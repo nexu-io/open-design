@@ -58,6 +58,7 @@ test('a second-round edit of an existing artifact counts as touched, not zero', 
     renderDependencyTouched: 0,
     renderDependencyTouchedPaths: [],
     supportingMediaTouched: 0,
+    filesWritten: 1,
   });
 });
 
@@ -84,6 +85,7 @@ test('created vs modified are reported separately and sum into touched', () => {
     renderDependencyTouched: 0,
     renderDependencyTouchedPaths: [],
     supportingMediaTouched: 1,
+    filesWritten: 2,
   });
 });
 
@@ -107,6 +109,7 @@ test('a touched DESIGN.md sets designSystemCreated but not artifact_count', () =
     renderDependencyTouched: 0,
     renderDependencyTouchedPaths: [],
     supportingMediaTouched: 0,
+    filesWritten: 1, // …but it IS a written file
   });
 
   // Editing it on a later round still flags the design-system signal.
@@ -131,7 +134,7 @@ test('preview modules are counted and also count as artifacts', () => {
   assert.equal(diff.created, 2);
 });
 
-test('non-artifact files and ignored dirs do not count', () => {
+test('non-artifact files and ignored dirs do not count as artifacts', () => {
   const root = tmpProject();
   const before = snapshotProjectArtifacts(root);
 
@@ -154,7 +157,29 @@ test('non-artifact files and ignored dirs do not count', () => {
     renderDependencyTouched: 0,
     renderDependencyTouchedPaths: [],
     supportingMediaTouched: 0,
+    // notes.txt IS a written file; node_modules stays ignored entirely.
+    filesWritten: 1,
   });
+});
+
+test('an md-only delivery reports files_written while artifact_count stays 0', () => {
+  // The blind spot that motivated files_written_count: a run whose deliverable
+  // is a markdown brief (e.g. `PROMPTS.md`) looked identical to a pure chat
+  // turn because markdown is not an artifact extension.
+  const root = tmpProject();
+  const before = snapshotProjectArtifacts(root);
+
+  fs.writeFileSync(path.join(root, 'PROMPTS.md'), '# nine premium backgrounds');
+  const afterCreate = snapshotProjectArtifacts(root);
+  const createDiff = diffRunArtifacts(before, afterCreate);
+  assert.equal(createDiff.touched, 0, 'md never counts as an artifact');
+  assert.equal(createDiff.filesWritten, 1);
+
+  // A later run that only EDITS the md still reports its write.
+  fs.writeFileSync(path.join(root, 'PROMPTS.md'), '# nine premium backgrounds — revised');
+  const editDiff = diffRunArtifacts(afterCreate, snapshotProjectArtifacts(root));
+  assert.equal(editDiff.touched, 0);
+  assert.equal(editDiff.filesWritten, 1);
 });
 
 test('a same-size rewrite with a preserved mtime is still detected (content hash)', () => {
@@ -289,5 +314,6 @@ test('a no-op turn (no file writes) reports zero', () => {
     renderDependencyTouched: 0,
     renderDependencyTouchedPaths: [],
     supportingMediaTouched: 0,
+    filesWritten: 0,
   });
 });

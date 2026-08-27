@@ -1,22 +1,22 @@
 ---
-title: Open Design 0.19.1 — Design with DeepSeek Harness
-description: 把你安装的官方 DeepSeek Harness 接入 Open Design，使用模型发现、结构化运行与会话续接；付费套餐还可在两周内不限量使用 DeepSeek V4 Pro 和 Flash。
+title: OpenDesign 0.19.1 — Design with DeepSeek Harness
+description: 把你安装的官方 DeepSeek Harness 接入 OpenDesign，使用模型发现、结构化运行与会话续接；付费套餐还可在两周内不限量使用 DeepSeek V4 Pro 和 Flash。
 ---
 
 ### 🌟 Codename: *Design with DeepSeek Harness*
 
 🧰 **59 个 PR · 24 位贡献者 · 4 天** — **DeepSeek Harness 现在可以作为 Agent
-直接在 Open Design 里运行。** Open Design 会找到你安装的官方 `dsh`，引导完成连接
+直接在 OpenDesign 里运行。** OpenDesign 会找到你安装的官方 `dsh`，引导完成连接
 profile 设置，列出 Harness 提供的模型与 reasoning 选项，并在后续轮次续接同一个
 Harness session。0.19.1 还为付费套餐带来两周不限量的 DeepSeek V4 Pro 和 Flash，
 同时继续改善首页与团队项目在高负载下的响应速度。
 
 ## 🔥 亮点
 
-- 🧰 **把你安装的官方 DeepSeek Harness 接入 Open Design。** Open Design 会发现
+- 🧰 **把你安装的官方 DeepSeek Harness 接入 OpenDesign。** OpenDesign 会发现
   `dsh`，读取它提供的模型与 reasoning 选项；缺少凭据、profile 未配置或 Harness
   版本尚未验证时，界面会给出具体处理办法。Settings 与
-  `od agent setup deepseek-harness` 只安装或修复 Open Design 的连接 profile，
+  `od agent setup deepseek-harness` 只安装或修复 OpenDesign 的连接 profile，
   不会替换或升级 Harness。运行过程会以结构化事件传回 thinking、正文、工具调用、
   结果与用量，并在下一轮续接同一个 Harness session。Windows `.cmd` 安装也有对应
   的取消和进程清理处理。 (#6874)
@@ -24,7 +24,7 @@ Harness session。0.19.1 还为付费套餐带来两周不限量的 DeepSeek V4 
 - 🎁 **付费套餐可在两周内不限量使用 DeepSeek V4 Pro 和 Flash。** 活动时间为
   8 月 13 日 20:00 至 8 月 27 日 20:00（Asia/Shanghai）。工作台中的两款模型
   都会显示 Unlimited 标记，活动按钮会直接选择 V4 Pro。即使用户已经关闭过上一轮
-  Flash 活动，这次仍会展示一次。碰到模型滚动用量窗口上限后，Open Design 会显示
+  Flash 活动，这次仍会展示一次。碰到模型滚动用量窗口上限后，OpenDesign 会显示
   可重试时间，并明确说明本次请求没有扣费。 (#6861)
 
 - 🏠 **从首页更快进入项目。** 新版首页提供更清晰的创建类型入口和更直接的
@@ -47,9 +47,9 @@ Harness session。0.19.1 还为付费套餐带来两周不限量的 DeepSeek V4 
 - Design system 目录新增 **Cloudflare Kumo UI**，可以直接作为生成界面的视觉基础。
   (#6769)
 - macOS 和 Windows 上可以通过 `od mcp install claude-desktop` 为 Claude Desktop
-  配置 Open Design。 (#6489)
+  配置 OpenDesign。 (#6489)
 - 公开 Pricing 页现在会写明托管图像生成，而不再只描述文本模型。 (#6395)
-- Launch Week 在落地页上更容易被发现；离开 Open Design 的社区链接也会提前标明
+- Launch Week 在落地页上更容易被发现；离开 OpenDesign 的社区链接也会提前标明
   去向。 (#6680, #6684)
 
 ## 🔁 变更

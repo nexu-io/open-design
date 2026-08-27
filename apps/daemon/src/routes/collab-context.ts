@@ -24,6 +24,7 @@ import type {
   WorkspaceInvalidationSsePayload,
   WorkspaceTeamProjectsResponse,
 } from '@open-design/contracts';
+import { workspaceSeatCapacityState } from '@open-design/contracts';
 import {
   parseWorkspaceCollabContext,
   type WorkspaceContextProvider,
@@ -124,6 +125,8 @@ export function emitWorkspaceEventToAllScopes(
 
 export interface RegisterCollabContextRoutesDeps {
   workspaceContext: WorkspaceContextProvider;
+  /** Current settings-backed AMR environment for synthesized contexts. */
+  configuredEnv?: () => Record<string, string>;
   /** Optional settled verifier for exact-scoped display GETs. Mutations and
    * SSE subscriptions retain their fresh directory verification below. */
   verifyWorkspaceReadAuthority?: (
@@ -171,14 +174,14 @@ export interface RegisterCollabContextRoutesDeps {
     context: WorkspaceCollabContext,
   ) => Promise<CollabCloudMemberDirectoryEntry[]>;
   /**
-   * Legacy local selection store retained for compatibility wiring. Data-plane
-   * routes do not read or mutate it; each tab carries its exact Workspace and
-   * member identity on the request.
+   * Client-local restart default. Data-plane routes never use it as authority;
+   * each tab continues to carry its exact Workspace and member identity.
    */
   activeWorkspace?: {
     get(): string | null;
     set(workspaceId: string): Promise<void>;
     clear(): Promise<void>;
+    clearIf(workspaceId: string): Promise<boolean>;
   };
   /**
    * Announce that one tab selected `workspaceId`, after a fresh membership
@@ -259,15 +262,21 @@ function workspaceGroupProperties(
   context: WorkspaceCollabContext,
 ): Record<string, unknown> {
   const planId = context.planId?.trim().toLowerCase();
+  const seatSummary = context.seatSummary;
+  const seatState = workspaceSeatCapacityState(seatSummary);
   return {
     workspace_type: context.workspaceType,
     workspace_lifecycle: context.lifecycleState,
     billing_state: context.billingState,
     plan_bucket: !planId || planId === 'free' ? 'free' : 'paid',
     provider_mode: context.providerMode,
-    seat_limit: context.seatSummary.seatLimit,
-    member_count: context.seatSummary.usedSeats,
-    seat_state: context.seatSummary.isSeatFull ? 'full' : 'available',
+    ...(seatState !== 'unknown'
+      ? {
+          seat_limit: seatSummary.seatLimit,
+          member_count: seatSummary.usedSeats,
+        }
+      : {}),
+    seat_state: seatState,
   };
 }
 
@@ -311,7 +320,10 @@ function parseInviteCreateItems(
  */
 export function registerCollabContextRoutes(app: Express, deps: RegisterCollabContextRoutesDeps): void {
   const { workspaceContext } = deps;
-  const consumeInvite = deps.consumeInvite ?? ((nonce: string) => consumeInviteContinuation(nonce));
+  const configuredEnv = () => deps.configuredEnv?.() ?? {};
+  const consumeInvite = deps.consumeInvite ?? ((nonce: string) => consumeInviteContinuation(nonce, {
+    configuredEnv: configuredEnv(),
+  }));
   const createInvite =
     deps.createInvite ?? ((input: CreateWorkspaceInviteInput) => createWorkspaceInvite(input));
   const fetchBilling = deps.fetchBilling ?? (() => fetchVelaBillingSummary());
@@ -404,6 +416,7 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
     const verified = await verifyWorkspaceRequestContext({
       req,
       fetchWorkspaceDirectory,
+      configuredEnv: configuredEnv(),
       requireTeam: true,
     });
     if (!verified.ok) return sendWorkspaceVerificationFailure(res, verified);
@@ -438,6 +451,7 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
       : await verifyWorkspaceRequestContext({
           req,
           fetchWorkspaceDirectory,
+          configuredEnv: configuredEnv(),
         });
     if (!verified.ok) return sendWorkspaceVerificationFailure(res, verified);
     const enriched = await workspaceContext.resolveExact?.({
@@ -478,6 +492,7 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
       const verified = await verifyWorkspaceRequestContext({
         req: scopedRequest,
         fetchWorkspaceDirectory,
+        configuredEnv: configuredEnv(),
       });
       if (!verified.ok) {
         sendWorkspaceVerificationFailure(res, verified);
@@ -539,8 +554,26 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
     const claimed = await verifyWorkspaceRequestContext({
       req,
       fetchWorkspaceDirectory: async () => directory,
+      configuredEnv: configuredEnv(),
     });
-    const activeWorkspaceId = claimed.ok ? claimed.context.workspaceId : null;
+    const savedWorkspaceId = deps.activeWorkspace?.get()?.trim() || null;
+    const workspaceIsVisible = (workspaceId: string | null) => Boolean(
+      workspaceId
+      && items.some(
+        (item) =>
+          item.workspaceId === workspaceId
+          && item.memberStatus === 'active'
+          && item.lifecycleState !== 'deleted',
+      ),
+    );
+    const savedWorkspaceIsVisible = workspaceIsVisible(savedWorkspaceId);
+    if (savedWorkspaceId && !savedWorkspaceIsVisible) {
+      await deps.activeWorkspace?.clearIf(savedWorkspaceId).catch(() => false);
+    }
+    const currentWorkspaceId = deps.activeWorkspace?.get()?.trim() || null;
+    const currentWorkspaceIsVisible = workspaceIsVisible(currentWorkspaceId);
+    let activeWorkspaceId = currentWorkspaceIsVisible ? currentWorkspaceId : null;
+    if (claimed.ok) activeWorkspaceId = claimed.context.workspaceId;
     const body: WorkspaceDirectoryResponse = { items, activeWorkspaceId };
     res.json(body);
   });
@@ -579,8 +612,8 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
     // Matching on the id alone would let a listed-but-removed membership (or a
     // deleted workspace) through, and this entry is also what gets synthesized
     // into the response below — so an unfiltered match could describe a
-    // workspace the caller no longer holds. Same predicate the provider's own
-    // `resolvePinnedWorkspace` uses.
+    // workspace the caller no longer holds. This matches the context provider's
+    // directory-selection predicate.
     const selected = directory.find(
       (item) =>
         item.workspaceId === workspaceId &&
@@ -592,9 +625,10 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
       return res.status(404).json({ error: 'workspace_not_visible' });
     }
 
-    // Choosing a workspace is tab-local. The membership directory above is the
-    // authorization; neither this compatibility endpoint nor any data-plane
-    // route writes a daemon-global active Workspace.
+    // The membership directory above is the authorization. Persist the choice
+    // only as this client's next-start default; data-plane routes continue to
+    // require the exact Workspace/member pair on every request, so another tab
+    // already operating in a different workspace keeps its own scope.
     //
     // This used to PUT B's account-level active workspace first and fail the
     // user's click (502) when that write did not take. That row is keyed by app
@@ -618,7 +652,17 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
     ) {
       return res.status(404).json({ error: 'workspace_no_longer_available' });
     }
-    const resolved = context ?? workspaceContextFromDirectoryItem(selected);
+    const resolved = context ?? workspaceContextFromDirectoryItem(selected, configuredEnv());
+    try {
+      await deps.activeWorkspace?.set(workspaceId);
+    } catch {
+      return sendApiError(
+        res,
+        500,
+        'INTERNAL_ERROR',
+        'failed to persist the selected workspace',
+      );
+    }
     // Warm this exact workspace's cold caches before responding, but never
     // await them — a slow upstream must not delay the tab-local selection.
     deps.onWorkspaceSwitched?.(workspaceId);
@@ -640,6 +684,7 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
       : await verifyWorkspaceRequestContext({
           req,
           fetchWorkspaceDirectory,
+          configuredEnv: configuredEnv(),
           requireTeam: true,
         });
     if (!verified.ok) {
@@ -682,6 +727,7 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
       : await verifyWorkspaceRequestContext({
           req,
           fetchWorkspaceDirectory,
+          configuredEnv: configuredEnv(),
           requireTeam: true,
         });
     if (!verified.ok) return sendWorkspaceVerificationFailure(res, verified);
@@ -970,6 +1016,7 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
     const verified = await verifyWorkspaceRequestContext({
       req,
       fetchWorkspaceDirectory,
+      configuredEnv: configuredEnv(),
       requireTeam: true,
     });
     if (!verified.ok) return sendWorkspaceVerificationFailure(res, verified);
@@ -985,6 +1032,7 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
     const verified = await verifyWorkspaceRequestContext({
       req,
       fetchWorkspaceDirectory,
+      configuredEnv: configuredEnv(),
       requireTeam: true,
     });
     if (!verified.ok) return sendWorkspaceVerificationFailure(res, verified);

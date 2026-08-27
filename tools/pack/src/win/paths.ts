@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-import type { ToolPackConfig } from "../config.js";
+import type { ToolPackConfig } from "../config/index.js";
 import {
   WIN_PREBUNDLE_ENTRYPOINTS_DIR_NAME,
   WIN_PREBUNDLE_META_DIR_NAME,
@@ -10,7 +10,7 @@ import {
   WIN_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH,
   WIN_PREBUNDLED_PACKAGED_MAIN_RELATIVE_PATH,
   WIN_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH,
-} from "../win-prebundle.js";
+} from "./prebundle.js";
 import { PRODUCT_NAME } from "./constants.js";
 import { pathExists } from "./fs.js";
 import { resolveWinInstallIdentity } from "./identity.js";

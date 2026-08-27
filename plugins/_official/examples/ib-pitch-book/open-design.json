@@ -10,15 +10,15 @@
   },
   "version": "0.1.0",
   "publishedAt": "2026-05-12T07:18:16Z",
-  "description": "Open Design's investor pitch book: market map, moat, unit economics, and the ask — analyst-grade and diligence-ready. Built as a decision-grade fundraising pitch deck for growth-equity investors.",
+  "description": "OpenDesign's investor pitch book: market map, moat, unit economics, and the ask — analyst-grade and diligence-ready. Built as a decision-grade fundraising pitch deck for growth-equity investors.",
   "description_i18n": {
-    "en": "Open Design's investor pitch book: market map, moat, unit economics, and the ask — analyst-grade and diligence-ready. Built as a decision-grade fundraising pitch deck for growth-equity investors.",
+    "en": "OpenDesign's investor pitch book: market map, moat, unit economics, and the ask — analyst-grade and diligence-ready. Built as a decision-grade fundraising pitch deck for growth-equity investors.",
     "zh-CN": "像成长股权分析师一样写投资 Pitch Book——一份可商业交付的融资路演 Deck，围绕真实主题、证据链与决策目标组织。",
     "zh-TW": "像成长股权分析师一样写投资 Pitch Book——一份可商业交付的融资路演 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
-    "name": "Open Design",
+    "name": "OpenDesign",
     "url": "https://github.com/nexu-io"
   },
   "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/ib-pitch-book",
@@ -65,8 +65,8 @@
     },
     "useCase": {
       "query": {
-        "en": "Create \"Write an Investor Pitch Book like a Growth-Equity Analyst\" as a decision-grade Fundraising pitch deck in this template's own visual system. Subject: Open Design's investor pitch book: market map, moat, unit economics, and the ask — analyst-grade and diligence-ready. Audience: growth-equity investors. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would an investor know why this is venture-scale and urgent.",
-        "zh-CN": "像成长股权分析师一样写投资 Pitch Book。像成长股权分析师一样写投资 Pitch Book——一份可商业交付的融资路演 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's investor pitch book: market map, moat, unit economics, and the ask — analyst-grade and diligence-ready. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+        "en": "Create \"Write an Investor Pitch Book like a Growth-Equity Analyst\" as a decision-grade Fundraising pitch deck in this template's own visual system. Subject: OpenDesign's investor pitch book: market map, moat, unit economics, and the ask — analyst-grade and diligence-ready. Audience: growth-equity investors. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would an investor know why this is venture-scale and urgent.",
+        "zh-CN": "像成长股权分析师一样写投资 Pitch Book。像成长股权分析师一样写投资 Pitch Book——一份可商业交付的融资路演 Deck，围绕真实主题、证据链与决策目标组织。 主题：OpenDesign's investor pitch book: market map, moat, unit economics, and the ask — analyst-grade and diligence-ready. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {

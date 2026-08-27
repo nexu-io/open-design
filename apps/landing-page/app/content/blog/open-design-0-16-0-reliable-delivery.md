@@ -1,5 +1,5 @@
 ---
-title: "Open Design 0.16.0: reliable delivery"
+title: "OpenDesign 0.16.0: reliable delivery"
 date: 2026-07-22
 category: "Product"
 readingTime: 7
@@ -8,7 +8,7 @@ socialImage: "/blog/open-design-0-16-0-reliable-delivery-cover.webp"
 ctaKind: download-app
 i18n:
   zh:
-    title: 'Open Design 0.16.0：可靠交付'
+    title: 'OpenDesign 0.16.0：可靠交付'
     summary: 'open-design-v0.16.0 —— 五天内 20 位贡献者提交了 92 个 PR。代号「可靠交付（Reliable Delivery）」。视觉风格现在会跟着你手上真正在做的东西走，自动更新会真正生效，长任务能留住结果和随之产出的文件，预览也不再跟你较劲。另有应用内消息中心——以及 0.16.1 顺手清掉的最后一样挡住画布的东西。'
     category: '产品'
     bodyHtml: |
@@ -65,7 +65,7 @@ i18n:
           <tr><th>如果你是……</th><th>从这里开始</th></tr>
         </thead>
         <tbody>
-          <tr><td>Open Design 新用户</td><td>下载桌面应用、开一个项目，然后为你正在做的形态挑一个专门的视觉方向</td></tr>
+          <tr><td>OpenDesign 新用户</td><td>下载桌面应用、开一个项目，然后为你正在做的形态挑一个专门的视觉方向</td></tr>
           <tr><td>在跑长任务</td><td>把一次长运行推得更远——撞到上下文上限现在会带着最新的有用上下文继续，文件完整保留</td></tr>
           <tr><td>还停在旧版本</td><td>跑一次「检查更新…」——更新状态现在是明确的，升级后 PPTX 导出也能用了</td></tr>
           <tr><td>在用自己的密钥</td><td>重新测一遍你的 BYOK 服务商：报错会在配置阶段就出现，草稿也不会覆盖能用的配置</td></tr>
@@ -75,17 +75,17 @@ i18n:
 
       <h2>接下来做什么</h2>
       <p>一个值得信赖的版本，多半就是一个不再弄丢东西的版本。0.16.0 把预算花在了这里——一次真正落地的更新、一个留得住文件的长任务、一种匹配形态的风格、一个懂得让开的预览。下载桌面应用，重跑你手上最长的那个任务，看着它完整抵达。</p>
-      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">下载 Open Design</a>。</p>
+      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">下载 OpenDesign</a>。</p>
       <p>五天 92 个 PR，来自 20 个人，每个人都把「结果做完」和「东西交到手上」之间的一道缝隙补上了一点。可靠是不显眼的活儿，却是让其他一切显得可信的那件活儿。我们看见你们了。🚀</p>
 
       <h2>延伸阅读</h2>
       <ul>
-        <li><a href="/blog/open-design-0-15-1/">Open Design 0.15.1：看得更清，跑得更久</a></li>
-        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">Open Design 0.15.0：更省成本，更快交付</a></li>
-        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">Open Design 0.14.0：灵感时光机</a></li>
+        <li><a href="/blog/open-design-0-15-1/">OpenDesign 0.15.1：看得更清，跑得更久</a></li>
+        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">OpenDesign 0.15.0：更省成本，更快交付</a></li>
+        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">OpenDesign 0.14.0：灵感时光机</a></li>
       </ul>
   ja:
-    title: 'Open Design 0.16.0 — 確実に届く'
+    title: 'OpenDesign 0.16.0 — 確実に届く'
     summary: 'open-design-v0.16.0 — 5 日間で 20 人のコントリビューターから 92 の PR。コードネームは「Reliable Delivery」。ビジュアルの方向性が実際に作っているものに追従し、自動アップデートがきちんと効き、長いタスクが答えと生成物を手放さず、プレビューが枠と争わなくなりました。アプリ内のメッセージセンターと、キャンバスを覆う最後の一点を片づけた 0.16.1 も。'
     category: 'プロダクト'
     bodyHtml: |
@@ -142,7 +142,7 @@ i18n:
           <tr><th>あなたが……</th><th>ここから</th></tr>
         </thead>
         <tbody>
-          <tr><td>Open Design を初めて使う</td><td>デスクトップアプリを入れてプロジェクトを開始し、作っているフォーマット向けのビジュアル方向性を選ぶ</td></tr>
+          <tr><td>OpenDesign を初めて使う</td><td>デスクトップアプリを入れてプロジェクトを開始し、作っているフォーマット向けのビジュアル方向性を選ぶ</td></tr>
           <tr><td>長いタスクを回している</td><td>長い実行をもう一歩先へ。コンテキストの上限に触れても最新の有用なコンテキストで続き、ファイルもそのまま</td></tr>
           <tr><td>古いビルドのまま</td><td>「アップデートを確認…」を実行。状態が明示され、アップグレード後は PPTX の書き出しも動く</td></tr>
           <tr><td>自分の鍵を使っている</td><td>BYOK のプロバイダーを再テスト。エラーは設定時に出て、下書きが動作中の設定を壊さない</td></tr>
@@ -152,17 +152,17 @@ i18n:
 
       <h2>次にすること</h2>
       <p>信頼できるリリースとは、たいてい物を失わなくなったリリースのことです。0.16.0 はそこに予算を使いました — 着地するアップデート、ファイルを保つ長いタスク、フォーマットに合うスタイル、邪魔をしないプレビュー。デスクトップアプリを入れて、手元でいちばん長いタスクを走らせ直し、丸ごと届くのを見てください。</p>
-      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">Open Design をダウンロード</a>。</p>
+      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">OpenDesign をダウンロード</a>。</p>
       <p>5 日間で 92 の PR。仕上がった成果と届いた成果のあいだにある隙間を、20 人がひとつずつ埋めました。信頼性は派手さのない仕事で、そして他のすべてを信じられるものにする仕事です。見ています。🚀</p>
 
       <h2>関連記事</h2>
       <ul>
-        <li><a href="/blog/open-design-0-15-1/">Open Design 0.15.1 — より鮮明な視界、より長いフロー</a></li>
-        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">Open Design 0.15.0 — コストを下げ、速く届ける</a></li>
-        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">Open Design 0.14.0 — インスピレーションのタイムマシン</a></li>
+        <li><a href="/blog/open-design-0-15-1/">OpenDesign 0.15.1 — より鮮明な視界、より長いフロー</a></li>
+        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">OpenDesign 0.15.0 — コストを下げ、速く届ける</a></li>
+        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">OpenDesign 0.14.0 — インスピレーションのタイムマシン</a></li>
       </ul>
   ko:
-    title: 'Open Design 0.16.0: 확실한 전달'
+    title: 'OpenDesign 0.16.0: 확실한 전달'
     summary: 'open-design-v0.16.0 — 5일 동안 20명의 기여자가 92개의 PR을 보냈습니다. 코드명 “Reliable Delivery”. 비주얼 방향이 실제로 만드는 것에 맞춰 따라오고, 자동 업데이트가 제대로 적용되며, 긴 작업이 결과와 함께 만들어진 파일까지 지키고, 미리보기가 프레임과 다투지 않습니다. 앱 안의 메시지 센터, 그리고 캔버스를 가리던 마지막 하나를 걷어낸 0.16.1까지.'
     category: '제품'
     bodyHtml: |
@@ -219,7 +219,7 @@ i18n:
           <tr><th>당신이……</th><th>여기서 시작하세요</th></tr>
         </thead>
         <tbody>
-          <tr><td>Open Design이 처음이라면</td><td>데스크톱 앱을 내려받아 프로젝트를 시작하고, 지금 만드는 포맷에 맞는 비주얼 방향을 고르세요</td></tr>
+          <tr><td>OpenDesign이 처음이라면</td><td>데스크톱 앱을 내려받아 프로젝트를 시작하고, 지금 만드는 포맷에 맞는 비주얼 방향을 고르세요</td></tr>
           <tr><td>긴 작업을 돌리고 있다면</td><td>긴 실행을 한 걸음 더 밀어 보세요 — 컨텍스트 한계에 닿아도 최신의 유용한 컨텍스트로 이어지고 파일도 남습니다</td></tr>
           <tr><td>오래된 빌드를 쓰고 있다면</td><td>“업데이트 확인…”을 실행하세요 — 상태가 명확해졌고, 업그레이드 후 PPTX 내보내기도 동작합니다</td></tr>
           <tr><td>자기 키를 쓰고 있다면</td><td>BYOK 제공자를 다시 테스트하세요: 오류는 설정 단계에서 드러나고, 초안이 동작 중인 설정을 덮지 않습니다</td></tr>
@@ -229,17 +229,17 @@ i18n:
 
       <h2>다음에 할 일</h2>
       <p>믿을 수 있는 릴리스는 대개 무언가를 잃지 않게 된 릴리스입니다. 0.16.0은 예산을 바로 거기에 썼습니다 — 착지하는 업데이트, 파일을 지키는 긴 작업, 포맷에 맞는 스타일, 비켜서는 미리보기. 데스크톱 앱을 내려받아 가진 것 중 가장 긴 작업을 다시 돌리고, 그것이 온전히 도착하는지 보세요.</p>
-      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">Open Design 내려받기</a>.</p>
+      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">OpenDesign 내려받기</a>.</p>
       <p>5일 동안 92개의 PR, 완성된 결과와 전달된 결과 사이의 틈을 하나씩 메운 20명에게서. 안정성은 화려하지 않은 일이고, 나머지 모든 것을 믿을 수 있게 만드는 일입니다. 보고 있습니다. 🚀</p>
 
       <h2>함께 읽기</h2>
       <ul>
-        <li><a href="/blog/open-design-0-15-1/">Open Design 0.15.1 — 더 또렷한 시야, 더 긴 몰입</a></li>
-        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">Open Design 0.15.0 — 비용은 줄이고, 더 빠르게</a></li>
-        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">Open Design 0.14.0 — 영감의 타임머신</a></li>
+        <li><a href="/blog/open-design-0-15-1/">OpenDesign 0.15.1 — 더 또렷한 시야, 더 긴 몰입</a></li>
+        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">OpenDesign 0.15.0 — 비용은 줄이고, 더 빠르게</a></li>
+        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">OpenDesign 0.14.0 — 영감의 타임머신</a></li>
       </ul>
   de:
-    title: 'Open Design 0.16.0: verlässliche Auslieferung'
+    title: 'OpenDesign 0.16.0: verlässliche Auslieferung'
     summary: 'open-design-v0.16.0 — 92 PRs von 20 Mitwirkenden in fünf Tagen. Codename „Reliable Delivery“. Die visuelle Richtung folgt jetzt dem, was Sie tatsächlich bauen, automatische Updates greifen wirklich, lange Aufgaben behalten ihr Ergebnis samt Dateien, und Vorschauen kämpfen nicht mehr mit dem Rahmen. Dazu ein Nachrichtencenter in der App — und der 0.16.1-Patch, der das Letzte von der Canvas geräumt hat.'
     category: 'Produkt'
     bodyHtml: |
@@ -296,7 +296,7 @@ i18n:
           <tr><th>Wenn Sie …</th><th>Hier anfangen</th></tr>
         </thead>
         <tbody>
-          <tr><td>neu bei Open Design sind</td><td>Laden Sie die Desktop-App, starten Sie ein Projekt und wählen Sie eine visuelle Richtung, die zum Format passt, an dem Sie arbeiten</td></tr>
+          <tr><td>neu bei OpenDesign sind</td><td>Laden Sie die Desktop-App, starten Sie ein Projekt und wählen Sie eine visuelle Richtung, die zum Format passt, an dem Sie arbeiten</td></tr>
           <tr><td>lange Aufgaben laufen lassen</td><td>Treiben Sie einen langen Lauf weiter — die Kontextgrenze zu erreichen läuft jetzt mit dem neuesten nützlichen Kontext weiter, Dateien intakt</td></tr>
           <tr><td>auf einem älteren Build sind</td><td>Führen Sie „Nach Updates suchen …“ aus — der Update-Zustand ist jetzt explizit, und der PPTX-Export funktioniert nach dem Upgrade</td></tr>
           <tr><td>eigene Schlüssel nutzen</td><td>Testen Sie Ihre BYOK-Anbieter erneut: Fehler zeigen sich beim Einrichten, Entwürfe überschreiben keine funktionierende Konfiguration</td></tr>
@@ -306,17 +306,17 @@ i18n:
 
       <h2>Was als Nächstes</h2>
       <p>Ein Release, dem man vertrauen kann, ist meist ein Release, das aufhört, Dinge zu verlieren. 0.16.0 gibt sein Budget genau dafür aus — ein Update, das landet, eine lange Aufgabe, die ihre Dateien behält, ein Stil, der zum Format passt, eine Vorschau, die aus dem Weg geht. Laden Sie die Desktop-App, starten Sie Ihre längste Aufgabe neu und sehen Sie zu, wie sie vollständig ankommt.</p>
-      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">Open Design herunterladen</a>.</p>
+      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">OpenDesign herunterladen</a>.</p>
       <p>92 PRs in fünf Tagen, von 20 Menschen, die jeweils eine weitere Lücke zwischen einem fertigen und einem ausgelieferten Ergebnis geschlossen haben. Verlässlichkeit ist unglamouröse Arbeit — und genau die Arbeit, die alles andere glaubwürdig macht. Wir sehen euch. 🚀</p>
 
       <h2>Weiterlesen</h2>
       <ul>
-        <li><a href="/blog/open-design-0-15-1/">Open Design 0.15.1 — schärferer Blick, längerer Flow</a></li>
-        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">Open Design 0.15.0 — weniger Kosten, schneller ausliefern</a></li>
-        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">Open Design 0.14.0 — die Inspirations-Zeitmaschine</a></li>
+        <li><a href="/blog/open-design-0-15-1/">OpenDesign 0.15.1 — schärferer Blick, längerer Flow</a></li>
+        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">OpenDesign 0.15.0 — weniger Kosten, schneller ausliefern</a></li>
+        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">OpenDesign 0.14.0 — die Inspirations-Zeitmaschine</a></li>
       </ul>
   fr:
-    title: 'Open Design 0.16.0 : une livraison fiable'
+    title: 'OpenDesign 0.16.0 : une livraison fiable'
     summary: 'open-design-v0.16.0 — 92 PR de 20 contributeurs en cinq jours. Nom de code « Reliable Delivery ». La direction visuelle suit désormais ce que vous fabriquez vraiment, les mises à jour automatiques prennent effet pour de bon, les longues tâches gardent leur résultat et les fichiers qui vont avec, et les aperçus cessent de se battre avec le cadre. Plus un centre de messages dans l''app — et le correctif 0.16.1 qui a dégagé la dernière chose posée sur votre canvas.'
     category: 'Produit'
     bodyHtml: |
@@ -373,7 +373,7 @@ i18n:
           <tr><th>Si vous…</th><th>Commencez ici</th></tr>
         </thead>
         <tbody>
-          <tr><td>découvrez Open Design</td><td>Téléchargez l'app desktop, démarrez un projet et choisissez une direction visuelle faite pour le format sur lequel vous travaillez</td></tr>
+          <tr><td>découvrez OpenDesign</td><td>Téléchargez l'app desktop, démarrez un projet et choisissez une direction visuelle faite pour le format sur lequel vous travaillez</td></tr>
           <tr><td>lancez de longues tâches</td><td>Poussez une longue exécution plus loin — atteindre le plafond de contexte continue désormais avec le contexte utile le plus récent, fichiers intacts</td></tr>
           <tr><td>êtes sur une build ancienne</td><td>Lancez « Rechercher les mises à jour… » — l'état est maintenant explicite, et l'export PPTX refonctionne après la mise à niveau</td></tr>
           <tr><td>utilisez vos propres clés</td><td>Retestez vos fournisseurs BYOK : les erreurs apparaissent à la configuration, les brouillons n'écrasent plus une config qui marche</td></tr>
@@ -383,17 +383,17 @@ i18n:
 
       <h2>Et maintenant</h2>
       <p>Une version en laquelle on peut avoir confiance est surtout une version qui arrête de perdre des choses. 0.16.0 dépense son budget exactement là — une mise à jour qui atterrit, une longue tâche qui garde ses fichiers, un style adapté au format, un aperçu qui s'écarte. Téléchargez l'app desktop, relancez la plus longue tâche que vous ayez, et regardez-la arriver entière.</p>
-      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">Télécharger Open Design</a>.</p>
+      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">Télécharger OpenDesign</a>.</p>
       <p>92 PR en cinq jours, de la part de 20 personnes qui ont chacune comblé un écart de plus entre un résultat fini et un résultat livré. La fiabilité est un travail sans gloire, et c'est le travail qui rend tout le reste crédible. On vous voit. 🚀</p>
 
       <h2>À lire ensuite</h2>
       <ul>
-        <li><a href="/blog/open-design-0-15-1/">Open Design 0.15.1 — vision plus nette, flow plus long</a></li>
-        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">Open Design 0.15.0 — coûter moins, livrer plus vite</a></li>
-        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">Open Design 0.14.0 — la machine à remonter l'inspiration</a></li>
+        <li><a href="/blog/open-design-0-15-1/">OpenDesign 0.15.1 — vision plus nette, flow plus long</a></li>
+        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">OpenDesign 0.15.0 — coûter moins, livrer plus vite</a></li>
+        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">OpenDesign 0.14.0 — la machine à remonter l'inspiration</a></li>
       </ul>
   ru:
-    title: 'Open Design 0.16.0: надёжная доставка'
+    title: 'OpenDesign 0.16.0: надёжная доставка'
     summary: 'open-design-v0.16.0 — 92 PR от 20 участников за пять дней. Кодовое имя «Reliable Delivery». Визуальное направление теперь следует за тем, что вы действительно делаете, автообновления по-настоящему вступают в силу, длинные задачи сохраняют результат вместе с файлами, а превью перестаёт бороться с рамкой. Плюс центр сообщений внутри приложения — и патч 0.16.1, убравший последнее, что закрывало холст.'
     category: 'Продукт'
     bodyHtml: |
@@ -450,7 +450,7 @@ i18n:
           <tr><th>Если вы…</th><th>Начните отсюда</th></tr>
         </thead>
         <tbody>
-          <tr><td>только знакомитесь с Open Design</td><td>Скачайте десктопное приложение, начните проект и выберите визуальное направление под тот формат, в котором работаете</td></tr>
+          <tr><td>только знакомитесь с OpenDesign</td><td>Скачайте десктопное приложение, начните проект и выберите визуальное направление под тот формат, в котором работаете</td></tr>
           <tr><td>запускаете длинные задачи</td><td>Продвиньте длинный прогон дальше — упор в потолок контекста теперь продолжается со свежим полезным контекстом, файлы на месте</td></tr>
           <tr><td>сидите на старой сборке</td><td>Запустите «Проверить обновления…» — состояние теперь явное, а экспорт в PPTX после обновления работает</td></tr>
           <tr><td>используете свои ключи</td><td>Перепроверьте своих BYOK-провайдеров: ошибки всплывают на этапе настройки, а черновики не затирают рабочую конфигурацию</td></tr>
@@ -460,17 +460,17 @@ i18n:
 
       <h2>Что дальше</h2>
       <p>Релиз, которому можно доверять, — это в основном релиз, который перестал терять вещи. 0.16.0 тратит бюджет именно здесь: обновление, которое доезжает, длинная задача, которая держит файлы, стиль, подходящий формату, превью, которое уходит с дороги. Скачайте десктопное приложение, перезапустите самую длинную свою задачу и посмотрите, как она доходит целиком.</p>
-      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">Скачать Open Design</a>.</p>
+      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">Скачать OpenDesign</a>.</p>
       <p>92 PR за пять дней от 20 человек, каждый из которых закрыл ещё один разрыв между готовым результатом и доставленным. Надёжность — работа без блеска, и именно она делает всё остальное убедительным. Мы вас видим. 🚀</p>
 
       <h2>Что почитать дальше</h2>
       <ul>
-        <li><a href="/blog/open-design-0-15-1/">Open Design 0.15.1 — чётче взгляд, длиннее поток</a></li>
-        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">Open Design 0.15.0 — дешевле и быстрее</a></li>
-        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">Open Design 0.14.0 — машина времени для вдохновения</a></li>
+        <li><a href="/blog/open-design-0-15-1/">OpenDesign 0.15.1 — чётче взгляд, длиннее поток</a></li>
+        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">OpenDesign 0.15.0 — дешевле и быстрее</a></li>
+        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">OpenDesign 0.14.0 — машина времени для вдохновения</a></li>
       </ul>
   es:
-    title: 'Open Design 0.16.0: entrega fiable'
+    title: 'OpenDesign 0.16.0: entrega fiable'
     summary: 'open-design-v0.16.0 — 92 PR de 20 personas en cinco días. Nombre en clave «Reliable Delivery». La dirección visual ahora sigue a lo que estás haciendo de verdad, las actualizaciones automáticas surten efecto, las tareas largas conservan su resultado y los archivos que lo acompañan, y las vistas previas dejan de pelearse con el marco. Además, un centro de mensajes dentro de la app y el parche 0.16.1 que despejó lo último que tapaba el lienzo.'
     category: 'Producto'
     bodyHtml: |
@@ -527,7 +527,7 @@ i18n:
           <tr><th>Si eres…</th><th>Empieza aquí</th></tr>
         </thead>
         <tbody>
-          <tr><td>nuevo en Open Design</td><td>Descarga la app de escritorio, empieza un proyecto y elige una dirección visual pensada para el formato en el que trabajas</td></tr>
+          <tr><td>nuevo en OpenDesign</td><td>Descarga la app de escritorio, empieza un proyecto y elige una dirección visual pensada para el formato en el que trabajas</td></tr>
           <tr><td>de tareas largas</td><td>Lleva una ejecución larga más lejos: llegar al techo de contexto ahora continúa con el contexto útil más reciente, con los archivos intactos</td></tr>
           <tr><td>usuario de una build antigua</td><td>Ejecuta «Buscar actualizaciones…»: el estado ahora es explícito y la exportación a PPTX funciona tras actualizar</td></tr>
           <tr><td>de los que usan sus propias claves</td><td>Vuelve a probar tus proveedores BYOK: los errores aparecen al configurar y los borradores no pisan una configuración que funciona</td></tr>
@@ -537,17 +537,17 @@ i18n:
 
       <h2>Qué hacer ahora</h2>
       <p>Una versión en la que confiar es, sobre todo, una versión que deja de perder cosas. 0.16.0 gasta ahí su presupuesto: una actualización que aterriza, una tarea larga que conserva sus archivos, un estilo acorde al formato y una vista previa que se aparta. Descarga la app de escritorio, vuelve a lanzar la tarea más larga que tengas y mírala llegar entera.</p>
-      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">Descargar Open Design</a>.</p>
+      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">Descargar OpenDesign</a>.</p>
       <p>92 PR en cinco días, de 20 personas que cerraron cada una un hueco más entre un resultado terminado y uno entregado. La fiabilidad es un trabajo poco vistoso, y es el trabajo que hace creíble todo lo demás. Os vemos. 🚀</p>
 
       <h2>Lecturas relacionadas</h2>
       <ul>
-        <li><a href="/blog/open-design-0-15-1/">Open Design 0.15.1 — visión más nítida, flow más largo</a></li>
-        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">Open Design 0.15.0 — cuesta menos, entrega antes</a></li>
-        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">Open Design 0.14.0 — la máquina del tiempo de la inspiración</a></li>
+        <li><a href="/blog/open-design-0-15-1/">OpenDesign 0.15.1 — visión más nítida, flow más largo</a></li>
+        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">OpenDesign 0.15.0 — cuesta menos, entrega antes</a></li>
+        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">OpenDesign 0.14.0 — la máquina del tiempo de la inspiración</a></li>
       </ul>
   pt-br:
-    title: 'Open Design 0.16.0: entrega confiável'
+    title: 'OpenDesign 0.16.0: entrega confiável'
     summary: 'open-design-v0.16.0 — 92 PRs de 20 pessoas em cinco dias. Codinome “Reliable Delivery”. A direção visual agora acompanha o que você está realmente criando, as atualizações automáticas passam a valer de fato, tarefas longas guardam o resultado e os arquivos que vieram com ele, e as prévias param de brigar com a moldura. Além de uma central de mensagens dentro do app — e o patch 0.16.1, que tirou a última coisa em cima do canvas.'
     category: 'Produto'
     bodyHtml: |
@@ -604,7 +604,7 @@ i18n:
           <tr><th>Se você…</th><th>Comece por aqui</th></tr>
         </thead>
         <tbody>
-          <tr><td>é novo no Open Design</td><td>Baixe o app de desktop, comece um projeto e escolha uma direção visual feita para o formato em que está trabalhando</td></tr>
+          <tr><td>é novo no OpenDesign</td><td>Baixe o app de desktop, comece um projeto e escolha uma direção visual feita para o formato em que está trabalhando</td></tr>
           <tr><td>roda tarefas longas</td><td>Leve uma execução longa mais adiante — bater no teto de contexto agora segue com o contexto útil mais recente, com os arquivos intactos</td></tr>
           <tr><td>está numa build antiga</td><td>Rode “Verificar atualizações…” — o estado agora é explícito e a exportação para PPTX funciona depois de atualizar</td></tr>
           <tr><td>usa as próprias chaves</td><td>Teste de novo seus provedores BYOK: os erros aparecem na configuração e rascunhos não atropelam uma config que funciona</td></tr>
@@ -614,17 +614,17 @@ i18n:
 
       <h2>O que fazer em seguida</h2>
       <p>Uma versão em que dá para confiar é, na maior parte, uma versão que parou de perder coisas. O 0.16.0 gasta o orçamento aí — uma atualização que aterrissa, uma tarefa longa que guarda os arquivos, um estilo que combina com o formato, uma prévia que sai da frente. Baixe o app de desktop, rode de novo a tarefa mais longa que você tem e veja-a chegar inteira.</p>
-      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">Baixar o Open Design</a>.</p>
+      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">Baixar o OpenDesign</a>.</p>
       <p>92 PRs em cinco dias, de 20 pessoas que fecharam cada uma mais uma fresta entre um resultado pronto e um resultado entregue. Confiabilidade é um trabalho sem glamour, e é o trabalho que torna todo o resto crível. A gente vê vocês. 🚀</p>
 
       <h2>Leitura relacionada</h2>
       <ul>
-        <li><a href="/blog/open-design-0-15-1/">Open Design 0.15.1 — visão mais nítida, flow mais longo</a></li>
-        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">Open Design 0.15.0 — custe menos, entregue mais rápido</a></li>
-        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">Open Design 0.14.0 — a máquina do tempo da inspiração</a></li>
+        <li><a href="/blog/open-design-0-15-1/">OpenDesign 0.15.1 — visão mais nítida, flow mais longo</a></li>
+        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">OpenDesign 0.15.0 — custe menos, entregue mais rápido</a></li>
+        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">OpenDesign 0.14.0 — a máquina do tempo da inspiração</a></li>
       </ul>
   it:
-    title: 'Open Design 0.16.0: consegna affidabile'
+    title: 'OpenDesign 0.16.0: consegna affidabile'
     summary: 'open-design-v0.16.0 — 92 PR da 20 contributori in cinque giorni. Nome in codice «Reliable Delivery». La direzione visiva ora segue ciò che stai davvero costruendo, gli aggiornamenti automatici hanno davvero effetto, le attività lunghe conservano il risultato e i file che lo accompagnano, e le anteprime smettono di litigare con la cornice. In più un centro messaggi dentro l''app e la patch 0.16.1, che ha liberato l''ultima cosa rimasta sopra la canvas.'
     category: 'Prodotto'
     bodyHtml: |
@@ -681,7 +681,7 @@ i18n:
           <tr><th>Se sei…</th><th>Parti da qui</th></tr>
         </thead>
         <tbody>
-          <tr><td>nuovo su Open Design</td><td>Scarica l'app desktop, avvia un progetto e scegli una direzione visiva pensata per il formato su cui stai lavorando</td></tr>
+          <tr><td>nuovo su OpenDesign</td><td>Scarica l'app desktop, avvia un progetto e scegli una direzione visiva pensata per il formato su cui stai lavorando</td></tr>
           <tr><td>uno che lancia attività lunghe</td><td>Spingi più in là un'esecuzione lunga: toccare il tetto del contesto ora prosegue con il contesto utile più recente, file intatti</td></tr>
           <tr><td>fermo a una build vecchia</td><td>Lancia «Verifica aggiornamenti…»: lo stato ora è esplicito e l'esportazione PPTX funziona dopo l'upgrade</td></tr>
           <tr><td>uno che usa le proprie chiavi</td><td>Ritesta i tuoi provider BYOK: gli errori emergono in configurazione e le bozze non travolgono una config funzionante</td></tr>
@@ -691,17 +691,17 @@ i18n:
 
       <h2>Cosa fare ora</h2>
       <p>Una release di cui fidarsi è soprattutto una release che smette di perdere pezzi. 0.16.0 spende lì il suo budget: un aggiornamento che atterra, un'attività lunga che conserva i file, uno stile che corrisponde al formato, un'anteprima che si toglie di mezzo. Scarica l'app desktop, rilancia l'attività più lunga che hai e guardala arrivare intera.</p>
-      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">Scarica Open Design</a>.</p>
+      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">Scarica OpenDesign</a>.</p>
       <p>92 PR in cinque giorni, da 20 persone che hanno chiuso ciascuna un altro varco tra un risultato finito e uno consegnato. L'affidabilità è un lavoro poco appariscente, ed è il lavoro che rende credibile tutto il resto. Vi vediamo. 🚀</p>
 
       <h2>Letture correlate</h2>
       <ul>
-        <li><a href="/blog/open-design-0-15-1/">Open Design 0.15.1 — sguardo più nitido, flow più lungo</a></li>
-        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">Open Design 0.15.0 — costa meno, consegna prima</a></li>
-        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">Open Design 0.14.0 — la macchina del tempo dell'ispirazione</a></li>
+        <li><a href="/blog/open-design-0-15-1/">OpenDesign 0.15.1 — sguardo più nitido, flow più lungo</a></li>
+        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">OpenDesign 0.15.0 — costa meno, consegna prima</a></li>
+        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">OpenDesign 0.14.0 — la macchina del tempo dell'ispirazione</a></li>
       </ul>
   tr:
-    title: 'Open Design 0.16.0: güvenilir teslimat'
+    title: 'OpenDesign 0.16.0: güvenilir teslimat'
     summary: 'open-design-v0.16.0 — beş günde 20 katkıcıdan 92 PR. Kod adı “Reliable Delivery”. Görsel yön artık gerçekten ürettiğiniz şeyi izliyor, otomatik güncellemeler gerçekten devreye giriyor, uzun görevler sonucu ve yanındaki dosyaları koruyor, önizlemeler çerçeveyle boğuşmayı bırakıyor. Ayrıca uygulama içinde bir mesaj merkezi ve tuvalin üzerindeki son şeyi kaldıran 0.16.1 yaması.'
     category: 'Ürün'
     bodyHtml: |
@@ -758,7 +758,7 @@ i18n:
           <tr><th>Eğer…</th><th>Buradan başlayın</th></tr>
         </thead>
         <tbody>
-          <tr><td>Open Design'a yeniyseniz</td><td>Masaüstü uygulamasını indirin, bir proje başlatın ve çalıştığınız biçime uygun bir görsel yön seçin</td></tr>
+          <tr><td>OpenDesign'a yeniyseniz</td><td>Masaüstü uygulamasını indirin, bir proje başlatın ve çalıştığınız biçime uygun bir görsel yön seçin</td></tr>
           <tr><td>Uzun görevler koşuyorsanız</td><td>Uzun bir koşuyu daha ileri götürün — bağlam tavanına çarpmak artık en güncel yararlı bağlamla, dosyalar yerinde devam ediyor</td></tr>
           <tr><td>Eski bir yapıdaysanız</td><td>“Güncellemeleri Denetle…”yi çalıştırın — durum artık açık ve yükseltmeden sonra PPTX dışa aktarma çalışıyor</td></tr>
           <tr><td>Kendi anahtarlarınızı kullanıyorsanız</td><td>BYOK sağlayıcılarınızı yeniden test edin: hatalar kurulumda ortaya çıkıyor, taslaklar çalışan yapılandırmayı ezmiyor</td></tr>
@@ -768,14 +768,14 @@ i18n:
 
       <h2>Sırada ne var</h2>
       <p>Güvenebileceğiniz bir sürüm, çoğunlukla bir şeyleri kaybetmeyi bırakmış bir sürümdür. 0.16.0 bütçesini tam oraya harcıyor: yere inen bir güncelleme, dosyalarını koruyan uzun bir görev, biçimle örtüşen bir stil, yoldan çekilen bir önizleme. Masaüstü uygulamasını indirin, elinizdeki en uzun görevi yeniden çalıştırın ve eksiksiz vardığını görün.</p>
-      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">Open Design'ı indir</a>.</p>
+      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">OpenDesign'ı indir</a>.</p>
       <p>Beş günde 92 PR; biten bir sonuçla teslim edilmiş bir sonuç arasındaki boşluğu birer birer kapatan 20 kişiden. Güvenilirlik gösterişsiz bir iştir ve geri kalan her şeyi inandırıcı kılan iştir. Sizi görüyoruz. 🚀</p>
 
       <h2>İlgili okumalar</h2>
       <ul>
-        <li><a href="/blog/open-design-0-15-1/">Open Design 0.15.1 — daha keskin görüş, daha uzun akış</a></li>
-        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">Open Design 0.15.0 — daha az maliyet, daha hızlı teslim</a></li>
-        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">Open Design 0.14.0 — ilham zaman makinesi</a></li>
+        <li><a href="/blog/open-design-0-15-1/">OpenDesign 0.15.1 — daha keskin görüş, daha uzun akış</a></li>
+        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">OpenDesign 0.15.0 — daha az maliyet, daha hızlı teslim</a></li>
+        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">OpenDesign 0.14.0 — ilham zaman makinesi</a></li>
       </ul>
 ---
 
@@ -844,7 +844,7 @@ The next day, [0.16.1](https://github.com/nexu-io/open-design/releases/tag/open-
 
 | If you're… | Start here |
 |---|---|
-| New to Open Design | Download the desktop app, start a project, and pick a visual direction made for the format you're working in |
+| New to OpenDesign | Download the desktop app, start a project, and pick a visual direction made for the format you're working in |
 | Running long tasks | Push a long run further — hitting the context ceiling now continues with the newest useful context, files intact |
 | On an older build | Run "Check for Updates…" — the update state is now explicit, and PPTX export works after upgrading |
 | Using your own keys | Re-test your BYOK providers: errors surface at setup, drafts no longer clobber a working config |
@@ -854,12 +854,12 @@ The next day, [0.16.1](https://github.com/nexu-io/open-design/releases/tag/open-
 
 A release you can trust is mostly a release that stops losing things. 0.16.0 spends its budget there — an update that lands, a long task that keeps its files, a style that matches the format, a preview that gets out of the way. Download the desktop app, rerun the longest task you've got, and see it arrive whole.
 
-[Download Open Design](https://releases.open-design.ai/?utm_source=blog&utm_medium=docs&utm_campaign=202607_0_16_0&utm_content=official).
+[Download OpenDesign](https://releases.open-design.ai/?utm_source=blog&utm_medium=docs&utm_campaign=202607_0_16_0&utm_content=official).
 
 92 PRs in five days, from 20 people who each closed one more gap between a finished result and a delivered one. Reliability is unglamorous work, and it is the work that makes everything else believable. We see you. 🚀
 
 ## Related reading
 
-- [Open Design 0.15.1: sharper vision, longer flow](/blog/open-design-0-15-1/)
-- [Open Design 0.15.0: cost less, ship faster](/blog/open-design-0-15-0-cost-less-ship-faster/)
-- [Open Design 0.14.0: the inspiration time machine](/blog/open-design-0-14-0-inspiration-time-machine/)
+- [OpenDesign 0.15.1: sharper vision, longer flow](/blog/open-design-0-15-1/)
+- [OpenDesign 0.15.0: cost less, ship faster](/blog/open-design-0-15-0-cost-less-ship-faster/)
+- [OpenDesign 0.14.0: the inspiration time machine](/blog/open-design-0-14-0-inspiration-time-machine/)

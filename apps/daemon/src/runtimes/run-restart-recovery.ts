@@ -14,6 +14,7 @@ export interface RestartRecoverableDurableRunState {
   status: string;
   terminalTrigger?: TrackingRunTerminalTrigger | null;
   terminalRecoveryReason?: 'daemon_restart' | 'analytics_incomplete';
+  terminalAt?: number | null;
   updatedAt: number;
 }
 
@@ -24,6 +25,7 @@ export function interruptDurableRunAfterDaemonRestart(
   if (TERMINAL_STATUSES.has(state.status)) return false;
   state.status = 'failed';
   state.updatedAt = now;
+  state.terminalAt = now;
   state.exitCode = 1;
   state.signal = null;
   state.error = RESTART_ERROR_MESSAGE;

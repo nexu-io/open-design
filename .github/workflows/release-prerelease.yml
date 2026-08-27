@@ -144,6 +144,9 @@ env:
   # VELA_WEB_URL_PROD.
   OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}
   OD_VELA_WEB_URL: ${{ inputs.amr_profile == 'feature-test' && secrets.VELA_WEB_URL_FEATURE_TEST || inputs.amr_profile == 'test' && secrets.VELA_WEB_URL_TEST || inputs.amr_profile == 'prod' && secrets.VELA_WEB_URL_PROD || '' }}
+  OD_VELA_WEB_URL_FEATURE_TEST: ${{ secrets.VELA_WEB_URL_FEATURE_TEST }}
+  OD_VELA_WEB_URL_TEST: ${{ secrets.VELA_WEB_URL_TEST }}
+  OD_VELA_WEB_URL_PROD: ${{ secrets.VELA_WEB_URL_PROD }}
 jobs:
   metadata:
     name: Prepare prerelease metadata
@@ -244,6 +247,17 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Setup Playwright
         run: pnpm -C e2e exec playwright install --with-deps chromium
+      # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor.
+      # The daemon launches the installed Chromium directly instead of through
+      # Playwright. Restore user namespaces on this ephemeral runner so the real
+      # Chromium sandbox remains enabled rather than disabling that protection.
+      - name: Allow Chromium user namespaces on GitHub Ubuntu
+        shell: bash
+        run: |
+          set -euo pipefail
+          if sysctl kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - name: Prebuild workspace type declarations
         run: |
           pnpm --filter @open-design/daemon build

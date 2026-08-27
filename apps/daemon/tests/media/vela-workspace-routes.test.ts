@@ -37,7 +37,7 @@ function task(id: string, projectId: string) {
 
 async function startRouteServer(options: {
   generateMedia: ReturnType<typeof vi.fn>;
-  teamWorkspaceId: string | null;
+  workspaceBinding: { workspaceId: string; visibility: 'personal' | 'team' } | null;
 }) {
   const toolGrant = {
     token: 'tool-token',
@@ -88,7 +88,7 @@ async function startRouteServer(options: {
     nativeDialogs: functionProxy(),
     projectStore: functionProxy({
       getProject: (_db: unknown, projectId: string) => ({ id: projectId }),
-      findTeamWorkspaceIdForProject: () => options.teamWorkspaceId,
+      getWorkspaceProjectByProjectId: () => options.workspaceBinding,
     }),
     projectFiles: functionProxy(),
     conversations: functionProxy(),
@@ -108,7 +108,11 @@ async function startRouteServer(options: {
   return `http://127.0.0.1:${address.port}`;
 }
 
-async function postGenerate(url: string, route: string) {
+async function postGenerate(
+  url: string,
+  route: string,
+  surface: 'image' | 'video' = 'image',
+) {
   const response = await fetch(`${url}${route}`, {
     method: 'POST',
     headers: {
@@ -116,8 +120,11 @@ async function postGenerate(url: string, route: string) {
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      surface: 'image',
-      model: 'vela/gpt-image-2',
+      surface,
+      model:
+        surface === 'image'
+          ? 'vela/gpt-image-2'
+          : 'vela/doubao-seedance-2-0-260128',
       prompt: 'test trusted workspace routing',
     }),
   });
@@ -125,13 +132,16 @@ async function postGenerate(url: string, route: string) {
 }
 
 describe('Vela media route Workspace attribution', () => {
-  it('passes the persisted team workspace through both project and tool-token routes', async () => {
+  it('uses a team Workspace binding even when the project remains personal', async () => {
     const generateMedia = vi.fn(async (_args: { workspaceId?: string }) => ({
       name: 'result.png',
     }));
     const url = await startRouteServer({
       generateMedia,
-      teamWorkspaceId: 'workspace-from-database',
+      workspaceBinding: {
+        workspaceId: 'workspace-from-database',
+        visibility: 'personal',
+      },
     });
 
     await postGenerate(url, '/api/projects/team-project/media/generate');
@@ -142,11 +152,31 @@ describe('Vela media route Workspace attribution', () => {
     expect(generateMedia.mock.calls[1]![0].workspaceId).toBe('workspace-from-database');
   });
 
-  it('does not fabricate a Vela workspace for a personal project', async () => {
+  it('uses the same Workspace binding for Vela video generation', async () => {
+    const generateMedia = vi.fn(async (_args: { workspaceId?: string }) => ({
+      name: 'result.mp4',
+    }));
+    const url = await startRouteServer({
+      generateMedia,
+      workspaceBinding: {
+        workspaceId: 'workspace-from-database',
+        visibility: 'personal',
+      },
+    });
+
+    await postGenerate(url, '/api/projects/team-project/media/generate', 'video');
+    await vi.waitFor(() => expect(generateMedia).toHaveBeenCalledOnce());
+    expect(generateMedia.mock.calls[0]![0]).toMatchObject({
+      surface: 'video',
+      workspaceId: 'workspace-from-database',
+    });
+  });
+
+  it('does not fabricate a Vela workspace for an unbound project', async () => {
     const generateMedia = vi.fn(async (_args: { workspaceId?: string }) => ({
       name: 'result.png',
     }));
-    const url = await startRouteServer({ generateMedia, teamWorkspaceId: null });
+    const url = await startRouteServer({ generateMedia, workspaceBinding: null });
 
     await postGenerate(url, '/api/projects/personal-project/media/generate');
     await vi.waitFor(() => expect(generateMedia).toHaveBeenCalledTimes(1));

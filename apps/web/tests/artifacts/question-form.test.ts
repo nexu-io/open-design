@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   formatFormAnswers,
+  hasUnterminatedQuestionForm,
   splitOnQuestionForms,
   parsePartialQuestionForm,
+  stripTrailingOpenQuestionForm,
 } from '../../src/artifacts/question-form';
 
 const VALID_BODY = `{
@@ -12,6 +14,61 @@ const VALID_BODY = `{
       "options": ["Mobile", "Desktop", "Responsive"], "required": true }
   ]
 }`;
+
+describe('unterminated question-form detection', () => {
+  // Production repro (OD Next strategy turn, no clarification needed): the
+  // model narrated its decision *into* an open tag instead of emitting a form.
+  // The tail is prose, so it can never become a form body — treating the tag
+  // as "a form is still streaming" spins the loading skeleton forever, hides
+  // every character after the tag, and latches the turn as awaiting input.
+  const PROSE_TAIL = '策略判断信息充足，将直接进入生产。\n\n<question-form> 无需提出';
+
+  it('does not treat a prose tail after the open tag as a form in flight', () => {
+    const result = stripTrailingOpenQuestionForm(PROSE_TAIL);
+    expect(result.hadOpenForm).toBe(false);
+    // Nothing may be swallowed: the narration after the tag is ordinary prose.
+    expect(result.text).toBe(PROSE_TAIL);
+    expect(hasUnterminatedQuestionForm(PROSE_TAIL)).toBe(false);
+  });
+
+  it('still reports a form in flight while its body is a plausible JSON prefix', () => {
+    const streaming = [
+      // stream stopped right after the tag — the body may still arrive
+      'One quick check:\n<question-form id="discovery" title="Brief">',
+      'One quick check:\n<question-form id="discovery" title="Brief">\n',
+      // bare JSON prefix
+      'One quick check:\n<question-form id="discovery" title="Brief">{',
+      'One quick check:\n<question-form id="discovery" title="Brief">{"id":"x","questions":[',
+      // fenced ```json wrapper, including the fence itself mid-stream
+      'One quick check:\n<question-form id="discovery" title="Brief">\n``',
+      'One quick check:\n<question-form id="discovery" title="Brief">\n```json',
+      'One quick check:\n<question-form id="discovery" title="Brief">\n```json\n{"questions":[',
+      // the alias tag behaves identically
+      'One quick check:\n<ask-question id="discovery">{"questions":[',
+    ];
+    for (const input of streaming) {
+      const result = stripTrailingOpenQuestionForm(input);
+      expect({ input, hadOpenForm: result.hadOpenForm }).toEqual({ input, hadOpenForm: true });
+      expect(result.text).toBe('One quick check:\n');
+      expect(hasUnterminatedQuestionForm(input)).toBe(true);
+    }
+  });
+
+  it('keeps scanning past a prose tag so a real form later in the message still counts', () => {
+    const input =
+      'Head.\n<question-form> 无需提出\n\nActually:\n<question-form id="d">{"questions":[';
+    const result = stripTrailingOpenQuestionForm(input);
+    expect(result.hadOpenForm).toBe(true);
+    expect(result.text).toBe('Head.\n<question-form> 无需提出\n\nActually:\n');
+  });
+
+  it('leaves a completed form block alone', () => {
+    const input = `Intro.\n<question-form id="discovery">\n${VALID_BODY}\n</question-form>\nOutro.`;
+    const result = stripTrailingOpenQuestionForm(input);
+    expect(result.hadOpenForm).toBe(false);
+    expect(result.text).toBe(input);
+  });
+});
 
 describe('form content language (lang)', () => {
   it('parses a top-level lang tag from the complete form body', () => {

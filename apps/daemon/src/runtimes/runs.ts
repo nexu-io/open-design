@@ -2,7 +2,12 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { todoSnapshotHasUnfinishedWork } from '@open-design/contracts';
+import { strategyTaskProvesDelivery, todoSnapshotHasUnfinishedWork } from '@open-design/contracts';
+import {
+  collectProcessTreePids,
+  listProcessSnapshots,
+  stopProcesses,
+} from '@open-design/platform';
 import { normalizeMediaExecutionPolicyForRun } from '../media/policy.js';
 import {
   normalizeRunToolBundleForRun,
@@ -20,6 +25,11 @@ import {
   RESTART_ERROR_CODE,
   RESTART_ERROR_MESSAGE,
 } from './run-restart-recovery.js';
+import {
+  beginRunTelemetryDelivery,
+  finalizeRunTelemetryDelivery,
+  recordRunTelemetryDeliveryAttempt,
+} from '../observability/delivery-state.js';
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 
@@ -203,6 +213,8 @@ function summarizeAssistantMessageEvents(events) {
   let upstreamErrorCount = 0;
   let provider;
   let model;
+  let usageProvider;
+  let usageModel;
   let fallbackOrdinal = 0;
   const countErrorClass = (value) => {
     if (value === 'rate_limited') rateLimitedCount += 1;
@@ -212,6 +224,15 @@ function summarizeAssistantMessageEvents(events) {
   for (const record of events) {
     if (record?.event !== 'agent' || !record.data || typeof record.data !== 'object') continue;
     const data = record.data;
+    if (data.type === 'usage') {
+      if (typeof data.provider === 'string' && data.provider.trim()) {
+        usageProvider = data.provider.trim();
+      }
+      if (typeof data.model === 'string' && data.model.trim()) {
+        usageModel = data.model.trim();
+      }
+      continue;
+    }
     if (data.type !== 'diagnostic') continue;
     if (data.name === 'model_retry') {
       retryCount += 1;
@@ -282,8 +303,8 @@ function summarizeAssistantMessageEvents(events) {
     rateLimitedCount,
     timeoutCount,
     upstreamErrorCount,
-    provider,
-    model,
+    provider: provider ?? usageProvider,
+    model: model ?? usageModel,
   };
 }
 
@@ -502,10 +523,14 @@ function durableRunState(run) {
     assistantMessageId: run.assistantMessageId,
     clientRequestId: run.clientRequestId,
     requestFingerprint: run.requestFingerprint,
+    ...(run.strategyRolloutDecision
+      ? { strategyRolloutDecision: run.strategyRolloutDecision }
+      : {}),
     agentId: run.agentId,
     status: run.status,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
+    terminalAt: run.terminalAt ?? null,
     exitCode: run.exitCode,
     signal: run.signal,
     error: run.error,
@@ -536,9 +561,6 @@ function durableRunState(run) {
       : {}),
     ...(typeof run.clientType === 'string' ? { clientType: run.clientType } : {}),
     ...(run.workspaceScope !== undefined ? { workspaceScope: run.workspaceScope } : {}),
-    ...(run.designSystemScope !== undefined
-      ? { designSystemScope: run.designSystemScope }
-      : {}),
     ...(run.analyticsTelemetry ? { analyticsTelemetry: run.analyticsTelemetry } : {}),
     ...(run.promptTelemetry ? { promptTelemetry: run.promptTelemetry } : {}),
     ...(run.promptCache ? { promptCache: run.promptCache } : {}),
@@ -570,9 +592,14 @@ function durableRunState(run) {
     ...(typeof run.deliverableArtifactKind === 'string'
       ? { deliverableArtifactKind: run.deliverableArtifactKind }
       : {}),
+    ...(run.strategyTask ? { strategyTask: run.strategyTask } : {}),
+    ...(run.odNextTaskInputSnapshot
+      ? { odNextTaskInputSnapshot: run.odNextTaskInputSnapshot }
+      : {}),
     ...(typeof run.langfuseCompletedAt === 'number'
       ? { langfuseCompletedAt: run.langfuseCompletedAt }
       : {}),
+    ...(run.telemetryDelivery ? { telemetryDelivery: run.telemetryDelivery } : {}),
   };
 }
 
@@ -642,18 +669,48 @@ export function createChatRunService({
   // outlives buffer truncation. Kept generic here: this service does not
   // interpret event semantics, it just hands each record to the observer.
   onEventEmitted = null,
+  // Optional synchronous hook invoked immediately before the single physical
+  // terminal transition. The daemon uses this to converge durable logical
+  // task state before the `end` event is persisted or published. Keeping the
+  // hook here covers startup failures and daemon shutdown in addition to the
+  // normal child-close path.
+  beforeFinish = null,
+  // Optional synchronous terminal hook. It runs after the terminal state is
+  // durable but before the terminal SSE event is published, so local outbox
+  // writes share the exact terminal timestamp without delaying on delivery.
+  onTerminal = null,
 }) {
   const runs = new Map();
   const runIdsByClientRequestId = new Map();
   const runIdsByPluginWorkflowId = new Map();
 
+  const finalizeTerminalLocally = (run, status, terminalAt) => {
+    if (!onTerminal) return;
+    try {
+      onTerminal(run, status, terminalAt);
+    } catch (error) {
+      console.warn('[runs] terminal local finalizer failed', error);
+    }
+  };
+
+  const backfillDurableTerminal = (state) => {
+    if (!TERMINAL_RUN_STATUSES.has(state?.status)) return;
+    const terminalAt = Number.isFinite(state.terminalAt)
+      ? state.terminalAt
+      : state.updatedAt;
+    if (!Number.isFinite(terminalAt)) return;
+    finalizeTerminalLocally(state, state.status, terminalAt);
+  };
+
   if (runsLogDir) {
     try {
       for (const entry of fs.readdirSync(runsLogDir, { withFileTypes: true })) {
         if (!entry.isDirectory()) continue;
-        const state = readDurableRunState(path.join(runsLogDir, entry.name, 'state.json'));
+        const statePath = path.join(runsLogDir, entry.name, 'state.json');
+        const state = readDurableRunState(statePath);
+        if (!state) continue;
         if (
-          typeof state?.clientRequestId === 'string'
+          typeof state.clientRequestId === 'string'
           && state.clientRequestId
           && typeof state.id === 'string'
         ) {
@@ -682,11 +739,15 @@ export function createChatRunService({
     const interruptedAfterRestart =
       interruptDurableRunAfterDaemonRestart(state);
     if (interruptedAfterRestart) atomicWriteJson(statePath, state);
+    backfillDurableTerminal(state);
     if (!TERMINAL_RUN_STATUSES.has(state.status)) return null;
     const eventsLogPath = path.join(runsLogDir, id, 'events.jsonl');
     const events = readDurableRunEvents(eventsLogPath);
-    if (interruptedAfterRestart) {
-      const timestamp = state.updatedAt;
+    if (
+      interruptedAfterRestart
+      || state.terminalRecoveryReason === 'daemon_restart'
+    ) {
+      const timestamp = state.terminalAt ?? state.updatedAt;
       const nextEventId =
         events.reduce((max, record) => Math.max(max, record.id), 0) + 1;
       events.push(
@@ -709,6 +770,7 @@ export function createChatRunService({
             code: 1,
             signal: null,
             status: 'failed',
+            terminalAt: timestamp,
             resumable: false,
             endedWithUnfinishedWork: Boolean(state.endedWithUnfinishedWork),
           },
@@ -762,6 +824,12 @@ export function createChatRunService({
       requestFingerprint:
         typeof meta.requestFingerprint === 'string' && meta.requestFingerprint
           ? meta.requestFingerprint
+          : null,
+      strategyRolloutDecision:
+        meta.strategyRolloutDecision
+        && typeof meta.strategyRolloutDecision === 'object'
+        && !Array.isArray(meta.strategyRolloutDecision)
+          ? meta.strategyRolloutDecision
           : null,
       agentId: typeof meta.agentId === 'string' && meta.agentId ? meta.agentId : null,
       projectMetadata:
@@ -817,6 +885,7 @@ export function createChatRunService({
       status: 'queued',
       createdAt: now,
       updatedAt: now,
+      terminalAt: null,
       events: [],
       nextEventId: 1,
       clients: new Set(),
@@ -874,11 +943,15 @@ export function createChatRunService({
       manualResumeAttemptCount: 0,
       rechargeWaitDurationMs: 0,
     };
+    if (
+      meta.odNextTaskInputSnapshot
+      && typeof meta.odNextTaskInputSnapshot === 'object'
+      && !Array.isArray(meta.odNextTaskInputSnapshot)
+    ) {
+      run.odNextTaskInputSnapshot = meta.odNextTaskInputSnapshot;
+    }
     if (Object.prototype.hasOwnProperty.call(meta, 'workspaceScope')) {
       run.workspaceScope = meta.workspaceScope ?? null;
-    }
-    if (Object.prototype.hasOwnProperty.call(meta, 'designSystemScope')) {
-      run.designSystemScope = meta.designSystemScope ?? null;
     }
     runs.set(run.id, run);
     if (run.clientRequestId) runIdsByClientRequestId.set(run.clientRequestId, run.id);
@@ -942,10 +1015,52 @@ export function createChatRunService({
     persistState(run);
   };
 
+  const beginTelemetryDelivery = (run) => {
+    if (!run) return null;
+    run.telemetryDelivery = beginRunTelemetryDelivery(
+      run.telemetryDelivery,
+      run.id,
+    );
+    persistState(run);
+    return run.telemetryDelivery;
+  };
+
+  const finalizeTelemetryDelivery = (run, delivery) => {
+    if (!run || !delivery) return null;
+    run.telemetryDelivery = finalizeRunTelemetryDelivery(
+      run.telemetryDelivery,
+      run.id,
+      delivery,
+    );
+    if (typeof run.telemetryDelivery.finalizedAt === 'number') {
+      run.langfuseCompletedAt = run.telemetryDelivery.finalizedAt;
+    } else {
+      delete run.langfuseCompletedAt;
+    }
+    persistState(run);
+    return run.telemetryDelivery;
+  };
+
+  const recordTelemetryDeliveryAttempt = (run) => {
+    if (!run) return null;
+    run.telemetryDelivery = recordRunTelemetryDeliveryAttempt(
+      run.telemetryDelivery,
+      run.id,
+    );
+    persistState(run);
+    return run.telemetryDelivery;
+  };
+
+  // Compatibility alias for older in-process callers. New delivery paths use
+  // the explicit begin/finalize pair so a daemon crash cannot be confused
+  // with a terminal network failure.
   const markLangfuseCompleted = (run) => {
     if (!run) return;
-    run.langfuseCompletedAt = Date.now();
-    persistState(run);
+    finalizeTelemetryDelivery(run, {
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted',
+      langfuse_attempt_count: 1,
+    });
   };
 
   const setDeliverableValidation = (run, result) => {
@@ -988,6 +1103,7 @@ export function createChatRunService({
     run.cleanupGeneration = (run.cleanupGeneration ?? 0) + 1;
     run.status = 'queued';
     run.updatedAt = resumedAt;
+    run.terminalAt = null;
     run.exitCode = null;
     run.signal = null;
     run.error = null;
@@ -1022,6 +1138,18 @@ export function createChatRunService({
     run.stdinOpen = false;
     run.eventsLogStream = null;
     run.eventsLogClosed = false;
+    // A resumed attempt is a fresh execution, so it must not inherit the prior
+    // attempt's lifecycle marks. Keeping them makes every phase boundary
+    // measure from before the recharge pause, putting the wait time inside the
+    // new attempt's model-active window. Only the logical run start survives,
+    // so queue time is still measured from when the user asked for the run.
+    run.analyticsTelemetry = {
+      ...(run.analyticsTelemetry?.startRequestedAt !== undefined
+        ? { startRequestedAt: run.analyticsTelemetry.startRequestedAt }
+        : {}),
+      attemptStartedAt: resumedAt,
+      attemptIndex: 0,
+    };
     run.manualResumeAttemptCount = (run.manualResumeAttemptCount ?? 0) + 1;
     run.rechargeWaitDurationMs =
       (run.rechargeWaitDurationMs ?? 0) + rechargeWaitDurationMs;
@@ -1067,14 +1195,20 @@ export function createChatRunService({
     }
   };
 
-  const emit = (run, event, data) => {
+  const emit = (run, event, data, timestamp = Date.now(), persistLifecycle = true) => {
+    // Once a terminal verdict is waiting only on process-tree quiescence, the
+    // attempt no longer owns transcript or error state. Shutdown bytes and
+    // duplicate child callbacks must not overwrite the classified verdict
+    // during that bounded window. The termination barrier itself may still
+    // publish `termination_failed` evidence before the final `end` event.
+    if (run.pendingTerminalFinish && event !== 'diagnostic') return null;
     if (event === 'error') {
       const details = extractErrorDetails(data);
       if (details.error) run.error = details.error;
       if (details.errorCode) run.errorCode = details.errorCode;
     }
     const id = run.nextEventId++;
-    const record = { id, event, data, timestamp: Date.now() };
+    const record = { id, event, data, timestamp };
     // Fold committed side effects BEFORE the ring buffer can drop this record,
     // so the finalization-time verdict survives truncation of run.events.
     if (onEventEmitted) {
@@ -1082,11 +1216,11 @@ export function createChatRunService({
     }
     run.events.push(record);
     if (run.events.length > maxEvents) run.events.splice(0, run.events.length - maxEvents);
-    run.updatedAt = Date.now();
+    run.updatedAt = timestamp;
     // State writes are synchronous so they survive process termination. Keep
     // them on lifecycle boundaries only: agent/text deltas can arrive many
     // times per second and are already streamed to events.jsonl.
-    if (event === 'start' || event === 'error' || event === 'end') persistState(run);
+    if (persistLifecycle && (event === 'start' || event === 'error' || event === 'end')) persistState(run);
     const stream = ensureLogStream(run);
     if (stream) {
       try {
@@ -1113,9 +1247,11 @@ export function createChatRunService({
     designSystemDigest: run.designSystemDigest ?? null,
     appliedPluginSnapshotId: run.appliedPluginSnapshotId ?? null,
     pluginId: run.pluginId ?? null,
+    strategyRolloutDecision: run.strategyRolloutDecision ?? null,
     status: run.status,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
+    terminalAt: run.terminalAt ?? null,
     cancelRequested: !!run.cancelRequested,
     cancelOrigin: run.cancelOrigin ?? null,
     terminalTrigger: run.terminalTrigger ?? null,
@@ -1169,25 +1305,41 @@ export function createChatRunService({
     ...(typeof run.deliverableArtifactKind === 'string'
       ? { deliverableArtifactKind: run.deliverableArtifactKind }
       : {}),
+    ...(run.strategyTask ? { strategyTask: run.strategyTask } : {}),
     ...(TERMINAL_RUN_STATUSES.has(run.status)
       ? { executionDiagnostics: buildExecutionDiagnostics(run) }
       : {}),
   });
 
-  const finish = (run, status, code: number | null = null, signal: string | null = null) => {
+  const commitFinish = (run, status, code: number | null = null, signal: string | null = null) => {
     if (TERMINAL_RUN_STATUSES.has(run.status)) return;
+    if (beforeFinish) beforeFinish(run, status, code, signal);
+    const terminalAt = Date.now();
     run.status = status;
     run.exitCode = code;
     run.signal = signal;
-    run.updatedAt = Date.now();
+    run.updatedAt = terminalAt;
+    run.terminalAt = terminalAt;
     // Derive the work-completeness flag once, at the single terminal choke point,
     // from the signals the agent-event handler folded onto the run. Uses the
     // canonical predicate so it can never diverge from the web chat footer
     // (#1247 / #1060). A truncated turn (max_tokens) counts as unfinished even
     // if the last TodoWrite looked done. Absence of any TodoWrite snapshot keeps
     // the flag false, so a text-only answer stays "Completed".
+    //
+    // A settled strategy verdict outranks the TodoWrite narration: the task
+    // reaches `completed` only once the deliverable was verified on disk, and
+    // the agent's own checklist is routinely left with a stale `pending` item.
+    // Truncation stays an independent term — a cut-off generation is unfinished
+    // whatever verdict was recorded.
     run.endedWithUnfinishedWork =
-      Boolean(run.truncatedMidTurn) || todoSnapshotHasUnfinishedWork(run.lastTodoSnapshot);
+      Boolean(run.truncatedMidTurn)
+      || (!strategyTaskProvesDelivery(run.strategyTask)
+        && todoSnapshotHasUnfinishedWork(run.lastTodoSnapshot));
+    // Commit the terminal Run snapshot before exposing its terminal event. The
+    // optional outbox hook is local-only and synchronous by contract.
+    persistState(run);
+    finalizeTerminalLocally(run, status, terminalAt);
     // Release run-scoped resources the starter registered (e.g. the minted
     // tool-token grant + agent event-sink entries). This runs on EVERY
     // terminal path — including a startup throw that never reached the child
@@ -1198,17 +1350,23 @@ export function createChatRunService({
       run.onFinalize = null;
       try { finalize(); } catch { /* best-effort */ }
     }
+    // Terminal finalizers can add artifact metadata after the authoritative
+    // terminal timestamp snapshot. Persist once more before publishing `end`
+    // so restart hydration sees the same artifact result as live clients.
+    persistState(run);
     emit(run, 'end', {
       code,
       signal,
       status,
+      terminalAt,
       resumable: run.resumable ?? false,
       endedWithUnfinishedWork: run.endedWithUnfinishedWork,
       ...(Number.isFinite(run.artifactCount) ? { artifactCount: run.artifactCount } : {}),
       ...(Array.isArray(run.artifactPaths) ? { artifactPaths: run.artifactPaths } : {}),
       failureCategory: run.failureCategory ?? null,
       failureDetail: run.failureDetail ?? null,
-    });
+      ...(run.strategyTask ? { strategyTask: run.strategyTask } : {}),
+    }, terminalAt, false);
     for (const sse of run.clients) sse.end();
     run.clients.clear();
     for (const waiter of run.waiters) waiter(statusBody(run));
@@ -1220,6 +1378,21 @@ export function createChatRunService({
     // Any event emitted after this point must not lazily re-open the log.
     run.eventsLogClosed = true;
     scheduleCleanup(run);
+  };
+
+  // A run may reach its logical verdict before the attempt's complete process
+  // tree is quiet. Keep the public status/SSE/analytics terminal behind every
+  // registered teardown barrier: `run_finished` is a claim that this run can no
+  // longer produce model traffic, not merely that its direct child emitted
+  // `close`. The first verdict owns the terminal fields; duplicate close/error
+  // paths wait on the same pending finish instead of publishing twice.
+  const finish = (run, status, code: number | null = null, signal: string | null = null) => {
+    if (TERMINAL_RUN_STATUSES.has(run.status) || run.pendingTerminalFinish) return;
+    if ((run.processTreeTerminationPending ?? 0) > 0) {
+      run.pendingTerminalFinish = { status, code, signal };
+      return;
+    }
+    commitFinish(run, status, code, signal);
   };
 
   const fail = (run, code, message, init = {}) => {
@@ -1298,20 +1471,6 @@ export function createChatRunService({
     });
   };
 
-  // A runtime error can be emitted while the child is still draining stdout.
-  // When that happened before cancellation, wait for `close` so server.ts's
-  // earlier close listener can classify and finalize the failure before the
-  // cancel route applies its canceled fallback. Ordinary cancellation keeps
-  // the faster exit-or-close behavior.
-  const waitForCanceledChildExit = (run, timeoutMs) => {
-    if (TERMINAL_RUN_STATUSES.has(run.status)) return Promise.resolve(true);
-    return waitForChildExit(
-      run.child,
-      timeoutMs,
-      { closeOnly: run.runtimeFailureObservedBeforeCancellation === true },
-    );
-  };
-
   const forceWaitMs = () => {
     const raw = Number(process.env.OD_CHAT_RUN_CANCEL_FORCE_WAIT_MS);
     return Number.isFinite(raw) && raw > 0 ? raw : 500;
@@ -1380,6 +1539,177 @@ export function createChatRunService({
     return true;
   };
 
+  const processGroupIsAlive = (processGroupId) => {
+    if (process.platform === 'win32' || !Number.isInteger(processGroupId)) return false;
+    try {
+      process.kill(-processGroupId, 0);
+      return true;
+    } catch (err) {
+      return err?.code !== 'ESRCH';
+    }
+  };
+
+  const waitForProcessGroupExit = async (processGroupId, timeoutMs) => {
+    const deadline = Date.now() + Math.max(0, timeoutMs);
+    while (Date.now() < deadline) {
+      if (!processGroupIsAlive(processGroupId)) return true;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    return !processGroupIsAlive(processGroupId);
+  };
+
+  /**
+   * Terminate one captured attempt's complete process ownership boundary and
+   * register it as a terminal-publication barrier on the logical run.
+   *
+   * POSIX agents are spawned as process-group leaders, so pgid signalling also
+   * catches descendants created after teardown starts. Windows has no matching
+   * group primitive here; reuse the platform package's process-tree snapshot +
+   * bounded SIGTERM/SIGKILL escalation while the direct child is still alive.
+   * The captured child/pgid key makes repeated verdict/close callbacks
+   * idempotent and prevents a retry generation from targeting its successor.
+   */
+  const terminateProcessTree = (run, child, processGroupId, {
+    gracefulWaitMs = 0,
+    termGraceMs = cancelGraceMs(),
+    killGraceMs = forceWaitMs(),
+    reason = 'run_terminal',
+  } = {}) => {
+    const key = child ?? processGroupId;
+    run.processTreeTerminations ??= new Map();
+    if (key != null && run.processTreeTerminations.has(key)) {
+      return run.processTreeTerminations.get(key);
+    }
+
+    run.processTreeTerminationPending = (run.processTreeTerminationPending ?? 0) + 1;
+    const task = (async () => {
+      if (process.platform !== 'win32' && Number.isInteger(processGroupId)) {
+        if (!processGroupIsAlive(processGroupId)) {
+          return { quiescent: true, forced: false, remainingPids: [] };
+        }
+        if (
+          gracefulWaitMs > 0
+          && await waitForProcessGroupExit(processGroupId, gracefulWaitMs)
+        ) {
+          return { quiescent: true, forced: false, remainingPids: [] };
+        }
+        if (gracefulWaitMs > 0) closeRunStdin(run);
+        signalProcessGroup(processGroupId, 'SIGTERM');
+        if (await waitForProcessGroupExit(processGroupId, termGraceMs)) {
+          return { quiescent: true, forced: false, remainingPids: [] };
+        }
+        signalProcessGroup(processGroupId, 'SIGKILL');
+        const quiescent = await waitForProcessGroupExit(processGroupId, killGraceMs);
+        return {
+          quiescent,
+          forced: true,
+          remainingPids: quiescent ? [] : [processGroupId],
+        };
+      }
+
+      if (!Number.isInteger(child?.pid)) {
+        if (
+          gracefulWaitMs > 0
+          && await waitForChildExit(child, gracefulWaitMs)
+        ) {
+          return { quiescent: true, forced: false, remainingPids: [] };
+        }
+        if (gracefulWaitMs > 0) closeRunStdin(run);
+        signalChildProcess(child, null, 'SIGTERM');
+        if (await waitForChildExit(child, termGraceMs)) {
+          return { quiescent: true, forced: false, remainingPids: [] };
+        }
+        signalChildProcess(child, null, 'SIGKILL');
+        const quiescent = await waitForChildExit(child, killGraceMs);
+        return {
+          quiescent,
+          forced: true,
+          remainingPids: [],
+        };
+      }
+
+      const initialSnapshots = await listProcessSnapshots();
+      let enumerationVerified = initialSnapshots.length > 0;
+      let childExitedDuringGrace = childHasExited(child);
+      if (gracefulWaitMs > 0) {
+        childExitedDuringGrace = await waitForChildExit(child, gracefulWaitMs);
+        if (!childExitedDuringGrace) closeRunStdin(run);
+      }
+      const refreshedSnapshots = await listProcessSnapshots();
+      enumerationVerified &&= refreshedSnapshots.length > 0;
+      const snapshots = [...initialSnapshots, ...refreshedSnapshots];
+      const pids = collectProcessTreePids(snapshots, [child.pid])
+        .filter((pid) => !childExitedDuringGrace || pid !== child.pid);
+      const terminationPids = pids.length > 0 || childExitedDuringGrace
+        ? pids
+        : [child.pid];
+      const result = await stopProcesses(terminationPids, { termGraceMs, killGraceMs });
+
+      const verificationSnapshots = await listProcessSnapshots();
+      enumerationVerified &&= verificationSnapshots.length > 0;
+      const livePids = new Set(verificationSnapshots.map((snapshot) => snapshot.pid));
+      let remainingPids = collectProcessTreePids(
+        [...snapshots, ...verificationSnapshots],
+        [child.pid, ...pids],
+      ).filter((pid) => livePids.has(pid));
+      let forcedPids = result.forcedPids;
+
+      // A wrapper may create one last descendant while handling SIGTERM. Reap
+      // anything the post-escalation verification newly attaches to the
+      // captured ownership tree, then verify once more before terminalizing.
+      if (enumerationVerified && remainingPids.length > 0) {
+        const followUp = await stopProcesses(remainingPids, {
+          termGraceMs: 0,
+          killGraceMs,
+        });
+        forcedPids = [...new Set([...forcedPids, ...followUp.forcedPids])];
+        const finalSnapshots = await listProcessSnapshots();
+        enumerationVerified &&= finalSnapshots.length > 0;
+        const finalLivePids = new Set(finalSnapshots.map((snapshot) => snapshot.pid));
+        remainingPids = collectProcessTreePids(
+          [...snapshots, ...verificationSnapshots, ...finalSnapshots],
+          [...pids, ...remainingPids],
+        ).filter((pid) => finalLivePids.has(pid));
+      }
+      return {
+        quiescent: enumerationVerified && remainingPids.length === 0,
+        forced: forcedPids.length > 0,
+        remainingPids,
+        ...(!enumerationVerified ? { error: 'process enumeration unavailable' } : {}),
+      };
+    })().catch((error) => ({
+      quiescent: false,
+      forced: false,
+      remainingPids: [],
+      error: error instanceof Error ? error.message : String(error),
+    })).then((result) => {
+      if (!result.quiescent) {
+        emit(run, 'diagnostic', {
+          type: 'termination_failed',
+          reason,
+          child_pid: child?.pid ?? null,
+          process_group_id: processGroupId ?? null,
+          remaining_pids: result.remainingPids,
+          ...(result.error ? { error: result.error } : {}),
+        });
+      }
+      return result;
+    }).finally(() => {
+      run.processTreeTerminationPending = Math.max(
+        0,
+        (run.processTreeTerminationPending ?? 1) - 1,
+      );
+      if (run.processTreeTerminationPending === 0 && run.pendingTerminalFinish) {
+        const pending = run.pendingTerminalFinish;
+        run.pendingTerminalFinish = null;
+        commitFinish(run, pending.status, pending.code, pending.signal);
+      }
+    });
+
+    if (key != null) run.processTreeTerminations.set(key, task);
+    return task;
+  };
+
   // Reap a torn-down attempt's whole process group: SIGTERM now, then SIGKILL any
   // survivors after the grace window. Both target the CAPTURED pgid passed in —
   // callers must snapshot run.processGroupId before a same-run retry overwrites
@@ -1441,37 +1771,46 @@ export function createChatRunService({
       return statusBody(run);
     }
 
+    const targetChild = run.child;
+    const targetProcessGroupId = run.processGroupId;
+
     // Prefer RPC-level abort for agents that support it (pi, ACP adapters).
     // If the adapter does not exit within its grace window, fall back to
     // process signals and finally SIGKILL the process group.
     if (run.acpSession?.abort) {
+      const graceMs = Number(process.env.PI_ABORT_GRACE_MS) || 3000;
       try {
         run.acpSession.abort();
       } catch {
         // Signal fallback below owns eventual process termination.
       }
-      const graceMs = Number(process.env.PI_ABORT_GRACE_MS) || 3000;
-      if (await waitForCanceledChildExit(run, graceMs)) {
-        return finishCanceledFromChildState(run, 'SIGTERM');
-      }
-      closeRunStdin(run);
-      killChild(run, 'SIGTERM');
-      if (await waitForCanceledChildExit(run, graceMs)) {
-        return finishCanceledFromChildState(run, 'SIGTERM');
-      }
-      killChild(run, 'SIGKILL');
-      await waitForCanceledChildExit(run, forceWaitMs());
-      return finishCanceledFromChildState(run, 'SIGKILL');
+      const termination = terminateProcessTree(
+        run,
+        targetChild,
+        targetProcessGroupId,
+        {
+          gracefulWaitMs: graceMs,
+          termGraceMs: graceMs,
+          killGraceMs: forceWaitMs(),
+          reason: 'run_cancel',
+        },
+      );
+      const terminationResult = await termination;
+      return finishCanceledFromChildState(run, terminationResult.forced ? 'SIGKILL' : 'SIGTERM');
     }
 
     closeRunStdin(run);
-    killChild(run, 'SIGTERM');
-    if (await waitForCanceledChildExit(run, cancelGraceMs())) {
-      return finishCanceledFromChildState(run, 'SIGTERM');
-    }
-    killChild(run, 'SIGKILL');
-    await waitForCanceledChildExit(run, forceWaitMs());
-    return finishCanceledFromChildState(run, 'SIGKILL');
+    const termination = await terminateProcessTree(
+      run,
+      targetChild,
+      targetProcessGroupId,
+      {
+        termGraceMs: cancelGraceMs(),
+        killGraceMs: forceWaitMs(),
+        reason: 'run_cancel',
+      },
+    );
+    return finishCanceledFromChildState(run, termination.forced ? 'SIGKILL' : 'SIGTERM');
   };
 
   const shutdownActive = async ({ graceMs = shutdownGraceMs } = {}) => {
@@ -1481,6 +1820,17 @@ export function createChatRunService({
       run.cancelOrigin = 'daemon_shutdown';
       run.updatedAt = Date.now();
       clearPendingRetryRestart(run);
+      const termination = terminateProcessTree(
+        run,
+        run.child,
+        run.processGroupId,
+        {
+          gracefulWaitMs: graceMs,
+          termGraceMs: graceMs,
+          killGraceMs: 500,
+          reason: 'daemon_shutdown',
+        },
+      );
       if (run.acpSession?.abort) {
         try {
           run.acpSession.abort();
@@ -1489,12 +1839,8 @@ export function createChatRunService({
         }
       }
       closeRunStdin(run);
-      killChild(run, 'SIGTERM');
-      finish(run, 'canceled', null, 'SIGTERM');
-      if (run.child && !(await waitForChildExit(run.child, graceMs))) {
-        killChild(run, 'SIGKILL');
-        await waitForChildExit(run.child, 500);
-      }
+      const terminationResult = await termination;
+      finish(run, 'canceled', null, terminationResult.forced ? 'SIGKILL' : 'SIGTERM');
     }));
   };
 
@@ -1567,6 +1913,9 @@ export function createChatRunService({
     persistState,
     setAnalyticsRecovery,
     markAnalyticsCompleted,
+    beginTelemetryDelivery,
+    recordTelemetryDeliveryAttempt,
+    finalizeTelemetryDelivery,
     markLangfuseCompleted,
     setDeliverableValidation,
     finish,
@@ -1574,6 +1923,7 @@ export function createChatRunService({
     drop,
     signalChild: killChild,
     reapProcessGroup,
+    terminateProcessTree,
     signalProcessGroup,
     statusBody,
     signalChildProcess,

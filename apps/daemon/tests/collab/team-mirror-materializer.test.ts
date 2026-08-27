@@ -169,6 +169,67 @@ describe('authorized team mirror SQLite materialization', () => {
       .toEqual(receipt());
   });
 
+  it('keeps an owner first-open placeholder creator-less until real content commits', async () => {
+    const db = await database();
+    const ownerScope = {
+      ...scope,
+      ownerMemberId: scope.viewerMemberId,
+    };
+
+    materializePulledTeamMirror(
+      db,
+      { ...input, name: '共享项目' },
+      ownerScope,
+      undefined,
+      { placeholder: true },
+    );
+
+    expect(getProject(db, input.id)?.metadata?.sharedProjectPlaceholderAt)
+      .toEqual(expect.any(Number));
+    expect(listWorkspaceProjects(db, ownerScope.workspaceId).find(
+      (project) => project.id === input.id,
+    )?.createdByWorkspaceMemberId).toBeNull();
+
+    materializePulledTeamMirror(db, {
+      ...input,
+      metadata: { kind: 'prototype' },
+    }, ownerScope);
+
+    expect(getProject(db, input.id)).toMatchObject({
+      name: input.name,
+      metadata: { kind: 'prototype' },
+    });
+    expect(listWorkspaceProjects(db, ownerScope.workspaceId).find(
+      (project) => project.id === input.id,
+    )?.createdByWorkspaceMemberId).toBe(ownerScope.viewerMemberId);
+  });
+
+  it('replaces a member placeholder even when its local bootstrap timestamp is newer', async () => {
+    const db = await database();
+    materializePulledTeamMirror(
+      db,
+      { ...input, name: '共享项目', updatedAt: 20_000 },
+      scope,
+      undefined,
+      { placeholder: true },
+    );
+
+    materializePulledTeamMirror(db, {
+      ...input,
+      updatedAt: 10_000,
+      metadata: { kind: 'prototype' },
+    }, scope);
+
+    expect(getProject(db, input.id)).toMatchObject({
+      name: input.name,
+      updatedAt: 10_000,
+      metadata: { kind: 'prototype' },
+    });
+    expect(listWorkspaceProjects(db, scope.workspaceId).find(
+      (project) => project.id === input.id,
+    )?.createdByWorkspaceMemberId).toBeNull();
+  });
+
   it('refreshes an existing foreign mirror name when the owner metadata is newer', async () => {
     const db = await database();
     materializePulledTeamMirror(db, input, scope, receipt());

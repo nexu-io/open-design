@@ -7,6 +7,7 @@ import {
   initialTypewriterState,
   type PlaceholderScenario,
 } from './placeholderScenarios';
+import { isVisualStabilityMode } from '../../utils/visualStability';
 
 // Reports the OS "reduce motion" preference, live. SSR/jsdom without
 // matchMedia falls back to false (animate) — the animation is purely
@@ -50,6 +51,7 @@ interface Props {
 // the frequent re-renders stay confined here and never touch the editor.
 export function PlaceholderCarousel({ scenarios, active, paused = false, onScenarioChange }: Props) {
   const reducedMotion = usePrefersReducedMotion();
+  const visualStabilityMode = isVisualStabilityMode();
   const [state, setState] = useState(initialTypewriterState);
   const onChangeRef = useRef(onScenarioChange);
   onChangeRef.current = onScenarioChange;
@@ -88,7 +90,7 @@ export function PlaceholderCarousel({ scenarios, active, paused = false, onScena
   // state re-runs this effect, whose cleanup clears the prior timer — so the
   // chain self-sustains without overlapping timers (StrictMode-safe).
   useEffect(() => {
-    if (!active || paused || scenarios.length === 0) return;
+    if (!active || paused || visualStabilityMode || scenarios.length === 0) return;
     const scenario = scenarios[state.index % scenarios.length];
     const length = scenario?.text.length ?? 0;
     const { state: nextState, delayMs } = advanceTypewriter(
@@ -100,12 +102,14 @@ export function PlaceholderCarousel({ scenarios, active, paused = false, onScena
     );
     const timer = window.setTimeout(() => setState(nextState), Math.max(16, delayMs));
     return () => window.clearTimeout(timer);
-  }, [active, paused, state, scenarios, reducedMotion]);
+  }, [active, paused, state, scenarios, reducedMotion, visualStabilityMode]);
 
   if (!active || paused || scenarios.length === 0) return null;
   const scenario = scenarios[state.index % scenarios.length];
   if (!scenario) return null;
-  const visible = reducedMotion ? scenario.text : scenario.text.slice(0, state.charCount);
+  const visible = reducedMotion || visualStabilityMode
+    ? scenario.text
+    : scenario.text.slice(0, state.charCount);
   return (
     <div className="home-hero__carousel" aria-hidden="true" data-testid="home-hero-carousel">
       <span className="home-hero__carousel-text">{visible}</span>

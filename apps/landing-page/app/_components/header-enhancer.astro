@@ -6,7 +6,6 @@ const directAssets = {
   macArm64: latestRelease.matrix.macArm64Dmg?.url ?? '',
   macX64: latestRelease.matrix.macX64Dmg?.url ?? '',
   windows: latestRelease.matrix.winSetup?.url ?? '',
-  linux: latestRelease.matrix.linux?.url ?? '',
 };
 ---
 
@@ -79,13 +78,8 @@ const directAssets = {
               match: (name) => /mac-arm64\.dmg$/i.test(name),
             };
       }
-      if (/linux/.test(platform) || (/linux/.test(ua) && !/android/.test(ua))) {
-        return {
-          assetKey: 'linux',
-          label: 'Linux',
-          match: (name) => /\.appimage$/i.test(name),
-        };
-      }
+      // No Linux desktop build — Linux visitors keep the /download/
+      // page fallback.
       return null;
     };
     const navPlatform = navDownload ? detectNavDownloadPlatform() : null;
@@ -201,7 +195,7 @@ const directAssets = {
     }
 
     // Hamburger menu toggle. Active only at narrow viewports (CSS hides
-    // the toggle button at ≥1100px). Click toggles `.is-open` on the
+    // the toggle button at ≥1367px). Click toggles `.is-open` on the
     // header; outside-click, Escape, and clicking any link inside the
     // menu close it again. Keeps `aria-expanded` in sync.
     const toggle = document.querySelector('[data-nav-toggle]');
@@ -280,7 +274,7 @@ const directAssets = {
         .catch(() => {});
     }
 
-    // Open Design Cloud header account. Detects an existing cloud session via
+    // OpenDesign Cloud header account. Detects an existing cloud session via
     // the vela API and reveals the avatar menu only for signed-in visitors.
     // Signed-out visitors keep the download CTA as the sole account-side
     // action, because the product itself runs in the desktop client. All

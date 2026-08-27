@@ -141,7 +141,6 @@ test('[P0] Team design systems catch up missed shares, updates, and retractions'
     await expectProjectSharedLogo(
       ownerPage,
       'Shared Product Language',
-      OWNER.memberId,
     );
 
     await gotoDesignSystems(ownerPage);
@@ -152,7 +151,6 @@ test('[P0] Team design systems catch up missed shares, updates, and retractions'
     await expectSharedLogo(
       ownerPage.getByTestId(`design-system-detail-${designSystemId}`),
       'Shared Product Language',
-      OWNER.memberId,
     );
 
     const shareResponse = await ownerPage.request.post(
@@ -208,7 +206,6 @@ test('[P0] Team design systems catch up missed shares, updates, and retractions'
     await expectSharedLogo(
       memberPage.getByTestId(`design-system-detail-${designSystemId}`),
       'Shared Product Language',
-      MEMBER.memberId,
     );
     await gotoHome(memberPage);
     await ensureRailOpen(memberPage);
@@ -421,14 +418,14 @@ async function pinWorkspace(page: Page, workspaceMemberId: string): Promise<void
 
 async function gotoHome(page: Page): Promise<void> {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, {
+  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0, {
     timeout: T.xlong,
   });
 }
 
 async function gotoDesignSystems(page: Page): Promise<void> {
   await page.goto('/design-systems', { waitUntil: 'domcontentloaded' });
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, {
+  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0, {
     timeout: T.xlong,
   });
 }
@@ -450,7 +447,6 @@ async function writeLogoProjectFile(
 async function expectSharedLogo(
   container: ReturnType<Page['getByTestId']>,
   alt: string,
-  workspaceMemberId: string,
 ): Promise<void> {
   const logo = container.getByTestId('design-kit-logo-section').getByRole('img', { name: alt });
   await expect(logo).toBeVisible({ timeout: T.xlong });
@@ -459,16 +455,22 @@ async function expectSharedLogo(
       complete: image.complete,
       width: image.naturalWidth,
       height: image.naturalHeight,
+      workspaceId: new URL(image.src).searchParams.get('workspaceId'),
       workspaceMemberId: new URL(image.src).searchParams.get('workspaceMemberId'),
     })),
     { timeout: T.long },
-  ).toEqual({ complete: true, width: 320, height: 160, workspaceMemberId });
+  ).toEqual({
+    complete: true,
+    width: 320,
+    height: 160,
+    workspaceId: null,
+    workspaceMemberId: null,
+  });
 }
 
 async function expectProjectSharedLogo(
   page: Page,
   alt: string,
-  workspaceMemberId: string,
 ): Promise<void> {
   const tab = page.getByTestId('design-system-project-tab');
   const panel = page.getByTestId('design-system-project-tab-panel');
@@ -487,16 +489,21 @@ async function expectProjectSharedLogo(
       return 0;
     }
 
+    // A late workspace restoration can replace this panel after tabReady was
+    // observed. Bound the locator probe so the outer poll can select the tab
+    // again instead of waiting on the removed image until the full timeout.
     const image = await logo.evaluate((element: HTMLImageElement) => ({
       complete: element.complete,
       width: element.naturalWidth,
       height: element.naturalHeight,
+      workspaceId: new URL(element.src).searchParams.get('workspaceId'),
       workspaceMemberId: new URL(element.src).searchParams.get('workspaceMemberId'),
-    })).catch(() => null);
+    }), { timeout: T.short }).catch(() => null);
     const matches = image?.complete === true
       && image.width === 320
       && image.height === 160
-      && image.workspaceMemberId === workspaceMemberId;
+      && image.workspaceId === null
+      && image.workspaceMemberId === null;
     if (!matches) {
       matchingSince = 0;
       return 0;

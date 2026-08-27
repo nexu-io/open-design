@@ -3,10 +3,10 @@
   "id": "uber",
   "name": "Uber",
   "category": "Media & Consumer",
-  "description": "Bundled Open Design package for Uber, derived from curated DESIGN.md, tokens.css, and components.html fixtures.",
+  "description": "Bundled OpenDesign package for Uber, derived from curated DESIGN.md, tokens.css, and components.html fixtures.",
   "source": {
     "type": "bundled",
-    "origin": "Open Design curated bundled fixture"
+    "origin": "OpenDesign curated bundled fixture"
   },
   "files": {
     "design": "DESIGN.md",
@@ -50,11 +50,5 @@
     "evidence": "source/evidence.md",
     "tokens": "source/tokens.source.json",
     "report": "source/token-contract.report.json"
-  },
-  "runtime": {
-    "components": "manifests/components.json",
-    "intents": "manifests/intent-map.json",
-    "lint": "rules/lint.json",
-    "fallback": "rules/fallback.json"
   }
 }

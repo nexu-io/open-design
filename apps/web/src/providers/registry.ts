@@ -1,4 +1,9 @@
-import { workspaceContextHasTeamIdentity } from '@open-design/contracts';
+import {
+  PUBLIC_FILE_MANUAL_REVOKE_REQUIRED,
+  workspaceContextHasTeamIdentity,
+  type PublicFileManualRevokeRequiredData,
+  type PublicProjectFilePublication,
+} from '@open-design/contracts';
 import { boundedRequestErrorCode } from '../analytics/workspace';
 import type {
   ConnectorAuthConfigPrepareResponse,
@@ -19,6 +24,7 @@ import type {
   ReplaceProjectWorkingDirResponse,
   ProjectFileTextPreviewResponse,
   ProjectFileResponse,
+  ProjectPreviewScopeRenewResponse,
   ProjectPreviewUrlResponse,
   ProjectFileVersion,
   ProjectFileVersionSource,
@@ -96,7 +102,10 @@ import {
   appendResourceQuery,
   workspaceIdentityCacheKey,
   workspaceResourceUrl,
+  workspaceAccountScopedCacheKey,
+  currentWorkspaceAccountGeneration,
 } from '../collab/workspace-identity';
+import { PublicFilePublishError } from '../collab/public-file-publish';
 
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
@@ -114,11 +123,7 @@ export type WebDeployProjectFileResponse = DeployProjectFileResponse;
 export type WebCloudflarePagesDeploySelection = CloudflarePagesDeploySelection;
 export type WebCloudflarePagesZonesResponse = CloudflarePagesZonesResponse;
 
-export interface WebPublicProjectFileResponse {
-  url: string;
-  slug: string;
-  fileName: string;
-}
+export type WebPublicProjectFileResponse = PublicProjectFilePublication;
 
 export function isDeployProviderId(value: unknown): value is WebDeployProviderId {
   return typeof value === 'string' && (DEPLOY_PROVIDER_IDS as readonly string[]).includes(value);
@@ -581,12 +586,18 @@ export interface FetchDesignSystemsOptions {
    * Exact Team ids returned by a workspace-scoped Team-index read that just
    * completed in the caller. Reuse that witness while reading the unified
    * catalog instead of issuing a duplicate `/team` materialization request.
+   *
+   * Supplying it also declares the catalog read itself authoritative: the only
+   * caller passes it when its fresh `/team` witness disagrees with the rows it
+   * holds, or straight after a share/unshare. So the catalog read starts fresh
+   * rather than joining one issued before that change.
    */
   materializedTeamIds?: readonly string[];
 }
 
 async function materializeTeamDesignSystems(
   workspaceContext: WorkspaceCollabContext | null | undefined,
+  accountGeneration: number,
   options?: FetchDesignSystemsOptions,
 ): Promise<ReadonlySet<string>> {
   if (!workspaceContext || !workspaceContextHasTeamIdentity(workspaceContext)) {
@@ -605,9 +616,14 @@ async function materializeTeamDesignSystems(
   // workspace" lookup. One account can have multiple clients open in different
   // Workspaces; a backend-global active Workspace would let either client
   // retarget the other's catalog request.
-  const identity = workspaceIdentityCacheKey(workspaceContext);
   try {
-    const cacheKey = `design-system-team-materialization:${identity}`;
+    // Account-scoped for the same reason the catalog key is, and with the SAME
+    // captured generation: this witness decorates the catalog rows, so a `/team`
+    // request still in flight across a sign-out/sign-in must not be joined by a
+    // post-boundary reader — that would stamp the new account's rows with the
+    // previous account's Team-share flags.
+    const cacheKey = `design-system-team-materialization:`
+      + `${workspaceAccountScopedCacheKey(workspaceContext, accountGeneration)}`;
     const readTeamIndex = async () => {
       const response = await fetch('/api/workspace/design-systems/team', {
         cache: 'no-store',
@@ -633,20 +649,140 @@ async function materializeTeamDesignSystems(
   }
 }
 
+/**
+ * Read the unified catalog once per burst of identical concurrent readers.
+ *
+ * Several independent surfaces want this catalog on the same launch or
+ * navigation pass: bootstrap, the Workspace-identity effect, the home-route
+ * effect, plus LibrarySection, DesignSystemsSection and DesignSystemSwitchPicker
+ * as they mount. None of them can drop its read — each owns its own latest-wins
+ * bookkeeping and must settle its own loading state — but on the wire they are
+ * one request, and the browser's ~6-connections-per-host cap makes the extra
+ * copies queue behind everything else the launch is already fetching.
+ *
+ * SINGLE-FLIGHT ONLY (ttl 0, no shared settled result). Some of those call
+ * sites exist precisely to observe a change that just happened out of band:
+ * returning home re-reads so an in-project brand extraction appears, and a
+ * `forceTeamMaterialization` caller is announcing a realtime mutation. Sharing
+ * a settled answer — for even a second — would hand exactly those reads the
+ * state they were fired to replace.
+ */
+const CATALOG_SINGLE_FLIGHT_ONLY_MS = 0;
+
+/**
+ * Bumped by every successful LOCAL catalog mutation, and part of the read key.
+ *
+ * `ttl = 0` stops a settled result from being reused; it does not stop a new
+ * caller from JOINING a request that is still in flight. The callers that follow
+ * a mutation are exactly the ones that must not join: `DesignSystemsTab` awaits
+ * `deleteDesignSystemDraft` / `updateDesignSystemDraft` and then calls its plain
+ * `onSystemsRefresh()` — no `forceTeamMaterialization`, because nothing remote
+ * changed — and the daemon answers `/api/design-systems` from a snapshot taken
+ * when the request arrived. Joining a pre-mutation GET would leave the deleted
+ * system on screen, or show the old published/draft status.
+ *
+ * The rule, stated so it stays checkable: every export that SYNCHRONOUSLY changes
+ * catalog membership or a summary field bumps this on success — create, update,
+ * update-revision-status, delete, uninstall, the three imports, install, and
+ * asset sync.
+ *
+ * Two groups deliberately do not, and should not be "fixed" later:
+ *   - the job starters (`startDesignSystemGenerationJob`,
+ *     `startDesignSystemRevisionJob`,
+ *     `startDesignSystemTokenContractRebuildJob`) — nothing has changed when they
+ *     return; the finished job arrives through the invalidation path;
+ *   - `ensureDesignSystemWorkspace` — it materializes an editing workspace and
+ *     leaves the catalog rows alone.
+ *
+ * `forceTeamMaterialization` also stays as it is: that is the REMOTE
+ * (team-invalidation) signal, this is the local one.
+ */
+let designSystemCatalogMutationGeneration = 0;
+
+function noteDesignSystemCatalogMutation(): void {
+  designSystemCatalogMutationGeneration += 1;
+}
+
+async function readDesignSystemCatalog(
+  workspaceContext: WorkspaceCollabContext | null | undefined,
+  accountGeneration: number,
+  options?: FetchDesignSystemsOptions,
+): Promise<DesignSystemSummary[]> {
+  // Keyed by the exact identity the request will carry, PLUS the account
+  // boundary it was captured under — the same two-part identity the app uses
+  // for this catalog and the team-project catalog carries as its request
+  // generation. `/api/design-systems` is fail-closed on a missing scope, so a
+  // headerless read is a different, smaller catalog and never an answer a
+  // Workspace-scoped read may join. The generation is load-bearing on its own:
+  // a sign-out/sign-in cycle can leave every context field identical while the
+  // authority behind them has changed, and ttl 0 would not catch it — it stops
+  // settled-result reuse, not a post-boundary reader joining a request issued
+  // before the boundary.
+  const cacheKey = `design-system-catalog:${designSystemCatalogMutationGeneration}`
+    + `:${workspaceAccountScopedCacheKey(workspaceContext, accountGeneration)}`;
+  // Same rule as the Team index above: a forced call is an authoritative read
+  // for one mutation and must never join a snapshot issued before it.
+  //
+  // `materializedTeamIds` counts too, and it is not obvious from the name.
+  // `DesignSystemsTab.refreshTeamShared` is the only caller that supplies it,
+  // and it does so exactly when the fresh `/team` witness disagrees with the
+  // catalog it holds — or immediately after a share/unshare. Carrying that
+  // witness therefore means "what I hold is out of date"; joining a catalog GET
+  // issued before the share would omit the newly shared system or keep a
+  // retired mirror on screen. Routine mounts do not pass it, so ordinary
+  // readers still collapse onto the shared key.
+  if (options?.forceTeamMaterialization || options?.materializedTeamIds) {
+    evictCoalescedGet(cacheKey);
+  }
+  return coalescedGet(cacheKey, async () => {
+    const resp = await fetch('/api/design-systems', {
+      ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
+    });
+    // Throw rather than return a sentinel: `coalescedGet` never caches a
+    // failure, so the next reader retries instead of joining a dead entry.
+    if (!resp.ok) throw new Error(`design-systems ${resp.status}`);
+    const json = (await resp.json()) as { designSystems?: DesignSystemSummary[] };
+    return json.designSystems ?? [];
+  }, CATALOG_SINGLE_FLIGHT_ONLY_MS);
+}
+
 export async function fetchDesignSystemsResult(
   workspaceContext?: WorkspaceCollabContext | null,
   options?: FetchDesignSystemsOptions,
 ): Promise<DesignSystemsResult> {
+  // Capture the account boundary ONCE. The Team witness and the catalog are two
+  // awaited reads; letting each resolve the generation at its own call time lets
+  // them straddle a sign-out/sign-in, which would decorate post-boundary rows
+  // with pre-boundary Team-share flags. Keyed as of one boundary, the pair is at
+  // least internally consistent.
+  //
+  // What this does NOT do, stated because the opposite is easy to assume: it
+  // does not stop a late result from being COMMITTED after a boundary. Only
+  // `App`'s `refreshDesignSystems` re-checks the generation after awaiting;
+  // `DesignSystemSwitchPicker`, `DesignSystemsSection` and `LibrarySection` key
+  // their effects on workspace identity alone, and the Workspace hook
+  // deliberately retains the old context while an identity change is pending, so
+  // those fields can be unchanged across the boundary. That exposure predates
+  // coalescing — each of those readers had it when every call made its own
+  // request — and closing it means giving those three readers a generation
+  // guard, which is its own change.
+  const accountGeneration = currentWorkspaceAccountGeneration();
   try {
-    const teamSharedIds = await materializeTeamDesignSystems(workspaceContext, options);
-    const resp = await fetch('/api/design-systems', {
-      ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
-    });
-    if (!resp.ok) return { ok: false };
-    const json = (await resp.json()) as { designSystems?: DesignSystemSummary[] };
+    const teamSharedIds = await materializeTeamDesignSystems(
+      workspaceContext,
+      accountGeneration,
+      options,
+    );
+    const designSystems = await readDesignSystemCatalog(
+      workspaceContext,
+      accountGeneration,
+      options,
+    );
     return {
       ok: true,
-      designSystems: (json.designSystems ?? []).map((system) => (
+      // Mapped per caller: readers sharing one catalog read still resolve the
+      // Team-shared flag against their own Team-index witness.
+      designSystems: designSystems.map((system) => (
         teamSharedIds.has(system.id)
           ? { ...system, teamShared: true }
           : system
@@ -758,6 +894,7 @@ export async function createDesignSystemDraft(
       body: JSON.stringify(input),
     });
     if (!resp.ok) return null;
+    noteDesignSystemCatalogMutation();
     return parseDesignSystemDetail(await resp.json());
   } catch {
     return null;
@@ -858,6 +995,7 @@ export async function updateDesignSystemRevisionStatus(
       },
     );
     if (!resp.ok) return null;
+    noteDesignSystemCatalogMutation();
     const json = (await resp.json()) as { revision?: DesignSystemRevision };
     return json.revision ?? null;
   } catch {
@@ -923,6 +1061,7 @@ export async function updateDesignSystemDraft(
       body: JSON.stringify(input),
     });
     if (!resp.ok) return null;
+    noteDesignSystemCatalogMutation();
     return parseDesignSystemDetail(await resp.json());
   } catch {
     return null;
@@ -952,6 +1091,7 @@ export async function syncDesignSystemAssetsFromWorkspace(
       },
     });
     if (!resp.ok) return null;
+    noteDesignSystemCatalogMutation();
     return (await resp.json()) as { synced: string[] };
   } catch {
     return null;
@@ -989,6 +1129,7 @@ export async function deleteDesignSystemDraft(
         ?? (/^[A-Z][A-Z0-9_]+$/.test(errorBody.message) ? errorBody.message : undefined);
       throw new DesignSystemDeleteError(errorBody.message, resp.status, code);
     }
+    if (resp.ok) noteDesignSystemCatalogMutation();
     return resp.ok;
   } catch (error) {
     if (error instanceof DesignSystemDeleteError) throw error;
@@ -1008,6 +1149,7 @@ export async function importLocalDesignSystem(
     if (!resp.ok) {
       return { error: await readImportError(resp) };
     }
+    noteDesignSystemCatalogMutation();
     return (await resp.json()) as ImportLocalDesignSystemResponse;
   } catch (err) {
     return {
@@ -1028,6 +1170,7 @@ export async function importGitHubDesignSystem(
       body: JSON.stringify(input),
     });
     if (!resp.ok) return { error: await readImportError(resp) };
+    noteDesignSystemCatalogMutation();
     return (await resp.json()) as ImportGitHubDesignSystemResponse;
   } catch (err) {
     return {
@@ -1048,6 +1191,7 @@ export async function importShadcnDesignSystem(
       body: JSON.stringify(input),
     });
     if (!resp.ok) return { error: await readImportError(resp) };
+    noteDesignSystemCatalogMutation();
     return (await resp.json()) as ImportShadcnDesignSystemResponse;
   } catch (err) {
     return {
@@ -1188,7 +1332,7 @@ export interface ConnectorActionResult {
 }
 
 function popupBlockedMessage(): string {
-  return 'Popup blocked. Allow popups for Open Design and try again.';
+  return 'Popup blocked. Allow popups for OpenDesign and try again.';
 }
 
 export async function openExternalUrl(url: string): Promise<boolean> {
@@ -1489,9 +1633,14 @@ export async function cancelConnectorAuthorization(connectorId: string): Promise
   }
 }
 
+
 function isAppVersionInfo(value: unknown): value is AppVersionInfo {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Partial<AppVersionInfo>;
+  // `capabilities` is optional so an older daemon's response stays valid; a
+  // present-but-wrong shape is rejected rather than half-trusted.
+  const caps = candidate.capabilities as { slideRenderer?: unknown } | undefined;
+  if (caps !== undefined && (!caps || typeof caps.slideRenderer !== 'boolean')) return false;
   return (
     typeof candidate.version === 'string' &&
     typeof candidate.channel === 'string' &&
@@ -1506,7 +1655,7 @@ export async function fetchAppVersionInfo(): Promise<AppVersionInfo | null> {
     const resp = await fetch('/api/version');
     if (!resp.ok) return null;
     const json = (await resp.json()) as Partial<AppVersionResponse>;
-    return isAppVersionInfo(json.version) ? json.version : null;
+    return isAppVersionInfo(json?.version) ? json.version : null;
   } catch {
     return null;
   }
@@ -1695,16 +1844,43 @@ export async function deployProjectFile(
     const message = payload?.error?.message || payload?.message || `Deploy failed (${resp.status})`;
     // Preserve a queryable failure code for analytics (`deployErrorCode` reads
     // `.code` first). The daemon deploy route (apps/daemon/src/routes/deploy.ts)
-    // collapses every non-404 failure's code to a generic `BAD_REQUEST` (and 404
-    // to `FILE_NOT_FOUND`) while keeping the REAL provider HTTP status on the
-    // response and the real message in the body — so ignore those envelope codes
-    // and fall back to `HTTP_${resp.status}`, which then buckets as HTTP_403 /
-    // HTTP_429 / HTTP_500 instead of collapsing every failure into one code.
+    // names the causes it can classify (NOT_HTML, MISSING_REFERENCES, …) and
+    // falls back to a generic `BAD_REQUEST` (404 → `FILE_NOT_FOUND`) for a
+    // provider transport failure, where it keeps the REAL provider HTTP status
+    // on the response and the real message in the body — so ignore those generic
+    // envelope codes and fall back to `HTTP_${resp.status}`, which then buckets
+    // as HTTP_403 / HTTP_429 / HTTP_500 instead of collapsing every failure into
+    // one code.
     const rawCode = payload?.error?.code || payload?.code;
     const code = rawCode && !GENERIC_DEPLOY_ENVELOPE_CODES.has(rawCode) ? rawCode : `HTTP_${resp.status}`;
     throw Object.assign(new Error(message), { code });
   }
   return (await resp.json()) as WebDeployProjectFileResponse;
+}
+
+function parsePublicFileManualRevokeData(
+  value: unknown,
+): PublicFileManualRevokeRequiredData | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const data = value as Partial<Record<keyof PublicFileManualRevokeRequiredData, unknown>>;
+  if (
+    typeof data.projectId !== 'string'
+    || typeof data.url !== 'string'
+    || typeof data.slug !== 'string'
+    || typeof data.fileName !== 'string'
+    || !data.projectId
+    || !data.url
+    || !data.slug
+    || !data.fileName
+  ) {
+    return undefined;
+  }
+  return {
+    projectId: data.projectId,
+    url: data.url,
+    slug: data.slug,
+    fileName: data.fileName,
+  };
 }
 
 export async function publishProjectFilePublic(
@@ -1725,15 +1901,38 @@ export async function publishProjectFilePublic(
   );
   if (!resp.ok) {
     const payload = (await resp.json().catch(() => null)) as
-      | { error?: { message?: string } | string; message?: string }
+      | {
+          error?: { code?: unknown; message?: unknown; data?: unknown } | string;
+          message?: unknown;
+        }
       | null;
+    const structuredError = payload?.error && typeof payload.error === 'object'
+      ? payload.error
+      : null;
+    const code = typeof structuredError?.code === 'string'
+      ? structuredError.code
+      : typeof payload?.error === 'string'
+        ? payload.error
+        : undefined;
     const errorMessage =
-      typeof payload?.error === 'object'
-        ? payload.error.message
-        : typeof payload?.error === 'string'
+      typeof structuredError?.message === 'string'
+        ? structuredError.message
+      : typeof payload?.error === 'string'
           ? payload.error
-          : payload?.message;
-    throw new Error(errorMessage || `Publish failed (${resp.status})`);
+          : typeof payload?.message === 'string'
+            ? payload.message
+            : undefined;
+    const recoveryData = code === PUBLIC_FILE_MANUAL_REVOKE_REQUIRED
+      ? parsePublicFileManualRevokeData(structuredError?.data)
+      : undefined;
+    throw new PublicFilePublishError(
+      errorMessage || `Publish failed (${resp.status})`,
+      resp.status,
+      code,
+      recoveryData?.projectId === projectId && recoveryData.fileName === fileName
+        ? recoveryData
+        : undefined,
+    );
   }
   return (await resp.json()) as WebPublicProjectFileResponse;
 }
@@ -2289,25 +2488,41 @@ export function projectFileUrl(
 }
 
 /**
- * Mint the existing daemon-owned, project-scoped preview capability and return
- * its directory URL for srcDoc relative-resource resolution. The daemon binds
- * the capability to the exact Workspace identity and re-authorizes every asset
- * read, so callers must not manufacture a base from raw-file query scope.
+ * Mint the daemon-owned, project-scoped preview capability and return its
+ * directory URL for srcDoc relative-resource resolution. Project ownership is
+ * persisted by the daemon, so the browser must not duplicate that authority in
+ * query parameters or headers. The opaque preview scope authorizes subsequent
+ * asset navigation without exposing Workspace identifiers in iframe URLs.
  */
+export interface ProjectPreviewBaseScope {
+  href: string;
+  expiresAt: number;
+}
+
+// Newer daemons return the authoritative scope expiry. During a rolling
+// desktop/web update the web bundle can briefly run against an older daemon,
+// so retain a conservative refresh horizon instead of rejecting an otherwise
+// valid preview URL and dropping relative assets altogether.
+const LEGACY_PREVIEW_SCOPE_REFRESH_MS = 45 * 60 * 1000;
+
+function previewCapabilityHref(pathname: string): string {
+  const runtimeHref = typeof globalThis.location?.href === 'string'
+    ? globalThis.location.href
+    : 'http://open-design.local/';
+  return new URL(pathname, runtimeHref).href;
+}
+
 export async function fetchProjectPreviewBaseHref(
   projectId: string,
   name: string,
-  workspaceContext: WorkspaceCollabContext,
-): Promise<string | null> {
+  _workspaceContext?: WorkspaceCollabContext | null,
+): Promise<ProjectPreviewBaseScope | null> {
   const params = new URLSearchParams({ file: name });
-  const requestUrl = workspaceResourceUrl(
-    `/api/projects/${encodeURIComponent(projectId)}/preview-url?${params.toString()}`,
-    workspaceContext,
-  );
+  const requestUrl =
+    `/api/projects/${encodeURIComponent(projectId)}/preview-url?${params.toString()}`;
   try {
     const response = await fetch(requestUrl, {
       cache: 'no-store',
-      headers: workspaceProjectHeaders(workspaceContext),
     });
     if (!response.ok) return null;
     const body = (await response.json()) as ProjectPreviewUrlResponse;
@@ -2317,7 +2532,47 @@ export async function fetchProjectPreviewBaseHref(
     if (!parsed.pathname.startsWith(expectedPrefix)) return null;
     const directoryEnd = parsed.pathname.lastIndexOf('/') + 1;
     if (directoryEnd <= expectedPrefix.length) return null;
-    return parsed.pathname.slice(0, directoryEnd);
+    const expiresAt = typeof body.expiresAt === 'number' && Number.isFinite(body.expiresAt)
+      ? body.expiresAt
+      : Date.now() + LEGACY_PREVIEW_SCOPE_REFRESH_MS;
+    return {
+      // Electron renders injected HTML from blob:od:// URLs. A root-relative
+      // <base> is ignored in a Blob document, leaving document.baseURI on the
+      // Blob and breaking lazy or script-created relative assets. Resolve the
+      // capability against the host document while it still has a real origin.
+      href: previewCapabilityHref(parsed.pathname.slice(0, directoryEnd)),
+      expiresAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function renewProjectPreviewBaseScope(
+  projectId: string,
+  href: string,
+): Promise<number | null> {
+  try {
+    const parsed = new URL(href, 'http://open-design.local');
+    const expectedPrefix = `/api/projects/${encodeURIComponent(projectId)}/preview/`;
+    if (!parsed.pathname.startsWith(expectedPrefix)) return null;
+    const scopeEnd = parsed.pathname.indexOf('/', expectedPrefix.length);
+    if (scopeEnd <= expectedPrefix.length) return null;
+    const scope = parsed.pathname.slice(expectedPrefix.length, scopeEnd);
+    if (!/^[A-Za-z0-9_-]{8,128}$/u.test(scope)) return null;
+    const response = await fetch(
+      `${expectedPrefix}${encodeURIComponent(scope)}/renew`,
+      {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'x-od-preview-scope-renewal': '1' },
+      },
+    );
+    if (!response.ok) return null;
+    const body = (await response.json()) as ProjectPreviewScopeRenewResponse;
+    return typeof body.expiresAt === 'number' && Number.isFinite(body.expiresAt)
+      ? body.expiresAt
+      : null;
   } catch {
     return null;
   }
@@ -2952,7 +3207,7 @@ export async function uploadProjectFiles(
 export function projectRawUrl(
   projectId: string,
   filePath: string,
-  workspaceContext?: WorkspaceCollabContext | null,
+  _workspaceContext?: WorkspaceCollabContext | null,
 ): string {
   // Encode each path segment individually so a slash inside the file
   // path stays a path separator, not %2F.
@@ -2960,10 +3215,7 @@ export function projectRawUrl(
     .split('/')
     .map((seg) => encodeURIComponent(seg))
     .join('/');
-  return workspaceResourceUrl(
-    `/api/projects/${encodeURIComponent(projectId)}/raw/${safePath}`,
-    workspaceContext,
-  );
+  return `/api/projects/${encodeURIComponent(projectId)}/raw/${safePath}`;
 }
 
 export function designSystemStaticUrl(
@@ -3354,6 +3606,7 @@ export async function installDesignSystem(
     });
     const json = await resp.json();
     if (!resp.ok) return { error: json.error ?? 'Install failed' };
+    noteDesignSystemCatalogMutation();
     return json as InstallDesignSystemResponse;
   } catch {
     return { error: 'Network error' };
@@ -3371,9 +3624,15 @@ export async function uninstallDesignSystem(
         ? { headers: workspaceProjectHeaders(workspaceContext) }
         : {}),
     });
-    const json = await resp.json();
-    if (!resp.ok) return { error: json.error ?? 'Uninstall failed' };
-    return { ok: true };
+    // Success is decided by the status, not by a parsed body: this route can
+    // answer an empty 204, and parsing first threw straight into the catch —
+    // which also made any bump placed on the success path unreachable.
+    if (resp.ok) {
+      noteDesignSystemCatalogMutation();
+      return { ok: true };
+    }
+    const json = (await resp.json().catch(() => null)) as { error?: string } | null;
+    return { error: json?.error ?? 'Uninstall failed' };
   } catch {
     return { error: 'Network error' };
   }

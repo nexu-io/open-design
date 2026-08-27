@@ -17,6 +17,7 @@ import type {
 } from '../routes/collab-sync.js';
 import type { AuthorizedTeamProjectPullReceipt } from './authorized-team-project-pull.js';
 import type { ResourceHubPrincipal } from './resource-principal.js';
+import { isUnmaterializedSharedPlaceholder } from './shared-project-placeholder.js';
 
 type SqliteDb = Database.Database;
 
@@ -169,6 +170,7 @@ export function materializePulledTeamMirror(
   input: RegisterPulledProjectInput,
   scope: TeamMirrorPullScope,
   receipt?: AuthorizedTeamProjectPullReceipt,
+  options: { placeholder?: boolean } = {},
 ): MaterializePulledTeamMirrorResult {
   if (
     receipt &&
@@ -192,8 +194,11 @@ export function materializePulledTeamMirror(
       lifecycleState: 'active',
       workspaceType: 'team',
     };
-    const expectedCreator =
-      scope.ownerMemberId === scope.viewerMemberId ? scope.viewerMemberId : null;
+    const expectedCreator = options.placeholder
+      ? null
+      : scope.ownerMemberId === scope.viewerMemberId
+        ? scope.viewerMemberId
+        : null;
     const resourceHubResourceId =
       receipt?.resourceId ?? projectResourceIdFor(input.id, ownerPrincipal);
     if (
@@ -213,6 +218,10 @@ export function materializePulledTeamMirror(
         }
       | undefined;
     const existing = getProject(db, input.id);
+    const existingIsPlaceholder = isUnmaterializedSharedPlaceholder(existing);
+    if (options.placeholder && existing && !existingIsPlaceholder) {
+      throw new Error(`team placeholder project conflict for ${input.id}`);
+    }
     const isRevokedMirror =
       existingBinding?.resourceState === 'deleted'
       && Boolean(existing?.metadata?.teamMirrorRevokedAt);
@@ -226,7 +235,14 @@ export function materializePulledTeamMirror(
           || isRevokedMirror
         ) &&
         existingBinding.cloudTombstonedAt === null &&
-        existingBinding.createdByWorkspaceMemberId === expectedCreator &&
+        (
+          existingBinding.createdByWorkspaceMemberId === expectedCreator
+          || (
+            !options.placeholder
+            && existingIsPlaceholder
+            && existingBinding.createdByWorkspaceMemberId === null
+          )
+        ) &&
         (
           existingBinding.resourceHubResourceId === null ||
           existingBinding.resourceHubResourceId === resourceHubResourceId
@@ -237,27 +253,40 @@ export function materializePulledTeamMirror(
     }
 
     let localRecordChanged = false;
+    const persistedInput = options.placeholder
+      ? {
+          ...input,
+          metadata: {
+            ...(input.metadata ?? {}),
+            sharedProjectPlaceholderAt: Date.now(),
+          },
+        }
+      : input;
     if (!existing) {
       insertProject(db, {
-        id: input.id,
-        name: input.name,
-        skillId: input.skillId,
-        designSystemId: input.designSystemId,
-        metadata: input.metadata,
-        createdAt: input.createdAt,
-        updatedAt: input.updatedAt,
+        id: persistedInput.id,
+        name: persistedInput.name,
+        skillId: persistedInput.skillId,
+        designSystemId: persistedInput.designSystemId,
+        metadata: persistedInput.metadata,
+        createdAt: persistedInput.createdAt,
+        updatedAt: persistedInput.updatedAt,
       });
       localRecordChanged = true;
     } else if (
-      existing.name === '共享项目'
-      || (expectedCreator === null && input.updatedAt > existing.updatedAt)
+      (!options.placeholder && existingIsPlaceholder)
+      || (
+        !existingIsPlaceholder
+        && expectedCreator === null
+        && input.updatedAt > existing.updatedAt
+      )
     ) {
       updateProject(db, input.id, {
-        name: input.name,
-        skillId: input.skillId,
-        designSystemId: input.designSystemId,
-        metadata: input.metadata,
-        updatedAt: input.updatedAt,
+        name: persistedInput.name,
+        skillId: persistedInput.skillId,
+        designSystemId: persistedInput.designSystemId,
+        metadata: persistedInput.metadata,
+        updatedAt: persistedInput.updatedAt,
       });
       localRecordChanged = true;
     } else if (existing.metadata?.teamMirrorRevokedAt) {

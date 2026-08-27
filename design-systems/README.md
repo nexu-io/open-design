@@ -36,7 +36,7 @@ The v1 manifest uses fixed canonical file names:
   "description": "A concise English catalog summary.",
   "source": {
     "type": "bundled",
-    "origin": "Open Design curated bundled fixture"
+    "origin": "OpenDesign curated bundled fixture"
   },
   "files": {
     "design": "DESIGN.md",
@@ -93,70 +93,6 @@ The manifest and package-quality guards validate the declared paths, rich
 profile, derived-file parity, token contract, component fixture, source
 evidence, and preview coverage. Read
 [`_schema/AGENTS.md`](_schema/AGENTS.md) before editing those contracts.
-
-## Structured runtime contract
-
-A package may opt into machine-readable component selection by declaring a
-complete `runtime` block in `manifest.json`:
-
-```json
-{
-  "runtime": {
-    "components": "manifests/components.json",
-    "intents": "manifests/intent-map.json",
-    "lint": "rules/lint.json",
-    "fallback": "rules/fallback.json"
-  }
-}
-```
-
-The declared files form one graph:
-
-```text
-manifests/components.json       component id → component definition path
-manifests/intent-map.json       business intent → component/variant/properties/states
-components/<id>/component.json  reusable implementation and allowed choices
-rules/lint.json                 generation checks
-rules/fallback.json             no-match and multiple-match behavior
-```
-
-The daemon validates the graph and pushes only a compact canonical-intent index
-into the prompt. A filesystem agent resolves the selected intent on demand with:
-
-```bash
-"$OD_NODE_BIN" "$OD_BIN" tools design-systems resolve \
-  --intent account.settings.save
-```
-
-The result contains the reusable implementation, selectors, variant,
-properties, required states, and the package lint policy. Missing or ambiguous
-matches execute `rules/fallback.json`; the agent must honor confirmation gates
-and `allowInventComponent` instead of creating a visually similar near-copy.
-When `runtime` is declared, this resolver is the only component-selection
-authority: `components.manifest.json` and `components.html` remain package
-evidence and authoring checks, but are not injected as a second component
-inventory. If `runtime` is absent, the package keeps the existing prompt-based
-component manifest / fixture path.
-
-After writing the artifact, the agent closes the loop with:
-
-```bash
-"$OD_NODE_BIN" "$OD_BIN" tools design-systems validate \
-  --intent account.settings.save \
-  --artifact account-settings.html \
-  --artifact styles.css
-```
-
-The validator returns `passed`, `failed`, or `confirmation-required`. It checks
-the generated files against the selected component, variant, required states,
-tokens, and raw-color policy; failed checks include remediation and must be
-re-run after correction.
-`hud`, `webflow`, and `uber` are the first bundled packages using this complete
-runtime path and cover the three-task DS 3.0 regression set.
-If `runtime` is present but invalid, it is reported as invalid rather than
-silently treated as a legacy package. The production schema versions and shared
-types live in
-[`packages/contracts/src/design-systems/runtime-schema.ts`](../packages/contracts/src/design-systems/runtime-schema.ts).
 
 ## Writing a package
 

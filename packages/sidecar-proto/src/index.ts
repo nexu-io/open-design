@@ -116,9 +116,7 @@ export type DesktopUpdateMode = (typeof DESKTOP_UPDATE_MODES)[keyof typeof DESKT
 
 export const DESKTOP_UPDATE_CHANNELS = Object.freeze({
   BETA: RELEASE_CHANNELS.BETA,
-  BETAS: RELEASE_CHANNELS.BETAS,
   PRERELEASE: RELEASE_CHANNELS.PRERELEASE,
-  PREVIEW: RELEASE_CHANNELS.PREVIEW,
   STABLE: RELEASE_CHANNELS.STABLE,
 } as const);
 
@@ -598,6 +596,12 @@ export type DesktopSidecarMessage =
 
 export type ShutdownResult = {
   accepted: true;
+  /**
+   * When true, the sidecar accepted shutdown but is holding process exit for
+   * critical work (for example a handoff journal commit). The owner should
+   * wait a longer bounded grace for self-exit before force-stopping.
+   */
+  deferred?: boolean;
 };
 
 export type SidecarStamp = {

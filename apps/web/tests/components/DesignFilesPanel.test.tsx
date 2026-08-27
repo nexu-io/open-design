@@ -109,6 +109,7 @@ function renderPanel(
   const result = render(
     <DesignFilesPanel
       projectId="test-project"
+      projectKind="prototype"
       files={files}
       liveArtifacts={[]}
       onRefreshFiles={vi.fn()}
@@ -402,6 +403,7 @@ describe("DesignFilesPanel selection", () => {
       >
         <DesignFilesPanel
           projectId="test-project"
+          projectKind="prototype"
           files={files}
           liveArtifacts={[]}
           onRefreshFiles={vi.fn()}
@@ -686,6 +688,30 @@ describe("DesignFilesPanel page thumbnails", () => {
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("mounts a cached HTML thumbnail with the desktop layout viewport on its first render", () => {
+    const cachedFile = file({
+      name: "deck.html",
+      kind: "html",
+      mime: "text/html",
+      size: 16 * 1024,
+      mtime: 1700000000001,
+    });
+    setHtmlSourceSnapshot({
+      authorizationScopeKey: "local",
+      projectId: "test-project",
+      fileName: cachedFile.name,
+      refreshKey: `${cachedFile.mtime}:${cachedFile.size}:8`,
+      source: "<!doctype html><html><body><main>Deck</main></body></html>",
+    });
+
+    const { container } = renderPanel([cachedFile], { filesRefreshKey: 8 });
+    const iframe = container.querySelector<HTMLIFrameElement>(".df-card-thumb iframe");
+
+    expect(iframe).toBeTruthy();
+    expect(iframe?.style.width).toBe("1200px");
+    expect(iframe?.style.height).toBe("675px");
+  });
 });
 
 describe("DesignFilesPanel directory navigation", () => {
@@ -810,6 +836,7 @@ describe("DesignFilesPanel directory navigation", () => {
       return (
         <DesignFilesPanel
           projectId="test-project"
+          projectKind="prototype"
           files={[
             file({ name: "assets/logo.png", kind: "image" }),
             file({ name: "top.html", kind: "html" }),
@@ -893,6 +920,7 @@ describe("DesignFilesPanel directory navigation", () => {
       return (
         <DesignFilesPanel
           projectId="test-project"
+          projectKind="prototype"
           files={files}
           liveArtifacts={[]}
           onRefreshFiles={vi.fn()}
@@ -1057,6 +1085,7 @@ describe("DesignFilesPanel pending sync (downloadPending)", () => {
   it("replaces the retained materialization directly when the pull completes", () => {
     const commonProps = {
       projectId: "test-project",
+      projectKind: "prototype" as const,
       liveArtifacts: [],
       onRefreshFiles: vi.fn(),
       onOpenFile: vi.fn(),

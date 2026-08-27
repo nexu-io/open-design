@@ -144,11 +144,47 @@ describe('EntryNavRail workspace-switcher invite target (recvqgbyLNk4eE)', () =>
     expect(openSpy).not.toHaveBeenCalled();
   });
 
-  it('fails closed while the team seat state is unknown', () => {
+  it('keeps the permission-gated local invite when team seat state is unknown', () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
     renderRail(teamContextWithUnknownSeats());
 
     fireEvent.click(screen.getByTestId('workspace-switcher'));
-    expect(menu().queryByRole('menuitem', { name: /邀请同事/ })).toBeNull();
+    fireEvent.click(menu().getByRole('menuitem', { name: /邀请同事/ }));
+
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  it('lets the invite API resolve the directory-derived zero/zero seat sentinel', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    const fetchSpy = vi.mocked(globalThis.fetch);
+    const context = teamContext(3);
+    renderRail({
+      ...context,
+      role: 'admin',
+      seatSummary: { seatLimit: 0, usedSeats: 0, availableSeats: 0, isSeatFull: true },
+      permissions: {
+        ...context.permissions,
+        canManageBilling: false,
+      },
+    } as WorkspaceCollabContext);
+
+    fireEvent.click(screen.getByTestId('workspace-switcher'));
+    fireEvent.click(menu().getByRole('menuitem', { name: /邀请同事/ }));
+
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getAllByRole('textbox')[0]!, {
+      target: { value: 'teammate@example.com' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: /确认并邀请/ }));
+
+    await vi.waitFor(() => {
+      expect(fetchSpy.mock.calls.some(([url, init]) => (
+        String(url) === '/api/workspace/invite'
+        && (init as RequestInit | undefined)?.method === 'POST'
+      ))).toBe(true);
+    });
+    expect(openSpy).not.toHaveBeenCalled();
   });
 
   it('hides the invite entry when neither local capacity nor a safe Vela URL exists', () => {

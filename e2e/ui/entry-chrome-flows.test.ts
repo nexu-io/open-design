@@ -8,7 +8,13 @@ import type {
   WorkspaceDirectoryItem,
 } from '@open-design/contracts';
 import type { Page, Request } from '@playwright/test';
-import { applyStandardMocks, fulfillAgentsRoute, routeSuccessfulRuns, STORAGE_KEY } from '@/playwright/mock-factory';
+import {
+  applyStandardMocks,
+  fulfillAgentsRoute,
+  routeSignedOutVelaStatus,
+  routeSuccessfulRuns,
+  STORAGE_KEY,
+} from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 const LOCAL_CLI_LABEL = /Local CLI|Local coding agent|本机 CLI|本地 CLI/i;
 const STARTER_PLUGIN = makeStarterPlugin({
@@ -119,6 +125,55 @@ test('[P0] @critical entry chrome exposes the primary home creation surface and 
   await expect(settingsDialog.getByTestId('settings-nav-execution')).toBeVisible();
   await expect(settingsDialog.getByRole('button', { name: /hide pet picker/i })).toHaveCount(0);
   await expect(settingsDialog.getByRole('button', { name: /show pet picker/i })).toHaveCount(0);
+});
+
+test('[P1] cold Home defers Automations reads until the route becomes active', async ({ page }) => {
+  const automationsPaths = [
+    '/api/automation-templates',
+    '/api/automation-proposals',
+    '/api/routines',
+  ] as const;
+  const counts = new Map<string, number>(automationsPaths.map((path) => [path, 0]));
+  const record = (request: Request) => {
+    if (request.method() !== 'GET') return;
+    const path = new URL(request.url()).pathname;
+    if (!counts.has(path)) return;
+    counts.set(path, (counts.get(path) ?? 0) + 1);
+  };
+  page.on('request', record);
+
+  try {
+    await gotoEntryHome(page);
+    await expectStableCount(
+      () => [...counts.values()].reduce((total, count) => total + count, 0),
+      0,
+      {
+        timeout: T.short,
+        message: 'the inactive Automations view must not spend its request budget on Home launch',
+      },
+    );
+
+    await page.goto('/automations', { waitUntil: 'domcontentloaded' });
+    await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
+    await expect(page.getByTestId('entry-view-tasks')).toHaveAttribute('data-active', 'true');
+    await expect(page.getByTestId('tasks-view')).toBeVisible();
+    await expect.poll(() => [...counts.values()].every((count) => count > 0)).toBe(true);
+    const activeRouteBudget = [...counts.values()].reduce((total, count) => total + count, 0);
+    // React's development StrictMode may replay the active view once. Keep the
+    // assertion on the product contract: zero reads while inactive, then one
+    // bounded mount pass (at most two requests per resource) when activated.
+    for (const [path, count] of counts) {
+      expect(count, `${path} should load when Automations becomes active`).toBeGreaterThanOrEqual(1);
+      expect(count, `${path} should stay within one StrictMode mount pass`).toBeLessThanOrEqual(2);
+    }
+    await expectStableCount(
+      () => [...counts.values()].reduce((total, count) => total + count, 0),
+      activeRouteBudget,
+      { timeout: T.short, message: 'active Automations reads must settle within one mount pass' },
+    );
+  } finally {
+    page.off('request', record);
+  }
 });
 
 test('[P0] @critical workspace selection remains isolated across two browser tabs', async ({ page, context }) => {
@@ -333,7 +388,7 @@ test('[P1] onboarding lands on the home composer without a recommended-start str
     });
   });
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
 
   // Cloud-first onboarding no longer contains the legacy runtime/About-you/
   // Product-design survey. A signed-in user accepts the recommended Hosted
@@ -342,7 +397,7 @@ test('[P1] onboarding lands on the home composer without a recommended-start str
   await expect(cloudPrimary).toBeEnabled();
   await cloudPrimary.click();
   await expect(page.getByRole('heading', { name: /Choose your model source|选择模型来源/i })).toBeVisible();
-  await page.getByRole('radio', { name: /Open Design Hosted/i }).click();
+  await page.getByRole('radio', { name: /OpenDesign Hosted/i }).click();
   await page.getByRole('button', { name: /^Continue$/i }).click();
 
   // Finishing model-source setup lands the user on Home with the composer
@@ -365,6 +420,7 @@ test('[P1] onboarding lands on the home composer without a recommended-start str
 });
 
 test('[P1] entry top navigation matches the current home tab structure', async ({ page }) => {
+  await routeSignedOutVelaStatus(page);
   await gotoEntryHome(page);
   await ensureRailOpen(page);
 
@@ -416,7 +472,7 @@ test('[P1] home view exposes the redesigned hero, recent projects, and starters'
   // `recent-projects-view-all` button — so `HomeView.onViewAllProjects` is
   // wired but unreachable. Drive the route directly until an entry returns.
   await page.goto('/projects', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
   await expect(page).toHaveURL(/\/projects$/);
   await expect(page.getByTestId('entry-view-projects')).toBeVisible();
 });
@@ -992,7 +1048,7 @@ test('[P1] Use everywhere guide uses daemon MCP install info and copies an agent
   // With the topbar's "Use everywhere" button gone (#5517) the Integrations
   // route is the entry; its default tab is still the Use everywhere guide.
   await page.goto('/integrations', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
   await expect(page.getByRole('heading', { name: 'Integrations' })).toBeVisible();
   // Landing on the route directly opens the view's own default tab, so select
   // the Use everywhere guide explicitly.
@@ -1054,7 +1110,8 @@ test('[P2] home topbar overlays close on outside click, Escape, and Settings ope
 // inside the Home composer footer and does not follow the user to secondary
 // entry pages. This spec now pins the rail's surviving destinations plus the
 // pill at its new, Home-only home.
-test('[P1] rail destinations navigate and Home keeps its composer execution pill', async ({ page }) => {
+test('[P0] signed-out Local setup can navigate the surviving rail destinations', async ({ page }) => {
+  await routeSignedOutVelaStatus(page);
   await routeDesignSystems(page);
   await gotoEntryHome(page);
 
@@ -1083,7 +1140,7 @@ test('[P1] rail destinations navigate and Home keeps its composer execution pill
   await expect(page.getByTestId('inline-model-switcher-popover')).toHaveCount(0);
 });
 
-test('[P0] @critical home composer routes free-form prompts through the default deck scenario', async ({ page }) => {
+test('[P0] @critical home composer delegates the default prototype scenario to daemon authority', async ({ page }) => {
   await gotoEntryHome(page);
 
   await expect(page.getByTestId('composer-mode-trigger')).toHaveAttribute('aria-label', 'Mode: Design');
@@ -1103,14 +1160,16 @@ test('[P0] @critical home composer routes free-form prompts through the default 
     conversationMode?: string;
     pluginId?: string | null;
     pluginInputs?: Record<string, unknown>;
+    automaticStrategyTaskProfile?: string;
     metadata?: { kind?: string };
   };
-  expect(body.name).toBe('Write an Operating Review like a Disciplined COO');
+  expect(body.name).toBe('Infographic 5 Habits Effective Code Reviewers');
   expect(body.pendingPrompt).toBe(prompt);
   expect(body.conversationMode).toBe('design');
-  expect(body.pluginId).toBe('example-simple-deck');
-  expect(body.pluginInputs).toMatchObject({ deckType: 'pitch deck' });
-  expect(body.metadata?.kind).toBe('deck');
+  expect(body.pluginId).toBeUndefined();
+  expect(body.pluginInputs).toBeUndefined();
+  expect(body.automaticStrategyTaskProfile).toBe('prototype');
+  expect(body.metadata?.kind).toBe('prototype');
 });
 
 test('[P0] @critical home working directory creates the project with linked dirs instead of importing files', async ({ page }) => {
@@ -1242,7 +1301,8 @@ test('[P0] @critical home hero input keeps Shift+Enter as a newline and submits 
   await expect(page).toHaveURL(/\/projects\//);
 });
 
-test('[P1] home hero @ mention picker opens and Enter applies the highlighted plugin', async ({ page }) => {
+test('[P0] signed-out Local setup can apply a plugin from the Home composer', async ({ page }) => {
+  await routeSignedOutVelaStatus(page);
   await page.route('**/api/plugins', async (route) => {
     await route.fulfill({
       json: {
@@ -1316,12 +1376,12 @@ test('[P0] @critical home hero attachment input stages files, enables submit, an
 
   const input = page.getByTestId('home-hero-file-input');
   const submit = page.getByTestId('home-hero-submit');
-  // Fresh Home now locks submit until its default deck route has resolved.
+  // Fresh Home locks submit until its default prototype route has resolved.
   // Under the grouped CI pool that catalogue binding can outlive Playwright's
   // default assertion timeout, so wait on the user-visible routed state before
   // checking the attachment lifecycle rather than racing the seed effect.
   await expect(page.getByTestId('home-hero-template-trigger')).toContainText(
-    /Slide deck|幻灯片|投影片/i,
+    /Prototype|原型/i,
     { timeout: T.long },
   );
   await expect(submit).toBeEnabled({ timeout: T.long });
@@ -1594,8 +1654,8 @@ async function dispatchAmbientWorkspaceEvent(
 
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);

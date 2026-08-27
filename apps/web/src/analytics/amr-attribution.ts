@@ -80,6 +80,7 @@ const ENTRY_PAGE_BY_SOURCE: Record<TrackingAmrEntrySource, TrackingPageName> = {
   generation_preview_switch_retry_card: 'file_manager',
   settings_amr_upgrade: 'settings',
   inline_amr_upgrade: 'chat_panel',
+  go_plan_sunset_modal: 'home',
   deepseek_unpaid_modal: 'home',
   deepseek_workbench_badge: 'home',
   deepseek_model_switcher_upgrade: 'chat_panel',
@@ -219,11 +220,11 @@ export function amrHandoffDeviceId(input: {
   return input.installationId ?? input.resolvedDeviceId ?? null;
 }
 
-// Builds the AMR handoff URL with Open Design attribution params. When
+// Builds the AMR handoff URL with OpenDesign attribution params. When
 // `deviceId` is provided it is added as `od_device_id`, so AMR can link the
-// landing/registration directly back to this Open Design install instead of
+// landing/registration directly back to this OpenDesign install instead of
 // only through the one-shot entry id. The caller passes it ONLY when the user
-// has consented to metrics: AMR is Open Design's official model service, so
+// has consented to metrics: AMR is OpenDesign's official model service, so
 // this is a same-owner cross-product link, but it still respects the telemetry
 // opt-in. Pass null/undefined to omit it.
 export function attributedAmrUrl(
@@ -340,7 +341,7 @@ async function mirrorAmrEntryToAmrAnalytics(
       }),
     });
   } catch {
-    // AMR analytics mirroring must never block the primary Open Design action.
+    // AMR analytics mirroring must never block the primary OpenDesign action.
   }
 }
 

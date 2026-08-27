@@ -1,17 +1,22 @@
 import { expect, test } from '@/playwright/suite';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import { runErrorCard } from '@/playwright/chat';
 import { openAllProjectFiles } from '@/playwright/workspace';
 import type { Locator, Page, Request, Response } from '@playwright/test';
 import {
+  createFakeAcpHandshakeRuntime,
   createFakeAgentRuntimes,
   FAKE_AGENT_RUNTIME_IDS,
 } from '@/playwright/fake-agents';
 import { trackRunRequests } from '@/playwright/mock-factory';
-import type { FakeAgentId } from '@/playwright/fake-agents';
+import type { FakeAcpHandshakeRuntime, FakeAgentId } from '@/playwright/fake-agents';
 import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
+const EXPERIENCE_SURVEY_RETIRED_KEY = 'open-design:experience-survey:v1:retired';
+const EXPERIENCE_SURVEY_DELIVERIES_KEY = 'open-design:experience-survey:v1:deliveries';
 const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 const GENERATED_FILE = 'real-daemon-smoke.html';
 const GENERATED_HEADING = 'Real Daemon Smoke';
@@ -25,8 +30,20 @@ const DELAYED_HEADING = 'Delayed Daemon Smoke';
 const SLOW_RELOAD_FILE = 'slow-reload-daemon-smoke.html';
 const SLOW_RELOAD_HEADING = 'Slow Reload Daemon Smoke';
 const FOLLOW_UP_FILE = 'follow-up-daemon-smoke.html';
+const OD_NEXT_CANARY_FILE = 'od-next-active-canary.html';
 const MEDIA_ONLY_FILE = 'media-only.png';
+const SERVER_DERIVED_WORKSPACE_HEADERS = {
+  'x-od-workspace-id': 'e2e-server-derived-workspace',
+  'x-od-workspace-type': 'personal',
+  'x-od-workspace-member-id': 'e2e-server-derived-member',
+  'x-od-workspace-role': 'owner',
+  'x-od-workspace-member-status': 'active',
+  'x-od-workspace-lifecycle-state': 'active',
+  'x-od-workspace-can-share-projects': 'true',
+  'x-od-workspace-can-write-synced-files': 'true',
+} as const;
 let fakeRuntimes: Awaited<ReturnType<typeof createFakeAgentRuntimes>>;
+let fakeAcpHandshakeRuntime: FakeAcpHandshakeRuntime;
 
 function artifactPreview(page: Page) {
   return page.locator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).first();
@@ -42,8 +59,15 @@ function artifactPreviewFrame(page: Page) {
 // the CI shard matrix — a serial group is atomic within one shard and this
 // file's chain alone would floor the UI wall time.
 
-test.beforeAll(async () => {
-  fakeRuntimes = await createFakeAgentRuntimes();
+test.beforeAll(async ({ toolsDev }) => {
+  [fakeRuntimes, fakeAcpHandshakeRuntime] = await Promise.all([
+    createFakeAgentRuntimes({
+      root: join(toolsDev.root, 'scratch', 'fake-agent-runtimes'),
+    }),
+    createFakeAcpHandshakeRuntime({
+      root: join(toolsDev.root, 'scratch', 'fake-acp-handshake-runtime'),
+    }),
+  ]);
 });
 
 test.beforeEach(async ({ page }) => {
@@ -88,6 +112,7 @@ test('[P0] real daemon run streams, persists, and previews an artifact', async (
   await expect(artifactPreview(page)).toBeVisible();
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByRole('heading', { name: GENERATED_HEADING })).toBeVisible();
+  await expectGeneratedPreviewToRemainStable(page, GENERATED_HEADING);
 
   const rawResponse = await page.request.get(`/api/projects/${projectId}/raw/${GENERATED_FILE}`, {
     headers: { Origin: 'null' },
@@ -104,6 +129,288 @@ test('[P0] real daemon run streams, persists, and previews an artifact', async (
   await expect(artifactPreview(page)).toBeVisible();
   await expect(artifactPreviewFrame(page).getByRole('heading', { name: GENERATED_HEADING })).toBeVisible();
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
+});
+
+test('[P0] local OD Next active canary follows one public task across physical runs', async ({ page }) => {
+  test.skip(
+    process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
+      || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
+    'requires the explicit local synthetic rollout canary flags',
+  );
+  await prepareLocalOdNextCanary(page, 'OD Next local active canary');
+
+  const createResponsePromise = page.waitForResponse(isCreateRunResponse);
+  await sendPrompt(page, 'Create an OD Next active canary artifact');
+  const createResponse = await createResponsePromise;
+  const created = await createResponse.json() as {
+    runId: string;
+    taskExecutionId?: string;
+    strategyTask?: { taskExecutionId: string; inputStage: string; terminal: boolean };
+  };
+  expect(created.strategyTask).toMatchObject({ inputStage: 'request', terminal: false });
+  expect(created.taskExecutionId).toBe(created.strategyTask?.taskExecutionId);
+
+  const { projectId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, [OD_NEXT_CANARY_FILE]);
+  await expect(page.getByText(
+    'Created od-next-active-canary.html through the continued native session.',
+  ).last()).toBeVisible();
+
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/runs/${created.runId}`);
+    const status = await response.json() as {
+      strategyTask?: {
+        activeRunId: string;
+        inputStage: string;
+        outcome: string;
+        terminal: boolean;
+      };
+    };
+    return status.strategyTask;
+  }, { timeout: 20_000 }).toMatchObject({
+    inputStage: 'production',
+    outcome: 'completed',
+    terminal: true,
+    activeRunId: expect.not.stringMatching(new RegExp(`^${created.runId}$`)),
+  });
+
+  const list = await page.request.get(`/api/runs?projectId=${encodeURIComponent(projectId)}`);
+  const body = await list.json() as {
+    runs: Array<{ strategyTask?: { taskExecutionId: string } }>;
+  };
+  expect(body.runs.filter((run) => (
+    run.strategyTask?.taskExecutionId === created.taskExecutionId
+  ))).toHaveLength(2);
+});
+
+test('[P0] local OD Next clarification canary preserves one taskExecutionId through the public form', async ({ page }) => {
+  test.skip(
+    process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
+      || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
+    'requires the explicit local synthetic rollout canary flags',
+  );
+  await prepareLocalOdNextCanary(page, 'OD Next local clarification canary');
+
+  const createResponsePromise = page.waitForResponse(isCreateRunResponse);
+  await sendPrompt(page, 'Create an OD Next clarification canary artifact');
+  const created = await (await createResponsePromise).json() as {
+    runId: string;
+    taskExecutionId: string;
+  };
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/runs/${created.runId}`);
+    return (await response.json() as { strategyTask?: { outcome: string } }).strategyTask?.outcome;
+  }, { timeout: 20_000 }).toBe('clarification_required');
+
+  const form = page.locator('.question-form').first();
+  await expect(form).toBeVisible();
+  await form.getByText('Desktop web', { exact: true }).click();
+  const clarificationResponsePromise = page.waitForResponse(isCreateRunResponse);
+  await form.getByRole('button', { name: 'Send answers' }).click();
+  const clarificationResponse = await clarificationResponsePromise;
+  const clarificationText = await clarificationResponse.text();
+  expect(clarificationResponse.ok(), clarificationText).toBeTruthy();
+  const clarification = JSON.parse(clarificationText) as {
+    taskExecutionId: string;
+    strategyTask?: { inputStage: string };
+  };
+  expect(clarification.taskExecutionId).toBe(created.taskExecutionId);
+  expect(clarification.strategyTask?.inputStage).toBe('clarification');
+
+  const { projectId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, [OD_NEXT_CANARY_FILE]);
+  await expect(page.getByText(
+    'Created od-next-active-canary.html through the continued native session.',
+  ).last()).toBeVisible();
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/runs/${created.runId}`);
+    return (await response.json() as {
+      strategyTask?: { taskExecutionId: string; outcome: string; terminal: boolean };
+    }).strategyTask;
+  }, { timeout: 20_000 }).toMatchObject({
+    taskExecutionId: created.taskExecutionId,
+    outcome: 'completed',
+    terminal: true,
+  });
+});
+
+test('[P0] local OD Next public canaries project blocked and canceled terminal mappings', async ({ page }) => {
+  test.skip(
+    process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
+      || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
+    'requires the explicit local synthetic rollout canary flags',
+  );
+  await prepareLocalOdNextCanary(page, 'OD Next local blocked canary');
+  const blockedResponsePromise = page.waitForResponse(isCreateRunResponse);
+  await sendPrompt(page, 'Create an OD Next blocked canary');
+  const blocked = await (await blockedResponsePromise).json() as {
+    runId: string;
+    taskExecutionId: string;
+  };
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/runs/${blocked.runId}`);
+    return (await response.json() as {
+      strategyTask?: { taskExecutionId: string; outcome: string; terminal: boolean };
+    }).strategyTask;
+  }, { timeout: 20_000 }).toMatchObject({
+    taskExecutionId: blocked.taskExecutionId,
+    outcome: 'blocked',
+    terminal: true,
+  });
+
+  await prepareLocalOdNextCanary(page, 'OD Next local canceled canary');
+  const canceledResponsePromise = page.waitForResponse(isCreateRunResponse);
+  await sendPrompt(page, 'Hold the daemon run open until canceled');
+  const canceled = await (await canceledResponsePromise).json() as {
+    runId: string;
+    taskExecutionId: string;
+  };
+  const cancelResponse = await page.request.post(`/api/runs/${canceled.runId}/cancel`);
+  expect(cancelResponse.ok(), await cancelResponse.text()).toBeTruthy();
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/runs/${canceled.runId}`);
+    return (await response.json() as {
+      strategyTask?: { taskExecutionId: string; outcome: string; terminal: boolean };
+    }).strategyTask;
+  }, { timeout: 20_000 }).toMatchObject({
+    taskExecutionId: canceled.taskExecutionId,
+    outcome: 'canceled',
+    terminal: true,
+  });
+});
+
+test('[P0] OD Next app-config switch takes effect immediately and rejects invalid modes atomically', async ({ page }) => {
+  const readRollout = async () => {
+    const response = await page.request.get('/api/strategies/od-next/rollout');
+    expect(response.ok(), await response.text()).toBeTruthy();
+    return (await response.json() as {
+      status: {
+        requestedMode: string;
+        requestedModeSource: string;
+        effectiveMode: string;
+      };
+    }).status;
+  };
+
+  const activeWrite = await page.request.put('/api/app-config', {
+    data: { odNextStrategyMode: 'active' },
+  });
+  expect(activeWrite.ok(), await activeWrite.text()).toBeTruthy();
+  await expect.poll(readRollout).toMatchObject({
+    requestedMode: 'active',
+    requestedModeSource: 'app_config',
+    effectiveMode: 'active',
+  });
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  const persisted = await page.request.get('/api/app-config');
+  expect(persisted.ok(), await persisted.text()).toBeTruthy();
+  expect((await persisted.json() as { config: { odNextStrategyMode?: string; agentId?: string } }).config)
+    .toMatchObject({ odNextStrategyMode: 'active', agentId: 'codex' });
+
+  const invalidWrite = await page.request.put('/api/app-config', {
+    data: { odNextStrategyMode: 'acive', agentId: 'mock' },
+  });
+  expect(invalidWrite.status()).toBe(400);
+  expect(await invalidWrite.json()).toMatchObject({
+    error: { code: 'INVALID_APP_CONFIG_VALUE' },
+  });
+  await expect.poll(readRollout).toMatchObject({
+    requestedMode: 'active',
+    requestedModeSource: 'app_config',
+    effectiveMode: 'active',
+  });
+  const afterInvalid = await page.request.get('/api/app-config');
+  expect((await afterInvalid.json() as { config: { odNextStrategyMode?: string; agentId?: string } }).config)
+    .toMatchObject({ odNextStrategyMode: 'active', agentId: 'codex' });
+
+  const offWrite = await page.request.put('/api/app-config', {
+    data: { odNextStrategyMode: 'off' },
+  });
+  expect(offWrite.ok(), await offWrite.text()).toBeTruthy();
+  await expect.poll(readRollout).toMatchObject({
+    requestedMode: 'off',
+    requestedModeSource: 'app_config',
+    effectiveMode: 'off',
+  });
+});
+
+test('[P1] delivered artifact opens the one-time experience survey and accepts an Other response', async ({ page }) => {
+  await enableExperienceSurvey(page);
+  await createProject(page, 'Delivered artifact survey smoke');
+  await expectWorkspaceReady(page);
+
+  await sendPrompt(page, 'Create a deterministic smoke artifact');
+
+  const { projectId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, [GENERATED_FILE]);
+  await expect(artifactPreviewFrame(page).getByRole('heading', { name: GENERATED_HEADING })).toBeVisible();
+
+  const survey = page.getByRole('dialog', {
+    name: /We'd love your feedback — help improve Open ?Design/,
+  });
+  const recommendation = survey.getByText(
+    /How likely are you to recommend Open ?Design to a colleague or friend\?/,
+  );
+  await expect(recommendation).toBeVisible({ timeout: T.medium });
+  await survey.getByRole('button', { name: '8', exact: true }).click();
+  await expect(survey.getByText('Which one should we improve first?')).toBeVisible();
+  await survey.getByRole('button', { name: 'Something else', exact: true }).click();
+  const other = survey.getByRole('textbox', { name: 'Tell us in your own words' });
+  await expect(other).toBeFocused();
+  await other.fill('Keep generated artifact previews visible after delivery.');
+  await survey.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(survey.getByText('Thank you!')).toBeVisible();
+
+  await expect
+    .poll(() => page.evaluate((key) => window.localStorage.getItem(key), EXPERIENCE_SURVEY_RETIRED_KEY))
+    .toBe('1');
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await expect(survey).toHaveCount(0);
+});
+
+test('[P0] bound project reads derive Workspace authority without browser query scope', async ({ page }) => {
+  const projectId = `server-derived-raw-${Date.now()}`;
+  const { conversationId } = await createProjectViaApi(
+    page,
+    projectId,
+    'Server-derived raw authority',
+    undefined,
+    SERVER_DERIVED_WORKSPACE_HEADERS,
+  );
+
+  expect(conversationId).toBeTruthy();
+  const conversationsResponse = await page.request.get(
+    `/api/projects/${projectId}/conversations`,
+  );
+  expect(
+    conversationsResponse.ok(),
+    await conversationsResponse.text(),
+  ).toBeTruthy();
+  const messagesResponse = await page.request.get(
+    `/api/projects/${projectId}/conversations/${conversationId}/messages`,
+  );
+  expect(messagesResponse.ok(), await messagesResponse.text()).toBeTruthy();
+
+  const writeResponse = await page.request.post(`/api/projects/${projectId}/files`, {
+    headers: SERVER_DERIVED_WORKSPACE_HEADERS,
+    data: {
+      name: GENERATED_FILE,
+      content: `<!doctype html><html><body><h1>${GENERATED_HEADING}</h1></body></html>`,
+    },
+  });
+  expect(writeResponse.ok(), await writeResponse.text()).toBeTruthy();
+
+  const rawPath = `/api/projects/${projectId}/raw/${GENERATED_FILE}`;
+  const response = await page.goto(rawPath, { waitUntil: 'domcontentloaded' });
+  expect(response?.ok(), await response?.text()).toBeTruthy();
+  expect(new URL(page.url()).searchParams.has('workspaceId')).toBe(false);
+  expect(new URL(page.url()).searchParams.has('workspaceMemberId')).toBe(false);
+  await expect(page.getByRole('heading', { name: GENERATED_HEADING })).toBeVisible();
+  await expect(page.locator('body')).not.toContainText('WORKSPACE_CONTEXT_REQUIRED');
 });
 
 test('[P0] real daemon run persists an artifact streamed across multiple chunks', async ({ page }) => {
@@ -158,6 +465,44 @@ test('[P0] real daemon run classifies a Claude mid-stream socket drop as a retry
   });
 });
 
+test('[P0] ACP handshake refusal is actionable, persists, and does not auto-retry', async ({ page }) => {
+  await createHandshakeRefusingKimiProject(page, 'ACP handshake refusal smoke');
+  await expectWorkspaceReady(page);
+
+  await sendPrompt(page, 'Start a session that the ACP fixture refuses');
+
+  const card = runErrorCard(page);
+  await expect(card).toContainText('Agent version incompatible', { timeout: 15_000 });
+  await expect(card).toContainText('Kimi CLI refused to start a session');
+  await expect(card).toContainText('json-rpc id 2: Internal error');
+  await expect(card.getByRole('button', { name: /^Retry$/ })).toBeVisible();
+  await expect.poll(() => countAcpRunSessionStarts(fakeAcpHandshakeRuntime.invocationLog)).toBe(1);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await expect(runErrorCard(page)).toContainText('Agent version incompatible', { timeout: 15_000 });
+  await expect(runErrorCard(page)).toContainText('Kimi CLI refused to start a session');
+  await expect.poll(() => countAcpRunSessionStarts(fakeAcpHandshakeRuntime.invocationLog)).toBe(1);
+});
+
+test('[P1] real daemon classifies a Claude prompt-too-long result and preserves it across reload', async ({ page }) => {
+  await createProject(page, 'Daemon prompt-too-long smoke', 'claude');
+  await expectWorkspaceReady(page);
+
+  await sendPrompt(page, 'Return a Claude prompt-too-long failure');
+
+  const card = runErrorCard(page);
+  await expect(card).toContainText('Input too long', { timeout: 15_000 });
+  await expect(card).toContainText("exceeded the model's context limit");
+  await expect(card.getByRole('button', { name: /^Retry$/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i })).toHaveCount(0);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await expect(runErrorCard(page)).toContainText('Input too long', { timeout: 15_000 });
+  await expect(runErrorCard(page)).toContainText("exceeded the model's context limit");
+});
+
 test('[P0] real daemon run supports a follow-up turn in the same project', async ({ page }) => {
   await createProject(page, 'Daemon follow-up smoke');
   await expectWorkspaceReady(page);
@@ -206,7 +551,7 @@ test('[P1] real daemon run treats an in-place artifact edit as produced work', a
     }, { timeout: 15_000 })
     .toContainEqual({
       runStatus: 'succeeded',
-      producedFiles: [],
+      producedFiles: [GENERATED_FILE],
       traceObjectFiles: [GENERATED_FILE],
       resultDeliveryState: 'delivered',
     });
@@ -224,9 +569,17 @@ test('[P1] real daemon run treats an in-place artifact edit as produced work', a
     .filter({ hasText: 'Font size' })
     .locator('input');
   await fontSizeInput.fill('52');
+  // Project-detail editing is optimistic: the authored artifact must update
+  // in the active preview before persistence finishes or the user clicks
+  // Save. A file-only assertion would miss a broken edit bridge that writes
+  // correct bytes while leaving the visible artifact stale.
+  await expect.poll(
+    () => editedHeading.evaluate((element) => getComputedStyle(element).fontSize),
+  ).toBe('52px');
   await page.locator('.manual-edit-modal').getByRole('button', { name: /^Save$/ }).click({ force: true });
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, 'font-size: 52px');
   await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(artifactPreviewFrame(page).locator('[data-od-id="smoke-title"]')).toHaveCSS('font-size', '52px');
 
   await page.getByRole('button', { name: 'Versions' }).click();
   const versionsDialog = page.getByRole('dialog', { name: 'Versions' });
@@ -607,6 +960,42 @@ test('[P0] real daemon run previews an artifact from a fake OpenCode runtime', a
   await expectProjectFileToContain(page, projectId, fileName, heading);
 });
 
+test('[P2] OpenCode non-zero tool results trigger and persist the repeated-failure warning', async ({ page }) => {
+  await createProject(page, 'OpenCode repeated tool failure smoke', 'opencode');
+  await expectWorkspaceReady(page);
+
+  const runResponse = await sendPrompt(page, 'Return repeated OpenCode tool failures');
+  expectCreateRunAgentId(runResponse, 'opencode');
+
+  const warning = 'Heads up — the agent has repeated a failing bash call 4× and may be stuck.';
+  await expect(page.getByText(warning, { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('Stopped retrying after repeated tool failures.', { exact: true })).toBeVisible();
+
+  const { projectId, conversationId } = await currentProjectContext(page);
+  await expect.poll(async () => {
+    const messages = await listConversationMessages(page, projectId, conversationId);
+    const assistant = messages.find((message) => message.role === 'assistant');
+    return {
+      runStatus: assistant?.runStatus ?? null,
+      failedToolResults: assistant?.events?.filter(
+        (event) => event.kind === 'tool_result' && event.isError === true,
+      ).length ?? 0,
+      warningDetails: assistant?.events?.filter(
+        (event) => event.kind === 'status' && event.detail === warning,
+      ).length ?? 0,
+    };
+  }, { timeout: 15_000 }).toEqual({
+    runStatus: 'succeeded',
+    failedToolResults: 4,
+    warningDetails: 1,
+  });
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+  await expect(page.getByText(warning, { exact: true })).toBeVisible();
+  await expect(page.getByText('Stopped retrying after repeated tool failures.', { exact: true })).toBeVisible();
+});
+
 test('[P1] BYOK OpenCode run is blocked before spawn when provider config is missing', async ({ page }) => {
   await createByokOpenCodeProject(page, 'BYOK OpenCode missing provider smoke');
   await expectWorkspaceReady(page);
@@ -665,7 +1054,7 @@ test('[P1] plugin authoring produces a generated-plugin scaffold with action car
   await waitForLoadingToClear(page);
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await page.getByTestId('plugin-create-with-agent').click();
-  await expect(page.getByTestId('home-hero-input')).toHaveText(/Create an Open Design plugin for:/);
+  await expect(page.getByTestId('home-hero-input')).toHaveText(/Create an OpenDesign plugin for:/);
 
   const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
   const runRequestPromise = page.waitForRequest(isCreateRunRequest);
@@ -740,7 +1129,12 @@ test('[P0] real daemon run supports fake non-Codex runtime protocols', async ({ 
   }
 });
 
-async function createProject(page: Page, name: string, agentId: FakeAgentId = 'codex') {
+async function createProject(
+  page: Page,
+  name: string,
+  agentId: FakeAgentId = 'codex',
+  conversationMode?: 'design' | 'chat' | 'plan',
+) {
   const projectId = `real-daemon-${name}-${Date.now()}`.replace(/[^A-Za-z0-9._-]/g, '-');
   await configureFakeAgent(page, agentId);
   await installBrowserAgentConfig(page, agentId);
@@ -750,7 +1144,12 @@ async function createProject(page: Page, name: string, agentId: FakeAgentId = 'c
   // redundant setup it removed — `installBrowserAgentConfig` above already
   // seeded it — and the goto is guarded against the aborted-navigation races a
   // domcontentloaded wait can lose to.
-  const { conversationId } = await createProjectViaApi(page, projectId, name);
+  const { conversationId } = await createProjectViaApi(
+    page,
+    projectId,
+    name,
+    conversationMode,
+  );
   try {
     await page.goto(`/projects/${projectId}/conversations/${conversationId}`, {
       waitUntil: 'domcontentloaded',
@@ -762,6 +1161,67 @@ async function createProject(page: Page, name: string, agentId: FakeAgentId = 'c
   await waitForLoadingToClear(page);
   await expectBrowserAgentConfig(page, agentId);
   await dismissPrivacyDialog(page);
+}
+
+async function createHandshakeRefusingKimiProject(page: Page, name: string) {
+  const env = fakeAcpHandshakeRuntime.env;
+  const response = await page.request.put('/api/app-config', {
+    data: {
+      onboardingCompleted: true,
+      agentId: 'kimi',
+      agentModels: { kimi: { model: 'default', reasoning: 'default' } },
+      agentCliEnv: { kimi: env },
+      skillId: null,
+      designSystemId: null,
+    },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  await page.addInitScript(installConfig, {
+    key: STORAGE_KEY,
+    id: 'kimi',
+    env,
+  });
+
+  const projectId = `real-daemon-${name}-${Date.now()}`.replace(/[^A-Za-z0-9._-]/g, '-');
+  const { conversationId } = await createProjectViaApi(page, projectId, name);
+  await page.goto(`/projects/${projectId}/conversations/${conversationId}`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await waitForLoadingToClear(page);
+  await expectBrowserAgentConfig(page, 'kimi');
+  await dismissPrivacyDialog(page);
+}
+
+async function prepareLocalOdNextCanary(page: Page, name: string): Promise<void> {
+  // Exercise the shipped Design-mode New Project flow, rather than hand-
+  // constructing the create payload. EntryShell leaves the silently selected
+  // default out of explicit plugin authority; the daemon derives and stamps
+  // its exact snapshot, so rollout can replace only that automatic pin.
+  await configureFakeAgent(page, 'opencode');
+  await installBrowserAgentConfig(page, 'opencode');
+  await gotoEntryHome(page);
+  await setBrowserAgentConfig(page, 'opencode');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await setBrowserAgentConfig(page, 'opencode');
+  await configureFakeAgent(page, 'opencode');
+  await expectBrowserAgentConfig(page, 'opencode');
+  await dismissPrivacyDialog(page);
+  await openNewProjectModalFromProjects(page);
+  await page.getByTestId('new-project-tab-prototype').click();
+  await page.getByTestId('new-project-name').fill(name);
+  await page.getByTestId('create-project').click();
+  await expectWorkspaceReady(page);
+  await configureFakeAgent(page, 'opencode');
+  const response = await page.request.get('/api/agents');
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const body = await response.json() as {
+    agents?: Array<{ id: string; available: boolean; version?: string }>;
+  };
+  expect(body.agents?.find((agent) => agent.id === 'opencode')).toMatchObject({
+    available: true,
+    version: 'opencode-e2e 0.0.0',
+  });
 }
 
 async function createByokOpenCodeProject(page: Page, name: string) {
@@ -781,8 +1241,15 @@ async function createByokOpenCodeProject(page: Page, name: string) {
   await page.getByTestId('create-project').click();
 }
 
-async function createProjectViaApi(page: Page, projectId: string, name: string) {
+async function createProjectViaApi(
+  page: Page,
+  projectId: string,
+  name: string,
+  conversationMode?: 'design' | 'chat' | 'plan',
+  headers?: Readonly<Record<string, string>>,
+) {
   const response = await page.request.post('/api/projects', {
+    ...(headers ? { headers: { ...headers } } : {}),
     data: {
       id: projectId,
       name,
@@ -790,6 +1257,7 @@ async function createProjectViaApi(page: Page, projectId: string, name: string) 
       designSystemId: null,
       pendingPrompt: null,
       metadata: { kind: 'prototype' },
+      ...(conversationMode ? { conversationMode } : {}),
     },
   });
   expect(response.ok()).toBeTruthy();
@@ -851,7 +1319,7 @@ async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   await projectsSettled;
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
@@ -963,7 +1431,7 @@ async function openNewProjectModal(page: Page) {
 }
 
 async function dismissPrivacyDialog(page: Page) {
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
@@ -971,12 +1439,99 @@ async function dismissPrivacyDialog(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
 }
 
 async function clickVisible(locator: Locator) {
   await expect(locator).toBeVisible({ timeout: T.medium });
   await locator.evaluate((element: HTMLElement) => element.click());
+}
+
+async function expectGeneratedPreviewToRemainStable(page: Page, heading: string) {
+  const preview = artifactPreview(page);
+  const original = await preview.elementHandle();
+  if (!original) throw new Error('generated artifact preview iframe is missing');
+
+  // The regression happened after the first successful paint: the file-route
+  // commit briefly re-entered materialization, remounted the pooled iframe,
+  // and Electron cancelled its srcdoc navigation. Observe the already-painted
+  // frame through that settle window instead of accepting one transiently
+  // successful visibility check.
+  await original.evaluate(async (frame) => {
+    const startedAt = performance.now();
+    await new Promise<void>((resolve, reject) => {
+      const tick = () => {
+        if (!frame.isConnected) {
+          reject(new Error('generated artifact preview iframe was detached after first paint'));
+          return;
+        }
+        const style = getComputedStyle(frame);
+        const rect = frame.getBoundingClientRect();
+        if (
+          style.display === 'none'
+          || style.visibility === 'hidden'
+          || Number(style.opacity) === 0
+          || rect.width === 0
+          || rect.height === 0
+        ) {
+          reject(new Error('generated artifact preview became hidden after first paint'));
+          return;
+        }
+        const blockingSurface = Array.from(
+          document.querySelectorAll<HTMLElement>('.viewer-loading, .viewer-empty'),
+        ).some((element) => {
+          const candidateStyle = getComputedStyle(element);
+          return candidateStyle.display !== 'none'
+            && candidateStyle.visibility !== 'hidden'
+            && Number(candidateStyle.opacity) !== 0
+            && element.getClientRects().length > 0;
+        });
+        if (blockingSurface) {
+          reject(new Error('loading or empty state masked the generated artifact after first paint'));
+          return;
+        }
+        if (performance.now() - startedAt >= 1_200) {
+          resolve();
+          return;
+        }
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+  });
+
+  expect(
+    await preview.evaluate((frame, firstFrame) => frame === firstFrame, original),
+    'generated artifact preview iframe was replaced after first paint',
+  ).toBe(true);
+  await expect(artifactPreviewFrame(page).getByRole('heading', { name: heading })).toBeVisible();
+}
+
+async function enableExperienceSurvey(page: Page) {
+  const response = await page.request.put('/api/app-config', {
+    data: {
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: 1,
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+
+  await page.addInitScript(({ configKey, deliveriesKey, retiredKey }) => {
+    const resetMarker = 'od-e2e:experience-survey-reset';
+    if (window.sessionStorage.getItem(resetMarker) !== '1') {
+      window.localStorage.removeItem(deliveriesKey);
+      window.localStorage.removeItem(retiredKey);
+      window.sessionStorage.setItem(resetMarker, '1');
+    }
+    const parsed = JSON.parse(window.localStorage.getItem(configKey) ?? '{}') as Record<string, unknown>;
+    parsed.privacyDecisionAt = 1;
+    parsed.telemetry = { metrics: true, content: false, artifactManifest: false };
+    window.localStorage.setItem(configKey, JSON.stringify(parsed));
+  }, {
+    configKey: STORAGE_KEY,
+    deliveriesKey: EXPERIENCE_SURVEY_DELIVERIES_KEY,
+    retiredKey: EXPERIENCE_SURVEY_RETIRED_KEY,
+  });
 }
 
 async function configureFakeAgent(page: Page, agentId: FakeAgentId) {
@@ -1038,7 +1593,7 @@ async function installBrowserByokOpenCodeConfig(page: Page) {
   await page.addInitScript(installByokOpenCodeConfig, { key: STORAGE_KEY });
 }
 
-function installConfig({ key, id, env }: { key: string; id: FakeAgentId; env: Record<string, string> }) {
+function installConfig({ key, id, env }: { key: string; id: string; env: Record<string, string> }) {
   window.localStorage.setItem(
     key,
     JSON.stringify({
@@ -1054,6 +1609,19 @@ function installConfig({ key, id, env }: { key: string; id: FakeAgentId; env: Re
       agentCliEnv: { [id]: env },
     }),
   );
+}
+
+async function countAcpRunSessionStarts(invocationLog: string): Promise<number> {
+  const raw = await readFile(invocationLog, 'utf8').catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') return '';
+    throw error;
+  });
+  return raw
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as { client?: string; method?: string })
+    .filter((entry) => entry.client === 'open-design' && entry.method === 'session/new')
+    .length;
 }
 
 function installByokOpenCodeConfig({ key }: { key: string }) {
@@ -1262,7 +1830,13 @@ async function listConversationMessages(
       role: string;
       runId?: string;
       runStatus?: string;
-      events?: Array<{ kind: string }>;
+      events?: Array<{
+        kind: string;
+        content?: string;
+        detail?: string;
+        isError?: boolean;
+        name?: string;
+      }>;
       producedFiles?: Array<{ name: string }>;
       traceObjectFiles?: Array<{ name: string }>;
       resultDeliveryState?: string;

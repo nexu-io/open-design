@@ -96,7 +96,7 @@ describe("newsletter subscribe welcome email", () => {
     assert.equal(calls[1]?.init.headers?.["Idempotency-Key" as keyof HeadersInit], "newsletter-welcome-sub:abc");
 
     const emailBody = JSON.parse(String(calls[1]?.init.body));
-    assert.equal(emailBody.from, "Open Design <updates@open-design.ai>");
+    assert.equal(emailBody.from, "OpenDesign <updates@open-design.ai>");
     assert.equal(emailBody.reply_to, "updates@open-design.ai");
     assert.equal(emailBody.to, "user@example.com");
     assert.equal(emailBody.subject, "Welcome to OpenDesign — you're in 🎉");

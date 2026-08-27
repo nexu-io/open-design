@@ -1,19 +1,19 @@
 ---
-title: Open Design 0.18.0
-description: Open Design 0.18.0 introduces Team Workspace—a shared home where design teams can share projects, review updates, comment in context, and reuse the same design systems, plugins, and skills. With the new Open Design plugin for Codex, that collaborative workspace now extends directly into Codex.
+title: OpenDesign 0.18.0
+description: OpenDesign 0.18.0 introduces Team Workspace—a shared home where design teams can share projects, review updates, comment in context, and reuse the same design systems, plugins, and skills. With the new OpenDesign plugin for Codex, that collaborative workspace now extends directly into Codex.
 ---
 
 ### 🌟 Codename: *Design Team Workspace. Now in Codex.*
 
-🤝 **`115 PRs` · `22 contributors` · `2 days`** — Open Design 0.18.0 introduces Team Workspace—a shared home where design teams can share projects, review updates, comment in context, and reuse the same design systems, plugins, and skills. With the new Open Design plugin for Codex, that collaborative workspace now extends directly into Codex. 🚀
+🤝 **`115 PRs` · `22 contributors` · `2 days`** — OpenDesign 0.18.0 introduces Team Workspace—a shared home where design teams can share projects, review updates, comment in context, and reuse the same design systems, plugins, and skills. With the new OpenDesign plugin for Codex, that collaborative workspace now extends directly into Codex. 🚀
 
 ## 🔥 Highlights
 
-- 🤝 **Team workspaces — your team gets a home.** *Collaboration used to mean leaving Open Design: export the file, paste the screenshot, chase the latest copy.* Now a **Team workspace** lives right next to your personal one. Create it, switch into it, and invite colleagues with a role through a seat-aware invite flow — everyone lands in the same place, signed in through one Open Design Cloud account. (#6142, #6459)
+- 🤝 **Team workspaces — your team gets a home.** *Collaboration used to mean leaving OpenDesign: export the file, paste the screenshot, chase the latest copy.* Now a **Team workspace** lives right next to your personal one. Create it, switch into it, and invite colleagues with a role through a seat-aware invite flow — everyone lands in the same place, signed in through one OpenDesign Cloud account. (#6142, #6459)
 
-- 🚀 **Open Design for Codex — in case you missed 0.17.0.** *The last release lived for exactly two days, so its headline rides again:* Codex Desktop and CLI can call Open Design as a complete creative engine. Confirm a visual brief, choose Open Design Cloud or a supported local runtime, and receive a real Preview or Studio result. The signed Open Design runtime starts headlessly when needed, so there is no second app to keep open and no stack to wire together by hand. Upgrading from 0.16.x? This one is new to you too. (#6055, #6273, #6362 — shipped in [0.17.0](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.17.0))
+- 🚀 **OpenDesign for Codex — in case you missed 0.17.0.** *The last release lived for exactly two days, so its headline rides again:* Codex Desktop and CLI can call OpenDesign as a complete creative engine. Confirm a visual brief, choose OpenDesign Cloud or a supported local runtime, and receive a real Preview or Studio result. The signed OpenDesign runtime starts headlessly when needed, so there is no second app to keep open and no stack to wire together by hand. Upgrading from 0.16.x? This one is new to you too. (#6055, #6273, #6362 — shipped in [0.17.0](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.17.0))
 
-- 🔌 **And Codex doesn't lose Open Design anymore.** External MCP hosts — Codex and friends — used to go dark if Open Design's local service came back on a different port after a restart. The connection now finds its way home on its own, so `@open-design` keeps working across restarts without re-setup. (#6391)
+- 🔌 **And Codex doesn't lose OpenDesign anymore.** External MCP hosts — Codex and friends — used to go dark if OpenDesign's local service came back on a different port after a restart. The connection now finds its way home on its own, so `@open-design` keeps working across restarts without re-setup. (#6391)
 
 - 📁 **Shared projects that stay current on their own.** Move a project into the team space and every member gets a live read-only mirror: content auto-pulls as the owner works, presence avatars show who's looking, transfer progress is visible, and comments flow both ways — including from viewers in read-only mode. Nobody re-sends anything, and "is this the latest?" stops being a question. (#5281, #5283, #5395, #6294)
 
@@ -41,13 +41,13 @@ description: Open Design 0.18.0 introduces Team Workspace—a shared home where 
 
 ### 🏠 Home, projects & landing
 
-- **The plugin catalog has a front door.** A dedicated landing page introduces Open Design plugins to newcomers before they ever install the app. (#6241) Thanks @joeylee12629-star.
+- **The plugin catalog has a front door.** A dedicated landing page introduces OpenDesign plugins to newcomers before they ever install the app. (#6241) Thanks @joeylee12629-star.
 
 - **The Codex agent page now answers the question people actually ask.** Sharper positioning and content for anyone searching for a Codex UI. (#6200) Thanks @joeylee12629-star.
 
 ## 🔁 Changed
 
-- **Open Design ships light-first.** The new workspace surfaces are tuned for the light appearance, so the theme setting is retired for now and every install returns to light. (#6168)
+- **OpenDesign ships light-first.** The new workspace surfaces are tuned for the light appearance, so the theme setting is retired for now and every install returns to light. (#6168)
 
 ## 🐛 Fixed
 

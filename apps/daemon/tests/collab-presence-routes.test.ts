@@ -1225,4 +1225,18 @@ describe('createCollabPresenceCloudClient', () => {
       'leave:p1:ws-for-p1',
     ]);
   });
+
+  it('fails closed instead of issuing a headerless cloud call without a scope', () => {
+    const transport = {
+      heartbeatPresence: vi.fn(async () => []),
+      listPresence: vi.fn(async () => []),
+      leavePresence: vi.fn(async () => []),
+    };
+    const cloud = createCollabPresenceCloudClient(transport, () => undefined);
+
+    expect(() => cloud!.listPresence('p1')).toThrow(expect.objectContaining({
+      code: 'workspace_scope_unavailable',
+    }));
+    expect(transport.listPresence).not.toHaveBeenCalled();
+  });
 });

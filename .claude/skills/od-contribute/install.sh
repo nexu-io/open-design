@@ -122,15 +122,15 @@ cyan "How to use it:"
 cat <<'EOF'
 
   In Claude Code:  type  /od-contribute  in any chat.
-  In Codex CLI:    type  @od-contribute  or pick "Open Design — Contribute" from /skills.
+  In Codex CLI:    type  @od-contribute  or pick "OpenDesign — Contribute" from /skills.
   In other agents: ask the agent to follow ~/.claude/skills/od-contribute/SKILL.md
 
 The skill walks you through one of:
 
-  * shipping a Skill or Design System you made with Open Design
+  * shipping a Skill or Design System you made with OpenDesign
   * translating a doc to a new language
   * fixing a typo or writing a use-case blog
   * reporting a clean bug
 
-Need help? Open Design Discord:  https://discord.gg/qhbcCH8Am4
+Need help? OpenDesign Discord:  https://discord.gg/qhbcCH8Am4
 EOF

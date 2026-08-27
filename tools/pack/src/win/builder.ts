@@ -4,21 +4,21 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { hashJson, hashPath, type CacheNode, ToolPackCache } from "../cache.js";
-import type { ToolPackConfig } from "../config.js";
+import { hashJson, hashPath, type CacheNode, ToolPackCache } from "../cache/index.js";
+import type { ToolPackConfig } from "../config/index.js";
 import { domToPptxBundleResource } from "../dom-to-pptx-resource.js";
 import {
   assertNodePtyRuntime,
   validateNodePtyRuntime,
 } from "../node-pty-runtime.js";
-import { winResources } from "../resources.js";
-import { electronBuilderVersionForAppVersion, versionCoreForAppVersion } from "../versions.js";
+import { winResources } from "../resources/index.js";
+import { electronBuilderVersionForAppVersion, versionCoreForAppVersion } from "../versioning/index.js";
 import {
   WIN_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH,
   WIN_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH,
   WIN_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH,
   shouldUseWinStandalonePrebundle,
-} from "../win-prebundle.js";
+} from "./prebundle.js";
 import {
   buildCustomWinNsisInstaller,
   hashWinNsisBasePayloadInputs,
@@ -102,7 +102,11 @@ async function assertWebStandaloneOutput(config: ToolPackConfig): Promise<void> 
   throw new Error("Next.js standalone server output was not produced under apps/web/.next/standalone");
 }
 
-async function writeWebStandaloneHookConfig(config: ToolPackConfig, paths: WinPaths): Promise<string> {
+async function writeWebStandaloneHookConfig(
+  config: ToolPackConfig,
+  paths: WinPaths,
+  hyperframesRuntimeSourceRoot: string,
+): Promise<string> {
   const webRoot = join(config.workspaceRoot, "apps", "web");
   await assertWebStandaloneOutput(config);
 
@@ -112,6 +116,7 @@ async function writeWebStandaloneHookConfig(config: ToolPackConfig, paths: WinPa
     `${JSON.stringify(
       {
         auditReportPath: paths.webStandaloneHookAuditPath,
+        hyperframesRuntimeSourceRoot,
         pruneCopiedSharp: true,
         pruneRootNext: true,
         pruneRootSharp: true,
@@ -167,7 +172,7 @@ async function runElectronBuilderRaw(
   const packageVersion = electronBuilderVersionForAppVersion(packagedVersion);
   const webStandaloneHookConfigPath = config.webOutputMode === "standalone"
     ? await runSegment("electron-builder-raw:write-web-standalone-hook-config", async () =>
-      writeWebStandaloneHookConfig(config, paths)
+      writeWebStandaloneHookConfig(config, paths, projectDir)
     )
     : null;
   const builderConfig = {

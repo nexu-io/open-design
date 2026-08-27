@@ -4,8 +4,8 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import type { ToolPackConfig } from "../src/config.js";
-import { processWebSourcemaps } from "../src/web-sourcemaps.js";
+import type { ToolPackConfig } from "@/config/index.js";
+import { processWebSourcemaps } from "@/web-sourcemaps.js";
 
 /**
  * These tests cover the parts of `processWebSourcemaps` that don't shell out

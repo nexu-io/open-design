@@ -67,6 +67,7 @@ import {
   type VisualStyleContext,
 } from "../runtime/visual-style-catalog";
 import { splitStreamingArtifact, stripArtifact, stripRecoveredHtmlFallbackForDisplay } from "../artifacts/strip";
+import { stripInternalControlMarkers } from "../artifacts/internal-markers";
 import { BRAND_BROWSER_TAB_ID } from "../runtime/brand-browser-bridge";
 import {
   getPluginFolderCandidates,
@@ -82,8 +83,8 @@ import { useT } from "../i18n";
 import { deriveFileOps, type FileOpEntry } from "../runtime/file-ops";
 import { dedupeToolUsesById } from "../runtime/tool-events";
 import {
+  continuableUnfinishedTodos,
   isTodoWriteToolName,
-  unfinishedTodosFromEvents,
   type TodoItem,
 } from "../runtime/todos";
 import type { Dict } from "../i18n/types";
@@ -286,7 +287,7 @@ function SkillPluginCandidateCard({
         { action },
       );
       setNotice({
-        message: `Open Design contribution task started for ${data?.path ?? "the draft"}.`,
+        message: `OpenDesign contribution task started for ${data?.path ?? "the draft"}.`,
       });
     } catch (err) {
       setNotice({ message: err instanceof Error ? err.message : String(err) });
@@ -370,7 +371,7 @@ interface Props {
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
-  // Click handler for the post-completion "Share to Open Design" submission
+  // Click handler for the post-completion "Share to OpenDesign" submission
   // action. ProjectView wires this to handleSend with the bundled
   // `od-share-to-community` trigger prompt.
   onShareToOpenDesign?: () => void;
@@ -548,6 +549,15 @@ function AssistantMessageImpl({
   nextStepVariant = 'default',
 }: Props) {
   const t = useT();
+  // A blocked strategy task is a sticky terminal verdict: the daemon rejects
+  // every further continuation with 409 STRATEGY_TASK_STATE_MISMATCH, so the
+  // turn's question forms must stop accepting submissions and explain why.
+  // Prefer the gate's persisted agent-visible text; fall back to the generic
+  // localized notice.
+  const strategyBlockedNotice =
+    message.strategyTaskBlocked === true
+      ? message.strategyTaskBlockedText?.trim() || t("questions.strategyBlockedNotice")
+      : null;
   // Thinking text renders markdown too — its file links must route in-app
   // exactly like prose links (ProseBlock builds the same handler itself).
   const thinkingLinkClick = useMemo(
@@ -633,13 +643,13 @@ function AssistantMessageImpl({
     () => turnFileOps.filter((entry) => entry.ops.includes('write') || entry.ops.includes('edit')),
     [turnFileOps],
   );
-  // Same artifacts-not-inputs rule, applied to the #5517 summary source. The
-  // summary row is fed by `fileOps` (produced files stay their own flat block
-  // below), so it needs its own read-only filter rather than reusing
-  // `turnArtifactOps`, which is derived from the produced-file merge.
+  // Same artifacts-not-inputs rule, applied to the #5517 summary source. Once
+  // the daemon has attached an authoritative produced-file list, the result
+  // card must describe that delivered set rather than every attempted tool
+  // path. Failed attempts remain visible in the execution disclosure.
   const summaryArtifactOps = useMemo(
-    () => fileOps.filter((entry) => entry.ops.includes('write') || entry.ops.includes('edit')),
-    [fileOps],
+    () => summaryArtifactOpsForProducedFiles(fileOps, produced),
+    [fileOps, produced],
   );
   // The single artifact the "next step" affordance anchors to: prefer the HTML
   // produced by THIS turn; if the final turn emitted none (a summary / continue
@@ -749,7 +759,12 @@ function AssistantMessageImpl({
           }),
     [message.content, nextStepVariant, projectMetadata, streaming],
   );
-  const unfinishedTodos = streaming ? [] : unfinishedTodosFromEvents(events);
+  // A settled `completed` strategy verdict outranks a stale TodoWrite snapshot:
+  // the deliverable was verified on disk, so the footer must not report the
+  // turn as stopped with unfinished work (and must not withhold next steps).
+  const unfinishedTodos = streaming
+    ? []
+    : continuableUnfinishedTodos({ events, strategyTaskDelivered: message.strategyTaskDelivered });
   const hasTodoSnapshot = events.some(
     (event) => event.kind === "tool_use" && isTodoWriteToolName(event.name),
   );
@@ -921,7 +936,10 @@ function AssistantMessageImpl({
                 nextUserContent={nextUserContent}
                 suppressDirectionForms={suppressDirectionForms}
                 onSubmitQuestionForm={onSubmitQuestionForm}
-                questionFormSubmitDisabled={questionFormSubmitDisabled}
+                questionFormSubmitDisabled={
+                  questionFormSubmitDisabled || strategyBlockedNotice !== null
+                }
+                strategyBlockedNotice={strategyBlockedNotice}
                 visualStyleContext={visualStyleContextForProjectKind(projectKind)}
                 projectId={projectId}
                 conversationId={conversationId}
@@ -1258,6 +1276,60 @@ function mergeProducedFilesIntoFileOps(
     });
   }
   return merged;
+}
+
+function summaryArtifactOpsForProducedFiles(
+  fileOps: FileOpEntry[],
+  produced: ProjectFile[],
+): FileOpEntry[] {
+  const artifactOps = fileOps.filter(
+    (entry) => entry.ops.includes('write') || entry.ops.includes('edit'),
+  );
+  if (artifactOps.length === 0 || produced.length === 0) return artifactOps;
+
+  const unused = new Set(artifactOps);
+  return produced.map((file) => {
+    const candidates = [...unused]
+      .map((entry) => ({ entry, score: producedFileOpMatchScore(entry, file) }))
+      .filter(({ score }) => score > 0)
+      .sort((left, right) => {
+        const statusDelta =
+          Number(right.entry.status === 'done') - Number(left.entry.status === 'done');
+        return statusDelta || right.score - left.score;
+      });
+    const matched = candidates[0]?.entry;
+    if (matched) {
+      unused.delete(matched);
+      return {
+        ...matched,
+        path: file.name,
+        status: 'done' as const,
+      };
+    }
+
+    const fullPath = file.path || file.localPath || file.name;
+    return {
+      path: file.name,
+      fullPath,
+      ops: ['write'],
+      opCounts: { read: 0, write: 1, edit: 0, delete: 0 },
+      total: 1,
+      status: 'done',
+    };
+  });
+}
+
+function producedFileOpMatchScore(entry: FileOpEntry, file: ProjectFile): number {
+  const entryFullPath = normalizeTouchedPath(entry.fullPath);
+  const entryPath = normalizeTouchedPath(entry.path);
+  const filePaths = [file.path, file.localPath, file.name]
+    .filter((path): path is string => Boolean(path))
+    .map(normalizeTouchedPath);
+
+  if (filePaths.includes(entryFullPath)) return 3;
+  if (filePaths.some((path) => entryFullPath.endsWith(`/${path}`))) return 2;
+  if (filePaths.includes(entryPath)) return 1;
+  return 0;
 }
 
 function normalizeTouchedPath(path: string): string {
@@ -2329,7 +2401,7 @@ function PluginActionPanel({
                   <span>
                     {actionBusy && busyKey === `contribute:${folder.path}`
                       ? "Sending..."
-                      : "Open Design PR"}
+                      : "OpenDesign PR"}
                   </span>
                 </button>
                 {onRequestOpenFile ? (
@@ -2425,7 +2497,7 @@ function pathMatchesFolderFileBasename(
 }
 
 function hasPluginFinalActionHint(content: string): boolean {
-  return /\b(Add to My plugins|Open Design PR|Publish repo|plugin publish|ready to publish|ready to add)\b/i.test(
+  return /\b(Add to My plugins|OpenDesign PR|Publish repo|plugin publish|ready to publish|ready to add)\b/i.test(
     content,
   );
 }
@@ -2481,6 +2553,7 @@ function ProseBlock({
   suppressDirectionForms,
   onSubmitQuestionForm,
   questionFormSubmitDisabled,
+  strategyBlockedNotice = null,
   visualStyleContext,
   projectId,
   conversationId,
@@ -2505,15 +2578,22 @@ function ProseBlock({
   projectResolvedDir?: string | null;
   onSubmitQuestionForm?: QuestionFormSubmitHandler;
   questionFormSubmitDisabled: boolean;
+  /** Localized blocked-task notice; non-null terminates form interaction. */
+  strategyBlockedNotice?: string | null;
   visualStyleContext?: VisualStyleContext;
   onRequestOpenFile?: (name: string) => void;
   onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
 }) {
   const t = useT();
   const cleaned = useMemo(() => {
-    const stripped = stripArtifact(text);
-    return hideRecoveredHtmlFallback ? stripRecoveredHtmlFallbackForDisplay(stripped, text) : stripped;
-  }, [hideRecoveredHtmlFallback, text]);
+    // Internal control markers come off first: they are daemon plumbing that
+    // never belongs in prose, and a leaked one would otherwise reach Markdown.
+    const withoutMarkers = stripInternalControlMarkers(text, { streaming });
+    const stripped = stripArtifact(withoutMarkers);
+    return hideRecoveredHtmlFallback
+      ? stripRecoveredHtmlFallbackForDisplay(stripped, withoutMarkers)
+      : stripped;
+  }, [hideRecoveredHtmlFallback, streaming, text]);
   // While the latest turn is still streaming a not-yet-closed question-form,
   // drop the partial `<question-form>{…` markup from the prose so the chat
   // doesn't flash raw JSON; an inline loading frame takes its place. A not-yet-closed
@@ -2624,6 +2704,7 @@ function ProseBlock({
             interactive={isLastAssistant}
             onSubmit={onSubmitQuestionForm}
             submitDisabled={questionFormSubmitDisabled}
+            strategyBlockedNotice={strategyBlockedNotice}
             visualStyleContext={visualStyleContext}
           />
         );
@@ -2656,6 +2737,7 @@ function FormBlock({
   interactive,
   onSubmit,
   submitDisabled,
+  strategyBlockedNotice = null,
   visualStyleContext,
 }: {
   form: QuestionForm;
@@ -2666,6 +2748,8 @@ function FormBlock({
   interactive: boolean;
   onSubmit?: QuestionFormSubmitHandler;
   submitDisabled: boolean;
+  /** Localized blocked-task notice rendered under the disabled form. */
+  strategyBlockedNotice?: string | null;
   visualStyleContext?: VisualStyleContext;
 }) {
   const t = useT();
@@ -3049,6 +3133,15 @@ function FormBlock({
         visualStyleContext={visualStyleContext}
         autoContinueAfterTimeout
       />
+      {strategyBlockedNotice ? (
+        <div
+          className="qf-blocked-notice"
+          role="status"
+          data-testid="question-form-blocked-notice"
+        >
+          {strategyBlockedNotice}
+        </div>
+      ) : null}
       {uploadError ? (
         <div className="qf-upload-error" role="alert">
           {uploadError}

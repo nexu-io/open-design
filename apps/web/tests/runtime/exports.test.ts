@@ -24,6 +24,7 @@ import {
   planDeckImageCapture,
   requestPreviewSnapshot,
   sourceLooksLikeExportableDeck,
+  sourceLooksLikeNavigableDeck,
 } from '../../src/runtime/exports';
 import { workspaceContextFixture } from '../helpers/workspace-context';
 
@@ -125,6 +126,40 @@ describe('sourceLooksLikeExportableDeck (#4604 horizontal deck export)', () => {
     expect(sourceLooksLikeExportableDeck('')).toBe(false);
     expect(sourceLooksLikeExportableDeck(null)).toBe(false);
     expect(sourceLooksLikeExportableDeck(undefined)).toBe(false);
+  });
+});
+
+describe('sourceLooksLikeNavigableDeck', () => {
+  it('does not turn ordinary prototype annotations into deck chrome', () => {
+    expect(
+      sourceLooksLikeNavigableDeck('<h1 data-screen-label="Hero title">Prototype</h1>'),
+    ).toBe(false);
+    expect(sourceLooksLikeNavigableDeck(
+      '<main><h1 data-screen-label="Hero">Prototype</h1>' +
+      '<button data-screen-label="CTA">Buy</button></main>',
+    )).toBe(false);
+    expect(sourceLooksLikeNavigableDeck(
+      '<main><section data-screen-label="01 Hero">One</section>' +
+      '<div><section data-screen-label="02 CTA">Two</section></div></main>',
+    )).toBe(false);
+  });
+
+  it('ignores deck-shaped text inside report comments and scripts', () => {
+    expect(sourceLooksLikeNavigableDeck(
+      '<main class="doc"><h1>Annual report</h1></main>' +
+      '<!-- print support waits for a <deck-stage> when one exists -->' +
+      '<script>const example = "<deck-stage></deck-stage>";</script>',
+    )).toBe(false);
+  });
+
+  it('keeps explicit and multi-screen persisted decks navigable', () => {
+    expect(sourceLooksLikeNavigableDeck(
+      '<deck-stage><section data-screen-label="Cover">A</section></deck-stage>',
+    )).toBe(true);
+    expect(sourceLooksLikeNavigableDeck(
+      '<main><section data-screen-label="01 Cover">A</section>' +
+      '<section data-screen-label="02 Agenda">B</section></main>',
+    )).toBe(true);
   });
 });
 
@@ -648,7 +683,7 @@ describe('exportProjectImageDataUrl', () => {
       versionId: 'v1',
     });
 
-    expect(result).toEqual({ ok: false, unavailable: true });
+    expect(result).toEqual({ ok: false, unavailable: true, reason: 'no-renderer' });
     expect(fetch).toHaveBeenCalledWith('/api/projects/proj%201/export/image', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -897,7 +932,7 @@ describe('binary project/design-system downloads', () => {
 
     const res = await exportProjectAsPptx({ projectId: 'p', fileName: 'deck.html' });
 
-    expect(res).toEqual({ ok: false, unavailable: true });
+    expect(res).toEqual({ ok: false, unavailable: true, reason: 'no-renderer' });
   });
 
   it('surfaces a semantic failure (non-501) as an error, not unavailable', async () => {
@@ -918,7 +953,7 @@ describe('binary project/design-system downloads', () => {
 
     const res = await exportProjectAsPptx({ projectId: 'p', fileName: 'deck.html' });
 
-    expect(res).toEqual({ ok: false, unavailable: true });
+    expect(res).toEqual({ ok: false, unavailable: true, reason: 'unreachable' });
   });
 
   it('a post-response failure (renderer already produced bytes) is an error, not unavailable', async () => {
@@ -1158,7 +1193,9 @@ describe('sandboxed preview Blob exports', () => {
 
     expect(capturedBlob).toBeDefined();
     const wrapper = await capturedBlob!.text();
-    expect(wrapper).toContain('&lt;base href=&quot;https://open-design.test/&quot;&gt;');
+    expect(wrapper).toContain(
+      '&lt;base href=&quot;https://open-design.test/&quot; data-od-project-preview-base&gt;',
+    );
   });
 
   it('passes srcdoc options through the sandboxed new-tab wrapper', async () => {
@@ -1173,7 +1210,9 @@ describe('sandboxed preview Blob exports', () => {
     const wrapper = await capturedBlob!.text();
     expect(wrapper).toContain('sandbox="allow-scripts"');
     expect(wrapper).not.toContain('allow-same-origin');
-    expect(wrapper).toContain('&lt;base href=&quot;/artifacts/project/assets/&quot;&gt;');
+    expect(wrapper).toContain(
+      '&lt;base href=&quot;/artifacts/project/assets/&quot; data-od-project-preview-base&gt;',
+    );
     expect(wrapper).toContain('od:slide');
   });
 

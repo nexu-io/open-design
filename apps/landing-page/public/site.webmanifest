@@ -1,7 +1,7 @@
 {
-  "name": "Open Design",
-  "short_name": "Open Design",
-  "description": "The official Open Design site for the open-source, local-first Claude Design alternative.",
+  "name": "OpenDesign",
+  "short_name": "OpenDesign",
+  "description": "The official OpenDesign site for the open-source, local-first Claude Design alternative.",
   "icons": [
     {
       "src": "/android-chrome-192x192.png",

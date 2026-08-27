@@ -26,7 +26,6 @@ const directAssets = {
   macArm64: m.macArm64Dmg?.url ?? '',
   macX64: m.macX64Dmg?.url ?? '',
   windows: m.winSetup?.url ?? '',
-  linux: m.linux?.url ?? '',
 };
 
 const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
@@ -57,7 +56,7 @@ interface Row {
 }
 
 interface PlatformCard {
-  os: 'macOS' | 'Windows' | 'Linux';
+  os: 'macOS' | 'Windows';
   osLabel: string;
   arch?: string; // sub-label, e.g. "Apple Silicon"
   matchKey: string; // ties to enhancer detectPlatform (recommend highlight)
@@ -89,15 +88,6 @@ const cards: PlatformCard[] = [
     // Installer only — portable zip stays available via the all-releases link.
     rows: [{ key: 'win-setup', variant: page.windowsInstaller, asset: m.winSetup }],
   },
-  {
-    os: 'Linux',
-    osLabel: page.linux,
-    matchKey: 'linux',
-    rows: m.linux
-      ? [{ key: 'linux-appimage', variant: 'AppImage', asset: m.linux }]
-      : [],
-    note: page.linuxBody,
-  },
 ];
 
 const publishedLabel = fmtDate(release.publishedAt);
@@ -108,12 +98,9 @@ const ICON_APPLE =
   '<svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true"><path d="M16.36 12.78c.02 2.5 2.19 3.33 2.22 3.34-.02.06-.35 1.2-1.15 2.37-.69 1.01-1.41 2.02-2.54 2.04-1.11.02-1.47-.66-2.74-.66s-1.66.64-2.71.68c-1.09.04-1.92-1.09-2.62-2.1-1.42-2.06-2.51-5.83-1.05-8.37.72-1.27 2.01-2.07 3.41-2.09 1.07-.02 2.08.72 2.74.72.65 0 1.88-.89 3.17-.76.54.02 2.06.22 3.03 1.64-.08.05-1.81 1.06-1.79 3.15M14.28 5.6c.58-.7.97-1.68.86-2.65-.83.03-1.84.55-2.44 1.25-.54.62-1.01 1.61-.88 2.56.93.07 1.87-.47 2.46-1.16"/></svg>';
 const ICON_WINDOWS =
   '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="M3 5.1 10.4 4v7.3H3zm0 13.8L10.4 20v-7.2H3zm8.2 1.2L21 21.3V12.8h-9.8zm0-16.2v7.4H21V2.7z"/></svg>';
-const ICON_LINUX =
-  '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="M12 2c-2.2 0-3.3 1.9-3.3 4.1 0 1.4.5 2.3.5 3.4 0 1-.7 1.8-1.4 2.9C6.9 13.9 6 15.6 6 17.3c0 .9.3 1.5.9 1.9-.1.5 0 1 .3 1.3.6.6 1.7.6 2.5.3.5-.2.8-.6.9-1.1.3 0 .6-.1.9-.1s.6 0 .9.1c.1.5.4.9.9 1.1.8.3 1.9.3 2.5-.3.3-.3.4-.8.3-1.3.6-.4.9-1 .9-1.9 0-1.7-.9-3.4-1.8-4.9-.7-1.1-1.4-1.9-1.4-2.9 0-1.1.5-2 .5-3.4C15.3 3.9 14.2 2 12 2m-1.3 4.3c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9m2.6 0c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9"/></svg>';
-const PLATFORM_ICON: Record<'macOS' | 'Windows' | 'Linux', string> = {
+const PLATFORM_ICON: Record<'macOS' | 'Windows', string> = {
   macOS: ICON_APPLE,
   Windows: ICON_WINDOWS,
-  Linux: ICON_LINUX,
 };
 const ICON_DOWNLOAD =
   '↓';
@@ -128,16 +115,16 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Open Design', item: absUrl('/') },
+      { '@type': 'ListItem', position: 1, name: 'OpenDesign', item: absUrl('/') },
       { '@type': 'ListItem', position: 2, name: page.breadcrumb, item: absUrl('/download/') },
     ],
   },
   {
     '@context': 'https://schema.org',
     '@type': 'SoftwareApplication',
-    name: 'Open Design',
+    name: 'OpenDesign',
     applicationCategory: 'DesignApplication',
-    operatingSystem: 'macOS, Windows, Linux',
+    operatingSystem: 'macOS, Windows',
     softwareVersion: release.version,
     softwareHelp: { '@type': 'CreativeWork', url: QUICKSTART_DOC },
     downloadUrl: m.macArm64Dmg?.url ?? release.releaseUrl,
@@ -149,7 +136,7 @@ const jsonLd = [
 
 <Layout title={title} description={description} active="download" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
-    <a href={href('/')}>Open Design</a>
+    <a href={href('/')}>OpenDesign</a>
     <span>/</span>
     <span aria-current="page">{page.breadcrumb}</span>
   </nav>
@@ -157,12 +144,6 @@ const jsonLd = [
   <article class="info-page dl-page" data-download-root>
     <header class="dl-hero">
       <div class="dl-hero-copy">
-        <div class="dl-hero-brand">
-          <span class="dl-hero-mark" aria-hidden="true">
-            <img src="/favicon.svg" alt="" width="34" height="34" />
-          </span>
-          <span>Vibe Design Workspace</span>
-        </div>
         <h1 class="dl-hero-heading">{page.heading}</h1>
         <p class="dl-hero-lead">{page.lead}</p>
         <p class="dl-mobile-notice" data-dl-mobile-notice hidden>
@@ -171,11 +152,11 @@ const jsonLd = [
 
         {/*
          * Static fallback points at the neutral release page, not a specific
-         * asset: with JS disabled/blocked every platform (Windows, Linux, and
-         * Macs whose arch we can't sniff) should reach a usable page rather
-         * than be handed a macOS Apple Silicon DMG. The enhancer below swaps
-         * in the detected platform's direct installer once it runs; platforms
-         * with no single asset (Linux) intentionally keep this release-page href.
+         * asset: with JS disabled/blocked every platform (Windows, and Macs
+         * whose arch we can't sniff) should reach a usable page rather than be
+         * handed a macOS Apple Silicon DMG. The enhancer below swaps in the
+         * detected platform's direct installer once it runs; platforms with no
+         * packaged asset intentionally keep this release-page href.
          */}
         <div class="dl-hero-actions">
           <a
@@ -255,11 +236,7 @@ const jsonLd = [
                 ))}
               </ul>
             )}
-            {/*
-             * Keep the platform note visible even when there are rows — e.g.
-             * Linux ships an AppImage row but still needs to surface the
-             * Docker / Podman Compose path the page copy advertises.
-             */}
+            {/* Keep the platform note visible even when there are rows. */}
             {card.note && (
               <p class="dl-note">
                 <a class="inline-link" href={release.releaseUrl} data-release-notes-link target="_blank" rel="noreferrer noopener">{card.note}</a>
@@ -282,7 +259,7 @@ const jsonLd = [
       </ul>
     </section>
 
-    <section class="info-cta" aria-label="Open Design call to action">
+    <section class="info-cta" aria-label="OpenDesign call to action">
       <div>
         <h2>{page.ctaTitle}</h2>
         <p>{page.ctaBody}</p>
@@ -294,7 +271,7 @@ const jsonLd = [
       <div class="info-cta-meta">
         <span class="stamp">● {common.live}</span>
         <span><span data-release-version>{release.versionLabel}</span> · Apache-2.0</span>
-        <span>{common.macWinLinux}</span>
+        <span>{common.macWin}</span>
       </div>
     </section>
   </article>
@@ -367,7 +344,6 @@ const jsonLd = [
         if (isIpadOS || /iphone|ipad|ipod/.test(ua)) return null;
         const isWin = /win/.test(p) || /windows/.test(ua);
         const isMac = /mac/.test(p) || (/mac os x/.test(ua) && !/iphone|ipad|ipod/.test(ua));
-        const isLinux = /linux/.test(p) || (/linux/.test(ua) && !/android/.test(ua));
         if (isWin) return { assetKey: 'windows', matchKey: 'win', os: 'Windows', match: (n) => /win.*setup\.exe$/.test(n) };
         if (isMac) {
           const intel = (() => {
@@ -382,7 +358,8 @@ const jsonLd = [
             ? { assetKey: 'macX64', matchKey: 'mac-x64', os: 'macOS (Intel)', match: (n) => n.endsWith('mac-x64.dmg') }
             : { assetKey: 'macArm64', matchKey: 'mac-arm64', os: 'macOS (Apple Silicon)', match: (n) => n.endsWith('mac-arm64.dmg') };
         }
-        if (isLinux) return { assetKey: 'linux', matchKey: 'linux', os: 'Linux', match: (n) => /\.appimage$/i.test(n) };
+        // No Linux desktop build — Linux visitors keep the neutral
+        // release-page fallback.
         return null;
       };
 
@@ -449,7 +426,6 @@ const jsonLd = [
             'mac-arm64-dmg': artifact('mac', 'dmg'),
             'mac-x64-dmg': artifact('macIntel', 'dmg'),
             'win-setup': artifact('win', 'installer'),
-            'linux-appimage': artifact('linux', 'appImage') || artifact('linux', 'appimage'),
           };
           const linkUpdates = [];
           for (const link of document.querySelectorAll('[data-dl-key]')) {
@@ -490,7 +466,6 @@ const jsonLd = [
             macArm64: 'mac-arm64-dmg',
             macX64: 'mac-x64-dmg',
             windows: 'win-setup',
-            linux: 'linux-appimage',
           }[platform.assetKey];
           const heroAsset = heroAssetKey ? assets[heroAssetKey] : null;
           if (heroAsset && hero) {
@@ -559,27 +534,6 @@ const jsonLd = [
   }
   .dl-hero-copy {
     min-width: 0;
-  }
-  .dl-hero-brand {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    color: var(--ink-soft, #555);
-    font-size: 0.82rem;
-    font-weight: 650;
-    letter-spacing: 0.02em;
-  }
-  .dl-hero-mark {
-    width: 52px;
-    height: 52px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 auto;
-    border-radius: 15px;
-    background: var(--surface, rgba(255, 255, 255, 0.6));
-    border: 1px solid var(--border, rgba(0, 0, 0, 0.1));
-    box-shadow: 0 12px 30px -18px rgba(0, 0, 0, 0.4);
   }
   .dl-hero-heading {
     font-family: var(--serif, Georgia, serif);
@@ -735,7 +689,6 @@ const jsonLd = [
       padding: 28px 0 12px;
       text-align: center;
     }
-    .dl-hero-brand,
     .dl-hero-actions {
       justify-content: center;
     }
@@ -770,13 +723,21 @@ const jsonLd = [
   .dl-platforms { margin-top: 64px; }
   .dl-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    /* Three cards since the Linux card was removed — 3 equal columns
+       keep the row centered under the hero. */
+    grid-template-columns: repeat(3, 1fr);
     gap: 16px;
-    max-width: 920px;
+    max-width: 690px;
     margin: 0 auto;
   }
   @media (max-width: 860px) {
     .dl-grid { grid-template-columns: repeat(2, 1fr); max-width: 480px; }
+    /* Odd card out (Windows) centers under the two macOS cards. */
+    .dl-grid .dl-card:last-child {
+      grid-column: 1 / -1;
+      justify-self: center;
+      width: calc(50% - 8px);
+    }
   }
   @media (max-width: 420px) {
     .dl-grid { grid-template-columns: 1fr; max-width: 320px; }

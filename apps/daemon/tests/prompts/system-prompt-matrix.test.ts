@@ -44,7 +44,7 @@ const SECTION_MARKERS = [
   ['direction-library', '## Direction library — infer and bind by default'],
   ['shared-device-frames', '## Multi-device / multi-screen — shared frames'],
   ['identity-charter', '# Identity and workflow charter (background)'],
-  ['slim-core-charter', '# Open Design Charter'],
+  ['slim-core-charter', '# OpenDesign Charter'],
   ['slim-platform-contracts', '## Platform delivery contracts'],
   ['personal-memory', '## Personal memory (auto-extracted from past chats)'],
   ['memory-intent-gateway', '## Intent gateway — turn short asks into a brief'],
@@ -58,8 +58,6 @@ const SECTION_MARKERS = [
   ['design-system-tokens', '## Active design system tokens'],
   ['design-system-components-manifest', '## Reference component manifest'],
   ['design-system-fixture', '## Reference fixture'],
-  ['design-system-intent-routing', '## Structured component intent routing'],
-  ['design-system-runtime-unavailable', '## Structured design-system runtime unavailable'],
   ['design-system-pull-index', '## Pull-layer files available on demand'],
   ['craft-references', '## Active craft references'],
   ['active-skill', '## Active skill'],
@@ -124,8 +122,6 @@ const designSystemInputs = {
   designSystemUsageMd: 'Read DESIGN.md first, then bind tokens.',
   designSystemTokensCss: ':root { --ink: #111; --bone: #f5f1e8; }',
   designSystemComponentsManifest: 'button.primary — solid ink pill',
-  designSystemIntentIndex:
-    'Canonical business intents declared by the active design system:\n- `account.settings.save` → Button.primary',
   designSystemPullIndex: 'reference/moodboard.html — full moodboard',
   designSystemImportMode: 'normalized',
 } satisfies Partial<ComposeInput>;
@@ -167,24 +163,6 @@ const SCENARIOS: ReadonlyArray<[name: string, input: ComposeInput]> = [
       ...designSystemInputs,
       designSystemComponentsManifest: undefined,
       designSystemFixtureHtml: '<button class="primary">Buy</button>',
-      designSystemIntentIndex: undefined,
-      executionProfile: 'filesystem',
-    },
-  ],
-  [
-    'design-ds-manifest-legacy',
-    {
-      ...designSystemInputs,
-      designSystemIntentIndex: undefined,
-      executionProfile: 'filesystem',
-    },
-  ],
-  [
-    'design-ds-invalid-runtime',
-    {
-      ...designSystemInputs,
-      designSystemIntentIndex: undefined,
-      designSystemRuntimeIssue: 'intent mapping references unknown component MissingButton',
       executionProfile: 'filesystem',
     },
   ],
@@ -343,7 +321,7 @@ describe('composeSystemPrompt — position invariants', () => {
       const expectedHead = isSlim
         ? input.sessionMode === 'chat'
           ? '# Ask mode — bare conversation'
-          : '# Open Design Charter'
+          : '# OpenDesign Charter'
         : '## Security: prompt injection resistance';
       expect(
         composed.startsWith(expectedHead),

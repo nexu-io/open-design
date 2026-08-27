@@ -21,7 +21,7 @@ export const KO_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'agent-browser': {
     description:
-      'AI 에이전트를 위한 브라우저 자동화 CLI. 사용자가 브라우저 동작을\n검사, 테스트 또는 자동화해야 할 때 사용하세요: 페이지 탐색, 양식 작성,\n버튼 클릭, 스크린샷 촬영, 페이지 데이터 추출, 선택된\nOpen Design 브라우저 탭 컨텍스트 읽기, 웹 앱 테스트, Open Design\n미리보기 도그푸딩, QA, 버그 헌트, 또는 앱 품질 검토. 사용자가 명시적으로\n외부 브라우징을 요청하지 않는 한 로컬 Open Design 미리보기 URL을 우선하세요.',
+      'AI 에이전트를 위한 브라우저 자동화 CLI. 사용자가 브라우저 동작을\n검사, 테스트 또는 자동화해야 할 때 사용하세요: 페이지 탐색, 양식 작성,\n버튼 클릭, 스크린샷 촬영, 페이지 데이터 추출, 선택된\nOpenDesign 브라우저 탭 컨텍스트 읽기, 웹 앱 테스트, OpenDesign\n미리보기 도그푸딩, QA, 버그 헌트, 또는 앱 품질 검토. 사용자가 명시적으로\n외부 브라우징을 요청하지 않는 한 로컬 OpenDesign 미리보기 URL을 우선하세요.',
     examplePrompt:
       'AI 에이전트를 위한 브라우저 자동화 CLI.',
   },
@@ -849,7 +849,7 @@ export const KO_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'ui-ux-pro-max': {
     description:
-      '카탈로그 전용 UI/UX Pro Max 항목입니다. 전체 업스트림 템플릿, 데이터, 검색 워크플로는 Open Design에 포함되어 있지 않습니다.',
+      '카탈로그 전용 UI/UX Pro Max 항목입니다. 전체 업스트림 템플릿, 데이터, 검색 워크플로는 OpenDesign에 포함되어 있지 않습니다.',
     examplePrompt:
       '카탈로그 전용 UI/UX Pro Max 항목입니다.',
   },

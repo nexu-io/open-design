@@ -1,7 +1,7 @@
 /*
  * /showcase/ page content — localized copy + non-localized work data.
  *
- * The showcase is a curated gallery of REAL Open Design output — shipped
+ * The showcase is a curated gallery of REAL OpenDesign output — shipped
  * launch sites, decks, prototypes, and motion pieces — so evaluating users
  * can judge actual quality instead of feature copy (funnel: acquisition).
  *
@@ -50,20 +50,20 @@ export const SHOWCASE_WORKS: readonly ShowcaseWork[] = [
     cover: '/showcase/fable5-site.jpg',
     href: 'https://asme-nu.vercel.app/',
     external: true,
-    madeWith: 'Open Design',
+    madeWith: 'OpenDesign',
   },
   {
     id: 'opendesign-y2k',
     type: 'landing',
     cover: '/showcase/opendesign-y2k.jpg',
-    madeWith: 'Open Design',
+    madeWith: 'OpenDesign',
   },
   {
     id: 'oryzo-replica',
     type: 'landing',
     cover: '/showcase/oryzo-replica.jpg',
     replicaDemo: true,
-    madeWith: 'Open Design',
+    madeWith: 'OpenDesign',
   },
   // ---- prototypes (template library, baked previews on the CDN) ----------
   {
@@ -72,7 +72,7 @@ export const SHOWCASE_WORKS: readonly ShowcaseWork[] = [
     cover: `${CDN}/example-github-dashboard.e62822fb978db2cf.poster.jpg`,
     hoverVideo: `${CDN}/example-github-dashboard.e62822fb978db2cf.mp4`,
     href: pluginDetailPath('example-github-dashboard'),
-    madeWith: 'Open Design',
+    madeWith: 'OpenDesign',
   },
   {
     id: 'taste-editorial',
@@ -80,7 +80,7 @@ export const SHOWCASE_WORKS: readonly ShowcaseWork[] = [
     cover: `${CDN}/example-web-prototype-taste-editorial.85f9a9794adf3a99.poster.jpg`,
     hoverVideo: `${CDN}/example-web-prototype-taste-editorial.85f9a9794adf3a99.mp4`,
     href: pluginDetailPath('example-web-prototype-taste-editorial'),
-    madeWith: 'Open Design',
+    madeWith: 'OpenDesign',
   },
   {
     id: 'taste-brutalist',
@@ -88,7 +88,7 @@ export const SHOWCASE_WORKS: readonly ShowcaseWork[] = [
     cover: `${CDN}/example-web-prototype-taste-brutalist.7430274db7d5178c.poster.jpg`,
     hoverVideo: `${CDN}/example-web-prototype-taste-brutalist.7430274db7d5178c.mp4`,
     href: pluginDetailPath('example-web-prototype-taste-brutalist'),
-    madeWith: 'Open Design',
+    madeWith: 'OpenDesign',
   },
   // ---- decks --------------------------------------------------------------
   {
@@ -97,7 +97,7 @@ export const SHOWCASE_WORKS: readonly ShowcaseWork[] = [
     cover: `${CDN}/example-deck-swiss-international/0c869eb1a4d0d324/poster.jpg`,
     hoverVideo: `${CDN}/example-deck-swiss-international/0c869eb1a4d0d324/preview.mp4`,
     href: pluginDetailPath('example-deck-swiss-international'),
-    madeWith: 'Open Design',
+    madeWith: 'OpenDesign',
   },
   {
     id: 'pitch-deck',
@@ -105,7 +105,7 @@ export const SHOWCASE_WORKS: readonly ShowcaseWork[] = [
     cover: `${CDN}/example-html-ppt-pitch-deck/1790847524ab4667/poster.jpg`,
     hoverVideo: `${CDN}/example-html-ppt-pitch-deck/1790847524ab4667/preview.mp4`,
     href: pluginDetailPath('example-html-ppt-pitch-deck'),
-    madeWith: 'Open Design',
+    madeWith: 'OpenDesign',
   },
   {
     id: 'biennale-deck',
@@ -113,7 +113,7 @@ export const SHOWCASE_WORKS: readonly ShowcaseWork[] = [
     cover: `${CDN}/example-html-ppt-zhangzara-biennale-yellow/290a336318d001bb/poster.jpg`,
     hoverVideo: `${CDN}/example-html-ppt-zhangzara-biennale-yellow/290a336318d001bb/preview.mp4`,
     href: pluginDetailPath('example-html-ppt-zhangzara-biennale-yellow'),
-    madeWith: 'Open Design',
+    madeWith: 'OpenDesign',
   },
   // ---- videos (published on X; covers extracted from the clips) ----------
   {
@@ -185,13 +185,13 @@ export interface ShowcaseCopy {
 
 const en: ShowcaseCopy = {
   meta: {
-    title: 'Showcase — real work generated with Open Design',
+    title: 'Showcase — real work generated with OpenDesign',
     description:
-      'A curated gallery of real output — launch sites, prototypes, decks, and motion pieces generated with Open Design. Judge the quality yourself.',
+      'A curated gallery of real output — launch sites, prototypes, decks, and motion pieces generated with OpenDesign. Judge the quality yourself.',
   },
   hero: {
     label: 'Showcase',
-    title: 'Real work, generated with Open Design.',
+    title: 'Real work, generated with OpenDesign.',
     lead: 'Not mockups — shipped launch sites, working prototypes, presentation decks, and published motion pieces. Filter by type and judge the output quality yourself.',
   },
   filters: {
@@ -214,7 +214,7 @@ const en: ShowcaseCopy = {
       blurb: 'A complete model-introduction site — hero, capabilities, pricing — one-shotted and shipped live.',
     },
     'opendesign-y2k': {
-      title: 'Open Design — Y2K brand page',
+      title: 'OpenDesign — Y2K brand page',
       blurb: 'Sticker-collage Y2K brand statement with liquid 3D type, generated as one self-contained HTML file.',
     },
     'oryzo-replica': {
@@ -246,16 +246,16 @@ const en: ShowcaseCopy = {
       blurb: 'Solar yellow on warm parchment with deep indigo serifs — an art-book deck treatment.',
     },
     'launch-0-10-0': {
-      title: 'Open Design 0.10.0 launch film',
+      title: 'OpenDesign 0.10.0 launch film',
       blurb: '“From prompts to design loops.” The 0.10.0 release film, authored end-to-end in Hyperframes.',
     },
     'launch-0-9-0': {
-      title: 'Open Design 0.9.0 launch film',
+      title: 'OpenDesign 0.9.0 launch film',
       blurb: '“Bring any model. Run any agent.” The 0.9.0 release film, authored in Hyperframes.',
     },
     'cloud-fable5': {
-      title: 'Open Design Cloud × Claude Fable 5',
-      blurb: 'Partnership announcement film for Claude Fable 5 on Open Design Cloud, generated with Seedance 2.0.',
+      title: 'OpenDesign Cloud × Claude Fable 5',
+      blurb: 'Partnership announcement film for Claude Fable 5 on OpenDesign Cloud, generated with Seedance 2.0.',
     },
     'event-shanghai': {
       title: 'Shanghai meetup teaser',
@@ -276,7 +276,7 @@ const en: ShowcaseCopy = {
       },
       {
         title: 'Any model, any agent',
-        body: 'Generated by the coding agents and models you already use; Open Design orchestrates them into design work.',
+        body: 'Generated by the coding agents and models you already use; OpenDesign orchestrates them into design work.',
       },
       {
         title: 'Open source, self-hostable',
@@ -287,19 +287,19 @@ const en: ShowcaseCopy = {
         body: 'Decks and prototypes come from reusable templates and design systems — fork one and make it yours.',
       },
     ],
-    compareCta: 'See how Open Design compares',
+    compareCta: 'See how OpenDesign compares',
   },
 };
 
 const zhCN: DeepPartial<ShowcaseCopy> = {
   meta: {
-    title: '作品展示 — 用 Open Design 生成的真实作品',
+    title: '作品展示 — 用 OpenDesign 生成的真实作品',
     description:
-      '精选真实产出画廊 — 用 Open Design 生成的发布站点、原型、演示 deck 与动效视频。质量如何，自己判断。',
+      '精选真实产出画廊 — 用 OpenDesign 生成的发布站点、原型、演示 deck 与动效视频。质量如何，自己判断。',
   },
   hero: {
     label: '作品展示',
-    title: '真实作品，由 Open Design 生成。',
+    title: '真实作品，由 OpenDesign 生成。',
     lead: '不是效果图 — 是已上线的发布站点、可交互的原型、演示 deck 和已发布的动效视频。按类型筛选，自己判断产出质量。',
   },
   filters: { all: '全部', landing: '落地页', prototype: '原型', deck: '演示 Deck', video: '视频' },
@@ -316,7 +316,7 @@ const zhCN: DeepPartial<ShowcaseCopy> = {
       blurb: '完整的模型介绍网站 — hero、能力、定价 — 一次生成并已上线。',
     },
     'opendesign-y2k': {
-      title: 'Open Design Y2K 品牌页',
+      title: 'OpenDesign Y2K 品牌页',
       blurb: '贴纸拼贴 Y2K 风格的品牌宣言页，液态 3D 字体，单个自包含 HTML 文件生成。',
     },
     'oryzo-replica': {
@@ -348,16 +348,16 @@ const zhCN: DeepPartial<ShowcaseCopy> = {
       blurb: '暖羊皮纸上的太阳黄与深靛蓝衬线 — 艺术书式 deck 处理。',
     },
     'launch-0-10-0': {
-      title: 'Open Design 0.10.0 发布片',
+      title: 'OpenDesign 0.10.0 发布片',
       blurb: '「From prompts to design loops.」0.10.0 版本发布片，全程用 Hyperframes 制作。',
     },
     'launch-0-9-0': {
-      title: 'Open Design 0.9.0 发布片',
+      title: 'OpenDesign 0.9.0 发布片',
       blurb: '「Bring any model. Run any agent.」0.9.0 版本发布片，用 Hyperframes 制作。',
     },
     'cloud-fable5': {
-      title: 'Open Design Cloud × Claude Fable 5',
-      blurb: 'Claude Fable 5 登陆 Open Design Cloud 的合作宣传片，用 Seedance 2.0 生成。',
+      title: 'OpenDesign Cloud × Claude Fable 5',
+      blurb: 'Claude Fable 5 登陆 OpenDesign Cloud 的合作宣传片，用 Seedance 2.0 生成。',
     },
     'event-shanghai': {
       title: '上海线下活动预告',
@@ -373,11 +373,11 @@ const zhCN: DeepPartial<ShowcaseCopy> = {
     title: '你刚看到的是真实产出 — 不是画板。',
     items: [
       { title: '产出即真实代码', body: '上面每件作品都是可打开、可托管、可继续迭代的 HTML/CSS/JS — 不是还需要交付流程的画布。' },
-      { title: '任意模型、任意 agent', body: '由你已在用的编码 agent 和模型生成；Open Design 把它们编排成设计工作。' },
+      { title: '任意模型、任意 agent', body: '由你已在用的编码 agent 和模型生成；OpenDesign 把它们编排成设计工作。' },
       { title: '开源、可自部署', body: '这些作品背后的引擎是开源的。本地运行，作品留在你自己的机器上。' },
       { title: '系统化而非一次性', body: 'Deck 和原型来自可复用的模板与设计系统 — fork 一份改成你自己的。' },
     ],
-    compareCta: '看 Open Design 的对比优势',
+    compareCta: '看 OpenDesign 的对比优势',
   },
 };
 

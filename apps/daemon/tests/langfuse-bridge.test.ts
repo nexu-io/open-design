@@ -3,7 +3,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { reportRunCompletedFromDaemon } from '../src/langfuse-bridge.js';
+import {
+  buildSafeRunQualityProjectionFromDaemon,
+  reportRunCompletedFromDaemon,
+} from '../src/langfuse-bridge.js';
 import { buildPromptStackTelemetry } from '../src/prompt-telemetry.js';
 
 interface FakeMessage {
@@ -118,6 +121,54 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
     delete process.env.OPEN_DESIGN_OBJECT_RELAY_URL;
     dataDir = await mkdtemp(path.join(tmpdir(), 'od-bridge-'));
+  });
+
+  it('rebuilds Task quality from the same durable message, tool, and manifest facts', async () => {
+    const run = makeRun({
+      status: 'failed',
+      error: 'token=sk-test-1234567890123456789012 /Users/alice/private',
+      errorCode: 'AGENT_EXIT',
+    });
+    const quality = await buildSafeRunQualityProjectionFromDaemon({
+      db: makeDbWithListMessages({
+        'conv-1': [{
+          id: 'user-1',
+          role: 'user',
+          content: 'request',
+          attachments: [{ path: '/Users/alice/private.png', size: 42 }],
+        }, {
+          id: 'msg-1',
+          role: 'assistant',
+          content:
+            'done token=sk-test-1234567890123456789012 <artifact>private body</artifact>',
+          producedFiles: [{ path: '/Users/alice/result.html', size: 84, kind: 'html' }],
+        }],
+      }),
+      dataDir,
+      run,
+      prefs: { metrics: true, content: true, artifactManifest: true },
+      installationId: 'installation-fixture',
+    });
+
+    expect(quality?.result?.output?.text).toContain('[REDACTED:artifact_content]');
+    expect(quality?.result?.error).toMatchObject({ code: 'AGENT_EXIT' });
+    expect(quality?.tools).toHaveLength(2);
+    expect(quality?.manifests).toMatchObject({
+      completeness: 'complete',
+      attachments: [{ object_class: 'attachment', size_bytes: 42 }],
+      artifacts: [{ object_class: 'artifact', size_bytes: 84, type: 'html' }],
+    });
+    const serialized = JSON.stringify(quality);
+    expect(serialized).not.toContain('/Users/alice');
+    expect(serialized).not.toContain('sk-test-');
+    expect(serialized).not.toContain('private body');
+
+    expect(await buildSafeRunQualityProjectionFromDaemon({
+      db: makeDb(),
+      dataDir,
+      run,
+      prefs: { metrics: true, content: false, artifactManifest: true },
+    })).toBeUndefined();
   });
 
   afterEach(async () => {
@@ -936,6 +987,7 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(fetchSpy.mock.calls[3]![0]).toBe('https://us.cloud.langfuse.com/api/public/ingestion');
     const registrationBatch = JSON.parse(fetchSpy.mock.calls[0]![1]!.body as string).batch as any[];
     const finalBatch = JSON.parse(fetchSpy.mock.calls[3]![1]!.body as string).batch as any[];
+    expect(registrationBatch[0].id).not.toBe(finalBatch[0].id);
     expect(registrationBatch[0].body.metadata.artifact_manifest[0]).toMatchObject({
       object_class: 'artifact',
       storage_ref: expect.stringContaining(
@@ -944,6 +996,120 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     });
     expect(finalBatch[0].body.metadata.artifact_manifest[0]).toMatchObject({
       object_class: 'artifact',
+      status: 'ok',
+      stored_in_open_design: true,
+    });
+  });
+
+  it('registers object authority through Vela without an anonymous trace shell', async () => {
+    await writeAppCfg({
+      installationId: 'install-uuid-1',
+      telemetry: { metrics: true, content: true, artifactManifest: true },
+    });
+    const projectDir = path.join(dataDir, 'projects', 'proj-1');
+    await mkdir(projectDir, { recursive: true });
+    await writeFile(path.join(projectDir, 'index.html'), '<!doctype html><h1>artifact body</h1>');
+
+    const velaEnvelopes: any[] = [];
+    const fetchSpy = vi.fn(async (url: string, init: RequestInit) => {
+      if (url === 'https://vela.example.test/api/v1/open-design/telemetry') {
+        const envelope = JSON.parse(init.body as string);
+        velaEnvelopes.push(envelope);
+        return new Response(JSON.stringify({ ok: true }), { status: 202 });
+      }
+      if (url === 'https://telemetry.open-design.ai/api/objects/authorize') {
+        const parsed = JSON.parse(init.body as string) as {
+          run_id: string;
+          objects: Array<{ storage_ref: string }>;
+        };
+        expect(parsed.run_id).toBe('run-id-1');
+        expect(parsed.objects[0]?.storage_ref).toContain('/runs/run-id-1/');
+        return new Response(JSON.stringify({ upload_token: 'upload-token' }), { status: 200 });
+      }
+      if (url === 'https://telemetry.open-design.ai/api/objects/batch') {
+        const parsed = JSON.parse(init.body as string) as {
+          run_id: string;
+          objects: Array<{ storage_ref: string; content_base64: string }>;
+        };
+        expect(parsed.run_id).toBe('run-id-1');
+        expect(parsed.objects[0]?.storage_ref).toContain('/runs/run-id-1/');
+        return new Response(JSON.stringify({
+          objects: parsed.objects.map((object) => ({
+            storage_ref: object.storage_ref,
+            status: 'available',
+            size_bytes: Buffer.from(object.content_base64, 'base64').byteLength,
+            sha256: 'sha256:uploaded-artifact',
+          })),
+        }), { status: 200 });
+      }
+      throw new Error(`unexpected telemetry request: ${url}`);
+    });
+
+    const velaTelemetryEnabled = process.env.OPEN_DESIGN_VELA_TELEMETRY;
+    const velaControlKey = process.env.VELA_CONTROL_KEY;
+    const velaApiUrl = process.env.VELA_API_URL;
+    process.env.OPEN_DESIGN_VELA_TELEMETRY = 'on';
+    process.env.VELA_CONTROL_KEY = 'ck_test';
+    process.env.VELA_API_URL = 'https://vela.example.test';
+    process.env.OPEN_DESIGN_OBJECT_RELAY_URL =
+      'https://telemetry.open-design.ai/api/objects/batch';
+    try {
+      await reportRunCompletedFromDaemon({
+        db: makeDbWithListMessages({
+          'conv-1': [
+            { id: 'user-1', role: 'user', content: 'Build it.' },
+            {
+              id: 'msg-1',
+              role: 'assistant',
+              content: 'done',
+              producedFiles: [{ name: 'index.html', kind: 'html', size: 35 }],
+            },
+          ],
+        }),
+        dataDir,
+        run: makeRun() as any,
+        fetchImpl: fetchSpy as any,
+      });
+    } finally {
+      if (velaTelemetryEnabled === undefined) delete process.env.OPEN_DESIGN_VELA_TELEMETRY;
+      else process.env.OPEN_DESIGN_VELA_TELEMETRY = velaTelemetryEnabled;
+      if (velaControlKey === undefined) delete process.env.VELA_CONTROL_KEY;
+      else process.env.VELA_CONTROL_KEY = velaControlKey;
+      if (velaApiUrl === undefined) delete process.env.VELA_API_URL;
+      else process.env.VELA_API_URL = velaApiUrl;
+      delete process.env.OPEN_DESIGN_OBJECT_RELAY_URL;
+    }
+
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
+    expect(velaEnvelopes).toHaveLength(2);
+    expect(fetchSpy.mock.calls.map((call) => call[0])).not.toContain(
+      'https://telemetry.open-design.ai/api/langfuse',
+    );
+
+    const velaRegistrationEvent = velaEnvelopes[0].events.find(
+      (event: { kind: string }) => event.kind === 'trace',
+    );
+    const velaRegistrationTrace = velaRegistrationEvent.data;
+    expect(velaRegistrationTrace.id).toBe('run-id-1');
+    expect(velaRegistrationTrace.metadata.registration_only).toBe(true);
+    expect(velaRegistrationTrace.metadata.artifact_manifest[0]).toMatchObject({
+      run_id: 'run-id-1',
+      storage_ref: expect.stringContaining('/runs/run-id-1/'),
+    });
+    expect(velaRegistrationTrace).not.toHaveProperty('input');
+    expect(velaRegistrationTrace).not.toHaveProperty('output');
+
+    const velaFinalEvent = velaEnvelopes[1].events.find(
+      (event: { kind: string }) => event.kind === 'trace',
+    );
+    const velaFinalTrace = velaFinalEvent.data;
+    expect(velaFinalEvent.id).not.toBe(velaRegistrationEvent.id);
+    expect(velaFinalTrace.id).toBe('run-id-1');
+    expect(velaFinalTrace).toHaveProperty('input');
+    expect(velaFinalTrace).toHaveProperty('output');
+    expect(velaFinalTrace.metadata.artifact_manifest[0]).toMatchObject({
+      run_id: 'run-id-1',
+      storage_ref: expect.stringContaining('/runs/run-id-1/'),
       status: 'ok',
       stored_in_open_design: true,
     });

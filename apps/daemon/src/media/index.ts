@@ -77,6 +77,10 @@ import {
   fetchImageGenerationWithResponseRetry,
   type ImageGenerationRequestSummary,
 } from './image-generation-retry.js';
+import {
+  resolveHyperFramesCliPath,
+  resolveHyperFramesNodeBin,
+} from './hyperframes-runtime.js';
 import { renderVelaImage, renderVelaVideo } from './vela.js';
 import {
   ensureProject,
@@ -1861,7 +1865,7 @@ async function renderOpenRouterImage(
       'authorization': `Bearer ${credentials.apiKey}`,
       'content-type': 'application/json',
       'HTTP-Referer': 'https://opendesign.dev',
-      'X-Title': 'Open Design',
+      'X-Title': 'OpenDesign',
     },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(Math.max(OPENAI_IMAGE_HEADERS_TIMEOUT_MS, OPENAI_IMAGE_BODY_TIMEOUT_MS)),
@@ -2021,7 +2025,7 @@ async function renderOpenRouterVideo(
       // OpenRouter attribution headers per
       // https://openrouter.ai/docs/app-attribution
       'HTTP-Referer': 'https://opendesign.dev',
-      'X-Title': 'Open Design',
+      'X-Title': 'OpenDesign',
     },
     body: JSON.stringify(body),
   }));
@@ -2077,7 +2081,7 @@ async function renderOpenRouterVideo(
       headers: {
         'authorization': `Bearer ${credentials.apiKey}`,
         'HTTP-Referer': 'https://opendesign.dev',
-        'X-Title': 'Open Design',
+        'X-Title': 'OpenDesign',
       },
     }));
     const pollText = await pollResp.text();
@@ -3803,7 +3807,8 @@ async function renderFalVideo(ctx: MediaContext, credentials: ProviderConfig, on
 // with a GSAP timeline) into a hidden cache dir under the project, then
 // dispatches here with `--composition-dir <relative-path>`.
 //
-// We run `npx hyperframes render <absolutePath> --output <tmp>/render.mp4`
+// We run the pinned HyperFrames CLI with the daemon's Node-compatible runtime:
+// `<node> <hyperframes-cli> render <absolutePath> --output <tmp>/render.mp4`
 // from the daemon process (NOT the agent's shell) for two reasons:
 //   1. HyperFrames spawns a puppeteer-controlled Chrome to capture frames.
 //      Claude Code's Bash tool wraps subprocesses in macOS sandbox-exec,
@@ -3860,13 +3865,13 @@ async function renderHyperFramesViaCli(ctx: MediaContext, projectDir: string, on
     compAbs,
     compRel,
     'hyperframes.json',
-    'Run `npx hyperframes init "$OD_PROJECT_DIR/$COMP_REL" --example blank --skip-skills --non-interactive` before editing the composition.',
+    'Run `"$OD_NODE_BIN" "$OD_BIN" media scaffold --project "$OD_PROJECT_ID" --composition-dir "$COMP_REL"` before editing the composition.',
   );
   await assertHyperFramesCompositionFile(
     compAbs,
     compRel,
     'meta.json',
-    'Run `npx hyperframes init` so the renderer has duration/scene metadata before dispatch.',
+    'Run `"$OD_NODE_BIN" "$OD_BIN" media scaffold --composition-dir "$COMP_REL"` so the renderer has duration/scene metadata before dispatch.',
   );
   await assertHyperFramesCompositionFile(
     compAbs,
@@ -3915,7 +3920,7 @@ async function assertHyperFramesCompositionFile(
 }
 
 /**
- * Run `npx hyperframes render` and stream every line of stdout/stderr
+ * Run the pinned HyperFrames CLI and stream every line of stdout/stderr
  * through `onProgress`. Resolves on a clean exit, rejects on non-zero
  * exit (with the stderr tail attached so the dispatcher can surface it).
  *
@@ -3927,11 +3932,11 @@ async function assertHyperFramesCompositionFile(
  */
 function runHyperFramesRender(compAbs: string, tmpOutput: string, onProgress?: ProgressFn): Promise<void> {
   return new Promise<void>((resolve, reject) => {
+    const hyperFramesCli = resolveHyperFramesCliPath();
     const child = spawn(
-      'npx',
+      resolveHyperFramesNodeBin(),
       [
-        '-y',
-        'hyperframes',
+        hyperFramesCli,
         'render',
         compAbs,
         '--output',
@@ -3940,10 +3945,13 @@ function runHyperFramesRender(compAbs: string, tmpOutput: string, onProgress?: P
         '1',
       ],
       {
-        // Inherit env so npx can find the cached hyperframes install
-        // and any user-level node config. stdin closed (HF doesn't
-        // read from it), stdout/stderr piped so we can stream.
-        env: process.env,
+        // Use the same Node-compatible runtime that owns the daemon and a
+        // pinned HyperFrames CLI shipped with Open Design. Do not delegate
+        // native dependency selection to a user-level npx cache.
+        env: {
+          ...process.env,
+          OD_HYPERFRAMES_BIN: hyperFramesCli,
+        },
         stdio: ['ignore', 'pipe', 'pipe'],
       },
     );

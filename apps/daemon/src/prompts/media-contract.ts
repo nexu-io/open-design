@@ -50,13 +50,52 @@ localized sentence and nothing else:
 
 - Success: say the localized equivalent of "Image generated". For Simplified
   Chinese, reply exactly \`图片已生成\`.
-- Failure, including a placeholder/stub outcome: say the localized equivalent
-  of "The image generation service is temporarily unavailable". For Simplified
-  Chinese, reply exactly \`图片生成服务暂时不可用\`.
+- Refused by a content safety policy — the structured result's error \`code\` is
+  \`safety_rejection\`: say the localized equivalent of "The image was not
+  generated because a content safety policy refused the request". For
+  Simplified Chinese, reply exactly \`图片未生成：内容安全策略拒绝了该请求\`.
+- A known local failure: ignore diagnostic wording and use the fixed safe copy
+  for its code:
+  - \`MEDIA_EXECUTION_DISABLED\`: "Image was not generated: Media generation was
+    disabled for this run (error code: \`MEDIA_EXECUTION_DISABLED\`)." Simplified
+    Chinese: 图片未生成：本次任务未启用图片生成（错误代码：\`MEDIA_EXECUTION_DISABLED\`）.
+  - \`MEDIA_SURFACE_DENIED\` or \`MEDIA_MODEL_DENIED\`: "Image was not generated:
+    This run does not allow the requested image generation (error code: \`{code}\`)."
+    Simplified Chinese: 图片未生成：本次任务不允许所请求的图片生成（错误代码：\`{code}\`）.
+  - \`STUB_PROVIDER_DISABLED\`: "Image was not generated: The selected image
+    model has no configured renderer (error code: \`STUB_PROVIDER_DISABLED\`)."
+    Simplified Chinese: 图片未生成：所选图片模型未配置可用的生成器（错误代码：\`STUB_PROVIDER_DISABLED\`）.
+  - \`MEDIA_DISPATCHER_UNREACHABLE\`: "Image was not generated: The local media
+    dispatcher could not be reached (error code: \`MEDIA_DISPATCHER_UNREACHABLE\`)."
+    Simplified Chinese: 图片未生成：无法连接本地媒体生成调度器（错误代码：\`MEDIA_DISPATCHER_UNREACHABLE\`）.
+  - \`MEDIA_DISPATCH_NOT_INVOKED\`: use this only when image generation was
+    expected but no media dispatch command was invoked. Say "Image was not
+    generated: The media dispatcher was not invoked (error code:
+    \`MEDIA_DISPATCH_NOT_INVOKED\`)." Simplified Chinese:
+    图片未生成：未调用媒体生成调度器（错误代码：\`MEDIA_DISPATCH_NOT_INVOKED\`）.
+  - \`MEDIA_DISPATCH_FAILED\`: "Image was not generated: The media dispatcher
+    failed for an unclassified reason (error code: \`MEDIA_DISPATCH_FAILED\`)."
+    Simplified Chinese: 图片未生成：媒体生成调度失败，原因未分类（错误代码：\`MEDIA_DISPATCH_FAILED\`）.
+Render every error code as Markdown inline code so underscores remain visible
+in the rendered chat. Do not emit a bare underscore-delimited code.
 
-Do not add a filename, model, provider, reason, remediation, retry offer, or
-follow-up question. Use the command's structured result only to choose success
-versus failure; retain its original diagnostics in the tool trace for debugging.`;
+- A structured dispatcher or provider error with a non-empty safe public error
+  \`code\` and \`message\`: include both fields. For Simplified Chinese, reply
+  exactly 图片未生成：{message}（错误代码：\`{code}\`）, substituting the returned
+  values. Never use an unsanitized response body, stderr, or diagnostic field.
+- Any other failure: use \`MEDIA_DISPATCH_FAILED\` and its fixed copy above.
+  Do not infer an outage from HTTP status, a placeholder/stub, missing output,
+  or model-generated fallback text.
+
+A provider verdict is not automatically an outage. Use its structured safe
+public code and message without reclassifying either one from wording or HTTP
+status. Claim service unavailability only when a structured availability code
+explicitly establishes it.
+
+Do not add a filename, model, provider, remediation, retry offer, or follow-up
+question. Expose only the fixed local-category copy or a structured safe public
+\`message\` and \`code\`; retain all other diagnostics in the tool trace for
+debugging.`;
 
 export function renderMediaGenerationContract(
   mediaExecution?: MediaExecutionPolicy | undefined,
@@ -73,17 +112,20 @@ export function renderMediaGenerationContract(
 
 ## Media generation policy (load-bearing — overrides softer wording above)
 
-Open Design-owned media execution is **disabled for this run**. Do not call
+OpenDesign-owned media execution is **disabled for this run**. Do not call
 \`"$OD_NODE_BIN" "$OD_BIN" media generate\`, OD media provider APIs, local
 renderers, or ad-hoc scripts that create media bytes on
 OD's behalf.
 
 External MCP media tools, when explicitly configured for this run, are outside
 this OD-owned media policy. If no such external tool is available and the user
-asks for media, describe the intended creative brief, prompt, surface, model
-preference, references, and output filename in chat, then stop. Do not claim a
-file was generated and do not emit an \`<artifact>\` block for media.
-${scope}`;
+asks for an image, use the fixed \`MEDIA_EXECUTION_DISABLED\` sentence from the
+user-reply contract below and stop. For a video or audio request, state briefly
+that media generation is disabled for this run and stop. Do not claim a file was
+generated and do not emit an \`<artifact>\` block for media.
+${scope}
+
+${MEDIA_USER_REPLY_CONTRACT}`;
   }
   return renderEnabledMediaGenerationContract(mediaExecution, byokMediaDefaults);
 }
@@ -219,7 +261,7 @@ A size or tier the user names IS that ask, in any language — "2K", "1k",
 "high quality", "高质量". Map it onto \`--resolution\` / \`--quality\`;
 restating it inside the prompt text does not reach the provider.
 
-Open Design Cloud image and video models use the \`vela/*\` catalogue prefix.
+OpenDesign Cloud image and video models use the \`vela/*\` catalogue prefix.
 Always invoke those models through \`"$OD_NODE_BIN" "$OD_BIN" media generate\`.
 Never invoke the \`vela\` CLI directly and never call its remote media API.
 The daemon owns model routing, trusted Workspace attribution, task polling,
@@ -263,7 +305,7 @@ capture. The daemon process is unsandboxed and renders reliably AND
 streams per-line progress to your stderr (so the user sees frame
 counts in chat instead of a silent spinner).
 
-**Default recipe — use \`hyperframes init\`, don't write from scratch.**
+**Default recipe — use Open Design's scaffold, don't write from scratch.**
 For most OD requests ("test video", "5s product reveal", "demo clip"),
 authoring an HF composition from zero costs minutes of model output and
 silent chat-tool time. The init scaffold gives you a valid GSAP-ready
@@ -274,8 +316,8 @@ actually changes.
 COMP_REL=".hyperframes-cache/$(date +%s)-$(openssl rand -hex 2)"
 COMP="$OD_PROJECT_DIR/$COMP_REL"
 
-# Pure file copy, no Chrome — works in any agent shell.
-npx hyperframes init "$COMP" --example blank --skip-skills --non-interactive
+# Open Design writes the required files itself; HyperFrames init is never run.
+"$OD_NODE_BIN" "$OD_BIN" media scaffold --project "$OD_PROJECT_ID" --composition-dir "$COMP_REL"
 
 # Edit ONLY $COMP/index.html: tweak data-duration on the root, swap
 # the placeholder palette, add 1–3 clip <div>s, and append matching
@@ -302,10 +344,11 @@ The chat surfaces the mp4 as a download/open chip automatically. Keep
 Only write the composition HTML from scratch when the user explicitly
 needs something the blank template clearly can't host (multi-comp
 timelines, audio-reactive visuals, TTS-synced captions on an existing
-track). For typical test renders, the init+edit path is the default.
+track). For typical test renders, the scaffold+edit path is the default.
 
-You MAY still run lighter HF subcommands from your own shell:
-\`npx hyperframes lint "$COMP"\`, \`transcribe\`, \`tts\` — none of
+You MAY still run lighter HF subcommands from your own shell through
+\`"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN"\`: \`lint "$COMP"\`, \`transcribe\`,
+\`tts\` — none of
 these spawn Chrome so the agent-side sandbox doesn't trip them.
 Reserve the daemon dispatch for anything Chrome-bound (\`render\`,
 \`inspect\`, \`preview\`).
@@ -466,10 +509,10 @@ path is given.
 
    For \`hyperframes-html\`, the discovery turn is the last turn before
    you start authoring. Once the user answers, create the composition
-   with \`npx hyperframes init\` under \`.hyperframes-cache/\`, edit the
+   with \`"$OD_NODE_BIN" "$OD_BIN" media scaffold\` under \`.hyperframes-cache/\`, edit the
    generated \`index.html\`, and dispatch through
    \`"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model hyperframes-html --composition-dir <rel>\`.
-   Do not run \`npx hyperframes render\` yourself; Chrome-bound rendering
+   Do not run HyperFrames \`render\` yourself; Chrome-bound rendering
    must happen in the daemon process. Do not add a second "plan" or
    "environment check" message first.
 3. **Generate by shell, then follow the user-facing completion contract.** When you invoke
@@ -507,8 +550,8 @@ stub/error signal as described below.
 
 The dispatcher tags every outcome explicitly. Treat the failure signals below
 as hard errors, keep their details in the tool trace and daemon logs, and use
-them only to select the generic visible failure sentence. Never narrate a stub
-as if it were the final result.
+them only to select the safe visible failure category in the user-reply contract.
+Never narrate a stub as if it were the final result.
 
 1. **HTTP status.** When stubs are disabled (the default release-build
    posture), the dispatcher returns \`503 provider not configured\` for
@@ -539,8 +582,10 @@ as if it were the final result.
    1×1 transparent PNG plus a \`providerNote\` that starts with
    \`[stub]\` is the placeholder renderer's signature. If you see one,
    either the integration is pending (\`intentionalStub: true\`) or the
-   provider call failed (\`providerError\` non-null). Keep that distinction in
-   diagnostics only; both outcomes use the generic visible failure sentence.
+   provider call failed (\`providerError\` non-null). An intentional stub uses
+   the fixed \`STUB_PROVIDER_DISABLED\` renderer-not-configured copy. A provider
+   failure uses its structured safe public error when present; otherwise use
+   \`MEDIA_DISPATCH_FAILED\`.
 
 Some long-tail image/video/music providers are still intentional stubs. Treat
 their placeholder outcome as a failure for user-facing completion copy.

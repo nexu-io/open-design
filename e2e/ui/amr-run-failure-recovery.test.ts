@@ -27,7 +27,7 @@ let codexRuntime: Awaited<ReturnType<typeof createFakeAgentRuntimes>>['codex'];
 const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 const AMR_AGENT = {
   id: 'amr',
-  name: 'Open Design AMR',
+  name: 'OpenDesign AMR',
   bin: 'vela',
   available: true,
   version: 'test',
@@ -228,7 +228,7 @@ test('[P0] @critical AMR auth failures return to the existing sign-in gate witho
   await sendPrompt(page, 'AMR auth failure recovery smoke');
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page).toHaveURL(/\/onboarding$/, { timeout: T.long });
-  await expect(page.getByRole('heading', { name: /Sign in to Open Design|登录 Open Design/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i })).toBeVisible();
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
   expect(loginRequested).toBe(false);
 });
@@ -325,7 +325,7 @@ test('[P0] @critical AMR model catalog invalid-key failures return to sign-in wi
   loggedIn = false;
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page).toHaveURL(/\/onboarding$/, { timeout: T.long });
-  await expect(page.getByRole('heading', { name: /Sign in to Open Design|登录 Open Design/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i })).toBeVisible();
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
   expect(loginRequested).toBe(false);
 });
@@ -417,14 +417,14 @@ test('[P0] @critical non-AMR model failures stay recoverable while Cloud is sign
 
   await gotoProject(page, projectId);
 
-  const switchAndRetry = page.getByRole('button', { name: /Switch to Open Design Cloud & retry/i }).first();
+  const switchAndRetry = page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i }).first();
   await expect(switchAndRetry).toBeVisible({ timeout: T.long });
   await switchAndRetry.click();
 
   await expect
     .poll(() => new URL(page.url()).pathname, { timeout: T.medium })
     .toBe('/onboarding');
-  await expect(page.getByRole('heading', { name: /Sign in to Open Design|登录 Open Design/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i })).toBeVisible();
   await expect
     .poll(async () => {
       const raw = await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY);
@@ -547,6 +547,80 @@ test('[P1] Settings AMR wallet fallback balance renders from the daemon wallet e
   expect(walletUrls.every((url) => new URL(url).searchParams.get('refresh') == null)).toBe(true);
 });
 
+test('[P1] Coding Plan badges follow the dynamic daemon wallet model list after reload', async ({ page }) => {
+  await stubCatalogsEmpty(page);
+  const dynamicModel = { id: 'new-coding-plan-model', label: 'New Coding Plan Model' };
+  const meteredModel = { id: 'metered-model', label: 'Metered Model' };
+  await routeAgents(page, [
+    {
+      ...AMR_AGENT,
+      models: [{ id: 'default', label: 'Default' }, dynamicModel, meteredModel],
+    },
+    {
+      id: 'codex',
+      name: 'Codex CLI',
+      bin: 'codex',
+      available: true,
+      version: 'test',
+      models: [{ id: 'default', label: 'Default' }],
+    },
+  ]);
+  await page.route('**/api/integrations/vela/status', async (route) => {
+    await route.fulfill({
+      json: {
+        loggedIn: true,
+        profile: 'test',
+        configPath: '/tmp/.amr/config.json',
+        user: { id: 'dynamic-model-user', email: 'dynamic-model@example.com', plan: 'plus' },
+      },
+    });
+  });
+
+  let codingPlanModels = [dynamicModel.id];
+  await page.route('**/api/integrations/vela/wallet**', async (route) => {
+    await route.fulfill({
+      json: {
+        status: 'available',
+        profile: 'test',
+        user: { id: 'dynamic-model-user', email: 'dynamic-model@example.com', plan: 'plus' },
+        balanceUsd: '0.0000',
+        codingPlanModels,
+        updatedAt: '2026-08-26T00:00:00.000Z',
+        fetchedAt: '2026-08-26T00:00:00.000Z',
+        stale: false,
+        source: 'vela_api',
+      },
+    });
+  });
+
+  await setupAmrWorkspace(page, {
+    profile: 'test',
+    selectedAgentId: 'amr',
+    assistantText: 'Dynamic Coding Plan model smoke',
+  });
+  // The compact model switcher is a Home top-bar surface. Project workspaces
+  // intentionally expose Account & settings instead of mounting this chip.
+  await gotoEntryHome(page);
+
+  await page.getByTestId('inline-model-switcher-chip').click();
+  let popover = page.getByTestId('inline-model-switcher-popover');
+  await expect(popover.getByTestId(`inline-model-switcher-unlimited-badge-${dynamicModel.id}`))
+    .toBeVisible();
+  await expect(popover.getByTestId(`inline-model-switcher-unlimited-badge-${meteredModel.id}`))
+    .toHaveCount(0);
+
+  codingPlanModels = [meteredModel.id];
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.getByTestId('home-hero')).toBeVisible({ timeout: T.long });
+  await expect(page.getByTestId('inline-model-switcher-chip')).toBeVisible();
+  await page.getByTestId('inline-model-switcher-chip').click();
+  popover = page.getByTestId('inline-model-switcher-popover');
+  await expect(popover.getByTestId(`inline-model-switcher-unlimited-badge-${dynamicModel.id}`))
+    .toHaveCount(0);
+  await expect(popover.getByTestId(`inline-model-switcher-unlimited-badge-${meteredModel.id}`))
+    .toBeVisible();
+});
+
 test('[P1] Settings AMR upgrade opens the attributed plans URL for the active profile', async ({ page }) => {
   await stubCatalogsEmpty(page);
   await stubRuntimeAgents(page);
@@ -647,7 +721,7 @@ test('[P0] @critical Settings preserves AMR account, recharge shortcut, and mode
 
   await settings.getByTestId('settings-agent-select-codex').click();
   await expect(settings.getByTestId('settings-agent-select-codex')).toHaveAttribute('aria-pressed', 'true');
-  await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('Open Design');
+  await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('OpenDesign');
 
   await settings.getByTestId('settings-agent-select-amr').click();
   await expect(settings.getByTestId('settings-agent-select-amr')).toHaveAttribute('aria-pressed', 'true');
@@ -701,7 +775,7 @@ test('[P0] after an AMR failure the user can switch to Codex and complete a fres
   await gotoProject(page, amr.projectId);
   await sendPrompt(page, 'AMR auth failure before switch smoke');
   await expect(runErrorCard(page)).toContainText(
-    /Open Design agent isn't signed in yet|AMR sign-in is required/i,
+    /OpenDesign agent isn't signed in yet|AMR sign-in is required/i,
     { timeout: T.long },
   );
   const settings = await openExecutionSettingsDialog(page);
@@ -799,7 +873,7 @@ test('[P0] upstream outages keep Retry available without promoting AMR', async (
 
   await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first()).toBeVisible({ timeout: T.long });
   await expect(page.getByText(/Generation service unavailable|model provider is temporarily unavailable/i).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /Switch to Open Design Cloud & retry/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i })).toHaveCount(0);
   await expect(page.getByText(/Model call failed/i)).toHaveCount(0);
 });
 
@@ -882,7 +956,7 @@ test('[P1] zh-CN run failure guidance shows actionable copy and expandable raw s
   await expect(card).toContainText('内容过长', { timeout: T.long });
   await expect(card).toContainText('本轮输入超出了模型的上下文上限');
   await expect(page.getByRole('button', { name: /^重试$/ }).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /Switch to Open Design Cloud & retry/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i })).toHaveCount(0);
 
   const sourceToggle = card.getByRole('button', { name: /查看详情/ });
   await expect(sourceToggle).toHaveAttribute('aria-expanded', 'false');
@@ -972,7 +1046,7 @@ test('[P0] antigravity rate limits offer terminal model switching without promot
   const launchTerminal = page.getByRole('button', { name: /Switch model in terminal/i }).first();
   await expect(launchTerminal).toBeVisible({ timeout: T.long });
   await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /Switch to Open Design Cloud & retry/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i })).toHaveCount(0);
 
   await launchTerminal.click();
 

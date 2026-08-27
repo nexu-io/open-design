@@ -971,6 +971,14 @@
   pointer-events: none;
   background: #000;
 }
+.deck-thumbnail-iframe-host {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.deck-thumbnail-iframe-host iframe {
+  position: absolute;
+}
 /* Shadow-root thumbnail host (the default path): the single cloned slide lives
    in a shadow root whose `.od-thumb-canvas` is scaled + centered inline by
    DeckSlideThumbnail. `contain: strict` isolates each thumbnail's layout/paint

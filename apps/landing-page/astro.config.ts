@@ -173,6 +173,9 @@ export default defineConfig({
   srcDir: './app',
   outDir: './out',
   trailingSlash: 'always',
+  // The Astro audit toolbar observes the live countdown and re-audits every
+  // image on each tick, creating a dev-only asset request storm.
+  devToolbar: { enabled: false },
   vite: {
     define: {
       // Staging / PR-preview builds set OD_LANDING_NOINDEX=1. SeoHead reads

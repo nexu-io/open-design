@@ -32,7 +32,7 @@ import {
 } from '../db.js';
 import {
   enforceVerifiedWorkspaceResourceMutation,
-  resolveOptionalWorkspaceRequestAuthority,
+  resolveOptionalLocalWorkspaceRequestAuthority,
   type VerifyWorkspaceRequestAuthority,
 } from '../collab/workspace-resource-mutation.js';
 import { listCodexPets, readCodexPetSpritesheet } from '../codex-pets.js';
@@ -65,6 +65,7 @@ import {
   type SkillInstallErrorCode,
 } from '../services/skill-installation.js';
 import type { RouteDeps } from '../server-context.js';
+import { findRealElementRange, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
 
 export interface RegisterAtomRoutesDeps {
   db: Database.Database;
@@ -283,10 +284,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       );
       return undefined;
     }
-    const authority = await resolveOptionalWorkspaceRequestAuthority(
-      scopedRequest,
-      options.verifyAuthority ?? ctx.verifyWorkspaceRequestAuthority,
-    );
+    const authority = resolveOptionalLocalWorkspaceRequestAuthority(scopedRequest);
     if (!authority.ok) {
       sendApiError(res, authority.status, authority.code, authority.message, {
         ...(authority.retryable ? { retryable: true } : {}),
@@ -308,6 +306,16 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   ): Promise<boolean> => {
     const binding = getWorkspaceResourceByResourceId(db, 'skill', skillId);
     if (!binding) return true;
+    const localAuthority = resolveOptionalLocalWorkspaceRequestAuthority(req);
+    if (!localAuthority.ok) {
+      sendApiError(
+        res,
+        localAuthority.status,
+        localAuthority.code,
+        localAuthority.message,
+      );
+      return false;
+    }
     return enforceVerifiedWorkspaceResourceMutation(
       'skill',
       req,
@@ -318,7 +326,9 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       db,
       skillId,
       capability,
-      ctx.verifyWorkspaceRequestAuthority,
+      localAuthority.context
+        ? async () => ({ ok: true as const, context: localAuthority.context! })
+        : undefined,
     );
   };
   const hasActiveTeamSkillBinding = (
@@ -1294,7 +1304,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       try {
         const runtimeRoot = fs.realpathSync.native(RUNTIME_DATA_DIR_CANONICAL);
         if (sourceRoot === runtimeRoot || sourceRoot.startsWith(`${runtimeRoot}${path.sep}`)) {
-          return sendApiError(res, 400, 'BAD_REQUEST', 'cannot import Open Design runtime data');
+          return sendApiError(res, 400, 'BAD_REQUEST', 'cannot import OpenDesign runtime data');
         }
       } catch {
         // The runtime data directory may not exist yet in first-run tests.
@@ -1486,9 +1496,20 @@ function normalizeDesignSystemCraftApplies(value: unknown): string[] | undefined
 }
 
 export function assembleExample(templateHtml: string, slidesHtml: string, title: string) {
-  return templateHtml
-    .replace('<!-- SLIDES_HERE -->', slidesHtml)
-    .replace(/<title>.*?<\/title>/, `<title>${title} | Open Design Example</title>`);
+  // Function replacements: string replacements would expand `$$`, `$&`, `$``,
+  // and `$'` inside the skill-derived inputs via String.prototype.replace's
+  // GetSubstitution (#6795).
+  const withSlides = templateHtml.replace('<!-- SLIDES_HERE -->', () => slidesHtml);
+  // Retitle the template's own <title>. The slides just interpolated above are
+  // skill-authored and can carry a <title> of their own, which a text match
+  // would rewrite instead (nexu-io/open-design#7410).
+  // The close is located by the raw-text rule rather than searched for as text
+  // from the open tag's own start — from there a `</title` sitting in one of
+  // its attribute values would match first.
+  const range = findRealElementRange(withSlides, HTML_TAG_PATTERNS.titleOpen, 'title');
+  if (!range) return withSlides;
+  return `${withSlides.slice(0, range.start)}<title>${title} | OpenDesign Example</title>`
+    + withSlides.slice(range.end);
 }
 
 export function rewriteSkillAssetUrls(

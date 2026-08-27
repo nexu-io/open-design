@@ -1,7 +1,7 @@
 /**
  * One-shot legacy `.od/` data migrator.
  *
- * Open Design 0.3.x ran from the repo and wrote runtime state to
+ * OpenDesign 0.3.x ran from the repo and wrote runtime state to
  * `<repo>/.od/` (SQLite at `app.sqlite`, agent CWDs under `projects/`,
  * saved renders under `artifacts/`, credentials at `media-config.json`).
  * The 0.4.x packaged Desktop app moved the data root to a per-namespace
@@ -337,7 +337,7 @@ export function migrateLegacyDataDirSync(
     // migration ran when it hadn't (this is the original #710 footgun).
     throw new LegacyMigrationError(
       'legacy_dir_invalid',
-      `OD_LEGACY_DATA_DIR="${legacyDir}" is not a usable legacy data dir (expected app.sqlite directly inside it). Quit Open Design, fix the path, and relaunch.`,
+      `OD_LEGACY_DATA_DIR="${legacyDir}" is not a usable legacy data dir (expected app.sqlite directly inside it). Quit OpenDesign, fix the path, and relaunch.`,
     );
   }
 

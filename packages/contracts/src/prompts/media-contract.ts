@@ -13,13 +13,52 @@ localized sentence and nothing else:
 
 - Success: say the localized equivalent of "Image generated". For Simplified
   Chinese, reply exactly \`图片已生成\`.
-- Failure, including a placeholder/stub outcome: say the localized equivalent
-  of "The image generation service is temporarily unavailable". For Simplified
-  Chinese, reply exactly \`图片生成服务暂时不可用\`.
+- Refused by a content safety policy — the structured result's error \`code\` is
+  \`safety_rejection\`: say the localized equivalent of "The image was not
+  generated because a content safety policy refused the request". For
+  Simplified Chinese, reply exactly \`图片未生成：内容安全策略拒绝了该请求\`.
+- A known local failure: ignore diagnostic wording and use the fixed safe copy
+  for its code:
+  - \`MEDIA_EXECUTION_DISABLED\`: "Image was not generated: Media generation was
+    disabled for this run (error code: \`MEDIA_EXECUTION_DISABLED\`)." Simplified
+    Chinese: 图片未生成：本次任务未启用图片生成（错误代码：\`MEDIA_EXECUTION_DISABLED\`）.
+  - \`MEDIA_SURFACE_DENIED\` or \`MEDIA_MODEL_DENIED\`: "Image was not generated:
+    This run does not allow the requested image generation (error code: \`{code}\`)."
+    Simplified Chinese: 图片未生成：本次任务不允许所请求的图片生成（错误代码：\`{code}\`）.
+  - \`STUB_PROVIDER_DISABLED\`: "Image was not generated: The selected image
+    model has no configured renderer (error code: \`STUB_PROVIDER_DISABLED\`)."
+    Simplified Chinese: 图片未生成：所选图片模型未配置可用的生成器（错误代码：\`STUB_PROVIDER_DISABLED\`）.
+  - \`MEDIA_DISPATCHER_UNREACHABLE\`: "Image was not generated: The local media
+    dispatcher could not be reached (error code: \`MEDIA_DISPATCHER_UNREACHABLE\`)."
+    Simplified Chinese: 图片未生成：无法连接本地媒体生成调度器（错误代码：\`MEDIA_DISPATCHER_UNREACHABLE\`）.
+  - \`MEDIA_DISPATCH_NOT_INVOKED\`: use this only when image generation was
+    expected but no media dispatch command was invoked. Say "Image was not
+    generated: The media dispatcher was not invoked (error code:
+    \`MEDIA_DISPATCH_NOT_INVOKED\`)." Simplified Chinese:
+    图片未生成：未调用媒体生成调度器（错误代码：\`MEDIA_DISPATCH_NOT_INVOKED\`）.
+  - \`MEDIA_DISPATCH_FAILED\`: "Image was not generated: The media dispatcher
+    failed for an unclassified reason (error code: \`MEDIA_DISPATCH_FAILED\`)."
+    Simplified Chinese: 图片未生成：媒体生成调度失败，原因未分类（错误代码：\`MEDIA_DISPATCH_FAILED\`）.
+Render every error code as Markdown inline code so underscores remain visible
+in the rendered chat. Do not emit a bare underscore-delimited code.
 
-Do not add a filename, model, provider, reason, remediation, retry offer, or
-follow-up question. Use the command's structured result only to choose success
-versus failure; retain its original diagnostics in the tool trace for debugging.`;
+- A structured dispatcher or provider error with a non-empty safe public error
+  \`code\` and \`message\`: include both fields. For Simplified Chinese, reply
+  exactly 图片未生成：{message}（错误代码：\`{code}\`）, substituting the returned
+  values. Never use an unsanitized response body, stderr, or diagnostic field.
+- Any other failure: use \`MEDIA_DISPATCH_FAILED\` and its fixed copy above.
+  Do not infer an outage from HTTP status, a placeholder/stub, missing output,
+  or model-generated fallback text.
+
+A provider verdict is not automatically an outage. Use its structured safe
+public code and message without reclassifying either one from wording or HTTP
+status. Claim service unavailability only when a structured availability code
+explicitly establishes it.
+
+Do not add a filename, model, provider, remediation, retry offer, or follow-up
+question. Expose only the fixed local-category copy or a structured safe public
+\`message\` and \`code\`; retain all other diagnostics in the tool trace for
+debugging.`;
 
 export const MEDIA_GENERATION_CONTRACT = `
 ---
@@ -72,7 +111,7 @@ lets the model's own default decide. A size or tier the user names IS that
 ask, in any language — "2K", "1k", "high quality", "高质量" — so map it onto
 the flag; restating it inside the prompt text does not reach the provider.
 
-Open Design Cloud image and video models use the \`vela/*\` catalogue prefix.
+OpenDesign Cloud image and video models use the \`vela/*\` catalogue prefix.
 Always invoke those models through \`"$OD_NODE_BIN" "$OD_BIN" media generate\`.
 Never invoke the \`vela\` CLI directly and never call its remote media API.
 The daemon owns model routing, trusted Workspace attribution, task polling,

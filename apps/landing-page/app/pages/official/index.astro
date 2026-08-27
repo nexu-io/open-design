@@ -2,7 +2,7 @@
 /*
  * /official/ — brand-authority surface.
  *
- * This page exists to satisfy "Open Design vs OpenDesigner / opendesign.ai"
+ * This page exists to satisfy "OpenDesign vs OpenDesigner / opendesign.ai"
  * brand-confusion queries: it lists every canonical link, names every alias
  * the project is searched under, and points at the GitHub source of truth.
  *
@@ -55,7 +55,7 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Open Design', item: SITE },
+      { '@type': 'ListItem', position: 1, name: 'OpenDesign', item: SITE },
       { '@type': 'ListItem', position: 2, name: page.breadcrumb, item: `${SITE}official/` },
     ],
   },
@@ -80,7 +80,7 @@ const jsonLd = [
 
 <Layout title={title} description={description} jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
-    <a href={href('/')}>Open Design</a>
+    <a href={href('/')}>OpenDesign</a>
     <span>/</span>
     <span aria-current="page">{page.breadcrumb}</span>
   </nav>

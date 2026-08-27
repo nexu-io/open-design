@@ -28,10 +28,10 @@ import {
   stopProcesses,
 } from "@open-design/platform";
 
-import type { ToolPackConfig } from "../config.js";
-import { resolveToolPackLauncherLayout } from "../launcher-layout.js";
-import { readToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
-import { readToolPackUpdateCacheLifecycleSnapshot } from "../update-cache-lifecycle-snapshot.js";
+import type { ToolPackConfig } from "../config/index.js";
+import { resolveToolPackLauncherLayout } from "../launcher/layout.js";
+import { readToolPackLauncherRuntimeSnapshot } from "../launcher/runtime-snapshot.js";
+import { readToolPackUpdateCacheLifecycleSnapshot } from "../updates/cache-lifecycle-snapshot.js";
 import { DESKTOP_LOG_ECHO_ENV } from "./constants.js";
 import { listDirectories, pathExists, removeTree } from "./fs.js";
 import { readBuiltAppManifest } from "./manifest.js";

@@ -705,6 +705,10 @@ describe('App AMR polling', () => {
       expect(screen.getByTestId('amr-profile').textContent).toBe('prod');
     });
 
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const workspaceDirectoryReadsBefore = fetchMock.mock.calls.filter(([input]) =>
+      input.toString().includes('/api/workspace/directory')).length;
+
     fireEvent(window, new CustomEvent('open-design:app-config-changed'));
 
     await waitFor(() => {
@@ -718,6 +722,11 @@ describe('App AMR polling', () => {
     });
     await waitFor(() => {
       expect(mockedFetchAgentsStream).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.filter(([input]) =>
+        input.toString().includes('/api/workspace/directory')).length,
+      ).toBeGreaterThan(workspaceDirectoryReadsBefore);
     });
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
   });

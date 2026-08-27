@@ -1,0 +1,340 @@
+/* Labs experiment rows.
+ *
+ * The mock (`cheems-work/od-lab/ref/od-labs-switch.html`) draws a filled,
+ * borderless row rather than the bordered card `.toggle-row` renders, and puts
+ * the item name and its help affordance on one line with the switch opposite.
+ * Tokens rather than the mock's literal greys, so the row follows the rest of
+ * Settings when the palette moves.
+ */
+
+/* The global `.settings-section` supplies the flex column, the 12px gap between
+   blocks, and the entrance animation, so this file adds no wrapper rule of its
+   own — overriding `display` here would cancel that gap. */
+.pageDesc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-muted);
+}
+
+.row {
+  display: flex;
+  /* Top-aligned, not centred: the row grows when the reason panel opens, and a
+     centred switch would slide down away from the item it belongs to. The
+     switch's own margin puts it level with the name + hint block. */
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+}
+
+.rowText {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rowTitle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.rowName {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* The "applies next generation" line is permanent, not a transient
+   confirmation: the switch has no visible effect until the next run, so the
+   user should read that before flipping it rather than after. */
+.rowHint {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.rowNotice {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.tooltipHost {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.tooltipTrigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: help;
+  transition: color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.tooltipTrigger:hover,
+.tooltipTrigger:focus-visible {
+  color: var(--text);
+}
+
+.tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: -10px;
+  z-index: 2;
+  display: flex;
+  width: max-content;
+  max-width: 340px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--text-strong, #1f2328);
+  box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.22));
+  color: var(--bg, #fff);
+  animation: labsTooltipIn 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.tooltipBody {
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.tooltipScope {
+  font-size: 11.5px;
+  line-height: 1.55;
+  opacity: 0.7;
+}
+
+@keyframes labsTooltipIn {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Geometry and on-colour match `.toggle-slider` (the Memory / Skills switch,
+   `styles/viewer/memory.css`) so Labs does not introduce a second toggle look.
+   The hover states are new: the shared toggles only lift on hover in dark mode,
+   which left this control with no pointer affordance at all in the default
+   theme — hovering looked identical to resting. */
+.switch {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  margin-top: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--border-strong);
+  cursor: pointer;
+  transition: background-color 200ms var(--ease-out), box-shadow 200ms var(--ease-out);
+}
+
+.switch:hover:not([aria-disabled='true']) {
+  background: color-mix(in srgb, var(--text-muted) 42%, var(--border-strong));
+}
+
+.switch:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 45%, transparent);
+}
+
+.switchOn {
+  background: var(--brand);
+}
+
+.switchOn:hover:not([aria-disabled='true']) {
+  background: color-mix(in srgb, var(--text) 14%, var(--brand));
+}
+
+.switch[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.switchKnob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform 200ms var(--ease-out);
+}
+
+.switchOn .switchKnob {
+  transform: translateX(16px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tooltip { animation: none; }
+  .switch,
+  .switchKnob { transition: none; }
+}
+
+/* Opt-out reason panel.
+ *
+ * Sits inside the row rather than in a dialog: the user has just declined
+ * something, and a modal asking them to justify it reads as friction.
+ * Geometry follows the approved mock (`cheems-work/od-lab/ref/od-labs-switch.html`
+ * — 8px radius chips, 6x11 padding, 7px gaps), with the mock's literal greys
+ * replaced by tokens. Note this is deliberately NOT the pill shape the older
+ * assistant-feedback chips use; the mock asks for a rounded rectangle. */
+.optOut {
+  display: flex;
+  flex-direction: column;
+  animation: labsOptOutIn 200ms var(--ease-out);
+}
+
+.optOutPrompt {
+  margin-top: 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.optOutChoices {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-top: 11px;
+}
+
+.optOutChip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.3;
+  cursor: pointer;
+  transition: border-color 200ms var(--ease-out), color 200ms var(--ease-out);
+}
+
+.optOutChip:hover,
+.optOutChip:focus-visible {
+  border-color: var(--border-strong);
+  color: var(--text-strong);
+}
+
+.optOutChipActive,
+.optOutChipActive:hover {
+  border-color: var(--border-strong);
+  color: var(--text-strong);
+}
+
+/* Skip is an escape, not a peer of the reasons — borderless so the real
+   answers keep the visual weight. Padding matches the chips so the baseline
+   stays on the same line. */
+.optOutSkip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 5px;
+  border: 0;
+  background: transparent;
+  color: var(--text-soft, var(--text-muted));
+  font-size: 12px;
+  line-height: 1.3;
+  cursor: pointer;
+  transition: color 200ms var(--ease-out);
+}
+
+.optOutSkip:hover,
+.optOutSkip:focus-visible {
+  color: var(--text);
+}
+
+.optOutInputRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 520px;
+  margin-top: 11px;
+}
+
+.optOutInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.3;
+}
+
+.optOutInput:focus {
+  outline: none;
+  border-color: var(--border-strong);
+}
+
+.optOutSubmit {
+  flex: none;
+  padding: 9px 16px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--text);
+  color: var(--bg);
+  font-size: 12.5px;
+  line-height: 1.3;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: opacity 200ms var(--ease-out);
+}
+
+/* Readable while disabled. The mock draws white-on-grey here, which lands at
+   about 1.9:1 against this palette's `--border-strong` — the label reads as a
+   blank button rather than a disabled one. Mute the surface instead of the
+   text so the word stays legible. */
+.optOutSubmit:disabled {
+  cursor: not-allowed;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+@keyframes labsOptOutIn {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .optOut { animation: none; }
+}

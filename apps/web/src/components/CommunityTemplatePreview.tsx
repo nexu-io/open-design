@@ -59,7 +59,7 @@ export type TemplateDemo = {
   prompt: string;
 };
 
-export const TEMPLATE_TYPE_ORDER: TemplateType[] = ['Slides', 'Prototype', 'Live Artifact', 'Image', 'Video', 'HyperFrames', 'Audio'];
+export const TEMPLATE_TYPE_ORDER: TemplateType[] = ['Prototype', 'Slides', 'Live Artifact', 'Image', 'Video', 'HyperFrames', 'Audio'];
 
 /** The Community grid is the plugin catalogue seen through the artifact a user
  *  wants to make. Membership comes from the shared facet derivation in
@@ -331,7 +331,7 @@ function templatePreviewHtml(template: TemplateDemo): string {
     <section class="sections">
       <div class="section"><b>Structure</b><span>Ready-made sections and hierarchy.</span></div>
       <div class="section"><b>Visual System</b><span>Color, type, rhythm, and reusable blocks.</span></div>
-      <div class="section"><b>Editable</b><span>Remix into a real Open Design project.</span></div>
+      <div class="section"><b>Editable</b><span>Remix into a real OpenDesign project.</span></div>
     </section>
   </main>
 </body>

@@ -224,26 +224,6 @@ export async function startFakeCollabHub(options: {
         return json(response, 200, { ok: true });
       }
 
-      if (url.pathname === '/api/v1/workspaces/current' && request.method === 'GET') {
-        if (!identity) return json(response, 401, { error: 'unauthorized' });
-        const addedWorkspace = addedWorkspaces.get(identity.memberId)?.get(workspaceId);
-        if (addedWorkspace) {
-          return json(response, 200, addedWorkspaceContext(addedWorkspace));
-        }
-        if (
-          options.includePersonalWorkspace
-          && workspaceId === personalWorkspaceId(identity.memberId)
-        ) {
-          return json(response, 200, personalWorkspaceContext(identity));
-        }
-        if (removedMembers.has(identity.memberId)) {
-          if (workspaceId === personalWorkspaceId(identity.memberId)) {
-            return json(response, 200, personalWorkspaceContext(identity));
-          }
-          return json(response, 403, { error: 'workspace_membership_removed' });
-        }
-        return json(response, 200, workspaceContext(options, identity));
-      }
       if (url.pathname === '/api/v1/workspaces' && request.method === 'GET') {
         if (!identity) return json(response, 401, { error: 'unauthorized' });
         return json(response, 200, {
@@ -1008,19 +988,6 @@ function handleCollabCommand(input: {
   throw new Error(`unsupported collab command: ${input.args.join(' ')}`);
 }
 
-function workspaceContext(
-  options: { workspaceId: string; workspaceName: string },
-  identity: ClientIdentity,
-) {
-  return {
-    ...workspaceDirectoryItem(options, identity),
-    billingState: 'active',
-    planId: 'team_plus',
-    providerMode: 'platform_credits',
-    seatSummary: { seatLimit: 5, usedSeats: 2, availableSeats: 3, isSeatFull: false },
-  };
-}
-
 function recordForIdentity(
   project: TeamProjectRecord,
   identity: ClientIdentity,
@@ -1063,20 +1030,6 @@ function addedWorkspaceDirectoryItem(workspace: {
   };
 }
 
-function addedWorkspaceContext(workspace: {
-  workspaceId: string;
-  workspaceName: string;
-  workspaceMemberId: string;
-}) {
-  return {
-    ...addedWorkspaceDirectoryItem(workspace),
-    billingState: 'free',
-    planId: null,
-    providerMode: 'platform_credits',
-    seatSummary: { seatLimit: 1, usedSeats: 1, availableSeats: 0, isSeatFull: true },
-  };
-}
-
 function personalWorkspaceId(memberId: string): string {
   return `personal-${memberId}`;
 }
@@ -1098,16 +1051,6 @@ function personalWorkspaceDirectoryItem(identity: ClientIdentity) {
     role: 'owner',
     memberStatus: 'active',
     lifecycleState: 'active',
-  };
-}
-
-function personalWorkspaceContext(identity: ClientIdentity) {
-  return {
-    ...personalWorkspaceDirectoryItem(identity),
-    billingState: 'free',
-    planId: null,
-    providerMode: 'platform_credits',
-    seatSummary: { seatLimit: 1, usedSeats: 1, availableSeats: 0, isSeatFull: true },
   };
 }
 

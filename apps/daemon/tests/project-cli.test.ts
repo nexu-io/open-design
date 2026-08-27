@@ -84,6 +84,18 @@ async function startProjectStubServer(): Promise<StubServer> {
         res.end(JSON.stringify({ files: [] }));
         return;
       }
+      if (
+        captured.method === 'DELETE'
+        && captured.url === '/api/projects/project-1/files/nested%2Findex.html/publish-public'
+      ) {
+        res.statusCode = 200;
+        res.end(JSON.stringify({
+          ok: true,
+          slug: 'legacy-public-slug',
+          fileName: 'nested/index.html',
+        }));
+        return;
+      }
       if (captured.method === 'GET' && captured.url === '/api/workspaces/ws-1/projects?view=team') {
         res.statusCode = 200;
         res.end(JSON.stringify({
@@ -246,6 +258,44 @@ describe('od project CLI', () => {
     expect(stub.requests[0]!.headers).toMatchObject({
       'x-od-workspace-id': 'ws-1',
       'x-od-workspace-member-id': 'member-1',
+    });
+  });
+
+  it('revokes a legacy public link by extracting its snapshot slug', async () => {
+    stub = await startProjectStubServer();
+
+    const result = await runCli([
+      'project',
+      'revoke-public-link',
+      'project-1',
+      '--path',
+      'nested/index.html',
+      '--url',
+      'https://hub.example.test/api/v1/public/snapshots/legacy-public-slug/files/nested/index.html',
+      '--workspace',
+      'ws-1',
+      '--workspace-member',
+      'member-1',
+      '--daemon-url',
+      stub.baseUrl,
+      '--json',
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      ok: true,
+      slug: 'legacy-public-slug',
+    });
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]).toMatchObject({
+      method: 'DELETE',
+      url: '/api/projects/project-1/files/nested%2Findex.html/publish-public',
+      headers: {
+        'x-od-workspace-id': 'ws-1',
+        'x-od-workspace-member-id': 'member-1',
+      },
+      body: JSON.stringify({ slug: 'legacy-public-slug' }),
     });
   });
 

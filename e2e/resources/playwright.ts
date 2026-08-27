@@ -512,14 +512,15 @@ export const playwrightUiScenarios: UiScenario[] = [
     flow: 'deck-pagination-next-prev-correctness',
     automated: true,
     description:
-      'Should verify that deck preview pagination moves to the actual previous and next slide instead of routing both actions to the same page.',
+      'Should verify that persisted deck-stage thumbnails and pagination move the real preview while host chrome and speaker notes stay synchronized.',
     create: {
       projectName: 'Deck pagination controls',
       tab: 'deck',
     },
     prompt: 'Review pagination behavior in a multi-slide deck preview',
     notes: [
-      'Seeds deterministic deck HTML through the project files API and verifies previous/next controls in Playwright.',
+      'Seeds mixed legacy and modern slide markers through the project files API, including a decoy screen label outside the explicit deck-stage.',
+      'Verifies thumbnail selection, previous/next controls, and deck-originated navigation in Playwright.',
     ],
   },
   {

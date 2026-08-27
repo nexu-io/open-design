@@ -1309,7 +1309,7 @@ describe('workspace project routes', () => {
     });
   });
 
-  it('blocks direct project and file writes when the workspace is locked', async () => {
+  it('does not let a stale remote locked snapshot block local project and file writes', async () => {
     const projectId = `workspace-direct-locked-${Date.now()}`;
     await createProject(projectId, 'Locked direct write project');
 
@@ -1334,21 +1334,21 @@ describe('workspace project routes', () => {
       headers: lockedHeaders,
       body: JSON.stringify({ name: 'Locked rename' }),
     });
-    expect(patchResp.status).toBe(403);
+    expect(patchResp.status).toBe(200);
 
     const duplicateResp = await fetch(`${baseUrl}/api/projects/${projectId}/duplicate`, {
       method: 'POST',
       headers: lockedHeaders,
       body: JSON.stringify({ name: 'Locked duplicate' }),
     });
-    expect(duplicateResp.status).toBe(403);
+    expect(duplicateResp.status).toBe(200);
 
     const writeResp = await fetch(`${baseUrl}/api/projects/${projectId}/files`, {
       method: 'POST',
       headers: lockedHeaders,
       body: JSON.stringify({ name: 'locked.txt', content: 'locked' }),
     });
-    expect(writeResp.status).toBe(403);
+    expect(writeResp.status).toBe(200);
 
     const uploadForm = new FormData();
     uploadForm.append('files', new Blob(['locked'], { type: 'text/plain' }), 'locked-upload.txt');
@@ -1358,7 +1358,7 @@ describe('workspace project routes', () => {
       headers: uploadHeaders,
       body: uploadForm,
     });
-    expect(uploadResp.status).toBe(403);
+    expect(uploadResp.status).toBe(200);
   });
 
   it('rejects member batch-delete for unknown legacy ownership and allows privileged delete', async () => {
@@ -2758,15 +2758,22 @@ describe('GET /api/projects/:id/workspace-scope route bootstrap', () => {
       res: express.Response,
     ) => {
       if (options.unbound) return true;
+      if (options.resourceState === 'deleted') {
+        res.status(403).json({
+          error: { code: 'WORKSPACE_PROJECT_PERMISSION_DENIED' },
+        });
+        return false;
+      }
       const claimedWorkspaceId = req.get('x-od-workspace-id');
       const claimedMemberId = req.get('x-od-workspace-member-id');
+      if (!claimedWorkspaceId && !claimedMemberId) return true;
       if (!claimedWorkspaceId || !claimedMemberId) {
         res.status(400).json({
           error: { code: 'WORKSPACE_CONTEXT_INCOMPLETE' },
         });
         return false;
       }
-      if (claimedWorkspaceId !== workspaceId || claimedMemberId !== memberId) {
+      if (claimedWorkspaceId !== workspaceId) {
         res.status(403).json({
           error: { code: 'WORKSPACE_PROJECT_PERMISSION_DENIED' },
         });
@@ -2787,7 +2794,7 @@ describe('GET /api/projects/:id/workspace-scope route bootstrap', () => {
     return listen(app);
   }
 
-  it('returns exact A scope headerlessly while keeping project content behind explicit A headers', async () => {
+  it('returns exact local scope and project content headerlessly', async () => {
     const routeServer = await startBootstrapRoute();
     try {
       const scope = await fetch(
@@ -2801,7 +2808,7 @@ describe('GET /api/projects/:id/workspace-scope route bootstrap', () => {
           workspaceId,
           context: {
             workspaceId,
-            workspaceMemberId: memberId,
+            workspaceMemberId: 'member-cleanup-fail',
           },
         },
       });
@@ -2809,12 +2816,7 @@ describe('GET /api/projects/:id/workspace-scope route bootstrap', () => {
       const headerlessDetail = await fetch(
         `${routeServer.url}/api/projects/${projectId}`,
       );
-      expect(headerlessDetail.status).toBe(400);
-      const headerlessFiles = await fetch(
-        `${routeServer.url}/api/projects/${projectId}/files`,
-      );
-      expect(headerlessFiles.status).not.toBe(200);
-
+      expect(headerlessDetail.status).toBe(200);
       const scopedDetail = await fetch(
         `${routeServer.url}/api/projects/${projectId}`,
         {
@@ -2842,7 +2844,7 @@ describe('GET /api/projects/:id/workspace-scope route bootstrap', () => {
         `${routeServer.url}/api/projects/${projectId}/workspace-scope`,
         {
           headers: {
-            'x-od-workspace-id': workspaceId,
+            'x-od-workspace-id': 'wrong-workspace',
             'x-od-workspace-member-id': 'wrong-member',
           },
         },
@@ -2853,8 +2855,8 @@ describe('GET /api/projects/:id/workspace-scope route bootstrap', () => {
     }
   });
 
-  it('does not disclose scope for nonmembers, removed/deleted memberships, or deleted resources', async () => {
-    const deniedCases = [
+  it('ignores stale directory membership but still hides a deleted local resource', async () => {
+    const staleDirectoryCases = [
       {
         directory: async () => ({
           ok: true,
@@ -2873,43 +2875,45 @@ describe('GET /api/projects/:id/workspace-scope route bootstrap', () => {
           items: [{ ...activeMembership, lifecycleState: 'deleted' as const }],
         }),
       },
-      {
-        resourceState: 'deleted',
-      },
     ];
-    for (const denied of deniedCases) {
-      const routeServer = await startBootstrapRoute(denied);
+    for (const stale of staleDirectoryCases) {
+      const routeServer = await startBootstrapRoute(stale);
       try {
         const response = await fetch(
           `${routeServer.url}/api/projects/${projectId}/workspace-scope`,
         );
-        expect(response.status).toBe(403);
-        const text = await response.text();
-        expect(text).not.toContain(workspaceId);
-        expect(text).not.toContain(memberId);
+        expect(response.status).toBe(200);
       } finally {
         await close(routeServer.server);
       }
     }
+    const deletedServer = await startBootstrapRoute({ resourceState: 'deleted' });
+    try {
+      const deleted = await fetch(
+        `${deletedServer.url}/api/projects/${projectId}/workspace-scope`,
+      );
+      expect(deleted.status).toBe(403);
+    } finally {
+      await close(deletedServer.server);
+    }
   });
 
-  it('returns retryable 503 on directory outage and 404 for a missing project', async () => {
+  it('stays available on directory outage and returns 404 for a missing project', async () => {
+    const directory = vi.fn(async () => {
+      throw new Error('directory down');
+    });
     const routeServer = await startBootstrapRoute({
-      directory: async () => {
-        throw new Error('directory down');
-      },
+      directory,
     });
     try {
       const outage = await fetch(
         `${routeServer.url}/api/projects/${projectId}/workspace-scope`,
       );
-      expect(outage.status).toBe(503);
+      expect(outage.status).toBe(200);
       await expect(outage.json()).resolves.toMatchObject({
-        error: {
-          code: 'WORKSPACE_DIRECTORY_UNAVAILABLE',
-          retryable: true,
-        },
+        scope: { kind: 'team', workspaceId },
       });
+      expect(directory).not.toHaveBeenCalled();
       const missing = await fetch(
         `${routeServer.url}/api/projects/missing-project/workspace-scope`,
       );

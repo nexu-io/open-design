@@ -37,6 +37,7 @@ import type {
 } from '@open-design/contracts/analytics';
 import { sessionModeToTracking } from '@open-design/contracts/analytics';
 import { deriveUploadCohort } from '../analytics/upload-tracking';
+import { notifyCompletionFeedbackGesture } from '../utils/notifications';
 import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchRecentLinkedDirs, pushRecentLinkedDir, dirExists, applyLibraryAsset, fetchLibraryAssetElementHtml } from "../providers/registry";
 import {
   duplicatePluginAsProject,
@@ -2652,6 +2653,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (hatched) {
         if (streaming) return;
         setStreamingAnnotationSendPending(false);
+        notifyCompletionFeedbackGesture();
         beginComposedSend(() => onSend(hatched, staged, nextCommentAttachments, contextMeta));
         return;
       }
@@ -2659,6 +2661,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (search) {
         if (streaming) return;
         setStreamingAnnotationSendPending(false);
+        notifyCompletionFeedbackGesture();
         beginComposedSend(
           () => onSend(search.prompt, staged, nextCommentAttachments, {
             ...contextMeta,
@@ -2677,6 +2680,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       // suggested prompt — those explicitly type it into the composer via
       // applyDesignToolboxAction before the user ever hits Send.
       if (!prompt && staged.length === 0 && nextCommentAttachments.length === 0) return;
+      notifyCompletionFeedbackGesture();
       sendComposedTurn(prompt, staged, nextCommentAttachments, contextMeta);
     }
 
@@ -3118,7 +3122,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 setMentionIndex(0);
               }}
               activeIndex={mentionIndex}
-              currentSkillId={currentSkillId}
+              stagedSkillIds={new Set(stagedSkills.map((skill) => skill.id))}
               onPickFile={insertMention}
               onPickWorkspaceContext={insertWorkspaceMention}
               onPickPlugin={(record) => void insertPluginMention(record)}
@@ -5615,50 +5619,55 @@ function SlashPopover({
   t: TranslateFn;
 }) {
   return (
-    <div
-      className="slash-popover"
-      data-testid="slash-popover"
-      role="listbox"
-      aria-label={t('pet.slashPopoverAria')}
-    >
+    <div className="slash-popover" data-testid="slash-popover">
       <div className="slash-popover-head">
         <span>{t('pet.slashPopoverTitle')}</span>
         <span className="slash-popover-hint">{t('pet.slashPopoverHint')}</span>
       </div>
-      {commands.map((cmd, idx) => {
-        const active = idx === activeIndex;
-        return (
-          <button
-            key={cmd.id}
-            id={`slash-opt-${idx}`}
-            type="button"
-            role="option"
-            aria-selected={active}
-            className={`slash-item${active ? ' active' : ''}`}
-            onMouseDown={(e) => {
-              // Prevent the textarea from losing focus before the click
-              // handler fires — otherwise selectionStart resets and the
-              // pick replacement targets the wrong substring.
-              e.preventDefault();
-            }}
-            onMouseEnter={() => onHover(idx)}
-            onClick={() => onPick(cmd)}
-          >
-            <span className="slash-item-icon" aria-hidden>
-              <Icon name={cmd.icon} size={13} />
-            </span>
-            <span className="slash-item-body">
-              <span className="slash-item-row">
-                <code className="slash-item-label">{cmd.label}</code>
-                {cmd.argHint ? (
-                  <span className="slash-item-arg">{cmd.argHint}</span>
-                ) : null}
+      {/* The rows live in their own scroll port, not directly in the
+          height-capped popover column — see `.slash-popover-list`. Carrying
+          `role="listbox"` down here also keeps the header out of the
+          listbox, whose only children may be options. */}
+      <div
+        className="slash-popover-list"
+        role="listbox"
+        aria-label={t('pet.slashPopoverAria')}
+      >
+        {commands.map((cmd, idx) => {
+          const active = idx === activeIndex;
+          return (
+            <button
+              key={cmd.id}
+              id={`slash-opt-${idx}`}
+              type="button"
+              role="option"
+              aria-selected={active}
+              className={`slash-item${active ? ' active' : ''}`}
+              onMouseDown={(e) => {
+                // Prevent the textarea from losing focus before the click
+                // handler fires — otherwise selectionStart resets and the
+                // pick replacement targets the wrong substring.
+                e.preventDefault();
+              }}
+              onMouseEnter={() => onHover(idx)}
+              onClick={() => onPick(cmd)}
+            >
+              <span className="slash-item-icon" aria-hidden>
+                <Icon name={cmd.icon} size={13} />
               </span>
-              <span className="slash-item-desc">{t(cmd.descKey)}</span>
-            </span>
-          </button>
-        );
-      })}
+              <span className="slash-item-body">
+                <span className="slash-item-row">
+                  <code className="slash-item-label">{cmd.label}</code>
+                  {cmd.argHint ? (
+                    <span className="slash-item-arg">{cmd.argHint}</span>
+                  ) : null}
+                </span>
+                <span className="slash-item-desc">{t(cmd.descKey)}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -5674,7 +5683,7 @@ function MentionPopover({
   tab,
   onTabChange,
   activeIndex,
-  currentSkillId,
+  stagedSkillIds,
   onPickFile,
   onPickWorkspaceContext,
   onPickPlugin,
@@ -5692,7 +5701,7 @@ function MentionPopover({
   tab: MentionTab;
   onTabChange: (tab: MentionTab) => void;
   activeIndex: number;
-  currentSkillId: string | null;
+  stagedSkillIds: Set<string>;
   onPickFile: (path: string) => void;
   onPickWorkspaceContext: (item: WorkspaceContextItem) => void;
   onPickPlugin: (record: InstalledPluginRecord) => void;
@@ -5862,7 +5871,7 @@ function MentionPopover({
               const flat = optionIndex;
               optionIndex += 1;
               const rowActive = flat === activeIndex;
-              const isCurrent = skill.id === currentSkillId;
+              const isStaged = stagedSkillIds.has(skill.id);
               return (
                 <button
                   key={`skill-${skill.id}`}
@@ -5875,14 +5884,14 @@ function MentionPopover({
                   onClick={() => onPickSkill(skill)}
                   title={localizeSkillDescription(locale, skill)}
                 >
-                  <Icon name={isCurrent ? 'check' : 'file'} size={12} />
+                  <Icon name={isStaged ? 'check' : 'file'} size={12} />
                   <span className="mention-item-body">
                     <strong>{localizeSkillName(locale, skill)}</strong>
                     <span className="mention-meta mention-meta--desc">
                       {localizeSkillDescription(locale, skill) || skill.id}
                     </span>
                   </span>
-                  <span className="mention-meta mention-item-kind">{isCurrent ? t('chat.mentionActiveSkill') : skill.mode}</span>
+                  <span className="mention-meta mention-item-kind">{isStaged ? t('chat.mentionActiveSkill') : skill.mode}</span>
                 </button>
               );
             })}

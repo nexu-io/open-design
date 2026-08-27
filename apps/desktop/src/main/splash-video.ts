@@ -10,7 +10,7 @@
 // packaged builds, before anything else is up.
 //
 // Provenance: the designer's startup-animation master, re-cut with the wordmark
-// capitalised as "Open Design" (was "Open design"). Source is VP9/WebM 1920x1132,
+// capitalised as "OpenDesign" (was "Open design"). Source is VP9/WebM 1920x1132,
 // inlined verbatim (no transcode) so the brand intro keeps its authored quality.
 // Electron's bundled Chromium plays VP9 from a data: URL natively.
 //

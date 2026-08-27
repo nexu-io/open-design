@@ -1,19 +1,19 @@
-<h1 align="center">Open Design: Die quelloffene Alternative zu Claude Design</h1>
+<h1 align="center">OpenDesign: Die quelloffene Alternative zu Claude Design</h1>
 
-> ⚡ **[Open Design Cloud — der offizielle Modell-Service.](https://open-design.ai/zh/pricing/)** Einmal aufladen und Agent- sowie Bildmodelle direkt in Open Design nutzen: GPT, Claude und DeepSeek für Agents; GPT Image 2.0, Seedream 5.0 Pro und Nano Banana 2.0 für Bilder.
+> ⚡ **[OpenDesign Cloud — der offizielle Modell-Service.](https://open-design.ai/zh/pricing/)** Einmal aufladen und Agent- sowie Bildmodelle direkt in OpenDesign nutzen: GPT, Claude und DeepSeek für Agents; GPT Image 2.0, Seedream 5.0 Pro und Nano Banana 2.0 für Bilder.
 >
 > 🚀 **[DeepSeek V4 Flash und V4 Pro sind jetzt verfügbar.](https://open-design.ai/zh/pricing/)** Nutzen Sie Spitzenintelligenz für Prototypen, Präsentationen, Designsysteme und alltägliche Agent-Aufgaben. Open-Design-Mitglieder können beide Modelle zwei Wochen lang unbegrenzt direkt in der App verwenden.
 >
-> 🧩 **[DeepSeek Harness wird jetzt unterstützt.](https://open-design.ai/zh/agents/deepseek-harness-design/)** Verbinden Sie DeepSeeks offizielles `dsh` Agent Harness als native Laufzeit mit Open Design — inklusive strukturiertem Denken, Tool-Aufrufen, Modellerkennung, Abbruch und Sitzungsfortsetzung. Generierte Dateien bleiben für Live-Vorschau und Auslieferung im Open-Design-Workflow.
+> 🧩 **[DeepSeek Harness wird jetzt unterstützt.](https://open-design.ai/zh/agents/deepseek-harness-design/)** Verbinden Sie DeepSeeks offizielles `dsh` Agent Harness als native Laufzeit mit OpenDesign — inklusive strukturiertem Denken, Tool-Aufrufen, Modellerkennung, Abbruch und Sitzungsfortsetzung. Generierte Dateien bleiben für Live-Vorschau und Auslieferung im Open-Design-Workflow.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design hero banner" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="OpenDesign hero banner" width="100%" />
 </p>
 
 <p align="center">
   <a href="https://open-design.ai/">Website</a> ·
   <a href="https://open-design.ai/">Download</a> ·
-  <a href="https://open-design.ai/cloud/">Open Design Cloud</a> ·
+  <a href="https://open-design.ai/cloud/">OpenDesign Cloud</a> ·
   <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
   <a href="https://x.com/OpenDesignHQ">@OpenDesignHQ folgen</a>
 </p>
@@ -29,11 +29,11 @@
 
 ---
 
-## Was ist Open Design
+## Was ist OpenDesign
 
 🎨 **Die local-first, quelloffene Alternative zu Claude Design.** &nbsp;🖥️ **Native Desktop-App für macOS und Windows.** &nbsp;⚡ **100+ funktionale Skills + separater Rendering-Vorlagenkatalog** · ✨ **151 markenreife Designsystem-Pakete** · 📦 **277 sofort einsetzbare Plugins.** &nbsp;🖼️ Erzeugt **Web- · Desktop- · Mobile-Prototypen**, **Live-Dashboards / Artefakte**, **Präsentationen**, **Bilder**, **Videos** sowie **HyperFrames**-Motion-Graphics. 🔒 Sandboxed iframe-Vorschau · Export als HTML / PDF / PPTX / MP4. &nbsp;🤖 **Läuft auf Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity und 25 unterschiedlichen lokalen CLI-Programmen**, oder über BYOK an jedem OpenAI-kompatiblen Endpunkt.
 
-Open Design ist das, was entsteht, wenn die **agent-native** Schleife, die Anthropic mit Claude Design eingeführt hat — das Briefing erkunden, die Richtung festlegen, das Artefakt streamen, kritisieren, ausliefern — nicht länger geschlossen ist und zu einem **Dateisystem aus funktionalen Skills, Rendering-Designvorlagen, Designsystemen und Plugins** wird, das die Coding-Agents, die schon auf deinem Laptop liegen, lesen, schreiben und neu kombinieren können. Dein CLI wird zur Design-Engine, dein Laptop zum Studio und die `DESIGN.md` deines Teams zum Markenvertrag.
+OpenDesign ist das, was entsteht, wenn die **agent-native** Schleife, die Anthropic mit Claude Design eingeführt hat — das Briefing erkunden, die Richtung festlegen, das Artefakt streamen, kritisieren, ausliefern — nicht länger geschlossen ist und zu einem **Dateisystem aus funktionalen Skills, Rendering-Designvorlagen, Designsystemen und Plugins** wird, das die Coding-Agents, die schon auf deinem Laptop liegen, lesen, schreiben und neu kombinieren können. Dein CLI wird zur Design-Engine, dein Laptop zum Studio und die `DESIGN.md` deines Teams zum Markenvertrag.
 
 Es ist außerdem die **Figma-Alternative für das Agent-Zeitalter** — statt Pixel auf einer Leinwand zu schieben, liefert es einseitige Artefakte in echtem CSS, echten Schriften, echten Komponenten, direkt exportiert als HTML / PDF / PPTX / MP4 — bereits durch dein Designsystem geformt, bereits lauffähig in dem Agent, den du jeden Tag verwendest.
 
@@ -42,7 +42,7 @@ Es ist außerdem die **Figma-Alternative für das Agent-Zeitalter** — statt Pi
 
 ## Produkt-Rundgang
 
-Ein kurzer Blick auf den Kern-Workflow von Open Design. Starten Sie auf **Home** mit einem Briefing, entdecken Sie wiederverwendbare Skills unter **Plugins** und verwandeln Sie Markenreferenzen in ein **Design System**. Wechseln Sie anschließend ins **Studio** eines Projekts, um Prototypen, Präsentationen, Mobile Apps, Bilder, Dokumente und HyperFrames an einem Ort zu erstellen und weiterzuentwickeln.
+Ein kurzer Blick auf den Kern-Workflow von OpenDesign. Starten Sie auf **Home** mit einem Briefing, entdecken Sie wiederverwendbare Skills unter **Plugins** und verwandeln Sie Markenreferenzen in ein **Design System**. Wechseln Sie anschließend ins **Studio** eines Projekts, um Prototypen, Präsentationen, Mobile Apps, Bilder, Dokumente und HyperFrames an einem Ort zu erstellen und weiterzuentwickeln.
 
 ### Kernseiten
 
@@ -108,7 +108,7 @@ Im Studio eines Projekts bleiben Unterhaltung, generierte Dateien und Live-Vorsc
 
 ## Plattform-Kompatibilität
 
-> Open Design wird als **Skills, ein CLI und ein MCP-Server** ausgeliefert, die gängige Coding-Agents nativ konsumieren. Sobald OD installiert ist, verdrahtet ein einziges `od mcp install <agent>` den MCP-Server in die Konfiguration dieses Agents, und du rufst dieselben Tools aus jedem Agent heraus auf.
+> OpenDesign wird als **Skills, ein CLI und ein MCP-Server** ausgeliefert, die gängige Coding-Agents nativ konsumieren. Sobald OD installiert ist, verdrahtet ein einziges `od mcp install <agent>` den MCP-Server in die Konfiguration dieses Agents, und du rufst dieselben Tools aus jedem Agent heraus auf.
 
 | Coding-Agent / Plattform &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Status &nbsp;&nbsp; | Einzeiler zur MCP-Server-Installation &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
 |---|:---:|---|
@@ -133,7 +133,7 @@ Im Studio eines Projekts bleiben Unterhaltung, generierte Dateien und Live-Vorsc
 `od mcp install <agent> --print` für eine Trockenlauf-Vorschau · `--uninstall` zum Entfernen · vollständige Liste mit `od mcp install --help`.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 25 coding-agent CLIs Open Design supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 25 coding-agent CLIs OpenDesign supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
 </p>
 
 **Kein CLI installiert?** Der BYOK-Proxy unter `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` gibt dir dieselbe Schleife (ohne Prozess-Spawn) — füge `baseUrl` + `apiKey` + `model` ein, mit Unterstützung für OpenAI, Anthropic, Azure OpenAI, Google Gemini, Ollama, LM Studio, vLLM oder jeden OpenAI-kompatiblen Endpunkt. Pro-Ziel-SSRF-Schutz blockiert interne IPs / Link-Local / CGNAT am Daemon-Rand.
@@ -223,7 +223,7 @@ Jedes Deck exportiert als **HTML** (einzelne Datei, eingebettete Assets), **PDF*
 
 ### 5 · Video & HyperFrames — agent-native Motion-Graphics
 
-**[HyperFrames][hyperframes]** ist HeyGens quelloffenes, agent-natives Video-Framework, integriert als vollwertiger Bestandteil von Open Design. Der Agent schreibt HTML + CSS + GSAP, und HyperFrames rendert es über headless Chrome + FFmpeg zu einem deterministischen MP4. Kombiniere es mit **Seedance 2.0** für filmisches t2v / i2v, **Veo 3 / Sora 2 / Kling 2** für geroutete Modellvarianten und **Suno v5 / Lyria 2** für die Audioebene.
+**[HyperFrames][hyperframes]** ist HeyGens quelloffenes, agent-natives Video-Framework, integriert als vollwertiger Bestandteil von OpenDesign. Der Agent schreibt HTML + CSS + GSAP, und HyperFrames rendert es über headless Chrome + FFmpeg zu einem deterministischen MP4. Kombiniere es mit **Seedance 2.0** für filmisches t2v / i2v, **Veo 3 / Sora 2 / Kling 2** für geroutete Modellvarianten und **Suno v5 / Lyria 2** für die Audioebene.
 
 <table>
 <tr>
@@ -246,11 +246,11 @@ Jedes Deck exportiert als **HTML** (einzelne Datei, eingebettete Assets), **PDF*
 
 ---
 
-## Warum Open Design
+## Warum OpenDesign
 
 > **Im April 2026 veröffentlichte Anthropic Claude Design — das erste Mal, dass ein LLM aufhörte, Prosa zu schreiben, und begann, Design-Artefakte direkt auszuliefern.** Es ging viral. Aber es blieb closed-source, nur kostenpflichtig, nur cloudbasiert, gebunden an Anthropics Modell, Anthropics Skills, Anthropics Oberfläche. Kein Checkout, kein Self-Hosting, kein Vercel-Deploy, kein eigener Agent zum Einsetzen.
 
-Open Design (OD) ist die quelloffene Alternative. Dieselbe Schleife, dasselbe artefakt-zentrierte mentale Modell, ohne den Lock-in:
+OpenDesign (OD) ist die quelloffene Alternative. Dieselbe Schleife, dasselbe artefakt-zentrierte mentale Modell, ohne den Lock-in:
 
 - 🤖 **Agent-native, modellunabhängig.** Wir liefern keinen Agent. Die `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi`, die bereits in deinem `PATH` liegen, sind die Design-Engine. Mit einem Klick wechseln.
 - 🧠 **Markenreif von Haus aus.** Jedes Rendering liest die `DESIGN.md` des aktiven Pakets als zentralen Markenvertrag. 151 Designsystem-Pakete werden mit dem Repo ausgeliefert; ältere Pakete können nur aus `DESIGN.md` bestehen, neuere zusätzlich `manifest.json`, `tokens.css`, Komponenten, Assets und Herkunftsangaben enthalten. Lege einen Ordner ab, der Picker findet ihn.
@@ -261,7 +261,7 @@ Open Design (OD) ist die quelloffene Alternative. Dieselbe Schleife, dasselbe ar
 
 ### Vergleich
 
-| | Claude Design | Figma | Lovable / v0 / Bolt | **Open Design** |
+| | Claude Design | Figma | Lovable / v0 / Bolt | **OpenDesign** |
 |---|---|---|---|---|
 | Open Source | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | Self-Hosting / Desktop | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
@@ -278,7 +278,7 @@ Open Design (OD) ist die quelloffene Alternative. Dieselbe Schleife, dasselbe ar
 
 ### 🖥️ Die Desktop-App herunterladen (empfohlen — keine Konfiguration)
 
-Der schnellste Weg, Open Design zu nutzen. Kein Node, kein pnpm, kein Klonen.
+Der schnellste Weg, OpenDesign zu nutzen. Kein Node, kein pnpm, kein Klonen.
 
 - **macOS** (Apple Silicon · Intel x64) → [**open-design.ai**](https://open-design.ai/) oder [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Windows** (x64) → [**open-design.ai**](https://open-design.ai/) oder [GitHub Releases](https://github.com/nexu-io/open-design/releases)
@@ -288,7 +288,7 @@ Nach der Installation erkennt die App jedes Coding-Agent-CLI in deinem `PATH` un
 
 ### 🤖 In deinen Coding-Agent installieren (keine UI)
 
-Du kannst Open Design nutzen, ohne jemals die GUI zu öffnen — rufe es als Skill, Plugin oder MCP-Server innerhalb von Claude Code, Codex, Cursor, Copilot, OpenClaw, Antigravity, Hermes, Kimi und mehr auf.
+Du kannst OpenDesign nutzen, ohne jemals die GUI zu öffnen — rufe es als Skill, Plugin oder MCP-Server innerhalb von Claude Code, Codex, Cursor, Copilot, OpenClaw, Antigravity, Hermes, Kimi und mehr auf.
 
 ```bash
 # One-line install into the agent you're using:
@@ -303,7 +303,7 @@ Dann, innerhalb des Agents:
 > Use open-design to generate a landing page with the Linear design system
 ```
 
-In einem dateisystemgestützten lokalen CLI-Lauf kombiniert der Agent den gewählten funktionalen Skill oder die Designvorlage mit deiner `DESIGN.md`, schreibt die kanonischen Projektdateien und Open Design zeigt diese Dateien an. Ein BYOK-/Plain-API-Lauf ohne Dateisystemwerkzeuge gibt stattdessen genau einen vollständigen `<artifact>`-Block zurück.
+In einem dateisystemgestützten lokalen CLI-Lauf kombiniert der Agent den gewählten funktionalen Skill oder die Designvorlage mit deiner `DESIGN.md`, schreibt die kanonischen Projektdateien und OpenDesign zeigt diese Dateien an. Ein BYOK-/Plain-API-Lauf ohne Dateisystemwerkzeuge gibt stattdessen genau einen vollständigen `<artifact>`-Block zurück.
 
 ### 🐳 Mit Docker ausführen
 
@@ -343,13 +343,13 @@ Node `~24`, pnpm `10.33.x`. Windows-Nutzer, siehe [`docs/windows-troubleshooting
 2. **Ein Designer (oder der Agent) legt die Richtung fest.** Keine Marke? Wähle aus 5 kuratierten Richtungen. Du hast eine Marke? Lege einen Screenshot / eine URL ab → der Agent verbindet GitHub, importiert Figma und kodifiziert eine wiederverwendbare `DESIGN.md`.
 3. **Der Agent erstellt das erste Ergebnis.** Plugin + funktionaler Skill oder Designvorlage + `DESIGN.md` sind gebunden. Dateisystemgestützte CLI-Läufe schreiben kanonische Projektdateien; BYOK-/Plain-API-Läufe ohne Dateiwerkzeuge liefern einen vollständigen `<artifact>`-Block.
 4. **Übergabe an das Engineering.** Das Artefakt ist echtes HTML/CSS — lege es in Cursor, Codex oder Claude Code, um als Code weiterzubauen. Oder exportiere PPTX / PDF / MP4 direkt ins Marketing.
-5. **Open Design wird mit der Nutzung klüger.** Deine Screenshots, Schriften, Farbpaletten und bestätigten Artefakte sammeln sich als Voreinstellungen für die nächste Sitzung an. Weniger Nacharbeit, weniger Drift.
+5. **OpenDesign wird mit der Nutzung klüger.** Deine Screenshots, Schriften, Farbpaletten und bestätigten Artefakte sammeln sich als Voreinstellungen für die nächste Sitzung an. Weniger Nacharbeit, weniger Drift.
 
 ---
 
-## Open Design aus deinem Coding-Agent nutzen
+## OpenDesign aus deinem Coding-Agent nutzen
 
-Open Design liefert einen **stdio-MCP-Server** und **Installationsskripte pro Agent** aus. Jeder MCP-kompatible Agent in einem anderen Repo kann Dateien aus deinen lokalen Open-Design-Projekten direkt lesen — Token-CSS, JSX-Komponenten, Einstiegs-HTML — als eine strukturierte, nach Namen abfragbare API. Der Agent sieht immer die Live-Datei, nicht einen veralteten Export.
+OpenDesign liefert einen **stdio-MCP-Server** und **Installationsskripte pro Agent** aus. Jeder MCP-kompatible Agent in einem anderen Repo kann Dateien aus deinen lokalen Open-Design-Projekten direkt lesen — Token-CSS, JSX-Komponenten, Einstiegs-HTML — als eine strukturierte, nach Namen abfragbare API. Der Agent sieht immer die Live-Datei, nicht einen veralteten Export.
 
 ```bash
 # One-line install (16+ CLIs supported):
@@ -506,7 +506,7 @@ Vollständiger Feldsatz und Laufzeitvertrag → [`plugins/spec/SPEC.md`](../../p
 
 ### Ein Plugin beitragen
 
-1. Lege den Plugin-Ordner in [`plugins/community/`](../../plugins/community/) (Drittanbieter-Plugins) ab, oder — um es gebündelt mit Open Design auszuliefern — in die passende Stufe von [`plugins/_official/`](../../plugins/_official/).
+1. Lege den Plugin-Ordner in [`plugins/community/`](../../plugins/community/) (Drittanbieter-Plugins) ab, oder — um es gebündelt mit OpenDesign auszuliefern — in die passende Stufe von [`plugins/_official/`](../../plugins/_official/).
 2. Bestehe die Validierung: `od plugin validate`, `pnpm guard`, `pnpm --filter @open-design/plugin-runtime typecheck`.
 3. Fülle den PR mithilfe der Vorlage in [`plugins/spec/CONTRIBUTING.md`](../../plugins/spec/CONTRIBUTING.md) (ID, Version, Spur, Modus, Capabilities, Trigger-Beispiele; füge für visuelle Plugins einen Screenshot / eine Vorschau bei).
 4. Um in einer externen Registry zu veröffentlichen (skills.sh / ClawHub / eigenständiges GitHub) → [`plugins/spec/PUBLISHING-REGISTRIES.md`](../../plugins/spec/PUBLISHING-REGISTRIES.md).
@@ -570,7 +570,7 @@ Vollständige Architektur → [`docs/architecture.md`](../../docs/architecture.m
 - [x] Sidecar-Protokoll + Electron-Desktop + IPC-Automatisierung
 - [x] Artefakt-Lint-API + 5-dimensionales Selbstkritik-Pre-Emit-Gate
 - [x] **0.8.0** — Plugin-Marktplatz-Infrastruktur (261 offizielle Plugins, Manifest-Spezifikation, Installationsskripte pro Agent)
-- [x] **0.9.0** — Open Design Cloud (offizieller Model Router in die App integriert: keine Konfiguration, Ein-Klick-Anmeldung)
+- [x] **0.9.0** — OpenDesign Cloud (offizieller Model Router in die App integriert: keine Konfiguration, Ein-Klick-Anmeldung)
 - [x] Gepackte Electron-Builds — macOS (Apple Silicon + Intel) + Windows (x64) + Linux-AppImage (optionale Spur)
 - [ ] Kommentar-Modus für chirurgische Bearbeitungen — teilweise ausgeliefert; zuverlässiges gezieltes Patchen in Arbeit
 - [ ] KI-ausgegebenes Tweaks-Panel-UX — noch nicht implementiert
@@ -598,7 +598,7 @@ Die Labels [`good-first-issue`](https://github.com/nexu-io/open-design/issues?q=
 
 ## Mitwirken
 
-Open Design kommt voran, weil Mitwirkende — Designer, Ingenieure, Prompt-Autoren — immer wieder auftauchen. Viele der meistgenutzten Skills, Designsysteme und Plugins wurden von Menschen außerhalb des Kernteams geschrieben.
+OpenDesign kommt voran, weil Mitwirkende — Designer, Ingenieure, Prompt-Autoren — immer wieder auftauchen. Viele der meistgenutzten Skills, Designsysteme und Plugins wurden von Menschen außerhalb des Kernteams geschrieben.
 
 ### 🎯 Wo anfangen (maximaler Hebel, minimale Änderung)
 
@@ -635,9 +635,9 @@ gh pr create --fill
 
 Vollständiger agentenfreundlicher Beitragsablauf, Code-Stil und PR-Maßstab → [English](../../CONTRIBUTING.md) ([Deutsch](CONTRIBUTING.de.md) · [Français](CONTRIBUTING.fr.md) · [简体中文](CONTRIBUTING.zh-CN.md) · [日本語](CONTRIBUTING.ja-JP.md) · [Português](CONTRIBUTING.pt-BR.md)).
 
-### 🏅 Open Design Fellow-Programm
+### 🏅 OpenDesign Fellow-Programm
 
-Wir rekrutieren weltweit **Open Design Fellows** — Fellows gestalten das Produkt gemeinsam mit dem Kernteam, vertreten Open Design offiziell in ihrer Region und lassen die Community vor Ort wachsen, unterstützt durch finanzielle Förderung ($1,000 / MR), kostenlose LLM-Credits und einen direkten Review-Track. Details → [`MAINTAINERS.md`](../../MAINTAINERS.md) und die Ankündigung auf [Discord](https://discord.gg/mHAjSMV6gz).
+Wir rekrutieren weltweit **OpenDesign Fellows** — Fellows gestalten das Produkt gemeinsam mit dem Kernteam, vertreten OpenDesign offiziell in ihrer Region und lassen die Community vor Ort wachsen, unterstützt durch finanzielle Förderung ($1,000 / MR), kostenlose LLM-Credits und einen direkten Review-Track. Details → [`MAINTAINERS.md`](../../MAINTAINERS.md) und die Ankündigung auf [Discord](https://discord.gg/mHAjSMV6gz).
 
 ---
 
@@ -671,7 +671,7 @@ Maintainer-Regeln, Beförderungskriterien und das Ausstiegsprotokoll → [`MAINT
 Dank an alle, die teilgenommen haben — Code, Doku, Feedback, ein scharfsinniges Issue, einen neuen Skill, ein neues Designsystem.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-08-04" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-08-04" alt="OpenDesign contributors" />
 </a>
 
 ---
@@ -679,7 +679,7 @@ Dank an alle, die teilgenommen haben — Code, Doku, Feedback, ein scharfsinnige
 ## Repository-Aktivität
 
 <picture>
-  <img alt="Open Design — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
+  <img alt="OpenDesign — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
 </picture>
 
 Das obige SVG wird täglich von [`.github/workflows/metrics.yml`](../../.github/workflows/metrics.yml) mit [`lowlighter/metrics`](https://github.com/lowlighter/metrics) neu generiert.
@@ -689,16 +689,16 @@ Das obige SVG wird täglich von [`.github/workflows/metrics.yml`](../../.github/
 ## Gib uns einen Stern
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star Open Design on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
+  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star OpenDesign on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
 </p>
 
 Wenn dir das dreißig Minuten gespart hat, gib ihm ein ★. Sterne zahlen keine Miete — aber sie sagen dem nächsten Designer, Agent und Mitwirkenden, dass dieses Experiment ihre Aufmerksamkeit wert ist. Ein Klick, drei Sekunden, ein echtes Signal.
 
-<a href="https://star-history.com/#nexu-io/open-design&Date">
+<a href="https://star-history.dera.page/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-08-04" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-08-04" />
+    <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+    <img alt="OpenDesign star history" src="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
   </picture>
 </a>
 
@@ -716,7 +716,7 @@ Wenn dir das dreißig Minuten gespart hat, gib ihm ein ★. Sterne zahlen keine 
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | Die Daemon- + Adapter-Architektur — PATH-Scan-Agent-Erkennung, lokaler Daemon als einziger privilegierter Prozess. |
 | [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | Historische Quelle des ursprünglichen 9-teiligen `DESIGN.md`-Schemas und von 70 upstream-abgeleiteten Systemen; heutige Pakete können diese Basis erweitern. |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | Quelle der 57 Design-Skills, die unter `design-systems/` hinzugefügt wurden. |
-| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | Das HTML→MP4-Motion-Graphics-Framework, integriert als vollwertiges `hyperframes-html` in Open Design. |
+| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | Das HTML→MP4-Motion-Graphics-Framework, integriert als vollwertiges `hyperframes-html` in OpenDesign. |
 | [Claude Code skills][skill] | Die `SKILL.md`-Konvention, die wir wortgetreu übernehmen. |
 
 Detaillierte Herkunft → [`docs/references.md`](../../docs/references.md).

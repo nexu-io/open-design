@@ -25,6 +25,7 @@ const fetchChatRunStatus = vi.fn();
 const listActiveChatRuns = vi.fn();
 const listProjectRuns = vi.fn();
 const reattachDaemonRun = vi.fn();
+const streamViaDaemon = vi.fn();
 const deleteConversation = vi.fn();
 const createConversation = vi.fn();
 const patchConversation = vi.fn();
@@ -40,7 +41,12 @@ const saveTabs = vi.fn();
 const chatPaneProps: {
   onDeleteConversation?: (id: string) => Promise<void> | void;
   onForkFromMessage?: (message: ChatMessage) => Promise<void> | void;
-  onSubmitQuestionForm?: (text: string) => void;
+  onSubmitQuestionForm?: (
+    text: string,
+    attachments?: unknown[],
+    context?: unknown,
+    sourceAssistantMessageId?: string,
+  ) => boolean | Promise<boolean>;
   questionFormSubmitDisabled?: boolean;
   activeConversationId?: string | null;
   conversations?: Array<{ id: string; title?: string | null }>;
@@ -80,7 +86,7 @@ vi.mock('../../src/providers/daemon', () => ({
   listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
   publishDaemonRunFinishedEvent: vi.fn(),
   reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),
-  streamViaDaemon: vi.fn(),
+  streamViaDaemon: (...args: unknown[]) => streamViaDaemon(...args),
 }));
 
 vi.mock('../../src/providers/registry', () => ({
@@ -129,7 +135,12 @@ vi.mock('../../src/components/ChatPane', () => ({
   ChatPane: (props: {
     onDeleteConversation?: (id: string) => Promise<void> | void;
     onForkFromMessage?: (message: ChatMessage) => Promise<void> | void;
-    onSubmitQuestionForm?: (text: string) => void;
+    onSubmitQuestionForm?: (
+      text: string,
+      attachments?: unknown[],
+      context?: unknown,
+      sourceAssistantMessageId?: string,
+    ) => boolean | Promise<boolean>;
     questionFormSubmitDisabled?: boolean;
     activeConversationId?: string | null;
     conversations?: Array<{ id: string; title?: string | null }>;
@@ -395,6 +406,51 @@ describe('ProjectView conversation delete', () => {
     await waitFor(() => expect(chatPaneProps.onSubmitQuestionForm).toBeDefined());
     await waitFor(() => expect(chatPaneProps.questionFormSubmitDisabled).toBe(false));
     expect(fileWorkspaceProps.questionForm).toBeUndefined();
+  });
+
+  it('passes the daemon-issued task handle when answering its inline question form', async () => {
+    const assistantMessage: ChatMessage = {
+      id: 'assistant-1',
+      role: 'assistant',
+      content: '<question-form id="task-type">{"questions":[]}</question-form>',
+      runId: 'run-request',
+      runStatus: 'succeeded',
+      strategyTaskExecutionId: 'task-strategy-1',
+      taskAnalytics: {
+        taskExecutionId: 'analytics-task-1',
+        taskRunIndex: 0,
+      },
+    };
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation 1' }]);
+    listMessages.mockResolvedValue([assistantMessage]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    reattachDaemonRun.mockResolvedValue(undefined);
+    streamViaDaemon.mockResolvedValue(undefined);
+
+    renderProjectView(vi.fn());
+    await waitFor(() => expect(chatPaneProps.onSubmitQuestionForm).toBeDefined());
+
+    await act(async () => {
+      await expect(chatPaneProps.onSubmitQuestionForm!(
+        'Prototype',
+        [],
+        undefined,
+        'assistant-1',
+      )).resolves.toBe(true);
+    });
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(streamViaDaemon.mock.calls[0]?.[0]).toMatchObject({
+      taskExecutionId: 'task-strategy-1',
+    });
   });
 });
 

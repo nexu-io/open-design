@@ -1,0 +1,112 @@
+{
+  "provenance": "test_synthetic",
+  "containsSensitiveContent": false,
+  "cases": {
+    "child_success": [
+      { "type": "system", "subtype": "init", "session_id": "session-synthetic" },
+      {
+        "type": "assistant",
+        "parent_tool_use_id": null,
+        "message": {
+          "id": "main-delegate",
+          "content": [
+            { "type": "tool_use", "id": "task-success", "name": "Task", "input": {} }
+          ],
+          "stop_reason": "tool_use"
+        }
+      },
+      {
+        "type": "assistant",
+        "parent_tool_use_id": "task-success",
+        "message": {
+          "id": "child-success",
+          "content": [{ "type": "text", "text": "sanitized child output" }],
+          "stop_reason": "end_turn"
+        }
+      },
+      {
+        "type": "assistant",
+        "parent_tool_use_id": null,
+        "message": {
+          "id": "main-final",
+          "content": [{ "type": "text", "text": "sanitized parent output" }],
+          "stop_reason": "end_turn"
+        }
+      }
+    ],
+    "child_failure_parent_recovers": [
+      {
+        "type": "assistant",
+        "parent_tool_use_id": null,
+        "message": {
+          "id": "main-delegate-failure",
+          "content": [
+            { "type": "tool_use", "id": "task-failure", "name": "Task", "input": {} }
+          ],
+          "stop_reason": "tool_use"
+        }
+      },
+      {
+        "type": "assistant",
+        "parent_tool_use_id": "task-failure",
+        "error": "synthetic_child_failure",
+        "message": {
+          "id": "child-failure",
+          "content": [],
+          "stop_reason": null
+        }
+      },
+      {
+        "type": "assistant",
+        "parent_tool_use_id": null,
+        "message": {
+          "id": "main-recovered",
+          "content": [{ "type": "text", "text": "sanitized recovery" }],
+          "stop_reason": "end_turn"
+        }
+      }
+    ],
+    "multiple_children": [
+      {
+        "type": "assistant",
+        "parent_tool_use_id": null,
+        "message": {
+          "id": "main-multiple",
+          "content": [
+            { "type": "tool_use", "id": "task-a", "name": "Task", "input": {} },
+            { "type": "tool_use", "id": "task-b", "name": "Task", "input": {} }
+          ],
+          "stop_reason": "tool_use"
+        }
+      },
+      {
+        "type": "assistant",
+        "parent_tool_use_id": "task-a",
+        "message": { "id": "child-a", "content": [], "stop_reason": "end_turn" }
+      },
+      {
+        "type": "assistant",
+        "parent_tool_use_id": "task-b",
+        "message": { "id": "child-b", "content": [], "stop_reason": "end_turn" }
+      }
+    ],
+    "incomplete_child": [
+      {
+        "type": "assistant",
+        "parent_tool_use_id": null,
+        "message": {
+          "id": "main-incomplete",
+          "content": [
+            { "type": "tool_use", "id": "task-incomplete", "name": "Task", "input": {} }
+          ],
+          "stop_reason": "tool_use"
+        }
+      },
+      {
+        "type": "assistant",
+        "parent_tool_use_id": "task-incomplete",
+        "message": { "id": "child-incomplete", "content": [], "stop_reason": null }
+      }
+    ]
+  }
+}

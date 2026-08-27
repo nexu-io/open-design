@@ -114,7 +114,7 @@ async function stubEmptyProjectsNewProjectData(page: Page): Promise<void> {
 
 async function openNewProjectFromEmptyProjects(page: Page): Promise<void> {
   await page.goto('/projects', { waitUntil: 'domcontentloaded' });
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0, { timeout: 15_000 });
   await expect(page.locator('.designs-empty-state')).toBeVisible();
   await page.getByTestId('designs-empty-new-project').click();
 
@@ -399,13 +399,13 @@ test('[P0] UI-created Personal project recovers preview and write authority afte
     // not that ephemeral witness — must reconnect the already-ready artifact.
     //
     // Reload only reaches `domcontentloaded` while the dynamic App boot shell
-    // (`Loading Open Design…`) and the project-route workspace-context gate
+    // (`Loading OpenDesign…`) and the project-route workspace-context gate
     // (`Loading workspace…`) may still own the page. Wait those out with the
     // suite's long budget before asserting the fail-closed workspace chrome —
     // the default expect timeout is 10s and is too short under CI contention.
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page
-      .getByText('Loading Open Design…')
+      .getByText('Loading OpenDesign…')
       .waitFor({ state: 'hidden', timeout: T.long })
       .catch(() => {});
     await expect(page.getByText('Loading workspace…')).toHaveCount(0, { timeout: T.long });
@@ -616,6 +616,27 @@ test('[P1] project detail composer design system picker switches the active proj
   const body = request.postDataJSON() as { designSystemId?: string | null };
   expect(body.designSystemId).toBe('editorial-noir');
   await expect(trigger).toHaveAccessibleName(/Editorial Noir/i);
+});
+
+test('[P1] design system create Back restores the originating project conversation', async ({ page }) => {
+  await page.route('**/api/design-systems', async (route) => {
+    await route.fulfill({ json: { designSystems: DESIGN_SYSTEMS } });
+  });
+
+  await page.goto('/');
+  await createProject(page, 'Design system create return target');
+  await expectWorkspaceReady(page);
+
+  const origin = new URL(page.url());
+  expect(origin.pathname).toMatch(/^\/projects\/[^/]+\/conversations\/[^/]+$/);
+
+  await projectDesignSystemTrigger(page).click();
+  await page.getByTestId('project-ds-picker-create').click();
+  await expect(page).toHaveURL(/\/design-systems\/create$/);
+
+  await page.getByRole('button', { name: /^(Back|返回)$/ }).first().click();
+  await expect(page).toHaveURL(origin.toString());
+  await expectWorkspaceReady(page);
 });
 
 test('[P0] @critical project detail composer design system switch carries into the next run request', async ({ page }) => {
@@ -1293,7 +1314,7 @@ async function wireTeamRunBalanceFixtures(
     ...AGENTS,
     {
       id: 'amr',
-      name: 'Open Design Cloud',
+      name: 'OpenDesign Cloud',
       bin: 'amr',
       available: true,
       version: 'cloud',
@@ -2878,7 +2899,7 @@ test('[P1] read-only project viewers do not see conversation fork actions', asyn
 
   await page.goto(`/projects/${projectId}/conversations/${conversationId}`);
   await page
-    .getByText('Loading Open Design…')
+    .getByText('Loading OpenDesign…')
     .waitFor({ state: 'hidden', timeout: T.long })
     .catch(() => {});
   const showChat = page.getByTestId('workspace-focus-toggle');
@@ -4143,7 +4164,7 @@ async function routeComposerPlusFixtures(page: Page) {
 
 async function expectWorkspaceReady(page: Page) {
   await expect(page).toHaveURL(/\/projects\//);
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long }).catch(() => {});
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long }).catch(() => {});
   await dismissPrivacyDialog(page);
   await expect(page.getByTestId('project-title')).toBeVisible();
   await expect(page.getByTestId('chat-composer')).toBeVisible();
@@ -4191,7 +4212,7 @@ async function openHandoffCliTab(page: Page): Promise<Locator> {
 }
 
 async function dismissPrivacyDialog(page: Page) {
-  const privacyRegion = page.getByRole('region', { name: /Help us improve Open Design/i });
+  const privacyRegion = page.getByRole('region', { name: /Help us improve OpenDesign/i });
   if (await privacyRegion.isVisible().catch(() => false)) {
     await privacyRegion.getByRole('button', { name: /I get it|not now|got it/i }).click();
     await expect(privacyRegion).toBeHidden();

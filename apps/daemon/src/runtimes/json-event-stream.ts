@@ -1,3 +1,8 @@
+import {
+  createOpenCodeRootTaskEvidenceCollector,
+  type OpenCodeTaskTerminalCandidate,
+} from './opencode-child-evidence.js';
+
 type JsonObject = Record<string, unknown>;
 type StreamEvent = Record<string, unknown>;
 type StreamEventHandler = (event: StreamEvent) => void;
@@ -7,6 +12,7 @@ type ParserState = {
   cursorTextSoFar: string;
   cursorTurnStart: number;
   openCodeToolUses: Set<string>;
+  openCodeToolResults: Set<string>;
   codexToolUses: Set<string>;
   codexErrorEmitted: boolean;
   codexPreviousEventWasAgentMessage: boolean;
@@ -153,6 +159,48 @@ function formatOpenCodeUsage(tokens: unknown): Usage | null {
   return Object.keys(usage).length > 0 ? usage : null;
 }
 
+function isPowerShellErrorRecord(toolName: string, output: unknown): boolean {
+  const normalizedTool = toolName.toLowerCase();
+  if (normalizedTool !== 'bash' && normalizedTool !== 'shell') return false;
+  if (typeof output !== 'string') return false;
+
+  // A PowerShell non-terminating error can leave the shell process at exit 0.
+  // Require both canonical ErrorRecord fields so ordinary output containing a
+  // word such as "failed" does not become an error result.
+  return (
+    /(?:^|\r?\n)\s*\+\s*CategoryInfo\s*:/u.test(output) &&
+    /(?:^|\r?\n)\s*\+\s*FullyQualifiedErrorId\s*:/u.test(output)
+  );
+}
+
+function openCodeToolResult(
+  toolName: string,
+  statePart: JsonObject,
+): { content: string; isError: boolean } | null {
+  const status = typeof statePart.status === 'string' ? statePart.status.toLowerCase() : '';
+  if (status !== 'completed' && status !== 'error' && status !== 'failed') return null;
+
+  const metadata = isRecord(statePart.metadata) ? statePart.metadata : {};
+  const exitCodes = [statePart.exit, statePart.exitCode, metadata.exit];
+  const hasNonZeroExit = exitCodes.some(
+    (exitCode) => typeof exitCode === 'number' && Number.isFinite(exitCode) && exitCode !== 0,
+  );
+  const explicitError =
+    (typeof statePart.error === 'string' && statePart.error.trim().length > 0) ||
+    (isRecord(statePart.error) && Object.keys(statePart.error).length > 0)
+      ? statePart.error
+      : null;
+  const isError =
+    status === 'error' ||
+    status === 'failed' ||
+    explicitError !== null ||
+    hasNonZeroExit ||
+    isPowerShellErrorRecord(toolName, statePart.output);
+  const contentSource = explicitError ?? statePart.output;
+
+  return { content: stringifyContent(contentSource), isError };
+}
+
 function handleOpenCodeEvent(obj: unknown, onEvent: StreamEventHandler, state: ParserState): boolean {
   if (!isRecord(obj)) return false;
   const part = isRecord(obj.part) ? obj.part : {};
@@ -188,12 +236,14 @@ function handleOpenCodeEvent(obj: unknown, onEvent: StreamEventHandler, state: P
         input: safeParseJson(statePart?.input) ?? statePart?.input ?? null,
       });
     }
-    if (statePart?.status === 'completed') {
+    const result = statePart ? openCodeToolResult(part.tool, statePart) : null;
+    if (result && !state.openCodeToolResults.has(key)) {
+      state.openCodeToolResults.add(key);
       onEvent({
         type: 'tool_result',
         toolUseId: part.callID,
-        content: stringifyContent(statePart.output),
-        isError: false,
+        content: result.content,
+        isError: result.isError,
       });
     }
     return true;
@@ -870,12 +920,26 @@ function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: Pars
   return false;
 }
 
-export function createJsonEventStreamHandler(kind: ParserKind, onEvent: StreamEventHandler) {
+export interface JsonEventStreamHandlerOptions {
+  openCodeChildEvidence?: {
+    rootSessionId?: string;
+    cliVersion: string;
+    onCandidate: (candidate: OpenCodeTaskTerminalCandidate) => void;
+    now?: () => number;
+  };
+}
+
+export function createJsonEventStreamHandler(
+  kind: ParserKind,
+  onEvent: StreamEventHandler,
+  options: JsonEventStreamHandlerOptions = {},
+) {
   let buffer = '';
   const state: ParserState = {
     cursorTextSoFar: '',
     cursorTurnStart: 0,
     openCodeToolUses: new Set<string>(),
+    openCodeToolResults: new Set<string>(),
     codexToolUses: new Set<string>(),
     codexErrorEmitted: false,
     codexPreviousEventWasAgentMessage: false,
@@ -887,6 +951,9 @@ export function createJsonEventStreamHandler(kind: ParserKind, onEvent: StreamEv
     artifactOpenCandidate: '',
     pendingArtifactText: '',
   };
+  const openCodeChildEvidence = kind === 'opencode' && options.openCodeChildEvidence
+    ? createOpenCodeRootTaskEvidenceCollector(options.openCodeChildEvidence)
+    : null;
 
   function handleLine(line: string): void {
     let obj: unknown;
@@ -896,6 +963,8 @@ export function createJsonEventStreamHandler(kind: ParserKind, onEvent: StreamEv
       onEvent({ type: 'raw', line });
       return;
     }
+
+    openCodeChildEvidence?.observe(obj);
 
     if (kind === 'opencode' && handleOpenCodeEvent(obj, onEvent, state)) return;
     if (kind === 'gemini' && handleGeminiEvent(obj, onEvent, state)) return;
@@ -924,5 +993,17 @@ export function createJsonEventStreamHandler(kind: ParserKind, onEvent: StreamEv
     flushPendingArtifactText(state, onEvent);
   }
 
-  return { feed, flush };
+  function childEvidenceCoverage(streamComplete: boolean) {
+    return openCodeChildEvidence?.coverage(streamComplete);
+  }
+
+  // The terminal candidates are the only carrier of the child id, its parent
+  // binding, and the native Task time window. The close handler needs them
+  // after the stream is gone in order to request each child's sanitized
+  // export, so they are read back here rather than re-derived.
+  function childEvidenceCandidates(): readonly OpenCodeTaskTerminalCandidate[] {
+    return openCodeChildEvidence?.candidates() ?? [];
+  }
+
+  return { feed, flush, childEvidenceCoverage, childEvidenceCandidates };
 }

@@ -604,11 +604,15 @@ describe('brand routes', () => {
       createdAt: 1,
       updatedAt: 1,
     });
-    // The agent paused on an anti-bot wall and asked the user via a question form.
+    // The agent paused on an anti-bot wall and asked the user via a question
+    // form. The body has to be a RENDERABLE form (JSON with a non-empty
+    // `questions` array): needs_input promises the user something to answer, so
+    // the latch requires a form the UI can actually draw, not a bare marker.
     upsertMessage(db, 'conversation-blocked', {
       id: 'message-blocked',
       role: 'assistant',
-      content: 'Please complete the Cloudflare check. <question-form><question>Done?</question></question-form>',
+      content: 'Please complete the Cloudflare check. '
+        + '<question-form>{"questions":[{"id":"done","label":"Done?"}]}</question-form>',
       runId: 'run-blocked',
       runStatus: 'running',
       startedAt: 1,

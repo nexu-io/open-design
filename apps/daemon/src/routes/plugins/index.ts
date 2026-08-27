@@ -18,7 +18,7 @@ import {
 } from '../../collab/team-resource-state.js';
 import {
   enforceVerifiedWorkspaceResourceMutation,
-  resolveOptionalWorkspaceRequestAuthority,
+  resolveOptionalLocalWorkspaceRequestAuthority,
   type VerifyWorkspaceRequestAuthority,
 } from '../../collab/workspace-resource-mutation.js';
 import {
@@ -281,12 +281,28 @@ export interface RegisterPluginRoutesDeps {
   helpers: PluginRouteHelpers;
 }
 
+function duplicatedProjectKind(plugin: InstalledPluginLike): ProjectMetadata['kind'] {
+  const od = plugin.manifest?.['od'];
+  const mode = od && typeof od === 'object'
+    ? (od as { mode?: unknown }).mode
+    : null;
+  switch (mode) {
+    case 'deck':
+    case 'image':
+    case 'video':
+    case 'audio':
+    case 'brand':
+    case 'template':
+    case 'prototype':
+      return mode;
+    default:
+      return 'prototype';
+  }
+}
+
 export function registerPluginEventRoutes(app: Express, deps: RegisterPluginEventRoutesDeps): void {
   const resolveEventScope = async (req: Request, res: Response) => {
-    const authority = await resolveOptionalWorkspaceRequestAuthority(
-      req,
-      deps.verifyWorkspaceRequestAuthority,
-    );
+    const authority = resolveOptionalLocalWorkspaceRequestAuthority(req);
     if (!authority.ok) {
       deps.http.sendApiError(
         res,
@@ -386,10 +402,7 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
     verifyAuthority: VerifyWorkspaceRequestAuthority | undefined =
       deps.verifyWorkspaceRequestAuthority,
   ): Promise<WorkspaceCollabContext | null | undefined> => {
-    const authority = await resolveOptionalWorkspaceRequestAuthority(
-      req,
-      verifyAuthority,
-    );
+    const authority = resolveOptionalLocalWorkspaceRequestAuthority(req);
     if (!authority.ok) {
       helpers.sendApiError(
         res,
@@ -582,7 +595,9 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
         db,
         req.params.id,
         'delete',
-        deps.verifyWorkspaceRequestAuthority,
+        authority
+          ? async () => ({ ok: true as const, context: authority })
+          : undefined,
       )) return;
       const result = await plugins.uninstallPlugin(db, req.params.id, paths.PLUGIN_REGISTRY_ROOTS); if (!result.ok && !result.removedFolder) return res.status(404).json({ error: 'plugin not found', warning: result.warning }); res.json(result);
     } catch (err) { res.status(500).json({ error: String(err) }); }
@@ -609,7 +624,9 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
       db,
       req.params.id,
       'writeFiles',
-      deps.verifyWorkspaceRequestAuthority,
+      authority
+        ? async () => ({ ok: true as const, context: authority })
+        : undefined,
     )) return;
     return helpers.installOrUpgradePlugin(req, res, 'upgrade', authority);
   });
@@ -719,7 +736,11 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
       const conversationId = ids.randomId();
       cleanupProjectId = projectId;
       const metadata: ProjectMetadata = {
-        kind: 'prototype',
+        // Preserve the plugin's artifact contract. Treating every duplicate as
+        // a prototype made deck behavior depend on the copied HTML happening
+        // to match the viewer's heuristic; fixed-canvas/vertical deck examples
+        // then opened without slide chrome or a thumbnail rail.
+        kind: duplicatedProjectKind(plugin),
         templateId: `plugin:${plugin.id}`,
         templateLabel: plugin.title || plugin.id,
         duplicatedFromPluginId: plugin.id,

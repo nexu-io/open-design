@@ -22,17 +22,17 @@ export const ptBr: DeepseekCopyOverride = {
     'Feche o ciclo: anote páginas reais, compile assets de movimento e traga sua biblioteca de skills junto.',
     'Faça do próprio harness um workspace de design: painéis de preview, bancadas de trabalho e quadros ao lado do chat.',
   ],
-  collectionCloserHeading: 'Pule a configuração. Projete com o DeepSeek Harness dentro do Open Design',
+  collectionCloserHeading: 'Pule a configuração. Projete com o DeepSeek Harness dentro do OpenDesign',
   filterAll: 'Tudo',
   collectionCloserBody:
-    'O Open Design é o workspace de design open source e agent-native que roda em volta do DeepSeek Harness. Ele mantém seus sistemas, skills e templates consistentes, então o agente entrega um trabalho que é seu.',
+    'O OpenDesign é o workspace de design open source e agent-native que roda em volta do DeepSeek Harness. Ele mantém seus sistemas, skills e templates consistentes, então o agente entrega um trabalho que é seu.',
 
   categoryVision: 'Visão & Entrada',
   categoryCanvas: 'Canvas & UI Generativa',
   categoryWorkflow: 'Fluxo de Design',
   categoryWorkspace: 'Workspace & Preview',
 
-  ctaDownload: 'Baixar o Open Design',
+  ctaDownload: 'Baixar o OpenDesign',
   ctaStarList: 'Dar estrela no DeepSeek Harness',
   ctaGuide: 'Como fazer design com o DeepSeek Harness',
   ctaBrowseAll: 'Ver todos os plugins',
@@ -71,9 +71,9 @@ export const ptBr: DeepseekCopyOverride = {
   detailMoreOnList: 'Mais no repositório do DeepSeek Harness',
   detailRelated: 'Mais plugins de design para o DeepSeek Harness',
   finalEyebrow: 'Próximo passo',
-  detailCloserHeading: 'Projete com o Open Design, sem a configuração',
+  detailCloserHeading: 'Projete com o OpenDesign, sem a configuração',
   detailCloserBody:
-    'Instale este plugin por conta própria ou rode uma camada de design curada em volta do DeepSeek Harness com o Open Design. Use sua própria chave e seja dono do resultado.',
+    'Instale este plugin por conta própria ou rode uma camada de design curada em volta do DeepSeek Harness com o OpenDesign. Use sua própria chave e seja dono do resultado.',
 
   skills: {
     modlens: {

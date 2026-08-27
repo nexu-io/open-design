@@ -26,6 +26,8 @@ export interface ConsumeInviteContinuationOptions {
   fetch?: typeof fetch;
   /** Injectable for tests; defaults to reading ~/.amr / env. */
   readSession?: typeof readVelaControlApiContext;
+  /** Settings-backed AMR environment selected by the desktop app. */
+  configuredEnv?: Record<string, string>;
   timeoutMs?: number;
 }
 
@@ -45,7 +47,8 @@ export async function consumeInviteContinuation(
   const trimmed = nonce.trim();
   if (!trimmed) return { ok: false, status: 400, error: 'missing_nonce' };
 
-  const session = readSession();
+  const configuredEnv = options.configuredEnv ?? {};
+  const session = readSession(process.env, configuredEnv);
   if (!session || !session.controlKey || !session.apiUrl) {
     return { ok: false, status: 401, error: 'no_session' };
   }
@@ -67,7 +70,7 @@ export async function consumeInviteContinuation(
     };
     return {
       ok: true,
-      context: mapVelaWorkspaceContext(body.currentWorkspaceContext),
+      context: mapVelaWorkspaceContext(body.currentWorkspaceContext, configuredEnv),
       workspaceMemberId: typeof body.workspaceMemberId === 'string' ? body.workspaceMemberId : '',
     };
   } catch {

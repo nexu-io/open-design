@@ -4,26 +4,26 @@ Status: active product and protocol contract
 
 Date: 2026-08-14
 
-The selected architecture is not an Open Design-packaged SDK carrier. It uses
-the user's official `dsh` installation plus an Open Design profile bundle.
+The selected architecture is not an OpenDesign-packaged SDK carrier. It uses
+the user's official `dsh` installation plus an OpenDesign profile bundle.
 
 ## 1. Product outcome
 
-Open Design integrates DeepSeek Harness like Claude Code or Codex: the user
-installs and owns the official coding-agent CLI, while Open Design detects and
+OpenDesign integrates DeepSeek Harness like Claude Code or Codex: the user
+installs and owns the official coding-agent CLI, while OpenDesign detects and
 launches it.
 
 The desired user experience is:
 
 1. The user installs the official `@deepseek-ai/dsh` package.
-2. Open Design installs or detects an OD-specific profile named `open-design`.
+2. OpenDesign installs or detects an OD-specific profile named `open-design`.
 3. The user selects **DeepSeek Harness** from the normal coding-agent picker.
 4. Harness creates files in the selected OD project; OD detects, previews, and
    delivers those files through its existing artifact path.
 5. A later OD turn starts a new process, resumes the same Harness session, and
    modifies the existing artifact without replaying the whole transcript.
 
-The stable Open Design runtime identity is:
+The stable OpenDesign runtime identity is:
 
 - runtime id: `deepseek-harness`
 - display name: `DeepSeek Harness`
@@ -44,7 +44,7 @@ This adapter remains distinct from the existing `deepseek` TUI adapter.
 - the Harness home and managed credential document;
 - native session record formats and interrupted-tail recovery.
 
-### Open Design owns
+### OpenDesign owns
 
 - daemon discovery and launch of the user's `dsh`;
 - the `open-design` profile bundle and its versioned stdio contract;
@@ -54,7 +54,7 @@ This adapter remains distinct from the existing `deepseek` TUI adapter.
 - product guidance, profile compatibility checks, and explicit one-click
   profile installation or repair.
 
-### Open Design explicitly does not own
+### OpenDesign explicitly does not own
 
 - a copy of `dsh`, Node, or the Harness dependency closure;
 - a fork of the Harness agent loop or session format;
@@ -64,9 +64,9 @@ This adapter remains distinct from the existing `deepseek` TUI adapter.
 
 This boundary avoids the approximately 174 MB experimental single-executable
 carrier and avoids turning Windows runtime construction, signing, and updates
-into an Open Design responsibility.
+into an OpenDesign responsibility.
 
-## 3. Why an Open Design profile bundle is needed
+## 3. Why an OpenDesign profile bundle is needed
 
 Official Harness profiles are supported composition points under the Harness
 home. A bundle is an installable npm package that contributes a Cordis patch
@@ -106,7 +106,7 @@ The profile bundle is installed into the user's official Harness installation:
 dsh plugin --profile open-design add <pinned OD bundle package>
 ```
 
-The source lives in the Open Design repository so the host types, fake runtime,
+The source lives in the OpenDesign repository so the host types, fake runtime,
 profile implementation, and protocol fixtures change atomically. Its package
 identity is `@open-design/dsh-runtime`, but end-user setup does not require a
 public registry release: each packaged OD build carries an exact packed
@@ -325,7 +325,7 @@ The initial product proof is intentionally artifact-oriented:
 
 ## 9. Event normalization
 
-| Profile frame | Open Design event |
+| Profile frame | OpenDesign event |
 | --- | --- |
 | `thinking` | `thinking_start`, then `thinking_delta` |
 | `text` | `text_delta` |
@@ -454,4 +454,4 @@ The complete design is ready when:
   credential delegation, and cancellation pass shared fixtures;
 - macOS, Linux, and Windows pass process-tree and two-process resume smoke;
 - a credentialed two-turn artifact flow succeeds without committing secrets;
-- no Harness runtime is bundled into Open Design.
+- no Harness runtime is bundled into OpenDesign.
