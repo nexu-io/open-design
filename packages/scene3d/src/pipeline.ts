@@ -1920,6 +1920,14 @@ export async function compile(
           frameCount: proofImages.length,
           turntable: proofOpts.turntable !== false,
           authoredCamera: proofOpts.respectSceneCamera === true,
+          // The runner MEASURED the placed camera's pose, so an authored still
+          // gets an honest compass name instead of silence.
+          ...(census?.camera.azimuthDeg !== undefined
+            ? { authoredAzimuthDeg: census.camera.azimuthDeg }
+            : {}),
+          ...(census?.camera.elevationDeg !== undefined
+            ? { authoredElevationDeg: census.camera.elevationDeg }
+            : {}),
         });
 
 

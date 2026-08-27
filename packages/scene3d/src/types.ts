@@ -910,6 +910,16 @@ export interface CensusCamera {
    * keeps their classification exactly what it was.
    */
   staging?: boolean;
+  /**
+   * The render camera's MEASURED pose about the subject centre, in the same
+   * convention as `read/views.ts` (azimuth 0 = −Y = front, +az toward +X,
+   * elevation above the XY horizon). Lets an author-placed camera — whose pose
+   * the orbit math never derived — still carry an honest compass name. Absent
+   * on a census with no camera, one sitting on the centre, or one taken before
+   * this was measured.
+   */
+  azimuthDeg?: number;
+  elevationDeg?: number;
 }
 
 /**

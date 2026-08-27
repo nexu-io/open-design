@@ -191,9 +191,24 @@ export function describeProofViews(input: {
   turntable: boolean;
   /** True when the frames came from a camera the author placed. */
   authoredCamera?: boolean;
+  /** The author-placed camera's MEASURED pose (from the census), if the runner
+   *  derived one — used to give an authored still an honest compass name. */
+  authoredAzimuthDeg?: number;
+  authoredElevationDeg?: number;
 }): ProofView[] | undefined {
   if (input.frameCount <= 0) return undefined;
-  if (input.authoredCamera) return undefined;
+  if (input.authoredCamera) {
+    // Absent beats a confident wrong name — UNLESS the runner actually MEASURED
+    // the placed camera's pose, in which case that measurement IS the truth, so
+    // name it. Only for a single still: an authored multi-frame render is not an
+    // orbit whose per-frame poses we can label.
+    if (input.frameCount === 1 && input.authoredAzimuthDeg !== undefined) {
+      const az = ((input.authoredAzimuthDeg % 360) + 360) % 360;
+      const el = input.authoredElevationDeg ?? PROOF_ELEVATION_DEG;
+      return [{ index: 0, azimuthDeg: az, elevationDeg: el, name: compassName(az), eye: orbitEye(az, el) }];
+    }
+    return undefined;
+  }
   if (!input.turntable) return input.frameCount === 1 ? stillView() : undefined;
   return turntableViews(input.frameCount);
 }

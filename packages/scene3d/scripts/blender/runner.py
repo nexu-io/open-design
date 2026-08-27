@@ -1721,6 +1721,27 @@ def census(scene, measure_thickness=False, voxel_grid=0.0, zf_pair_budget=0):
     zf_pairs, zf_skipped = z_fighting_pairs(finite_objects, zf_pair_budget or COPLANAR_TRI_PRODUCT_CAP)
     contacts, contacts_skipped = contact_report(finite_objects)
     cam = scene.camera
+    # The render camera's pose about the subject centre, in the SAME convention
+    # as read/views.ts: azimuth 0 = camera on -Y (front), +az toward +X,
+    # elevation above the XY horizon (Blender is Z-up here). A MEASURED fact, so
+    # even an author-placed camera whose pose the orbit math never derived gets
+    # an honest compass name instead of silence. Empty when there is no camera or
+    # it sits exactly on the centre (no direction to name).
+    cam_pose = {}
+    if cam is not None:
+        import mathutils as _mu
+        _pts = [o.matrix_world @ _mu.Vector(c)
+                for o in objects if o.type == "MESH" for c in o.bound_box]
+        if _pts:
+            _cx = (min(p.x for p in _pts) + max(p.x for p in _pts)) / 2.0
+            _cy = (min(p.y for p in _pts) + max(p.y for p in _pts)) / 2.0
+            _cz = (min(p.z for p in _pts) + max(p.z for p in _pts)) / 2.0
+            _P = cam.matrix_world.translation
+            _hx, _hy, _hz = _P.x - _cx, _P.y - _cy, _P.z - _cz
+            _horiz = math.hypot(_hx, _hy)
+            if _horiz >= 1e-9 or abs(_hz) >= 1e-9:
+                cam_pose = {"azimuthDeg": math.degrees(math.atan2(_hx, -_hy)) % 360.0,
+                            "elevationDeg": math.degrees(math.atan2(_hz, _horiz))}
     keyframed = sorted(
         (o.name for o in objects
          if o.animation_data and o.animation_data.action
@@ -1792,7 +1813,8 @@ def census(scene, measure_thickness=False, voxel_grid=0.0, zf_pair_budget=0):
         # caused it instead of only at the geometry that exhibits it.
         "provenance": PROVENANCE,
         "camera": {"present": cam is not None, "name": cam.name if cam else None,
-                   "staging": bool(cam is not None and cam.get("s3d_staging"))},
+                   "staging": bool(cam is not None and cam.get("s3d_staging")),
+                   **cam_pose},
         "lightCount": sum(1 for o in objects if o.type == "LIGHT"),
         "animation": {
             "fps": scene.render.fps, "frameStart": scene.frame_start, "frameEnd": scene.frame_end,

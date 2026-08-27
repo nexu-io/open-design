@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { compile, probeBlender, clearProbeCache } from "../src/index.js";
+import { compile, probeBlender, clearProbeCache, describeProofViews } from "../src/index.js";
 import { rmForSetup } from "./helpers/fs.js";
 import { assertBlenderIfRequired } from "./helpers/blender-gate.js";
 
@@ -63,6 +63,46 @@ describe.skipIf(!hasBlender)("scene3d pipeline (real Blender)", () => {
       // attribute it — usable, but it is the degraded case, not the goal.
       expect(origin.line, `origin for ${mesh.object} has no line`).not.toBeNull();
     }
+  }, LONG);
+
+  it("gives an author-placed camera an honest compass from its MEASURED pose", async () => {
+    // R5.2 — an authored still used to get NO compass ("absent beats a wrong
+    // name"), but the runner now MEASURES the placed camera's pose, which is not
+    // a guess. A camera on −X, elevated ~30°, must read azimuth 270 = "left".
+    const dir = path.join(__dirname, ".work", `authored-cam-${++workSeq}`);
+    rmForSetup(dir);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "build.py"),
+      [
+        "import bpy, math",
+        "bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0,0,0))",
+        "bpy.context.object.name = 'prp_box'",
+        "bpy.ops.object.camera_add(location=(-5, 0, 2.887))",
+        "cam = bpy.context.object; cam.name = 'cam_shot'",
+        "cam.rotation_euler = (math.radians(60), 0, math.radians(-90))",
+        "bpy.context.scene.camera = cam",
+        "bpy.ops.object.light_add(type='SUN', location=(4,4,6)); bpy.context.object.name='lgt_key'",
+      ].join("\n"),
+    );
+    const result = await compile({
+      projectDir: dir,
+      proof: { turntable: false, respectSceneCamera: true, resolution: 128 },
+      timeoutMs: LONG,
+    });
+    expect(result.ok).toBe(true);
+    const cam = result.census!.camera;
+    expect(cam.azimuthDeg).toBeCloseTo(270, 0); // −X → azimuth 270 (left)
+    expect(cam.elevationDeg).toBeCloseTo(30, 0);
+    const views = describeProofViews({
+      frameCount: 1,
+      turntable: false,
+      authoredCamera: true,
+      authoredAzimuthDeg: cam.azimuthDeg,
+      authoredElevationDeg: cam.elevationDeg,
+    });
+    expect(views).toHaveLength(1); // named, not silent
+    expect(views![0]!.name).toBe("left");
   }, LONG);
 
   it("points a geometry issue at the source lines that produced it", async () => {

@@ -197,6 +197,31 @@ describe("proof views", () => {
     expect(describeProofViews({ frameCount: 0, turntable: true })).toBeUndefined();
     expect(describeProofViews({ frameCount: 8, turntable: true })).toHaveLength(8);
   });
+
+  it("names an authored still HONESTLY when the runner measured the camera pose", () => {
+    // Absent beats a wrong name — but a MEASURED pose is not a guess, so an
+    // author-placed camera earns a compass instead of silence.
+    const authored = describeProofViews({
+      frameCount: 1,
+      turntable: false,
+      authoredCamera: true,
+      authoredAzimuthDeg: 135,
+      authoredElevationDeg: 20,
+    });
+    expect(authored).toHaveLength(1);
+    expect(authored![0]!.name).toBe("back-right"); // az 135
+    expect(authored![0]!.azimuthDeg).toBe(135);
+    expect(authored![0]!.elevationDeg).toBe(20);
+    // Wrapped angles normalise; an authored MULTI-frame render is still not a
+    // labelable orbit, pose or no pose.
+    expect(
+      describeProofViews({ frameCount: 1, turntable: false, authoredCamera: true, authoredAzimuthDeg: -225 })![0]!
+        .name,
+    ).toBe("back-right"); // -225 ≡ 135
+    expect(
+      describeProofViews({ frameCount: 3, turntable: false, authoredCamera: true, authoredAzimuthDeg: 90 }),
+    ).toBeUndefined();
+  });
 });
 
 /* ---------------------------------------------------------------- *
