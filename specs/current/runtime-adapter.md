@@ -33,7 +33,7 @@ The implementation is split by responsibility:
 ## Registered Runtimes
 
 `BASE_AGENT_DEFS` in `apps/daemon/src/runtimes/registry.ts` currently contains
-26 built-in adapter definitions. `AGENT_DEFS` also appends valid local profiles
+28 built-in adapter definitions. `AGENT_DEFS` also appends valid local profiles
 loaded by `readLocalAgentProfileDefs()`, so an installation can expose more
 entries than the built-in list.
 
