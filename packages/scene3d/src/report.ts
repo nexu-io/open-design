@@ -163,17 +163,34 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
     }
   }
   if (result.manifest.materials.length > 0) {
+    // The measured base colour, keyed by material name from the census. Hue
+    // is the single most salient thing an author asks a material for — "a red
+    // lamp", "gold trim" — and the manifest carries none, so this feedback
+    // channel used to confirm metallic/roughness/emission/alpha and stay
+    // silent on the one property the eye reads first. Sourced from the census
+    // (linear RGB → sRGB hex) rather than the manifest so no schema changes;
+    // absent on a parse-only pass, where there is no build to have measured it.
+    const censusColor = new Map(
+      (result.census?.materials ?? []).map((m) => [m.name, m.principled?.baseColor] as const),
+    );
     // Print the properties that DEFINE each material, not only the two
     // every material has: a lamp's whole purpose is its emission and a
     // glass's is its alpha, and this line used to omit both.
     lines.push(
       `materials: ${result.manifest.materials
         .map((m) => {
-          const bits = [`metallic=${fmt(m.metallic)}`, `roughness=${fmt(m.roughness)}`];
+          const bits: string[] = [];
+          const rgb = censusColor.get(m.name);
+          if (rgb) bits.push(`color=${srgbHex(rgb)}`);
+          bits.push(`metallic=${fmt(m.metallic)}`, `roughness=${fmt(m.roughness)}`);
           if (m.emissionStrength !== undefined && m.emissionStrength > 0) {
             bits.push(`emission×${Number(m.emissionStrength.toFixed(2))}`);
           }
           if (m.alpha !== undefined) bits.push(`alpha=${Number(m.alpha.toFixed(2))}`);
+          // A texture multiplies over the base colour, so the hex above is a
+          // tint, not the whole surface — say so rather than let the agent
+          // read a flat colour off a mapped material.
+          if (m.hasTexture) bits.push("textured");
           return `${m.name}[${bits.join(" ")}]`;
         })
         .join(", ")}`,
@@ -620,22 +637,42 @@ function appendFrames(lines: string[], result: CompileResult, options: ReportOpt
   const all = result.proofImages;
   const count = Math.min(MAX_ASCII_FRAMES, all.length);
   const shown = Array.from({ length: count }, (_, i) => all[Math.floor((i * all.length) / count)]!);
+  // Which side each frame photographs, keyed by the frame index in its
+  // filename. Without it the only mark on the ramp a text-only reader can
+  // act on is an opaque hash filename, and "look at the back" stays a move
+  // the reader cannot aim — the exact gap the orbit map exists to close, but
+  // stated far above and never on the frame itself.
+  const viewByIndex = new Map((result.manifest.proofViews ?? []).map((v) => [v.index, v]));
   lines.push("");
   lines.push(
-    `frames (${shown.length} of ${all.length}, sampled around the orbit, ${ASCII_COLUMNS} cols, ' ' dark -> '@' lit):`,
+    `frames (${shown.length} of ${all.length}, sampled evenly around the orbit; ${ASCII_COLUMNS} cols; ` +
+      `ramp "${RAMP_LEGEND}" = dark→bright, a leading blank is transparent background):`,
   );
   for (const rel of shown) {
+    const frameIdx = Number(/(\d+)\.png$/i.exec(rel)?.[1]);
+    const view = Number.isFinite(frameIdx) ? viewByIndex.get(frameIdx) : undefined;
+    // Compass name FIRST, so the reader knows which way they are looking
+    // before they read a single ramp row; the filename trails for the reader
+    // who wants to open the real PNG.
+    const label = view
+      ? `${view.name} · az ${Math.round(view.azimuthDeg)}° · ${path.basename(rel)}`
+      : path.basename(rel);
     try {
       const png = fs.readFileSync(path.join(options.projectDir, rel));
-      lines.push(formatAsciiFrame(path.basename(rel), renderAsciiFrame(png, { columns: ASCII_COLUMNS })));
+      lines.push(formatAsciiFrame(label, renderAsciiFrame(png, { columns: ASCII_COLUMNS })));
     } catch (err: any) {
-      lines.push(`${path.basename(rel)}  could not be read: ${err?.message ?? String(err)}`);
+      lines.push(`${label}  could not be read: ${err?.message ?? String(err)}`);
     }
   }
 }
 
 const MAX_ASCII_FRAMES = 4;
 const ASCII_COLUMNS = 48;
+/** The printable ramp (dark → bright) shown in the frames legend. The full
+ *  ramp in read/ascii.ts leads with a space that doubles as the transparent
+ *  background, so the legend names the two roles separately: the blank is
+ *  background, `.`…`@` is the lit gradient. */
+const RAMP_LEGEND = ".:-=+*#%@";
 
 function appendDelta(lines: string[], result: CompileResult): void {
   const impact = result.impact;
@@ -876,6 +913,20 @@ function describePart(part: CompileResult["manifest"]["partTree"][number]): stri
 
 function fmt(value: number | null): string {
   return value === null ? "-" : String(value);
+}
+
+/** A linear-RGB triple as an sRGB `#rrggbb` string — the same linear→sRGB
+ *  transfer the kit page's swatches use, so the hex an agent reads here is the
+ *  hex a human sees on the material ball. */
+function srgbHex(rgb: readonly [number, number, number]): string {
+  const enc = (c: number) => {
+    const v = Math.max(0, Math.min(1, c));
+    const s = v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055;
+    return Math.round(s * 255)
+      .toString(16)
+      .padStart(2, "0");
+  };
+  return `#${enc(rgb[0])}${enc(rgb[1])}${enc(rgb[2])}`;
 }
 
 /** Metres, shown in mm below 10cm so "0.002" reads as the 2mm it is. */
