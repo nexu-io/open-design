@@ -115,15 +115,19 @@ describe('fetchAntigravityModels', () => {
   });
 
   // The actual bug: agy's `models` subcommand does not answer until stdin
-  // reaches EOF, and `execFile`'s `timeout` option only *signals* a child
-  // that never exits on its own -- it does not force the promise to settle.
-  // This test's mock reproduces that exact contract (its promise only
-  // resolves once `.child.stdin.end()` has actually been called), so a
-  // regression that moves the `.end()` call to after the `await` -- or
-  // drops it entirely -- reproduces the real hang: the race below times out
-  // and the test fails, instead of silently passing on an unrelated
+  // reaches EOF. `execAgentFile` sets `killSignal: 'SIGKILL'`, so its
+  // `timeout` does eventually kill a held-open child and settle (reject)
+  // the promise -- this is a bounded ~30s delay, not an unbounded hang --
+  // but the killed child's stdout is discarded, so the caller gets nothing
+  // for the wait and falls back to the static list every single probe.
+  // This test's mock simplifies that to "never resolves until closed" (no
+  // 30s timeout simulation) purely so a regression fails fast rather than
+  // slowly: a regression that moves the `.end()` call to after the `await`
+  // -- or drops it entirely -- makes the mock (and, in production, the
+  // 30s-then-fallback path) never deliver real data; the race below times
+  // out and the test fails, instead of silently passing on an unrelated
   // assertion.
-  it('closes stdin before awaiting the result, so a held-open pipe cannot hang the probe', async () => {
+  it('closes stdin before awaiting the result, so the probe gets real data instead of burning the full timeout', async () => {
     let stdinClosed = false;
     const end = vi.fn(() => {
       stdinClosed = true;

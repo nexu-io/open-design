@@ -210,15 +210,19 @@ export function parseAntigravityModelsJson(stdout: string): RuntimeModelOption[]
 // execFile-shaped piped, non-tty stdin (the same shape `execAgentFile`
 // spawns with, and the shape any daemon integration using
 // child_process.execFile/spawn gets by default): held open, the process
-// idles past any `timeout` — execFile's `timeout` option only *signals* the
-// child, and the promise settles on the child actually exiting, which never
-// happens here on its own. Closed immediately after spawn, the same command
-// answers in 6-21s (cold start includes a Google login / quota-refresh
-// round trip). This is why model discovery is a `fetchModels` — imperative,
-// gets a handle on the spawned child — rather than a declarative
-// `listModels: { args, parse }` entry: a declarative entry spawns through
-// this same `execAgentFile` path with no hook to close stdin first, and
-// would hang identically.
+// waits out the full `timeout` on every single probe. `execAgentFile` sets
+// `killSignal: 'SIGKILL'`, so the timeout does eventually kill the child and
+// settle (reject) the promise -- this is a bounded delay, not an unbounded
+// hang -- but the probe then has nothing to show for it: the killed child's
+// stdout is discarded, so the caller burns the whole timeout budget and
+// still falls back to the static list. Closed immediately after spawn, the
+// same command answers in 6-21s with real data (cold start includes a
+// Google login / quota-refresh round trip). This is why model discovery is
+// a `fetchModels` -- imperative, gets a handle on the spawned child --
+// rather than a declarative `listModels: { args, parse }` entry: a
+// declarative entry spawns through this same `execAgentFile` path with no
+// hook to close stdin first, so it would wait out the full timeout on every
+// probe and never actually get the live list.
 // Exported for tests; referenced through `antigravityAgentDef.fetchModels`
 // in production.
 export async function fetchAntigravityModels(

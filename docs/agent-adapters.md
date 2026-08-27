@@ -468,13 +468,18 @@ The identifier is slugged before use, collisions receive `-2`, `-3`, etc., and o
   prints Usage. **Gotcha:** this subcommand does not print or exit until
   stdin reaches EOF. Spawned with a held-open pipe (`execFile`'s default,
   and the shape any daemon integration gets without an explicit stdin
-  strategy), the process idles indefinitely — `execFile`'s `timeout` option
-  only *signals* the child and the promise settles on actual exit, which
-  never happens on its own here. The adapter's `fetchModels` closes stdin
-  immediately after spawn (before awaiting the result) to avoid this; a
-  declarative `listModels: { args, parse }` entry would spawn through the
-  same path with no hook to do so and hang identically. `fallbackModels` is
-  the offline-only floor for when the live probe fails.
+  strategy), the process waits out the full `timeout` on every probe.
+  `execAgentFile` sets `killSignal: 'SIGKILL'`, so the timeout does
+  eventually kill the child and settle (reject) the promise — this is a
+  bounded delay, not an unbounded hang — but the probe gets nothing for its
+  wait: the killed child's stdout is discarded, so the caller burns the
+  whole timeout budget and still falls back to the static list. The
+  adapter's `fetchModels` closes stdin immediately after spawn (before
+  awaiting the result) so the probe answers in 6-21s with real data instead;
+  a declarative `listModels: { args, parse }` entry would spawn through the
+  same path with no hook to do so and would wait out the full timeout on
+  every probe without ever getting the live list. `fallbackModels` is the
+  offline-only floor for when the live probe fails.
 
 ## 6. Runtime metadata and UI
 
