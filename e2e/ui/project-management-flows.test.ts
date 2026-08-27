@@ -250,20 +250,12 @@ test.describe('new project modal from left rail', () => {
     await expect(page.getByText('Fidelity', { exact: true })).toBeVisible();
     await page.getByTestId('new-project-name').fill('Prototype draft survives');
 
-    await page.getByTestId('new-project-tab-live-artifact').click();
-    await expect(page.getByTestId('new-project-tab-live-artifact')).toHaveAttribute('aria-selected', 'true');
-    await expect(page.locator('.newproj-title')).toContainText('New live artifact');
-    await expect(page.locator('.newproj-title')).toContainText('Beta');
-    await expect(page.getByTestId('design-system-picker')).toHaveCount(0);
-    await expect(page.getByTestId('new-project-connectors')).toBeVisible();
-    await expect(page.getByTestId('create-project')).toContainText('Create live artifact');
-
-    await page.getByTestId('new-project-tab-deck').click();
-    await expect(page.getByTestId('new-project-tab-deck')).toHaveAttribute('aria-selected', 'true');
-    await expect(page.locator('.newproj-title')).toContainText('New slide deck');
-    await expect(page.getByTestId('design-system-trigger')).toBeVisible();
-    await expect(page.getByText('Use speaker notes')).toBeVisible();
+    await page.getByTestId('new-project-tab-template').click();
+    await expect(page.getByTestId('new-project-tab-template')).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByTestId('new-project-connectors')).toHaveCount(0);
+
+    await page.getByTestId('new-project-tab-media').click();
+    await expect(page.getByTestId('new-project-tab-media')).toHaveAttribute('aria-selected', 'true');
 
     await page.getByTestId('new-project-tab-prototype').click();
     await expect(page.getByTestId('new-project-tab-prototype')).toHaveAttribute('aria-selected', 'true');

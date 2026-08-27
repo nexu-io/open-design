@@ -2,13 +2,9 @@
 
 // Plugins home section — UI contract.
 //
-// The section renders artifact-kind filters for the starter grid:
-// Slides / Prototype / Live Artifact / Image / Video / HyperFrames / Audio.
-// Prototype, Slides, Image, and Video expose a second row of scene buckets;
-// the smaller Live Artifact, HyperFrames, and Audio slices stay flat. Saved is an
-// orthogonal user collection override, and sparse buckets should fall
-// back to the normal empty-filter state rather than rendering synthetic
-// cards.
+// Renders artifact-kind filters for the starter grid:
+// Prototype · Image. Prototype exposes a second row of scene buckets.
+// Saved is an orthogonal user collection override.
 
 import { describe, expect, it, afterEach, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
@@ -154,7 +150,6 @@ describe('PluginsHomeSection (community gallery)', () => {
         id: `prototype-gallery-${index + 1}`,
         mode: 'prototype',
         tags: ['dashboard'],
-        preview: { type: 'html', entry: './example.html' },
       }),
     );
 
@@ -224,19 +219,22 @@ describe('PluginsHomeSection (community gallery)', () => {
     expect(screen.getByTestId('plugins-home-pill-category-all').getAttribute('aria-selected')).toBe(
       'true',
     );
-    expect(screen.getByTestId('plugins-home-pill-category-deck').getAttribute('aria-selected')).toBe(
-      'false',
-    );
-    expect(screen.queryByTestId('plugins-home-row-subcategory-deck')).toBeNull();
+    expect(screen.queryByTestId('plugins-home-pill-category-deck')).toBeNull();
+    expect(screen.queryByTestId('plugins-home-row-subcategory-prototype')).toBeNull();
 
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-deck'));
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-prototype'));
     expect(screen.getByTestId('plugins-home-pill-category-all').getAttribute('aria-selected')).toBe(
       'false',
     );
-    expect(screen.getByTestId('plugins-home-pill-category-deck').getAttribute('aria-selected')).toBe(
+    expect(screen.getByTestId('plugins-home-pill-category-prototype').getAttribute('aria-selected')).toBe(
       'true',
     );
-    expect(pluginIds()).toEqual(['deck-pitch']);
+    expect(pluginIds().sort()).toEqual([
+      'example-live-artifact',
+      'example-live-dashboard',
+      'prototype-app',
+      'prototype-dashboard',
+    ]);
 
     first.unmount();
     renderSection(sample, { cardLayout: 'gallery' });
@@ -244,7 +242,7 @@ describe('PluginsHomeSection (community gallery)', () => {
     expect(screen.getByTestId('plugins-home-pill-category-all').getAttribute('aria-selected')).toBe(
       'true',
     );
-    expect(screen.getByTestId('plugins-home-pill-category-deck').getAttribute('aria-selected')).toBe(
+    expect(screen.getByTestId('plugins-home-pill-category-prototype').getAttribute('aria-selected')).toBe(
       'false',
     );
   });
@@ -260,51 +258,44 @@ describe('PluginsHomeSection (category bar)', () => {
     expect(onBrowseRegistry).toHaveBeenCalledTimes(1);
   });
 
-  it('renders the artifact category row and the default Slides scene row', () => {
+  it('renders the artifact category row and the default Prototype scene row', () => {
     renderSection();
 
     expect(screen.getByTestId('plugins-home-row-category')).toBeTruthy();
     expect(screen.getByTestId('plugins-home-chip-saved').textContent).toContain('Saved');
     expect(screen.getByTestId('plugins-home-pill-category-all')).toBeTruthy();
     expect(screen.getByTestId('plugins-home-pill-category-prototype')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-category-live-artifact')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-category-deck')).toBeTruthy();
     expect(screen.getByTestId('plugins-home-pill-category-image')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-category-video')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-category-hyperframes')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-category-audio')).toBeTruthy();
+    expect(screen.queryByTestId('plugins-home-pill-category-live-artifact')).toBeNull();
+    expect(screen.queryByTestId('plugins-home-pill-category-deck')).toBeNull();
+    expect(screen.queryByTestId('plugins-home-pill-category-video')).toBeNull();
+    expect(screen.queryByTestId('plugins-home-pill-category-hyperframes')).toBeNull();
+    expect(screen.queryByTestId('plugins-home-pill-category-audio')).toBeNull();
     expect(screen.queryByTestId('plugins-home-pill-category-import')).toBeNull();
     expect(screen.queryByTestId('plugins-home-pill-category-create')).toBeNull();
     expect(screen.queryByTestId('plugins-home-pill-category-export')).toBeNull();
 
-    expect(screen.getByTestId('plugins-home-row-subcategory-deck')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-deck-fundraising-pitch')).toBeTruthy();
+    expect(screen.getByTestId('plugins-home-row-subcategory-prototype')).toBeTruthy();
+    expect(screen.getByTestId('plugins-home-pill-subcategory-prototype-app-prototypes')).toBeTruthy();
   });
 
-  it('filters Video separately from HyperFrames', () => {
+  it('does not surface Video, HyperFrames, or Live Artifact as Community categories', () => {
     renderSection();
 
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-video'));
-    expect(pluginIds().sort()).toEqual(['video-cinematic', 'video-short']);
-    expect(screen.getByTestId('plugins-home-row-subcategory-video')).toBeTruthy();
-
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-hyperframes'));
-    expect(pluginIds()).toEqual(['hyperframes-composition']);
-    expect(screen.queryByTestId('plugins-home-row-subcategory-hyperframes')).toBeNull();
+    expect(screen.queryByTestId('plugins-home-pill-category-video')).toBeNull();
+    expect(screen.queryByTestId('plugins-home-pill-category-hyperframes')).toBeNull();
+    expect(screen.queryByTestId('plugins-home-pill-category-live-artifact')).toBeNull();
+    expect(screen.queryByTestId('plugins-home-pill-category-audio')).toBeNull();
   });
 
-  it('groups Live Artifact as its own flat Community category', () => {
+  it('keeps live-artifact tagged prototypes inside Prototype, not a dedicated tab', () => {
     renderSection();
 
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-live-artifact'));
-
-    // Order is now usage/sink-driven (OPEND-449); assert grouping membership.
     expect(pluginIds().sort()).toEqual([
       'example-live-artifact',
       'example-live-dashboard',
-      'example-social-media-matrix-tracker-template',
-      'example-trading-analysis-dashboard-template',
-      'image-template-notion-team-dashboard-live-artifact',
+      'prototype-app',
+      'prototype-dashboard',
     ]);
     expect(screen.queryByTestId('plugins-home-row-subcategory-live-artifact')).toBeNull();
   });
@@ -312,10 +303,9 @@ describe('PluginsHomeSection (category bar)', () => {
   it('keeps sparse subcategories as real filters without adding contribution cards', () => {
     renderSection();
 
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-video'));
-    fireEvent.click(screen.getByTestId('plugins-home-pill-subcategory-video-social-short-form'));
+    fireEvent.click(screen.getByTestId('plugins-home-pill-subcategory-prototype-app-prototypes'));
 
-    expect(pluginIds()).toEqual(['video-short']);
+    expect(pluginIds()).toEqual(['prototype-app']);
     expect(screen.queryByTestId('plugins-home-contribution-card')).toBeNull();
     expect(screen.queryByText(/Contribute a/i)).toBeNull();
   });
@@ -362,24 +352,11 @@ describe('PluginsHomeSection (category bar)', () => {
   it('shows the normal empty-filter state for planned empty buckets', () => {
     renderSection();
 
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-video'));
-    fireEvent.click(screen.getByTestId('plugins-home-pill-subcategory-video-data-explainers'));
+    fireEvent.click(screen.getByTestId('plugins-home-pill-subcategory-prototype-developer-tools'));
 
     expect(screen.queryByRole('list')).toBeNull();
     expect(screen.getByText(/No plugins match the current filters/i)).toBeTruthy();
     expect(screen.queryByTestId('plugins-home-contribution-card')).toBeNull();
-  });
-
-  it('keeps HyperFrames and Audio flat', () => {
-    renderSection();
-
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-hyperframes'));
-    expect(pluginIds()).toEqual(['hyperframes-composition']);
-    expect(screen.queryByTestId('plugins-home-row-subcategory-hyperframes')).toBeNull();
-
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-audio'));
-    expect(pluginIds()).toEqual(['audio-voice']);
-    expect(screen.queryByTestId('plugins-home-row-subcategory-audio')).toBeNull();
   });
 
   it('All pill clears the category filter and only shows user-facing plugins', () => {
@@ -408,7 +385,7 @@ describe('PluginsHomeSection (category bar)', () => {
 
     fireEvent.click(screen.getByTestId('plugins-home-pill-category-prototype'));
     fireEvent.click(screen.getByTestId('plugins-home-save-prototype-dashboard'));
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-video'));
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-image'));
     fireEvent.click(screen.getByTestId('plugins-home-chip-saved'));
 
     expect(pluginIds()).toEqual(['prototype-dashboard']);

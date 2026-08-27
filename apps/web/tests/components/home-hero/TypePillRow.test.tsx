@@ -9,7 +9,7 @@ import {
   type HomeHeroChip,
 } from '../../../src/components/home-hero/chips';
 
-const chips = ['deck', 'prototype', 'document', 'image', 'video'].map((chipId) => {
+const chips = ['prototype', 'image', 'web-clone'].map((chipId) => {
   const chip = HOME_HERO_CHIPS.find((candidate) => candidate.id === chipId);
   if (!chip) throw new Error(`Missing chip fixture: ${chipId}`);
   return chip;
@@ -54,7 +54,7 @@ function renderPillRow(labelFor: (chipId: string) => string) {
   return render(
     <TypePillRow
       chips={chips as HomeHeroChip[]}
-      activeChipId="deck"
+      activeChipId="prototype"
       labelFor={labelFor}
       onPick={vi.fn()}
     />,
@@ -65,52 +65,46 @@ describe('TypePillRow', () => {
   it('keeps a strict ordered prefix inline and moves the remaining suffix into All', () => {
     renderPillRow((chipId) => chipId);
 
-    expect(screen.queryByTestId('home-hero-type-pill-deck')).not.toBeNull();
     expect(screen.queryByTestId('home-hero-type-pill-prototype')).not.toBeNull();
-    expect(screen.queryByTestId('home-hero-type-pill-document')).not.toBeNull();
-    expect(screen.queryByTestId('home-hero-type-pill-image')).toBeNull();
-    expect(screen.queryByTestId('home-hero-type-pill-video')).toBeNull();
-
-    fireEvent.click(screen.getByTestId('home-hero-type-pills-more'));
-    expect(screen.queryByTestId('home-hero-type-pill-image-more')).not.toBeNull();
-    expect(screen.queryByTestId('home-hero-type-pill-video-more')).not.toBeNull();
+    expect(screen.queryByTestId('home-hero-type-pill-image')).not.toBeNull();
+    expect(screen.queryByTestId('home-hero-type-pill-web-clone')).not.toBeNull();
   });
 
   it('recomputes the inline split when rendered labels change without resizing the container', () => {
     const labels = new Map(chips.map((chip) => [chip.id, chip.label]));
     const view = renderPillRow((chipId) => labels.get(chipId) ?? chipId);
 
-    expect(screen.queryByTestId('home-hero-type-pill-document')).not.toBeNull();
+    expect(screen.queryByTestId('home-hero-type-pill-web-clone')).not.toBeNull();
 
     renderedPillWidth = 100;
-    labels.set('deck', 'A much longer slide deck label');
     labels.set('prototype', 'A much longer prototype label');
-    labels.set('document', 'A much longer document label');
+    labels.set('image', 'A much longer image label');
+    labels.set('web-clone', 'A much longer website clone label');
     view.rerender(
       <TypePillRow
         chips={chips as HomeHeroChip[]}
-        activeChipId="deck"
+        activeChipId="prototype"
         labelFor={(chipId) => labels.get(chipId) ?? chipId}
         onPick={vi.fn()}
       />,
     );
 
-    expect(screen.queryByTestId('home-hero-type-pill-deck')).not.toBeNull();
-    expect(screen.queryByTestId('home-hero-type-pill-prototype')).toBeNull();
-    expect(screen.queryByTestId('home-hero-type-pill-document')).toBeNull();
+    expect(screen.queryByTestId('home-hero-type-pill-prototype')).not.toBeNull();
+    expect(screen.queryByTestId('home-hero-type-pill-image')).toBeNull();
+    expect(screen.queryByTestId('home-hero-type-pill-web-clone')).toBeNull();
   });
 
   it('recomputes the inline split when observed pill widths settle after render', () => {
     renderPillRow((chipId) => chipId);
-    expect(screen.queryByTestId('home-hero-type-pill-document')).not.toBeNull();
+    expect(screen.queryByTestId('home-hero-type-pill-web-clone')).not.toBeNull();
 
     renderedPillWidth = 100;
     act(() => {
       resizeObserverCallback?.([], {} as ResizeObserver);
     });
 
-    expect(screen.queryByTestId('home-hero-type-pill-deck')).not.toBeNull();
-    expect(screen.queryByTestId('home-hero-type-pill-prototype')).toBeNull();
-    expect(screen.queryByTestId('home-hero-type-pill-document')).toBeNull();
+    expect(screen.queryByTestId('home-hero-type-pill-prototype')).not.toBeNull();
+    expect(screen.queryByTestId('home-hero-type-pill-image')).toBeNull();
+    expect(screen.queryByTestId('home-hero-type-pill-web-clone')).toBeNull();
   });
 });

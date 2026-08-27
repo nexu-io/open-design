@@ -43,13 +43,13 @@ function fixture(overrides: {
 describe('extractCategories', () => {
   it('maps generation modes to artifact-kind primary tabs', () => {
     expect(extractCategories(fixture({ id: 'prototype', od: { mode: 'prototype' } }))).toEqual(['prototype']);
-    expect(extractCategories(fixture({ id: 'deck', od: { mode: 'deck' } }))).toEqual(['deck']);
+    expect(extractCategories(fixture({ id: 'deck', od: { mode: 'deck' } }))).toEqual([]);
     expect(extractCategories(fixture({ id: 'image', od: { mode: 'image' } }))).toEqual(['image']);
-    expect(extractCategories(fixture({ id: 'video', od: { mode: 'video' } }))).toEqual(['video']);
-    expect(extractCategories(fixture({ id: 'audio', od: { mode: 'audio' } }))).toEqual(['audio']);
+    expect(extractCategories(fixture({ id: 'video', od: { mode: 'video' } }))).toEqual([]);
+    expect(extractCategories(fixture({ id: 'audio', od: { mode: 'audio' } }))).toEqual([]);
   });
 
-  it('groups live artifacts ahead of their underlying rendering mode', () => {
+  it('does not surface live artifacts as a primary artifact tab', () => {
     expect(
       extractCategories(
         fixture({
@@ -58,7 +58,7 @@ describe('extractCategories', () => {
           od: { mode: 'prototype' },
         }),
       ),
-    ).toEqual(['live-artifact']);
+    ).toEqual(['prototype']);
     expect(
       extractCategories(
         fixture({
@@ -67,7 +67,7 @@ describe('extractCategories', () => {
           od: { mode: 'image' },
         }),
       ),
-    ).toEqual(['live-artifact']);
+    ).toEqual(['image']);
     expect(
       extractCategories(
         fixture({
@@ -76,16 +76,16 @@ describe('extractCategories', () => {
           od: { mode: 'template' },
         }),
       ),
-    ).toEqual(['live-artifact']);
+    ).toEqual([]);
   });
 
-  it('splits HyperFrames from the broader video mode', () => {
+  it('does not surface HyperFrames or video as primary artifact tabs', () => {
     expect(
       extractCategories(fixture({ id: 'hf', tags: ['hyperframes'], od: { mode: 'video' } })),
-    ).toEqual(['hyperframes']);
+    ).toEqual([]);
     expect(
       extractCategories(fixture({ id: 'composition', tags: ['video-composition'], od: { mode: 'video' } })),
-    ).toEqual(['hyperframes']);
+    ).toEqual([]);
   });
 
   it('keeps non-artifact workflow and design-system plugins out of primary tabs', () => {
@@ -98,7 +98,7 @@ describe('extractCategories', () => {
   it('normalises mode casing / formatting via slugify before matching', () => {
     expect(extractCategories(fixture({ id: 'a', od: { mode: 'Prototype' } }))).toEqual(['prototype']);
     expect(extractCategories(fixture({ id: 'b', od: { mode: 'slide_deck' } }))).toEqual([]);
-    expect(extractCategories(fixture({ id: 'c', od: { mode: 'deck' } }))).toEqual(['deck']);
+    expect(extractCategories(fixture({ id: 'c', od: { mode: 'deck' } }))).toEqual([]);
   });
 });
 
@@ -108,7 +108,7 @@ describe('extractSubcategories', () => {
     expect(extractSubcategories(fixture({ id: 'app', tags: ['mobile-app'], od: { mode: 'prototype' } }))).toEqual(['app-prototypes']);
     expect(extractSubcategories(fixture({ id: 'landing', tags: ['saas-landing'], od: { mode: 'prototype' } }))).toEqual(['landing-marketing']);
     expect(extractSubcategories(fixture({ id: 'dev', tags: ['engineering'], od: { mode: 'prototype' } }))).toEqual(['developer-tools']);
-    expect(extractSubcategories(fixture({ id: 'clinical', tags: ['case-report'], od: { mode: 'prototype' } }))).toEqual(['docs-reports']);
+    expect(extractSubcategories(fixture({ id: 'clinical', tags: ['case-report'], od: { mode: 'prototype' } }))).toEqual([]);
     expect(extractSubcategories(fixture({ id: 'brand', tags: ['wireframe'], od: { mode: 'prototype' } }))).toEqual(['brand-design']);
   });
 
@@ -116,15 +116,9 @@ describe('extractSubcategories', () => {
   // commercial category id (od.category / a category tag / od.scenario) rather
   // than tag-slug heuristics, so the filter row shares one taxonomy with the
   // per-card category chip.
-  it('maps deck templates to their commercial scene by resolved category id', () => {
-    expect(extractSubcategories(fixture({ id: 'pitch', od: { mode: 'deck', category: 'fundraising-pitch' } }))).toEqual(['fundraising-pitch']);
-    expect(extractSubcategories(fixture({ id: 'board', od: { mode: 'deck', category: 'corporate-strategy' } }))).toEqual(['corporate-strategy']);
-    expect(extractSubcategories(fixture({ id: 'sales', od: { mode: 'deck', category: 'b2b-sales' } }))).toEqual(['b2b-sales']);
-    expect(extractSubcategories(fixture({ id: 'craft', od: { mode: 'deck', category: 'design-craft' } }))).toEqual(['design-craft']);
-    // A category tag resolves the scene when od.category is absent.
-    expect(extractSubcategories(fixture({ id: 'tagged', tags: ['ai-literacy'], od: { mode: 'deck' } }))).toEqual(['ai-literacy']);
-    // A deck with no resolvable commercial category lands in no scene bucket.
-    expect(extractSubcategories(fixture({ id: 'bare', tags: ['pitch-deck'], od: { mode: 'deck' } }))).toEqual([]);
+  it('does not bucket retired slide or video plugins into a home scene', () => {
+    expect(extractSubcategories(fixture({ id: 'pitch', od: { mode: 'deck', category: 'fundraising-pitch' } }))).toEqual([]);
+    expect(extractSubcategories(fixture({ id: 'motion', tags: ['motion-graphics'], od: { mode: 'video' } }))).toEqual([]);
   });
 
   it('maps image templates to visual-scene buckets', () => {
@@ -136,12 +130,9 @@ describe('extractSubcategories', () => {
     expect(extractSubcategories(fixture({ id: 'illustration', tags: ['illustration'], od: { mode: 'image' } }))).toEqual(['illustration-style']);
   });
 
-  it('maps non-HyperFrames video templates to scene buckets', () => {
-    expect(extractSubcategories(fixture({ id: 'motion', tags: ['motion-graphics'], od: { mode: 'video' } }))).toEqual(['motion-effects']);
-    expect(extractSubcategories(fixture({ id: 'social', tags: ['short-form'], od: { mode: 'video' } }))).toEqual(['social-short-form']);
-    expect(extractSubcategories(fixture({ id: 'marketing', tags: ['product-promo'], od: { mode: 'video' } }))).toEqual(['marketing-product']);
-    expect(extractSubcategories(fixture({ id: 'data', tags: ['flowchart'], od: { mode: 'video' } }))).toEqual(['data-explainers']);
-    expect(extractSubcategories(fixture({ id: 'cinema', tags: ['cinematic'], od: { mode: 'video' } }))).toEqual(['cinematic-story']);
+  it('does not map video templates onto a home scene rail', () => {
+    expect(extractSubcategories(fixture({ id: 'motion', tags: ['motion-graphics'], od: { mode: 'video' } }))).toEqual([]);
+    expect(extractSubcategories(fixture({ id: 'cinema', tags: ['cinematic'], od: { mode: 'video' } }))).toEqual([]);
   });
 
   // Regression: the prototype/image/video rail display order
@@ -193,13 +184,8 @@ describe('buildFacetCatalog', () => {
     ]);
 
     expect(catalog.category.map((o) => [o.slug, o.count])).toEqual([
-      ['deck', 1],
-      ['prototype', 1],
-      ['live-artifact', 1],
+      ['prototype', 2],
       ['image', 1],
-      ['video', 1],
-      ['hyperframes', 1],
-      ['audio', 1],
     ]);
     // Display order (SUBCATEGORY_DISPLAY_ORDER) — distinct from the matching
     // precedence encoded by the SUBCATEGORIES array order.
@@ -209,26 +195,8 @@ describe('buildFacetCatalog', () => {
       'business-dashboards',
       'app-prototypes',
       'developer-tools',
-      'docs-reports',
     ]);
-    // Deck scenes: the 15 commercial "品类" buckets in commercial-priority order.
-    expect((catalog.subcategory.deck ?? []).map((o) => o.slug)).toEqual([
-      'fundraising-pitch',
-      'corporate-strategy',
-      'b2b-sales',
-      'product-management',
-      'design-craft',
-      'marketing-gtm',
-      'data-finance',
-      'consulting',
-      'government-policy',
-      'professional-training',
-      'academic-research',
-      'ai-literacy',
-      'career',
-      'student-coursework',
-      'life',
-    ]);
+    expect(catalog.subcategory.deck).toBeUndefined();
     expect((catalog.subcategory.image ?? []).map((o) => o.slug)).toEqual([
       'ui-product-mockups',
       'brand-visuals',
@@ -237,13 +205,7 @@ describe('buildFacetCatalog', () => {
       'avatar-portrait',
       'illustration-style',
     ]);
-    expect((catalog.subcategory.video ?? []).map((o) => o.slug)).toEqual([
-      'motion-effects',
-      'social-short-form',
-      'marketing-product',
-      'data-explainers',
-      'cinematic-story',
-    ]);
+    expect(catalog.subcategory.video).toBeUndefined();
     expect(catalog.subcategory['live-artifact']).toBeUndefined();
     expect(catalog.subcategory.hyperframes).toBeUndefined();
     expect(catalog.subcategory.audio).toBeUndefined();
@@ -280,16 +242,16 @@ describe('applyFacetSelection', () => {
   it('filters by the selected artifact-kind category slug', () => {
     expect(
       applyFacetSelection(plugins, { category: 'prototype', subcategory: null }).map((p) => p.id),
-    ).toEqual(['prototype-dashboard', 'prototype-app']);
+    ).toEqual(['prototype-dashboard', 'prototype-app', 'example-live-artifact']);
     expect(
       applyFacetSelection(plugins, { category: 'live-artifact', subcategory: null }).map((p) => p.id),
-    ).toEqual(['example-live-artifact']);
+    ).toEqual([]);
     expect(
       applyFacetSelection(plugins, { category: 'hyperframes', subcategory: null }).map((p) => p.id),
-    ).toEqual(['hf']);
+    ).toEqual([]);
     expect(
       applyFacetSelection(plugins, { category: 'video', subcategory: null }).map((p) => p.id),
-    ).toEqual(['video']);
+    ).toEqual([]);
   });
 
   it('filters by the selected scene bucket inside the selected artifact kind', () => {
@@ -302,7 +264,7 @@ describe('applyFacetSelection', () => {
     // Deck scene bucket = the plugin's resolved commercial category.
     expect(
       applyFacetSelection(plugins, { category: 'deck', subcategory: 'fundraising-pitch' }).map((p) => p.id),
-    ).toEqual(['deck']);
+    ).toEqual([]);
   });
 });
 
@@ -316,19 +278,19 @@ describe('isFeaturedPlugin', () => {
 });
 
 describe('resolveDefaultSelection', () => {
-  it('defaults the home catalog to Slides when that bucket exists', () => {
+  it('defaults the home catalog to Prototype when that bucket exists', () => {
     const catalog = buildFacetCatalog([
       fixture({ id: 'slides', od: { mode: 'deck' } }),
       fixture({ id: 'prototype', od: { mode: 'prototype' } }),
     ]);
 
     expect(resolveDefaultSelection(catalog)).toEqual({
-      category: 'deck',
+      category: 'prototype',
       subcategory: null,
     });
   });
 
-  it('falls back to the first populated artifact kind when Slides is unavailable', () => {
+  it('falls back to the first populated artifact kind when Prototype is unavailable', () => {
     const catalog = buildFacetCatalog([
       fixture({ id: 'prototype', od: { mode: 'prototype' } }),
     ]);

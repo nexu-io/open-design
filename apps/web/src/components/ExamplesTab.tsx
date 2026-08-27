@@ -36,18 +36,13 @@ const SURFACE_PILLS: { value: SurfaceFilter; labelKey: keyof Dict }[] = [
   { value: 'all', labelKey: 'examples.modeAll' },
   { value: 'web', labelKey: 'examples.surfaceWeb' },
   { value: 'image', labelKey: 'examples.surfaceImage' },
-  { value: 'video', labelKey: 'examples.surfaceVideo' },
-  { value: 'audio', labelKey: 'examples.surfaceAudio' },
 ];
 
 const MODE_PILLS: { value: ModeFilter; labelKey: keyof Dict }[] = [
   { value: 'all', labelKey: 'examples.modeAll' },
   { value: 'prototype-desktop', labelKey: 'examples.modePrototypeDesktop' },
   { value: 'prototype-mobile', labelKey: 'examples.modePrototypeMobile' },
-  { value: 'deck', labelKey: 'examples.modeDeck' },
-  { value: 'document', labelKey: 'examples.modeDocument' },
   { value: 'orbit', labelKey: 'examples.modeOrbit' },
-  { value: 'live', labelKey: 'examples.modeLive' },
 ];
 
 const SCENARIO_LABEL_KEY: Record<string, keyof Dict> = {

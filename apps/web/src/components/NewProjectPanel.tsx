@@ -180,6 +180,13 @@ const TAB_LABEL_KEYS: Record<CreateTab, keyof Dict> = {
   other: 'newproj.tabOther',
 };
 
+const VISIBLE_CREATE_TABS: CreateTab[] = [
+  'prototype',
+  'template',
+  'media',
+  'other',
+];
+
 // Maps the New Project tab + media surface to the apply-result target
 // kind enum. `media` collapses to image/video/audio inside callers;
 // this helper covers the non-media tabs and the live-artifact special
@@ -857,7 +864,7 @@ export function NewProjectPanel({
           <Icon name="chevron-left" size={16} strokeWidth={2} />
         </button>
         <div className="newproj-tabs" role="tablist" ref={tabsRef}>
-          {(Object.keys(TAB_LABEL_KEYS) as CreateTab[]).map((entry) => (
+          {VISIBLE_CREATE_TABS.map((entry) => (
             <button
               key={entry}
               role="tab"
@@ -970,7 +977,7 @@ export function NewProjectPanel({
             role="tablist"
             aria-label={t('newproj.tabMedia')}
           >
-            {(Object.keys(MEDIA_SURFACE_LABEL_KEYS) as MediaSurface[]).map((surface) => (
+            {(['image'] as MediaSurface[]).map((surface) => (
               <button
                 key={surface}
                 type="button"

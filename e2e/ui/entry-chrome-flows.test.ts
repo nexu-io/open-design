@@ -8,13 +8,7 @@ import type {
   WorkspaceDirectoryItem,
 } from '@open-design/contracts';
 import type { Page, Request } from '@playwright/test';
-import {
-  applyStandardMocks,
-  fulfillAgentsRoute,
-  routeSignedOutVelaStatus,
-  routeSuccessfulRuns,
-  STORAGE_KEY,
-} from '@/playwright/mock-factory';
+import { applyStandardMocks, fulfillAgentsRoute, routeSuccessfulRuns, STORAGE_KEY } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 const LOCAL_CLI_LABEL = /Local CLI|Local coding agent|本机 CLI|本地 CLI/i;
 const STARTER_PLUGIN = makeStarterPlugin({
@@ -105,7 +99,7 @@ test('[P0] @critical entry chrome exposes the primary home creation surface and 
   // create a blank project" row and its cards); the composer footer's Template
   // picker owns every project type now.
   const templateMenu = await openHomeTemplateMenu(page);
-  for (const id of ['prototype', 'live-artifact', 'deck', 'image', 'video', 'hyperframes', 'audio']) {
+  for (const id of ['prototype', 'image', 'web-clone']) {
     await expect(templateMenu.getByTestId(`home-hero-template-wedge-${id}`)).toBeVisible();
   }
   await page.keyboard.press('Escape');
@@ -371,7 +365,6 @@ test('[P1] onboarding lands on the home composer without a recommended-start str
 });
 
 test('[P1] entry top navigation matches the current home tab structure', async ({ page }) => {
-  await routeSignedOutVelaStatus(page);
   await gotoEntryHome(page);
   await ensureRailOpen(page);
 
@@ -1061,8 +1054,7 @@ test('[P2] home topbar overlays close on outside click, Escape, and Settings ope
 // inside the Home composer footer and does not follow the user to secondary
 // entry pages. This spec now pins the rail's surviving destinations plus the
 // pill at its new, Home-only home.
-test('[P0] signed-out Local setup can navigate the surviving rail destinations', async ({ page }) => {
-  await routeSignedOutVelaStatus(page);
+test('[P1] rail destinations navigate and Home keeps its composer execution pill', async ({ page }) => {
   await routeDesignSystems(page);
   await gotoEntryHome(page);
 
@@ -1252,8 +1244,7 @@ test('[P0] @critical home hero input keeps Shift+Enter as a newline and submits 
   await expect(page).toHaveURL(/\/projects\//);
 });
 
-test('[P0] signed-out Local setup can apply a plugin from the Home composer', async ({ page }) => {
-  await routeSignedOutVelaStatus(page);
+test('[P1] home hero @ mention picker opens and Enter applies the highlighted plugin', async ({ page }) => {
   await page.route('**/api/plugins', async (route) => {
     await route.fulfill({
       json: {

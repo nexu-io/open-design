@@ -157,7 +157,7 @@ test('[P1] prompt template retry preserves the edited body in project metadata',
   });
 });
 
-test('[P1] live artifact empty connector CTA opens the gated connector setup path', async ({ page }) => {
+test.skip('[P1] live artifact empty connector CTA opens the gated connector setup path', async ({ page }) => {
   await routeConnectors(page, []);
   await routeComposioConfig(page, { configured: false, apiKeyTail: '' });
 

@@ -3,14 +3,11 @@
 // The Home starter grid is organized around the artifact a user wants
 // to make first:
 //
-//   Slides · Prototype · Live Artifact · Image · Video · HyperFrames · Audio
+//   Prototype · Image
 //
-// Prototype, Slides, Image, and Video have enough bundled templates to
-// deserve a second row. Those child buckets follow the Feishu prompt
-// taxonomy from the user-query analysis doc: business dashboards, app
-// prototypes, landing pages, pitch decks, training decks, brand visuals,
-// video/motion generation, and adjacent scene clusters. HyperFrames and
-// Audio stay flat because their catalog slices are intentionally small.
+// Prototype has enough bundled templates to deserve a second row. Those
+// child buckets follow the Feishu prompt taxonomy: business dashboards,
+// app prototypes, landing pages, and brand visuals.
 //
 // Counts in each category reflect the catalog *as a whole*, not the
 // post-filter slice. We deliberately avoid recomputing counts after
@@ -19,7 +16,6 @@
 // catalog is shaped.
 
 import { resolveLocalizedText, type InstalledPluginRecord } from '@open-design/contracts';
-import { CURATED_LIVE_ARTIFACT_PLUGIN_IDS } from './curatedPriority';
 import { localizedText } from './localization';
 import { resolveCommercialCategoryId, type CommercialCategoryId } from './categoryLabel';
 
@@ -112,75 +108,20 @@ function byAnySlug(...slugs: string[]): (record: InstalledPluginRecord) => boole
   return (record) => hasAnySlug(record, slugs);
 }
 
-function matchesAny(record: InstalledPluginRecord, tests: Array<(record: InstalledPluginRecord) => boolean>): boolean {
-  return tests.some((test) => test(record));
-}
-
-const HYPERFRAMES_TESTS = [
-  byAnySlug(
-    'hyperframes',
-    'html-video',
-    'video-composition',
-    'interactive-video',
-  ),
-];
-
-function isHyperFramesPlugin(record: InstalledPluginRecord): boolean {
-  return matchesAny(record, HYPERFRAMES_TESTS);
-}
-
-function isVideoPlugin(record: InstalledPluginRecord): boolean {
-  return byMode('video')(record) && !isHyperFramesPlugin(record);
-}
-
-function isLiveArtifactPlugin(record: InstalledPluginRecord): boolean {
-  return (CURATED_LIVE_ARTIFACT_PLUGIN_IDS as readonly string[]).includes(record.id);
-}
-
 // Curated artifact-kind list. Keep this aligned with the Home creation
 // intents and the app's artifact product types.
 const PRIMARY_CATEGORIES: readonly CategoryDef[] = [
   {
-    slug: 'deck',
-    label: 'Slides',
-    starterPrompt: 'Create an OpenDesign plugin that generates a polished slide deck from a narrative brief.',
-    test: byMode('deck'),
-  },
-  {
     slug: 'prototype',
     label: 'Prototype',
     starterPrompt: 'Create an OpenDesign plugin that generates an interactive prototype from a product brief.',
-    test: (record) => byMode('prototype')(record) && !isLiveArtifactPlugin(record),
-  },
-  {
-    slug: 'live-artifact',
-    label: 'Live Artifact',
-    starterPrompt: 'Create an OpenDesign plugin that generates a live artifact with refreshable, data-aware UI.',
-    test: isLiveArtifactPlugin,
+    test: byMode('prototype'),
   },
   {
     slug: 'image',
     label: 'Image',
     starterPrompt: 'Create an OpenDesign plugin that generates image assets from structured creative direction.',
     test: byMode('image'),
-  },
-  {
-    slug: 'video',
-    label: 'Video',
-    starterPrompt: 'Create an OpenDesign plugin that generates video prompts, storyboards, or render-ready motion artifacts.',
-    test: isVideoPlugin,
-  },
-  {
-    slug: 'hyperframes',
-    label: 'HyperFrames',
-    starterPrompt: 'Create an OpenDesign plugin that generates a HyperFrames-ready motion composition.',
-    test: isHyperFramesPlugin,
-  },
-  {
-    slug: 'audio',
-    label: 'Audio',
-    starterPrompt: 'Create an OpenDesign plugin that generates audio, voice, or sound-design assets from a brief.',
-    test: byMode('audio'),
   },
 ];
 
@@ -258,7 +199,6 @@ const SUBCATEGORY_DISPLAY_ORDER: Record<string, readonly string[]> = {
     'business-dashboards',
     'app-prototypes',
     'developer-tools',
-    'docs-reports',
   ],
   // Deck order is the commercial-priority order declared above.
   deck: DECK_COMMERCIAL_ORDER,
@@ -367,28 +307,6 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
       'github',
       'linear',
       'issue',
-    ),
-  },
-  {
-    parent: 'prototype',
-    slug: 'docs-reports',
-    label: 'Docs / reports',
-    starterPrompt: 'Create an OpenDesign prototype plugin for reports, documents, case studies, specs, invoices, or resumes.',
-    test: byAnySlug(
-      'report',
-      'financial-report',
-      'finance-report',
-      'case-report',
-      'clinical-case',
-      'case-study',
-      'guide',
-      'tutorial',
-      'pm-spec',
-      'prd',
-      'spec',
-      'invoice',
-      'resume',
-      'cv',
     ),
   },
   {
@@ -644,7 +562,7 @@ export function filterByQuery(
 // Smart default selection. Lead with the first artifact kind in the
 // Home creation flow while keeping all prototype scenes visible.
 export const PREFERRED_DEFAULT_SELECTION: FacetSelection = {
-  category: 'deck',
+  category: 'prototype',
   subcategory: null,
 };
 

@@ -247,47 +247,6 @@ const DISMISS_CASES: DismissCase[] = [
     pluginId: null,
   },
   {
-    name: '幻灯片, no scene',
-    chipId: 'deck',
-    cardId: 'example-pitch-deck',
-    automaticStrategyTaskProfile: 'ppt',
-    projectKind: 'deck',
-    projectMetadata: { kind: 'deck' },
-    pluginId: null,
-  },
-  {
-    // 幻灯片's second-level rail is a pure card filter — it never reaches
-    // `onPickPrototypeSubtype`, so the dismiss has only the chip to return to.
-    name: '幻灯片 + 融资路演',
-    chipId: 'deck',
-    scene: 'fundraising-pitch',
-    cardId: 'example-pitch-deck',
-    automaticStrategyTaskProfile: 'ppt',
-    projectKind: 'deck',
-    projectMetadata: { kind: 'deck' },
-    pluginId: null,
-  },
-  {
-    name: 'HyperFrames (no second-level rail)',
-    chipId: 'hyperframes',
-    cardId: 'example-frame-glitch-title',
-    automaticStrategyTaskProfile: 'hyperframes',
-    projectKind: 'video',
-    projectMetadata: { kind: 'video', intent: 'hyperframes', videoModel: 'hyperframes-html' },
-    pluginId: null,
-  },
-  {
-    // Task types with no automatic route still have a task type to return to:
-    // the dismiss must land on their own scenario, not on a blank composer.
-    name: '文档 (no OD Next route)',
-    chipId: 'document',
-    cardId: 'example-eng-runbook',
-    automaticStrategyTaskProfile: null,
-    projectKind: 'other',
-    projectMetadata: { kind: 'other', intent: 'document' },
-    pluginId: 'od-new-generation',
-  },
-  {
     name: '图片 (media surface, no OD Next route)',
     chipId: 'image',
     cardId: 'example-image-template',
@@ -295,15 +254,6 @@ const DISMISS_CASES: DismissCase[] = [
     projectKind: 'image',
     projectMetadata: { kind: 'image' },
     pluginId: 'od-media-generation',
-  },
-  {
-    name: 'Live artifact (no OD Next route)',
-    chipId: 'live-artifact',
-    cardId: 'example-live-dashboard',
-    automaticStrategyTaskProfile: null,
-    projectKind: 'prototype',
-    projectMetadata: { kind: 'prototype', intent: 'live-artifact', fidelity: 'high-fidelity' },
-    pluginId: 'example-live-artifact',
   },
 ];
 

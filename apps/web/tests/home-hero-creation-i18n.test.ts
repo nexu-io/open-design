@@ -43,19 +43,20 @@ const dictionaries: Dict[] = [
 ];
 
 describe('Home creation hierarchy i18n', () => {
-  it('localizes Prototype in every supported locale and keeps WebGL as the product label', () => {
+  it('localizes Prototype in every supported locale', () => {
     expect(dictionaries).toHaveLength(19);
     for (const dict of dictionaries) {
       expect(dict['homeHero.chip.prototype'].trim()).not.toBe('');
       expect(dict['homeHero.chip.prototype']).not.toBe('UI Mockup');
-      expect(dict['homeHero.chip.webgl']).toBe('WebGL');
+      expect(dict['homeHero.chip.image'].trim()).not.toBe('');
+      expect(dict['homeHero.chip.webClone'].trim()).not.toBe('');
     }
   });
 
   it('uses the requested Simplified and Traditional Chinese hierarchy labels', () => {
     expect(zhCN['homeHero.chip.prototype']).toBe('原型');
-    expect(zhCN['homeHero.chip.liveArtifact']).toBe('实时产物');
+    expect(zhCN['homeHero.chip.image']).toBe('图片');
     expect(zhTW['homeHero.chip.prototype']).toBe('原型');
-    expect(zhTW['homeHero.chip.liveArtifact']).toBe('即時產物');
+    expect(zhTW['homeHero.chip.image']).toBe('圖片');
   });
 });

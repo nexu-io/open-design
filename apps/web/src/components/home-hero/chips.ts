@@ -23,23 +23,12 @@ import type { ProjectKind, ProjectMetadata } from '@open-design/contracts';
 import type { DefaultScenarioPluginId } from '@open-design/contracts';
 import type { IconName } from '../Icon';
 
-// Plugin ids the chip rail can dispatch to. Most chips route to a
+// Plugin ids the chip rail can dispatch to. Chips route to a
 // `DefaultScenarioPluginId` so the same fallback table the daemon
-// uses for naked Home queries stays the source of truth. Specialised
-// chips (HyperFrames lives under `plugins/_official/examples/hyperframes/`
-// and surfaces as the `example-hyperframes` bundled plugin id) bypass
-// the default table by carrying their own plugin id directly. The
+// uses for naked Home queries stays the source of truth. The
 // curated union keeps typo safety while letting the rail evolve
 // independently of the default-binding mapping.
-export type ChipScenarioPluginId =
-  | DefaultScenarioPluginId
-  | 'example-hyperframes'
-  // Powered-preview scenarios: real-time GPU / off-main-thread artifacts that
-  // render in the cross-origin-isolated "powered preview" iframe. They ship
-  // their own bundled example plugins under plugins/_official/examples/, so —
-  // like example-hyperframes — they carry their plugin id directly rather than
-  // routing through the default kind→plugin table.
-  | 'example-webgl-experience';
+export type ChipScenarioPluginId = DefaultScenarioPluginId;
 
 export type ChipAction =
   | {
@@ -154,120 +143,6 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   // platform targets), so they have no chip id, no action and no route of their
   // own to diverge from their parent's.
   {
-    id: 'deck',
-    label: 'Slide deck',
-    icon: 'present',
-    group: 'create',
-    description: 'Presentations & pitch decks',
-    // Slide deck binds to `example-simple-deck`, which ships a 353-line
-    // `assets/template.html` (the 1920×1080 + scale-to-fit + nav + print
-    // framework paired with proven slide CSS), 8 paste-ready layouts in
-    // `references/layouts.md` (cover, body, big-stat, three-point,
-    // pipeline, dark quote, before/after, closing), and a P0/P1/P2
-    // checklist that catches overflow at 1280×800 / 1440×900. The
-    // previous routing to od-new-generation gave the agent only the
-    // generic deck-framework directive — which fixed nav but not slide
-    // layout — so density bugs (168px headline + absolute footer
-    // collision) shipped on default decks.
-    action: {
-      kind: 'apply-scenario',
-      pluginId: 'example-simple-deck',
-      projectKind: 'deck',
-      automaticDefault: true,
-    },
-  },
-  {
-    id: 'document',
-    label: 'Document',
-    icon: 'file-text',
-    group: 'create',
-    description: 'Resumes, reports & PDFs',
-    hint: 'Draft a polished document — resume, report, or PDF — you can export.',
-    // Documents (resumes / reports / PDFs) route through the generic
-    // od-new-generation scenario under the `other` kind; there is no
-    // dedicated bundled document seed yet, so the agent composes the
-    // document layout from the brief.
-    action: {
-      kind: 'apply-scenario',
-      pluginId: 'od-new-generation',
-      projectKind: 'other',
-      inputs: {
-        artifactKind: 'document',
-        audience: 'readers',
-        topic: 'the user brief',
-      },
-      projectMetadata: {
-        kind: 'other',
-        // Analytics-only tag: splits this card's projects out of generic
-        // `other` so `project_kind` reports `document` (matches the task_chip).
-        // No product behavior keys off `intent: 'document'`.
-        intent: 'document',
-      },
-    },
-  },
-  {
-    id: 'hyperframes',
-    label: 'HyperFrames',
-    icon: 'orbit',
-    group: 'create',
-    description: 'Motion graphics & loops',
-    hint: 'Author HTML-based motion: captions, audio-reactive visuals, scene transitions.',
-    // HyperFrames is its own bundled scenario (motion-graphics
-    // specialisation of Video). It surfaces in PluginsHomeSection's
-    // primary category list, so the rail picks it up too rather than
-    // hiding the specialised bucket behind the generic Video chip.
-    action: {
-      kind: 'apply-scenario',
-      pluginId: 'example-hyperframes',
-      projectKind: 'video',
-      automaticDefault: true,
-      projectMetadata: {
-        kind: 'video',
-        intent: 'hyperframes',
-        videoModel: 'hyperframes-html',
-      },
-    },
-  },
-  {
-    id: 'webgl',
-    label: 'WebGL experience',
-    icon: 'sparkles',
-    group: 'create',
-    description: 'Shaders, 3D & generative GPU visuals',
-    hint: 'Build a full-screen real-time WebGL2 shader / 3D scene that runs live on the GPU.',
-    // Powered-preview scenario: binds the bundled `example-webgl-experience`
-    // plugin (shader/3D seed + P0 checklist). The artifact auto-detects into
-    // powered preview via its `getContext('webgl2')` call.
-    action: {
-      kind: 'apply-scenario',
-      pluginId: 'example-webgl-experience',
-      projectKind: 'prototype',
-      projectMetadata: {
-        kind: 'prototype',
-        intent: 'webgl-experience',
-        fidelity: 'high-fidelity',
-      },
-    },
-  },
-  {
-    id: 'live-artifact',
-    label: 'Live artifact',
-    icon: 'bar-chart-box',
-    group: 'create',
-    description: 'Data-backed live dashboards',
-    hint: 'Build a refreshable artifact backed by connector or local data.',
-    action: {
-      kind: 'apply-scenario',
-      pluginId: 'example-live-artifact',
-      projectKind: 'prototype',
-      projectMetadata: {
-        kind: 'prototype',
-        intent: 'live-artifact',
-        fidelity: 'high-fidelity',
-      },
-    },
-  },
-  {
     id: 'image',
     label: 'Image',
     icon: 'image',
@@ -281,42 +156,6 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
         mediaKind: 'image',
         subject: 'a polished product concept',
         style: 'cinematic, high-quality, on-brand',
-        aspect: '16:9',
-      },
-    },
-  },
-  {
-    id: 'video',
-    label: 'Video',
-    icon: 'video-ai',
-    group: 'create',
-    description: 'Clips, reels & promos',
-    action: {
-      kind: 'apply-scenario',
-      pluginId: 'od-media-generation',
-      projectKind: 'video',
-      inputs: {
-        mediaKind: 'video',
-        subject: 'a short product reveal',
-        style: 'cinematic, high-quality, on-brand',
-        aspect: '16:9',
-      },
-    },
-  },
-  {
-    id: 'audio',
-    label: 'Audio',
-    icon: 'mic',
-    group: 'create',
-    description: 'Voiceovers, music & SFX',
-    action: {
-      kind: 'apply-scenario',
-      pluginId: 'od-media-generation',
-      projectKind: 'audio',
-      inputs: {
-        mediaKind: 'audio',
-        subject: 'a concise audio identity for a product',
-        style: 'clear, polished, modern',
         aspect: '16:9',
       },
     },
@@ -359,29 +198,19 @@ export function chipsForGroup(group: ChipGroup): HomeHeroChip[] {
   return HOME_HERO_CHIPS.filter((c) => c.group === group);
 }
 
-// Fixed Home information architecture. Only these ten output types are
+// Fixed Home information architecture. Only these three output types are
 // top-level choices. Action-only create entries (for example Create Design
 // System) are intentionally excluded.
 export const CREATE_RAIL_ORDER = [
   'prototype',
-  'deck',
   'image',
-  'document',
-  'hyperframes',
   'web-clone',
-  'video',
-  'audio',
-  'live-artifact',
-  'webgl',
 ] as const;
 
 // Chip ids the onboarding "build a design system" teaser intentionally omits.
-// Video and Audio are pure-media outputs and the least central to the
-// design-system story, so they are omitted to keep the teaser chips to a
-// single tidy row. Website clone starts
-// from someone else's site rather than the user's design system, so it stays
-// off the design-system teaser too.
-const ONBOARDING_ARTIFACT_OMIT = new Set<string>(['web-clone', 'video', 'audio']);
+// Website clone starts from someone else's site rather than the user's design
+// system, so it stays off the design-system teaser.
+const ONBOARDING_ARTIFACT_OMIT = new Set<string>(['web-clone']);
 
 // The artifact chips shown on the onboarding "build a design system" step — a
 // curated single-row subset of the create rail. Derived from CREATE_RAIL_ORDER

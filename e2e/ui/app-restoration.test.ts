@@ -2425,7 +2425,7 @@ function runtimeSkill(id: string, name: string) {
 async function createEmptyProject(page: Page, name: string): Promise<string> {
   await gotoEntryHome(page);
   await openNewProjectModal(page);
-  await page.getByTestId('new-project-tab-live-artifact').click();
+  await page.getByTestId('new-project-tab-prototype').click();
   await page.getByTestId('new-project-name').fill(name);
   await page.getByTestId('create-project').click();
   await expect(page).toHaveURL(/\/projects\//, { timeout: T.long });

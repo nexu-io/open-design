@@ -22,7 +22,7 @@ import {
 // audio/hyperframes) own their own inline composer form and are excluded;
 // the facet table only defines children for prototype/deck/image/video, and
 // we surface the rail for prototype + deck.
-export type SubChipParentId = 'prototype' | 'deck';
+export type SubChipParentId = 'prototype';
 
 /**
  * What a second-level scene adds to the metadata its parent task type stamps.
@@ -44,7 +44,7 @@ export interface HomeHeroSubChip {
   projectMetadata?: HomeHeroSubChipMetadata;
 }
 
-const PARENT_IDS: readonly SubChipParentId[] = ['prototype', 'deck'];
+const PARENT_IDS: readonly SubChipParentId[] = ['prototype'];
 
 // Icon per facet subcategory slug. Falls back to a neutral glyph so a newly
 // added facet still renders a pill rather than crashing.
@@ -98,7 +98,6 @@ const PROTOTYPE_SUB_CHIPS: readonly HomeHeroSubChip[] = [
   { slug: 'app-prototypes', label: 'Apps', icon: 'blocks' },
   { slug: 'developer-tools', label: 'Developer tools', icon: 'terminal' },
   { slug: 'brand-design', label: 'Brand / design', icon: 'palette' },
-  { slug: 'docs-reports', label: 'Docs / reports', icon: 'file' },
 ];
 
 export function prototypeSubChipForSlug(slug: string | null): HomeHeroSubChip | null {
@@ -107,7 +106,7 @@ export function prototypeSubChipForSlug(slug: string | null): HomeHeroSubChip | 
 }
 
 export function isSubChipParent(chipId: string | null): chipId is SubChipParentId {
-  return chipId === 'prototype' || chipId === 'deck';
+  return chipId === 'prototype';
 }
 
 /**
