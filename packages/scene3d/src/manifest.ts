@@ -240,6 +240,11 @@ export function buildManifest(input: {
         metallic: m.principled.metallic,
         roughness: m.principled.roughness,
         hasTexture: m.principled.hasTexture,
+        // Hue is the first property an author asks a material for, and a
+        // scripted agent reading the manifest JSON (not the report) was blind
+        // to it. Carry the measured linear RGB; a textured surface's is a tint.
+        ...(m.principled.baseColor ? { baseColor: m.principled.baseColor } : {}),
+        ...(m.principled.emission ? { emissionColor: m.principled.emission } : {}),
         // The look's third lever, next to metallic/roughness: an author
         // verifying "is my lantern actually glowing" should not have to
         // open Blender — the census measured it, so the manifest carries it.

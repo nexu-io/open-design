@@ -1306,6 +1306,19 @@ async function runScene3d(args) {
   if (failed) process.exitCode = 1;
 }
 
+/** Linear-RGB triple → sRGB `#rrggbb`, the same transfer the report and kit
+ *  swatches use, so the hex is stable across every surface an agent reads. */
+function srgbHexCli(rgb) {
+  const enc = (c) => {
+    const v = Math.max(0, Math.min(1, c));
+    const s = v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055;
+    return Math.round(s * 255)
+      .toString(16)
+      .padStart(2, '0');
+  };
+  return `#${enc(rgb[0])}${enc(rgb[1])}${enc(rgb[2])}`;
+}
+
 function printScene3dManifest(manifest, scenePath) {
   console.log(`${scenePath}: ${manifest.source.kind} (${manifest.source.files.join(', ')})`);
   console.log(`blender: ${manifest.blender.version ?? 'not used'}`);
@@ -1314,7 +1327,15 @@ function printScene3dManifest(manifest, scenePath) {
     console.log(`  ${'  '.repeat(part.depth)}${part.name} (${part.type.toLowerCase()})${mesh}`);
   }
   for (const material of manifest.materials) {
-    console.log(`  mat ${material.name} metallic=${material.metallic} roughness=${material.roughness}`);
+    const color = material.baseColor ? ` color=${srgbHexCli(material.baseColor)}` : '';
+    const emit =
+      material.emissionStrength && material.emissionStrength > 0
+        ? ` emission×${Number(material.emissionStrength.toFixed(2))}`
+        : '';
+    const tex = material.hasTexture ? ' textured' : '';
+    console.log(
+      `  mat ${material.name}${color} metallic=${material.metallic} roughness=${material.roughness}${emit}${tex}`,
+    );
   }
   console.log(
     `issues: ${manifest.issues.errors} error(s) · ${manifest.issues.warnings} warning(s)` +

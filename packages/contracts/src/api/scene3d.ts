@@ -114,6 +114,11 @@ export interface Scene3dManifestMaterial {
   metallic: number | null;
   roughness: number | null;
   hasTexture: boolean;
+  /** Measured base colour, LINEAR RGB — the hue the material carries. Absent
+   *  when unmeasured (parse-only); on a textured surface it is a tint. */
+  baseColor?: [number, number, number];
+  /** Emission colour (linear RGB), when the surface emits. */
+  emissionColor?: [number, number, number];
   /** Emission strength the build actually authored, when measured. */
   emissionStrength?: number;
   /** Measured alpha, present only when the surface is actually translucent

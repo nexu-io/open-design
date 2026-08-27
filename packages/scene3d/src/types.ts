@@ -1417,6 +1417,16 @@ export interface ManifestMaterial {
   metallic: number | null;
   roughness: number | null;
   hasTexture: boolean;
+  /** Measured base colour, LINEAR RGB — the hue an author asks a material for
+   *  ("a red lamp", "gold trim"), the one property the eye reads first. Absent
+   *  when unmeasured (parse-only) or on a census predating the material panel.
+   *  On a textured surface (`hasTexture`) it is a tint over the map, not the
+   *  whole surface. A machine-readable agent gets the raw linear triple; the
+   *  human-facing report sRGB-encodes it. */
+  baseColor?: [number, number, number];
+  /** Emission colour (linear RGB), when the surface emits — pairs with
+   *  `emissionStrength` so "what colour does it glow" is answerable. */
+  emissionColor?: [number, number, number];
   /** Measured alpha, present only when the surface is actually translucent
    *  (alpha < 1) — a glass material's whole identity. */
   alpha?: number;
