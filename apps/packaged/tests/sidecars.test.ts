@@ -838,6 +838,17 @@ describe('buildPackagedDaemonSpawnEnv', () => {
     ]);
   });
 
+  it('forwards the isolated headless runtime namespace to MCP bootstrap', () => {
+    const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: '1.2.3',
+      daemonCliEntry: null,
+      mcpBootstrapRuntimeNamespace: 'release-stable-headless',
+      requireDesktopAuth: false,
+    });
+
+    expect(env.OD_PACKAGED_RUNTIME_NAMESPACE).toBe('release-stable-headless');
+  });
+
   it('forwards OD_LEGACY_DATA_DIR only when set, irrespective of requireDesktopAuth', () => {
     const withLegacy = buildPackagedDaemonSpawnEnv(fakePaths(), {
       appVersion: null,

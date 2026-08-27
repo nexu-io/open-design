@@ -87,6 +87,24 @@ describe("resolvePackagedNamespacePaths", () => {
     );
   });
 
+  it("supports separate runtime and data namespaces", () => {
+    const config = fakeConfig();
+    const paths = resolvePackagedNamespacePaths(
+      config,
+      "release-stable-headless",
+      {},
+      config.namespace,
+    );
+
+    expect(paths.namespaceRoot).toBe(
+      join(config.namespaceBaseRoot, "release-stable-headless"),
+    );
+    expect(paths.dataRoot).toBe(
+      join(config.namespaceBaseRoot, config.namespace, "data"),
+    );
+    expect(paths.namespaceRoot).not.toBe(paths.dataRoot);
+  });
+
   it("uses OD_DATA_DIR as a base for the namespace-scoped packaged daemon dataRoot", () => {
     const config = fakeConfig();
     const override = join("C:", "Users", "Fred", "MyProject", "design", ".od");

@@ -13,6 +13,7 @@ import { bootstrapSidecarRuntime, createJsonIpcServer, resolveAppIpcPath } from 
 import type { JsonIpcServerHandle } from "@open-design/sidecar";
 
 import type { PackagedConfig } from "./config.js";
+import { PACKAGED_RUNTIME_NAMESPACE_ENV } from "./config.js";
 import type { PackagedDesktopIdentityHandle } from "./identity.js";
 import { writePackagedDesktopIdentity, writePackagedWebIdentity } from "./identity.js";
 import { confirmPackagedLauncherRuntime, resolvePackagedLauncherRuntime } from "./launcher-runtime.js";
@@ -51,6 +52,17 @@ export interface PackagedHeadlessRequest {
 
 export interface RunPackagedHeadlessOptions {
   mcpBootstrapLaunch?: PackagedMcpBootstrapLaunch;
+}
+
+export function resolvePackagedHeadlessRuntimeNamespace(
+  dataNamespace: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const configured = env[PACKAGED_RUNTIME_NAMESPACE_ENV]?.trim();
+  if (configured != null && configured.length > 0) {
+    return OPEN_DESIGN_SIDECAR_CONTRACT.normalizeNamespace(configured);
+  }
+  return OPEN_DESIGN_SIDECAR_CONTRACT.normalizeNamespace(`${dataNamespace}-headless`);
 }
 
 export interface PackagedHeadlessStartupDependencies {
@@ -166,15 +178,17 @@ export async function runPackagedHeadless(
   },
   options: RunPackagedHeadlessOptions = {},
 ): Promise<void> {
+  const runtimeNamespace = resolvePackagedHeadlessRuntimeNamespace(config.namespace);
   const initialPaths = resolvePackagedNamespacePaths(
     config,
-    config.namespace,
+    runtimeNamespace,
     process.env,
+    config.namespace,
   );
   const launcherRuntime = await resolvePackagedLauncherRuntime(config, initialPaths);
   const activeConfig = launcherRuntime.config;
   const paths = launcherRuntime.paths;
-  const stamp = createHeadlessStamp(config.namespace);
+  const stamp = createHeadlessStamp(runtimeNamespace);
   const mcpBootstrap =
     options.mcpBootstrapLaunch
     ?? resolvePackagedMcpBootstrapLaunch({
@@ -228,6 +242,7 @@ export async function runPackagedHeadless(
         electronNodeCommand: launcherRuntime.electronNodeCommand,
         mcpBootstrapArgs: mcpBootstrap.args,
         mcpBootstrapCommand: mcpBootstrap.command,
+        mcpBootstrapRuntimeNamespace: runtimeNamespace,
         nodeCommand: activeConfig.nodeCommand,
         telemetryRelayUrl: activeConfig.telemetryRelayUrl,
         posthogKey: activeConfig.posthogKey,
