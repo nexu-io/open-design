@@ -840,7 +840,14 @@ export function buildPackagedDaemonSpawnEnv(
     ...(options.mcpBootstrapRuntimeNamespace == null
       || options.mcpBootstrapRuntimeNamespace.length === 0
       ? {}
-      : { OD_PACKAGED_RUNTIME_NAMESPACE: options.mcpBootstrapRuntimeNamespace }),
+      : {
+          OD_MCP_BOOTSTRAP_IPC_PATH: resolveAppIpcPath({
+            app: APP_KEYS.DAEMON,
+            contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+            namespace: options.mcpBootstrapRuntimeNamespace,
+          }),
+          OD_PACKAGED_RUNTIME_NAMESPACE: options.mcpBootstrapRuntimeNamespace,
+        }),
     ...pickPackagedDesktopHandoffEnv(options.desktopHandoffEnv ?? {}),
     ...(options.telemetryRelayUrl == null || options.telemetryRelayUrl.length === 0
       ? {}
