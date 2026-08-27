@@ -472,6 +472,13 @@ function Scene3dScenePanel({
     button: number;
   } | null>(null);
   const frameRects = manifest?.proofRects?.[frameIndex];
+  /* Which side of the model this frame photographs.
+     The scrubber read `3/8`, which says where you are in the FILE and
+     nothing about where you are around the SUBJECT — so a user dragging
+     through a turntable could not say whether they were looking at the
+     front or the back of their own asset. Absent for an authored-camera
+     still, whose pose the compiler never measured. */
+  const currentView = manifest?.proofViews?.[frameIndex];
 
   useEffect(() => {
     const el = stageRef.current;
@@ -1215,8 +1222,20 @@ function Scene3dScenePanel({
                   setFrameIndex(Number(event.target.value));
                 }}
               />
-              <output className={styles.counter}>
+              <output
+                className={styles.counter}
+                {...(currentView
+                  ? { title: `${currentView.name} · azimuth ${Math.round(currentView.azimuthDeg)}°` }
+                  : {})}
+              >
                 {frameIndex + 1}/{frames.length}
+                {/* The compass name is compiler DATA, not UI copy — it comes
+                    off the manifest already named — so it carries no i18n
+                    key and must not be translated into a different word than
+                    the report and the contact sheet use for the same view. */}
+                {currentView ? (
+                  <span className={styles.counterView}>{currentView.name}</span>
+                ) : null}
               </output>
             </div>
           ) : null}

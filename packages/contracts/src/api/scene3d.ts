@@ -154,6 +154,38 @@ export interface Scene3dManifest {
    * energize decodes them to find exactly which pixels a part occupies.
    */
   proofIdParts?: string[];
+  /**
+   * Where each proof frame was photographed from.
+   *
+   * Present only when the pose is derivable — a turntable's orbit is a
+   * documented function of the frame index, but a still through a camera the
+   * AUTHOR placed has a pose the compiler never measured. Absent therefore
+   * means "not knowable", never "front": naming an unmeasured pose would be
+   * a confident lie in exactly the case a reader most needs the truth.
+   */
+  proofViews?: Array<{
+    index: number;
+    azimuthDeg: number;
+    elevationDeg: number;
+    /** `front`, `back-right`, … prefixed `~` when between octants. */
+    name: string;
+  }>;
+  /**
+   * The contact sheet: every proof frame on one labelled page, with the
+   * compass name and azimuth per frame, a projected world-axis gnomon, and
+   * one numbered badge per part.
+   *
+   * `legend` is the badge↔part mapping AS DRAWN, so the numbers on the image
+   * are resolvable from the manifest alone — by a reader with no image input,
+   * and by any UI that wants to name a badge without re-decoding pixels.
+   */
+  contactSheet?: {
+    path: string;
+    legend: Array<{ badge: number; part: string }>;
+    /** Parts no angle of the orbit shows a pixel of: enclosed, or hidden
+     *  inside another part. A fact about the scene, not about the sheet. */
+    neverVisible: string[];
+  };
   exportedAssets: string[];
   issues: Scene3dIssueSummary;
   issueCodes: string[];
@@ -246,6 +278,16 @@ export interface Scene3dCompileResponse {
    * `proofImages`: these are not frames of the scene.
    */
   materialBalls?: Scene3dArtifactRef[];
+  /**
+   * The proof contact sheet (`out/contact.png`), resolved project-relative
+   * with its asset URL.
+   *
+   * `manifest.contactSheet.path` is stored SCENE-relative like every other
+   * manifest path; this is the same file addressed the way a consumer
+   * outside the scene directory has to address it. Present whenever the
+   * compile rendered proof frames.
+   */
+  contactSheet?: Scene3dArtifactRef;
   blender: { available: boolean; version: string | null };
   /**
    * The solver's output for spec-authored scenes: every part's solved box,
@@ -292,6 +334,16 @@ export interface Scene3dCompileCliEnvelope {
   issues: Scene3dIssue[];
   proofImages: string[];
   exportedAssets: string[];
+  /** Project-relative path to `out/contact.png`, when the proof rendered. */
+  contactSheet?: string;
+  /**
+   * The `<scene3d-report>` block, when `--agent-message` (or `--frames`) was
+   * passed. Carried on the machine envelope for the same reason it is printed
+   * on the prose one: the block exists for agent self-correction, and `--json`
+   * is the surface an agent drives. Omitted without the flag so a scripted
+   * `--json | jq` call does not pay for a report nothing reads.
+   */
+  agentMessage?: string;
   manifest: Scene3dManifest;
 }
 
@@ -322,6 +374,11 @@ export interface Scene3dManifestResponse {
   manifest: Scene3dManifest | null;
   proofImages: Scene3dArtifactRef[];
   exportedAssets: Scene3dArtifactRef[];
+  /** The labelled contact sheet, resolved to a project-relative URL — the same
+   *  ready reference the compile response carries, so a consumer hydrating from
+   *  the manifest endpoint need not reconstruct a path for a nested scene.
+   *  Absent when the last compile drew no sheet. */
+  contactSheet?: Scene3dArtifactRef;
 }
 
 /* ------------------------------------------------------------------ */

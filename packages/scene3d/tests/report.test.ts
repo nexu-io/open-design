@@ -335,7 +335,11 @@ describe("renderAgentReport", () => {
     expect(text).not.toContain("unchanged since previous compile");
   });
 
-  it("summarises artifacts without dumping every proof frame path", () => {
+  it("gives the frame set as an addressable pattern, not one path", () => {
+    /* Naming ONE path and a count left the reader to infer a hash-bearing
+       filename it had never been shown, so reaching frame 3 began with a
+       guess and an ENOENT. The pattern plus the index range is addressable
+       and still costs one line — the frames are not enumerated. */
     const text = renderAgentReport(
       result({
         proofImages: [
@@ -346,9 +350,52 @@ describe("renderAgentReport", () => {
         exportedAssets: [".scene3d/work/scene.usda", ".scene3d/work/scene.glb"],
       }),
     );
-    expect(text).toContain("proof: 3 frame(s) — .scene3d/proof/proof-abc-000.png");
+    expect(text).toContain("proof: 3 frame(s) — .scene3d/proof/proof-abc-NNN.png, N = 000..002");
     expect(text).not.toContain("proof-abc-001.png");
     expect(text).toContain("assets: .scene3d/work/scene.usda, .scene3d/work/scene.glb");
+  });
+
+  it("maps every frame to the side it photographs, and says where 0° is", () => {
+    /* The orientation half of the report. Without it a serial-numbered
+       frame set says nothing about which side it shows, so every finding
+       about "one side" is a finding about an unidentified side and no
+       follow-up edit can be aimed. */
+    const base = result({
+      proofImages: ["p/f-000.png", "p/f-001.png", "p/f-002.png", "p/f-003.png"],
+    });
+    const text = renderAgentReport({
+      ...base,
+      manifest: {
+        ...base.manifest,
+        proofViews: [
+          { index: 0, azimuthDeg: 0, elevationDeg: 30, name: "front" },
+          { index: 1, azimuthDeg: 90, elevationDeg: 30, name: "right" },
+          { index: 2, azimuthDeg: 180, elevationDeg: 30, name: "back" },
+          { index: 3, azimuthDeg: 270, elevationDeg: 30, name: "left" },
+        ],
+        contactSheet: {
+          path: "out/contact.png",
+          legend: [{ badge: 1, part: "prp_lid" }],
+          neverVisible: ["prp_core"],
+        },
+      },
+    });
+    expect(text).toContain("orbit: [0] front 0° · [1] right 90° · [2] back 180° · [3] left 270°");
+    expect(text).toContain("azimuth 0° = front = camera on -Y");
+    expect(text).toContain("contact sheet: out/contact.png");
+    expect(text).toContain("badges: 1=prp_lid");
+    // A part no angle shows is a fact about the scene, reported not dropped.
+    expect(text).toContain("never visible: prp_core");
+  });
+
+  it("claims no compass name when the camera pose was never measured", () => {
+    // A still through an authored camera has no derivable azimuth. Absent
+    // beats wrong: labelling it `front` would mislead precisely where the
+    // reader has no other way to check.
+    const text = renderAgentReport(result({ proofImages: ["p/f-000.png"] }));
+    expect(text).toContain("proof: 1 frame(s)");
+    expect(text).not.toContain("orbit:");
+    expect(text).not.toContain("azimuth 0°");
   });
 
   it("surfaces the user's viewport edits so the agent sees human intent", () => {

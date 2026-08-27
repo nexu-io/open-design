@@ -45,6 +45,24 @@ export { lintSheets, type SheetSpec, type SheetKind, type SheetLintInput } from 
 export { changeImpact, formatImpact } from "./read/impact.js";
 export { renderOrthoSvg, orthoDimensions } from "./read/ortho.js";
 export {
+  renderContactSheet,
+  type ContactFrame,
+  type ContactSheetInput,
+  type ContactSheetResult,
+} from "./read/contact.js";
+export {
+  compassName,
+  describeProofViews,
+  orbitEye,
+  projectDirection,
+  screenBasis,
+  stillView,
+  turntableViews,
+  viewLabel,
+  PROOF_ELEVATION_DEG,
+  type ProofView,
+} from "./read/views.js";
+export {
   renderAsciiFrame,
   formatAsciiFrame,
   type AsciiFrame,

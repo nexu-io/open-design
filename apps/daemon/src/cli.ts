@@ -738,7 +738,7 @@ const SCENE3D_STRING_FLAGS = new Set([
 ]);
 const SCENE3D_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json', 'agent-message', 'no-turntable', 'no-cache',
-  'merge', 'clear', 'fast', 'frames',
+  'merge', 'clear', 'fast', 'frames', 'respect-scene-camera',
 ]);
 const SCENE3D_ACTIONS = ['compile', 'manifest', 'tweaks'];
 const SCENE3D_FAIL_ON_VALUES = ['error', 'warning', 'none'];
@@ -887,16 +887,25 @@ Options:
   --resolution <px>        Proof render resolution (64-4096)
   --turntable-steps <n>    Turntable frame count (1-64)
   --no-turntable           Render one still instead of a turntable
+  --respect-scene-camera   One still through the camera the SCENE places, framed as
+                           its author framed it (implies --no-turntable). The compiler
+                           cannot derive that pose, so the report claims no compass
+                           name for it.
   --no-cache               Bypass the per-stage content-hash cache
   --frames                 Show the proof frames as ASCII in the report even when clean (implies --agent-message)
   --fail-on <sev>          error | warning | none — exit 1 threshold (default error)
-  --agent-message          Also print the <scene3d-report> block for agent splicing
+  --agent-message          Emit the <scene3d-report> block: per-issue fixes, measured
+                           data, the turntable's compass map, and where the read
+                           artifacts live. Prints after the terse stream, or rides the
+                           envelope as .agentMessage under --json.
 
 Tweaks (per-part placement edits, the same file the viewer's gizmo saves):
   --set <json>             Write these edits, e.g. '{"prp_lid":{"translate":[0,0.1,0]}}'
   --set-file <path|->      Read the same JSON from a file, or - for stdin
   --merge                  Compose with what is already saved instead of replacing
   --clear                  Remove all saved edits for the scene
+
+Common to every action:
   --json                   Print a machine-readable result envelope
   --daemon-url <url>       Override daemon URL
 
@@ -1145,6 +1154,16 @@ async function runScene3d(args) {
     proof.turntableSteps = steps;
   }
   if (flags['no-turntable'] === true) proof.turntable = false;
+  /* The AUTHORED framing: one still through the camera the scene places,
+     turntable overridden. The daemon has validated this since the flag
+     existed and the CLI never offered it, so the one way to photograph a
+     scene the way its author framed it was to hand-post JSON — a
+     capability with only an HTTP surface, which the dual-track rule calls
+     a regression. */
+  if (flags['respect-scene-camera'] === true) {
+    proof.respectSceneCamera = true;
+    proof.turntable = false;
+  }
   if (Object.keys(proof).length > 0) body.proof = proof;
 
   let resp;
@@ -1187,8 +1206,18 @@ async function runScene3d(args) {
       issues: result.issues,
       proofImages: result.proofImages.map((a) => a.path),
       exportedAssets: result.exportedAssets.map((a) => a.path),
+      ...(result.contactSheet ? { contactSheet: result.contactSheet.path } : {}),
       ...(result.materialBalls
         ? { materialBalls: result.materialBalls.map((a: { path: string }) => a.path) }
+        : {}),
+      /* The report rides the envelope under the same flags that print it in
+         the prose stream. It used to be dropped here unconditionally, which
+         made `--json --agent-message` a silent no-op and `--frames --json`
+         print no frames at all — on the surface an AGENT uses. The whole
+         point of the block is agent self-correction, so withholding it from
+         the machine-readable path withheld it from its only real audience. */
+      ...((flags['agent-message'] || flags.frames) && result.agentMessage
+        ? { agentMessage: result.agentMessage }
         : {}),
       manifest: result.manifest,
     };
@@ -1213,6 +1242,28 @@ async function runScene3d(args) {
     console.log(result.ok ? `compiles clean — ${counts}` : `compile failed — ${counts}`);
     if (result.proofImages.length > 0) {
       console.log(`proof: ${result.proofImages.length} frame(s) — ${result.proofImages[0].path}`);
+    }
+    /* The orientation facts, in the terse stream too. A serial-numbered
+       frame set says nothing about which side it photographs, so without
+       these two lines a reader who never asks for the full letter cannot
+       tell the front of their own model from the back — and every
+       observation they make about "one side" is about an unidentified one. */
+    {
+      const views = result.manifest?.proofViews ?? [];
+      if (views.length > 0) {
+        console.log(
+          `orbit: ${views.map((v) => `[${v.index}] ${v.name} ${Math.round(v.azimuthDeg)}°`).join(' · ')}`,
+        );
+      }
+      /* The route's project-relative ref, never manifest.contactSheet.path:
+         the manifest stores it scene-relative, and printing that raw told a
+         reader standing at the project root to open a file that is not
+         there. Every other path in this stream is project-relative. */
+      if (result.contactSheet) {
+        console.log(
+          `contact sheet: ${result.contactSheet.path} — every frame on one labelled page`,
+        );
+      }
     }
     // The light measurements, in the terse stream too: they existed in the
     // full letter only, so a blind reader's sole default answer to "did my

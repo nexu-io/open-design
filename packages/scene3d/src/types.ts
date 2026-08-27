@@ -1281,6 +1281,39 @@ export interface Scene3dManifest {
    * pixels a part occupies in each prerendered frame.
    */
   proofIdParts?: string[];
+  /**
+   * Where each proof frame was photographed from — the fact that turns
+   * `proof-<hash>-003.png` from an unidentified angle into "the back-right".
+   *
+   * Present only when the pose is actually derivable: a turntable's orbit is
+   * a documented function of the frame index, but a still shot through a
+   * camera the AUTHOR placed has a pose the compiler never measured, and
+   * naming that one `front` would be a confident lie in exactly the case a
+   * reader most needs the truth. Absent means "not knowable", never "front".
+   */
+  proofViews?: Array<{
+    index: number;
+    azimuthDeg: number;
+    elevationDeg: number;
+    /** `front`, `back-right`, … prefixed `~` when it is between octants. */
+    name: string;
+  }>;
+  /**
+   * The contact sheet drawn from those frames — every proof frame on one
+   * labelled page, with the compass names, an axis gnomon and one numbered
+   * badge per part.
+   *
+   * `legend` is the badge↔part mapping as DRAWN, so a reader who cannot open
+   * the image still learns which number names which part, and the text
+   * report can quote the same numbers the picture shows.
+   */
+  contactSheet?: {
+    path: string;
+    legend: Array<{ badge: number; part: string }>;
+    /** Parts the orbit never showed a pixel of — enclosed or fully occluded
+     *  from every angle, which is a fact about the scene, not the sheet. */
+    neverVisible: string[];
+  };
   issues: IssueSummary;
   issueCodes: string[];
   /** The subset of issueCodes that fired at error or warning severity —

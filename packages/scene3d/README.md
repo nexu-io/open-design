@@ -364,7 +364,8 @@ an edited `.bin` used to report `build: cached` and ship the old mesh.
 output.
 
 - **Parts** declare an AABB in metres and what fills it: `box`,
-  `cylinder`, `sphere`, `cone`, `torus`, a `file:` import, a `script:`
+  `cylinder`, `sphere`, `cone`, `torus`, `wedge`, `tube`, `capsule`, a
+  `file:` import, a `script:`
   Python file that defines `def build(ctx)`, or a `recipe:` — Python that
   records a deterministic kernel operator trace (`ctx.box`/`cage`/
   `subdivide`/`mirror`) the compiler evaluates in exact rationals (see
@@ -372,7 +373,8 @@ output.
   scale, centred on x/y, bottom-rest), so relations, claims, contacts, and
   provenance behave identically.
 - **Relations** (`at`, `sits_on`, `above`, `align`, `inset_from`, `span`,
-  `repeat`, `scatter`) are order-independent. The solver is a fixpoint.
+  `repeat`, `scatter`, `around`) are order-independent. The solver is a
+  fixpoint.
   `repeat` × `scatter` on the same part is a static reject.
 - **Scatter** uses path-addressed RNG (`src/solve/rng.ts`, PCG/FNV over
   BigInt). Adding an unrelated part cannot reshuffle an existing scatter.
@@ -383,16 +385,23 @@ output.
   (Blender GPUShaderCreateInfo and WebGL2 300 es), and the bake. Time is a
   kernel dimension: `frames: 2..256` (powers of two) bakes a POT atlas that registers as a
   sheet.
-- **Animation currently includes** per-part `spin` / `bob`. The compiler owns
-  those keyframes (24 fps, cycles modifiers), and any motion derives
-  `assetKind: animation`. Sequenced keyframes, skeletal/deformation systems,
-  and richer animation intent are future language areas, not architectural
-  exclusions.
-- **Claims** (`parts`, `maxTriangles`, `grounded`, `maxHeight`,
-  `footprint`, `watertight`, `materialsUsed`) are adjudicated against the
-  census. `grounded` means nothing sinks through the floor. Floating is a
-  legitimate composition; projects that want it reported opt into
-  `conventions.grounding`.
+- **Animation currently includes** per-part `spin` / `bob` / `screw`. The
+  compiler owns those keyframes (24 fps, cycles modifiers), and any motion
+  derives `assetKind: animation`. Spatial claims are then adjudicated over
+  the swept envelope, not one pose. Sequenced keyframes, skeletal/deformation
+  systems, and richer animation intent are future language areas, not
+  architectural exclusions.
+- **Claims** (`parts`, `maxTriangles`, `grounded`, `maxHeight`, `minHeight`,
+  `footprint`, `minFootprint`, `watertight`, `materialsUsed`, `volume`) are
+  adjudicated against the
+  census. `grounded` is adjudicated in BOTH directions: nothing sinks
+  through the floor, *and* every part is supported — resting on the ground
+  or transitively in contact with something that is (`lint/claims.ts`,
+  "Direction two"). A part hovering with neither fails the claim. Floating
+  on purpose is the author's to declare, and the language already has the
+  sentence: a part placed by `above`, or listed in
+  `conventions.grounding.exempt`, hovers licensed, and anything hanging off
+  a declared float inherits the licence.
 - **Identifiers** are charset-gated (`[A-Za-z][A-Za-z0-9_]{2,63}` for
   parts and materials; `uCamelCase` for uniforms). That is what makes
   generated Python and assembled GLSL injection-proof by construction.
@@ -813,8 +822,11 @@ scenes/<name>/
     ├── manifest.json
     ├── digest.md
     ├── ortho.svg
+    ├── contact.png          # every proof frame on one labelled page
     ├── read-model.json
-    ├── proof/proof-*.png
+    ├── proof/proof-*.png    # + proof-*.idx.png object-index maps
+    ├── materials/ball-*.png # lit-sphere preview per bound material
+    ├── textures/            # baked shader maps and atlases
     ├── scene.usda / .usdz / .glb / .obj / .fbx / …
     └── minecraft/          # when target is minecraft
 ```
@@ -823,6 +835,39 @@ Deliverables live in `out/`, not under `.scene3d/`. The host file listing
 hides dot-directories; putting the product there made a clean compile look
 like nothing had been built. The cache stays hidden because it is
 internal.
+
+Two different files are called `kit.html`: the per-scene viewport above, and
+the project-wide CATALOG at the project root (`writeProjectKit`). The deep
+link below is the catalog's; the scene's own copy lives under its `out/`
+with everything else that compile produced.
+
+### Orientation is a product, not a comment
+
+`src/read/views.ts` is the ONE place that knows where a proof frame was
+photographed from. It restates `orbit_offset`/`aim_camera` in
+`scripts/blender/runner.py`: azimuth 0 puts the camera on −Y (Blender's
+numpad-1 front view), azimuth increases toward +X, elevation is 30°, and
+frame *i* of *n* sits at `i·360/n`. Everything downstream of a camera pose
+reads it — the compass names in the report, the labels and the projected
+axis gnomon on the contact sheet, `manifest.proofViews`, the compass label
+on the web panel's scrubber — so the picture and the prose cannot disagree
+about which way is front. Re-deriving it locally is how they would.
+
+`describeProofViews` is the honesty gate: a still through a camera the
+AUTHOR placed has a pose the compiler never measured, so it returns
+`undefined` rather than naming it. Absent means "not knowable", never
+"front", and every consumer stays silent instead of confident.
+
+`out/contact.png` (`src/read/contact.ts`, drawn with the 5×9 bitmap face in
+`src/read/font.ts`) composes the whole orbit onto one page: compass name and
+azimuth per cell, the gnomon, and one numbered badge per part keyed to a
+legend. Two rules earned the design and should not be undone. Badges are
+placed from the `.idx.png` id map, never from `proofRects` — a bounding
+box's centre is the hole of a torus and, for an occluded part, points
+confidently at whatever stands in front of it. And each part is badged ONCE,
+in the frame where it shows the most pixels: badging every part in every
+frame is 13×8 discs that bury the render the sheet exists to show. Output is
+byte-deterministic, so two compiles diff.
 
 `scenes/*/out/` is hidden from the files-list API, but
 `GET /api/projects/:id/files/<path>` still serves those bytes. Export URLs
@@ -1157,8 +1202,9 @@ important the first time it broke.
 - **`Scene3dRenderer` matches `renderer`, registered first.**
 - **Material merge replaces the object.** Per-key merge makes "I put the
   roughness back" unsayable.
-- **`claims.grounded` is one-sided** (nothing sinks). Floating is not a
-  failed claim.
+- **`claims.grounded` is two-sided**: nothing sinks, AND nothing floats
+  unsupported. An undeclared hover fails the claim; `above` and
+  `conventions.grounding.exempt` are how a deliberate float is licensed.
 - **Oriented box is the voxel authority**, not the world AABB of a rotated
   part.
 - **Boxness is measured on positions, not topology.** A triangulated

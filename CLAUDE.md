@@ -27,6 +27,8 @@ it again; read this, then act.
 | Compile hook + scene-path heuristic | `apps/web/src/hooks/useScene3dCompile.ts` |
 | Presentation rules (deliverable grouping, assetKind labels, kit hydration) | `apps/web/src/runtime/scene3d-assets.ts` |
 | Interactive kit page + orbit/edit runtime (generated HTML) | `packages/scene3d/src/viewer/kit.ts`, `kit-runtime.ts` |
+| Camera-pose truth (azimuth→compass, screen basis) | `packages/scene3d/src/read/views.ts` |
+| Contact sheet (`out/contact.png`) + its bitmap font | `packages/scene3d/src/read/contact.ts`, `read/font.ts` |
 | Sidecar writers | `packages/scene3d/src/manifest.ts` (`writeArtifactSidecar`, `writeKitSidecar`, `writeViewer`, `writeProjectKit`) |
 | Home chip / plugin / template | `home-hero/chips.ts` (`example-scene3d`), `plugins/_official/examples/scene3d/`, `design-templates/scene3d/` |
 
@@ -277,6 +279,18 @@ it again; read this, then act.
   `lint/provenance.ts` drops the severity to info with `detail.provenance` so
   the report can explain its own quiet. Turning any of these back into an
   early `return`/`catch {}` reinstates the exact bug class three audits found.
+- **The agent is never told where it is standing by accident.** A proof
+  frame's camera pose is DERIVED in one place (`read/views.ts`: azimuth 0 =
+  camera on −Y = front, +az toward +X, elevation 30°, frame i of n at
+  i·360/n) and consumed by the report's `orbit:` line, `manifest.proofViews`,
+  the contact sheet's labels and gnomon, and the web scrubber's compass
+  label. `describeProofViews` returns `undefined` for an authored camera —
+  absent beats a confident wrong name. The report also prints the frame
+  filename PATTERN and index range, never one path: the hash varies per
+  compile and a reader who has to guess it gets ENOENT. Contact-sheet badges
+  come from the `.idx.png` id map (which pixels ARE the part), never from
+  `proofRects` bounding boxes, and each part is badged once in its largest
+  frame. Do not re-derive any of this locally.
 - **One predicate per physical relation.** Grounding lives in
   `solve/contact.ts` and is consumed by both the world linter and the claims
   adjudicator; the voxel element frame is the census's oriented box

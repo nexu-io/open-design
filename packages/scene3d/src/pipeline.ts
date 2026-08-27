@@ -10,6 +10,7 @@ import {
   ProofFrameStats,
   ProofOptions,
   Scene3dContract,
+  Scene3dManifest,
   StageId,
   StageReport,
   PartTweak,
@@ -48,6 +49,8 @@ import { buildManifest, writeManifest, writeViewer } from "./manifest.js";
 import { describeScene } from "./read/describe.js";
 import { changeImpact, formatImpact, type ImpactReport } from "./read/impact.js";
 import { renderOrthoSvg, orthoDimensions } from "./read/ortho.js";
+import { renderContactSheet } from "./read/contact.js";
+import { describeProofViews, orbitEye, type ProofView } from "./read/views.js";
 import { validateSceneSpec, specDeclarationLines } from "./solve/validate.js";
 import { solveScene } from "./solve/solver.js";
 import { motionEnvelopeIssues } from "./solve/sweep.js";
@@ -944,6 +947,9 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
    *  runner rendered `<frame>.idx.png` object-index maps beside the frames.
    *  The viewer derives each map's path from its frame's path. */
   let proofIdParts: string[] | undefined;
+  /** The contact sheet's own report: which badge named which part, and which
+   *  parts the orbit never showed. Filled at manifest time (below). */
+  let contactSheetSummary: ContactSheetSummary | undefined;
   const proofOpts: ProofOptions = { ...normalized.proof, ...(request.proof ?? {}) };
   if (wanted.has("proof")) {
     const tp = performance.now();
@@ -1764,8 +1770,23 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
     // frames and exports on disk are still the scene's deliverables. Carry
     // them forward from the previous manifest when their stage was not
     // asked to run, verifying each file still exists.
+    let proofCarried = false;
+    let carriedProofViews: ProofView[] | undefined;
+    let carriedContactSheet: ContactSheetSummary | undefined;
     if (!wanted.has("proof") && proofImages.length === 0) {
-      proofImages.push(...previousManifestArtifacts(request.projectDir, "proofImages"));
+      const block = carriedProofBlock(request.projectDir);
+      proofImages.push(...block.images);
+      proofCarried = block.images.length > 0;
+      if (proofCarried) {
+        // The whole coherent block rides with the frames: poses, part rectangles
+        // (so the panel still picks parts), id-map legend, per-frame stats, and
+        // the contact sheet as-drawn — none re-derived from this compile.
+        carriedProofViews = block.views;
+        carriedContactSheet = block.contactSheet;
+        if (proofRects === undefined) proofRects = block.rects;
+        if (proofIdParts === undefined) proofIdParts = block.idParts;
+        if (proofFrames === undefined) proofFrames = block.frames;
+      }
     }
     if (!wanted.has("export") && exportedAssets.length === 0) {
       exportedAssets.push(...previousManifestArtifacts(request.projectDir, "exportedAssets"));
@@ -1822,6 +1843,27 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       });
     }
 
+    /* Where each frame was photographed from.
+       The compiler always knew this and never said it, so `proof-<hash>-003`
+       was a picture of an unidentified side and "check the back" was not a
+       move a reader could make. `describeProofViews` refuses to guess when
+       the camera was authored rather than orbited — absent beats wrong.
+
+       When the frames were CARRIED from a previous compile (proof did not run
+       this pass), their poses are what THAT compile measured — not the current
+       proof options, which may differ (a turntable request after an authored-
+       camera render would otherwise relabel a still as `front · az 0°`). Read
+       them back from the previous manifest, reconstructing each `eye` from its
+       angles; absent there (the prior render was authored) stays absent. */
+    const proofViews: ProofView[] | undefined = proofCarried
+      ? carriedProofViews
+      : describeProofViews({
+          frameCount: proofImages.length,
+          turntable: proofOpts.turntable !== false,
+          authoredCamera: proofOpts.respectSceneCamera === true,
+        });
+
+
     /* Recomputed AFTER the read-model write attempt: a failed write pushed
        DELIVERABLE_WRITE_FAILED into `issues`, and building the manifest
        from the earlier list made the response and the manifest disagree
@@ -1830,7 +1872,12 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
        write below can only ride the response; an artifact cannot contain
        the failure to write itself.) */
     const manifestIssues = attributeIssues([...issues, ...lintIssues], census);
-    const manifest = buildManifest({
+    /* Everything the manifest derives from EXCEPT the issue list — a later
+       fallible write (the contact sheet, below) can still grow that list, so
+       the manifest is rebuilt from these once the final issues are known,
+       keeping summary/issueCodes/actionableCodes consistent with one another
+       through one definition (buildManifest). */
+    const manifestInput = {
       source,
       projectDir: request.projectDir,
       carried: carriedRecord,
@@ -1838,8 +1885,6 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       ...(proofRects ? { proofRects } : {}),
       ...(proofIdParts ? { proofIdParts } : {}),
       census,
-      issues: manifestIssues,
-      summary: summarize(manifestIssues),
       proofImages,
       exportedAssets,
       blenderUsed: probe !== null && needsBlender,
@@ -1858,7 +1903,77 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
             ].sort(),
           }
         : {}),
+    };
+    const baseManifest = buildManifest({
+      ...manifestInput,
+      issues: manifestIssues,
+      summary: summarize(manifestIssues),
     });
+
+    /* The contact sheet: the whole orbit on one labelled page.
+       Drawn here, between building the manifest and writing it, because its
+       header quotes the census metrics the manifest just derived — reading
+       them rather than re-deriving them keeps one definition of "how big is
+       this scene". A failure is reported and survivable, like the read
+       model's: the compile's products are the frames and the exports, and a
+       sheet that could not be drawn must not take them down with it.
+
+       On a CARRIED pass the frames are the last render's, so the sheet is too:
+       redrawing it here would stamp THIS compile's metrics (world size, tris,
+       part count) onto stale pictures, a page whose facts and images disagree.
+       The carried sheet — drawn when those frames were fresh, its facts theirs —
+       is reused as-is instead. */
+    let contactSheet: ContactSheetSummary | undefined = proofCarried ? carriedContactSheet : undefined;
+    if (!proofCarried && proofImages.length > 0) {
+      try {
+        contactSheet = writeContactSheet(request.projectDir, {
+          title: sceneTitle(request, source),
+          images: proofImages,
+          views: proofViews,
+          idParts: proofIdParts,
+          metrics: baseManifest.metrics,
+        });
+      } catch (err: any) {
+        issues.push({
+          code: ISSUE_CODES.DELIVERABLE_WRITE_FAILED,
+          severity: "warning",
+          message: `could not write the proof contact sheet (out/contact.png): ${String(err?.message ?? err)}`,
+        });
+      }
+    }
+    /* Recomputed AGAIN after the contact-sheet write, for the same reason the
+       read-model write forced the recompute above: writeContactSheet can push a
+       DELIVERABLE_WRITE_FAILED, and a manifest built from the pre-contact-sheet
+       issues would report the warning in the response while the persisted
+       manifest denied it — the response-versus-disk split the single-manifest
+       discipline exists to prevent. Rebuilt from the SAME inputs (one
+       definition, not a hand-patched field) only when the list actually grew;
+       baseManifest — already drawn from for its metrics — stands otherwise. */
+    const finalManifestIssues = attributeIssues([...issues, ...lintIssues], census);
+    const builtManifest =
+      finalManifestIssues.length === manifestIssues.length
+        ? baseManifest
+        : buildManifest({ ...manifestInput, issues: finalManifestIssues, summary: summarize(finalManifestIssues) });
+    const manifest: Scene3dManifest = {
+      ...builtManifest,
+      /* The pose as ANGLES, without the `eye` unit vector the in-process
+         view carries. The vector is a pure function of the two angles
+         (`orbitEye`), so persisting it would be derived state that can
+         drift from its own source — and it serialises as three 17-digit
+         floats per frame for a reader that can recompute it exactly. */
+      ...(proofViews
+        ? {
+            proofViews: proofViews.map((v) => ({
+              index: v.index,
+              azimuthDeg: v.azimuthDeg,
+              elevationDeg: v.elevationDeg,
+              name: v.name,
+            })),
+          }
+        : {}),
+      ...(contactSheet ? { contactSheet } : {}),
+    };
+    contactSheetSummary = contactSheet;
     try {
       finalManifest = writeManifest(request.projectDir, manifest);
       // The viewer is part of the deliverable, not a debug aid: it is the only
@@ -2199,6 +2314,102 @@ function emitMaterialCapabilityParity(
   }
 }
 
+/** What the contact sheet reported about itself, for the manifest and report. */
+export interface ContactSheetSummary {
+  /** Project-relative path to the sheet. */
+  path: string;
+  /** Legend number → part name, exactly as drawn. */
+  legend: Array<{ badge: number; part: string }>;
+  /** Parts the orbit never showed a pixel of. */
+  neverVisible: string[];
+}
+
+/**
+ * Draw and write `out/contact.png`.
+ *
+ * The turntable's frames are the compiler's most information-dense product
+ * and, as loose serially-named PNGs, its least usable one: nothing on a frame
+ * says which side it photographs or which shape is which part, so a reader
+ * opens several and carries nothing between them. This composes all of them
+ * onto one labelled page — compass names and azimuths from the same `views`
+ * module the text report quotes, an axis gnomon projected from the real
+ * camera pose, and one numbered badge per part keyed to a legend.
+ *
+ * A frame that will not decode is drawn as a labelled blank rather than
+ * skipped, so a sheet with a hole in it looks like one.
+ */
+function writeContactSheet(
+  projectDir: string,
+  input: {
+    title: string;
+    images: string[];
+    views: ProofView[] | undefined;
+    idParts: string[] | undefined;
+    metrics: Scene3dManifest["metrics"];
+  },
+): ContactSheetSummary | undefined {
+  const frames = input.images.map((rel, index) => {
+    const abs = path.join(projectDir, rel);
+    const idAbs = abs.replace(/\.png$/i, ".idx.png");
+    return {
+      png: fs.readFileSync(abs),
+      // The id map is an enhancement, not a dependency: without it the sheet
+      // still orients the reader, it just cannot name the shapes.
+      ...(fs.existsSync(idAbs) ? { idPng: fs.readFileSync(idAbs) } : {}),
+      ...(input.views?.[index] ? { view: input.views[index]! } : {}),
+    };
+  });
+
+  const worldSize = input.metrics?.worldSize;
+  const facts = [
+    `${frames.length} ${frames.length === 1 ? "frame" : "frames"}`,
+    worldSize
+      ? `world ${worldSize.map((v: number) => Number(v.toFixed(2))).join(" × ")} m`
+      : null,
+    input.metrics?.totalTriangles
+      ? `${input.metrics.totalTriangles.toLocaleString("en-US")} tris`
+      : null,
+    input.idParts ? `${input.idParts.length} parts` : null,
+  ].filter((f): f is string => f !== null);
+
+  const sheet = renderContactSheet({
+    title: input.title,
+    frames,
+    ...(input.idParts ? { idParts: input.idParts } : {}),
+    facts,
+  });
+  const dir = path.join(projectDir, OUT_DIR);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, CONTACT_SHEET_FILE), sheet.png);
+  return {
+    path: `${OUT_DIR}/${CONTACT_SHEET_FILE}`,
+    legend: sheet.legend,
+    neverVisible: sheet.neverVisible,
+  };
+}
+
+const CONTACT_SHEET_FILE = "contact.png";
+
+/**
+ * What to call this compile on the sheet.
+ *
+ * The scene directory's own name, which is what the author typed and what
+ * every path in the report already shows. Falling back to the project
+ * directory keeps a single-scene project from being titled `.`.
+ */
+function sceneTitle(request: CompileRequest, source: { files: string[] }): string {
+  const fromScene = request.scenePath
+    ? path.basename(request.scenePath.replace(/[\\/]+$/, ""))
+    : "";
+  if (fromScene && fromScene !== "." && fromScene !== "..") return fromScene;
+  const first = source.files[0];
+  if (first) {
+    const parent = path.dirname(first);
+    if (parent && parent !== "." && parent !== "..") return path.basename(parent);
+  }
+  return path.basename(request.projectDir) || "scene";
+}
+
 function writeReadModel(projectDir: string, model: ReadModel): void {
   const dir = path.join(projectDir, OUT_DIR);
   fs.mkdirSync(dir, { recursive: true });
@@ -2237,6 +2448,106 @@ function previousManifestArtifacts(
     );
   } catch {
     return [];
+  }
+}
+
+/**
+ * The proof-frame poses from the previous manifest, for a pass that CARRIES its
+ * frames rather than rendering them. The manifest stores each view's angles and
+ * name but not its `eye` unit vector (derivable, so not persisted); this
+ * reconstructs `eye` with the same `orbitEye` the live path uses, so a carried
+ * contact sheet draws the same gnomon it did when the frames were fresh. Returns
+ * undefined when the previous render had no derivable pose (an authored camera),
+ * which is the honest label for the carried frames too.
+ */
+interface CarriedProofBlock {
+  images: string[];
+  views: ProofView[] | undefined;
+  rects: Scene3dManifest["proofRects"];
+  idParts: string[] | undefined;
+  frames: Scene3dManifest["proofFrames"];
+  contactSheet: ContactSheetSummary | undefined;
+}
+
+/**
+ * The proof block a carrying pass reuses from the previous manifest — the frames
+ * and every artifact coupled to them: poses, part rectangles, id-map legend,
+ * per-frame stats, and the contact sheet.
+ *
+ * A restricted compile (`parse,build,lint`) does not re-render, so it presents
+ * the LAST render's artifacts rather than none. Two disciplines keep that
+ * honest, and they are the whole point of gathering the block in one place:
+ *
+ *  - The FRAMES carry only if every one still exists on disk (a partial set is
+ *    a broken orbit), and each POSITIONAL companion — poses, rects, per-frame
+ *    stats — carries only when its length matches the frames, so it stays
+ *    paired to the right frame. An incoherent or absent companion is dropped,
+ *    not force-fit: a right view labelled `front` or a rect that picks the
+ *    wrong part is worse than an unlabelled frame ("absent beats wrong", the
+ *    same rule the pose module keeps for an authored camera). A pre-feature
+ *    manifest (frames, none of this metadata) thus carries bare frames — the
+ *    behavior it always had — and gains the rest on its next FULL compile.
+ *  - The CONTACT SHEET carries as the reference it already is — drawn when
+ *    these frames were fresh, its embedded facts theirs. The caller does not
+ *    REDRAW it on a carried pass, which would stamp this compile's metrics onto
+ *    stale pictures; a scene with no prior sheet simply gets one from its next
+ *    full compile.
+ *
+ * Each `eye` is reconstructed with `orbitEye` (the manifest stores angles, not
+ * the derivable vector).
+ */
+function carriedProofBlock(projectDir: string): CarriedProofBlock {
+  const empty: CarriedProofBlock = {
+    images: [],
+    views: undefined,
+    rects: undefined,
+    idParts: undefined,
+    frames: undefined,
+    contactSheet: undefined,
+  };
+  try {
+    const prev = JSON.parse(
+      fs.readFileSync(path.join(projectDir, OUT_DIR, "manifest.json"), "utf8"),
+    ) as Partial<Scene3dManifest>;
+    const all = Array.isArray(prev.proofImages) ? prev.proofImages : [];
+    if (
+      all.length === 0 ||
+      !all.every((rel) => typeof rel === "string" && fs.existsSync(path.join(projectDir, rel)))
+    ) {
+      return empty;
+    }
+    const pv = Array.isArray(prev.proofViews) ? prev.proofViews : undefined;
+    const views =
+      pv && pv.length === all.length
+        ? all.map((_, i) => ({
+            index: pv[i]!.index,
+            azimuthDeg: pv[i]!.azimuthDeg,
+            elevationDeg: pv[i]!.elevationDeg,
+            name: pv[i]!.name,
+            eye: orbitEye(pv[i]!.azimuthDeg, pv[i]!.elevationDeg),
+          }))
+        : undefined;
+    // The contact sheet reference carries only if the PNG it names still exists;
+    // its embedded facts stay from when it was drawn, matching its own frames.
+    const sheet =
+      prev.contactSheet &&
+      typeof prev.contactSheet.path === "string" &&
+      fs.existsSync(path.join(projectDir, prev.contactSheet.path))
+        ? prev.contactSheet
+        : undefined;
+    return {
+      images: [...all],
+      views,
+      rects:
+        Array.isArray(prev.proofRects) && prev.proofRects.length === all.length ? prev.proofRects : undefined,
+      idParts:
+        Array.isArray(prev.proofIdParts) && prev.proofIdParts.length > 0 ? prev.proofIdParts : undefined,
+      frames:
+        Array.isArray(prev.proofFrames) && prev.proofFrames.length === all.length ? prev.proofFrames : undefined,
+      contactSheet: sheet,
+    };
+  } catch {
+    return empty;
   }
 }
 

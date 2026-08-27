@@ -180,6 +180,20 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
         ...(result.materialBalls.length > 0
           ? { materialBalls: result.materialBalls.map((p) => artifactRef(project.id, scenePath, p)) }
           : {}),
+        /* Resolved like every other artifact on this response, and for the
+           same reason. The manifest stores paths SCENE-relative
+           (`out/contact.png`); every consumer outside the scene directory
+           needs them project-relative, and a path a reader follows to a
+           wall is the exact failure this artifact exists to prevent. */
+        ...(result.manifest.contactSheet
+          ? {
+              contactSheet: artifactRef(
+                project.id,
+                scenePath,
+                result.manifest.contactSheet.path,
+              ),
+            }
+          : {}),
         blender: { available: probe !== null, version: probe?.version ?? null },
         // The solver's own output: the parse loop's placement eyes.
         ...(result.solved ? { solved: result.solved } : {}),
@@ -382,6 +396,13 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
         exportedAssets: (manifest?.exportedAssets ?? []).map((p) =>
           artifactRef(project.id, scenePath, p),
         ),
+        // Resolve the contact sheet the same way the POST response does, so a
+        // consumer hydrating from the manifest endpoint gets the ready
+        // project-relative URL rather than reconstructing a path for a scene
+        // nested below the project root.
+        ...(manifest?.contactSheet
+          ? { contactSheet: artifactRef(project.id, scenePath, manifest.contactSheet.path) }
+          : {}),
       };
       res.json(response);
     } catch (err: any) {

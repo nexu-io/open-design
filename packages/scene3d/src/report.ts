@@ -233,11 +233,22 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
       animRange.frameEnd > animRange.frameStart
         ? ` (turntable steps evenly across animation frames ${animRange.frameStart}–${animRange.frameEnd})`
         : "";
+    /* The whole frame set, addressably.
+       This line used to print ONE path and a count, which left the reader to
+       infer a hash-bearing filename pattern it had never been shown — so
+       "look at the back" began with a guessed path and an ENOENT. Naming the
+       pattern and its index range costs one line and removes the guess. */
+    const first = result.proofImages[0]!;
+    const pattern = first.replace(/(\d+)(\.png)$/i, (_m, digits: string, ext: string) =>
+      `${"N".repeat(digits.length)}${ext}`,
+    );
+    const last = String(result.proofImages.length - 1).padStart(3, "0");
     lines.push(
-      `proof: ${result.proofImages.length} frame(s)${sampled} — ${result.proofImages[0]}` +
+      `proof: ${result.proofImages.length} frame(s)${sampled} — ${pattern}, N = 000..${last}` +
         (carried ? " (carried from a previous compile — proof did not run this time)" : "") +
         " · real PNGs: open them directly if you can read images",
     );
+    appendOrbit(lines, result);
   }
   if (result.exportedAssets.length > 0) {
     lines.push(`assets: ${result.exportedAssets.join(", ")}`);
@@ -412,6 +423,15 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
        first --fast pass writes no frame player and a census-less pass no
        ortho. A read: that can name an absent file teaches the reader to
        stop following it. */
+    /* The sheet leads, above even the ortho: it is the cheapest thing in the
+       list to act on (one image, no parsing) and the only one that answers
+       "which way am I looking" — the question every other artifact here
+       silently assumes the reader has already answered. */
+    if (result.manifest.contactSheet) {
+      lines.push(
+        `  ${result.manifest.contactSheet.path} — the whole turntable on one labelled page: compass name and azimuth per frame, an axis gnomon, numbered part badges. The fastest way to see what you built and from where`,
+      );
+    }
     if (result.census) {
       lines.push(
         "  out/ortho.svg — dimensioned plan/front/side drawings (SVG = text-readable); a 2-second look catches proportion and overlap mistakes the turntable obscures",
@@ -471,8 +491,13 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
         lines.push("next: structure settled? run a full compile to photograph, export, and see the piece.");
       }
     } else {
+      /* Point at the sheet when there is one: "walk one proof frame" asks
+         the reader to judge the piece from a single unidentified angle,
+         which is the habit this whole artifact exists to replace. */
       lines.push(
-        "next: before calling it done, walk one proof frame and out/ortho.svg — a clean compile proves the build, not the design.",
+        result.manifest.contactSheet
+          ? `next: before calling it done, look at ${result.manifest.contactSheet.path} and out/ortho.svg — a clean compile proves the build, not the design.`
+          : "next: before calling it done, walk one proof frame and out/ortho.svg — a clean compile proves the build, not the design.",
       );
     }
     // A spec with no claims is a shape nothing re-verifies. One nudge, only
@@ -508,6 +533,62 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
  *   - changed → the consequence-first impact block, capped so the broken-
  *     support lines can never be pushed below the fold
  */
+
+/**
+ * Which frame photographs which side, and where the labelled sheet is.
+ *
+ * The orientation half of the report, and the half that did not exist. The
+ * compiler orbits its camera on a documented path and then handed back frames
+ * whose only mark was a serial number, so a reader could not tell the front of
+ * its own model from the back — every observation about "one side" was an
+ * observation about an unidentified side, and no follow-up edit could be
+ * aimed. Three lines close it: the map from index to compass point, the
+ * convention that makes those names mean something, and the one artifact that
+ * shows all of it at once.
+ *
+ * Printed only when the poses are actually known. A still through a camera
+ * the author placed has no derivable azimuth, and `proofViews` is absent
+ * there rather than invented — so this block is silent instead of confident.
+ */
+function appendOrbit(lines: string[], result: CompileResult): void {
+  const views = result.manifest.proofViews;
+  if (views && views.length > 0) {
+    const orbit = views
+      .map((v) => `[${v.index}] ${v.name} ${Math.round(v.azimuthDeg)}°`)
+      .join(" · ");
+    lines.push(`  orbit: ${orbit}`);
+    lines.push(
+      "  frame N looks from azimuth N×360/count. azimuth 0° = front = camera on -Y (Blender numpad-1)," +
+        " increasing toward +X, elevated 30°. world is Z-up.",
+    );
+  }
+
+  const sheet = result.manifest.contactSheet;
+  if (!sheet) return;
+  lines.push(
+    `  contact sheet: ${sheet.path} — every frame on one page, labelled with these compass names,` +
+      " an axis gnomon per frame, and a numbered badge on each part. Open this ONE image rather than the loose frames.",
+  );
+  if (sheet.legend.length > 0) {
+    // The badge↔part mapping as text too, so the numbers on the picture are
+    // resolvable by a reader who cannot open it — and so a reader who CAN is
+    // not forced to squint at a 9-pixel numeral to name a part.
+    lines.push(
+      `  badges: ${sheet.legend.map((e) => `${e.badge}=${e.part}`).join(" · ")}`,
+    );
+  }
+  if (sheet.neverVisible.length > 0) {
+    /* A measured fact about the scene, not about the sheet: a part the whole
+       orbit never shows a pixel of is enclosed by other geometry or hidden
+       inside it. That is sometimes intended (an interior) and sometimes a
+       part that was never placed where the author thought — and either way it
+       is invisible to every review that only looks at renders. */
+    lines.push(
+      `  never visible: ${sheet.neverVisible.join(", ")} — no pixel from any angle of the orbit` +
+        " (enclosed, or hidden inside another part)",
+    );
+  }
+}
 
 /**
  * The proof frames, as text, when the report is about what they look like.

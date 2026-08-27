@@ -913,6 +913,18 @@
   text-align: right;
 }
 
+/* The compass name beside the frame count: which side of the subject this
+   frame photographs. Quieter than the count and allowed to disappear before
+   it — the count is the control's own state, the name is annotation. It is
+   compiler data (`front-right`), so it must not wrap mid-word into the
+   scrubber. */
+.counterView {
+  margin-left: 6px;
+  color: var(--text-tertiary, #8a93a3);
+  font-variant-numeric: normal;
+  white-space: nowrap;
+}
+
 /* ---- side rail --------------------------------------------------- */
 
 /* The rail scrolls as one column; the lists inside it do not scroll
@@ -1242,6 +1254,14 @@
 
   .assetName {
     max-width: 30cqw;
+  }
+
+  /* The compass name stands down before the scrubber does. The count is
+     the control's own state and the track is what the user drags; a
+     nowrap annotation that squeezes either is worth less than both. It
+     stays one hover away on the counter's tooltip. */
+  .counterView {
+    display: none;
   }
 }
 
