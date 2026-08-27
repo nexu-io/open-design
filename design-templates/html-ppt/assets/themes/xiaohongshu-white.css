@@ -1,0 +1,16 @@
+/* theme: xiaohongshu-white — 小红书白底高级感 */
+:root{
+  --bg:#fffdfb;--bg-soft:#fff6f1;--surface:#ffffff;--surface-2:#fff1ea;
+  --border:rgba(60,30,20,.1);--border-strong:rgba(60,30,20,.22);
+  --text-1:#1a1210;--text-2:#4f3a32;--text-3:#a08d85;
+  --accent:#ff2742;--accent-2:#ff7a90;--accent-3:#ffb38a;
+  --good:#3ba55c;--warn:#f5a524;--bad:#ff2742;
+  --grad:linear-gradient(135deg,#ff2742,#ff7a90 55%,#ffb38a);
+  --grad-soft:linear-gradient(135deg,#fff6f1,#ffeae0);
+  --radius:20px;--radius-sm:14px;--radius-lg:28px;
+  --shadow:0 12px 30px rgba(255,39,66,.08);
+  --shadow-lg:0 24px 60px rgba(255,39,66,.14);
+  --font-sans:'Noto Sans SC','Inter',sans-serif;
+  --font-display:'Noto Serif SC','Playfair Display',serif;
+  --letter-tight:-.02em;
+}

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <rect id="pill-tl" x="870" y="410" width="80" height="120" rx="40" fill="#F24E1E" />
+  <rect id="pill-tr" x="970" y="410" width="80" height="120" rx="40" fill="#A259FF" />
+  <rect id="pill-bl" x="870" y="550" width="80" height="120" rx="40" fill="#1ABCFE" />
+  <rect id="pill-br" x="970" y="550" width="80" height="120" rx="40" fill="#0ACF83" />
+</svg>

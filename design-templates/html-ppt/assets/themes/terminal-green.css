@@ -1,0 +1,18 @@
+/* theme: terminal-green — 绿屏终端 */
+:root{
+  --bg:#030a04;--bg-soft:#041308;--surface:#0a1b10;--surface-2:#0d2614;
+  --border:rgba(0,255,120,.22);--border-strong:rgba(0,255,120,.42);
+  --text-1:#8cff9a;--text-2:#4bd17a;--text-3:#2f8a4d;
+  --accent:#00ff88;--accent-2:#67ffd0;--accent-3:#b6ff6b;
+  --good:#00ff88;--warn:#ffe066;--bad:#ff6464;
+  --grad:linear-gradient(135deg,#00ff88,#67ffd0);
+  --grad-soft:linear-gradient(135deg,#0a1b10,#0d2614);
+  --radius:4px;--radius-sm:2px;--radius-lg:8px;
+  --shadow:0 0 30px rgba(0,255,136,.15);
+  --shadow-lg:0 0 60px rgba(0,255,136,.28);
+  --font-sans:'JetBrains Mono','IBM Plex Mono',monospace;
+  --font-display:'JetBrains Mono',monospace;
+  --letter-tight:-.01em;
+}
+body{text-shadow:0 0 2px rgba(0,255,136,.5)}
+.card{border:1px solid rgba(0,255,120,.3);background:rgba(10,27,16,.6)}

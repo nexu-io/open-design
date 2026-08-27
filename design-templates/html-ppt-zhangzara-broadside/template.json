@@ -1,0 +1,49 @@
+{
+  "slug": "zhangzara-broadside",
+  "name": "Broadside",
+  "tagline": "Dark editorial canvas with a single fire orange accent and bilingual Latin/Chinese type stack.",
+  "mood": [
+    "editorial",
+    "dramatic",
+    "loud",
+    "newspaper"
+  ],
+  "occasion": [
+    "brand manifesto",
+    "founder vision deck",
+    "magazine / cultural pitch",
+    "design talk",
+    "bilingual EN/CN deck",
+    "campaign launch"
+  ],
+  "tone": [
+    "graphic",
+    "punchy",
+    "literary",
+    "considered"
+  ],
+  "formality": "medium-high",
+  "density": "medium",
+  "palette": {
+    "bg": "#111111",
+    "bg_alt": "#1a1a18",
+    "fg": "#f0ece5",
+    "accent": "#e85d26",
+    "border": "#282826",
+    "muted": "#888880",
+    "description": "near-black newspaper canvas with warm cream text and a single fire-orange headline accent; high typographic contrast, no decorative color"
+  },
+  "typography": {
+    "display": "Barlow",
+    "body": "Barlow",
+    "mono": "IBM Plex Mono",
+    "cn": "Noto Sans SC",
+    "style": "broadside-newspaper grotesk pairing with technical mono captions and Simplified Chinese support"
+  },
+  "scheme": "dark",
+  "best_for": "Anything that should land like a broadside newspaper headline: brand manifestos, magazine and cultural pitches, design talks, bilingual EN/CN decks, founder vision statements. Also a striking pick for tech, research, or business decks that want a dramatic single-accent editorial feel.",
+  "avoid_for": "Decks that need to feel quiet, warm, or institutionally traditional — the dark canvas with fire-orange accent commits to drama.",
+  "slide_count": 16,
+  "navigation": "inline keyboard handler",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/broadside"
+}

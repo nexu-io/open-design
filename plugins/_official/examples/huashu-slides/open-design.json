@@ -1,0 +1,174 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-huashu-slides",
+  "title": "Tell a Career-Pivot Story like an Executive-Presence Coach",
+  "title_i18n": {
+    "en": "Tell a Career-Pivot Story like an Executive-Presence Coach",
+    "zh-CN": "像高管形象教练一样讲职业转型故事",
+    "zh-TW": "像高管形象教练一样讲职业转型故事"
+  },
+  "version": "1.0.0",
+  "publishedAt": "2026-06-16T09:32:15Z",
+  "description": "A career-pivot story from consultant to product leader — the arc, the proof, and why the next role is the right bet. Built as a decision-grade career deck for hiring manager, mentors.",
+  "description_i18n": {
+    "en": "A career-pivot story from consultant to product leader — the arc, the proof, and why the next role is the right bet. Built as a decision-grade career deck for hiring manager, mentors.",
+    "zh-CN": "像高管形象教练一样讲职业转型故事——一份可商业交付的职业发展 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像高管形象教练一样讲职业转型故事——一份可商业交付的职业发展 Deck，围绕真实主题、证据链与决策目标组织。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "花叔 (alchaincyf)",
+    "url": "https://github.com/alchaincyf"
+  },
+  "homepage": "https://github.com/alchaincyf/huashu-design",
+  "plugin": {
+    "repo": "https://github.com/alchaincyf/huashu-design"
+  },
+  "tags": [
+    "community",
+    "deck",
+    "slides",
+    "ppt",
+    "presentation",
+    "pptx",
+    "editorial",
+    "huashu",
+    "consulting-deliverable",
+    "strategy",
+    "client",
+    "huashu-slides",
+    "consulting-delivery",
+    "career",
+    "year-end-self-review-deck",
+    "personal",
+    "portfolio",
+    "promotion",
+    "self-review",
+    "decision-deck",
+    "commercial-slide-agent"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "personal",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "motion": "deck"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create \"Tell a Career-Pivot Story like an Executive-Presence Coach\" as a decision-grade Career deck in this template's own visual system. Subject: A career-pivot story from consultant to product leader — the arc, the proof, and why the next role is the right bet. Audience: hiring manager, mentors. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the evidence make the claim feel earned.",
+        "zh-CN": "像高管形象教练一样讲职业转型故事。像高管形象教练一样讲职业转型故事——一份可商业交付的职业发展 Deck，围绕真实主题、证据链与决策目标组织。 主题：A career-pivot story from consultant to product leader — the arc, the proof, and why the next role is the right bet. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Tell a Career-Pivot Story like an Executive-Presence Coach",
+          "title_i18n": {
+            "en": "Tell a Career-Pivot Story like an Executive-Presence Coach",
+            "zh-CN": "像高管形象教练一样讲职业转型故事",
+            "zh-TW": "像高管形象教练一样讲职业转型故事"
+          }
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "deckType",
+        "label": "Deck type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "product launch deck",
+          "pitch deck",
+          "lecture / course deck",
+          "data report deck",
+          "brand brochure deck"
+        ],
+        "default": "product launch deck"
+      },
+      {
+        "name": "topic",
+        "label": "Topic",
+        "type": "string",
+        "required": true,
+        "placeholder": "你的主题，例如：AI 设计工作流的下一步",
+        "default": "the user's brief"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "投资人 / 团队全员 / 大会听众",
+        "default": "decision makers"
+      },
+      {
+        "name": "slideCount",
+        "label": "Pages",
+        "type": "select",
+        "required": true,
+        "options": [
+          "6-8 pages",
+          "8-12 pages",
+          "12-16 pages",
+          "16-20 pages"
+        ],
+        "default": "8-12 pages"
+      },
+      {
+        "name": "pptxExport",
+        "label": "Editable PPTX",
+        "type": "select",
+        "options": [
+          "HTML only",
+          "also need editable PPTX"
+        ],
+        "default": "HTML only"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "category": "career"
+  }
+}

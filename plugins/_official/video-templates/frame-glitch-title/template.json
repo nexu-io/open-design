@@ -1,0 +1,37 @@
+{
+  "id": "frame-glitch-title",
+  "surface": "hyperframes",
+  "title": "Glitch Title Frame",
+  "summary": "Digital glitch, chromatic offset, and data-corruption title frame for video transitions or cyberpunk heroes.",
+  "category": "Presentation",
+  "tags": [
+    "title",
+    "glitch",
+    "cyberpunk",
+    "rgb-shift",
+    "tech",
+    "scanline"
+  ],
+  "engine": "hyperframes",
+  "engineVersion": "^0.4.0",
+  "sourceEntry": "source/index.html",
+  "aspect": "16:9",
+  "fps": 60,
+  "durationSec": 15,
+  "formats": [
+    "mp4",
+    "webm"
+  ],
+  "bestFor": [
+    "Tech product reveal",
+    "Cyberpunk aesthetic",
+    "Hacker vibe"
+  ],
+  "source": {
+    "repo": "nexu-io/html-video",
+    "path": "templates/frame-glitch-title",
+    "license": "Apache-2.0",
+    "author": "nexu-io",
+    "url": "https://github.com/nexu-io"
+  }
+}

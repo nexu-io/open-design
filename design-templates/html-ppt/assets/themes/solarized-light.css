@@ -1,0 +1,14 @@
+/* theme: solarized-light */
+:root{
+  --bg:#fdf6e3;--bg-soft:#eee8d5;--surface:#ffffff;--surface-2:#f5efd7;
+  --border:rgba(88,110,117,.2);--border-strong:rgba(88,110,117,.4);
+  --text-1:#073642;--text-2:#586e75;--text-3:#93a1a1;
+  --accent:#268bd2;--accent-2:#2aa198;--accent-3:#d33682;
+  --good:#859900;--warn:#b58900;--bad:#dc322f;
+  --grad:linear-gradient(135deg,#268bd2,#2aa198 50%,#859900);
+  --grad-soft:linear-gradient(135deg,#fdf6e3,#eee8d5);
+  --radius:10px;--radius-sm:6px;--radius-lg:16px;
+  --shadow:0 6px 20px rgba(88,110,117,.14);
+  --shadow-lg:0 18px 50px rgba(88,110,117,.24);
+  --font-sans:'Inter','Noto Sans SC',sans-serif;
+}

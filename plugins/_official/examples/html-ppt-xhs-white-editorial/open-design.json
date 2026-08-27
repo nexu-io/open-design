@@ -1,0 +1,110 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-html-ppt-xhs-white-editorial",
+  "title": "Write a Staff-Engineer Promotion Case like a Calibration-Committee Insider",
+  "title_i18n": {
+    "en": "Write a Staff-Engineer Promotion Case like a Calibration-Committee Insider",
+    "zh-CN": "像晋升评审内部人一样写 Staff 工程师晋升材料",
+    "zh-TW": "像晋升评审内部人一样写 Staff 工程师晋升材料"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A staff-engineer promotion packet — scope, the proof moments, the artifacts, and the impact that clears the bar. Built as a decision-grade career deck for manager, calibration committee.",
+  "description_i18n": {
+    "en": "A staff-engineer promotion packet — scope, the proof moments, the artifacts, and the impact that clears the bar. Built as a decision-grade career deck for manager, calibration committee.",
+    "zh-CN": "像晋升评审内部人一样写 Staff 工程师晋升材料——一份可商业交付的职业发展 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像晋升评审内部人一样写 Staff 工程师晋升材料——一份可商业交付的职业发展 Deck，围绕真实主题、证据链与决策目标组织。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "OpenDesign",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/html-ppt-xhs-white-editorial",
+  "tags": [
+    "example",
+    "first-party",
+    "deck",
+    "marketing",
+    "web",
+    "untitled",
+    "xhs-editorial",
+    "white-editorial",
+    "editorial-deck",
+    "launch",
+    "campaign",
+    "pipeline",
+    "html-ppt-xhs-white-editorial",
+    "marketing-and-gtm",
+    "career",
+    "year-end-self-review-deck",
+    "personal",
+    "portfolio",
+    "promotion",
+    "self-review",
+    "decision-deck",
+    "commercial-slide-agent"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "personal",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create \"Write a Staff-Engineer Promotion Case like a Calibration-Committee Insider\" as a decision-grade Career deck in this template's own visual system. Subject: A staff-engineer promotion packet — scope, the proof moments, the artifacts, and the impact that clears the bar. Audience: manager, calibration committee. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the evidence make the claim feel earned.",
+        "zh-CN": "像晋升评审内部人一样写 Staff 工程师晋升材料。像晋升评审内部人一样写 Staff 工程师晋升材料——一份可商业交付的职业发展 Deck，围绕真实主题、证据链与决策目标组织。 主题：A staff-engineer promotion packet — scope, the proof moments, the artifacts, and the impact that clears the bar. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Write a Staff-Engineer Promotion Case like a Calibration-Committee Insider",
+          "title_i18n": {
+            "en": "Write a Staff-Engineer Promotion Case like a Calibration-Committee Insider",
+            "zh-CN": "像晋升评审内部人一样写 Staff 工程师晋升材料",
+            "zh-TW": "像晋升评审内部人一样写 Staff 工程师晋升材料"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "category": "career"
+  }
+}

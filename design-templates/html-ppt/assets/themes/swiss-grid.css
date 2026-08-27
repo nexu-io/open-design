@@ -1,0 +1,17 @@
+/* theme: swiss-grid — 瑞士网格，Helvetica 感 */
+:root{
+  --bg:#ffffff;--bg-soft:#f4f4f4;--surface:#ffffff;--surface-2:#f4f4f4;
+  --border:#111111;--border-strong:#111111;
+  --text-1:#111111;--text-2:#444444;--text-3:#888888;
+  --accent:#d6001c;--accent-2:#111111;--accent-3:#888888;
+  --good:#0f8a2f;--warn:#d38a00;--bad:#d6001c;
+  --grad:linear-gradient(135deg,#d6001c,#111);
+  --grad-soft:linear-gradient(135deg,#f4f4f4,#fff);
+  --radius:0;--radius-sm:0;--radius-lg:0;
+  --shadow:none;--shadow-lg:none;
+  --font-sans:'Inter','Helvetica Neue',Helvetica,'Noto Sans SC',sans-serif;
+  --font-display:'Inter','Helvetica Neue',Helvetica,sans-serif;
+  --letter-tight:-.04em;
+}
+.card{border-top:2px solid #111;border-bottom:1px solid #111;border-left:none;border-right:none;box-shadow:none;background:#fff}
+.slide{background-image:linear-gradient(90deg,rgba(0,0,0,.04) 1px,transparent 1px);background-size:calc(100%/12) 100%}

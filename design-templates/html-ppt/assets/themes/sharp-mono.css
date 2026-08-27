@@ -1,0 +1,17 @@
+/* theme: sharp-mono — 锐利黑白高对比 */
+:root{
+  --bg:#ffffff;--bg-soft:#ffffff;--surface:#ffffff;--surface-2:#000000;
+  --border:#000000;--border-strong:#000000;
+  --text-1:#000000;--text-2:#1a1a1a;--text-3:#4a4a4a;
+  --accent:#000000;--accent-2:#000000;--accent-3:#ff2200;
+  --good:#008800;--warn:#ff9900;--bad:#ff0000;
+  --grad:linear-gradient(135deg,#000,#222);
+  --grad-soft:linear-gradient(135deg,#fff,#eee);
+  --radius:0;--radius-sm:0;--radius-lg:0;
+  --shadow:4px 4px 0 #000;--shadow-lg:8px 8px 0 #000;
+  --font-sans:'Archivo Black','Inter','Noto Sans SC',sans-serif;
+  --font-display:'Archivo Black',sans-serif;
+  --letter-tight:-.04em;
+}
+.h1,.h2,h1.title,h2.title{text-transform:uppercase}
+.card{border:2px solid #000}

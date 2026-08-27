@@ -1,0 +1,105 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-ppt-keynote",
+  "title": "Present an Operating-Model Redesign like a Strategy Engagement Lead",
+  "title_i18n": {
+    "en": "Present an Operating-Model Redesign like a Strategy Engagement Lead",
+    "zh-CN": "像战略项目负责人一样讲运营模式重设计",
+    "zh-TW": "像战略项目负责人一样讲运营模式重设计"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-05-13T13:02:05Z",
+  "description": "An operating-model redesign for a scaling logistics firm — the diagnosis, the target model, and the transition roadmap. Built as a decision-grade consulting deck for client sponsor, ops leaders.",
+  "description_i18n": {
+    "en": "An operating-model redesign for a scaling logistics firm — the diagnosis, the target model, and the transition roadmap. Built as a decision-grade consulting deck for client sponsor, ops leaders.",
+    "zh-CN": "像战略项目负责人一样讲运营模式重设计——一份可商业交付的咨询交付 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像战略项目负责人一样讲运营模式重设计——一份可商业交付的咨询交付 Deck，围绕真实主题、证据链与决策目标组织。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "OpenDesign",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/ppt-keynote",
+  "tags": [
+    "example",
+    "first-party",
+    "deck",
+    "marketing",
+    "web",
+    "slides",
+    "presentation",
+    "untitled",
+    "consulting-deliverable",
+    "strategy",
+    "client",
+    "ppt-keynote",
+    "consulting-delivery",
+    "consulting",
+    "consulting-final-deck",
+    "decision-deck",
+    "commercial-slide-agent"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "strategy",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create \"Present an Operating-Model Redesign like a Strategy Engagement Lead\" as a decision-grade Consulting deck in this template's own visual system. Subject: An operating-model redesign for a scaling logistics firm — the diagnosis, the target model, and the transition roadmap. Audience: client sponsor, ops leaders. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a client know what to do Monday morning.",
+        "zh-CN": "像战略项目负责人一样讲运营模式重设计。像战略项目负责人一样讲运营模式重设计——一份可商业交付的咨询交付 Deck，围绕真实主题、证据链与决策目标组织。 主题：An operating-model redesign for a scaling logistics firm — the diagnosis, the target model, and the transition roadmap. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Present an Operating-Model Redesign like a Strategy Engagement Lead",
+          "title_i18n": {
+            "en": "Present an Operating-Model Redesign like a Strategy Engagement Lead",
+            "zh-CN": "像战略项目负责人一样讲运营模式重设计",
+            "zh-TW": "像战略项目负责人一样讲运营模式重设计"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "category": "consulting"
+  }
+}

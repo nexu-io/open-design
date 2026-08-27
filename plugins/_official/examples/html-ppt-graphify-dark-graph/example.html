@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Write a Feature Business Case like a Principal PM - Product management</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=Inter:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* graphify-dark-graph :: dark ground + force-directed graph signature
+   tokens: green-tinted off-black, single emerald accent, hairlines over glass */
+:root{
+  --bg:#0f1211;
+  --text:#eef1ee;
+  --text-2:#a2aba4;
+  --text-3:#7d8780;
+  --line:rgba(238,241,238,.1);
+  --line-strong:rgba(238,241,238,.24);
+  --accent:#3ecf8e;
+  --accent-dim:rgba(62,207,142,.16);
+  --font-display:'Archivo','Inter',sans-serif;
+  --font-body:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+  --font-mono:'JetBrains Mono',SFMono-Regular,Menlo,monospace;
+  --ease:cubic-bezier(.16,1,.3,1);
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+  font-family:var(--font-body);font-weight:400;line-height:1.6;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+a{color:inherit;text-decoration:none}
+img,svg{max-width:100%;display:block}
+
+/* ============ deck (static preview: slides stacked) ============ */
+.deck{width:100vw}
+.slide{position:relative;width:100vw;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;justify-content:center;
+  padding:72px 96px;border-bottom:1px solid var(--line);
+  background:
+    radial-gradient(rgba(238,241,238,.045) 1px,transparent 1px) 0 0/28px 28px,
+    var(--bg)}
+
+/* slide number, top right */
+.snum{position:absolute;top:34px;right:48px;font-family:var(--font-mono);
+  font-size:11.5px;letter-spacing:.22em;color:var(--text-3)}
+
+/* ============ type ============ */
+.eyebrow{font-family:var(--font-mono);font-size:12px;font-weight:500;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 18px}
+.eyebrow.quiet{color:var(--text-3)}
+.h1{font-family:var(--font-display);font-weight:700;letter-spacing:-.02em;line-height:1.04;
+  font-size:clamp(60px,7vw,92px);margin:0;color:var(--text)}
+.h2{font-family:var(--font-display);font-weight:700;letter-spacing:-.015em;line-height:1.1;
+  font-size:clamp(38px,4.4vw,54px);margin:0}
+.lede{font-size:20px;line-height:1.7;color:var(--text-2);font-weight:400;max-width:60ch;margin:0}
+.ac{color:var(--accent)}
+
+/* ============ graph motif primitives ============ */
+.node-dot{display:inline-block;width:9px;height:9px;border-radius:50%;
+  background:var(--accent);box-shadow:0 0 0 4px var(--accent-dim);flex:none}
+.node-dot.hollow{background:transparent;border:1.5px solid var(--text-3);box-shadow:none}
+
+/* callout: edge-line into a node */
+.callout{display:flex;gap:18px;align-items:baseline;border-top:1px solid var(--line-strong);
+  padding-top:22px;margin-top:34px;max-width:72ch}
+.callout .node-dot{transform:translateY(-1px)}
+.callout p{margin:0;font-size:17px;line-height:1.7;color:var(--text-2)}
+.callout p .ac{color:var(--accent)}
+
+/* ============ entrance motion: transform+opacity only, staggered ============ */
+@keyframes rise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+.slide .in{animation:rise .65s var(--ease) both}
+.slide .in:nth-child(2){animation-delay:.06s}
+.slide .in:nth-child(3){animation-delay:.12s}
+.slide .in:nth-child(4){animation-delay:.18s}
+.slide .in:nth-child(5){animation-delay:.24s}
+@media (prefers-reduced-motion:reduce){.slide .in{animation:none}}
+
+/* ============ S1 cover ============ */
+.cover-graph{position:absolute;inset:0;width:100%;height:100%;opacity:.55;pointer-events:none}
+.cover-inner{position:relative;margin-top:auto;padding-bottom:24px}
+.cover .h1{font-size:clamp(54px,5.6vw,72px)}
+
+/* ============ S3 capability grid ============ */
+.cap-grid{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line-strong);
+  border-bottom:1px solid var(--line);margin-top:36px}
+.cap{padding:28px 26px 30px 0;display:flex;flex-direction:column;gap:10px}
+.cap+.cap{border-left:1px solid var(--line);padding-left:26px}
+.cap .idx{font-family:var(--font-mono);font-size:12px;color:var(--text-3);letter-spacing:.08em;
+  display:flex;align-items:center;gap:10px}
+.cap h4{font-family:var(--font-display);font-weight:600;font-size:18.5px;letter-spacing:-.01em;
+  line-height:1.3;margin:6px 0 0;color:var(--text)}
+.cap p{margin:0;font-size:13.5px;line-height:1.65;color:var(--text-2)}
+
+/* ============ S4 code ============ */
+.cmd{font-family:var(--font-mono);font-size:clamp(20px,2.4vw,28px);font-weight:600;
+  color:var(--accent);letter-spacing:-.01em;margin:14px 0 0}
+.codebox{background:#0b0e0d;border:1px solid var(--line);border-radius:4px;
+  padding:24px 28px;font-family:var(--font-mono);font-size:14px;line-height:1.85;
+  color:#ccd4ce;margin:26px 0 0;max-width:760px;overflow:hidden}
+.codebox .cm{color:var(--text-3)}
+.codebox .kw{color:var(--accent)}
+.codebox .st{color:#dfe5e0}
+.codebox .fn{color:var(--text-2)}
+
+/* ============ S5 race tracks + stat board ============ */
+.race{max-width:920px;margin-top:38px}
+.track{display:grid;grid-template-columns:96px 1fr;gap:24px;align-items:center;padding:26px 0}
+.track+.track{border-top:1px solid var(--line)}
+.track .who{font-family:var(--font-display);font-weight:600;font-size:16px;line-height:1.35;
+  text-align:right;color:var(--text-2)}
+.track.open .who{color:var(--text)}
+.track .lane{position:relative;height:40px}
+.track .lane::before{content:'';position:absolute;left:0;right:0;top:50%;height:1px;background:var(--line-strong)}
+.track .lane .marker{position:absolute;top:50%;transform:translate(-50%,-50%);
+  width:11px;height:11px;border-radius:50%}
+.track.closed .lane .marker{left:26%;background:transparent;border:1.5px solid var(--text-3)}
+.track.open .lane .marker{left:calc(100% - 6px);background:var(--accent);box-shadow:0 0 0 5px var(--accent-dim)}
+.track .lane .lbl{position:absolute;top:-12px;font-family:var(--font-mono);font-size:13px;letter-spacing:.02em}
+.track.closed .lane .lbl{left:calc(26% + 18px);color:var(--text-3)}
+.track.open .lane .lbl{right:26px;color:var(--accent)}
+
+.stat-board{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--line-strong);
+  margin-top:40px;max-width:920px}
+.stat{padding:28px 32px 6px 0}
+.stat+.stat{border-left:1px solid var(--line);padding-left:32px}
+.stat .v{font-family:var(--font-display);font-weight:700;letter-spacing:-.03em;line-height:1;
+  font-size:clamp(52px,5.4vw,76px);color:var(--text)}
+.stat:first-child .v{color:var(--accent)}
+.stat .l{font-size:13.5px;color:var(--text-2);margin-top:10px}
+
+/* ============ S6 pipeline: steps as nodes on one edge ============ */
+.pipe{position:relative;display:grid;grid-template-columns:repeat(4,1fr);gap:40px;margin-top:64px}
+.pipe::before{content:'';position:absolute;top:6px;left:8px;right:8px;height:1px;background:var(--line-strong)}
+.step{position:relative;padding-top:34px}
+.step::before{content:'';position:absolute;top:0;left:0;width:13px;height:13px;border-radius:50%;
+  background:var(--bg);border:1.5px solid var(--text-3)}
+.step.last::before{background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 5px var(--accent-dim)}
+.step .sn{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.16em;color:var(--text-3)}
+.step h4{font-family:var(--font-display);font-weight:600;font-size:21px;letter-spacing:-.01em;margin:8px 0 6px;color:var(--text)}
+.step p{margin:0;font-size:13.5px;line-height:1.6;color:var(--text-2)}
+
+/* ============ S7 CTA ============ */
+.cta-dl{font-family:var(--font-mono);font-size:clamp(18px,2.1vw,24px);font-weight:600;
+  color:var(--text);margin:12px 0 0;letter-spacing:-.01em}
+.tags{display:flex;flex-wrap:wrap;gap:10px;margin-top:40px}
+.tag{font-family:var(--font-mono);font-size:12px;letter-spacing:.04em;color:var(--text-2);
+  border:1px solid var(--line-strong);border-radius:2px;padding:7px 14px}
+
+/* ============ S8 thanks ============ */
+.thanks{text-align:center;align-items:center}
+.thanks .big{font-family:var(--font-display);font-weight:700;letter-spacing:-.03em;line-height:1;
+  font-size:clamp(110px,15vw,190px);margin:0}
+.thanks .lede{margin:30px auto 0}
+
+@media print{.slide{page-break-after:always}}
+@media (max-width:768px){
+  .slide{padding:48px 28px;height:auto;min-height:100vh}
+  .snum{right:28px}
+  .cap-grid,.stat-board,.pipe{grid-template-columns:1fr}
+  .cap+.cap,.stat+.stat{border-left:none;padding-left:0;border-top:1px solid var(--line)}
+  .pipe::before{display:none}
+  .track{grid-template-columns:1fr;gap:8px}
+  .track .who{text-align:left}
+}
+</style>
+</head>
+<body class="tpl-graphify-dark-graph">
+<div class="deck">
+
+  <!-- 1. COVER -->
+  <section class="slide is-active cover">
+    <!-- force-directed graph signature: hairline edges, neutral nodes, accent hubs -->
+    <svg class="cover-graph" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <g stroke="rgba(238,241,238,.15)" stroke-width="1" fill="none">
+        <line x1="300" y1="200" x2="520" y2="340"/>
+        <line x1="520" y1="340" x2="780" y2="260"/>
+        <line x1="780" y1="260" x2="1040" y2="420"/>
+        <line x1="520" y1="340" x2="640" y2="560"/>
+        <line x1="640" y1="560" x2="900" y2="620"/>
+        <line x1="900" y1="620" x2="1040" y2="420"/>
+        <line x1="1040" y1="420" x2="1260" y2="300"/>
+        <line x1="1260" y1="300" x2="1380" y2="500"/>
+        <line x1="900" y1="620" x2="1120" y2="720"/>
+        <line x1="300" y1="200" x2="200" y2="420"/>
+        <line x1="200" y1="420" x2="360" y2="640"/>
+        <line x1="360" y1="640" x2="640" y2="560"/>
+      </g>
+      <g>
+        <circle cx="300" cy="200" r="7" fill="none" stroke="rgba(238,241,238,.35)" stroke-width="1.5"/>
+        <circle cx="520" cy="340" r="10" fill="#3ecf8e" opacity=".9"/>
+        <circle cx="780" cy="260" r="6" fill="none" stroke="rgba(238,241,238,.35)" stroke-width="1.5"/>
+        <circle cx="1040" cy="420" r="13" fill="#3ecf8e" opacity=".55"/>
+        <circle cx="640" cy="560" r="8" fill="none" stroke="rgba(238,241,238,.35)" stroke-width="1.5"/>
+        <circle cx="900" cy="620" r="9" fill="none" stroke="rgba(62,207,142,.7)" stroke-width="1.5"/>
+        <circle cx="1260" cy="300" r="5" fill="none" stroke="rgba(238,241,238,.3)" stroke-width="1.5"/>
+        <circle cx="1380" cy="500" r="7" fill="none" stroke="rgba(238,241,238,.3)" stroke-width="1.5"/>
+        <circle cx="1120" cy="720" r="6" fill="none" stroke="rgba(238,241,238,.3)" stroke-width="1.5"/>
+        <circle cx="200" cy="420" r="5" fill="none" stroke="rgba(238,241,238,.3)" stroke-width="1.5"/>
+        <circle cx="360" cy="640" r="8" fill="none" stroke="rgba(62,207,142,.7)" stroke-width="1.5"/>
+      </g>
+    </svg>
+    <div class="snum">01 / 08</div>
+    <div class="cover-inner">
+      <p class="eyebrow in">Product Management · Business Case</p>
+      <h1 class="h1 in">Feature Business Case<br><span class="ac">Plugin Marketplace</span></h1>
+      <p class="lede in" style="margin-top:24px">Should OpenDesign open a first-party plugin marketplace in Q3? <span style="color:var(--text)">The case for PM, Eng, Design, and Leadership to land on one option.</span></p>
+      <p class="eyebrow quiet in" style="margin:30px 0 0">Decision owner: PM · Reviewers: Eng, Design, Leadership</p>
+    </div>
+  </section>
+
+  <!-- 2. SECTION DIVIDER -->
+  <section class="slide">
+    <div class="snum">02 / 08</div>
+    <div style="margin:auto 0">
+      <p class="eyebrow quiet in">Decision needed</p>
+      <h1 class="h1 in" style="font-size:clamp(88px,10vw,128px)">Ship a <span class="ac">marketplace</span>, or hold the line?</h1>
+      <p class="lede in" style="margin-top:24px">217+ plugins already exist, built for free by the community. Today they're only discoverable through a static home rail — no ratings, no revenue share, no owner of record. We need one call before Q3 planning locks.</p>
+    </div>
+  </section>
+
+  <!-- 3. CONTENT — plugin grid -->
+  <section class="slide">
+    <div class="snum">03 / 08</div>
+    <p class="eyebrow in">The Pain</p>
+    <h2 class="h2 in">Four ways the current model <span class="ac">breaks down</span></h2>
+    <div class="cap-grid in">
+      <div class="cap">
+        <span class="idx"><span class="node-dot hollow"></span>n.01</span>
+        <h4>Discovery dead-ends</h4>
+        <p>68% of installs come from the top 6 home-rail plugins; the other 211 get near-zero traffic</p>
+      </div>
+      <div class="cap">
+        <span class="idx"><span class="node-dot hollow"></span>n.02</span>
+        <h4>No trust signal</h4>
+        <p>No ratings, no verification badge — support tickets show users afraid to install unfamiliar plugin code</p>
+      </div>
+      <div class="cap">
+        <span class="idx"><span class="node-dot hollow"></span>n.03</span>
+        <h4>Zero creator incentive</h4>
+        <p>38 external contributors shipped a plugin this year; only 4 shipped a second one</p>
+      </div>
+      <div class="cap">
+        <span class="idx"><span class="node-dot"></span>n.04</span>
+        <h4>Unowned support load</h4>
+        <p>112 GitHub issues this quarter trace back to plugins with no listed maintainer of record</p>
+      </div>
+    </div>
+    <div class="callout in">
+      <span class="node-dot"></span>
+      <p>Every pain point traces to the same root cause: <span class="ac">plugins have no marketplace, so they have no owner, no signal, and no incentive</span>.</p>
+    </div>
+  </section>
+
+  <!-- 4. CODE -->
+  <section class="slide">
+    <div class="snum">04 / 08</div>
+    <p class="eyebrow in">Options Considered</p>
+    <h2 class="h2 in">Three shapes, <span class="ac">one recommendation</span></h2>
+    <p class="cmd in">$ od plugin marketplace --compare-options</p>
+    <pre class="codebox in"><span class="cm"># three options weighed for Q3</span>
+<span class="kw">option_a</span>: <span class="st">status_quo</span>       <span class="cm"># home rail only, curated by us</span>
+  trust_signal: <span class="fn">none</span>   creator_incentive: <span class="fn">none</span>   effort: <span class="fn">low</span>
+
+<span class="kw">option_b</span>: <span class="st">reviewed_marketplace</span>  <span class="cm"># submission queue + revenue share</span>
+  trust_signal: <span class="fn">verified_badge</span>   creator_incentive: <span class="fn">70/30_split</span>   effort: <span class="fn">medium</span>
+
+<span class="kw">option_c</span>: <span class="st">open_federation</span>   <span class="cm"># npm-style, no review, self-serve</span>
+  trust_signal: <span class="fn">none</span>   creator_incentive: <span class="fn">tips_only</span>   effort: <span class="fn">low</span>
+
+<span class="kw">recommended</span>: option_b     <span class="cm"># only option that fixes trust AND incentive</span></pre>
+  </section>
+
+  <!-- 5. CHART — race diagram -->
+  <section class="slide">
+    <div class="snum">05 / 08</div>
+    <p class="eyebrow in">Tradeoffs</p>
+    <h2 class="h2 in">Option B wins trust, <span class="ac">costs speed</span></h2>
+    <div class="race in">
+      <div class="track closed">
+        <div class="who">Options<br>A / C</div>
+        <div class="lane">
+          <span class="marker"></span>
+          <span class="lbl">Ship in 2 weeks · no review gate · no trust signal</span>
+        </div>
+      </div>
+      <div class="track open">
+        <div class="who">Option<br>B</div>
+        <div class="lane">
+          <span class="marker"></span>
+          <span class="lbl">Ship in 6 weeks · review gate · verified badge + revenue share</span>
+        </div>
+      </div>
+    </div>
+    <div class="stat-board in">
+      <div class="stat"><div class="v">+4wk</div><p class="l">added time-to-ship for review tooling</p></div>
+      <div class="stat"><div class="v">70/30</div><p class="l">creator revenue split, our favor 30%</p></div>
+      <div class="stat"><div class="v">20</div><p class="l">creators committed for private beta</p></div>
+    </div>
+  </section>
+
+  <!-- 6. PIPELINE -->
+  <section class="slide">
+    <div class="snum">06 / 08</div>
+    <p class="eyebrow in">Recommendation</p>
+    <h2 class="h2 in">Ship Option B in <span class="ac">4 phases</span></h2>
+    <div class="pipe in">
+      <div class="step">
+        <span class="sn">STEP 01</span>
+        <h4>Freeze scope</h4>
+        <p>Review rubric &amp; revenue-share terms locked with legal by Jul 21</p>
+      </div>
+      <div class="step">
+        <span class="sn">STEP 02</span>
+        <h4>Build the queue</h4>
+        <p>Submission form, review dashboard, verified badge shipped by Aug 11</p>
+      </div>
+      <div class="step">
+        <span class="sn">STEP 03</span>
+        <h4>Private beta</h4>
+        <p>20 committed creators list one plugin each; review SLA measured live</p>
+      </div>
+      <div class="step last">
+        <span class="sn">STEP 04</span>
+        <h4>GA rollout</h4>
+        <p>Open submissions to all 217+ creators; revenue share turns on</p>
+      </div>
+    </div>
+    <div class="callout in">
+      <span class="node-dot"></span>
+      <p>This is the irreversible step: once revenue share is live, pulling the marketplace back costs trust we won't get back. <span class="ac">Sign off here, not after Aug.</span></p>
+    </div>
+  </section>
+
+  <!-- 7. CTA -->
+  <section class="slide">
+    <div class="snum">07 / 08</div>
+    <p class="eyebrow in">Measure of Success</p>
+    <h2 class="h1 in" style="font-size:clamp(56px,6.4vw,80px)">North star: <span class="ac">long-tail install share</span></h2>
+    <p class="cmd in" style="margin-top:30px">$ od plugin marketplace --track long-tail-install-share</p>
+    <p class="cta-dl in">→ Target: long-tail install share 24% → 45% by Q4</p>
+    <div class="tags in">
+      <span class="tag">#review-sla-under-72h</span>
+      <span class="tag">#creator-payout-on-time</span>
+      <span class="tag">#support-tickets-flat</span>
+      <span class="tag">#nps-unchanged</span>
+    </div>
+  </section>
+
+  <!-- 8. THANKS -->
+  <section class="slide thanks">
+    <div class="snum">08 / 08</div>
+    <div style="margin:auto 0">
+      <h1 class="big in">Approve<span class="ac">.</span></h1>
+      <p class="lede in">Option B — reviewed marketplace with revenue share. Sign-off requested from PM, Eng, Design, and Leadership by Jul 21.</p>
+    </div>
+  </section>
+
+</div>
+
+</body>
+</html>

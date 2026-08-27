@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Turn an Anniversary into a Photo Essay like a Wedding Storyteller - Life &amp; story</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="assets/deck-stage.js"></script>
+<style>
+  :root{
+    --paper: #F5EDF1;
+    --pink: #ED3D8C;
+    --line: rgba(237,61,140,.32);
+    --mute: rgba(245,237,241,.62);
+    --hair: rgba(245,237,241,.14);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #000; font-family: "Instrument Sans", system-ui, sans-serif; color: var(--paper); }
+
+  /* --- shared slide chrome ----------------------------------------- */
+  deck-stage > section.slide {
+    position: relative;
+    width: 1920px; height: 1080px;
+    background:
+      radial-gradient(ellipse 90% 70% at 30% 30%, #1A1218 0%, #0A0709 55%, #050306 100%);
+    color: var(--paper);
+    overflow: hidden;
+  }
+  /* film grain via tiny svg noise */
+  .slide::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    opacity: .08; mix-blend-mode: screen;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+  /* hairline frame */
+  .slide::after {
+    content: ""; position: absolute; inset: 36px; pointer-events: none;
+    border: 1px solid var(--hair);
+  }
+
+  /* runner: top-left brand + top-right meta + bottom corners */
+  .runner {
+    position: absolute; left: 60px; right: 60px; top: 60px;
+    display: flex; align-items: baseline; justify-content: space-between;
+    font-family: "JetBrains Mono", monospace; font-size: 24px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--mute);
+    z-index: 5;
+    white-space: nowrap;
+  }
+  .runner .brand { color: var(--pink); }
+  .footer {
+    position: absolute; left: 60px; right: 60px; bottom: 60px;
+    display: flex; align-items: baseline; justify-content: space-between;
+    font-family: "JetBrains Mono", monospace; font-size: 24px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--mute);
+    z-index: 5;
+    white-space: nowrap;
+  }
+  .footer .pageno { color: var(--paper); white-space: nowrap; flex-shrink: 0; }
+  .footer .pageno em { color: var(--pink); font-style: normal; }
+
+  /* ============== 1. COVER · STILL US ======================= */
+  .s-cover .stage {
+    position: absolute; left: 60px; right: 60px; top: 180px; bottom: 360px;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 20px;
+  }
+  .s-cover .pre { font-family: "JetBrains Mono", monospace; font-size: 28px; letter-spacing: .42em; text-transform: uppercase; color: var(--paper); opacity: .75; }
+  .s-cover .title-wrap { position: relative; }
+  .s-cover .title {
+    font-family: "Instrument Serif", serif; font-style: italic;
+    color: var(--pink); font-size: 280px; line-height: 1.02; letter-spacing: -.015em;
+    text-align: center;
+    text-shadow: 0 0 80px rgba(237,61,140,.18);
+    padding-bottom: .12em;
+  }
+  .s-cover .title .l2 { display: block; padding-left: 180px; color: var(--paper); }
+  .s-cover .lower { position: absolute; left: 60px; right: 60px; bottom: 160px; display: flex; justify-content: space-between; align-items: end; gap: 32px; }
+  .s-cover .lower .col { display: flex; flex-direction: column; gap: 6px; }
+  .s-cover .lower .lab { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); }
+  .s-cover .lower .val { font-family: "Instrument Serif", serif; font-style: italic; font-size: 48px; color: var(--pink); line-height: 1.05; }
+  .s-cover .lower .val.alt { color: var(--paper); }
+
+  /* ============== 2. THE INDEX (TOC) ======================= */
+  .s-toc .body { position: absolute; inset: 140px 60px 140px 60px; display: grid; grid-template-columns: 480px 1fr; gap: 80px; }
+  .s-toc h1 { font-family: "Instrument Serif", serif; font-style: italic; font-size: 220px; line-height: 1.04; color: var(--pink); padding-bottom: .12em; }
+  .s-toc h1 .small { display: block; font-size: 80px; color: var(--paper); margin-top: 16px; opacity: .8; }
+  .s-toc .rows { display: flex; flex-direction: column; }
+  .s-toc .row { display: grid; grid-template-columns: 110px 1fr 200px; gap: 32px; align-items: baseline; padding: 26px 0; border-bottom: 1px solid var(--hair); }
+  .s-toc .row .num { font-family: "Instrument Serif", serif; font-style: italic; font-size: 64px; color: var(--pink); line-height: 1; }
+  .s-toc .row .title { font-family: "Instrument Serif", serif; font-style: italic; font-size: 56px; color: var(--paper); line-height: 1.05; }
+  .s-toc .row .desc { font-family: "Instrument Sans", sans-serif; font-size: 24px; color: var(--mute); margin-top: 8px; line-height: 1.4; font-style: normal; }
+  .s-toc .row .meta { font-family: "JetBrains Mono", monospace; font-size: 24px; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); text-align: right; }
+  .s-toc .row.cur .num, .s-toc .row.cur .title { color: var(--pink); }
+
+  /* ============== 3. BY THE NUMBERS ======================== */
+  .s-stats .body { position: absolute; inset: 140px 60px 140px 60px; display: grid; grid-template-columns: 1fr 1.05fr; gap: 60px; }
+  .s-stats .left { display: flex; flex-direction: column; justify-content: space-between; padding-right: 20px; }
+  .s-stats .left .kicker { font-family: "JetBrains Mono", monospace; font-size: 24px; letter-spacing: .18em; text-transform: uppercase; color: var(--pink); }
+  .s-stats .left h2 { font-family: "Instrument Serif", serif; font-style: italic; font-size: 132px; line-height: 1.06; color: var(--paper); padding-bottom: .1em; }
+  .s-stats .left h2 em { color: var(--pink); font-style: italic; }
+  .s-stats .left p { font-family: "Instrument Sans", sans-serif; font-size: 24px; line-height: 1.55; color: var(--paper); opacity: .75; max-width: 36ch; font-weight: 400; }
+  .s-stats .right { display: flex; flex-direction: column; gap: 18px; padding-top: 0; }
+  .s-stats .stat { display: grid; grid-template-columns: 240px 1fr; align-items: center; gap: 28px; padding-bottom: 16px; border-bottom: 1px solid var(--hair); }
+  .s-stats .stat:last-child { border-bottom: 0; padding-bottom: 0; }
+  .s-stats .stat .figure { font-family: "Instrument Serif", serif; font-style: italic; font-size: 116px; line-height: .9; color: var(--pink); display: flex; align-items: baseline; }
+  .s-stats .stat .figure sup { font-size: 36px; color: var(--paper); vertical-align: top; margin-left: 4px; line-height: 1; align-self: flex-start; padding-top: 18px; }
+  .s-stats .stat .meta .lab { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--paper); }
+  .s-stats .stat .meta .desc { font-family: "Instrument Sans", sans-serif; font-size: 24px; color: var(--mute); margin-top: 8px; line-height: 1.45; font-weight: 400; }
+
+  /* ============== 4. MOVEMENTS · SECTION DIVIDER =========== */
+  .s-section .body { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .s-section .body { justify-content: flex-start; padding-left: 200px; }
+  .s-section .num {
+    font-family: "Instrument Serif", serif; font-style: italic;
+    color: var(--pink);
+    font-size: 600px; line-height: .82; letter-spacing: -.02em;
+    text-shadow: 0 0 120px rgba(237,61,140,.22);
+  }
+  .s-section .label-l { position: absolute; left: 80px; top: auto; bottom: 140px; transform: rotate(-90deg); transform-origin: left bottom; font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .42em; text-transform: uppercase; color: var(--mute); white-space: nowrap; }
+  .s-section .right { position: absolute; right: 100px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 18px; max-width: 380px; }
+  .s-section .right .kicker { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--pink); }
+  .s-section .right h2 { font-family: "Instrument Serif", serif; font-style: italic; font-size: 88px; line-height: 1.06; color: var(--paper); padding-bottom: .1em; }
+  .s-section .right p  { font-family: "Instrument Sans", sans-serif; font-size: 24px; line-height: 1.55; color: var(--mute); font-weight: 400; }
+
+  /* ============== 5. THE CURVE · CHART ===================== */
+  .s-chart .head { position: absolute; left: 60px; right: 60px; top: 140px; display: flex; align-items: end; justify-content: space-between; gap: 80px; }
+  .s-chart .head h2 { font-family: "Instrument Serif", serif; font-style: italic; font-size: 90px; line-height: 1.06; color: var(--paper); max-width: 18ch; padding-bottom: .1em; }
+  .s-chart .head h2 em { color: var(--pink); font-style: italic; }
+  .s-chart .head .legend { display: flex; flex-direction: column; gap: 14px; align-items: flex-end; }
+  .s-chart .head .legend .li { display: flex; align-items: center; gap: 14px; font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .12em; text-transform: uppercase; color: var(--paper); }
+  .s-chart .head .legend .li i { width: 36px; height: 2px; background: var(--pink); }
+  .s-chart .head .legend .li.b i { background: var(--paper); opacity: .5; }
+  .s-chart .plotwrap { position: absolute; left: 160px; right: 460px; top: 480px; bottom: 200px; }
+  .s-chart .plotwrap .yax { position: absolute; left: -100px; top: 0; bottom: 30px; display: flex; flex-direction: column; justify-content: space-between; font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .1em; color: var(--mute); align-items: flex-end; }
+  .s-chart .plotwrap .plot { position: absolute; inset: 0 0 30px 0; border-left: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .s-chart .plotwrap .plot .gline { position: absolute; left: 0; right: 0; border-top: 1px dashed rgba(237,61,140,.18); }
+  .s-chart .plotwrap .plot svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .s-chart .plotwrap .xax { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .1em; color: var(--mute); }
+  .s-chart .callout {
+    position: absolute; right: 60px; top: 480px; bottom: 200px;
+    display: flex; flex-direction: column; gap: 8px; width: 360px; align-items: flex-end; text-align: right; justify-content: flex-start;
+    border-left: 1px solid var(--pink); padding-left: 24px; padding-top: 4px;
+  }
+  .s-chart .callout .num { font-family: "Instrument Serif", serif; font-style: italic; font-size: 120px; line-height: .9; color: var(--pink); }
+  .s-chart .callout .lab { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--paper); }
+  .s-chart .callout .desc { font-family: "Instrument Sans", sans-serif; font-size: 22px; color: var(--mute); line-height: 1.4; font-weight: 400; }
+
+  /* ============== 6. PROCESS · DIAGRAM ===================== */
+  .s-process .head { position: absolute; left: 60px; right: 60px; top: 140px; display: flex; align-items: end; justify-content: space-between; gap: 60px; }
+  .s-process .head h2 { font-family: "Instrument Serif", serif; font-style: italic; font-size: 156px; line-height: 1.04; color: var(--paper); max-width: 12ch; padding-bottom: .1em; }
+  .s-process .head h2 em { color: var(--pink); font-style: italic; }
+  .s-process .head .lead { font-family: "Instrument Sans", sans-serif; font-size: 26px; color: var(--mute); max-width: 40ch; line-height: 1.55; font-weight: 400; padding-bottom: 18px; }
+  .s-process .row { position: absolute; left: 60px; right: 60px; top: 540px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 24px; }
+  .s-process .step { position: relative; display: flex; flex-direction: column; gap: 18px; padding: 26px 0; border-top: 1px solid var(--pink); }
+  .s-process .step .n { font-family: "Instrument Serif", serif; font-style: italic; font-size: 96px; color: var(--pink); line-height: .8; }
+  .s-process .step h3 { font-family: "Instrument Serif", serif; font-style: italic; font-size: 38px; color: var(--paper); line-height: 1.05; }
+  .s-process .step p { font-family: "Instrument Sans", sans-serif; font-size: 22px; color: var(--mute); line-height: 1.5; font-weight: 400; }
+  .s-process .step .arr {
+    position: absolute; right: -16px; top: 60px; width: 24px; height: 24px;
+    color: var(--pink); pointer-events: none;
+  }
+  .s-process .step:last-child .arr { display: none; }
+  .s-process .timeline { position: absolute; left: 60px; right: 60px; bottom: 140px; display: flex; justify-content: space-between; font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); padding-top: 16px; border-top: 1px solid var(--hair); }
+  .s-process .timeline span em { color: var(--pink); font-style: normal; }
+
+  /* ============== 7. THE FIELD · COMPARISON ================ */
+  .s-matrix .head { position: absolute; left: 60px; right: 60px; top: 140px; display: flex; align-items: end; justify-content: space-between; gap: 60px; }
+  .s-matrix .head h2 { font-family: "Instrument Serif", serif; font-style: italic; font-size: 132px; line-height: 1.04; color: var(--paper); max-width: 14ch; padding-bottom: .1em; }
+  .s-matrix .head h2 em { color: var(--pink); font-style: italic; }
+  .s-matrix .head .source { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); padding-bottom: 18px; max-width: 30ch; line-height: 1.5; text-align: right; }
+  .s-matrix .table { position: absolute; left: 60px; right: 60px; top: 460px; bottom: 140px; display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; grid-auto-rows: 1fr; }
+  .s-matrix .cell { padding: 16px 24px; border-bottom: 1px solid var(--line); display: flex; align-items: center; font-family: "Instrument Sans", sans-serif; font-size: 22px; line-height: 1.4; color: var(--paper); font-weight: 400; }
+  .s-matrix .cell.colhead { background: transparent; font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--pink); border-bottom-color: var(--pink); }
+  .s-matrix .cell.label { font-family: "Instrument Serif", serif; font-style: italic; font-size: 32px; color: var(--paper); }
+  .s-matrix .cell.us { background: rgba(237,61,140,.08); color: var(--paper); }
+  .s-matrix .pill { display: inline-block; padding: 6px 14px; font-family: "JetBrains Mono", monospace; font-size: 16px; letter-spacing: .08em; text-transform: uppercase; border: 1px solid var(--pink); white-space: nowrap; line-height: 1.2; color: var(--pink); }
+  .s-matrix .pill.dim { border-color: var(--hair); color: var(--mute); }
+  .s-matrix .pill.solid { background: var(--pink); color: #060507; border-color: var(--pink); font-weight: 500; }
+
+  /* ============== 8. VOICES · QUOTE ======================== */
+  .s-quote .body { position: absolute; inset: 140px 60px 140px 60px; display: grid; grid-template-columns: 320px 1fr; gap: 80px; align-items: center; }
+  .s-quote .left { display: flex; flex-direction: column; gap: 28px; }
+  .s-quote .left .qmark { font-family: "Instrument Serif", serif; font-style: italic; font-size: 320px; color: var(--pink); line-height: .65; }
+  .s-quote .left .lab { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); }
+  .s-quote .right blockquote { font-family: "Instrument Serif", serif; font-style: italic; font-size: 92px; line-height: 1.05; color: var(--paper); letter-spacing: -.005em; }
+  .s-quote .right blockquote em { color: var(--pink); font-style: italic; }
+  .s-quote .attr { display: flex; align-items: baseline; gap: 24px; margin-top: 60px; padding-top: 28px; border-top: 1px solid var(--pink); }
+  .s-quote .attr .who { font-family: "Instrument Serif", serif; font-style: italic; font-size: 48px; color: var(--paper); }
+  .s-quote .attr .role { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--pink); }
+
+  /* ============== 9. ENCORE · CTA ========================== */
+  .s-cta .body { position: absolute; inset: 140px 60px 140px 60px; display: flex; flex-direction: column; justify-content: space-between; }
+  .s-cta .top { display: flex; flex-direction: column; gap: 12px; }
+  .s-cta .top .pre { font-family: "JetBrains Mono", monospace; font-size: 26px; letter-spacing: .24em; text-transform: uppercase; color: var(--pink); }
+  .s-cta .top h2 { font-family: "Instrument Serif", serif; font-style: italic; font-size: 140px; line-height: 1.04; color: var(--paper); letter-spacing: -.015em; padding-bottom: .1em; }
+  .s-cta .top h2 em { color: var(--pink); font-style: italic; }
+  .s-cta .bottom { display: grid; grid-template-columns: repeat(3, 1fr) 280px; gap: 48px; align-items: end; }
+  .s-cta .step { display: flex; flex-direction: column; gap: 16px; padding-top: 22px; border-top: 1px solid var(--pink); }
+  .s-cta .step .n { font-family: "Instrument Serif", serif; font-style: italic; font-size: 64px; color: var(--pink); line-height: 1; }
+  .s-cta .step h3 { font-family: "Instrument Serif", serif; font-style: italic; font-size: 44px; color: var(--paper); line-height: 1.05; }
+  .s-cta .step p { font-family: "Instrument Sans", sans-serif; font-size: 22px; color: var(--mute); line-height: 1.5; font-weight: 400; }
+  .s-cta .qr { display: flex; flex-direction: column; gap: 14px; align-items: flex-end; }
+  .s-cta .qr .box { width: 180px; height: 180px; background: var(--paper); padding: 12px; }
+  .s-cta .qr .box svg { width: 100%; height: 100%; }
+  .s-cta .qr .lab { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--paper); }
+  .s-cta .qr .url { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .04em; color: var(--pink); }
+
+  /* entrance: stagger rise on the active slide's direct children */
+  @keyframes rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
+  section.slide[data-deck-active] > * { animation: rise .6s cubic-bezier(.16,1,.3,1) both; }
+  section.slide[data-deck-active] > :nth-child(2) { animation-delay: .06s; }
+  section.slide[data-deck-active] > :nth-child(3) { animation-delay: .12s; }
+  section.slide[data-deck-active] > :nth-child(4) { animation-delay: .18s; }
+  section.slide[data-deck-active] > :nth-child(5) { animation-delay: .24s; }
+  @media (prefers-reduced-motion: reduce) {
+    section.slide[data-deck-active] > * { animation: none; }
+  }
+  @media print {
+    section.slide > * { opacity: 1 !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<deck-stage>
+
+  <!-- ============== 1. COVER · TEN YEARS, ONE STORY ===================== -->
+  <section class="slide s-cover" data-label="01 Cover" data-om-validate="false">
+    <div class="runner">
+      <span class="brand">Life &amp; Story</span>
+      <span>A Decade in Scenes · 2026</span>
+    </div>
+    <div class="stage">
+      <div class="pre">A Photo Essay for a Wedding Anniversary</div>
+      <div class="title-wrap">
+        <div class="title">Still<span class="l2">Us.</span></div>
+      </div>
+    </div>
+    <div class="lower">
+      <div class="col">
+        <div class="lab">Married</div>
+        <div class="val">June 14, 2016</div>
+      </div>
+      <div class="col">
+        <div class="lab">Anniversary</div>
+        <div class="val alt">10 Years</div>
+      </div>
+      <div class="col">
+        <div class="lab">Where</div>
+        <div class="val alt">Lisbon → Austin</div>
+      </div>
+      <div class="col">
+        <div class="lab">Guests</div>
+        <div class="val">62 Loved Ones</div>
+      </div>
+    </div>
+    <div class="footer">
+      <span>For Elena &amp; Daniel Reyes</span>
+      <span class="pageno"><em>01</em> / 09</span>
+    </div>
+  </section>
+
+  <!-- ============== 2. THE INDEX ============================== -->
+  <section class="slide s-toc" data-label="02 The Index" data-om-validate="false">
+    <div class="runner"><span class="brand">Still Us</span><span>The Story</span></div>
+    <div class="body">
+      <h1>The<br><span class="small">Story.</span></h1>
+      <div class="rows">
+        <div class="row">
+          <div class="num">01</div>
+          <div>
+            <div class="title">By the Numbers</div>
+            <div class="desc">A decade counted in ordinary days.</div>
+          </div>
+          <div class="meta">Stats · pp. 14</div>
+        </div>
+        <div class="row cur">
+          <div class="num">02</div>
+          <div>
+            <div class="title">The Turn</div>
+            <div class="desc">The year everything nearly ended.</div>
+          </div>
+          <div class="meta">Section · pp. 22</div>
+        </div>
+        <div class="row">
+          <div class="num">03</div>
+          <div>
+            <div class="title">The Curve</div>
+            <div class="desc">Twelve seasons of showing up.</div>
+          </div>
+          <div class="meta">Chart · pp. 36</div>
+        </div>
+        <div class="row">
+          <div class="num">04</div>
+          <div>
+            <div class="title">Then &amp; Now</div>
+            <div class="desc">Five things that changed, and one that didn't.</div>
+          </div>
+          <div class="meta">Matrix · pp. 48</div>
+        </div>
+        <div class="row">
+          <div class="num">05</div>
+          <div>
+            <div class="title">Voices &amp; Encore</div>
+            <div class="desc">What the family remembers, and the invitation ahead.</div>
+          </div>
+          <div class="meta">pp. 60–72</div>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>Still Us</span><span class="pageno"><em>02</em> / 09</span></div>
+  </section>
+
+  <!-- ============== 3. BY THE NUMBERS ========================= -->
+  <section class="slide s-stats" data-label="03 By the Numbers" data-om-validate="false">
+    <div class="runner"><span class="brand">Chapter 01</span><span>By the Numbers · 2016–2026</span></div>
+    <div class="body">
+      <div class="left">
+        <div class="kicker">By the Numbers</div>
+        <div>
+          <h2>A marriage<br>told in<br><em>five</em> figures.</h2>
+        </div>
+        <p>Read top to bottom. Every figure comes from the family calendar, the travel log, and the box of ticket stubs kept in the hallway closet.</p>
+      </div>
+      <div class="right">
+        <div class="stat">
+          <div class="figure">3,652</div>
+          <div class="meta">
+            <div class="lab">Days Married</div>
+            <div class="desc">From June 14, 2016 to this June — not one of them wasted.</div>
+          </div>
+        </div>
+        <div class="stat">
+          <div class="figure">3</div>
+          <div class="meta">
+            <div class="lab">Homes Together</div>
+            <div class="desc">Two apartments in Lisbon, a rental in Denver, and the house on Birch Street they finally own.</div>
+          </div>
+        </div>
+        <div class="stat">
+          <div class="figure">2</div>
+          <div class="meta">
+            <div class="lab">Children</div>
+            <div class="desc">Mateo, born 2019, and Sofia, born 2022 — baptized in the same church as the wedding.</div>
+          </div>
+        </div>
+        <div class="stat">
+          <div class="figure">41</div>
+          <div class="meta">
+            <div class="lab">Postcards Mailed</div>
+            <div class="desc">One from every trip, taped inside a scrapbook that lives on the kitchen shelf.</div>
+          </div>
+        </div>
+        <div class="stat">
+          <div class="figure">11<sup>wk</sup></div>
+          <div class="meta">
+            <div class="lab">Longest Time Apart</div>
+            <div class="desc">A 2021 deployment — the single hardest season of the ten years.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>Source · The Family Calendar</span><span class="pageno"><em>03</em> / 09</span></div>
+  </section>
+
+  <!-- ============== 4. THE TURN · SECTION DIVIDER ============= -->
+  <section class="slide s-section" data-label="04 The Turn" data-om-validate="false">
+    <div class="runner"><span class="brand">Chapter 02</span><span>The Turn</span></div>
+    <div class="label-l">Still Us · A Photo Essay</div>
+    <div class="body">
+      <div class="num">02</div>
+    </div>
+    <div class="right">
+      <div class="kicker">The Turn</div>
+      <h2>The year<br>we almost<br>lost it.</h2>
+      <p>In 2021, an eleven-week deployment and a miscarriage landed in the same season. They spent it writing letters instead of talking — the first time in nine years they'd gone quiet with each other.</p>
+    </div>
+    <div class="footer"><span>Chapter 02 of 05</span><span class="pageno"><em>04</em> / 09</span></div>
+  </section>
+
+  <!-- ============== 5. THE CURVE · CHART ====================== -->
+  <section class="slide s-chart" data-label="05 The Curve" data-om-validate="false">
+    <div class="runner"><span class="brand">Chapter 03</span><span>The Curve</span></div>
+    <div class="head">
+      <h2>Twelve seasons of <em>showing up</em><br>for each other.</h2>
+      <div class="legend">
+        <div class="li"><i></i>Date nights · logged</div>
+        <div class="li b"><i></i>Their first year's pace</div>
+      </div>
+    </div>
+    <div class="callout">
+      <div class="num">112</div>
+      <div class="lab">Date Nights, Year Ten</div>
+      <div class="desc">After the silence of 2021, they started a standing Thursday date — no phones, no exceptions. It never stopped.</div>
+    </div>
+    <div class="plotwrap">
+      <div class="yax">
+        <span>120</span><span>90</span><span>60</span><span>30</span><span>0</span>
+      </div>
+      <div class="plot">
+        <div class="gline" style="top:0%"></div>
+        <div class="gline" style="top:25%"></div>
+        <div class="gline" style="top:50%"></div>
+        <div class="gline" style="top:75%"></div>
+        <svg viewBox="0 0 1200 400" preserveAspectRatio="none">
+          <!-- benchmark (dim white) -->
+          <polyline fill="none" stroke="rgba(245,237,241,.45)" stroke-width="2" stroke-dasharray="6 6"
+            points="0,310 100,300 200,295 300,290 400,285 500,280 600,272 700,265 800,260 900,255 1000,250 1100,245 1200,242"/>
+          <!-- house line (pink) -->
+          <polyline fill="none" stroke="#ED3D8C" stroke-width="3"
+            points="0,330 100,318 200,300 300,288 400,272 500,250 600,232 700,210 800,140 900,120 1000,108 1100,98 1200,92"/>
+          <!-- inflection marker -->
+          <circle cx="800" cy="140" r="9" fill="#ED3D8C"/>
+          <circle cx="800" cy="140" r="18" fill="none" stroke="#ED3D8C" stroke-width="1.5" opacity=".5"/>
+          <line x1="800" y1="140" x2="800" y2="400" stroke="#ED3D8C" stroke-width="1" stroke-dasharray="4 6" opacity=".5"/>
+        </svg>
+      </div>
+      <div class="xax">
+        <span>Y1</span><span>Y2</span><span>Y3</span><span>Y4</span><span>Y5</span><span>Y6</span><span>Y7</span><span>Y8</span><span style="color:var(--pink)">Y6*</span><span>Y8</span><span>Y9</span><span>Y10</span>
+      </div>
+    </div>
+    <div class="footer"><span>Source · The Family Calendar · Ten Years</span><span class="pageno"><em>05</em> / 09</span></div>
+  </section>
+
+  <!-- ============== 6. PROCESS · DIAGRAM ====================== -->
+  <section class="slide s-process" data-label="06 Process" data-om-validate="false">
+    <div class="runner"><span class="brand">Chapter 04</span><span>The Scenes</span></div>
+    <div class="head">
+      <h2>The<br><em>scenes.</em></h2>
+      <div class="lead">Five scenes carry the decade — the meeting, the move, the wedding, the quiet year, and the return. Each one hangs as a photograph on the wall at home.</div>
+    </div>
+    <div class="row">
+      <div class="step">
+        <div class="n">01</div>
+        <h3>Meet</h3>
+        <p>A rooftop birthday party in Lisbon, 2014. Daniel spilled a drink on Elena's shoe and apologized in the wrong language.</p>
+        <svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16M14 5l7 7-7 7"/></svg>
+      </div>
+      <div class="step">
+        <div class="n">02</div>
+        <h3>Move</h3>
+        <p>Elena followed Daniel to Denver in 2015 — two suitcases, one folding table, and a lease neither could really afford.</p>
+        <svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16M14 5l7 7-7 7"/></svg>
+      </div>
+      <div class="step">
+        <div class="n">03</div>
+        <h3>Marry</h3>
+        <p>June 14, 2016, in her grandmother's courtyard. Sixty-two guests, a broken folding chair, vows written the night before.</p>
+        <svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16M14 5l7 7-7 7"/></svg>
+      </div>
+      <div class="step">
+        <div class="n">04</div>
+        <h3>Endure</h3>
+        <p>2021: deployment, distance, and a loss neither spoke about for months. They chose to stay anyway.</p>
+        <svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16M14 5l7 7-7 7"/></svg>
+      </div>
+      <div class="step">
+        <div class="n">05</div>
+        <h3>Return</h3>
+        <p>2022 onward: Mateo, then Sofia, the house on Birch Street, and the Thursday dates that never stopped.</p>
+      </div>
+    </div>
+    <div class="timeline">
+      <span>2014 <em>Meet</em></span>
+      <span>2015 <em>Move</em></span>
+      <span>2016 <em>Marry</em></span>
+      <span>2021 <em>Endure</em></span>
+      <span>2024 <em>Return</em></span>
+    </div>
+    <div class="footer"><span>The Scenes · A Photo Essay</span><span class="pageno"><em>06</em> / 09</span></div>
+  </section>
+
+  <!-- ============== 7. THEN &amp; NOW · COMPARISON MATRIX ========== -->
+  <section class="slide s-matrix" data-label="07 Then &amp; Now" data-om-validate="false">
+    <div class="runner"><span class="brand">Chapter 05</span><span>Then &amp; Now</span></div>
+    <div class="head">
+      <h2>Then<br>and <em>now</em>, in five rows.</h2>
+      <div class="source">Sourced · the family calendar, travel logs, and two people who kept receipts · 2026</div>
+    </div>
+    <div class="table">
+      <div class="cell colhead">Dimension</div>
+      <div class="cell colhead" style="color:var(--pink)">Now · 2026</div>
+      <div class="cell colhead">Wedding · 2016</div>
+      <div class="cell colhead">The Turn · 2021</div>
+
+      <div class="cell label">Home</div>
+      <div class="cell us">Birch Street, paid down</div>
+      <div class="cell">One rented apartment, Lisbon</div>
+      <div class="cell">Split across two continents</div>
+
+      <div class="cell label">Together, nightly</div>
+      <div class="cell us"><span class="pill solid">Every night, by choice</span></div>
+      <div class="cell">Every night</div>
+      <div class="cell"><span class="pill dim">Eleven weeks apart</span></div>
+
+      <div class="cell label">Family</div>
+      <div class="cell us">Mateo, 6 · Sofia, 3</div>
+      <div class="cell">Just the two of them</div>
+      <div class="cell">Expecting, then grieving</div>
+
+      <div class="cell label">Ritual</div>
+      <div class="cell us"><span class="pill solid">Thursday date · no exceptions</span></div>
+      <div class="cell">No standing date</div>
+      <div class="cell">Letters, once a week</div>
+
+      <div class="cell label" style="border-bottom:0">Anniversary</div>
+      <div class="cell us" style="border-bottom:0"><strong style="color:var(--pink);font-family:'Instrument Serif';font-style:italic;font-size:32px">10th</strong></div>
+      <div class="cell" style="border-bottom:0">Day one</div>
+      <div class="cell" style="border-bottom:0">5th, nearly skipped</div>
+    </div>
+    <div class="footer"><span>Ten years, side by side</span><span class="pageno"><em>07</em> / 09</span></div>
+  </section>
+
+  <!-- ============== 8. VOICES · QUOTE ========================= -->
+  <section class="slide s-quote" data-label="08 Voices" data-om-validate="false">
+    <div class="runner"><span class="brand">Chapter 06</span><span>Voices</span></div>
+    <div class="body">
+      <div class="left">
+        <div class="qmark">"</div>
+        <div class="lab">Voices · Family</div>
+      </div>
+      <div class="right">
+        <blockquote>
+          They didn't stay together because it was <em>easy</em>. They stayed because every single time, they chose to <em>come back</em>.
+        </blockquote>
+        <div class="attr">
+          <div class="who">— Rosa Reyes</div>
+          <div class="role">Daniel's mother</div>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>Voices · The Reyes Family</span><span class="pageno"><em>08</em> / 09</span></div>
+  </section>
+
+  <!-- ============== 9. ENCORE · CTA =========================== -->
+  <section class="slide s-cta" data-label="09 Encore" data-om-validate="false">
+    <div class="runner"><span class="brand">Chapter 07</span><span>Encore</span></div>
+    <div class="body">
+      <div class="top">
+        <div class="pre">An invitation</div>
+        <h2><em>Ten years.</em><br>One more<br>celebration.</h2>
+      </div>
+      <div class="bottom">
+        <div class="step">
+          <div class="n">01</div>
+          <h3>Save the date</h3>
+          <p>Saturday, June 14, 2026 — the same courtyard, again, at 5pm.</p>
+        </div>
+        <div class="step">
+          <div class="n">02</div>
+          <h3>Bring a memory</h3>
+          <p>One photo or one story from any year of the ten. We'll read a few aloud.</p>
+        </div>
+        <div class="step">
+          <div class="n">03</div>
+          <h3>Toast with us</h3>
+          <p>No gifts — just the people who watched this story happen.</p>
+        </div>
+        <div class="qr">
+          <div class="box">
+            <svg viewBox="0 0 25 25" shape-rendering="crispEdges">
+              <rect width="25" height="25" fill="#F5EDF1"/>
+              <g fill="#060507">
+                <rect x="0" y="0" width="7" height="7"/><rect x="2" y="2" width="3" height="3" fill="#F5EDF1"/>
+                <rect x="18" y="0" width="7" height="7"/><rect x="20" y="2" width="3" height="3" fill="#F5EDF1"/>
+                <rect x="0" y="18" width="7" height="7"/><rect x="2" y="20" width="3" height="3" fill="#F5EDF1"/>
+                <rect x="9" y="0" width="1" height="1"/><rect x="11" y="0" width="2" height="1"/><rect x="14" y="1" width="1" height="2"/>
+                <rect x="8" y="3" width="2" height="2"/><rect x="12" y="3" width="3" height="1"/><rect x="9" y="5" width="1" height="2"/>
+                <rect x="11" y="5" width="2" height="2"/><rect x="14" y="6" width="2" height="1"/>
+                <rect x="0" y="9" width="2" height="1"/><rect x="3" y="9" width="2" height="2"/><rect x="6" y="9" width="3" height="1"/>
+                <rect x="10" y="9" width="2" height="3"/><rect x="14" y="9" width="2" height="2"/><rect x="17" y="9" width="2" height="1"/>
+                <rect x="20" y="9" width="3" height="2"/><rect x="0" y="12" width="3" height="1"/><rect x="5" y="12" width="2" height="2"/>
+                <rect x="9" y="12" width="2" height="1"/><rect x="13" y="12" width="3" height="2"/><rect x="18" y="12" width="2" height="3"/>
+                <rect x="22" y="12" width="2" height="1"/><rect x="0" y="15" width="2" height="2"/><rect x="4" y="15" width="3" height="1"/>
+                <rect x="9" y="15" width="3" height="2"/><rect x="14" y="15" width="2" height="2"/><rect x="20" y="15" width="2" height="2"/>
+                <rect x="9" y="18" width="2" height="1"/><rect x="13" y="18" width="3" height="3"/><rect x="18" y="18" width="2" height="3"/>
+                <rect x="22" y="18" width="2" height="2"/><rect x="9" y="21" width="3" height="2"/><rect x="17" y="22" width="3" height="2"/>
+                <rect x="22" y="22" width="3" height="3"/>
+              </g>
+            </svg>
+          </div>
+          <span class="lab" style="text-decoration:none;color:inherit;">Scan to RSVP</span>
+          <div class="url">reyesanniversary.com/2026</div>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>RSVP by June 1 · Family only</span><span class="pageno"><em>09</em> / 09</span></div>
+  </section>
+
+</deck-stage>
+
+<script type="application/json" id="speaker-notes">
+[
+  "Cover slide. Still Us, a photo-essay tribute for Elena and Daniel Reyes' tenth wedding anniversary — presented editorial-style. Italic script display type, hot pink on deep black with a subtle radial spotlight and film grain.",
+  "The Index. Five chapters laid out as an editorial table of contents: the numbers, the turn, the curve, then and now, and the invitation.",
+  "By the Numbers. Five hero figures from a decade of marriage: 3,652 days married, 3 homes, 2 children, 41 postcards, 11 weeks apart during the hardest season.",
+  "The Turn. The big 02 acts as the section divider — 2021's deployment and loss, the year the marriage was tested most.",
+  "The Curve. A line chart of date-night frequency across ten years, with a callout for the Thursday-date ritual that began after 2021.",
+  "The Scenes. Five steps from meeting to today: meet, move, marry, endure, return.",
+  "Then & Now. Comparison matrix using the pink-tinted column to spotlight 2026 against the wedding year and the hardest year.",
+  "Voices. Pull quote from Daniel's mother — they stayed because they kept choosing to come back.",
+  "Encore. The CTA — save the date, bring a memory, toast together; QR points to the RSVP page."
+]
+</script>
+
+</body>
+</html>

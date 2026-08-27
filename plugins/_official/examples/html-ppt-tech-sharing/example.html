@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Give an Engineering Tech Talk like a Staff Developer-Advocate - AI literacy</title>
+<style>/* html-ppt :: tech-sharing webfonts (only families actually used) */
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap');
+</style>
+<style>/* tech-sharing :: amber-phosphor terminal deck
+ * Stance: warm off-black, single CRT-amber accent, IBM Plex Mono structure,
+ * hairline panels with sharp corners, no gradients, no decorative shadows.
+ */
+:root{
+  --bg:#151210;
+  --surface:#1c1814;
+  --line:rgba(236,231,223,.14);
+  --line-strong:rgba(236,231,223,.32);
+  --text-1:#ece7df;
+  --text-2:#a89f91;
+  --text-3:#8d8476; /* >=4.5:1 on --bg for 12-13px captions */
+  --accent:#e8973c;
+  --accent-deep:#a85d14;
+  --paper:#f1ece3;
+  --paper-ink:#1c1814;
+  --font-display:'Sora',-apple-system,BlinkMacSystemFont,sans-serif;
+  --font-sans:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
+  --font-mono:'IBM Plex Mono',SFMono-Regular,Menlo,monospace;
+  --ease:cubic-bezier(.16,1,.3,1);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text-1);
+  font-family:var(--font-sans);font-weight:400;line-height:1.65;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+img,svg,video{max-width:100%;display:block}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+code,kbd,pre,samp{font-family:var(--font-mono)}
+
+/* ================= SLIDE SYSTEM (static preview: slides stacked) ================= */
+.deck{width:100vw;background:var(--bg)}
+.slide{position:relative;width:100vw;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;justify-content:center;
+  padding:72px 96px;border-bottom:1px solid var(--line);
+  background:var(--bg);color:var(--text-1)}
+/* terminal gutter: hairline + tick, the deck's quiet signature */
+.slide::before{content:"";position:absolute;top:0;bottom:0;left:56px;width:1px;
+  background:var(--line);pointer-events:none}
+.slide::after{content:"";position:absolute;top:72px;left:52px;width:9px;height:1px;
+  background:var(--accent);pointer-events:none}
+
+/* ================= TYPOGRAPHY ================= */
+.kicker{font-family:var(--font-mono);font-size:13px;font-weight:500;color:var(--accent);
+  letter-spacing:.02em;margin:0 0 18px}
+.kicker::before{content:"> "}
+h1.title,.h1{font-family:var(--font-display);font-size:76px;line-height:1.06;font-weight:700;
+  letter-spacing:-.02em;margin:0 0 18px;color:var(--text-1)}
+h2.title,.h2{font-family:var(--font-display);font-size:50px;line-height:1.14;font-weight:600;
+  letter-spacing:-.015em;margin:0 0 14px;color:var(--text-1)}
+h3,.h3{font-size:30px;line-height:1.25;font-weight:600;margin:0 0 10px;color:var(--text-1)}
+h4,.h4{font-family:var(--font-display);font-size:20px;line-height:1.35;font-weight:600;margin:0 0 8px;color:var(--text-1)}
+.lede{font-size:21px;line-height:1.6;color:var(--text-2);font-weight:400;max-width:62ch;margin:0}
+.dim{color:var(--text-2)}
+.dim2{color:var(--text-3)}
+.mono{font-family:var(--font-mono)}
+.ac{color:var(--accent)}
+
+/* ================= LAYOUT PRIMITIVES ================= */
+.stack>*+*{margin-top:14px}
+.row{display:flex;gap:24px;align-items:center}
+.grid{display:grid;gap:28px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.center{display:flex;align-items:center;justify-content:center;text-align:center}
+.mt-s{margin-top:8px}.mt-m{margin-top:18px}.mt-l{margin-top:36px}
+.tc{text-align:center}
+
+/* ================= PANELS (hairline, sharp corners, no shadows) ================= */
+.card{background:transparent;border:1px solid var(--line);border-radius:0;padding:26px 28px}
+.card-accent{border-top:1px solid var(--accent)}
+/* resolution panel: the one card allowed extra weight (problem/problem/answer rhythm) */
+.card-hot{border-color:var(--accent-deep);border-top-color:var(--accent);background:rgba(232,151,60,.05)}
+.card-hot h4{color:var(--accent)}
+.card p{margin:10px 0 0;font-size:15.5px;line-height:1.7}
+
+.tag{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;
+  font-family:var(--font-mono);font-size:12.5px;color:var(--text-2);
+  border:1px solid var(--line);border-radius:0;background:transparent}
+
+/* ================= AGENDA ================= */
+.agenda-row{display:flex;align-items:baseline;gap:28px;padding:19px 0;
+  border-bottom:1px solid var(--line);font-family:var(--font-mono)}
+.agenda-row:first-child{border-top:1px solid var(--line-strong)}
+.agenda-row .num{color:var(--accent);flex:none;width:48px;font-size:14px}
+.agenda-row .t{color:var(--text-1);font-size:23px;flex:1;font-family:var(--font-display);font-weight:600;letter-spacing:-.01em}
+.agenda-row .d{color:var(--text-3);font-size:13px}
+
+/* ================= TERMINAL (family signature, kept) ================= */
+.terminal{background:#100d0a;border:1px solid var(--line);border-radius:0;overflow:hidden;
+  font-family:var(--font-mono);font-size:15px;line-height:1.7}
+.terminal .bar{display:flex;align-items:center;gap:8px;padding:11px 16px;background:var(--surface);
+  border-bottom:1px solid var(--line);font-size:12px;color:var(--text-3)}
+.terminal .dot{width:9px;height:9px;border-radius:50%;background:#3c362e}
+.terminal .dot:first-child{background:var(--accent)}
+.terminal pre{margin:0;padding:24px 28px;color:var(--text-1);overflow:auto;max-height:440px}
+/* restrained warm syntax: amber + sand on off-black, no rainbow */
+.kw{color:var(--accent)}
+.fn{color:#f3efe7}
+.str{color:#c9b896}
+.cmt{color:var(--text-3);font-style:italic}
+.terminal .num,pre .num{color:#efc98b}
+
+/* ================= SPEAKER ================= */
+.speaker{display:flex;align-items:center;gap:16px;margin-top:32px}
+.speaker .av{width:46px;height:46px;flex:none;background:var(--surface);
+  border:1px solid var(--line-strong);position:relative}
+.speaker .av::after{content:"";position:absolute;left:12px;top:13px;width:11px;height:20px;
+  background:var(--accent)}
+.speaker b{display:block;color:var(--text-1);font-size:17px;font-weight:600}
+.speaker span{color:var(--text-3);font-size:13px;font-family:var(--font-mono)}
+
+/* ================= CHROME ================= */
+.deck-footer{position:absolute;bottom:28px;left:96px;right:96px;display:flex;align-items:baseline;
+  justify-content:space-between;font-size:12px;color:var(--text-3);font-family:var(--font-mono);
+  z-index:10;pointer-events:none}
+.slide-number::before{content:attr(data-current)}
+.slide-number::after{content:" / " attr(data-total)}
+
+/* ================= INVERSION (single deliberate flip: closing slide) ================= */
+.slide.invert{background:var(--paper);color:var(--paper-ink)}
+.slide.invert::before{background:rgba(28,24,20,.16)}
+.slide.invert::after{background:var(--accent-deep)}
+.slide.invert .h2{color:var(--paper-ink)}
+.slide.invert .lede{color:rgba(28,24,20,.72)}
+.slide.invert .tag{color:rgba(28,24,20,.7);border-color:rgba(28,24,20,.28)}
+.slide.invert .glyph{color:var(--accent-deep)}
+
+/* ================= MOTION (transform+opacity only, ease-out, staggered) ================= */
+@keyframes kf-rise{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
+.anim-fade-up{animation:kf-rise .7s var(--ease) both}
+.slide>.kicker{animation:kf-rise .6s var(--ease) both}
+.slide>.h1,.slide>.h2{animation:kf-rise .7s var(--ease) both;animation-delay:.06s}
+.slide>.lede,.slide>.stack,.slide>.grid,.slide>.terminal,.slide>.speaker{
+  animation:kf-rise .7s var(--ease) both;animation-delay:.14s}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+
+/* ================= UTILITY / PRINT ================= */
+.hidden{display:none!important}
+.notes{display:none!important}
+@media print{
+  .slide{page-break-after:always}
+}
+</style>
+</head>
+<body class="tpl-tech-sharing">
+<div class="deck">
+
+  <!-- 1. Cover -->
+  <section class="slide" data-title="Cover">
+    <p class="kicker">tech-talk playbook / ai-literacy</p>
+    <h1 class="h1 anim-fade-up" data-anim="fade-up">Give an Engineering Tech Talk<br>like a <span class="ac">Staff Developer-Advocate</span></h1>
+    <p class="lede mt-m">A worked rundown for engineers who want internal deep-dives to land — rehearsed against OpenDesign's own agent-stream, sandbox, and artifact internals.</p>
+    <div class="speaker"><div class="av"></div><div><b>Platform DevEx Guild</b><span>internal eng talk · 45 min + Q&amp;A</span></div></div>
+    <div class="deck-footer"><span class="mono">#devrel #eng-talks #agent-stream</span><span class="slide-number" data-current="1" data-total="8"></span></div>
+  </section>
+
+  <!-- 2. Agenda -->
+  <section class="slide" data-title="Agenda">
+    <p class="kicker">agenda.toml</p>
+    <h2 class="h2">Today's roadmap</h2>
+    <div class="stack mt-l">
+      <div class="agenda-row"><span class="num">01</span><span class="t">Why now: internal talks are the highest-leverage devrel channel</span><span class="d">~5min</span></div>
+      <div class="agenda-row"><span class="num">02</span><span class="t">Workflow map: the 6-beat rundown that keeps the room with you</span><span class="d">~10min</span></div>
+      <div class="agenda-row"><span class="num">03</span><span class="t">Pilot: rehearsing the talk on the agent-stream internals</span><span class="d">~12min</span></div>
+      <div class="agenda-row"><span class="num">04</span><span class="t">Risk control: the demo-fails-live playbook</span><span class="d">~8min</span></div>
+      <div class="agenda-row"><span class="num">05</span><span class="t">ROI + rollout: from one talk to a recurring series</span><span class="d">~5min</span></div>
+    </div>
+  </section>
+
+  <!-- 3. Context -->
+  <section class="slide" data-title="Context">
+    <p class="kicker">// why-now</p>
+    <h2 class="h2">The problem: engineers stop trusting<br>demo-slides, not demo-code.</h2>
+    <div class="grid g3 mt-l">
+      <div class="card card-accent"><h4>Slide decks</h4><p class="dim">Static bullets compress a whole system into buzzwords; senior engineers tune out by slide three because there's nothing they can falsify.</p><span class="tag mt-s">❌ nothing to verify</span></div>
+      <div class="card card-accent"><h4>Marketing-style demos</h4><p class="dim">A polished screen recording proves the feature ships, not that you understand why it works — the gap shows up the moment Q&amp;A starts.</p><span class="tag mt-s">😩 no mental-model transfer</span></div>
+      <div class="card card-hot"><h4>Staff-level walkthroughs</h4><p class="dim">Show the real code path live — the SSE stream, the sandboxed iframe, the artifact write — and let the room poke at it. Trust compounds instead of decaying.</p><span class="tag mt-s">✅ engineers verify, then believe</span></div>
+    </div>
+  </section>
+
+  <!-- 4. Deep dive 1 -->
+  <section class="slide" data-title="Deep Dive 1">
+    <p class="kicker">workflow map · 1 / 2</p>
+    <h2 class="h2">Map the talk before you write a single slide.</h2>
+    <div class="grid g2 mt-l" style="align-items:start">
+      <div>
+        <p class="lede">Pick one running system, then plot six beats against it: why now, architecture, live walkthrough, failure modes, impact numbers, next steps. Every beat should end on a question the audience can actually ask out loud.</p>
+        <div class="mt-l">
+          <span class="tag">6 beats</span> <span class="tag">45 minutes</span> <span class="tag">one live system</span>
+        </div>
+      </div>
+      <div class="terminal">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>rundown.md</span></div>
+<pre><span class="cmt"># engineering tech-talk rundown</span>
+<span class="kw">$</span> <span class="fn">talk</span> map --subject agent-stream
+
+  <span class="str">✓</span> Why now         <span class="str">✓</span> Architecture map
+  <span class="str">✓</span> Live walkthrough <span class="str">✓</span> Failure modes
+  <span class="str">✓</span> Impact numbers   <span class="str">✓</span> Next steps
+  …
+
+<span class="cmt">// 6 beats, 45 minutes, one running system</span>
+<span class="cmt">// every beat ends on a question the room can ask live</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Deep dive 2 -->
+  <section class="slide" data-title="Deep Dive 2">
+    <p class="kicker">pilot · 2 / 2</p>
+    <h2 class="h2">Pilot the talk on a system you actually run.</h2>
+    <div class="grid g2 mt-l" style="align-items:start">
+      <div>
+        <p class="lede">The pilot subject is OpenDesign's own <span class="mono">claude-stream.ts</span> SSE loop, the sandboxed iframe preview, and the artifact write path — nothing hypothetical, nothing slideware. Three colleagues sat in on the dry-runs before the real room.</p>
+        <div class="stack mt-m">
+          <div class="tag">✦ 3 dry-runs before the real room</div>
+          <div class="tag">✦ timed to the second, per beat</div>
+          <div class="tag">✦ live terminal, no recorded video</div>
+          <div class="tag">✦ audience holds questions to the end</div>
+        </div>
+      </div>
+      <div class="card" style="padding:32px">
+        <h4 class="mono" style="color:var(--accent)">pilot · 5 checkpoints</h4>
+        <div class="stack mt-m" style="font-family:var(--font-mono);font-size:14px;line-height:1.9;color:var(--text-2)">
+          <div><span style="color:var(--accent)">1.</span> Pick the system — the agent-stream SSE loop, not a hypothetical one</div>
+          <div><span style="color:var(--accent)">2.</span> Script the failure — kill the daemon mid-turn, narrate the reconnect live</div>
+          <div><span style="color:var(--accent)">3.</span> Time-box each beat — 45 min hard stop, timer visible to the speaker only</div>
+          <div><span style="color:var(--accent)">4.</span> Run it past a skeptic — one senior engineer allowed to interrupt</div>
+          <div><span style="color:var(--accent)">5.</span> Cut anything that needs a slide to explain what the code already shows</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. Code example -->
+  <section class="slide" data-title="Code">
+    <p class="kicker">talks/agent-stream-deep-dive/risk.md</p>
+    <h2 class="h2" style="font-size:40px">Every live demo needs a written recovery path.</h2>
+    <div class="terminal mt-m">
+      <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>risk.md</span></div>
+<pre><span class="kw">## Known failure modes</span>
+- daemon restarts mid-stream:  <span class="num">12s</span> reconnect — narrate it, don't hide it
+- sandbox iframe goes blank:   fall back to the 90s recorded clip
+- Q&amp;A runs long:              cut the "further reading" slide, keep the room
+
+<span class="kw">## Rule</span>
+- Never debug live past <span class="num">60</span>s; switch to the fallback clip, explain after
+
+<span class="cmt"># rehearsed 3x against this exact list before the real room</span>
+<span class="cmt"># the backup clip is muted b-roll, not a scripted answer</span></pre>
+    </div>
+  </section>
+
+  <!-- 7. Takeaways -->
+  <section class="slide" data-title="Takeaways">
+    <p class="kicker">// roi</p>
+    <h2 class="h2">Three numbers that justify the rehearsal time.</h2>
+    <div class="grid g3 mt-l">
+      <div class="card card-accent"><h4>1 · Time to competence</h4><p class="dim">23 engineers who watched the sandbox walkthrough shipped their first agent-stream patch in under a week, down from roughly three.</p></div>
+      <div class="card card-accent"><h4>2 · Fewer repeat questions</h4><p class="dim">"How does the SSE reconnect work" pings dropped from ~9/week to ~2/week once the recording shipped to the wiki.</p></div>
+      <div class="card card-accent"><h4>3 · A reusable format</h4><p class="dim">The same 6-beat rundown ran twice more this quarter — sandbox isolation, artifact storage — each under 4 hours of prep.</p></div>
+    </div>
+    <p class="lede mt-l">Recording + rundown: <span class="mono">internal-wiki/agent-stream-talk</span> · <span class="mono">#eng-devrel</span></p>
+  </section>
+
+  <!-- 8. Q&A -->
+  <section class="slide center tc invert" data-title="Q and A">
+    <div>
+      <div class="mono glyph" style="font-size:96px;font-weight:600;letter-spacing:-.04em;line-height:1;margin:0 0 40px">&gt;_</div>
+      <h2 class="h2">Turn one good talk into<br>a recurring rundown</h2>
+      <p class="lede" style="margin:14px auto">One system · one rehearsal · one recording engineers actually rewatch</p>
+      <div class="row mt-l" style="justify-content:center">
+        <span class="tag">next: sandbox-isolation talk · Q3 wk2</span>
+        <span class="tag">owner: platform-devex guild</span>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+</body></html>

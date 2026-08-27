@@ -1,0 +1,118 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-html-ppt-zhangzara-pink-script",
+  "title": "Turn an Anniversary into a Photo Essay like a Wedding Storyteller",
+  "title_i18n": {
+    "en": "Turn an Anniversary into a Photo Essay like a Wedding Storyteller",
+    "zh-CN": "像婚礼讲述者一样把纪念日做成影像散文",
+    "zh-TW": "像婚礼讲述者一样把纪念日做成影像散文"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A wedding-anniversary tribute photo essay — a decade in scenes, the turning points, and the quiet meaning of staying. Built as a decision-grade story deck for couple, family, friends.",
+  "description_i18n": {
+    "en": "A wedding-anniversary tribute photo essay — a decade in scenes, the turning points, and the quiet meaning of staying. Built as a decision-grade story deck for couple, family, friends.",
+    "zh-CN": "像婚礼讲述者一样把纪念日做成影像散文——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像婚礼讲述者一样把纪念日做成影像散文——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "OpenDesign",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/html-ppt-zhangzara-pink-script",
+  "tags": [
+    "example",
+    "first-party",
+    "deck",
+    "marketing",
+    "web",
+    "pink-script",
+    "zhangzara-pink-script",
+    "pink-script-after-hours",
+    "nocturnal",
+    "moody",
+    "literary",
+    "sultry",
+    "fashion-brand-deck",
+    "creator-personal-brand",
+    "html-deck",
+    "html-slides",
+    "zhangzara",
+    "launch",
+    "campaign",
+    "pipeline",
+    "html-ppt-zhangzara-pink-script",
+    "marketing-and-gtm",
+    "life",
+    "travel-photo-essay-deck",
+    "personal",
+    "story",
+    "photo-essay",
+    "decision-deck",
+    "commercial-slide-agent"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "personal",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create \"Turn an Anniversary into a Photo Essay like a Wedding Storyteller\" as a decision-grade Life & story deck in this template's own visual system. Subject: A wedding-anniversary tribute photo essay — a decade in scenes, the turning points, and the quiet meaning of staying. Audience: couple, family, friends. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would someone retell the story after seeing it once.",
+        "zh-CN": "像婚礼讲述者一样把纪念日做成影像散文。像婚礼讲述者一样把纪念日做成影像散文——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。 主题：A wedding-anniversary tribute photo essay — a decade in scenes, the turning points, and the quiet meaning of staying. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Turn an Anniversary into a Photo Essay like a Wedding Storyteller",
+          "title_i18n": {
+            "en": "Turn an Anniversary into a Photo Essay like a Wedding Storyteller",
+            "zh-CN": "像婚礼讲述者一样把纪念日做成影像散文",
+            "zh-TW": "像婚礼讲述者一样把纪念日做成影像散文"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html",
+        "./assets/deck-stage.js"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "category": "life"
+  }
+}

@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Present a Senior Thesis Defense like a Distinction-Grade Economics Student - Student coursework</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #ede8e0;
+            --bg-secondary: #e2dbd1;
+            --text-primary: #1a1a1a;
+            --text-secondary: #4f4b45;
+            --accent: #8c4130; /* quiet rubric red, manuscript rubrication; 5.7:1 on --bg-primary */
+            --line: #b8b0a4;
+            --font-display: 'Playfair Display', Georgia, serif;
+            --font-body: 'Source Serif 4', Georgia, serif;
+            --ease-out: cubic-bezier(.16, 1, .3, 1);
+        }
+
+        body {
+            font-family: var(--font-body);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            overflow: hidden;
+        }
+
+        /* Faint paper grain, part of the Cartesian manuscript identity.
+           Inline SVG turbulence, no remote assets. */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            pointer-events: none;
+            opacity: 0.05;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+            background-size: 160px 160px;
+        }
+
+        .presentation {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        .slide {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.6s var(--ease-out), visibility 0.6s var(--ease-out);
+            display: flex;
+            flex-direction: column;
+            /* Generous book margins; the page should breathe like a set spread */
+            padding: 6vh 6vw;
+            background: var(--bg-primary);
+            overflow: hidden;
+        }
+
+        .slide.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Quiet entrance: content rises gently on each slide change.
+           Transform + opacity only, ease-out. */
+        @keyframes slide-rise {
+            from { opacity: 0; transform: translateY(18px); }
+            to { opacity: 1; transform: none; }
+        }
+
+        .slide.active .content > * {
+            animation: slide-rise 0.7s var(--ease-out) both;
+        }
+
+        .slide.active .content > *:nth-child(2) { animation-delay: 0.07s; }
+        .slide.active .content > *:nth-child(3) { animation-delay: 0.14s; }
+        .slide.active .content > *:nth-child(4) { animation-delay: 0.21s; }
+
+        @media (prefers-reduced-motion: reduce) {
+            .slide.active .content > * { animation: none; }
+            .slide, .nav-dot, .nav-arrow { transition: none; }
+        }
+
+        /* Navigation */
+        .nav-dots {
+            position: fixed;
+            right: 2vw;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 100;
+        }
+
+        .nav-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: transparent;
+            border: 1px solid var(--line);
+            cursor: pointer;
+            transition: background 0.3s var(--ease-out), transform 0.3s var(--ease-out), border-color 0.3s var(--ease-out);
+        }
+
+        .nav-dot:hover {
+            border-color: var(--accent);
+        }
+
+        .nav-dot.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            transform: scale(1.25);
+        }
+
+        .slide-counter {
+            position: fixed;
+            bottom: 3vh;
+            right: 3vw;
+            font-family: var(--font-body);
+            font-variant-numeric: tabular-nums;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            letter-spacing: 2px;
+            z-index: 100;
+        }
+
+        .nav-arrows {
+            position: fixed;
+            bottom: 3vh;
+            left: 3vw;
+            display: flex;
+            gap: 16px;
+            z-index: 100;
+        }
+
+        .nav-arrow {
+            width: 40px;
+            height: 40px;
+            border: 1px solid var(--text-secondary);
+            border-radius: 50%;
+            background: transparent;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            color: var(--text-primary);
+            transition: background 0.3s var(--ease-out), color 0.3s var(--ease-out), border-color 0.3s var(--ease-out);
+        }
+
+        .nav-arrow:hover {
+            background: var(--text-primary);
+            border-color: var(--text-primary);
+            color: var(--bg-primary);
+        }
+
+        /* Typography */
+        h1, h2, h3 {
+            font-family: var(--font-display);
+            font-weight: 400;
+            line-height: 1.08;
+            letter-spacing: -0.015em;
+            text-wrap: balance;
+        }
+
+        h4 {
+            font-weight: 600;
+        }
+
+        h1 {
+            font-size: clamp(2.5rem, 5vw, 4.5rem);
+        }
+
+        h2 {
+            font-size: clamp(1.8rem, 3.5vw, 3rem);
+        }
+
+        h3 {
+            font-size: clamp(1.2rem, 2vw, 1.6rem);
+        }
+
+        p, li {
+            font-family: var(--font-body);
+            font-size: clamp(0.9rem, 1.2vw, 1.1rem);
+            line-height: 1.65;
+            color: var(--text-secondary);
+            max-width: 62ch;
+            /* Oldstyle figures sit into the serif text like a set manuscript page */
+            font-variant-numeric: oldstyle-nums;
+        }
+
+        ::selection {
+            background: var(--accent);
+            color: var(--bg-primary);
+        }
+
+        .label {
+            font-family: var(--font-body);
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.22em;
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        /* Slide 1: Title */
+        .slide-title {
+            justify-content: center;
+        }
+
+        .slide-title .content {
+            position: relative;
+            z-index: 1;
+            max-width: 65vw;
+        }
+
+        .slide-title .label {
+            margin-bottom: 3vh;
+        }
+
+        .slide-title h1 {
+            font-size: clamp(3rem, 6vw, 5.5rem);
+            margin-bottom: 2vh;
+        }
+
+        .slide-title .subtitle {
+            font-family: var(--font-body);
+            font-size: clamp(1rem, 1.5vw, 1.3rem);
+            line-height: 1.6;
+            color: var(--text-secondary);
+            max-width: 44ch;
+        }
+
+        /* All geo-decoration instances are decorative overlays, not flex
+           items — they must be absolutely positioned in their slide. The
+           slide-statement instance uses inline left/top/width/height to
+           override the defaults below. */
+        .geo-decoration {
+            position: absolute;
+            border: 1px solid var(--line);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .slide-title .geo-decoration {
+            right: 5vw;
+            bottom: 10vh;
+            width: 30vw;
+            height: 30vw;
+            opacity: 0.4;
+        }
+
+        .slide-title .geo-decoration::before {
+            content: '';
+            position: absolute;
+            top: 10%;
+            left: 10%;
+            width: 80%;
+            height: 80%;
+            border: 1px dashed var(--line);
+            border-radius: 50%;
+        }
+
+        /* Slide 2: Agenda */
+        .slide-agenda .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6vw;
+            align-items: center;
+            height: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+        .slide-agenda .left-col h2 {
+            margin-bottom: 3vh;
+        }
+
+        .slide-agenda .left-col p {
+            max-width: 30vw;
+        }
+
+        .slide-agenda .agenda-list {
+            list-style: none;
+        }
+
+        .slide-agenda .agenda-list li {
+            padding: 2vh 0;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: baseline;
+            gap: 2vw;
+        }
+
+        .slide-agenda .agenda-number {
+            font-family: var(--font-display);
+            font-size: 1.5rem;
+            color: var(--accent);
+            min-width: 3vw;
+            font-variant-numeric: lining-nums tabular-nums;
+        }
+
+        /* Slide 3: Statement */
+        .slide-statement {
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        .slide-statement .content {
+            max-width: 60vw;
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+        }
+
+        /* Rubricated opening quote, echoing the manuscript-red accent */
+        .slide-statement .quote-mark {
+            font-family: var(--font-display);
+            font-size: 5rem;
+            line-height: 0.6;
+            color: var(--accent);
+            opacity: 0.45;
+            display: block;
+            margin-bottom: 2vh;
+        }
+
+        .slide-statement h2 {
+            font-style: italic;
+            margin-bottom: 3vh;
+        }
+
+        .slide-statement .attribution {
+            font-size: 0.85rem;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        /* Slide 4: Bar Chart */
+        .slide-barchart .content {
+            display: grid;
+            grid-template-columns: 1fr 1.5fr;
+            gap: 5vw;
+            align-items: center;
+            height: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+        .slide-barchart .left-col h2 {
+            margin-bottom: 2vh;
+        }
+
+        .slide-barchart .chart-container {
+            position: relative;
+            height: 55vh;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Hand-drawn cost comparison: flat single-hue bars, accent on ours */
+        .cost-bars {
+            flex: 1;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            gap: 6vw;
+            border-bottom: 1px solid var(--line);
+            min-height: 0;
+        }
+
+        .cost-bar {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            width: 9vw;
+            height: 100%;
+        }
+
+        .cost-value {
+            font-family: var(--font-display);
+            font-size: 1.4rem;
+            margin-bottom: 1.2vh;
+            color: var(--text-primary);
+            font-variant-numeric: lining-nums tabular-nums;
+        }
+
+        .cost-fill {
+            width: 100%;
+            background: var(--text-primary);
+        }
+
+        .cost-fill.is-ours {
+            background: var(--accent);
+        }
+
+        .cost-bar-label {
+            margin-top: 1.5vh;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            text-align: center;
+        }
+
+        .cost-bars-wrap {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .cost-bar-labels {
+            display: flex;
+            justify-content: center;
+            gap: 6vw;
+        }
+
+        .cost-bar-labels .cost-bar-label {
+            width: 9vw;
+        }
+
+        .chart-caption {
+            margin-top: 2.5vh;
+            text-align: center;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--accent);
+        }
+
+        /* Slide 5: Two Column */
+        .slide-twocol .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5vw;
+            align-items: center;
+            height: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+        .slide-twocol .image-placeholder {
+            width: 100%;
+            height: 60vh;
+            background: var(--bg-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--line);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .slide-twocol .image-placeholder::before {
+            content: '';
+            position: absolute;
+            width: 150%;
+            height: 1px;
+            background: var(--line);
+            transform: rotate(-30deg);
+        }
+
+        .slide-twocol .image-placeholder::after {
+            content: '';
+            position: absolute;
+            width: 150%;
+            height: 1px;
+            background: var(--line);
+            transform: rotate(30deg);
+        }
+
+        .slide-twocol .image-label {
+            position: relative;
+            z-index: 1;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--accent);
+        }
+
+        .slide-twocol .right-col h2 {
+            margin-bottom: 2vh;
+        }
+
+        .slide-twocol .right-col p {
+            margin-bottom: 2vh;
+        }
+
+        .slide-twocol .stats {
+            display: flex;
+            gap: 3vw;
+            margin-top: 4vh;
+            padding-top: 3vh;
+            border-top: 1px solid var(--line);
+        }
+
+        .slide-twocol .stat-item h4 {
+            font-family: var(--font-display);
+            font-size: 2rem;
+            margin-bottom: 0.5vh;
+            font-variant-numeric: lining-nums;
+        }
+
+        .slide-twocol .stat-item span {
+            font-size: 0.8rem;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Slide 6: Three Cards */
+        .slide-cards {
+            justify-content: center;
+        }
+
+        .slide-cards .content {
+            position: relative;
+            z-index: 1;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .slide-cards .header {
+            text-align: center;
+            margin-bottom: 6vh;
+        }
+
+        .slide-cards .header h2 {
+            margin-bottom: 1vh;
+        }
+
+        .slide-cards .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 3vw;
+        }
+
+        .slide-cards .card {
+            border-top: 1px solid var(--text-primary);
+            padding: 3.5vh 0.5vw 0 0;
+            background: transparent;
+        }
+
+        .slide-cards .card-icon {
+            font-family: var(--font-display);
+            font-style: italic;
+            margin-bottom: 2.5vh;
+            font-size: 1.15rem;
+            color: var(--accent);
+        }
+
+        .slide-cards .card h3 {
+            margin-bottom: 2vh;
+            font-size: 1.3rem;
+        }
+
+        .slide-cards .card p {
+            font-size: 0.9rem;
+        }
+
+        /* Slide 7: Line Chart */
+        .slide-linechart .content {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+        .slide-linechart .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 4vh;
+        }
+
+        .slide-linechart .chart-wrapper {
+            flex: 1;
+            position: relative;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .slide-linechart .chart-wrapper svg {
+            flex: 1;
+            width: 100%;
+            min-height: 0;
+        }
+
+        .slide-linechart .chart-legend {
+            display: flex;
+            justify-content: center;
+            gap: 3vw;
+            padding-top: 2vh;
+            font-size: 0.75rem;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+        }
+
+        .slide-linechart .chart-legend .key {
+            display: inline-block;
+            width: 22px;
+            height: 0;
+            border-top: 2px solid var(--text-primary);
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        .slide-linechart .chart-legend .key.dashed {
+            border-top-style: dashed;
+            border-top-color: var(--line);
+        }
+
+        /* Slide 8: Timeline */
+        .slide-timeline .content {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            height: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+        .slide-timeline .header {
+            margin-bottom: 6vh;
+        }
+
+        .slide-timeline .timeline {
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+            padding-top: 3vh;
+        }
+
+        .slide-timeline .timeline::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: var(--line);
+        }
+
+        .slide-timeline .timeline-item {
+            flex: 1;
+            padding-right: 3vw;
+            position: relative;
+        }
+
+        /* Phase markers removed — the labels alone provide enough structure
+           and the small circles were colliding with the start of each label. */
+        .slide-timeline .timeline-item::before {
+            content: none;
+        }
+
+        .slide-timeline .timeline-item h4 {
+            font-family: var(--font-display);
+            font-size: 1.2rem;
+            margin-bottom: 1vh;
+            margin-top: 2vh;
+        }
+
+        .slide-timeline .timeline-item .year {
+            font-size: 0.75rem;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 1vh;
+        }
+
+        .slide-timeline .timeline-item p {
+            font-size: 0.85rem;
+        }
+
+        /* Slide 9: Team */
+        .slide-team .content {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            height: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+        .slide-team .header {
+            text-align: center;
+            margin-bottom: 6vh;
+        }
+
+        .slide-team .team-grid {
+            display: flex;
+            justify-content: center;
+            gap: 4vw;
+        }
+
+        .slide-team .team-member {
+            text-align: center;
+        }
+
+        .slide-team .member-photo {
+            width: 12vw;
+            height: 12vw;
+            border-radius: 50%;
+            background: var(--bg-secondary);
+            margin: 0 auto 2vh;
+            border: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            color: var(--accent);
+        }
+
+        .slide-team .team-member h4 {
+            font-family: var(--font-display);
+            font-size: 1.2rem;
+            margin-bottom: 0.5vh;
+        }
+
+        .slide-team .team-member span {
+            font-size: 0.8rem;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Slide 10: Closing */
+        .slide-closing {
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        .slide-closing .content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .slide-closing h1 {
+            margin-bottom: 3vh;
+        }
+
+        .slide-closing p {
+            margin-bottom: 4vh;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            font-size: 0.9rem;
+        }
+
+        .slide-closing .geo-ring {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 50vw;
+            height: 50vw;
+            border: 1px solid var(--line);
+            border-radius: 50%;
+            opacity: 0.3;
+            z-index: 0;
+        }
+
+        .slide-closing .geo-ring::before {
+            content: '';
+            position: absolute;
+            top: 15%;
+            left: 15%;
+            width: 70%;
+            height: 70%;
+            border: 1px dashed var(--line);
+            border-radius: 50%;
+        }
+
+        @media (max-aspect-ratio: 4/3) {
+            .slide-agenda .content,
+            .slide-barchart .content,
+            .slide-twocol .content {
+                grid-template-columns: 1fr;
+                gap: 3vh;
+            }
+
+            .slide-cards .cards-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .slide-timeline .timeline {
+                flex-direction: column;
+                gap: 3vh;
+            }
+
+            .slide-timeline .timeline::before {
+                display: none;
+            }
+
+            .slide-team .team-grid {
+                flex-direction: column;
+                gap: 3vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="presentation">
+        <!-- Slide 1: Title -->
+        <div class="slide slide-title active">
+            <div class="geo-decoration"></div>
+            <div class="content">
+                <div class="label">Senior Thesis Defense · Department of Economics</div>
+                <h1>Minimum Wage and the Teen Labor Market</h1>
+                <p class="subtitle">Evidence from border-county pairs, 2009–2023. Presented by Elena Kowalski to the Undergraduate Thesis Committee, Spring 2026.</p>
+            </div>
+        </div>
+
+        <!-- Slide 2: Agenda -->
+        <div class="slide slide-agenda">
+            <div class="content">
+                <div class="left-col">
+                    <div class="label">Overview</div>
+                    <h2>Roadmap</h2>
+                    <p>The employment question, how the design isolates the minimum-wage effect from other local shocks, and what 316 border-county pairs show.</p>
+                </div>
+                <div class="right-col">
+                    <ul class="agenda-list">
+                        <li><span class="agenda-number">01</span> The Employment Question</li>
+                        <li><span class="agenda-number">02</span> Identification Strategy</li>
+                        <li><span class="agenda-number">03</span> Evidence from 316 County Pairs</li>
+                        <li><span class="agenda-number">04</span> Contribution &amp; Limitations</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 3: Statement -->
+        <div class="slide slide-statement">
+            <div class="content">
+                <span class="quote-mark" aria-hidden="true">&ldquo;</span>
+                <h2>Across contiguous county pairs, a 10% minimum-wage increase moves teen employment by 0.3 percentage points — statistically indistinguishable from zero.</h2>
+                <div class="attribution">Chapter 4 &middot; Border-Pair Estimate</div>
+            </div>
+            <div class="geo-decoration" style="left: -10vw; top: 10vh; width: 40vw; height: 40vw; opacity: 0.2;"></div>
+        </div>
+
+        <!-- Slide 4: Bar Chart -->
+        <div class="slide slide-barchart">
+            <div class="content">
+                <div class="left-col">
+                    <div class="label">The Identification Problem</div>
+                    <h2>Naive Panels Overstate Job Loss</h2>
+                    <p>Comparing all treated and untreated states implies a &minus;0.15 teen employment elasticity. Restricting comparisons to adjacent counties that share a labor market narrows that to &minus;0.02 — well within sampling noise.</p>
+                </div>
+                <div class="right-col">
+                    <div class="chart-container">
+                        <div class="cost-bars-wrap">
+                            <div class="cost-bars">
+                                <div class="cost-bar">
+                                    <div class="cost-value">&minus;0.15</div>
+                                    <div class="cost-fill" style="height: 78%;"></div>
+                                </div>
+                                <div class="cost-bar">
+                                    <div class="cost-value">&minus;0.02</div>
+                                    <div class="cost-fill is-ours" style="height: 11.4%;"></div>
+                                </div>
+                            </div>
+                            <div class="cost-bar-labels">
+                                <div class="cost-bar-label">Naive State Panel</div>
+                                <div class="cost-bar-label">Border-County Design</div>
+                            </div>
+                        </div>
+                        <div class="chart-caption">Estimated teen employment elasticity</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 5: Two Column -->
+        <div class="slide slide-twocol">
+            <div class="content">
+                <div class="left-col">
+                    <div class="image-placeholder">
+                        <span class="image-label">Border-Pair Map, PA&ndash;NJ Corridor</span>
+                    </div>
+                </div>
+                <div class="right-col">
+                    <div class="label">Identification Strategy</div>
+                    <h2>Matching Counties Across State Lines</h2>
+                    <p>The design pairs each minimum-wage county with its contiguous neighbor across a state border, so local labor-demand shocks — weather, retail openings, highway construction — are shared by construction.</p>
+                    <p>Employment comes from QCEW county records linked to state and local minimum-wage schedules, restricted to teen-heavy sectors: retail and food service.</p>
+                    <div class="stats">
+                        <div class="stat-item">
+                            <h4>316</h4>
+                            <span>County Pairs</span>
+                        </div>
+                        <div class="stat-item">
+                            <h4>15</h4>
+                            <span>Years, 2009&ndash;23</span>
+                        </div>
+                        <div class="stat-item">
+                            <h4>1.3M</h4>
+                            <span>Employment-Months</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 6: Three Cards -->
+        <div class="slide slide-cards">
+            <div class="content">
+                <div class="header">
+                    <div class="label">Contribution</div>
+                    <h2>What This Thesis Adds</h2>
+                </div>
+                <div class="cards-grid">
+                    <div class="card">
+                        <div class="card-icon">I</div>
+                        <h3>A Longer Border-Pair Panel</h3>
+                        <p>Extends the Dube-Lester-Reich design six years past its original sample, through three federal non-adjustment years and 41 state-level increases.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">II</div>
+                        <h3>Firm-Size Heterogeneity</h3>
+                        <p>Splits establishments by employee count. Job loss concentrates in firms under 20 employees; larger employers show no detectable effect.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">III</div>
+                        <h3>A Dynamic Event Study</h3>
+                        <p>Traces employment for eight quarters around each increase, ruling out anticipation effects and pre-existing divergent trends.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 7: Line Chart -->
+        <div class="slide slide-linechart">
+            <div class="content">
+                <div class="header">
+                    <div>
+                        <div class="label">Evidence</div>
+                        <h2>Employment Converges to the Counterfactual</h2>
+                    </div>
+                    <p style="max-width: 25vw; text-align: right;">Border-pair synthetic-control estimate for teen employment in treated counties, indexed to the quarter before each minimum-wage increase (Q0 = 100).</p>
+                </div>
+                <div class="chart-wrapper">
+                    <svg viewBox="0 0 1000 400" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Teen employment index, treated county versus synthetic control">
+                        <!-- gridlines -->
+                        <line x1="70" y1="350" x2="960" y2="350" stroke="#b8b0a4" stroke-width="1"/>
+                        <line x1="70" y1="240" x2="960" y2="240" stroke="#d3ccc0" stroke-width="1"/>
+                        <line x1="70" y1="130" x2="960" y2="130" stroke="#d3ccc0" stroke-width="1"/>
+                        <line x1="70" y1="20" x2="960" y2="20" stroke="#d3ccc0" stroke-width="1"/>
+                        <!-- y labels -->
+                        <text x="58" y="354" text-anchor="end" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">90</text>
+                        <text x="58" y="244" text-anchor="end" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">95</text>
+                        <text x="58" y="134" text-anchor="end" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">100</text>
+                        <text x="58" y="24" text-anchor="end" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">105</text>
+                        <!-- synthetic control (counterfactual) trend -->
+                        <polyline points="80,295 256,240 432,185 608,130 784,75 960,20" fill="none" stroke="#b8b0a4" stroke-width="2" stroke-dasharray="6 6"/>
+                        <!-- treated county actual employment index -->
+                        <polyline points="80,306 256,267.5 432,218 608,157.5 784,86 960,20" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+                        <circle cx="80" cy="306" r="4" fill="#1a1a1a"/>
+                        <circle cx="256" cy="267.5" r="4" fill="#1a1a1a"/>
+                        <circle cx="432" cy="218" r="4" fill="#1a1a1a"/>
+                        <circle cx="608" cy="157.5" r="4" fill="#1a1a1a"/>
+                        <circle cx="784" cy="86" r="4" fill="#1a1a1a"/>
+                        <circle cx="960" cy="20" r="5" fill="#8c4130" stroke="#ede8e0" stroke-width="2"/>
+                        <!-- x labels -->
+                        <text x="80" y="382" text-anchor="start" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">Q&minus;8</text>
+                        <text x="256" y="382" text-anchor="middle" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">Q&minus;5</text>
+                        <text x="432" y="382" text-anchor="middle" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">Q&minus;2</text>
+                        <text x="608" y="382" text-anchor="middle" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">Q+1</text>
+                        <text x="784" y="382" text-anchor="middle" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">Q+4</text>
+                        <text x="960" y="382" text-anchor="end" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">Q+8</text>
+                    </svg>
+                    <div class="chart-legend">
+                        <span><span class="key"></span>Treated County (Actual)</span>
+                        <span><span class="key dashed"></span>Synthetic Control (Counterfactual)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 8: Timeline -->
+        <div class="slide slide-timeline">
+            <div class="content">
+                <div class="header">
+                    <div class="label">Methodology</div>
+                    <h2>From Data to Defensible Estimate</h2>
+                </div>
+                <div class="timeline">
+                    <div class="timeline-item">
+                        <div class="year">Step One</div>
+                        <h4>Assemble the Panel</h4>
+                        <p>Link county-level QCEW employment records to every state and local minimum-wage schedule change, 2009&ndash;2023.</p>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="year">Step Two</div>
+                        <h4>Construct Border Pairs</h4>
+                        <p>Match each treated county to its closest untreated neighbor across a state line, following the contiguous-pair method.</p>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="year">Step Three</div>
+                        <h4>Estimate the Event Study</h4>
+                        <p>Run quarter-by-quarter fixed-effects regressions with pair-by-time controls to isolate the minimum-wage effect.</p>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="year">Step Four</div>
+                        <h4>Stress-Test the Result</h4>
+                        <p>Re-run under placebo dates, alternate bandwidths, and a synthetic-control specification to check the estimate survives.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 9: Team -->
+        <div class="slide slide-team">
+            <div class="content">
+                <div class="header">
+                    <div class="label">Robustness</div>
+                    <h2>Four Checks the Result Survives</h2>
+                </div>
+                <div class="team-grid">
+                    <div class="team-member">
+                        <div class="member-photo">PT</div>
+                        <h4>Placebo Test</h4>
+                        <span>No Effect Found</span>
+                    </div>
+                    <div class="team-member">
+                        <div class="member-photo">SC</div>
+                        <h4>Synthetic Control</h4>
+                        <span>Confirms Estimate</span>
+                    </div>
+                    <div class="team-member">
+                        <div class="member-photo">BW</div>
+                        <h4>Bandwidth Check</h4>
+                        <span>&plusmn;10 Miles</span>
+                    </div>
+                    <div class="team-member">
+                        <div class="member-photo">FS</div>
+                        <h4>Firm-Size Split</h4>
+                        <span>Small Firms Only</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 10: Closing -->
+        <div class="slide slide-closing">
+            <div class="geo-ring"></div>
+            <div class="content">
+                <div class="label">Verdict</div>
+                <h1>No Detectable Teen Job Loss — With One Caveat</h1>
+                <p>The Estimate Holds Only for Increases Below $12/hr</p>
+                <div style="margin-top: 4vh; font-size: 0.85rem; color: var(--accent);">
+                    Committee: Prof. A. Reyes (Chair) &middot; Prof. M. Okafor &middot; Prof. L. Chen
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation -->
+    <div class="nav-dots">
+        <div class="nav-dot active" data-slide="0"></div>
+        <div class="nav-dot" data-slide="1"></div>
+        <div class="nav-dot" data-slide="2"></div>
+        <div class="nav-dot" data-slide="3"></div>
+        <div class="nav-dot" data-slide="4"></div>
+        <div class="nav-dot" data-slide="5"></div>
+        <div class="nav-dot" data-slide="6"></div>
+        <div class="nav-dot" data-slide="7"></div>
+        <div class="nav-dot" data-slide="8"></div>
+        <div class="nav-dot" data-slide="9"></div>
+    </div>
+
+    <div class="nav-arrows">
+        <button class="nav-arrow" id="prevBtn">&#8592;</button>
+        <button class="nav-arrow" id="nextBtn">&#8594;</button>
+    </div>
+
+    <div class="slide-counter">
+        <span id="currentSlide">01</span> / <span id="totalSlides">10</span>
+    </div>
+
+    <script>
+        const slides = document.querySelectorAll('.slide');
+        const dots = document.querySelectorAll('.nav-dot');
+        let currentSlide = 0;
+        const totalSlides = slides.length;
+
+        document.getElementById('totalSlides').textContent = String(totalSlides).padStart(2, '0');
+
+        function showSlide(index) {
+            slides.forEach((slide, i) => {
+                slide.classList.toggle('active', i === index);
+            });
+            dots.forEach((dot, i) => {
+                dot.classList.toggle('active', i === index);
+            });
+            document.getElementById('currentSlide').textContent = String(index + 1).padStart(2, '0');
+            currentSlide = index;
+        }
+
+        function nextSlide() {
+            const next = (currentSlide + 1) % totalSlides;
+            showSlide(next);
+        }
+
+        function prevSlide() {
+            const prev = (currentSlide - 1 + totalSlides) % totalSlides;
+            showSlide(prev);
+        }
+
+        document.getElementById('nextBtn').addEventListener('click', nextSlide);
+        document.getElementById('prevBtn').addEventListener('click', prevSlide);
+
+        dots.forEach(dot => {
+            dot.addEventListener('click', () => {
+                showSlide(parseInt(dot.dataset.slide));
+            });
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                nextSlide();
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                prevSlide();
+            }
+        });
+    </script>
+
+</body>
+</html>

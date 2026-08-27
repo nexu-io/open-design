@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><title>Full-Deck Gallery — html-ppt v2</title>
+<link rel="stylesheet" href="../assets/fonts.css">
+<link rel="stylesheet" href="../assets/base.css">
+<style>
+  html,body{background:#0b0c10;color:#e8ebf4;font-family:var(--font-sans)}
+  .deck{background:#0b0c10}
+  .slide{padding:60px 80px;color:#e8ebf4;background:transparent;display:flex;flex-direction:column}
+  .slide h1{color:#fff;font-size:48px;margin:0 0 6px;letter-spacing:-.02em}
+  .slide .sub{color:#aab0c0;font-size:18px;margin:0 0 22px}
+  .frame-wrap{flex:1;border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,.12);
+    box-shadow:0 30px 80px rgba(0,0,0,.5);position:relative;background:#fff}
+  iframe.tpl{position:absolute;inset:0;width:200%;height:200%;border:0;
+    transform:scale(.5);transform-origin:top left}
+  .meta{position:absolute;top:24px;right:40px;font-family:'JetBrains Mono',monospace;
+    font-size:12px;color:#6a7086;letter-spacing:.14em;text-transform:uppercase;z-index:30}
+  .tag{display:inline-block;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.08);
+    color:#cfd3dc;font-size:11px;margin-right:6px}
+  .cover{align-items:center;justify-content:center;text-align:center}
+  .cover h1{font-size:84px;background:linear-gradient(135deg,#60a5fa,#a78bfa,#f472b6);
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .cover p{color:#aab0c0;max-width:60ch;font-size:20px}
+  .legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+</style>
+</head>
+<body>
+<div class="deck">
+
+<section class="slide cover">
+  <p class="kicker" style="color:#a78bfa">HTML-PPT v2 · Full-Deck Gallery</p>
+  <h1>14 full-deck templates</h1>
+  <p>Press → to browse. Each slide is a live iframe preview of a complete, multi-slide deck template. Open any <code>templates/full-decks/&lt;name&gt;/index.html</code> to see the full deck, or copy the folder to scaffold your own.</p>
+  <div class="legend">
+    <span class="tag">8 extracted from real decks</span>
+    <span class="tag">6 scenario scaffolds</span>
+    <span class="tag">scoped .tpl-&lt;name&gt; CSS</span>
+    <span class="tag">36 themes compatible</span>
+  </div>
+</section>
+
+<!-- Template preview slides generated via JS below -->
+
+</div>
+
+<script>
+const TPLS = [
+  ['xhs-white-editorial',      '白底杂志风',        'extracted', 'xhs posts, editorial lifestyle'],
+  ['graphify-dark-graph',      '暗底知识图谱',      'extracted', 'AI/graph/data products'],
+  ['knowledge-arch-blueprint', '奶油蓝图架构',      'extracted', 'architecture, systems thinking'],
+  ['hermes-cyber-terminal',    '暗终端 cyber',      'extracted', 'devtool, honest-review, agent demos'],
+  ['obsidian-claude-gradient', 'GitHub 暗紫渐变',   'extracted', 'tool walkthroughs, LLM product'],
+  ['testing-safety-alert',     '红琥珀警示',        'extracted', 'security, incident review, AI safety'],
+  ['xhs-pastel-card',          '柔和马卡龙',        'extracted', 'lifestyle, soft emotional'],
+  ['dir-key-nav-minimal',      '方向键 8 色极简',    'extracted', 'keynote, one-idea-per-slide'],
+  ['pitch-deck',               'Pitch Deck YC 风',  'scenario',  'fundraising, startup pitch'],
+  ['product-launch',           'Product Launch',    'scenario',  'product announcement, launch keynote'],
+  ['tech-sharing',             'Tech Sharing 技术分享','scenario','internal tech talk, conference talk'],
+  ['weekly-report',            'Weekly Report 周报','scenario',  'status update, business review'],
+  ['xhs-post',                 '小红书 图文 9 屏 3:4','scenario', 'xiaohongshu / ig carousel'],
+  ['course-module',            'Course Module 教学模块','scenario','online course, workshop module'],
+  ['presenter-mode-reveal',    '🎤 Presenter Mode 演讲者模式','scenario','tech sharing, talk with 逐字稿, speaker view']
+];
+
+const deck = document.querySelector('.deck');
+TPLS.forEach((t,i)=>{
+  const s = document.createElement('section');
+  s.className = 'slide';
+  s.setAttribute('data-title',t[0]);
+  s.innerHTML = `
+    <span class="meta">${i+1}/${TPLS.length+1}</span>
+    <h1>${t[0]}</h1>
+    <p class="sub">${t[1]} · <span class="tag">${t[2]}</span> ${t[3]}</p>
+    <div class="frame-wrap">
+      <iframe class="tpl" src="full-decks/${t[0]}/index.html" loading="eager" title="${t[0]}"></iframe>
+    </div>`;
+  deck.appendChild(s);
+});
+</script>
+<script src="../assets/runtime.js"></script>
+</body></html>

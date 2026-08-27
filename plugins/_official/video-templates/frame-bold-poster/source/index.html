@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="fonts.css" />
+<meta charset="UTF-8" />
+<title>Bold Poster · Editorial Statement Frame</title>
+
+<style>
+  /*
+   * frame-bold-poster — 1970s European editorial poster, in motion.
+   * Visual vocabulary distilled from the frontend-slides "Bold Poster" template
+   * (MIT, © Zara Zhang). Rebuilt as a self-contained CSS @keyframes timeline for
+   * html-video / Hyperframes — no upstream source HTML copied.
+   *
+   * Palette (from upstream design.md): white sheet, brown-black ink #1C1410,
+   * one tomato red #D8000F, warm off-white #F5F2EF.
+   * Type stack: Shrikhand (display + figures), Libre Baskerville (body),
+   * Space Grotesk (mono labels / chrome).
+   * Signature move: display Shrikhand is tilted -6deg..+2deg; red is the only accent.
+   *
+   * Timeline (~4.5s @ 60fps): off-white sheet settles -> top hairline + mono kicker
+   * rule across -> giant red figure rotates+drops in -> three-line ink/red headline
+   * rises line-by-line (each on its own tilt) -> serif standfirst fades ->
+   * footer rule + mono metadata draw in.
+   */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1920px; height: 1080px; overflow: hidden;
+    background: #F5F2EF; color: #1C1410;
+    font-family: 'Space Grotesk', sans-serif; position: relative;
+  }
+
+  /* full-bleed paper, fades up first so the cut feels printed not lit */
+  .sheet { position: absolute; inset: 0; background: #F5F2EF;
+    opacity: 0; animation: sheetIn 0.5s ease-out forwards; }
+  @keyframes sheetIn { to { opacity: 1; } }
+
+  /* top kicker: mono label + a red rule that draws across */
+  .kicker { position: absolute; top: 92px; left: 110px; right: 110px;
+    display: flex; align-items: center; gap: 28px; }
+  .kicker .label { font-size: 22px; font-weight: 700; letter-spacing: 6px;
+    text-transform: uppercase; color: #1C1410; white-space: nowrap;
+    opacity: 0; animation: fade 0.5s ease-out 0.35s forwards; }
+  .kicker .rule { flex: 1; height: 3px; background: #D8000F; transform-origin: left center;
+    transform: scaleX(0); animation: ruleX 0.8s cubic-bezier(0.16,1,0.3,1) 0.5s forwards; }
+  .kicker .date { font-size: 22px; font-weight: 500; letter-spacing: 3px;
+    text-transform: uppercase; color: #1C1410; white-space: nowrap;
+    opacity: 0; animation: fade 0.5s ease-out 0.55s forwards; }
+  @keyframes ruleX { to { transform: scaleX(1); } }
+
+  /* giant red figure — the poster's loudest move, rotates + drops in */
+  .figure { position: absolute; top: 150px; right: 96px; font-family: 'Shrikhand', cursive;
+    font-size: 320px; line-height: 0.8; color: #D8000F; letter-spacing: 1px;
+    opacity: 0; transform: translateY(-60px) rotate(-14deg);
+    animation: figureIn 0.9s cubic-bezier(0.16,1,0.3,1) 0.7s forwards; }
+  @keyframes figureIn { to { opacity: 1; transform: translateY(0) rotate(-6deg); } }
+
+  /* three-line headline, each line its own tilt, rising in sequence */
+  .head { position: absolute; left: 110px; bottom: 300px; font-family: 'Shrikhand', cursive;
+    line-height: 0.86; }
+  .head .ln { display: block; font-size: 150px; opacity: 0; transform: translateY(40px); }
+  .head .ln1 { color: #1C1410; transform-origin: left bottom; animation: lineUp 0.7s cubic-bezier(0.16,1,0.3,1) 1.15s forwards; }
+  .head .ln2 { color: #D8000F; animation: lineUpTilt 0.7s cubic-bezier(0.16,1,0.3,1) 1.35s forwards; }
+  .head .ln3 { color: #1C1410; animation: lineUpTilt2 0.7s cubic-bezier(0.16,1,0.3,1) 1.55s forwards; }
+  @keyframes lineUp { to { opacity: 1; transform: translateY(0) rotate(-2deg); } }
+  @keyframes lineUpTilt { to { opacity: 1; transform: translateY(0) rotate(-4deg); } }
+  @keyframes lineUpTilt2 { to { opacity: 1; transform: translateY(0) rotate(2deg); } }
+
+  /* serif standfirst */
+  .standfirst { position: absolute; left: 114px; bottom: 200px; max-width: 980px;
+    font-family: 'Libre Baskerville', serif; font-style: italic; font-size: 34px;
+    line-height: 1.4; color: #1C1410;
+    opacity: 0; animation: fadeUp 0.7s ease-out 1.95s forwards; }
+  @keyframes fadeUp { 0%{opacity:0;transform:translateY(22px)} 100%{opacity:1;transform:translateY(0)} }
+
+  /* footer: ink rule + mono metadata */
+  .footer { position: absolute; left: 110px; right: 110px; bottom: 96px; }
+  .footer .rule { height: 2px; background: #1C1410; transform-origin: left center;
+    transform: scaleX(0); animation: ruleX 0.7s cubic-bezier(0.16,1,0.3,1) 2.15s forwards; }
+  .footer .meta { display: flex; justify-content: space-between; margin-top: 18px;
+    font-size: 18px; font-weight: 500; letter-spacing: 3px; text-transform: uppercase;
+    color: #1C1410; opacity: 0; animation: fade 0.6s ease-out 2.4s forwards; }
+  .footer .meta .red { color: #D8000F; }
+
+  @keyframes fade { to { opacity: 1; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; }
+    .sheet { opacity: 1; }
+    .kicker .label, .kicker .date { opacity: 1; }
+    .kicker .rule, .footer .rule { transform: scaleX(1); }
+    .figure { opacity: 1; transform: rotate(-6deg); }
+    .head .ln1 { opacity: 1; transform: rotate(-2deg); }
+    .head .ln2 { opacity: 1; transform: rotate(-4deg); }
+    .head .ln3 { opacity: 1; transform: rotate(2deg); }
+    .standfirst, .footer .meta { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="sheet"></div>
+
+  <div class="kicker">
+    <span class="label">Manifesto</span>
+    <span class="rule"></span>
+    <span class="date">Vol. 04 · 2026</span>
+  </div>
+
+  <div class="figure">03</div>
+
+  <div class="head">
+    <span class="ln ln1">Make it</span>
+    <span class="ln ln2">loud.</span>
+    <span class="ln ln3">Make it last.</span>
+  </div>
+
+  <div class="standfirst">Every slide should land like a printed page — set in heavy type, locked to one red accent, ruled in ink.</div>
+
+  <div class="footer">
+    <div class="rule"></div>
+    <div class="meta">
+      <span>Bold Poster</span>
+      <span class="red">html-video</span>
+    </div>
+  </div>
+</body>
+</html>

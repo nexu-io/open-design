@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Write a Feature Business Case like a Principal PM - Product management</title>
+<style>/* html-ppt :: shared webfonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@200;300;400;500;600;700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,800;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap');
+
+</style>
+<style>/* html-ppt :: base.css — reset + shared tokens + layout primitives */
+/* Default tokens. Themes in assets/themes/*.css override the :root block. */
+:root {
+  --bg: #ffffff;
+  --bg-soft: #f7f7f8;
+  --surface: #ffffff;
+  --surface-2: #f2f2f4;
+  --border: rgba(0,0,0,.08);
+  --border-strong: rgba(0,0,0,.16);
+  --text-1: #111216;
+  --text-2: #55596a;
+  --text-3: #8a8f9e;
+  --accent: #3b6cff;
+  --accent-2: #7a5cff;
+  --accent-3: #ff5c8a;
+  --good: #1aaf6c;
+  --warn: #f5a524;
+  --bad:  #e0445a;
+  --grad: linear-gradient(135deg,#3b6cff,#7a5cff 55%,#ff5c8a);
+  --grad-soft: linear-gradient(135deg,#eef2ff,#f5ecff 55%,#ffeef5);
+  --radius: 18px;
+  --radius-sm: 12px;
+  --radius-lg: 26px;
+  --shadow: 0 10px 30px rgba(18,24,40,.08), 0 2px 6px rgba(18,24,40,.04);
+  --shadow-lg: 0 24px 60px rgba(18,24,40,.14), 0 6px 16px rgba(18,24,40,.06);
+  --font-sans: 'Inter','Noto Sans SC',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
+  --font-serif: 'Playfair Display','Noto Serif SC',Georgia,serif;
+  --font-mono: 'JetBrains Mono','IBM Plex Mono',SFMono-Regular,Menlo,monospace;
+  --font-display: var(--font-sans);
+  --letter-tight: -.03em;
+  --letter-normal: -.01em;
+  --ease: cubic-bezier(.4,0,.2,1);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text-1);
+  font-family:var(--font-sans);font-weight:400;line-height:1.6;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+  letter-spacing:var(--letter-normal)}
+img,svg,video{max-width:100%;display:block}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+code,kbd,pre,samp{font-family:var(--font-mono)}
+
+/* ================= SLIDE SYSTEM ================= */
+.deck{position:relative;width:100vw;height:100vh;overflow:hidden;background:var(--bg)}
+.slide{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;justify-content:center;
+  padding:72px 96px;
+  box-sizing:border-box;
+  opacity:0;pointer-events:none;
+  transition:opacity .5s var(--ease), transform .5s var(--ease);
+  transform:translateX(30px);
+  overflow:hidden;
+}
+.slide.is-active{opacity:1;pointer-events:auto;transform:translateX(0);z-index:2}
+.slide.is-prev{transform:translateX(-30px)}
+
+/* single-page standalone (used when a layout file is opened directly) */
+body.single .slide{position:relative;width:100vw;height:100vh;opacity:1;transform:none;pointer-events:auto}
+
+/* ================= TYPOGRAPHY ================= */
+.eyebrow{font-size:13px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--text-3)}
+.kicker{font-size:14px;font-weight:600;color:var(--accent);letter-spacing:.08em;text-transform:uppercase}
+h1.title,.h1{font-family:var(--font-display);font-size:72px;line-height:1.05;font-weight:800;letter-spacing:var(--letter-tight);margin:0 0 18px;color:var(--text-1)}
+h2.title,.h2{font-family:var(--font-display);font-size:54px;line-height:1.1;font-weight:700;letter-spacing:var(--letter-tight);margin:0 0 14px}
+h3,.h3{font-size:32px;line-height:1.2;font-weight:600;letter-spacing:var(--letter-normal);margin:0 0 10px}
+h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
+.lede{font-size:22px;line-height:1.55;color:var(--text-2);font-weight:300;max-width:62ch}
+.dim{color:var(--text-2)}
+.dim2{color:var(--text-3)}
+.mono{font-family:var(--font-mono)}
+.serif{font-family:var(--font-serif)}
+.gradient-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+
+/* ================= LAYOUT PRIMITIVES ================= */
+.stack>*+*{margin-top:14px}
+.row{display:flex;gap:24px;align-items:center}
+.row.wrap{flex-wrap:wrap}
+.grid{display:grid;gap:24px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+.center{display:flex;align-items:center;justify-content:center;text-align:center}
+.fill{flex:1}
+.sp-t{padding-top:24px}.sp-b{padding-bottom:24px}
+.mt-s{margin-top:8px}.mt-m{margin-top:18px}.mt-l{margin-top:32px}
+.mb-s{margin-bottom:8px}.mb-m{margin-bottom:18px}.mb-l{margin-bottom:32px}
+
+/* ================= CARDS ================= */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:26px 28px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.card-soft{background:var(--surface-2);border:1px solid var(--border)}
+.card-outline{background:transparent;border:1.5px solid var(--border-strong);box-shadow:none}
+.card-accent{background:var(--surface);border-top:3px solid var(--accent)}
+.card-hover{transition:transform .3s var(--ease),box-shadow .3s var(--ease)}
+.card-hover:hover{transform:translateY(-4px);box-shadow:var(--shadow-lg)}
+
+.pill{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:500;
+  background:var(--surface-2);color:var(--text-2);border:1px solid var(--border)}
+.pill-accent{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 28%,transparent)}
+
+/* ================= BARS / DIVIDERS ================= */
+.divider{height:1px;background:var(--border);width:100%}
+.divider-accent{height:3px;width:72px;background:var(--accent);border-radius:2px}
+
+/* ================= CHROME (header/footer/progress) ================= */
+.deck-header{position:absolute;top:24px;left:40px;right:40px;display:flex;align-items:center;justify-content:space-between;
+  font-size:12px;color:var(--text-3);letter-spacing:.12em;text-transform:uppercase;z-index:10;pointer-events:none}
+.deck-footer{position:absolute;bottom:24px;left:40px;right:40px;display:flex;align-items:center;justify-content:space-between;
+  font-size:12px;color:var(--text-3);z-index:10;pointer-events:none}
+.slide-number::before{content:attr(data-current)}
+.slide-number::after{content:" / " attr(data-total)}
+.progress-bar{position:fixed;left:0;right:0;bottom:0;height:3px;background:transparent;z-index:20}
+.progress-bar > span{display:block;height:100%;width:0;background:var(--accent);transition:width .3s var(--ease)}
+
+/* ================= PRESENTER / OVERVIEW ================= */
+.notes{display:none!important}
+.notes-overlay{position:fixed;inset:auto 0 0 0;max-height:42vh;background:rgba(20,22,30,.95);color:#e8ebf4;
+  padding:20px 32px;font-size:16px;line-height:1.6;border-top:1px solid rgba(255,255,255,.1);transform:translateY(100%);
+  transition:transform .3s var(--ease);z-index:40;overflow:auto;font-family:var(--font-sans)}
+.notes-overlay.open{transform:translateY(0)}
+.overview{position:fixed;inset:0;background:rgba(10,12,18,.92);backdrop-filter:blur(12px);z-index:50;
+  display:none;padding:40px;overflow:auto}
+.overview.open{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;align-content:start}
+.overview .thumb{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  aspect-ratio:16/9;overflow:hidden;cursor:pointer;position:relative;color:var(--text-1);padding:16px;
+  font-size:11px;transition:transform .2s var(--ease)}
+.overview .thumb:hover{transform:scale(1.04)}
+.overview .thumb .n{position:absolute;top:8px;left:10px;font-weight:700;font-size:14px;color:var(--text-3)}
+.overview .thumb .t{position:absolute;bottom:10px;left:14px;right:14px;font-weight:600;color:var(--text-1)}
+
+/* ================= PRESENTER VIEW ================= */
+/* Presenter view opens in a separate popup window (S key).
+ * All presenter styles are self-contained in the popup HTML generated by runtime.js.
+ * The audience window (this file) is NOT affected — it stays as normal deck view.
+ * Only the .notes class below is needed to hide speaker notes from audience. */
+
+/* ================= UTILITY ================= */
+.hidden{display:none!important}
+.nowrap{white-space:nowrap}
+.tr{text-align:right}.tc{text-align:center}.tl{text-align:left}
+.uppercase{text-transform:uppercase;letter-spacing:.12em}
+
+/* ================= PRINT ================= */
+@media print{
+  .slide{position:relative;opacity:1!important;transform:none!important;page-break-after:always;height:100vh}
+  .deck-header,.deck-footer,.progress-bar,.notes-overlay,.overview{display:none!important}
+}
+
+</style>
+<style>/* graphify-dark-graph — 暗底玻璃 + 力导向知识图谱 */
+.tpl-graphify-dark-graph{
+  --gd-bg:#06060c;
+  --gd-bg2:#0e1020;
+  --gd-text:#f0ece4;
+  --gd-text2:#b0a99e;
+  --gd-text3:#7a746c;
+  --gd-warm:#e8a87c;
+  --gd-blue:#7eb8da;
+  --gd-green:#7ed3a4;
+  --gd-rose:#d4a0b9;
+  --gd-purple:#b8a4d6;
+  --gd-danger:#e07070;
+  background:var(--gd-bg);
+  color:var(--gd-text);
+  font-family:'Inter','Noto Sans SC',-apple-system,sans-serif;
+  letter-spacing:-.01em;
+}
+.tpl-graphify-dark-graph .slide{background:linear-gradient(160deg,#08080f,#0e1020 50%,#08080f);color:var(--gd-text);padding:64px 88px;overflow:hidden}
+.tpl-graphify-dark-graph .gd-ambient{position:absolute;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+.tpl-graphify-dark-graph .gd-orb{position:absolute;border-radius:50%;filter:blur(110px);opacity:.35;animation:gdDrift 22s ease-in-out infinite alternate}
+.tpl-graphify-dark-graph .gd-orb-1{width:520px;height:520px;background:radial-gradient(circle,rgba(126,184,218,.55),transparent 70%);top:-12%;left:-6%}
+.tpl-graphify-dark-graph .gd-orb-2{width:460px;height:460px;background:radial-gradient(circle,rgba(232,168,124,.45),transparent 70%);top:55%;right:-8%;animation-delay:-6s}
+.tpl-graphify-dark-graph .gd-orb-3{width:420px;height:420px;background:radial-gradient(circle,rgba(184,164,214,.4),transparent 70%);bottom:-8%;left:30%;animation-delay:-11s}
+@keyframes gdDrift{0%{transform:translate(0,0) scale(1)}100%{transform:translate(25px,-20px) scale(1.08)}}
+.tpl-graphify-dark-graph .slide > *{position:relative;z-index:2}
+.tpl-graphify-dark-graph .gd-snum{position:absolute;top:28px;right:40px;font-size:12px;letter-spacing:.25em;color:var(--gd-text3);z-index:3}
+.tpl-graphify-dark-graph .gd-eyebrow{font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:var(--gd-text3);font-weight:500}
+.tpl-graphify-dark-graph .gd-h1{font-size:74px;font-weight:800;line-height:1.08;letter-spacing:-.02em;margin:16px 0 10px;color:var(--gd-text)}
+.tpl-graphify-dark-graph .gd-h2{font-size:52px;font-weight:700;line-height:1.12;margin:0 0 14px}
+.tpl-graphify-dark-graph .gd-lede{font-size:22px;line-height:1.65;font-weight:300;color:var(--gd-text2);max-width:850px}
+.tpl-graphify-dark-graph .gd-rainbow{background:linear-gradient(90deg,#ff0080,#ff4d00,#ff9900,#ffe600,#00c853,#0091ea,#6200ea,#ff0080);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:gdRainbow 4s linear infinite}
+@keyframes gdRainbow{0%{background-position:0% center}100%{background-position:200% center}}
+.tpl-graphify-dark-graph .gd-grad{background:linear-gradient(135deg,var(--gd-warm),var(--gd-rose),var(--gd-purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.tpl-graphify-dark-graph .gd-accent{color:var(--gd-warm);font-weight:500}
+.tpl-graphify-dark-graph .gd-green{color:var(--gd-green)}
+.tpl-graphify-dark-graph .gd-blue{color:var(--gd-blue)}
+.tpl-graphify-dark-graph .gd-dim{color:var(--gd-text2)}
+.tpl-graphify-dark-graph .gd-mono{font-family:'JetBrains Mono',monospace}
+.tpl-graphify-dark-graph .gd-glass{position:relative;overflow:hidden;border-radius:20px;padding:22px 26px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(20px) saturate(160%);box-shadow:0 8px 32px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.08)}
+.tpl-graphify-dark-graph .gd-glass::before{content:'';position:absolute;top:0;left:0;right:0;height:50%;background:linear-gradient(180deg,rgba(255,255,255,.05),transparent);pointer-events:none}
+.tpl-graphify-dark-graph .gd-glass-warm{background:rgba(232,168,124,.06);border-color:rgba(232,168,124,.2)}
+.tpl-graphify-dark-graph .gd-glass-green{background:rgba(126,211,164,.06);border-color:rgba(126,211,164,.2)}
+.tpl-graphify-dark-graph .gd-glass-blue{background:rgba(126,184,218,.06);border-color:rgba(126,184,218,.2)}
+.tpl-graphify-dark-graph .gd-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:24px}
+.tpl-graphify-dark-graph .gd-grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:24px}
+.tpl-graphify-dark-graph .gd-tag{display:inline-block;border-radius:999px;padding:5px 14px;font-size:12px;font-weight:500;margin:2px 4px 2px 0;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);color:var(--gd-text2)}
+.tpl-graphify-dark-graph .gd-cmd{font-family:'JetBrains Mono',monospace;font-size:32px;font-weight:700;color:var(--gd-green);text-shadow:0 0 30px rgba(126,211,164,.45),0 0 60px rgba(126,211,164,.15);letter-spacing:-.01em}
+.tpl-graphify-dark-graph .gd-big{font-size:120px;font-weight:900;letter-spacing:-.04em;line-height:1}
+.tpl-graphify-dark-graph .gd-codebox{background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:22px 26px;font-family:'JetBrains Mono',monospace;font-size:14px;line-height:1.8;color:#d8d4c8}
+.tpl-graphify-dark-graph .gd-codebox .cm{color:#6b6a62}
+.tpl-graphify-dark-graph .gd-codebox .kw{color:var(--gd-warm)}
+.tpl-graphify-dark-graph .gd-codebox .st{color:var(--gd-green)}
+.tpl-graphify-dark-graph .gd-codebox .fn{color:var(--gd-blue)}
+
+</style>
+<style>
+/* Static-preview fallback (runtime.js is absent — keep every slide visible) */
+.deck{height:auto;min-height:100vh;overflow:visible}
+.slide{position:relative;inset:auto;opacity:1;pointer-events:auto;transform:none;height:100vh;page-break-after:always}
+.deck-header,.deck-footer,.slide-number,.progress-bar,.notes-overlay,.overview{pointer-events:none}
+.notes{display:none!important}
+</style></head>
+<body class="tpl-graphify-dark-graph">
+<div class="deck">
+
+  <!-- 1. COVER -->
+  <section class="slide is-active">
+    <div class="gd-ambient"><div class="gd-orb gd-orb-1"></div><div class="gd-orb gd-orb-2"></div><div class="gd-orb gd-orb-3"></div></div>
+    <!-- live force-directed graph bg -->
+    <svg viewBox="0 0 1600 900" style="position:absolute;inset:0;width:100%;height:100%;opacity:.38;z-index:1" xmlns="http://www.w3.org/2000/svg">
+      <g stroke="#7eb8da" stroke-width="1" stroke-opacity=".5" fill="none">
+        <line x1="300" y1="200" x2="520" y2="340"/>
+        <line x1="520" y1="340" x2="780" y2="260"/>
+        <line x1="780" y1="260" x2="1040" y2="420"/>
+        <line x1="520" y1="340" x2="640" y2="560"/>
+        <line x1="640" y1="560" x2="900" y2="620"/>
+        <line x1="900" y1="620" x2="1040" y2="420"/>
+        <line x1="1040" y1="420" x2="1260" y2="300"/>
+        <line x1="1260" y1="300" x2="1380" y2="500"/>
+        <line x1="900" y1="620" x2="1120" y2="720"/>
+        <line x1="300" y1="200" x2="200" y2="420"/>
+        <line x1="200" y1="420" x2="360" y2="640"/>
+        <line x1="360" y1="640" x2="640" y2="560"/>
+      </g>
+      <g>
+        <circle cx="300" cy="200" r="10" fill="#e8a87c"/>
+        <circle cx="520" cy="340" r="14" fill="#7eb8da"/>
+        <circle cx="780" cy="260" r="9" fill="#7ed3a4"/>
+        <circle cx="1040" cy="420" r="18" fill="#b8a4d6"/>
+        <circle cx="640" cy="560" r="11" fill="#d4a0b9"/>
+        <circle cx="900" cy="620" r="12" fill="#e8a87c"/>
+        <circle cx="1260" cy="300" r="8" fill="#7ed3a4"/>
+        <circle cx="1380" cy="500" r="10" fill="#7eb8da"/>
+        <circle cx="1120" cy="720" r="9" fill="#d4a0b9"/>
+        <circle cx="200" cy="420" r="8" fill="#b8a4d6"/>
+        <circle cx="360" cy="640" r="11" fill="#7eb8da"/>
+      </g>
+    </svg>
+    <div class="gd-snum">01 / 08</div>
+    <div style="margin-top:auto">
+      <p class="gd-eyebrow">Product Management · Business Case</p>
+      <h1 class="gd-h1" style="font-size:72px"><span class="gd-rainbow">Feature Business Case:<br>Plugin Marketplace</span></h1>
+      <p class="gd-lede" style="margin-top:20px">Should OpenDesign open a first-party plugin marketplace in Q3? <span class="gd-accent">One decision for PM, Eng, Design, and Leadership to land on.</span></p>
+      <p class="gd-eyebrow" style="margin-top:26px">Decision owner: PM · Reviewers: Eng, Design, Leadership</p>
+    </div>
+  </section>
+
+  <!-- 2. SECTION DIVIDER -->
+  <section class="slide">
+    <div class="gd-ambient"><div class="gd-orb gd-orb-1"></div><div class="gd-orb gd-orb-2"></div></div>
+    <div class="gd-snum">02 / 08</div>
+    <div style="margin:auto 0">
+      <div class="gd-eyebrow">Decision needed</div>
+      <h1 class="gd-h1" style="font-size:96px">Ship a <span class="gd-grad">marketplace</span>, or hold the line?</h1>
+      <p class="gd-lede">217+ plugins already exist, built for free by the community — discoverable only through a static home rail, with no ratings, no revenue share, no owner of record. One call, before Q3 planning locks.</p>
+    </div>
+  </section>
+
+  <!-- 3. CONTENT — plugin grid -->
+  <section class="slide">
+    <div class="gd-ambient"><div class="gd-orb gd-orb-2"></div><div class="gd-orb gd-orb-3"></div></div>
+    <div class="gd-snum">03 / 08</div>
+    <p class="gd-eyebrow">The Pain</p>
+    <h2 class="gd-h2">Four ways the current model <span class="gd-grad">breaks down</span></h2>
+    <div class="gd-grid-4">
+      <div class="gd-glass gd-glass-warm"><div style="font-size:30px">🔍</div><h4 style="margin:10px 0 6px">Discovery dead-ends</h4><p class="gd-dim" style="font-size:13px;line-height:1.55">68% of installs come from the top 6 home-rail plugins; the other 211 get near-zero traffic</p></div>
+      <div class="gd-glass gd-glass-blue"><div style="font-size:30px">🛡️</div><h4 style="margin:10px 0 6px">No trust signal</h4><p class="gd-dim" style="font-size:13px;line-height:1.55">No ratings, no verification badge — support tickets show users afraid to install unfamiliar plugin code</p></div>
+      <div class="gd-glass gd-glass-green"><div style="font-size:30px">📉</div><h4 style="margin:10px 0 6px">Zero creator incentive</h4><p class="gd-dim" style="font-size:13px;line-height:1.55">38 external contributors shipped a plugin this year; only 4 shipped a second one</p></div>
+      <div class="gd-glass"><div style="font-size:30px">🎫</div><h4 style="margin:10px 0 6px">Unowned support load</h4><p class="gd-dim" style="font-size:13px;line-height:1.55">112 GitHub issues this quarter trace back to plugins with no listed maintainer of record</p></div>
+    </div>
+    <div class="gd-glass gd-glass-warm" style="margin-top:24px"><p style="font-size:18px;line-height:1.6">Every pain point traces to the same root cause: <span class="gd-accent">plugins have no marketplace, so they have no owner, no signal, and no incentive</span>.</p></div>
+  </section>
+
+  <!-- 4. CODE -->
+  <section class="slide">
+    <div class="gd-ambient"><div class="gd-orb gd-orb-1"></div></div>
+    <div class="gd-snum">04 / 08</div>
+    <p class="gd-eyebrow">Options Considered</p>
+    <h2 class="gd-h2">Three shapes, <span class="gd-grad">one recommendation</span></h2>
+    <p class="gd-cmd" style="margin:16px 0 22px">$ od plugin marketplace --compare-options</p>
+    <pre class="gd-codebox"><span class="cm"># three options weighed for Q3</span>
+<span class="kw">option_a</span>: <span class="st">status_quo</span>       <span class="cm"># home rail only, curated by us</span>
+  trust_signal: <span class="fn">none</span>   creator_incentive: <span class="fn">none</span>   effort: <span class="fn">low</span>
+
+<span class="kw">option_b</span>: <span class="st">reviewed_marketplace</span>  <span class="cm"># submission queue + revenue share</span>
+  trust_signal: <span class="fn">verified_badge</span>   creator_incentive: <span class="fn">70/30_split</span>   effort: <span class="fn">medium</span>
+
+<span class="kw">option_c</span>: <span class="st">open_federation</span>   <span class="cm"># npm-style, no review, self-serve</span>
+  trust_signal: <span class="fn">none</span>   creator_incentive: <span class="fn">tips_only</span>   effort: <span class="fn">low</span>
+
+<span class="kw">recommended</span>: option_b     <span class="cm"># only option that fixes trust AND incentive</span></pre>
+  </section>
+
+  <!-- 5. CHART — race diagram -->
+  <section class="slide">
+    <div class="gd-ambient"><div class="gd-orb gd-orb-3"></div></div>
+    <div class="gd-snum">05 / 08</div>
+    <p class="gd-eyebrow">Tradeoffs</p>
+    <h2 class="gd-h2">Option B wins trust, <span class="gd-grad">costs speed</span></h2>
+    <div style="max-width:900px;margin-top:30px">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px">
+        <div style="width:110px;text-align:right;font-weight:700;color:var(--gd-danger)">Options<br>A / C</div>
+        <div style="flex:1;position:relative;height:70px;background:rgba(224,112,112,.06);border:1px solid rgba(224,112,112,.2);border-radius:16px">
+          <div style="position:absolute;left:16px;top:50%;transform:translateY(-50%);font-size:32px">⚡</div>
+          <div style="position:absolute;left:72px;top:50%;transform:translateY(-50%);color:var(--gd-danger);font-size:14px">Ship in 2 weeks · no review gate · no trust signal</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:16px">
+        <div style="width:110px;text-align:right;font-weight:700;color:var(--gd-green)">Option<br>B</div>
+        <div style="flex:1;position:relative;height:70px;background:rgba(126,211,164,.06);border:1px solid rgba(126,211,164,.25);border-radius:16px">
+          <div style="position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:32px">🛡️</div>
+          <div style="position:absolute;right:72px;top:50%;transform:translateY(-50%);color:var(--gd-green);font-size:14px">Ship in 6 weeks · review gate · verified badge + revenue share</div>
+        </div>
+      </div>
+    </div>
+    <div class="gd-grid-3" style="margin-top:36px">
+      <div class="gd-glass gd-glass-warm"><div class="gd-big gd-grad">+4wk</div><p class="gd-dim" style="margin-top:6px">added time-to-ship for review tooling</p></div>
+      <div class="gd-glass gd-glass-green"><div class="gd-big gd-grad">70/30</div><p class="gd-dim" style="margin-top:6px">creator revenue split, our favor 30%</p></div>
+      <div class="gd-glass gd-glass-blue"><div class="gd-big gd-grad">20</div><p class="gd-dim" style="margin-top:6px">creators committed for private beta</p></div>
+    </div>
+  </section>
+
+  <!-- 6. PIPELINE -->
+  <section class="slide">
+    <div class="gd-ambient"><div class="gd-orb gd-orb-2"></div></div>
+    <div class="gd-snum">06 / 08</div>
+    <p class="gd-eyebrow">Recommendation</p>
+    <h2 class="gd-h2">Ship Option B in <span class="gd-grad">4 phases</span></h2>
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:36px">
+      <div class="gd-glass" style="flex:1;text-align:center"><div style="font-size:34px">📋</div><div style="font-weight:600;margin-top:8px">Freeze scope</div><div class="gd-dim" style="font-size:13px">Rubric + revenue terms locked by Jul 21</div></div>
+      <div style="color:var(--gd-text3);font-size:24px">→</div>
+      <div class="gd-glass gd-glass-blue" style="flex:1;text-align:center"><div style="font-size:34px">🛠️</div><div style="font-weight:600;margin-top:8px">Build the queue</div><div class="gd-dim" style="font-size:13px">Submission + review dashboard by Aug 11</div></div>
+      <div style="color:var(--gd-text3);font-size:24px">→</div>
+      <div class="gd-glass gd-glass-green" style="flex:1;text-align:center"><div style="font-size:34px">🧪</div><div style="font-weight:600;margin-top:8px">Private beta</div><div class="gd-dim" style="font-size:13px">20 creators, review SLA measured live</div></div>
+      <div style="color:var(--gd-text3);font-size:24px">→</div>
+      <div class="gd-glass gd-glass-warm" style="flex:1;text-align:center"><div style="font-size:34px">🚀</div><div style="font-weight:600;margin-top:8px">GA rollout</div><div class="gd-dim" style="font-size:13px">All 217+ creators, revenue share turns on</div></div>
+    </div>
+    <div class="gd-glass" style="margin-top:32px"><p style="font-size:16px;line-height:1.6;color:var(--gd-text2)">This is the irreversible step: once revenue share is live, pulling the marketplace back costs trust we won't get back. <span class="gd-accent">Sign off here, not after Aug.</span></p></div>
+  </section>
+
+  <!-- 7. CTA -->
+  <section class="slide">
+    <div class="gd-ambient"><div class="gd-orb gd-orb-1"></div><div class="gd-orb gd-orb-3"></div></div>
+    <div class="gd-snum">07 / 08</div>
+    <p class="gd-eyebrow">Measure of Success</p>
+    <h2 class="gd-h1" style="font-size:64px">North star: <span class="gd-grad">long-tail install share</span></h2>
+    <p class="gd-cmd" style="margin-top:22px">$ od plugin marketplace --track long-tail-install-share</p>
+    <p class="gd-cmd" style="margin-top:10px;color:var(--gd-warm);text-shadow:0 0 30px rgba(232,168,124,.45)">→ Target: 24% → 45% by Q4</p>
+    <div style="margin-top:32px">
+      <span class="gd-tag">#review-sla-under-72h</span>
+      <span class="gd-tag">#creator-payout-on-time</span>
+      <span class="gd-tag">#support-tickets-flat</span>
+      <span class="gd-tag">#nps-unchanged</span>
+    </div>
+  </section>
+
+  <!-- 8. THANKS -->
+  <section class="slide">
+    <div class="gd-ambient"><div class="gd-orb gd-orb-2"></div></div>
+    <div class="gd-snum">08 / 08</div>
+    <div style="margin:auto 0;text-align:center">
+      <div class="gd-big gd-rainbow" style="font-size:140px">Approve.</div>
+      <p class="gd-lede" style="margin:28px auto 0">Option B — reviewed marketplace with revenue share. Sign-off requested from PM, Eng, Design, and Leadership by Jul 21.</p>
+    </div>
+  </section>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="retro-tv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Turn Home Movies into a Family-History Story like a Documentary Editor - Life &amp; story</title>
+<style>
+/* hps-retro-tv :: webfonts (Google Fonts @import only — no other external deps) */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;0,800;0,900;1,600;1,800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+</style>
+<style>
+/* ============================================================
+   RETRO TV — LOCKED TOKEN SHEET
+   Ported from lewislulu/html-ppt-skill assets/themes/retro-tv.css.
+   This deck is single-theme: do not add other theme blocks.
+   ============================================================ */
+:root{
+  --bg:#f5ecd7; --bg-soft:#efe4c6; --surface:#fbf5e2; --surface-2:#efe3c2;
+  --border:rgba(120,70,20,.22); --border-strong:rgba(120,70,20,.45);
+  --text-1:#2a1a08; --text-2:#6b4a22; --text-3:#a68656;
+  --accent:#e67e14; --accent-2:#c73a1f; --accent-3:#f2b544;
+  --good:#3e8940; --warn:#e67e14; --bad:#c73a1f;
+  --grad:linear-gradient(135deg,#c73a1f,#e67e14 55%,#f2b544);
+  --grad-soft:linear-gradient(135deg,#fde6c4,#fbd9a0);
+  --radius:10px; --radius-sm:6px; --radius-lg:16px;
+  --shadow:0 6px 0 rgba(80,40,0,.12),0 12px 28px rgba(80,40,0,.15);
+  --shadow-lg:0 10px 0 rgba(80,40,0,.15),0 24px 50px rgba(80,40,0,.2);
+  --font-sans:'Inter','Noto Sans SC',sans-serif;
+  --font-serif:'Playfair Display','Noto Serif SC',serif;
+  --font-mono:'JetBrains Mono',SFMono-Regular,Menlo,monospace;
+  --font-display:'Playfair Display','Noto Serif SC',serif;
+  --letter-tight:-.01em; --letter-normal:0;
+  --ease:cubic-bezier(.4,0,.2,1);
+}
+</style>
+<style>
+/* ============================================================
+   BASE + SLIDE SYSTEM — horizontal scroll-snap deck.
+   One <section class="slide"> = exactly one viewport screen.
+   Designed at 16:9 (1280×720 baseline), fluid to the viewport.
+   ============================================================ */
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%}
+body{color:var(--text-1);font-family:var(--font-sans);
+  font-weight:400;line-height:1.6;letter-spacing:var(--letter-normal);
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow:hidden;
+  /* Signature device #1 — picture-tube canvas: faint horizontal scanlines
+     over a curved-glass radial vignette that darkens toward the edges,
+     like looking into a powered-on CRT. Slides stay transparent so this
+     canvas shows through on every page. Never paint an opaque slide bg. */
+  background:
+    repeating-linear-gradient(0deg,rgba(80,40,0,.06) 0 2px,transparent 2px 4px),
+    radial-gradient(ellipse at center,#f7ecd0 0%,#e8d9b0 85%,#c9b888 100%)}
+img,svg,video{max-width:100%;display:block}
+code,kbd,pre,samp{font-family:var(--font-mono)}
+
+.deck{display:flex;width:100vw;height:100vh;overflow-x:auto;overflow-y:hidden;
+  scroll-snap-type:x mandatory;scrollbar-width:none;-ms-overflow-style:none}
+.deck::-webkit-scrollbar{display:none}
+.slide{position:relative;flex:0 0 100vw;height:100vh;scroll-snap-align:start;
+  display:flex;flex-direction:column;justify-content:center;
+  padding:72px 96px;overflow:hidden}
+/* Signature device #2 — per-slide CRT scanline overlay. The ::before sits
+   above slide backgrounds but below content (content gets z-index:2), so
+   every page reads as a broadcast frame. Do not remove or dim it. */
+.slide::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.035) 0 2px,transparent 2px 4px);z-index:1}
+.slide>*{position:relative;z-index:2}
+
+/* ============ TYPOGRAPHY ============ */
+.eyebrow{font-size:13px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text-2);margin:0}
+.kicker{font-size:14px;font-weight:700;color:var(--accent-2);letter-spacing:.1em;text-transform:uppercase;margin:0 0 10px}
+/* Signature device #4 — Playfair Display headlines in brick red with a
+   heavy offset shadow, like silkscreened titles on a TV-guide cover. */
+.h1{font-family:var(--font-display);font-size:clamp(46px,5.6vw,74px);line-height:1.04;font-weight:800;letter-spacing:var(--letter-tight);margin:0 0 18px;color:var(--accent-2);text-shadow:3px 3px 0 rgba(80,40,0,.18)}
+.h2{font-family:var(--font-display);font-size:clamp(34px,4vw,52px);line-height:1.1;font-weight:800;letter-spacing:var(--letter-tight);margin:0 0 14px;color:var(--text-1);text-shadow:2px 2px 0 rgba(80,40,0,.14)}
+.h3{font-family:var(--font-display);font-size:clamp(22px,2.5vw,32px);line-height:1.2;font-weight:700;margin:0 0 10px}
+.h4{font-size:clamp(17px,1.7vw,22px);line-height:1.3;font-weight:700;margin:0 0 8px}
+.lede{font-size:clamp(17px,1.7vw,22px);line-height:1.55;color:var(--text-2);font-weight:400;max-width:62ch;margin:0}
+.dim{color:var(--text-2)}
+.dim2{color:var(--text-3)}
+.mono{font-family:var(--font-mono)}
+.gradient-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+
+/* ============ LAYOUT PRIMITIVES ============ */
+.row{display:flex;gap:24px;align-items:center}
+.row.wrap{flex-wrap:wrap}
+.grid{display:grid;gap:24px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+.center{display:flex;align-items:center;justify-content:center;text-align:center}
+.mt-s{margin-top:8px}.mt-m{margin-top:18px}.mt-l{margin-top:32px}
+
+/* ============ CARDS / PILLS — warm parchment faces, chunky tube shadows ============ */
+.card{background:var(--surface);border:1.5px solid var(--border-strong);border-radius:var(--radius);
+  padding:26px 28px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.card-soft{background:var(--surface-2)}
+.card-amber{border-top:6px solid var(--accent)}
+.card-brick{border-top:6px solid var(--accent-2)}
+.card-gold{border-top:6px solid var(--accent-3)}
+.pill{display:inline-block;padding:5px 14px;border-radius:999px;font-size:12px;font-weight:700;
+  font-family:var(--font-mono);letter-spacing:.06em;
+  background:var(--surface);color:var(--text-2);border:1.5px solid var(--border-strong);
+  box-shadow:0 3px 0 rgba(80,40,0,.12)}
+.pill-amber{background:var(--accent);color:var(--text-1);border-color:var(--accent)}
+.pill-brick{background:var(--accent-2);color:#fff;border-color:var(--accent-2)}
+.pill-gold{background:var(--accent-3);color:var(--text-1);border-color:var(--accent-3)}
+/* Signature device #5 — ON AIR lamp: brick-red pill with a softly pulsing dot. */
+.on-air{display:inline-flex;align-items:center;gap:8px;background:var(--accent-2);color:#fff;border-color:var(--accent-2)}
+.on-air::before{content:"";width:8px;height:8px;border-radius:50%;background:#f2b544;animation:kf-blink 1.6s ease-in-out infinite}
+@keyframes kf-blink{0%,100%{opacity:1}50%{opacity:.25}}
+.divider-accent{height:8px;width:96px;background:var(--accent);border-radius:999px;box-shadow:0 4px 0 rgba(80,40,0,.14)}
+
+/* Signature device #3 — test-card color bars: an SMPTE-style strip in the
+   locked palette. Use as a slide garnish or section accent, 1 per slide max. */
+.test-bars{display:flex;height:14px;width:180px;border-radius:4px;overflow:hidden;border:1.5px solid var(--border-strong);box-shadow:0 3px 0 rgba(80,40,0,.12)}
+.test-bars i{flex:1}
+.test-bars i:nth-child(1){background:var(--accent-2)}
+.test-bars i:nth-child(2){background:var(--accent)}
+.test-bars i:nth-child(3){background:var(--accent-3)}
+.test-bars i:nth-child(4){background:var(--good)}
+.test-bars i:nth-child(5){background:var(--surface-2)}
+.test-bars i:nth-child(6){background:var(--text-2)}
+
+/* ============ DECK CHROME ============ */
+.deck-header{position:fixed;top:24px;left:40px;right:40px;display:flex;align-items:center;justify-content:space-between;
+  font-size:12px;font-weight:700;color:var(--text-2);letter-spacing:.12em;text-transform:uppercase;z-index:10;pointer-events:none}
+.deck-footer{position:fixed;bottom:24px;left:40px;right:40px;display:flex;align-items:center;justify-content:space-between;
+  font-size:12px;font-weight:700;color:var(--text-2);z-index:10;pointer-events:none}
+.theme-chip{font-family:var(--font-mono);font-size:11px;letter-spacing:.04em;text-transform:none}
+.progress-bar{position:fixed;left:0;right:0;bottom:0;height:5px;z-index:20;pointer-events:none;border-top:1.5px solid var(--border-strong)}
+.progress-bar>span{display:block;height:100%;width:0;background:var(--accent);transition:width .3s var(--ease)}
+
+/* ============ TV DECOR (inline SVG dials, antennas, starbursts) ============ */
+.tv-shape{position:absolute;z-index:0;pointer-events:none;opacity:.9}
+.slide>.tv-shape{z-index:2}
+
+/* ============ SLIDE-LOCAL COMPONENTS ============ */
+.section-num{position:absolute;right:72px;bottom:24px;font-family:var(--font-display);font-style:italic;
+  font-size:clamp(140px,19vw,250px);line-height:.9;letter-spacing:-.02em;z-index:2;pointer-events:none;
+  color:var(--surface);-webkit-text-stroke:3px var(--accent-2);text-shadow:10px 10px 0 rgba(199,58,31,.18)}
+.kpi .num{font-family:var(--font-display);font-weight:900;font-size:clamp(32px,3.8vw,50px);letter-spacing:var(--letter-tight);line-height:1.1}
+.kpi .lbl{font-size:14px;color:var(--text-2);margin-top:6px;font-weight:500}
+.stat-big{font-family:var(--font-display);font-weight:900;font-size:clamp(110px,15vw,200px);line-height:1;letter-spacing:-.02em;margin:0;text-shadow:none}
+.bar-chart{display:flex;align-items:flex-end;gap:18px;height:240px;margin-top:40px;max-width:820px}
+.bar-chart .bar{flex:1;border:1.5px solid var(--border-strong);border-bottom:none;border-radius:8px 8px 0 0;position:relative;min-height:18px;box-shadow:0 6px 0 rgba(80,40,0,.12)}
+.bar-chart .bar span{position:absolute;bottom:-32px;left:0;right:0;text-align:center;font-size:13px;font-weight:700;color:var(--text-2)}
+.bar-chart .bar em{position:absolute;top:-32px;left:0;right:0;text-align:center;font-size:15px;font-weight:700;font-style:normal;color:var(--text-1)}
+.steps{counter-reset:step}
+.steps .card{padding-top:38px}
+.steps .card::before{counter-increment:step;content:"CH " counter(step,decimal-leading-zero);
+  font-family:var(--font-mono);font-size:12px;font-weight:700;color:#fff;background:var(--accent-2);
+  border-radius:999px;padding:3px 10px;box-shadow:0 3px 0 rgba(80,40,0,.14);
+  position:absolute;top:12px;left:24px;letter-spacing:.08em}
+.quote{font-family:var(--font-display);font-style:italic;font-weight:600;font-size:clamp(28px,3.6vw,48px);line-height:1.3;max-width:28ch;margin:0;color:var(--text-1);text-shadow:2px 2px 0 rgba(80,40,0,.12)}
+.check{list-style:none;padding:0;margin:0;font-size:clamp(15px,1.5vw,19px)}
+.check li{padding:9px 0 9px 36px;position:relative;color:var(--text-2);font-weight:500}
+.check li::before{content:"";position:absolute;left:0;top:13px;width:18px;height:18px;border-radius:50%;
+  background:var(--accent-3);border:1.5px solid var(--border-strong);box-shadow:0 2px 0 rgba(80,40,0,.14)}
+.check li::after{content:"";position:absolute;left:5px;top:18px;width:9px;height:5px;
+  border-left:2.5px solid var(--text-1);border-bottom:2.5px solid var(--text-1);transform:rotate(-45deg)}
+
+/* ============ SPEAKER NOTES (hidden from audience) ============ */
+.notes{display:none!important}
+
+/* ============ ANIMATIONS (entry effects, upstream subset) ============ */
+@keyframes kf-rise{from{opacity:0;transform:translateY(60px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes kf-fade-up{from{opacity:0;transform:translateY(32px)}to{opacity:1;transform:none}}
+@keyframes kf-tube-on{from{opacity:0;transform:scaleY(.02) scaleX(.6)}55%{opacity:1;transform:scaleY(1.06) scaleX(1)}to{opacity:1;transform:none}}
+.anim-rise-in{animation:kf-rise .9s var(--ease) both}
+.anim-fade-up{animation:kf-fade-up .7s var(--ease) both}
+.anim-tube-on{animation:kf-tube-on .8s var(--ease) both}
+.anim-stagger-list>*{opacity:0;animation:kf-rise .65s var(--ease) both}
+.anim-stagger-list>*:nth-child(1){animation-delay:.05s}
+.anim-stagger-list>*:nth-child(2){animation-delay:.15s}
+.anim-stagger-list>*:nth-child(3){animation-delay:.25s}
+.anim-stagger-list>*:nth-child(4){animation-delay:.35s}
+.anim-stagger-list>*:nth-child(5){animation-delay:.45s}
+.anim-stagger-list>*:nth-child(n+6){animation-delay:.55s}
+
+/* ============ REDUCED MOTION (entry effects settle instantly; the
+   ON AIR lamp stops pulsing; progress bar jumps without easing) ============ */
+@media (prefers-reduced-motion: reduce){
+  .anim-rise-in,.anim-fade-up,.anim-tube-on,.anim-stagger-list>*{animation:none;opacity:1;transform:none}
+  .on-air::before{animation:none}
+  .progress-bar>span{transition:none}
+}
+
+/* ============ PRINT ============ */
+@media print{
+  body{overflow:visible}
+  .deck{display:block;width:auto;height:auto;overflow:visible}
+  .slide{width:100vw;height:100vh;page-break-after:always}
+  .deck-header,.deck-footer,.progress-bar{display:none!important}
+}
+</style>
+<style id="od-no-pager">.deck-controls,#counter,.deck-counter{display:none!important}</style>
+</head>
+<body>
+
+<div class="deck-header"><span>The Alvarez Family Archive</span><span class="theme-chip">retro-tv</span></div>
+
+<div class="deck" id="deck">
+
+  <!-- 1 · layout: cover -->
+  <section class="slide" data-title="Cover">
+    <svg class="tv-shape" style="top:10%;right:9%" width="120" height="96" viewBox="0 0 120 96"><path d="M60 40 24 8M60 40 96 8" stroke="#6b4a22" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="8" r="6" fill="#e67e14"/><circle cx="96" cy="8" r="6" fill="#c73a1f"/><rect x="22" y="40" width="76" height="50" rx="10" fill="#fbf5e2" stroke="#6b4a22" stroke-width="4"/><rect x="32" y="50" width="40" height="30" rx="5" fill="#f2b544"/><circle cx="86" cy="58" r="5" fill="#c73a1f"/><circle cx="86" cy="72" r="5" fill="#6b4a22"/></svg>
+    <svg class="tv-shape" style="bottom:18%;right:22%" width="72" height="72" viewBox="0 0 72 72"><circle cx="36" cy="36" r="28" fill="#fbf5e2" stroke="#6b4a22" stroke-width="4"/><path d="M36 36 36 14" stroke="#c73a1f" stroke-width="5" stroke-linecap="round"/><circle cx="36" cy="36" r="6" fill="#e67e14"/></svg>
+    <p class="kicker">Life &amp; Story · Home Movie Archive, 1968–2016</p>
+    <h1 class="h1 anim-tube-on">Five Reels, One Question:<br>What Was <span class="gradient-text">Rosa</span> Filming?</h1>
+    <p class="lede">127 hours of Super 8, VHS, MiniDV, and iPhone clips shot by three generations of the Alvarez family — cut into the 12-minute documentary we screened at Rosa's 90th birthday in Nogales.</p>
+    <div class="row wrap mt-l" style="gap:12px">
+      <span class="pill on-air">Est. 1968</span>
+      <span class="pill pill-amber">127 hrs of tape</span>
+      <span class="pill pill-gold">3 generations</span>
+      <span class="pill">12-min final cut</span>
+    </div>
+    <div class="notes">Open with the tube-on animation: the headline flickers in like a CRT warming up, as if Rosa's first Super 8 reel is loading. The scanline canvas and the little TV set do the nostalgia talking — keep the copy warm and short.</div>
+  </section>
+
+  <!-- 2 · layout: toc -->
+  <section class="slide" data-title="How we built the film">
+    <div class="test-bars tv-shape" style="top:13%;right:8%"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <p class="kicker">How we built the film</p>
+    <h2 class="h2">Five decades, three questions</h2>
+    <div class="grid g3 mt-l anim-stagger-list">
+      <div class="card card-brick"><h4 class="h4">01 · The question</h4><p class="dim">Why did Rosa keep filming, even on the ordinary days nobody thought to save?</p></div>
+      <div class="card card-amber"><h4 class="h4">02 · The eras</h4><p class="dim">From a Nogales kitchen table in 1968 to a hospice room in 2016 — what the camera caught changing.</p></div>
+      <div class="card card-gold"><h4 class="h4">03 · The cut</h4><p class="dim">18 hours of digitized tape became the 12-minute film the whole family could watch once, together.</p></div>
+    </div>
+    <div class="notes">Agenda mirrors the deck's three sections. Each card gets one accent top-border — brick, amber, gold — never more. The test-bar strip is the only garnish on this page.</div>
+  </section>
+
+  <!-- 3 · layout: section-divider -->
+  <section class="slide" data-title="Section · The Question">
+    <span class="section-num">01</span>
+    <svg class="tv-shape" style="top:16%;left:54%" width="110" height="60" viewBox="0 0 110 60"><path d="M55 52 20 14M55 52 90 14" stroke="#a68656" stroke-width="4" stroke-linecap="round"/><circle cx="20" cy="14" r="5" fill="#e67e14"/><circle cx="90" cy="14" r="5" fill="#c73a1f"/></svg>
+    <p class="eyebrow">Segment one</p>
+    <h2 class="h2" style="color:var(--accent-2)">The question<br>we never asked her</h2>
+    <div class="divider-accent mt-m"></div>
+    <div class="notes">Section divider: the giant italic Playfair numeral with a brick outline and warm offset shadow anchors the page. One antenna, nothing else.</div>
+  </section>
+
+  <!-- 4 · layout: two-column -->
+  <section class="slide" data-title="The eras">
+    <svg class="tv-shape" style="bottom:12%;right:7%" width="64" height="64" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#e67e14" stroke-width="4"/><path d="M32 32 32 12M32 32 46 40" stroke="#6b4a22" stroke-width="4" stroke-linecap="round"/></svg>
+    <p class="kicker">The eras</p>
+    <h2 class="h2">A camera in every decade</h2>
+    <div class="grid g2 mt-l">
+      <div>
+        <p class="lede">Rosa's son Danny spent last winter digitizing seven boxes of reels and tapes. He expected birthdays and Christmases. What he found was a habit.</p>
+        <ul class="check mt-m">
+          <li>1968–1980 · Super 8, silent, hand-cranked at the Nogales kitchen table</li>
+          <li>1985–2001 · VHS camcorder, borrowed then bought outright in 1988</li>
+          <li>2002–2010 · MiniDV, mostly Sunday dinners and school recitals</li>
+          <li>2011–2016 · iPhone clips, filmed by grandchildren who'd taken over the job</li>
+        </ul>
+      </div>
+      <div class="card card-soft">
+        <h3 class="h3">The pattern, in one line</h3>
+        <p class="dim">Across every format change, one shot repeats in almost every reel: Rosa's hands, cooking, mending, or writing something down just out of frame.</p>
+        <div class="row wrap mt-m" style="gap:10px">
+          <span class="pill pill-brick">7 boxes</span>
+          <span class="pill pill-amber">4 formats</span>
+          <span class="pill pill-gold">1 recurring shot</span>
+        </div>
+      </div>
+    </div>
+    <div class="notes">Two-column: the four-format timeline on the left with gold dial-button checks, the recurring "hands" pattern in a darker parchment card on the right.</div>
+  </section>
+
+  <!-- 5 · layout: kpi-grid -->
+  <section class="slide" data-title="The archive by the numbers">
+    <div class="test-bars tv-shape" style="top:11%;right:9%"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <p class="kicker">The archive, by the numbers</p>
+    <h2 class="h2">Four decades, one shelf of tape</h2>
+    <div class="grid g4 mt-l anim-stagger-list">
+      <div class="card kpi"><div class="num gradient-text">48</div><div class="lbl">years between the first reel and the last clip</div></div>
+      <div class="card kpi"><div class="num gradient-text">31</div><div class="lbl">reels and tapes pulled out of a closet in Nogales</div></div>
+      <div class="card kpi"><div class="num gradient-text">127</div><div class="lbl">hours of raw footage once fully digitized</div></div>
+      <div class="card kpi"><div class="num gradient-text">42</div><div class="lbl">relatives across 6 states identified on camera</div></div>
+    </div>
+    <div class="notes">KPI grid: four numbers, one line of context each. Gradient numerals are the only place the brick→amber→gold gradient appears on this page.</div>
+  </section>
+
+  <!-- 6 · layout: stat-highlight -->
+  <section class="slide center" data-title="Headline stat">
+    <svg class="tv-shape" style="top:15%;left:15%" width="64" height="64" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="#fbf5e2" stroke="#6b4a22" stroke-width="4"/><path d="M32 32 32 12" stroke="#c73a1f" stroke-width="5" stroke-linecap="round"/><circle cx="32" cy="32" r="5" fill="#e67e14"/></svg>
+    <svg class="tv-shape" style="bottom:17%;right:16%" width="90" height="50" viewBox="0 0 90 50"><path d="M45 44 16 10M45 44 74 10" stroke="#a68656" stroke-width="4" stroke-linecap="round"/><circle cx="16" cy="10" r="5" fill="#f2b544"/><circle cx="74" cy="10" r="5" fill="#c73a1f"/></svg>
+    <p class="kicker">The turning point</p>
+    <p class="stat-big gradient-text anim-tube-on">1994</p>
+    <p class="lede mt-m" style="max-width:46ch">the year Tomás died and Rosa started pointing the camera at herself — talking to it alone at the stove, as if someone was finally supposed to be listening.</p>
+    <div class="notes">Stat-highlight: one giant Playfair number in the warm gradient carries the slide, flickering in with the tube-on effect. Everything else stays quiet.</div>
+  </section>
+
+  <!-- 7 · layout: chart-bar (pure CSS bars — no chart library) -->
+  <section class="slide" data-title="Footage by decade">
+    <p class="kicker">Minutes of usable footage, by decade</p>
+    <h2 class="h2">Where the story actually lived</h2>
+    <div class="bar-chart">
+      <div class="bar" style="height:38%;background:var(--accent-2)"><em>22</em><span>1968–80</span></div>
+      <div class="bar" style="height:91%;background:var(--accent)"><em>54</em><span>1985–2001</span></div>
+      <div class="bar" style="height:64%;background:var(--accent-3)"><em>38</em><span>2002–10</span></div>
+      <div class="bar" style="height:22%;background:var(--good)"><em>13</em><span>2011–16</span></div>
+    </div>
+    <p class="dim mt-l" style="margin-top:56px">Usable minutes per era after the digitizing pass. The VHS years carry the film's spine — Rosa filming the family growing up around her, one Sunday dinner at a time.</p>
+    <div class="notes">Bar chart rebuilt in pure CSS — parchment-outlined bars filled with the flat accent palette, chunky tube shadow under each. No chart library anywhere in this file.</div>
+  </section>
+
+  <!-- 8 · layout: process-steps -->
+  <section class="slide" data-title="What the edit revealed">
+    <svg class="tv-shape" style="top:11%;right:8%" width="64" height="64" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#c73a1f" stroke-width="4"/><path d="M32 8v8M32 48v8M8 32h8M48 32h8" stroke="#6b4a22" stroke-width="4" stroke-linecap="round"/></svg>
+    <p class="kicker">What the edit revealed</p>
+    <h2 class="h2">What she was actually recording</h2>
+    <div class="grid g4 mt-l steps anim-stagger-list">
+      <div class="card"><h4 class="h4">Notice the hands</h4><p class="dim">Cutting every reel's opening seconds together, the same shot recurs decade after decade: Rosa's hands at work.</p></div>
+      <div class="card"><h4 class="h4">Notice the table</h4><p class="dim">The Nogales kitchen table appears in all four formats — the one constant set across 48 years of footage.</p></div>
+      <div class="card"><h4 class="h4">Notice the audience</h4><p class="dim">After 1994 she starts talking to the lens directly, naming grandchildren not yet born.</p></div>
+      <div class="card"><h4 class="h4">Notice the gift</h4><p class="dim">She wasn't documenting the family. She was leaving instructions for one she wouldn't get to raise.</p></div>
+    </div>
+    <div class="notes">Process steps: the counter pseudo-element stamps a brick "CH 01–04" badge on each card, like preset channel buttons. Four discoveries, one sentence each, building toward the film's meaning.</div>
+  </section>
+
+  <!-- 9 · layout: big-quote -->
+  <section class="slide center" data-title="Quote">
+    <div class="test-bars tv-shape" style="top:14%;right:18%"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <svg class="tv-shape" style="bottom:16%;left:16%" width="90" height="50" viewBox="0 0 90 50"><path d="M45 44 16 10M45 44 74 10" stroke="#a68656" stroke-width="4" stroke-linecap="round"/><circle cx="16" cy="10" r="5" fill="#e67e14"/><circle cx="74" cy="10" r="5" fill="#f2b544"/></svg>
+    <p class="quote anim-fade-up">"I always thought she filmed us. Watching it back, I understood — she was filming <span class="gradient-text">for us</span>, for after."</p>
+    <p class="eyebrow mt-l">— Danny Alvarez, Rosa's son and the film's editor</p>
+    <div class="notes">Big quote in italic Playfair with the soft offset shadow. One gradient phrase, one test-bar strip, one antenna — nothing else competing.</div>
+  </section>
+
+  <!-- 10 · layout: thanks / cta -->
+  <section class="slide center" data-title="Thanks">
+    <svg class="tv-shape" style="top:12%;left:13%" width="100" height="80" viewBox="0 0 100 80"><path d="M50 34 22 8M50 34 78 8" stroke="#6b4a22" stroke-width="4" stroke-linecap="round"/><circle cx="22" cy="8" r="5" fill="#e67e14"/><circle cx="78" cy="8" r="5" fill="#c73a1f"/><rect x="18" y="34" width="64" height="42" rx="9" fill="#fbf5e2" stroke="#6b4a22" stroke-width="4"/><rect x="26" y="42" width="34" height="26" rx="4" fill="#f2b544"/><circle cx="72" cy="49" r="4" fill="#c73a1f"/><circle cx="72" cy="61" r="4" fill="#6b4a22"/></svg>
+    <svg class="tv-shape" style="top:18%;right:14%" width="72" height="72" viewBox="0 0 72 72"><circle cx="36" cy="36" r="28" fill="#fbf5e2" stroke="#6b4a22" stroke-width="4"/><path d="M36 36 36 14" stroke="#c73a1f" stroke-width="5" stroke-linecap="round"/><circle cx="36" cy="36" r="6" fill="#e67e14"/></svg>
+    <p class="kicker">Screened at Rosa's 90th birthday · Nogales</p>
+    <h1 class="h1">Back on the<br>family <span class="gradient-text">table</span></h1>
+    <p class="lede mt-m" style="max-width:48ch">The film brought 42 relatives from 6 states into one backyard for the first time in a decade. Reel Night is now annual — a new cut, one more year of footage added each time.</p>
+    <div class="row wrap mt-l" style="gap:12px;justify-content:center">
+      <span class="pill pill-brick">Watch: alvarezreels.family</span>
+      <span class="pill pill-amber">← → navigate</span>
+      <span class="pill pill-gold">#/10 deep link</span>
+    </div>
+    <div class="notes">Closer: one screening, one tradition started, and the keyboard hints as channel pills. Sign off the way old stations did — warmly, with the set still glowing.</div>
+  </section>
+
+</div>
+
+<div class="deck-footer"><span>retro-tv · MIT · lewislulu/html-ppt-skill</span><span id="counter">1 / 10</span></div>
+<div class="progress-bar"><span id="bar"></span></div>
+
+<script>
+(function () {
+  var deck = document.getElementById('deck');
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var counter = document.getElementById('counter');
+  var bar = document.getElementById('bar');
+  var active = 0;
+  var lastKeyEvent = null;
+
+  function clamp(i) { return Math.max(0, Math.min(slides.length - 1, i)); }
+
+  function paint(i) {
+    counter.textContent = (i + 1) + ' / ' + slides.length;
+    bar.style.width = (((i + 1) / slides.length) * 100) + '%';
+  }
+
+  // Hash routing: #/N (1-based). replaceState keeps back-button clean and
+  // never throws inside a srcdoc iframe thanks to the try/catch.
+  function setHash(i) {
+    try { history.replaceState(null, '', '#/' + (i + 1)); } catch (_) { /* sandboxed */ }
+  }
+  function fromHash() {
+    var m = (location.hash || '').match(/^#\/(\d+)/);
+    return m ? clamp(parseInt(m[1], 10) - 1) : 0;
+  }
+
+  function go(i, instant) {
+    active = clamp(i);
+    deck.scrollTo({ left: active * deck.clientWidth, behavior: instant ? 'auto' : 'smooth' });
+    paint(active);
+    setHash(active);
+  }
+
+  function syncFromScroll() {
+    var i = Math.round(deck.scrollLeft / deck.clientWidth);
+    if (i !== active && i >= 0 && i < slides.length) { active = i; paint(i); setHash(i); }
+  }
+
+  function onKey(e) {
+    if (e === lastKeyEvent) return; // dedupe: same Event passes both listeners
+    lastKeyEvent = e;
+    var t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); go(active + 1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(active - 1); }
+    else if (e.key === 'Home') { e.preventDefault(); go(0); }
+    else if (e.key === 'End') { e.preventDefault(); go(slides.length - 1); }
+  }
+
+  // Listen on both window and document in capture phase so keys work no
+  // matter which element holds focus inside a host iframe.
+  window.addEventListener('keydown', onKey, true);
+  document.addEventListener('keydown', onKey, true);
+  deck.addEventListener('scroll', function () { window.requestAnimationFrame(syncFromScroll); }, { passive: true });
+  window.addEventListener('hashchange', function () { go(fromHash()); });
+  window.addEventListener('resize', function () { go(active, true); });
+
+  // Auto-focus so arrow keys work without a click.
+  document.body.setAttribute('tabindex', '-1');
+  document.body.style.outline = 'none';
+  function focusDeck() {
+    try { window.focus(); document.body.focus({ preventScroll: true }); } catch (_) { /* sandboxed */ }
+  }
+  document.addEventListener('mousedown', focusDeck);
+  window.addEventListener('load', focusDeck);
+
+  go(fromHash(), true);
+  paint(active);
+  focusDeck();
+})();
+</script>
+
+</body>
+</html>

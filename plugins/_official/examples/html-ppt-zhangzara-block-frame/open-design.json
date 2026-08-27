@@ -1,0 +1,117 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-html-ppt-zhangzara-block-frame",
+  "title": "Rescue a Messy Deck to Board-Grade like an Executive Design Director",
+  "title_i18n": {
+    "en": "Rescue a Messy Deck to Board-Grade like an Executive Design Director",
+    "zh-CN": "像高管级设计总监一样把混乱 Deck 救到董事会级",
+    "zh-TW": "像高管级设计总监一样把混乱 Deck 救到董事会级"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "Rescuing a messy startup deck into a board-grade system — the diagnosis, the page grammar, and the rebuilt proof pages. Built as a decision-grade design craft deck for founders, exec presenter.",
+  "description_i18n": {
+    "en": "Rescuing a messy startup deck into a board-grade system — the diagnosis, the page grammar, and the rebuilt proof pages. Built as a decision-grade design craft deck for founders, exec presenter.",
+    "zh-CN": "像高管级设计总监一样把混乱 Deck 救到董事会级——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像高管级设计总监一样把混乱 Deck 救到董事会级——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "OpenDesign",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/html-ppt-zhangzara-block-frame",
+  "tags": [
+    "example",
+    "first-party",
+    "deck",
+    "marketing",
+    "web",
+    "block-frame",
+    "zhangzara-block-frame",
+    "blockframe",
+    "bold",
+    "playful",
+    "confident",
+    "graphic",
+    "creative-agency-pitch",
+    "indie-saas-launch",
+    "html-deck",
+    "html-slides",
+    "zhangzara",
+    "product",
+    "roadmap",
+    "architecture",
+    "html-ppt-zhangzara-block-frame",
+    "product-and-technical-management",
+    "design-craft",
+    "board-upgrade-deck-rescue",
+    "design",
+    "brand",
+    "visual-system",
+    "decision-deck",
+    "commercial-slide-agent"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create \"Rescue a Messy Deck to Board-Grade like an Executive Design Director\" as a decision-grade Design craft deck in this template's own visual system. Subject: Rescuing a messy startup deck into a board-grade system — the diagnosis, the page grammar, and the rebuilt proof pages. Audience: founders, exec presenter. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck feel authored by a senior designer rather than generated.",
+        "zh-CN": "像高管级设计总监一样把混乱 Deck 救到董事会级。像高管级设计总监一样把混乱 Deck 救到董事会级——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。 主题：Rescuing a messy startup deck into a board-grade system — the diagnosis, the page grammar, and the rebuilt proof pages. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Rescue a Messy Deck to Board-Grade like an Executive Design Director",
+          "title_i18n": {
+            "en": "Rescue a Messy Deck to Board-Grade like an Executive Design Director",
+            "zh-CN": "像高管级设计总监一样把混乱 Deck 救到董事会级",
+            "zh-TW": "像高管级设计总监一样把混乱 Deck 救到董事会级"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "category": "design-craft"
+  }
+}

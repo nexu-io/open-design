@@ -1,0 +1,39 @@
+/* product-launch — modern announcement deck */
+.tpl-product-launch{
+  --bg:#ffffff;--bg-soft:#f5f5f7;--surface:#ffffff;--surface-2:#f2f2f6;
+  --ink:#0a0a12;--ink-2:#3a3a44;
+  --border:rgba(10,10,18,.08);--border-strong:rgba(10,10,18,.18);
+  --text-1:#0a0a12;--text-2:#4a4a58;--text-3:#8a8a96;
+  --accent:#ff5a36;--accent-2:#ff8c5a;--accent-3:#ffb36b;
+  --grad:linear-gradient(120deg,#ff5a36 0%,#ff8c5a 60%,#ffb36b 100%);
+  --radius:22px;--radius-lg:32px;
+  --shadow:0 20px 60px rgba(10,10,18,.1);
+  font-family:'Inter','Noto Sans SC',sans-serif;
+}
+.tpl-product-launch .slide{padding:80px 112px}
+.tpl-product-launch .slide.dark{background:#0a0a12;color:#f5f5f7}
+.tpl-product-launch .slide.dark .h1,.tpl-product-launch .slide.dark .h2,.tpl-product-launch .slide.dark h3,.tpl-product-launch .slide.dark h4{color:#fff}
+.tpl-product-launch .slide.dark .lede,.tpl-product-launch .slide.dark .dim{color:rgba(245,245,247,.72)}
+.tpl-product-launch .slide.dark .card{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.12);box-shadow:none;backdrop-filter:blur(20px)}
+.tpl-product-launch .slide.dark .kicker{color:var(--accent-2)}
+.tpl-product-launch .h1{font-size:96px;line-height:.98;font-weight:900;letter-spacing:-.045em}
+.tpl-product-launch .h2{font-size:64px;font-weight:800;letter-spacing:-.035em}
+.tpl-product-launch .hero-shot{position:absolute;right:-60px;top:50%;transform:translateY(-50%);width:640px;height:640px;border-radius:50%;background:var(--grad);filter:blur(2px);opacity:.85}
+.tpl-product-launch .hero-shot::after{content:"";position:absolute;inset:80px;border-radius:40px;background:linear-gradient(160deg,rgba(255,255,255,.3),transparent 60%),#1a1a28;box-shadow:inset 0 2px 0 rgba(255,255,255,.2)}
+.tpl-product-launch .hero-shot::before{content:"Halo v2";position:absolute;inset:80px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:44px;font-weight:900;letter-spacing:-.02em;z-index:2;border-radius:40px}
+.tpl-product-launch .brand{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.tpl-product-launch .feature-card{padding:40px 36px;border-radius:var(--radius-lg);background:var(--surface);border:1px solid var(--border);position:relative;overflow:hidden}
+.tpl-product-launch .feature-card .icon{width:60px;height:60px;border-radius:18px;background:var(--grad);display:flex;align-items:center;justify-content:center;color:#fff;font-size:28px;font-weight:900;margin-bottom:20px}
+.tpl-product-launch .step{display:flex;gap:24px;align-items:flex-start}
+.tpl-product-launch .step .n{flex:none;width:56px;height:56px;border-radius:50%;background:var(--grad);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:22px}
+.tpl-product-launch .price-card{padding:40px 32px;border-radius:var(--radius-lg);border:1.5px solid var(--border);background:var(--surface);text-align:left}
+.tpl-product-launch .price-card.pro{background:#0a0a12;color:#fff;border-color:#0a0a12;transform:scale(1.04);box-shadow:0 30px 80px rgba(255,90,54,.25)}
+.tpl-product-launch .price-card.pro .dim{color:rgba(255,255,255,.7)}
+.tpl-product-launch .price-card h4{font-size:16px;text-transform:uppercase;letter-spacing:.1em;color:var(--accent)}
+.tpl-product-launch .price-card.pro h4{color:var(--accent-2)}
+.tpl-product-launch .price-card .amount{font-size:64px;font-weight:900;letter-spacing:-.035em;margin:14px 0}
+.tpl-product-launch .price-card ul{list-style:none;padding:0;margin:20px 0 0}
+.tpl-product-launch .price-card li{padding:8px 0;font-size:15px;color:var(--text-2);border-top:1px solid var(--border)}
+.tpl-product-launch .price-card.pro li{color:rgba(255,255,255,.8);border-color:rgba(255,255,255,.12)}
+.tpl-product-launch .cta-btn{display:inline-block;padding:20px 40px;border-radius:999px;background:var(--grad);color:#fff;font-weight:700;font-size:20px;box-shadow:0 20px 50px rgba(255,90,54,.4)}
+.tpl-product-launch .testimonial{max-width:44ch;font-family:'Playfair Display',serif;font-size:44px;line-height:1.25;font-weight:500;letter-spacing:-.01em}

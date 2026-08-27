@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Build a New-Hire Onboarding Module like a Top Enablement Lead - Professional training</title>
+<style>/* course-module :: webfonts (only families actually used) */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+</style>
+<style>/* course-module :: academic textbook. cream paper, Fraunces serif, single forest-teal accent.
+ * Polished pass: trimmed unused slop CSS (gradient tokens, animation library, card/chrome leftovers),
+ * raised label contrast, footer aligned to the 80px slide grid, disciplined entrance stagger. */
+:root{
+  --bg:#fbfaf6;
+  --bg-soft:#f4f1e8;
+  --surface:#fffefb;
+  --surface-2:#f5f2e9;
+  --border:rgba(60,45,20,.14);
+  --border-strong:rgba(60,45,20,.32);
+  --text-1:#2a2418;
+  --text-2:#564d3c;
+  --text-3:#76694f;
+  --accent:#2d7d6e;
+  --radius:8px;
+  --font-sans:'Source Sans 3',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
+  --font-serif:'Fraunces',Georgia,serif;
+  --font-mono:'JetBrains Mono',SFMono-Regular,Menlo,monospace;
+  --ease:cubic-bezier(.16,1,.3,1);
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text-1);
+  font-family:var(--font-sans);font-weight:400;line-height:1.6;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+img,svg{max-width:100%;display:block}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+code,kbd,pre,samp{font-family:var(--font-mono)}
+
+/* ---------------- deck (static preview: slides stacked, one viewport each) ---------------- */
+.deck{width:100vw}
+.slide{position:relative;width:100vw;height:100vh;overflow:hidden;background:var(--bg);
+  padding:64px 80px;display:grid;grid-template-columns:260px 1fr;gap:56px;align-content:start;
+  border-bottom:1px solid var(--border);page-break-after:always}
+.slide.full{display:flex;flex-direction:column;justify-content:center;padding-bottom:96px}
+
+/* ---------------- typography ---------------- */
+.kicker{color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;margin:0}
+.h1{font-family:var(--font-serif);font-size:clamp(48px,7.4vh,66px);line-height:1.04;font-weight:500;
+  font-variation-settings:'opsz' 100;letter-spacing:-.018em;margin:0;color:var(--text-1)}
+.h2{font-family:var(--font-serif);font-size:clamp(38px,6.3vh,46px);line-height:1.08;font-weight:500;
+  font-variation-settings:'opsz' 80;letter-spacing:-.014em;margin:0 0 14px;color:var(--text-1)}
+.h1 em,.h2 em{font-style:italic;font-weight:500;color:var(--accent)}
+h4{font-size:20px;line-height:1.3;font-weight:600;margin:0 0 8px;color:var(--text-1)}
+.lede{font-size:20px;line-height:1.65;color:var(--text-2);font-weight:400;max-width:62ch;margin:0}
+.lede b,.dim b{color:var(--text-1)}
+.dim{color:var(--text-2);margin:0}
+
+/* ---------------- layout primitives ---------------- */
+.stack>*+*{margin-top:14px}
+.row{display:flex;gap:24px;align-items:center}
+.grid{display:grid;gap:24px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.mt-s{margin-top:8px}.mt-m{margin-top:18px}.mt-l{margin-top:32px}
+
+/* ---------------- sidebar (module chrome) ---------------- */
+.sidebar{border-right:1px solid var(--border-strong);padding-right:32px;position:relative}
+.sidebar .brand{font-family:var(--font-serif);font-size:21px;font-weight:600;font-variation-settings:'opsz' 40;color:var(--text-1)}
+.sidebar h5{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:var(--text-3);margin:34px 0 10px}
+.obj-list{list-style:none;padding:0;margin:0;font-size:13.5px;color:var(--text-2);line-height:1.5;counter-reset:obj}
+.obj-list li{padding:9px 0 9px 26px;position:relative;border-bottom:1px solid var(--border);counter-increment:obj}
+.obj-list li::before{content:counter(obj,decimal-leading-zero);position:absolute;left:0;top:10px;
+  font-family:var(--font-mono);font-size:11px;color:var(--text-3)}
+.obj-list li.done{color:var(--text-3)}
+.obj-list li.done::before{color:var(--accent)}
+.obj-list li.current{color:var(--text-1);font-weight:700}
+.obj-list li.current::before{color:var(--accent);font-weight:700}
+.obj-list li.current::after{content:"";position:absolute;left:-32px;top:8px;bottom:8px;width:3px;background:var(--accent)}
+.main{min-width:0}
+
+/* ---------------- course components ---------------- */
+.callout{border-left:3px solid var(--accent);background:var(--surface-2);padding:20px 24px;margin-top:24px;max-width:65ch}
+.callout b{color:var(--accent)}
+.concept-box{border-top:1px solid var(--border-strong);padding:18px 4px 6px}
+.concept-box h4{margin-top:0;margin-bottom:6px}
+.concept-box .dim{font-size:15px;line-height:1.55;margin:0 0 10px}
+.exercise{background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius);padding:24px 28px;max-width:70ch}
+.exercise::before{content:"Exercise";display:block;font-size:12px;font-weight:700;letter-spacing:.14em;
+  color:var(--accent);margin-bottom:10px;text-transform:uppercase}
+.code{background:#26211a;color:#f0ece1;border-radius:var(--radius);padding:20px 24px;
+  font-family:var(--font-mono);font-size:14px;line-height:1.7;overflow:auto;max-width:70ch}
+.code .cmt{color:#928871;font-style:italic}
+.code .kw{color:#e3b577}
+.code .str{color:#8ec6b2}
+.mcq{border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;margin-bottom:10px;
+  display:flex;gap:14px;align-items:flex-start;max-width:72ch}
+.mcq .letter{flex:none;width:28px;height:28px;border-radius:50%;border:1.5px solid var(--border-strong);
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:var(--text-2);
+  font-family:var(--font-mono)}
+.mcq.correct{border-color:var(--accent);background:rgba(45,125,110,.06)}
+.mcq.correct .letter{border-color:var(--accent);background:var(--accent);color:#fbfaf6}
+.pill-academic{display:inline-block;padding:5px 12px;border-radius:3px;border:1px solid var(--border-strong);
+  font-size:12px;color:var(--text-2);font-family:var(--font-mono)}
+.pill-academic b{color:var(--text-1);font-weight:600}
+
+/* ---------------- footer chrome ---------------- */
+.deck-footer{position:absolute;left:80px;right:80px;bottom:40px;display:flex;align-items:baseline;
+  justify-content:space-between;font-family:var(--font-mono);font-size:12px;letter-spacing:.02em;color:var(--text-3)}
+.slide-number::before{content:attr(data-current)}
+.slide-number::after{content:" / " attr(data-total)}
+
+/* ---------------- full-slide variants ---------------- */
+.slide.full .h1{max-width:20ch;margin-bottom:0}
+.slide.full .lede{margin-top:20px}
+.slide.full .grid.g2{gap:0 40px}
+.slide.full .callout{margin-top:20px}
+
+/* ---------------- entrance motion (transform+opacity only, ease-out, staggered) ---------------- */
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.sidebar,.main>*,.slide.full>*{animation:rise .55s var(--ease) both}
+.main>*:nth-child(2),.slide.full>*:nth-child(2){animation-delay:.06s}
+.main>*:nth-child(3),.slide.full>*:nth-child(3){animation-delay:.12s}
+.main>*:nth-child(4),.slide.full>*:nth-child(4){animation-delay:.18s}
+.main>*:nth-child(n+5),.slide.full>*:nth-child(n+5){animation-delay:.24s}
+@media (prefers-reduced-motion:reduce){
+  .sidebar,.main>*,.slide.full>*{animation:none}
+}
+
+/* ---------------- print ---------------- */
+@media print{
+  .slide{border-bottom:none}
+}
+</style></head>
+<body class="tpl-course-module">
+<div class="deck">
+
+  <!-- 1. Cover -->
+  <section class="slide full" data-title="Cover">
+    <p class="kicker">PROFESSIONAL TRAINING · MODULE 01</p>
+    <h1 class="h1 mt-s">Guest-ready in 30 days: the<br>new-hire onboarding <em>module</em>.</h1>
+    <p class="lede mt-l" style="max-width:62ch">Build and run a first-30-days onboarding module for new hospitality hires — the shift behaviors, the shadow-and-practice loop, the manager checks, and the follow-up conversations that turn a new hire into a guest-ready teammate.</p>
+    <div class="row mt-l" style="gap:16px">
+      <span class="pill-academic">~ 45 min hands-on</span>
+      <span class="pill-academic">audience · new hires + managers</span>
+      <span class="pill-academic">outcome · day-1 shift ready</span>
+    </div>
+    <div class="deck-footer"><span>Harbor Row Hotels · People &amp; Learning</span><span class="slide-number" data-current="1" data-total="7"></span></div>
+  </section>
+
+  <!-- 2. Objectives -->
+  <section class="slide" data-title="Objectives">
+    <aside class="sidebar">
+      <div class="brand">Onboarding · M01</div>
+      <h5>Learning objectives</h5>
+      <ul class="obj-list">
+        <li class="current">Why the first 30 days matter</li>
+        <li>Run the onboarding workflow</li>
+        <li>Watch a shift demo</li>
+        <li>Practice the greet-and-seat</li>
+        <li>Check + manager follow-up</li>
+      </ul>
+      <h5>Module progress</h5>
+      <p class="dim" style="font-size:13px">Page 2 of 7 · ~5 min in</p>
+    </aside>
+    <div class="main">
+      <p class="kicker">WHY IT MATTERS</p>
+      <h2 class="h2 mt-s">By the end, you will be able to…</h2>
+      <div class="stack mt-l">
+        <div class="concept-box"><h4>① Explain why the first 30 days decide retention.</h4><p class="dim">Hires who don't shadow a real shift in week one leave 2.4x more often before day 90 — front desk and F&B data across our 42 properties says the same thing.</p></div>
+        <div class="concept-box"><h4>② Run the 3-shift onboarding workflow.</h4><p class="dim">Observe, co-work, solo-with-support — each shift has one owner, one checklist, and one 5-minute huddle.</p></div>
+        <div class="concept-box"><h4>③ Perform the core guest interaction.</h4><p class="dim">The greet-and-seat script, standard turnaround time, and the three phrases every guest should hear.</p></div>
+        <div class="concept-box"><h4>④ Close the loop with a manager check-in.</h4><p class="dim">Day 7, day 14, and day 30 conversations, plus what "ready for solo shifts" actually looks like.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Concept -->
+  <section class="slide" data-title="Concept">
+    <aside class="sidebar">
+      <div class="brand">Onboarding · M01</div>
+      <h5>Learning objectives</h5>
+      <ul class="obj-list">
+        <li class="done">Why the first 30 days matter</li>
+        <li class="current">Run the onboarding workflow</li>
+        <li>Watch a shift demo</li>
+        <li>Practice the greet-and-seat</li>
+        <li>Check + manager follow-up</li>
+      </ul>
+      <h5>Key terms</h5>
+      <p class="dim" style="font-size:13px">shadow shift · buddy · huddle · readiness check</p>
+    </aside>
+    <div class="main">
+      <p class="kicker">THE WORKFLOW</p>
+      <h2 class="h2 mt-s">Two parts, every shift.</h2>
+      <p class="lede mt-m">Every onboarding shift has exactly two moving parts: the <b>buddy</b> assigned to that new hire, and the <b>5-minute huddle</b> that opens and closes the shift — what we're watching for, what we saw.</p>
+      <div class="callout">
+        <b>Rule of thumb.</b> Don't hand a new hire a manual — hand them a buddy and a checklist. The buddy narrates decisions out loud; the checklist turns "watch me" into "now you."
+      </div>
+      <div class="grid g2 mt-l">
+        <div class="concept-box"><h4>The buddy</h4><p class="dim">A shift lead with 6+ months tenure, paired for all 3 onboarding shifts — same buddy, same hire.</p><p class="pill-academic">e.g. <b>front desk · F&amp;B · housekeeping</b></p></div>
+        <div class="concept-box"><h4>The huddle</h4><p class="dim">5 minutes before and after each shift: one goal in, one observation out — logged on the readiness card.</p><p class="pill-academic">e.g. <b>observe → co-work → solo</b></p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Example -->
+  <section class="slide" data-title="Example">
+    <aside class="sidebar">
+      <div class="brand">Onboarding · M01</div>
+      <h5>Learning objectives</h5>
+      <ul class="obj-list">
+        <li class="done">Why the first 30 days matter</li>
+        <li class="done">Run the onboarding workflow</li>
+        <li class="current">Watch a shift demo</li>
+        <li>Practice the greet-and-seat</li>
+        <li>Check + manager follow-up</li>
+      </ul>
+      <h5>Try it yourself</h5>
+      <p class="dim" style="font-size:13px">Shadow the script on the right during your next shadow shift, then run it solo with your buddy watching.</p>
+    </aside>
+    <div class="main">
+      <p class="kicker">SHIFT DEMO</p>
+      <h2 class="h2 mt-s">The greet-and-seat, start to finish.</h2>
+      <div class="code mt-m"><pre style="margin:0"><span class="cmt"># target: under 90 seconds, door to seated</span>
+<span class="kw">01</span> Eye contact + name: <span class="str">"Welcome back, Ms. Alvarez"</span>
+<span class="kw">02</span> Confirm party size + any notes on file
+<span class="kw">03</span> Walk the table, don't point — <span class="cmt"># narrate as you go</span>
+pace <span class="kw">to</span> guest, <span class="kw">not</span> to kitchen</pre></div>
+      <div class="callout">
+        <b>What just happened.</b> The buddy ran the 90-second greet-and-seat while narrating each decision out loud, then logged it on the readiness card — that narration is what the new hire copies on shift two.
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Exercise -->
+  <section class="slide" data-title="Exercise">
+    <aside class="sidebar">
+      <div class="brand">Onboarding · M01</div>
+      <h5>Learning objectives</h5>
+      <ul class="obj-list">
+        <li class="done">Why the first 30 days matter</li>
+        <li class="done">Run the onboarding workflow</li>
+        <li class="done">Watch a shift demo</li>
+        <li class="current">Practice the greet-and-seat</li>
+        <li>Check + manager follow-up</li>
+      </ul>
+      <h5>Time</h5>
+      <p class="dim" style="font-size:13px">~10 minutes · with buddy</p>
+    </aside>
+    <div class="main">
+      <p class="kicker">SHIFT 2 · CO-WORK</p>
+      <h2 class="h2 mt-s">Run <em>your first greet-and-seat</em>.</h2>
+      <p class="lede mt-m">From watching to doing — in four steps, with your buddy standing one pace back.</p>
+      <div class="exercise mt-l">
+        <p style="margin:0;font-size:18px;color:var(--text-1)"><b>Your task</b></p>
+        <ol style="color:var(--text-2);line-height:1.8;margin:10px 0 0">
+          <li>Take the next three parties solo while your buddy observes from the host stand.</li>
+          <li>Use the three required phrases — welcome, confirm, walk — every single time.</li>
+          <li>Log your own turnaround time on the readiness card after each party.</li>
+          <li>Bonus: handle one seating conflict and narrate your choice to your buddy afterward.</li>
+        </ol>
+      </div>
+      <p class="dim mt-m" style="font-size:14px">Stuck? Remember: every shift you log becomes evidence for your day-14 readiness check.</p>
+    </div>
+  </section>
+
+  <!-- 6. Check understanding -->
+  <section class="slide" data-title="Check">
+    <aside class="sidebar">
+      <div class="brand">Onboarding · M01</div>
+      <h5>Learning objectives</h5>
+      <ul class="obj-list">
+        <li class="done">Why the first 30 days matter</li>
+        <li class="done">Run the onboarding workflow</li>
+        <li class="done">Watch a shift demo</li>
+        <li class="done">Practice the greet-and-seat</li>
+        <li class="current">Check + manager follow-up</li>
+      </ul>
+      <h5>Self-assess</h5>
+      <p class="dim" style="font-size:13px">You should get 3/3.</p>
+    </aside>
+    <div class="main">
+      <p class="kicker">CHECK YOUR UNDERSTANDING</p>
+      <h2 class="h2 mt-s">What makes a new hire "solo-shift ready"?</h2>
+      <div class="mt-l">
+        <div class="mcq"><div class="letter">A</div><div><b>They finished the online orientation video</b><p class="dim" style="font-size:13px;margin:4px 0 0">No — the video covers policy, not the greet-and-seat or table-walk skills a shift actually needs.</p></div></div>
+        <div class="mcq correct"><div class="letter">B</div><div><b>Their buddy signs off on 3 shadow shifts and a clean readiness card</b><p class="dim" style="font-size:13px;margin:4px 0 0"><b style="color:var(--accent)">✓ Correct.</b> Observe, co-work, solo-with-support — each logged and signed by the same buddy.</p></div></div>
+        <div class="mcq"><div class="letter">C</div><div><b>They've worked at the property for at least two weeks</b><p class="dim" style="font-size:13px;margin:4px 0 0">No — tenure alone isn't readiness; the readiness card is what unlocks solo shifts, not the calendar.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. Summary -->
+  <section class="slide full" data-title="Summary">
+    <p class="kicker">SUMMARY · MODULE 01</p>
+    <h1 class="h1 mt-s">Next behavior: book the <em>day-30</em> check-in.</h1>
+    <div class="grid g2 mt-l">
+      <div class="concept-box"><h4>✓ Explain why 30 days matter</h4><p class="dim">Shadowed hires stay 2.4x longer past day 90 — the module exists to make that shadowing repeatable.</p></div>
+      <div class="concept-box"><h4>✓ Run the onboarding workflow</h4><p class="dim">One buddy, three shifts, a 5-minute huddle before and after each one.</p></div>
+      <div class="concept-box"><h4>✓ Perform the greet-and-seat</h4><p class="dim">Under 90 seconds, three required phrases, logged turnaround time.</p></div>
+      <div class="concept-box"><h4>✓ Close the loop with your manager</h4><p class="dim">Day 7 check-in, day 14 readiness review, day 30 solo-shift sign-off.</p></div>
+    </div>
+    <div class="callout mt-l">
+      <b>Up next.</b> Managers: put the day-7, day-14, and day-30 check-ins on the calendar today — new hires: bring your readiness card to each one.
+    </div>
+  </section>
+
+</div>
+
+</body></html>

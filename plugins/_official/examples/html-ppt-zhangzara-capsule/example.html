@@ -1,0 +1,1417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Write a Year-End Self-Review like a Promotion-Committee Insider - Career</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,600..800;1,6..96,600..800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  :root {
+    --bg: #F5F5F0;
+    --fg: #1A1A1A;
+    --coral: #E85D4E;
+    --lime: #C4D94E;
+    --lavender: #C5B5E0;
+    --sky: #8BB4F7;
+    --violet: #A06CE8;
+    --yellow: #F2D160;
+    --peach: #F5B895;
+    --outline: #1E1E1E;
+    --card: #FCFBF6;
+    /* darker ink-tones of the family hues, for text on light surfaces */
+    --coral-ink: #C73D2E;
+    --lime-ink: #6E7C1A;
+    --sky-ink: #2D5FBF;
+    --violet-ink: #7A3FD1;
+    --shadow: var(--outline);
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    --font-display: 'Bodoni Moda', serif;
+    --font-body: 'Space Grotesk', sans-serif;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    font-family: var(--font-body);
+    color: var(--fg);
+  }
+
+  /* Grain texture overlay */
+  .grain-overlay {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.04;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 200px 200px;
+  }
+
+  .presentation {
+    width: 100%;
+    height: 100%;
+    position: relative;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 3rem 4rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.5s var(--ease);
+    overflow: hidden;
+  }
+
+  .slide.active {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  /* Entrance: transform + opacity only, staggered, ease-out */
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .slide.active > * {
+    animation: rise 0.6s var(--ease) both;
+  }
+
+  .slide.active > *:nth-child(2) { animation-delay: 0.07s; }
+  .slide.active > *:nth-child(3) { animation-delay: 0.14s; }
+  .slide.active > *:nth-child(4) { animation-delay: 0.21s; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .slide { transition: none; }
+    .slide.active > * { animation: none; }
+  }
+
+  /* Decorative pill elements */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    border: 2px solid var(--outline);
+    font-family: var(--font-body);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+
+  .pill-filled {
+    border-width: 2px;
+  }
+
+  .pill-coral { background: var(--coral); }
+  .pill-lime { background: var(--lime); }
+  .pill-lavender { background: var(--lavender); }
+  .pill-sky { background: var(--sky); }
+  .pill-violet { background: var(--violet); }
+  .pill-yellow { background: var(--yellow); }
+  .pill-peach { background: var(--peach); }
+  .pill-white { background: var(--card); }
+
+  .pill-outline {
+    background: transparent;
+  }
+
+  /* Navigation dots */
+  .nav-dots {
+    position: fixed;
+    right: 2rem;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    z-index: 100;
+  }
+
+  .nav-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid var(--outline);
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.25s var(--ease), transform 0.25s var(--ease);
+  }
+
+  .nav-dot.active {
+    background: var(--outline);
+    transform: scale(1.2);
+  }
+
+  /* Slide counter */
+  .slide-counter {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg);
+    opacity: 0.74;
+    z-index: 100;
+  }
+
+  /* Keyboard hint */
+  .nav-hint {
+    position: fixed;
+    bottom: 2rem;
+    left: 2rem;
+    font-family: var(--font-body);
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg);
+    opacity: 0.7;
+    z-index: 100;
+  }
+
+  /* ============================================
+     SLIDE 1 — Title
+     ============================================ */
+  .slide-1 {
+    justify-content: center;
+    align-items: center;
+    background: var(--bg);
+  }
+
+  .slide-1 .deco-pills {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .slide-1 .deco-pill {
+    position: absolute;
+    border-radius: 9999px;
+    border: 2px solid var(--outline);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-body);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .slide-1 .main-title {
+    font-family: var(--font-display);
+    font-size: clamp(3rem, 8vw, 7rem);
+    font-weight: 800;
+    line-height: 0.9;
+    text-align: center;
+    letter-spacing: -0.02em;
+    color: var(--fg);
+    position: relative;
+    z-index: 2;
+  }
+
+  .slide-1 .main-title .subtitle {
+    display: block;
+    font-family: var(--font-body);
+    font-size: clamp(0.8rem, 1.5vw, 1.1rem);
+    font-weight: 400;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-top: 1.5rem;
+    color: var(--fg);
+    opacity: 0.82;
+  }
+
+  .slide-1 .title-pill {
+    position: relative;
+    z-index: 2;
+    background: var(--yellow);
+    padding: 1.5rem 3.5rem;
+    border-radius: 9999px;
+    border: 2px solid var(--outline);
+    margin-bottom: 2rem;
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 0.85rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  /* ============================================
+     SLIDE 2 — Introduction / Split
+     ============================================ */
+  .slide-2 {
+    justify-content: center;
+    background: var(--bg);
+  }
+
+  .slide-2 .slide-inner {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4rem;
+    align-items: center;
+    max-width: 1200px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .slide-2 .left-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .slide-2 .left-content h2 {
+    font-family: var(--font-display);
+    font-size: clamp(2rem, 4vw, 3.5rem);
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+  }
+
+  .slide-2 .left-content p {
+    font-family: var(--font-body);
+    font-size: clamp(0.95rem, 1.2vw, 1.15rem);
+    line-height: 1.6;
+    opacity: 0.8;
+    max-width: 60ch;
+  }
+
+  .slide-2 .left-content .accent-line {
+    width: 60px;
+    height: 4px;
+    background: var(--coral);
+    border-radius: 9999px;
+  }
+
+  .slide-2 .right-visual {
+    position: relative;
+    height: 400px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .slide-2 .right-visual .orbit-pill {
+    position: absolute;
+    border-radius: 9999px;
+    border: 2px solid var(--outline);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    box-shadow: 6px 6px 0 var(--shadow);
+  }
+
+  .slide-2 .right-visual .orbit-center {
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    background: var(--lime);
+    border: 2px solid var(--outline);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-size: 2.5rem;
+    font-weight: 700;
+    z-index: 2;
+  }
+
+  /* ============================================
+     SLIDE 3 — Three Pillars / Cards
+     ============================================ */
+  .slide-3 {
+    justify-content: center;
+    background: var(--bg);
+  }
+
+  .slide-3 .slide-inner {
+    max-width: 1200px;
+    width: 100%;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 3rem;
+  }
+
+  .slide-3 .slide-header {
+    text-align: center;
+    margin-bottom: 1rem;
+  }
+
+  .slide-3 .slide-header h2 {
+    font-family: var(--font-display);
+    font-size: clamp(1.8rem, 3.5vw, 3rem);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .slide-3 .slide-header .header-pill {
+    display: inline-block;
+    background: var(--lavender);
+    padding: 0.4rem 1.2rem;
+    border-radius: 9999px;
+    border: 2px solid var(--outline);
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 1rem;
+  }
+
+  .slide-3 .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2rem;
+  }
+
+  .slide-3 .pillar-card {
+    background: var(--card);
+    border: 2px solid var(--outline);
+    border-radius: 2rem;
+    padding: 2.5rem 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    box-shadow: 6px 6px 0 var(--shadow);
+    transition: transform 0.3s var(--ease);
+  }
+
+  .slide-3 .pillar-card:hover {
+    transform: translate(-3px, -3px);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .slide-3 .pillar-card:hover { transform: none; }
+  }
+
+  .slide-3 .pillar-card .card-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: 2px solid var(--outline);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .slide-3 .pillar-card h3 {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+
+  .slide-3 .pillar-card p {
+    font-size: 0.9rem;
+    line-height: 1.55;
+    opacity: 0.84;
+  }
+
+  /* ============================================
+     SLIDE 4 — Data / Bar Chart
+     ============================================ */
+  .slide-4 {
+    justify-content: center;
+    background: var(--bg);
+  }
+
+  .slide-4 .slide-inner {
+    max-width: 1000px;
+    width: 100%;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+  }
+
+  .slide-4 .slide-header h2 {
+    font-family: var(--font-display);
+    font-size: clamp(1.8rem, 3.5vw, 3rem);
+    font-weight: 700;
+    text-align: center;
+    letter-spacing: -0.01em;
+  }
+
+  .slide-4 .chart-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    background: var(--card);
+    border: 2px solid var(--outline);
+    border-radius: 2rem;
+    padding: 3rem;
+    box-shadow: 6px 6px 0 var(--shadow);
+  }
+
+  .slide-4 .chart-row {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  .slide-4 .chart-label {
+    width: 140px;
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .slide-4 .chart-bar-track {
+    flex: 1;
+    height: 36px;
+    background: var(--bg);
+    border-radius: 9999px;
+    border: 2px solid var(--outline);
+    overflow: hidden;
+    position: relative;
+  }
+
+  .slide-4 .chart-bar-fill {
+    height: 100%;
+    border-radius: 9999px;
+    transition: width 1s var(--ease);
+    border-right: 2px solid var(--outline);
+    /* value is read from the column on the right; the duplicate inside the bar is visually muted */
+    font-size: 0;
+    color: transparent;
+  }
+
+  .slide-4 .chart-value {
+    width: 72px;
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    flex-shrink: 0;
+  }
+
+  /* ============================================
+     SLIDE 5 — Statement / Quote
+     ============================================ */
+  .slide-5 {
+    justify-content: center;
+    align-items: center;
+    background: var(--bg);
+  }
+
+  .slide-5 .statement-box {
+    max-width: 900px;
+    text-align: center;
+    position: relative;
+    padding: 3rem;
+  }
+
+  .slide-5 .statement-box .quote-mark {
+    font-family: var(--font-display);
+    font-size: 8rem;
+    line-height: 0;
+    color: var(--coral);
+    opacity: 0.3;
+    position: absolute;
+    top: 2rem;
+    left: 0;
+  }
+
+  .slide-5 .statement-box blockquote {
+    font-family: var(--font-display);
+    font-size: clamp(1.6rem, 3.5vw, 3rem);
+    font-weight: 600;
+    font-style: italic;
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+    position: relative;
+    z-index: 1;
+  }
+
+  .slide-5 .statement-box .quote-highlight {
+    display: inline-block;
+    background: var(--lime);
+    padding: 0.1rem 0.8rem;
+    border-radius: 9999px;
+    border: 2px solid var(--outline);
+    font-style: normal;
+    font-weight: 700;
+  }
+
+  .slide-5 .statement-box .quote-highlight.alt {
+    background: var(--sky);
+  }
+
+  .slide-5 .statement-box .attribution {
+    margin-top: 2rem;
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.78;
+  }
+
+  .slide-5 .floating-pills {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .slide-5 .floating-pills .f-pill {
+    position: absolute;
+    border-radius: 9999px;
+    border: 2px solid var(--outline);
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ============================================
+     SLIDE 6 — Process / Timeline
+     ============================================ */
+  .slide-6 {
+    justify-content: center;
+    background: var(--bg);
+  }
+
+  .slide-6 .slide-inner {
+    max-width: 1100px;
+    width: 100%;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+  }
+
+  .slide-6 .slide-header {
+    text-align: center;
+  }
+
+  .slide-6 .slide-header h2 {
+    font-family: var(--font-display);
+    font-size: clamp(1.8rem, 3.5vw, 3rem);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .slide-6 .timeline {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    position: relative;
+    padding-top: 1rem;
+  }
+
+  .slide-6 .timeline-track {
+    position: absolute;
+    top: 2.5rem;
+    left: 5%;
+    right: 5%;
+    height: 4px;
+    background: var(--bg);
+    border-radius: 9999px;
+    border: 2px solid var(--outline);
+    z-index: 0;
+  }
+
+  .slide-6 .timeline-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    position: relative;
+    z-index: 1;
+    flex: 1;
+    max-width: 220px;
+  }
+
+  .slide-6 .timeline-step .step-node {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 2px solid var(--outline);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    font-weight: 700;
+    background: var(--card);
+    flex-shrink: 0;
+    box-shadow: 4px 4px 0 var(--shadow);
+  }
+
+  .slide-6 .timeline-step .step-label {
+    text-align: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    line-height: 1.3;
+  }
+
+  .slide-6 .timeline-step .step-desc {
+    text-align: center;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    opacity: 0.8;
+    margin-top: -0.5rem;
+  }
+
+  /* ============================================
+     SLIDE 7 — Statistics / Numbers
+     ============================================ */
+  .slide-7 {
+    justify-content: center;
+    background: var(--bg);
+  }
+
+  .slide-7 .slide-inner {
+    max-width: 1100px;
+    width: 100%;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 3rem;
+  }
+
+  .slide-7 .slide-header {
+    text-align: center;
+  }
+
+  .slide-7 .slide-header h2 {
+    font-family: var(--font-display);
+    font-size: clamp(1.8rem, 3.5vw, 3rem);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .slide-7 .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+  }
+
+  .slide-7 .stat-pill {
+    background: var(--card);
+    border: 2px solid var(--outline);
+    border-radius: 2rem;
+    padding: 2rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0.75rem;
+    box-shadow: 5px 5px 0 var(--shadow);
+  }
+
+  .slide-7 .stat-pill .stat-number {
+    font-family: var(--font-display);
+    font-size: clamp(2rem, 3.5vw, 3rem);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+
+  .slide-7 .stat-pill .stat-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.82;
+    line-height: 1.3;
+  }
+
+  .slide-7 .stat-pill .stat-bar {
+    width: 40px;
+    height: 4px;
+    border-radius: 9999px;
+    margin-top: 0.25rem;
+  }
+
+  /* ============================================
+     SLIDE 8 — Diagram / Flow
+     ============================================ */
+  .slide-8 {
+    justify-content: center;
+    background: var(--bg);
+  }
+
+  .slide-8 .slide-inner {
+    max-width: 1000px;
+    width: 100%;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+  }
+
+  .slide-8 .slide-header {
+    text-align: center;
+  }
+
+  .slide-8 .slide-header h2 {
+    font-family: var(--font-display);
+    font-size: clamp(1.8rem, 3.5vw, 3rem);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .slide-8 .diagram-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    position: relative;
+  }
+
+  .slide-8 .diagram-node {
+    border-radius: 9999px;
+    border: 2px solid var(--outline);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.85rem;
+    line-height: 1.3;
+    padding: 1rem 2rem;
+    box-shadow: 5px 5px 0 var(--shadow);
+    z-index: 2;
+    background: var(--card);
+    min-width: 140px;
+    min-height: 60px;
+  }
+
+  .slide-8 .diagram-connector {
+    width: 50px;
+    height: 4px;
+    background: var(--outline);
+    position: relative;
+  }
+
+  .slide-8 .diagram-connector::after {
+    content: '';
+    position: absolute;
+    right: -6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-top: 6px solid transparent;
+    border-bottom: 6px solid transparent;
+    border-left: 10px solid var(--outline);
+  }
+
+  .slide-8 .diagram-branch {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .slide-8 .diagram-joiner {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2px;
+    height: 100%;
+    background: var(--outline);
+    z-index: 0;
+  }
+
+  /* ============================================
+     SLIDE 9 — Split with Visual Frame
+     ============================================ */
+  .slide-9 {
+    justify-content: center;
+    background: var(--bg);
+  }
+
+  .slide-9 .slide-inner {
+    max-width: 1200px;
+    width: 100%;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4rem;
+    align-items: center;
+  }
+
+  .slide-9 .visual-side {
+    position: relative;
+    height: 450px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .slide-9 .visual-frame {
+    width: 100%;
+    height: 100%;
+    border-radius: 2rem;
+    border: 2px solid var(--outline);
+    background: var(--sky);
+    position: relative;
+    overflow: hidden;
+    box-shadow: 8px 8px 0 var(--shadow);
+  }
+
+  .slide-9 .visual-frame .frame-pattern {
+    position: absolute;
+    inset: 0;
+    opacity: 0.18;
+    background-image:
+      radial-gradient(circle at 25% 25%, var(--outline) 2px, transparent 2px),
+      radial-gradient(circle at 75% 75%, var(--outline) 2px, transparent 2px);
+    background-size: 40px 40px;
+  }
+
+  .slide-9 .visual-frame .frame-content {
+    position: absolute;
+    inset: 2rem;
+    border-radius: 1.5rem;
+    border: 2px dashed var(--outline);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .slide-9 .visual-frame .frame-content span {
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    opacity: 0.75;
+  }
+
+  .slide-9 .text-side {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .slide-9 .text-side h2 {
+    font-family: var(--font-display);
+    font-size: clamp(2rem, 4vw, 3.5rem);
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+  }
+
+  .slide-9 .text-side p {
+    font-size: clamp(0.9rem, 1.1vw, 1.05rem);
+    line-height: 1.6;
+    opacity: 0.84;
+    max-width: 60ch;
+  }
+
+  .slide-9 .text-side .text-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-top: 0.5rem;
+  }
+
+  .slide-9 .text-side .text-pills .mini-pill {
+    padding: 0.35rem 1rem;
+    border-radius: 9999px;
+    border: 2px solid var(--outline);
+    font-size: 0.7rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* ============================================
+     SLIDE 10 — Closing
+     ============================================ */
+  .slide-10 {
+    justify-content: center;
+    align-items: center;
+    background: var(--bg);
+  }
+
+  .slide-10 .closing-content {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    position: relative;
+    z-index: 2;
+  }
+
+  .slide-10 .closing-pill {
+    background: var(--yellow);
+    padding: 1rem 2.5rem;
+    border-radius: 9999px;
+    border: 2px solid var(--outline);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+
+  .slide-10 h2 {
+    font-family: var(--font-display);
+    font-size: clamp(2.5rem, 6vw, 5rem);
+    font-weight: 800;
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    max-width: 700px;
+  }
+
+  .slide-10 .closing-line {
+    width: 80px;
+    height: 4px;
+    background: var(--coral);
+    border-radius: 9999px;
+  }
+
+  .slide-10 .closing-sub {
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    opacity: 0.7;
+  }
+
+  .slide-10 .deco-pills-closing {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .slide-10 .deco-pills-closing .c-pill {
+    position: absolute;
+    border-radius: 9999px;
+    border: 2px solid var(--outline);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* Responsive adjustments */
+  @media (max-width: 900px) {
+    .slide { padding: 2rem; }
+    .slide-2 .slide-inner,
+    .slide-9 .slide-inner { grid-template-columns: 1fr; gap: 2rem; }
+    .slide-3 .cards-grid { grid-template-columns: 1fr; }
+    .slide-7 .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .slide-6 .timeline { flex-direction: column; align-items: center; gap: 2rem; }
+    .slide-6 .timeline-track { display: none; }
+    .slide-4 .chart-row { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+    .slide-4 .chart-label { text-align: left; }
+    .nav-dots { display: none; }
+  }
+
+  @media (max-width: 600px) {
+    .slide-7 .stats-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="grain-overlay"></div>
+
+<div class="presentation">
+
+  <!-- SLIDE 1: Title -->
+  <div class="slide slide-1 active" data-slide="1">
+    <div class="deco-pills">
+      <div class="deco-pill pill-coral" style="width:120px;height:55px;top:12%;left:8%;transform:rotate(-12deg);font-size:0.85rem;">Ownership</div>
+      <div class="deco-pill pill-lavender" style="width:160px;height:60px;top:18%;right:12%;transform:rotate(8deg);font-size:0.9rem;">Judgment</div>
+      <div class="deco-pill pill-sky" style="width:110px;height:50px;top:72%;left:15%;transform:rotate(6deg);font-size:0.8rem;">Impact</div>
+      <div class="deco-pill pill-lime" style="width:135px;height:55px;top:78%;right:18%;transform:rotate(-8deg);font-size:0.85rem;">Craft</div>
+      <div class="deco-pill pill-peach" style="width:85px;height:85px;border-radius:50%;top:15%;left:45%;transform:rotate(0deg);font-size:0.75rem;">FY2025</div>
+      <div class="deco-pill pill-white" style="width:105px;height:48px;top:65%;right:8%;transform:rotate(15deg);font-size:0.75rem;opacity:0.6;">Scope</div>
+      <div class="deco-pill pill-violet" style="width:90px;height:90px;border-radius:50%;top:75%;left:5%;transform:rotate(0deg);font-size:0.7rem;">Ask</div>
+    </div>
+    <div class="title-pill">FY2025 Self-Review &middot; Product Management &middot; Fenwick Financial</div>
+    <h1 class="main-title">
+      MAYA CHEN
+      <span class="subtitle">Senior PM, Checkout &amp; Payments — The Case for Group PM</span>
+    </h1>
+  </div>
+
+  <!-- SLIDE 2: Introduction Split -->
+  <div class="slide slide-2" data-slide="2">
+    <div class="slide-inner">
+      <div class="left-content">
+        <div class="accent-line"></div>
+        <h2>Owned Checkout End-to-End Through a Pricing Overhaul and a Live Outage</h2>
+        <p>Since March 2025 I've run the Checkout &amp; Payments pod — one designer, four engineers, and a standing seat with Risk and Data Science. The mandate: protect conversion while a mandated interchange-fee change and rising fraud losses pulled in opposite directions.</p>
+        <p>I set the roadmap, wrote every PRD from problem statement to rollout plan, and was the on-call decision-maker the two times checkout broke in production.</p>
+      </div>
+      <div class="right-visual">
+        <div class="orbit-center">PM</div>
+        <div class="orbit-pill pill-coral" style="width:90px;height:42px;top:10%;left:20%;transform:rotate(-20deg);">Checkout</div>
+        <div class="orbit-pill pill-lime" style="width:100px;height:45px;top:5%;right:15%;transform:rotate(15deg);">Pricing</div>
+        <div class="orbit-pill pill-sky" style="width:95px;height:42px;bottom:15%;left:10%;transform:rotate(10deg);">Fraud</div>
+        <div class="orbit-pill pill-lavender" style="width:110px;height:48px;bottom:10%;right:10%;transform:rotate(-12deg);">Mobile</div>
+        <div class="orbit-pill pill-yellow" style="width:80px;height:38px;top:40%;left:0%;transform:rotate(25deg);font-size:0.65rem;">Risk</div>
+        <div class="orbit-pill pill-violet" style="width:85px;height:40px;top:45%;right:0%;transform:rotate(-18deg);font-size:0.65rem;">Roadmap</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 3: Three Pillars -->
+  <div class="slide slide-3" data-slide="3">
+    <div class="slide-inner">
+      <div class="slide-header">
+        <div class="header-pill">Proof, Not Adjectives</div>
+        <h2>Three Moments the Numbers Don't Capture</h2>
+      </div>
+      <div class="cards-grid">
+        <div class="pillar-card">
+          <div class="card-icon pill-coral">I</div>
+          <h3>Caught the Pricing Cliff Six Weeks Early</h3>
+          <p>Modeled the Q3 interchange-fee change against actual transaction mix, flagged a projected 4-point drop in gross margin that finance's plan had missed, and shipped a tiered surcharge before the change went live. Margin held flat.</p>
+        </div>
+        <div class="pillar-card">
+          <div class="card-icon pill-lime">II</div>
+          <h3>Ran Recovery During the June Outage</h3>
+          <p>When the payment processor's webhook queue backed up for 47 minutes, I was incident commander: rerouted traffic to the backup processor and shipped the customer-facing status banner within 20 minutes.</p>
+        </div>
+        <div class="pillar-card">
+          <div class="card-icon pill-sky">III</div>
+          <h3>Turned a Losing Test Into the Year's Best Idea</h3>
+          <p>The one-click Apple Pay test lost by 2 points in July. Instead of shelving it, I read the session recordings, found a mistimed permission prompt, fixed it — the rerun became our biggest single-quarter conversion win.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 4: Data / Chart -->
+  <div class="slide slide-4" data-slide="4">
+    <div class="slide-inner">
+      <div class="slide-header">
+        <h2>What I Actually Shipped in FY2025</h2>
+      </div>
+      <div class="chart-container">
+        <div class="chart-row">
+          <div class="chart-label">Experiments Run</div>
+          <div class="chart-bar-track">
+            <div class="chart-bar-fill pill-coral" style="width: 95%;">22</div>
+          </div>
+          <div class="chart-value">22</div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-label">PRDs Shipped</div>
+          <div class="chart-bar-track">
+            <div class="chart-bar-fill pill-lime" style="width: 70%;">14</div>
+          </div>
+          <div class="chart-value">14</div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-label">Launch Reviews Led</div>
+          <div class="chart-bar-track">
+            <div class="chart-bar-fill pill-sky" style="width: 56%;">9</div>
+          </div>
+          <div class="chart-value">9</div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-label">Cross-Team Runbooks</div>
+          <div class="chart-bar-track">
+            <div class="chart-bar-fill pill-violet" style="width: 42%;">6</div>
+          </div>
+          <div class="chart-value">6</div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-label">Postmortems Authored</div>
+          <div class="chart-bar-track">
+            <div class="chart-bar-fill pill-yellow" style="width: 24%;">3</div>
+          </div>
+          <div class="chart-value">3</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 5: Statement / Quote -->
+  <div class="slide slide-5" data-slide="5">
+    <div class="floating-pills">
+      <div class="f-pill pill-coral" style="width:80px;height:35px;top:10%;left:8%;transform:rotate(-15deg);font-size:0.6rem;">Margin</div>
+      <div class="f-pill pill-lavender" style="width:100px;height:40px;top:15%;right:10%;transform:rotate(12deg);font-size:0.65rem;">Judgment</div>
+      <div class="f-pill pill-sky" style="width:90px;height:38px;bottom:12%;left:12%;transform:rotate(8deg);font-size:0.6rem;">Trust</div>
+      <div class="f-pill pill-lime" style="width:110px;height:42px;bottom:18%;right:8%;transform:rotate(-10deg);font-size:0.7rem;">Calibration</div>
+      <div class="f-pill pill-violet" style="width:70px;height:70px;border-radius:50%;top:8%;left:40%;font-size:0.55rem;">Q3</div>
+      <div class="f-pill pill-peach" style="width:75px;height:35px;bottom:8%;left:45%;transform:rotate(20deg);font-size:0.55rem;">Why</div>
+    </div>
+    <div class="statement-box">
+      <div class="quote-mark">&ldquo;</div>
+      <blockquote>
+        Maya didn't just hit her numbers — she was the person calibration trusted to explain <span class="quote-highlight">why</span> the numbers moved, and what she'd do <span class="quote-highlight alt">differently</span> next time.
+      </blockquote>
+      <div class="attribution">Priya Raman &middot; VP Product, Fenwick Financial</div>
+    </div>
+  </div>
+
+  <!-- SLIDE 6: Timeline -->
+  <div class="slide slide-6" data-slide="6">
+    <div class="slide-inner">
+      <div class="slide-header">
+        <h2>The Year, Quarter by Quarter</h2>
+      </div>
+      <div class="timeline">
+        <div class="timeline-track"></div>
+        <div class="timeline-step">
+          <div class="step-node pill-coral">Q1</div>
+          <div class="step-label">Diagnosed the Risk</div>
+          <div class="step-desc">Modeled the pricing cliff before it hit the P&amp;L</div>
+        </div>
+        <div class="timeline-step">
+          <div class="step-node pill-lime">Q2</div>
+          <div class="step-label">Shipped the Fix</div>
+          <div class="step-desc">Tiered surcharge live four weeks ahead of the mandate</div>
+        </div>
+        <div class="timeline-step">
+          <div class="step-node pill-sky">Q3</div>
+          <div class="step-label">Held the Line</div>
+          <div class="step-desc">Incident-commanded the June outage, zero data loss</div>
+        </div>
+        <div class="timeline-step">
+          <div class="step-node pill-violet">Q4</div>
+          <div class="step-label">Compounded the Win</div>
+          <div class="step-desc">Apple Pay fix became the year's top conversion driver</div>
+        </div>
+        <div class="timeline-step">
+          <div class="step-node pill-yellow">Now</div>
+          <div class="step-label">Scaled the Playbook</div>
+          <div class="step-desc">Runbook adopted by two other payments pods</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 7: Statistics -->
+  <div class="slide slide-7" data-slide="7">
+    <div class="slide-inner">
+      <div class="slide-header">
+        <h2>The Impact, in Numbers</h2>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-pill">
+          <div class="stat-number" style="color: var(--coral-ink);">+2.3pt</div>
+          <div class="stat-label">Checkout<br>Conversion</div>
+          <div class="stat-bar pill-coral"></div>
+        </div>
+        <div class="stat-pill">
+          <div class="stat-number" style="color: var(--lime-ink);">$1.4M</div>
+          <div class="stat-label">Margin<br>Protected</div>
+          <div class="stat-bar pill-lime"></div>
+        </div>
+        <div class="stat-pill">
+          <div class="stat-number" style="color: var(--sky-ink);">-31%</div>
+          <div class="stat-label">Fraud<br>Losses</div>
+          <div class="stat-bar pill-sky"></div>
+        </div>
+        <div class="stat-pill">
+          <div class="stat-number" style="color: var(--violet-ink);">0</div>
+          <div class="stat-label">Repeat Outages<br>Since the Fix</div>
+          <div class="stat-bar pill-violet"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 8: Diagram / Flow -->
+  <div class="slide slide-8" data-slide="8">
+    <div class="slide-inner">
+      <div class="slide-header">
+        <h2>The Judgment Call Framework I Built This Year</h2>
+      </div>
+      <div class="diagram-container">
+        <div class="diagram-node pill-white" style="min-width:120px;">Signal</div>
+        <div class="diagram-connector"></div>
+        <div class="diagram-node pill-lavender" style="min-width:140px;">Model the Downside</div>
+        <div class="diagram-connector"></div>
+        <div class="diagram-node" style="background:var(--lime);min-width:120px;">Ship the Smallest Fix</div>
+        <div class="diagram-connector"></div>
+        <div class="diagram-node pill-coral" style="min-width:120px;">Own the Outcome</div>
+      </div>
+      <div style="display:flex;justify-content:center;gap:2rem;margin-top:2.5rem;">
+        <div style="text-align:center;max-width:180px;">
+          <div class="pill pill-filled pill-sky" style="padding:0.5rem 1.2rem;font-size:0.7rem;margin-bottom:0.5rem;">Read the Data First</div>
+          <div style="font-size:0.75rem;opacity:0.84;line-height:1.4;">Every call this year started from the transaction mix, not the dashboard summary</div>
+        </div>
+        <div style="text-align:center;max-width:180px;">
+          <div class="pill pill-filled pill-violet" style="padding:0.5rem 1.2rem;font-size:0.7rem;margin-bottom:0.5rem;">Preview Before Promising</div>
+          <div style="font-size:0.75rem;opacity:0.84;line-height:1.4;">The surcharge and the Apple Pay fix both shipped as a scoped pilot first</div>
+        </div>
+        <div style="text-align:center;max-width:180px;">
+          <div class="pill pill-filled pill-yellow" style="padding:0.5rem 1.2rem;font-size:0.7rem;margin-bottom:0.5rem;">Write It Down Either Way</div>
+          <div style="font-size:0.75rem;opacity:0.84;line-height:1.4;">Postmortems even on good news — that's what made the runbook reusable</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 9: Split with Visual -->
+  <div class="slide slide-9" data-slide="9">
+    <div class="slide-inner">
+      <div class="visual-side">
+        <div class="visual-frame">
+          <div class="frame-pattern"></div>
+          <div class="frame-content">
+            <span>Group PM Charter — Draft</span>
+          </div>
+        </div>
+      </div>
+      <div class="text-side">
+        <h2>What I'm Asking to Own Next</h2>
+        <p>Checkout proved I can carry a pricing overhaul and an outage in the same quarter without dropping either. The Group PM scope extends that ownership to mobile wallet and international checkout, where the same margin-and-trust tradeoffs are already surfacing.</p>
+        <p>It also means leading, not just doing: a team of three PMs, with me setting the roadmap and reviewing their calls the way Priya reviews mine today.</p>
+        <div class="text-pills">
+          <div class="mini-pill pill-coral">Payments</div>
+          <div class="mini-pill pill-lime">Fraud</div>
+          <div class="mini-pill pill-sky">Mobile Wallet</div>
+          <div class="mini-pill pill-violet">Intl. Checkout</div>
+          <div class="mini-pill pill-yellow">People Management</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 10: Closing -->
+  <div class="slide slide-10" data-slide="10">
+    <div class="deco-pills-closing">
+      <div class="c-pill pill-lime" style="width:100px;height:42px;top:15%;left:10%;transform:rotate(-12deg);font-size:0.65rem;">Margin</div>
+      <div class="c-pill pill-sky" style="width:80px;height:38px;top:20%;right:12%;transform:rotate(15deg);font-size:0.6rem;">Trust</div>
+      <div class="c-pill pill-lavender" style="width:110px;height:45px;bottom:20%;left:12%;transform:rotate(10deg);font-size:0.7rem;">Ownership</div>
+      <div class="c-pill pill-coral" style="width:70px;height:70px;border-radius:50%;bottom:15%;right:15%;font-size:0.6rem;">Ask</div>
+      <div class="c-pill pill-violet" style="width:90px;height:40px;top:50%;left:5%;transform:rotate(-20deg);font-size:0.6rem;">Scope</div>
+      <div class="c-pill pill-yellow" style="width:85px;height:38px;top:45%;right:8%;transform:rotate(18deg);font-size:0.55rem;">Impact</div>
+      <div class="c-pill pill-peach" style="width:75px;height:35px;top:8%;left:50%;transform:rotate(5deg);font-size:0.55rem;opacity:0.7;">Judgment</div>
+    </div>
+    <div class="closing-content">
+      <div class="closing-pill">FY2025 Self-Review &middot; The Ask</div>
+      <h2>Promote Me to Group PM, Payments Platform</h2>
+      <div class="closing-line"></div>
+      <div class="closing-sub">Maya Chen &middot; Checkout &amp; Payments &middot; Calibration 2026</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="nav-dots">
+  <div class="nav-dot active" data-slide="1"></div>
+  <div class="nav-dot" data-slide="2"></div>
+  <div class="nav-dot" data-slide="3"></div>
+  <div class="nav-dot" data-slide="4"></div>
+  <div class="nav-dot" data-slide="5"></div>
+  <div class="nav-dot" data-slide="6"></div>
+  <div class="nav-dot" data-slide="7"></div>
+  <div class="nav-dot" data-slide="8"></div>
+  <div class="nav-dot" data-slide="9"></div>
+  <div class="nav-dot" data-slide="10"></div>
+</div>
+
+<div class="slide-counter"><span id="current">01</span> / 10</div>
+<div class="nav-hint">Use arrow keys to navigate</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const dots = document.querySelectorAll('.nav-dot');
+  const counterCurrent = document.getElementById('current');
+  let currentSlide = 1;
+  const totalSlides = slides.length;
+
+  function goToSlide(n) {
+    if (n < 1) n = totalSlides;
+    if (n > totalSlides) n = 1;
+    currentSlide = n;
+
+    slides.forEach(s => s.classList.remove('active'));
+    dots.forEach(d => d.classList.remove('active'));
+
+    const activeSlide = document.querySelector(`.slide[data-slide="${currentSlide}"]`);
+    const activeDot = document.querySelector(`.nav-dot[data-slide="${currentSlide}"]`);
+
+    if (activeSlide) activeSlide.classList.add('active');
+    if (activeDot) activeDot.classList.add('active');
+    counterCurrent.textContent = String(currentSlide).padStart(2, '0');
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+      e.preventDefault();
+      goToSlide(currentSlide + 1);
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      goToSlide(currentSlide - 1);
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      goToSlide(1);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      goToSlide(totalSlides);
+    }
+  });
+
+  dots.forEach(dot => {
+    dot.addEventListener('click', () => {
+      goToSlide(parseInt(dot.dataset.slide));
+    });
+  });
+
+  let touchStartX = 0;
+  let touchEndX = 0;
+
+  document.addEventListener('touchstart', (e) => {
+    touchStartX = e.changedTouches[0].screenX;
+  }, { passive: true });
+
+  document.addEventListener('touchend', (e) => {
+    touchEndX = e.changedTouches[0].screenX;
+    const diff = touchStartX - touchEndX;
+    if (Math.abs(diff) > 50) {
+      if (diff > 0) goToSlide(currentSlide + 1);
+      else goToSlide(currentSlide - 1);
+    }
+  }, { passive: true });
+</script>
+
+</body>
+</html>

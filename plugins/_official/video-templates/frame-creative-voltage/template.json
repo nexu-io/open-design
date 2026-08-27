@@ -1,0 +1,52 @@
+{
+  "id": "frame-creative-voltage",
+  "surface": "hyperframes",
+  "title": "Creative Voltage Frame",
+  "summary": "Electric split with hand-drawn script — offset panels slide in, display title rises with an outlined word, script strokes itself in.",
+  "category": "Presentation",
+  "tags": [
+    "split-panel",
+    "electric",
+    "script",
+    "retro-modern",
+    "voltage",
+    "energetic"
+  ],
+  "engine": "hyperframes",
+  "engineVersion": "^0.4.0",
+  "sourceEntry": "source/index.html",
+  "aspect": "16:9",
+  "fps": 60,
+  "durationSec": 15,
+  "formats": [
+    "mp4",
+    "webm"
+  ],
+  "bestFor": [
+    "Energetic brand / campaign title",
+    "Creative reveal with a human, hand-drawn accent",
+    "Retro-modern hero"
+  ],
+  "source": {
+    "repo": "nexu-io/html-video",
+    "path": "templates/frame-creative-voltage",
+    "license": "Apache-2.0",
+    "author": "nexu-io",
+    "url": "https://github.com/zarazhangrui/frontend-slides"
+  },
+  "provenance": {
+    "origin": {
+      "name": "none (original preset by the L2 skill author)",
+      "kind": "none",
+      "reference": "No specific real-world studio; the 'Creative Voltage' look is an original preset composed by the frontend-slides author"
+    },
+    "via_skill": {
+      "name": "frontend-slides",
+      "author": "Zara Zhang",
+      "url": "https://github.com/zarazhangrui/frontend-slides",
+      "license": "MIT",
+      "source_file": "STYLE_PRESETS.md (preset \"Creative Voltage\")"
+    },
+    "transformation": "Static slide preset → animated hyperframes timeline (offset panels slide in, display title rises with one electric outlined word, handwritten script strokes itself in over a swept underline) built as original CSS/SVG keyframes. Original sample data. No upstream source code copied verbatim.\n"
+  }
+}

@@ -1,0 +1,174 @@
+<template id="08-cta-outro-template">
+
+
+
+  <div
+    data-composition-id="08-cta-outro"
+    data-start="0"
+    data-duration="5"
+    data-width="1920"
+    data-height="1080"
+  >
+    <div class="stage-08">
+      <div class="grid-floor"></div>
+
+      <div class="outro-lockup">
+        <div class="lockup-row">
+          <div class="o-symbol">
+            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="grad-08" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#5E6AD2"/>
+                  <stop offset="100%" stop-color="#A9B0F0"/>
+                </linearGradient>
+              </defs>
+              <path d="M 25 18 L 75 18 L 75 34 L 41 34 L 41 82 L 25 82 Z" fill="url(#grad-08)" />
+            </svg>
+          </div>
+          <div class="o-wordmark">BRANDNAME</div>
+          <div class="shimmer"></div>
+        </div>
+
+        <div class="o-tagline">The product development system for teams and agents.</div>
+
+        <div class="o-cta">Get started &nbsp;—&nbsp; linear.app</div>
+      </div>
+
+      <div class="vignette"></div>
+      <div class="grain"></div>
+    </div>
+
+    <style>
+      [data-composition-id="08-cta-outro"] {
+        position: absolute; inset: 0; overflow: hidden; background: #000;
+      }
+      [data-composition-id="08-cta-outro"] .stage-08 { position: absolute; inset: 0; }
+      [data-composition-id="08-cta-outro"] .grid-floor {
+        position: absolute; inset: 0;
+        transform: perspective(900px) rotateX(60deg) translateY(25%);
+        background:
+          repeating-linear-gradient(0deg,  rgba(255,255,255,0.04) 0 1px, transparent 1px 80px),
+          repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 80px);
+        background-color: #000;
+      }
+      [data-composition-id="08-cta-outro"] .outro-lockup {
+        position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 32px;
+        text-align: center;
+      }
+      [data-composition-id="08-cta-outro"] .lockup-row {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 24px;
+      }
+      [data-composition-id="08-cta-outro"] .o-symbol {
+        width: 100px; height: 100px;
+        filter: drop-shadow(0 0 40px rgba(169,176,240,0.6));
+        opacity: 0;
+      }
+      [data-composition-id="08-cta-outro"] .o-symbol svg { width: 100%; height: 100%; }
+      [data-composition-id="08-cta-outro"] .o-wordmark {
+        font-family: "Inter", sans-serif;
+        font-weight: 600;
+        font-size: 144px;
+        letter-spacing: -0.04em;
+        background: linear-gradient(180deg, #ffffff 0%, #cccccc 60%, #888888 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        color: transparent;
+        text-shadow: 0 0 60px rgba(255,255,255,0.3);
+        opacity: 0;
+      }
+      [data-composition-id="08-cta-outro"] .shimmer {
+        position: absolute;
+        top: 0; left: 0;
+        width: 200px; height: 100%;
+        background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.55) 50%, transparent 100%);
+        filter: blur(4px);
+        transform: translateX(-200%);
+        opacity: 0;
+        mix-blend-mode: screen;
+        pointer-events: none;
+      }
+      [data-composition-id="08-cta-outro"] .o-tagline {
+        font-family: "Instrument Serif", serif;
+        font-style: italic;
+        font-size: 44px;
+        color: rgba(255,255,255,0.85);
+        letter-spacing: 0.005em;
+        max-width: 1200px;
+        line-height: 1.25;
+        opacity: 0;
+      }
+      [data-composition-id="08-cta-outro"] .o-cta {
+        margin-top: 12px;
+        padding: 18px 40px;
+        border-radius: 999px;
+        font-family: "Geist", sans-serif;
+        font-weight: 500;
+        font-size: 28px;
+        letter-spacing: 0.02em;
+        color: #fff;
+        background: linear-gradient(135deg, rgba(94,106,210,0.3), rgba(169,176,240,0.2));
+        border: 1px solid rgba(169,176,240,0.5);
+        box-shadow: 0 0 40px rgba(94,106,210,0.3), inset 0 1px 0 rgba(255,255,255,0.25);
+        backdrop-filter: blur(12px);
+        opacity: 0;
+      }
+      [data-composition-id="08-cta-outro"] .vignette {
+        position: absolute; inset: 0; pointer-events: none;
+        background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.95) 95%);
+        opacity: 0.75;
+      }
+      [data-composition-id="08-cta-outro"] .grain {
+        position: absolute; inset: 0; pointer-events: none;
+        opacity: 0.08;
+        background-image:
+          radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+          radial-gradient(rgba(255,255,255,0.02) 1px, transparent 1px);
+        background-size: 3px 3px, 5px 5px;
+      }
+    </style>
+
+    <script>
+      (() => {
+        const SLOT = 5;
+        const tl = gsap.timeline({ paused: true });
+        const sel = (q) => `[data-composition-id="08-cta-outro"] ${q}`;
+
+        tl.to(sel('.o-symbol'), { opacity: 1, duration: 0.5, ease: 'power2.out' }, 0);
+        tl.to(sel('.o-wordmark'), { opacity: 1, duration: 0.5, ease: 'power2.out' }, 0.1);
+
+        tl.fromTo(sel('.o-tagline'),
+          { opacity: 0, y: 20 },
+          { opacity: 1, y: 0, duration: 0.6, ease: 'power3.out' }, 0.5);
+
+        tl.fromTo(sel('.o-cta'),
+          { opacity: 0, scale: 0.9 },
+          { opacity: 1, scale: 1, duration: 0.5, ease: 'back.out(1.3)' }, 0.9);
+
+        const shimmer = (t) => {
+          tl.set(sel('.shimmer'), { opacity: 1, xPercent: -120 }, t);
+          tl.to(sel('.shimmer'), { xPercent: 400, duration: 0.7, ease: 'power2.inOut' }, t);
+          tl.to(sel('.shimmer'), { opacity: 0, duration: 0.1 }, t + 0.65);
+        };
+        shimmer(1.2);
+        shimmer(3.0);
+        shimmer(4.5);
+
+        tl.to(sel('.vignette'), { opacity: 0.85, duration: 2.5, yoyo: true, repeat: 1, ease: 'sine.inOut' }, 0);
+
+        tl.to({}, { duration: SLOT }, 0);
+        window.__timelines = window.__timelines || {};
+        window.__timelines['08-cta-outro'] = tl;
+      })();
+    </script>
+  </div>
+</template>

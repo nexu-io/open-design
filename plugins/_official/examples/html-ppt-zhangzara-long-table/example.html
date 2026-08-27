@@ -1,0 +1,1207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Present a Unit-Economics Model like an FP&amp;A Partner - Data, KPI &amp; finance</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400;1,9..144,500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper: #FAF1E2;   /* warm buttery cream paper */
+    --ink:   #B53D2A;   /* warm rust / terracotta red, the only ink colour */
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: #0a0a0a; }
+  h1, h2, p { margin: 0; } /* spacing is owned by flex/grid gaps, not UA margins */
+  body {
+    font-family: 'Fraunces', Georgia, serif;
+    color: var(--ink);
+    overflow: hidden;
+  }
+
+  /* Deck wrapper */
+  .deck { position: fixed; inset: 0; display: grid; place-items: center; }
+  .stage {
+    position: relative;
+    width: 100vw; height: 100vh;
+    overflow: hidden;
+    background: var(--paper);
+  }
+
+  /* Subtle paper texture. Sits ABOVE the slide backgrounds (slides paint
+     var(--paper) at z-index 2, so a z-index 1 grain would never render);
+     pointer-events none, 10% opacity, reads as print grain. */
+  .stage::before {
+    content: '';
+    position: absolute; inset: 0;
+    pointer-events: none;
+    opacity: 0.10;
+    background-image: radial-gradient(circle at 1px 1px, rgba(181,61,42,0.5) 0.5px, transparent 1px);
+    background-size: 4px 4px;
+    z-index: 3;
+  }
+  /* On the inverted closing slide the grain flips to paper-coloured dots. */
+  .stage:has(.s-closing.active)::before {
+    background-image: radial-gradient(circle at 1px 1px, rgba(250,241,226,0.5) 0.5px, transparent 1px);
+    opacity: 0.07;
+  }
+
+  .slide {
+    position: absolute; inset: 0;
+    opacity: 0; pointer-events: none;
+    transition: opacity 300ms cubic-bezier(.16, 1, .3, 1);
+    z-index: 2;
+  }
+  .slide.active { opacity: 1; pointer-events: auto; }
+
+  /* Entrance rhythm: direct children of each slide's layout root rise in
+     with a short stagger. Transform + opacity only. */
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .slide.active .grid > *,
+  .slide.active .frame > *,
+  .slide.active .footer-line {
+    animation: rise 560ms cubic-bezier(.16, 1, .3, 1) both;
+  }
+  .slide.active .grid > :nth-child(2),
+  .slide.active .frame > :nth-child(2) { animation-delay: 70ms; }
+  .slide.active .grid > :nth-child(3),
+  .slide.active .frame > :nth-child(3) { animation-delay: 140ms; }
+  .slide.active .grid > :nth-child(4),
+  .slide.active .frame > :nth-child(4) { animation-delay: 210ms; }
+  .slide.active .grid > :nth-child(5),
+  .slide.active .frame > :nth-child(5) { animation-delay: 280ms; }
+  .slide.active .footer-line           { animation-delay: 210ms; }
+  @media (prefers-reduced-motion: reduce) {
+    .slide { transition: none; }
+    .slide.active .grid > *,
+    .slide.active .frame > *,
+    .slide.active .footer-line { animation: none; }
+  }
+
+  /* ─── TYPE SYSTEM ──────────────────────────────────────────── */
+  .body-it {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-weight: 400;
+    line-height: 1.45;
+    color: var(--ink);
+  }
+
+  /* Page-number marker — italic Fraunces */
+  .pagenum {
+    position: absolute;
+    right: clamp(36px, 3.6vw, 80px);
+    bottom: clamp(40px, 4vh, 64px);
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(14px, 0.95vw, 16px);
+    color: var(--ink);
+    letter-spacing: 0.02em;
+    z-index: 9;
+  }
+  .nav-hint {
+    position: fixed;
+    left: clamp(36px, 3.6vw, 80px);
+    bottom: clamp(40px, 4vh, 64px);
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(11px, 0.78vw, 13px);
+    color: var(--ink);
+    letter-spacing: 0.02em;
+    opacity: 0.72;
+    z-index: 12;
+    pointer-events: none;
+  }
+  /* The closing slide inverts ink/paper; the fixed hint must follow suit. */
+  body:has(.s-closing.active) .nav-hint { color: #FAF1E2; }
+
+  /* ─── REUSABLE: pill button (outlined rounded rectangle) ────── */
+  .pill {
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    padding: clamp(8px, 1vh, 14px) clamp(20px, 2vw, 32px);
+    border: 1.5px solid var(--ink);
+    border-radius: 999px;
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(15px, 1.1vw, 20px);
+    color: var(--ink);
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .pill-divider {
+    color: var(--ink);
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(18px, 1.4vw, 24px);
+    line-height: 1;
+    align-self: center;
+    opacity: 0.7;
+  }
+
+  /* ─── REUSABLE: numbered edition badge (circle outline) ─────── */
+  .ed-badge {
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    width: clamp(34px, 2.6vw, 44px);
+    height: clamp(34px, 2.6vw, 44px);
+    border: 1.5px solid var(--ink);
+    border-radius: 50%;
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(15px, 1.05vw, 18px);
+    color: var(--ink);
+    line-height: 1;
+  }
+
+  /* ─── REUSABLE: outlined rectangle tag ──────────────────────── */
+  .rect-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: clamp(7px, 0.9vh, 12px) clamp(14px, 1.4vw, 22px);
+    border: 1.5px solid var(--ink);
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(15px, 1.1vw, 20px);
+    color: var(--ink);
+    line-height: 1.1;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 1 — COVER (echo of supper-club poster, left text + right illustration)
+     ────────────────────────────────────────────────────────────── */
+  .s-cover { background: var(--paper); }
+
+  .s-cover .grid {
+    position: absolute;
+    inset: clamp(48px, 5.4vh, 90px) clamp(60px, 5vw, 110px) clamp(96px, 10.5vh, 160px);
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    gap: clamp(40px, 4vw, 80px);
+    z-index: 5;
+  }
+  .s-cover .left {
+    display: flex; flex-direction: column;
+    gap: clamp(14px, 1.8vh, 26px);
+    min-height: 0;
+  }
+  .s-cover .ed-row {
+    display: flex; align-items: center; gap: clamp(12px, 1.2vw, 18px);
+  }
+  .s-cover .ed-row .ed-label {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(20px, 1.6vw, 30px);
+    color: var(--ink);
+    line-height: 1;
+  }
+  .s-cover .title {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: clamp(72px, min(8.2vw, 12.5vh), 168px);
+    line-height: 0.92;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+  }
+  .s-cover .actions {
+    display: flex; gap: clamp(8px, 0.8vw, 14px); align-items: center;
+    flex-wrap: wrap;
+  }
+  .s-cover .stats {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(17px, 1.2vw, 22px);
+    line-height: 1.4;
+    color: var(--ink);
+  }
+  .s-cover .stats .num {
+    font-style: normal;
+    font-weight: 600;
+  }
+  .s-cover .left .bottom-block {
+    margin-top: auto;
+    display: flex; flex-direction: column;
+    gap: clamp(12px, 1.4vh, 22px);
+    align-items: flex-start;
+  }
+  .s-cover .tagline {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(18px, 1.4vw, 26px);
+    line-height: 1.35;
+    color: var(--ink);
+    max-width: 40ch;
+  }
+
+  /* Right side of cover — big italic edition numeral as a typographic anchor,
+     replacing the hand-drawn illustration. */
+  .s-cover .right {
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: flex-end;
+    color: var(--ink);
+    text-align: right;
+  }
+  .s-cover .big-edition {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: clamp(180px, min(22vw, 38vh), 480px);
+    line-height: 0.86;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .s-cover .big-edition-lab {
+    margin-top: clamp(8px, 1vh, 16px);
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: clamp(15px, 1.1vw, 18px);
+    letter-spacing: 0.18em;
+    color: var(--ink);
+  }
+  .s-cover .big-edition-meta {
+    margin-top: clamp(20px, 2.4vh, 36px);
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(17px, 1.2vw, 22px);
+    line-height: 1.4;
+    color: var(--ink);
+    max-width: 30ch;
+    text-align: right;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 2 — MANIFESTO / LETTER FROM THE TABLE
+     ────────────────────────────────────────────────────────────── */
+  .s-manifesto { background: var(--paper); }
+  .s-manifesto .frame {
+    position: absolute;
+    inset: clamp(96px, 10vh, 160px) clamp(80px, 8vw, 200px) clamp(110px, 11vh, 170px);
+    display: grid;
+    grid-template-columns: 0.85fr 1fr;
+    gap: clamp(50px, 5vw, 100px);
+    align-items: center;
+    z-index: 5;
+  }
+  .s-manifesto .left .ed-row {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: clamp(20px, 2.4vh, 36px);
+  }
+  .s-manifesto .left .ed-row .ed-label {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(18px, 1.4vw, 24px);
+    color: var(--ink);
+  }
+  .s-manifesto .left .h {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: clamp(72px, min(7.6vw, 13vh), 160px);
+    line-height: 0.9;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+  }
+  .s-manifesto .right p {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(20px, 1.5vw, 28px);
+    line-height: 1.45;
+    color: var(--ink);
+    margin: 0 0 clamp(16px, 1.6vh, 24px);
+  }
+  .s-manifesto .right p .empha {
+    font-style: normal;
+    font-weight: 600;
+  }
+  .s-manifesto .right .sig {
+    margin-top: clamp(18px, 2vh, 30px);
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(16px, 1.2vw, 20px);
+    color: var(--ink);
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .s-manifesto .right .sig .who-tag {
+    font-style: normal;
+    font-weight: 600;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 3 — INDEX OF EDITIONS
+     ────────────────────────────────────────────────────────────── */
+  .s-index { background: var(--paper); }
+  .s-index .frame {
+    position: absolute;
+    inset: clamp(96px, 10vh, 160px) clamp(60px, 5vw, 110px) clamp(110px, 11vh, 170px);
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: clamp(28px, 3vh, 50px);
+    z-index: 5;
+  }
+  .s-index .topbar {
+    display: flex; align-items: end; justify-content: space-between;
+    border-bottom: 1.5px solid var(--ink);
+    padding-bottom: clamp(14px, 1.6vh, 24px);
+    gap: 30px;
+  }
+  .s-index .topbar .h {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: clamp(56px, min(6vw, 10vh), 120px);
+    line-height: 0.9;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+  }
+  .s-index .topbar .lab-tag {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(15px, 1.05vw, 18px);
+    color: var(--ink);
+    text-align: right;
+    line-height: 1.4;
+  }
+  .s-index .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: auto;
+    gap: clamp(20px, 2.4vw, 36px);
+    align-self: center;
+    align-items: stretch; /* equal card heights; meta-row anchors to the bottom via margin-top:auto */
+  }
+  .s-index .card {
+    border: 1.5px solid var(--ink);
+    padding: clamp(20px, 2vh, 32px) clamp(20px, 1.8vw, 30px);
+    display: flex; flex-direction: column; gap: clamp(10px, 1.2vh, 18px);
+  }
+  .s-index .card .card-top {
+    display: flex; align-items: center; gap: clamp(10px, 1vw, 16px);
+    border-bottom: 1px solid rgba(181, 61, 42, 0.40);
+    padding-bottom: clamp(10px, 1.2vh, 16px);
+  }
+  .s-index .card .card-top .num-tag {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(15px, 1.05vw, 18px);
+    color: var(--ink);
+  }
+  .s-index .card .card-top .city-tag {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(15px, 1.05vw, 18px);
+    color: var(--ink);
+    margin-left: auto;
+  }
+  .s-index .card .nm {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: clamp(28px, 2.4vw, 44px);
+    line-height: 0.95;
+    color: var(--ink);
+    letter-spacing: -0.008em;
+  }
+  .s-index .card .desc {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(15px, 1vw, 17px);
+    line-height: 1.45;
+    color: var(--ink);
+    flex: 1;
+  }
+  .s-index .card .meta-row {
+    display: flex; align-items: center; gap: clamp(10px, 1vw, 16px);
+    margin-top: auto;
+    border-top: 1px dashed rgba(181, 61, 42, 0.40);
+    padding-top: clamp(10px, 1.2vh, 16px);
+  }
+  .s-index .card .meta-row .seats-tag,
+  .s-index .card .meta-row .date-tag {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(14px, 0.95vw, 16px);
+    color: var(--ink);
+  }
+  .s-index .card .meta-row .seats-tag { margin-right: auto; }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 4 — FEATURED EDITION
+     ────────────────────────────────────────────────────────────── */
+  .s-featured { background: var(--paper); }
+  .s-featured .frame {
+    /* Bottom inset enlarged so content can never run into the page-num /
+       nav-hint chrome at the bottom of the slide. */
+    position: absolute;
+    inset: clamp(96px, 10vh, 160px) clamp(80px, 7vw, 160px) clamp(150px, 14vh, 220px);
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: clamp(40px, 4vw, 80px);
+    align-items: center;
+    z-index: 5;
+  }
+  .s-featured .left { display: flex; flex-direction: column; gap: clamp(18px, 2vh, 32px); }
+  .s-featured .left .ed-row {
+    display: flex; align-items: center; gap: 14px;
+  }
+  .s-featured .left .ed-row .ed-label {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(18px, 1.3vw, 22px);
+    color: var(--ink);
+  }
+  .s-featured .left .ttl {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: clamp(60px, min(6.4vw, 10.5vh), 140px);
+    line-height: 0.9;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+  }
+  .s-featured .left .lede {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(17px, 1.2vw, 22px);
+    line-height: 1.5;
+    color: var(--ink);
+    max-width: 44ch;
+  }
+  .s-featured .left .stats-line {
+    display: flex; gap: clamp(20px, 2vw, 36px); align-items: center;
+    flex-wrap: wrap;
+  }
+  /* Right side of featured edition — text info card replacing the illustration. */
+  .s-featured .right {
+    display: flex; flex-direction: column;
+    justify-content: center;
+    color: var(--ink);
+    border: 1.5px solid var(--ink);
+    padding: clamp(28px, 3vw, 56px) clamp(28px, 2.4vw, 48px);
+    gap: clamp(16px, 2vh, 28px);
+  }
+  .s-featured .right .info-row {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: clamp(20px, 2vw, 36px);
+    align-items: baseline;
+    border-bottom: 1px dashed rgba(181, 61, 42, 0.40);
+    padding-bottom: clamp(12px, 1.4vh, 20px);
+  }
+  .s-featured .right .info-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .s-featured .right .info-row .k {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(14px, 0.95vw, 16px);
+    color: var(--ink);
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+  }
+  .s-featured .right .info-row .v {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: clamp(20px, 1.6vw, 28px);
+    line-height: 1.1;
+    color: var(--ink);
+    letter-spacing: -0.005em;
+    text-align: right;
+  }
+  .s-featured .right .info-row .v.it {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: clamp(20px, 1.5vw, 26px);
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 5 — MENU / PROGRAMME
+     ────────────────────────────────────────────────────────────── */
+  .s-menu { background: var(--paper); }
+  .s-menu .frame {
+    /* Centre the whole menu block in its band: no flex-stretch on course
+       rows (space-between would tear the ledger apart), the block floats
+       as one unit so top and bottom whitespace stay balanced. */
+    position: absolute;
+    inset: clamp(40px, 4vh, 70px) clamp(120px, 12vw, 280px) clamp(110px, 11vh, 170px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: clamp(20px, 2.6vh, 40px);
+    z-index: 5;
+  }
+  .s-menu .top-row {
+    text-align: center;
+    display: flex; flex-direction: column; align-items: center;
+    gap: clamp(8px, 1vh, 14px);
+  }
+  .s-menu .top-row .kicker {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(16px, 1.2vw, 20px);
+    color: var(--ink);
+  }
+  .s-menu .top-row .h {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: clamp(48px, min(5vw, 8.4vh), 100px);
+    line-height: 0.92;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+  }
+  .s-menu .courses {
+    display: flex; flex-direction: column;
+    gap: 0;
+  }
+  .s-menu .course {
+    display: grid;
+    grid-template-columns: 64px 1fr auto;
+    gap: clamp(14px, 1.4vw, 28px);
+    align-items: center;
+    padding: clamp(14px, 1.6vh, 24px) 0;
+    border-bottom: 1px solid rgba(181, 61, 42, 0.40);
+  }
+  .s-menu .course .num-tag {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(16px, 1.1vw, 20px);
+    color: var(--ink);
+    line-height: 1;
+  }
+  .s-menu .course .item {
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .s-menu .course .item .nm {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: clamp(20px, 1.5vw, 28px);
+    line-height: 1.05;
+    letter-spacing: -0.005em;
+    color: var(--ink);
+  }
+  .s-menu .course .item .desc {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(15px, 1vw, 17px);
+    line-height: 1.4;
+    color: var(--ink);
+    max-width: 60ch;
+  }
+  .s-menu .course .pair-tag {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(14px, 0.95vw, 16px);
+    color: var(--ink);
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 6 — QUOTE / TESTIMONIAL
+     ────────────────────────────────────────────────────────────── */
+  .s-quote { background: var(--paper); }
+  .s-quote .frame {
+    /* Single centred quote, balanced band: equal top/bottom insets so the
+       quote sits on the true centre instead of riding high. */
+    position: absolute;
+    inset: clamp(96px, 10vh, 160px) clamp(120px, 12vw, 280px) clamp(96px, 10vh, 160px);
+    display: flex; flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    z-index: 5;
+  }
+  .s-quote .right {
+    display: flex; flex-direction: column;
+    gap: clamp(18px, 2vh, 32px);
+    align-items: center;
+    width: 100%;
+  }
+  .s-quote .right .kicker {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(16px, 1.2vw, 20px);
+    color: var(--ink);
+  }
+  .s-quote .right .qbody {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: clamp(40px, min(4.4vw, 7.4vh), 96px);
+    line-height: 0.95;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+  }
+  .s-quote .right .qbody .it-emph {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: -0.005em;
+    line-height: 1;
+  }
+  .s-quote .right .who-row {
+    display: flex; flex-direction: column; gap: 4px;
+    border-top: 1.5px solid var(--ink);
+    padding-top: clamp(12px, 1.4vh, 20px);
+    align-items: center;
+  }
+  .s-quote .right .who-row .who-tag {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: clamp(15px, 1.05vw, 18px);
+    color: var(--ink);
+    letter-spacing: -0.005em;
+  }
+  .s-quote .right .who-row .meta-tag {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(14px, 0.95vw, 16px);
+    color: var(--ink);
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 7 — UPCOMING SCHEDULE
+     ────────────────────────────────────────────────────────────── */
+  .s-cal { background: var(--paper); }
+  .s-cal .frame {
+    position: absolute;
+    inset: clamp(96px, 10vh, 160px) clamp(80px, 7vw, 160px) clamp(110px, 11vh, 170px);
+    display: flex; flex-direction: column;
+    z-index: 5;
+  }
+  .s-cal .topbar {
+    display: flex; align-items: end; justify-content: space-between;
+    border-bottom: 1.5px solid var(--ink);
+    padding-bottom: clamp(14px, 1.6vh, 24px);
+    margin-bottom: clamp(20px, 2.4vh, 32px);
+    gap: 30px;
+  }
+  .s-cal .topbar .h {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: clamp(56px, min(6vw, 10vh), 120px);
+    line-height: 0.9;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+  }
+  .s-cal .topbar .lab-tag {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(15px, 1.05vw, 18px);
+    color: var(--ink);
+    text-align: right;
+    line-height: 1.4;
+  }
+  .s-cal .ledger {
+    flex: 1;
+    display: flex; flex-direction: column;
+  }
+  .s-cal .row {
+    display: grid;
+    grid-template-columns: 80px 130px 1.6fr 0.9fr auto;
+    gap: clamp(14px, 1.4vw, 28px);
+    align-items: center;
+    padding: clamp(11px, 1.3vh, 18px) 0;
+    border-bottom: 1px solid rgba(181, 61, 42, 0.40);
+    flex: 1 1 0;
+    min-height: clamp(56px, 7vh, 90px);
+  }
+  .s-cal .row.headrow {
+    flex: 0 0 auto;
+    min-height: 0;
+    border-bottom: 1.5px solid var(--ink);
+    padding: 6px 0;
+  }
+  .s-cal .row.headrow > div {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(13px, 0.92vw, 15px);
+    color: var(--ink);
+    letter-spacing: 0.04em;
+  }
+  .s-cal .row .num-tag {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(15px, 1.05vw, 18px);
+    color: var(--ink);
+  }
+  .s-cal .row .city-tag {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: clamp(18px, 1.3vw, 24px);
+    color: var(--ink);
+    letter-spacing: -0.005em;
+  }
+  .s-cal .row .theme {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(17px, 1.2vw, 22px);
+    color: var(--ink);
+    line-height: 1.3;
+  }
+  .s-cal .row .date-tag {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(15px, 1.05vw, 17px);
+    color: var(--ink);
+  }
+  .s-cal .row .seats-pill {
+    border: 1.5px solid var(--ink);
+    border-radius: 999px;
+    padding: 6px 16px;
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(13px, 0.95vw, 16px);
+    color: var(--ink);
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 8 — CLOSING / RSVP
+     ────────────────────────────────────────────────────────────── */
+  /* Closing slide is the deck's single inverted page: the two inks swap.
+     Every rule below already paints with var(--ink) / var(--paper), so the
+     scoped variable swap flips type, badges, pills, hairlines and the page
+     number together with no per-element overrides. */
+  .s-closing {
+    --ink: #FAF1E2;
+    --paper: #B53D2A;
+    background: var(--paper);
+  }
+  /* Frame ends well above the footer-line; footer-line ends well above the
+     page-num chrome. Three discrete bands, no overlap zones. */
+  .s-closing .frame {
+    position: absolute;
+    left: clamp(80px, 7vw, 160px);
+    right: clamp(80px, 7vw, 160px);
+    top: clamp(96px, 10vh, 160px);
+    bottom: clamp(220px, 23vh, 330px);
+    display: flex; flex-direction: column;
+    justify-content: center;
+    z-index: 5;
+  }
+  .s-closing .left { display: flex; flex-direction: column; gap: clamp(20px, 2.4vh, 38px); max-width: 60ch; }
+  .s-closing .left .ed-row {
+    display: flex; align-items: center; gap: 14px;
+  }
+  .s-closing .left .ed-row .ed-label {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(18px, 1.3vw, 22px);
+    color: var(--ink);
+  }
+  .s-closing .left .h {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: clamp(60px, min(6.4vw, 10vh), 130px);
+    line-height: 0.92;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+  }
+  /* No right-side illustration — closing is a single text band. */
+  .s-closing .left .desc-it {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(17px, 1.2vw, 22px);
+    line-height: 1.5;
+    color: var(--ink);
+    max-width: 42ch;
+  }
+  .s-closing .left .actions {
+    display: flex; gap: clamp(12px, 1.2vw, 20px); align-items: center;
+    flex-wrap: wrap;
+  }
+  .s-closing .footer-line {
+    /* Footer band sits above the page-num chrome; clear gap below. */
+    position: absolute;
+    left: clamp(80px, 7vw, 160px);
+    right: clamp(80px, 7vw, 160px);
+    bottom: clamp(110px, 11vh, 160px);
+    display: flex; gap: clamp(40px, 4vw, 70px);
+    z-index: 5;
+  }
+  .s-closing .footer-line .colf {
+    border-top: 1px solid var(--ink);
+    padding-top: clamp(8px, 1vh, 14px);
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(14px, 0.95vw, 16px);
+    color: var(--ink);
+    line-height: 1.4;
+    flex: 1;
+  }
+  .s-closing .footer-line .colf .ftag {
+    font-style: normal;
+    font-weight: 600;
+    margin-bottom: 2px;
+    display: block;
+  }
+</style>
+</head>
+<body>
+
+<div class="deck">
+  <div class="stage">
+
+    <!-- 1. COVER ─────────────────────────────────────────────── -->
+    <section class="slide s-cover active">
+      <div class="grid">
+        <div class="left">
+          <div class="ed-row">
+            <div class="ed-badge caption">OD</div>
+            <div class="ed-label caption">data, kpi &amp; finance</div>
+          </div>
+          <h1 class="title">Unit Economics</h1>
+          <div class="actions">
+            <span class="pill caption">BYOK Model</span>
+            <span class="pill-divider caption">|</span>
+            <span class="pill caption">FP&amp;A Pre-Read</span>
+          </div>
+          <div class="stats body-it">
+            <span class="num">97.8% gross margin</span><br/>
+            Zero AI cost of goods sold on our books, by design.
+          </div>
+          <div class="bottom-block">
+            <span class="rect-tag caption">Q1 FY26 · prepared for the board</span>
+            <p class="tagline">Present a unit-economics model like an FP&amp;A partner: the assumptions, the sensitivity, and why it scales.</p>
+          </div>
+        </div>
+
+        <div class="right">
+          <div class="big-edition">97.8%</div>
+          <div class="big-edition-lab caption">Gross Margin · BYOK Model</div>
+          <div class="big-edition-meta">$0.42 infra cost per seat. $0 AI COGS. Margin holds as usage climbs.</div>
+        </div>
+      </div>
+
+      <div class="pagenum">01 / 08</div>
+    </section>
+
+    <!-- 2. MANIFESTO ─────────────────────────────────────────── -->
+    <section class="slide s-manifesto">
+      <div class="frame">
+        <div class="left">
+          <div class="ed-row">
+            <div class="ed-badge caption">·</div>
+            <div class="ed-label caption">the headline answer</div>
+          </div>
+          <h2 class="h">The answer,<br/>before<br/>the model.</h2>
+        </div>
+        <div class="right">
+          <p>Every AI design tool carries the same tension: usage grows, and the AI inference bill grows with it. OpenDesign breaks that link with <span class="empha">BYOK — bring your own key</span>.</p>
+          <p>Under BYOK, model inference is billed straight from the user's own provider account, never resold through our infrastructure. Our own cost per seat is <span class="empha">$0.42 a month</span> — storage, sync, relay, nothing more.</p>
+          <p>The result: gross margin holds at 97.8% whether a seat runs ten generations a month or ten thousand. This deck walks the assumptions, the sensitivity, and the forecast.</p>
+          <div class="sig">
+            <div class="who-tag">Prepared for the board</div>
+            <div>FP&amp;A · Q1 FY26 · confidential draft</div>
+          </div>
+        </div>
+      </div>
+      <div class="pagenum">02 / 08</div>
+    </section>
+
+    <!-- 3. INDEX OF EDITIONS ────────────────────────────────── -->
+    <section class="slide s-index">
+      <div class="frame">
+        <div class="topbar">
+          <div class="h">The three cost drivers</div>
+          <div class="lab-tag caption">unit-economics · driver tree</div>
+        </div>
+        <div class="grid">
+          <div class="card">
+            <div class="card-top">
+              <div class="num-tag caption">No. 01</div>
+              <div class="city-tag caption">Compute</div>
+            </div>
+            <div class="nm">Zero-Cost<br/>Compute</div>
+            <div class="desc body-it">Model inference runs against the user's own API key. Every token and every generation is billed to their provider account, not ours.</div>
+            <div class="meta-row">
+              <div class="seats-tag caption">BYOK</div>
+              <div class="date-tag caption">$0 AI COGS</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-top">
+              <div class="num-tag caption">No. 02</div>
+              <div class="city-tag caption">Infra</div>
+            </div>
+            <div class="nm">Thin-Cloud<br/>Infra</div>
+            <div class="desc body-it">Our infra bill is sync, relay, and storage only — the daemon and agent runtime execute locally on the user's own machine.</div>
+            <div class="meta-row">
+              <div class="seats-tag caption">Local-first</div>
+              <div class="date-tag caption">$0.42 / seat / mo</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-top">
+              <div class="num-tag caption">No. 03</div>
+              <div class="city-tag caption">Retention</div>
+            </div>
+            <div class="nm">Compounding<br/>Retention</div>
+            <div class="desc body-it">Design systems and memory accumulate per account, raising switching cost and expansion revenue without raising our marginal cost.</div>
+            <div class="meta-row">
+              <div class="seats-tag caption">129 design systems</div>
+              <div class="date-tag caption">NDR trending up</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="pagenum">03 / 08</div>
+    </section>
+
+    <!-- 4. FEATURED EDITION ────────────────────────────────── -->
+    <section class="slide s-featured">
+      <div class="frame">
+        <div class="left">
+          <div class="ed-row">
+            <div class="ed-badge caption">№</div>
+            <div class="ed-label caption">the model · every assumption stated</div>
+          </div>
+          <h2 class="ttl">The metric<br/>behind the claim.</h2>
+          <p class="lede">The chart only matters if the assumptions hold. Here is every input to the model, published in full — nothing modeled here that we would not show a CFO directly.</p>
+          <div class="stats-line">
+            <span class="pill caption">$19 / seat / month</span>
+            <span class="pill caption">97.8% gross margin</span>
+          </div>
+        </div>
+        <div class="right">
+          <div class="info-row">
+            <div class="k caption">Revenue per seat</div>
+            <div class="v it">$19.00 / mo</div>
+          </div>
+          <div class="info-row">
+            <div class="k caption">Infra COGS per seat</div>
+            <div class="v it">$0.42 / mo</div>
+          </div>
+          <div class="info-row">
+            <div class="k caption">AI COGS per seat (BYOK)</div>
+            <div class="v it">$0.00 / mo</div>
+          </div>
+          <div class="info-row">
+            <div class="k caption">Gross margin</div>
+            <div class="v it">97.8%</div>
+          </div>
+          <div class="info-row">
+            <div class="k caption">Payback period</div>
+            <div class="v">1.1 mo</div>
+          </div>
+        </div>
+      </div>
+      <div class="pagenum">04 / 08</div>
+    </section>
+
+    <!-- 5. MENU ─────────────────────────────────────────────── -->
+    <section class="slide s-menu">
+      <div class="frame">
+        <div class="top-row">
+          <div class="kicker caption">The Model, Built in Five Lines</div>
+          <h2 class="h">How We Get to 98%</h2>
+        </div>
+        <div class="courses">
+          <div class="course">
+            <div class="num-tag caption">i.</div>
+            <div class="item">
+              <div class="nm">Start with list price</div>
+              <div class="desc body-it">$19 per seat per month, mid-market design-tool pricing</div>
+            </div>
+            <div class="pair-tag caption">$19.00</div>
+          </div>
+          <div class="course">
+            <div class="num-tag caption">ii.</div>
+            <div class="item">
+              <div class="nm">Subtract infra COGS</div>
+              <div class="desc body-it">sync, storage, and relay, metered per active seat</div>
+            </div>
+            <div class="pair-tag caption">-$0.42</div>
+          </div>
+          <div class="course">
+            <div class="num-tag caption">iii.</div>
+            <div class="item">
+              <div class="nm">Subtract AI COGS</div>
+              <div class="desc body-it">BYOK routes every inference call to the user's own key</div>
+            </div>
+            <div class="pair-tag caption">-$0.00</div>
+          </div>
+          <div class="course">
+            <div class="num-tag caption">iv.</div>
+            <div class="item">
+              <div class="nm">Land on gross profit</div>
+              <div class="desc body-it">per seat, per month, before sales, support, and marketing</div>
+            </div>
+            <div class="pair-tag caption">$18.58</div>
+          </div>
+          <div class="course">
+            <div class="num-tag caption">v.</div>
+            <div class="item">
+              <div class="nm">Compute the margin</div>
+              <div class="desc body-it">gross profit over revenue, held flat as usage scales</div>
+            </div>
+            <div class="pair-tag caption">97.8%</div>
+          </div>
+        </div>
+      </div>
+      <div class="pagenum">05 / 08</div>
+    </section>
+
+    <!-- 6. QUOTE ──────────────────────────────────────────── -->
+    <section class="slide s-quote">
+      <div class="frame">
+        <div class="right">
+          <div class="kicker caption">The sensitivity, in one line</div>
+          <p class="qbody">Usage can grow tenfold and margin does not move — because <span class="it-emph">the AI bill isn't ours.</span></p>
+          <div class="who-row">
+            <div class="who-tag">FP&amp;A</div>
+            <div class="meta-tag caption">sensitivity analysis · BYOK cost model</div>
+          </div>
+        </div>
+      </div>
+      <div class="pagenum">06 / 08</div>
+    </section>
+
+    <!-- 7. UPCOMING SCHEDULE ───────────────────────────────── -->
+    <section class="slide s-cal">
+      <div class="frame">
+        <div class="topbar">
+          <div class="h">The four-quarter forecast</div>
+          <div class="lab-tag caption">FY26 model · seats × margin</div>
+        </div>
+        <div class="ledger">
+          <div class="row headrow">
+            <div class="caption">No.</div>
+            <div class="caption">Period</div>
+            <div class="caption">Volume &amp; revenue</div>
+            <div class="caption">Margin</div>
+            <div class="caption">Status</div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">01</div>
+            <div class="city-tag">Q1 FY26</div>
+            <div class="theme">3,200 seats · $60.8K MRR</div>
+            <div class="date-tag caption">97.8%</div>
+            <div><span class="seats-pill caption">Actual</span></div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">02</div>
+            <div class="city-tag">Q2 FY26</div>
+            <div class="theme">4,900 seats · $93.1K MRR</div>
+            <div class="date-tag caption">97.8%</div>
+            <div><span class="seats-pill caption">Forecast</span></div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">03</div>
+            <div class="city-tag">Q3 FY26</div>
+            <div class="theme">7,400 seats · $140.6K MRR</div>
+            <div class="date-tag caption">97.9%</div>
+            <div><span class="seats-pill caption">Forecast</span></div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">04</div>
+            <div class="city-tag">Q4 FY26</div>
+            <div class="theme">11,000 seats · $209.0K MRR</div>
+            <div class="date-tag caption">98.0%</div>
+            <div><span class="seats-pill caption">Forecast</span></div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">05</div>
+            <div class="city-tag">Downside</div>
+            <div class="theme">5,500 seats · growth cut 25%</div>
+            <div class="date-tag caption">97.6%</div>
+            <div><span class="seats-pill caption">Stress case</span></div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">06</div>
+            <div class="city-tag">Upside</div>
+            <div class="theme">15,000 seats · BYOK adoption up</div>
+            <div class="date-tag caption">98.3%</div>
+            <div><span class="seats-pill caption">Upside case</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="pagenum">07 / 08</div>
+    </section>
+
+    <!-- 8. CLOSING / RSVP ─────────────────────────────────── -->
+    <section class="slide s-closing">
+      <div class="frame">
+        <div class="left">
+          <div class="ed-row">
+            <div class="ed-badge caption">·</div>
+            <div class="ed-label caption">the recommended move</div>
+          </div>
+          <h2 class="h">The move<br/>we recommend.</h2>
+          <p class="desc-it">Hold pricing flat at $19 per seat, lean on BYOK as the retention lever, and let team expansion — not AI resale — drive revenue. The model holds at 97.8% margin through 15,000 seats.</p>
+          <div class="actions">
+            <a class="pill caption" href="https://github.com/nexu-io/open-design" target="_blank" rel="noreferrer noopener" style="text-decoration:none;color:inherit;">Review the model</a>
+            <a class="pill caption" href="https://open-design.ai/" target="_blank" rel="noreferrer noopener" style="text-decoration:none;color:inherit;">See the BYOK docs</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer-line">
+        <div class="colf">
+          <span class="ftag caption">Governance</span>
+          Apache-2.0, self-hostable — no vendor lock-in risk in the model.
+        </div>
+        <div class="colf">
+          <span class="ftag caption">Set</span>
+          In Bricolage Grotesque &amp; Fraunces, with one rust-red ink.
+        </div>
+        <div class="colf">
+          <span class="ftag caption">Contact</span>
+          finance@opendesign.dev · nexu-io/open-design · deck v1.2
+        </div>
+      </div>
+
+      <div class="pagenum">08 / 08</div>
+    </section>
+
+  </div>
+</div>
+
+<div class="caption nav-hint">← / → · space</div>
+
+<script>
+  // Plain vanilla navigation: arrows, space, home/end, swipe.
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  let current = 0;
+  function show(i) {
+    if (i < 0) i = 0;
+    if (i > slides.length - 1) i = slides.length - 1;
+    slides[current].classList.remove('active');
+    slides[i].classList.add('active');
+    current = i;
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); show(current + 1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp')               { e.preventDefault(); show(current - 1); }
+    else if (e.key === 'Home')                                            { e.preventDefault(); show(0); }
+    else if (e.key === 'End')                                             { e.preventDefault(); show(slides.length - 1); }
+  });
+  let tx = null;
+  document.addEventListener('touchstart', (e) => { tx = e.touches[0].clientX; }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    if (tx == null) return;
+    const dx = e.changedTouches[0].clientX - tx;
+    if (Math.abs(dx) > 40) show(current + (dx < 0 ? 1 : -1));
+    tx = null;
+  });
+</script>
+
+</body>
+</html>

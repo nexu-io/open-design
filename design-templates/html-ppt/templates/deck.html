@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="minimal-white">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>html-ppt · Deck</title>
+<link rel="stylesheet" href="../assets/fonts.css">
+<link rel="stylesheet" href="../assets/base.css">
+<link rel="stylesheet" id="theme-link" href="../assets/themes/minimal-white.css">
+<link rel="stylesheet" href="../assets/animations/animations.css">
+</head>
+<body data-themes="minimal-white,editorial-serif,soft-pastel,arctic-cool,sunset-warm,catppuccin-mocha,tokyo-night,aurora,xiaohongshu-white,neo-brutalism" data-theme-base="../assets/themes/">
+<div class="deck">
+
+  <!-- 1. Cover -->
+  <section class="slide" data-title="Cover">
+    <p class="kicker">html-ppt · 2026</p>
+    <h1 class="h1 anim-fade-up" data-anim="fade-up">用模板，<span class="gradient-text">换主题</span><br>讲任何事情</h1>
+    <p class="lede">24 themes · 30 layouts · 25 animations · zero build</p>
+    <div class="deck-footer"><span class="dim2">lewis</span><span class="slide-number" data-current="1" data-total="6"></span></div>
+    <div class="notes">这是一个最小可用的 deck。你可以复制这个文件作为新 deck 的起点。</div>
+  </section>
+
+  <!-- 2. TOC -->
+  <section class="slide" data-title="目录">
+    <p class="kicker">Agenda</p>
+    <h2 class="h2">我们会讲三件事</h2>
+    <div class="grid g3 mt-l anim-stagger-list" data-anim-target>
+      <div class="card"><h4>01 · Tokens</h4><p class="dim">把颜色/字体/圆角收进 CSS 变量。</p></div>
+      <div class="card"><h4>02 · Layouts</h4><p class="dim">30 种可复用单页。</p></div>
+      <div class="card"><h4>03 · Runtime</h4><p class="dim">键盘驱动、按 T 换主题。</p></div>
+    </div>
+  </section>
+
+  <!-- 3. Stat -->
+  <section class="slide center tc" data-title="Stat">
+    <div>
+      <p class="kicker">Result</p>
+      <div style="font-size:220px;font-weight:900;line-height:1"><span class="counter gradient-text" data-to="92">0</span><span class="gradient-text">%</span></div>
+      <h3>的准备时间被省下</h3>
+    </div>
+  </section>
+
+  <!-- 4. Two column -->
+  <section class="slide" data-title="Tokens">
+    <p class="kicker">Under the hood</p>
+    <h2 class="h2">换主题 = 换一组变量</h2>
+    <div class="grid g2 mt-l">
+      <div class="card"><h4>语义变量</h4><p class="dim">写 <code>var(--surface)</code>，不写具体色值。</p></div>
+      <div class="card"><h4>一键切换</h4><p class="dim">按 T 循环所有主题——所有 slide 同步更新。</p></div>
+    </div>
+  </section>
+
+  <!-- 5. CTA -->
+  <section class="slide center tc" data-title="CTA">
+    <div>
+      <p class="kicker">Your turn</p>
+      <h1 class="h1 anim-rise-in" data-anim="rise-in">开始做你的 deck</h1>
+      <p class="lede" style="margin:16px auto">按 ← → 翻页 · T 切主题 · A 切动效 · F 全屏 · O 概览 · S 备注</p>
+    </div>
+  </section>
+
+  <!-- 6. Thanks -->
+  <section class="slide center tc" data-title="Thanks">
+    <h1 class="h1" style="font-size:160px;line-height:1"><span class="gradient-text">Thanks</span></h1>
+    <p class="lede">lewis · sudolewis@gmail.com</p>
+  </section>
+</div>
+<script src="../assets/runtime.js"></script>
+</body></html>

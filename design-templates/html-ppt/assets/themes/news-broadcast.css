@@ -1,0 +1,20 @@
+/* theme: news-broadcast — 新闻播报 */
+:root{
+  --bg:#ffffff;--bg-soft:#f4f4f4;--surface:#ffffff;--surface-2:#ececec;
+  --border:rgba(0,0,0,.14);--border-strong:#0a0a0a;
+  --text-1:#0a0a0a;--text-2:#3a3a3a;--text-3:#7a7a7a;
+  --accent:#e11d2d;--accent-2:#0a0a0a;--accent-3:#ffd100;
+  --good:#0e7c3a;--warn:#ffd100;--bad:#e11d2d;
+  --grad:linear-gradient(90deg,#e11d2d 0%,#e11d2d 100%);
+  --grad-soft:linear-gradient(135deg,#fde5e7,#f4f4f4);
+  --radius:0px;--radius-sm:0px;--radius-lg:2px;
+  --shadow:none;
+  --shadow-lg:0 4px 0 var(--accent);
+  --font-sans:'Oswald','Inter','Noto Sans SC',sans-serif;
+  --font-display:'Oswald','Inter','Noto Sans SC',sans-serif;
+}
+h1.title,h2.title,.h1,.h2{font-weight:700;text-transform:uppercase;letter-spacing:-.01em}
+.card{border:2px solid var(--text-1);box-shadow:6px 6px 0 var(--accent)}
+.divider-accent{background:var(--accent);height:6px;width:100%}
+.kicker{background:var(--accent);color:#fff;padding:4px 12px;display:inline-block;letter-spacing:.15em}
+.slide::before{content:"";position:absolute;left:0;top:0;bottom:0;width:8px;background:var(--accent);z-index:3}

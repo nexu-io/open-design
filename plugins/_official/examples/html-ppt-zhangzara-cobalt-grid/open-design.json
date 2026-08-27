@@ -1,0 +1,115 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-html-ppt-zhangzara-cobalt-grid",
+  "title": "Write a Renewal & Expansion Business Case like an Account Director",
+  "title_i18n": {
+    "en": "Write a Renewal & Expansion Business Case like an Account Director",
+    "zh-CN": "像客户总监一样写续约与扩容论证",
+    "zh-TW": "像客户总监一样写续约与扩容论证"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "OpenDesign renewal + seat-expansion business case for a growing customer: realized value, usage proof, and the expansion ROI. Built as a decision-grade B2B sales deck for champion, finance approver.",
+  "description_i18n": {
+    "en": "OpenDesign renewal + seat-expansion business case for a growing customer: realized value, usage proof, and the expansion ROI. Built as a decision-grade B2B sales deck for champion, finance approver.",
+    "zh-CN": "像客户总监一样写续约与扩容论证——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像客户总监一样写续约与扩容论证——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "OpenDesign",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/html-ppt-zhangzara-cobalt-grid",
+  "tags": [
+    "example",
+    "first-party",
+    "deck",
+    "marketing",
+    "web",
+    "cobalt-grid",
+    "zhangzara-cobalt-grid",
+    "editorial",
+    "design-research",
+    "considered",
+    "literary",
+    "design-trend-or-research-report",
+    "studio-annual-or-seasonal-bulletin",
+    "html-deck",
+    "html-slides",
+    "zhangzara",
+    "design",
+    "brand",
+    "visual-system",
+    "html-ppt-zhangzara-cobalt-grid",
+    "b2b-sales",
+    "b2b-saas-sales-proposal",
+    "sales",
+    "renewal",
+    "customer",
+    "decision-deck",
+    "commercial-slide-agent"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "sales",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create \"Write a Renewal & Expansion Business Case like an Account Director\" as a decision-grade B2B sales deck in this template's own visual system. Subject: OpenDesign renewal + seat-expansion business case for a growing customer: realized value, usage proof, and the expansion ROI. Audience: champion, finance approver. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the champion forward this internally without rewriting it.",
+        "zh-CN": "像客户总监一样写续约与扩容论证。像客户总监一样写续约与扩容论证——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。 主题：OpenDesign renewal + seat-expansion business case for a growing customer: realized value, usage proof, and the expansion ROI. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Write a Renewal & Expansion Business Case like an Account Director",
+          "title_i18n": {
+            "en": "Write a Renewal & Expansion Business Case like an Account Director",
+            "zh-CN": "像客户总监一样写续约与扩容论证",
+            "zh-TW": "像客户总监一样写续约与扩容论证"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "category": "b2b-sales"
+  }
+}

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>theme cell</title>
+<link rel="stylesheet" href="../../assets/fonts.css">
+<link rel="stylesheet" href="../../assets/base.css">
+<link id="theme-link" rel="stylesheet" href="../../assets/themes/minimal-white.css">
+<style>
+  html,body{height:100%;margin:0;overflow:hidden}
+  body{
+    background:var(--bg,#fff);color:var(--text-1,#111);
+    font-family:var(--font-sans);box-sizing:border-box;
+    padding:5cqw 6cqw;container-type:size;
+  }
+  .k{font:700 2.6cqw/1 var(--font-mono,monospace);color:var(--text-3,#888);letter-spacing:.14em;text-transform:uppercase;margin-bottom:2.5cqh}
+  h1{font:900 11cqw/.95 var(--font-display,var(--font-sans));letter-spacing:-.025em;margin:0 0 3cqh;color:var(--text-1)}
+  .lede{font:500 3.2cqw/1.4 var(--font-sans);color:var(--text-2,#555);margin:0 0 3.5cqh;max-width:85cqw}
+  .row{display:flex;gap:1.4cqw;flex-wrap:wrap}
+  .pill{padding:1.2cqh 2.4cqw;border-radius:999px;background:var(--surface-2,#f4f4f8);color:var(--text-1);font:600 2.3cqw/1 var(--font-sans);border:1px solid var(--border,#e5e5ea)}
+  .pill.accent{background:var(--accent,#7c5cff);color:#fff;border-color:transparent}
+  .kpi{margin-top:4cqh;display:flex;gap:5cqw}
+  .kpi div{font:900 10cqw/1 var(--font-display,var(--font-sans));letter-spacing:-.03em;color:var(--accent,#7c5cff)}
+  .kpi div span{display:block;font:500 1.8cqw/1 var(--font-sans);color:var(--text-3,#888);margin-top:1cqh;letter-spacing:.08em;text-transform:uppercase}
+  .gradient-hero{background:linear-gradient(90deg,var(--accent,#7c5cff),var(--accent-2,#22d3ee),var(--accent-3,#ff4d8d));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+</style>
+</head>
+<body>
+  <div class="k" id="kname">theme · minimal-white</div>
+  <h1 id="h1">2026<br>年度回顾</h1>
+  <p class="lede">同一份 outline，换一行 theme，排版、字体、色系、装饰全部重写。</p>
+  <div class="row">
+    <span class="pill accent">12 里程碑</span>
+    <span class="pill">团队 +40%</span>
+    <span class="pill">SAT 98%</span>
+  </div>
+  <div class="kpi">
+    <div>98%<span>Sat</span></div>
+    <div>12<span>MS</span></div>
+    <div>7×<span>Faster</span></div>
+  </div>
+<script>
+(function(){
+  const m = /[?&]theme=([\w-]+)/.exec(location.search||'');
+  if (m){
+    const name = m[1];
+    document.getElementById('theme-link').href = '../../assets/themes/'+name+'.css';
+    document.getElementById('kname').textContent = 'theme · ' + name;
+    if (/rainbow|aurora|cyberpunk|vaporwave|y2k/.test(name)){
+      document.getElementById('h1').classList.add('gradient-hero');
+    }
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Write a Series A Growth Story like a Tier-1 VC Partner - Fundraising pitch</title>
+  <link href="https://fonts.googleapis.com/css2?family=Shrikhand&family=Libre+Baskerville:ital,wght@0,400;1,400&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #FAF6EF;
+      --dark: #1C1410;
+      --red: #D8000F;
+      --light: #F1EAE0;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      font-family: 'Libre Baskerville', serif;
+      color: var(--dark);
+    }
+
+    /* ---------- NAV ---------- */
+    .progress {
+      position: fixed; bottom: 0; left: 0; height: 5px;
+      background: var(--red); z-index: 100;
+      transition: width 0.5s cubic-bezier(0.22,1,0.36,1);
+    }
+    .counter {
+      position: fixed; bottom: 18px; right: 24px; z-index: 100;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+      font-weight: 600; color: var(--dark); opacity: 0.65;
+    }
+    .hint {
+      position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+      z-index: 100; font-family: 'Space Grotesk', sans-serif;
+      font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
+      color: var(--dark); opacity: 0; transition: opacity 0.4s ease;
+      background: var(--light); padding: 6px 14px;
+      border: 1.5px solid var(--dark); /* hard poster edge, no rounded pill */
+    }
+    body:hover .hint { opacity: 0.6; }
+
+    /* ---------- SLIDE SYSTEM ---------- */
+    .slides { width: 100%; height: 100%; position: relative; }
+    .slide {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      justify-content: center; align-items: center;
+      opacity: 0; pointer-events: none;
+      transform: translateY(30px) scale(0.98);
+      transition: opacity 0.55s ease, transform 0.55s cubic-bezier(0.22,1,0.36,1);
+      overflow: hidden; padding: 48px 56px;
+    }
+    .slide.active {
+      opacity: 1; pointer-events: all;
+      transform: translateY(0) scale(1);
+    }
+
+    /* staggered entrance for slide children (transform + opacity only) */
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: none; }
+    }
+    .slide.active > * { animation: rise 0.55s cubic-bezier(.16,1,.3,1) both; }
+    .slide.active > *:nth-child(2) { animation-delay: 0.07s; }
+    .slide.active > *:nth-child(3) { animation-delay: 0.14s; }
+    .slide.active > *:nth-child(4) { animation-delay: 0.21s; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .slide { transition: opacity 0.3s ease; transform: none; }
+      .slide.active > * { animation: none; }
+      .progress { transition: none; }
+    }
+
+    /* ---------- SLIDE 1: HERO (ULTRA LOW) ---------- */
+    .slide-hero {
+      background: var(--bg);
+      justify-content: flex-start; align-items: flex-start;
+      padding-top: 5vh; padding-left: 7vw;
+    }
+    .hero-meta {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(11px, 1vw, 14px);
+      font-style: italic; color: var(--dark); opacity: 0.78;
+      margin-bottom: 1.5vh; letter-spacing: 0.5px;
+    }
+    .hero-title-group {
+      position: relative; width: 100%;
+    }
+    .hero-title {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(72px, 16vw, 220px);
+      line-height: 0.88; color: var(--dark); letter-spacing: 1px;
+    }
+    .hero-title.red {
+      color: var(--red);
+      font-size: clamp(84px, 18vw, 260px);
+      line-height: 0.85; transform: rotate(-4deg);
+      display: inline-block; margin-left: -0.5vw; margin-top: -2vh;
+    }
+    .hero-title.bottom {
+      font-size: clamp(64px, 14vw, 200px);
+      line-height: 0.9; transform: rotate(2deg);
+      display: inline-block; margin-top: -1vh;
+    }
+    .hero-tagline {
+      position: absolute; right: 7vw; bottom: 8vh;
+      text-align: right; max-width: 300px;
+    }
+    .hero-tagline .tag-label {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(10px, 0.9vw, 12px);
+      letter-spacing: 3px; text-transform: uppercase;
+      font-weight: 600; color: var(--red); margin-bottom: 8px;
+    }
+    .hero-tagline .tag-body {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(13px, 1.2vw, 16px);
+      line-height: 1.6; color: var(--dark); font-style: italic;
+    }
+
+    /* ---------- SLIDE 2: RED STATEMENT (ULTRA LOW) ---------- */
+    .slide-red {
+      background: var(--red); color: var(--bg);
+      text-align: center; justify-content: center;
+    }
+    .red-quote {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(32px, 7vw, 90px);
+      line-height: 1.15;
+      text-shadow: 5px 5px 0 var(--dark); /* solid offset, same as stat/close shadows */
+      max-width: 900px;
+    }
+    .red-cite {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(13px, 1.3vw, 16px);
+      font-style: italic; margin-top: 3vh; opacity: 0.92;
+    }
+
+    /* ---------- SLIDE 3: EXECUTIVE SUMMARY (MEDIUM) ---------- */
+    .slide-summary {
+      background: var(--bg); justify-content: center;
+      align-items: center;
+    }
+    .summary-inner {
+      width: 100%; max-width: 1100px;
+    }
+    .summary-header {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(32px, 5vw, 64px);
+      color: var(--dark); line-height: 1; margin-bottom: 4vh;
+    }
+    .summary-columns {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 48px; margin-bottom: 4vh;
+    }
+    .summary-col {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(13px, 1.2vw, 16px);
+      line-height: 1.75; color: var(--dark);
+    }
+    .summary-col strong {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 600; font-size: 0.95em;
+      letter-spacing: 0.3px;
+    }
+    .summary-highlights {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 0; border: 2px solid var(--dark);
+    }
+    .summary-hl {
+      padding: 20px 24px; border-left: 2px solid var(--dark);
+      display: flex; flex-direction: column;
+    }
+    .summary-hl:first-child { border-left: none; }
+    .summary-hl .hl-num {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(28px, 3.5vw, 48px);
+      color: var(--red); line-height: 1; margin-bottom: 6px;
+    }
+    .summary-hl .hl-label {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 10px; letter-spacing: 2px;
+      text-transform: uppercase; font-weight: 600;
+      color: var(--dark); margin-bottom: 4px;
+    }
+    .summary-hl .hl-body {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(11px, 1vw, 13px);
+      line-height: 1.5; color: var(--dark); opacity: 0.85;
+    }
+
+    /* ---------- SLIDE 4: FINANCIAL GRID (HIGH) ---------- */
+    .slide-financial {
+      background: var(--bg); justify-content: center;
+      align-items: stretch;
+    }
+    .fin-header {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(36px, 6vw, 72px);
+      color: var(--dark); margin-bottom: 3vh; line-height: 1;
+    }
+    .fin-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 0; width: 100%; max-width: 1100px;
+      border: 3px solid var(--dark);
+    }
+    .fin-cell {
+      padding: 22px 20px;
+      border-left: 3px solid var(--dark); border-top: 3px solid var(--dark);
+      display: flex; flex-direction: column; justify-content: flex-start;
+    }
+    .fin-cell:nth-child(3n + 1) { border-left: none; }
+    .fin-cell:nth-child(-n + 3) { border-top: none; }
+    .fin-cell .fc-num {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(28px, 3.5vw, 52px);
+      color: var(--red); line-height: 1; margin-bottom: 8px;
+    }
+    .fin-cell .fc-label {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 10px; letter-spacing: 2px;
+      text-transform: uppercase; font-weight: 600;
+      color: var(--dark); margin-bottom: 6px;
+    }
+    .fin-cell .fc-body {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(11px, 1vw, 13px);
+      line-height: 1.55; color: var(--dark); opacity: 0.85;
+      margin-bottom: 10px;
+    }
+    .fin-cell .fc-micro {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 11px; color: var(--dark); opacity: 0.78;
+      line-height: 1.4; margin-top: auto;
+    }
+
+    /* ---------- SLIDE 5: BIG STAT (LOW) ---------- */
+    .slide-stat {
+      background: var(--bg); justify-content: center;
+      align-items: center; text-align: center;
+    }
+    .stat-big {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(120px, 26vw, 320px);
+      line-height: 0.82; color: var(--red);
+      rotate: -6deg; display: inline-block;
+      text-shadow: 5px 5px 0 var(--dark);
+    }
+    .stat-row {
+      display: flex; gap: 48px; justify-content: center;
+      margin-top: 5vh;
+    }
+    .stat-item {
+      text-align: center;
+    }
+    .stat-item .si-num {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(28px, 4vw, 56px);
+      color: var(--dark); line-height: 1;
+    }
+    .stat-item .si-label {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 10px; letter-spacing: 2px;
+      text-transform: uppercase; font-weight: 600;
+      color: var(--dark); margin-top: 4px;
+    }
+    .stat-context {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(13px, 1.2vw, 16px);
+      font-style: italic; color: var(--dark); opacity: 0.82;
+      margin-top: 3vh; max-width: 520px; line-height: 1.6;
+    }
+
+    /* ---------- SLIDE 6: SERVICES (HIGH) ---------- */
+    .slide-services {
+      background: var(--bg); justify-content: center;
+      align-items: center;
+    }
+    .svc-header {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(32px, 5vw, 64px);
+      color: var(--dark); line-height: 1; margin-bottom: 3vh;
+    }
+    .svc-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 24px 32px; width: 100%; max-width: 1000px;
+    }
+    .svc-card {
+      border-left: 4px solid var(--red);
+      padding-left: 18px;
+    }
+    .svc-card .svc-title {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(22px, 3vw, 36px);
+      line-height: 1.1; color: var(--dark); margin-bottom: 8px;
+    }
+    .svc-card .svc-body {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(12px, 1.1vw, 14px);
+      line-height: 1.6; color: var(--dark); opacity: 0.85;
+      margin-bottom: 10px;
+    }
+    .svc-card .svc-bullets {
+      list-style: none; padding: 0; margin: 0;
+    }
+    .svc-card .svc-bullets li {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(10px, 0.9vw, 12px);
+      line-height: 1.45; color: var(--dark); opacity: 0.8;
+      padding-left: 12px; position: relative; margin-bottom: 3px;
+    }
+    .svc-card .svc-bullets li::before {
+      content: '\25AA'; position: absolute; left: 0;
+      color: var(--red); font-weight: 700;
+    }
+
+    /* ---------- SLIDE 7: ROADMAP (VERY HIGH) ---------- */
+    /* tinted paper, not a second inversion: the red statement slide owns the deck's one flip */
+    .slide-roadmap {
+      background: var(--light); color: var(--dark);
+      justify-content: center; align-items: center;
+      padding: 40px 48px;
+    }
+    .rm-inner {
+      width: 100%; max-width: 1100px;
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 28px 36px;
+    }
+    .rm-phase {
+      border-left: 3px solid var(--red);
+      padding-left: 16px;
+    }
+    .rm-phase .rm-label {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 10px; letter-spacing: 3px;
+      text-transform: uppercase; font-weight: 700;
+      color: var(--red); margin-bottom: 6px;
+    }
+    .rm-phase .rm-title {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(18px, 2.5vw, 32px);
+      line-height: 1.1; color: var(--dark); margin-bottom: 8px;
+    }
+    .rm-phase .rm-body {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(11px, 1vw, 13px);
+      line-height: 1.6; color: var(--dark); opacity: 0.9;
+      margin-bottom: 10px;
+    }
+    .rm-phase .rm-bullets {
+      list-style: none; padding: 0; margin: 0;
+    }
+    .rm-phase .rm-bullets li {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(10px, 0.85vw, 11px);
+      line-height: 1.4; color: var(--dark); opacity: 0.85;
+      padding-left: 12px; position: relative; margin-bottom: 3px;
+    }
+    .rm-phase .rm-bullets li::before {
+      content: '\25AA'; position: absolute; left: 0;
+      color: var(--red); font-weight: 700;
+    }
+
+    /* ---------- SLIDE 8: PILLARS (VERY HIGH) ---------- */
+    .slide-pillars {
+      flex-direction: row; padding: 0; background: var(--bg);
+    }
+    .pillar {
+      flex: 1; display: flex; flex-direction: column;
+      justify-content: flex-start; align-items: flex-start;
+      padding: 32px 24px; text-align: left;
+      border-right: 3px solid var(--dark); position: relative;
+      overflow-y: auto;
+    }
+    .pillar:last-child { border-right: none; }
+    .pillar:nth-child(odd) { background: var(--light); }
+    .pillar .p-num {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(36px, 5vw, 64px);
+      color: var(--red); line-height: 1; margin-bottom: 10px;
+    }
+    .pillar .p-title {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(18px, 2.2vw, 28px);
+      color: var(--dark); line-height: 1.15; margin-bottom: 12px;
+    }
+    .pillar .p-lead {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(12px, 1.1vw, 14px);
+      line-height: 1.6; color: var(--dark); font-style: italic;
+      margin-bottom: 12px;
+    }
+    .pillar .p-bullets {
+      list-style: none; padding: 0; margin: 0; width: 100%;
+    }
+    .pillar .p-bullets li {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(10px, 0.9vw, 12px);
+      line-height: 1.45; color: var(--dark); opacity: 0.85;
+      padding: 5px 0; border-bottom: 1px solid rgba(28,20,16,0.14);
+    }
+    .pillar .p-bullets li:last-child { border-bottom: none; }
+
+    /* ---------- SLIDE 9: GLOBAL (MEDIUM-HIGH) ---------- */
+    .slide-global {
+      background: var(--bg); justify-content: center;
+      align-items: center;
+    }
+    .global-inner {
+      width: 100%; max-width: 1000px;
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 32px 40px;
+    }
+    .global-header {
+      grid-column: 1 / -1;
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(32px, 5vw, 64px);
+      color: var(--dark); line-height: 1; margin-bottom: 1vh;
+    }
+    .global-card {
+      border: 2px solid var(--dark); padding: 24px;
+      display: flex; flex-direction: column;
+    }
+    .global-card .gc-label {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 10px; letter-spacing: 2px;
+      text-transform: uppercase; font-weight: 600;
+      color: var(--red); margin-bottom: 10px;
+    }
+    .global-card .gc-title {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(20px, 2.5vw, 32px);
+      color: var(--dark); line-height: 1.1; margin-bottom: 10px;
+    }
+    .global-card .gc-body {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(12px, 1.1vw, 14px);
+      line-height: 1.65; color: var(--dark); opacity: 0.85;
+    }
+    .global-card .gc-stats {
+      display: flex; gap: 20px; margin-top: 14px;
+    }
+    .global-card .gc-stat {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 11px; color: var(--dark); opacity: 0.78;
+      line-height: 1.4;
+    }
+    .global-card .gc-stat strong {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(18px, 2vw, 28px);
+      color: var(--red); display: block; line-height: 1;
+      margin-bottom: 2px;
+    }
+
+    /* ---------- SLIDE 10: CLOSING (ULTRA LOW) ---------- */
+    .slide-close {
+      background: var(--bg); justify-content: center;
+      align-items: center; text-align: center; position: relative;
+    }
+    .close-big {
+      font-family: 'Shrikhand', cursive;
+      font-size: clamp(80px, 18vw, 260px);
+      line-height: 0.88; color: var(--red);
+      rotate: -5deg; display: inline-block;
+      text-shadow: 5px 5px 0 var(--dark);
+    }
+    .close-sub {
+      font-family: 'Libre Baskerville', serif;
+      font-size: clamp(14px, 1.5vw, 18px);
+      font-style: italic; color: var(--dark);
+      margin-top: 4vh; max-width: 520px; line-height: 1.6;
+    }
+    .close-links {
+      margin-top: 5vh; display: flex; gap: 32px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(10px, 0.9vw, 12px);
+      letter-spacing: 2px; text-transform: uppercase;
+      font-weight: 600;
+    }
+    .close-links a {
+      color: var(--dark); text-decoration: none;
+      border-bottom: 2px solid var(--red); padding-bottom: 4px;
+      transition: color 0.3s;
+    }
+    .close-links a:hover { color: var(--red); }
+
+    /* ---------- RESPONSIVE ---------- */
+    @media (max-width: 768px) {
+      .slide { padding: 32px 24px; }
+      .summary-columns { grid-template-columns: 1fr; gap: 20px; }
+      .summary-highlights { grid-template-columns: 1fr; }
+      .summary-hl { border-left: none; border-top: 2px solid var(--dark); }
+      .summary-hl:first-child { border-top: none; }
+      .fin-grid { grid-template-columns: 1fr 1fr; }
+      .fin-cell { border-left: 3px solid var(--dark); border-top: 3px solid var(--dark); }
+      .fin-cell:nth-child(odd) { border-left: none; }
+      .fin-cell:nth-child(-n + 2) { border-top: none; }
+      .svc-grid { grid-template-columns: 1fr; gap: 20px; }
+      .rm-inner { grid-template-columns: 1fr; gap: 20px; }
+      .slide-pillars { flex-direction: column; }
+      .pillar { border-right: none; border-bottom: 3px solid var(--dark); padding: 24px; }
+      .pillar:last-child { border-bottom: none; }
+      .global-inner { grid-template-columns: 1fr; gap: 20px; }
+      .stat-row { flex-direction: column; gap: 16px; }
+      .hero-tagline { position: relative; right: auto; bottom: auto; text-align: left; margin-top: 3vh; max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="progress" id="progress"></div>
+  <div class="counter" id="counter">01 / 10</div>
+  <div class="hint"><span>&#8592;</span> Click or Swipe <span>&#8594;</span></div>
+
+  <div class="slides" id="slides">
+
+    <!-- SLIDE 1: HERO (ULTRA LOW) -->
+    <div class="slide slide-hero active" data-index="0">
+      <div class="hero-meta">Series A Growth Memo &mdash; Prepared for the Partnership</div>
+      <div class="hero-title-group">
+        <div class="hero-title">Open</div>
+        <div class="hero-title red">Design</div>
+        <div class="hero-title bottom">Series&nbsp;A</div>
+      </div>
+      <div class="hero-tagline">
+        <div class="tag-label">$18M Ask &middot; Apache-2.0 &middot; BYOK</div>
+        <div class="tag-body">The traction curve, the expansion motion, and why this round is venture-scale.</div>
+      </div>
+    </div>
+
+    <!-- SLIDE 2: RED STATEMENT (ULTRA LOW) -->
+    <div class="slide slide-red" data-index="1">
+      <div class="red-quote">"Design AI billed per seat, locked to one model, run in someone else's cloud &mdash; that's the market OpenDesign is eating."</div>
+      <div class="red-cite">&mdash; The wedge thesis, in one sentence</div>
+    </div>
+
+    <!-- SLIDE 3: EXECUTIVE SUMMARY (MEDIUM) -->
+    <div class="slide slide-summary" data-index="2">
+      <div class="summary-inner">
+        <div class="summary-header">The Solution</div>
+        <div class="summary-columns">
+          <div class="summary-col">
+            In April 2026, Claude Design proved for the first time that an LLM can truly design &mdash; not write about design, but produce real artifacts. But it shipped closed-source, paid, and cloud-only: one model, no agent choice, no self-hosting, no BYOK. That gap is the entire wedge.
+            <br><br>
+            <strong>OpenDesign</strong> sets that capability free: <strong>Apache-2.0</strong>, runs on the user's own machine, <strong>BYOK</strong>, no sign-up wall between a builder and their first output.
+          </div>
+          <div class="summary-col">
+            We didn't rebuild agents &mdash; we wired <strong>Claude Code, Codex, and Cursor</strong>, already installed on the builder's machine, into one complete design workflow. That is why distribution is free: every install is a developer who already had the hard part.
+            <br><br>
+            And every session compounds: design systems, preferences, and memory turn one-time users into a moat, not a funnel that leaks after signup.
+          </div>
+        </div>
+        <div class="summary-highlights">
+          <div class="summary-hl">
+            <div class="hl-num">68K+</div>
+            <div class="hl-label">GitHub Stars, +41% QoQ</div>
+            <div class="hl-body">Zero-dollar CAC distribution compounding faster than our closed-source comp.</div>
+          </div>
+          <div class="summary-hl">
+            <div class="hl-num">310+</div>
+            <div class="hl-label">Active Contributors</div>
+            <div class="hl-body">An external engineering org shipping the roadmap alongside our 14 FTEs.</div>
+          </div>
+          <div class="summary-hl">
+            <div class="hl-num">224+</div>
+            <div class="hl-label">Plugins Shipped</div>
+            <div class="hl-body">A marketplace surface we did not have to staff to build.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 4: FINANCIAL GRID (HIGH) -->
+    <div class="slide slide-financial" data-index="3">
+      <div class="fin-header">Traction, By the Numbers</div>
+      <div class="fin-grid">
+        <div class="fin-cell">
+          <div class="fc-num">68.4K</div>
+          <div class="fc-label">GitHub Stars</div>
+          <div class="fc-body">Up from 4,800 twelve months ago &mdash; the top-of-funnel a paid sales team would otherwise cost us.</div>
+          <div class="fc-micro">github.com/nexu-io/open-design</div>
+        </div>
+        <div class="fin-cell">
+          <div class="fc-num">312</div>
+          <div class="fc-label">Merging Contributors</div>
+          <div class="fc-body">External engineers shipping PRs weekly &mdash; our roadmap velocity isn't gated by headcount we pay for.</div>
+          <div class="fc-micro">Apache-2.0 licensed.</div>
+        </div>
+        <div class="fin-cell">
+          <div class="fc-num">224+</div>
+          <div class="fc-label">Plugins Live</div>
+          <div class="fc-body">3.1 shipped per week across prototypes, slides, dashboards, and reports &mdash; a marketplace we didn't staff.</div>
+          <div class="fc-micro">Official and community plugins.</div>
+        </div>
+        <div class="fin-cell">
+          <div class="fc-num">131</div>
+          <div class="fc-label">Design Systems Imported</div>
+          <div class="fc-body">Each import is a workspace that returns weekly &mdash; the retention signal behind our expansion motion.</div>
+          <div class="fc-micro">Markdown systems stop token drift.</div>
+        </div>
+        <div class="fin-cell">
+          <div class="fc-num">22</div>
+          <div class="fc-label">Coding Agents Wired In</div>
+          <div class="fc-body">Auto-detected from PATH with zero config &mdash; Claude Code, Codex CLI, Cursor Agent, and more.</div>
+          <div class="fc-micro">BYOK for any compatible endpoint.</div>
+        </div>
+        <div class="fin-cell">
+          <div class="fc-num">6.9x</div>
+          <div class="fc-label">Cost Advantage</div>
+          <div class="fc-body">Versus the closed-source comp &mdash; builders bring their own keys and pay providers directly.</div>
+          <div class="fc-micro">$501 &rarr; ~$73 per seat, per month.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 5: BIG STAT (LOW) -->
+    <div class="slide slide-stat" data-index="4">
+      <div class="stat-big">41%</div>
+      <div class="stat-row">
+        <div class="stat-item">
+          <div class="si-num">312</div>
+          <div class="si-label">Contributors</div>
+        </div>
+        <div class="stat-item">
+          <div class="si-num">224+</div>
+          <div class="si-label">Plugins</div>
+        </div>
+        <div class="stat-item">
+          <div class="si-num">22</div>
+          <div class="si-label">Coding Agents</div>
+        </div>
+      </div>
+      <div class="stat-context">
+        Quarter-over-quarter star growth &mdash; open source distribution compounding faster than our closed, cloud-only comp is spending on paid acquisition.
+      </div>
+    </div>
+
+    <!-- SLIDE 6: SERVICES (HIGH) -->
+    <div class="slide slide-services" data-index="5">
+      <div class="svc-header">The Wedge: Where We Land</div>
+      <div class="svc-grid">
+        <div class="svc-card">
+          <div class="svc-title">Prototype</div>
+          <div class="svc-body">The lowest-friction land point: a builder describes a screen, gets a real runnable prototype, and never leaves their own machine.</div>
+          <ul class="svc-bullets">
+            <li>Mobile and web flows</li>
+            <li>Interactive states, not static pictures</li>
+            <li>Instant sandbox preview and edits</li>
+            <li>Zero-signup first session</li>
+          </ul>
+        </div>
+        <div class="svc-card">
+          <div class="svc-title">Slides</div>
+          <div class="svc-body">The expand motion into teams: decks and dashboards get shared, and every share is a new builder discovering the wedge.</div>
+          <ul class="svc-bullets">
+            <li>Creative decks</li>
+            <li>Research reports</li>
+            <li>Interactive dashboards</li>
+            <li>Live briefs that pull in coworkers</li>
+          </ul>
+        </div>
+        <div class="svc-card">
+          <div class="svc-title">Image</div>
+          <div class="svc-body">The moat forms here: once a design system is imported, every image generated is locked to the workspace's own palette and taste.</div>
+          <ul class="svc-bullets">
+            <li>Posters</li>
+            <li>Illustrations</li>
+            <li>Product mockups</li>
+            <li>Brand-consistent output, run over run</li>
+          </ul>
+        </div>
+        <div class="svc-card">
+          <div class="svc-title">Video</div>
+          <div class="svc-body">The highest-ACV surface: HyperFrames turns a design workspace into a marketing production line, the upsell we monetize next.</div>
+          <ul class="svc-bullets">
+            <li>HyperFrames HTML-to-MP4 pipeline</li>
+            <li>Marketing shorts</li>
+            <li>Product demos</li>
+            <li>Cinematic generative footage</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 7: ROADMAP (VERY HIGH) -->
+    <div class="slide slide-roadmap" data-index="6">
+      <div class="rm-inner">
+        <div class="rm-phase">
+          <div class="rm-label">Motion One &mdash; Land</div>
+          <div class="rm-title">One Builder, Zero Friction</div>
+          <div class="rm-body">A single developer installs locally, describes a goal in one sentence, and gets a working artifact before any sales conversation happens.</div>
+          <ul class="rm-bullets">
+            <li>224+ plugins as instant starting points</li>
+            <li>Local files, Figma exports, and repos readable</li>
+            <li>Works with agents already on the machine</li>
+            <li>No sign-up wall between intent and output</li>
+          </ul>
+        </div>
+        <div class="rm-phase">
+          <div class="rm-label">Motion Two &mdash; Standardize</div>
+          <div class="rm-title">The Team Imports a System</div>
+          <div class="rm-body">The first shared win pulls in a design system import &mdash; 131 and counting &mdash; and the whole team now generates on-brand by default.</div>
+          <ul class="rm-bullets">
+            <li>Import from GitHub, Figma, or local files</li>
+            <li>Markdown design systems stop token drift</li>
+            <li>Palette, type, and spacing auto-applied</li>
+            <li>Brand consistency enforced run over run</li>
+          </ul>
+        </div>
+        <div class="rm-phase">
+          <div class="rm-label">Motion Three &mdash; Compound</div>
+          <div class="rm-title">Memory Becomes Switching Cost</div>
+          <div class="rm-body">Every session writes back into preferences and memory, so the workspace gets measurably better at this team's taste &mdash; and harder to leave.</div>
+          <ul class="rm-bullets">
+            <li>Real runnable, git-diffable files</li>
+            <li>Instant sandbox preview and edits</li>
+            <li>Self-evolving design memory per workspace</li>
+            <li>Each run lands closer to what the team wants</li>
+          </ul>
+        </div>
+        <div class="rm-phase">
+          <div class="rm-label">Motion Four &mdash; Expand</div>
+          <div class="rm-title">Video Opens the Upsell</div>
+          <div class="rm-body">HyperFrames turns the same workspace into a marketing production line &mdash; the seat-based, higher-ACV surface we monetize on top of the free core.</div>
+          <ul class="rm-bullets">
+            <li>Engineering handoff for prototypes</li>
+            <li>HTML-to-MP4 video via HyperFrames</li>
+            <li>Cross-team accounts, not single seats</li>
+            <li>Land-and-expand, not a one-time download</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 8: PILLARS (VERY HIGH) -->
+    <div class="slide slide-pillars" data-index="7">
+      <div class="pillar">
+        <div class="p-num">01</div>
+        <div class="p-title">Distribution Moat</div>
+        <div class="p-lead">Desktop-native, zero-CAC installs compound faster than any closed competitor's paid funnel.</div>
+        <ul class="p-bullets">
+          <li>68.4K GitHub stars, +41% QoQ</li>
+          <li>Local files, Figma exports, and repos as context</li>
+          <li>Runs on the builder's own machine, no cloud lock-in</li>
+          <li>No sign-up wall to convert against</li>
+          <li>Available for macOS and Windows today</li>
+          <li>312 outside contributors extending the roadmap for free</li>
+        </ul>
+      </div>
+      <div class="pillar">
+        <div class="p-num">02</div>
+        <div class="p-title">Architecture Moat</div>
+        <div class="p-lead">We don't compete with the model layer &mdash; we sit above it, so no single model shift can strand us.</div>
+        <ul class="p-bullets">
+          <li>22 coding agents supported, zero config</li>
+          <li>Claude Code, Codex, and Cursor wired in, not rebuilt</li>
+          <li>Full-stack BYOK across providers</li>
+          <li>Anthropic, OpenAI, Azure, and Google endpoints</li>
+          <li>14 media providers, none exclusive</li>
+          <li>A closed competitor locked to one model can't match this</li>
+        </ul>
+      </div>
+      <div class="pillar">
+        <div class="p-num">03</div>
+        <div class="p-title">Data Moat</div>
+        <div class="p-lead">Every session writes into workspace memory, so tenure with OpenDesign is switching cost, not just usage.</div>
+        <ul class="p-bullets">
+          <li>Self-evolving design memory per workspace</li>
+          <li>Preferences and color lineage remembered</li>
+          <li>131 imported design systems and climbing</li>
+          <li>Markdown systems stop token drift</li>
+          <li>Memory compounds run over run</li>
+          <li>Churn risk drops the longer a team stays</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- SLIDE 9: GLOBAL (MEDIUM-HIGH) -->
+    <div class="slide slide-global" data-index="8">
+      <div class="global-inner">
+        <div class="global-header">Why This Is Venture-Scale</div>
+        <div class="global-card">
+          <div class="gc-label">TAM Entry</div>
+          <div class="gc-title">Every Coding Agent Seat</div>
+          <div class="gc-body">We don't sell against agents, we sit on top of every one of them &mdash; Claude Code, Codex CLI, Cursor Agent, Gemini CLI, and more. Any OpenAI / Azure / Google endpoint works via BYOK, so our TAM is the entire agentic-coding market, not one vendor's install base.</div>
+          <div class="gc-stats">
+            <div class="gc-stat"><strong>22</strong> agents</div>
+            <div class="gc-stat"><strong>0</strong> config needed</div>
+          </div>
+        </div>
+        <div class="global-card">
+          <div class="gc-label">Expansion</div>
+          <div class="gc-title">Design Systems Drive NRR</div>
+          <div class="gc-body">Every imported design system is a workspace that returns weekly and pulls in teammates &mdash; the mechanism behind our expansion revenue once monetization ships.</div>
+          <div class="gc-stats">
+            <div class="gc-stat"><strong>131</strong> design systems</div>
+          </div>
+        </div>
+        <div class="global-card">
+          <div class="gc-label">Marketplace</div>
+          <div class="gc-title">Plugins Are Unpaid R&amp;D</div>
+          <div class="gc-body">Prototypes, slides, posters, dashboards, weekly reports, OKRs &mdash; a community shipping our surface area faster than we could staff it, for free.</div>
+          <div class="gc-stats">
+            <div class="gc-stat"><strong>224+</strong> plugins</div>
+          </div>
+        </div>
+        <div class="global-card">
+          <div class="gc-label">Urgency</div>
+          <div class="gc-title">The Window Is Now</div>
+          <div class="gc-body">Apache-2.0, fork- and self-host-friendly, built in the open on GitHub and Discord &mdash; the open alternative to closed design AI doesn't stay uncontested for long. This round funds the sprint to lock it in.</div>
+          <div class="gc-stats">
+            <div class="gc-stat"><strong>68.4K</strong> GitHub stars</div>
+            <div class="gc-stat"><strong>312</strong> contributors</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 10: CLOSING (ULTRA LOW) -->
+    <div class="slide slide-close" data-index="9">
+      <div class="close-big">The Ask</div>
+      <div class="close-sub">
+        $18M Series A to convert an open-source distribution lead into the default agent-native design workspace.<br>
+        Funding platform engineering, the workspace collaboration hub, and enterprise go-to-market &mdash; github.com/nexu-io/open-design
+      </div>
+      <div class="close-links">
+        <a href="https://open-design.ai/" target="_blank" rel="noreferrer noopener">Data Room</a>
+        <a href="https://github.com/nexu-io/open-design" target="_blank" rel="noreferrer noopener">Star on GitHub</a>
+        <a href="https://discord.gg/mHAjSMV6gz" target="_blank" rel="noreferrer noopener">Book Time</a>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    (function() {
+      const slides = document.querySelectorAll('.slide');
+      const progress = document.getElementById('progress');
+      const counter = document.getElementById('counter');
+      const total = slides.length;
+      let current = 0;
+
+      function show(i) {
+        slides.forEach((s, idx) => s.classList.toggle('active', idx === i));
+        progress.style.width = ((i + 1) / total * 100) + '%';
+        counter.textContent = String(i + 1).padStart(2, '0') + ' / ' + String(total).padStart(2, '0');
+      }
+
+      function next() { if (current < total - 1) { current++; show(current); } }
+      function prev() { if (current > 0) { current--; show(current); } }
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ' || e.key === 'Enter' || e.key === 'PageDown') {
+          e.preventDefault(); next();
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
+          e.preventDefault(); prev();
+        }
+      });
+
+      document.addEventListener('click', (e) => {
+        const x = e.clientX;
+        const w = window.innerWidth;
+        if (x > w / 2) next(); else prev();
+      });
+
+      let tx = 0;
+      document.addEventListener('touchstart', (e) => { tx = e.changedTouches[0].screenX; });
+      document.addEventListener('touchend', (e) => {
+        const dx = e.changedTouches[0].screenX - tx;
+        if (dx < -50) next();
+        else if (dx > 50) prev();
+      });
+
+      show(0);
+    })();
+  </script>
+
+</body>
+</html>
