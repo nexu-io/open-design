@@ -395,15 +395,18 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number, meter: WorkMet
     }
     case "triangulate": {
       const m = need();
-      // Charge the ear-clip's TRUE cost BEFORE running it: ear-clipping an n-gon
-      // is ~O(n²) exact-rational work, so a single pathological huge face would
-      // otherwise stall for O(n²) before any output-based charge caught it. Σ n²
-      // over faces is that work — a realistic face (hundreds of sides) is cheap,
-      // a 10k-sided monster trips the budget with a diagnostic instead of hanging.
-      // (The O(n log n) triangulation that would make even huge faces cheap is the
-      // documented next step; until then the meter makes the cost honest.)
-      const earClipWork = m.faces.reduce((a, f) => a + f.length * f.length, 0);
-      charge(meter, earClipWork, i, "triangulate");
+      // Charge the TRUE cost BEFORE running it: the monotone sweep triangulates
+      // an n-gon in O(n log n) exact-rational work, so Σ n·log₂n over faces is
+      // the topology term — work ≈ output, so a realistic face is cheap and even a
+      // huge face is bounded (no O(n²) corner to stall on). Scale by
+      // `coordComplexity` like every other grower: each rational predicate costs
+      // ~O(coordinate bit length), so a mesh with deep coordinates (a chain of
+      // `scale(1/3)`) pays for its arithmetic, not just its topology.
+      const triTopology = m.faces.reduce(
+        (a, f) => a + f.length * Math.max(1, Math.ceil(Math.log2(f.length))),
+        0,
+      );
+      charge(meter, triTopology * coordComplexity(m), i, "triangulate");
       return triangulate(m);
     }
     case "clip": {

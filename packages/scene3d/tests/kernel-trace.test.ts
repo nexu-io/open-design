@@ -118,24 +118,20 @@ describe("kernel trace: the work meter guards runaway, not scale", () => {
 
   it("an invalid budget (NaN/Infinity/≤0) falls back to the default — the guard can't be disabled", () => {
     // A bad budget must NOT silently switch the runaway guard off: `spent > NaN`
-    // is always false, `> Infinity` never true. A ~1600-sided face costs ~2.6M
-    // ear-clip units (over the ~2M default) so triangulate trips at the default —
-    // cheap to set up (no huge mesh built), and it must still fire for each bad
-    // budget rather than passing through unmetered.
-    const n = 1600;
-    const ring: Array<[number, number, number]> = Array.from({ length: n }, (_, k) => {
-      const a = (2 * Math.PI * k) / n;
-      return [Math.round(1000 * Math.cos(a)), Math.round(1000 * Math.sin(a)), 0];
-    });
-    const trace = new Recorder()
-      .cage(ring, [Array.from({ length: n }, (_, k) => k)])
-      .triangulate()
-      .trace();
+    // is always false, `> Infinity` never true. A cage of many points whose
+    // coordinate TEXT totals over the ~2M default costs that many parse units —
+    // charged BEFORE any mesh is built, so it trips cheaply (no allocation), and
+    // it must still fire for each bad budget rather than passing through
+    // unmetered. (The triangulate charge is now O(n·log n), too cheap to trip.)
+    const n = 20_000;
+    const coord = "1234567890123456789012345678901234567890"; // 40 digits ⇒ ~2.4M coord-text units
+    const pts: Array<[string, string, string]> = Array.from({ length: n }, () => [coord, coord, coord]);
+    const trace = new Recorder().cage(pts, [Array.from({ length: n }, (_, k) => k)]).trace();
     for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, 0, -100] as number[]) {
       expect(() => evalTrace(trace, { workBudget: bad })).toThrow(WorkBudgetError);
     }
-    // And a generous explicit budget builds the same 1600-gon fine.
-    expect(() => evalTrace(trace, { workBudget: 50_000_000 })).not.toThrow();
+    // (That the SAME charge clears under a raised budget — the wall raised, not
+    // disabled — is the next test.)
   });
 
   it("a raised budget builds what the default would refuse — a wall you can raise", () => {

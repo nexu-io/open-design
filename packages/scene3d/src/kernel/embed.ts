@@ -1,5 +1,6 @@
 import { Rational } from "./rational.js";
 import type { KernelMesh, RVec3 } from "./mesh.js";
+import { triangulateSimplePolygon, type P2 } from "./triangulate.js";
 
 /**
  * Exact embedding test — does a closed mesh BOUND a solid, or merely IMMERSE?
@@ -198,28 +199,28 @@ export function trianglesProperlyIntersect(t1: Tri, t2: Tri): boolean {
 }
 
 /**
- * Exact ear-clipping of ONE face (a simple polygon, possibly non-planar and
- * NON-CONVEX) into triangles — every decision the sign of a rational
- * determinant. A fan from one vertex only tiles a STAR-shaped polygon; an L- or
- * U-shaped cap has no such vertex, so its fan overlaps in-plane (a real
- * self-intersection). Ear-clipping produces a VALID, non-overlapping
- * triangulation of any simple polygon, so its triangles tile the face — they
- * share edges, never area. The face is projected onto the coordinate plane its
- * Newell normal is most aligned with, oriented CCW so a left turn marks a convex
- * ear tip; a tip whose CLOSED triangle contains no other vertex is clipped.
+ * Exact O(n log n) triangulation of ONE face (a simple polygon, possibly
+ * non-planar and NON-CONVEX) into triangles — every decision the sign of a
+ * rational determinant. A fan from one vertex only tiles a STAR-shaped polygon;
+ * an L- or U-shaped cap has no such vertex, so its fan overlaps in-plane (a real
+ * self-intersection). This projects the face onto the coordinate plane its
+ * Newell normal is most aligned with, oriented CCW, then hands the 2D simple
+ * polygon to the monotone sweep (`triangulateSimplePolygon`), which produces a
+ * VALID, non-overlapping triangulation — its triangles tile the face, sharing
+ * edges never area — in O(n log n) (the ear-clip it replaced was O(n²)/O(n³)).
  *
  * The projection is exact and simple for every planar face and every mildly
  * non-planar one (the overwhelming majority). It is NOT the authority on
  * correctness: a pathologically-folded non-planar face can project to a
  * self-crossing polygon, and a bow-tie or fully-collinear ring (which `meshOf`
- * does not reject) finds no ear and falls back to a fan of the remainder. Such a
- * triangulation is never TRUSTED — it is only ever a PROPOSAL. Soundness rests
- * on `embeds()`, which adjudicates the SHIPPED triangles themselves: it tests a
- * face's own triangles against each other (same-face pairs are not skipped) and
- * flags a zero-area triangle, so an invalid triangulation surfaces as a
- * self-intersection or an `unchecked` verdict — never a silently-certified
- * volume. Whatever the projection does, the certificate reports the volume of
- * the actual embedded surface or refuses to report one.
+ * does not reject) degrades to a finite fan. Such a triangulation is never
+ * TRUSTED — it is only ever a PROPOSAL. Soundness rests on `embeds()`, which
+ * adjudicates the SHIPPED triangles themselves: it tests a face's own triangles
+ * against each other (same-face pairs are not skipped) and flags a zero-area
+ * triangle, so an invalid triangulation surfaces as a self-intersection or an
+ * `unchecked` verdict — never a silently-certified volume. Whatever the
+ * projection does, the certificate reports the volume of the actual embedded
+ * surface or refuses to report one.
  */
 export function triangulateFace(face: readonly number[], verts: readonly RVec3[]): number[][] {
   const n = face.length;
@@ -251,50 +252,14 @@ export function triangulateFace(face: readonly number[], verts: readonly RVec3[]
   const flip = (drop === 0 ? nx : drop === 1 ? ny : nz).cmp(ZERO) < 0;
   const px = flip ? cj : ci;
   const py = flip ? ci : cj;
-  const at = (vi: number): [Rational, Rational] => [verts[vi]![px]!, verts[vi]![py]!];
-  const turn = (a: [Rational, Rational], b: [Rational, Rational], c: [Rational, Rational]): number =>
-    b[0].sub(a[0]).mul(c[1].sub(a[1])).sub(b[1].sub(a[1]).mul(c[0].sub(a[0]))).cmp(ZERO);
-  // CLOSED containment — inside OR on the boundary of the CCW triangle. A vertex
-  // lying exactly on a candidate ear's edge (a reflex tip on the ear's diagonal,
-  // a boundary-collinear vertex) must INVALIDATE that ear: clipping it anyway
-  // would run the new diagonal through that vertex and overlap the triangle that
-  // later consumes it. Strict-interior containment misses that touch; `>= 0`
-  // rejects the ear, and the two-ears theorem guarantees another ear remains.
-  const insideT = (pt: [Rational, Rational], a: [Rational, Rational], b: [Rational, Rational], c: [Rational, Rational]): boolean =>
-    turn(a, b, pt) >= 0 && turn(b, c, pt) >= 0 && turn(c, a, pt) >= 0;
-  const poly = [...face];
-  const tris: number[][] = [];
-  let guard = n * n + 8;
-  while (poly.length > 3 && guard-- > 0) {
-    let clipped = false;
-    for (let k = 0; k < poly.length; k++) {
-      const m = poly.length;
-      const ip = poly[(k - 1 + m) % m]!;
-      const ic = poly[k]!;
-      const iN = poly[(k + 1) % m]!;
-      const A = at(ip);
-      const B = at(ic);
-      const C = at(iN);
-      if (turn(A, B, C) <= 0) continue; // reflex or straight — not a convex ear tip
-      let empty = true;
-      for (const other of poly) {
-        if (other === ip || other === ic || other === iN) continue;
-        if (insideT(at(other), A, B, C)) {
-          empty = false;
-          break;
-        }
-      }
-      if (!empty) continue;
-      tris.push([ip, ic, iN]);
-      poly.splice(k, 1);
-      clipped = true;
-      break;
-    }
-    if (!clipped) break; // no ear found — malformed polygon; fan the remainder (embeds() backstops it)
-  }
-  if (poly.length === 3) tris.push([poly[0]!, poly[1]!, poly[2]!]);
-  else for (let k = 1; k + 1 < poly.length; k++) tris.push([poly[0]!, poly[k]!, poly[k + 1]!]);
-  return tris;
+  // The projected polygon reads CCW; triangulate it exactly in O(n log n) with
+  // the monotone sweep (`triangulateSimplePolygon`) — retiring the old ear-clip's
+  // O(n²)/O(n³) corner so work ≈ output for every polygon. Still only a PROPOSAL:
+  // `embeds()` adjudicates the emitted triangles (a folded non-planar face, a
+  // bow-tie, or a collinear ring degrades to a finite fan there, never a silent
+  // certification). Original vertex indices are carried through `.i`.
+  const poly: P2[] = face.map((vi, k) => ({ x: verts[vi]![px]!, y: verts[vi]![py]!, i: vi, k }));
+  return triangulateSimplePolygon(poly);
 }
 
 /** The result of the embedding test. `unchecked` reports a bounded search that
@@ -320,19 +285,15 @@ export const EMBED_FACE_CAP = 20_000;
 export const EMBED_PAIR_CAP = 4_000_000;
 
 /**
- * Beyond this much ear-clip WORK (Σ n² over faces) the embedding test degrades to
- * `unchecked` rather than spend it — a cost bound on the TEST, not a size limit
- * on the asset (the mesh compiles either way). A dense normal mesh of triangles/
- * quads is Σ 9 or 16 per face, nowhere near this, and a face of hundreds of sides
- * is comfortably under it. HONEST caveat: naive ear-clipping is O(n²) typically
- * but O(n³) in the adversarial non-convex worst case (each of O(n²) ear tests
- * scans O(n) vertices), so Σ n² is the TYPICAL cost, not a hard worst-case bound;
- * an adversarial huge non-convex single face could still be slow. Replacing the
- * ear-clip with an O(n log n) monotone/sweep triangulation removes that corner
- * entirely (work ≈ output for every polygon) and is the documented next step;
- * this bound keeps the common path safe until then.
+ * Beyond this much triangulation WORK (Σ n·log₂n over faces) the embedding test
+ * degrades to `unchecked` rather than spend it — a cost bound on the TEST, not a
+ * size limit on the asset (the mesh compiles either way). The monotone sweep is
+ * O(n log n) per face, so work ≈ output: a dense normal mesh of triangles/quads
+ * is a few units per face, and even a face of hundreds of thousands of sides is
+ * comfortably under this. (This replaced the old ear-clip's Σ n² bound — the
+ * corner where an adversarial huge non-convex single face could stall is gone.)
  */
-export const EMBED_EARCLIP_WORK_CAP = 4_000_000;
+export const EMBED_TRIANGULATE_WORK_CAP = 4_000_000;
 
 /**
  * The first STRUCTURAL defect in a mesh's face list — a face with fewer than
@@ -390,21 +351,19 @@ export function embeds(mesh: KernelMesh): EmbedResult {
   // expensive — the mesh still compiles, only the volume's embedding certificate
   // is left unproven, never refused. Two cost signals, both degrade to
   // `unchecked`: the triangle total (a valid triangulation is Σ(sides−2)), and
-  // the ear-clip WORK (Σ n² — ear-clipping an n-gon is ~O(n²)), so one
-  // pathologically large single face cannot stall the census/volume path. (The
-  // O(n log n) triangulation that would make even a huge face cheap is the
-  // documented next step; until then this keeps the test bounded, not the asset.)
+  // the triangulation WORK (Σ n·log₂n — the monotone sweep is O(n log n)), so one
+  // pathologically large single face cannot stall the census/volume path.
   let projected = 0;
-  let earClipWork = 0;
+  let triWork = 0;
   for (const f of mesh.faces) {
     projected += f.length - 2;
-    earClipWork += f.length * f.length;
+    triWork += f.length * Math.max(1, Math.ceil(Math.log2(f.length)));
   }
   if (projected > EMBED_FACE_CAP) {
     return { kind: "unchecked", reason: `the mesh has ${projected} triangles, over the ${EMBED_FACE_CAP} embedding-test cap` };
   }
-  if (earClipWork > EMBED_EARCLIP_WORK_CAP) {
-    return { kind: "unchecked", reason: `a face is large enough that exact triangulation for the embedding test would cost ~${earClipWork} operations, over the ${EMBED_EARCLIP_WORK_CAP} bound — the volume's embedding is left unproven` };
+  if (triWork > EMBED_TRIANGULATE_WORK_CAP) {
+    return { kind: "unchecked", reason: `a face is large enough that exact triangulation for the embedding test would cost ~${triWork} operations, over the ${EMBED_TRIANGULATE_WORK_CAP} bound — the volume's embedding is left unproven` };
   }
   // Ear-clip every face into a valid triangle tiling, remembering the source face.
   const items: Array<{ face: number; lo: RVec3; hi: RVec3; tri: Tri }> = [];

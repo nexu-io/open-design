@@ -427,8 +427,8 @@ export function subdivide(mesh: KernelMesh, levels: number): KernelMesh {
 }
 
 /**
- * Triangulate every face by EXACT EAR-CLIPPING (`triangulateFace`), fixing ONE
- * valid triangulation into the geometry itself.
+ * Triangulate every face by EXACT O(n log n) monotone triangulation
+ * (`triangulateFace`), fixing ONE valid triangulation into the geometry itself.
  *
  * This is the author's opt-in escape from a triangulation-DEPENDENT volume. A
  * mesh of non-planar quads bounds a RANGE of volumes — one per triangulation,
@@ -438,7 +438,7 @@ export function subdivide(mesh: KernelMesh, levels: number): KernelMesh {
  * triangle is planar, so `volumeAmbiguity` is exactly 0 and the volume is a
  * property of the deliverable AND every re-triangulation of it. For a PLANAR
  * face the volume is unchanged whichever way it splits; for a non-planar face
- * the ear-clip commits to one specific value WITHIN the former band (it need not
+ * the triangulation commits to one specific value WITHIN the former band (it need not
  * equal the mass integral's own first-vertex fan diagonal). Topology-only —
  * vertices and their provenance are untouched, and a valid triangulation keeps a
  * closed manifold closed (each original edge still borders two faces; each new
@@ -462,7 +462,7 @@ export function subdivide(mesh: KernelMesh, levels: number): KernelMesh {
  */
 export function triangulate(mesh: KernelMesh): KernelMesh {
   // Reject a structurally malformed mesh rather than SILENTLY drop its bad faces
-  // (a sub-3-vertex face ear-clips to nothing): a mesh operator must not quietly
+  // (a sub-3-vertex face triangulates to nothing): a mesh operator must not quietly
   // change topology. Unreachable through the recipe path (every mesh flows through
   // meshOf), this guards a directly-assembled KernelMesh.
   const malformed = firstMalformedFace(mesh);
@@ -473,7 +473,7 @@ export function triangulate(mesh: KernelMesh): KernelMesh {
     verts: [...mesh.verts],
     faces,
     vertId: [...mesh.vertId],
-    // Original edges survive (each is an edge of some ear-clipped triangle), so
+    // Original edges survive (each is an edge of some output triangle), so
     // a crease on one is still a crease; the new diagonals are simply uncreased.
     ...(mesh.creases ? { creases: mesh.creases } : {}),
   };
