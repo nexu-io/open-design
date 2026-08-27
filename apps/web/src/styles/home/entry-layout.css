@@ -5710,8 +5710,8 @@
   padding-top: var(--spacing-10);
 }
 /* Update-ready slot: an independent top-right cluster item immediately AFTER
-   the credits/avatar capsule. The rail footer remains the signed-out fallback
-   because that shell has no account capsule.
+   the credits/avatar capsule when present. Signed-out shells keep the same
+   top-right position without rendering an account capsule.
 
    This stays a global selector next to the rest of the account block rather
    than a CSS Module: its only child is `.entry-updater-menu`, itself a global
