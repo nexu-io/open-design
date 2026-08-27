@@ -572,6 +572,11 @@ export interface CensusMesh {
   shapeKeys?: string[];
   ngons: number;
   nonManifoldEdges: number;
+  /** Pinch/bowtie vertices — a vertex whose faces do not form one fan. Manifold
+   *  EDGES do not catch this, but a true 2-manifold (watertight) forbids it, so
+   *  the kernel's watertight predicate and its adjudication compare on it too.
+   *  Absent on an older census, which then reads as "none measured". */
+  nonManifoldVertices?: number;
   zeroAreaFaces: number;
   nan: boolean;
   uvLayers: string[];
@@ -648,6 +653,13 @@ export interface CensusMesh {
   inconsistentWindingEdges?: number;
   /** Faces whose material slot is empty or out of range. */
   facesWithoutMaterial?: number;
+  /** Enclosed volume, fan-triangulated from each polygon's first vertex — the
+   *  SAME fan the kernel's exact mass uses, at full float precision. A recipe
+   *  part's exact rational volume is adjudicated against this (S3D-E-703).
+   *  `null` when the runner's measurement was non-finite (it maps that to null
+   *  so the payload stays valid JSON, exactly as R6 does) — a null reads as an
+   *  honest "unmeasured", never as a number. */
+  volumeFan?: number | null;
   /** Total world-space surface area, m². */
   surfaceArea?: number;
   /**

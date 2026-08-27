@@ -45,7 +45,8 @@ describe("kernel trace: the recorder and the evaluator agree with the kernel", (
 
   it("evalTraceWithCensus hands back both projections of the one exact object", () => {
     const { mesh, census } = evalTraceWithCensus(new Recorder().box().subdivide(1).trace());
-    expect(census).toEqual(predictCensus(mesh));
+    // evalTraceWithCensus is the ADJUDICATION census, so it carries mass; match it.
+    expect(census).toEqual(predictCensus(mesh, { mass: true }));
     expect([census.vertices, census.edges, census.faces]).toEqual([26, 48, 24]);
     expect(census.watertight).toBe(true);
   });

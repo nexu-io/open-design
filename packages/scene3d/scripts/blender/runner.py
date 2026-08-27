@@ -1341,6 +1341,41 @@ def action_has_curves(action):
 ZERO_AREA_RATIO = 1e-6
 
 
+def fan_volume(o):
+    """Signed enclosed volume, fanning EACH polygon from its own first vertex —
+    the exact SAME triangulation the kernel's `massProperties` uses. That is the
+    whole point: a kernel recipe part predicts an exact rational volume under
+    this fan, and comparing against a fan measured the identical way makes the
+    discrepancy pure float forward-error, not a disagreement with whatever
+    diagonal Blender's own splitter would pick for a non-planar quad.
+
+    Computed on LOCAL coords (near the mesh's own frame, so the determinant sum
+    is numerically stable) then scaled by |det| of the object's 3x3 linear part.
+    That catches an object-level SCALE — which the exact local prediction does
+    not assume — while keeping TRANSLATION out of it: measuring a far-placed part
+    in world space would inflate every determinant and its cancellation error in
+    proportion to the placement, tripping a false breach even though translation
+    preserves volume. Rotation's determinant is ±1, so a spun part still matches.
+    Reported at FULL float (not R6-quantised): the bound is ~1e-6, above grid."""
+    me = o.data
+    verts = me.vertices
+    total = 0.0
+    for poly in me.polygons:
+        idx = poly.vertices
+        if len(idx) < 3:
+            continue
+        a = verts[idx[0]].co
+        for k in range(1, len(idx) - 1):
+            total += a.dot(verts[idx[k]].co.cross(verts[idx[k + 1]].co))
+    vol = abs(total) / 6.0 * abs(o.matrix_world.to_3x3().determinant())
+    # This value ships at FULL float (it bypasses R6), so it must map its own
+    # non-finite result to None the way R6 does — otherwise an overflowed sum
+    # would reach emit()'s allow_nan=False and kill the entire compile. None
+    # transports as JSON null → undefined on the TS side → the volume reads
+    # UNCHECKED (W-702), never a false match. See R6 for the same contract.
+    return vol if math.isfinite(vol) else None
+
+
 def census(scene, measure_thickness=False, voxel_grid=0.0, zf_pair_budget=0):
     import bpy
     import bmesh
@@ -1410,6 +1445,18 @@ def census(scene, measure_thickness=False, voxel_grid=0.0, zf_pair_budget=0):
         bm.from_mesh(o.data)
         ngons = sum(1 for f in bm.faces if len(f.verts) > 4)
         non_manifold = sum(1 for e in bm.edges if not e.is_manifold)
+        # Pinch/bowtie vertices: a vertex whose incident faces do NOT form one
+        # fan. A shell joined to another at a single point has manifold EDGES yet
+        # is not a closed 2-manifold, so watertightness needs this too — it is
+        # the one topology fact the edge count cannot see, and the kernel's own
+        # watertight predicate includes it (predictCensus.nonManifoldVertices),
+        # so the measured projection must carry it to compare like with like.
+        # The `>= 2` face gate MATCHES the kernel's countNonManifoldVertices,
+        # which skips vertices with fewer than two incident faces: an orphan or a
+        # single-face corner is not a pinch. Without it Blender's is_manifold —
+        # false for a loose vertex too — would flag an orphan the kernel ignores,
+        # and a closed shell carrying one would draw a phantom watertight mismatch.
+        non_manifold_verts = sum(1 for v in bm.verts if not v.is_manifold and len(v.link_faces) >= 2)
         nan_verts = any(not all(math.isfinite(c) for c in v.co) for v in bm.verts)
         # Engine hygiene, counted while the mesh is already loaded. All of
         # these are invisible in Blender's viewport and punished on import:
@@ -1534,11 +1581,14 @@ def census(scene, measure_thickness=False, voxel_grid=0.0, zf_pair_budget=0):
             # looseVerts and nonManifoldEdges then name.
             "edges": len(o.data.edges),
             "tris": tris,
+            # Fan-triangulated WORLD volume (kernel's own fan) at full float —
+            # a recipe part's exact rational volume is adjudicated against this.
+            "volumeFan": fan_volume(o),
             # Morph-target (shape-key) names, excluding the Basis — a kernel
             # recipe part predicts these and the claim adjudicates them. Absent
             # key when the mesh has none, so an older census reads as "no keys".
             **({"shapeKeys": [k.name for k in o.data.shape_keys.key_blocks[1:]]} if o.data.shape_keys else {}),
-            "ngons": ngons, "nonManifoldEdges": non_manifold, "zeroAreaFaces": zero_area,
+            "ngons": ngons, "nonManifoldEdges": non_manifold, "nonManifoldVertices": non_manifold_verts, "zeroAreaFaces": zero_area,
             "nan": nan_verts or not all(math.isfinite(v) for row in o.matrix_world for v in row),
             "uvLayers": [l.name for l in o.data.uv_layers],
             # A colour attribute (vertex colours) is a shading source in its own

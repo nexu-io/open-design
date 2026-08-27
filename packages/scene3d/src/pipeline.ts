@@ -34,7 +34,8 @@ import {
 } from "./build/blender.js";
 import { runRecipe } from "./parse/recipe.js";
 import { evalTraceShapes } from "./kernel/trace.js";
-import { toEmitMesh, fitToBox, predictCensus, type EmitMesh, type PredictedCensus } from "./kernel/mesh.js";
+import { toEmitMesh, fitKernelMesh, predictCensus, type EmitMesh, type PredictedCensus } from "./kernel/mesh.js";
+import { ratFromFloat } from "./kernel/rational.js";
 
 type KernelShape = { name: string; verts: Array<[number, number, number]> };
 import { validateCensus } from "./build/census.js";
@@ -513,18 +514,25 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
           try {
             const { base, shapes } = evalTraceShapes(result.trace);
             const box = part.localSize ?? part.size;
-            const fitted = fitToBox(
-              toEmitMesh(base),
-              shapes.map((s) => ({ name: s.name, mesh: toEmitMesh(s.mesh) })),
-              box,
-            );
-            kernelMeshes[part.id] = fitted.base;
-            if (fitted.shapes.length > 0) kernelShapes[part.id] = fitted.shapes;
-            // The census counts are fit-invariant, so the exact prediction is
-            // taken from the unfitted base; morph-target NAMES ride alongside.
+            // ONE exact box-fit over ℚ (base and every shape by the same exact
+            // affine), then a SINGLE rounding at emit. So the census, the mass
+            // certificate, and the geometry Blender builds are all the SAME
+            // solid — the volume is about what the user actually receives.
+            const fittedK = fitKernelMesh(base, shapes, [
+              ratFromFloat(box[0]),
+              ratFromFloat(box[1]),
+              ratFromFloat(box[2]),
+            ]);
+            kernelMeshes[part.id] = toEmitMesh(fittedK.base);
+            if (fittedK.shapes.length > 0) {
+              kernelShapes[part.id] = fittedK.shapes.map((sh) => ({
+                name: sh.name,
+                verts: toEmitMesh(sh.mesh).verts,
+              }));
+            }
             kernelPredictions.push({
               partId: part.id,
-              census: predictCensus(base),
+              census: predictCensus(fittedK.base, { mass: true }),
               shapeNames: shapes.map((s) => s.name),
             });
           } catch (e) {

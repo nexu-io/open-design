@@ -470,6 +470,19 @@ export interface ClaimsSpec {
   watertight?: boolean;
   /** Each named material is actually bound to at least one part. */
   materialsUsed?: string[];
+  /** Total EXACT volume (unit density) of the scene's geometry, as a rational
+   *  `"n/d"`. It names the fan-triangulated volume of the box-FITTED recipe
+   *  solid — the geometry that actually ships — and is adjudicated by EXACT
+   *  rational equality against the sum of the kernel's per-part exact volumes.
+   *  (The kernel's exact value is itself proven against the build within a float
+   *  bound, S3D-E-703, so exact-equality here is a claim about the real mesh.)
+   *  Adjudicated only when every mesh part is a `recipe:` part the kernel
+   *  evaluated as a single closed orientable solid; any Blender-primitive or
+   *  imported part leaves it honestly UNCHECKED (no exact volume exists for
+   *  geometry the kernel did not build). The certificate's `volumeAmbiguity`
+   *  says how far a consumer's own re-triangulation of non-planar faces can
+   *  move it (zero for a planar-faced solid). */
+  volume?: string;
 }
 
 export interface SceneSpec {

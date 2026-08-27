@@ -1,4 +1,5 @@
 import { Rational, rat, ratMean } from "./rational.js";
+import { massProperties } from "./mass.js";
 
 /**
  * The deterministic geometry kernel: exact meshes and the operators over them.
@@ -554,6 +555,75 @@ export function fitToBox(
   };
 }
 
+/**
+ * The EXACT rational twin of {@link fitToBox}, over ℚ — the box-fit done once,
+ * before the single rounding at emit.
+ *
+ * `fitToBox` runs on emitted floats; but the fit scale `s = min size/extent`
+ * and the centre/rest offsets are all RATIONAL, so the whole affine is exact.
+ * Doing it in ℚ (then `toEmitMesh` once) means the geometry the census/mass
+ * reason about IS the geometry that ships — the volume certificate is about
+ * what the user receives, not a pre-fit design — and the kernel's own
+ * "one rounding at the boundary" invariant is kept. The SAME transform applies
+ * to every morph shape, exactly as the float path does.
+ *
+ * It carries `fitToBox`'s OWN 1e-9 extent floor faithfully into ℚ — the same
+ * `max(extent, 1e-9)` guard on the DIVISION, the same raw extent for the z-rest.
+ * Where the two can differ is the INPUT, not the formula: `fitKernelMesh` reads
+ * the exact rational extent, `fitToBox` reads it after `toEmitMesh` has rounded
+ * the coordinates to float64. Wherever float64 represents those coordinates
+ * faithfully — the whole bounded domain a recipe actually produces — the two
+ * agree to float noise (the equivalence tests pin this from ordinary down to
+ * sub-nanometre extents). Beyond it, where distinct coordinates share a float
+ * (e.g. 2^53 and 2^53+1), `fitToBox` reads a collapsed extent and mis-scales,
+ * while `fitKernelMesh` keeps the true extent and stays correct — it is the
+ * EXACT fit, of which `fitToBox` is the float approximation, not the authority.
+ * The recipe path uses THIS function, so recipe geometry always gets the exact
+ * placement; a same-input divergence would be float64 losing precision, never
+ * the rational fit being wrong.
+ */
+const FIT_FLOOR = rat(1, 1_000_000_000); // fitToBox's 1e-9 division guard, exact in ℚ
+export function fitKernelMesh(
+  base: KernelMesh,
+  shapes: ReadonlyArray<{ name: string; mesh: KernelMesh }>,
+  size: readonly [Rational, Rational, Rational],
+): { base: KernelMesh; shapes: Array<{ name: string; mesh: KernelMesh }> } {
+  if (base.verts.length === 0) return { base, shapes: shapes.map((s) => ({ name: s.name, mesh: s.mesh })) };
+  const min: RVec3 = [base.verts[0]![0], base.verts[0]![1], base.verts[0]![2]];
+  const max: RVec3 = [base.verts[0]![0], base.verts[0]![1], base.verts[0]![2]];
+  for (const v of base.verts) {
+    for (let i = 0; i < 3; i++) {
+      if (v[i]!.cmp(min[i]!) < 0) min[i] = v[i]!;
+      if (v[i]!.cmp(max[i]!) > 0) max[i] = v[i]!;
+    }
+  }
+  const extent: RVec3 = [max[0].sub(min[0]), max[1].sub(min[1]), max[2].sub(min[2])];
+  // The floor only guards the DIVISION (a degenerate axis must not divide by
+  // zero); it never binds `s`, because a near-zero extent gives a huge ratio the
+  // `min` discards — exactly the float path's reasoning. With the floor applied
+  // to every axis, `s` is always defined, so there is no degenerate special case.
+  const two = rat(2);
+  let s: Rational | null = null;
+  for (let i = 0; i < 3; i++) {
+    const floored = extent[i]!.cmp(FIT_FLOOR) > 0 ? extent[i]! : FIT_FLOOR;
+    const ratio = size[i]!.div(floored);
+    if (s === null || ratio.cmp(s) < 0) s = ratio;
+  }
+  const c: RVec3 = [min[0].add(max[0]).div(two), min[1].add(max[1]).div(two), min[2].add(max[2]).div(two)];
+  // Bottom-rest on z uses the REAL extent (not the floored one), so a flat panel
+  // lands exactly at −size_z/2 rather than a 1e-9·s epsilon above it.
+  const dz = size[2]!.div(two).neg().add(extent[2]!.mul(s!).div(two));
+  const scale = s!;
+  const xf = (v: RVec3): RVec3 => [v[0].sub(c[0]).mul(scale), v[1].sub(c[1]).mul(scale), v[2].sub(c[2]).mul(scale).add(dz)];
+  const remap = (m: KernelMesh): KernelMesh => ({
+    verts: m.verts.map(xf),
+    faces: m.faces.map((f) => [...f]),
+    vertId: [...m.vertId],
+    ...(m.creases ? { creases: m.creases } : {}),
+  });
+  return { base: remap(base), shapes: shapes.map((sh) => ({ name: sh.name, mesh: remap(sh.mesh) })) };
+}
+
 /* ------------------------------------------------------------------ */
 /* Extrude — grow geometry from a face region                          */
 /* ------------------------------------------------------------------ */
@@ -733,6 +803,26 @@ export interface PredictedCensus {
   /** Exact axis-aligned bounds, reported as float64 at the boundary. */
   min: [number, number, number];
   max: [number, number, number];
+  /** Exact mass properties (unit density) of THIS polygonal mesh under the
+   *  kernel's own fan triangulation (the same triangulation the `triangles`
+   *  count uses) — the physics certificate. Present only for a single closed
+   *  ORIENTABLE solid (genus's domain), where one global winding sign is
+   *  correct; null otherwise. `volumeExact`/`volumeAmbiguityExact` are exact
+   *  rationals; the rest are float64 at the boundary. `symmetryAxis` is the
+   *  EXACT verdict (a repeated principal moment: the char cubic's discriminant
+   *  is zero). `volumeAmbiguity` bounds how far any consumer's triangulation of
+   *  the shipped mesh can move the volume (zero iff every face is planar);
+   *  `conditioning` is the scale for the float error bound a Blender-measured
+   *  fan volume is adjudicated within. */
+  mass: {
+    volume: number;
+    volumeExact: string;
+    centroid: [number, number, number];
+    symmetryAxis: boolean;
+    volumeAmbiguity: number;
+    volumeAmbiguityExact: string;
+    conditioning: number;
+  } | null;
 }
 
 /**
@@ -740,8 +830,18 @@ export interface PredictedCensus {
  * mesh EXACTLY — the debut consumer of the operator. A claim adjudicated
  * against the built census (S3D-E-701) then judges the kernel the same way
  * it judges any author: the prediction is not trusted, it is measured.
+ *
+ * `opts.mass` gates the EXACT mass properties (volume, centroid, symmetry, the
+ * conditioning that scales E-703's bound). That path integrates over every face
+ * in ℚ — an order more work than the topology counts — and its only readers are
+ * the volume claim (E-701) and the build self-check (E-703), which run only in
+ * the pipeline against a real build. So it is computed on demand, keyed on a
+ * caller that will actually adjudicate it: topology-only consumers (the fuzz
+ * property suite predicts a census purely to assert genus preservation) do not
+ * pay for an integral nobody reads. This is the cost gate the doctrine allows —
+ * on a value that proves a reader exists — not a mode that hides a fact.
  */
-export function predictCensus(mesh: KernelMesh): PredictedCensus {
+export function predictCensus(mesh: KernelMesh, opts: { mass?: boolean } = {}): PredictedCensus {
   const edges = edgesOf(mesh);
   let boundaryEdges = 0;
   let nonManifoldEdges = 0;
@@ -775,6 +875,24 @@ export function predictCensus(mesh: KernelMesh): PredictedCensus {
       if (c > max[i]!) max[i] = c;
     }
   }
+  // Mass properties are the exact integral of a SOLID, well-defined only for a
+  // SINGLE closed ORIENTABLE surface — the same domain as genus. The one global
+  // winding sign massProperties normalises is correct exactly there; two
+  // oppositely-wound closed components are each watertight yet would net to the
+  // signed DIFFERENCE of their volumes, so they are (honestly) left null.
+  const singleClosedOrientable = watertight && components === 1 && orientable;
+  const mp = opts.mass && singleClosedOrientable ? massProperties(mesh) : null;
+  const mass = mp
+    ? {
+        volume: mp.volume.toNumber(),
+        volumeExact: mp.volume.toString(),
+        centroid: [mp.centroid[0].toNumber(), mp.centroid[1].toNumber(), mp.centroid[2].toNumber()] as [number, number, number],
+        symmetryAxis: mp.symmetryAxis,
+        volumeAmbiguity: mp.volumeAmbiguity.toNumber(),
+        volumeAmbiguityExact: mp.volumeAmbiguity.toString(),
+        conditioning: mp.conditioning.toNumber(),
+      }
+    : null;
   return {
     vertices: V,
     edges: E,
@@ -790,5 +908,6 @@ export function predictCensus(mesh: KernelMesh): PredictedCensus {
     genus,
     min,
     max,
+    mass,
   };
 }

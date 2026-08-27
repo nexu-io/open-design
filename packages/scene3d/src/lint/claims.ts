@@ -1,5 +1,6 @@
 import { Census, Issue } from "../types.js";
 import { ISSUE_CODES } from "../errors.js";
+import { Rational } from "../kernel/rational.js";
 import type { ClaimsSpec, SolvedPart } from "../solve/types.js";
 import { isExempt } from "./exempt.js";
 import { groundVerdict, groundedSupport, nearestSupportBelow } from "../solve/contact.js";
@@ -78,6 +79,20 @@ export function lintClaims(
      * supported: a declared float is a composition, not a defect.
      */
     declaredFloating?: readonly string[];
+    /**
+     * The EXACT volume of each `recipe:` part the kernel evaluated (of the
+     * box-fitted solid), `volumeExact` null when the part is not a single closed
+     * orientable solid. The `volume` claim is summed and compared as rationals,
+     * and only when they account for EVERY mesh part in the scene — a
+     * Blender-primitive or imported part has no exact volume, so the claim then
+     * stays honestly unchecked.
+     */
+    kernelVolumes?: ReadonlyArray<{ partId: string; volumeExact: string | null; ambiguityExact: string | null }>;
+    /** Part ids whose build volume the kernel self-check CONFIRMED against the
+     *  exact within E-703's float bound. The `volume` claim is a theorem about
+     *  the shipped mesh only over these — a part measured but diverged (E-703
+     *  error) or unmeasured (W-702) is absent, so the claim cannot show held. */
+    volumeConfirmed?: ReadonlySet<string>;
   } = {},
 ): void {
   const fail = (claim: string, message: string, detail: Record<string, unknown>, hint?: string): void => {
@@ -99,12 +114,12 @@ export function lintClaims(
    * compiles where the build never ran — the one number a reader scans
    * must never lie loudest exactly when nothing was measured.
    */
-  const unchecked = (claim: string, reason: string): void => {
+  const unchecked = (claim: string, reason: string, detail: Record<string, unknown> = {}): void => {
     issues.push({
       code: ISSUE_CODES.CLAIM_UNCHECKED,
       severity: "warning",
       message: `claim ${claim} could not be adjudicated: ${reason} — unchecked is not passed`,
-      detail: { claim, unadjudicated: true },
+      detail: { claim, unadjudicated: true, ...detail },
     });
   };
   /** An adjudicated claim that carries an honest caveat (stride gaps, a
@@ -589,6 +604,118 @@ export function lintClaims(
           });
         }
       }
+    }
+  }
+
+  if (claims.volume !== undefined) {
+    // `census` is defined here — the no-census case returned at the top of this
+    // function (marking every claim key, volume included, unchecked). The helper
+    // takes a NON-optional census, so that guarantee is enforced by the type, not
+    // just by reading control flow: the volume adjudication can never see undefined.
+    adjudicateVolumeClaim(
+      claims.volume,
+      census,
+      options.kernelVolumes ?? [],
+      options.volumeConfirmed ?? new Set(),
+      (reason, detail) => unchecked("volume", reason, detail),
+      (message, detail) => fail("volume", message, detail),
+    );
+  }
+}
+
+/**
+ * Prove an author's exact `volume` claim against the build. Split out with a
+ * NON-optional `census` because the volume path grew to carry three doctrines —
+ * whole-scene recipe geometry, the build-measured bridge, and triangulation
+ * independence — and because a defined census is a precondition the caller has
+ * already established (the no-census case is handled and returns before here).
+ *
+ * A PASS requires ALL of:
+ *  - every mesh is recipe geometry the kernel built (else no exact total),
+ *  - each part is a single closed solid (else it encloses no volume),
+ *  - each part's build volume was CONFIRMED by the E-703 self-check — measured
+ *    AND within bound of the exact, the coordinate-dependent bridge to the
+ *    shipped mesh (topology alone is scale-invariant); composed, not re-derived,
+ *  - the volume is triangulation-INDEPENDENT (Σ ambiguity == 0, every face
+ *    planar), so the exact value is a theorem about the DELIVERABLE and every
+ *    re-triangulation of it, and only then does exact ℚ equality decide it.
+ * Any gap is UNCHECKED ("unchecked is not passed"), with the reason named.
+ */
+function adjudicateVolumeClaim(
+  claimVolume: string,
+  census: Census,
+  kernelVolumes: ReadonlyArray<{ partId: string; volumeExact: string | null; ambiguityExact: string | null }>,
+  volumeConfirmed: ReadonlySet<string>,
+  unchecked: (reason: string, detail?: Record<string, unknown>) => void,
+  fail: (message: string, detail: Record<string, unknown>) => void,
+): void {
+  // Match each built mesh to its recipe volume BY NAME (a recipe part builds an
+  // object of its own id): the sum is over the census meshes, looked up in this
+  // map, so a duplicated, stale, or misnamed prediction cannot satisfy a bare
+  // count and total the wrong set. Exact only when the WHOLE scene is recipe
+  // geometry — a Blender-primitive or imported mesh has no exact volume, so a
+  // partial sum would be a confident wrong number.
+  const byId = new Map(kernelVolumes.map((r) => [r.partId, r.volumeExact]));
+  const ambById = new Map(kernelVolumes.map((r) => [r.partId, r.ambiguityExact]));
+  const uncovered = census.meshes.filter((m) => !byId.has(m.object));
+  if (byId.size === 0) {
+    unchecked("no recipe parts — an exact volume needs geometry the kernel built");
+  } else if (uncovered.length > 0 || byId.size !== census.meshes.length) {
+    const names = uncovered.map((m) => `'${m.object}'`).join(", ");
+    unchecked(
+      `${uncovered.length || Math.abs(byId.size - census.meshes.length)} mesh part(s)${names ? ` (${names})` : ""} are not recipe geometry, so the scene has no exact total volume`,
+    );
+  } else if (census.meshes.some((m) => byId.get(m.object) === null)) {
+    const open = census.meshes.filter((m) => byId.get(m.object) === null).map((m) => `'${m.object}'`).join(", ");
+    unchecked(`recipe part(s) ${open} are not a single closed solid, so they enclose no volume`);
+  } else if (census.meshes.some((m) => !volumeConfirmed.has(m.object))) {
+    // The exact ℚ sum proves the DESIGN's volume; this claim is about the SHIPPED
+    // mesh, and the only bridge is the build's own fan measurement, adjudicated by
+    // the E-703 self-check. E-702 matched TOPOLOGY (counts, genus) but topology is
+    // scale-invariant — a half-scale bake passes it byte-for-byte yet ships 1/8
+    // the volume — so the build volume is the ONLY coordinate-dependent evidence.
+    // A part is CONFIRMED only when E-703 found it within bound of the exact; a
+    // part unmeasured (W-702) or diverged (E-703 error) is not, and the claim
+    // then cannot be a theorem about the artifact. Composed from the self-check,
+    // not re-derived, so the two never disagree. Unchecked, naming the part(s).
+    const unconfirmed = census.meshes.filter((m) => !volumeConfirmed.has(m.object)).map((m) => `'${m.object}'`).join(", ");
+    unchecked(`the build volume of part(s) ${unconfirmed} was not confirmed against the exact value, so the total cannot be proven for the shipped mesh`);
+  } else {
+    // Every part is a measured, closed recipe solid. Two facts settle the
+    // claim: is the volume a property of the DELIVERABLE (not just one
+    // triangulation), and does it equal the claim?
+    let sum = Rational.ZERO;
+    let amb = Rational.ZERO;
+    for (const m of census.meshes) {
+      sum = sum.add(Rational.parse(byId.get(m.object)!));
+      amb = amb.add(Rational.parse(ambById.get(m.object)!));
+    }
+    const claimed = Rational.parse(claimVolume);
+    if (!amb.isZero()) {
+      // Non-planar faces. glTF/USD store TRIANGLES, so every exporter
+      // re-triangulates, and for a non-planar quad it may take the other
+      // diagonal — moving the enclosed volume by up to `amb` (the exact sum of
+      // the corner tetrahedra). The exact fan volume is a theorem about ONE
+      // triangulation, not about what any consumer opens, so it is not a
+      // provable property of the deliverable. "Unchecked is not passed": report
+      // the exact ℚ band and whether the claim sits inside it, and NAME the
+      // structural exit — an author-declared triangulate step makes the volume
+      // triangulation-independent. The compiler never triangulates to rescue a
+      // claim (that would silently trade away the quad topology).
+      const lo = sum.sub(amb);
+      const hi = sum.add(amb);
+      const inside = claimed.cmp(lo) >= 0 && claimed.cmp(hi) <= 0;
+      unchecked(
+        `the mesh has non-planar faces, so its volume is triangulation-dependent: the exact fan volume is ${sum.toString()}, but an exporter's diagonal choice moves it within [${lo.toString()}, ${hi.toString()}]. The claimed ${claimed.toString()} ${inside ? "lies within" : "is OUTSIDE"} that band. Add a triangulate step to the recipe to make the volume triangulation-independent and provable`,
+        { band: [lo.toString(), hi.toString()], ambiguity: amb.toString(), fanVolume: sum.toString(), claimInsideBand: inside },
+      );
+    } else if (!sum.eq(claimed)) {
+      // Planar faces (ambiguity 0): the volume is universal, so exact equality
+      // is a theorem about the deliverable and every re-triangulation of it.
+      fail(`the exact total volume is ${sum.toString()}, not the claimed ${claimed.toString()}`, {
+        expected: claimVolume,
+        actual: sum.toString(),
+      });
     }
   }
 }

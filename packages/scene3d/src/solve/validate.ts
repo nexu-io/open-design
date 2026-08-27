@@ -1327,6 +1327,26 @@ function validateCamera(value: unknown, errors: string[]): SceneSpec["camera"] {
   };
 }
 
+/** A volume needs a handful of digits; even a very finely subdivided limit
+ *  surface stays well under this. The cap exists only to bar a numerator or
+ *  denominator crafted to exhaust the exact path — BigInt construction is O(n²)
+ *  in the digit count, and the value then flows into gcd reduction and the
+ *  rational sum in `lintClaims`. Generous enough to never reject a real claim,
+ *  small enough that the whole exact pipeline stays trivially fast. */
+const MAX_CLAIM_RATIONAL_DIGITS = 512;
+
+/** A canonical positive rational `"n"` or `"n/d"` — a volume is a magnitude,
+ *  so no sign and a non-zero numerator/denominator. Rejects the float and the
+ *  malformed string before Rational.parse would throw on them downstream, and
+ *  the over-long string BEFORE a BigInt is built from it (an untrusted scene
+ *  must not be able to hang the compiler with a million-digit numerator). */
+function isPositiveRational(s: string): boolean {
+  const m = /^(\d+)(?:\/(\d+))?$/.exec(s.trim());
+  if (!m) return false;
+  if (m[1]!.length > MAX_CLAIM_RATIONAL_DIGITS || (m[2]?.length ?? 0) > MAX_CLAIM_RATIONAL_DIGITS) return false;
+  return BigInt(m[1]!) > 0n && (m[2] === undefined || BigInt(m[2]!) > 0n);
+}
+
 function validateClaims(value: unknown, errors: string[]): ClaimsSpec | undefined {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     errors.push("claims must be an object");
@@ -1417,13 +1437,22 @@ function validateClaims(value: unknown, errors: string[]): ClaimsSpec | undefine
       errors.push("claims.materialsUsed must be an array of material names");
     }
   }
+  // Volume is an EXACT claim, so it is a rational STRING (like a trace scalar),
+  // never a float that would already have lost the exactness the claim tests.
+  if (claims.volume !== undefined) {
+    if (typeof claims.volume === "string" && isPositiveRational(claims.volume)) {
+      out.volume = claims.volume.trim();
+    } else {
+      errors.push(`claims.volume must be a positive rational string, e.g. "4/3" or "2" (numerator and denominator at most ${MAX_CLAIM_RATIONAL_DIGITS} digits)`);
+    }
+  }
   // A claim key the language has no oracle for is refused, never swallowed:
   // `doorWidth` typed in good faith compiled clean and adjudicated nothing —
   // the author believed they had signed a door and had signed air. The error
   // names every claim that DOES adjudicate so the refusal teaches.
   const KNOWN_CLAIM_KEYS = new Set([
     "parts", "maxTriangles", "grounded", "maxHeight", "minHeight",
-    "footprint", "minFootprint", "watertight", "materialsUsed",
+    "footprint", "minFootprint", "watertight", "materialsUsed", "volume",
   ]);
   for (const key of Object.keys(claims)) {
     if (isCommentKey(key)) continue;

@@ -128,6 +128,32 @@ function exactInt(v: number): number {
 /** Convenience: a rational from an integer numerator over an integer denom. */
 export const rat = (n: bigint | number, d: bigint | number = 1n): Rational => Rational.of(n, d);
 
+/**
+ * The EXACT rational a float64 denotes DECIMALLY — `0.4` → `2/5`, not the
+ * dyadic 3602879701896397/9007199254740992 that `0.4` is in binary.
+ *
+ * A scene.json scalar (a part `size`) is a decimal the author typed; the
+ * shortest decimal that round-trips to `x` (`x.toString()`) is the one they
+ * meant, so parsing THAT recovers the clean fraction. Used where a float
+ * crosses into the exact kernel (the box-fit scale), so the fit stays exact
+ * over ℚ and the single rounding happens once, at emit.
+ */
+export function ratFromFloat(x: number): Rational {
+  if (!Number.isFinite(x)) throw new Error(`ratFromFloat: ${x} is not finite`);
+  // Always via the DECIMAL string, integers included: `(5).toString()` is "5"
+  // and a huge integer's shortest decimal (e.g. "1e+21") parses exactly.
+  const m = /^(-?)(\d*)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(x.toString());
+  if (!m) throw new Error(`ratFromFloat: cannot read '${x}'`);
+  const sign = m[1] === "-" ? -1n : 1n;
+  const fracPart = m[3] ?? "";
+  let num = BigInt((m[2] ?? "") + fracPart || "0") * sign;
+  let den = 1n;
+  const shift = (m[4] ? BigInt(m[4]) : 0n) - BigInt(fracPart.length);
+  if (shift >= 0n) num *= 10n ** shift;
+  else den = 10n ** -shift;
+  return Rational.of(num, den);
+}
+
 /** Sum a list exactly (empty sum is zero). */
 export function ratSum(values: readonly Rational[]): Rational {
   let acc = Rational.ZERO;

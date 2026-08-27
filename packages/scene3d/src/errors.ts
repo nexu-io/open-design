@@ -392,6 +392,12 @@ export const ISSUE_CODES = {
   /* A predicted field the census did not measure (the built census was
      unavailable or a mesh cap was hit). Reported, never passed. */
   KERNEL_PREDICTION_UNCHECKED: "S3D-W-702",
+  /* The kernel's EXACT rational volume disagrees with the build's fan-measured
+     volume by MORE than the float forward-error bound (K·ε·conditioning). Both
+     are fanned identically, so a breach this large is a real emit/build error
+     (a scaled or corrupted mesh), not a rounding difference — separate from the
+     integer-exact E-702 because volume is a real, judged within a bound. */
+  KERNEL_VOLUME_MISMATCH: "S3D-E-703",
 
   /* info */
   STAGE_SKIPPED: "S3D-I-501",

@@ -15,7 +15,7 @@ import { lintSheets, type SheetLintInput } from "./sheet.js";
 import { lintClaims } from "./claims.js";
 import { lintIntent } from "./judge.js";
 import { applyImportedPosture, importedObjects } from "./provenance.js";
-import { adjudicateKernelPrediction, type MeasuredMesh } from "./kernel.js";
+import { adjudicateKernelPrediction, classifyVolumeCheck, type MeasuredMesh } from "./kernel.js";
 import type { ClaimsSpec, SolvedScene } from "../solve/types.js";
 import type { PredictedCensus } from "../kernel/mesh.js";
 
@@ -148,16 +148,6 @@ export function runLint(input: LintInput): Issue[] {
   // Thresholds come from the contract, not from whatever the caller happened
   // to build, so the sheet family is tunable like every other one.
   if (input.sheets) lintSheets({ ...input.sheets, ...input.contract.sheetRules }, issues);
-  if (input.claims) {
-    lintClaims(input.claims, input.census, issues, {
-      groundTolerance: input.contract.grounding.tolerance,
-      groundExempt: input.contract.grounding.exempt,
-      // The analytic layer: swept envelopes over the solved boxes, the
-      // closed-form oracle that works with or without a census.
-      ...(input.solved ? { solved: input.solved.parts } : {}),
-      ...(input.declaredFloating ? { declaredFloating: input.declaredFloating } : {}),
-    });
-  }
   // Scene size comes from the census the rest of the linter already uses:
   // the empty-frame error needs it to tell 'aimed wrong' from 'too small
   // to render'.
@@ -169,6 +159,14 @@ export function runLint(input: LintInput): Issue[] {
   // exact (a Blender edge is manifold only when it borders exactly two
   // faces, so zero non-manifold edges means closed AND manifold); genus is
   // formed from the census edge count when the prediction offered one.
+  //
+  // This runs BEFORE the claims so the `volume` claim can COMPOSE with the
+  // self-check: `volumeConfirmed` collects the parts whose build volume E-703
+  // found within bound of the exact (no KERNEL_VOLUME_MISMATCH, no volume-
+  // unchecked). The claim is a theorem about the SHIPPED mesh only over
+  // confirmed parts — never the exact prediction alone — so a build that
+  // diverged (E-703 error) can never also show the volume claim as held.
+  const volumeConfirmed = new Set<string>();
   if (input.kernelPredictions && input.kernelPredictions.length > 0) {
     const measuredByName = new Map((input.census?.meshes ?? []).map((m) => [m.object, m]));
     for (const { partId, census, shapeNames } of input.kernelPredictions) {
@@ -178,15 +176,66 @@ export function runLint(input: LintInput): Issue[] {
             vertices: m.verts,
             faces: m.faces,
             ...(m.tris !== undefined ? { triangles: m.tris } : {}),
-            watertight: m.nonManifoldEdges === 0,
+            // Mirror the kernel's watertight predicate EXACTLY: a closed 2-manifold
+            // has no non-manifold edge AND no pinch/bowtie vertex. Measuring only
+            // edges would compare a reduced fact against the kernel's richer one,
+            // so a build corrupted into a pinch could read watertight and slip the
+            // E-702 check. The vertex fact must be MEASURED, not assumed: an older
+            // census without it leaves watertightness UNDETERMINED (omitted →
+            // adjudicated as W-702 unchecked), never silently true — "unchecked is
+            // not passed". A fresh compile always carries it, so recipes are judged.
+            ...(m.nonManifoldVertices !== undefined
+              ? { watertight: m.nonManifoldEdges === 0 && m.nonManifoldVertices === 0 }
+              : {}),
             ...(census.genus !== null && m.edges !== undefined && m.nonManifoldEdges === 0
               ? { genus: (2 - (m.verts - m.edges + m.faces)) / 2 }
               : {}),
             shapeKeys: m.shapeKeys ?? [],
+            // `!= null` drops BOTH undefined and the runner's non-finite null,
+            // so MeasuredMesh.volumeFan stays strictly number — a missing or
+            // non-finite measurement simply never arrives, reading as unchecked.
+            ...(m.volumeFan != null ? { volumeFan: m.volumeFan } : {}),
           }
         : undefined;
       issues.push(...adjudicateKernelPrediction(partId, census, measured, shapeNames));
+      // A part's build VOLUME is confirmed iff it has an exact volume (a closed
+      // solid) AND the SAME predicate the E-703 check just ran classifies the
+      // build's fan volume as within bound. One predicate for both, so the claim
+      // and the self-check can never disagree about a part.
+      if (
+        census.mass &&
+        classifyVolumeCheck(census.mass.volume, census.mass.volumeExact, census.mass.conditioning, measured?.volumeFan) ===
+          "confirmed"
+      ) {
+        volumeConfirmed.add(partId);
+      }
     }
+  }
+
+  // Claims run AFTER the kernel self-check so the `volume` claim can require
+  // every contributing part to be volume-confirmed (composed above), not merely
+  // measured. The analytic layer (swept envelopes over the solved boxes) works
+  // with or without a census; the exact per-part volumes power the rational sum.
+  if (input.claims) {
+    lintClaims(input.claims, input.census, issues, {
+      groundTolerance: input.contract.grounding.tolerance,
+      groundExempt: input.contract.grounding.exempt,
+      ...(input.solved ? { solved: input.solved.parts } : {}),
+      ...(input.declaredFloating ? { declaredFloating: input.declaredFloating } : {}),
+      ...(input.kernelPredictions
+        ? {
+            kernelVolumes: input.kernelPredictions.map((p) => ({
+              partId: p.partId,
+              volumeExact: p.census.mass ? p.census.mass.volumeExact : null,
+              // The triangulation-ambiguity band travels with the volume: a
+              // claim is a theorem about the DELIVERABLE only when it is zero
+              // (every face planar, so no exporter's diagonal changes the volume).
+              ambiguityExact: p.census.mass ? p.census.mass.volumeAmbiguityExact : null,
+            })),
+            volumeConfirmed,
+          }
+        : {}),
+    });
   }
   if (input.exportedUsda) {
     lintExportedStage(

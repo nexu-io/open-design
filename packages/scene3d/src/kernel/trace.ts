@@ -359,7 +359,7 @@ function inRegion(v: RVec3, region: ParsedRegion): boolean {
  *  adjudicate as a claim). */
 export function evalTraceWithCensus(trace: Trace): { mesh: KernelMesh; census: PredictedCensus } {
   const mesh = evalTrace(trace);
-  return { mesh, census: predictCensus(mesh) };
+  return { mesh, census: predictCensus(mesh, { mass: true }) };
 }
 
 /* ------------------------------------------------------------------ */

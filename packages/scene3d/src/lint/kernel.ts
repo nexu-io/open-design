@@ -30,6 +30,57 @@ export interface MeasuredMesh {
   genus?: number | null;
   /** Morph-target (shape-key) names Blender built, excluding the Basis. */
   shapeKeys?: string[];
+  /** Enclosed volume, fanned the SAME way the kernel fans (runner `fan_volume`),
+   *  at full float precision — adjudicated against the exact rational volume. */
+  volumeFan?: number;
+}
+
+/** Blender stores vertex coordinates as float32, so the built mesh's positions
+ *  are the emitted float64 rounded to SINGLE precision — this, not the float64
+ *  summation, dominates the gap between the kernel's exact volume and the
+ *  build's fan measurement (a mesh at integer coords, exact in float32, matches
+ *  to the bit; a subdivided mesh rounds at ~1e-7). The volume is degree-3 in the
+ *  coordinates, so its relative error is a few float32 ε. */
+const F32_EPS = 2 ** -23; // ≈ 1.19e-7
+/** Generous headroom over the degree-3 propagation. It only has to sit far below
+ *  a REAL divergence — a fit slip or a corrupt bake is macroscopic, orders of
+ *  magnitude above float32 noise — so the separation stays clean. */
+const KVOL = 32;
+
+/** The four outcomes of comparing the build's fan volume to the kernel's exact:
+ *  the build reproduced it within bound (`confirmed`); the census carried no
+ *  finite volume (`unmeasured`); the exact value or its bound is outside
+ *  float64's faithful range so the comparison is meaningless (`abstain`); or the
+ *  build's volume is finite, comparable, and past the bound (`diverged`). */
+export type VolumeCheckVerdict = "confirmed" | "unmeasured" | "abstain" | "diverged";
+
+/**
+ * The ONE predicate that decides whether a build's fan volume matches the exact.
+ * Both the E-703 self-check and the `volume` claim's build-confirmation gate run
+ * on it, so the claim can never disagree with the self-check about a part. Pure:
+ * the same inputs give the same verdict on every machine.
+ */
+export function classifyVolumeCheck(
+  exactVolume: number,
+  exactVolumeStr: string,
+  conditioning: number,
+  volumeFan: number | undefined,
+): VolumeCheckVerdict {
+  if (volumeFan === undefined || !Number.isFinite(volumeFan)) return "unmeasured";
+  const bound = KVOL * F32_EPS * conditioning;
+  // The comparison can only speak when both magnitudes survive float64 and the
+  // bound is a usable positive tolerance (see the E-703 notes below): a nonzero
+  // exact volume that `toNumber` flushed to 0, a non-finite exact/bound, or a
+  // bound that underflowed to 0 all make `|measured − exact| > bound` meaningless.
+  if (
+    !Number.isFinite(exactVolume) ||
+    !Number.isFinite(bound) ||
+    bound === 0 ||
+    (exactVolume === 0 && exactVolumeStr !== "0")
+  ) {
+    return "abstain";
+  }
+  return Math.abs(volumeFan - exactVolume) > bound ? "diverged" : "confirmed";
 }
 
 export function adjudicateKernelPrediction(
@@ -104,6 +155,53 @@ export function adjudicateKernelPrediction(
       target: partId,
       detail: { unchecked },
     });
+  }
+
+  // Volume is the ONE real-valued fact, so it is judged within a FLOAT bound,
+  // not by exact equality (kept out of the integer-exact block above on
+  // purpose). The build's `volumeFan` is fanned identically to the kernel's
+  // exact volume, so any gap beyond `K·ε·conditioning` is a real emit/build
+  // divergence — a scaled or corrupted mesh — never Blender's own triangulation.
+  if (predicted.mass) {
+    const exact = predicted.mass.volume;
+    const bound = KVOL * F32_EPS * predicted.mass.conditioning;
+    // The verdict is the shared predicate `classifyVolumeCheck`, so the E-703
+    // self-check here and the `volume` claim's build-confirmation gate can never
+    // disagree about a part. The abstain rule keeps the check TOTAL: `toNumber`
+    // underflows a nonzero exact volume to 0 below ~5e-324 and overflows a vast
+    // one to Infinity, and the bound can underflow to exactly 0 (a zero tolerance
+    // would fire on any float noise); wherever float64 cannot carry the magnitude
+    // the comparison is meaningless, so E-703 ABSTAINS (W-702) rather than pass —
+    // or fail — by accident. The EXACT rational claim (E-701) never leaves ℚ.
+    const verdict = classifyVolumeCheck(exact, predicted.mass.volumeExact, predicted.mass.conditioning, measured.volumeFan);
+    if (verdict === "unmeasured") {
+      // Unchecked is not passed: a missing or non-finite measurement never reads
+      // as agreement — the volume claim it would back stays unproven, not held.
+      issues.push({
+        code: ISSUE_CODES.KERNEL_PREDICTION_UNCHECKED,
+        severity: "warning",
+        message: `kernel part '${partId}': the census carried no finite volume, so the exact volume ${predicted.mass.volumeExact} could not be adjudicated`,
+        target: partId,
+        detail: { unchecked: ["volume"], predicted: predicted.mass.volumeExact },
+      });
+    } else if (verdict === "abstain") {
+      issues.push({
+        code: ISSUE_CODES.KERNEL_PREDICTION_UNCHECKED,
+        severity: "warning",
+        message: `kernel part '${partId}': the exact volume ${predicted.mass.volumeExact} is outside float64's faithful range, so the float-bound build check abstained (the exact volume claim still holds)`,
+        target: partId,
+        detail: { unchecked: ["volume"], predicted: predicted.mass.volumeExact },
+      });
+    } else if (verdict === "diverged") {
+      issues.push({
+        code: ISSUE_CODES.KERNEL_VOLUME_MISMATCH,
+        severity: "error",
+        message: `kernel part '${partId}': predicted exact volume ${exact} but the build measured ${measured.volumeFan} (float bound ±${bound.toExponential(2)}) — the emitted mesh was scaled or corrupted between the exact fit and the bake`,
+        hint: "a volume delta far beyond float noise means the geometry changed between the exact mesh and the build — suspect the emit or a non-identity object scale",
+        target: partId,
+        detail: { predicted: exact, measured: measured.volumeFan, bound, conditioning: predicted.mass.conditioning },
+      });
+    }
   }
   return issues;
 }

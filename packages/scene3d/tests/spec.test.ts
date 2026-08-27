@@ -322,6 +322,26 @@ describe("validateSceneSpec", () => {
     expect(errors.some((e) => e.includes("parts, maxTriangles"))).toBe(true);
   });
 
+  it("accepts an exact volume claim but refuses a float or an exhausting rational", () => {
+    const base = {
+      schemaVersion: 1,
+      parts: [{ id: "prp_a", size: [1, 1, 1] }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    };
+    // A canonical positive rational is accepted verbatim.
+    expect(validateSceneSpec({ ...base, claims: { volume: "297412448/475021263" } }).spec?.claims?.volume).toBe(
+      "297412448/475021263",
+    );
+    // A float is not a rational string — refused before Rational.parse would throw.
+    expect(validateSceneSpec({ ...base, claims: { volume: "1.5" } }).spec).toBeUndefined();
+    // An over-long numerator is refused BEFORE a BigInt is built from it, so an
+    // untrusted scene cannot hang the exact path with a million-digit value.
+    const huge = "9".repeat(600);
+    const { spec, errors } = validateSceneSpec({ ...base, claims: { volume: huge } });
+    expect(spec).toBeUndefined();
+    expect(errors.some((e) => e.includes("claims.volume") && e.includes("digits"))).toBe(true);
+  });
+
   it("refuses an unknown material key instead of swallowing it", () => {
     const { spec, errors } = validateSceneSpec({
       schemaVersion: 1,
