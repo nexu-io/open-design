@@ -120,6 +120,20 @@ class RecipeCtx:
         self._ops.append({"op": "triangulate"})
         return self
 
+    def clip(self, normal, d):
+        """Cut the mesh by a plane, keeping the half-space normal.x <= d and
+        capping the cut so the solid stays closed — a chamfer, a bevel, a flat
+        facet. Chain clips to intersect with a convex tool (a box hole, a wedge
+        notch). normal is a non-zero [x, y, z] exact direction, d the exact plane
+        offset. Coordinates are ints, rational strings or Fractions."""
+        if len(normal) != 3:
+            raise ValueError("clip(normal, d): normal must be [x, y, z]")
+        n = [_coord(normal[0]), _coord(normal[1]), _coord(normal[2])]
+        if all(Fraction(c) == 0 for c in n):
+            raise ValueError("clip(normal, d): normal must be non-zero -- a plane has a direction")
+        self._ops.append({"op": "clip", "normal": n, "d": _coord(d)})
+        return self
+
     def move(self, region, offset):
         """Translate the vertices in a coordinate region by an exact offset.
 
@@ -253,6 +267,8 @@ CONTRACT = (
     "(fan faces to triangles -- makes a volume claim provable on a curved mesh); "
     "TRANSFORM with ctx.mirror(axis), ctx.move(region, offset), ctx.scale(region, factor, pivot), "
     "ctx.crease(region), ctx.extrude(region, offset), ctx.inset(region, factor); "
+    "CUT with ctx.clip(normal, d) (keep the half-space normal.x <= d, capped -- "
+    "a chamfer/bevel, or chain clips to carve with a convex tool); "
     "author a MORPH target with ctx.shape(name)...ctx.end_shape(); "
     "coordinates are ints, rational strings ('1/2') or fractions.Fraction, never floats"
 )

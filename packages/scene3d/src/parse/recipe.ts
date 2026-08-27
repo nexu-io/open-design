@@ -122,6 +122,17 @@ function validateTraceShape(value: unknown): string | null {
       case "triangulate":
         // No parameters: it fans every face into triangles. Nothing to validate.
         break;
+      case "clip": {
+        const nrm = op.normal;
+        if (!Array.isArray(nrm) || nrm.length !== 3 || nrm.some((c) => !okRat(c))) {
+          return `trace.ops[${i}] clip.normal must be three rational strings`;
+        }
+        if ((nrm as string[]).every((c) => okRat(c) && BigInt(c.split("/")[0]!) === 0n)) {
+          return `trace.ops[${i}] clip.normal must be non-zero — a plane has a direction`;
+        }
+        if (!okRat(op.d)) return `trace.ops[${i}] clip.d must be a rational string`;
+        break;
+      }
       case "move": {
         const off = op.offset;
         if (!Array.isArray(off) || off.length !== 3 || off.some((c) => !okRat(c))) {

@@ -154,6 +154,33 @@ describe.skipIf(!hasBlender)("kernel recipe pipeline (real Blender)", () => {
     expect(result.ok).toBe(true);
   }, 300_000);
 
+  it.skipIf(!hasPython)("ctx.clip() chamfers a box end to end — planar faces, a PROVABLE volume", async () => {
+    // The first CSG operator through the whole chain: clipping the (1,1,1) corner
+    // of a box leaves every face planar (a plane through a planar face stays
+    // planar, and the cap lies on the plane), so the clipped solid's volume is
+    // triangulation-INDEPENDENT and its claim is CHECKED — no triangulate needed.
+    // The value is the compiler's own exact volume of the fitted, clipped mesh,
+    // so a mismatch would be a real Python↔TS divergence.
+    const vol = predictCensus(
+      fitKernelMesh(evalTrace(new Recorder().box().clip([1, 1, 1], "5/2").trace()), [], [rat(1), rat(1), rat(1)]).base,
+      { mass: true },
+    ).mass!.volumeExact;
+    const dir = workDir("good/spec_recipe");
+    fs.writeFileSync(path.join(dir, "hull.py"), "def build(ctx):\n    ctx.box().clip([1, 1, 1], '5/2')\n", "utf8");
+    const scene = JSON.parse(fs.readFileSync(path.join(dir, "scene.json"), "utf8"));
+    scene.claims = { ...scene.claims, volume: vol, watertight: true };
+    fs.writeFileSync(path.join(dir, "scene.json"), JSON.stringify(scene), "utf8");
+
+    const result = await compile({ projectDir: dir, proof: { turntable: false }, noCache: true });
+    // The build reproduced the exact prediction (topology + volume), and the
+    // volume claim is CHECKED and held — not unchecked, because the cut is planar.
+    expect(result.issues.some((i) => i.code === "S3D-E-702")).toBe(false);
+    expect(result.issues.some((i) => i.code === "S3D-E-703")).toBe(false);
+    expect(result.issues.some((i) => i.code === "S3D-E-701")).toBe(false);
+    expect(result.issues.some((i) => i.code === "S3D-W-701" && /volume/.test(i.message))).toBe(false);
+    expect(result.ok).toBe(true);
+  }, 300_000);
+
   it.skipIf(!hasPython)("measures a FAR-PLACED part's volume translation-stably (no phantom E-703)", async () => {
     // The build places a part by its object LOCATION and keeps the mesh in the
     // local frame, so `fan_volume` reads small local coordinates and scales by

@@ -4,6 +4,7 @@ import type { Rational } from "../src/kernel/rational.js";
 import { meshOf, predictCensus } from "../src/kernel/mesh.js";
 import type { KernelMesh } from "../src/kernel/mesh.js";
 import { clip } from "../src/kernel/clip.js";
+import { Recorder, evalTrace } from "../src/kernel/trace.js";
 
 /**
  * Exact half-space clipping — the first CSG operator. Every fact is an exact
@@ -53,6 +54,20 @@ describe("clip — exact half-space cut", () => {
     const gone = clip(box(1, 1, 1), plane(0, 0, 1, rat(-1)));
     expect(gone.faces.length).toBe(0);
     expect(gone.verts.length).toBe(0);
+  });
+
+  it("round-trips through the recipe recorder and evaluator", () => {
+    // box(1) is [-1,1]³ (volume 8); clip z ≤ 1/2 keeps a 2×2×(3/2) box, volume 6.
+    const mesh = evalTrace(new Recorder().box(1).clip([0, 0, 1], "1/2").trace());
+    const c = predictCensus(mesh, { mass: true });
+    expect(c.watertight).toBe(true);
+    expect(c.genus).toBe(0);
+    expect(c.mass!.volumeExact).toBe("6");
+    expect(c.mass!.embed).toEqual({ kind: "embedded" });
+  });
+
+  it("the evaluator refuses a degenerate (zero) plane normal", () => {
+    expect(() => evalTrace(new Recorder().box(1).clip([0, 0, 0], "1/2").trace())).toThrow(/non-zero normal/);
   });
 
   it("two opposed clips carve an exact slab (a box minus both ends)", () => {

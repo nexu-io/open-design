@@ -13,6 +13,7 @@ import {
   subdivide,
   triangulate,
 } from "./mesh.js";
+import { clip, type Plane } from "./clip.js";
 
 /**
  * The operator trace — the kernel's language-neutral IR.
@@ -64,6 +65,21 @@ export type TraceOp =
     }
   | { op: "subdivide"; levels: number }
   | { op: "mirror"; axis: 0 | 1 | 2 }
+  | {
+      /**
+       * Cut the mesh by a plane, keeping the half-space `normal·x ≤ d` and
+       * capping the cut so the result is still a closed solid — the first
+       * CONSTRUCTIVE-SOLID operator. Exact: a vertex's side is the sign of
+       * `normal·v − d`, an edge splits at the exact rational crossing, and the
+       * cap welds with no tolerance because both faces of a shared edge compute
+       * the same point. A single clip chamfers or bevels a corner; a sequence of
+       * clips intersects the solid with a convex tool (a box hole, a wedge
+       * notch). `normal` (three rational strings) must be non-zero.
+       */
+      op: "clip";
+      normal: [string, string, string];
+      d: string;
+    }
   | {
       /**
        * Fan every face into triangles from its first vertex — the author's
@@ -206,6 +222,15 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number): KernelMesh {
       return mirror(need(), op.axis);
     case "triangulate":
       return triangulate(need());
+    case "clip": {
+      const m = need();
+      const normal: RVec3 = [Rational.parse(op.normal[0]), Rational.parse(op.normal[1]), Rational.parse(op.normal[2])];
+      if (normal[0].isZero() && normal[1].isZero() && normal[2].isZero()) {
+        throw new Error(`evalTrace: op ${i} 'clip' needs a non-zero normal — a plane has a direction`);
+      }
+      const plane: Plane = { normal, d: Rational.parse(op.d) };
+      return clip(m, plane);
+    }
     case "move": {
       const m = need();
       const region = parseRegion(op.region);
@@ -496,6 +521,19 @@ export class Recorder {
 
   mirror(axis: 0 | 1 | 2): this {
     this.ops.push({ op: "mirror", axis });
+    return this;
+  }
+
+  /** Cut the mesh by a plane, keeping the half-space `normal·x ≤ d` and capping
+   *  the cut so the solid stays closed — a chamfer, a bevel, a flat facet; chain
+   *  clips to intersect with a convex tool. `normal` is any non-zero exact
+   *  direction; `d` the exact plane offset. */
+  clip(normal: [Coord, Coord, Coord], d: Coord): this {
+    this.ops.push({
+      op: "clip",
+      normal: [coordStr(normal[0]), coordStr(normal[1]), coordStr(normal[2])],
+      d: coordStr(d),
+    });
     return this;
   }
 
