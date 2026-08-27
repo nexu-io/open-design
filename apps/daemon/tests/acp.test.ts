@@ -211,6 +211,99 @@ test('attachAcpSession keeps legacy session/set_model when no model config optio
   assert.equal(requests.some((entry) => entry.method === 'session/set_config_option'), false);
 });
 
+test('attachAcpSession stops an AMR turn when session/set_model rejects the selected model', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  const events: Array<{ event: string; payload: unknown }> = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: 'claude-opus-5',
+    mcpServers: [],
+    modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  try {
+    writeAcpResult(child, 1, {});
+    writeAcpResult(child, 2, {
+      sessionId: 'session-1',
+      models: { currentModelId: null },
+    });
+    writeAcpError(child, 3, {
+      code: -32602,
+      message: 'session/set_model modelId is not available',
+    });
+
+    const requests = parseRpcWrites(writes);
+    assert.equal(requests.some((entry) => entry.method === 'session/set_model'), true);
+    assert.equal(requests.some((entry) => entry.method === 'session/prompt'), false);
+    assert.deepEqual(agentModelStatuses(events), []);
+    assert.equal(session.hasFatalError(), true);
+    assert.equal(session.completedSuccessfully(), false);
+    assert.deepEqual(events.filter((entry) => entry.event === 'error'), [
+      {
+        event: 'error',
+        payload: {
+          message: 'json-rpc id 3: session/set_model modelId is not available',
+          error: {
+            code: 'AMR_MODEL_UNAVAILABLE',
+            message: 'json-rpc id 3: session/set_model modelId is not available',
+            retryable: false,
+            details: { kind: 'amr_model', action: 'choose_model' },
+          },
+        },
+      },
+    ]);
+  } finally {
+    session.abort();
+  }
+});
+
+test('attachAcpSession preserves default-model recovery for other ACP agents', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  const events: Array<{ event: string; payload: unknown }> = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: 'optional-model',
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  try {
+    writeAcpResult(child, 1, {});
+    writeAcpResult(child, 2, {
+      sessionId: 'session-1',
+      models: { currentModelId: null },
+    });
+    writeAcpError(child, 3, {
+      code: -32602,
+      message: 'optional model selection is unavailable',
+    });
+
+    assert.equal(
+      parseRpcWrites(writes).some((entry) => entry.method === 'session/prompt'),
+      true,
+    );
+    assert.deepEqual(agentModelStatuses(events), ['default']);
+
+    writeAcpResult(child, 4, {});
+    assert.equal(session.hasFatalError(), false);
+    assert.equal(session.completedSuccessfully(), true);
+    assert.deepEqual(events.filter((entry) => entry.event === 'error'), []);
+  } finally {
+    session.abort();
+  }
+});
+
 test('attachAcpSession includes frozen PDF, text, and image attachments as ACP resource links', () => {
   const child = new FakeAcpChild();
   const writes: string[] = [];

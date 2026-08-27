@@ -385,7 +385,8 @@ export function attachAcpSession({
       value.includes('model not found') ||
       value.includes('providermodelnotfounderror') ||
       value.includes('unknown model') ||
-      value.includes('invalid model')
+      value.includes('invalid model') ||
+      value.includes('modelid is not available')
     );
   };
 
@@ -773,14 +774,20 @@ export function attachAcpSession({
       if (finished) return;
       // JSON-RPC error handling:
       // -32603 unexpected-id errors are cleanup noise. Expected-id model
-      // selection failures are recoverable; all other RPC errors are real
-      // protocol failures for initialize/session/new/session/prompt.
+      // selection failures are recoverable for agents with an implicit
+      // default. AMR/Vela requires an explicit selection before prompt, so a
+      // rejected model must stay terminal instead of creating a secondary
+      // `session/set_model must be called before session/prompt` failure.
       if (
         obj.id === setModelRequestId &&
         modelSelectionErrorIsRecoverable(error?.code) &&
         promptRequestId === null
       ) {
-        recoverFromModelSelectionError();
+        if (modelUnavailableErrorCode) {
+          fail(rpcErr, { details: rpcErrorData(obj), retryable: false });
+        } else {
+          recoverFromModelSelectionError();
+        }
         return;
       }
       if (error?.code === -32603 && obj.id !== expectedId) {
