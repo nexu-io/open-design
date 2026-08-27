@@ -211,6 +211,13 @@ export interface EvalOptions {
   /** Work-unit budget for this evaluation (default {@link DEFAULT_WORK_BUDGET}).
    *  Raise it to build a larger asset on a machine with the memory for it. */
   workBudget?: number;
+  /** Cooperative cancellation: polled at every work-meter checkpoint (which
+   *  fire BEFORE each expensive grow — e.g. once per subdivide level), so a
+   *  long evaluation can be abandoned promptly without a wall-clock cap. When it
+   *  returns true the evaluator throws {@link EvalCancelledError}. This is the
+   *  ONLY way to interrupt the synchronous exact-arithmetic loop; a message can't
+   *  reach it until it yields, which it never does mid-evaluation. */
+  shouldCancel?: () => boolean;
 }
 
 /** Thrown when a trace's cumulative work exceeds the budget — a runaway, not a
@@ -229,9 +236,24 @@ export class WorkBudgetError extends Error {
   }
 }
 
+/** Thrown when a caller cancels the evaluation (see {@link EvalOptions.shouldCancel}).
+ *  Distinct from every domain failure: it means "the caller walked away", not
+ *  "the recipe is wrong", so the pipeline re-throws it rather than reporting an
+ *  issue against the author's scene. */
+export class EvalCancelledError extends Error {
+  constructor(
+    readonly opIndex: number,
+    readonly opKind: string,
+  ) {
+    super(`evalTrace: cancelled at op ${opIndex} '${opKind}'`);
+    this.name = "EvalCancelledError";
+  }
+}
+
 interface WorkMeter {
   spent: number;
   budget: number;
+  shouldCancel?: () => boolean;
 }
 
 /** A caller's budget, sanitised: a finite POSITIVE number, else the default. A
@@ -247,6 +269,10 @@ function resolveBudget(workBudget: number | undefined): number {
 /** Charge `units` of work and throw if the running total passes the budget.
  *  The single guard that replaces every domain-count cap. */
 function charge(meter: WorkMeter, units: number, opIndex: number, opKind: string): void {
+  // Cancellation shares the meter's checkpoint: it fires before every grow, so
+  // a cancelled deep subdivide stops between levels without ever building the
+  // next one. Cheap (a bool read) and keeps the one hot path single-purpose.
+  if (meter.shouldCancel?.()) throw new EvalCancelledError(opIndex, opKind);
   meter.spent += units;
   if (meter.spent > meter.budget) throw new WorkBudgetError(opIndex, opKind, meter.spent, meter.budget);
 }
@@ -297,7 +323,11 @@ export function evalTrace(trace: Trace, opts: EvalOptions = {}): KernelMesh {
   if (trace.version !== 1) {
     throw new Error(`evalTrace: unsupported trace version ${trace.version}`);
   }
-  const meter: WorkMeter = { spent: 0, budget: resolveBudget(opts.workBudget) };
+  const meter: WorkMeter = {
+    spent: 0,
+    budget: resolveBudget(opts.workBudget),
+    ...(opts.shouldCancel ? { shouldCancel: opts.shouldCancel } : {}),
+  };
   let mesh: KernelMesh | null = null;
   trace.ops.forEach((op, i) => {
     if (op.op === "shape" || op.op === "endShape") {
@@ -317,6 +347,12 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number, meter: WorkMet
     if (!mesh) throw new Error(`evalTrace: op ${i} '${op.op}' before any geometry`);
     return mesh;
   };
+  // Poll cancellation ONCE per op, before it runs. Some ops (extrude, inset)
+  // build their result and only THEN charge, so the in-`charge` checkpoint alone
+  // would let a large op finish before it could stop; checking here interrupts
+  // before any op executes. The per-charge check still adds finer granularity
+  // INSIDE multi-level ops (subdivide charges — and so polls — before each level).
+  if (meter.shouldCancel?.()) throw new EvalCancelledError(i, op.op);
   switch (op.op) {
     case "cage": {
       // Charge the cage BEFORE parsing: its element count PLUS the total length of
@@ -479,7 +515,11 @@ export function evalTraceShapes(
   if (trace.version !== 1) {
     throw new Error(`evalTraceShapes: unsupported trace version ${trace.version}`);
   }
-  const meter: WorkMeter = { spent: 0, budget: resolveBudget(opts.workBudget) };
+  const meter: WorkMeter = {
+    spent: 0,
+    budget: resolveBudget(opts.workBudget),
+    ...(opts.shouldCancel ? { shouldCancel: opts.shouldCancel } : {}),
+  };
   let base: KernelMesh | null = null;
   const shapes: ShapeResult[] = [];
   let recording: string | null = null;

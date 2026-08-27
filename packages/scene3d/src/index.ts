@@ -11,6 +11,7 @@ export * from "./types.js";
 export { ISSUE_CODES, summarize } from "./errors.js";
 export { DEFAULT_CONTRACT, normalizeContract, validateContract, BLENDER_DEFAULT_NAMES } from "./contract.js";
 export { compile } from "./pipeline.js";
+export { compileInWorker, workerEvalAvailable, type CompileInWorkerOptions } from "./compile-in-worker.js";
 export { renderAgentReport } from "./report.js";
 export { buildManifest, writeManifest, writeViewer, writeProjectKit } from "./manifest.js";
 export { renderKitHtml, type KitEntry, type KitPage } from "./viewer/kit.js";

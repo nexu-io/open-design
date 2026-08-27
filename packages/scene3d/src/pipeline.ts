@@ -34,7 +34,7 @@ import {
   writeCache,
 } from "./build/blender.js";
 import { runRecipe } from "./parse/recipe.js";
-import { evalTraceShapes } from "./kernel/trace.js";
+import { evalTraceShapes, EvalCancelledError } from "./kernel/trace.js";
 import { toEmitMesh, fitKernelMesh, predictCensus, type EmitMesh, type PredictedCensus } from "./kernel/mesh.js";
 import { ratFromFloat } from "./kernel/rational.js";
 
@@ -123,7 +123,24 @@ function collectAuthoredKeys(conventions: unknown, prefix = "", out = new Set<st
  * Stages are cached by content hash of their inputs; `noCache` bypasses.
  * `ok` is true only when no error-severity issue was produced.
  */
-export async function compile(request: CompileRequest): Promise<CompileResult> {
+/** Non-serializable, in-process-only compile options. Kept separate from
+ *  {@link CompileRequest} (which crosses the worker boundary as data) precisely
+ *  because a function can't be serialized — the worker rebuilds `shouldCancel`
+ *  locally from a shared flag. See `compileInWorker`. */
+export interface CompileControl {
+  /** Cooperative cancellation, polled at every kernel work-meter checkpoint AND
+   *  at each pipeline stage boundary (build/proof/export). So an abandoned
+   *  compile stops the exact evaluation promptly and never STARTS a further
+   *  Blender stage. A Blender stage already IN FLIGHT still runs to completion
+   *  (bounded by `request.timeoutMs`) — killing a running child would need
+   *  cross-platform process-tree management, deliberately out of scope. */
+  shouldCancel?: () => boolean;
+}
+
+export async function compile(
+  request: CompileRequest,
+  control: CompileControl = {},
+): Promise<CompileResult> {
   // The runner chdirs into the project and then joins projectDir against
   // the new cwd, so a relative projectDir resolves twice and every source
   // "does not exist". Resolve once here and the whole class of bug is gone.
@@ -520,10 +537,10 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
             continue;
           }
           try {
-            const { base, shapes } = evalTraceShapes(
-              result.trace,
-              request.workBudget !== undefined ? { workBudget: request.workBudget } : {},
-            );
+            const { base, shapes } = evalTraceShapes(result.trace, {
+              ...(request.workBudget !== undefined ? { workBudget: request.workBudget } : {}),
+              ...(control.shouldCancel ? { shouldCancel: control.shouldCancel } : {}),
+            });
             const box = part.localSize ?? part.size;
             // ONE exact box-fit over ℚ (base and every shape by the same exact
             // affine), then a SINGLE rounding at emit. So the census, the mass
@@ -547,11 +564,19 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
               shapeNames: shapes.map((s) => s.name),
             });
           } catch (e) {
+            // A cancellation is the caller walking away, not a defect in the
+            // author's recipe — propagate it out of the whole compile instead of
+            // blaming the scene with an issue.
+            if (e instanceof EvalCancelledError) throw e;
             recipeFailed = true;
+            // The try spans evaluation, box-fitting, the float32 bake AND census
+            // prediction, so a throw is not necessarily an evaluation failure —
+            // e.g. an absurd declared `size` (≥~1e39) overflows the float32 bake,
+            // not the exact trace. Don't pin it on "did not evaluate".
             issues.push({
               code: ISSUE_CODES.SPEC_INVALID,
               severity: "error",
-              message: `part '${part.id}': recipe trace did not evaluate — ${(e as Error).message}`,
+              message: `part '${part.id}': recipe could not be evaluated and prepared for build — ${(e as Error).message}`,
               file: "scene.json",
               target: part.id,
             });
@@ -770,6 +795,14 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
   }
 
   /* ---- build ------------------------------------------------------ */
+  // If the caller already abandoned the request (a client disconnect during
+  // parse/solve/eval), stop before the whole Blender pipeline — build, proof,
+  // export, lint, manifest — spins up, so an abandoned compile doesn't hold its
+  // worker + gate slot through every remaining stage. A disconnect DURING a
+  // Blender stage still lets THAT stage finish (killing a running Blender child
+  // would need cross-platform process-tree management, deliberately out of
+  // scope); the abort reaches the exact-evaluation phase and this boundary.
+  if (control.shouldCancel?.()) throw new EvalCancelledError(-1, "build");
   let census: Census | undefined;
   /* The read model. Populated at the manifest stage, which is the only
      point where every measurement this run will produce is final. */
@@ -934,6 +967,10 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
   }
 
   /* ---- proof ------------------------------------------------------ */
+  // Abandoned between stages? Don't start the next Blender render. (See the
+  // build-stage note: this bounds an aborted compile's waste to at most the one
+  // stage already in flight.)
+  if (control.shouldCancel?.()) throw new EvalCancelledError(-1, "proof");
   /* Proof runs before lint on purpose: the linter consumes each frame's
      coverage statistics, so "the render came out black" is a measured fact
      it can report rather than a failure only a human would ever notice. */
@@ -1179,6 +1216,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
   }
 
   /* ---- export ----------------------------------------------------- */
+  if (control.shouldCancel?.()) throw new EvalCancelledError(-1, "export");
   /* Export precedes lint because the linter reads the exported stage back:
      the USD we ship can violate the contract the Blender scene satisfied,
      and only the artifact itself can settle that. */

@@ -3,6 +3,7 @@ import { Rational } from "../src/kernel/rational.js";
 import { meshOf, mirror, predictCensus, subdivide, KernelMesh, RVec3 } from "../src/kernel/mesh.js";
 import {
   canonicalize,
+  EvalCancelledError,
   evalTrace,
   evalTraceShapes,
   evalTraceWithCensus,
@@ -27,6 +28,67 @@ const cube = (): KernelMesh =>
   );
 const keys = (m: KernelMesh): string[] =>
   m.verts.map((v: RVec3) => `${v[0].key()},${v[1].key()},${v[2].key()}`).sort();
+
+describe("kernel trace: cooperative cancellation", () => {
+  // Cancellation rides the work-meter checkpoint (once per grow / subdivide
+  // level) — the only place a caller can interrupt the synchronous exact loop.
+  // These pin the exact behaviour the off-thread worker depends on.
+
+  it("stops immediately when cancelled from the first checkpoint", () => {
+    const trace = new Recorder().box().subdivide(4).trace();
+    expect(() => evalTrace(trace, { shouldCancel: () => true })).toThrow(EvalCancelledError);
+  });
+
+  it("is cooperative: it keeps evaluating until the signal flips, then stops", () => {
+    const trace = new Recorder().box().subdivide(6).trace();
+    let polls = 0;
+    // Flip true only after several checkpoints — proves it polls repeatedly and
+    // interrupts partway, not just at op 0.
+    expect(() =>
+      evalTrace(trace, { shouldCancel: () => ++polls > 3 }),
+    ).toThrow(EvalCancelledError);
+    expect(polls).toBeGreaterThan(3);
+  });
+
+  it("a cancel is not a budget trip — distinct error, so the report can tell them apart", () => {
+    const trace = new Recorder().box().subdivide(3).trace();
+    let err: unknown;
+    try {
+      evalTrace(trace, { shouldCancel: () => true, workBudget: 10_000_000 });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(EvalCancelledError);
+    expect(err).not.toBeInstanceOf(WorkBudgetError);
+  });
+
+  it("evalTraceShapes honours cancellation too (the entry the pipeline uses)", () => {
+    const trace = new Recorder().box().subdivide(2).trace();
+    expect(() => evalTraceShapes(trace, { shouldCancel: () => true })).toThrow(EvalCancelledError);
+  });
+
+  it("interrupts a charge-after op (extrude) BEFORE it builds, not only at its post-build charge", () => {
+    // extrude builds its result and charges afterwards, so the per-charge poll
+    // alone would let it finish first. The per-op checkpoint must catch it. Poll
+    // sequence: cage top (1), cage charge (2), extrude top (3) → stop here. If the
+    // per-op check were gone, only the two charges would poll and this never trips.
+    const trace = new Recorder().box().extrude({ z: [0, 2] }, [0, 0, "1/2"]).trace();
+    let n = 0;
+    let caught: EvalCancelledError | undefined;
+    try {
+      evalTrace(trace, { shouldCancel: () => ++n >= 3 });
+    } catch (e) {
+      caught = e as EvalCancelledError;
+    }
+    expect(caught).toBeInstanceOf(EvalCancelledError);
+    expect(caught?.opKind).toBe("extrude"); // stopped AT the extrude, before its build
+  });
+
+  it("without a signal it runs to completion unchanged", () => {
+    const trace = new Recorder().box().subdivide(3).trace();
+    expect(() => evalTrace(trace)).not.toThrow();
+  });
+});
 
 describe("kernel trace: the work meter guards runaway, not scale", () => {
   it("builds a large legitimate asset with no arbitrary cap (a level-5 cube)", () => {

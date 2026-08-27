@@ -57,3 +57,22 @@ await build({
   platform: "node",
   target: "node24",
 });
+
+/*
+ * Step 3 — bundle the off-thread compile worker, beside the index.
+ *
+ * `compileInWorker` runs the whole compile on a worker thread so a CPU-heavy
+ * exact-rational evaluation never stalls the caller's event loop. The worker is
+ * its own bundled entry (a separate thread is a separate module instance, so
+ * the duplicated bundle is fine) and resolves relative to dist/index.mjs via
+ * `new URL('./compile-worker.mjs', import.meta.url)`.
+ */
+await build({
+  bundle: true,
+  entryPoints: ["./src/compile-worker.ts"],
+  format: "esm",
+  outfile: "./dist/compile-worker.mjs",
+  packages: "external",
+  platform: "node",
+  target: "node24",
+});

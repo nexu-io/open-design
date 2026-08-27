@@ -7,6 +7,7 @@ import * as path from 'node:path';
 import { assertBlenderIfRequired, probeBlender } from '@open-design/scene3d';
 import {
   artifactRef,
+  CompileGate,
   parseProof,
   parseStages,
   registerScene3dRoutes,
@@ -130,6 +131,109 @@ async function startServer(options: {
     base,
   };
 }
+
+describe('CompileGate', () => {
+  // The gate is what keeps off-thread compiles from fanning out an unbounded
+  // number of worker threads + Blender children under a burst. Pin both halves
+  // of the contract: the ceiling holds, and a rejecting task frees its slot.
+  const flush = () => new Promise<void>((r) => setImmediate(r));
+
+  it('never runs more than `limit` at once and admits queued work FIFO as slots free', async () => {
+    const gate = new CompileGate(2);
+    let active = 0;
+    let peak = 0;
+    const entered: number[] = [];
+    const release: Array<() => void> = [];
+    const run = (i: number) =>
+      gate.run(async () => {
+        active++;
+        peak = Math.max(peak, active);
+        entered.push(i);
+        await new Promise<void>((r) => release.push(r));
+        active--;
+        return i;
+      });
+    const tasks = [0, 1, 2, 3].map(run);
+
+    await flush();
+    expect(entered).toEqual([0, 1]); // only `limit` admitted; 2 and 3 queued
+    expect(peak).toBe(2);
+
+    release[0]!();
+    await flush();
+    expect(entered).toEqual([0, 1, 2]); // a freed slot admits the next in order
+    expect(peak).toBe(2); // never exceeds the ceiling
+
+    release[1]!();
+    await flush();
+    expect(entered).toEqual([0, 1, 2, 3]);
+
+    release[2]!();
+    release[3]!();
+    expect(await Promise.all(tasks)).toEqual([0, 1, 2, 3]);
+    expect(peak).toBe(2);
+  });
+
+  it('holds the ceiling under a synchronous burst of run() calls', async () => {
+    // Slots are transferred to waiters, not decremented-then-reincremented, so
+    // no in-tick burst can transiently breach the limit.
+    const gate = new CompileGate(2);
+    let active = 0;
+    let peak = 0;
+    const release: Array<() => void> = [];
+    const tasks = Array.from({ length: 8 }, () =>
+      gate.run(async () => {
+        active++;
+        peak = Math.max(peak, active);
+        await new Promise<void>((r) => release.push(r));
+        active--;
+      }),
+    );
+    await flush();
+    expect(peak).toBe(2); // eight fired at once, only two admitted
+    for (let i = 0; i < 8; i++) {
+      release[i]!();
+      await flush();
+    }
+    await Promise.all(tasks);
+    expect(peak).toBe(2);
+  });
+
+  it('frees the slot when a task rejects, so the gate does not wedge', async () => {
+    const gate = new CompileGate(1);
+    await expect(
+      gate.run(async () => {
+        throw new Error('boom');
+      }),
+    ).rejects.toThrow('boom');
+    // If the finally did not release, this second task would hang forever.
+    await expect(gate.run(async () => 'after')).resolves.toBe('after');
+  });
+
+  it('drops a queued task the moment its signal aborts, without ever admitting it', async () => {
+    const gate = new CompileGate(1);
+    const release: Array<() => void> = [];
+    // Occupy the only slot.
+    const holding = gate.run(async () => {
+      await new Promise<void>((r) => release.push(r));
+    });
+    await flush();
+
+    const ac = new AbortController();
+    let admitted = false;
+    const queued = gate.run(async () => {
+      admitted = true;
+    }, ac.signal);
+    await flush(); // it is waiting behind `holding`, not running
+
+    ac.abort();
+    await expect(queued).rejects.toMatchObject({ name: 'AbortError' });
+    expect(admitted).toBe(false); // it never got a slot
+
+    release[0]!();
+    await holding; // and dropping the queued one didn't strand the gate
+  });
+});
 
 describe('resolveSceneDir', () => {
   // Resolved, not just joined: on win32 `path.resolve` prefixes the current

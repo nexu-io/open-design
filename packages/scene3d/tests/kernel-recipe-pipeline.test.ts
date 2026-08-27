@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { pathToFileURL } from "node:url";
 import { compile, probeBlender } from "../src/index.js";
 import { Recorder, evalTrace } from "../src/kernel/trace.js";
 import { fitKernelMesh, predictCensus } from "../src/kernel/mesh.js";
@@ -27,6 +28,13 @@ const hasPython = !spawnSync(python, ["--version"], { encoding: "utf8", windowsH
 const hasBlender = (await probeBlender({})) !== null;
 assertBlenderIfRequired(hasBlender);
 
+// The genuine off-thread worker only exists against the BUILT dist (in the
+// vitest source context the sibling compile-worker.mjs isn't there). The
+// off-thread parity test below loads the built entry when present.
+const distIndex = path.join(__dirname, "..", "dist", "index.mjs");
+const distBuilt =
+  fs.existsSync(distIndex) && fs.existsSync(path.join(__dirname, "..", "dist", "compile-worker.mjs"));
+
 describe.skipIf(!hasBlender)("kernel recipe pipeline (real Blender)", () => {
   const fixture = (name: string) => path.join(__dirname, "fixtures", name);
   const workDir = (name: string) => {
@@ -35,6 +43,33 @@ describe.skipIf(!hasBlender)("kernel recipe pipeline (real Blender)", () => {
     fs.cpSync(fixture(name), dir, { recursive: true });
     return dir;
   };
+
+  it.skipIf(!hasPython || !distBuilt)(
+    "yields an identical recipe census whether compiled inline or off-thread",
+    async () => {
+      // The recipe path IS the CPU-heavy exact evaluation that off-thread eval
+      // moves off the daemon's event loop; the whole Blender-built result must
+      // survive the worker's JSON boundary unchanged — down to the census.
+      const dist = (await import(pathToFileURL(distIndex).href)) as typeof import("../src/index.js");
+      const viaWorker = await dist.compileInWorker({
+        projectDir: workDir("good/spec_recipe"),
+        proof: { turntable: false },
+        noCache: true,
+      });
+      const viaInline = await dist.compile({
+        projectDir: workDir("good/spec_recipe"),
+        proof: { turntable: false },
+        noCache: true,
+      });
+      expect(viaWorker.ok).toBe(viaInline.ok);
+      const shape = (r: typeof viaWorker) =>
+        r.census?.meshes.map((m) => [m.object, m.verts, m.faces, m.tris, m.nonManifoldEdges]);
+      expect(shape(viaWorker)).toEqual(shape(viaInline));
+      expect(viaWorker.issues.map((i) => i.code).sort()).toEqual(
+        viaInline.issues.map((i) => i.code).sort(),
+      );
+    },
+  );
 
   it.skipIf(!hasPython)("builds a recipe part whose exact prediction matches the measured census", async () => {
     const dir = workDir("good/spec_recipe");

@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as os from 'node:os';
 import type { Express } from 'express';
 import type {
   Scene3dArtifactRef,
@@ -11,7 +12,7 @@ import type {
   Scene3dStageId,
 } from '@open-design/contracts';
 import { buildScene3dAssetUrl, scene3dIssueTitle } from '@open-design/contracts';
-import { compile, renderAgentReport, probeBlender, writeProjectKit } from '@open-design/scene3d';
+import { compileInWorker, workerEvalAvailable, renderAgentReport, probeBlender, writeProjectKit } from '@open-design/scene3d';
 import type { RouteDeps } from '../server-context.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 
@@ -40,6 +41,79 @@ const inFlight = new Set<string>();
 
 /** Ceiling on a single compile so a pathological scene cannot pin a worker. */
 const MAX_TIMEOUT_MS = 600_000;
+
+// Compiles run on a worker thread (compileInWorker) so a CPU-heavy exact
+// evaluation never stalls the daemon event loop. Warn ONCE at startup if the
+// worker entry is missing — that means compiles fall back to a blocking inline
+// path, which is a real (if rare) regression worth surfacing before it bites.
+if (!workerEvalAvailable) {
+  console.warn(
+    '[scene3d] off-thread compile worker unavailable — compiles will run inline and block the event loop',
+  );
+}
+
+// Bound how many compiles run at once. Off-thread eval removed the event loop's
+// incidental serialization, so without this a burst of distinct-scene requests
+// could fan out an unbounded number of worker threads AND Blender children and
+// exhaust the machine. This is resource management, not a size cap on any one
+// asset: excess compiles QUEUE, none are rejected, and the ceiling is raisable
+// for a bigger box via OD_SCENE3D_COMPILE_CONCURRENCY. `inFlight` still dedupes
+// the same scene; this bounds the cross-scene total.
+const parseConcurrency = (raw: string | undefined): number | undefined => {
+  const n = raw === undefined ? NaN : Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+};
+const COMPILE_CONCURRENCY =
+  parseConcurrency(process.env.OD_SCENE3D_COMPILE_CONCURRENCY) ??
+  Math.max(1, Math.min(4, os.cpus().length - 1));
+
+const gateAbortError = () => new DOMException('The compile was aborted while queued', 'AbortError');
+
+/** A minimal FIFO concurrency gate: at most `limit` `run` callbacks execute at
+ *  once; the rest wait their turn. A queued caller whose `signal` aborts drops
+ *  out of the queue AT ONCE (rejecting with an AbortError) rather than lingering
+ *  until admission — so a burst of disconnected requests can't pile up holding
+ *  their closures for the full compile duration ahead of them. */
+export class CompileGate {
+  private active = 0;
+  private readonly waiters: Array<() => void> = [];
+  constructor(private readonly limit: number) {}
+  async run<T>(fn: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    if (this.active < this.limit) {
+      this.active++; // a slot was free — take it
+    } else {
+      // Wait for a slot. On release the slot is HANDED to us directly: `active`
+      // is NOT decremented then re-incremented across the await, so there is no
+      // transient window in which a fast-path caller could slip in and breach
+      // the ceiling or jump ahead of the FIFO queue. A caller that disconnects
+      // while queued drops out of the queue at once.
+      await new Promise<void>((admitted, reject) => {
+        if (signal?.aborted) return reject(gateAbortError());
+        const admit = () => {
+          signal?.removeEventListener('abort', onAbort);
+          admitted();
+        };
+        const onAbort = () => {
+          const i = this.waiters.indexOf(admit);
+          if (i >= 0) this.waiters.splice(i, 1);
+          reject(gateAbortError());
+        };
+        this.waiters.push(admit);
+        signal?.addEventListener('abort', onAbort);
+      });
+      // Admitted: our slot was transferred from the releaser, which left `active`
+      // counting it — so we must NOT increment here.
+    }
+    try {
+      return await fn();
+    } finally {
+      const next = this.waiters.shift();
+      if (next) next(); // transfer our slot straight to the next waiter (active unchanged)
+      else this.active--; // no one waiting — free the slot
+    }
+  }
+}
+const compileGate = new CompileGate(COMPILE_CONCURRENCY);
 
 /**
  * Error text as sent to the client: absolute host paths stripped. An fs
@@ -130,27 +204,67 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
           'a compile is already running for this scene — wait for it and retry; its finished stages will come back cached, so nothing is wasted',
         );
       }
+      // If the client disconnects before we respond, cancel the compile — its
+      // result is going nowhere, so don't keep burning a core (and a worker) on
+      // it. Cooperative: this aborts the CPU phase without orphaning Blender.
+      const abort = new AbortController();
+      const onClose = () => {
+        if (!res.writableEnded) abort.abort();
+      };
+      res.on('close', onClose);
       inFlight.add(sceneDir);
       let result;
       try {
-        // `exactOptionalPropertyTypes` is on: an omitted option and an
-        // option explicitly set to `undefined` are different types, so the
-        // optional fields are spread in only when the caller sent them.
-        result = await compile({
-          projectDir: sceneDir,
-          scenePath,
-          noCache: body.noCache === true,
-          timeoutMs: MAX_TIMEOUT_MS,
-          ...(stages ? { stages } : {}),
-          ...(proof ? { proof } : {}),
-          // A raisable ceiling on the kernel work meter, not a size cap: forwarded
-          // only when a positive finite number, so a bad value falls to the default.
-          ...(typeof body.workBudget === "number" && Number.isFinite(body.workBudget) && body.workBudget > 0
-            ? { workBudget: body.workBudget }
-            : {}),
-        });
+        // Hold the gate slot AND the inFlight guard until the worker fully
+        // EXITS — not merely until it returns a result. An aborted compile
+        // rejects the caller promptly, but its worker keeps writing this scene's
+        // out/ until its Blender stage ends; releasing on result-settle would
+        // let a same-scene recompile clobber those writes and let disconnect
+        // bursts overrun the concurrency ceiling. The compile runs INSIDE the
+        // gate callback (so the slot is acquired before the worker spawns) and a
+        // finally awaits `exited`, so the slot frees only on true worker exit.
+        result = await compileGate.run(async () => {
+          let markExited!: () => void;
+          const exited = new Promise<void>((r) => {
+            markExited = r;
+          });
+          // `exactOptionalPropertyTypes` is on: an omitted option and an option
+          // explicitly set to `undefined` are different types, so the optional
+          // fields are spread in only when the caller sent them.
+          const compiling = compileInWorker(
+            {
+              projectDir: sceneDir,
+              scenePath,
+              noCache: body.noCache === true,
+              timeoutMs: MAX_TIMEOUT_MS,
+              ...(stages ? { stages } : {}),
+              ...(proof ? { proof } : {}),
+              // A raisable ceiling on the kernel work meter, not a size cap: forwarded
+              // only when a positive finite number, so a bad value falls to the default.
+              ...(typeof body.workBudget === "number" && Number.isFinite(body.workBudget) && body.workBudget > 0
+                ? { workBudget: body.workBudget }
+                : {}),
+            },
+            {
+              // No hardTimeoutMs: a legit dense asset may compile for minutes, so
+              // an arbitrary wall-clock kill would reject real work. The guards
+              // that matter already exist — the kernel work meter bounds the CPU
+              // phase, per-stage `timeoutMs` bounds Blender. Cancel via the abort
+              // signal; report a fallback loudly; free the slot on true exit.
+              signal: abort.signal,
+              onFallback: (reason) => console.warn('[scene3d]', reason),
+              onExit: markExited,
+            },
+          );
+          try {
+            return await compiling;
+          } finally {
+            await exited;
+          }
+        }, abort.signal);
       } finally {
         inFlight.delete(sceneDir);
+        res.off('close', onClose);
       }
 
       // Refresh the project-wide kit after every compile so the catalogue of
@@ -217,6 +331,9 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
       };
       res.json(response);
     } catch (err: any) {
+      // The client disconnected and we cancelled the compile — expected, not a
+      // server error. The socket is already gone, so there's nothing to send.
+      if (err?.name === 'AbortError') return;
       console.error('[scene3d]', err);
       return sendApiError(res, 500, 'INTERNAL_ERROR', redactedMessage(err));
     }
