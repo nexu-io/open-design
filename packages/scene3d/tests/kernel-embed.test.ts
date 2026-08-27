@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { rat } from "../src/kernel/rational.js";
 import type { Rational } from "../src/kernel/rational.js";
 import { meshOf, triangulate } from "../src/kernel/mesh.js";
-import type { KernelMesh } from "../src/kernel/mesh.js";
-import { embeds, trianglesProperlyIntersect, type Tri } from "../src/kernel/embed.js";
+import type { KernelMesh, RVec3 } from "../src/kernel/mesh.js";
+import { embeds, triangulateFace, trianglesProperlyIntersect, type Tri } from "../src/kernel/embed.js";
 
 /**
  * The exact embedding certificate — does a mesh BOUND a solid (so its signed
@@ -51,6 +51,69 @@ describe("trianglesProperlyIntersect — the exact pairwise predicate", () => {
     const t1 = tri([0, 0, 0], [1, 0, 0], [0, 1, 0]);
     const t2 = tri([0, 0, 0], [-1, 0, 0], [0, -1, 0]);
     expect(trianglesProperlyIntersect(t1, t2)).toBe(false);
+  });
+
+  it("ear-clips a CONCAVE (L-shaped) face into a VALID triangulation — in EVERY plane", () => {
+    // An L-hexagon (reflex at index 3) laid in each coordinate plane, so the
+    // Newell normal's dominant axis is x, y, then z in turn — exercising all
+    // three projection cases. A fan from a reflex-adjacent vertex would cross
+    // outside the polygon; ear-clipping must not, so the triangulated faces must
+    // pairwise NOT properly intersect regardless of orientation. (A wrong-handed
+    // projection would silently fall back to that self-intersecting fan.)
+    const l2 = [
+      [0, 0], [3, 0], [3, 1], [1, 1], [1, 3], [0, 3],
+    ] as const;
+    const planes: Array<(u: number, w: number) => RVec3> = [
+      (u, w) => v(u, w, 0), // XY  → normal ‖ z
+      (u, w) => v(u, 0, w), // XZ  → normal ‖ y (the drop-Y case Manifold caught)
+      (u, w) => v(0, u, w), // YZ  → normal ‖ x
+    ];
+    for (const place of planes) {
+      const pts: RVec3[] = l2.map(([u, w]) => place(u, w));
+      const tris = triangulateFace([0, 1, 2, 3, 4, 5], pts);
+      expect(tris.length).toBe(4); // n − 2, a real ear-clip (not a dropped face)
+      const T = (t: number[]): Tri => [pts[t[0]!]!, pts[t[1]!]!, pts[t[2]!]!];
+      for (let i = 0; i < tris.length; i++) {
+        for (let j = i + 1; j < tris.length; j++) {
+          expect(trianglesProperlyIntersect(T(tris[i]!), T(tris[j]!))).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("catches a TRANSVERSAL criss-cross whose crossings all land on edges (edge-pierce test misses it)", () => {
+    // Two triangles in perpendicular planes (z=0 and y=0) crossing through the
+    // origin. Each crosses the other's plane over the SAME x-interval [−1.5,1.5],
+    // and every crossing point sits on an EDGE of the other triangle — never in a
+    // face interior — so an edge-pierces-interior test reports nothing. But the
+    // open chord is interior to BOTH triangles: a real transversal self-crossing.
+    const t1 = tri([-2, -1, 0], [2, -1, 0], [0, 3, 0]); // z = 0
+    const t2 = tri([-2, 0, -1], [2, 0, -1], [0, 0, 3]); // y = 0
+    expect(trianglesProperlyIntersect(t1, t2)).toBe(true);
+  });
+
+  it("a shared-edge DIHEDRAL with both hinge verts on the plane is NOT a crossing", () => {
+    // The straddle guard must not fire on the boundary touch: t2's hinge verts lie
+    // ON t1's plane (sign 0) and its apex is strictly on one side — never both.
+    const t1 = tri([0, 0, 0], [4, 0, 0], [0, 0, 4]); // y = 0
+    const t2 = tri([0, 0, 0], [4, 0, 0], [0, 4, 0]); // z = 0, hinged on the x-axis
+    expect(trianglesProperlyIntersect(t1, t2)).toBe(false);
+  });
+
+  it("ear-clips a ring with a vertex ON a candidate ear's edge into a valid triangulation", () => {
+    // A CCW ring whose reflex vertex (1,1) lies exactly on the line x+y=2 — the
+    // diagonal of the ears at (0,0) and (2,0). A strict-interior emptiness test
+    // would clip those ears anyway and overlap; closed containment must reject
+    // them and pick ears that fan cleanly around (1,1).
+    const pts: RVec3[] = [v(0, 0, 0), v(2, 0, 0), v(2, 2, 0), v(1, 1, 0), v(0, 2, 0)];
+    const tris = triangulateFace([0, 1, 2, 3, 4], pts);
+    expect(tris.length).toBe(3); // n − 2
+    const T = (t: number[]): Tri => [pts[t[0]!]!, pts[t[1]!]!, pts[t[2]!]!];
+    for (let i = 0; i < tris.length; i++) {
+      for (let j = i + 1; j < tris.length; j++) {
+        expect(trianglesProperlyIntersect(T(tris[i]!), T(tris[j]!))).toBe(false);
+      }
+    }
   });
 
   it("catches a CONCAVE-FAN fold: two coplanar triangles sharing an edge, SAME side", () => {
@@ -109,6 +172,65 @@ describe("embeds — the whole-mesh sweep", () => {
       [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [3, 7, 6, 2], [0, 4, 7, 3], [1, 2, 6, 5]],
     );
     expect(embeds(immersed).kind).toBe("selfIntersects");
+  });
+
+  it("catches a MALFORMED (bow-tie) face's self-overlap — same-face pairs are not skipped", () => {
+    // A self-crossing quad ring meshOf accepts (four distinct verts, no repeat):
+    // edges 0-1 and 2-3 cross. Its triangulation cannot be valid, so its own
+    // triangles overlap. Because embeds() tests a face against ITSELF, that
+    // overlap surfaces as a witness (both indices the same face) instead of
+    // hiding behind a same-face skip.
+    const bowtie: KernelMesh = {
+      verts: [v(0, 0, 0), v(1, 1, 0), v(1, 0, 0), v(0, 1, 0)],
+      faces: [[0, 1, 2, 3]],
+      vertId: ["a", "b", "c", "d"],
+    };
+    const r = embeds(bowtie);
+    expect(r.kind).toBe("selfIntersects");
+    if (r.kind === "selfIntersects") expect(r.faceA).toBe(0);
+  });
+
+  it("reports UNCHECKED (never a silent embed) when a shipped face has collapsed to zero area", () => {
+    // A face whose three vertices are collinear (as float32 quantization can weld
+    // a face flat) is singular — it has no interior, so the embedded-solid
+    // hypothesis can't be certified. embeds() must say so, not skip it and embed.
+    const singular: KernelMesh = {
+      verts: [v(0, 0, 0), v(1, 0, 0), v(2, 0, 0), v(0, 1, 0)],
+      faces: [[0, 1, 2], [0, 2, 3]],
+      vertId: ["a", "b", "c", "d"],
+    };
+    const r = embeds(singular);
+    expect(r.kind).toBe("unchecked");
+    if (r.kind === "unchecked") expect(r.reason).toContain("collapsed");
+  });
+
+  it("reports UNCHECKED for a single face over the per-face ear-clip ceiling (no throw from the sweep)", () => {
+    const big = Array.from({ length: 700 }, (_, i) => i);
+    const verts = Array.from({ length: 700 }, (_, i) => v(i, i * i, 0));
+    const r = embeds({ verts, faces: [big], vertId: verts.map((_, i) => `v${i}`) });
+    expect(r.kind).toBe("unchecked");
+    if (r.kind === "unchecked") expect(r.reason).toContain("per-face");
+  });
+
+  it("is TOTAL: an out-of-range face index yields UNCHECKED, never a thrown TypeError", () => {
+    // A directly-assembled mesh (bypassing meshOf) whose face names a vertex that
+    // does not exist. embeds() must return a controlled verdict, not crash on a
+    // missing vertex.
+    const bad: KernelMesh = { verts: [v(0, 0, 0), v(1, 0, 0), v(0, 1, 0)], faces: [[0, 1, 99]], vertId: ["a", "b", "c"] };
+    const r = embeds(bad);
+    expect(r.kind).toBe("unchecked");
+    if (r.kind === "unchecked") expect(r.reason).toContain("outside");
+  });
+
+  it("triangulate() REJECTS a malformed mesh rather than silently dropping the face", () => {
+    const shortFace: KernelMesh = { verts: [v(0, 0, 0), v(1, 0, 0)], faces: [[0, 1]], vertId: ["a", "b"] };
+    expect(() => triangulate(shortFace)).toThrow(/malformed mesh/);
+    const badIndex: KernelMesh = { verts: [v(0, 0, 0), v(1, 0, 0), v(0, 1, 0)], faces: [[0, 1, 5]], vertId: ["a", "b", "c"] };
+    expect(() => triangulate(badIndex)).toThrow(/malformed mesh/);
+    // A repeated index (would ear-clip to a zero-area triangle) is structural — refused.
+    const repeat: KernelMesh = { verts: [v(0, 0, 0), v(1, 0, 0), v(0, 1, 0)], faces: [[0, 1, 1, 2]], vertId: ["a", "b", "c"] };
+    expect(() => triangulate(repeat)).toThrow(/malformed mesh/);
+    expect(embeds(repeat).kind).toBe("unchecked"); // and embeds degrades, never throws
   });
 
   it("reports UNCHECKED (never a silent skip) when the mesh is over the face cap", () => {

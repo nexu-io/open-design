@@ -117,13 +117,14 @@ describe("kernel: exact mass properties", () => {
     expect(mp.conditioning.cmp(rat(0)) > 0).toBe(true); // a positive error scale
   });
 
-  it("triangulate() drives volumeAmbiguity to ZERO while preserving the exact volume and topology", () => {
+  it("triangulate() drives volumeAmbiguity to ZERO and lands a VALID triangulation's volume", () => {
     // The author's escape hatch: the perturbed cube has a non-planar quad
-    // (ambiguity 1/6), so its volume is triangulation-dependent and a claim on
-    // it is unchecked. Triangulating fans that quad — the SAME fan the mass
-    // integral uses — so the volume is unchanged to the bit, but now every face
-    // is a triangle (planar) and the ambiguity is exactly 0: the volume is a
-    // theorem about the shipped mesh and every re-triangulation of it.
+    // (fan volume 4/3, ambiguity 1/6), so its volume is triangulation-dependent
+    // and a claim on it is unchecked. Triangulating (ear-clip) fixes ONE valid
+    // triangulation into the geometry — every face a planar triangle, ambiguity
+    // exactly 0 — so the volume becomes a theorem about the shipped mesh. That
+    // fixed value need not equal the mass integral's own fan diagonal; it is
+    // some valid triangulation, so it lands WITHIN the original ambiguity band.
     const perturbed = meshOf(
       [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 1], [1, 0, 1], [1, 1, 2], [0, 1, 1]],
       [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [3, 7, 6, 2], [0, 4, 7, 3], [1, 2, 6, 5]],
@@ -133,13 +134,16 @@ describe("kernel: exact mass properties", () => {
     expect(tri.verts.length).toBe(perturbed.verts.length); // topology-only: no new verts
     const before = massProperties(perturbed)!;
     const after = massProperties(tri)!;
-    expect(after.volume.eq(before.volume)).toBe(true); // 4/3, unchanged to the bit
     expect(after.volumeAmbiguity.isZero()).toBe(true); // now triangulation-independent
-    // Watertightness and genus are invariant — the fan keeps a closed manifold closed.
+    // The shipped volume is a valid triangulation's, so within [V−a, V+a].
+    expect(after.volume.cmp(before.volume.sub(before.volumeAmbiguity)) >= 0).toBe(true);
+    expect(after.volume.cmp(before.volume.add(before.volumeAmbiguity)) <= 0).toBe(true);
+    // Watertightness and genus are invariant — a valid triangulation keeps a
+    // closed manifold closed, and the shipped mesh EMBEDS (no self-intersection).
     const c = predictCensus(tri, { mass: true });
     expect(c.watertight).toBe(true);
     expect(c.genus).toBe(0);
-    expect(c.mass!.volumeExact).toBe("4/3");
+    expect(c.mass!.embed).toEqual({ kind: "embedded" });
   });
 
   it("triangulate() enforces the face-count ceiling (a quad becomes two triangles)", () => {

@@ -105,12 +105,14 @@ describe("kernel: partition of unity (rows sum to exactly 1)", () => {
 
   it("a constant cage subdivides to that constant (weights sum to one)", () => {
     // Degenerate but decisive: if every corner sits at the same point, every
-    // convex combination is that point. Any weight drift would move it.
-    const p: [number, number, number] = [2, -3, 5];
-    const degenerate = meshOf(
-      Array.from({ length: 8 }, () => p),
-      cube().faces,
-    );
+    // convex combination is that point. Any weight drift would move it. meshOf
+    // (rightly) refuses an all-coincident cage now, so assemble the KernelMesh
+    // directly — this test exercises the subdivision weights, not authoring.
+    const degenerate: KernelMesh = {
+      verts: Array.from({ length: 8 }, () => [rat(2), rat(-3), rat(5)] as RVec3),
+      faces: cube().faces,
+      vertId: Array.from({ length: 8 }, (_, i) => `c${i}`),
+    };
     const out = subdivideCatmullClark(degenerate);
     for (const v of out.verts) {
       expect(v[0].eq(rat(2))).toBe(true);
@@ -267,6 +269,27 @@ describe("kernel: orientation, connectivity and index guards (red-team)", () => 
     expect(() => meshOf([[0, 0, 0], [1, 0, 0], [1, 1, 0]], [[0, 1, -1]])).toThrow(/index -1/);
     expect(() => meshOf([[0, 0, 0], [1, 0, 0], [1, 1, 0]], [[0, 1]])).toThrow(/at least 3/);
   });
+
+  it("refuses a single face over the per-face side ceiling (bounds exact ear-clipping)", () => {
+    // A ring polygon of 600 distinct verts is one face of 600 sides — under the
+    // FACE-count ceiling, but its exact triangulation would be unbounded work, so
+    // meshOf rejects it up front.
+    const pts = Array.from({ length: 600 }, (_, i) => [i, i * i, 0] as [number, number, number]);
+    const face = Array.from({ length: 600 }, (_, i) => i);
+    expect(() => meshOf(pts, [face])).toThrow(/over the 512 per-face ceiling/);
+    // 512 sides is still accepted — the ceiling is a bound, not a low cap.
+    const okPts = Array.from({ length: 512 }, (_, i) => [i, i * i, 0] as [number, number, number]);
+    expect(() => meshOf(okPts, [Array.from({ length: 512 }, (_, i) => i)])).not.toThrow();
+  });
+
+  it("refuses a face whose vertices WELD to one (coincident points collapse an edge)", () => {
+    // Indices 0 and 1 are distinct but share a coordinate, so welding maps the
+    // face to [0, 0, 1] — a zero-area face. The distinctness gate runs AFTER the
+    // weld, so this is caught at authoring, not left for a downstream check.
+    expect(() => meshOf([[0, 0, 0], [0, 0, 0], [1, 0, 0]], [[0, 1, 2]])).toThrow(/collapse to one/);
+    // A literal repeated index is still refused by the same gate.
+    expect(() => meshOf([[0, 0, 0], [1, 0, 0], [1, 1, 0]], [[0, 1, 1]])).toThrow(/collapse to one/);
+  });
 });
 
 describe("kernel: creases keep chosen edges sharp under subdivision", () => {
@@ -350,7 +373,7 @@ describe("kernel: soundness fixes (red-team)", () => {
   });
 
   it("meshOf refuses a face with a repeated vertex index", () => {
-    expect(() => meshOf([[0, 0, 0], [1, 0, 0], [1, 1, 0]], [[0, 0, 1]])).toThrow(/repeats a vertex index/);
+    expect(() => meshOf([[0, 0, 0], [1, 0, 0], [1, 1, 0]], [[0, 0, 1]])).toThrow(/collapse to one/);
   });
 
   it("refuses a runaway subdivision before allocating (the loud ceiling)", () => {

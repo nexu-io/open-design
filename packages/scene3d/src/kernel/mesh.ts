@@ -1,6 +1,6 @@
 import { Rational, rat, ratMean, ratFromFloat } from "./rational.js";
 import { massProperties } from "./mass.js";
-import { embeds, type EmbedResult } from "./embed.js";
+import { embeds, triangulateFace, firstMalformedFace, MAX_FACE_SIDES, type EmbedResult } from "./embed.js";
 
 /**
  * The deterministic geometry kernel: exact meshes and the operators over them.
@@ -120,18 +120,28 @@ export function meshOf(
     if (f.length < 3) {
       throw new Error(`meshOf: face ${fi} has ${f.length} vertices — a face needs at least 3`);
     }
+    if (f.length > MAX_FACE_SIDES) {
+      throw new Error(
+        `meshOf: face ${fi} has ${f.length} sides, over the ${MAX_FACE_SIDES} per-face ceiling — split it, or build the profile from the shape primitives`,
+      );
+    }
     for (const i of f) {
       if (!Number.isInteger(i) || i < 0 || i >= points.length) {
         throw new Error(`meshOf: face ${fi} references vertex index ${i}, outside 0..${points.length - 1}`);
       }
     }
-    // A repeated index in one face collapses two of its edges onto one key and
-    // corrupts the edge/boundary count for that face — a degenerate face, not
-    // a valid one.
-    if (new Set(f).size !== f.length) {
-      throw new Error(`meshOf: face ${fi} repeats a vertex index — a face's vertices must be distinct`);
+    // A repeated vertex in one face collapses two of its edges onto one key and
+    // corrupts the edge/boundary count — a degenerate face. Checked AFTER welding
+    // (remap), so two DISTINCT input points at the SAME coordinate — which
+    // collapse to one vertex and would leave a zero-length edge — are caught here
+    // too, not only a literal repeated index.
+    const remapped = f.map((i) => remap[i]!);
+    if (new Set(remapped).size !== remapped.length) {
+      throw new Error(
+        `meshOf: face ${fi} has vertices that collapse to one (a repeated index, or two coincident points) — a face's vertices must be distinct`,
+      );
     }
-    b.face(f.map((i) => remap[i]!));
+    b.face(remapped);
   }
   if (b.faces.length > MAX_KERNEL_FACES) {
     throw new Error(`kernel: a cage of ${b.faces.length} faces is over the ${MAX_KERNEL_FACES} ceiling`);
@@ -445,37 +455,48 @@ export function subdivide(mesh: KernelMesh, levels: number): KernelMesh {
 }
 
 /**
- * Fan every face into triangles from its first vertex — the SAME fan the mass
- * integral and the enclosed volume use, so the volume is unchanged to the bit.
+ * Triangulate every face by EXACT EAR-CLIPPING (`triangulateFace`), fixing ONE
+ * valid triangulation into the geometry itself.
  *
  * This is the author's opt-in escape from a triangulation-DEPENDENT volume. A
  * mesh of non-planar quads bounds a RANGE of volumes — one per triangulation,
  * the `volumeAmbiguity` band — so its `volume` claim cannot be a theorem about
  * the shipped asset (glTF/USD re-triangulate and may pick the other diagonal).
- * Triangulating fixes ONE triangulation into the geometry itself: every face
- * becomes a triangle, a triangle is planar, so `volumeAmbiguity` is exactly 0
- * and the volume is a property of the deliverable AND every re-triangulation of
- * it. Topology-only — vertices and their provenance are untouched, and the fan
- * keeps a closed manifold closed (each original edge still borders two faces;
- * each new diagonal borders the two fan triangles that share it), so
- * watertightness and genus are invariant; only the face list changes. The trade
- * is quad editability, which is why the AUTHOR reaches for it and the compiler
- * never applies it to rescue a claim.
+ * Triangulating collapses that band to a point: every face becomes a triangle, a
+ * triangle is planar, so `volumeAmbiguity` is exactly 0 and the volume is a
+ * property of the deliverable AND every re-triangulation of it. For a PLANAR
+ * face the volume is unchanged whichever way it splits; for a non-planar face
+ * the ear-clip commits to one specific value WITHIN the former band (it need not
+ * equal the mass integral's own first-vertex fan diagonal). Topology-only —
+ * vertices and their provenance are untouched, and a valid triangulation keeps a
+ * closed manifold closed (each original edge still borders two faces; each new
+ * diagonal borders the two triangles that share it), so watertightness and genus
+ * are invariant; only the face list changes. The trade is quad editability,
+ * which is why the AUTHOR reaches for it and the compiler never applies it to
+ * rescue a claim.
  *
- * The fan is taken from each face's FIRST vertex — the identical fan the mass
- * integral and the runner's `fan_volume` already use, so the certified volume is
- * exactly the SIGNED volume of the triangles that ship, and E-703 confirms it
- * against Blender's own measurement (Blender fans the same way). For the convex
- * faces every kernel operator generates — Catmull-Clark quads, box/grid,
- * extrude, inset — that fan is a valid, non-self-intersecting triangulation. A
- * concave face an author writes by hand with `cage()` is still fanned from its
- * first vertex; its signed volume is what ships and stays E-703-confirmed, but a
- * reflex first vertex can self-intersect the surface — a geometry defect the
- * manifold/winding lints report on their own, not a wrong volume certificate.
+ * Ear-clipping — NOT a fan from the first vertex, which self-intersects on a
+ * concave face (its diagonal leaves the polygon) and would make the shipped
+ * surface immerse — yields a valid, non-overlapping triangulation of ANY simple
+ * polygon: convex Catmull-Clark quads and a hand-authored concave `cage()` cap
+ * alike, so the shipped triangles embed. E-703 confirms the volume against Blender.
+ *
+ * A STRUCTURALLY malformed mesh (a short face, a repeated or out-of-range index)
+ * is refused up front — a topology operator must not silently drop or corrupt a
+ * face. "Valid triangulation" is COMBINATORIAL: a geometrically-degenerate input
+ * face (collinear vertices — a measurement meshOf's structural gate does not
+ * make) yields degenerate triangles, which the embedding certificate reports as
+ * uncertified downstream rather than this operator judging geometry itself.
  */
 export function triangulate(mesh: KernelMesh): KernelMesh {
-  // The same face-count backstop meshOf and subdivide enforce: a quad becomes
-  // two triangles, so triangulating near the ceiling would otherwise slip a mesh
+  // Reject a structurally malformed mesh rather than SILENTLY drop its bad faces
+  // (a sub-3-vertex face ear-clips to nothing): a mesh operator must not quietly
+  // change topology. Unreachable through the recipe path (every mesh flows through
+  // meshOf), this guards a directly-assembled KernelMesh.
+  const malformed = firstMalformedFace(mesh);
+  if (malformed) throw new Error(`kernel: triangulate on a malformed mesh — ${malformed}`);
+  // The same face-count backstop meshOf and subdivide enforce: an n-gon becomes
+  // n-2 triangles, so triangulating near the ceiling would otherwise slip a mesh
   // of up to ~2× MAX_KERNEL_FACES past every downstream cost guard.
   const projected = mesh.faces.reduce((n, f) => n + Math.max(f.length - 2, 0), 0);
   if (projected > MAX_KERNEL_FACES) {
@@ -484,14 +505,12 @@ export function triangulate(mesh: KernelMesh): KernelMesh {
     );
   }
   const faces: number[][] = [];
-  for (const f of mesh.faces) {
-    for (let k = 1; k + 1 < f.length; k++) faces.push([f[0]!, f[k]!, f[k + 1]!]);
-  }
+  for (const f of mesh.faces) for (const t of triangulateFace(f, mesh.verts)) faces.push(t);
   return {
     verts: [...mesh.verts],
     faces,
     vertId: [...mesh.vertId],
-    // Original edges survive the fan (each is an edge of some fan triangle), so
+    // Original edges survive (each is an edge of some ear-clipped triangle), so
     // a crease on one is still a crease; the new diagonals are simply uncreased.
     ...(mesh.creases ? { creases: mesh.creases } : {}),
   };
