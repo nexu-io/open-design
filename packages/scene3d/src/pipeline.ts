@@ -50,6 +50,7 @@ import { buildManifest, writeManifest, writeViewer } from "./manifest.js";
 import { describeScene } from "./read/describe.js";
 import { changeImpact, formatImpact, type ImpactReport } from "./read/impact.js";
 import { renderOrthoSvg, orthoDimensions } from "./read/ortho.js";
+import { renderOrthoAscii } from "./read/ortho-ascii.js";
 import { renderContactSheet } from "./read/contact.js";
 import { describeProofViews, orbitEye, type ProofView } from "./read/views.js";
 import { validateSceneSpec, specDeclarationLines } from "./solve/validate.js";
@@ -2482,6 +2483,10 @@ function writeReadModel(projectDir: string, model: ReadModel): void {
   const dimensions = model.census ? orthoDimensions(model.census) : "no census";
   if (model.census) {
     fs.writeFileSync(path.join(dir, "ortho.svg"), renderOrthoSvg(model.census), "utf8");
+    // The same three elevations as ASCII box-art — proportion and height a
+    // text-only model reads natively, without parsing SVG paths. The primary
+    // spatial feedback in the --fast gear, where there are no proof frames.
+    fs.writeFileSync(path.join(dir, "ortho.txt"), renderOrthoAscii(model.census), "utf8");
   }
   fs.writeFileSync(
     path.join(dir, "digest.md"),

@@ -865,7 +865,8 @@ describe("renderAgentReport", () => {
         proofImages: ["out/proof/proof-abc-000.png"],
       }),
     );
-    expect(text).toContain("out/ortho.svg — dimensioned plan/front/side");
+    expect(text).toContain("out/ortho.txt — plan/front/side as ASCII box-art");
+    expect(text).toContain("out/ortho.svg — the same three elevations");
     expect(text).toContain("out/index.html (frame player)");
   });
 

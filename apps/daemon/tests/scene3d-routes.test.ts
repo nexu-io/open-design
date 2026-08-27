@@ -705,6 +705,12 @@ describe.skipIf(!hasBlender)('scene3d compile over HTTP (real Blender)', () => {
     expect(graph).toContain('stage:');
     expect(graph).toContain('prp_crate_body');
     expect(graph).not.toContain('faceVertexIndices');
+
+    // The ASCII ortho triptych ships beside ortho.svg — plan/front/side an LLM
+    // reads directly.
+    const orthoTxt = path.join(root, 'proj1', 'scenes', 'crate', 'out', 'ortho.txt');
+    expect(fs.existsSync(orthoTxt)).toBe(true);
+    expect(fs.readFileSync(orthoTxt, 'utf8')).toContain('Plan · top');
   }, LONG);
 
   it('returns 200 with the failing codes for a poisoned scene', async () => {

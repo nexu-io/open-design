@@ -451,7 +451,10 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
     }
     if (result.census) {
       lines.push(
-        "  out/ortho.svg — dimensioned plan/front/side drawings (SVG = text-readable); a 2-second look catches proportion and overlap mistakes the turntable obscures",
+        "  out/ortho.txt — plan/front/side as ASCII box-art with a per-part legend and dimensions: the proportion and height a perspective frame can't show, read directly as text (no render needed)",
+      );
+      lines.push(
+        "  out/ortho.svg — the same three elevations as an SVG drawing (also text-readable)",
       );
     }
     lines.push("  out/digest.md — the census in prose, with the per-part dimensions table");
