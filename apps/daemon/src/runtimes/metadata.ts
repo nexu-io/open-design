@@ -92,8 +92,8 @@ const AGENT_INSTALL_LINKS: Record<
     docsUrl: 'https://atomcode.atomgit.com/docs/en/index.html',
   },
   dulus: {
-    installUrl: 'https://kevrojo.github.io/Dulus/',
-    docsUrl: 'https://kevrojo.github.io/Dulus/',
+    installUrl: 'https://pypi.org/project/dulus/',
+    docsUrl: 'https://github.com/KevRojo/Dulus',
   },
 };
 

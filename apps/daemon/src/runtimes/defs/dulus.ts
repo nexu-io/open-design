@@ -3,8 +3,14 @@ import type { RuntimeAgentDef } from '../types.js';
 
 // Dulus — provider-independent autonomous agent runtime for the terminal.
 // Repo:    https://github.com/KevRojo/Dulus
-// Docs:    https://kevrojo.github.io/Dulus/
 // Install: `pip install dulus` (PyPI console_script `dulus = dulus:main`)
+//
+// The install link points at PyPI because that is literally where
+// `pip install dulus` resolves, and the docs link at the repository, whose
+// README and `docs/` tree are the documentation surface. Dulus's own
+// `Project-URL: Documentation` (kevrojo.github.io/Dulus) is the interactive
+// product demo — a "live tour", per its README — not a reference users can
+// follow to get the CLI running.
 //
 // Headless mode: `dulus --print <prompt>` runs one turn non-interactively and
 // exits. The prompt is a POSITIONAL argv argument — Dulus rejects print mode
@@ -51,6 +57,6 @@ export const dulusAgentDef = {
   maxPromptArgBytes: 30_000,
   streamFormat: 'plain',
   env: { DULUS_NO_IPC: '1' },
-  installUrl: 'https://kevrojo.github.io/Dulus/',
-  docsUrl: 'https://kevrojo.github.io/Dulus/',
+  installUrl: 'https://pypi.org/project/dulus/',
+  docsUrl: 'https://github.com/KevRojo/Dulus',
 } satisfies RuntimeAgentDef;
