@@ -319,6 +319,45 @@ export function validateShaderSpec(
 }
 
 /**
+ * Replace every GLSL comment with a single space, the way the driver's lexer
+ * does — in ONE left-to-right pass where the first comment opener wins.
+ *
+ * This must NOT be two independent regex passes (a block-comment strip then a
+ * line-comment strip): GLSL lexes comments in a single scan, so a block-open
+ * that sits inside a line ("//") comment is inert, and a block-close inside a
+ * LATER line comment closes nothing. A block-first regex would instead splice
+ * out the live code BETWEEN those two lines, hiding e.g. an injected `uniform`
+ * from the structural gate while the driver still compiles it (found by
+ * adversarial review). A single scanner that, once inside a line comment,
+ * ignores any block-open until the newline is what closes that hole.
+ */
+export function stripGlslComments(src: string): string {
+  let out = "";
+  let i = 0;
+  const n = src.length;
+  while (i < n) {
+    const c = src[i];
+    const next = src[i + 1];
+    if (c === "/" && next === "/") {
+      // Line comment → one space; consume up to (not including) the newline.
+      out += " ";
+      i += 2;
+      while (i < n && src[i] !== "\n") i++;
+    } else if (c === "/" && next === "*") {
+      // Block comment → one space; consume through the closing */ (or EOF).
+      out += " ";
+      i += 2;
+      while (i < n && !(src[i] === "*" && src[i + 1] === "/")) i++;
+      i += 2;
+    } else {
+      out += c;
+      i++;
+    }
+  }
+  return out;
+}
+
+/**
  * Structural checks on the kernel text itself. The compiler owns the
  * scaffolding, so scaffolding in the kernel is an error with the reason —
  * the alternative is two authorities over one shader program.
@@ -334,7 +373,7 @@ export function validateKernelText(
   // is a live declaration to the driver but invisible to a raw-text regex
   // (found by adversarial review). Stripping also fixes the inverse hole —
   // a commented-out `vec4 kernel(...)` no longer counts as defined.
-  text = text.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  text = stripGlslComments(text);
   const forbidden: Array<[RegExp, string]> = [
     [/#\s*version/, "the compiler owns the #version header"],
     [/void\s+main\s*\(/, "the compiler owns main() — write vec4 kernel(vec2 uv)"],

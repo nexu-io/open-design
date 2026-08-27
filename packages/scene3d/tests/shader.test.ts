@@ -236,6 +236,26 @@ describe("validateKernelText", () => {
     const errors = check("vec4 kernel(vec2 uv);");
     expect(errors.some((e) => e.includes("with a body"))).toBe(true);
   });
+
+  it("closes the cross-line comment-strip bypass — /* inside one // line, */ inside a later one", () => {
+    // A block-first two-pass strip would greedily delete the live middle line,
+    // hiding the injected uniform; GLSL lexes single-pass so the driver sees it
+    // as a real declaration. The gate must see it too. (Red-team finding C1.)
+    const attack =
+      "float a = 0.0; // /*\n" +
+      "uniform float yInjected; // */\n" +
+      "vec4 kernel(vec2 uv) { return vec4(a + yInjected); }";
+    expect(check(attack).some((e) => e.includes("scene.json"))).toBe(true);
+  });
+
+  it("still catches the inline block-comment bypass (uniform/**/float)", () => {
+    expect(check("uniform/**/float uX;\n" + KERNEL).some((e) => e.includes("scene.json"))).toBe(true);
+  });
+
+  it("strips genuine comments — a commented-out uniform is not flagged", () => {
+    expect(check("// uniform float uX;\n" + KERNEL)).toEqual([]);
+    expect(check("/* uniform float uX; */\n" + KERNEL)).toEqual([]);
+  });
 });
 
 describe("assembly", () => {
