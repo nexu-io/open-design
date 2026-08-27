@@ -246,6 +246,14 @@ export interface Scene3dCompileRequest {
    * anyway" — the text-only reader's equivalent of opening the PNGs.
    */
   frames?: boolean;
+  /**
+   * Recipe-evaluation work budget (kernel work units). Omitted → the kernel's
+   * generous default. NOT a size cap — it is the runaway guard's ceiling as a
+   * RAISABLE input: a genuinely large kernel asset that trips the default
+   * compiles by raising this. A positive finite number; anything else is
+   * ignored and the default stands.
+   */
+  workBudget?: number;
 }
 
 /**

@@ -34,8 +34,15 @@ import { Rng } from "./rng.js";
  * answer, and silent wrong answers in geometry cost a whole compile round
  * trip to notice.
  */
-export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): SolvedScene {
+export function solveScene(
+  spec: SceneSpec,
+  opts: { grid?: number; maxParts?: number; maxRepeatCount?: number } = {},
+): SolvedScene {
   const diagnostics: SolveDiagnostic[] = [];
+  // Raisable runaway backstops (contract-overridable), defaulting to the generous
+  // module constants — NOT size caps, just guards against an unbuildable count.
+  const maxParts = opts.maxParts ?? MAX_PARTS;
+  const maxRepeatCount = opts.maxRepeatCount ?? MAX_REPEAT_COUNT;
   const parts = new Map<string, PartSpec>();
   for (const part of spec.parts) parts.set(part.id, part);
 
@@ -366,6 +373,7 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
           occupied,
           diagnostics,
           snap,
+          maxRepeatCount,
         );
         if (placements === null) return true; // failed loudly; base stays unplaced
         scatterOccupancy.set(relation.on, [...occupied, ...placements]);
@@ -649,8 +657,8 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
     });
   }
 
-  expandRepeats(solved, repeats, new Set(parts.keys()), diagnostics, snap);
-  expandArounds(solved, aroundPlans, new Set(parts.keys()), diagnostics, snap);
+  expandRepeats(solved, repeats, new Set(parts.keys()), diagnostics, snap, { maxParts, maxRepeatCount });
+  expandArounds(solved, aroundPlans, new Set(parts.keys()), diagnostics, snap, { maxParts, maxRepeatCount });
 
   // Scatter instances 2..N. The base already solved through the fixpoint;
   // clones inherit everything but centre and (jittered) size, and record
@@ -665,11 +673,11 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
     // and the limit exists precisely because a runaway generator is a bug, not
     // a world. Reported once per relation rather than per instance: the author
     // made one decision.
-    const room = MAX_PARTS - solved.length;
+    const room = maxParts - solved.length;
     if (plan.rest.length > room) {
       diagnostics.push({
         code: "SOLVE-LIMIT",
-        message: `scatter on '${plan.relation.part}' would grow the scene to ${solved.length + plan.rest.length} parts — the ceiling is ${MAX_PARTS}`,
+        message: `scatter on '${plan.relation.part}' would grow the scene to ${solved.length + plan.rest.length} parts — the ceiling is ${maxParts}`,
         part: plan.relation.part,
       });
       continue;
@@ -824,7 +832,9 @@ function expandRepeats(
   diagnostics: SolveDiagnostic[],
   /** Grid quantizer for solver-invented positions (identity off-grid). */
   snap: (v: number) => number,
+  limits: { maxParts: number; maxRepeatCount: number },
 ): void {
+  const { maxParts: MAX_PARTS, maxRepeatCount: MAX_REPEAT_COUNT } = limits;
   const byId = new Map(solved.map((part) => [part.id, part]));
   const counters = new Map<string, number>();
 
@@ -984,7 +994,9 @@ function expandArounds(
   diagnostics: SolveDiagnostic[],
   /** Grid quantizer for solver-invented positions (identity off-grid). */
   snap: (v: number) => number,
+  limits: { maxParts: number; maxRepeatCount: number },
 ): void {
+  const { maxParts: MAX_PARTS, maxRepeatCount: MAX_REPEAT_COUNT } = limits;
   const byId = new Map(solved.map((part) => [part.id, part]));
 
   for (const { relation, hub } of plans) {
@@ -1110,7 +1122,9 @@ function sampleScatter(
   diagnostics: SolveDiagnostic[],
   /** Grid quantizer for solver-invented positions (identity off-grid). */
   snap: (v: number) => number,
+  maxRepeatCount: number,
 ): Array<{ center: Vec3; size: Vec3 }> | null {
+  const MAX_REPEAT_COUNT = maxRepeatCount;
   if (relation.count > MAX_REPEAT_COUNT) {
     diagnostics.push({
       code: "SOLVE-LIMIT",

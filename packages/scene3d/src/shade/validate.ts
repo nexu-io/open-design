@@ -125,15 +125,16 @@ export function validateShaderSpec(
 
   let frames = 1;
   if (doc.frames !== undefined) {
-    // Power-of-two is STRUCTURAL (the atlas grid and its mip-safe cells
-    // depend on it); the 256 top is not taste — a 16×16 grid is where the
-    // atlas edge meets the 16384px PNG/GPU boundary at production cell
-    // sizes, so past it the sheet stops being encodable, not ugly.
+    // Power-of-two is STRUCTURAL (the atlas grid and its mip-safe cells depend
+    // on it) — the only constraint on the COUNT. There is no arbitrary upper
+    // limit: how many frames fit is a RESOURCE fact, decided by the joint
+    // atlas-edge check below (grid columns × cell size vs the 16384px encode
+    // boundary), which allows many small-cell frames and few large-cell ones.
     const f = doc.frames as number;
-    if (typeof f === "number" && Number.isInteger(f) && f >= 2 && f <= 256 && Number.isInteger(Math.log2(f))) {
+    if (typeof f === "number" && Number.isInteger(f) && f >= 2 && Number.isInteger(Math.log2(f))) {
       frames = f;
     } else {
-      errors.push(`${at}.frames must be a power of two from 2 to 256 (power-of-two atlas grids)`);
+      errors.push(`${at}.frames must be a power of two ≥ 2 (power-of-two atlas grids)`);
     }
   }
 
@@ -150,8 +151,10 @@ export function validateShaderSpec(
   // burn the whole bake and then fail at encode. Each factor was legal
   // alone (size ≤ 4096, frames ≤ 256); only the product breaks.
   // `frames` and `size` only hold non-default values that already passed
-  // their own checks, so this never fires on garbage — and it must not be
-  // gated on the whole error list, or an unrelated typo would hide it.
+  // their own checks (POT frames, size ≤ 4096), so this never fires on garbage
+  // — and it must not be gated on the whole error list, or an unrelated typo
+  // would hide it. This is the SOLE upper bound on the frame count: a resource
+  // fact (the encodable atlas edge), not an arbitrary number.
   if (frames > 1) {
     const cols = 2 ** Math.ceil(Math.log2(Math.sqrt(frames)));
     const atlasEdge = cols * size;

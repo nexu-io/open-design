@@ -143,6 +143,11 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
           timeoutMs: MAX_TIMEOUT_MS,
           ...(stages ? { stages } : {}),
           ...(proof ? { proof } : {}),
+          // A raisable ceiling on the kernel work meter, not a size cap: forwarded
+          // only when a positive finite number, so a bad value falls to the default.
+          ...(typeof body.workBudget === "number" && Number.isFinite(body.workBudget) && body.workBudget > 0
+            ? { workBudget: body.workBudget }
+            : {}),
         });
       } finally {
         inFlight.delete(sceneDir);

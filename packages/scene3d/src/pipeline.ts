@@ -439,7 +439,12 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       // A voxel scene's grid is a solver CONSTRAINT: emergent positions
       // (repeat instances, scatter samples) snap onto it so they never flood
       // the linter with off-grid vertices. Authored coordinates are untouched.
-      solved = solveScene(spec, normalized.voxel.enabled ? { grid: normalized.voxel.gridSize } : {});
+      solved = solveScene(spec, {
+        ...(normalized.voxel.enabled ? { grid: normalized.voxel.gridSize } : {}),
+        // Raisable runaway backstops from the contract (default generous).
+        maxParts: normalized.geometry.maxParts,
+        maxRepeatCount: normalized.geometry.maxRepeatCount,
+      });
       for (const diagnostic of solved.diagnostics) {
         // Two diagnostics describe a scene that BUILT: one where the solver
         // adjusted an offset, one where it placed instances inside each other.
@@ -515,7 +520,10 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
             continue;
           }
           try {
-            const { base, shapes } = evalTraceShapes(result.trace);
+            const { base, shapes } = evalTraceShapes(
+              result.trace,
+              request.workBudget !== undefined ? { workBudget: request.workBudget } : {},
+            );
             const box = part.localSize ?? part.size;
             // ONE exact box-fit over ℚ (base and every shape by the same exact
             // affine), then a SINGLE rounding at emit. So the census, the mass

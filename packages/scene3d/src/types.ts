@@ -310,6 +310,16 @@ export interface Scene3dContract {
        * it buys the check on dense pairs at quadratic cost. Default 200000.
        */
       zFightingPairBudget?: number;
+      /**
+       * Raise the solver's runaway backstops for a genuinely large scene — the
+       * ceiling on total parts after `repeat`/`scatter`/`around` expansion
+       * (`maxParts`) and on any single instance count (`maxRepeatCount`). These
+       * are walls you can RAISE, not size caps: the generous defaults only catch
+       * a `count:` typo, and an author building a real crowd/forest lifts them.
+       * The true bound on an enormous scene is downstream (Blender's memory).
+       */
+      maxParts?: number;
+      maxRepeatCount?: number;
     };
   };
   /**
@@ -397,6 +407,14 @@ export interface CompileRequest {
   pythonBin?: string;
   /** Disable the per-stage content-hash cache. */
   noCache?: boolean;
+  /**
+   * Recipe-evaluation work budget, in kernel work units (verts+faces scaled by
+   * coordinate complexity). Omitted → the kernel's generous default. This is the
+   * runaway guard's ceiling as a RAISABLE input, not a size cap: a genuinely
+   * large asset that trips the default compiles by raising this (on a machine
+   * with the memory), the "wall you can raise" the scalability doctrine promises.
+   */
+  workBudget?: number;
   /** Per-stage wall-clock timeout in milliseconds. */
   timeoutMs?: number;
   /** Extra environment variables for the Blender/python child process. */

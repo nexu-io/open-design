@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { findCoplanarFaces, solveScene } from "../src/solve/solver.js";
 import { emitBlenderScript, frameScene } from "../src/solve/emit-bpy.js";
-import { MAX_PARTS, MIN_CONTACT, SceneSpec } from "../src/solve/types.js";
+import { MIN_CONTACT, SceneSpec } from "../src/solve/types.js";
 
 /**
  * The crate from the real session, expressed as relations instead of
@@ -537,11 +537,11 @@ describe("the solver's own output is checked, not assumed", () => {
 });
 
 describe("the part ceiling applies to every path that mints parts", () => {
-  it("stops a scatter from growing the scene past MAX_PARTS", () => {
-    // The ceiling was checked before REPEAT expansion and nowhere else, so a
-    // scene could pass the documented limit through scatter without a word.
-    // It exists because a runaway generator is a bug, not a world — and a
-    // ceiling that only guards one of two minting paths is not a ceiling.
+  it("stops a scatter from growing the scene past the (raisable) part backstop", () => {
+    // The backstop guards EVERY minting path, not just repeat — a guard that
+    // watches one of two paths is not a guard. It is the contract-overridable
+    // maxParts, not a fixed 4000 wall, so this drives it with a small explicit
+    // budget (fast) rather than expanding to the generous default.
     const spec: SceneSpec = {
       schemaVersion: 1,
       parts: [
@@ -550,19 +550,18 @@ describe("the part ceiling applies to every path that mints parts", () => {
       ],
       relations: [
         { type: "at", part: "prp_ground", center: [0, 0, 0.05] },
-        // MAX_PARTS exactly: legal as a per-relation count, but the two
-        // authored parts push the TOTAL past the ceiling — the growth path
-        // this test exists to guard, at whatever value the ceiling holds.
-        { type: "scatter", part: "prp_pebble", on: "prp_ground", count: MAX_PARTS, seed: 1 },
+        // count == the budget: legal as a per-relation count, but the two
+        // authored parts push the TOTAL past it — the growth path this guards.
+        { type: "scatter", part: "prp_pebble", on: "prp_ground", count: 500, seed: 1 },
       ],
     } as SceneSpec;
-    const solved = solveScene(spec);
+    const solved = solveScene(spec, { maxParts: 500 });
     const limit = solved.diagnostics.filter((d) => d.code === "SOLVE-LIMIT");
     expect(limit.length).toBeGreaterThan(0);
     expect(limit[0]!.message).toContain("ceiling is");
     // ...and it is reported ONCE for the one authored decision, not per instance.
     expect(limit).toHaveLength(1);
-    expect(solved.parts.length).toBeLessThanOrEqual(MAX_PARTS);
+    expect(solved.parts.length).toBeLessThanOrEqual(500);
   });
 
   it("leaves a scatter that fits alone", () => {

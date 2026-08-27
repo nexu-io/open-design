@@ -251,8 +251,37 @@ function charge(meter: WorkMeter, units: number, opIndex: number, opKind: string
   if (meter.spent > meter.budget) throw new WorkBudgetError(opIndex, opKind, meter.spent, meter.budget);
 }
 
-/** The size (verts + faces) a mesh contributes to the work total. */
-const meshWork = (m: KernelMesh): number => m.verts.length + m.faces.length;
+/** Bit-length of a bigint's magnitude — a cheap proxy for arithmetic cost. */
+const bitLen = (x: bigint): number => (x === 0n ? 0 : (x < 0n ? -x : x).toString(2).length);
+
+/**
+ * A coordinate-complexity multiplier for the work charge, ≥ 1. The unit "1 ≈ one
+ * element" assumes SMALL-coordinate arithmetic; but exact rationals grow in
+ * bit-length as a recipe compounds fractions (repeated `scale(1/3)` drives the
+ * denominator to 3ᵏ), and arithmetic on B-bit rationals costs ~O(B). Element
+ * COUNT alone stays flat under such an op, so without this factor a
+ * bit-length-exploding runaway would spend real seconds while reading as "under
+ * budget". Sampling ≤32 coordinates' bit-length (deterministic, cheap) keeps the
+ * currency honest. Deliberately GENTLE (÷32): ordinary small-integer/short-
+ * fraction meshes read ~1, so it never penalises a legitimate large asset —
+ * it only rises when coordinates themselves have exploded.
+ */
+function coordComplexity(m: KernelMesh): number {
+  const n = m.verts.length;
+  if (n === 0) return 1;
+  const step = Math.max(1, Math.floor(n / 32));
+  let maxBits = 1;
+  for (let i = 0; i < n; i += step) {
+    const v = m.verts[i]!;
+    const b = bitLen(v[0].n) + bitLen(v[0].d) + bitLen(v[1].n) + bitLen(v[1].d) + bitLen(v[2].n) + bitLen(v[2].d);
+    if (b > maxBits) maxBits = b;
+  }
+  return Math.max(1, Math.round(maxBits / 32));
+}
+
+/** The work a mesh contributes: its size (verts + faces) scaled by how expensive
+ *  its coordinates are to compute with (bit-length). */
+const meshWork = (m: KernelMesh): number => (m.verts.length + m.faces.length) * coordComplexity(m);
 
 /* ------------------------------------------------------------------ */
 /* The one evaluator                                                   */
@@ -290,9 +319,13 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number, meter: WorkMet
   };
   switch (op.op) {
     case "cage": {
-      // Charge the cage's size BEFORE parsing a million rationals: a genuine
-      // runaway trips the meter here; a legitimately large cage passes.
-      charge(meter, op.points.length + op.faces.length, i, "cage");
+      // Charge the cage BEFORE parsing: its element count PLUS the total length of
+      // the coordinate strings, since parsing an arbitrary-precision rational is
+      // ~O(digits) — so a small cage carrying a few million-digit coordinates
+      // (expensive BigInt parsing) is charged for that work, not just its 3 points.
+      let coordText = 0;
+      for (const p of op.points) coordText += p[0].length + p[1].length + p[2].length;
+      charge(meter, op.points.length + op.faces.length + coordText, i, "cage");
       const points: RVec3[] = op.points.map((p) => [Rational.parse(p[0]), Rational.parse(p[1]), Rational.parse(p[2])]);
       return meshOf(points, op.faces, op.ids);
     }
@@ -310,7 +343,9 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number, meter: WorkMet
       let sub = m;
       for (let lvl = 0; lvl < op.levels; lvl++) {
         const nextFaces = sub.faces.reduce((a, f) => a + f.length, 0);
-        charge(meter, nextFaces + sub.verts.length + nextFaces, i, "subdivide"); // ≈ verts_out + faces_out
+        // ≈ verts_out + faces_out, scaled by the current coordinate complexity
+        // (CC deepens the rationals a little each level, so per-element cost rises).
+        charge(meter, (nextFaces + sub.verts.length + nextFaces) * coordComplexity(sub), i, "subdivide");
         sub = subdivideCatmullClark(sub);
       }
       return sub;
@@ -354,8 +389,12 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number, meter: WorkMet
         throw new Error(`evalTrace: op ${i} 'clip' needs a non-zero normal — a plane has a direction`);
       }
       const plane: Plane = { normal, d: Rational.parse(op.d) };
-      const out = clip(m, plane);
-      charge(meter, meshWork(out), i, "clip");
+      // Charge the Sutherland–Hodgman pass (walks every face's sides) up front,
+      // and the cap ear-clip (~O(L²) per cross-section loop) as each loop is
+      // assembled — the one super-linear step inside clip, so a grazing cut that
+      // produces a huge cap loop trips the meter, not just the linear output.
+      charge(meter, m.faces.reduce((a, f) => a + f.length, 0), i, "clip");
+      const out = clip(m, plane, (loopLength) => charge(meter, loopLength * loopLength, i, "clip"));
       return out;
     }
     case "move": {

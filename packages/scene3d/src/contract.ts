@@ -2,6 +2,7 @@ import { Budget, EngineTarget, Scene3dContract } from "./types.js";
 import { EXPORT_FORMAT_VALUES, validateFields } from "./contract-schema.js";
 import { SHEET_DEFAULTS } from "./lint/sheet.js";
 import { TESSELLATION_DEFAULTS, type Tessellation } from "./solve/emit-bpy.js";
+import { MAX_PARTS, MAX_REPEAT_COUNT } from "./solve/types.js";
 import { DEFAULT_PROOF_THRESHOLDS } from "./lint/proof.js";
 
 type Conventions = NonNullable<Scene3dContract["conventions"]>;
@@ -225,6 +226,13 @@ export interface NormalizedContract {
      *  because a correct sphere-on-cylinder scene can exceed the default
      *  and the author's only prior recourse was "split the scene". */
     zFightingPairBudget: number;
+    /** Backstop on total parts after `repeat`/`scatter`/`around` expansion, and
+     *  on any single instance count — a RUNAWAY guard (a `count:` typo), not a
+     *  size cap, and RAISABLE: an author building a genuine crowd/forest lifts it
+     *  rather than being refused. Generous default; the real bound on a huge scene
+     *  is downstream (Blender's own memory), which fails on its own resources. */
+    maxParts: number;
+    maxRepeatCount: number;
   };
   sheets: NonNullable<Scene3dContract["sheets"]>;
   /** Thresholds for the 2D sheet rules — contract data like every other lint
@@ -438,6 +446,10 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
       // check on dense pairs at quadratic cost, which is the author's
       // trade to make, not the module's.
       zFightingPairBudget: numOr(geo.zFightingPairBudget, 200_000),
+      // Raisable runaway backstops (not size caps): default generous, an author
+      // building a real crowd/forest lifts them rather than being refused.
+      maxParts: Math.max(1, Math.floor(numOr(geo.maxParts, MAX_PARTS))),
+      maxRepeatCount: Math.max(1, Math.floor(numOr(geo.maxRepeatCount, MAX_REPEAT_COUNT))),
     },
     sheets: asArray(c.sheets, []) as NonNullable<Scene3dContract["sheets"]>,
     tessellation: {

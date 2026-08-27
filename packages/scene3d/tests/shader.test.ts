@@ -35,19 +35,26 @@ const run = (raw: unknown, kernel?: string) => {
 };
 
 describe("validateShaderSpec", () => {
-  it("accepts any power-of-two frame count from 2 to 256, rejects the rest", () => {
-    // The POT-ness is structural (the atlas grid and mip-safe cells depend
-    // on it); the 256 top is where a 16-wide grid meets the 16384px encode
-    // boundary at production cell sizes. Both edges pinned from both sides.
+  it("accepts any power-of-two frame count, rejects non-powers-of-two — no arbitrary upper cap", () => {
+    // POT-ness is the only STRUCTURAL constraint on the count (the atlas grid and
+    // mip-safe cells depend on it). There is NO arbitrary ceiling: a large POT
+    // count is allowed when its atlas fits the 16384px encode boundary (the joint
+    // resource check below), so 512 at a small cell size is legal, not refused.
     for (const frames of [2, 4, 8, 16, 32, 64, 128, 256]) {
       const ok = run(spec({ frames }), KERNEL);
       expect(ok.errors, `frames: ${frames} is legal`).toEqual([]);
       expect(ok.result!.frames).toBe(frames);
     }
-    for (const frames of [1, 3, 48, 100, 512, 1.5, -8]) {
+    // A larger POT count is accepted when the atlas fits (a resource fact):
+    // 512 frames → 32-col grid × 64 px = 2048 px atlas, well inside 16384.
+    const big = run(spec({ frames: 512, size: 64 }), KERNEL);
+    expect(big.errors, "512 POT frames at a small cell fit the encode boundary").toEqual([]);
+    expect(big.result!.frames).toBe(512);
+    // Only NON-powers-of-two (and non-integers/≤1) are refused on the count itself.
+    for (const frames of [1, 3, 48, 100, 1.5, -8]) {
       const bad = run(spec({ frames }), KERNEL);
       expect(
-        bad.errors.some((e) => /frames must be a power of two from 2 to 256/.test(e)),
+        bad.errors.some((e) => /frames must be a power of two/.test(e)),
         `frames: ${frames} is refused`,
       ).toBe(true);
     }

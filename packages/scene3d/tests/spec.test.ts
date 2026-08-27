@@ -852,18 +852,40 @@ describe("repeat expansion", () => {
     expect(solved.diagnostics.map((d) => d.code)).toContain("SOLVE-CONFLICT");
   });
 
-  it("refuses a repeat that would blow the part ceiling", () => {
+  it("the part backstop is a RAISABLE runaway guard, not an arbitrary cap", () => {
+    // A grid of 20×20 = 400 parts. The ceiling is not a fixed 4000 wall — it is
+    // the contract-overridable `maxParts`, so the SAME scene is refused under a
+    // low budget and solved under a raised one: a wall you can raise, per the
+    // no-arbitrary-caps doctrine. (Small counts keep the test fast.)
     const spec: SceneSpec = {
       schemaVersion: 1,
       parts: [{ id: "prp_a", size: [0.1, 0.1, 0.1] }],
       relations: [
         { type: "at", part: "prp_a", center: [0, 0, 0.05] },
-        { type: "repeat", part: "prp_a", count: 150, along: "x", every: 0.2 },
-        { type: "repeat", part: "prp_a", count: 150, along: "y", every: 0.2 },
+        { type: "repeat", part: "prp_a", count: 20, along: "x", every: 0.2 },
+        { type: "repeat", part: "prp_a", count: 20, along: "y", every: 0.2 },
       ],
     };
-    const solved = solveScene(spec);
-    expect(solved.diagnostics.map((d) => d.code)).toContain("SOLVE-LIMIT");
+    // A low budget refuses the runaway with a SOLVE-LIMIT diagnostic.
+    const tight = solveScene(spec, { maxParts: 100 });
+    expect(tight.diagnostics.map((d) => d.code)).toContain("SOLVE-LIMIT");
+    // Raise the budget and the very same scene solves — no refusal.
+    const roomy = solveScene(spec, { maxParts: 10_000 });
+    expect(roomy.diagnostics.map((d) => d.code)).not.toContain("SOLVE-LIMIT");
+    expect(roomy.parts.length).toBe(400);
+  });
+
+  it("a single instance count is bounded by the RAISABLE maxRepeatCount, not a fixed wall", () => {
+    const spec: SceneSpec = {
+      schemaVersion: 1,
+      parts: [{ id: "prp_a", size: [0.1, 0.1, 0.1] }],
+      relations: [
+        { type: "at", part: "prp_a", center: [0, 0, 0.05] },
+        { type: "repeat", part: "prp_a", count: 50, along: "x", every: 0.2 },
+      ],
+    };
+    expect(solveScene(spec, { maxRepeatCount: 10 }).diagnostics.map((d) => d.code)).toContain("SOLVE-LIMIT");
+    expect(solveScene(spec, { maxRepeatCount: 1000 }).diagnostics.map((d) => d.code)).not.toContain("SOLVE-LIMIT");
   });
 });
 

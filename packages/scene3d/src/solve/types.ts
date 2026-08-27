@@ -598,22 +598,26 @@ export interface SolvedScene {
 export const MIN_CONTACT = 0.001;
 
 /**
- * Loud ceiling on repeat expansion — a runaway count is a bug, not a world.
- *
- * A BACKSTOP, not a budget: it sits far above any scene an author means
- * (a 60×60 instanced field fits), and exists only so `count: 999999` — a
- * typo or a unit slip — refuses loudly instead of hanging Blender. Build
- * time and census time below the ceiling are the author's own spend.
+ * The DEFAULT backstop on a single instance count (`repeat`/`around`/`scatter`)
+ * — a RUNAWAY guard, not a size cap, and RAISABLE via
+ * `conventions.geometry.maxRepeatCount`. It sits far above any real instanced
+ * field (a 200×200 grid fits) so `count: 9999999` — a typo or unit slip —
+ * refuses with a diagnostic instead of handing Blender an unbuildable scene; an
+ * author building a genuine crowd past it lifts the knob rather than being
+ * walled. Build/census time below it is the author's own spend, and the real
+ * bound on a truly enormous scene is downstream (Blender's memory), which fails
+ * on its own resources.
  */
-export const MAX_REPEAT_COUNT = 4000;
+export const MAX_REPEAT_COUNT = 100_000;
 
 /**
- * Loud ceiling on total parts after expansion. 4000 on purpose: it is the
- * same backstop the kit viewer's tree payload is engineered to
- * (MAX_TREE_PARTS), so the largest scene the language will solve is also
- * the largest scene every downstream surface has been sized for.
+ * The DEFAULT backstop on total parts after expansion — same character as
+ * MAX_REPEAT_COUNT, and RAISABLE via `conventions.geometry.maxParts`. The kit
+ * viewer's tree payload truncates gracefully past its own display cap, so a
+ * scene above that still compiles and ships; this is only the solver's guard
+ * against minting an unbuildable count.
  */
-export const MAX_PARTS = 4000;
+export const MAX_PARTS = 100_000;
 
 /**
  * The axis-aligned bound of a local box turned `deg` degrees about `axis`.

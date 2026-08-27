@@ -55,7 +55,7 @@ const keyOf = (v: RVec3): string => `${v[0].toString()}|${v[1].toString()}|${v[2
  * wound to face OUT of the kept solid. A mesh that does not reach the plane comes
  * back unchanged; a mesh entirely outside comes back empty.
  */
-export function clip(mesh: KernelMesh, plane: Plane): KernelMesh {
+export function clip(mesh: KernelMesh, plane: Plane, onEarClip?: (loopLength: number) => void): KernelMesh {
   const { normal, d } = plane;
   // Signed plane distance of every vertex, once: f = normal·v − d. Sign is side:
   // <0 strictly inside (kept), 0 on the plane, >0 outside (removed).
@@ -124,7 +124,7 @@ export function clip(mesh: KernelMesh, plane: Plane): KernelMesh {
     }
   }
 
-  capCut(cutEdges, pts, normal, faces);
+  capCut(cutEdges, pts, normal, faces, onEarClip);
 
   if (faces.length === 0) return { verts: [], faces: [], vertId: [] };
   return meshOf(pts, faces);
@@ -139,7 +139,13 @@ export function clip(mesh: KernelMesh, plane: Plane): KernelMesh {
  * loop's Newell normal opposes the plane normal it is reversed before clipping,
  * so the cap's normal is +plane-normal (away from the `normal·x ≤ d` interior).
  */
-function capCut(cutEdges: Array<[number, number]>, pts: RVec3[], normal: RVec3, faces: number[][]): void {
+function capCut(
+  cutEdges: Array<[number, number]>,
+  pts: RVec3[],
+  normal: RVec3,
+  faces: number[][],
+  onEarClip?: (loopLength: number) => void,
+): void {
   if (cutEdges.length === 0) return;
   const byTail = new Map<number, number[]>();
   cutEdges.forEach(([tail], ei) => {
@@ -171,6 +177,10 @@ function capCut(cutEdges: Array<[number, number]>, pts: RVec3[], normal: RVec3, 
     }
     if (!closed || loop.length < 3) continue;
     if (newellDotNormal(loop, pts, normal).cmp(ZERO) < 0) loop.reverse();
+    // Report the loop length so the caller can charge the ear-clip's ~O(L²) cost
+    // (a grazing cut can produce a large cross-section loop); triangulating it is
+    // the one super-linear step inside clip.
+    onEarClip?.(loop.length);
     for (const t of triangulateFace(loop, pts)) faces.push(t);
   }
 }

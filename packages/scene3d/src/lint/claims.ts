@@ -637,9 +637,12 @@ export function lintClaims(
  *  - each part's build volume was CONFIRMED by the E-703 self-check — measured
  *    AND within bound of the exact, the coordinate-dependent bridge to the
  *    shipped mesh (topology alone is scale-invariant); composed, not re-derived,
- *  - the volume is triangulation-INDEPENDENT (Σ ambiguity == 0, every face
- *    planar), so the exact value is a theorem about the DELIVERABLE and every
- *    re-triangulation of it, and only then does exact ℚ equality decide it.
+ *  - the volume is triangulation-INDEPENDENT — gated on the EXACT per-face
+ *    planarity certificate (`facesPlanar`, the Newell-normal test in mass.ts),
+ *    NOT the `volumeAmbiguity` heuristic, which reads 0 for a non-planar ≥5-gon
+ *    with collinear fan diagonals and would let a wrong claim pass. Only when
+ *    every face is exactly planar is the value a theorem about the DELIVERABLE
+ *    and every re-triangulation of it, and only then does exact ℚ equality decide.
  * Any gap is UNCHECKED ("unchecked is not passed"), with the reason named.
  */
 function adjudicateVolumeClaim(

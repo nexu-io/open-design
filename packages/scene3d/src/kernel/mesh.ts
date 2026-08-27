@@ -126,7 +126,7 @@ export function meshOf(
     }
     b.face(remapped);
   }
-  return b.build(); // build() enforces both ceilings as the construction invariant
+  return b.build();
 }
 
 /* ------------------------------------------------------------------ */

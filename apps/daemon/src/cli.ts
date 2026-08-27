@@ -730,7 +730,7 @@ async function runExport(args) {
 // chain of check tools.
 const SCENE3D_STRING_FLAGS = new Set([
   'daemon-url', 'project', 'scene', 'stages', 'engine', 'resolution',
-  'turntable-steps', 'fail-on',
+  'turntable-steps', 'fail-on', 'work-budget',
   // `od scene3d tweaks`: the edits the viewer's gizmo writes. --set takes
   // JSON inline, --set-file takes a path or `-` for stdin, matching the
   // --prompt-file convention the rest of the CLI uses for long input.
@@ -892,6 +892,8 @@ Options:
                            cannot derive that pose, so the report claims no compass
                            name for it.
   --no-cache               Bypass the per-stage content-hash cache
+  --work-budget <n>        Raise the recipe work-meter ceiling (kernel work units) for a
+                           genuinely large asset — a wall you can raise, not a size cap
   --frames                 Show the proof frames as ASCII in the report even when clean (implies --agent-message)
   --fail-on <sev>          error | warning | none — exit 1 threshold (default error)
   --agent-message          Emit the <scene3d-report> block: per-issue fixes, measured
@@ -1102,11 +1104,19 @@ async function runScene3d(args) {
 
   // Stage/proof options are validated by the daemon too; parsing them here
   // means a typo fails before a Blender process is ever spawned.
-  const body = {
+  const body: Record<string, unknown> = {
     scenePath,
     noCache: flags['no-cache'] === true,
     ...(flags.frames === true ? { frames: true } : {}),
   };
+  if (flags['work-budget']) {
+    const workBudget = Number(flags['work-budget']);
+    if (!Number.isFinite(workBudget) || workBudget <= 0) {
+      console.error(`invalid --work-budget: ${flags['work-budget']} (expected a positive number of kernel work units)`);
+      process.exit(2);
+    }
+    body.workBudget = workBudget;
+  }
   // `--fast` is the structure-loop alias: parse + build + lint + manifest,
   // no proofs, no export. The iteration gear for grid/naming/relation work —
   // a full compile pays ~7s of proof for findings these stages already
