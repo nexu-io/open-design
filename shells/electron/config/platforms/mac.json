@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "activationPolicy": "regular",
+  "dock": {
+    "headless": "hidden",
+    "interactive": "visible",
+    "pinning": "system-owned"
+  }
+}

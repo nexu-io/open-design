@@ -26,8 +26,10 @@ describe("Electron product shell", () => {
   });
 
   it("owns finite macOS and Windows distribution policy", async () => {
-    const [policySource, windowsLifecycleSource] = await Promise.all([
+    const [policySource, macRuntimeSource, shellSource, windowsLifecycleSource] = await Promise.all([
       readFile(new URL("../config/distribution.json", import.meta.url), "utf8"),
+      readFile(new URL("../config/platforms/mac.json", import.meta.url), "utf8"),
+      readFile(new URL("../config/shell.json", import.meta.url), "utf8"),
       readFile(new URL("../config/platforms/windows.json", import.meta.url), "utf8"),
     ]);
     const policy = JSON.parse(policySource) as {
@@ -38,6 +40,18 @@ describe("Electron product shell", () => {
       install: { scope: string };
       uninstall: { productData: string };
     };
+    const macRuntime = JSON.parse(macRuntimeSource) as Record<string, unknown>;
+    expect(macRuntime).toEqual({
+      schemaVersion: 1,
+      activationPolicy: "regular",
+      dock: { headless: "hidden", interactive: "visible", pinning: "system-owned" },
+    });
+    expect(macRuntime).not.toHaveProperty("dock.pinned");
+    expect(JSON.parse(shellSource)).toMatchObject({
+      appId: "io.nexu.electron-foundation",
+      productName: "Open Design Electron Foundation",
+      executableName: "open-design-electron-foundation",
+    });
     expect(policy.mac.targets).toEqual(["dir", "dmg"]);
     expect(policy.windows.targets).toEqual(["dir", "nsis"]);
     expect(policy.windows.nsis).toMatchObject({

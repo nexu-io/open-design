@@ -68,6 +68,11 @@ describe("Electron distribution policy", () => {
       windowsNsisIncludePath: "/tmp/electron-kit-installer.nsh",
     });
 
+    expect(configuration).toMatchObject({
+      appId: manifest.appId,
+      productName: manifest.productName,
+      executableName: manifest.executableName,
+    });
     expect(configuration.mac).toEqual({ category: "public.app-category.developer-tools", target: ["dir", "dmg"] });
     expect(configuration.dmg).toEqual({ sign: false });
     expect(configuration.win).toEqual({ target: ["dir", "nsis"] });

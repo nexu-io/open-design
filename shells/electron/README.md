@@ -17,6 +17,11 @@ presentation policy. `shell.json` owns the single publisher/product identity; `c
 owns install scope and uninstall data retention. electron-kit derives registry endpoints from those declarations, while this Shell
 schedules post-ready registry reconciliation. These policies are consumed only by the relevant
 runtime or pack projection; the assembled scene remains independent of distribution and release policy.
+`config/platforms/mac.json` declares a regular interactive application: electron-kit
+uses `app.setActivationPolicy`, `app.dock.show()` and `app.dock.hide()` only for
+the current process presentation. A user's “Keep in Dock” choice is persisted
+and matched to the stable bundle identity by macOS; neither the Shell nor
+electron-kit stores, infers, pins, or unpins that state.
 Desktop handlers land only after the Standalone logical-handoff and Sidecar
 runtime-handle contracts freeze. Shell JSON and Shell code own product
 composition, while Sidecar owns private IPC, process identity, guarded physical

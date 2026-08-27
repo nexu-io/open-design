@@ -22,6 +22,7 @@ import { attachElectronProcessErrorHandlers } from "./session/process-errors.js"
 import { completeElectronShutdown } from "./session/shutdown.js";
 import { claimElectronSingleInstanceLock, ElectronLaunchHandoffQueue } from "./session/single-instance.js";
 import { observeElectronInstallerHandoff } from "./session/update-handoff.js";
+import { applyElectronMacRuntimePolicy } from "../platform/macos/index.js";
 import { ELECTRON_BOOTSTRAP_SCHEMA_VERSION, validateElectronBootstrapResult } from "./startup/bootstrap/contracts.js";
 import { ensureOfficialNodeCarrier, OfficialNodeCarrierError, type OfficialNodeCarrierReceipt } from "./startup/carrier/index.js";
 import {
@@ -142,7 +143,7 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
   });
 
   await app.whenReady();
-  if (presentation === "headless" && process.platform === "darwin") app.dock?.hide();
+  await applyElectronMacRuntimePolicy({ app, platform: process.platform, policy: definition.mac, presentation });
   const splashStartedAt = Date.now();
   if (presentation === "interactive") {
     splash = new BrowserWindow({ width: 520, height: 320, frame: false, resizable: false, show: true, webPreferences: { sandbox: true } });

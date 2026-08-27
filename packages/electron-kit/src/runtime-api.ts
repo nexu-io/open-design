@@ -1,6 +1,7 @@
 export * from "./contracts/index.js";
 export * from "./fixtures/lifecycle/port.js";
 export * from "./fixtures/updater/provider.js";
+export * from "./platform/macos/index.js";
 export * from "./runtime/index.js";
 export * from "./runtime/startup/bootstrap/index.js";
 export * from "./runtime/startup/carrier/index.js";

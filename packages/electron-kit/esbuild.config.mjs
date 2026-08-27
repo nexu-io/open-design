@@ -26,6 +26,7 @@ const publicEntries = {
   "contracts/index": "contracts/index",
   "integrations/shortcuts/index": "integrations/shortcuts/index",
   "distribution/index": "distribution/index",
+  "platform/macos/index": "platform/macos/index",
   "platform/windows/index": "platform/windows/index",
   "commands/dev": "commands/dev",
   "commands/pack": "commands/pack",
