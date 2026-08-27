@@ -8,6 +8,17 @@ const CLAUDE_FALLBACK_MODELS = [
   { id: 'sonnet', label: 'Sonnet (alias)' },
   { id: 'opus', label: 'Opus (alias)' },
   { id: 'haiku', label: 'Haiku (alias)' },
+  // Current generation. Kept in sync with the model support matrix
+  // clampClaudeReasoning (shared.ts) already encodes -- if a model shows up
+  // there, it should be selectable here too.
+  { id: 'claude-fable-5', label: 'claude-fable-5' },
+  { id: 'claude-opus-4-8', label: 'claude-opus-4-8' },
+  { id: 'claude-sonnet-5', label: 'claude-sonnet-5' },
+  { id: 'claude-haiku-4-5-20251001', label: 'claude-haiku-4-5-20251001' },
+  { id: 'claude-opus-4-7', label: 'claude-opus-4-7' },
+  { id: 'claude-sonnet-4-6', label: 'claude-sonnet-4-6' },
+  { id: 'claude-opus-4-6', label: 'claude-opus-4-6' },
+  // Prior generation, kept for anyone still pinned to it.
   { id: 'claude-opus-4-5', label: 'claude-opus-4-5' },
   { id: 'claude-sonnet-4-5', label: 'claude-sonnet-4-5' },
   { id: 'claude-haiku-4-5', label: 'claude-haiku-4-5' },
