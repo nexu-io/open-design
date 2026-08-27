@@ -609,6 +609,8 @@ export const ko: Dict = {
   'settings.modelPickerLiveCatalogOnlyHint': '설치된 CLI에서 모델을 새로 고쳤습니다.',
   'settings.modelPickerFallbackHint': '내장 기본값을 표시 중입니다. CLI에서 실시간 모델을 가져오려면 다시 스캔을 클릭하세요.',
   'settings.cliEnvTitle': '고급: 프록시 및 사용자 지정 경로',
+  'settings.cliEnvShortcut': '프록시 및 사용자 지정 경로',
+  'settings.cliEnvShortcutConfigured': '구성됨',
   'settings.cliEnvHint': '선택한 CLI 환경을 재정의할 때 사용하세요: API key, 프록시 base URL, 사용자 지정 home, 비표준 실행 파일 경로. base URL이 없으면 CLI는 자체 기본 endpoint를 사용합니다. 비밀 정보는 로컬 앱 설정에 저장되며 선택한 CLI만 볼 수 있습니다.',
   'settings.cliEnvClaudeConfigDir': 'Claude Code 설정 디렉터리',
   'settings.cliEnvClaudeBaseUrl': 'Claude 프록시 Base URL',

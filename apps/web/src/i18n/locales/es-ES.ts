@@ -609,6 +609,8 @@ export const esES: Dict = {
   'settings.modelPickerLiveCatalogOnlyHint': 'Los modelos se actualizaron desde la CLI instalada.',
   'settings.modelPickerFallbackHint': 'Mostrando valores predeterminados integrados. Pulsa Reescanear para obtener modelos en vivo desde la CLI.',
   'settings.cliEnvTitle': 'Avanzado: proxy y rutas personalizadas',
+  'settings.cliEnvShortcut': 'Proxy y rutas personalizadas',
+  'settings.cliEnvShortcutConfigured': 'Configurado',
   'settings.cliEnvHint': 'Usa estos campos para sobrescribir el entorno de la CLI seleccionada: API keys, base URLs de proxy, homes personalizados o rutas de binarios no estándar. Sin base URL, la CLI usa su endpoint predeterminado. Los secretos permanecen en la configuración local de la app y solo los ve la CLI seleccionada.',
   'settings.cliEnvClaudeConfigDir': 'Directorio de configuración de Claude Code',
   'settings.cliEnvClaudeBaseUrl': 'Base URL del proxy de Claude',

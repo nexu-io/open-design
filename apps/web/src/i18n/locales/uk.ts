@@ -609,6 +609,8 @@ export const uk: Dict = {
   'settings.modelPickerLiveCatalogOnlyHint': 'Моделі оновлено з установленого CLI.',
   'settings.modelPickerFallbackHint': 'Показано вбудовані типові значення. Натисніть Переканувати, щоб отримати актуальні моделі з CLI.',
   'settings.cliEnvTitle': 'Додатково: проксі та власні шляхи',
+  'settings.cliEnvShortcut': 'Проксі та власні шляхи',
+  'settings.cliEnvShortcutConfigured': 'Налаштовано',
   'settings.cliEnvHint': 'Використовуйте ці поля, щоб перевизначити середовище вибраної CLI: API key, proxy base URL, власні home-каталоги або нестандартні шляхи до бінарників. Без base URL CLI використовує свій endpoint за замовчуванням. Секрети залишаються в локальній конфігурації застосунку й передаються лише вибраній CLI.',
   'settings.cliEnvClaudeConfigDir': 'Каталог конфігурації Claude Code',
   'settings.cliEnvClaudeBaseUrl': 'Base URL проксі Claude',

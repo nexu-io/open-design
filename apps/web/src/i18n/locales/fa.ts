@@ -609,6 +609,8 @@ export const fa: Dict = {
   'settings.modelPickerLiveCatalogOnlyHint': 'مدل‌ها از CLI نصب‌شده به‌روزرسانی شدند.',
   'settings.modelPickerFallbackHint': 'پیش‌فرض‌های داخلی نمایش داده می‌شوند. برای دریافت مدل‌های زنده از CLI روی اسکن مجدد کلیک کنید.',
   'settings.cliEnvTitle': 'پیشرفته: پراکسی و مسیرهای سفارشی',
+  'settings.cliEnvShortcut': 'پراکسی و مسیرهای سفارشی',
+  'settings.cliEnvShortcutConfigured': 'پیکربندی‌شده',
   'settings.cliEnvHint': 'از این گزینه‌ها برای بازنویسی محیط CLI انتخاب‌شده استفاده کنید: API key، base URL پراکسی، home سفارشی یا مسیر اجرایی غیر استاندارد. اگر base URL تنظیم نشود، CLI از endpoint پیش‌فرض خودش استفاده می‌کند. اطلاعات محرمانه در تنظیمات محلی برنامه می‌مانند و فقط CLI انتخاب‌شده آن‌ها را می‌بیند.',
   'settings.cliEnvClaudeConfigDir': 'پوشه پیکربندی Claude Code',
   'settings.cliEnvClaudeBaseUrl': 'Base URL پروکسی Claude',

@@ -609,6 +609,8 @@ export const ar: Dict = {
   'settings.modelPickerLiveCatalogOnlyHint': 'تم تحديث النماذج من CLI المثبت.',
   'settings.modelPickerFallbackHint': 'يتم عرض الإعدادات الافتراضية المضمنة. انقر على إعادة المسح لجلب النماذج المباشرة من CLI.',
   'settings.cliEnvTitle': 'متقدّم: الوكيل والمسارات المخصّصة',
+  'settings.cliEnvShortcut': 'الوكيل والمسارات المخصّصة',
+  'settings.cliEnvShortcutConfigured': 'مُهيّأ',
   'settings.cliEnvHint': 'استخدم هذه الخيارات لتجاوز بيئة CLI المحدّد: مفاتيح API، وعناوين base URL للوكيل، ومجلدات home المخصّصة، أو مسارات تنفيذ غير قياسية. عند عدم ضبط base URL، يستخدم CLI نقطة النهاية الافتراضية الخاصة به. تبقى الأسرار في إعدادات التطبيق المحلية ولا يراها سوى CLI المحدّد.',
   'settings.cliEnvClaudeConfigDir': 'دليل إعدادات Claude Code',
   'settings.cliEnvClaudeBaseUrl': 'Base URL لوكيل Claude',

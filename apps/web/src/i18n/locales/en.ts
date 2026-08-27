@@ -609,6 +609,8 @@ export const en: Dict = {
   'settings.modelPickerLiveCatalogOnlyHint': 'Model list comes from this CLI.',
   'settings.modelPickerFallbackHint': 'Showing built-in defaults. Click Rescan to pull live models from the CLI.',
   'settings.cliEnvTitle': 'Advanced: proxy & custom paths',
+  'settings.cliEnvShortcut': 'Proxy & custom paths',
+  'settings.cliEnvShortcutConfigured': 'Configured',
   'settings.cliEnvHint': 'Use these to override the selected CLI environment: API keys, proxy base URLs, custom homes, or non-standard binary paths. Without a base URL, the CLI uses its default endpoint. Secrets stay in local app config and only the selected CLI sees them.',
   'settings.cliEnvClaudeConfigDir': 'Claude Code config directory',
   'settings.cliEnvClaudeBaseUrl': 'Claude proxy base URL',

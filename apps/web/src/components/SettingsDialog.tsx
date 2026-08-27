@@ -1673,6 +1673,20 @@ export function SettingsDialog({
   const settingsContentRef = useRef<HTMLDivElement | null>(null);
   // AMR-card focus, driven by the failed-run nudge (`initialHighlight==='amr'`).
   const amrCardRef = useRef<HTMLDivElement | null>(null);
+  // CLI env disclosure focus, driven by the per-agent card shortcut.
+  const agentCliEnvDetailsRef = useRef<HTMLDetailsElement | null>(null);
+  // Opens the "Advanced: proxy & custom paths" disclosure and brings it into
+  // view. The disclosure is a plain uncontrolled <details>, so `open` is set on
+  // the DOM node rather than through React state; scrolling waits a frame so it
+  // measures the expanded height instead of the collapsed one.
+  const revealAgentCliEnvSection = useCallback(() => {
+    const details = agentCliEnvDetailsRef.current;
+    if (!details) return;
+    details.open = true;
+    requestAnimationFrame(() => {
+      details.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
+  }, []);
   // Card pulse: a brief attention flash that auto-clears after a few seconds.
   const [amrHighlightActive, setAmrHighlightActive] = useState(false);
   // Coachmark: persists (unlike the card pulse) until the real pointer reaches
@@ -4728,6 +4742,34 @@ export function SettingsDialog({
                             hoveredAgentCardId === a.id &&
                             !amrCardSignedIn &&
                             amrCardStatus?.loginInFlight === true;
+                          // Shortcut into the "Advanced: proxy & custom paths"
+                          // disclosure. Two things this must not do:
+                          //
+                          // 1. Gate on "already configured" — that inverted its
+                          //    own purpose, since the user who needs to *find*
+                          //    the proxy fields is exactly the one who has not
+                          //    filled them in yet.
+                          // 2. Single out one agent. Claude and Codex are
+                          //    structurally identical here (both declare a base
+                          //    URL, auth keys, and custom paths), so visibility
+                          //    is derived from the field table rather than an
+                          //    agent id — any agent that gains CLI env fields
+                          //    gets the shortcut for free.
+                          const showCliEnvShortcut =
+                            active &&
+                            AGENT_CLI_ENV_FIELDS.some(
+                              (field) => field.agentId === a.id,
+                            );
+                          // Configured only changes how the shortcut reads
+                          // (offer vs. status), never whether it renders. Reads
+                          // every stored key rather than the known field list so
+                          // values written out-of-band by `od` (e.g. the daemon
+                          // also accepts ANTHROPIC_AUTH_TOKEN) still count.
+                          const hasCliEnvOverrides =
+                            showCliEnvShortcut &&
+                            Object.values(cfg.agentCliEnv?.[a.id] ?? {}).some(
+                              (value) => Boolean(value),
+                            );
                           const cardEl = (
                             <div
                               key={a.id}
@@ -4972,6 +5014,48 @@ export function SettingsDialog({
                                       aria-hidden="true"
                                     />
                                   )
+                                ) : null}
+                                {showCliEnvShortcut ? (
+                                  <Button
+                                    variant="ghost"
+                                    className={
+                                      'agent-card-cli-env-link' +
+                                      (hasCliEnvOverrides
+                                        ? ' agent-card-cli-env-link--configured'
+                                        : '')
+                                    }
+                                    // Not `settings-agent-card-*`: that prefix
+                                    // is the agent cards' own namespace and is
+                                    // enumerated by regex elsewhere.
+                                    data-testid={`settings-cli-env-shortcut-${a.id}`}
+                                    data-configured={
+                                      hasCliEnvOverrides ? 'true' : 'false'
+                                    }
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      revealAgentCliEnvSection();
+                                    }}
+                                  >
+                                    {/* The label carries the hover underline on
+                                        its own: text and chevron are separate
+                                        flex items, so underlining the whole
+                                        control leaves a visible break across
+                                        the gap between them. */}
+                                    <span className="agent-card-cli-env-link__label">
+                                      {t('settings.cliEnvShortcut')}
+                                    </span>
+                                    {hasCliEnvOverrides ? (
+                                      <VisuallyHidden>
+                                        {`, ${t('settings.cliEnvShortcutConfigured')}`}
+                                      </VisuallyHidden>
+                                    ) : null}
+                                    <span
+                                      className="agent-card-cli-env-link__chevron"
+                                      aria-hidden="true"
+                                    >
+                                      ›
+                                    </span>
+                                  </Button>
                                 ) : null}
                                 {active && !isAmrAgent ? (
                                   <button
@@ -5313,6 +5397,7 @@ export function SettingsDialog({
                 if (cliEnvFields.length === 0) return null;
                 return (
                   <details
+                    ref={agentCliEnvDetailsRef}
                     className="agent-cli-env"
                     data-testid="settings-cli-env"
                   >

@@ -609,6 +609,8 @@ export const tr: Dict = {
   'settings.modelPickerLiveCatalogOnlyHint': 'Modeller kurulu CLI\'dan yenilendi.',
   'settings.modelPickerFallbackHint': 'Yerleşik varsayılanlar gösteriliyor. CLI\'dan canlı modelleri almak için Yeniden tara\'ya tıklayın.',
   'settings.cliEnvTitle': 'Gelişmiş: proxy ve özel yollar',
+  'settings.cliEnvShortcut': 'Proxy ve özel yollar',
+  'settings.cliEnvShortcutConfigured': 'Yapılandırıldı',
   'settings.cliEnvHint': 'Seçili CLI ortamını geçersiz kılmak için bunları kullanın: API key, proxy base URL, özel home veya standart dışı binary yolları. Base URL yoksa CLI kendi varsayılan endpointini kullanır. Gizli bilgiler yerel uygulama yapılandırmasında kalır ve yalnızca seçili CLI bunları görür.',
   'settings.cliEnvClaudeConfigDir': 'Claude Code yapılandırma dizini',
   'settings.cliEnvClaudeBaseUrl': 'Claude proxy Base URL',

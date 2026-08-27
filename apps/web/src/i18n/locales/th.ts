@@ -609,6 +609,8 @@ export const th: Dict = {
   'settings.modelPickerLiveCatalogOnlyHint': 'รีเฟรชโมเดลจาก CLI ที่ติดตั้งแล้ว',
   'settings.modelPickerFallbackHint': 'กำลังแสดงค่าเริ่มต้นในตัว คลิกสแกนอีกครั้งเพื่อดึงโมเดลสดจาก CLI',
   'settings.cliEnvTitle': 'ขั้นสูง: พร็อกซีและพาธกำหนดเอง',
+  'settings.cliEnvShortcut': 'พร็อกซีและพาธกำหนดเอง',
+  'settings.cliEnvShortcutConfigured': 'ตั้งค่าแล้ว',
   'settings.cliEnvHint': 'ใช้ค่านี้เพื่อ override environment ของ CLI ที่เลือก: API key, proxy base URL, home แบบกำหนดเอง หรือพาธ binary ที่ไม่ใช่มาตรฐาน หากไม่ใส่ base URL CLI จะใช้ endpoint เริ่มต้นของตัวเอง ข้อมูลลับจะอยู่ในการตั้งค่าแอปบนเครื่องและ CLI ที่เลือกเท่านั้นที่เห็นค่าเหล่านี้',
   'settings.cliEnvClaudeConfigDir': 'ไดเรกทอรีการตั้งค่า Claude Code',
   'settings.cliEnvClaudeBaseUrl': 'Base URL ของ Claude proxy',

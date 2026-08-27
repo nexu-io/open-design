@@ -609,6 +609,8 @@ export const ja: Dict = {
   'settings.modelPickerLiveCatalogOnlyHint': 'インストール済みの CLI からモデルを更新しました。',
   'settings.modelPickerFallbackHint': '組み込みのデフォルトを表示しています。再スキャンをクリックすると CLI から最新モデルを取得します。',
   'settings.cliEnvTitle': '詳細設定: プロキシとカスタムパス',
+  'settings.cliEnvShortcut': 'プロキシとカスタムパス',
+  'settings.cliEnvShortcutConfigured': '設定済み',
   'settings.cliEnvHint': '選択した CLI の環境を上書きするために使用します: API key、プロキシ base URL、カスタム home、標準以外の実行ファイルパス。base URL を設定しない場合、CLI は既定の endpoint を使用します。シークレットはローカルのアプリ設定内に保持され、選択した CLI のみが参照します。',
   'settings.cliEnvClaudeConfigDir': 'Claude Code 設定ディレクトリ',
   'settings.cliEnvClaudeBaseUrl': 'Claude プロキシの Base URL',

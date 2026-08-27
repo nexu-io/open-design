@@ -614,6 +614,8 @@ export const zhTW: Dict = {
   "settings.modelPickerFallbackHint":
     "正在顯示內建預設值。點擊「重新掃描」可從 CLI 拉取即時模型。",
   "settings.cliEnvTitle": "進階：代理與自訂路徑",
+  "settings.cliEnvShortcut": "代理與自訂路徑",
+  "settings.cliEnvShortcutConfigured": "已設定",
   "settings.cliEnvHint":
     "用於覆蓋所選 CLI 的底層環境變數：API key、代理 base URL、自訂 home 或非標準可執行檔路徑。不填 base URL 時，CLI 會使用自己的預設端點。密鑰只保存在本機應用設定中，且只傳給所選 CLI。",
   "settings.cliEnvClaudeConfigDir": "Claude Code 設定目錄",

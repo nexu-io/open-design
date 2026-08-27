@@ -2737,6 +2737,290 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     ]);
   });
 
+  /*
+    The CLI env shortcut is the discovery path into "Advanced: proxy & custom
+    paths". Two properties are load-bearing and each has a guard below:
+
+    1. It does NOT depend on already having a custom endpoint. Gating it on
+       "configured" made it invisible to the only people who needed it.
+    2. It is NOT Claude-specific. Claude and Codex both declare base-URL, auth
+       and custom-path fields in AGENT_CLI_ENV_FIELDS, so both get the shortcut;
+       visibility is derived from that table rather than an agent id.
+  */
+  it('offers the CLI env shortcut on the active Claude Code card before anything is configured', () => {
+    const claudeAgent: AgentInfo = {
+      id: 'claude',
+      name: 'Claude Code',
+      bin: 'claude',
+      available: true,
+      version: '2.1.196',
+      models: [{ id: 'default', label: 'Default' }],
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 200 })),
+    );
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'claude' },
+      { agents: [claudeAgent] },
+    );
+
+    const link = screen.getByTestId('settings-cli-env-shortcut-claude');
+    expect(link).toHaveTextContent(en['settings.cliEnvShortcut']);
+    expect(link.getAttribute('data-configured')).toBe('false');
+    expect(link.className).not.toContain('agent-card-cli-env-link--configured');
+  });
+
+  it('offers the same CLI env shortcut on the active Codex card', () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 200 })),
+    );
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      { agents: [availableAgents[0]!] },
+    );
+
+    // Regression guard for the agent special-case: Codex is structurally
+    // identical to Claude here, so singling one out is a design-language bug.
+    expect(
+      screen.getByTestId('settings-cli-env-shortcut-codex'),
+    ).toHaveTextContent(en['settings.cliEnvShortcut']);
+  });
+
+  it('marks the shortcut configured once a Claude base URL is stored', () => {
+    const claudeAgent: AgentInfo = {
+      id: 'claude',
+      name: 'Claude Code',
+      bin: 'claude',
+      available: true,
+      version: '2.1.196',
+      models: [{ id: 'default', label: 'Default' }],
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 200 })),
+    );
+
+    renderSettingsDialog(
+      {
+        mode: 'daemon',
+        agentId: 'claude',
+        agentCliEnv: {
+          claude: { ANTHROPIC_BASE_URL: 'https://proxy.example.com' },
+        },
+      },
+      { agents: [claudeAgent] },
+    );
+
+    const link = screen.getByTestId('settings-cli-env-shortcut-claude');
+    expect(link.getAttribute('data-configured')).toBe('true');
+    expect(link.className).toContain('agent-card-cli-env-link--configured');
+    // Sighted users get the heavier text; AT users get the state in words.
+    expect(link).toHaveTextContent(en['settings.cliEnvShortcutConfigured']);
+  });
+
+  it('marks the shortcut configured from a Codex base URL', () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 200 })),
+    );
+
+    renderSettingsDialog(
+      {
+        mode: 'daemon',
+        agentId: 'codex',
+        agentCliEnv: { codex: { OPENAI_BASE_URL: 'https://proxy.example.com/v1' } },
+      },
+      { agents: [availableAgents[0]!] },
+    );
+
+    expect(
+      screen
+        .getByTestId('settings-cli-env-shortcut-codex')
+        .getAttribute('data-configured'),
+    ).toBe('true');
+  });
+
+  it('counts auth keys the Advanced panel does not itself expose', () => {
+    const claudeAgent: AgentInfo = {
+      id: 'claude',
+      name: 'Claude Code',
+      bin: 'claude',
+      available: true,
+      version: '2.1.196',
+      models: [{ id: 'default', label: 'Default' }],
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 200 })),
+    );
+
+    renderSettingsDialog(
+      {
+        mode: 'daemon',
+        agentId: 'claude',
+        // ANTHROPIC_AUTH_TOKEN has no field in AGENT_CLI_ENV_FIELDS but the
+        // daemon accepts it (AGENT_CLI_AUTH_ENV_KEYS) and `od` can write it, so
+        // the shortcut reads stored keys rather than the known field list.
+        agentCliEnv: { claude: { ANTHROPIC_AUTH_TOKEN: 'tok-test' } },
+      },
+      { agents: [claudeAgent] },
+    );
+
+    expect(
+      screen
+        .getByTestId('settings-cli-env-shortcut-claude')
+        .getAttribute('data-configured'),
+    ).toBe('true');
+  });
+
+  it('treats an empty stored value as not configured', () => {
+    const claudeAgent: AgentInfo = {
+      id: 'claude',
+      name: 'Claude Code',
+      bin: 'claude',
+      available: true,
+      version: '2.1.196',
+      models: [{ id: 'default', label: 'Default' }],
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 200 })),
+    );
+
+    renderSettingsDialog(
+      {
+        mode: 'daemon',
+        agentId: 'claude',
+        agentCliEnv: { claude: { ANTHROPIC_BASE_URL: '' } },
+      },
+      { agents: [claudeAgent] },
+    );
+
+    expect(
+      screen
+        .getByTestId('settings-cli-env-shortcut-claude')
+        .getAttribute('data-configured'),
+    ).toBe('false');
+  });
+
+  it('does not render the CLI env shortcut on a card that is not the active agent', () => {
+    const claudeAgent: AgentInfo = {
+      id: 'claude',
+      name: 'Claude Code',
+      bin: 'claude',
+      available: true,
+      version: '2.1.196',
+      models: [{ id: 'default', label: 'Default' }],
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 200 })),
+    );
+
+    renderSettingsDialog(
+      {
+        mode: 'daemon',
+        agentId: 'codex',
+        agentCliEnv: {
+          claude: { ANTHROPIC_BASE_URL: 'https://proxy.example.com' },
+        },
+      },
+      { agents: [availableAgents[0]!, claudeAgent] },
+    );
+
+    expect(
+      screen.queryByTestId('settings-cli-env-shortcut-claude'),
+    ).toBeNull();
+    expect(
+      screen.getByTestId('settings-cli-env-shortcut-codex'),
+    ).toBeTruthy();
+  });
+
+  it('expands and scrolls to the Advanced CLI env panel when the shortcut is clicked', async () => {
+    const scrollIntoViewMock = vi
+      .spyOn(Element.prototype, 'scrollIntoView')
+      .mockImplementation(() => {});
+    const claudeAgent: AgentInfo = {
+      id: 'claude',
+      name: 'Claude Code',
+      bin: 'claude',
+      available: true,
+      version: '2.1.196',
+      models: [{ id: 'default', label: 'Default' }],
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 200 })),
+    );
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'claude' },
+      { agents: [claudeAgent] },
+    );
+
+    const details = screen.getByTestId('settings-cli-env') as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+
+    fireEvent.click(
+      screen.getByTestId('settings-cli-env-shortcut-claude'),
+    );
+
+    expect(details.open).toBe(true);
+    await waitFor(() =>
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({
+        block: 'nearest',
+        behavior: 'smooth',
+      }),
+    );
+
+    scrollIntoViewMock.mockRestore();
+  });
+
+  /*
+    Keyboard activation (Enter / Space) is native <button> behaviour the browser
+    supplies; jsdom does not synthesise a click from a dispatched keydown, so
+    asserting on fireEvent.keyDown would only describe jsdom's gaps. The
+    reviewable invariant is the one that earned the original fixup: the shortcut
+    must stay a real, focusable, non-nested <button> — that is what makes
+    keyboard and AT activation work at all.
+  */
+  it('renders the CLI env shortcut as a real focusable button outside the card-select control', () => {
+    const claudeAgent: AgentInfo = {
+      id: 'claude',
+      name: 'Claude Code',
+      bin: 'claude',
+      available: true,
+      version: '2.1.196',
+      models: [{ id: 'default', label: 'Default' }],
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 200 })),
+    );
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'claude' },
+      { agents: [claudeAgent] },
+    );
+
+    const link = screen.getByTestId('settings-cli-env-shortcut-claude');
+
+    expect(link.tagName).toBe('BUTTON');
+    // type=button keeps it inert if the dialog is ever wrapped in a form.
+    expect(link.getAttribute('type')).toBe('button');
+    // Never a descendant of the card-selection button: nested interactive
+    // controls are invalid markup and break AT activation.
+    expect(link.closest('.agent-card-select')).toBeNull();
+
+    link.focus();
+    expect(document.activeElement).toBe(link);
+  });
+
+
   it('lets users switch to Local CLI, select an installed agent, and autosave', async () => {
     const installed = availableAgents[0]!;
     const unavailable: AgentInfo = {
