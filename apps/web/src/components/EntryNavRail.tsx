@@ -1155,6 +1155,7 @@ export function WorkspaceTopRightAccountCluster({
           page="project"
           metricsConsent={metricsConsent}
           installationId={installationId}
+          loggedIn={amrLoggedIn}
         />
       ) : null}
       updaterSlot={updaterSlot}
