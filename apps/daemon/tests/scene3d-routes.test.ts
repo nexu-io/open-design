@@ -299,17 +299,21 @@ describe('request validation', () => {
     expect(parseStages('parse')).toBeNull();
   });
 
-  it('range-checks every proof option because each one costs render time', () => {
+  it('range-checks proof options against RESOURCE ceilings, not UI walls', () => {
     expect(parseProof(undefined)).toBeUndefined();
     expect(parseProof({ resolution: 512, turntableSteps: 4 })).toEqual({
       resolution: 512,
       turntableSteps: 4,
     });
-    expect(parseProof({ resolution: 32 })).toBeNull();
-    expect(parseProof({ resolution: 8192 })).toBeNull();
+    // An 8K hero shot and a 120-frame turntable are legitimate — the old 4096/64
+    // walls are gone; the ceilings are now GPU memory (16384) and disk (2048).
+    expect(parseProof({ resolution: 8192 })).toEqual({ resolution: 8192 });
+    expect(parseProof({ turntableSteps: 120 })).toEqual({ turntableSteps: 120 });
+    expect(parseProof({ resolution: 32 })).toBeNull(); // below the meaningful floor
+    expect(parseProof({ resolution: 20000 })).toBeNull(); // past the GPU-memory ceiling
     expect(parseProof({ resolution: 512.5 })).toBeNull();
     expect(parseProof({ turntableSteps: 0 })).toBeNull();
-    expect(parseProof({ turntableSteps: 128 })).toBeNull();
+    expect(parseProof({ turntableSteps: 4096 })).toBeNull(); // past the disk ceiling
     expect(parseProof({ engine: 'UNREAL' })).toBeNull();
     expect(parseProof({ turntable: 'yes' })).toBeNull();
   });

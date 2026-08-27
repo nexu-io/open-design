@@ -897,7 +897,11 @@ export function parseProof(value: unknown): Scene3dProofOptions | undefined | nu
   }
   if (v.resolution !== undefined) {
     if (typeof v.resolution !== 'number' || !Number.isInteger(v.resolution)) return null;
-    if (v.resolution < 64 || v.resolution > 4096) return null;
+    // A RESOURCE ceiling (GPU memory ≈ resolution²), not a UI wall: an agent
+    // wanting an 8K hero shot should not be told no by a magic 4096. 16384 is the
+    // same edge the flipbook atlas uses; a floor of 64 keeps coverage/ASCII stats
+    // meaningful.
+    if (v.resolution < 64 || v.resolution > 16384) return null;
     out.resolution = v.resolution;
   }
   if (v.turntable !== undefined) {
@@ -906,7 +910,10 @@ export function parseProof(value: unknown): Scene3dProofOptions | undefined | nu
   }
   if (v.turntableSteps !== undefined) {
     if (typeof v.turntableSteps !== 'number' || !Number.isInteger(v.turntableSteps)) return null;
-    if (v.turntableSteps < 1 || v.turntableSteps > 64) return null;
+    // Frame count is a TIME/disk concern the per-stage timeoutMs already governs,
+    // not a size cap on the asset — a 120-frame hero turntable is legitimate. A
+    // generous 2048 backstops runaway disk without walling real use.
+    if (v.turntableSteps < 1 || v.turntableSteps > 2048) return null;
     out.turntableSteps = v.turntableSteps;
   }
   if (v.respectSceneCamera !== undefined) {

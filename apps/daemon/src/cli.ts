@@ -884,8 +884,8 @@ Options:
                            proof for findings these stages already produce.
   --stages <a,b,c>         Restrict the pipeline (${SCENE3D_STAGE_IDS.join(', ')})
   --engine <e>             BLENDER_EEVEE | CYCLES
-  --resolution <px>        Proof render resolution (64-4096)
-  --turntable-steps <n>    Turntable frame count (1-64)
+  --resolution <px>        Proof render resolution (64-16384; a GPU-memory ceiling, not a UI cap)
+  --turntable-steps <n>    Turntable frame count (1-2048; time governed by the stage timeout)
   --no-turntable           Render one still instead of a turntable
   --respect-scene-camera   One still through the camera the SCENE places, framed as
                            its author framed it (implies --no-turntable). The compiler
@@ -1149,16 +1149,16 @@ async function runScene3d(args) {
   }
   if (flags.resolution) {
     const resolution = Number(flags.resolution);
-    if (!Number.isInteger(resolution) || resolution < 64 || resolution > 4096) {
-      console.error(`invalid --resolution: ${flags.resolution} (expected an integer 64-4096)`);
+    if (!Number.isInteger(resolution) || resolution < 64 || resolution > 16384) {
+      console.error(`invalid --resolution: ${flags.resolution} (expected an integer 64-16384)`);
       process.exit(2);
     }
     proof.resolution = resolution;
   }
   if (flags['turntable-steps']) {
     const steps = Number(flags['turntable-steps']);
-    if (!Number.isInteger(steps) || steps < 1 || steps > 64) {
-      console.error(`invalid --turntable-steps: ${flags['turntable-steps']} (expected an integer 1-64)`);
+    if (!Number.isInteger(steps) || steps < 1 || steps > 2048) {
+      console.error(`invalid --turntable-steps: ${flags['turntable-steps']} (expected an integer 1-2048)`);
       process.exit(2);
     }
     proof.turntableSteps = steps;
