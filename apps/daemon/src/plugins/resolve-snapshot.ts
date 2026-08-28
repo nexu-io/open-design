@@ -88,6 +88,13 @@ export interface ResolveSnapshotInput {
    */
   requireSnapshotProjectMatch?: boolean | undefined;
   /**
+   * Whether a request that names no plugin or snapshot may implicitly reuse
+   * the project's durable pin. Run creation normally enables this behavior;
+   * callers that have rejected a stale daemon-owned selection can disable it
+   * so that rejection cannot fall through to an unrelated historical pin.
+   */
+  allowProjectPinFallback?: boolean | undefined;
+  /**
    * Internal Coordinator-only activation. This is not parsed from an HTTP or
    * CLI request body, so ordinary catalog/apply paths stay fail closed.
    */
@@ -96,6 +103,12 @@ export interface ResolveSnapshotInput {
     /** Trusted record resolved directly from the hidden bundled resource. */
     plugin: InstalledPluginRecord;
   } | undefined;
+  /**
+   * Apply an exact daemon-selected plugin for this Run without replacing the
+   * project's or conversation's durable plugin pin. The Run route links the
+   * resulting immutable snapshot after it claims the Run.
+   */
+  runScopedActivation?: boolean | undefined;
   /**
    * Daemon-owned provenance to stamp when this call changes the durable
    * project pin. Omit for fallback reuse; explicit request fields default to
@@ -177,7 +190,10 @@ function pickPluginFields(body: Record<string, unknown> | null | undefined) {
 export function resolvePluginSnapshot(input: ResolveSnapshotInput): ResolveSnapshotResult {
   const fields = pickPluginFields(input.body);
   const requestNamedBinding = Boolean(fields.pluginId || fields.snapshotId);
-  const projectBinding = input.internalStrategyActivation
+  const runScopedActivation = Boolean(
+    input.internalStrategyActivation || input.runScopedActivation,
+  );
+  const projectBinding = runScopedActivation
     ? null
     : input.projectBinding
       ?? (requestNamedBinding ? { provenance: 'explicit_user' as const } : null);
@@ -186,7 +202,12 @@ export function resolvePluginSnapshot(input: ResolveSnapshotInput): ResolveSnaps
   // conversation create that ran the plugin), reuse it. This is what
   // makes ChatComposer's "start a run" path work after the user picked a
   // plugin in NewProjectPanel — the body only carries `projectId`.
-  if (!fields.pluginId && !fields.snapshotId && input.projectId) {
+  if (
+    !fields.pluginId
+    && !fields.snapshotId
+    && input.projectId
+    && input.allowProjectPinFallback !== false
+  ) {
     const pinned = readProjectPinnedSnapshotId(input.db, input.projectId);
     if (pinned) {
       fields.snapshotId = pinned;
@@ -419,8 +440,10 @@ function finalizeOk(args: {
   // Rollout activation is run-scoped authority. It must not replace the
   // user's durable project/conversation plugin pin; rollback then affects new
   // tasks while this run remains linked to its immutable strategy snapshot.
-  const runScopedStrategy = Boolean(args.input.internalStrategyActivation);
-  if (args.input.projectId && !runScopedStrategy) {
+  const runScopedActivation = Boolean(
+    args.input.internalStrategyActivation || args.input.runScopedActivation,
+  );
+  if (args.input.projectId && !runScopedActivation) {
     linkSnapshotToProject(db, snap.snapshotId, args.input.projectId);
     if (args.projectBinding) {
       writeProjectScenarioBinding(db, {
@@ -434,7 +457,7 @@ function finalizeOk(args: {
       });
     }
   }
-  if (args.input.conversationId && !runScopedStrategy) {
+  if (args.input.conversationId && !runScopedActivation) {
     linkSnapshotToConversation(db, snap.snapshotId, args.input.conversationId);
   }
   if (args.input.runId) {

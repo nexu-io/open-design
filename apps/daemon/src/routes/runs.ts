@@ -6,12 +6,14 @@ import { createHash, randomUUID } from 'node:crypto';
 import {
   composeOdNextStrategyContinuationV2,
   defaultScenarioPluginIdForProjectMetadata,
+  InstalledPluginRecordSchema,
   RUN_RESULT_PACKAGE_SCHEMA,
   type AppliedPluginSnapshot,
   type ArtifactManifest,
   type ByokChatProviderConfig,
   type ChatRunStatus,
   type ChatRunStatusResponse,
+  type InstalledPluginRecord,
   type StrategyTaskProjectionV2,
   type ProjectMetadata as ContractProjectMetadata,
   type RunResultPackageResponse,
@@ -130,6 +132,10 @@ import {
   type ResolveSnapshotResult,
 } from '../plugins/index.js';
 import { getSnapshot, linkSnapshotToRun } from '../plugins/snapshots.js';
+import {
+  digestExampleSkillManifest,
+  readVerifiedProjectExampleBinding,
+} from '../plugins/example-binding.js';
 import {
   assertSandboxProjectRootAvailable,
   isSafeId,
@@ -1703,10 +1709,44 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       const verifiedStrategyBinding = readVerifiedProjectStrategyBinding(
         rolloutProject?.metadata as ContractProjectMetadata | null | undefined,
       );
+      const verifiedExampleBinding = readVerifiedProjectExampleBinding(
+        rolloutProject?.metadata as ContractProjectMetadata | null | undefined,
+      );
+      let selectedExamplePlugin: InstalledPluginRecord | null = null;
+      if (verifiedExampleBinding) {
+        try {
+          const candidate = await ctx.plugins.getLocalPluginBySource?.(
+            verifiedExampleBinding.pluginId,
+            verifiedExampleBinding.pluginSource,
+          );
+          const parsed = InstalledPluginRecordSchema.safeParse(candidate);
+          if (
+            !parsed.success
+            || parsed.data.id !== verifiedExampleBinding.pluginId
+            || parsed.data.source !== verifiedExampleBinding.pluginSource
+            || await digestExampleSkillManifest(parsed.data.fsPath)
+              !== verifiedExampleBinding.manifestSourceDigest
+          ) {
+            throw new Error('the bound example no longer resolves to its frozen identity');
+          }
+          selectedExamplePlugin = parsed.data;
+        } catch (error) {
+          console.warn(
+            `[plugins] selected example ${verifiedExampleBinding.pluginId} is unavailable for ordinary fallback: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      }
       const projectPinIsAutomaticDefault = Boolean(
         projectHasExplicitPin
         && verifiedScenarioBinding?.provenance === 'automatic_default'
         && verifiedScenarioBinding.pluginId === defaultPluginId,
+      );
+      const suppressAutomaticDefaultPinFallback = Boolean(
+        projectPinIsAutomaticDefault
+        && verifiedExampleBinding
+        && !selectedExamplePlugin,
       );
       const suppliedContextPluginWasNamed = Boolean(
         Array.isArray((rolloutProject?.metadata as ContractProjectMetadata | undefined)?.contextPlugins)
@@ -1883,11 +1923,21 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             pluginId: 'od-next-strategy',
             appliedPluginSnapshotId: undefined,
           };
-        } else if (!hasPin) {
-          const fallbackPluginId = defaultPluginId;
-          if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
+        } else if (!hasPin || (projectPinIsAutomaticDefault && selectedExamplePlugin)) {
+          // An official example card is the user's concrete choice inside this
+          // task type. When OD Next is not active, execute that exact example
+          // on the ordinary route instead of silently substituting the
+          // project-kind default (for decks, the unrelated simple-deck/COO
+          // template). A stale/unavailable binding deliberately yields no
+          // plugin rather than a different template.
+          const fallbackPluginId = selectedExamplePlugin?.id
+            ?? (verifiedExampleBinding ? null : defaultPluginId);
+          if (
+            fallbackPluginId
+            && (selectedExamplePlugin || getInstalledPlugin(db, fallbackPluginId))
+          ) {
             runResolveBody = { ...requestBody, pluginId: fallbackPluginId };
-            synthesizedAutomaticDefault = true;
+            synthesizedAutomaticDefault = !selectedExamplePlugin;
           }
         }
       }
@@ -1929,10 +1979,15 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         return res.status(500).json({ error: String(err) });
       }
       if (!explicitUserPlugin && strategyRolloutDecision?.effectiveMode === 'active') {
-        automaticOrdinaryFallbackPluginId = defaultPluginId;
-        const fallbackBody = !projectHasExplicitPin && defaultPluginId
-          && getInstalledPlugin(db, defaultPluginId)
-          ? { ...requestBody, pluginId: defaultPluginId }
+        automaticOrdinaryFallbackPluginId = selectedExamplePlugin?.id
+          ?? (verifiedExampleBinding ? null : defaultPluginId);
+        const fallbackBody = (
+          !projectHasExplicitPin
+          || (projectPinIsAutomaticDefault && selectedExamplePlugin)
+        )
+          && automaticOrdinaryFallbackPluginId
+          && (selectedExamplePlugin || getInstalledPlugin(db, automaticOrdinaryFallbackPluginId))
+          ? { ...requestBody, pluginId: automaticOrdinaryFallbackPluginId }
           : requestBody;
         resolveAutomaticOrdinaryFallback = () => resolvePluginSnapshot({
           db,
@@ -1942,7 +1997,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           registry: registryView,
           connectorProbe: buildConnectorProbe(connectorService),
           requireSnapshotProjectMatch: true,
-          ...(defaultPluginId
+          allowProjectPinFallback: !suppressAutomaticDefaultPinFallback,
+          ...(selectedExamplePlugin ? { plugin: selectedExamplePlugin } : {}),
+          ...(selectedExamplePlugin ? { runScopedActivation: true } : {}),
+          ...(!selectedExamplePlugin && defaultPluginId
             ? {
                 projectBinding: {
                   provenance: 'automatic_default' as const,
@@ -1964,6 +2022,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         registry: registryView,
         connectorProbe: buildConnectorProbe(connectorService),
         requireSnapshotProjectMatch: true,
+        allowProjectPinFallback: !suppressAutomaticDefaultPinFallback,
+        ...(selectedExamplePlugin ? { plugin: selectedExamplePlugin } : {}),
+        ...(selectedExamplePlugin && runResolveBody.pluginId === selectedExamplePlugin.id
+          ? { runScopedActivation: true }
+          : {}),
         ...(!activatingStrategy && !explicitExecutablePlugin
           && (projectPinIsAutomaticDefault || synthesizedAutomaticDefault)
           && defaultPluginId
