@@ -10,7 +10,14 @@ import { coalescedGet, evictCoalescedGet } from '../lib/coalesced-get';
 import { isDaemonProxyConnectionFailure } from '../runtime/daemon-proxy-failure';
 import { BackoffController, type BackoffOptions } from '../lib/backoff';
 import { markProjectCreatedByViewer } from '../collab/useProjectCollab';
-import { API_ERROR_CODES, type ApiErrorCode } from '@open-design/contracts';
+import {
+  API_ERROR_CODES,
+  LegacyPluginApplyErrorResponseSchema,
+  PLUGIN_APPLY_ERROR_CONTRACT_HEADER,
+  PLUGIN_APPLY_ERROR_CONTRACT_VERSION,
+  PluginApplyErrorResponseSchema,
+  type ApiErrorCode,
+} from '@open-design/contracts';
 import type {
   AppliedPluginSnapshot,
   ApplyResult,
@@ -2722,6 +2729,7 @@ export async function applyPlugin(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          [PLUGIN_APPLY_ERROR_CONTRACT_HEADER]: PLUGIN_APPLY_ERROR_CONTRACT_VERSION,
           ...(!options.pluginSource && options.workspaceContext
             ? workspaceProjectHeaders(options.workspaceContext)
             : {}),
@@ -2752,22 +2760,25 @@ async function readPluginApplyErrorMessage(resp: Response): Promise<string> {
 
   if (!contentType || contentType.includes('application/json')) {
     try {
-      const json = (await resp.clone().json()) as {
-        error?: string;
-        fields?: unknown;
-      };
-      if (json.error === 'plugin not found') return json.error;
-      if (json.error === 'plugin_apply_failed') {
-        return 'Plugin application failed. Try again.';
-      }
-      if (json.error === 'missing_inputs' && Array.isArray(json.fields)) {
-        const fields = json.fields.filter(
-          (field): field is string =>
-            typeof field === 'string' && /^[A-Za-z0-9._-]{1,64}$/u.test(field),
-        );
-        if (fields.length > 0 && fields.length <= 10 && fields.length === json.fields.length) {
-          return `Missing required plugin inputs: ${fields.join(', ')}`;
+      const json: unknown = await resp.clone().json();
+      const parsed = PluginApplyErrorResponseSchema.safeParse(json);
+      if (parsed.success) {
+        const diagnosis = parsed.data.error;
+        if (diagnosis.code === 'PLUGIN_INPUTS_MISSING') {
+          return `Missing required plugin inputs: ${diagnosis.details.fields.join(', ')}`;
         }
+        return diagnosis.message;
+      }
+
+      const legacy = LegacyPluginApplyErrorResponseSchema.safeParse(json);
+      if (legacy.success) {
+        if (legacy.data.error === 'missing_inputs') {
+          return `Missing required plugin inputs: ${legacy.data.fields.join(', ')}`;
+        }
+        if (legacy.data.error === 'plugin_apply_failed') {
+          return 'Plugin application failed. Try again.';
+        }
+        return legacy.data.error;
       }
       return '';
     } catch {

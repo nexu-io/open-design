@@ -145,12 +145,12 @@ describe('PluginDetailView Use hands the plugin to Home', () => {
   it('shows the preserved backend diagnosis when applying the plugin fails', async () => {
     vi.mocked(applyPlugin).mockResolvedValue({
       ok: false,
-      message: 'Plugin manifest is missing a required input.',
+      message: 'Plugin configuration is invalid. Reinstall or update the plugin and try again.',
     } as never);
     await renderDetailAndUse();
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Apply failed: Plugin manifest is missing a required input.',
+      'Apply failed: Plugin configuration is invalid. Reinstall or update the plugin and try again.',
     );
   });
 

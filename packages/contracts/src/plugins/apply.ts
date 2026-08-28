@@ -95,6 +95,63 @@ export const PluginProjectMetadataPatchSchema = z.object({
 
 export type PluginProjectMetadataPatch = z.infer<typeof PluginProjectMetadataPatchSchema>;
 
+export const PLUGIN_APPLY_ERROR_CONTRACT_HEADER = 'x-od-plugin-apply-error-contract';
+export const PLUGIN_APPLY_ERROR_CONTRACT_VERSION = '2';
+
+export const PluginApplyInputNameSchema = z.string().regex(/^[A-Za-z0-9._-]{1,64}$/u);
+
+// Shared HTTP error contract for both plugin apply routes. Messages are
+// literals and details are closed so the daemon can log raw paths/stacks while
+// the browser only accepts these bounded, user-safe diagnoses.
+export const PluginApplyErrorSchema = z.discriminatedUnion('code', [
+  z.object({
+    code: z.literal('PLUGIN_INPUTS_MISSING'),
+    message: z.literal('Missing required plugin inputs.'),
+    details: z.object({
+      kind: z.literal('missing_inputs'),
+      fields: z.array(PluginApplyInputNameSchema).min(1).max(10),
+    }).strict(),
+  }).strict(),
+  z.object({
+    code: z.literal('PLUGIN_CONFIGURATION_INVALID'),
+    message: z.literal('Plugin configuration is invalid. Reinstall or update the plugin and try again.'),
+    details: z.object({
+      reason: z.enum(['manifest_invalid', 'internal_strategy_invalid']),
+    }).strict(),
+  }).strict(),
+  z.object({
+    code: z.literal('PLUGIN_RESOURCE_UNAVAILABLE'),
+    message: z.literal('A required plugin resource is unavailable. Reinstall or update the plugin and try again.'),
+    details: z.object({
+      reason: z.literal('required_resource_missing'),
+    }).strict(),
+  }).strict(),
+  z.object({
+    code: z.literal('PLUGIN_APPLY_FAILED'),
+    message: z.literal('Plugin application failed. Try again.'),
+  }).strict(),
+]);
+
+export const PluginApplyErrorResponseSchema = z.object({
+  error: PluginApplyErrorSchema,
+}).strict();
+
+export type PluginApplyErrorResponse = z.infer<typeof PluginApplyErrorResponseSchema>;
+
+// Rolling upgrades can leave a browser talking to an older daemon. Keep the
+// previous bounded shapes explicit so compatibility never becomes a reason to
+// accept arbitrary daemon error strings.
+export const LegacyPluginApplyErrorResponseSchema = z.discriminatedUnion('error', [
+  z.object({
+    error: z.literal('missing_inputs'),
+    fields: z.array(PluginApplyInputNameSchema).min(1).max(10),
+  }).strict(),
+  z.object({ error: z.literal('plugin_apply_failed') }).strict(),
+  z.object({ error: z.literal('plugin not found') }).strict(),
+]);
+
+export type LegacyPluginApplyErrorResponse = z.infer<typeof LegacyPluginApplyErrorResponseSchema>;
+
 export const ApplyResultSchema = z.object({
   query:         z.string(),
   contextItems:  z.array(ContextItemSchema),

@@ -1,13 +1,19 @@
 import type { Express, NextFunction, Request, RequestHandler, Response } from 'express';
 import type {
   InstalledPluginRecord,
+  PluginApplyErrorResponse,
   PluginDuplicateProjectRequest,
   PluginDuplicateProjectResponse,
   Project,
   ProjectMetadata,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
-import { TeamResourceCopyForbiddenError } from '@open-design/contracts';
+import {
+  PLUGIN_APPLY_ERROR_CONTRACT_HEADER,
+  PLUGIN_APPLY_ERROR_CONTRACT_VERSION,
+  PluginApplyErrorResponseSchema,
+  TeamResourceCopyForbiddenError,
+} from '@open-design/contracts';
 import {
   duplicatePluginExampleIntoProject,
   PluginDuplicateProjectError,
@@ -35,6 +41,106 @@ import {
   classifyPluginInstallError,
   type PluginInstallErrorCode,
 } from '../../plugins/installer.js';
+import {
+  InternalBundledStrategyApplyError,
+  PluginApplyConfigurationError,
+} from '../../plugins/apply.js';
+import { InvalidBundledStrategyActivationV2Error } from '../../plugins/strategy-provenance.js';
+import { InvalidOdNextStrategyPipelineV2Error } from '../../plugins/strategy-stage-policy.js';
+
+interface ClassifiedPluginApplyFailure {
+  status: 422 | 500;
+  body: PluginApplyErrorResponse;
+}
+
+const genericPluginApplyFailure = (): ClassifiedPluginApplyFailure => ({
+  status: 500,
+  body: {
+    error: {
+      code: 'PLUGIN_APPLY_FAILED',
+      message: 'Plugin application failed. Try again.',
+    },
+  },
+});
+
+function pluginConfigurationFailure(
+  reason: 'manifest_invalid' | 'internal_strategy_invalid',
+): ClassifiedPluginApplyFailure {
+  return {
+    status: 422,
+    body: {
+      error: {
+        code: 'PLUGIN_CONFIGURATION_INVALID',
+        message: 'Plugin configuration is invalid. Reinstall or update the plugin and try again.',
+        details: { reason },
+      },
+    },
+  };
+}
+
+function missingPluginInputs(fields: string[]): ClassifiedPluginApplyFailure {
+  const parsed = PluginApplyErrorResponseSchema.safeParse({
+    error: {
+      code: 'PLUGIN_INPUTS_MISSING',
+      message: 'Missing required plugin inputs.',
+      details: { kind: 'missing_inputs', fields },
+    },
+  });
+  return parsed.success
+    ? { status: 422, body: parsed.data }
+    : pluginConfigurationFailure('manifest_invalid');
+}
+
+function classifiedPluginApplyFailure(cause: unknown): ClassifiedPluginApplyFailure {
+  if (cause instanceof PluginApplyConfigurationError) {
+    return pluginConfigurationFailure('manifest_invalid');
+  }
+  if (
+    cause instanceof InternalBundledStrategyApplyError
+    || cause instanceof InvalidBundledStrategyActivationV2Error
+    || cause instanceof InvalidOdNextStrategyPipelineV2Error
+  ) {
+    return pluginConfigurationFailure('internal_strategy_invalid');
+  }
+  const code = cause && typeof cause === 'object' && 'code' in cause
+    ? (cause as { code?: unknown }).code
+    : undefined;
+  if (code === 'ENOENT' || code === 'ENOTDIR') {
+    return {
+      status: 500,
+      body: {
+        error: {
+          code: 'PLUGIN_RESOURCE_UNAVAILABLE',
+          message: 'A required plugin resource is unavailable. Reinstall or update the plugin and try again.',
+          details: { reason: 'required_resource_missing' },
+        },
+      },
+    };
+  }
+  return genericPluginApplyFailure();
+}
+
+function sendPluginApplyFailure(
+  req: Request,
+  res: Response,
+  failure: ClassifiedPluginApplyFailure,
+) {
+  if (req.get(PLUGIN_APPLY_ERROR_CONTRACT_HEADER) === PLUGIN_APPLY_ERROR_CONTRACT_VERSION) {
+    return res.status(failure.status).json(failure.body);
+  }
+
+  // Cached browser tabs can outlive a daemon upgrade. Preserve the previous
+  // bounded discriminator unless the client opts into the shared v2 envelope.
+  // New browsers send the version header and still accept these legacy shapes
+  // while talking to an older daemon.
+  if (failure.body.error.code === 'PLUGIN_INPUTS_MISSING') {
+    return res.status(failure.status).json({
+      error: 'missing_inputs',
+      fields: failure.body.error.details.fields,
+    });
+  }
+  return res.status(failure.status).json({ error: 'plugin_apply_failed' });
+}
 
 function pluginUploadFailure(
   cause: unknown,
@@ -664,10 +770,15 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
       return await applyResolvedPlugin(req, res, currentPlugin, registry);
     } catch (err: unknown) {
       if (err instanceof plugins.MissingInputError) {
-        return res.status(422).json({ error: 'missing_inputs', fields: err.fields });
+        const failure = missingPluginInputs(err.fields);
+        if (failure.body.error.code === 'PLUGIN_CONFIGURATION_INVALID') {
+          logPluginApplyFailure('apply-local', req.params.id, err);
+        }
+        return sendPluginApplyFailure(req, res, failure);
       }
       logPluginApplyFailure('apply-local', req.params.id, err);
-      return res.status(500).json({ error: 'plugin_apply_failed' });
+      const failure = classifiedPluginApplyFailure(err);
+      return sendPluginApplyFailure(req, res, failure);
     }
   });
   app.post('/api/plugins/:id/apply', async (req, res) => {
@@ -699,10 +810,15 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
       return await applyResolvedPlugin(req, res, plugin, registry);
     } catch (err: unknown) {
       if (err instanceof plugins.MissingInputError) {
-        return res.status(422).json({ error: 'missing_inputs', fields: err.fields });
+        const failure = missingPluginInputs(err.fields);
+        if (failure.body.error.code === 'PLUGIN_CONFIGURATION_INVALID') {
+          logPluginApplyFailure('apply', req.params.id, err);
+        }
+        return sendPluginApplyFailure(req, res, failure);
       }
       logPluginApplyFailure('apply', req.params.id, err);
-      res.status(500).json({ error: 'plugin_apply_failed' });
+      const failure = classifiedPluginApplyFailure(err);
+      return sendPluginApplyFailure(req, res, failure);
     }
   });
   app.post('/api/plugins/:id/duplicate-project', helpers.requireLocalDaemonRequest, async (req, res) => {

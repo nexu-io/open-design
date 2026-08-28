@@ -430,6 +430,7 @@ describe('applyPlugin', () => {
       grantCaps: [],
       locale: 'zh-CN',
     });
+    expect(new Headers(init?.headers).get('x-od-plugin-apply-error-contract')).toBe('2');
   });
 
   it('uses the selected local source without Workspace headers', async () => {
@@ -446,6 +447,7 @@ describe('applyPlugin', () => {
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe('/api/plugins/shared-plugin-id/apply-local');
     expect(new Headers(init?.headers).has('x-od-workspace-id')).toBe(false);
+    expect(new Headers(init?.headers).get('x-od-plugin-apply-error-contract')).toBe('2');
     expect(JSON.parse(String(init?.body))).toMatchObject({
       source: 'team:plugin:workspace-a:shared-plugin-id',
       inputs: {},
@@ -534,12 +536,66 @@ describe('applyPlugin', () => {
   });
 
   it.each([
+    [
+      500,
+      {
+        error: {
+          code: 'PLUGIN_RESOURCE_UNAVAILABLE',
+          message: 'A required plugin resource is unavailable. Reinstall or update the plugin and try again.',
+          details: { reason: 'required_resource_missing' },
+        },
+      },
+      'A required plugin resource is unavailable. Reinstall or update the plugin and try again.',
+    ],
+    [
+      422,
+      {
+        error: {
+          code: 'PLUGIN_CONFIGURATION_INVALID',
+          message: 'Plugin configuration is invalid. Reinstall or update the plugin and try again.',
+          details: { reason: 'manifest_invalid' },
+        },
+      },
+      'Plugin configuration is invalid. Reinstall or update the plugin and try again.',
+    ],
+  ] as const)('maps a diagnosed daemon apply failure with status %i to an actionable state', async (
+    status,
+    body,
+    message,
+  ) => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json(body, { status })));
+
+    await expect(applyPlugin('sample-plugin')).resolves.toEqual({ ok: false, message });
+  });
+
+  it('rejects a daemon diagnosis that adds an unbounded raw path', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json({
+      error: {
+        code: 'PLUGIN_RESOURCE_UNAVAILABLE',
+        message: 'A required plugin resource is unavailable. Reinstall or update the plugin and try again.',
+        details: {
+          reason: 'required_resource_missing',
+          path: '/Volumes/PortableSSD/private-plugin/open-design.json',
+        },
+      },
+    }, { status: 500 })));
+
+    await expect(applyPlugin('sample-plugin')).resolves.toBeNull();
+  });
+
+  it.each([
     ['application/json', JSON.stringify({ error: 'connect ECONNREFUSED 127.0.0.1:18544' })],
     ['application/json', JSON.stringify({ error: 'Plugin failed at /Users/alice/open-design/plugin.ts' })],
     ['application/json', JSON.stringify({ error: 'ENOENT: /Volumes/PortableSSD/plugin.json' })],
     ['application/json', JSON.stringify({ error: 'Error: boom at applyPlugin (apps/daemon/src/routes/plugins/index.ts:432:20)' })],
     ['application/json', JSON.stringify({ error: 'Plugin failed\n    at apply (/private/tmp/plugin.ts:4:2)' })],
     ['application/json', JSON.stringify({ error: 'x'.repeat(301) })],
+    ['application/json', JSON.stringify({
+      error: {
+        code: 'PLUGIN_UNKNOWN_FAILURE',
+        message: 'Plugin failed at /Users/alice/open-design/plugin.ts',
+      },
+    })],
     ['text/plain', 'connect ECONNREFUSED 127.0.0.1:18544'],
     ['text/plain', 'connect ETIMEDOUT 127.0.0.1:18544'],
   ])('rejects an unsafe %s plugin apply diagnosis', async (contentType, body) => {
