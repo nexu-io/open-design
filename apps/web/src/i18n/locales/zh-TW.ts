@@ -3600,7 +3600,8 @@ export const zhTW: Dict = {
     "建立 API token 時勾選 Pages Edit；自訂網域需 Zone Read / DNS Edit。",
   "fileViewer.displayDevApiKey": "display.dev API 金鑰（選填）",
   "fileViewer.displayDevApiKeyGetLink": "取得 display.dev API 金鑰",
-  "fileViewer.displayDevApiKeyPlaceholder": "dsp_live_...",
+  "fileViewer.displayDevApiKeyPlaceholder": "sk_live...",
+  "fileViewer.displayDevVisibilityUnchanged": "保留目前可見性",
   "fileViewer.displayDevShareWithPlaceholder":
     "person@example.com, teammate@example.com",
   "fileViewer.displayDevApiKeyBlankHint":
@@ -3608,26 +3609,22 @@ export const zhTW: Dict = {
   "fileViewer.displayDevApiKeyClearHint": "清空此欄位即可改為匿名發佈。",
   "fileViewer.displayDevDeploySubtitle":
     "將此 HTML 預覽部署到可分享的 display.dev URL。",
-  "fileViewer.displayDevDeployAnonymousHint":
-    "留空 API 金鑰即可發佈公開的 30 天預覽，並取得認領連結。",
   "fileViewer.displayDevDeployAuthenticatedCreateHint":
     "使用下方存取設定發佈到你的 display.dev 組織。",
   "fileViewer.displayDevDeployAnonymousWithKeyHint":
     "使用 API 金鑰重新部署會建立一個歸屬組織的 display.dev 預覽。現有匿名預覽不會自動認領。",
   "fileViewer.displayDevDeployOwnedHint":
-    "重新部署會保留現有 display.dev 存取設定，除非你在此處更改。",
+    "重新部署需要 API 金鑰。現有存取設定會保持不變，除非你進行編輯。",
   "fileViewer.displayDevArtifactName": "名稱",
   "fileViewer.displayDevArtifactNamePlaceholder": "留空則使用檔名",
   "fileViewer.displayDevArtifactNameAuthenticatedPlaceholder": "留空則保留目前名稱",
   "fileViewer.displayDevVisibility": "可見性",
+  "fileViewer.displayDevVisibilityProvider": "帳戶預設值",
   "fileViewer.displayDevVisibilityPublic": "公開",
   "fileViewer.displayDevVisibilityCompany": "公司",
   "fileViewer.displayDevVisibilityPrivate": "私有",
-  "fileViewer.displayDevShowBranding": "顯示品牌標識",
-  "fileViewer.displayDevShowBrandingInherit": "繼承",
-  "fileViewer.displayDevShowBrandingShow": "顯示",
-  "fileViewer.displayDevShowBrandingHide": "隱藏",
   "fileViewer.displayDevShareWith": "分享給",
+  "fileViewer.displayDevShareWithPublicHint": "如果稍後變更可見性，收件者仍會保留。",
   "fileViewer.displayDevClaimUrlLabel": "認領 URL",
   "fileViewer.displayDevClaimUrlMessage":
     "認領此 URL，即可永久保留並在 display.dev 中管理存取權限。",
@@ -3662,12 +3659,14 @@ export const zhTW: Dict = {
   "fileViewer.savingConfig": "儲存中…",
   "fileViewer.deployConfigSaveFailed": "儲存 Vercel 設定失敗。",
   "fileViewer.deployFailed": "部署失敗，請檢查 Vercel 設定後重試。",
-  "fileViewer.deploymentsLoadFailed": "無法載入部署。發布前請重試。",
+  "fileViewer.deploymentsLoadFailed": "無法載入部署。",
+  "fileViewer.displayDevAccessSettingsLoadFailed": "無法載入 display.dev 存取設定。",
   "fileViewer.deploymentsLoadRetry": "重試",
   "fileViewer.deployProviderConfigSaveFailed": "無法儲存 {provider} 設定。",
   "fileViewer.deployProviderFailed": "{provider} 部署失敗。請檢查設定後重試。",
   "fileViewer.deployResultLabel": "部署連結",
   "fileViewer.deployLinkReady": "已就緒",
+  "fileViewer.displayDevDeploymentReadyDescription": "部署連結已就緒。",
   "fileViewer.deploySuccessToast": "部署已成功上傳",
   "fileViewer.deploySuccessToastDetails": "{provider} · {url}",
   "fileViewer.deployLinkPreparingLabel": "公開連結準備中",

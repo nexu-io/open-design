@@ -1,19 +1,25 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { readFile, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
 import { applyStandardMocks } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 
+test.use({ allowDisplayDevTestApiUrl: true });
+
 test.beforeEach(async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1600 });
   await applyStandardMocks(page);
 });
 
-test('Share menu deploys an HTML preview to display.dev anonymously and shows the claim URL', async ({ page }) => {
+test('Share menu deploys an HTML preview to display.dev anonymously and shows the claim URL', async ({ page, toolsDev }, testInfo) => {
   const displayDev = await createDisplayDevMock();
   const projectId = `displaydev-e2e-${Date.now()}`;
   const fileName = 'displaydev-preview.html';
+  let restoreDisplayDevConfig = async () => {};
 
   try {
     const { conversationId } = await createProjectViaApi(page, projectId, 'display.dev deploy E2E');
@@ -23,7 +29,11 @@ test('Share menu deploys an HTML preview to display.dev anonymously and shows th
       fileName,
       '<!doctype html><html><body><main><h1>display.dev E2E Preview</h1></main></body></html>',
     );
-    await configureAnonymousDisplayDevApiUrl(page, displayDev.baseUrl);
+    restoreDisplayDevConfig = await seedDisplayDevConfig(toolsDev, displayDev.baseUrl);
+    const savedDefault = await page.request.put('/api/deploy/config', {
+      data: { providerId: 'displaydev-self', displayDev: { defaultArtifactName: 'Old saved name' } },
+    });
+    expect(savedDefault.ok(), await savedDefault.text()).toBeTruthy();
 
     await page.goto(`/projects/${projectId}/conversations/${conversationId}`, { waitUntil: 'domcontentloaded' });
     await waitForLoadingToClear(page);
@@ -36,6 +46,11 @@ test('Share menu deploys an HTML preview to display.dev anonymously and shows th
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('heading', { name: 'Deploy to display.dev' })).toBeVisible();
     await expect(dialog.getByText('Leave blank to publish anonymously with a 30-day URL and claim link.')).toBeVisible();
+    await expect(dialog.getByLabel('Visibility')).toHaveCount(0);
+    await expect(dialog.getByLabel('Show branding')).toHaveCount(0);
+    await expect(dialog.getByLabel('Share with')).toHaveCount(0);
+    await expect(dialog.getByLabel('Name', { exact: true })).toHaveValue('Old saved name');
+    await dialog.getByLabel('Name', { exact: true }).fill('');
 
     await dialog.getByRole('button', { name: 'Deploy to display.dev' }).click();
 
@@ -50,15 +65,28 @@ test('Share menu deploys an HTML preview to display.dev anonymously and shows th
       path: '/v1/public/artifacts',
       authorization: '',
     });
+    expect(displayDev.artifactRequests[0]?.fieldNames).not.toContain('name');
+    const clearedDefault = await page.request.get('/api/deploy/config?providerId=displaydev-self');
+    expect(clearedDefault.ok(), await clearedDefault.text()).toBeTruthy();
+    expect((await clearedDefault.json()).displayDev?.defaultArtifactName ?? '').toBe('');
+    expect(displayDev.previewRequests).toEqual([]);
+    await expect(page.getByText('Deployment uploaded successfully', { exact: true })).toBeHidden();
+    await resultBlock.scrollIntoViewIfNeeded();
+    await dialog.screenshot({ path: testInfo.outputPath('anonymous-published.png') });
   } finally {
-    await displayDev.close();
+    try {
+      await restoreDisplayDevConfig();
+    } finally {
+      await displayDev.close();
+    }
   }
 });
 
-test('Share menu redeploys an authenticated display.dev preview with the current base version', async ({ page }) => {
+test('Share menu redeploys an authenticated display.dev preview with the current base version', async ({ page, toolsDev }, testInfo) => {
   const displayDev = await createDisplayDevMock();
   const projectId = `displaydev-auth-e2e-${Date.now()}`;
   const fileName = 'displaydev-auth-preview.html';
+  let restoreDisplayDevConfig = async () => {};
 
   try {
     const { conversationId } = await createProjectViaApi(page, projectId, 'display.dev authenticated deploy E2E');
@@ -68,7 +96,7 @@ test('Share menu redeploys an authenticated display.dev preview with the current
       fileName,
       '<!doctype html><html><body><main><h1>display.dev Auth E2E Preview</h1></main></body></html>',
     );
-    await configureAuthenticatedDisplayDev(page, displayDev.baseUrl);
+    restoreDisplayDevConfig = await seedDisplayDevConfig(toolsDev, displayDev.baseUrl, 'sk_liveE2eSecret');
 
     await page.goto(`/projects/${projectId}/conversations/${conversationId}`, { waitUntil: 'domcontentloaded' });
     await waitForLoadingToClear(page);
@@ -79,113 +107,147 @@ test('Share menu redeploys an authenticated display.dev preview with the current
 
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('heading', { name: 'Deploy to display.dev' })).toBeVisible();
+    await expect(dialog.getByLabel('Visibility')).toBeVisible();
+    await expect(dialog.getByRole('option', { name: 'Account default', exact: true })).toHaveCount(1);
+    await expect(dialog.getByLabel('Show branding')).toHaveCount(0);
+
+    const clearKeyResponse = await page.request.put('/api/deploy/config', {
+      data: { providerId: 'displaydev-self', clearToken: true },
+    });
+    expect(clearKeyResponse.ok(), await clearKeyResponse.text()).toBeTruthy();
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(dialog.getByText(/saved display.dev API key was removed/i)).toBeVisible();
+    await expect(dialog.getByLabel('display.dev API key (optional)')).toHaveValue('saved-displaydev-token');
     await dialog.getByRole('button', { name: 'Deploy to display.dev' }).click();
+    await expect(dialog.getByText('The saved display.dev API key was removed. Reload settings or enter an API key before publishing.')).toBeVisible();
+    expect(displayDev.artifactRequests).toEqual([]);
+    const restoreKeyResponse = await page.request.put('/api/deploy/config', {
+      data: { providerId: 'displaydev-self', token: 'sk_liveE2eSecret' },
+    });
+    expect(restoreKeyResponse.ok(), await restoreKeyResponse.text()).toBeTruthy();
+    await dialog.getByLabel('Name', { exact: true }).fill('Saved E2E preview');
+    const resumePublish = displayDev.pauseNextPublish();
+    await dialog.getByRole('button', { name: 'Deploy to display.dev' }).click();
+    await expect.poll(() => displayDev.artifactRequests.filter((request) => request.method === 'POST').length).toBe(1);
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.getByRole('button', { name: /^Share$/ }).click();
+    await page.getByRole('menuitem', { name: /Deploy to display\.dev/i }).click();
+    await expect(dialog.getByLabel('Name', { exact: true })).toHaveValue('Saved E2E preview');
+    await expect(dialog.getByLabel('Name', { exact: true })).toBeDisabled();
+    resumePublish();
     await expect(dialog.locator('.deploy-result-block').getByRole('link', { name: displayDev.previewUrl })).toBeVisible();
+
+    await expect(dialog.getByRole('option', { name: 'Account default', exact: true })).toHaveCount(0);
+
+    await dialog.getByRole('button', { name: 'Redeploy to display.dev' }).click();
+    await expect.poll(() => displayDev.artifactRequests.filter((request) => request.method === 'PUT').length).toBe(1);
+    const savedNameResponse = await page.request.get('/api/deploy/config?providerId=displaydev-self');
+    expect(await savedNameResponse.json()).toMatchObject({ displayDev: { defaultArtifactName: 'Saved E2E preview' } });
 
     await dialog.getByLabel('Visibility').selectOption('private');
     await dialog.getByLabel('Share with').fill('qa@example.com');
+    await dialog.getByLabel('display.dev API key (optional)').fill('sk_liveE2eRotatedSecret');
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(dialog.getByRole('button', { name: 'Redeploy to display.dev' })).toBeEnabled();
+    await expect(dialog.getByLabel('display.dev API key (optional)')).not.toHaveValue('sk_liveE2eRotatedSecret');
+    await expect(dialog.getByLabel('Visibility')).toHaveValue('private');
+    await expect(dialog.getByLabel('Share with')).toHaveValue('qa@example.com');
     await dialog.getByRole('button', { name: 'Redeploy to display.dev' }).click();
 
     await expect
-      .poll(() => displayDev.artifactRequests.some((request) => request.method === 'PUT'), { timeout: T.medium })
-      .toBe(true);
+      .poll(() => displayDev.artifactRequests.filter((request) => request.method === 'PUT').length, { timeout: T.medium })
+      .toBe(2);
     const postRequest = displayDev.artifactRequests.find((request) => request.method === 'POST');
     const getRequests = displayDev.artifactRequests.filter((request) => request.method === 'GET');
-    const putRequest = displayDev.artifactRequests.find((request) => request.method === 'PUT');
+    const putRequest = displayDev.artifactRequests.filter((request) => request.method === 'PUT')[1];
     expect(postRequest).toMatchObject({
       path: '/v1/artifacts',
-      authorization: 'Bearer dsp_live_secret',
+      authorization: 'Bearer sk_liveE2eSecret',
       ifMatch: '',
     });
+    expect(postRequest?.fieldNames).not.toContain('visibility');
     expect(getRequests.length).toBeGreaterThanOrEqual(1);
     expect(getRequests[0]).toMatchObject({
       method: 'GET',
       path: '/v1/artifacts/e2eDisplayDev',
-      authorization: 'Bearer dsp_live_secret',
+      authorization: 'Bearer sk_liveE2eSecret',
       ifMatch: '',
     });
     expect(putRequest).toMatchObject({
       method: 'PUT',
       path: '/v1/artifacts/e2eDisplayDev',
-      authorization: 'Bearer dsp_live_secret',
-      ifMatch: '"v1"',
+      authorization: 'Bearer sk_liveE2eRotatedSecret',
+      ifMatch: '"v2"',
     });
-  } finally {
-    await displayDev.close();
-  }
-});
-
-test('Share menu display.dev modal does not show another provider deployment', async ({ page }) => {
-  const displayDev = await createDisplayDevMock();
-  const projectId = `displaydev-fallback-e2e-${Date.now()}`;
-  const fileName = 'displaydev-fallback-preview.html';
-
-  try {
-    const { conversationId } = await createProjectViaApi(page, projectId, 'display.dev fallback E2E');
-    await seedHtmlArtifact(
-      page,
-      projectId,
-      fileName,
-      '<!doctype html><html><body><main><h1>display.dev Fallback E2E Preview</h1></main></body></html>',
-    );
-    await configureAnonymousDisplayDevApiUrl(page, displayDev.baseUrl);
-    await page.route('**/api/projects/*/deployments', async (route) => {
-      await route.fulfill({
-        json: {
-          deployments: [
-            {
-              id: 'vercel-existing',
-              projectId,
-              fileName,
-              providerId: 'vercel-self',
-              url: 'https://vercel.example',
-              deploymentCount: 1,
-              target: 'preview',
-              status: 'ready',
-              createdAt: 1,
-              updatedAt: 2,
-            },
-          ],
-        },
-      });
+    expect(putRequest?.fieldNames).toEqual(expect.arrayContaining(['visibility', 'sharedWith']));
+    expect(putRequest?.fieldValues).toMatchObject({
+      visibility: ['private'],
+      sharedWith: ['qa@example.com'],
     });
 
-    await page.goto(`/projects/${projectId}/conversations/${conversationId}`, { waitUntil: 'domcontentloaded' });
-    await waitForLoadingToClear(page);
-    await expect(page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', { name: 'display.dev Fallback E2E Preview' })).toBeVisible();
+    await expect(dialog.getByLabel('Visibility')).toHaveValue('private');
+    await expect(dialog.getByLabel('Share with')).toHaveValue('qa@example.com');
+    await dialog.getByLabel('Visibility').selectOption('company');
+    await expect(dialog.getByLabel('Share with')).toHaveValue('qa@example.com');
+    await dialog.getByRole('button', { name: 'Redeploy to display.dev' }).click();
 
-    await page.getByRole('button', { name: /^Share$/ }).click();
-    await page.getByRole('menuitem', { name: /Deploy to display\.dev/i }).click();
-
-    const dialog = page.getByRole('dialog');
-    await expect(dialog.getByRole('heading', { name: 'Deploy to display.dev' })).toBeVisible();
-    await expect(dialog.getByText('https://vercel.example')).toHaveCount(0);
-    await expect(dialog.locator('.deploy-result-block')).toHaveCount(0);
-    await expect(dialog.getByRole('button', { name: 'Deploy to display.dev' })).toBeVisible();
+    await expect
+      .poll(() => displayDev.artifactRequests.filter((request) => request.method === 'PUT').length, { timeout: T.medium })
+      .toBe(3);
+    const visibilityOnlyRequest = displayDev.artifactRequests.filter((request) => request.method === 'PUT')[2];
+    expect(visibilityOnlyRequest?.fieldValues.visibility).toEqual(['company']);
+    expect(visibilityOnlyRequest?.fieldNames).not.toContain('sharedWith');
+    expect(visibilityOnlyRequest?.fieldNames).not.toContain('clearSharedWith');
+    await expect(dialog.getByLabel('Share with')).toHaveValue('qa@example.com');
+    expect(displayDev.previewRequests).toEqual([]);
+    await expect(page.getByText('Deployment uploaded successfully', { exact: true })).toBeHidden();
+    await dialog.screenshot({ path: testInfo.outputPath('authenticated-redeployed.png') });
   } finally {
-    await displayDev.close();
+    try {
+      await restoreDisplayDevConfig();
+    } finally {
+      await displayDev.close();
+    }
   }
 });
 
 async function createDisplayDevMock() {
-  const artifactRequests: Array<{ method: string; path: string; authorization: string; ifMatch: string }> = [];
+  const artifactRequests: Array<{
+    method: string;
+    path: string;
+    authorization: string;
+    ifMatch: string;
+    fieldNames: string[];
+    fieldValues: Record<string, string[]>;
+  }> = [];
+  const previewRequests: string[] = [];
   let baseUrl = '';
   let currentVersion = 0;
+  let currentVisibility: 'public' | 'company' | 'private' = 'company';
+  let currentSharedWith: string[] = [];
+  let publishGate: Promise<void> | undefined;
+  let releasePublish = () => {};
   const previewPath = '/preview/e2e-displaydev';
   const claimUrl = 'https://app.display.dev/claim?code=e2e-displaydev';
 
-  const recordArtifactRequest = (req: IncomingMessage, path: string) => {
-    artifactRequests.push({
+  const recordArtifactRequest = async (req: IncomingMessage, path: string) => {
+    const body = await readRequestBody(req);
+    const request = {
       method: req.method || '',
       path,
       authorization: req.headers.authorization || '',
       ifMatch: typeof req.headers['if-match'] === 'string' ? req.headers['if-match'] : '',
-    });
+      fieldNames: Array.from(body.matchAll(/name="([^"]+)"/g), (match) => match[1]!),
+      fieldValues: multipartTextFields(body),
+    };
+    artifactRequests.push(request);
+    return request;
   };
 
-  const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+  const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url || '/', baseUrl || 'http://127.0.0.1');
     if ((req.method === 'HEAD' || req.method === 'GET') && url.pathname === previewPath) {
+      previewRequests.push(req.method);
       res.writeHead(200, { 'content-type': 'text/html' });
       if (req.method === 'GET') res.end('<!doctype html><h1>display.dev mock preview</h1>');
       else res.end();
@@ -193,20 +255,23 @@ async function createDisplayDevMock() {
     }
 
     if (req.method === 'POST' && url.pathname === '/v1/public/artifacts') {
-      recordArtifactRequest(req, url.pathname);
+      await recordArtifactRequest(req, url.pathname);
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({
         shortId: 'e2eDisplayDev',
-        url: `${baseUrl}${previewPath}`,
+        previewUrl: `${baseUrl}${previewPath}`,
         claimUrl,
-        expiresAt: '2026-07-01T00:00:00.000Z',
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       }));
       return;
     }
 
     if (req.method === 'POST' && url.pathname === '/v1/artifacts') {
-      recordArtifactRequest(req, url.pathname);
+      const request = await recordArtifactRequest(req, url.pathname);
+      await publishGate;
       currentVersion = 1;
+      currentVisibility = accessVisibilityFromRequest(request.fieldValues.visibility?.[0]) ?? 'company';
+      currentSharedWith = request.fieldValues.sharedWith ?? [];
       res.writeHead(201, { 'content-type': 'application/json' });
       res.end(JSON.stringify({
         shortId: 'e2eDisplayDev',
@@ -218,21 +283,20 @@ async function createDisplayDevMock() {
     }
 
     if (req.method === 'GET' && url.pathname === '/v1/artifacts/e2eDisplayDev') {
-      recordArtifactRequest(req, url.pathname);
+      await recordArtifactRequest(req, url.pathname);
       res.writeHead(200, { 'content-type': 'application/json', etag: `"v${currentVersion}"` });
       res.end(JSON.stringify({
         shortId: 'e2eDisplayDev',
         url: `${baseUrl}${previewPath}`,
         currentVersion,
-        visibility: 'company',
-        sharedWith: [],
-        showBranding: null,
+        visibility: currentVisibility,
+        sharedWith: currentSharedWith,
       }));
       return;
     }
 
     if (req.method === 'PUT' && url.pathname === '/v1/artifacts/e2eDisplayDev') {
-      recordArtifactRequest(req, url.pathname);
+      const request = await recordArtifactRequest(req, url.pathname);
       if (req.headers['if-match'] !== `"v${currentVersion}"`) {
         res.writeHead(428, { 'content-type': 'application/json' });
         res.end(JSON.stringify({
@@ -243,6 +307,9 @@ async function createDisplayDevMock() {
         return;
       }
       currentVersion += 1;
+      currentVisibility = accessVisibilityFromRequest(request.fieldValues.visibility?.[0]) ?? currentVisibility;
+      if (request.fieldValues.clearSharedWith?.[0] === 'true') currentSharedWith = [];
+      else if (request.fieldValues.sharedWith) currentSharedWith = request.fieldValues.sharedWith;
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({
         shortId: 'e2eDisplayDev',
@@ -264,8 +331,40 @@ async function createDisplayDevMock() {
     claimUrl,
     previewUrl: `${baseUrl}${previewPath}`,
     artifactRequests,
-    close: () => closeServer(server),
+    previewRequests,
+    pauseNextPublish: () => {
+      publishGate = new Promise<void>((resolve) => { releasePublish = resolve; });
+      return () => {
+        releasePublish();
+        publishGate = undefined;
+      };
+    },
+    close: () => {
+      releasePublish();
+      return closeServer(server);
+    },
   };
+}
+
+async function readRequestBody(req: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+function multipartTextFields(body: string): Record<string, string[]> {
+  const fields: Record<string, string[]> = {};
+  const pattern = /Content-Disposition: form-data; name="([^"]+)"(?:; filename="[^"]*")?\r\n(?:Content-Type:[^\r\n]+\r\n)?\r\n([\s\S]*?)(?=\r\n--)/g;
+  for (const match of body.matchAll(pattern)) {
+    if (match[0].includes('filename="')) continue;
+    const name = match[1]!;
+    (fields[name] ??= []).push(match[2] ?? '');
+  }
+  return fields;
+}
+
+function accessVisibilityFromRequest(value: string | undefined): 'public' | 'company' | 'private' | null {
+  return value === 'public' || value === 'company' || value === 'private' ? value : null;
 }
 
 async function closeServer(server: Server) {
@@ -310,26 +409,30 @@ async function seedHtmlArtifact(page: Page, projectId: string, fileName: string,
   expect(response.ok(), await response.text()).toBeTruthy();
 }
 
-async function configureAnonymousDisplayDevApiUrl(page: Page, apiUrl: string) {
-  const response = await page.request.put('/api/deploy/config', {
-    data: {
-      providerId: 'displaydev-self',
-      apiUrl,
-      clearToken: true,
-    },
+async function seedDisplayDevConfig(
+  toolsDev: { dataDir: string },
+  apiUrl: string,
+  token = '',
+) {
+  const configPath = join(toolsDev.dataDir, 'displaydev.json');
+  const previousConfig = await readFile(configPath).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
   });
-  expect(response.ok(), await response.text()).toBeTruthy();
-}
 
-async function configureAuthenticatedDisplayDev(page: Page, apiUrl: string) {
-  const response = await page.request.put('/api/deploy/config', {
-    data: {
-      providerId: 'displaydev-self',
-      apiUrl,
-      token: 'dsp_live_secret',
-    },
-  });
-  expect(response.ok(), await response.text()).toBeTruthy();
+  await writeFile(
+    configPath,
+    `${JSON.stringify({ token, apiUrl }, null, 2)}\n`,
+    { mode: 0o600 },
+  );
+
+  return async () => {
+    if (previousConfig == null) {
+      await rm(configPath, { force: true });
+      return;
+    }
+    await writeFile(configPath, previousConfig, { mode: 0o600 });
+  };
 }
 
 async function waitForLoadingToClear(page: Page) {

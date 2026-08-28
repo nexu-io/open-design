@@ -274,13 +274,15 @@ const TEMPLATES_STRING_FLAGS = new Set([
 const TEMPLATES_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // `od deploy …` posts to /api/projects/:id/deploy. The CLI form is the
 // embeddability contract: external agents can deploy a project file to
-// Vercel or Cloudflare Pages without going through the web UI.
+// Vercel, Cloudflare Pages, or display.dev without going through the web UI.
 const DEPLOY_STRING_FLAGS = new Set([
   'daemon-url', 'file', 'provider', 'target',
   'cf-zone-id', 'cf-zone-name', 'cf-domain-prefix',
+  'displaydev-name', 'displaydev-visibility', 'displaydev-shared-with',
+  'displaydev-api-key-env',
   'workspace', 'workspace-member',
 ]);
-const DEPLOY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
+const DEPLOY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'displaydev-anonymous']);
 // `od automation …` mirrors the Automations tab. Same surface, same
 // /api/routines store. The CLI form is the embeddability contract:
 // external agents (hermes-agent, openclaw, etc.) can drive OpenDesign
@@ -11886,11 +11888,17 @@ Required:
   --file <fileName>        File name within the project to deploy.
 
 Options:
-  --provider vercel-self|cloudflare-pages   Deploy provider (default: vercel-self).
+  --provider vercel-self|cloudflare-pages|displaydev-self
+                                            Deploy provider (default: vercel-self).
   --target preview|production               Deployment target (default: server decides).
   --cf-zone-id <id>                         Cloudflare Pages: zone id.
   --cf-zone-name <name>                     Cloudflare Pages: zone name.
   --cf-domain-prefix <prefix>               Cloudflare Pages: domain prefix.
+  --displaydev-name <name>                  display.dev: artifact name.
+  --displaydev-visibility <value>           display.dev: public, company, or private.
+  --displaydev-shared-with <emails>         display.dev: comma-separated recipients.
+  --displaydev-api-key-env <name>           display.dev: use the API key from this environment variable without changing the saved API key.
+  --displaydev-anonymous                    display.dev: publish anonymously without changing the saved API key.
   --workspace <id>                          Explicit Workspace id for a bound project.
   --workspace-member <id>                   Explicit Workspace member id for a bound project.
   --json                                    Emit raw JSON response.
@@ -11921,6 +11929,47 @@ Options:
 
   const providerId = typeof flags.provider === 'string' ? flags.provider : 'vercel-self';
 
+  const displayDevName = typeof flags['displaydev-name'] === 'string'
+    ? flags['displaydev-name'].trim()
+    : undefined;
+  const displayDevVisibility = flags['displaydev-visibility'];
+  const hasDisplayDevSharedWith = typeof flags['displaydev-shared-with'] === 'string';
+  const displayDevApiKeyEnv = typeof flags['displaydev-api-key-env'] === 'string'
+    ? flags['displaydev-api-key-env'].trim()
+    : undefined;
+  const displayDevAnonymous = flags['displaydev-anonymous'] === true;
+  const hasDisplayDevFlag =
+    displayDevName !== undefined ||
+    displayDevVisibility !== undefined ||
+    hasDisplayDevSharedWith ||
+    displayDevApiKeyEnv !== undefined ||
+    displayDevAnonymous;
+  if (providerId !== 'displaydev-self' && hasDisplayDevFlag) {
+    console.error('display.dev flags require --provider displaydev-self');
+    process.exit(2);
+  }
+  if (displayDevAnonymous && displayDevApiKeyEnv !== undefined) {
+    console.error('--displaydev-anonymous cannot be combined with --displaydev-api-key-env');
+    process.exit(2);
+  }
+  if (displayDevAnonymous && (displayDevVisibility !== undefined || hasDisplayDevSharedWith)) {
+    console.error(
+      '--displaydev-anonymous cannot be combined with --displaydev-visibility or --displaydev-shared-with',
+    );
+    process.exit(2);
+  }
+  if (flags['displaydev-api-key-env'] !== undefined && !displayDevApiKeyEnv) {
+    console.error('--displaydev-api-key-env requires a non-empty environment variable name');
+    process.exit(2);
+  }
+  const displayDevApiKey = displayDevApiKeyEnv
+    ? process.env[displayDevApiKeyEnv]?.trim() ?? ''
+    : undefined;
+  if (displayDevApiKeyEnv && !displayDevApiKey) {
+    console.error(`environment variable ${displayDevApiKeyEnv} must contain a display.dev API key`);
+    process.exit(2);
+  }
+
   const body: Record<string, unknown> = { fileName, providerId };
 
   // Only include target when explicitly supplied
@@ -11936,8 +11985,69 @@ Options:
     body.cloudflarePages = { zoneId, zoneName, domainPrefix };
   }
 
+  if (
+    displayDevVisibility !== undefined &&
+    displayDevVisibility !== 'public' &&
+    displayDevVisibility !== 'company' &&
+    displayDevVisibility !== 'private'
+  ) {
+    console.error(
+      `invalid --displaydev-visibility value: "${displayDevVisibility}" (must be "public", "company", or "private")`,
+    );
+    process.exit(2);
+  }
+  const displayDevSharedWith = hasDisplayDevSharedWith
+    ? flags['displaydev-shared-with'].split(',').map((item) => item.trim()).filter(Boolean)
+    : undefined;
+  if (displayDevName !== undefined || displayDevVisibility !== undefined || hasDisplayDevSharedWith) {
+    body.displayDev = {
+      ...(displayDevName ? { name: displayDevName } : {}),
+      ...(displayDevVisibility ? { visibility: displayDevVisibility } : {}),
+      ...(displayDevSharedWith !== undefined ? { sharedWith: displayDevSharedWith } : {}),
+    };
+  }
+
   const base = await cliDaemonBaseUrl(flags);
   const workspaceHeaders = workspaceHeadersFromExplicitFlags(flags) ?? {};
+  if (displayDevAnonymous) {
+    let deploymentsResp;
+    try {
+      deploymentsResp = await fetch(
+        `${base}/api/projects/${encodeURIComponent(projectId)}/deployments`,
+        { headers: workspaceHeaders },
+      );
+    } catch (err) {
+      surfaceFetchError(err, base);
+      process.exit(3);
+    }
+    if (!deploymentsResp.ok) return structuredHttpFailure(deploymentsResp);
+    const deploymentsBody = await deploymentsResp.json() as {
+      deployments?: Array<{
+        fileName?: string;
+        providerId?: string;
+        displayDev?: { mode?: string };
+      }>;
+    };
+    const ownedDeployment = deploymentsBody.deployments?.find((deployment) => (
+      deployment.fileName === fileName &&
+      deployment.providerId === 'displaydev-self' &&
+      deployment.displayDev?.mode === 'authenticated'
+    ));
+    if (ownedDeployment) {
+      console.error(
+        'Cannot publish anonymously over an owned display.dev artifact. Keep the saved API key or publish a different file.',
+      );
+      process.exit(2);
+    }
+  }
+  if (displayDevApiKey || displayDevAnonymous) {
+    body.displayDev = {
+      ...((body.displayDev as Record<string, unknown> | undefined) ?? {}),
+      authentication: displayDevApiKey
+        ? { mode: 'api-key', apiKey: displayDevApiKey }
+        : { mode: 'anonymous' },
+    };
+  }
   let resp;
   try {
     resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/deploy`, {
@@ -11951,7 +12061,19 @@ Options:
   }
   if (!resp.ok) return structuredHttpFailure(resp);
   const data = await resp.json();
+  if (
+    data?.displayDev?.mode === 'authenticated' &&
+    data.displayDev.accessSettingsMissing === true
+  ) {
+    console.error(
+      'warning: display.dev publish succeeded, but its access settings could not be loaded.',
+    );
+  }
   if (flags.json) return process.stdout.write(JSON.stringify(data) + '\n');
   const url = data?.url ?? data?.deploymentUrl ?? '';
   console.log(`[deploy] ${data?.id ?? 'done'}${url ? ` → ${url}` : ''}`);
+  if (data?.displayDev?.mode === 'anonymous' && data.displayDev.claimUrl) {
+    console.log(`[deploy] Claim URL → ${data.displayDev.claimUrl}`);
+    if (data.displayDev.expiresAt) console.log(`[deploy] Expires → ${data.displayDev.expiresAt}`);
+  }
 }

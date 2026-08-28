@@ -1757,10 +1757,16 @@ export async function fetchDeployConfig(
 ): Promise<WebDeployConfigResponse | null> {
   try {
     const resp = await fetch(`/api/deploy/config${deployProviderQuery(providerId)}`);
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      const payload = (await resp.json().catch(() => null)) as
+        | { error?: { message?: string }; message?: string }
+        | null;
+      throw new Error(payload?.error?.message || payload?.message || `Could not load deploy config (${resp.status})`);
+    }
     return (await resp.json()) as WebDeployConfigResponse;
-  } catch {
-    return null;
+  } catch (err) {
+    if (err instanceof Error) throw err;
+    throw new Error('Could not load deploy config');
   }
 }
 
@@ -1818,6 +1824,24 @@ export async function fetchProjectDeployments(
   }
   const json = (await resp.json()) as ProjectDeploymentsResponse;
   return (json.deployments ?? []) as WebDeploymentInfo[];
+}
+
+export async function fetchProjectDeployment(
+  projectId: string,
+  deploymentId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<WebDeploymentInfo> {
+  const resp = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/deployments/${encodeURIComponent(deploymentId)}`,
+    workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
+  );
+  if (!resp.ok) {
+    const payload = (await resp.json().catch(() => null)) as
+      | { error?: { message?: string }; message?: string }
+      | null;
+    throw new Error(payload?.error?.message || payload?.message || `Could not load deployment (${resp.status})`);
+  }
+  return (await resp.json()) as WebDeploymentInfo;
 }
 
 export async function deployProjectFile(

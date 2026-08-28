@@ -692,6 +692,7 @@ import {
   SandboxImportedProjectError,
   sanitizeName,
   sanitizePath,
+  validateProjectPath,
   searchProjectFiles,
   stageProjectDirsForDelete,
   resolveProjectFilePath,
@@ -712,6 +713,7 @@ import {
   getConversation,
   getDeployment,
   getDeploymentById,
+  renameDeploymentFileName,
   getMessage,
   getMessageTelemetryFinalizationState,
   getPreviewComment,
@@ -1063,6 +1065,7 @@ import {
 } from './tool-tokens.js';
 import {
   buildDeployFileSet,
+  assertDisplayDevPreviewUrl,
   checkDeploymentUrl,
   CLOUDFLARE_PAGES_PROVIDER_ID,
   DeployError,
@@ -7809,6 +7812,7 @@ export async function startServer({
   const uploadDeps = { upload, importUpload, handleProjectUpload };
   const projectStoreDeps = {
     getProject,
+    validateProjectPath,
     findTeamWorkspaceIdForProject,
     getWorkspaceProject,
     getWorkspaceProjectByProjectId,
@@ -7947,14 +7951,20 @@ export async function startServer({
     SAVED_DISPLAYDEV_TOKEN_MASK,
     isDeployProviderId,
     publicDeployConfigForProvider,
-    readDeployConfig,
-    writeDeployConfig,
+    readDeployConfig: (providerId: Parameters<typeof readDeployConfig>[0]) =>
+      readDeployConfig(providerId, RUNTIME_DATA_DIR),
+    writeDeployConfig: (
+      providerId: Parameters<typeof writeDeployConfig>[0],
+      input: Parameters<typeof writeDeployConfig>[1],
+      options?: Parameters<typeof writeDeployConfig>[3],
+    ) => writeDeployConfig(providerId, input, RUNTIME_DATA_DIR, options),
     listCloudflarePagesZones,
     DeployError,
     listDeployments,
     publicDeployments,
     getDeployment,
     getDeploymentById,
+    renameDeploymentFileName,
     buildDeployFileSet,
     cloudflarePagesProjectNameForDeploy,
     cloudflarePagesProjectNameFromDeployment,
@@ -7964,6 +7974,7 @@ export async function startServer({
     deployToDisplayDev,
     deployToVercel,
     fetchDisplayDevArtifactAccessSettings,
+    assertDisplayDevPreviewUrl,
     upsertDeployment,
     publicDeployment,
     cloudflarePagesDeploymentMetadata,

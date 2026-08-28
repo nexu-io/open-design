@@ -8,16 +8,11 @@ import {
   readDeployConfig,
 } from '../deploy.js';
 import { listDeployments } from '../db.js';
+import type { DeploymentLike } from './deployment-response.js';
+
+export { publicDeployment, publicDeployments } from './deployment-response.js';
 
 type JsonObject = Record<string, unknown>;
-
-export interface DeploymentLike {
-  providerId?: string | null;
-  url?: string | null;
-  providerMetadata?: JsonObject | null;
-  cloudflarePages?: JsonObject | null;
-  [key: string]: unknown;
-}
 
 const CLOUDFLARE_PAGES_PROJECT_METADATA_KEY = 'cloudflarePagesProjectName';
 
@@ -62,51 +57,6 @@ export function cloudflarePagesProjectNameForDeploy(
   }
 
   return cloudflarePagesProjectNameForProject(projectId, projectName);
-}
-
-export function publicDeployment<T extends DeploymentLike>(deployment: T): Omit<T, 'providerMetadata'>;
-export function publicDeployment<T>(deployment: T): T;
-export function publicDeployment(deployment: unknown): unknown {
-  if (!deployment || typeof deployment !== 'object') return deployment;
-  const { providerMetadata: _providerMetadata, ...publicShape } = deployment as DeploymentLike;
-  const displayDev = asRecord((deployment as DeploymentLike).providerMetadata?.displayDev);
-  if (displayDev) {
-    if (displayDev.mode === 'authenticated') {
-      const shortId = typeof displayDev.shortId === 'string' ? displayDev.shortId.trim() : '';
-      const visibility = isDisplayDevVisibility(displayDev.visibility) ? displayDev.visibility : null;
-      const sharedWith = isStringArray(displayDev.sharedWith)
-        ? displayDev.sharedWith.map((item) => item.trim()).filter(Boolean)
-        : null;
-      const showBranding = isDisplayDevShowBranding(displayDev.showBranding) ? displayDev.showBranding : null;
-      if (shortId && visibility && sharedWith && showBranding) {
-        (publicShape as DeploymentLike).displayDev = {
-          mode: 'authenticated',
-          shortId,
-          visibility,
-          sharedWith,
-          showBranding,
-        };
-      } else if (shortId) {
-        (publicShape as DeploymentLike).displayDev = {
-          mode: 'authenticated',
-          shortId,
-          accessSettingsMissing: true,
-        };
-      }
-    } else {
-      (publicShape as DeploymentLike).displayDev = {
-        ...(typeof displayDev.shortId === 'string' ? { shortId: displayDev.shortId } : {}),
-        mode: 'anonymous',
-        ...(typeof displayDev.claimUrl === 'string' ? { claimUrl: displayDev.claimUrl } : {}),
-        ...(typeof displayDev.expiresAt === 'string' ? { expiresAt: displayDev.expiresAt } : {}),
-      };
-    }
-  }
-  return publicShape;
-}
-
-export function publicDeployments<T extends DeploymentLike>(deployments: readonly T[] | null | undefined): Array<Omit<T, 'providerMetadata'>> {
-  return (deployments || []).map((deployment) => publicDeployment(deployment));
 }
 
 export async function checkCloudflarePagesDeploymentLinks(existing: DeploymentLike): Promise<DeploymentLike> {
@@ -192,16 +142,4 @@ function asRecord(value: unknown): JsonObject | null {
 
 function stringValue(value: unknown): string {
   return typeof value === 'string' ? value : '';
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === 'string');
-}
-
-function isDisplayDevVisibility(value: unknown): value is 'public' | 'company' | 'private' {
-  return value === 'public' || value === 'company' || value === 'private';
-}
-
-function isDisplayDevShowBranding(value: unknown): value is 'inherit' | 'show' | 'hide' {
-  return value === 'inherit' || value === 'show' || value === 'hide';
 }

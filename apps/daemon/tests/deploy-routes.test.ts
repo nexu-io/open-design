@@ -1,19 +1,35 @@
-import type http from 'node:http';
+import http from 'node:http';
+import express from 'express';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 
 import {
   CLOUDFLARE_PAGES_PROVIDER_ID,
   cloudflarePagesProjectNameForProject,
+  DeployError,
   deployConfigPath,
   DISPLAYDEV_PROVIDER_ID,
   VERCEL_PROVIDER_ID,
   SAVED_CLOUDFLARE_TOKEN_MASK,
   SAVED_DISPLAYDEV_TOKEN_MASK,
 } from '../src/deploy.js';
+import {
+  publicDeployment,
+  publicDeployments,
+} from '../src/deploy/deployment-response.js';
+import { openDatabase, upsertDeployment } from '../src/db.js';
 import { ensureProject } from '../src/projects.js';
+import { registerDeployRoutes } from '../src/routes/deploy.js';
 import { startServer } from '../src/server.js';
 
 describe('deploy provider routes', () => {
@@ -21,7 +37,7 @@ describe('deploy provider routes', () => {
   let baseUrl: string;
 
   beforeAll(async () => {
-    const started = await startServer({ port: 0, returnServer: true }) as {
+    const started = (await startServer({ port: 0, returnServer: true })) as {
       url: string;
       server: http.Server;
     };
@@ -29,7 +45,317 @@ describe('deploy provider routes', () => {
     server = started.server;
   });
 
-  afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  const runtimeDisplayDevConfigPath = () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    return deployConfigPath(DISPLAYDEV_PROVIDER_ID, dataDir);
+  };
+
+  beforeEach(async () => {
+    await rm(runtimeDisplayDevConfigPath(), { force: true });
+  });
+
+  afterAll(async () => {
+    await rm(runtimeDisplayDevConfigPath(), { force: true });
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  async function createDisplayDevPublishFixture() {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const projectId = `displaydev-draft-${Date.now()}`;
+    const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+    await writeFile(path.join(dir, 'quarterly.html'), '<!doctype html><h1>Quarterly report</h1>');
+    const projectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Draft settings', skillId: null, designSystemId: null }),
+    });
+    expect(projectResponse.status).toBe(200);
+    const configResponse = await fetch(`${baseUrl}/api/deploy/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        providerId: DISPLAYDEV_PROVIDER_ID,
+        token: 'sk_live_saved',
+        displayDev: { defaultArtifactName: 'Q3 Report' },
+      }),
+    });
+    expect(configResponse.status).toBe(200);
+    return {
+      savedConfig: await readFile(runtimeDisplayDevConfigPath(), 'utf8'),
+      publish: (displayDev: Record<string, unknown>) => fetch(
+        `${baseUrl}/api/projects/${projectId}/deploy`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileName: 'quarterly.html', providerId: DISPLAYDEV_PROVIDER_ID, displayDev }),
+        },
+      ),
+    };
+  }
+
+  function mockDisplayDevDraftPublish(upstreamStatus = 201) {
+    const publishes: Array<{
+      url: string;
+      method: string;
+      authorization: string | null;
+      name: unknown;
+      savedConfig: string;
+    }> = [];
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input);
+      const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      if (
+        (url === 'https://api.display.dev/v1/artifacts' && method === 'POST') ||
+        (url === 'https://api.display.dev/v1/public/artifacts' && method === 'POST') ||
+        (url === 'https://api.display.dev/v1/artifacts/draft1234' && method === 'PUT')
+      ) {
+        if (!(init?.body instanceof FormData)) throw new Error('Expected FormData body');
+        const authorization = new Headers(init.headers).get('Authorization');
+        publishes.push({
+          url,
+          method,
+          authorization,
+          name: init.body.get('name'),
+          savedConfig: await readFile(runtimeDisplayDevConfigPath(), 'utf8'),
+        });
+        if (upstreamStatus >= 400) {
+          return new Response(JSON.stringify({ error: 'display.dev is unavailable' }), { status: upstreamStatus });
+        }
+        return new Response(JSON.stringify({
+          shortId: 'draft1234',
+          ...(authorization
+            ? { name: 'Current artifact', url: 'https://public.dsp.so/draft1234', version: publishes.length }
+            : {
+                previewUrl: 'https://public.dsp.so/draft1234',
+                claimUrl: 'https://app.display.dev/claim?code=draft1234',
+                expiresAt: '2026-09-25T00:00:00.000Z',
+              }),
+        }), { status: upstreamStatus });
+      }
+      if (url === 'https://api.display.dev/v1/artifacts/draft1234' && method === 'GET') {
+        return new Response(JSON.stringify({
+          shortId: 'draft1234',
+          currentVersion: publishes.length,
+          visibility: 'company',
+          sharedWith: [],
+        }), { status: 200 });
+      }
+      throw new Error(`Unexpected provider request: ${method} ${url}`);
+    }));
+    return publishes;
+  }
+
+  it.each([
+    { mode: 'api-key', upstreamStatus: 201 },
+    { mode: 'api-key', upstreamStatus: 503 },
+    { mode: 'anonymous', upstreamStatus: 201 },
+    { mode: 'anonymous', upstreamStatus: 503 },
+  ])(
+    'preserves seeded display.dev settings for a request-scoped $mode publish returning $upstreamStatus',
+    async ({ mode, upstreamStatus }) => {
+      const fixture = await createDisplayDevPublishFixture();
+      const publishes = mockDisplayDevDraftPublish(upstreamStatus);
+      try {
+        const response = await fixture.publish({
+          authentication: mode === 'api-key'
+            ? { mode, apiKey: 'sk_live_invocation' }
+            : { mode },
+        });
+        const text = await response.text();
+        expect(response.status, text).toBe(upstreamStatus === 201 ? 200 : 503);
+        expect(publishes).toEqual([{
+          url: `https://api.display.dev/v1/${mode === 'anonymous' ? 'public/' : ''}artifacts`,
+          method: 'POST',
+          authorization: mode === 'api-key' ? 'Bearer sk_live_invocation' : null,
+          name: 'Q3 Report',
+          savedConfig: fixture.savedConfig,
+        }]);
+        expect(JSON.parse(text)).not.toHaveProperty('savedDisplayDevConfig');
+        expect(await readFile(runtimeDisplayDevConfigPath(), 'utf8')).toBe(fixture.savedConfig);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+
+  it.each([
+    { mode: 'anonymous', upstreamStatus: 201 },
+    { mode: 'anonymous', upstreamStatus: 503 },
+    { mode: 'authenticated', upstreamStatus: 201 },
+    { mode: 'authenticated', upstreamStatus: 503 },
+  ])(
+    'uses the cleared draft name for a $mode create returning $upstreamStatus and saves only after success',
+    async ({ mode, upstreamStatus }) => {
+      const fixture = await createDisplayDevPublishFixture();
+      const publishes = mockDisplayDevDraftPublish(upstreamStatus);
+      try {
+        const response = await fixture.publish({
+          saveDefaults: true,
+          authentication: mode === 'anonymous'
+            ? { mode: 'anonymous', save: true }
+            : { mode: 'saved-key' },
+        });
+        const text = await response.text();
+        expect(response.status, text).toBe(upstreamStatus === 201 ? 200 : 503);
+        expect(publishes).toEqual([{
+          url: `https://api.display.dev/v1/${mode === 'anonymous' ? 'public/' : ''}artifacts`,
+          method: 'POST',
+          authorization: mode === 'authenticated' ? 'Bearer sk_live_saved' : null,
+          name: mode === 'authenticated' ? 'quarterly' : null,
+          savedConfig: fixture.savedConfig,
+        }]);
+        const savedConfig = await readFile(runtimeDisplayDevConfigPath(), 'utf8');
+        if (upstreamStatus === 201) {
+          const saved = JSON.parse(savedConfig);
+          expect(saved.token).toBe(mode === 'authenticated' ? 'sk_live_saved' : '');
+          expect(saved.displayDev?.defaultArtifactName).toBeUndefined();
+          expect(JSON.parse(text)).toMatchObject({
+            savedDisplayDevConfig: { configured: mode === 'authenticated' },
+          });
+        } else {
+          expect(savedConfig).toBe(fixture.savedConfig);
+          expect(JSON.parse(text)).not.toHaveProperty('savedDisplayDevConfig');
+        }
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+
+  const displayDevNameDraftCases: Array<{
+    label: string;
+    selection: Record<string, unknown>;
+    expectedName: string;
+    expectedDefault: string;
+  }> = [
+    { label: 'omitted defaults', selection: {}, expectedName: 'Q3 Report', expectedDefault: 'Q3 Report' },
+    { label: 'unchanged default', selection: { name: 'Q3 Report', saveDefaults: true }, expectedName: 'Q3 Report', expectedDefault: 'Q3 Report' },
+    { label: 'nonempty override', selection: { name: 'Q4 Report', saveDefaults: true }, expectedName: 'Q4 Report', expectedDefault: 'Q4 Report' },
+    { label: 'one-off override', selection: { name: 'One-off report' }, expectedName: 'One-off report', expectedDefault: 'Q3 Report' },
+    { label: 'disabled default save', selection: { saveDefaults: false }, expectedName: 'Q3 Report', expectedDefault: 'Q3 Report' },
+    { label: 'explicit blank name', selection: { name: '  ', saveDefaults: true }, expectedName: 'quarterly', expectedDefault: '' },
+    { label: 'cleared name without authentication override', selection: { saveDefaults: true }, expectedName: 'quarterly', expectedDefault: '' },
+    { label: 'cleared name with request API key', selection: { saveDefaults: true, authentication: { mode: 'api-key', apiKey: 'sk_live_invocation' } }, expectedName: 'quarterly', expectedDefault: '' },
+  ];
+
+  it.each(displayDevNameDraftCases)(
+    'preserves display.dev create-name semantics for $label',
+    async ({ selection, expectedName, expectedDefault }) => {
+      const fixture = await createDisplayDevPublishFixture();
+      const publishes = mockDisplayDevDraftPublish();
+      try {
+        const response = await fixture.publish(selection);
+        const text = await response.text();
+        expect(response.status, text).toBe(200);
+        expect(publishes).toHaveLength(1);
+        expect(publishes[0]).toMatchObject({
+          method: 'POST', name: expectedName, savedConfig: fixture.savedConfig,
+        });
+        const savedConfig = await readFile(runtimeDisplayDevConfigPath(), 'utf8');
+        const saved = JSON.parse(savedConfig);
+        expect(saved.token).toBe('sk_live_saved');
+        expect(saved.displayDev?.defaultArtifactName ?? '').toBe(expectedDefault);
+        if (selection.saveDefaults !== true) expect(savedConfig).toBe(fixture.savedConfig);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+
+  it('keeps the current owned display.dev name when an update clears its saved name default', async () => {
+    const fixture = await createDisplayDevPublishFixture();
+    const publishes = mockDisplayDevDraftPublish();
+    try {
+      const created = await fixture.publish({ name: 'Current artifact' });
+      expect(created.status, await created.text()).toBe(200);
+      const updated = await fixture.publish({ saveDefaults: true });
+      expect(updated.status, await updated.text()).toBe(200);
+      expect(publishes).toHaveLength(2);
+      expect(publishes[1]).toMatchObject({
+        method: 'PUT', name: null, savedConfig: fixture.savedConfig,
+      });
+      const saved = JSON.parse(await readFile(runtimeDisplayDevConfigPath(), 'utf8'));
+      expect(saved.token).toBe('sk_live_saved');
+      expect(saved.displayDev?.defaultArtifactName).toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('rejects a saved-key publish when another client has cleared the key', async () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const projectId = `displaydev-cleared-key-${Date.now()}`;
+    const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+    await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Private draft</h1>');
+    const projectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Saved key race', skillId: null, designSystemId: null }),
+    });
+    expect(projectResponse.status).toBe(200);
+    const saveConfig = (input: Record<string, unknown>) => fetch(`${baseUrl}/api/deploy/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ providerId: DISPLAYDEV_PROVIDER_ID, ...input }),
+    });
+    const savedResponse = await saveConfig({ token: 'sk_liveLocalSecret' });
+    expect(savedResponse.status).toBe(200);
+    await expect(savedResponse.json()).resolves.toMatchObject({ configured: true, tokenMask: SAVED_DISPLAYDEV_TOKEN_MASK });
+    expect((await saveConfig({ clearToken: true })).status).toBe(200);
+    const beforeStaleSave = await readFile(runtimeDisplayDevConfigPath(), 'utf8');
+    const staleSave = await saveConfig({
+      token: SAVED_DISPLAYDEV_TOKEN_MASK,
+      displayDev: { defaultArtifactName: 'Must not save' },
+    });
+    expect(staleSave.status).toBe(409);
+    await expect(staleSave.json()).resolves.toMatchObject({ error: { code: 'CONFLICT' } });
+    expect(await readFile(runtimeDisplayDevConfigPath(), 'utf8')).toBe(beforeStaleSave);
+
+    const realFetch = globalThis.fetch;
+    const providerFetch = vi.fn();
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      providerFetch(input, init);
+      throw new Error(`Unexpected provider request: ${url}`);
+    }));
+    try {
+      const response = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: 'index.html',
+          providerId: DISPLAYDEV_PROVIDER_ID,
+          displayDev: { authentication: { mode: 'saved-key' } },
+        }),
+      });
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({ error: { code: 'CONFLICT' } });
+      expect(providerFetch).not.toHaveBeenCalled();
+      for (const apiKey of ['Bearer ', 'Bearer\t', '  Bearer  ']) {
+        const invalidKeyResponse = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html', providerId: DISPLAYDEV_PROVIDER_ID,
+            displayDev: { authentication: { mode: 'api-key', apiKey } },
+          }),
+        });
+        expect(invalidKeyResponse.status).toBe(400);
+        await expect(invalidKeyResponse.json()).resolves.toMatchObject({ error: { code: 'BAD_REQUEST' } });
+      }
+      expect(providerFetch).not.toHaveBeenCalled();
+      const history = await fetch(`${baseUrl}/api/projects/${projectId}/deployments`);
+      await expect(history.json()).resolves.toEqual({ deployments: [] });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 
   it('dispatches deploy config reads and writes by providerId', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-config-'));
@@ -102,7 +428,6 @@ describe('deploy provider routes', () => {
         providerId: DISPLAYDEV_PROVIDER_ID,
         configured: false,
         tokenMask: '',
-        apiUrl: 'https://api.display.dev',
       });
 
       const displayResp = await fetch(`${baseUrl}/api/deploy/config`, {
@@ -111,10 +436,8 @@ describe('deploy provider routes', () => {
         body: JSON.stringify({
           providerId: DISPLAYDEV_PROVIDER_ID,
           token: 'Bearer dsp_live_secret',
-          apiUrl: 'https://api.display.test:3331/',
           displayDev: {
             defaultArtifactName: 'Demo',
-            defaultVisibility: 'public',
           },
         }),
       });
@@ -123,49 +446,31 @@ describe('deploy provider routes', () => {
         providerId: DISPLAYDEV_PROVIDER_ID,
         configured: true,
         tokenMask: SAVED_DISPLAYDEV_TOKEN_MASK,
-        apiUrl: 'https://api.display.test:3331',
         displayDev: {
           defaultArtifactName: 'Demo',
-          defaultVisibility: 'public',
         },
       });
 
-      const invalidDisplayResp = await fetch(`${baseUrl}/api/deploy/config`, {
+      const ignoredApiUrlResp = await fetch(`${baseUrl}/api/deploy/config`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           providerId: DISPLAYDEV_PROVIDER_ID,
-          apiUrl: 'ftp://api.display.test',
+          apiUrl: 'https://attacker.example.test',
         }),
       });
-      expect(invalidDisplayResp.status).toBe(400);
-      expect(await invalidDisplayResp.json()).toMatchObject({
-        error: {
-          code: 'BAD_REQUEST',
-          message: 'display.dev API URL must be a valid HTTP or HTTPS URL.',
-        },
-      });
+      expect(ignoredApiUrlResp.status).toBe(200);
+      expect(await ignoredApiUrlResp.json()).not.toHaveProperty('apiUrl');
 
       const invalidDisplayDefaultCases: Array<[unknown, string]> = [
         [
           'bad',
           'display.dev settings must be an object.',
         ],
+        [[] as unknown, 'display.dev settings must be an object.'],
         [
-          [],
-          'display.dev settings must be an object.',
-        ],
-        [
-          { defaultVisibility: 'publik' },
-          'display.dev defaultVisibility must be "public", "company", or "private".',
-        ],
-        [
-          { defaultShowBranding: 'sometimes' },
-          'display.dev defaultShowBranding must be "inherit", "show", or "hide".',
-        ],
-        [
-          { defaultSharedWith: ['ok@example.com', 123] },
-          'display.dev defaultSharedWith must contain only strings.',
+          { defaultArtifactName: 123 },
+          'display.dev defaultArtifactName must be a string.',
         ],
       ];
       for (const [displayDev, message] of invalidDisplayDefaultCases) {
@@ -186,10 +491,13 @@ describe('deploy provider routes', () => {
         });
       }
 
-      await writeFile(deployConfigPath(DISPLAYDEV_PROVIDER_ID), JSON.stringify({
+      await writeFile(
+        runtimeDisplayDevConfigPath(),
+        JSON.stringify({
         token: 'dsp_live_secret',
         apiUrl: 'api.display.test:3331',
-      }));
+      }),
+      );
       const invalidSavedDisplayResp = await fetch(
         `${baseUrl}/api/deploy/config?providerId=${DISPLAYDEV_PROVIDER_ID}`,
       );
@@ -228,10 +536,13 @@ describe('deploy provider routes', () => {
         }),
       });
       expect(createProjectResp.status).toBe(200);
-      await writeFile(deployConfigPath(DISPLAYDEV_PROVIDER_ID), JSON.stringify({
+      await writeFile(
+        runtimeDisplayDevConfigPath(),
+        JSON.stringify({
         token: 'dsp_live_secret',
         apiUrl: 'api.display.test:3331',
-      }));
+      }),
+      );
 
       const realFetch = globalThis.fetch;
       const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -332,6 +643,152 @@ describe('deploy provider routes', () => {
     }
   });
 
+  it('rejects malformed anonymous display.dev 2xx responses before persistence', async () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const projectId = `displaydev-malformed-success-${Date.now()}`;
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+
+    const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'display.dev malformed success route test',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+      expect(createProjectResp.status).toBe(200);
+
+      const realFetch = globalThis.fetch;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        return new Response(
+          JSON.stringify({
+            shortId: 'anon1234',
+            previewUrl: 'https://display.dsp.so/anon1234-demo',
+          }),
+          {
+            status: 201,
+            headers: { 'content-type': 'application/json' },
+          },
+        );
+      }),
+    );
+    try {
+        const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html',
+            providerId: DISPLAYDEV_PROVIDER_ID,
+          }),
+        });
+      expect(deployResp.status).toBe(502);
+      await expect(deployResp.json()).resolves.toMatchObject({
+        error: {
+          code: 'UPSTREAM_UNAVAILABLE',
+          message: 'display.dev returned an invalid claim URL.',
+        },
+      });
+
+        const deploymentsResp = await fetch(`${baseUrl}/api/projects/${projectId}/deployments`);
+        expect(deploymentsResp.status).toBe(200);
+      await expect(deploymentsResp.json()).resolves.toEqual({
+        deployments: [],
+      });
+    } finally {
+        vi.unstubAllGlobals();
+      }
+  });
+
+  it('rejects an off-provider display.dev preview URL without probing it', async () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const projectId = `displaydev-preview-origin-${Date.now()}`;
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+    expect(
+      (
+        await fetch(`${baseUrl}/api/projects`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: projectId,
+            name: 'display.dev preview origin route test',
+            skillId: null,
+            designSystemId: null,
+          }),
+        })
+      ).status,
+    ).toBe(200);
+
+    let offProviderRequests = 0;
+
+      const realFetch = globalThis.fetch;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        if (url === 'http://127.0.0.1:4311/private') {
+          offProviderRequests += 1;
+          return new Response('', { status: 200 });
+        }
+        return new Response(
+          JSON.stringify({
+            shortId: 'anon-origin',
+            previewUrl: 'http://127.0.0.1:4311/private',
+            claimUrl: 'https://app.display.dev/claim?code=origin',
+            expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          }),
+          {
+            status: 201,
+            headers: { 'content-type': 'application/json' },
+          },
+        );
+      }),
+    );
+    try {
+      const response = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: 'index.html',
+          providerId: DISPLAYDEV_PROVIDER_ID,
+        }),
+      });
+      expect(response.status).toBe(502);
+      await expect(response.json()).resolves.toMatchObject({
+        error: {
+          code: 'UPSTREAM_UNAVAILABLE',
+          message:
+            'display.dev returned a deployment URL outside the configured provider origin.',
+        },
+      });
+      expect(offProviderRequests).toBe(0);
+      const deployments = await fetch(`${baseUrl}/api/projects/${projectId}/deployments`);
+      await expect(deployments.json()).resolves.toEqual({ deployments: [] });
+    } finally {
+        vi.unstubAllGlobals();
+      }
+  });
+
   it('lists Cloudflare Pages zones for saved account credentials', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-zones-'));
     const priorStateRoot = process.env.OD_USER_STATE_DIR;
@@ -425,7 +882,7 @@ describe('deploy provider routes', () => {
     const dataDir = process.env.OD_DATA_DIR;
     if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
     const projectId = `displaydev-preflight-${Date.now()}`;
-    const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
     await writeFile(
       path.join(dir, 'index.html'),
       '<!doctype html><meta name="viewport" content="width=device-width"><h1>Hello</h1>',
@@ -445,7 +902,7 @@ describe('deploy provider routes', () => {
     });
 
     expect(resp.status).toBe(200);
-    const body = await resp.json() as {
+    const body = (await resp.json()) as {
       files: Array<{ path: string }>;
       [key: string]: unknown;
     };
@@ -457,6 +914,335 @@ describe('deploy provider routes', () => {
     expect(body.files.map((file) => file.path).sort()).toEqual(['index.html']);
   });
 
+  it('serializes concurrent authenticated display.dev deploys for the same file', async () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const stateRoot = await mkdtemp(
+      path.join(os.tmpdir(), 'od-displaydev-concurrent-route-'),
+    );
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    const projectId = `displaydev-concurrent-${Date.now()}`;
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+    await mkdir(path.join(dir, 'sandbox'), { recursive: true });
+    await writeFile(
+      path.join(dir, 'sandbox', 'index.html'),
+      '<!doctype html><h1>Hello</h1>',
+    );
+    try {
+      expect(
+        (
+          await fetch(`${baseUrl}/api/projects`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: projectId,
+              name: 'Concurrent display.dev route test',
+              skillId: null,
+              designSystemId: null,
+            }),
+          })
+        ).status,
+      ).toBe(200);
+      expect(
+        (
+          await fetch(`${baseUrl}/api/deploy/config`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              providerId: DISPLAYDEV_PROVIDER_ID,
+              token: 'dsp_live_secret',
+            }),
+          })
+        ).status,
+      ).toBe(200);
+
+      let releaseCreate!: () => void;
+      const createGate = new Promise<void>((resolve) => {
+        releaseCreate = resolve;
+      });
+      let createCalls = 0;
+      let updateCalls = 0;
+
+      const realFetch = globalThis.fetch;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        const method = init?.method || (input instanceof Request ? input.method : 'GET');
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+          if (url.endsWith('/v1/artifacts') && method === 'POST') {
+            createCalls += 1;
+            await createGate;
+            return new Response(
+              JSON.stringify({
+                shortId: 'owned-lock',
+                url: 'https://display.dsp.so/owned-lock',
+                version: 1,
+                name: 'index',
+              }),
+              {
+            status: 201,
+            headers: { 'content-type': 'application/json' },
+          },
+            );
+          }
+          if (url.endsWith('/v1/artifacts/owned-lock') && method === 'GET') {
+            return new Response(
+              JSON.stringify({
+                shortId: 'owned-lock',
+                currentVersion: 1,
+                visibility: 'company',
+                sharedWith: [],
+              }),
+              {
+            status: 200,
+            headers: { 'content-type': 'application/json', etag: '"v1"' },
+          },
+            );
+          }
+          if (url.endsWith('/v1/artifacts/owned-lock') && method === 'PUT') {
+            updateCalls += 1;
+            return new Response(
+              JSON.stringify({
+                shortId: 'owned-lock',
+                url: 'https://display.dsp.so/owned-lock',
+                version: 2,
+                name: 'index',
+              }),
+              {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+            );
+          }
+        throw new Error(`Unexpected fetch: ${method} ${url}`);
+        }),
+      );
+      try {
+        const request = (fileName: string) =>
+          fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fileName,
+              providerId: DISPLAYDEV_PROVIDER_ID,
+              displayDev: {
+                name: 'Canonical preview',
+                saveDefaults: true,
+                authentication: {
+                  mode: 'api-key',
+                  apiKey: 'dsp_live_secret',
+                  save: true,
+                },
+              },
+            }),
+          });
+        const first = request('sandbox//index.html');
+        const second = request('sandbox\\index.html');
+        await vi.waitFor(() => expect(createCalls).toBe(1));
+        expect(updateCalls).toBe(0);
+        releaseCreate();
+
+        const responses = await Promise.all([first, second]);
+        const bodies = await Promise.all(
+          responses.map(async (response) => {
+            const text = await response.text();
+            expect(response.status, text).toBe(200);
+            expect(JSON.parse(text)).toMatchObject({
+              savedDisplayDevConfig: {
+                providerId: DISPLAYDEV_PROVIDER_ID,
+                tokenMask: SAVED_DISPLAYDEV_TOKEN_MASK,
+                displayDev: { defaultArtifactName: 'Canonical preview' },
+              },
+            });
+            expect(text).not.toContain('dsp_live_secret');
+            return JSON.parse(text) as {
+              deploymentCount: number;
+              fileName: string;
+            };
+          }),
+        );
+        expect(createCalls).toBe(1);
+        expect(updateCalls).toBe(1);
+        expect(bodies.map((body) => body.deploymentCount).sort()).toEqual([
+          1, 2,
+        ]);
+        expect(bodies.map((body) => body.fileName)).toEqual([
+          'sandbox/index.html',
+          'sandbox/index.html',
+        ]);
+        const deploymentsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/deployments`);
+        expect(deploymentsResponse.status).toBe(200);
+        await expect(deploymentsResponse.json()).resolves.toMatchObject({
+          deployments: [{ fileName: 'sandbox/index.html', deploymentCount: 2 }],
+        });
+        const savedConfig = await fetch(
+        `${baseUrl}/api/deploy/config?providerId=${DISPLAYDEV_PROVIDER_ID}`,
+      );
+        expect(savedConfig.status).toBe(200);
+        await expect(savedConfig.json()).resolves.toMatchObject({
+          configured: true,
+          displayDev: { defaultArtifactName: 'Canonical preview' },
+        });
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('migrates a legacy noncanonical deployment before redeploying', async () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const projectId = `displaydev-legacy-path-${Date.now()}`;
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+    await mkdir(path.join(dir, 'sandbox'), { recursive: true });
+    await writeFile(
+      path.join(dir, 'sandbox', 'index.html'),
+      '<!doctype html><h1>Hello</h1>',
+    );
+    expect(
+      (
+        await fetch(`${baseUrl}/api/projects`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: projectId,
+            name: 'display.dev legacy path migration test',
+            skillId: null,
+            designSystemId: null,
+          }),
+        })
+      ).status,
+    ).toBe(200);
+    await writeFile(
+      runtimeDisplayDevConfigPath(),
+      JSON.stringify({
+        token: 'dsp_live_secret',
+        apiUrl: 'https://api.display.dev',
+      }),
+    );
+    const db = openDatabase(process.cwd(), { dataDir });
+    upsertDeployment(db, {
+      id: 'legacy-path-deployment',
+      projectId,
+      fileName: 'sandbox//index.html',
+      providerId: DISPLAYDEV_PROVIDER_ID,
+      url: 'https://display.dsp.so/owned-legacy',
+      deploymentId: 'owned-legacy',
+      deploymentCount: 4,
+      target: 'preview',
+      status: 'ready',
+      providerMetadata: {
+        displayDev: {
+          mode: 'authenticated',
+          shortId: 'owned-legacy',
+          visibility: 'company',
+          sharedWith: [],
+        },
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+      const realFetch = globalThis.fetch;
+    let createCalls = 0;
+    let updateCalls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        const method = init?.method ?? 'GET';
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        if (url.endsWith('/v1/artifacts') && method === 'POST') {
+          createCalls += 1;
+        }
+        if (url.endsWith('/v1/artifacts/owned-legacy') && method === 'PUT') {
+          updateCalls += 1;
+          return new Response(
+            JSON.stringify({
+              shortId: 'owned-legacy',
+              url: 'https://display.dsp.so/owned-legacy',
+              version: 6,
+              name: 'index',
+            }),
+            {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+          );
+        }
+        if (url.endsWith('/v1/artifacts/owned-legacy') && method === 'GET') {
+          return new Response(
+            JSON.stringify({
+              shortId: 'owned-legacy',
+              currentVersion: 5,
+              visibility: 'company',
+              sharedWith: [],
+            }),
+            {
+              status: 200,
+              headers: {
+                'content-type': 'application/json',
+                etag: '"v5"',
+              },
+            },
+          );
+        }
+        throw new Error(`Unexpected fetch: ${method} ${url}`);
+      }),
+    );
+    try {
+      const response = await fetch(
+        `${baseUrl}/api/projects/${projectId}/deploy`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'sandbox/index.html',
+            providerId: DISPLAYDEV_PROVIDER_ID,
+          }),
+        },
+      );
+      const text = await response.text();
+      expect(response.status, text).toBe(200);
+      expect(JSON.parse(text)).toMatchObject({
+        id: 'legacy-path-deployment',
+        fileName: 'sandbox/index.html',
+        deploymentCount: 5,
+      });
+      expect(createCalls).toBe(0);
+      expect(updateCalls).toBe(1);
+
+      const listResponse = await fetch(`${baseUrl}/api/projects/${projectId}/deployments`);
+      await expect(listResponse.json()).resolves.toMatchObject({
+        deployments: [
+          {
+            id: 'legacy-path-deployment',
+            fileName: 'sandbox/index.html',
+            deploymentCount: 5,
+          },
+        ],
+      });
+    } finally {
+        vi.unstubAllGlobals();
+      }
+  });
+
   it('does not infer display.dev claim state when an API key is saved', async () => {
     const dataDir = process.env.OD_DATA_DIR;
     if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
@@ -464,8 +1250,8 @@ describe('deploy provider routes', () => {
     const priorStateRoot = process.env.OD_USER_STATE_DIR;
     process.env.OD_USER_STATE_DIR = stateRoot;
     const projectId = `displaydev-claim-${Date.now()}`;
-    const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
-    await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
     try {
       const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
         method: 'POST',
@@ -480,7 +1266,9 @@ describe('deploy provider routes', () => {
       expect(createProjectResp.status).toBe(200);
 
       const realFetch = globalThis.fetch;
-      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      let previewReachable = true;
+      const fetchMock = vi.fn(
+        async (input: string | URL | Request, init?: RequestInit) => {
         const url =
           typeof input === 'string'
             ? input
@@ -490,21 +1278,28 @@ describe('deploy provider routes', () => {
         const method = init?.method || (input instanceof Request ? input.method : 'GET');
         if (url.startsWith(baseUrl)) return realFetch(input, init);
         if (url.endsWith('/v1/public/artifacts') && method === 'POST') {
-          return new Response(JSON.stringify({
+            return new Response(
+              JSON.stringify({
             shortId: 'anon1234',
             previewUrl: 'https://public.dsp.so/anon1234',
-            claimUrl: 'https://api.display.dev/v1/claim/claim_123',
+            claimUrl: 'https://app.display.dev/claim?code=claim_123',
             expiresAt: '2026-06-26T00:00:00.000Z',
-          }), {
+              }),
+              {
             status: 201,
             headers: { 'content-type': 'application/json' },
-          });
+          },
+            );
         }
-        if (url === 'https://public.dsp.so/anon1234' && method === 'HEAD') {
-          return new Response('', { status: 200 });
+          if (
+            url === 'https://public.dsp.so/anon1234' &&
+            (method === 'HEAD' || method === 'GET')
+          ) {
+            return new Response('', { status: previewReachable ? 200 : 404 });
         }
         throw new Error(`Unexpected fetch: ${method} ${url}`);
-      });
+        },
+      );
       vi.stubGlobal('fetch', fetchMock);
       try {
         const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
@@ -517,14 +1312,30 @@ describe('deploy provider routes', () => {
         });
         const deployText = await deployResp.text();
         expect(deployResp.status, deployText).toBe(200);
-        expect(JSON.parse(deployText)).toMatchObject({
+        const deployment = JSON.parse(deployText) as { id: string };
+        expect(deployment).toMatchObject({
           providerId: DISPLAYDEV_PROVIDER_ID,
           url: 'https://public.dsp.so/anon1234',
           displayDev: {
             mode: 'anonymous',
             shortId: 'anon1234',
-            claimUrl: 'https://api.display.dev/v1/claim/claim_123',
+            claimUrl: 'https://app.display.dev/claim?code=claim_123',
             expiresAt: '2026-06-26T00:00:00.000Z',
+          },
+        });
+
+        previewReachable = false;
+
+        const checkResp = await fetch(`${baseUrl}/api/projects/${projectId}/deployments/${deployment.id}/check-link`, {
+          method: 'POST',
+        });
+        expect(checkResp.status).toBe(200);
+        expect(await checkResp.json()).toMatchObject({
+          status: 'link-delayed',
+          displayDev: {
+            mode: 'anonymous',
+            shortId: 'anon1234',
+            claimUrl: 'https://app.display.dev/claim?code=claim_123',
           },
         });
 
@@ -537,20 +1348,23 @@ describe('deploy provider routes', () => {
             displayDevClaim: { projectId, fileName: 'index.html' },
           }),
         });
-        expect(saveResp.status).toBe(200);
+      expect(saveResp.status).toBe(200);
 
         const deploymentsResp = await fetch(`${baseUrl}/api/projects/${projectId}/deployments`);
         expect(deploymentsResp.status).toBe(200);
-        const deploymentsBody = await deploymentsResp.json() as { deployments: Array<any> };
+        const deploymentsBody = (await deploymentsResp.json()) as { deployments: Array<any> };
         expect(deploymentsBody.deployments[0]).toMatchObject({
           providerId: DISPLAYDEV_PROVIDER_ID,
           displayDev: {
             mode: 'anonymous',
             shortId: 'anon1234',
-            claimUrl: 'https://api.display.dev/v1/claim/claim_123',
+            claimUrlRedacted: true,
             expiresAt: '2026-06-26T00:00:00.000Z',
           },
         });
+        expect(deploymentsBody.deployments[0]?.displayDev).not.toHaveProperty(
+          'claimUrl',
+        );
         expect(deploymentsBody.deployments[0]).not.toHaveProperty('providerMetadata');
       } finally {
         vi.unstubAllGlobals();
@@ -569,8 +1383,8 @@ describe('deploy provider routes', () => {
     const priorStateRoot = process.env.OD_USER_STATE_DIR;
     process.env.OD_USER_STATE_DIR = stateRoot;
     const projectId = `displaydev-hydration-fail-${Date.now()}`;
-    const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
-    await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
     try {
       const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
         method: 'POST',
@@ -603,15 +1417,16 @@ describe('deploy provider routes', () => {
           displayDev: {
             defaultVisibility: 'private',
             defaultSharedWith: ['fallback@example.com'],
-            defaultShowBranding: 'hide',
           },
         }),
       });
       expect(saveResp.status).toBe(200);
 
       let artifactGetCalls = 0;
+
       const realFetch = globalThis.fetch;
-      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const fetchMock = vi.fn(
+        async (input: string | URL | Request, init?: RequestInit) => {
         const url =
           typeof input === 'string'
             ? input
@@ -644,14 +1459,18 @@ describe('deploy provider routes', () => {
           return new Response('', { status: 200 });
         }
         if (url.endsWith('/v1/artifacts') && method === 'POST') {
-          return new Response(JSON.stringify({
+            return new Response(
+              JSON.stringify({
             shortId: 'owned1234',
             url: 'https://display.dsp.so/owned1234-demo',
             version: 1,
-          }), {
+                name: 'demo',
+              }),
+              {
             status: 201,
             headers: { 'content-type': 'application/json' },
-          });
+          },
+            );
         }
         if (url.endsWith('/v1/artifacts/owned1234') && method === 'GET') {
           artifactGetCalls += 1;
@@ -670,7 +1489,8 @@ describe('deploy provider routes', () => {
           return new Response('', { status: 200 });
         }
         throw new Error(`Unexpected fetch: ${method} ${url}`);
-      });
+        },
+      );
       vi.stubGlobal('fetch', fetchMock);
       try {
         const vercelResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
@@ -683,7 +1503,6 @@ describe('deploy provider routes', () => {
         });
         const vercelText = await vercelResp.text();
         expect(vercelResp.status, vercelText).toBe(200);
-
         const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -722,9 +1541,9 @@ describe('deploy provider routes', () => {
             url: 'https://display.dsp.so/owned1234-demo',
           }),
         ]));
-        const displayDevDeployment = deploymentsBody.deployments.find((deployment) => (
-          deployment.providerId === DISPLAYDEV_PROVIDER_ID
-        ));
+        const displayDevDeployment = deploymentsBody.deployments.find(
+          (deployment) => deployment.providerId === DISPLAYDEV_PROVIDER_ID,
+        );
         expect(displayDevDeployment).toMatchObject({
           displayDev: {
             mode: 'authenticated',
@@ -732,6 +1551,12 @@ describe('deploy provider routes', () => {
             accessSettingsMissing: true,
           },
         });
+        expect(artifactGetCalls).toBe(1);
+
+        const detailResp = await fetch(
+          `${baseUrl}/api/projects/${projectId}/deployments/${encodeURIComponent(displayDevDeployment.id)}`,
+        );
+        expect(detailResp.status).toBe(503);
         expect(artifactGetCalls).toBe(2);
       } finally {
         vi.unstubAllGlobals();
@@ -759,11 +1584,11 @@ describe('deploy provider routes', () => {
   ])(
     'keeps display.dev deploy responses successful when upstream $upstreamStatus access hydration fails',
     async ({ upstreamStatus, message }) => {
-      const dataDir = process.env.OD_DATA_DIR;
-      if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
       const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-displaydev-upstream-code-route-'));
-      const priorStateRoot = process.env.OD_USER_STATE_DIR;
-      process.env.OD_USER_STATE_DIR = stateRoot;
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
       const projectId = `displaydev-upstream-code-${upstreamStatus}-${Date.now()}`;
       const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
       await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
@@ -778,7 +1603,7 @@ describe('deploy provider routes', () => {
             designSystemId: null,
           }),
         });
-        expect(createProjectResp.status).toBe(200);
+      expect(createProjectResp.status).toBe(200);
 
         const saveResp = await fetch(`${baseUrl}/api/deploy/config`, {
           method: 'PUT',
@@ -788,27 +1613,32 @@ describe('deploy provider routes', () => {
             token: 'Bearer dsp_live_secret',
           }),
         });
-        expect(saveResp.status).toBe(200);
+      expect(saveResp.status).toBe(200);
 
-        const realFetch = globalThis.fetch;
-        const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-          const url =
-            typeof input === 'string'
-              ? input
-              : input instanceof Request
-                ? input.url
-                : String(input);
-          const method = init?.method || (input instanceof Request ? input.method : 'GET');
-          if (url.startsWith(baseUrl)) return realFetch(input, init);
+      const realFetch = globalThis.fetch;
+        const fetchMock = vi.fn(
+          async (input: string | URL | Request, init?: RequestInit) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        const method = init?.method || (input instanceof Request ? input.method : 'GET');
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
           if (url.endsWith('/v1/artifacts') && method === 'POST') {
-            return new Response(JSON.stringify({
+              return new Response(
+                JSON.stringify({
               shortId: 'owned1234',
               url: 'https://display.dsp.so/owned1234-demo',
               version: 1,
-            }), {
-              status: 201,
-              headers: { 'content-type': 'application/json' },
-            });
+                  name: 'demo',
+                }),
+                {
+            status: 201,
+            headers: { 'content-type': 'application/json' },
+          },
+              );
           }
           if (url.endsWith('/v1/artifacts/owned1234') && method === 'GET') {
             return new Response(JSON.stringify({ error: message }), {
@@ -816,12 +1646,13 @@ describe('deploy provider routes', () => {
               headers: { 'content-type': 'application/json' },
             });
           }
-          if (url === 'https://display.dsp.so/owned1234-demo' && method === 'HEAD') {
-            return new Response('', { status: 200 });
-          }
-          throw new Error(`Unexpected fetch: ${method} ${url}`);
-        });
-        vi.stubGlobal('fetch', fetchMock);
+        if (url === 'https://display.dsp.so/owned1234-demo' && method === 'HEAD') {
+          return new Response('', { status: 200 });
+        }
+        throw new Error(`Unexpected fetch: ${method} ${url}`);
+          },
+        );
+      vi.stubGlobal('fetch', fetchMock);
         try {
           const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
             method: 'POST',
@@ -848,22 +1679,22 @@ describe('deploy provider routes', () => {
           vi.unstubAllGlobals();
         }
       } finally {
-        if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
-        else process.env.OD_USER_STATE_DIR = priorStateRoot;
-        await rm(stateRoot, { recursive: true, force: true });
-      }
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
     },
   );
 
-  it('omits display.dev access overrides on plain owned redeploys', async () => {
+  it('omits display.dev access overrides and never fetches its stored preview URL', async () => {
     const dataDir = process.env.OD_DATA_DIR;
     if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-displaydev-owned-route-'));
     const priorStateRoot = process.env.OD_USER_STATE_DIR;
     process.env.OD_USER_STATE_DIR = stateRoot;
     const projectId = `displaydev-owned-${Date.now()}`;
-    const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
-    await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
     try {
       const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
         method: 'POST',
@@ -887,7 +1718,6 @@ describe('deploy provider routes', () => {
             defaultArtifactName: 'Config default',
             defaultVisibility: 'company',
             defaultSharedWith: ['default@example.com'],
-            defaultShowBranding: 'inherit',
           },
         }),
       });
@@ -898,12 +1728,15 @@ describe('deploy provider routes', () => {
         visibility: unknown;
         sharedWith: unknown[];
         clearSharedWith: unknown;
-        showBranding: unknown;
       }> = [];
       const createAuthHeaders: string[] = [];
+      const accessReadAuthHeaders: string[] = [];
       const updateAuthHeaders: string[] = [];
       const updateIfMatchHeaders: string[] = [];
-      let failAccessReads = false;
+      let accessReadFailure: { status: number; message: string } | null = null;
+      let previewStatus = 200;
+      let previewProbeGate: Promise<void> | null = null;
+      let previewProbeCalls = 0;
       const authHeader = (headers: RequestInit['headers'] | undefined) => {
         if (!headers) return '';
         if (headers instanceof Headers) return headers.get('Authorization') || '';
@@ -926,8 +1759,10 @@ describe('deploy provider routes', () => {
           || (headers as Record<string, string | undefined>)[name.toLowerCase()];
         return value || '';
       };
+
       const realFetch = globalThis.fetch;
-      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const fetchMock = vi.fn(
+        async (input: string | URL | Request, init?: RequestInit) => {
         const url =
           typeof input === 'string'
             ? input
@@ -938,33 +1773,51 @@ describe('deploy provider routes', () => {
         if (url.startsWith(baseUrl)) return realFetch(input, init);
         if (url.endsWith('/v1/artifacts') && method === 'POST') {
           createAuthHeaders.push(authHeader(init?.headers));
-          return new Response(JSON.stringify({
+            return new Response(
+              JSON.stringify({
             shortId: 'owned1234',
             url: 'https://display.dsp.so/owned1234-demo',
             version: 1,
-          }), {
+                name: 'demo',
+              }),
+              {
             status: 201,
             headers: { 'content-type': 'application/json' },
-          });
+          },
+            );
         }
         if (url.endsWith('/v1/artifacts/owned1234') && method === 'GET') {
-          if (failAccessReads) {
-            return new Response(JSON.stringify({ error: 'temporary display.dev outage on check-link' }), {
-              status: 503,
+            accessReadAuthHeaders.push(authHeader(init?.headers));
+            if (accessReadFailure) {
+              return new Response(
+                JSON.stringify({ error: accessReadFailure.message }),
+                {
+                  status: accessReadFailure.status,
               headers: { 'content-type': 'application/json' },
-            });
+                },
+              );
           }
-          return new Response(JSON.stringify({
+            return new Response(
+              JSON.stringify({
             shortId: 'owned1234',
             url: 'https://display.dsp.so/owned1234-demo',
             currentVersion: 1,
             visibility: 'private',
             sharedWith: ['person@example.com'],
-            showBranding: false,
-          }), {
+              }),
+              {
             status: 200,
             headers: { 'content-type': 'application/json', etag: '"v1"' },
-          });
+          },
+            );
+          }
+          if (
+            url === 'https://display.dsp.so/owned1234-demo' &&
+            (method === 'HEAD' || method === 'GET')
+          ) {
+            previewProbeCalls += 1;
+            if (previewProbeGate) await previewProbeGate;
+            return new Response('', { status: previewStatus });
         }
         if (url.endsWith('/v1/artifacts/owned1234') && method === 'PUT') {
           if (!(init?.body instanceof FormData)) throw new Error('Expected FormData body');
@@ -975,25 +1828,28 @@ describe('deploy provider routes', () => {
             visibility: init.body.get('visibility'),
             sharedWith: init.body.getAll('sharedWith'),
             clearSharedWith: init.body.get('clearSharedWith'),
-            showBranding: init.body.get('showBranding'),
           });
-          return new Response(JSON.stringify({
+            return new Response(
+              JSON.stringify({
             shortId: 'owned1234',
             url: 'https://display.dsp.so/owned1234-demo',
             version: 2,
-          }), {
-            status: 200,
-            headers: { 'content-type': 'application/json' },
-          });
-        }
-        if (url === 'https://display.dsp.so/owned1234-demo' && method === 'HEAD') {
-          return new Response('', { status: 200 });
+                name: 'demo',
+              }),
+              {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+            );
         }
         throw new Error(`Unexpected fetch: ${method} ${url}`);
-      });
+        },
+      );
       vi.stubGlobal('fetch', fetchMock);
       try {
-        const firstDeployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+        const firstDeployResp = await fetch(
+          `${baseUrl}/api/projects/${projectId}/deploy`,
+          {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1002,10 +1858,14 @@ describe('deploy provider routes', () => {
             displayDev: {
               visibility: 'private',
               sharedWith: ['person@example.com'],
-              showBranding: 'hide',
+                authentication: {
+                  mode: 'api-key',
+                  apiKey: 'dsp_live_request_secret',
+                },
             },
           }),
-        });
+          },
+        );
         const firstDeployText = await firstDeployResp.text();
         expect(firstDeployResp.status, firstDeployText).toBe(200);
         expect(JSON.parse(firstDeployText)).toMatchObject({
@@ -1016,7 +1876,6 @@ describe('deploy provider routes', () => {
             shortId: 'owned1234',
             visibility: 'private',
             sharedWith: ['person@example.com'],
-            showBranding: 'hide',
           },
         });
 
@@ -1038,38 +1897,98 @@ describe('deploy provider routes', () => {
             shortId: 'owned1234',
             visibility: 'private',
             sharedWith: ['person@example.com'],
-            showBranding: 'hide',
           },
         });
 
-        expect(updateBodies).toEqual([{
+        expect(updateBodies).toEqual([
+          {
           name: null,
           visibility: null,
           sharedWith: [],
           clearSharedWith: null,
-          showBranding: null,
-        }]);
-        expect(createAuthHeaders).toEqual(['Bearer dsp_live_secret']);
+          },
+        ]);
+        expect(createAuthHeaders).toEqual(['Bearer dsp_live_request_secret']);
+        expect(accessReadAuthHeaders[0]).toBe('Bearer dsp_live_request_secret');
         expect(updateAuthHeaders).toEqual(['Bearer dsp_live_secret']);
         expect(updateIfMatchHeaders).toEqual(['"v1"']);
+
+        let releasePreviewProbe!: () => void;
+        previewProbeGate = new Promise<void>((resolve) => {
+          releasePreviewProbe = resolve;
+        });
+        const checkDuringRedeploy = fetch(`${baseUrl}/api/projects/${projectId}/deployments/${secondDeployment.id}/check-link`, {
+          method: 'POST',
+        });
+        await vi.waitFor(() => expect(previewProbeCalls).toBeGreaterThan(0));
+        const redeployDuringCheck = fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: 'index.html',
+          providerId: DISPLAYDEV_PROVIDER_ID,
+        }),
+      });
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        expect(updateBodies).toHaveLength(1);
+        previewProbeGate = null;
+        releasePreviewProbe();
+        const [concurrentCheckResponse, concurrentRedeployResponse] =
+          await Promise.all([checkDuringRedeploy, redeployDuringCheck]);
+        expect(concurrentCheckResponse.status).toBe(200);
+        expect(concurrentRedeployResponse.status).toBe(200);
+        expect(updateBodies).toHaveLength(2);
+        await expect(concurrentRedeployResponse.json()).resolves.toMatchObject({
+          deploymentCount: 3,
+          displayDev: { shortId: 'owned1234' },
+        });
+        const finalDeploymentResponse = await fetch(
+          `${baseUrl}/api/projects/${projectId}/deployments/${secondDeployment.id}`,
+        );
+        expect(finalDeploymentResponse.status).toBe(200);
+        await expect(finalDeploymentResponse.json()).resolves.toMatchObject({
+          url: 'https://display.dsp.so/owned1234-demo',
+          deploymentCount: 3,
+          displayDev: {
+            mode: 'authenticated',
+            shortId: 'owned1234',
+          },
+        });
 
         const checkResp = await fetch(`${baseUrl}/api/projects/${projectId}/deployments/${secondDeployment.id}/check-link`, {
           method: 'POST',
         });
         const checkText = await checkResp.text();
         expect(checkResp.status, checkText).toBe(200);
-        expect(JSON.parse(checkText)).toMatchObject({
+        const checkBody = JSON.parse(checkText);
+        expect(checkBody).toMatchObject({
           status: 'ready',
           displayDev: {
             mode: 'authenticated',
             shortId: 'owned1234',
             visibility: 'private',
             sharedWith: ['person@example.com'],
-            showBranding: 'hide',
           },
         });
+        expect(checkBody.statusMessage).toBe('Public link is ready.');
 
-        failAccessReads = true;
+        previewStatus = 401;
+        const protectedCheckResp = await fetch(`${baseUrl}/api/projects/${projectId}/deployments/${secondDeployment.id}/check-link`, {
+          method: 'POST',
+        });
+        const protectedCheckText = await protectedCheckResp.text();
+        expect(protectedCheckResp.status, protectedCheckText).toBe(200);
+        expect(JSON.parse(protectedCheckText)).toMatchObject({
+          status: 'protected',
+          statusMessage:
+            'Authentication is required to open this display.dev preview.',
+        });
+        previewStatus = 200;
+
+        accessReadFailure = {
+          status: 503,
+          message: 'temporary display.dev outage on check-link',
+        };
         const failedCheckResp = await fetch(`${baseUrl}/api/projects/${projectId}/deployments/${secondDeployment.id}/check-link`, {
           method: 'POST',
         });
@@ -1079,6 +1998,28 @@ describe('deploy provider routes', () => {
           error: {
             code: 'UPSTREAM_UNAVAILABLE',
             message: 'temporary display.dev outage on check-link',
+          },
+        });
+
+        accessReadFailure = {
+          status: 404,
+          message: 'display.dev artifact not found',
+        };
+        const missingPriorResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: 'index.html',
+          providerId: DISPLAYDEV_PROVIDER_ID,
+        }),
+      });
+        const missingPriorText = await missingPriorResp.text();
+        expect(missingPriorResp.status, missingPriorText).toBe(502);
+        expect(JSON.parse(missingPriorText)).toMatchObject({
+          error: {
+            code: 'UPSTREAM_UNAVAILABLE',
+            message:
+              'display.dev artifact was not found or is not accessible with this API key.',
           },
         });
       } finally {
@@ -1098,7 +2039,7 @@ describe('deploy provider routes', () => {
     const priorStateRoot = process.env.OD_USER_STATE_DIR;
     process.env.OD_USER_STATE_DIR = stateRoot;
     const projectId = `displaydev-multifile-${Date.now()}`;
-    const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
     await writeFile(
       path.join(dir, 'index.html'),
       '<!doctype html><link rel="stylesheet" href="style.css"><h1>Hello</h1>',
@@ -1139,7 +2080,7 @@ describe('deploy provider routes', () => {
           }),
         });
         expect(deployResp.status).toBe(400);
-        const deployBody = await deployResp.json() as {
+        const deployBody = (await deployResp.json()) as {
           error?: { message?: string; details?: { unsupportedFiles?: string[] } };
         };
         expect(deployBody.error?.message).toMatch(/single-file HTML previews/i);
@@ -1752,43 +2693,47 @@ describe('deploy provider routes', () => {
     expectedPagesProject: string;
   }) {
     const { previewDeployUrl, captureFormData, expectedPagesProject } = options;
-    const realFetch = globalThis.fetch;
+
+      const realFetch = globalThis.fetch;
     return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const url =
-        typeof input === 'string'
-          ? input
-          : input instanceof Request
-            ? input.url
-            : String(input);
-      const method = init?.method || (input instanceof Request ? input.method : 'GET');
-      if (url.startsWith(baseUrl)) return realFetch(input, init);
-      if (url.endsWith(`/pages/projects/${expectedPagesProject}`) && method === 'GET') {
-        return new Response(JSON.stringify({ success: true, result: { name: expectedPagesProject } }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
-      }
-      if (url.endsWith(`/pages/projects/${expectedPagesProject}/upload-token`) && method === 'GET') {
-        return new Response(JSON.stringify({ success: true, result: { jwt: 'pages-upload-jwt' } }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
-      }
-      if (url.endsWith('/pages/assets/check-missing') && method === 'POST') {
-        return new Response(JSON.stringify({ success: true, result: [] }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
-      }
-      if (url.endsWith('/pages/assets/upsert-hashes') && method === 'POST') {
-        return new Response(JSON.stringify({ success: true, result: null }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
-      }
-      if (url.endsWith(`/pages/projects/${expectedPagesProject}/deployments`) && method === 'POST') {
-        const form = init?.body as FormData;
-        captureFormData.branch = form?.get('branch') as string | undefined ?? undefined;
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        const method = init?.method || (input instanceof Request ? input.method : 'GET');
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        if (url.endsWith(`/pages/projects/${expectedPagesProject}`) && method === 'GET') {
+          return new Response(JSON.stringify({ success: true, result: { name: expectedPagesProject } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (url.endsWith(`/pages/projects/${expectedPagesProject}/upload-token`) && method === 'GET') {
+          return new Response(JSON.stringify({ success: true, result: { jwt: 'pages-upload-jwt' } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (url.endsWith('/pages/assets/check-missing') && method === 'POST') {
+          return new Response(JSON.stringify({ success: true, result: [] }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (url.endsWith('/pages/assets/upsert-hashes') && method === 'POST') {
+          return new Response(JSON.stringify({ success: true, result: null }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+      if (
+        url.endsWith(`/pages/projects/${expectedPagesProject}/deployments`) && method === 'POST'
+      ) {
+          const form = init?.body as FormData;
+        captureFormData.branch =
+          (form?.get('branch') as string | undefined) ?? undefined;
         return new Response(JSON.stringify({
           success: true,
           result: { id: 'cf_dep_target_test', url: previewDeployUrl },
@@ -1800,7 +2745,7 @@ describe('deploy provider routes', () => {
       if (method === 'HEAD') {
         return new Response('', { status: 200 });
       }
-      throw new Error(`Unexpected fetch: ${method} ${url}`);
+        throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
   }
 
@@ -2247,18 +3192,13 @@ describe('deploy provider routes', () => {
     }
   });
 
-  // The other half of the same telemetry contract: a failure the provider
-  // rejected is classified by ITS HTTP status client-side (HTTP_403 /
-  // HTTP_429 / HTTP_502), and the client only falls back to that status when
-  // the envelope code is generic. So the provider catch-alls must NOT stamp a
-  // structured code — doing so would fold auth, quota and upstream faults into
-  // one bucket, which is coarser than what production already had.
-  it('leaves a provider-rejected deploy on the generic envelope code so the client keeps status bucketing', async () => {
+  it('maps a provider-rejected deploy to the canonical status-specific API code', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-provider-status-'));
     const priorStateRoot = process.env.OD_USER_STATE_DIR;
     process.env.OD_USER_STATE_DIR = stateRoot;
     try {
       const projectId = await setupProjectAndVercelConfig('provider-status', 'Provider status test');
+
       const realFetch = globalThis.fetch;
       const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const url =
@@ -2279,10 +3219,10 @@ describe('deploy provider routes', () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ fileName: 'index.html', providerId: VERCEL_PROVIDER_ID }),
         });
-        const text = await resp.text();
+      const text = await resp.text();
         expect(resp.status, text).toBe(429);
         const body = JSON.parse(text) as { error?: { code?: string } };
-        expect(body.error?.code).toBe('BAD_REQUEST');
+        expect(body.error?.code).toBe('RATE_LIMITED');
       } finally {
         vi.unstubAllGlobals();
       }
@@ -2409,6 +3349,55 @@ describe('deploy provider routes', () => {
     }
   });
 
+  it('rejects displaydev-self target=production before attempting a deploy', async () => {
+
+      const realFetch = globalThis.fetch;
+    const fetchMock = vi.fn(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        throw new Error(`Unexpected provider request: ${url}`);
+      },
+    );
+      vi.stubGlobal('fetch', fetchMock);
+    try {
+      const deployResp = await fetch(`${baseUrl}/api/projects/unused/deploy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: 'index.html',
+          providerId: DISPLAYDEV_PROVIDER_ID,
+          target: 'production',
+        }),
+      });
+        const bodyText = await deployResp.text();
+      expect(deployResp.status, bodyText).toBe(400);
+        const body = JSON.parse(bodyText) as { error?: { code?: string; message?: string } };
+        expect(body.error?.code).toBe('BAD_REQUEST');
+      expect(body.error?.message).toMatch(
+        /display\.dev.*production|production.*display\.dev/i,
+      );
+      expect(
+        fetchMock.mock.calls.filter(([input]) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+          return !url.startsWith(baseUrl);
+        }),
+      ).toHaveLength(0);
+    } finally {
+        vi.unstubAllGlobals();
+      }
+  });
+
   it('still deploys vercel-self successfully when target=preview is explicit (no regression)', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-vercel-preview-ok-'));
     const priorStateRoot = process.env.OD_USER_STATE_DIR;
@@ -2480,6 +3469,188 @@ describe('deploy provider routes', () => {
       if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
       else process.env.OD_USER_STATE_DIR = priorStateRoot;
       await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('display.dev deployment response authority', () => {
+  const deployment = {
+    id: 'deployment-1',
+    projectId: 'project-1',
+    fileName: 'index.html',
+    providerId: DISPLAYDEV_PROVIDER_ID,
+    url: 'https://display.dsp.so/owned1234-demo',
+    deploymentId: 'owned1234',
+    deploymentCount: 1,
+    target: 'preview',
+    status: 'ready',
+    providerMetadata: {
+      displayDev: {
+        mode: 'authenticated',
+        shortId: 'owned1234',
+        visibility: 'company',
+        sharedWith: ['recipient@example.com'],
+      },
+    },
+    createdAt: 1,
+    updatedAt: 1,
+  };
+
+  async function startAuthorityServer(input: {
+    authorizeProjectRequest: (...args: any[]) => Promise<boolean>;
+    fetchDisplayDevArtifactAccessSettings?: () => Promise<
+      Record<string, unknown>
+    >;
+  }) {
+    const app = express();
+    app.use(express.json());
+    const getDeploymentById = vi.fn(() => deployment);
+    const fetchDisplayDevArtifactAccessSettings = vi.fn(
+      input.fetchDisplayDevArtifactAccessSettings ??
+        (async () => ({
+          visibility: 'company',
+          sharedWith: ['recipient@example.com'],
+        })),
+    );
+    registerDeployRoutes(app, {
+      db: {},
+      http: {
+        sendApiError: (
+          res: express.Response,
+          status: number,
+          code: string,
+          message: string,
+          init?: { details?: unknown },
+        ) => res.status(status).json({ error: { code, message, ...init } }),
+      },
+      paths: { PROJECTS_DIR: '/unused' },
+      ids: { randomUUID: () => 'unused' },
+      projectStore: { getProject: () => ({ id: 'project-1' }) },
+      authorizeProjectRequest: input.authorizeProjectRequest,
+      deploy: {
+        VERCEL_PROVIDER_ID,
+        CLOUDFLARE_PAGES_PROVIDER_ID,
+        DISPLAYDEV_PROVIDER_ID,
+        DeployError,
+        listDeployments: () => [deployment],
+        publicDeployments,
+        getDeploymentById,
+        publicDeployment,
+        readDeployConfig: async () => ({ token: 'dsp_live_secret' }),
+        fetchDisplayDevArtifactAccessSettings,
+      },
+    } as any);
+
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) =>
+      server.listen(0, '127.0.0.1', resolve),
+    );
+    const address = server.address();
+    if (!address || typeof address === 'string')
+      throw new Error('server did not bind');
+    return {
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      getDeploymentById,
+      fetchDisplayDevArtifactAccessSettings,
+      close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    };
+  }
+
+  it('keeps the read-authorized deployment list free of display.dev recipients', async () => {
+    const authorizeProjectRequest = vi.fn(async () => true);
+    const api = await startAuthorityServer({ authorizeProjectRequest });
+    try {
+      const response = await fetch(
+        `${api.baseUrl}/api/projects/project-1/deployments`,
+      );
+      expect(response.status).toBe(200);
+      const text = await response.text();
+      expect(text).not.toContain('recipient@example.com');
+      expect(JSON.parse(text)).toMatchObject({
+        deployments: [
+          {
+          displayDev: {
+            mode: 'authenticated',
+            shortId: 'owned1234',
+            accessSettingsMissing: true,
+          },
+        },
+        ],
+      });
+      expect(authorizeProjectRequest).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        'project-1',
+        { mode: 'read' },
+      );
+      expect(api.fetchDisplayDevArtifactAccessSettings).not.toHaveBeenCalled();
+    } finally {
+      await api.close();
+    }
+  });
+
+  it('requires writeFiles authority before hydrating display.dev deployment detail', async () => {
+    const authorizeProjectRequest = vi.fn(
+      async (_req, res: express.Response) => {
+        res
+          .status(403)
+          .json({ error: { code: 'WORKSPACE_PROJECT_PERMISSION_DENIED' } });
+        return false;
+      },
+    );
+    const api = await startAuthorityServer({ authorizeProjectRequest });
+    try {
+      const response = await fetch(
+        `${api.baseUrl}/api/projects/project-1/deployments/deployment-1`,
+      );
+      expect(response.status).toBe(403);
+      expect(authorizeProjectRequest).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        'project-1',
+        { mode: 'write', capability: 'writeFiles' },
+      );
+      expect(api.getDeploymentById).not.toHaveBeenCalled();
+      expect(api.fetchDisplayDevArtifactAccessSettings).not.toHaveBeenCalled();
+    } finally {
+      await api.close();
+    }
+  });
+
+  it('returns display.dev recipients to a write-authorized detail request', async () => {
+    const authorizeProjectRequest = vi.fn(async () => true);
+    const api = await startAuthorityServer({
+      authorizeProjectRequest,
+      fetchDisplayDevArtifactAccessSettings: async () => ({
+        visibility: 'public',
+        sharedWith: ['recipient@example.com'],
+      }),
+    });
+    try {
+      const response = await fetch(
+        `${api.baseUrl}/api/projects/project-1/deployments/deployment-1`,
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      await expect(response.json()).resolves.toMatchObject({
+        displayDev: {
+          mode: 'authenticated',
+          shortId: 'owned1234',
+          visibility: 'public',
+          sharedWith: ['recipient@example.com'],
+        },
+      });
+      expect(authorizeProjectRequest).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        'project-1',
+        { mode: 'write', capability: 'writeFiles' },
+      );
+      expect(api.fetchDisplayDevArtifactAccessSettings).toHaveBeenCalledTimes(
+        1,
+      );
+    } finally {
+      await api.close();
     }
   });
 });

@@ -892,6 +892,15 @@ export function getDeploymentById(db: SqliteDb, projectId: string, id: string) {
   return row ? normalizeDeployment(row) : null;
 }
 
+export function renameDeploymentFileName(db: SqliteDb, projectId: string, id: string, fileName: string) {
+  const result = db.prepare(
+    `UPDATE deployments
+          SET file_name = ?, updated_at = ?
+        WHERE project_id = ? AND id = ?`,
+  ).run(fileName, Date.now(), projectId, id);
+  return result.changes > 0 ? getDeploymentById(db, projectId, id) : null;
+}
+
 export function upsertDeployment(db: SqliteDb, deployment: DbRow) {
   const existing = getDeployment(
     db,

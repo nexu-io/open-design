@@ -855,23 +855,32 @@ export interface CloudflarePagesDeploySelection {
 
 export interface DisplayDevConfigHints {
   defaultArtifactName?: string;
-  defaultVisibility?: 'public' | 'company' | 'private';
-  defaultSharedWith?: string[];
-  defaultShowBranding?: 'inherit' | 'show' | 'hide';
 }
 
 export interface DisplayDevDeploySelection {
   name?: string;
   visibility?: 'public' | 'company' | 'private';
   sharedWith?: string[];
-  showBranding?: 'inherit' | 'show' | 'hide';
+  saveDefaults?: boolean;
+  authentication?:
+    | { mode: 'saved-key' }
+    | { mode: 'anonymous'; save?: boolean }
+    | { mode: 'api-key'; apiKey: string; save?: boolean };
 }
 
 export type DisplayDevDeploymentInfo =
   | {
       mode: 'anonymous';
-      shortId?: string;
-      claimUrl?: string;
+      shortId: string;
+      claimUrl: string;
+      claimUrlRedacted?: never;
+      expiresAt?: string;
+    }
+  | {
+      mode: 'anonymous';
+      shortId: string;
+      claimUrl?: never;
+      claimUrlRedacted: true;
       expiresAt?: string;
     }
   | {
@@ -884,7 +893,6 @@ export type DisplayDevDeploymentInfo =
       shortId: string;
       visibility: 'public' | 'company' | 'private';
       sharedWith: string[];
-      showBranding: 'inherit' | 'show' | 'hide';
     };
 
 export type DeploymentLinkStatus =
@@ -956,7 +964,6 @@ export interface DeployConfigResponse {
   teamId: string;
   teamSlug: string;
   accountId?: string;
-  apiUrl?: string;
   projectName?: string;
   cloudflarePages?: CloudflarePagesConfigHints;
   displayDev?: DisplayDevConfigHints;
@@ -970,7 +977,6 @@ export interface UpdateDeployConfigRequest {
   teamId?: string;
   teamSlug?: string;
   accountId?: string;
-  apiUrl?: string;
   projectName?: string;
   cloudflarePages?: CloudflarePagesConfigHints;
   displayDev?: DisplayDevConfigHints;
@@ -1006,7 +1012,10 @@ export interface DeployProjectFileRequest {
   displayDev?: DisplayDevDeploySelection;
 }
 
-export interface DeployProjectFileResponse extends DeploymentInfo {}
+export interface DeployProjectFileResponse extends DeploymentInfo {
+  displayDevConfigSaveFailed?: boolean;
+  savedDisplayDevConfig?: DeployConfigResponse;
+}
 
 export interface CheckDeploymentLinkResponse extends DeploymentInfo {}
 

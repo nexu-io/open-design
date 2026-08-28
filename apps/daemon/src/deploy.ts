@@ -1,21 +1,40 @@
-import fs from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { hash as blake3Hash } from 'blake3-wasm';
 import { listFiles, readProjectFile, validateProjectPath } from './projects.js';
+import { withDeployConfigFileLock, writeDeployConfigFile } from './deploy/config-file.js';
+import { DeployError } from './deploy/errors.js';
+import {
+  displayDevConfigPath,
+  DISPLAYDEV_PROVIDER_ID,
+  publicDisplayDevConfig,
+  readDisplayDevConfig,
+  writeDisplayDevConfig,
+  type DisplayDevConfigHints,
+} from './integrations/displaydev.js';
+
+export { DeployError } from './deploy/errors.js';
+export {
+  deployToDisplayDev,
+  assertDisplayDevPreviewUrl,
+  DISPLAYDEV_FETCH_TIMEOUT_MS,
+  DISPLAYDEV_PROVIDER_ID,
+  fetchDisplayDevArtifactAccessSettings,
+  publicDisplayDevConfig,
+  readDisplayDevConfig,
+  SAVED_DISPLAYDEV_TOKEN_MASK,
+  writeDisplayDevConfig,
+} from './integrations/displaydev.js';
 
 export const VERCEL_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
-export const DISPLAYDEV_PROVIDER_ID = 'displaydev-self';
 export const SAVED_TOKEN_MASK = 'saved-vercel-token';
 export const SAVED_CLOUDFLARE_TOKEN_MASK = 'saved-cloudflare-token';
-export const SAVED_DISPLAYDEV_TOKEN_MASK = 'saved-displaydev-token';
 
 type JsonObject = Record<string, any>;
 type DeployProviderId = typeof VERCEL_PROVIDER_ID | typeof CLOUDFLARE_PAGES_PROVIDER_ID | typeof DISPLAYDEV_PROVIDER_ID;
-type DeployErrorDetails = JsonObject | string | undefined;
 type DeployConfig = {
   token: string;
   teamId?: string | undefined;
@@ -33,28 +52,6 @@ type CloudflarePagesConfigHints = {
   lastZoneId?: string;
   lastZoneName?: string;
   lastDomainPrefix?: string;
-};
-type DisplayDevConfigHints = {
-  defaultArtifactName?: string;
-  defaultVisibility?: 'public' | 'company' | 'private';
-  defaultSharedWith?: string[];
-  defaultShowBranding?: 'inherit' | 'show' | 'hide';
-};
-type DisplayDevDeploySelection = {
-  name?: string;
-  visibility?: 'public' | 'company' | 'private';
-  sharedWith?: string[];
-  clearSharedWith?: boolean;
-  showBranding?: 'inherit' | 'show' | 'hide';
-};
-type DisplayDevAccessSettings = {
-  visibility: 'public' | 'company' | 'private';
-  sharedWith: string[];
-  showBranding: 'inherit' | 'show' | 'hide';
-};
-type DisplayDevCurrentArtifact = {
-  version: number;
-  accessSettings: DisplayDevAccessSettings;
 };
 type DeployFile = { file: string; data: Buffer | Uint8Array | string; contentType?: string; sourcePath?: string };
 type DeployFilePlan = { entryPath: string; html: string; files: DeployFile[]; missing: string[]; invalid: string[] };
@@ -80,7 +77,6 @@ function errorMessage(err: unknown, fallback: string): string {
 
 const VERCEL_API = 'https://api.vercel.com';
 const CLOUDFLARE_API = 'https://api.cloudflare.com/client/v4';
-const DISPLAYDEV_API = 'https://api.display.dev';
 const CLOUDFLARE_API_PAGE_SIZE = 100;
 const CLOUDFLARE_API_MAX_PAGES = 100;
 export const CLOUDFLARE_PAGES_ASSET_UPLOAD_MAX_FILES = 100;
@@ -89,24 +85,12 @@ export const CLOUDFLARE_PAGES_ASSET_MAX_BYTES = 25 * 1024 * 1024;
 const VERCEL_PROTECTED_MESSAGE =
   'Deployment is protected by Vercel. Disable Deployment Protection or use a custom domain to make this link public.';
 
-export class DeployError extends Error {
-  status: number;
-  details: DeployErrorDetails;
-  code?: string | undefined;
-
-  constructor(message: string, status = 400, details: DeployErrorDetails = undefined, code?: string) {
-    super(message);
-    this.name = 'DeployError';
-    this.status = status;
-    this.details = details;
-    this.code = code;
+export function deployConfigPath(providerId: DeployProviderId = VERCEL_PROVIDER_ID, runtimeDataDir?: string) {
+  if (providerId === DISPLAYDEV_PROVIDER_ID) {
+    return displayDevConfigPath(requiredDisplayDevRuntimeDataDir(runtimeDataDir));
   }
-}
-
-export function deployConfigPath(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
   const base = process.env.OD_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return path.join(base, 'cloudflare-pages.json');
-  if (providerId === DISPLAYDEV_PROVIDER_ID) return path.join(base, 'displaydev.json');
   return path.join(base, 'vercel.json');
 }
 
@@ -141,135 +125,49 @@ export async function readCloudflarePagesConfig(): Promise<DeployConfig> {
   }
 }
 
-export async function readDisplayDevConfig(): Promise<DeployConfig> {
-  try {
-    const raw = await readFile(deployConfigPath(DISPLAYDEV_PROVIDER_ID), 'utf8');
-    const parsed = JSON.parse(raw);
-    return {
-      token: typeof parsed.token === 'string' ? parsed.token : '',
-      apiUrl: validateDisplayDevApiUrl(parsed.apiUrl),
-      displayDev: normalizeDisplayDevConfigHints(parsed.displayDev),
-    };
-  } catch (err) {
-    if (isErrnoException(err) && err.code === 'ENOENT') {
-      return {
-        token: '',
-        apiUrl: DISPLAYDEV_API,
-        displayDev: {},
-      };
-    }
-    throw err;
-  }
-}
-
-async function readDisplayDevConfigForWrite(): Promise<DeployConfig> {
-  try {
-    const raw = await readFile(deployConfigPath(DISPLAYDEV_PROVIDER_ID), 'utf8');
-    const parsed = JSON.parse(raw);
-    let apiUrl = DISPLAYDEV_API;
-    let displayDev: DisplayDevConfigHints = {};
-    try {
-      apiUrl = validateDisplayDevApiUrl(parsed?.apiUrl);
-    } catch {
-      apiUrl = DISPLAYDEV_API;
-    }
-    try {
-      displayDev = normalizeDisplayDevConfigHints(parsed?.displayDev);
-    } catch {
-      displayDev = {};
-    }
-    return {
-      token: typeof parsed?.token === 'string' ? parsed.token : '',
-      apiUrl,
-      displayDev,
-    };
-  } catch (err) {
-    if (isErrnoException(err) && err.code === 'ENOENT') {
-      return {
-        token: '',
-        apiUrl: DISPLAYDEV_API,
-        displayDev: {},
-      };
-    }
-    if (err instanceof SyntaxError) {
-      return {
-        token: '',
-        apiUrl: DISPLAYDEV_API,
-        displayDev: {},
-      };
-    }
-    throw err;
-  }
-}
-
 export async function writeVercelConfig(input: DeployConfigInput) {
-  const current = await readVercelConfig();
-  const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
-  const next = {
-    token:
-      tokenInput && tokenInput !== SAVED_TOKEN_MASK
-        ? tokenInput
-        : current.token,
-    teamId: typeof input?.teamId === 'string' ? input.teamId.trim() : current.teamId,
-    teamSlug:
-      typeof input?.teamSlug === 'string' ? input.teamSlug.trim() : current.teamSlug,
-  };
-  await writeDeployConfigFile(deployConfigPath(VERCEL_PROVIDER_ID), next);
-  return publicDeployConfig(next);
+  const configPath = deployConfigPath(VERCEL_PROVIDER_ID);
+  return withDeployConfigFileLock(configPath, async () => {
+    const current = await readVercelConfig();
+    const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
+    const next = {
+      token:
+        tokenInput && tokenInput !== SAVED_TOKEN_MASK
+          ? tokenInput
+          : current.token,
+      teamId: typeof input?.teamId === 'string' ? input.teamId.trim() : current.teamId,
+      teamSlug:
+        typeof input?.teamSlug === 'string' ? input.teamSlug.trim() : current.teamSlug,
+    };
+    await writeDeployConfigFile(configPath, next);
+    return publicDeployConfig(next);
+  });
 }
 
 export async function writeCloudflarePagesConfig(input: DeployConfigInput) {
-  const current = await readCloudflarePagesConfig();
-  const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
-  const cloudflarePages = normalizeCloudflarePagesConfigHints(input?.cloudflarePages, current.cloudflarePages);
-  const next: DeployConfig = {
-    token:
-      tokenInput && tokenInput !== SAVED_CLOUDFLARE_TOKEN_MASK
-        ? tokenInput
-        : current.token,
-    accountId: typeof input?.accountId === 'string' ? input.accountId.trim() : current.accountId,
-    // Legacy installs may already have a saved Cloudflare Pages projectName.
-    // New writes intentionally stop treating it as user configuration: the
-    // deploy route derives a Pages project name from the current OD project,
-    // mirroring Vercel's automatic `od-${projectId}` deployment name.
-    projectName: '',
-  };
-  if (Object.keys(cloudflarePages).length > 0) next.cloudflarePages = cloudflarePages;
-  if (!next.token) throw new DeployError('Cloudflare API token is required.', 400, undefined, 'CF_TOKEN_REQUIRED');
-  if (!next.accountId) throw new DeployError('Cloudflare account ID is required.', 400, undefined, 'CF_ACCOUNT_ID_REQUIRED');
-  await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), next);
-  return publicCloudflarePagesConfig(next);
-}
-
-export async function writeDisplayDevConfig(input: DeployConfigInput) {
-  const current = await readDisplayDevConfigForWrite();
-  const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
-  const displayDev = normalizeDisplayDevConfigHints(input?.displayDev, current.displayDev);
-  const apiUrl = Object.prototype.hasOwnProperty.call(input ?? {}, 'apiUrl')
-    ? validateDisplayDevApiUrl(input?.apiUrl, current.apiUrl)
-    : normalizeDisplayDevApiUrl(current.apiUrl);
-  const next: DeployConfig = {
-    token:
-      tokenInput && tokenInput !== SAVED_DISPLAYDEV_TOKEN_MASK
-        ? displayDevTokenFromInput(tokenInput)
-        : input?.clearToken === true
-          ? ''
+  const configPath = deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID);
+  return withDeployConfigFileLock(configPath, async () => {
+    const current = await readCloudflarePagesConfig();
+    const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
+    const cloudflarePages = normalizeCloudflarePagesConfigHints(input?.cloudflarePages, current.cloudflarePages);
+    const next: DeployConfig = {
+      token:
+        tokenInput && tokenInput !== SAVED_CLOUDFLARE_TOKEN_MASK
+          ? tokenInput
           : current.token,
-    apiUrl,
-  };
-  if (Object.keys(displayDev).length > 0) next.displayDev = displayDev;
-  await writeDeployConfigFile(deployConfigPath(DISPLAYDEV_PROVIDER_ID), next);
-  return publicDisplayDevConfig(next);
-}
-
-async function writeDeployConfigFile(file: string, config: DeployConfig) {
-  await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
-  try {
-    fs.chmodSync(file, 0o600);
-  } catch {
-    // Best effort on filesystems that do not support chmod.
-  }
+      accountId: typeof input?.accountId === 'string' ? input.accountId.trim() : current.accountId,
+      // Legacy installs may already have a saved Cloudflare Pages projectName.
+      // New writes intentionally stop treating it as user configuration: the
+      // deploy route derives a Pages project name from the current OD project,
+      // mirroring Vercel's automatic `od-${projectId}` deployment name.
+      projectName: '',
+    };
+    if (Object.keys(cloudflarePages).length > 0) next.cloudflarePages = cloudflarePages;
+    if (!next.token) throw new DeployError('Cloudflare API token is required.', 400, undefined, 'CF_TOKEN_REQUIRED');
+    if (!next.accountId) throw new DeployError('Cloudflare account ID is required.', 400, undefined, 'CF_ACCOUNT_ID_REQUIRED');
+    await writeDeployConfigFile(configPath, next);
+    return publicCloudflarePagesConfig(next);
+  });
 }
 
 export function publicDeployConfig(config: Partial<DeployConfig>) {
@@ -299,31 +197,37 @@ export function publicCloudflarePagesConfig(config: Partial<DeployConfig>) {
   return body;
 }
 
-export function publicDisplayDevConfig(config: Partial<DeployConfig>) {
-  const displayDev = normalizeDisplayDevConfigHints(config?.displayDev);
-  const body: JsonObject = {
-    providerId: DISPLAYDEV_PROVIDER_ID,
-    configured: Boolean(config?.token),
-    tokenMask: config?.token ? SAVED_DISPLAYDEV_TOKEN_MASK : '',
-    teamId: '',
-    teamSlug: '',
-    apiUrl: normalizeDisplayDevApiUrl(config?.apiUrl),
-    target: 'preview',
-  };
-  if (Object.keys(displayDev).length > 0) body.displayDev = displayDev;
-  return body;
-}
-
-export async function readDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
+export async function readDeployConfig(
+  providerId: DeployProviderId = VERCEL_PROVIDER_ID,
+  runtimeDataDir?: string,
+): Promise<DeployConfig> {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return readCloudflarePagesConfig();
-  if (providerId === DISPLAYDEV_PROVIDER_ID) return readDisplayDevConfig();
+  if (providerId === DISPLAYDEV_PROVIDER_ID) return readDisplayDevConfig(requiredDisplayDevRuntimeDataDir(runtimeDataDir));
   return readVercelConfig();
 }
 
-export async function writeDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID, input: DeployConfigInput = {}) {
+export async function writeDeployConfig(
+  providerId: DeployProviderId = VERCEL_PROVIDER_ID,
+  input: DeployConfigInput = {},
+  runtimeDataDir?: string,
+  options: { expectedToken?: string } = {},
+) {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return writeCloudflarePagesConfig(input);
-  if (providerId === DISPLAYDEV_PROVIDER_ID) return writeDisplayDevConfig(input);
+  if (providerId === DISPLAYDEV_PROVIDER_ID) {
+    return writeDisplayDevConfig(
+      input,
+      requiredDisplayDevRuntimeDataDir(runtimeDataDir),
+      options,
+    );
+  }
   return writeVercelConfig(input);
+}
+
+function requiredDisplayDevRuntimeDataDir(runtimeDataDir: string | undefined) {
+  if (!runtimeDataDir) {
+    throw new Error('display.dev config requires the resolved daemon data directory.');
+  }
+  return runtimeDataDir;
 }
 
 export function publicDeployConfigForProvider(providerId: DeployProviderId = VERCEL_PROVIDER_ID, config: Partial<DeployConfig> = {}) {
@@ -362,201 +266,6 @@ function normalizeCloudflarePagesConfigHints(input: unknown, fallback: Cloudflar
     ...(lastZoneId ? { lastZoneId } : {}),
     ...(lastZoneName ? { lastZoneName } : {}),
     ...(lastDomainPrefix ? { lastDomainPrefix } : {}),
-  };
-}
-
-function normalizeDisplayDevConfigHints(input: unknown, fallback: DisplayDevConfigHints = {}): DisplayDevConfigHints {
-  const inputObject = displayDevObjectFromInput(input);
-  const hasSource = Boolean(inputObject);
-  const source = (inputObject ?? {}) as JsonObject;
-  const prior = (!hasSource && fallback && typeof fallback === 'object' ? fallback : {}) as DisplayDevConfigHints;
-  const defaultArtifactName =
-    typeof source.defaultArtifactName === 'string'
-      ? source.defaultArtifactName.trim()
-      : typeof prior.defaultArtifactName === 'string'
-        ? prior.defaultArtifactName.trim()
-        : '';
-  const hasDefaultVisibilityInput = Object.prototype.hasOwnProperty.call(source, 'defaultVisibility');
-  const defaultVisibility = hasDefaultVisibilityInput
-    ? displayDevVisibilityFromInput(source.defaultVisibility, 'defaultVisibility')
-    : typeof prior.defaultVisibility === 'string'
-      ? displayDevVisibilityFromInput(prior.defaultVisibility, 'defaultVisibility')
-      : undefined;
-  const hasDefaultSharedWithInput = Object.prototype.hasOwnProperty.call(source, 'defaultSharedWith');
-  const rawSharedWith = hasDefaultSharedWithInput
-    ? displayDevStringArrayFromInput(source.defaultSharedWith, 'defaultSharedWith')
-    : Array.isArray(prior.defaultSharedWith)
-      ? displayDevStringArrayFromInput(prior.defaultSharedWith, 'defaultSharedWith')
-      : [];
-  const defaultSharedWith = rawSharedWith
-    .map((item) => item.trim())
-    .filter(Boolean);
-  const hasDefaultShowBrandingInput = Object.prototype.hasOwnProperty.call(source, 'defaultShowBranding');
-  const defaultShowBranding = hasDefaultShowBrandingInput
-    ? displayDevShowBrandingFromInput(source.defaultShowBranding, 'defaultShowBranding')
-    : typeof prior.defaultShowBranding === 'string'
-      ? displayDevShowBrandingFromInput(prior.defaultShowBranding, 'defaultShowBranding')
-      : undefined;
-  return {
-    ...(defaultArtifactName ? { defaultArtifactName } : {}),
-    ...(defaultVisibility ? { defaultVisibility } : {}),
-    ...(defaultSharedWith.length ? { defaultSharedWith } : {}),
-    ...(defaultShowBranding ? { defaultShowBranding } : {}),
-  };
-}
-
-function normalizeDisplayDevDeploySelection(input: unknown): DisplayDevDeploySelection {
-  const inputObject = displayDevObjectFromInput(input);
-  if (!inputObject) return {};
-  const source = inputObject as JsonObject;
-  const name = typeof source.name === 'string' ? source.name.trim() : '';
-  const hasVisibilityInput = Object.prototype.hasOwnProperty.call(source, 'visibility');
-  const visibility = hasVisibilityInput
-    ? displayDevVisibilityFromInput(source.visibility)
-    : undefined;
-  const hasSharedWithInput = Object.prototype.hasOwnProperty.call(source, 'sharedWith');
-  const rawSharedWith = hasSharedWithInput
-    ? displayDevSharedWithFromInput(source.sharedWith)
-    : [];
-  const sharedWith = rawSharedWith
-    .map((item) => item.trim())
-    .filter(Boolean);
-  const hasShowBrandingInput = Object.prototype.hasOwnProperty.call(source, 'showBranding');
-  const showBranding = hasShowBrandingInput
-    ? displayDevShowBrandingFromInput(source.showBranding)
-    : undefined;
-  return {
-    ...(name ? { name } : {}),
-    ...(visibility ? { visibility } : {}),
-    ...(sharedWith.length ? { sharedWith } : {}),
-    ...(hasSharedWithInput && sharedWith.length === 0 ? { clearSharedWith: true } : {}),
-    ...(showBranding ? { showBranding } : {}),
-  };
-}
-
-function displayDevObjectFromInput(input: unknown): JsonObject | null {
-  if (input == null) return null;
-  if (typeof input === 'object' && !Array.isArray(input)) return input as JsonObject;
-  throw new DeployError('display.dev settings must be an object.', 400);
-}
-
-function displayDevVisibilityFromInput(value: unknown, field = 'visibility'): DisplayDevDeploySelection['visibility'] {
-  if (value === 'public' || value === 'company' || value === 'private') return value;
-  throw new DeployError(`display.dev ${field} must be "public", "company", or "private".`, 400);
-}
-
-function displayDevShowBrandingFromInput(value: unknown, field = 'showBranding'): DisplayDevDeploySelection['showBranding'] {
-  if (value === 'inherit' || value === 'show' || value === 'hide') return value;
-  throw new DeployError(`display.dev ${field} must be "inherit", "show", or "hide".`, 400);
-}
-
-function displayDevSharedWithFromInput(value: unknown): string[] {
-  if (Array.isArray(value)) return displayDevStringArrayFromInput(value, 'sharedWith');
-  if (typeof value === 'string') return value.split(',');
-  throw new DeployError('display.dev sharedWith must be a string or an array of strings.', 400);
-}
-
-function displayDevStringArrayFromInput(value: unknown, field: string): string[] {
-  if (!Array.isArray(value)) {
-    throw new DeployError(`display.dev ${field} must be an array of strings.`, 400);
-  }
-  if (value.every((item) => typeof item === 'string')) return value;
-  throw new DeployError(`display.dev ${field} must contain only strings.`, 400);
-}
-
-function displayDevAccessSettingsFromArtifact(input: unknown): DisplayDevAccessSettings {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    throw new DeployError('display.dev did not return artifact access settings.', 502, input as DeployErrorDetails);
-  }
-  const source = input as JsonObject;
-  const visibility = displayDevVisibilityFromArtifact(source.visibility);
-  const sharedWith = displayDevSharedWithFromArtifact(source.sharedWith, visibility);
-  const showBranding = displayDevShowBrandingFromArtifact(source.showBranding);
-  return { visibility, sharedWith, showBranding };
-}
-
-function displayDevVisibilityFromArtifact(value: unknown): DisplayDevAccessSettings['visibility'] {
-  if (value === 'public' || value === 'company' || value === 'private') return value;
-  throw new DeployError('display.dev did not return a valid artifact visibility.', 502);
-}
-
-function displayDevSharedWithFromArtifact(
-  value: unknown,
-  visibility: DisplayDevAccessSettings['visibility'],
-): string[] {
-  if (value === undefined || value === null) {
-    if (visibility === 'private') {
-      throw new DeployError('display.dev did not return artifact recipients.', 502);
-    }
-    return [];
-  }
-  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) {
-    throw new DeployError('display.dev did not return valid artifact recipients.', 502);
-  }
-  return value.map((item) => item.trim()).filter(Boolean);
-}
-
-function displayDevShowBrandingFromArtifact(value: unknown): DisplayDevAccessSettings['showBranding'] {
-  if (value === true) return 'show';
-  if (value === false) return 'hide';
-  if (value === null) return 'inherit';
-  if (value === 'inherit' || value === 'show' || value === 'hide') return value;
-  throw new DeployError('display.dev did not return a valid artifact branding setting.', 502);
-}
-
-function displayDevDefaultArtifactName(entry: DeployFile, projectId: string) {
-  const source = entry.sourcePath || entry.file || projectId || 'open-design-preview';
-  const base = path.basename(source).replace(/\.[^.]*$/, '').trim();
-  return base || projectId || 'open-design-preview';
-}
-
-function normalizeDisplayDevApiUrl(input: unknown, fallback = DISPLAYDEV_API) {
-  const raw = typeof input === 'string' ? input.trim() : '';
-  if (!raw) return fallback || DISPLAYDEV_API;
-  try {
-    const url = new URL(raw);
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') return fallback || DISPLAYDEV_API;
-    return url.toString().replace(/\/+$/u, '');
-  } catch {
-    return fallback || DISPLAYDEV_API;
-  }
-}
-
-function validateDisplayDevApiUrl(input: unknown, fallback = DISPLAYDEV_API) {
-  if (input === undefined || input === null) return fallback || DISPLAYDEV_API;
-  if (typeof input !== 'string') {
-    throw new DeployError('display.dev API URL must be a string.', 400);
-  }
-  const raw = input.trim();
-  if (!raw) return fallback || DISPLAYDEV_API;
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    throw new DeployError('display.dev API URL must be a valid HTTP or HTTPS URL.', 400);
-  }
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-    throw new DeployError('display.dev API URL must be a valid HTTP or HTTPS URL.', 400);
-  }
-  return url.toString().replace(/\/+$/u, '');
-}
-
-function displayDevTokenFromInput(input: string) {
-  return input.replace(/^Bearer\s+/iu, '').trim();
-}
-
-function displayDevAuthorization(config: DeployConfig) {
-  const token = displayDevTokenFromInput(config?.token || '');
-  return token ? `Bearer ${token}` : '';
-}
-
-function displayDevHeaders(auth: string, extra: Record<string, string> = {}) {
-  return {
-    ...(auth ? { Authorization: auth } : {}),
-    'X-Client-Source': 'od-deploy-provider@0.8.0',
-    'X-Actor-Type': 'human',
-    'X-Actor-Name': 'open-design/0.8.0',
-    ...extra,
   };
 }
 
@@ -881,205 +590,6 @@ export async function deployToCloudflarePages(input: { config: DeployConfig; fil
     cloudflarePages: cloudflarePagesInfo,
     providerMetadata: cloudflarePagesProviderMetadata(config.projectName, cloudflarePagesInfo, { projectId }),
   };
-}
-
-export async function deployToDisplayDev(input: { config: DeployConfig; files: DeployFile[]; projectId: string; displayDev?: unknown; priorMetadata?: JsonObject | undefined }) {
-  const {
-    config,
-    files,
-    projectId,
-    displayDev = undefined,
-    priorMetadata = undefined,
-  } = input || {};
-  const entry = files?.[0];
-  if (!entry) throw new DeployError('No file found to publish to display.dev.', 400);
-  if (files.length > 1) {
-    throw new DeployError(
-      'display.dev deploy currently supports single-file HTML previews only. Remove or inline referenced assets before deploying to display.dev.',
-      400,
-      {
-        providerId: DISPLAYDEV_PROVIDER_ID,
-        unsupportedFiles: files.slice(1).map((file) => file.sourcePath || file.file),
-      },
-    );
-  }
-
-  const selection = normalizeDisplayDevDeploySelection(displayDev);
-  const apiUrl = validateDisplayDevApiUrl(config?.apiUrl);
-  const auth = displayDevAuthorization(config);
-  const priorDisplayDev =
-    priorMetadata?.displayDev && typeof priorMetadata.displayDev === 'object' && !Array.isArray(priorMetadata.displayDev)
-      ? priorMetadata.displayDev as JsonObject
-      : undefined;
-  const priorShortId = typeof priorDisplayDev?.shortId === 'string' ? priorDisplayDev.shortId : '';
-  const shouldUpdate = Boolean(auth && priorShortId && priorDisplayDev?.mode === 'authenticated');
-  if (shouldUpdate && selection.visibility && selection.visibility !== 'private' && selection.sharedWith?.length) {
-    throw new DeployError('display.dev sharedWith requires private visibility.', 400);
-  }
-  const currentArtifact = shouldUpdate
-    ? await fetchDisplayDevCurrentArtifact(apiUrl, auth, priorShortId)
-    : undefined;
-  const body = new FormData();
-  const data = Buffer.from(entry.data);
-  body.append(
-    'file',
-    new Blob([data], { type: entry.contentType || 'text/html' }),
-    entry.sourcePath || entry.file || 'index.html',
-  );
-  const defaultName = config?.displayDev?.defaultArtifactName?.trim();
-  const name = shouldUpdate
-    ? selection.name || ''
-    : selection.name || defaultName || (auth ? displayDevDefaultArtifactName(entry, projectId) : '');
-  if (name) body.append('name', name);
-  if (auth) {
-    if (shouldUpdate) {
-      const effectiveVisibility = selection.visibility || currentArtifact?.accessSettings.visibility;
-      if (selection.sharedWith?.length && effectiveVisibility !== 'private') {
-        throw new DeployError('display.dev sharedWith requires private visibility.', 400);
-      }
-      if (selection.visibility) body.append('visibility', selection.visibility);
-      if (selection.sharedWith?.length) {
-        for (const email of selection.sharedWith) body.append('sharedWith', email);
-      } else if (selection.clearSharedWith) {
-        body.append('clearSharedWith', 'true');
-      }
-      if (selection.showBranding) body.append('showBranding', selection.showBranding);
-    } else {
-      const visibility = selection.visibility || config?.displayDev?.defaultVisibility || 'company';
-      if (visibility !== 'private' && selection.sharedWith?.length) {
-        throw new DeployError('display.dev sharedWith requires private visibility.', 400);
-      }
-      body.append('visibility', visibility);
-      const sharedWith = visibility === 'private'
-        ? selection.sharedWith?.length
-          ? selection.sharedWith
-          : selection.clearSharedWith
-            ? []
-            : config?.displayDev?.defaultSharedWith || []
-        : [];
-      for (const email of sharedWith) body.append('sharedWith', email);
-      const showBranding = selection.showBranding || config?.displayDev?.defaultShowBranding || 'inherit';
-      body.append('showBranding', showBranding);
-    }
-  }
-
-  const baseVersion = currentArtifact?.version;
-  const resp = await displayDevFetch(
-    shouldUpdate
-      ? `${apiUrl}/v1/artifacts/${encodeURIComponent(priorShortId)}`
-      : auth
-        ? `${apiUrl}/v1/artifacts`
-        : `${apiUrl}/v1/public/artifacts`,
-    {
-      method: shouldUpdate ? 'PUT' : 'POST',
-      headers: displayDevHeaders(auth, baseVersion ? { 'If-Match': `"v${baseVersion}"` } : {}),
-      body,
-    },
-  );
-  const json = await readDisplayDevJson(resp);
-  if (!resp.ok) throw displayDevError(json, resp.status);
-
-  const shortId = typeof json.shortId === 'string' ? json.shortId : priorShortId;
-  const url =
-    typeof json.url === 'string'
-      ? json.url
-      : typeof json.previewUrl === 'string'
-        ? json.previewUrl
-        : '';
-  if (!shortId || !url) {
-    throw new DeployError('display.dev did not return a publish URL.', 502, json);
-  }
-  const link = await waitForReachableDeploymentUrl([url], {
-    providerLabel: 'display.dev',
-    timeoutMs: 20_000,
-  });
-  const providerMetadata = {
-    displayDev: {
-      shortId,
-      mode: auth ? 'authenticated' : 'anonymous',
-      ...(typeof json.version === 'number' ? { version: json.version } : {}),
-      ...(typeof json.claimUrl === 'string' ? { claimUrl: json.claimUrl } : {}),
-      ...(typeof json.expiresAt === 'string' ? { expiresAt: json.expiresAt } : {}),
-    },
-  };
-
-  return {
-    providerId: DISPLAYDEV_PROVIDER_ID,
-    url: link.url || url,
-    deploymentId: shortId,
-    target: 'preview',
-    status: link.status,
-    statusMessage: link.statusMessage,
-    reachableAt: link.reachableAt,
-    providerMetadata,
-  };
-}
-
-async function fetchDisplayDevCurrentArtifact(
-  apiUrl: string,
-  auth: string,
-  shortId: string,
-): Promise<DisplayDevCurrentArtifact> {
-  const resp = await displayDevFetch(`${apiUrl}/v1/artifacts/${encodeURIComponent(shortId)}`, {
-    method: 'GET',
-    headers: displayDevHeaders(auth),
-  });
-  const json = await readDisplayDevJson(resp);
-  if (!resp.ok) throw displayDevError(json, resp.status);
-
-  const version =
-    Number.isInteger(json.currentVersion)
-      ? json.currentVersion
-      : Number.isInteger(json.version)
-        ? json.version
-        : displayDevVersionFromEtag(resp.headers.get('etag'));
-  if (typeof version !== 'number' || version < 1) {
-    throw new DeployError('display.dev did not return the current artifact version.', 502, json);
-  }
-  return {
-    version,
-    accessSettings: displayDevAccessSettingsFromArtifact(json),
-  };
-}
-
-export async function fetchDisplayDevArtifactAccessSettings(
-  config: DeployConfig,
-  shortId: string,
-): Promise<DisplayDevAccessSettings> {
-  const normalizedShortId = typeof shortId === 'string' ? shortId.trim() : '';
-  if (!normalizedShortId) {
-    throw new DeployError('display.dev artifact id is required to read access settings.', 400);
-  }
-  const auth = displayDevAuthorization(config);
-  if (!auth) {
-    throw new DeployError('display.dev API key is required to read access settings.', 400);
-  }
-  const apiUrl = validateDisplayDevApiUrl(config?.apiUrl);
-  const resp = await displayDevFetch(`${apiUrl}/v1/artifacts/${encodeURIComponent(normalizedShortId)}`, {
-    method: 'GET',
-    headers: displayDevHeaders(auth),
-  });
-  const json = await readDisplayDevJson(resp);
-  if (!resp.ok) throw displayDevError(json, resp.status);
-  return displayDevAccessSettingsFromArtifact(json);
-}
-
-function displayDevVersionFromEtag(etag: string | null) {
-  const match = etag?.match(/^"v([1-9]\d*)"$/u);
-  return match ? Number(match[1]) : undefined;
-}
-
-async function displayDevFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
-  try {
-    return await fetch(input, init);
-  } catch (err) {
-    throw new DeployError(
-      'display.dev is unreachable.',
-      502,
-      { reason: err instanceof Error ? err.message : String(err) },
-      'UPSTREAM_UNAVAILABLE',
-    );
-  }
 }
 
 function normalizeDeploymentLinkStatus(status: unknown): DeployLinkStatus {
@@ -2385,48 +1895,6 @@ function cloudflareAssetHeaders(token: string, extra: Record<string, string> = {
     Authorization: `Bearer ${token}`,
     ...extra,
   };
-}
-
-async function readDisplayDevJson(resp: Response): Promise<JsonObject> {
-  try {
-    return await resp.json() as JsonObject;
-  } catch {
-    throw new DeployError(
-      'display.dev returned a non-JSON response.',
-      502,
-      { upstreamStatus: resp.status || null },
-      'UPSTREAM_UNAVAILABLE',
-    );
-  }
-}
-
-function displayDevError(json: JsonObject, status: number) {
-  const message =
-    json?.message ||
-    json?.error?.message ||
-    (typeof json?.error === 'string' ? json.error : '') ||
-    `display.dev publish failed (${status}).`;
-  return new DeployError(
-    message,
-    displayDevRouteStatusForStatus(status),
-    json,
-    displayDevApiErrorCodeForStatus(status),
-  );
-}
-
-function displayDevApiErrorCodeForStatus(status: number) {
-  if (status === 401) return 'UNAUTHORIZED';
-  if (status === 403) return 'FORBIDDEN';
-  if (status === 409 || status === 412 || status === 428) return 'CONFLICT';
-  if (status === 413) return 'PAYLOAD_TOO_LARGE';
-  if (status === 422) return 'VALIDATION_FAILED';
-  if (status === 429) return 'RATE_LIMITED';
-  if (status === 404 || status >= 500) return 'UPSTREAM_UNAVAILABLE';
-  return 'BAD_REQUEST';
-}
-
-function displayDevRouteStatusForStatus(status: number) {
-  return status === 404 ? 502 : status;
 }
 
 async function readCloudflareJson(resp: Response): Promise<JsonObject> {
