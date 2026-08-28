@@ -36,6 +36,10 @@ vi.mock('../../src/i18n', () => ({
       'entry.navPlugins': 'Plugins',
       'entry.navIntegrations': 'Integrations',
       'settings.welcomeTitle': 'Welcome',
+      'workspace.closeOtherTabs': 'Close other tabs',
+      'workspace.closeTabsToRight': 'Close tabs to the right',
+      'workspace.closeTab': 'Close tab',
+      'workspace.tabActions': 'Workspace tab actions',
     };
     return labels[key] ?? key;
   },
@@ -236,6 +240,26 @@ describe('WorkspaceTabsBar navigation semantics', () => {
 
     firstDock.remove();
     secondDock.remove();
+  });
+
+  it('opens tab actions from the active workspace control in docked mode', async () => {
+    const dock = document.createElement('div');
+    document.body.append(dock);
+    setWorkspaceTabsDock(dock);
+
+    render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />);
+
+    const trigger = await screen.findByTestId('workspace-tabs-dropdown-trigger');
+    fireEvent.click(trigger);
+    expect(screen.getByRole('listbox')).toBeTruthy();
+
+    fireEvent.contextMenu(trigger, { clientX: 120, clientY: 24 });
+
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(screen.getByRole('menu', { name: 'Workspace tab actions' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'Close tab' })).toBeEnabled();
+
+    dock.remove();
   });
 
   // recvq5eKj2kdF0: Home's own project fetch (recent/drafts, capped) replaces
@@ -692,6 +716,252 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     expect(screen.getAllByRole('tab')).toHaveLength(1);
     // Active on the home view, the pinned tab renders as the sidebar toggle.
     expect(screen.getByTestId('workspace-home-rail-toggle')).toBeTruthy();
+  });
+
+  it('does not open an all-disabled context menu for the lone pinned Home tab', async () => {
+    render(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
+
+    const homeControl = await screen.findByTestId('workspace-home-rail-toggle');
+    fireEvent.contextMenu(homeControl, { clientX: 20, clientY: 24 });
+
+    expect(screen.queryByRole('menu', { name: 'Workspace tab actions' })).toBeNull();
+  });
+
+  it('opens a context menu that can close other workspace tabs without closing Home', async () => {
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        activeTabId: 'project:project-alpha',
+        tabs: [
+          {
+            id: 'entry:home:seed',
+            kind: 'entry',
+            view: 'home',
+            createdAt: 1,
+            lastActiveAt: 1,
+          },
+          {
+            id: 'project:project-alpha',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: null,
+            fileName: null,
+            createdAt: 2,
+            lastActiveAt: 2,
+          },
+          {
+            id: 'project:project-beta',
+            kind: 'project',
+            projectId: 'project-beta',
+            conversationId: null,
+            fileName: null,
+            createdAt: 3,
+            lastActiveAt: 3,
+          },
+        ],
+      }),
+    );
+
+    render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project, projectBeta]} />);
+
+    const betaTab = await screen.findByRole('tab', { name: /Project Beta/i });
+    fireEvent.contextMenu(betaTab, { clientX: 120, clientY: 24 });
+
+    expect(screen.getByRole('menu', { name: 'Workspace tab actions' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Close other tabs' }));
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toEqual([
+        expect.stringContaining('Home'),
+        expect.stringContaining('Project Beta'),
+      ]);
+    });
+    expect(navigate).toHaveBeenLastCalledWith({
+      kind: 'project',
+      projectId: 'project-beta',
+      conversationId: null,
+      fileName: null,
+    });
+  });
+
+  it('disables closing the pinned Home tab but allows closing tabs to its right', async () => {
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        activeTabId: 'project:project-alpha',
+        tabs: [
+          {
+            id: 'entry:home:seed',
+            kind: 'entry',
+            view: 'home',
+            createdAt: 1,
+            lastActiveAt: 1,
+          },
+          {
+            id: 'project:project-alpha',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: null,
+            fileName: null,
+            createdAt: 2,
+            lastActiveAt: 2,
+          },
+        ],
+      }),
+    );
+
+    render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />);
+
+    const homeTab = await screen.findByRole('tab', { name: /Home/i });
+    fireEvent.contextMenu(homeTab, { clientX: 20, clientY: 24 });
+
+    expect(screen.getByRole('menuitem', { name: 'Close tab' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Close tabs to the right' }));
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(screen.getByTestId('workspace-home-rail-toggle')).toBeTruthy();
+    });
+    expect(navigate).toHaveBeenLastCalledWith(homeRoute);
+  });
+
+  it('places keyboard-opened context menus near the tab and supports menu keyboard navigation', async () => {
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        activeTabId: 'project:project-alpha',
+        tabs: [
+          {
+            id: 'entry:home:seed',
+            kind: 'entry',
+            view: 'home',
+            createdAt: 1,
+            lastActiveAt: 1,
+          },
+          {
+            id: 'project:project-alpha',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: null,
+            fileName: null,
+            createdAt: 2,
+            lastActiveAt: 2,
+          },
+          {
+            id: 'project:project-beta',
+            kind: 'project',
+            projectId: 'project-beta',
+            conversationId: null,
+            fileName: null,
+            createdAt: 3,
+            lastActiveAt: 3,
+          },
+        ],
+      }),
+    );
+
+    render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project, projectBeta]} />);
+
+    const alphaTab = await screen.findByRole('tab', { name: /Project Alpha/i });
+    const alphaControl = alphaTab.querySelector<HTMLButtonElement>('.workspace-tab__main');
+    expect(alphaControl).not.toBeNull();
+    mockTabRect(alphaControl!, 80, 120);
+    fireEvent.contextMenu(alphaControl!, { clientX: 0, clientY: 0 });
+
+    const menu = screen.getByRole('menu', { name: 'Workspace tab actions' });
+    expect(menu).toHaveStyle({ left: '92px', top: '36px' });
+    const closeTab = screen.getByRole('menuitem', { name: 'Close tab' });
+    const closeOtherTabs = screen.getByRole('menuitem', { name: 'Close other tabs' });
+    const closeTabsToRight = screen.getByRole('menuitem', { name: 'Close tabs to the right' });
+
+    await waitFor(() => expect(closeTab).toHaveFocus());
+
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(closeOtherTabs).toHaveFocus();
+
+    fireEvent.keyDown(menu, { key: 'End' });
+    expect(closeTabsToRight).toHaveFocus();
+
+    fireEvent.keyDown(menu, { key: 'Home' });
+    expect(closeTab).toHaveFocus();
+
+    fireEvent.keyDown(menu, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByRole('menu', { name: 'Workspace tab actions' })).toBeNull();
+      expect(alphaControl).toHaveFocus();
+    });
+  });
+
+  it('keeps a taller localized context menu inside the bottom viewport edge', async () => {
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        activeTabId: 'project:project-alpha',
+        tabs: [
+          {
+            id: 'entry:home:seed',
+            kind: 'entry',
+            view: 'home',
+            createdAt: 1,
+            lastActiveAt: 1,
+          },
+          {
+            id: 'project:project-alpha',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: null,
+            fileName: null,
+            createdAt: 2,
+            lastActiveAt: 2,
+          },
+        ],
+      }),
+    );
+
+    const originalViewportHeight = window.innerHeight;
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 768 });
+    const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+    const menuRectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.classList.contains('workspace-tabs-context-menu')) {
+          // Represents menu items growing beyond their min-height after a
+          // longer localized label wraps within the fixed-width menu.
+          return {
+            x: 0,
+            y: 0,
+            left: 0,
+            right: 190,
+            top: 0,
+            bottom: 180,
+            width: 190,
+            height: 180,
+            toJSON: () => ({}),
+          } as DOMRect;
+        }
+        return originalGetBoundingClientRect.call(this);
+      });
+
+    try {
+      render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />);
+
+      const alphaTab = await screen.findByRole('tab', { name: /Project Alpha/i });
+      const alphaControl = alphaTab.querySelector<HTMLButtonElement>('.workspace-tab__main');
+      expect(alphaControl).not.toBeNull();
+      mockTabRect(alphaControl!, 80, 120);
+      fireEvent.contextMenu(alphaControl!, { clientX: 120, clientY: 744 });
+
+      const menu = screen.getByRole('menu', { name: 'Workspace tab actions' });
+      await waitFor(() => expect(menu).toHaveStyle({ top: '580px' }));
+      expect(Number.parseFloat(menu.style.top) + 180).toBeLessThanOrEqual(760);
+    } finally {
+      menuRectSpy.mockRestore();
+      Object.defineProperty(window, 'innerHeight', {
+        configurable: true,
+        value: originalViewportHeight,
+      });
+    }
   });
 
   it('maps the browser new-tab shortcut to the workspace new-tab action', async () => {

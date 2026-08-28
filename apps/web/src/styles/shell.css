@@ -597,6 +597,56 @@ html.od-radial-open .workspace-shell {
 .workspace-tabs-popover * {
   -webkit-app-region: no-drag;
 }
+.workspace-tabs-context-menu {
+  position: fixed;
+  width: 190px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 1200;
+  -webkit-app-region: no-drag;
+}
+.workspace-tabs-context-menu,
+.workspace-tabs-context-menu * {
+  -webkit-app-region: no-drag;
+}
+.workspace-tabs-context-menu__item {
+  width: 100%;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  display: grid;
+  grid-template-columns: 17px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 550;
+  text-align: left;
+}
+.workspace-tabs-context-menu__item svg {
+  display: block;
+  color: var(--text-muted);
+}
+.workspace-tabs-context-menu__item:hover:not(:disabled),
+.workspace-tabs-context-menu__item:focus-visible {
+  background: color-mix(in srgb, var(--selected) 9%, var(--bg-subtle));
+  border-color: transparent;
+}
+.workspace-tabs-context-menu__item:disabled {
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+.workspace-tabs-context-menu__item:disabled svg {
+  color: var(--text-faint);
+}
 .workspace-tabs-search {
   height: 34px;
   display: flex;

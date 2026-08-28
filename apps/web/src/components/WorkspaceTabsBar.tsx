@@ -1,5 +1,7 @@
 import {
   type DragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -87,6 +89,19 @@ interface TabDragTarget {
   edge: TabDropEdge;
 }
 
+interface TabContextMenuState {
+  tabId: string;
+  x: number;
+  y: number;
+}
+
+interface TabContextMenuCapabilities {
+  tab: WorkspaceChromeTab;
+  canClose: boolean;
+  canCloseOthers: boolean;
+  canCloseRight: boolean;
+}
+
 interface Props {
   route: Route;
   projects: Project[];
@@ -123,6 +138,7 @@ const REMOVE_WORKSPACE_PROJECT_TABS_EVENT = 'open-design:workspace-tabs:remove-p
 const MAX_PERSISTED_TAB_SCOPES = 12;
 const TAB_DRAG_HAPTIC_MS = 8;
 const TAB_DROP_HAPTIC_MS = 12;
+const TAB_CONTEXT_MENU_EDGE_PADDING = 8;
 
 function consumeWorkspaceTabShortcut(event: KeyboardEvent) {
   event.preventDefault();
@@ -360,6 +376,37 @@ function reorderTabsById(
   nextTabs.splice(edge === 'after' ? targetIndex + 1 : targetIndex, 0, movedTab);
   if (nextTabs.every((tab, index) => tab.id === tabs[index]?.id)) return tabs;
   return nextTabs;
+}
+
+function tabContextMenuCapabilities(
+  state: WorkspaceTabsState,
+  tabId: string,
+): TabContextMenuCapabilities | null {
+  const normalized = normalizeTabsState(state);
+  const tabIndex = normalized.tabs.findIndex((tab) => tab.id === tabId);
+  if (tabIndex < 0) return null;
+  const tab = normalized.tabs[tabIndex]!;
+  return {
+    tab,
+    canClose: tab.kind !== 'entry',
+    canCloseOthers: normalized.tabs.some(
+      (candidate) => candidate.kind !== 'entry' && candidate.id !== tab.id,
+    ),
+    canCloseRight: normalized.tabs.some(
+      (candidate, index) => index > tabIndex && candidate.kind !== 'entry',
+    ),
+  };
+}
+
+function focusContextMenuItem(menuElement: HTMLElement, targetIndex: number) {
+  const items = Array.from(
+    menuElement.querySelectorAll<HTMLButtonElement>(
+      '.workspace-tabs-context-menu__item:not(:disabled)',
+    ),
+  );
+  if (items.length === 0) return;
+  const normalizedIndex = (targetIndex + items.length) % items.length;
+  items[normalizedIndex]?.focus();
 }
 
 function tabDragTargetKey(target: TabDragTarget): string {
@@ -714,7 +761,19 @@ export function WorkspaceTabsBar({
     };
   }, [radialMenu]);
   const [tabsOverflowing, setTabsOverflowing] = useState(false);
+  const [tabContextMenu, setTabContextMenu] = useState<TabContextMenuState | null>(null);
   const stripRef = useRef<HTMLDivElement | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  const contextMenuInvokerRef = useRef<HTMLElement | null>(null);
+  const dismissTabContextMenu = useCallback((restoreFocus = false) => {
+    const invoker = contextMenuInvokerRef.current;
+    contextMenuInvokerRef.current = null;
+    setTabContextMenu(null);
+    if (!restoreFocus || !invoker) return;
+    window.requestAnimationFrame(() => {
+      if (invoker.isConnected) invoker.focus();
+    });
+  }, []);
   const previousOnboardingCompletedRef = useRef(onboardingCompleted);
   const resetEntryToHomeAfterOnboardingRef = useRef(false);
   const dragSuppressClickRef = useRef(false);
@@ -896,6 +955,10 @@ export function WorkspaceTabsBar({
     }
     setState((current) => syncStateToRoute(current, route));
   }, [route, identityScopeKey]);
+
+  useEffect(() => {
+    dismissTabContextMenu();
+  }, [route, identityScopeKey, dismissTabContextMenu]);
 
   useEffect(() => {
     if (!previousOnboardingCompletedRef.current && onboardingCompleted) {
@@ -1240,6 +1303,56 @@ export function WorkspaceTabsBar({
     );
   }, [state, identityScopeKey, persistedTabsStore]);
 
+  useLayoutEffect(() => {
+    if (!tabContextMenu) return;
+    const menuElement = contextMenuRef.current;
+    if (!menuElement) return;
+    const menuRect = menuElement.getBoundingClientRect();
+    const maxX = Math.max(
+      TAB_CONTEXT_MENU_EDGE_PADDING,
+      window.innerWidth - menuRect.width - TAB_CONTEXT_MENU_EDGE_PADDING,
+    );
+    const maxY = Math.max(
+      TAB_CONTEXT_MENU_EDGE_PADDING,
+      window.innerHeight - menuRect.height - TAB_CONTEXT_MENU_EDGE_PADDING,
+    );
+    const x = Math.max(TAB_CONTEXT_MENU_EDGE_PADDING, Math.min(tabContextMenu.x, maxX));
+    const y = Math.max(TAB_CONTEXT_MENU_EDGE_PADDING, Math.min(tabContextMenu.y, maxY));
+    if (x === tabContextMenu.x && y === tabContextMenu.y) return;
+    setTabContextMenu((current) => {
+      if (!current || current.tabId !== tabContextMenu.tabId) return current;
+      if (current.x === x && current.y === y) return current;
+      return { ...current, x, y };
+    });
+  }, [tabContextMenu]);
+
+  useEffect(() => {
+    if (!tabContextMenu) return;
+    const focusFrame = window.requestAnimationFrame(() => {
+      const menuElement = contextMenuRef.current;
+      if (!menuElement) return;
+      focusContextMenuItem(menuElement, 0);
+    });
+    function onPointerDown(event: MouseEvent) {
+      const target = event.target as Node;
+      if (!(contextMenuRef.current?.contains(target) ?? false)) {
+        dismissTabContextMenu();
+      }
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        dismissTabContextMenu(true);
+      }
+    }
+    document.addEventListener('mousedown', onPointerDown, true);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener('mousedown', onPointerDown, true);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [tabContextMenu, dismissTabContextMenu]);
+
   useEffect(() => {
     function onWorkspaceTabShortcut(event: KeyboardEvent) {
       if (event.defaultPrevented) return;
@@ -1310,6 +1423,7 @@ export function WorkspaceTabsBar({
       ),
       activeTabId: tab.id,
     }));
+    dismissTabContextMenu();
     navigate(routeForTab(tab));
   }
 
@@ -1452,9 +1566,11 @@ export function WorkspaceTabsBar({
       });
       navigate({ kind: 'home', view: 'home' });
     }
+    dismissTabContextMenu();
   }
 
   function closeTab(tabId: string) {
+    dismissTabContextMenu();
     const normalized = normalizeTabsState(state);
     const closingIndex = normalized.tabs.findIndex((tab) => tab.id === tabId);
     if (closingIndex < 0) return;
@@ -1480,7 +1596,37 @@ export function WorkspaceTabsBar({
     if (nextRoute) navigate(nextRoute);
   }
 
+  function closeOtherTabs(tabId: string) {
+    setDockMenuOpen(false);
+    dismissTabContextMenu();
+    const normalized = normalizeTabsState(state);
+    const targetTab = normalized.tabs.find((tab) => tab.id === tabId);
+    if (!targetTab) return;
+    const nextTabs = normalized.tabs.filter((tab) => tab.kind === 'entry' || tab.id === tabId);
+    setState(normalizeTabsState({ tabs: nextTabs, activeTabId: targetTab.id }));
+    navigate(routeForTab(targetTab));
+  }
+
+  function closeTabsToRight(tabId: string) {
+    setDockMenuOpen(false);
+    dismissTabContextMenu();
+    const normalized = normalizeTabsState(state);
+    const targetIndex = normalized.tabs.findIndex((tab) => tab.id === tabId);
+    if (targetIndex < 0) return;
+    const targetTab = normalized.tabs[targetIndex]!;
+    const nextTabs = normalized.tabs.filter(
+      (tab, index) => index <= targetIndex || tab.kind === 'entry',
+    );
+    const activeStillOpen = nextTabs.some((tab) => tab.id === normalized.activeTabId);
+    const nextActiveTab = activeStillOpen
+      ? normalized.tabs.find((tab) => tab.id === normalized.activeTabId) ?? targetTab
+      : targetTab;
+    setState(normalizeTabsState({ tabs: nextTabs, activeTabId: nextActiveTab.id }));
+    if (!activeStillOpen) navigate(routeForTab(nextActiveTab));
+  }
+
   function reorderTab(sourceId: string, targetId: string, edge: TabDropEdge) {
+    dismissTabContextMenu();
     setState((current) => {
       const normalized = normalizeTabsState(current);
       const tabs = reorderTabsById(normalized.tabs, sourceId, targetId, edge);
@@ -1534,6 +1680,7 @@ export function WorkspaceTabsBar({
       event.preventDefault();
       return;
     }
+    dismissTabContextMenu();
     dragSuppressClickRef.current = true;
     draggingTabIdRef.current = tabId;
     dragHapticTargetRef.current = `${tabId}:self`;
@@ -1597,6 +1744,55 @@ export function WorkspaceTabsBar({
     }, 0);
   }
 
+  function openTabContextMenu(tabId: string, event: ReactMouseEvent<HTMLElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    const capabilities = tabContextMenuCapabilities(state, tabId);
+    if (!capabilities?.canClose && !capabilities?.canCloseOthers && !capabilities?.canCloseRight) {
+      dismissTabContextMenu();
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const openedFromKeyboard = event.clientX === 0 && event.clientY === 0;
+    const anchorX = openedFromKeyboard ? rect.left + 12 : event.clientX;
+    const anchorY = openedFromKeyboard ? rect.bottom + 4 : event.clientY;
+    contextMenuInvokerRef.current = event.currentTarget;
+    setDockMenuOpen(false);
+    setRadialMenu(null);
+    setTabContextMenu({
+      tabId,
+      x: Math.max(TAB_CONTEXT_MENU_EDGE_PADDING, anchorX),
+      y: Math.max(TAB_CONTEXT_MENU_EDGE_PADDING, anchorY),
+    });
+  }
+
+  function handleTabContextMenuKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const menuElement = event.currentTarget;
+    const items = Array.from(
+      menuElement.querySelectorAll<HTMLButtonElement>(
+        '.workspace-tabs-context-menu__item:not(:disabled)',
+      ),
+    );
+    const currentIndex = items.findIndex((item) => item === document.activeElement);
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      focusContextMenuItem(menuElement, currentIndex < 0 ? 0 : currentIndex + 1);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      focusContextMenuItem(menuElement, currentIndex < 0 ? items.length - 1 : currentIndex - 1);
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      focusContextMenuItem(menuElement, 0);
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      focusContextMenuItem(menuElement, items.length - 1);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      dismissTabContextMenu(true);
+    }
+  }
+
   const dockPortal = (node: ReactNode) =>
     tabsDockEl ? createPortal(node, tabsDockEl) : node;
 
@@ -1630,6 +1826,7 @@ export function WorkspaceTabsBar({
           aria-haspopup="listbox"
           aria-expanded={dockMenuOpen}
           onClick={() => setDockMenuOpen((v) => !v)}
+          onContextMenu={(event) => openTabContextMenu(activeTab.id, event)}
           data-testid="workspace-tabs-dropdown-trigger"
         >
           <span className="workspace-tabs-dropdown__icon" aria-hidden>
@@ -1654,12 +1851,14 @@ export function WorkspaceTabsBar({
                   <div
                     key={tab.id}
                     className={`workspace-tabs-dropdown__row${active ? ' is-active' : ''}`}
+                    onContextMenu={(event) => openTabContextMenu(tab.id, event)}
                   >
                     <button
                       type="button"
                       className="workspace-tabs-dropdown__row-main"
                       role="option"
                       aria-selected={active}
+                      onContextMenu={(event) => openTabContextMenu(tab.id, event)}
                       onClick={() => {
                         setDockMenuOpen(false);
                         openTab(tab);
@@ -1701,6 +1900,7 @@ export function WorkspaceTabsBar({
           data-tooltip-placement="bottom"
           data-testid="workspace-home-chrome"
           onClick={() => openTab(state.tabs[0]!)}
+          onContextMenu={(event) => openTabContextMenu(state.tabs[0]!.id, event)}
         >
           <ChromeHomeGlyph />
         </button>
@@ -1762,6 +1962,7 @@ export function WorkspaceTabsBar({
               draggable={!isPinned && state.tabs.length > 1}
               onDragStart={(event) => handleTabDragStart(tab.id, event)}
               onDragEnd={handleTabDragEnd}
+              onContextMenu={(event) => openTabContextMenu(tab.id, event)}
             >
               {isPinned && active && tab.view === 'home' ? (
                 /* Home view: the pinned tab is the brand-logo button. The
@@ -1777,6 +1978,7 @@ export function WorkspaceTabsBar({
                   data-tooltip={entryRailOpen ? undefined : t('entry.navExpand')}
                   data-tooltip-placement="bottom"
                   data-testid="workspace-home-rail-toggle"
+                  onContextMenu={(event) => openTabContextMenu(tab.id, event)}
                   onClick={(event) => {
                     event.stopPropagation();
                     if (!entryRailOpen) {
@@ -1809,6 +2011,7 @@ export function WorkspaceTabsBar({
                   data-tooltip={t('entry.navHome')}
                   data-tooltip-placement="bottom"
                   data-testid="workspace-home-nav"
+                  onContextMenu={(event) => openTabContextMenu(tab.id, event)}
                   onClick={(event) => {
                     event.stopPropagation();
                     openTab(tab);
@@ -1821,6 +2024,7 @@ export function WorkspaceTabsBar({
                   <button
                     type="button"
                     className="workspace-tab__main"
+                    onContextMenu={(event) => openTabContextMenu(tab.id, event)}
                     onClick={() => openTab(tab)}
                   >
                     <span className="workspace-tab__icon" aria-hidden>
@@ -1866,6 +2070,57 @@ export function WorkspaceTabsBar({
       </div>
       </>,
       )}
+      {tabContextMenu && typeof document !== 'undefined'
+        ? createPortal(
+            (() => {
+              const capabilities = tabContextMenuCapabilities(state, tabContextMenu.tabId);
+              if (!capabilities) return null;
+              const { tab: menuTab, canClose, canCloseOthers, canCloseRight } = capabilities;
+              return (
+                <div
+                  ref={contextMenuRef}
+                  className="workspace-tabs-context-menu"
+                  role="menu"
+                  aria-label={t('workspace.tabActions')}
+                  style={{ left: tabContextMenu.x, top: tabContextMenu.y }}
+                  onKeyDown={handleTabContextMenuKeyDown}
+                >
+                  <button
+                    type="button"
+                    className="workspace-tabs-context-menu__item"
+                    role="menuitem"
+                    disabled={!canClose}
+                    onClick={() => closeTab(menuTab.id)}
+                  >
+                    <Icon name="close" size={13} />
+                    <span>{t('workspace.closeTab')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="workspace-tabs-context-menu__item"
+                    role="menuitem"
+                    disabled={!canCloseOthers}
+                    onClick={() => closeOtherTabs(menuTab.id)}
+                  >
+                    <Icon name="layers-filled" size={13} />
+                    <span>{t('workspace.closeOtherTabs')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="workspace-tabs-context-menu__item"
+                    role="menuitem"
+                    disabled={!canCloseRight}
+                    onClick={() => closeTabsToRight(menuTab.id)}
+                  >
+                    <Icon name="chevron-right" size={13} />
+                    <span>{t('workspace.closeTabsToRight')}</span>
+                  </button>
+                </div>
+              );
+            })(),
+            document.body,
+          )
+        : null}
       {radialMenu ? createPortal(
         <div className="workspace-radial-layer" onMouseDown={() => setRadialMenu(null)}>
           <div
