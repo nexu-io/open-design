@@ -143,6 +143,202 @@ describe("kernel trace: the work meter guards runaway, not scale", () => {
   });
 });
 
+describe("kernel trace: the meter reads deep coordinates at EVERY index (S7/S8 red-team)", () => {
+  // The work meter is the ONE runaway guard the no-caps doctrine rests on, and
+  // its coordinate-cost term used to SAMPLE every ⌊n/32⌋-th vertex. A red-team
+  // proved the blindspot: a region-selected op can drive only the UNSAMPLED
+  // vertices to astronomical bit-length, so a few-hundred-KB trace pegged CPU
+  // quadratically while `spent` read "under budget". The scan is now exhaustive.
+
+  const N = 64; // ≥64 so the old ⌊n/32⌋=2 stride skipped the odd indices
+  const DEEP = "1" + "0".repeat(300); // 10^300 — ~1000 bits added per scale
+  const SHALLOW = "3"; // 3^k grows ~1.6 bits per scale — stays cheap forever
+
+  // Vertex k sits at y = k%2, so region {y:[1,1]} selects EXACTLY the odd
+  // indices — precisely the band the old sampler never read. The deepest vertex
+  // (k=63, odd) is in the band, so the coordinate max is identical whether we
+  // scale the band or the whole mesh: location cannot change the honest cost.
+  const chain = (region: { y?: [string, string] }, factorX: string, times: number): Trace => {
+    const pts: Array<[number, number, number]> = [];
+    for (let k = 0; k < N; k++) pts.push([k, k % 2, 0]);
+    const r = new Recorder().cage(pts, [Array.from({ length: N }, (_, k) => k)]);
+    for (let s = 0; s < times; s++) r.scale(region, [factorX, "1", "1"], [0, 0, 0]);
+    return r.trace();
+  };
+
+  it("charges a SUBSET-deep scale chain — the stride blindspot is closed", () => {
+    // 25 scales driving only the odd (y=1) band's x by 10^300: post-fix the full
+    // scan sees the deep band and the meter trips. Pre-fix the stride sampler
+    // read only the even band (coords ~one unit) and sailed under budget.
+    const trace = chain({ y: ["1", "1"] }, DEEP, 25);
+    expect(() => evalTrace(trace, { workBudget: 500_000 })).toThrow(WorkBudgetError);
+  });
+
+  it("it is coordinate DEPTH being charged, not op count — the same 25 ops stay cheap when shallow", () => {
+    // Identical topology and op count, but a factor that never deepens the
+    // coordinates: this must NOT trip, or the test above would be proving
+    // nothing but "25 scales is a lot".
+    const trace = chain({ y: ["1", "1"] }, SHALLOW, 25);
+    expect(() => evalTrace(trace, { workBudget: 500_000 })).not.toThrow();
+  });
+
+  it("the charge is LOCATION-independent — a banded deep chain costs what a whole-mesh one does", () => {
+    // With the deepest vertex in the band, scaling the band and scaling the
+    // whole mesh reach the coordinate max identically, so the meter trips at the
+    // SAME op with the SAME spent. A sampler that reads position, not value,
+    // could never guarantee this.
+    let banded: WorkBudgetError | undefined;
+    let whole: WorkBudgetError | undefined;
+    try { evalTrace(chain({ y: ["1", "1"] }, DEEP, 25), { workBudget: 500_000 }); } catch (e) { banded = e as WorkBudgetError; }
+    try { evalTrace(chain({}, DEEP, 25), { workBudget: 500_000 }); } catch (e) { whole = e as WorkBudgetError; }
+    expect(banded).toBeInstanceOf(WorkBudgetError);
+    expect(whole).toBeInstanceOf(WorkBudgetError);
+    expect(banded!.spent).toBe(whole!.spent);
+  });
+
+  it("a lone giant-PARAMETER scale is charged for its parse + arithmetic (reviewer Block)", () => {
+    // A shallow box scaled by a 10^100000 factor as the FINAL op: pre-fix the
+    // charge read only the shallow input mesh (~14 units) and the huge parse +
+    // BigInt multiply ran unmetered (nothing later ever sees the depth). The
+    // parameter-complexity term now charges it up front, before the giant parse.
+    const trace = new Recorder().box().scale({}, ["1" + "0".repeat(100_000), "1", "1"], [0, 0, 0]).trace();
+    expect(() => evalTrace(trace, { workBudget: 100_000 })).toThrow(WorkBudgetError);
+    let err: WorkBudgetError | undefined;
+    try { evalTrace(trace, { workBudget: 100_000 }); } catch (e) { err = e as WorkBudgetError; }
+    expect(err!.opKind).toBe("scale");
+  });
+
+  it("clip is charged for its exact per-vertex arithmetic, not just topology (S8)", () => {
+    // clip runs rational dot/crossing per vertex — O(coordinate bit length) —
+    // yet used to be charged purely topologically (a box has ~24 face-sides).
+    // On a deep-coordinate solid the topological charge is trivially under
+    // budget; only the coordinate-complexity factor makes clip pay for the
+    // arithmetic it is about to run. Post-fix it trips before running the cut.
+    const deepBox = new Recorder().box().scale({}, ["1" + "0".repeat(100_000), "1", "1"], [0, 0, 0]);
+    const trace = deepBox.clip(["1", "0", "0"], "0").trace();
+    // Budget clears the (now correctly-charged) deep scale, so the tipping op is
+    // the clip's CC-scaled charge, not the earlier ops.
+    expect(() => evalTrace(trace, { workBudget: 300_000 })).toThrow(WorkBudgetError);
+    let err: WorkBudgetError | undefined;
+    try { evalTrace(trace, { workBudget: 300_000 }); } catch (e) { err = e as WorkBudgetError; }
+    expect(err!.opKind).toBe("clip");
+  });
+
+  it("ordinary fractional parameters do not inflate the charge — no false trip", () => {
+    // The parameter term reads short rationals as complexity 1, so a normal
+    // recipe's charge is exactly what it was before the fix.
+    const trace = new Recorder()
+      .box()
+      .move({ z: ["1", "1"] }, [0, "1/3", "1/7"])
+      .scale({}, ["3/2", "2/3", 1], [0, 0, 0])
+      .subdivide(2)
+      .trace();
+    expect(() => evalTrace(trace, { workBudget: 20_000 })).not.toThrow();
+  });
+
+  it("sums parameter costs — six giant parameters cost more than one (reviewer risk)", () => {
+    // An op computes with EVERY parameter, so six giant factor/pivot strings are
+    // six times the work of one. A budget between them passes the single-giant
+    // scale and trips the six-giant one — the max-only charge would have billed
+    // them identically.
+    const G = "1" + "0".repeat(30_000); // ~30k chars ⇒ ~3750 units each
+    const one = new Recorder().box().scale({}, [G, "1", "1"], [0, 0, 0]).trace();
+    const six = new Recorder().box().scale({}, [G, G, G], [G, G, G]).trace();
+    expect(() => evalTrace(one, { workBudget: 120_000 })).not.toThrow(); // ~52,500
+    expect(() => evalTrace(six, { workBudget: 120_000 })).toThrow(WorkBudgetError); // ~315,000
+  });
+
+  it("a malformed clip gets its NAMED error regardless of parameter length or budget", () => {
+    // The shape validation must precede the parameter charge: a giant but
+    // malformed normal fails the documented shape check, never as a budget trip
+    // whose identity would depend on how long the bad payload happened to be.
+    const bad: Trace = {
+      version: 1,
+      ops: [
+        ...new Recorder().box().trace().ops,
+        { op: "clip", normal: ["1" + "0".repeat(100_000)] as never, d: "0" },
+      ],
+    };
+    expect(() => evalTrace(bad, { workBudget: 10_000 })).toThrow(/needs normal:\[x,y,z\]/);
+    expect(() => evalTrace(bad, { workBudget: 10_000 })).not.toThrow(WorkBudgetError);
+  });
+
+  it("a NORMAL invalid parameter still gets its own named error (the realistic case)", () => {
+    // Charge-before-parse is only consequential for adversarially giant literals;
+    // a normal zero normal / non-positive factor charges ~0, never trips, and
+    // reaches its named error. This is the case authors actually hit.
+    expect(() => evalTrace(new Recorder().box().clip(["0", "0", "0"], "0").trace())).toThrow(/non-zero normal/);
+    expect(() => evalTrace(new Recorder().box().inset({}, "-1").trace())).toThrow(/factor must be positive/);
+  });
+
+  it("a giant VALID clip plane is metered BEFORE its (super-linear) parse", () => {
+    // A valid but giant normal component: the charge must land before the
+    // BigInt + bgcd parse, so it trips AT the clip op rather than spending
+    // unmetered parse CPU — the sole runaway guard must see every parse.
+    const trace = new Recorder().box().clip(["1" + "0".repeat(100_000), "0", "0"], "0").trace();
+    let err: WorkBudgetError | undefined;
+    try { evalTrace(trace, { workBudget: 50_000 }); } catch (e) { err = e as WorkBudgetError; }
+    expect(err).toBeInstanceOf(WorkBudgetError);
+    expect(err!.opKind).toBe("clip");
+  });
+
+  it("a giant VALID inset factor is metered BEFORE its parse", () => {
+    const trace = new Recorder().box().inset({}, "1" + "0".repeat(100_000)).trace();
+    let err: WorkBudgetError | undefined;
+    try { evalTrace(trace, { workBudget: 50_000 }); } catch (e) { err = e as WorkBudgetError; }
+    expect(err).toBeInstanceOf(WorkBudgetError);
+    expect(err!.opKind).toBe("inset");
+  });
+
+  it("guards a giant parameter on a DIRECTLY-constructed trace — the real untrusted boundary", () => {
+    // The untrusted author writes Python in a spawned subprocess (parse/recipe.ts)
+    // and the trace returns as validated JSON; the meter lives at evalTrace, which
+    // parses that serialized trace. So the guard must fire on a trace built WITHOUT
+    // the TS Recorder (a trusted reference builder that normalizes at record time).
+    // This constructs the op object directly — the shape the daemon actually feeds
+    // evalTrace — and proves the charge precedes evalTrace's own parse.
+    const giant = "1" + "0".repeat(100_000);
+    const direct: Trace = {
+      version: 1,
+      ops: [
+        ...new Recorder().box().trace().ops, // cage only — small, from the builder
+        { op: "scale", region: {}, factor: [giant, "1", "1"], pivot: ["0", "0", "0"] },
+      ],
+    };
+    let err: WorkBudgetError | undefined;
+    try { evalTrace(direct, { workBudget: 50_000 }); } catch (e) { err = e as WorkBudgetError; }
+    expect(err).toBeInstanceOf(WorkBudgetError);
+    expect(err!.opKind).toBe("scale");
+  });
+
+  it("charges the parameter parse independent of mesh size — an empty mesh can't slip a giant parse", () => {
+    // The parse of a giant literal happens once per op regardless of vertex count,
+    // so the charge must not be × mesh cardinality. A cage with no faces welds to
+    // (near-)empty geometry; pre-fix a giant scale on it charged ~0 and parsed the
+    // 10^5-digit factor unmetered. The flat per-op parse charge closes it.
+    // (reviewer risk — empty/face-less-mesh bypass.)
+    const giant = "1" + "0".repeat(100_000);
+    const direct: Trace = {
+      version: 1,
+      ops: [
+        { op: "cage", points: [["0", "0", "0"]], faces: [] },
+        { op: "scale", region: {}, factor: [giant, "1", "1"], pivot: ["0", "0", "0"] },
+      ],
+    };
+    let err: WorkBudgetError | undefined;
+    try { evalTrace(direct, { workBudget: 100 }); } catch (e) { err = e as WorkBudgetError; }
+    expect(err).toBeInstanceOf(WorkBudgetError);
+    expect(err!.opKind).toBe("scale");
+  });
+
+  it("a genuinely large but shallow-coordinate mesh is unaffected — no false trip", () => {
+    // The whole point of the ÷32 gentleness: an ordinary big asset (small
+    // integer / short-fraction coordinates) reads complexity ~1 and builds
+    // freely. The exhaustive scan changes NOTHING for it.
+    expect(() => evalTrace(new Recorder().box().subdivide(5).trace())).not.toThrow();
+  });
+});
+
 describe("kernel trace: the recorder and the evaluator agree with the kernel", () => {
   it("box().subdivide(2) evaluates to the same exact mesh as subdivide(cube, 2)", () => {
     const viaTrace = evalTrace(new Recorder().box().subdivide(2).trace());

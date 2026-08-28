@@ -277,8 +277,41 @@ function charge(meter: WorkMeter, units: number, opIndex: number, opKind: string
   if (meter.spent > meter.budget) throw new WorkBudgetError(opIndex, opKind, meter.spent, meter.budget);
 }
 
-/** Bit-length of a bigint's magnitude — a cheap proxy for arithmetic cost. */
-const bitLen = (x: bigint): number => (x === 0n ? 0 : (x < 0n ? -x : x).toString(2).length);
+/**
+ * Bit-length of a bigint's magnitude — a cheap proxy for arithmetic cost.
+ *
+ * Two properties this guard needs: allocation-free on the COMMON path (a coord
+ * numerator/denominator that fits in 32 bits — box corners, short fractions — is
+ * the overwhelming majority, and `coordComplexity` now reads EVERY vertex, so a
+ * per-call string allocation would dominate), and LINEAR (never O(bits²)) on the
+ * rare deep coordinate. A repeated 32-bit bigint shift-loop would be O(bits²);
+ * base-2 `toString` is O(bits) in V8 (a power-of-two base needs no division), so
+ * a pathologically deep coord costs the meter O(bits) — bounded by what it
+ * already cost to BUILD that coord, which was itself metered.
+ */
+const bitLen = (x: bigint): number => {
+  const v = x < 0n ? -x : x;
+  if (v <= 0n) return 0;
+  if (v <= 0xffffffffn) return 32 - Math.clz32(Number(v));
+  return v.toString(2).length;
+};
+
+/**
+ * Exact integer ⌈log₂ n⌉ for n ≥ 1 — no `Math.log2`, whose last-ULP result is
+ * not guaranteed bit-identical across libm implementations. The meter is
+ * documented as identical on every machine; a transcendental in it could flip a
+ * charge sitting exactly on a budget boundary from pass to `WorkBudgetError`.
+ * n here is a face's vertex count (small), so the loop is trivial.
+ */
+const ceilLog2 = (n: number): number => {
+  let bits = 0;
+  let v = 1;
+  while (v < n) {
+    v *= 2;
+    bits++;
+  }
+  return bits;
+};
 
 /**
  * A coordinate-complexity multiplier for the work charge, ≥ 1. The unit "1 ≈ one
@@ -287,17 +320,35 @@ const bitLen = (x: bigint): number => (x === 0n ? 0 : (x < 0n ? -x : x).toString
  * denominator to 3ᵏ), and arithmetic on B-bit rationals costs ~O(B). Element
  * COUNT alone stays flat under such an op, so without this factor a
  * bit-length-exploding runaway would spend real seconds while reading as "under
- * budget". Sampling ≤32 coordinates' bit-length (deterministic, cheap) keeps the
- * currency honest. Deliberately GENTLE (÷32): ordinary small-integer/short-
- * fraction meshes read ~1, so it never penalises a legitimate large asset —
- * it only rises when coordinates themselves have exploded.
+ * budget".
+ *
+ * Reads EVERY vertex's bit-length, not a stride sample. An earlier version
+ * sampled every ⌊n/32⌋-th coordinate; a red-team proved the blindspot — a
+ * region-selected op (`scale`/`move` on a `y`-band) can drive only the UNSAMPLED
+ * vertices to 10^300 while the sampler reads ~1, so wall-clock went quadratic
+ * while `spent` stayed linear and "under budget". A subset-deep coordinate is
+ * exactly the adversarial shape, so the scan must be exhaustive. `bitLen` is
+ * allocation-free for the common small coord, so the full scan is cheap for the
+ * uniform-small meshes that dominate and only grows costly when coordinates
+ * genuinely have (making the honest cost the thing being charged). Deliberately
+ * GENTLE (÷32): ordinary small-integer/short-fraction meshes read ~1, so it
+ * never penalises a legitimate large asset — it rises only when coordinates
+ * themselves have exploded, at ANY index.
+ *
+ * The exhaustive scan is O(Σ vertex bit-length) per call, and that is bounded by
+ * the budget, not unbounded: reaching a mesh of size S at depth D bits already
+ * cost the meter ~S·D/32 ≤ budget (the ops that built it), so any later scan is
+ * O(S·D) ≤ 32·budget — the same order as the op's own charge. Total scanning
+ * across an evaluation is therefore within a constant factor of the metered work
+ * (a deliberate constant, not a runaway; an incremental maxCoordBits carried on
+ * the mesh could make it O(1) but would spread the fact across every producer).
+ * Cancellation stays per-op (polled at the top of applyOp), the existing grain.
  */
 function coordComplexity(m: KernelMesh): number {
   const n = m.verts.length;
   if (n === 0) return 1;
-  const step = Math.max(1, Math.floor(n / 32));
   let maxBits = 1;
-  for (let i = 0; i < n; i += step) {
+  for (let i = 0; i < n; i++) {
     const v = m.verts[i]!;
     const b = bitLen(v[0].n) + bitLen(v[0].d) + bitLen(v[1].n) + bitLen(v[1].d) + bitLen(v[2].n) + bitLen(v[2].d);
     if (b > maxBits) maxBits = b;
@@ -308,6 +359,49 @@ function coordComplexity(m: KernelMesh): number {
 /** The work a mesh contributes: its size (verts + faces) scaled by how expensive
  *  its coordinates are to compute with (bit-length). */
 const meshWork = (m: KernelMesh): number => (m.verts.length + m.faces.length) * coordComplexity(m);
+
+/** Mesh size scaled by an EXPLICIT complexity — used where an op's own
+ *  parameters may be deeper than the input mesh's coordinates. */
+const meshWorkCC = (m: KernelMesh, cc: number): number => (m.verts.length + m.faces.length) * cc;
+
+/** The rational-string bounds of a region, flattened — parameters the op parses
+ *  and compares against every vertex, so their bit-length is a real cost. */
+const regionStrings = (r: Region): string[] =>
+  [r.x, r.y, r.z].flatMap((b) => (b ? [b[0]!, b[1]!] : []));
+
+/**
+ * A complexity multiplier (≥1, same ÷32 currency as {@link coordComplexity})
+ * for an op's OWN rational-string parameters — a `move` offset, a `scale`
+ * factor/pivot, a `clip` plane, region bounds.
+ *
+ * The sampled-scan gap was one axis of the meter's blindness; the PARAMETER axis
+ * is the other, and the required reviewer found it. Every param-bearing op
+ * parses these strings and does arithmetic with them across the mesh, so a giant
+ * parameter (a 10⁵-digit factor, a deep clip normal) costs real O(digits) parse
+ * plus per-vertex BigInt work that the INPUT mesh's coordinates never reveal — a
+ * shallow box scaled by an astronomical factor gets a shallow charge, and if
+ * that op is the last (or alternates back to shallow so no later op's
+ * coordComplexity sees the depth) the work is never metered. Charged from string
+ * LENGTH (no parse needed — a decimal digit is < 4 bits, so `len·4` is a safe
+ * over-estimate of the parse's bit cost), folded into the op's up-front charge
+ * BEFORE the giant parse runs.
+ *
+ * SUMS each parameter's cost, not the max: an op parses and computes with EVERY
+ * one of its parameters (scale touches six factor/pivot strings plus up to six
+ * region bounds), so six giant parameters are six times the work, not one
+ * (reviewer risk finding). Returns the RAW sum, which is 0 for anything whose
+ * parameters are all under 8 characters — so it is ADDED to the mesh's own
+ * coordinate complexity at the call site: an op like `scale` or `clip`
+ * multiplies a parameter INTO each coordinate (factor·coord, normal·coord), so
+ * the exact-arithmetic bit-length is the SUM of the two depths, not their max
+ * (reviewer risk finding). Because the sum is 0 for ordinary short parameters,
+ * a normal recipe adds nothing and its charge is exactly the mesh term.
+ */
+const paramUnits = (...strings: Array<string | undefined>): number => {
+  let units = 0;
+  for (const s of strings) if (s) units += Math.floor((s.length * 4) / 32);
+  return units;
+};
 
 /* ------------------------------------------------------------------ */
 /* The one evaluator                                                   */
@@ -403,7 +497,7 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number, meter: WorkMet
       // ~O(coordinate bit length), so a mesh with deep coordinates (a chain of
       // `scale(1/3)`) pays for its arithmetic, not just its topology.
       const triTopology = m.faces.reduce(
-        (a, f) => a + f.length * Math.max(1, Math.ceil(Math.log2(f.length))),
+        (a, f) => a + f.length * Math.max(1, ceilLog2(f.length)),
         0,
       );
       charge(meter, triTopology * coordComplexity(m), i, "triangulate");
@@ -411,10 +505,11 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number, meter: WorkMet
     }
     case "clip": {
       const m = need();
-      // Guard the payload shape at the evaluator too, not only in the parse-time
-      // validator: a directly-constructed trace (a test, a future front-end that
-      // does not flow through recipe.ts) gets a NAMED error, never an opaque
-      // `undefined.split` out of Rational.parse.
+      // Validate the payload SHAPE first — a directly-constructed trace (a test,
+      // a future front-end that does not flow through recipe.ts) gets a NAMED
+      // error, never an opaque `undefined.split` out of Rational.parse. This must
+      // precede the parameter charge so a malformed payload's error does not
+      // depend on its length or the remaining budget (reviewer warn).
       if (
         !Array.isArray(op.normal) ||
         op.normal.length !== 3 ||
@@ -423,22 +518,44 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number, meter: WorkMet
       ) {
         throw new Error(`evalTrace: op ${i} 'clip' needs normal:[x,y,z] and d, all rational strings`);
       }
+      // Meter BEFORE parsing — the parse of a giant rational (BigInt build +
+      // `bgcd` normalize, plain Euclid → super-linear on deep integers) is real
+      // unmetered CPU otherwise (reviewer risk). cc folds the plane's own
+      // string-length depth in (additive), uniform with move/scale/extrude. clip runs
+      // exact rational dot/crossingPoint per vertex and per straddling edge, so
+      // per-corner cost is O(coordinate bit length); the cap ear-clip (~O(L²) per
+      // cross-section loop) is charged as each loop forms — a grazing cut that
+      // makes a huge cap trips the meter, not just the linear output.
+      //
+      // Consequence, BY DESIGN: a normal plane charges ~faceSum·1 and still
+      // reaches its non-zero-normal check below; only an adversarially-GIANT
+      // literal is resource-rejected before that value check. The meter must see
+      // every parse, and the validity of a giant literal is not worth an
+      // unmetered one — a normal zero normal still gets its named error.
+      // One-time parse (mesh-independent) + per-corner arithmetic (additive: clip
+      // multiplies normal INTO each coordinate — dot products, crossing divisions
+      // — so per-corner cost is coord + plane depth). Both reviewer risks.
+      const pu = paramUnits(op.normal[0], op.normal[1], op.normal[2], op.d);
+      const cc = coordComplexity(m) + pu;
+      charge(meter, pu + m.faces.reduce((a, f) => a + f.length, 0) * cc, i, "clip");
       const normal: RVec3 = [Rational.parse(op.normal[0]!), Rational.parse(op.normal[1]!), Rational.parse(op.normal[2]!)];
       if (normal[0].isZero() && normal[1].isZero() && normal[2].isZero()) {
         throw new Error(`evalTrace: op ${i} 'clip' needs a non-zero normal — a plane has a direction`);
       }
       const plane: Plane = { normal, d: Rational.parse(op.d) };
-      // Charge the Sutherland–Hodgman pass (walks every face's sides) up front,
-      // and the cap ear-clip (~O(L²) per cross-section loop) as each loop is
-      // assembled — the one super-linear step inside clip, so a grazing cut that
-      // produces a huge cap loop trips the meter, not just the linear output.
-      charge(meter, m.faces.reduce((a, f) => a + f.length, 0), i, "clip");
-      const out = clip(m, plane, (loopLength) => charge(meter, loopLength * loopLength, i, "clip"));
+      const out = clip(m, plane, (loopLength) => charge(meter, loopLength * loopLength * cc, i, "clip"));
       return out;
     }
     case "move": {
       const m = need();
-      charge(meter, meshWork(m), i, "move");
+      // Two costs: the one-time parameter PARSE (mesh-size independent — a giant
+      // literal is parsed once whether the mesh has a million vertices or none,
+      // so charging it × mesh size would let an empty/tiny mesh slip the parse;
+      // reviewer risk) plus the per-element ARITHMETIC (additive: when both the
+      // mesh coordinate and the region comparison are deep the cost is their sum,
+      // not their max; reviewer risk).
+      const pu = paramUnits(op.offset[0], op.offset[1], op.offset[2], ...regionStrings(op.region));
+      charge(meter, pu + meshWorkCC(m, coordComplexity(m) + pu), i, "move");
       const region = parseRegion(op.region);
       const dx = Rational.parse(op.offset[0]);
       const dy = Rational.parse(op.offset[1]);
@@ -450,7 +567,8 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number, meter: WorkMet
     }
     case "crease": {
       const m = need();
-      charge(meter, meshWork(m), i, "crease");
+      const pu = paramUnits(...regionStrings(op.region));
+      charge(meter, pu + meshWorkCC(m, coordComplexity(m) + pu), i, "crease");
       const region = parseRegion(op.region);
       const marked = new Set<string>(m.creases ?? []);
       for (const e of edgesOf(m).values()) {
@@ -460,6 +578,21 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number, meter: WorkMet
     }
     case "extrude": {
       const m = need();
+      // extrude/inset charge their OUTPUT (its size isn't predictable up front),
+      // so a giant offset would run its deep parse + per-vertex arithmetic BEFORE
+      // any charge. Guard the parameter bit-length up front (only when it is
+      // genuinely deep, so a normal recipe is unaffected). Charge over verts PLUS
+      // face-corners: the inRegion predicate walks every face corner (which can
+      // exceed the vertex count), and a giant region bound that selects no faces
+      // leaves the output shallow, so the post-build meshWork(out) cannot recover
+      // this cost (reviewer risk finding).
+      const pu = paramUnits(op.offset[0], op.offset[1], op.offset[2], ...regionStrings(op.region));
+      if (pu > 0) {
+        // Flat one-time parse (mesh-independent, so an empty/faceless mesh cannot
+        // slip a giant parse) + the per-corner region scan.
+        const corners = m.faces.reduce((a, f) => a + f.length, 0);
+        charge(meter, pu + (m.verts.length + corners) * pu, i, "extrude");
+      }
       const region = parseRegion(op.region);
       const off: RVec3 = [Rational.parse(op.offset[0]), Rational.parse(op.offset[1]), Rational.parse(op.offset[2])];
       const out = extrude(m, (v) => inRegion(v, region), off);
@@ -468,6 +601,18 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number, meter: WorkMet
     }
     case "inset": {
       const m = need();
+      // Meter BEFORE parsing the factor — a giant rational's parse (BigInt +
+      // `bgcd`) is unmetered CPU otherwise (reviewer risk). Over verts +
+      // face-corners: the inRegion scan can exceed the vertex count, and a giant
+      // region bound selecting no faces leaves the output shallow so meshWork(out)
+      // cannot recover it. A normal factor charges ~0 and still reaches its
+      // positive-check below; only a giant literal is resource-rejected first.
+      const pu = paramUnits(op.factor, ...regionStrings(op.region));
+      if (pu > 0) {
+        // Flat one-time parse (mesh-independent) + the per-corner region scan.
+        const corners = m.faces.reduce((a, f) => a + f.length, 0);
+        charge(meter, pu + (m.verts.length + corners) * pu, i, "inset");
+      }
       const region = parseRegion(op.region);
       const factor = Rational.parse(op.factor);
       if (factor.cmp(Rational.ZERO) <= 0) throw new Error(`evalTrace: op ${i} 'inset' factor must be positive`);
@@ -477,7 +622,20 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number, meter: WorkMet
     }
     case "scale": {
       const m = need();
-      charge(meter, meshWork(m), i, "scale");
+      // A shallow mesh scaled by an astronomical factor is the reviewer's Block
+      // case: the factor's parse + per-vertex multiply is real work the input
+      // mesh's complexity cannot see, and a lone/alternating scale never lets a
+      // later op's coordComplexity catch the resulting depth. Fold the parameters
+      // into the up-front charge, BEFORE parsing them.
+      // One-time parse (mesh-independent) + per-element arithmetic (additive:
+      // scale multiplies factor INTO each coordinate, so bit-length is coord +
+      // factor, not their max). Both reviewer risks.
+      const pu = paramUnits(
+        op.factor[0], op.factor[1], op.factor[2],
+        op.pivot[0], op.pivot[1], op.pivot[2],
+        ...regionStrings(op.region),
+      );
+      charge(meter, pu + meshWorkCC(m, coordComplexity(m) + pu), i, "scale");
       const region = parseRegion(op.region);
       const f: RVec3 = [Rational.parse(op.factor[0]), Rational.parse(op.factor[1]), Rational.parse(op.factor[2])];
       const p: RVec3 = [Rational.parse(op.pivot[0]), Rational.parse(op.pivot[1]), Rational.parse(op.pivot[2])];
