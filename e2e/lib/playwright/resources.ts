@@ -34,6 +34,7 @@ export interface UiScenario {
     | 'conversation-delete-recovery'
     | 'question-form-single-selection'
     | 'question-form-submit-persistence'
+    | 'question-form-single-answer'
     | 'generation-does-not-create-extra-file'
     | 'comment-attachment-flow'
     | 'deck-pagination-next-prev-correctness'
