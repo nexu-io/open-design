@@ -40,6 +40,7 @@ import {
   pluginApplyFailed,
   renderPluginBriefTemplate,
   resolvedWorkspaceContextForWrite,
+  type ApplyPluginOutcome,
 } from '../state/projects';
 import { useProjectCollabContext } from '../collab/collab-context';
 import { useWorkspaceContext } from '../collab/useWorkspaceContext';
@@ -70,7 +71,11 @@ interface Props {
   // pass false so the section behaves as a pure context-bar.
   showRail?: boolean;
   // Optional hooks — see file header.
-  onApplied?: (brief: string, applied: ApplyResult) => void;
+  onApplied?: (
+    brief: string,
+    applied: ApplyResult,
+    options?: { suppressBriefSeed?: boolean },
+  ) => void;
   onCleared?: () => void;
   onValidityChange?: (valid: boolean) => void;
   // Forwarded to ContextChipStrip so chips can open the plugin details
@@ -88,8 +93,13 @@ export interface PluginsSectionHandle {
   // Imperatively apply a plugin by id. Mirrors what InlinePluginsRail
   // does on click but lets ChatComposer drive the apply from the
   // tools-menu Plugins tab and the @-mention popover. Resolves with
-  // the ApplyResult on success or null on failure (matching applyPlugin).
-  applyById: (pluginId: string, record?: InstalledPluginRecord | null) => Promise<ApplyResult | null>;
+  // the full outcome so hosts can distinguish a safe diagnosed failure
+  // from an unreachable/invalid transport response (`null`).
+  applyById: (
+    pluginId: string,
+    record?: InstalledPluginRecord | null,
+    options?: { suppressBriefSeed?: boolean },
+  ) => Promise<ApplyPluginOutcome | null>;
   // Imperatively clear the active plugin (drops the context chips +
   // inputs form, fires onCleared). Used by tools-menu's "Replace" /
   // "Clear" affordance and by chip remove paths that bypass the strip.
@@ -131,7 +141,11 @@ export const PluginsSection = forwardRef<PluginsSectionHandle, Props>(
     ]);
 
     const handleApplied = useCallback(
-      (record: InstalledPluginRecord | null, result: ApplyResult) => {
+      (
+        record: InstalledPluginRecord | null,
+        result: ApplyResult,
+        options?: { suppressBriefSeed?: boolean },
+      ) => {
         setActiveRecord(record);
         setApplied(result);
         // Seed inputs from their schema defaults. The inputs form is no longer
@@ -142,7 +156,7 @@ export const PluginsSection = forwardRef<PluginsSectionHandle, Props>(
           if (field.default !== undefined) initialInputs[field.name] = field.default;
         }
         const brief = renderPluginBriefTemplate(result.query ?? '', initialInputs);
-        props.onApplied?.(brief, result);
+        props.onApplied?.(brief, result, options);
       },
       [props],
     );
@@ -163,7 +177,7 @@ export const PluginsSection = forwardRef<PluginsSectionHandle, Props>(
     useImperativeHandle(
       ref,
       () => ({
-        applyById: async (pluginId, record = null) => {
+        applyById: async (pluginId, record = null, options) => {
           let workspaceContext;
           try {
             workspaceContext = workspaceContextForAction();
@@ -175,8 +189,8 @@ export const PluginsSection = forwardRef<PluginsSectionHandle, Props>(
             locale,
             workspaceContext,
           });
-          if (!result || pluginApplyFailed(result)) return null;
-          handleApplied(record, result);
+          if (!result || pluginApplyFailed(result)) return result;
+          handleApplied(record, result, options);
           return result;
         },
         clear,
