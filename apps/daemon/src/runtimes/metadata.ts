@@ -91,10 +91,6 @@ const AGENT_INSTALL_LINKS: Record<
     installUrl: 'https://atomcode.atomgit.com/docs/en/quickstart.html',
     docsUrl: 'https://atomcode.atomgit.com/docs/en/index.html',
   },
-  dulus: {
-    installUrl: 'https://pypi.org/project/dulus/',
-    docsUrl: 'https://github.com/KevRojo/Dulus',
-  },
 };
 
 function sanitizeHttpsUrl(value: string | undefined): string | undefined {
