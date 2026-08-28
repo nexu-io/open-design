@@ -723,6 +723,60 @@ test('[P1] last project list row keeps its overflow menu inside the viewport', a
   expect((menuBox?.y ?? 0) + (menuBox?.height ?? 0)).toBeLessThan(triggerBox?.y ?? 0);
 });
 
+test('[P1] last project grid card keeps its overflow menu inside the viewport', async ({ page }) => {
+  const recentProjects = Array.from({ length: 3 }, (_, index) => ({
+    id: `recent-grid-menu-${index + 1}`,
+    name: `Grid Project ${index + 1}`,
+    skillId: null,
+    designSystemId: null,
+    createdAt: Date.now() - (index + 1) * 10_000,
+    updatedAt: Date.now() - (index + 1) * 5_000,
+    metadata: { kind: 'prototype', nameSource: 'user' },
+  }));
+  const lastProject = recentProjects.at(-1)!;
+
+  // Two grid columns at this width put the last card on the bottom row while
+  // retaining the default card/grid path reported by #6916.
+  await page.setViewportSize({ width: 540, height: 500 });
+  await page.route('**/api/projects', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { projects: recentProjects } });
+      return;
+    }
+    await route.continue();
+  });
+  await gotoEntryHome(page);
+
+  await page.getByRole('button', { name: 'Grid view' }).click();
+  const lastCard = page.locator(`[data-project-id="${lastProject.id}"]`);
+  await expect(lastCard).toBeVisible();
+  await page.evaluate((projectId) => {
+    const scroller = document.querySelector<HTMLElement>('.entry-main--scroll');
+    const card = document.querySelector<HTMLElement>(`[data-project-id="${projectId}"]`);
+    const trigger = card?.querySelector<HTMLElement>('.recent-projects__card-more');
+    if (!scroller || !card || !trigger) {
+      throw new Error('Recent project grid-menu fixture is missing');
+    }
+
+    const desiredTop = scroller.getBoundingClientRect().bottom - 10;
+    scroller.scrollTop += trigger.getBoundingClientRect().top - desiredTop;
+  }, lastProject.id);
+
+  await lastCard.hover();
+  const trigger = lastCard.getByRole('button', { name: /more actions/i });
+  await trigger.click();
+
+  const menu = lastCard.getByRole('menu');
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Delete' })).toBeInViewport();
+
+  const triggerBox = await trigger.boundingBox();
+  const menuBox = await menu.boundingBox();
+  expect(triggerBox).not.toBeNull();
+  expect(menuBox).not.toBeNull();
+  expect((menuBox?.y ?? 0) + (menuBox?.height ?? 0)).toBeLessThan(triggerBox?.y ?? 0);
+});
+
 test('[P1] home left rail expands and collapses from the shell controls', async ({ page }) => {
   await gotoEntryHome(page);
 
