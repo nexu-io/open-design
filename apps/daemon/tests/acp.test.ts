@@ -2685,7 +2685,7 @@ test('attachAcpSession default stage timeout tolerates >3min of silence between 
   }
 });
 
-test('attachAcpSession honors caller-supplied stageTimeoutMs override', async () => {
+test('attachAcpSession retains the prompt-stage timeout for generic callers', async () => {
   vi.useFakeTimers();
   try {
     const child = new FakeAcpChild();
@@ -2710,6 +2710,50 @@ test('attachAcpSession honors caller-supplied stageTimeoutMs override', async ()
     assert.ok(error, 'expected a stage-timeout error event');
     const message = (error.payload as { message?: string }).message ?? '';
     assert.match(message, /1000ms/);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('attachAcpSession transfers prompt-stage ownership before waiting status', async () => {
+  vi.useFakeTimers();
+  try {
+    const child = new FakeAcpChild();
+    const events: Array<{ event: string; payload: unknown }> = [];
+    const ordering: string[] = [];
+    const onPromptDispatched = vi.fn(() => ordering.push('prompt_dispatched'));
+
+    attachAcpSession({
+      child: child as never,
+      prompt: 'hello',
+      cwd: '/tmp/od-project',
+      model: null,
+      mcpServers: [],
+      stageTimeoutMs: 1_000,
+      onPromptDispatched,
+      send: (event, payload) => {
+        events.push({ event, payload });
+        if (
+          event === 'agent' &&
+          (payload as { type?: string; label?: string }).label === 'waiting_for_first_output'
+        ) {
+          ordering.push('waiting_for_first_output');
+        }
+      },
+    });
+
+    child.stdout.write(`${JSON.stringify({ id: 1, result: {} })}\n`);
+    child.stdout.write(`${JSON.stringify({ id: 2, result: { sessionId: 'session-1' } })}\n`);
+    // A heartbeat after prompt dispatch must not recreate the ACP stage timer.
+    child.stdout.write(`${JSON.stringify({
+      method: 'session/update',
+      params: { sessionId: 'session-1', update: { sessionUpdate: 'heartbeat' } },
+    })}\n`);
+
+    assert.equal(onPromptDispatched.mock.calls.length, 1);
+    assert.deepEqual(ordering, ['prompt_dispatched', 'waiting_for_first_output']);
+    await vi.advanceTimersByTimeAsync(1_500);
+    assert.equal(events.filter((entry) => entry.event === 'error').length, 0);
   } finally {
     vi.useRealTimers();
   }

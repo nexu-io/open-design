@@ -24,10 +24,12 @@ import {
 } from '../../src/server.js';
 import { amrAgentDef } from '../../src/runtimes/defs/amr.js';
 import { copilotAgentDef } from '../../src/runtimes/defs/copilot.js';
+import { SHIPPED_AGENT_DEFS } from '../../src/runtimes/registry.js';
 
 const ENV_KEY = 'OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS';
 const FIRST_OUTPUT_ENV_KEY = 'OD_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS';
 const TEN_MINUTES_MS = 10 * 60 * 1000;
+const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 const THIRTY_MINUTES_MS = 30 * 60 * 1000;
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
@@ -218,12 +220,38 @@ describe('copilotAgentDef.inactivityTimeoutMs', () => {
 });
 
 describe('amrAgentDef.inactivityTimeoutMs', () => {
-  it('ships a 30-minute inactivity hint so the outer chat watchdog matches ACP stage timeouts for slow upstream providers', () => {
+  it('ships a 30-minute post-output inactivity window for slow upstream providers', () => {
     expect(amrAgentDef.inactivityTimeoutMs).toBe(THIRTY_MINUTES_MS);
   });
 
-  it('ships a two-minute absolute first-output deadline', () => {
-    expect(amrAgentDef.firstOutputTimeoutMs).toBe(120_000);
+  // AMR has a distinct 15-minute absolute first-output budget. Its sliding
+  // inactivity watchdog remains 30 minutes, so a deadline expiry is reported
+  // as the terminal first-output outcome instead of starting the same request
+  // again under another long wait.
+  it('ships the AMR 15-minute first-output budget, not a two-minute one', () => {
+    expect(amrAgentDef.firstOutputTimeoutMs).toBe(FIFTEEN_MINUTES_MS);
+  });
+
+  it('no longer kills a silent-but-alive AMR turn anywhere near the old 120s mark', () => {
+    // Phrased as the user-visible invariant rather than a second equality: a
+    // future budget change must stay far above the deadline users complained
+    // about, whatever exact number it lands on.
+    expect(resolveChatRunFirstOutputTimeoutMs(amrAgentDef.firstOutputTimeoutMs))
+      .toBeGreaterThan(120_000);
+  });
+});
+
+describe('every other runtime keeps its first-output watchdog disabled', () => {
+  // 「不到超时不报错」 — the design's third principle. Only AMR advertises a
+  // first-output budget; every other agent resolves to 0 (disabled) and is
+  // bounded solely by the sliding inactivity watchdog. This change must not
+  // hand any of them a deadline they did not have.
+  it('resolves to 0 for every shipped def except AMR', () => {
+    delete process.env.OD_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS;
+    const withBudget = SHIPPED_AGENT_DEFS
+      .filter((def) => resolveChatRunFirstOutputTimeoutMs(def.firstOutputTimeoutMs) > 0)
+      .map((def) => def.id);
+    expect(withBudget).toEqual(['amr']);
   });
 });
 

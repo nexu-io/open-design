@@ -25,6 +25,7 @@ import {
   renderOdNextRuntimeFactsV2,
   composeOdNextStrategyStableRequestContextV2,
   executionProfileFromStreamFormat,
+  formatAgentStallTimeoutObservation,
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
 } from '@open-design/contracts';
 import { isTodoWriteToolName, stopReasonIsTruncation, todoItemsFromTodoWriteInput } from '@open-design/contracts';
@@ -13088,13 +13089,17 @@ export async function startServer({
       if (!stallPayload) {
         const timeoutMs =
           reason === 'first_output' ? firstOutputTimeoutMs : inactivityTimeoutMs;
-        const timeoutDescription =
-          reason === 'first_output'
-            ? 'without emitting a first output'
-            : 'without emitting any new output';
+        // Report only what the daemon observed: the budget elapsed with no
+        // output, plus the phase evidence. It must NOT name a cause — this
+        // sentence used to assert "The model or CLI likely hung while
+        // generating", and the data says that diagnosis is usually wrong
+        // (968 runs across 14 days emitted their first output past the
+        // ten-minute mark and then succeeded). The user-facing card renders
+        // localized copy off `failure_detail`; this string is the technical
+        // detail behind it. The observation prefix is shared with the web
+        // parser so wording changes cannot silently lose duration readback.
         const message =
-          `Agent stalled ${timeoutDescription} for ${Math.round(timeoutMs / 1000)}s. ` +
-          'The model or CLI likely hung while generating. ' +
+          `${formatAgentStallTimeoutObservation(reason, timeoutMs)} ` +
           `Phase details: spawned agent ${userFacingAgentLabel(agentId, resolvedBin)}; stdout arrived: ${childStdoutSeen ? 'yes' : 'no'}; ` +
           `last agent event: ${lastAgentEventPhase}; largest tool result observed: ${lastToolResultChars} chars. ` +
           'Retry the turn, pick a different model, or start a new conversation if the prior context is very large.';
@@ -13111,14 +13116,13 @@ export async function startServer({
         );
         acpSession.abort();
       }
-      // A silent first-token hang is one of the safe transient failure shapes
-      // this run is allowed to recover: classifyRunFailure maps the stall text
-      // to a retryable `timeout` at `first_token_wait`, and decideSafeRunRetry
-      // permits the same-run retry when no output/tools/artifacts were seen.
-      // Route through the shared finalizer (after surfacing stallPayload) so
-      // the watchdog path gets the same run_retry_attempted/run_retry_finished
-      // telemetry as child close/error — not a bare terminal failure.
-      const retried = finishWithRetryDecision('failed', 1, null);
+      // The absolute first-output deadline is terminal: retrying the same
+      // request starts a second physical attempt with the same long wait and
+      // hides the deadline that the user needs to act on. Sliding inactivity
+      // failures keep the established retry policy.
+      const retried = finishWithRetryDecision('failed', 1, null, {
+        allowRetry: reason !== 'first_output',
+      });
       if (retried) {
         watchdogRetryRestarted = true;
       }
@@ -13217,6 +13221,10 @@ export async function startServer({
       if (toolTokenGrant) {
         toolTokenRegistry.refreshToken(toolTokenGrant.token, { ttlMs: toolTokenTtlMs });
       }
+      // An enabled first-output deadline is absolute. Until an actual
+      // output/artifact ends that phase, heartbeats and transport bytes may
+      // refresh diagnostics but must not arm a competing sliding watchdog.
+      if (firstOutputTimeoutMs > 0 && !firstOutputSeen) return;
       const delay = activeInactivityTimeoutMs();
       if (delay <= 0) return;
       clearInactivityWatchdog();
@@ -13251,8 +13259,8 @@ export async function startServer({
     if (toolTokenGrant?.runId) {
       activeChatAgentEventSinks.set(toolTokenGrant.runId, (payload) => {
         lastAgentEventPhase = summarizeAgentEventForInactivity(payload);
-        noteAgentActivity();
         noteFirstOutputEvent(payload);
+        noteAgentActivity();
         send('agent', payload);
       });
       activeChatRunHandles.set(toolTokenGrant.runId, { noteArtifactRegistered });
@@ -13959,7 +13967,13 @@ export async function startServer({
     function emitGuardedTextDelta(delta: string) {
       const safe = guardTextDelta(delta);
       if (safe.length > 0) {
+        const wasAwaitingFirstOutput = firstOutputTimeoutMs > 0 && !firstOutputSeen;
         noteFirstOutputEvent({ type: 'text_delta' });
+        // ACP raw activity was observed before title/role filtering, while the
+        // absolute first-output phase intentionally suppresses inactivity. Arm
+        // the sliding watchdog exactly when guarded visible text completes the
+        // phase transition, so a post-output stall remains bounded.
+        if (wasAwaitingFirstOutput && firstOutputSeen) noteAgentActivity();
         send('agent', { type: 'text_delta', delta: safe });
       }
       if (runGuard.contaminated && !runWarned) {
@@ -14517,6 +14531,9 @@ export async function startServer({
         onCliReady: () => noteCliReadyAt(),
         onSessionInit: () => noteSessionInitDoneAt(),
         onPromptComplete: () => clearFirstOutputWatchdog(),
+        ...(firstOutputTimeoutMs > 0
+          ? { onPromptDispatched: () => armFirstOutputWatchdog() }
+          : {}),
         onTerminal: (kind) => beginAcpAttemptTermination(
           `acp_${kind}`,
           { gracefulWaitMs: kind === 'completed' ? 500 : 0 },
@@ -14530,12 +14547,7 @@ export async function startServer({
           }
           if (event === 'agent') {
             lastAgentEventPhase = summarizeAgentEventForInactivity(data);
-            if (
-              data?.type === 'status' &&
-              data.label === 'waiting_for_first_output'
-            ) {
-              armFirstOutputWatchdog();
-            } else if (data?.type !== 'text_delta') {
+            if (data?.type !== 'text_delta') {
               // Raw ACP text may be entirely consumed by title-marker or role
               // filtering. Only the guarded non-empty emission below counts
               // as substantive first output.

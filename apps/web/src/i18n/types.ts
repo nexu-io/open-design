@@ -2948,6 +2948,8 @@ export interface Dict {
   'chat.runError.workspaceCreditsMessage': string;
   'chat.runError.timedOutMessage': string;
   'chat.runError.inactivityTimeoutMessage': string;
+  'chat.runError.inactivityTimeoutMessageOneMinute': string;
+  'chat.runError.inactivityTimeoutMessageNoTime': string;
   'chat.runError.emptyOutputMessage': string;
   'chat.runError.sessionExpiredMessage': string;
   'chat.runError.gitBashMissingMessage': string;

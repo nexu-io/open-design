@@ -133,6 +133,13 @@ export interface AttachAcpSessionOptions {
   onSessionInit?: () => void;
   onPromptComplete?: () => void;
   /**
+   * Transfers post-prompt watchdog ownership to the caller. When supplied,
+   * ACP clears its stage timer, writes `session/prompt`, invokes this callback
+   * synchronously, then emits `waiting_for_first_output`. A failed prompt write
+   * never invokes the callback; callers may therefore arm exactly one timer.
+   */
+  onPromptDispatched?: () => void;
+  /**
    * Transfers process-tree teardown ownership to the caller once this
    * one-prompt session has a clean or fatal verdict. When provided, the ACP
    * bridge does not fall back to direct-child SIGTERM; the caller must stop the
@@ -186,6 +193,7 @@ export function attachAcpSession({
   onCliReady,
   onSessionInit,
   onPromptComplete,
+  onPromptDispatched,
   onTerminal,
 }: AttachAcpSessionOptions) {
   const runStartedAt = Date.now();
@@ -351,6 +359,10 @@ export function attachAcpSession({
   };
 
   const stageWatchdogDisabled = stageTimeoutMs <= 0;
+  // With a caller-owned first-output deadline, ACP's watchdog ends as soon as
+  // session/prompt is written. Generic callers retain the historical prompt
+  // stage watchdog, including resets from prompt updates and permissions.
+  const shouldArmStageTimer = () => !onPromptDispatched || promptRequestId === null;
   const resetStageTimer = (label: string) => {
     if (stageTimer) clearTimeout(stageTimer);
     // `stageTimeoutMs <= 0` disables the watchdog. Mirrors the outer chat
@@ -449,12 +461,20 @@ export function attachAcpSession({
     if (!terminalOwnedByCaller && !child.killed) child.kill('SIGTERM');
   };
 
-  const writeRpc = (id: JsonRpcId, method: string, params: unknown, timeoutLabel: string) => {
-    resetStageTimer(timeoutLabel);
+  const writeRpc = (
+    id: JsonRpcId,
+    method: string,
+    params: unknown,
+    timeoutLabel: string,
+    armStageTimer = true,
+  ) => {
+    if (armStageTimer) resetStageTimer(timeoutLabel);
     try {
       sendRpc(stdin, id, method, params);
+      return true;
     } catch (err) {
       fail(`stdin write failed: ${errorMessage(err)}`);
+      return false;
     }
   };
 
@@ -653,7 +673,11 @@ export function attachAcpSession({
   const sendPrompt = () => {
     promptRequestId = nextId;
     expectedId = promptRequestId;
-    writeRpc(
+    // The caller's first-output budget begins only after the prompt reaches
+    // stdin. It owns the entire post-prompt wait, so ACP must not retain a
+    // competing stage timer in that mode.
+    if (onPromptDispatched) clearStageTimer();
+    const promptWritten = writeRpc(
       promptRequestId,
       'session/prompt',
       {
@@ -661,7 +685,10 @@ export function attachAcpSession({
         prompt: buildPromptBlocks(prompt, [...resourcePaths, ...imagePaths]),
       },
       'session/prompt',
+      !onPromptDispatched,
     );
+    if (!promptWritten) return;
+    onPromptDispatched?.();
     send('agent', {
       type: 'status',
       label: 'waiting_for_first_output',
@@ -739,7 +766,7 @@ export function attachAcpSession({
       elapsedMs: Date.now() - runStartedAt,
       optionId,
     });
-    resetStageTimer('session/request_permission');
+    if (shouldArmStageTimer()) resetStageTimer('session/request_permission');
     try {
       sendRpcResult(stdin, raw.id, {
         outcome: { outcome: 'selected', optionId },
@@ -758,7 +785,7 @@ export function attachAcpSession({
 
   const parser = createJsonLineStream((raw, rawLine) => {
     if (aborted || finished) return;
-    resetStageTimer('response');
+    if (shouldArmStageTimer()) resetStageTimer('response');
     const obj = asObject(raw);
     if (!obj) return;
     // First well-formed ACP JSON-RPC message = CLI ready (#3408 §4). Caller

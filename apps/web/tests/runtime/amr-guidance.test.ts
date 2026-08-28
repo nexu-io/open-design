@@ -260,7 +260,6 @@ describe('resolveRunFailureUi', () => {
   it('maps long-tail failure_detail values to a named type + retry guidance for any agent', () => {
     const cases: Array<[string, string, string]> = [
       ['timeout', 'chat.runError.title.timedOut', 'chat.runError.timedOutMessage'],
-      ['inactivity_timeout', 'chat.runError.title.timedOut', 'chat.runError.inactivityTimeoutMessage'],
       ['empty_output', 'chat.runError.title.emptyOutput', 'chat.runError.emptyOutputMessage'],
       ['session_resume_expired', 'chat.runError.title.sessionExpired', 'chat.runError.sessionExpiredMessage'],
       ['git_bash_missing', 'chat.runError.title.gitBashMissing', 'chat.runError.gitBashMissingMessage'],
@@ -276,6 +275,98 @@ describe('resolveRunFailureUi', () => {
         });
       }
     }
+  });
+
+  // 《Open Design 报错体验设计方案》§5 场景卡:
+  //   「等了 10 分钟没有新的输出，先停下来了 —— 已做的部分都保留着。」
+  // The wait length is part of the sentence, and it is not a constant: the
+  // design gives 10 minutes as the default budget and 30 for Cloud (AMR), and
+  // an operator can set any other. So the card reads the length back out of
+  // the daemon's own timeout sentence rather than hard-coding a number, the
+  // same way the model-window card reads its reset instant.
+  it('names how long the wait was before the timeout stopped the run', () => {
+    const ui = resolveRunFailureUi(
+      'AGENT_EXECUTION_FAILED',
+      'inactivity_timeout',
+      'amr',
+      'Agent stalled without emitting a first output for 1800s. Phase details: spawned agent amr; stdout arrived: yes; last agent event: status:heartbeat; largest tool result observed: 0 chars.',
+    );
+    expect(ui).toMatchObject({
+      primaryAction: 'retry',
+      titleKey: 'chat.runError.title.timedOut',
+      messageKey: 'chat.runError.inactivityTimeoutMessage',
+      secondaryRetry: false,
+      showSwitchCard: false,
+    });
+    expect(ui.messageVars?.minutes).toBe('30');
+  });
+
+  // The mid-run watchdog phrases its sentence differently ("any new output"),
+  // and it is agent-neutral — every runtime shares the sliding budget.
+  it('reads the wait out of the mid-run stall sentence too, for any agent', () => {
+    for (const agent of ['claude', 'codex', 'amr', null]) {
+      const ui = resolveRunFailureUi(
+        'AGENT_EXECUTION_FAILED',
+        'inactivity_timeout',
+        agent,
+        'Agent stalled without emitting any new output for 600s. Phase details: spawned agent claude.',
+      );
+      expect(ui.messageKey).toBe('chat.runError.inactivityTimeoutMessage');
+      expect(ui.messageVars?.minutes).toBe('10');
+    }
+  });
+
+  it('floors operator budgets instead of overstating the wait', () => {
+    const ninetySeconds = resolveRunFailureUi(
+      'AGENT_EXECUTION_FAILED',
+      'inactivity_timeout',
+      'amr',
+      'Agent stalled without emitting a first output for 90s.',
+    );
+    expect(ninetySeconds.messageKey).toBe(
+      'chat.runError.inactivityTimeoutMessageOneMinute',
+    );
+    expect(ninetySeconds.messageVars?.minutes).toBeUndefined();
+
+    const justUnderOneMinute = resolveRunFailureUi(
+      'AGENT_EXECUTION_FAILED',
+      'inactivity_timeout',
+      'amr',
+      'Agent stalled without emitting a first output for 59s.',
+    );
+    expect(justUnderOneMinute.messageKey).toBe(
+      'chat.runError.inactivityTimeoutMessageNoTime',
+    );
+    expect(justUnderOneMinute.messageVars?.minutes).toBeUndefined();
+  });
+
+  // `inactivity_timeout` is also reached by text classification of arbitrary
+  // upstream wording, which carries no duration at all. Promising a number we
+  // did not read would be worse than not naming one.
+  it('degrades to the no-duration copy when the wait is unreadable', () => {
+    const ui = resolveRunFailureUi(
+      'AGENT_EXECUTION_FAILED',
+      'inactivity_timeout',
+      'amr',
+      'upstream reported the request hung',
+    );
+    expect(ui.titleKey).toBe('chat.runError.title.timedOut');
+    expect(ui.messageKey).toBe('chat.runError.inactivityTimeoutMessageNoTime');
+    expect(ui.messageVars?.minutes).toBeUndefined();
+  });
+
+  // A sub-minute operator budget would round to "0 minutes" / "1 minutes".
+  // Neither is a sentence, so the no-duration variant takes over below a
+  // whole minute rather than the copy rendering something false.
+  it('degrades to the no-duration copy for a sub-minute budget', () => {
+    const ui = resolveRunFailureUi(
+      'AGENT_EXECUTION_FAILED',
+      'inactivity_timeout',
+      'amr',
+      'Agent stalled without emitting a first output for 3s.',
+    );
+    expect(ui.messageKey).toBe('chat.runError.inactivityTimeoutMessageNoTime');
+    expect(ui.messageVars?.minutes).toBeUndefined();
   });
 
   // A cpu_unsupported crash (bundled agent binary requires AVX2, this CPU has

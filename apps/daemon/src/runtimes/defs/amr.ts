@@ -667,12 +667,21 @@ export const amrAgentDef = {
   // was selected. Explicit UI selections, including `default`, win.
   defaultModelEnvVar: 'VELA_DEFAULT_MODEL',
   // Vela/OpenCode can spend extended stretches silent while the upstream
-  // provider is still working. Keep the outer chat watchdog aligned with the
-  // 30-minute ACP stage timeout so the daemon does not fail the run first.
+  // provider is still working. This sliding post-output watchdog stays at 30
+  // minutes; the distinct absolute first-output deadline below owns prompt wait.
   inactivityTimeoutMs: 30 * 60 * 1000,
-  // Once the ACP handshake has completed and session/prompt is waiting on the
-  // provider, transport/status heartbeats must not leave the UI in Preparing
-  // indefinitely. Two minutes leaves conservative provider-startup headroom
-  // while still bounding the user's wait and one safe same-run retry.
-  firstOutputTimeoutMs: 2 * 60 * 1000,
+  // Absolute budget from `session/prompt` to the first substantive output.
+  // Unlike `inactivityTimeoutMs` above this one is NOT re-armed by activity,
+  // so it still bounds the wait when vela's transport/status heartbeats keep
+  // the sliding watchdogs fed forever without a token ever arriving.
+  //
+  // AMR (`amr_cloud`) has a distinct 15-minute absolute first-output budget
+  // while the sliding inactivity watchdog remains 30 minutes.
+  //
+  // It used to be two minutes, which declared healthy runs dead: first-token
+  // latency tracks context size (p90 = 277s past 600k tokens), and across 14
+  // days 968 runs emitted their first output more than ten minutes in and
+  // then SUCCEEDED. A deadline expiry is terminal rather than spending a
+  // second physical attempt on the same long wait.
+  firstOutputTimeoutMs: 15 * 60 * 1000,
 } satisfies RuntimeAgentDef;

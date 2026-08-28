@@ -5,6 +5,7 @@
 // without a circular dependency.
 import {
   isModelWindowLimitFailure,
+  readAgentStallWaitedMinutes,
   readMembershipConcurrencyResetAt,
   readModelWindowResetAt,
 } from '@open-design/contracts';
@@ -198,6 +199,8 @@ export type RunFailureMessageKey =
   | 'chat.runError.workspaceCreditsMessage'
   | 'chat.runError.timedOutMessage'
   | 'chat.runError.inactivityTimeoutMessage'
+  | 'chat.runError.inactivityTimeoutMessageOneMinute'
+  | 'chat.runError.inactivityTimeoutMessageNoTime'
   | 'chat.runError.emptyOutputMessage'
   | 'chat.runError.sessionExpiredMessage'
   | 'chat.runError.gitBashMissingMessage'
@@ -442,12 +445,10 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
     'chat.runError.title.timedOut',
     'chat.runError.timedOutMessage',
   ),
-  // The agent stalled (no new output for too long) and was cut off as a
-  // timeout. Distinct copy from a hard timeout, same retry recovery.
-  inactivity_timeout: retryWithGuidance(
-    'chat.runError.title.timedOut',
-    'chat.runError.inactivityTimeoutMessage',
-  ),
+  // `inactivity_timeout` is deliberately absent: its copy names how long the
+  // wait was, which has to be read off the raw message. It resolves in
+  // `resolveRunFailureUi` alongside the other detail whose copy carries a
+  // value (`model_window_limit`).
   // Run terminated without producing any output (daemon user_action: retry);
   // usually transient, so name it and offer a straight retry.
   empty_output: retryWithGuidance(
@@ -562,6 +563,33 @@ export function resolveRunFailureUi(
         ? 'chat.runError.membershipConcurrencyLimitMessage'
         : 'chat.runError.membershipConcurrencyLimitMessageNoTime',
       ...(retryAt ? { messageVars: { retryAt } } : {}),
+      secondaryRetry: false,
+      showSwitchCard: false,
+    };
+  }
+  // A no-output timeout names the wait it gave up on, so it resolves here with
+  // the raw message in hand rather than from the static detail table below.
+  // 《Open Design 报错体验设计方案》 §5: 「等了 10 分钟没有新的输出，先停下来了
+  // —— 已做的部分都保留着。」 The length is not a constant (10 min default, 30
+  // for Cloud, anything under an operator override), and the daemon already
+  // names it in the sentence the card shows under 「查看详情」.
+  if (detail === 'inactivity_timeout') {
+    const minutes = readAgentStallWaitedMinutes(rawMessage);
+    return {
+      primaryAction: 'retry',
+      titleKey: 'chat.runError.title.timedOut',
+      // Naming a length we could not read would be worse than not naming one:
+      // this detail is also reached by text-classifying arbitrary upstream
+      // wording, which carries no duration at all.
+      messageKey:
+        minutes === 1
+          ? 'chat.runError.inactivityTimeoutMessageOneMinute'
+          : minutes
+            ? 'chat.runError.inactivityTimeoutMessage'
+            : 'chat.runError.inactivityTimeoutMessageNoTime',
+      ...(minutes && minutes !== 1
+        ? { messageVars: { minutes: String(minutes) } }
+        : {}),
       secondaryRetry: false,
       showSwitchCard: false,
     };
