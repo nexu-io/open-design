@@ -1053,6 +1053,7 @@ export const zhTW: Dict = {
   "homeWorkingDir.manualSubmit": "使用此目錄",
   "homeWorkingDir.manualEmpty": "請輸入目錄路徑。",
   "homeWorkingDir.manualNotFound": "伺服器上不存在該目錄。",
+  "homeWorkingDir.back": "返回",
   "homeWorkingDir.clear": "移除工作目錄",
   "homeWorkingDir.hint": "讓 Agent 可讀取該本機目錄（不會匯入 Design Files）",
   "homeWorkingDir.missing": "該工作目錄已不存在，請重新選擇",

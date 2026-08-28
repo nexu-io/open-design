@@ -1040,6 +1040,7 @@ export const fr: Dict = {
   'homeWorkingDir.manualSubmit': 'Utiliser ce dossier',
   'homeWorkingDir.manualEmpty': 'Saisissez un chemin de dossier.',
   'homeWorkingDir.manualNotFound': "Ce dossier n'existe pas sur le serveur.",
+  'homeWorkingDir.back': 'Retour',
   'homeWorkingDir.clear': 'Retirer le dossier de travail',
   'homeWorkingDir.hint': 'Autoriser l’agent à lire ce dossier local (sans l’importer dans les fichiers de design)',
   'homeWorkingDir.missing': 'Ce dossier de travail n’existe plus — choisissez-en un autre',

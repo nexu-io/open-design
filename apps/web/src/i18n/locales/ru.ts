@@ -1040,6 +1040,7 @@ export const ru: Dict = {
   'homeWorkingDir.manualSubmit': 'Использовать эту папку',
   'homeWorkingDir.manualEmpty': 'Введите путь к папке.',
   'homeWorkingDir.manualNotFound': 'Такой папки нет на сервере.',
+  'homeWorkingDir.back': 'Назад',
   'homeWorkingDir.clear': 'Убрать рабочую папку',
   'homeWorkingDir.hint': 'Разрешите агенту читать эту локальную папку (она не импортируется в Design Files)',
   'homeWorkingDir.missing': 'Эта рабочая папка больше не существует — выберите другую',

@@ -1040,6 +1040,7 @@ export const pl: Dict = {
   'homeWorkingDir.manualSubmit': 'Use this folder',
   'homeWorkingDir.manualEmpty': 'Enter a folder path.',
   'homeWorkingDir.manualNotFound': 'That folder doesn\'t exist on the server.',
+  'homeWorkingDir.back': 'Wstecz',
   'homeWorkingDir.clear': 'Remove working directory',
   'homeWorkingDir.hint': 'Let the agent read this local folder (not imported into Design Files)',
   'homeWorkingDir.missing': 'This working folder no longer exists — pick another',

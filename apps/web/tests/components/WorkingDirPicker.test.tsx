@@ -82,4 +82,17 @@ describe('WorkingDirPicker manual path entry', () => {
       expect(screen.queryByTestId('working-dir-panel')).toBeNull();
     });
   });
+
+  it('returns to the main menu on back without closing the panel', () => {
+    const onSubmitPath = vi.fn().mockResolvedValue({ ok: true });
+    renderPicker({ onSubmitPath });
+
+    fireEvent.click(screen.getByTestId('working-dir-trigger'));
+    fireEvent.click(screen.getByTestId('working-dir-manual'));
+    fireEvent.click(screen.getByTestId('working-dir-manual-back'));
+
+    expect(screen.queryByTestId('working-dir-manual-input')).toBeNull();
+    expect(screen.getByTestId('working-dir-pick')).toBeTruthy();
+    expect(screen.getByTestId('working-dir-panel')).toBeTruthy();
+  });
 });

@@ -1433,6 +1433,7 @@ export interface Dict {
   'homeWorkingDir.manualSubmit': string;
   'homeWorkingDir.manualEmpty': string;
   'homeWorkingDir.manualNotFound': string;
+  'homeWorkingDir.back': string;
   'homeWorkingDir.clear': string;
   'homeWorkingDir.hint': string;
   'homeWorkingDir.missing': string;

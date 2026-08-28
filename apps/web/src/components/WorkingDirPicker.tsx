@@ -167,7 +167,7 @@ export function WorkingDirPicker({
                   type="button"
                   className={styles.manualBack}
                   data-testid="working-dir-manual-back"
-                  aria-label={t('homeWorkingDir.recent')}
+                  aria-label={t('homeWorkingDir.back')}
                   onClick={() => {
                     setManualOpen(false);
                     setManualError(null);

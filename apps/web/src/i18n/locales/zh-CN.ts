@@ -1051,6 +1051,7 @@ export const zhCN: Dict = {
   "homeWorkingDir.manualSubmit": "使用此目录",
   "homeWorkingDir.manualEmpty": "请输入目录路径。",
   "homeWorkingDir.manualNotFound": "服务器上不存在该目录。",
+  "homeWorkingDir.back": "返回",
   "homeWorkingDir.clear": "移除工作目录",
   "homeWorkingDir.hint": "让 Agent 可读取该本地目录（不会导入到 Design Files）",
   "homeWorkingDir.missing": "该工作目录已不存在，请重新选择",
