@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { execAgentFile } from './invocation.js';
-import { AGENT_DEFS } from './registry.js';
+import { currentAgentDefs, getAgentDef } from './registry.js';
 import {
   DEFAULT_MODEL_OPTION,
   getRememberedLiveModels,
@@ -93,7 +93,7 @@ export async function ensureDetectedRuntimeVersions(
   configuredAgentEnv: Record<string, string> = {},
 ): Promise<DetectedRuntimeVersions | null> {
   if (!agentId) return null;
-  const def = AGENT_DEFS.find((candidate) => candidate.id === agentId);
+  const def = getAgentDef(agentId);
   if (!def) return null;
   const context = runtimeVersionProbeContext(def, configuredAgentEnv);
   if (!context) return null;
@@ -139,7 +139,7 @@ export async function ensureDetectedRuntimeCapabilities(
   configuredAgentEnv: Record<string, string> = {},
 ): Promise<RuntimeCapabilityMap | null> {
   if (!agentId) return null;
-  const def = AGENT_DEFS.find((candidate) => candidate.id === agentId);
+  const def = getAgentDef(agentId);
   if (!def) return null;
   const context = runtimeVersionProbeContext(def, configuredAgentEnv);
   if (!context) return null;
@@ -789,14 +789,15 @@ function rememberDetectedLiveModels(
 export async function detectAgents(
   configuredEnvByAgent: Record<string, Record<string, string>> = {},
 ) {
+  const agentDefs = currentAgentDefs();
   const results = await Promise.all(
-    AGENT_DEFS.map((def) => detectAgent(def, configuredEnvForAgent(configuredEnvByAgent, def.id))),
+    agentDefs.map((def) => detectAgent(def, configuredEnvForAgent(configuredEnvByAgent, def.id))),
   );
   // Refresh the validation cache from whatever we just surfaced to the UI
   // so /api/chat can accept any model the user could have just picked,
   // including ones that only showed up after a CLI re-auth.
   for (const [index, agent] of results.entries()) {
-    const def = AGENT_DEFS[index];
+    const def = agentDefs[index];
     if (!def) continue;
     rememberDetectedLiveModels(def, configuredEnvForAgent(configuredEnvByAgent, def.id), agent);
   }
@@ -812,7 +813,8 @@ export async function detectAgents(
 export async function* detectAgentsStream(
   configuredEnvByAgent: Record<string, Record<string, string>> = {},
 ): AsyncGenerator<DetectedAgent> {
-  const tagged = AGENT_DEFS.map((def, index) =>
+  const agentDefs = currentAgentDefs();
+  const tagged = agentDefs.map((def, index) =>
     detectAgent(def, configuredEnvForAgent(configuredEnvByAgent, def.id)).then((agent) => {
       rememberDetectedLiveModels(def, configuredEnvForAgent(configuredEnvByAgent, def.id), agent);
       return { index, agent };
