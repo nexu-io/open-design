@@ -11,6 +11,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { InstalledPluginRecord } from '@open-design/contracts';
+import { automaticStrategyTaskProfileForRouteId } from '@open-design/contracts';
 
 vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
   PlaceholderCarousel: () => null,
@@ -555,18 +556,24 @@ describe('HomeHero intent rail', () => {
       kind: 'apply-scenario',
       pluginId: 'example-live-artifact',
       projectKind: 'prototype',
+      automaticDefault: true,
       projectMetadata: {
         kind: 'prototype',
         intent: 'live-artifact',
         fidelity: 'high-fidelity',
       },
     });
-    expect(findChip('live-artifact')?.action).not.toHaveProperty('automaticDefault');
   });
 
+  // `automaticDefault` is not the OD Next gate and never was — it says the
+  // chip's plugin is the product's own choice for that surface, so the create
+  // travels without a plugin id and the daemon stamps the automatic scenario
+  // binding. The OD Next route is decided separately, by chip id, and these
+  // surfaces own none.
   it('keeps ordinary media chips outside automatic OD Next routing', () => {
-    for (const id of ['image', 'video', 'audio']) {
-      expect(findChip(id)?.action).not.toHaveProperty('automaticDefault');
+    for (const id of ['image', 'video', 'audio', 'live-artifact']) {
+      expect(automaticStrategyTaskProfileForRouteId(id), id).toBeNull();
+      expect(findChip(id)?.action, id).toMatchObject({ automaticDefault: true });
     }
   });
 });

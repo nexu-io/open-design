@@ -1437,6 +1437,46 @@ function checkCrossAppImportsOnce(): Promise<boolean> {
   return crossAppImportsResult;
 }
 
+
+// Only the internal run-creation service may start a physical Run.
+//
+// The run analytics lifecycle is installed there, once, for every Run. Four
+// daemon-internal callers used to reach past it and call the run registry
+// directly; each of those Runs reported no `run_created` and no `run_finished`,
+// and nothing said so (OPEND-2365). The service's `start` now requires the
+// caller to declare its analytics identity, but that only binds callers who go
+// through it — this check is what keeps the bypass from coming back.
+const RUN_START_BYPASS_ALLOWLIST = new Set([
+  "apps/daemon/src/services/internal-run-service.ts",
+]);
+
+async function checkRunStartChokePoint(): Promise<boolean> {
+  const violations: string[] = [];
+  const daemonSource = path.join(repoRoot, "apps", "daemon", "src");
+  if (!(await repositoryDirectoryExists("apps/daemon/src"))) return true;
+
+  for (const repositoryPath of await collectRepositoryFiles(daemonSource)) {
+    if (!repositoryPath.endsWith(".ts")) continue;
+    if (RUN_START_BYPASS_ALLOWLIST.has(repositoryPath)) continue;
+    const source = await readFile(path.join(repoRoot, repositoryPath), "utf8");
+    source.split("\n").forEach((line, index) => {
+      if (!/\.runs\.start\s*\(/.test(line)) return;
+      violations.push(`${repositoryPath}:${index + 1} ${line.trim()}`);
+    });
+  }
+
+  if (violations.length > 0) {
+    console.error("Run start choke-point violations found:");
+    console.error("Start physical Runs through `internalRunCreation.start(run, analytics, starter)`");
+    console.error("so the Run analytics lifecycle is installed. See AGENTS.md -> Starting a physical Run.");
+    for (const violation of violations) console.error(`- ${violation}`);
+    return false;
+  }
+
+  console.log("Run start choke-point check passed: every physical Run starts through the internal run-creation service.");
+  return true;
+}
+
 const checks: GuardCheck[] = [
   { name: "residual JavaScript", run: checkResidualJavaScript },
   { name: "package dependency specs", run: checkPackageDependencySpecs },
@@ -1450,6 +1490,7 @@ const checks: GuardCheck[] = [
   { name: "e2e layout", run: checkE2eLayout },
   { name: "web test layout", run: checkWebTestLayout },
   { name: "web import isolation", run: checkWebImportIsolation },
+  { name: "run start choke point", run: checkRunStartChokePoint },
   { name: "tools layout", run: checkToolsLayout },
   { name: "style policy", run: checkStylePolicy },
   { name: "craft references", run: checkCraftReferences },

@@ -41,6 +41,8 @@ interface Stub {
   rolloutStatus?: OdNextRolloutControlStatus;
   rolloutFails?: boolean;
   writeFails?: boolean;
+  /** Held open to keep a PUT in flight while the section unmounts. */
+  writeGate?: Promise<void>;
 }
 
 function stubFetch(options: Stub = {}) {
@@ -56,6 +58,7 @@ function stubFetch(options: Stub = {}) {
     }
     if (url === '/api/app-config') {
       writes.push(JSON.parse(String(init?.body ?? '{}')));
+      if (options.writeGate) await options.writeGate;
       if (options.writeFails) return new Response('{}', { status: 500 });
       return new Response('{"config":{}}', { status: 200 });
     }
@@ -65,12 +68,38 @@ function stubFetch(options: Stub = {}) {
   return { writes, fetchMock };
 }
 
+/**
+ * Stands in for `SettingsDialog`, which owns one shared save indicator for
+ * every section. `supersede()` is another section taking it over.
+ */
+function autosaveHost(onAutosaveStatus?: (s: 'saving' | 'saved' | 'error' | 'idle') => void) {
+  let epoch = 0;
+  return {
+    supersede: () => { epoch += 1; },
+    controller: {
+      claim: () => {
+        epoch += 1;
+        onAutosaveStatus?.('saving');
+        return epoch;
+      },
+      settle: (claim: number, status: 'saved' | 'error' | 'idle') => {
+        if (claim !== epoch) return;
+        onAutosaveStatus?.(status);
+      },
+    },
+  };
+}
+
 function renderSection(onAutosaveStatus?: (s: 'saving' | 'saved' | 'error' | 'idle') => void) {
-  return render(
-    <I18nProvider initial="en">
-      <LabsSection onAutosaveStatus={onAutosaveStatus} />
-    </I18nProvider>,
-  );
+  const host = autosaveHost(onAutosaveStatus);
+  return {
+    ...render(
+      <I18nProvider initial="en">
+        <LabsSection autosave={host.controller} />
+      </I18nProvider>,
+    ),
+    host,
+  };
 }
 
 function switchEl(): HTMLButtonElement {
@@ -423,6 +452,137 @@ describe('LabsSection', () => {
     cleanup();
 
     expect(onAutosaveStatus).toHaveBeenCalledWith('idle');
+  });
+
+  // OPEND-2365 (P2). Leaving Labs mid-write is the ordinary case — the user
+  // flips the switch and immediately clicks another settings section. The
+  // write still lands, so the installation holds the preference the event
+  // asserts; a `mounted` guard that also swallows the report turns every one
+  // of those into a silently missing data point.
+  describe('left while the write is still in flight', () => {
+    function heldWrite() {
+      let release = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = () => resolve();
+      });
+      return { gate, release };
+    }
+
+    it('still reports the toggle once the successful write lands', async () => {
+      const { gate, release } = heldWrite();
+      const { writes } = stubFetch({ writeGate: gate });
+      renderSection();
+      await waitFor(() => expect(switchEl().getAttribute('aria-disabled')).toBe('false'));
+
+      fireEvent.click(switchEl());
+      await waitFor(() => expect(writes).toHaveLength(1));
+      cleanup();
+      release();
+
+      await waitFor(() => expect(track).toHaveBeenCalledTimes(1));
+      expect(track.mock.calls[0]?.[0]).toBe('labs_item_toggled');
+      expect(track.mock.calls[0]?.[1]).toEqual({
+        item_id: 'design_harness',
+        to: 'on',
+        source: 'settings',
+      });
+    });
+
+    it('settles the dialog autosave pill instead of leaving it on saving', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        const { gate, release } = heldWrite();
+        const { writes } = stubFetch({ writeGate: gate });
+        const onAutosaveStatus = vi.fn();
+        renderSection(onAutosaveStatus);
+        await waitFor(() => expect(switchEl().getAttribute('aria-disabled')).toBe('false'));
+
+        fireEvent.click(switchEl());
+        await waitFor(() => expect(writes).toHaveLength(1));
+        expect(onAutosaveStatus).toHaveBeenCalledWith('saving');
+        cleanup();
+        release();
+
+        await waitFor(() => expect(onAutosaveStatus).toHaveBeenCalledWith('saved'));
+        await vi.advanceTimersByTimeAsync(3_000);
+        await waitFor(() => expect(onAutosaveStatus).toHaveBeenCalledWith('idle'));
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('reports the failed write as an error rather than stranding the pill', async () => {
+      const { gate, release } = heldWrite();
+      const { writes } = stubFetch({ writeGate: gate, writeFails: true });
+      const onAutosaveStatus = vi.fn();
+      renderSection(onAutosaveStatus);
+      await waitFor(() => expect(switchEl().getAttribute('aria-disabled')).toBe('false'));
+
+      fireEvent.click(switchEl());
+      await waitFor(() => expect(writes).toHaveLength(1));
+      cleanup();
+      release();
+
+      await waitFor(() => expect(onAutosaveStatus).toHaveBeenCalledWith('error'));
+      expect(track).not.toHaveBeenCalled();
+    });
+
+    it('cannot take the shared save indicator back from a newer section', async () => {
+      // The indicator belongs to the dialog, not to this section. A Labs write
+      // that lands after the user has moved on and started a newer save must
+      // not relabel that save's outcome — nor force it to idle three seconds
+      // later, which is worse than a stuck pill.
+      const { gate, release } = heldWrite();
+      const { writes } = stubFetch({ writeGate: gate });
+      const onAutosaveStatus = vi.fn();
+      const { host } = renderSection(onAutosaveStatus);
+      await waitFor(() => expect(switchEl().getAttribute('aria-disabled')).toBe('false'));
+
+      fireEvent.click(switchEl());
+      await waitFor(() => expect(writes).toHaveLength(1));
+      cleanup();
+      // Another Settings section takes the indicator for a newer edit.
+      host.supersede();
+      onAutosaveStatus.mockClear();
+      release();
+
+      // The toggle still reports — the preference did land.
+      await waitFor(() => expect(track).toHaveBeenCalledTimes(1));
+      expect(onAutosaveStatus).not.toHaveBeenCalled();
+    });
+
+    it('keeps an opt-out paired with exactly one reason row', async () => {
+      // The reason panel cannot be shown to a section that is gone, and the
+      // unmount settler has already run by the time the write lands. Without
+      // an immediate skip the opt-out would be counted with no reason row at
+      // all, which is the one thing the pairing invariant exists to prevent.
+      const { gate, release } = heldWrite();
+      const { writes } = stubFetch({
+        rolloutStatus: status({ requestedMode: 'active', requestedModeSource: 'app_config' }),
+        writeGate: gate,
+      });
+      renderSection();
+      await waitFor(() => expect(switchEl().getAttribute('aria-checked')).toBe('true'));
+
+      fireEvent.click(switchEl());
+      await waitFor(() => expect(writes).toHaveLength(1));
+      cleanup();
+      release();
+
+      await waitFor(() => expect(track).toHaveBeenCalledTimes(2));
+      expect(track.mock.calls[0]?.[1]).toEqual({
+        item_id: 'design_harness',
+        to: 'off',
+        source: 'settings',
+      });
+      expect(track.mock.calls[1]?.[1]).toMatchObject({
+        item_id: 'design_harness',
+        to: 'off',
+        source: 'settings',
+        reason: ['skipped'],
+        has_custom_reason: false,
+      });
+    });
   });
 
   it('locks the switch and explains when an environment variable owns the mode', async () => {

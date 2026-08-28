@@ -207,16 +207,28 @@ function OptOutPanel({ onAnswer }: OptOutPanelProps) {
   );
 }
 
-export interface LabsSectionProps {
-  /**
-   * Drives the dialog-level autosave pill. This switch writes immediately
-   * rather than through the dialog's debounced autosave, so it reports its own
-   * outcome on the same surface every other Settings edit uses.
-   */
-  onAutosaveStatus?: (status: 'saving' | 'saved' | 'error' | 'idle') => void;
+/**
+ * The dialog's save indicator, borrowed for one write.
+ *
+ * It is a single shared surface: every Settings section drives the same pill.
+ * This switch writes immediately instead of through the dialog's debounced
+ * autosave, and its request can outlive the section — so a claim id, not a
+ * status alone, is what crosses the await. Comparing the pill's current value
+ * would not be enough: a newer section can legitimately be showing the same
+ * `saving` this write left behind.
+ */
+export interface LabsAutosaveController {
+  /** Take the indicator for one write and report it as saving. */
+  claim(): number;
+  /** Settle that claim. A no-op once a newer writer has taken the indicator. */
+  settle(claim: number, status: 'saved' | 'error' | 'idle'): void;
 }
 
-export function LabsSection({ onAutosaveStatus }: LabsSectionProps) {
+export interface LabsSectionProps {
+  autosave?: LabsAutosaveController;
+}
+
+export function LabsSection({ autosave }: LabsSectionProps) {
   const t = useT();
   const analytics = useAnalytics();
   const [state, setState] = useState<LabsHarnessState | null>(LOADING);
@@ -240,17 +252,28 @@ export function LabsSection({ onAutosaveStatus }: LabsSectionProps) {
   // whoever sets it owns clearing it. Without this the confirmation sat there
   // for the rest of the session, following the user into every other section.
   const savedPillTimerRef = useRef<number | null>(null);
-  const autosaveRef = useRef(onAutosaveStatus);
-  autosaveRef.current = onAutosaveStatus;
+  // The claim this section currently holds on the shared indicator, captured
+  // when the write starts rather than read back when it finishes.
+  const autosaveClaimRef = useRef<number | null>(null);
+  const autosaveRef = useRef(autosave);
+  autosaveRef.current = autosave;
 
-  const reportSaved = useCallback(() => {
-    autosaveRef.current?.('saved');
+  const settleAutosave = useCallback(
+    (claim: number | null, status: 'saved' | 'error' | 'idle') => {
+      if (claim == null) return;
+      autosaveRef.current?.settle(claim, status);
+    },
+    [],
+  );
+
+  const reportSaved = useCallback((claim: number | null) => {
+    settleAutosave(claim, 'saved');
     if (savedPillTimerRef.current != null) window.clearTimeout(savedPillTimerRef.current);
     savedPillTimerRef.current = window.setTimeout(() => {
       savedPillTimerRef.current = null;
-      autosaveRef.current?.('idle');
+      settleAutosave(claim, 'idle');
     }, SAVED_PILL_TTL_MS);
-  }, []);
+  }, [settleAutosave]);
 
   useEffect(() => () => {
     // Leaving the section takes the confirmation with it; it describes an edit
@@ -258,8 +281,8 @@ export function LabsSection({ onAutosaveStatus }: LabsSectionProps) {
     if (savedPillTimerRef.current == null) return;
     window.clearTimeout(savedPillTimerRef.current);
     savedPillTimerRef.current = null;
-    autosaveRef.current?.('idle');
-  }, []);
+    settleAutosave(autosaveClaimRef.current, 'idle');
+  }, [settleAutosave]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -320,13 +343,20 @@ export function LabsSection({ onAutosaveStatus }: LabsSectionProps) {
     writeInFlightRef.current = true;
     setState({ ...state, on: next });
     setBusy(true);
-    onAutosaveStatus?.('saving');
+    const claim = autosaveRef.current?.claim() ?? null;
+    autosaveClaimRef.current = claim;
     void (async () => {
       try {
         // `'off'` rather than clearing the key: an absent value reads as
         // "never touched", and the two are worth telling apart later.
         await writeHarnessMode(next ? 'active' : 'off');
-        if (token !== writeTokenRef.current || !mountedRef.current) return;
+        // Only staleness ends the write here. `mountedRef` guards this
+        // component's own state and nothing else: leaving Labs mid-write is
+        // the ordinary case — flip the switch, click another section — and the
+        // preference is on the machine either way. Letting the guard reach
+        // this far turned every one of those into a missing event and left the
+        // dialog's pill on "Saving" for an edit that had already landed.
+        if (token !== writeTokenRef.current) return;
         // After the write, not on click: a failed write rolls the switch back,
         // and an event for a preference the machine does not hold is worse
         // than a missing one.
@@ -342,19 +372,31 @@ export function LabsSection({ onAutosaveStatus }: LabsSectionProps) {
           // here keeps the invariant every count depends on: one reported
           // opt-out, one reason row.
           answerOptOut({ reason: ['skipped'] });
-        } else {
+        } else if (mountedRef.current) {
           // The opt-out itself is already reported above; the reason arrives
           // as a second event once the user answers. Counting opt-outs from
           // the first and reasons from the second keeps the opt-out count
           // whole even when nobody answers.
           reasonPendingRef.current = true;
           setAskingReason(true);
+        } else {
+          // Nobody is left to ask, and the unmount settler has already run.
+          // Recording the non-answer here keeps the same invariant: an
+          // opt-out reported without a reason row would never be paired.
+          reasonPendingRef.current = true;
+          answerOptOut({ reason: ['skipped'] });
         }
-        reportSaved();
+        reportSaved(claim);
       } catch {
-        if (token !== writeTokenRef.current || !mountedRef.current) return;
-        setState((current) => (current ? { ...current, on: previous } : current));
-        onAutosaveStatus?.('error');
+        if (token !== writeTokenRef.current) return;
+        if (mountedRef.current) {
+          setState((current) => (current ? { ...current, on: previous } : current));
+        }
+        // Reported even after unmount: the pill belongs to the dialog, which
+        // outlives this section, and a failed save it never hears about stays
+        // on "Saving" forever. Still gated on the claim — a newer section's
+        // save must not be relabelled as this one's failure.
+        settleAutosave(claim, 'error');
       } finally {
         if (token === writeTokenRef.current) {
           writeInFlightRef.current = false;
@@ -362,7 +404,7 @@ export function LabsSection({ onAutosaveStatus }: LabsSectionProps) {
         }
       }
     })();
-  }, [analytics.track, answerOptOut, onAutosaveStatus, reportSaved, state]);
+  }, [analytics.track, answerOptOut, reportSaved, settleAutosave, state]);
 
   const lockNoticeKey = state?.lock === 'latched'
     ? 'labs.latchedNotice'
