@@ -1,0 +1,55 @@
+{
+  "id": "document-docx-workspace",
+  "surface": "document",
+  "title": "DOCX Workspace Template",
+  "summary": "An authoring blueprint for building a decision-ready, editable DOCX update from bounded source material.",
+  "category": "Document Template",
+  "tags": [
+    "docx",
+    "workspace",
+    "authoring",
+    "blueprint",
+    "editable",
+    "a4"
+  ],
+  "format": "html",
+  "page": {
+    "size": "A4",
+    "count": 1,
+    "orientation": "portrait"
+  },
+  "bestFor": [
+    "editable Word deliverables",
+    "weekly updates",
+    "source-bounded authoring briefs"
+  ],
+  "informationStructure": [
+    "document outcome",
+    "material in scope",
+    "content architecture",
+    "format and delivery rules"
+  ],
+  "editableRegions": [
+    "document outcome",
+    "source material",
+    "content architecture",
+    "delivery rules"
+  ],
+  "visualInvariants": [
+    "Keep the one-page A4 blueprint and the numbered four-section reading order.",
+    "Preserve the editorial black, warm paper, electric-blue accent, and compact rules cards.",
+    "Keep heading hierarchy semantically compatible with an editable Word document."
+  ],
+  "outputContract": {
+    "selfContainedHtml": true,
+    "printReady": true,
+    "exactPageCount": 1,
+    "externalRuntimeDependencies": false
+  },
+  "reference": {
+    "sourceFile": "docx-workspace.html",
+    "sha256": "1b1ebe47b0b451085064a150c2ba45b5a4566e74d623d6254beb23e4e6a7d72b",
+    "htmlByteLength": 8697
+  },
+  "referenceHtml": "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n  <title>Document blueprint · Open Design template contributor guide</title>\n  <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\" />\n  <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin />\n  <link href=\"https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;650;700&display=swap\" rel=\"stylesheet\" />\n  <style>\n    :root { --canvas:#e3eefb; --paper:#fbfcff; --ink:#20242a; --body:#48525c; --muted:#626d79; --line:#cbd9ed; --blue:#1469d8; --blue-soft:#e7f1ff; --shadow:0 24px 60px rgba(20,105,216,.16),0 3px 10px rgba(20,105,216,.05); }\n    @page { size:A4; margin:0; }\n    * { box-sizing:border-box; } body { margin:0; padding:34px 22px; background:var(--canvas); color:var(--ink); font:12px/1.5 Inter,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif; } .mono { font-family:\"DM Mono\",ui-monospace,SFMono-Regular,Menlo,monospace; }\n    .page { position:relative; width:210mm; height:297mm; min-width:210mm; min-height:297mm; max-width:210mm; max-height:297mm; margin:0 auto; padding:10mm 15mm 15mm 18mm; overflow:hidden; background:var(--paper); box-shadow:var(--shadow); } .page::before { position:absolute; top:0; bottom:0; left:0; width:1mm; background:var(--blue); content:\"\"; }\n    .doc-head { display:grid; grid-template-columns:1fr 200px; gap:24px; padding:20px 0 16px; border-bottom:1px dashed #64a8f5; } .eyebrow,.label { color:var(--blue); font:10.5px \"DM Mono\",monospace; letter-spacing:.08em; text-transform:uppercase; } h1 { margin:9px 0 7px; font-size:31px; line-height:1.08; letter-spacing:-.04em; } .subtitle { max-width:570px; margin:0; color:var(--body); font-size:13px; line-height:1.55; }\n    .state { align-self:start; padding:14px 15px; background:var(--blue-soft); } .state b { display:block; margin-top:6px; color:var(--ink); font-size:12.5px; } .state span { display:block; margin-top:6px; color:var(--muted); font-size:11px; line-height:1.52; }\n    .definition { display:grid; grid-template-columns:repeat(3,1fr); margin-top:16px; border-top:1px solid var(--line); border-left:1px solid var(--line); } .definition div { min-height:60px; padding:10px 11px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); } .definition span { display:block; margin-bottom:5px; color:var(--muted); font:10px \"DM Mono\",monospace; letter-spacing:.06em; text-transform:uppercase; } .definition b { color:var(--body); font-size:12px; font-weight:500; line-height:1.4; }\n    section { margin-top:36px; } .section-head { display:flex; gap:9px; align-items:baseline; margin-bottom:8px; } .section-no { color:var(--blue); font:700 16px Inter,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif; font-variant-numeric:proportional-nums; letter-spacing:-.02em; } h2 { margin:0; color:var(--ink); font-size:17px; line-height:1.18; letter-spacing:-.02em; } .goal { display:grid; grid-template-columns:max-content 1fr; gap:24px; align-items:center; min-height:60px; padding:15px; border-left:4px solid var(--blue); background:var(--blue-soft); } .goal .label { font-weight:500; line-height:1.5; } .goal p { margin:0; color:var(--body); font-size:12.5px; line-height:1.5; } .goal b { color:var(--ink); }\n    .outline { border-top:1px solid var(--line); border-right:1px solid var(--line); border-left:4px solid #c6dcfa; } .outline-row { display:grid; grid-template-columns:5px 1fr; column-gap:9px; padding:11px 13px 10px 12px; border-bottom:1px solid var(--line); } .outline-row .bullet { width:5px; height:5px; margin-top:7px; background:var(--blue); } .outline-copy h3 { margin:0 0 4px; color:var(--ink); font-size:13px; } .outline-copy p { margin:0; color:var(--body); font-size:12.2px; line-height:1.5; }\n    .source-scope { display:grid; grid-template-columns:1fr 1fr; border-top:1px solid var(--line); border-left:1px solid var(--line); } .scope-item { min-height:72px; padding:11px 13px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); } .scope-item p { margin:6px 0 0; color:var(--body); font-size:12px; line-height:1.5; } .scope-item b { color:var(--ink); font-weight:600; }\n    .rules { display:grid; grid-template-columns:1fr 1fr; gap:24px; padding:14px 16px; border-left:4px solid var(--blue); background:var(--blue-soft); } .rule-box { padding:0; } .rule-box + .rule-box { padding-left:0; border-left:0; } .rule-box h3 { margin:0 0 7px; color:var(--ink); font-size:14.5px; } .rule-box ul { display:grid; gap:5px; margin:0; padding:0; list-style:none; color:var(--body); font-size:11.5px; } .rule-box li { display:flex; gap:7px; } .rule-box li::before { content:\"→\"; color:var(--blue); font-weight:700; }\n    footer { position:absolute; right:15mm; bottom:7mm; left:18mm; display:flex; justify-content:space-between; gap:12px; padding-top:13px; border-top:1px solid var(--line); color:var(--muted); font:10px \"DM Mono\",monospace; }\n    @media print { html,body { width:210mm; min-height:297mm; background:var(--paper); } body { padding:0; } .page { width:210mm; height:297mm; min-width:210mm; min-height:297mm; max-width:210mm; max-height:297mm; margin:0; box-shadow:none; -webkit-print-color-adjust:exact; print-color-adjust:exact; } .doc-head,.definition,section,.outline-row { break-inside:avoid; page-break-inside:avoid; } }\n    @media (max-width:650px) { body { min-width:calc(210mm + 40px); padding:20px; } }\n  </style>\n</head>\n<body>\n  <main class=\"page\">\n    <div class=\"doc-head\"><div><div class=\"eyebrow\">Open Design · DOCX Workspace</div><h1>Customer onboarding rollout</h1><p class=\"subtitle\">An authoring brief for revising the weekly rollout update in Word, with clear source boundaries and a decision-ready structure.</p></div><aside class=\"state\"><div class=\"label\">Deliverable</div><b>Decision-ready update</b><span>Editable Word document for the weekly review.</span></aside></div>\n    <section class=\"definition\"><div><span>Primary readers</span><b>Product, Operations &amp; leadership</b></div><div><span>Writing mode</span><b>Revise an existing draft</b></div><div><span>Target length</span><b>2–3 page DOCX</b></div></section>\n    <section><div class=\"section-head\"><span class=\"section-no\">01</span><h2>Document outcome</h2></div><div class=\"goal\"><div class=\"label\">Key question</div><p><b>What is ready, what may delay release and which decision is needed this week?</b></p></div></section>\n    <section><div class=\"section-head\"><span class=\"section-no\">02</span><h2>Material in scope</h2></div><div class=\"source-scope\"><div class=\"scope-item\"><div class=\"label\">Starting files</div><p>Last week's update, rollout plan and pilot notes. <b>Add current completion data.</b></p></div><div class=\"scope-item\"><div class=\"label\">Revision rule</div><p>Keep approved dates and customer language. Mark changed assumptions <b>“to confirm”.</b></p></div></div></section>\n    <section><div class=\"section-head\"><span class=\"section-no\">03</span><h2>Content architecture</h2></div><div class=\"outline\"><article class=\"outline-row\"><span class=\"bullet\" aria-hidden=\"true\"></span><div class=\"outline-copy\"><h3>Executive summary</h3><p>State the release status, this week's material change and the decision needed.</p></div></article><article class=\"outline-row\"><span class=\"bullet\" aria-hidden=\"true\"></span><div class=\"outline-copy\"><h3>Milestone status</h3><p>Group completed, in-flight and moved milestones; use only sourced dates and figures.</p></div></article><article class=\"outline-row\"><span class=\"bullet\" aria-hidden=\"true\"></span><div class=\"outline-copy\"><h3>Evidence and customer signals</h3><p>Include only pilot feedback that affects the plan, with its source.</p></div></article><article class=\"outline-row\"><span class=\"bullet\" aria-hidden=\"true\"></span><div class=\"outline-copy\"><h3>Decision and next steps</h3><p>Name the remaining risk, requested decision, owner and deadline.</p></div></article></div></section>\n    <section><div class=\"section-head\"><span class=\"section-no\">04</span><h2>Format &amp; delivery rules</h2></div><div class=\"rules\"><div class=\"rule-box\"><h3>Word document</h3><ul><li>Use real Word heading levels.</li><li>Keep source links beside supported claims.</li><li>Use tables only for milestones or owners.</li></ul></div><div class=\"rule-box\"><h3>Ready to deliver</h3><ul><li>Show status and the decision on page one.</li><li>Mark unconfirmed facts “to confirm”.</li><li>Keep the DOCX editable and sources intact.</li></ul></div></div></section>\n    <footer><span>Customer onboarding rollout · DOCX</span><span>Page 1</span></footer>\n  </main>\n</body>\n</html>\n"
+}

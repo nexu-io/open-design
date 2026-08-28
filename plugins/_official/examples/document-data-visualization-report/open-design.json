@@ -1,0 +1,97 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "document-data-visualization-report",
+  "title": "Data Visualization Report",
+  "title_i18n": {
+    "en": "Data Visualization Report",
+    "zh-CN": "数据可视化报告"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-08-27T00:00:00Z",
+  "description": "A two-page A4 report that turns real business data into an executive signal, directly labeled charts, decisions, and a validation plan.",
+  "description_i18n": {
+    "en": "A two-page A4 report that turns real business data into an executive signal, directly labeled charts, decisions, and a validation plan.",
+    "zh-CN": "将真实业务数据组织为执行信号、直接标注图表、决策建议与验证计划的双页 A4 报告。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/document-data-visualization-report",
+  "tags": [
+    "document-template",
+    "first-party",
+    "prototype",
+    "web",
+    "desktop",
+    "data",
+    "report",
+    "visualization",
+    "chart",
+    "decision",
+    "a4"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "documents",
+    "surface": "web",
+    "preview": {
+      "type": "image",
+      "poster": "./example.webp"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the Data Visualization Report to turn my real content into a polished, self-contained HTML document. Start from the embedded reference HTML, preserve its visual signature and A4 print contract, and do not invent facts.",
+        "zh-CN": "用「数据可视化报告」把我的真实内容做成一份精致、可独立打开的 HTML 文档。必须从内嵌参考 HTML 开始，保留视觉特征和 A4 打印契约，不要虚构事实。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.webp",
+          "title": "Data Visualization Report",
+          "title_i18n": {
+            "en": "Data Visualization Report",
+            "zh-CN": "数据可视化报告"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./template.json",
+        "./example.webp"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

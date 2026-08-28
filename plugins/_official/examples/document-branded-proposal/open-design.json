@@ -1,0 +1,97 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "document-branded-proposal",
+  "title": "Branded Proposal",
+  "title_i18n": {
+    "en": "Branded Proposal",
+    "zh-CN": "品牌提案"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-08-27T00:00:00Z",
+  "description": "A structured partner proposal covering recommendation, approach, scope, governance, and delivery in a polished branded format.",
+  "description_i18n": {
+    "en": "A structured partner proposal covering recommendation, approach, scope, governance, and delivery in a polished branded format.",
+    "zh-CN": "以品牌化版式呈现建议、方法、范围、治理与交付安排的合作提案。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/document-branded-proposal",
+  "tags": [
+    "document-template",
+    "first-party",
+    "prototype",
+    "web",
+    "desktop",
+    "proposal",
+    "partner",
+    "pilot",
+    "scope",
+    "governance",
+    "a4"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "documents",
+    "surface": "web",
+    "preview": {
+      "type": "image",
+      "poster": "./example.webp"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the Branded Proposal to turn my real content into a polished, self-contained HTML document. Start from the embedded reference HTML, preserve its visual signature and A4 print contract, and do not invent facts.",
+        "zh-CN": "用「品牌提案」把我的真实内容做成一份精致、可独立打开的 HTML 文档。必须从内嵌参考 HTML 开始，保留视觉特征和 A4 打印契约，不要虚构事实。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.webp",
+          "title": "Branded Proposal",
+          "title_i18n": {
+            "en": "Branded Proposal",
+            "zh-CN": "品牌提案"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./template.json",
+        "./example.webp"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

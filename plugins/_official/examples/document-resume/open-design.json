@@ -1,0 +1,97 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "document-resume",
+  "title": "Evidence-led Resume",
+  "title_i18n": {
+    "en": "Evidence-led Resume",
+    "zh-CN": "证据导向简历"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-08-27T00:00:00Z",
+  "description": "A refined one-page resume that emphasizes evidence, selected outputs, and measurable professional experience.",
+  "description_i18n": {
+    "en": "A refined one-page resume that emphasizes evidence, selected outputs, and measurable professional experience.",
+    "zh-CN": "突出成果证据、代表作品和可量化经历的一页式专业简历。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/document-resume",
+  "tags": [
+    "document-template",
+    "first-party",
+    "prototype",
+    "web",
+    "desktop",
+    "resume",
+    "career",
+    "profile",
+    "evidence",
+    "portfolio",
+    "a4"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "documents",
+    "surface": "web",
+    "preview": {
+      "type": "image",
+      "poster": "./example.webp"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the Evidence-led Resume to turn my real content into a polished, self-contained HTML document. Start from the embedded reference HTML, preserve its visual signature and A4 print contract, and do not invent facts.",
+        "zh-CN": "用「证据导向简历」把我的真实内容做成一份精致、可独立打开的 HTML 文档。必须从内嵌参考 HTML 开始，保留视觉特征和 A4 打印契约，不要虚构事实。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.webp",
+          "title": "Evidence-led Resume",
+          "title_i18n": {
+            "en": "Evidence-led Resume",
+            "zh-CN": "证据导向简历"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./template.json",
+        "./example.webp"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}
