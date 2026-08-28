@@ -33,7 +33,7 @@ The implementation is split by responsibility:
 ## Registered Runtimes
 
 `BASE_AGENT_DEFS` in `apps/daemon/src/runtimes/registry.ts` currently contains
-28 built-in adapter definitions. `AGENT_DEFS` also appends valid local profiles
+26 built-in adapter definitions. `AGENT_DEFS` also appends valid local profiles
 loaded by `readLocalAgentProfileDefs()`, so an installation can expose more
 entries than the built-in list.
 
@@ -45,7 +45,7 @@ entries than the built-in list.
 | `pi-rpc` | `pi` | `pi` |
 | `qoder-stream-json` | `qoder` | `qodercli` |
 | `copilot-stream-json` | `copilot` | `copilot` |
-| `plain` | `grok-build`, `qwen`, `deepseek`, `aider`, `antigravity`, `atomcode`, `dulus` | `grok`, `qwen`, `deepseek`, `aider`, `agy`, `atomcode`, `dulus` |
+| `plain` | `grok-build`, `qwen`, `deepseek`, `aider`, `antigravity`, `atomcode` | `grok`, `qwen`, `deepseek`, `aider`, `agy`, `atomcode` |
 
 There is no registered `gemini` adapter. The standalone Gemini CLI runtime was
 retired when Kimi ACP was restored. The JSON event parser still understands a
