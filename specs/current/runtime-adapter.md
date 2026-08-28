@@ -144,7 +144,8 @@ Session continuity is likewise adapter-specific:
 - Codex captures the thread ID from `thread.started` and resumes that explicit
   thread on later turns.
 - Pi persists and reuses its RPC session file.
-- AMR can capture an ACP durable session ID and resume with `session/load`.
+- AMR captures its bridge-provided durable OpenCode handle, while Kilo captures
+  its standard ACP session id; both resume with `session/load`.
 - Other adapters continue to receive daemon-composed conversation context.
 
 The daemon owns the resume identity checks and transparent reseed behavior, so

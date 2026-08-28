@@ -5,7 +5,8 @@
 //
 //   1. Listen on stdin for newline-delimited JSON-RPC messages from OD.
 //   2. Respond to `initialize` (id=1) with the protocol version.
-//   3. Respond to `session/new` (id=2) with a synthetic sessionId.
+//   3. Respond to `session/new` (id=2) with a synthetic sessionId, or restore a
+//      caller-provided id through `session/load` for durable ACP adapters.
 //   4. Optionally respond to `session/set_model` (id=3) with {}.
 //   5. When `session/prompt` (id=N) arrives, push a series of
 //      `session/update` NOTIFICATIONS carrying agent_message_chunk
@@ -63,7 +64,7 @@ export async function runAcpServer(events, opts = {}) {
   const writeLine = obj => writeFn(JSON.stringify(obj) + '\n');
 
   const meta = events.find(e => e.type === 'meta');
-  const sessionId = opts.sessionId ?? `mock-acp-${Date.now()}`;
+  let sessionId = opts.sessionId ?? `mock-acp-${Date.now()}`;
   const reportEvent = events.find(e => e.type === 'report');
   const reportText = reportEvent?.content ?? '';
 
@@ -123,12 +124,20 @@ export async function runAcpServer(events, opts = {}) {
       writeRpcResult(out, id, {
         protocolVersion: PROTOCOL_VERSION,
         capabilities: {
-          loadSession: false,
+          loadSession: true,
           // Tool calls aren't supported via stdio in this mock —
           // matches the actual ACP agents on OD's side.
           tools: false,
         },
       });
+      return;
+    }
+    if (method === 'session/load') {
+      if (typeof obj.params?.sessionId === 'string' && obj.params.sessionId) {
+        sessionId = obj.params.sessionId;
+      }
+      // Match Kilo: a successful load does not repeat the already-known id.
+      writeRpcResult(out, id, { configOptions: [] });
       return;
     }
     if (method === 'session/new') {

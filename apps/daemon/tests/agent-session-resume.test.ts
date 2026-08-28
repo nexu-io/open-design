@@ -20,6 +20,7 @@ import {
   isAmrResumeFailure,
   isClaudeResumeFailure,
   isCodexResumeFailure,
+  isKiloAcpLoadFailure,
   isOpencodeResumeFailure,
   persistCapturedAgentSession,
   resolveAgentResumeContext,
@@ -604,6 +605,48 @@ describe('isOpencodeResumeFailure', () => {
   });
 });
 
+describe('isKiloAcpLoadFailure', () => {
+  it('matches an ACP error response for the session/load request id', () => {
+    expect(
+      isKiloAcpLoadFailure(
+        '{"jsonrpc":"2.0","id":2,"error":{"code":-32603,"message":"Internal error: OpenCode service failure","data":{"service":"session"}}}',
+      ),
+    ).toBe(true);
+  });
+
+  it('ignores non-session id-2 errors so auth and invalid-params stay visible', () => {
+    expect(
+      isKiloAcpLoadFailure(
+        '{"jsonrpc":"2.0","id":2,"error":{"code":-32602,"message":"Invalid params"}}',
+      ),
+    ).toBe(false);
+    expect(
+      isKiloAcpLoadFailure(
+        '{"jsonrpc":"2.0","id":2,"error":{"code":-32603,"message":"Internal error: OpenCode service failure"}}',
+      ),
+    ).toBe(false);
+    expect(
+      isKiloAcpLoadFailure(
+        '{"jsonrpc":"2.0","id":2,"error":{"code":-32603,"message":"auth required","data":{"service":"auth"}}}',
+      ),
+    ).toBe(false);
+  });
+
+  it('ignores prompt errors, notifications, and malformed output', () => {
+    expect(
+      isKiloAcpLoadFailure(
+        '{"jsonrpc":"2.0","id":3,"error":{"code":-32603,"message":"provider unavailable"}}',
+      ),
+    ).toBe(false);
+    expect(
+      isKiloAcpLoadFailure(
+        '{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"agent_message_chunk"}}}',
+      ),
+    ).toBe(false);
+    expect(isKiloAcpLoadFailure('not json')).toBe(false);
+  });
+});
+
 describe('isAmrResumeFailure', () => {
   it('matches vela\'s structured resume_failed ACP error on stdout', () => {
     expect(
@@ -672,6 +715,20 @@ describe('isAgentResumeFailure dispatch', () => {
     // codex prose is not an OpenCode resume failure.
     expect(
       isAgentResumeFailure('opencode', 'no rollout found for thread id abc'),
+    ).toBe(false);
+  });
+
+  it('routes Kilo to the structured ACP session/load detector on stdout', () => {
+    const loadError =
+      '{"jsonrpc":"2.0","id":2,"error":{"code":-32603,"message":"Internal error: OpenCode service failure","data":{"service":"session"}}}';
+    expect(isAgentResumeFailure('kilo', '', loadError)).toBe(true);
+    expect(isAgentResumeFailure('kilo', loadError, '')).toBe(false);
+    expect(
+      isAgentResumeFailure(
+        'kilo',
+        '',
+        '{"jsonrpc":"2.0","id":2,"error":{"code":-32602,"message":"Invalid params"}}',
+      ),
     ).toBe(false);
   });
 

@@ -726,8 +726,8 @@ function stripFns(
   // (reasoningOptions, streamFormat, name, bin, etc.). `models` is
   // populated separately by `fetchModels`, so we strip the static
   // `fallbackModels` slot here too. `helpArgs` / `capabilityFlags` /
-  // `fallbackBins` / `maxPromptArgBytes` / `env` are probe-or-spawn-only
-  // metadata and shouldn't bleed into the API response either.
+  // `fallbackBins` / `maxPromptArgBytes` / ACP wire-shape flags / `env` are
+  // probe-or-spawn-only metadata and shouldn't bleed into the API response.
   // Runtime timeout fields are spawn-time hints for chat-run watchdogs and
   // are not part of the public AgentInfo contract — strip them here so the
   // runtime registry stays the only consumer.
@@ -743,6 +743,8 @@ function stripFns(
     versionPolicy,
     compatibilityProbe,
     maxPromptArgBytes,
+    acpImagePathFormat,
+    acpSessionIdIsDurable,
     env,
     inactivityTimeoutMs,
     firstOutputTimeoutMs,

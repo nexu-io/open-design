@@ -64,8 +64,8 @@ const AGENT_INSTALL_LINKS: Record<
     docsUrl: 'https://kiro.dev/docs/cli/',
   },
   kilo: {
-    installUrl: 'https://kilo.ai',
-    docsUrl: 'https://kilo.ai/docs/cli',
+    installUrl: 'https://kilo.ai/docs/code-with-ai/platforms/cli#install',
+    docsUrl: 'https://kilo.ai/docs/code-with-ai/platforms/cli-reference',
   },
   mimo: {
     installUrl: 'https://mimo.ai',
