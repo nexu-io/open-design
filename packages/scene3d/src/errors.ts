@@ -382,6 +382,13 @@ export const ISSUE_CODES = {
   /* A claim the census could not adjudicate. Reported, never silently
      passed — a check that silently did not run is worse than no check. */
   CLAIM_UNCHECKED: "S3D-W-701",
+  /* A claim that WAS adjudicated and held, but whose measurement carries a
+     caveat (a strided time sample, a conservative bound). Its own code
+     because it shares nothing with W-701 but a neighbourhood: one says the
+     check did not happen, this says it did and names the limit of its
+     evidence. Sharing one code made the report title a claim "could not be
+     checked" directly above a body saying it held. */
+  CLAIM_HELD_WITH_CAVEAT: "S3D-I-701",
   /* A KERNEL part's exact prediction (V/F/triangles/watertight/genus,
      computed by the one evaluator from its operator trace) disagrees with the
      census Blender measured. Unlike an authored claim this is the COMPILER

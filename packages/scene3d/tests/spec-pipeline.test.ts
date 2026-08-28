@@ -469,6 +469,39 @@ describe.skipIf(!hasBlender)("declarative spec pipeline (real Blender)", () => {
     // Advisory only — a warning, never a compile-blocking error.
     expect(result.issues.filter((i) => i.severity === "error")).toEqual([]);
   });
+  it("light.ambient actually reaches the pixels", async () => {
+    /*
+     * The one test that can catch this: two compiles differing ONLY in
+     * `ambient`, compared on MEASURED luminance. The emitter authored the
+     * world correctly all along and the runner's neutral default overwrote it
+     * afterwards, so the value reached no pixel — and every cheaper check
+     * passed, because a dark material under a grey world still looks dark.
+     * Assert the rendered result, not the emitted script.
+     */
+    const dir = workDir("good/spec_pavilion");
+    const p = path.join(dir, "scene.json");
+    const shoot = async (ambient: number): Promise<number> => {
+      const scene = JSON.parse(fs.readFileSync(p, "utf8"));
+      scene.light = { key: 0, ambient };
+      fs.writeFileSync(p, JSON.stringify(scene, null, 2));
+      const r = await compile({
+        projectDir: dir,
+        stages: ["parse", "build", "proof"],
+        proof: { turntable: false, resolution: 128 },
+        noCache: true,
+        timeoutMs: 300_000,
+      });
+      const lum = r.manifest.proofFrames?.[0]?.meanLuminance;
+      expect(lum, "the proof must report a measured luminance").toBeTypeOf("number");
+      return lum as number;
+    };
+    const dark = await shoot(0.002);
+    const bright = await shoot(3);
+    // A 1500x change in world light must move the picture. The bug produced
+    // byte-identical luminance for both.
+    expect(bright).toBeGreaterThan(dark * 5);
+  }, 600_000);
+
   it("reports lost material channels PER MATERIAL, not per scene", async () => {
     /*
      * An extension is not a scene-wide capability. One material carrying

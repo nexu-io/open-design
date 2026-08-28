@@ -870,6 +870,7 @@ function printScene3dHelp() {
   console.log(`Usage:
   od scene3d compile [options]
   od scene3d manifest [options]
+  od scene3d describe [options]
   od scene3d tweaks [options]
 
 Compile a 3D scene project the way a build tool compiles code: parse, build
@@ -1780,7 +1781,7 @@ function printRootHelp() {
       (no model/agent calls; headless-safe). Exits 1 when findings meet the
       --fail-on threshold, so it can gate cron/CI render pipelines.
 
-  od scene3d <compile|manifest|tweaks> --project <id> --scene <path> [options]
+  od scene3d <compile|manifest|describe|tweaks> --project <id> --scene <path> [options]
       Compile/inspect a scene3d asset through the same daemon endpoint the
       viewer uses. \`od scene3d compile --help\` lists the full flag set
       (--stages parse,build,lint,proof,export,manifest · --agent-message ·

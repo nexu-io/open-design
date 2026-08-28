@@ -160,6 +160,7 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   /* lint: claims */
   'S3D-E-701': 'Authored claim failed',
   'S3D-W-701': 'Claim could not be checked',
+  'S3D-I-701': 'Claim held, with a measurement caveat',
   'S3D-E-702': 'Kernel prediction did not match build',
   'S3D-W-702': 'Kernel prediction could not be checked',
   'S3D-E-703': 'Kernel volume diverged from the build',

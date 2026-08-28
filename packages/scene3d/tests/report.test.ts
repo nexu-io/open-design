@@ -68,6 +68,9 @@ function result(overrides: Partial<CompileResult> = {}): CompileResult {
     stages: [
       { id: "parse", status: "ran", durationMs: 2 },
       { id: "build", status: "cached", durationMs: 0 },
+      // Frames in a result mean proof ran; a result with frames and NO proof
+      // stage is the stale case, which the staleness tests state explicitly.
+      { id: "proof", status: "ran", durationMs: 5 },
     ],
     issues,
     manifest: buildManifest({
@@ -185,9 +188,13 @@ describe("renderAgentReport", () => {
     });
     const volatile = result({
       issues: [{ code: "S3D-E-381", severity: "error", message: "scene has no camera" }],
+      // The SAME stages, differing only in how long they took. Dropping a
+      // stage would be a real difference in what ran, which is not what this
+      // test is about.
       stages: [
         { id: "parse", status: "ran", durationMs: 9999 },
         { id: "build", status: "cached", durationMs: 12345 },
+        { id: "proof", status: "ran", durationMs: 54321 },
       ],
     });
     expect(renderAgentReport(volatile)).toBe(renderAgentReport(base));
@@ -792,7 +799,12 @@ describe("renderAgentReport", () => {
         ],
       }),
     );
-    expect(text).toContain("carried from a previous compile");
+    expect(text).toContain("proof: STALE");
+    expect(text).toContain("PREVIOUS compile");
+    // The derived facts are withheld, not merely footnoted: they describe the
+    // scene as it was when those frames were made.
+    expect(text).not.toContain("orbit:");
+    expect(text).not.toContain("contact sheet:");
   });
 
   it("also labels frames carried when the proof stage is present but skipped", () => {
@@ -805,7 +817,8 @@ describe("renderAgentReport", () => {
         ],
       }),
     );
-    expect(text).toContain("carried from a previous compile");
+    expect(text).toContain("proof: STALE");
+    expect(text).not.toContain("orbit:");
   });
 
   it("does not call frames carried when the proof stage actually ran or hit cache", () => {

@@ -47,6 +47,21 @@ import { triangleTotals, trianglesAreExact } from "./triangles.js";
  * The verdict is owned by whichever oracle can PROVE its answer, never by
  * the weaker one printed more politely.
  */
+/** English ordinal for a small count — "2nd", not "2th". The sampling caveat
+ *  is read by a human as often as by a model, and a broken ordinal reads as a
+ *  broken measurement. */
+function ordinal(n: number): string {
+  const abs = Math.abs(Math.trunc(n));
+  const tens = abs % 100;
+  if (tens >= 11 && tens <= 13) return `${n}th`;
+  switch (abs % 10) {
+    case 1: return `${n}st`;
+    case 2: return `${n}nd`;
+    case 3: return `${n}rd`;
+    default: return `${n}th`;
+  }
+}
+
 export function lintClaims(
   claims: ClaimsSpec,
   census: Census | undefined,
@@ -127,8 +142,8 @@ export function lintClaims(
    *  conservative bound). Checked, not unchecked — the ledger counts it. */
   const caveat = (claim: string, message: string, detail: Record<string, unknown> = {}): void => {
     issues.push({
-      code: ISSUE_CODES.CLAIM_UNCHECKED,
-      severity: "warning",
+      code: ISSUE_CODES.CLAIM_HELD_WITH_CAVEAT,
+      severity: "info",
       message,
       detail: { claim, ...detail },
     });
@@ -190,7 +205,7 @@ export function lintClaims(
     }
     const step = anim.frameStep ?? 1;
     if (step > 1) {
-      return `bounds over time were sampled every ${step}th frame (${anim.framesSampled ?? 0} frames of ${anim.frameStart ?? 0}–${anim.frameEnd ?? 0}) — extremes between samples are unmeasured`;
+      return `bounds over time were sampled every ${ordinal(step)} frame (${anim.framesSampled ?? 0} frames of ${anim.frameStart ?? 0}–${anim.frameEnd ?? 0}) — extremes between samples are unmeasured`;
     }
     // A partial WALK is as inexact as a strided one: a mesh the sampler
     // could not evaluate is absent from the envelope entirely, and "exact

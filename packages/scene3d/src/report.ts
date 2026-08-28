@@ -260,12 +260,25 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
       `${"N".repeat(digits.length)}${ext}`,
     );
     const last = String(result.proofImages.length - 1).padStart(3, "0");
-    lines.push(
-      `proof: ${result.proofImages.length} frame(s)${sampled} — ${pattern}, N = 000..${last}` +
-        (carried ? " (carried from a previous compile — proof did not run this time)" : "") +
-        " · real PNGs: open them directly if you can read images",
-    );
-    appendOrbit(lines, result);
+    if (carried) {
+      /* Proof did not run, so these files predate this compile. The staleness
+         leads the line rather than trailing it, and the derived facts below —
+         the orbit, the contact sheet, its badges, its never-visible list — are
+         withheld entirely. They describe the scene as it was when those frames
+         were made, and a reader who trusts them re-fixes a layout they already
+         fixed. */
+      lines.push(
+        `proof: STALE — ${result.proofImages.length} frame(s) from a PREVIOUS compile (${pattern}, N = 000..${last}).` +
+          " Proof did not run, so these do not show the current scene." +
+          " Compile without --fast to photograph what you just built.",
+      );
+    } else {
+      lines.push(
+        `proof: ${result.proofImages.length} frame(s)${sampled} — ${pattern}, N = 000..${last}` +
+          " · real PNGs: open them directly if you can read images",
+      );
+      appendOrbit(lines, result);
+    }
   }
   // Aimed shots after the orbit: the orbit answers "what did I build", a look
   // answers "what does THAT part look like from THERE", and reading them in

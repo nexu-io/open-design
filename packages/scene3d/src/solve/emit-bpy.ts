@@ -1068,6 +1068,11 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
         '        _out = world.node_tree.nodes.new("ShaderNodeOutputWorld")',
         '    world.node_tree.links.new(_bg.outputs["Background"], _out.inputs["Surface"])',
         `_bg.inputs["Color"].default_value = (${num(rgb[0]!)}, ${num(rgb[1]!)}, ${num(rgb[2]!)}, 1.0)`,
+        "# Marked as AUTHORED so the runner's neutral-world default does not",
+        "# overwrite it. The default runs after the build script and would",
+        "# otherwise silently replace this value with its own grey, which makes",
+        "# an authored ambient reach nothing.",
+        'world["s3d_authored_world"] = True',
         "",
       );
     }

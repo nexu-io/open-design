@@ -236,7 +236,7 @@ describe("lintClaims across time (animated bounds)", () => {
     expect(failed[0]!.detail).toMatchObject({ groundGap: -0.4, restGroundGap: -0.2 });
   });
 
-  it("reports W-701 unchecked when a PASSING claim was only strided-sampled", () => {
+  it("separates a claim that HELD at every sample from an extremum a stride cannot bound", () => {
     const c = withAnimatedBounds(census([{ object: "prp_x", spatial: spatial(0) }]), {
       min: [0, 0, 0],
       max: [1, 1, 1.2],
@@ -250,13 +250,21 @@ describe("lintClaims across time (animated bounds)", () => {
     });
     const issues = run({ maxHeight: 2, grounded: true }, c);
     expect(issues.some((i) => i.code === ISSUE_CODES.CLAIM_FAILED)).toBe(false);
-    const un = issues.filter((i) => i.code === ISSUE_CODES.CLAIM_UNCHECKED);
-    // Both spatial claims passed only what was sampled — both say so.
-    expect(un.map((i) => (i.detail as { claim: string }).claim).sort()).toEqual([
-      "grounded",
-      "maxHeight",
-    ]);
-    expect(un[0]!.message).toContain("every 4th frame");
+    /* The two are not the same epistemic position, so they do not share a
+       code. `grounded` is a per-sample property that HELD at every frame the
+       sampler looked at — adjudicated, with the limit of the evidence named
+       (I-701). `maxHeight` is an EXTREMUM, and a strided sample provably
+       cannot bound one: the peak can hide between samples, so it is genuinely
+       unadjudicated (W-701). Sharing one code made the report title a claim
+       "could not be checked" directly above a body saying it held. */
+    const unchecked = issues.filter((i) => i.code === ISSUE_CODES.CLAIM_UNCHECKED);
+    expect(unchecked.map((i) => (i.detail as { claim: string }).claim).sort()).toEqual(["maxHeight"]);
+    const held = issues.filter((i) => i.code === ISSUE_CODES.CLAIM_HELD_WITH_CAVEAT);
+    expect(held.map((i) => (i.detail as { claim: string }).claim).sort()).toEqual(["grounded"]);
+    expect(held[0]!.severity).toBe("info");
+    // Both name the stride, and name it grammatically.
+    expect(unchecked[0]!.message).toContain("every 4th frame");
+    expect(held[0]!.message).toContain("every 4th frame");
   });
 
   it("does not caveat a claim that already FAILED a sampled frame", () => {

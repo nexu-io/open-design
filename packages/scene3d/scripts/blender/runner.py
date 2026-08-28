@@ -379,6 +379,19 @@ def set_world_background(job):
     """
     import bpy
     hex_color = (job.get("proof") or {}).get("background")
+    # A scene that authored its own world owns it. This function runs AFTER the
+    # build script, so without this check its neutral default overwrites an
+    # authored `light.ambient` and the value reaches no pixel — the scene is
+    # then lit by a grey the author never asked for.
+    _world = bpy.context.scene.world
+    if _world is not None and _world.get("s3d_authored_world"):
+        if hex_color:
+            # An explicit contract backdrop still wins, but it is REPLACING an
+            # authored ambient rather than filling an absence, so it says so.
+            log("proof.background overrides this scene's authored light.ambient")
+        else:
+            bpy.context.scene.render.film_transparent = True
+            return
     if not hex_color:
         # No declared backdrop: give the WORLD a neutral ambient anyway,
         # but render the film transparent so the backdrop stays dark in
