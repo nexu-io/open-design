@@ -359,7 +359,7 @@ open-design/
 - **media generation says `OD_BIN` is missing or daemon URL is `:0`** — รัน media dispatcher checks ด้านบน. อย่า resume CLI session เก่า; เปิด project จาก OpenDesign app ใหม่เพื่อให้ daemon inject variables `OD_*` ชุดใหม่.
 - **Codex loads too much plugin context** — start OpenDesign ด้วย `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev` เพื่อให้ daemon-spawned Codex processes รันด้วย `--disable plugins`.
 - **artifact never renders** — ตรวจ handoff profile ก่อน. สำหรับ local runtime ที่ใช้ filesystem ได้ ให้ตรวจว่า agent สร้าง project file ที่ preview ได้และ file events มาถึง daemon; path นี้ไม่ควรส่ง source ใน `<artifact>`. สำหรับ plain/text-only หรือ BYOK run ให้ตรวจว่ามี `<artifact>` block ที่สมบูรณ์หนึ่งก้อน แล้วหา boundary แรกที่ fail ใน daemon log.
-- **`Authorization: Bearer <OD_API_TOKEN>` required on macOS** — Docker Desktop bridge networking ทำให้ daemon มอง request เป็น non-loopback. เปิด host networking ใน Docker Desktop และใช้ `network_mode: host`. ดู [`deploy/README.md` — Docker Desktop on macOS](../../deploy/README.md#docker-desktop-on-macos).
+- **หน้าต่างยืนยันตัวตนใน browser บน macOS** — ใช้ bridge networking ค่าเริ่มต้นของ Docker Desktop ได้ตามเดิม เมื่อ browser แสดงหน้าต่าง sign-in ให้ใช้ `open-design` เป็น username และใช้ค่า `OD_API_TOKEN` จาก `deploy/.env` เป็น password โดยไม่จำเป็นต้องเปิด host networking ดูรายละเอียดที่ [`deploy/README.md` — Docker Desktop on macOS](../../deploy/README.md#docker-desktop-on-macos).
 
 ## Mapping back to the vision
 
