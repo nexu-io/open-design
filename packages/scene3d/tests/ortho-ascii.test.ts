@@ -46,4 +46,20 @@ describe("renderOrthoAscii", () => {
   it("names its own emptiness rather than drawing a blank box", () => {
     expect(renderOrthoAscii(census([]))).toBe("ortho: no measured meshes");
   });
+
+  it("caps the legend to distinguishable glyphs and names the overflow loudly", () => {
+    // 80 parts, but only 62 printable glyphs — the rest draw '#'. The legend
+    // must list only the distinguishable ones, not 80 lines of noise, and say so.
+    const many = Array.from({ length: 80 }, (_, i) => ({
+      name: `prp_${String(i).padStart(2, "0")}`,
+      min: [i, 0, 0] as [number, number, number],
+      max: [i + 1, 1, 1] as [number, number, number],
+    }));
+    const out = renderOrthoAscii(census(many));
+    const legend = out.split("legend (one glyph per part):\n")[1]!;
+    const entries = legend.split("\n").filter((l) => l.trim() && !l.startsWith("("));
+    expect(entries.length).toBeLessThanOrEqual(62);
+    expect(out).toContain("further parts drawn '#'");
+    expect(out).toContain("od scene3d describe"); // points to the region query
+  });
 });

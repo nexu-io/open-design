@@ -124,14 +124,23 @@ export function renderOrthoAscii(census: Census, options: OrthoAsciiOptions = {}
     panes.push(`${view.label}   ${view.gnomon}   ${dims}\n${border}\n${body}\n${border}`);
   }
 
+  // Only the glyph-DISTINCT parts get a legend line — the rest all draw '#' and
+  // are indistinguishable in the panes, so listing 20k of them (one per part)
+  // would be a wall of noise where only 62 entries can be told apart. This is a
+  // display-glyph limit (62 printable chars), not an arbitrary size cap on the
+  // asset: every part is still MEASURED and drawn; the overflow is named loudly.
   const legend = boxes
+    .slice(0, GLYPHS.length)
     .map((b) => {
       const g = glyphOf.get(b.name)!;
       const size = `${metres(b.max[0] - b.min[0])}×${metres(b.max[1] - b.min[1])}×${metres(b.max[2] - b.min[2])}`;
       return `${g} ${b.name} ${size}`;
     })
     .join("\n");
-  const overflow = boxes.length > GLYPHS.length ? `\n(# = ${boxes.length - GLYPHS.length} further parts, unlabelled)` : "";
+  const overflow =
+    boxes.length > GLYPHS.length
+      ? `\n(and ${boxes.length - GLYPHS.length} further parts drawn '#' — beyond the ${GLYPHS.length} distinguishable glyphs; query them by region with \`od scene3d describe\`)`
+      : "";
 
   return `${panes.join("\n\n")}\n\nlegend (one glyph per part):\n${legend}${overflow}`;
 }
