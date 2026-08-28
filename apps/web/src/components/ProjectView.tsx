@@ -13,7 +13,6 @@ import {
   type SetStateAction,
 } from 'react';
 import { AnimatePresence } from 'motion/react';
-import { Button } from '@open-design/components';
 import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
 import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
 import { validateHtmlArtifact } from '../artifacts/validate';
@@ -63,7 +62,6 @@ import {
   strategySettledMessageFields,
 } from '../runtime/strategy-question-continuation';
 import {
-  hasCurrentAutomaticScenarioBinding,
   type AmrWalletSnapshot,
   type ByokChatProviderConfig,
   type ByokMediaDefaults,
@@ -210,7 +208,6 @@ import {
   persistTabsToDaemonNow,
   listPlugins,
   resolvedWorkspaceContextForWrite,
-  restoreProjectAutomaticScenario,
   type SaveMessageOptions,
   waitGeneratedPluginShareTask,
 } from '../state/projects';
@@ -224,7 +221,6 @@ import type {
   WorkspaceCollabContext,
   WorkspaceContextItem,
 } from '@open-design/contracts';
-import scenarioStyles from './ProjectScenarioControl.module.css';
 import type {
   AgentEvent,
   AgentInfo,
@@ -11065,8 +11061,6 @@ export function ProjectView({
   // the project switches away mid-flight to avoid setState-on-unmount.
   const [activePluginSnapshot, setActivePluginSnapshot] =
     useState<AppliedPluginSnapshot | null>(null);
-  const [restoreAutomaticScenarioState, setRestoreAutomaticScenarioState] =
-    useState<'idle' | 'confirm' | 'busy'>('idle');
   const [contextPluginDetails, setContextPluginDetails] =
     useState<InstalledPluginRecord | null>(null);
   const [contextDesignSystemDetails, setContextDesignSystemDetails] =
@@ -11086,44 +11080,6 @@ export function ProjectView({
       cancelled = true;
     };
   }, [project.appliedPluginSnapshotId]);
-  const canRestoreAutomaticScenario = Boolean(
-    project.metadata?.kind
-    && !hasCurrentAutomaticScenarioBinding({
-      metadata: project.metadata,
-      appliedPluginSnapshotId: project.appliedPluginSnapshotId,
-    }),
-  );
-  const handleRestoreAutomaticScenario = useCallback(async () => {
-    if (restoreAutomaticScenarioState === 'busy') return;
-    setRestoreAutomaticScenarioState('busy');
-    try {
-      const result = await restoreProjectAutomaticScenario(
-        project.id,
-        project.appliedPluginSnapshotId ?? null,
-        resolvedWorkspaceContextForWrite(workspaceContextState),
-      );
-      // The mutation response is the local project row; preserve read-model
-      // Workspace projections that came from the scoped project detail API.
-      onProjectChange({ ...project, ...result.project });
-      setRestoreAutomaticScenarioState('idle');
-    } catch {
-      setRestoreAutomaticScenarioState('idle');
-      setProjectActionsToast({
-        message: t('project.restoreAutomaticScenarioFailed'),
-        details: null,
-        tone: 'error',
-        ttlMs: 3000,
-      });
-    }
-  }, [
-    onProjectChange,
-    project,
-    project.appliedPluginSnapshotId,
-    project.id,
-    restoreAutomaticScenarioState,
-    t,
-    workspaceContextState,
-  ]);
   const handleOpenContextPluginDetails = useCallback(async (pluginId: string) => {
     const normalizedId = pluginId.trim();
     if (!normalizedId) return;
@@ -11685,26 +11641,6 @@ export function ProjectView({
                   </span>
                   {projectTypeLabel ? (
                     <span className="meta" data-testid="project-meta">{projectTypeLabel}</span>
-                  ) : null}
-                  {canRestoreAutomaticScenario && !projectCollab.viewerOnly ? (
-                    <Button
-                      variant="ghost"
-                      className={scenarioStyles.restoreButton}
-                      disabled={restoreAutomaticScenarioState === 'busy'}
-                      onClick={() => {
-                        if (restoreAutomaticScenarioState === 'confirm') {
-                          void handleRestoreAutomaticScenario();
-                        } else {
-                          setRestoreAutomaticScenarioState('confirm');
-                        }
-                      }}
-                    >
-                      {restoreAutomaticScenarioState === 'busy'
-                        ? t('project.restoreAutomaticScenarioBusy')
-                        : restoreAutomaticScenarioState === 'confirm'
-                          ? t('project.restoreAutomaticScenarioConfirm')
-                          : t('project.restoreAutomaticScenario')}
-                    </Button>
                   ) : null}
                 </span>
               )}

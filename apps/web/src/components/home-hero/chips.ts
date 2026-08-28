@@ -35,10 +35,9 @@ export type ChipScenarioPluginId =
   | DefaultScenarioPluginId
   | 'example-hyperframes'
   // Powered-preview scenarios: real-time GPU / off-main-thread artifacts that
-  // render in the cross-origin-isolated "powered preview" iframe. They ship
-  // their own bundled example plugins under plugins/_official/examples/, so —
-  // like example-hyperframes — they carry their plugin id directly rather than
-  // routing through the default kind→plugin table.
+  // render in the cross-origin-isolated "powered preview" iframe. Kept as
+  // explicit members — like example-hyperframes — so the rail can name a
+  // scenario the default table has not mapped yet; both are mapped today.
   | 'example-webgl-experience';
 
 export type ChipAction =
@@ -46,7 +45,23 @@ export type ChipAction =
       kind: 'apply-scenario';
       pluginId: ChipScenarioPluginId;
       projectKind: ProjectKind;
-      /** Product-owned default route; the daemon resolves and stamps it. */
+      /**
+       * Product-owned default route; the daemon resolves and stamps it.
+       *
+       * Set it on every first-level output type in `CREATE_RAIL_ORDER`: the
+       * user picked a task type, not a plugin, so the create must travel as
+       * `pluginSelectionProvenance: 'automatic-default'` and let the daemon
+       * re-derive `pluginId` from the metadata. Forwarding the id instead
+       * reads as a user pin — which is real authority elsewhere (it opts a
+       * project out of OD Next), so the project is left with no
+       * `automatic_default` scenario binding and the header offers to restore
+       * an automatic scenario it never left.
+       *
+       * Only truthful when `pluginId` is exactly what
+       * `defaultScenarioPluginIdForProjectMetadata` resolves for the metadata
+       * this same chip stamps — otherwise dropping the id binds a different
+       * plugin. `chips.automatic-default.test.ts` pins both halves.
+       */
       automaticDefault?: boolean;
       inputs?: Record<string, unknown>;
       projectMetadata?: ProjectMetadata;
@@ -142,6 +157,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
       kind: 'apply-scenario',
       pluginId: 'example-web-clone',
       projectKind: 'prototype',
+      automaticDefault: true,
       projectMetadata: {
         kind: 'prototype',
         intent: 'web-clone',
@@ -191,6 +207,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
       kind: 'apply-scenario',
       pluginId: 'od-new-generation',
       projectKind: 'other',
+      automaticDefault: true,
       inputs: {
         artifactKind: 'document',
         audience: 'readers',
@@ -242,6 +259,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
       kind: 'apply-scenario',
       pluginId: 'example-webgl-experience',
       projectKind: 'prototype',
+      automaticDefault: true,
       projectMetadata: {
         kind: 'prototype',
         intent: 'webgl-experience',
@@ -260,6 +278,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
       kind: 'apply-scenario',
       pluginId: 'example-live-artifact',
       projectKind: 'prototype',
+      automaticDefault: true,
       projectMetadata: {
         kind: 'prototype',
         intent: 'live-artifact',
@@ -277,6 +296,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
       kind: 'apply-scenario',
       pluginId: 'od-media-generation',
       projectKind: 'image',
+      automaticDefault: true,
       inputs: {
         mediaKind: 'image',
         subject: 'a polished product concept',
@@ -295,6 +315,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
       kind: 'apply-scenario',
       pluginId: 'od-media-generation',
       projectKind: 'video',
+      automaticDefault: true,
       inputs: {
         mediaKind: 'video',
         subject: 'a short product reveal',
@@ -313,6 +334,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
       kind: 'apply-scenario',
       pluginId: 'od-media-generation',
       projectKind: 'audio',
+      automaticDefault: true,
       inputs: {
         mediaKind: 'audio',
         subject: 'a concise audio identity for a product',

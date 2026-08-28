@@ -31,7 +31,6 @@ import type {
   PluginShareAction,
   ProjectPluginFolderInstallRequest,
   ProjectScenarioTaskProfile,
-  RestoreProjectAutomaticScenarioResponse,
   ProjectVisibility,
   ProjectWorkspaceScopeResponse,
   TerminalSession,
@@ -167,35 +166,6 @@ export function resolvedWorkspaceContextForWrite(
     throw new Error('Workspace context is unavailable. Try again when workspace sync finishes.');
   }
   return state.context;
-}
-
-export async function restoreProjectAutomaticScenario(
-  projectId: string,
-  expectedCurrentSnapshotId: string | null,
-  workspaceContext: WorkspaceCollabContext | null,
-): Promise<RestoreProjectAutomaticScenarioResponse> {
-  const response = await fetch(
-    `/api/projects/${encodeURIComponent(projectId)}/scenario/restore-automatic`,
-    {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
-      },
-      body: JSON.stringify({ expectedCurrentSnapshotId }),
-    },
-  );
-  const body = await response.json().catch(() => null) as
-    | RestoreProjectAutomaticScenarioResponse
-    | { error?: { message?: string } }
-    | null;
-  if (!response.ok || !body || !('project' in body)) {
-    throw new Error(body && 'error' in body
-      ? body.error?.message ?? `HTTP ${response.status}`
-      : `HTTP ${response.status}`);
-  }
-  evictCoalescedGet(`/api/projects/${encodeURIComponent(projectId)}`);
-  return body;
 }
 
 /**
