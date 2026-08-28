@@ -326,7 +326,13 @@ export function LabsSection({ onAutosaveStatus }: LabsSectionProps) {
         // `'off'` rather than clearing the key: an absent value reads as
         // "never touched", and the two are worth telling apart later.
         await writeHarnessMode(next ? 'active' : 'off');
-        if (token !== writeTokenRef.current || !mountedRef.current) return;
+        // Only staleness ends the write here. `mountedRef` guards this
+        // component's own state and nothing else: leaving Labs mid-write is
+        // the ordinary case — flip the switch, click another section — and the
+        // preference is on the machine either way. Letting the guard reach
+        // this far turned every one of those into a missing event and left the
+        // dialog's pill on "Saving" for an edit that had already landed.
+        if (token !== writeTokenRef.current) return;
         // After the write, not on click: a failed write rolls the switch back,
         // and an event for a preference the machine does not hold is worse
         // than a missing one.
@@ -342,19 +348,30 @@ export function LabsSection({ onAutosaveStatus }: LabsSectionProps) {
           // here keeps the invariant every count depends on: one reported
           // opt-out, one reason row.
           answerOptOut({ reason: ['skipped'] });
-        } else {
+        } else if (mountedRef.current) {
           // The opt-out itself is already reported above; the reason arrives
           // as a second event once the user answers. Counting opt-outs from
           // the first and reasons from the second keeps the opt-out count
           // whole even when nobody answers.
           reasonPendingRef.current = true;
           setAskingReason(true);
+        } else {
+          // Nobody is left to ask, and the unmount settler has already run.
+          // Recording the non-answer here keeps the same invariant: an
+          // opt-out reported without a reason row would never be paired.
+          reasonPendingRef.current = true;
+          answerOptOut({ reason: ['skipped'] });
         }
         reportSaved();
       } catch {
-        if (token !== writeTokenRef.current || !mountedRef.current) return;
-        setState((current) => (current ? { ...current, on: previous } : current));
-        onAutosaveStatus?.('error');
+        if (token !== writeTokenRef.current) return;
+        if (mountedRef.current) {
+          setState((current) => (current ? { ...current, on: previous } : current));
+        }
+        // Reported even after unmount: the pill belongs to the dialog, which
+        // outlives this section, and a failed save it never hears about stays
+        // on "Saving" forever.
+        autosaveRef.current?.('error');
       } finally {
         if (token === writeTokenRef.current) {
           writeInFlightRef.current = false;

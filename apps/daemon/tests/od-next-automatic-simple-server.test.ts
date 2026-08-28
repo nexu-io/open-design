@@ -1342,6 +1342,77 @@ describe('OD Next automatic production through the real server', () => {
     await waitForRunTerminal(started.url, automatic.runId as string);
   });
 
+  // OPEND-2365 (P1). Only the HTTP-created Run passes through the analytics
+  // lifecycle installed on POST /api/runs; the repair and production Runs the
+  // daemon allocates for the SAME logical task are started straight off
+  // `internalRunCreation.start(...)` and never enter it. Every OD Next rate
+  // computed per physical Run — volume, success, failure, cancellation,
+  // duration — is therefore measured on the request stage alone.
+  it('installs the run analytics lifecycle on every physical Run of an automatic chain', async () => {
+    const fixture = await createFixture('repair');
+    const analyticsHeaders = {
+      'x-od-analytics-device-id': 'device-opend-2365',
+      'x-od-analytics-session-id': 'session-opend-2365',
+      'x-od-analytics-client-type': 'desktop',
+    };
+
+    queueFixtureIds(fixture);
+    const created = await postRun(
+      started!.url,
+      createRunRequest(fixture, 'Build the operator prototype.'),
+      analyticsHeaders,
+    );
+    expect(created.runId).toBe(fixture.initialRunId);
+
+    await waitForRunTerminal(started!.url, fixture.initialRunId);
+    const terminal = await waitForTask(fixture.taskExecutionId, 'completed');
+    expect(terminal.runs.map((run) => run.inputStage)).toEqual([
+      'request',
+      'contract_repair',
+      'production',
+    ]);
+
+    const recoveries = await waitForRunAnalyticsRecoveries(
+      terminal.runs.map((mapping) => mapping.runId),
+    );
+    // Reported at all.
+    expect(
+      terminal.runs
+        .map((mapping, index) => (recoveries[index] ? null : mapping.inputStage))
+        .filter(Boolean),
+    ).toEqual([]);
+    // One stable identity per physical Run — a shared insert id would collapse
+    // three Runs into one row on ingest.
+    const insertIds = recoveries.map((recovery) => recovery?.insertId);
+    expect(new Set(insertIds).size).toBe(3);
+    // The continuation inherits the requesting client's identity rather than
+    // inventing one, so the chain stays attributable to the same person.
+    for (const recovery of recoveries) {
+      expect(recovery?.context?.deviceId).toBe('device-opend-2365');
+    }
+    // The terminal listener ran for each Run, which is what emits run_finished.
+    for (const recovery of recoveries) {
+      expect(typeof recovery?.completedAt).toBe('number');
+    }
+    // The lineage is what stitches the physical Runs back into one turn: one
+    // shared task id, one shared first Run, and a Run index that advances.
+    const lineage = recoveries.map((recovery) => recovery?.properties ?? {});
+    expect(new Set(lineage.map((props) => props.task_execution_id)).size).toBe(1);
+    expect(new Set(lineage.map((props) => props.initial_run_id))).toEqual(
+      new Set([fixture.initialRunId]),
+    );
+    expect(lineage.map((props) => props.task_run_index)).toEqual([0, 1, 2]);
+    // The rollout decision is daemon-owned truth; every Run of an admitted
+    // task reports the harness it actually ran under.
+    expect(lineage.map((props) => props.harness)).toEqual([
+      'od_next',
+      'od_next',
+      'od_next',
+    ]);
+    // The lifecycle re-reads host facts (app config, agent detection) before
+    // it captures, so three physical Runs settle well past the shared default.
+  }, 90_000);
+
   it('runs parsed plan -> serialization repair -> production after each source end and remains exactly-once across restart', async () => {
     const fixture = await createFixture('repair');
     const sourcePdfAttachment = path.join(
@@ -2849,10 +2920,14 @@ function queueFixtureIds(fixture: {
   uuidControl.forced.push(fixture.initialRunId);
 }
 
-async function postRun(url: string, body: Record<string, unknown>) {
+async function postRun(
+  url: string,
+  body: Record<string, unknown>,
+  headers: Record<string, string> = {},
+) {
   const response = await fetch(`${url}/api/runs`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify(body),
   });
   expect(response.headers.get('content-type')).toContain('application/json');
@@ -2895,6 +2970,53 @@ async function waitForTask(taskExecutionId: string, outcome: string) {
   throw new Error(
     `task ${taskExecutionId} did not reach ${outcome}: ${JSON.stringify(latest)}`,
   );
+}
+
+/**
+ * The persisted analytics recovery record for one physical Run.
+ *
+ * This is the daemon's own durable evidence that a Run entered the analytics
+ * lifecycle: `run_created` was captured under this `insertId`, and the terminal
+ * listener replays `run_finished` from it after a restart. A physical Run that
+ * has no record never reported, and never will.
+ */
+async function readRunAnalyticsRecovery(runId: string): Promise<{
+  insertId?: string;
+  context?: { deviceId?: string };
+  properties?: Record<string, unknown>;
+  completedAt?: number;
+} | null> {
+  const statePath = path.join(process.env.OD_DATA_DIR!, 'runs', runId, 'state.json');
+  try {
+    const raw = await readFile(statePath, 'utf8');
+    return (JSON.parse(raw) as { analyticsRecovery?: any }).analyticsRecovery ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Poll until each Run's recovery record has settled.
+ *
+ * The lifecycle installs after the response is sent and re-reads host facts
+ * (app config, agent detection) before it captures, so the record appears a
+ * beat behind the Run itself and is stamped complete only once the terminal
+ * listener has run.
+ */
+async function waitForRunAnalyticsRecoveries(
+  runIds: string[],
+  timeoutMs = 45_000,
+): Promise<Array<Awaited<ReturnType<typeof readRunAnalyticsRecovery>>>> {
+  const deadline = Date.now() + timeoutMs;
+  let latest = await Promise.all(runIds.map(readRunAnalyticsRecovery));
+  while (
+    Date.now() < deadline
+    && !latest.every((recovery) => recovery && typeof recovery.completedAt === 'number')
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    latest = await Promise.all(runIds.map(readRunAnalyticsRecovery));
+  }
+  return latest;
 }
 
 async function readProjectInvocations(logPath: string, projectId: string): Promise<Invocation[]> {
