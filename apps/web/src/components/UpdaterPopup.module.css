@@ -43,3 +43,23 @@
   width: 15px;
   height: 15px;
 }
+
+/* Destructive override for restart-safety denials; composes with the global
+   `updater-popup__button` pill and mirrors the app-menu UpdateDialog danger
+   action. */
+.dangerButton {
+  border-color: color-mix(in srgb, #c1583c 38%, var(--border-soft));
+  color: #a74631;
+  background: color-mix(in srgb, #c1583c 8%, var(--bg-elevated));
+}
+
+.dangerButton:hover:not(:disabled) {
+  background: color-mix(in srgb, #c1583c 13%, var(--bg-elevated));
+}
+
+/* Warning layouts carry a third action; stack the pills so the destructive
+   option sits apart from the safe defaults. Driven by an explicit conditional
+   class from the component, not by descendant inference. */
+.warningActions {
+  grid-template-columns: 1fr;
+}

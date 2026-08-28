@@ -448,7 +448,18 @@ export function UpdaterPopup({
       const quitResult = await quitAfterUpdaterInstallerOpen(installOptions(force));
       if (quitResult.ok) return;
       const quitSafety = restartSafetyFromActionResult(quitResult);
-      if (quitSafety != null) setRestartSafety(quitSafety);
+      if (quitSafety != null) {
+        // The diagnostic must describe the latest denial: retries can flip
+        // between blocked and unknown, and for payload updates the error line
+        // is the only visible copy, so state and message move together.
+        setRestartSafety(quitSafety);
+        setInstallError(restartSafetyText(t, quitSafety));
+      } else {
+        // An unrelated quit failure is not a safety denial: the stale warning
+        // and its override give way to the plain recovery state.
+        setRestartSafety(null);
+        setInstallError(t('updater.failed'));
+      }
     } catch {
       // Keep the explicit quit recovery action available.
     }
@@ -579,6 +590,9 @@ function UpdaterPopupPanel({
 }) {
   const laterButtonRef = useRef<HTMLButtonElement | null>(null);
   const showInstallSafety = restartSafety != null && !quitRecoverable;
+  // Warning states replace the normal install action with the safety set;
+  // the conditional class stacks the action pills for the three-button layout.
+  const warningActions = showInstallSafety || (quitRecoverable && restartSafety != null);
 
   // A denial focuses the safe default action; Restart anyway must never be
   // the initial focus (mirrors the app-menu UpdateDialog).
@@ -645,7 +659,7 @@ function UpdaterPopupPanel({
             </p>
           ) : null}
         </div> : null}
-        <div className="updater-popup__actions">
+        <div className={warningActions ? `updater-popup__actions ${styles.warningActions}` : 'updater-popup__actions'}>
           <button
             className="updater-popup__button"
             data-testid="updater-later-button"
@@ -667,9 +681,9 @@ function UpdaterPopupPanel({
               {t('updater.tryAgain')}
             </button>
           ) : null}
-          {showInstallSafety || (quitRecoverable && restartSafety != null) ? (
+          {warningActions ? (
             <button
-              className="updater-popup__button updater-popup__button--danger"
+              className={`updater-popup__button ${styles.dangerButton}`}
               data-testid="updater-restart-anyway-button"
               disabled={installBusy}
               type="button"

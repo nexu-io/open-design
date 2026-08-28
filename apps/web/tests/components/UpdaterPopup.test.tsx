@@ -814,4 +814,103 @@ describe('UpdaterPopup', () => {
     await waitFor(() => expect(quit).toHaveBeenNthCalledWith(2, { payload: { force: true, source: 'updater-prompt' } }));
     expect(install).toHaveBeenCalledTimes(1);
   });
+
+  it('updates the recoverable diagnostic when a quit retry flips blocked to unknown', async () => {
+    const install = vi.fn(async () => installerOpenedStatus());
+    const quit = vi.fn()
+      .mockResolvedValueOnce({ ok: false as const, reason: 'active-runs-blocked', details: { activeRunCount: 2 } })
+      .mockResolvedValueOnce({ ok: false as const, reason: 'active-runs-unknown', details: { activeRunCount: null } });
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          install,
+          quit,
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    render(<UpdaterPopup />);
+
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
+    fireEvent.click(screen.getByTestId('updater-install-button'));
+
+    expect(await screen.findByRole('dialog', { name: 'Could not quit' })).toBeTruthy();
+    expect(screen.getByRole('alert')).toHaveTextContent('2 active tasks are still running');
+
+    fireEvent.click(screen.getByTestId('updater-install-button'));
+    await waitFor(() => expect(quit).toHaveBeenCalledTimes(2));
+    expect(quit).toHaveBeenNthCalledWith(2, { payload: { source: 'updater-prompt' } });
+
+    // The diagnostic must follow the latest denial, not the first one.
+    expect(await screen.findByRole('alert')).toHaveTextContent('could not confirm whether tasks are still running');
+    expect(screen.queryByText(/active tasks are still running/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Restart anyway' })).toBeTruthy();
+  });
+
+  it('updates the recoverable diagnostic when a quit retry flips unknown to blocked', async () => {
+    const install = vi.fn(async () => installerOpenedStatus());
+    const quit = vi.fn()
+      .mockResolvedValueOnce({ ok: false as const, reason: 'active-runs-unknown', details: { activeRunCount: null } })
+      .mockResolvedValueOnce({ ok: false as const, reason: 'active-runs-blocked', details: { activeRunCount: 1 } });
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          install,
+          quit,
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    render(<UpdaterPopup />);
+
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
+    fireEvent.click(screen.getByTestId('updater-install-button'));
+
+    expect(await screen.findByRole('dialog', { name: 'Could not quit' })).toBeTruthy();
+    expect(screen.getByRole('alert')).toHaveTextContent('could not confirm whether tasks are still running');
+
+    fireEvent.click(screen.getByTestId('updater-install-button'));
+    await waitFor(() => expect(quit).toHaveBeenCalledTimes(2));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('1 active tasks are still running');
+    expect(screen.queryByText(/could not confirm whether tasks/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Restart anyway' })).toBeTruthy();
+  });
+
+  it('drops the safety warning when a quit retry fails for an unrelated reason', async () => {
+    const install = vi.fn(async () => installerOpenedStatus());
+    const quit = vi.fn()
+      .mockResolvedValueOnce({ ok: false as const, reason: 'active-runs-blocked', details: { activeRunCount: 2 } })
+      .mockResolvedValueOnce({ ok: false as const, reason: 'installer has not been opened' });
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          install,
+          quit,
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    render(<UpdaterPopup />);
+
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
+    fireEvent.click(screen.getByTestId('updater-install-button'));
+
+    expect(await screen.findByRole('dialog', { name: 'Could not quit' })).toBeTruthy();
+    expect(screen.getByRole('alert')).toHaveTextContent('2 active tasks are still running');
+    expect(screen.getByRole('button', { name: 'Restart anyway' })).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('updater-install-button'));
+    await waitFor(() => expect(quit).toHaveBeenCalledTimes(2));
+
+    // The unrelated failure is not a safety denial: the stale warning and its
+    // override must give way to the plain recovery state.
+    expect(await screen.findByRole('alert')).toHaveTextContent('Update failed');
+    expect(screen.queryByText(/active tasks are still running/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Restart anyway' })).toBeNull();
+    expect(screen.getByTestId('updater-install-button')).toBeTruthy();
+  });
 });
