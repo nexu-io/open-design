@@ -2638,3 +2638,273 @@ describe("light validation: the object is legal, nonsense is named", () => {
     expect(spec).toBeUndefined();
   });
 });
+
+/**
+ * A material is a set of BINDINGS onto the surface model's inputs, and every
+ * channel takes either a constant or a baked shader output. These pin that
+ * symmetry, because it is the whole primitive: coat, sheen, transmission,
+ * subsurface, anisotropy, iridescence and a directly authored normal map are
+ * not features here, they are rows in one table.
+ */
+describe("material channels: constant or binding, one vocabulary", () => {
+  const scene = (materials: Record<string, unknown>, shaders?: Record<string, unknown>) =>
+    validateSceneSpec({
+      schemaVersion: 1,
+      ...(shaders ? { shaders } : {}),
+      materials,
+      parts: [{ id: "prp_a", size: [1, 1, 1], material: "mtl_x" }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    });
+
+  it("accepts every channel as a constant", () => {
+    const { errors, spec } = scene({
+      mtl_x: {
+        baseColor: [0.3, 0.1, 0.1], roughness: 0.4, metallic: 1,
+        coat: 1, coatRoughness: 0.03, coatIor: 1.5, coatTint: [1, 1, 1],
+        sheen: 0.8, sheenRoughness: 0.3, sheenTint: [0.9, 0.8, 1],
+        transmission: 1, ior: 1.45,
+        subsurface: 0.5, subsurfaceRadius: [0.4, 0.2, 0.1], subsurfaceScale: 0.05,
+        anisotropic: 0.9, anisotropicRotation: 0.25,
+        thinFilmThickness: 420, thinFilmIor: 1.4,
+        specular: 0.6, specularTint: [1, 0.9, 0.8], diffuseRoughness: 0.2,
+        emission: [1, 0.5, 0.2], emissionStrength: 3,
+      },
+    });
+    expect(errors).toEqual([]);
+    expect((spec!.materials!.mtl_x as Record<string, unknown>).coat).toBe(1);
+    expect((spec!.materials!.mtl_x as Record<string, unknown>).thinFilmThickness).toBe(420);
+  });
+
+  it("accepts a per-channel shader binding, and defaults the output to the channel", () => {
+    const { errors, spec } = scene(
+      { mtl_x: { baseColor: [0.5, 0.5, 0.5], roughness: { shader: "shd_r" } } },
+      { shd_r: { kernel: "k.glsl", outputs: ["roughness"] } },
+    );
+    expect(errors).toEqual([]);
+    // The binding names which baked channel drives this one; omitted, it is
+    // the channel itself, which is what keeps the common case short.
+    expect((spec!.materials!.mtl_x as Record<string, unknown>).roughness).toEqual({
+      shader: "shd_r",
+      output: "roughness",
+    });
+  });
+
+  it("a binding may read a DIFFERENT output than the channel it drives", () => {
+    const { errors, spec } = scene(
+      { mtl_x: { baseColor: [0.5, 0.5, 0.5], coat: { shader: "shd_r", output: "roughness" } } },
+      { shd_r: { kernel: "k.glsl", outputs: ["roughness"] } },
+    );
+    expect(errors).toEqual([]);
+    expect((spec!.materials!.mtl_x as Record<string, unknown>).coat).toEqual({
+      shader: "shd_r",
+      output: "roughness",
+    });
+  });
+
+  it("a map channel takes a binding and refuses a number, saying why", () => {
+    // A normal is a per-texel direction; a scalar could not mean anything.
+    const bad = scene({ mtl_x: { baseColor: [0.5, 0.5, 0.5], normal: 0.5 } });
+    expect(bad.errors.join(" ")).toContain("takes a shader binding, not a value");
+    const good = scene(
+      { mtl_x: { baseColor: [0.5, 0.5, 0.5], normal: { shader: "shd_n" } } },
+      { shd_n: { kernel: "k.glsl", outputs: ["normal"] } },
+    );
+    expect(good.errors).toEqual([]);
+  });
+
+  it("names the channel and its range when a constant is out of bounds", () => {
+    const { errors } = scene({ mtl_x: { baseColor: [0.5, 0.5, 0.5], coat: 4 } });
+    expect(errors.join(" ")).toContain("coat must be a number in [0, 1]");
+    // …and the refusal teaches what the channel IS.
+    expect(errors.join(" ")).toContain("clear lacquer");
+  });
+
+  it("refuses a binding to an undeclared shader by name", () => {
+    const { errors } = scene({ mtl_x: { baseColor: [0.5, 0.5, 0.5], coat: { shader: "shd_nope" } } });
+    expect(errors.join(" ")).toContain("'shd_nope' is not declared in shaders");
+  });
+
+  it("metallic keeps its own 0-or-1 refusal for a constant, but a binding is a texture", () => {
+    expect(scene({ mtl_x: { baseColor: [0.5, 0.5, 0.5], metallic: 0.5 } }).errors.join(" ")).toContain(
+      "must be 0 or 1",
+    );
+    const bound = scene(
+      { mtl_x: { baseColor: [0.5, 0.5, 0.5], metallic: { shader: "shd_m" } } },
+      { shd_m: { kernel: "k.glsl", outputs: ["metallic"] } },
+    );
+    expect(bound.errors).toEqual([]);
+  });
+
+  it("carries how the surface is READ, separately from what its alpha is", () => {
+    const { errors, spec } = scene({
+      mtl_x: { baseColor: [0.2, 0.4, 0.1], alpha: 0.9, alphaMode: "mask", alphaCutoff: 0.4, doubleSided: true },
+    });
+    expect(errors).toEqual([]);
+    const m = spec!.materials!.mtl_x as Record<string, unknown>;
+    expect(m.alphaMode).toBe("mask");
+    expect(m.alphaCutoff).toBe(0.4);
+    expect(m.doubleSided).toBe(true);
+    expect(scene({ mtl_x: { baseColor: [0, 0, 0], alphaMode: "ghost" } }).errors.join(" ")).toContain(
+      "alphaMode must be one of",
+    );
+  });
+
+  it("still refuses an unknown material field, and suggests the channel meant", () => {
+    const { errors } = scene({ mtl_x: { baseColor: [0.5, 0.5, 0.5], clearcoat: 1 } });
+    expect(errors.join(" ")).toContain("not a material field");
+    // `clearcoat` is what the socket used to be called; `coat` is the channel.
+    expect(errors.join(" ")).toContain("coat");
+  });
+});
+
+describe("material channels: a binding that could never wire is refused", () => {
+  const scene = (materials: Record<string, unknown>, shaders?: Record<string, unknown>) =>
+    validateSceneSpec({
+      schemaVersion: 1,
+      ...(shaders ? { shaders } : {}),
+      materials,
+      parts: [{ id: "prp_a", size: [1, 1, 1], material: "mtl_x" }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    });
+
+  it("displacement reads the shader's HEIGHT output, since nothing bakes a 'displacement'", () => {
+    const { errors, spec } = scene(
+      { mtl_x: { baseColor: [0.5, 0.5, 0.5], displacement: { shader: "shd_h" } } },
+      { shd_h: { kernel: "k.glsl", outputs: ["height"] } },
+    );
+    expect(errors).toEqual([]);
+    // Defaulting to the channel's own name would validate and then wire
+    // nothing at all — the silent failure this default exists to prevent.
+    expect((spec!.materials!.mtl_x as Record<string, unknown>).displacement).toEqual({
+      shader: "shd_h",
+      output: "height",
+    });
+  });
+
+  it("occlusion is bakeable but NOT bindable — see the refusal test below", () => {
+    // A kernel may write an occlusion map; a material may not claim to wear
+    // one, because nothing downstream carries it. The map still lands on disk
+    // for the author to multiply into baseColor themselves.
+    const { errors } = scene(
+      { mtl_x: { baseColor: [0.5, 0.5, 0.5] } },
+      { shd_o: { kernel: "k.glsl", outputs: ["occlusion"] } },
+    );
+    expect(errors).toEqual([]);
+  });
+
+  it("names the legal outputs when one is asked for that no kernel can bake", () => {
+    const { errors } = scene(
+      { mtl_x: { baseColor: [0.5, 0.5, 0.5], coat: { shader: "shd_r", output: "nonsense" } } },
+      { shd_r: { kernel: "k.glsl", outputs: ["roughness"] } },
+    );
+    expect(errors.join(" ")).toContain("must be one of");
+    expect(errors.join(" ")).toContain("roughness");
+  });
+});
+
+describe("material bindings: a mistake is reported once, and never as the wrong mistake", () => {
+  const scene = (materials: Record<string, unknown>, shaders?: Record<string, unknown>) =>
+    validateSceneSpec({
+      schemaVersion: 1,
+      ...(shaders ? { shaders } : {}),
+      materials,
+      parts: [{ id: "prp_a", size: [1, 1, 1], material: "mtl_x" }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    });
+
+  it("refuses an unknown key inside a binding rather than driving the default output", () => {
+    // `ouput` would otherwise validate and silently bind the channel's own
+    // name — a wrong answer that compiles, which is the failure this check
+    // exists to prevent.
+    const { errors } = scene(
+      { mtl_x: { baseColor: [0.5, 0.5, 0.5], coat: { shader: "shd_r", ouput: "roughness" } } },
+      { shd_r: { kernel: "k.glsl", outputs: ["roughness"] } },
+    );
+    expect(errors.join(" ")).toContain("not a binding field");
+    expect(errors.join(" ")).toContain("output");
+    // ONCE. The block's whole promise is that one mistake yields one
+    // diagnostic; a cascade would still satisfy a "contains" assertion.
+    expect(errors.filter((e) => e.includes("coat")).length).toBe(1);
+    expect(errors.length).toBe(1);
+  });
+
+  it("a baseColor bound to a BROKEN shader does not also demand a constant", () => {
+    // The shader is declared but its own declaration failed. Its real errors
+    // carry its own JSON path; telling the author to add a base colour points
+    // them at a value their binding already supplies.
+    const { errors } = scene(
+      { mtl_x: { baseColor: { shader: "shd_bad" } } },
+      { shd_bad: { kernel: 42 } },
+    );
+    expect(errors.some((e) => e.includes("baseColor") && e.includes("must be"))).toBe(false);
+    expect(errors.some((e) => e.includes("shaders.shd_bad"))).toBe(true);
+  });
+
+  it("reports a malformed colour exactly once", () => {
+    const { errors } = scene({ mtl_x: { baseColor: [2, 0, 0] } });
+    expect(errors.filter((e) => e.includes("baseColor")).length).toBe(1);
+  });
+});
+
+describe("material channels: what cannot be delivered is refused, not lost", () => {
+  const scene = (materials: Record<string, unknown>, shaders?: Record<string, unknown>) =>
+    validateSceneSpec({
+      schemaVersion: 1,
+      ...(shaders ? { shaders } : {}),
+      materials,
+      parts: [{ id: "prp_a", size: [1, 1, 1], material: "mtl_x" }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    });
+
+  it("refuses an occlusion binding, and names the way that does work", () => {
+    // The surface model has no AO input, and the glTF-only node-group route
+    // does not survive the USD master — binding it fails master parity
+    // (E-901) rather than shipping AO. Refusing beats losing it downstream.
+    const { errors } = scene(
+      { mtl_x: { baseColor: [0.5, 0.5, 0.5], occlusion: { shader: "shd_o" } } },
+      { shd_o: { kernel: "k.glsl", outputs: ["occlusion"] } },
+    );
+    expect(errors.join(" ")).toContain("occlusion cannot be bound");
+    expect(errors.join(" ")).toContain("multiply it into baseColor");
+  });
+
+  it("still lets a kernel BAKE occlusion — it is the binding that is refused", () => {
+    const { errors } = scene(
+      { mtl_x: { baseColor: [0.5, 0.5, 0.5] } },
+      { shd_o: { kernel: "k.glsl", outputs: ["occlusion"] } },
+    );
+    expect(errors.filter((e) => e.includes("occlusion"))).toEqual([]);
+  });
+
+  it("displacement is bindable, because it reaches the material output", () => {
+    const { errors } = scene(
+      { mtl_x: { baseColor: [0.5, 0.5, 0.5], displacement: { shader: "shd_h" } } },
+      { shd_h: { kernel: "k.glsl", outputs: ["height"] } },
+    );
+    expect(errors).toEqual([]);
+  });
+});
+
+describe("the whole-material shorthand never fights an explicit binding", () => {
+  it("a normal binding also claims the shader's height output", () => {
+    // `height` reaches the surface as the DERIVED normal map, so a material
+    // that overrides `normal` must not also inherit `height` from its
+    // shorthand shader — that is two competing normal inputs, and the explicit
+    // override would lose to the shader it was written to overrule.
+    const { errors, spec } = validateSceneSpec({
+      schemaVersion: 1,
+      shaders: {
+        shd_a: { kernel: "a.glsl", outputs: ["baseColor", "height"] },
+        shd_n: { kernel: "n.glsl", outputs: ["normal"] },
+      },
+      materials: { mtl_x: { shader: "shd_a", normal: { shader: "shd_n" } } },
+      parts: [{ id: "prp_a", size: [1, 1, 1], material: "mtl_x" }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    });
+    expect(errors).toEqual([]);
+    expect((spec!.materials!.mtl_x as Record<string, unknown>).normal).toEqual({
+      shader: "shd_n",
+      output: "normal",
+    });
+  });
+});

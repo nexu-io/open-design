@@ -1132,6 +1132,15 @@ export interface Census {
    * never mutate or guess.
    */
   importNotes?: string[];
+  /**
+   * Material channels this Blender had no socket for, as `material.channel`.
+   *
+   * The Principled BSDF renamed inputs across versions, so a channel the
+   * compiler knows may not exist on the build that ran. Reported rather than
+   * dropped: the material shipped without it, and only the compiler can tell
+   * the author which capability this runtime does not carry.
+   */
+  unboundChannels?: string[];
   /** Viewer edits the runner could not replay — a stale part name, or a value
    *  this Blender would not take. Dropping them is right (a bad edit must not
    *  wedge a compile); dropping them silently is not, which is what the bare

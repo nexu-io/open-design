@@ -178,8 +178,14 @@ export interface RunnerJob {
     fragmentSource: string;
     vertexSource: string;
   }>;
-  /** Material -> baked-shader-texture wiring applied after the bake. */
-  shaderBindings?: Array<{ material: string; shader: string; outputs: string[] }>;
+  /** Material <- baked-shader wiring. `channel` names the material channel
+   *  the output drives; absent means the channel of the same name, which is
+   *  the whole-material shorthand. */
+  shaderBindings?: Array<{ material: string; shader: string; outputs: string[]; channel?: string }>;
+  /** The material-channel table, shipped as DATA so the runner applies what
+   *  the compiler decided rather than keeping a second copy that can drift.
+   *  Keyed by channel name; `sockets` are candidates tried in order. */
+  channelSockets?: Record<string, { sockets: string[]; nonColor: boolean }>;
   outDir: string;
   proof?: {
     engine: string;

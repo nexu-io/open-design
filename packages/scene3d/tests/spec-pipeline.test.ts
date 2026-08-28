@@ -469,6 +469,43 @@ describe.skipIf(!hasBlender)("declarative spec pipeline (real Blender)", () => {
     // Advisory only — a warning, never a compile-blocking error.
     expect(result.issues.filter((i) => i.severity === "error")).toEqual([]);
   });
+  it("reports lost material channels PER MATERIAL, not per scene", async () => {
+    /*
+     * An extension is not a scene-wide capability. One material carrying
+     * `KHR_materials_clearcoat` says nothing about whether a different
+     * material's sheen survived — and a check that reads `extensionsUsed`
+     * alone reports no loss for a real loss whenever any other material
+     * happens to use the same extension. Two materials, two different
+     * channels, one of which travels and one of which does not, is the case
+     * that separates the two implementations.
+     */
+    const dir = workDir("good/spec_pavilion");
+    const scene = JSON.parse(fs.readFileSync(path.join(dir, "scene.json"), "utf8"));
+    scene.materials.mtl_coated = {
+      baseColor: [0.4, 0.05, 0.05], roughness: 0.3, metallic: 1, coat: 1, coatRoughness: 0.05,
+    };
+    scene.materials.mtl_velvet = {
+      baseColor: [0.2, 0.1, 0.3], roughness: 0.9, metallic: 0, sheen: 1, sheenRoughness: 0.3,
+    };
+    scene.parts[0].material = "mtl_coated";
+    scene.parts[1].material = "mtl_velvet";
+    fs.writeFileSync(path.join(dir, "scene.json"), JSON.stringify(scene, null, 2));
+
+    const result = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "export", "lint"],
+      noCache: true,
+      timeoutMs: 300_000,
+    });
+    const lost = result.issues.find((i) => i.code === "S3D-W-903");
+    expect(lost, "expected a deliverable-parity finding").toBeTruthy();
+    const names = (lost!.detail as { lost?: string[] }).lost ?? [];
+    // Sheen has no carrier in the lowered glTF and is named WITH its material.
+    expect(names).toContain("mtl_velvet.sheen");
+    // Clearcoat DOES travel, so it must not be reported as lost — and the
+    // scene-wide check could not tell these two apart.
+    expect(names.some((n) => n.startsWith("mtl_coated."))).toBe(false);
+  }, 300_000);
 });
 
 describe.skipIf(!hasBlender)("script parts vs a hostile selection", () => {
@@ -581,4 +618,5 @@ describe.skipIf(!hasBlender)("claim margins against the real build", () => {
       expect(margins[i - 1]!.used).toBeGreaterThanOrEqual(margins[i]!.used);
     }
   }, 400_000);
+
 });

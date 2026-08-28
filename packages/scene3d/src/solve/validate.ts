@@ -13,6 +13,12 @@ import {
   Vec3,
 } from "./types.js";
 import { didYouMean } from "./did-you-mean.js";
+import {
+  ALPHA_MODES,
+  MATERIAL_CHANNELS,
+  SHADER_OUTPUTS,
+  type ChannelDef,
+} from "./channels.js";
 import { validateShaderSpec } from "../shade/validate.js";
 import type { ShaderSpec } from "../shade/types.js";
 
@@ -922,57 +928,221 @@ function validateMaterial(
       errors.push(`${at}.shader '${mat.shader}' is not declared in shaders — declare it or fix the name`);
     }
   }
-  // A shader material's surface comes from the bake; without a shader the
-  // base colour is the material, so it is required.
-  let baseColor: [number, number, number] | undefined;
-  if (mat.baseColor !== undefined || (shader === undefined && !shaderPoisoned)) {
-    baseColor = validateColor(`${at}.baseColor`, mat.baseColor, errors);
-  }
-  const roughness = validateUnit(`${at}.roughness`, mat.roughness, errors);
-  let metallic: number | undefined;
-  if (mat.metallic !== undefined) {
-    if (mat.metallic === 0 || mat.metallic === 1) {
-      metallic = mat.metallic;
-    } else {
-      // Name the nearest legal value the same way W-972 names the nearest
-      // legal angle — the author typed a plausible-looking number and the
-      // refusal should hand back the one move that fixes it.
-      const suggestion =
-        typeof mat.metallic === "number" && Number.isFinite(mat.metallic)
-          ? mat.metallic < 0.5
-            ? 0
-            : 1
-          : undefined;
+  /* Every channel is validated the same way: a CONSTANT of the channel's
+     own kind, or a BINDING onto a declared shader's baked output. That
+     symmetry is the primitive — it is why coat, sheen, transmission and a
+     directly authored normal map need no code of their own here. */
+  const out: Record<string, unknown> = {};
+  const isBinding = (v: unknown): v is { shader: string; output?: string } =>
+    typeof v === "object" && v !== null && !Array.isArray(v) && "shader" in v;
+
+  const channelValue = (
+    chan: { name: string; kind: ChannelDef["kind"]; min?: number; max?: number; note: string },
+    raw: unknown,
+  ): unknown => {
+    const where = `${at}.${chan.name}`;
+    if (isBinding(raw)) {
+      const b = raw as { shader?: unknown; output?: unknown };
+      if (typeof b.shader !== "string") {
+        errors.push(`${where}.shader must be the name of a declared shader`);
+        return undefined;
+      }
+      if (!shaderNames.has(b.shader)) {
+        // A shader whose own declaration failed is not re-reported: its real
+        // errors carry its JSON path, and this binding is fine once it is
+        // fixed. The poison flag travels so the required-field checks below
+        // stay quiet too — otherwise a baseColor BOUND to a broken shader also
+        // collects "set the base colour", pointing the author at a constant
+        // their binding already supplies.
+        if (!declaredShaders.has(b.shader)) {
+          errors.push(
+            `${where}.shader '${b.shader}' is not declared in shaders — declare it or fix the name`,
+          );
+        } else {
+          shaderPoisoned = true;
+        }
+        return undefined;
+      }
+      // Unknown keys INSIDE a binding are errors for the same reason unknown
+      // material keys are: `{ shader, ouput }` would otherwise validate and
+      // then drive the channel's default output, which is a silent wrong
+      // answer rather than a refusal.
+      const BINDING_KEYS = new Set(["shader", "output"]);
+      for (const k of Object.keys(b as Record<string, unknown>)) {
+        if (isCommentKey(k)) continue;
+        if (!BINDING_KEYS.has(k)) {
+          errors.push(
+            `${where}.${k} is not a binding field — ${didYouMean(k, BINDING_KEYS)}known fields: ${[...BINDING_KEYS].join(", ")}`,
+          );
+          return undefined;
+        }
+      }
+      // The default output is the channel's own name, which is what makes the
+      // common case short — except where the channel is DRIVEN by a different
+      // baked thing. Displacement is a height field; nothing bakes a
+      // "displacement", so defaulting to the channel name would validate and
+      // then wire nothing at all.
+      let output: string = chan.name === "displacement" ? "height" : chan.name;
+      if (!(SHADER_OUTPUTS as readonly string[]).includes(output)) {
+        errors.push(
+          `${where} has no bakeable output of its own — bind it explicitly with { "shader": "...", "output": "..." } from ${SHADER_OUTPUTS.join(", ")}`,
+        );
+        return undefined;
+      }
+      if (b.output !== undefined) {
+        if (typeof b.output !== "string" || !(SHADER_OUTPUTS as readonly string[]).includes(b.output)) {
+          errors.push(
+            `${where}.output must be one of ${SHADER_OUTPUTS.join(", ")} — it names which of the shader's baked channels drives this one`,
+          );
+          return undefined;
+        }
+        output = b.output;
+      }
+      return { shader: b.shader, output };
+    }
+    // A constant. `map` channels have none: their value is a per-texel
+    // direction, so a number could not mean anything.
+    if (chan.kind === "map") {
       errors.push(
-        `${at}.metallic must be 0 or 1 — in-between metallic is physically meaningless and the pbr rule rejects it${
-          suggestion !== undefined ? ` (use ${suggestion})` : ""
-        }`,
+        `${where} takes a shader binding, not a value — ${chan.note}`,
+      );
+      return undefined;
+    }
+    if (chan.kind === "color") return validateColor(where, raw, errors);
+    if (chan.kind === "vector") {
+      if (
+        Array.isArray(raw) &&
+        raw.length === 3 &&
+        raw.every((n) => typeof n === "number" && Number.isFinite(n) && n >= (chan.min ?? -Infinity) && n <= (chan.max ?? Infinity))
+      ) {
+        return [raw[0], raw[1], raw[2]];
+      }
+      errors.push(`${where} must be three numbers in [${chan.min}, ${chan.max}] — ${chan.note}`);
+      return undefined;
+    }
+    if (
+      typeof raw === "number" &&
+      Number.isFinite(raw) &&
+      raw >= (chan.min ?? -Infinity) &&
+      raw <= (chan.max ?? Infinity)
+    ) {
+      return raw;
+    }
+    errors.push(`${where} must be a number in [${chan.min}, ${chan.max}] — ${chan.note}`);
+    return undefined;
+  };
+
+  for (const chan of MATERIAL_CHANNELS) {
+    if (mat[chan.name] === undefined) continue;
+    // Metallic keeps its own refusal: the pbr rule rejects in-between
+    // CONSTANTS, and naming the nearest legal value is the one move that
+    // fixes it. A bound metallic is a texture and is not range-checked.
+    if (chan.name === "metallic" && !isBinding(mat.metallic)) {
+      if (mat.metallic === 0 || mat.metallic === 1) {
+        out.metallic = mat.metallic;
+      } else {
+        const suggestion =
+          typeof mat.metallic === "number" && Number.isFinite(mat.metallic)
+            ? mat.metallic < 0.5
+              ? 0
+              : 1
+            : undefined;
+        errors.push(
+          `${at}.metallic must be 0 or 1 — in-between metallic is physically meaningless and the pbr rule rejects it${
+            suggestion !== undefined ? ` (use ${suggestion})` : ""
+          }`,
+        );
+      }
+      continue;
+    }
+    const v = channelValue(chan, mat[chan.name]);
+    if (v !== undefined) out[chan.name] = v;
+  }
+
+  // A shader material's surface comes from the bake; without a shader — and
+  // without a binding that supplies it — the base colour IS the material.
+  if (
+    out.baseColor === undefined &&
+    mat.baseColor === undefined &&
+    shader === undefined &&
+    !shaderPoisoned
+  ) {
+    // Only when it is ABSENT. A malformed one was already refused by the
+    // channel loop above, and validating it twice collects the same
+    // diagnostic twice for one mistake.
+    validateColor(`${at}.baseColor`, mat.baseColor, errors);
+  }
+  // A plain material glowing at strength N with no colour is a mistake; a
+  // shader material may bake the colour, which makes the strength alone fine.
+  if (
+    out.emissionStrength !== undefined &&
+    out.emission === undefined &&
+    shader === undefined
+  ) {
+    errors.push(`${at}.emissionStrength is set but emission is not — set the emission colour`);
+  }
+
+  /* Facts about how the surface is READ rather than what it is. They are not
+     channels: no shader bakes them, and an engine consumes them as material
+     state. */
+  if (mat.alphaMode !== undefined) {
+    if (typeof mat.alphaMode === "string" && (ALPHA_MODES as readonly string[]).includes(mat.alphaMode)) {
+      out.alphaMode = mat.alphaMode;
+    } else {
+      errors.push(
+        `${at}.alphaMode must be one of ${ALPHA_MODES.join(", ")} — 'mask' is a hard cut-out at alphaCutoff (leaves, chain-link) and sorts correctly in every engine; 'blend' is true translucency`,
       );
     }
   }
-  let emission: [number, number, number] | undefined;
-  if (mat.emission !== undefined) emission = validateColor(`${at}.emission`, mat.emission, errors);
-  let emissionStrength: number | undefined;
-  if (mat.emissionStrength !== undefined) {
-    if (typeof mat.emissionStrength === "number" && mat.emissionStrength >= 0 && Number.isFinite(mat.emissionStrength)) {
-      emissionStrength = mat.emissionStrength;
-    } else {
-      errors.push(`${at}.emissionStrength must be a non-negative number`);
+  if (mat.alphaCutoff !== undefined) {
+    const c = validateUnit(`${at}.alphaCutoff`, mat.alphaCutoff, errors);
+    if (c !== undefined) out.alphaCutoff = c;
+  }
+  if (mat.doubleSided !== undefined) {
+    if (typeof mat.doubleSided === "boolean") out.doubleSided = mat.doubleSided;
+    else errors.push(`${at}.doubleSided must be true or false`);
+  }
+  /* `occlusion` is NOT bindable. The surface model has no ambient-occlusion
+     input, and the only route a glTF exporter reads — the "glTF Material
+     Output" node group — is invisible to the USD writer, so binding it fails
+     the master-parity check (S3D-E-901) instead of shipping AO. A kernel may
+     still BAKE an occlusion map; what a material may not do is claim to wear
+     one. Refused with the way that does work, rather than accepted and lost. */
+  if (mat.occlusion !== undefined) {
+    errors.push(
+      `${at}.occlusion cannot be bound to a material — the surface model has no ambient-occlusion input, and the glTF-only route does not survive the USD master. Bake it as a shader output and multiply it into baseColor inside the kernel`,
+    );
+  }
+  // Displacement is bound like a channel but is not a surface input: it drives
+  // the material output's displacement, which is what USD carries and what an
+  // engine tessellates against. Texture-only, since a constant displacement is
+  // just a translation.
+  for (const extra of ["displacement"] as const) {
+    if (mat[extra] === undefined) continue;
+    if (!isBinding(mat[extra])) {
+      errors.push(
+        `${at}.${extra} takes a shader binding like { "shader": "shd_x" }, not a value`,
+      );
+      continue;
     }
+    const v = channelValue(
+      { name: extra, kind: "map", note: `${extra} is driven by a baked map` },
+      mat[extra],
+    );
+    if (v !== undefined) out[extra] = v;
   }
-  // A shader material may bake its emission colour, making a strength
-  // without an authored colour legitimate; a plain material glowing at
-  // strength N with no colour is still a mistake.
-  if (emissionStrength !== undefined && emission === undefined && shader === undefined) {
-    errors.push(`${at}.emissionStrength is set but emission is not — set the emission colour`);
-  }
-  const alpha = validateUnit(`${at}.alpha`, mat.alpha, errors);
 
   // Unknown material keys are errors, never swallows, for the same reason
   // part keys are: `"offset"` typed where `"emissionStrength"` was meant
   // compiled clean and lit nothing, silently.
-  const KNOWN_MATERIAL_KEYS = new Set([
-    "shader", "baseColor", "roughness", "metallic", "emission", "emissionStrength", "alpha",
+  const KNOWN_MATERIAL_KEYS = new Set<string>([
+    "shader",
+    ...MATERIAL_CHANNELS.map((c) => c.name),
+    "alphaMode",
+    "alphaCutoff",
+    "doubleSided",
+    "displacement",
+    "occlusion",
   ]);
   for (const key of Object.keys(mat)) {
     if (isCommentKey(key)) continue;
@@ -983,16 +1153,13 @@ function validateMaterial(
     }
   }
 
-  if (errors.length > before || (!baseColor && shader === undefined)) return undefined;
+  if (errors.length > before || (out.baseColor === undefined && shader === undefined)) {
+    return undefined;
+  }
   return {
     ...(shader !== undefined ? { shader } : {}),
-    ...(baseColor ? { baseColor } : {}),
-    ...(roughness !== undefined ? { roughness } : {}),
-    ...(metallic !== undefined ? { metallic } : {}),
-    ...(emission ? { emission } : {}),
-    ...(emissionStrength !== undefined ? { emissionStrength } : {}),
-    ...(alpha !== undefined ? { alpha } : {}),
-  };
+    ...out,
+  } as MaterialSpec;
 }
 
 function validateRelation(index: number, value: unknown, errors: string[]): Relation | undefined {

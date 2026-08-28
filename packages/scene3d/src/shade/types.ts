@@ -32,7 +32,18 @@ export type ShaderUniformValue = number | number[];
  * the baked field, wrap-aware) — the author writes "how bumpy", the
  * compiler owns the vector calculus.
  */
-export type ShaderOutput = "baseColor" | "emission" | "roughness" | "metallic" | "height";
+/**
+ * What a kernel may bake.
+ *
+ * The vocabulary is the material channel set (`solve/channels.ts`) plus
+ * `height` and `occlusion`, which are bakeable without being surface inputs —
+ * a height field is what the compiler derives a normal map and displacement
+ * from, and occlusion is carried beside the material rather than into it.
+ * Deriving the list rather than restating it is what keeps "bake it" and
+ * "bind it" one vocabulary: a channel a material can wear is a channel a
+ * kernel can write.
+ */
+export type ShaderOutput = import("../solve/channels.js").ShaderOutputName;
 
 export interface ShaderSpec {
   /** Scene-relative path of the kernel file (`.glsl`). */
@@ -170,13 +181,7 @@ export function pushConstantBytes(types: ShaderUniformType[]): number {
   return offset;
 }
 
-export const SHADER_OUTPUTS: readonly ShaderOutput[] = [
-  "baseColor",
-  "emission",
-  "roughness",
-  "metallic",
-  "height",
-];
+export { SHADER_OUTPUTS } from "../solve/channels.js";
 
 /** Kernel entry point required per output ("baseColor" uses plain `kernel`). */
 export function kernelFunctionFor(output: ShaderOutput): string {

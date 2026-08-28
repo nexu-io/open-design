@@ -807,9 +807,10 @@ def bake_shaders(job):
             fail("S3D-E-802",
                  "shader '%s' failed to compile on the driver: %s%s"
                  % (name, e, ("\n" + tail) if tail else
-                    " (the driver printed no log; the kernel dialect allows "
-                    "straight-line math and the injected s3d_* helpers only — "
-                    "no user-defined functions, no loops)"))
+                    " (the driver printed no log, so the compile failed "
+                    "without saying where; check the kernel for a GLSL "
+                    "version mismatch, a missing return, or a built-in this "
+                    "driver does not provide)"))
 
         def draw_cell(out_index, t):
             """One GPU execution of the kernel; returns (size, size, 4)
@@ -968,12 +969,18 @@ def bake_shaders(job):
     # Wire baked textures into the referencing materials. `height` wires
     # its DERIVED normal map (through a Normal Map node, as normals must
     # be); the raw height PNG stays on disk for engines that displace.
-    socket_for = {
-        "baseColor": "Base Color",
-        "emission": "Emission Color",
-        "roughness": "Roughness",
-        "metallic": "Metallic",
+    # Which socket each channel drives, and whether its map carries DATA
+    # rather than colour. Shipped by the compiler with the job rather than
+    # written here: `solve/channels.ts` is the one vocabulary, and a second
+    # table in Python is a second thing to drift. Absent (an older cached
+    # job) falls back to the four channels that always existed.
+    channel_sockets = job.get("channelSockets") or {
+        "baseColor": {"sockets": ["Base Color"], "nonColor": False},
+        "emission": {"sockets": ["Emission Color"], "nonColor": False},
+        "roughness": {"sockets": ["Roughness"], "nonColor": True},
+        "metallic": {"sockets": ["Metallic"], "nonColor": True},
     }
+    unbound_channels = []
     for binding in job.get("shaderBindings") or []:
         mat = bpy.data.materials.get(binding["material"])
         if mat is None:
@@ -996,24 +1003,58 @@ def bake_shaders(job):
             return node
 
         for output in binding["outputs"]:
+            # The channel this output drives. Stated when the author bound one
+            # channel to one output; otherwise the channel of the same name,
+            # which is the whole-material shorthand.
+            channel = binding.get("channel") or output
             # ONE name family: the shader is declared shd_rust, its file is
             # shd_rust_baseColor.png, and the image datablock now matches —
             # a grep for any one of the three finds the others. (The old
             # tex_<stem> datablock name was a third alias nothing else used.)
-            if output == "height":
+            if output == "height" and channel in ("height", "normal"):
+                # A height field is not a surface input: the compiler DERIVES a
+                # normal map from it, and that is what reaches the shader.
                 normal_node = wire_image("normal", "%s_normal" % binding["shader"], True)
                 if normal_node is not None and "Normal" in bsdf.inputs:
                     nm = mat.node_tree.nodes.new("ShaderNodeNormalMap")
                     mat.node_tree.links.new(normal_node.outputs["Color"], nm.inputs["Color"])
                     mat.node_tree.links.new(nm.outputs["Normal"], bsdf.inputs["Normal"])
                 continue
+            if channel == "displacement":
+                # Displacement is not a surface input: it drives the material
+                # OUTPUT's displacement, which is what USD and MaterialX carry
+                # and what an engine tessellates against. Loading the image
+                # alone would materialise it into the export and move nothing.
+                node = wire_image(output, "%s_displacement" % binding["shader"], True)
+                if node is not None:
+                    out_node = next((n for n in mat.node_tree.nodes
+                                     if n.type == "OUTPUT_MATERIAL"), None)
+                    if out_node is not None and "Displacement" in out_node.inputs:
+                        disp = mat.node_tree.nodes.new("ShaderNodeDisplacement")
+                        disp.inputs["Midlevel"].default_value = 0.5
+                        mat.node_tree.links.new(node.outputs["Color"], disp.inputs["Height"])
+                        mat.node_tree.links.new(disp.outputs["Displacement"],
+                                                out_node.inputs["Displacement"])
+                    else:
+                        unbound_channels.append("%s.displacement" % binding["material"])
+                continue
+            info = channel_sockets.get(channel) or {}
             node = wire_image(output, "%s_%s" % (binding["shader"], output),
-                              output in ("roughness", "metallic"))
+                              bool(info.get("nonColor")))
             if node is not None:
-                socket = socket_for[output]
-                if socket in bsdf.inputs:
+                socket = next((sk for sk in info.get("sockets", []) if sk in bsdf.inputs), None)
+                if socket is None:
+                    unbound_channels.append("%s.%s" % (binding["material"], channel))
+                elif channel in ("normal", "coatNormal"):
+                    # A normal map is a DIRECTION, so it goes through a Normal
+                    # Map node rather than straight into the socket — wiring the
+                    # raw texture would feed a colour where a vector is meant.
+                    nm = mat.node_tree.nodes.new("ShaderNodeNormalMap")
+                    mat.node_tree.links.new(node.outputs["Color"], nm.inputs["Color"])
+                    mat.node_tree.links.new(nm.outputs["Normal"], bsdf.inputs[socket])
+                else:
                     mat.node_tree.links.new(node.outputs["Color"], bsdf.inputs[socket])
-                if (output == "emission" and "Emission Strength" in bsdf.inputs
+                if (channel == "emission" and "Emission Strength" in bsdf.inputs
                         and bsdf.inputs["Emission Strength"].default_value == 0.0):
                     # Emission Color is a COLOUR; Emission Strength decides
                     # whether any of it leaves the surface, and Blender
@@ -1030,6 +1071,16 @@ def bake_shaders(job):
                     # it does not overrule one.
                     bsdf.inputs["Emission Strength"].default_value = 1.0
 
+    if unbound_channels:
+        # A channel that matched no socket on THIS build is named, never
+        # dropped: the material shipped without it, and only the compiler can
+        # tell the author which capability this Blender does not carry. Recorded
+        # as a FACT the result carries, so it becomes a reported issue rather
+        # than a line in a log nobody reads.
+        UNBOUND_CHANNELS.extend(sorted(set(unbound_channels)))
+        log("channels with no socket on %s: %s"
+            % (bpy.app.version_string, ", ".join(sorted(set(unbound_channels)))))
+
 
 """Degraded-import facts gathered during load, surfaced as lint warnings.
 
@@ -1038,6 +1089,12 @@ file, never guess — DETECT what is missing or damaged and report it with
 the fix, so the author (or the agent) repairs the source. A silent grey
 import is the worst outcome; a named missing .mtl is a one-line fix."""
 IMPORT_NOTES = []
+
+# Material channels this Blender had no socket for, gathered during the bake
+# and reported with the census — the same detect-and-name posture as
+# IMPORT_NOTES, for the same reason: a silently missing capability is worse
+# than a named one.
+UNBOUND_CHANNELS = []
 
 # The names of materials an asset importer brought in THIS build. Provenance is
 # MEASURED at the importer boundary and lives only in this process: the census
@@ -1824,6 +1881,7 @@ def census(scene, measure_thickness=False, voxel_grid=0.0, zf_pair_budget=0):
         },
         "armatures": armature_rows,
         "importNotes": list(IMPORT_NOTES),
+        "unboundChannels": list(UNBOUND_CHANNELS),
         "tweakNotes": list(TWEAK_NOTES),
         "shaderNotes": list(SHADER_NOTES),
         "offCameraObjects": off_camera_objects(scene, finite_objects),

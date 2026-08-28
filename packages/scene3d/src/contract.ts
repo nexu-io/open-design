@@ -204,7 +204,7 @@ export interface NormalizedContract {
   /** Shader bake resolution bounds (power-of-two, inclusive). The lower bound
    *  is data, not a kernel constant: 64 for pbr, or the author's declared
    *  `pxPerBlock` (pow2-floored) under pixel-art so a 16-px bake is legal. */
-  shade: { bakeMin: number; bakeMax: number };
+  shade: { bakeMin: number; bakeMax: number; maxAtlasBytes: number };
   textures: {
     requirePowerOfTwo: boolean;
     maxSize: number;
@@ -352,6 +352,17 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
   // discipline enum: a project that says one block is worth 16 px has said a
   // 16-px bake is legal, and nothing downstream needs to know a mode name.
   const bakeMin = voxelPxPerBlock !== null ? pow2Floor(voxelPxPerBlock) : 64;
+  /* Largest float32 bake atlas, in bytes. Resource-denominated rather than a
+     frame cap: what hurts is the allocation, and the same frame count is
+     harmless at a small cell size and fatal at a large one. Raisable, because
+     a bigger machine really can bake a bigger sheet — a wall you can raise is
+     a resource negotiation, not a refusal. */
+  const atlasBytes = intIn(
+    (c.conventions as { shade?: { maxAtlasBytes?: unknown } } | undefined)?.shade?.maxAtlasBytes,
+    1,
+    Number.MAX_SAFE_INTEGER,
+    1024 ** 3,
+  );
   // Field-by-field, not a spread: this block is not only lint config, it is
   // the RENDER JOB. A wrong-typed `engine` or `resolution` from a programmatic
   // contract used to pass straight through to Blender, where "big" pixels is
@@ -418,7 +429,7 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
       texelDensityTarget: effectiveTexelTarget,
       texelDensityMaxRatio: numOr(uv.texelDensity?.maxRatio, 4),
     },
-    shade: { bakeMin, bakeMax: 4096 },
+    shade: { bakeMin, bakeMax: 4096, maxAtlasBytes: atlasBytes },
     // Iglewicz–Hoaglin robust-z cutoff — a citable statistical constant, not a
     // domain threshold; overridable for a scene that mixes scales on purpose.
     outlierZ: (() => {

@@ -45,6 +45,17 @@ const SHADING_EXTENSIONS = new Set([
  * report elsewhere, not a reason to fail a compile that already succeeded.
  */
 export function gltfExtensionsUsed(file: string): string[] | null {
+  const doc = gltfDocument(file);
+  if (doc === null) return null;
+  const used = (doc as { extensionsUsed?: unknown }).extensionsUsed;
+  if (!Array.isArray(used)) return [];
+  return used.filter((e): e is string => typeof e === "string");
+}
+
+/** The JSON of a `.glb` or `.gltf`, or null when it cannot be read as either.
+ *  One parse, shared: two readers that each sniffed the container their own
+ *  way would eventually disagree about what a file is. */
+function gltfDocument(file: string): object | null {
   let buf: Buffer;
   try {
     buf = fs.readFileSync(file);
@@ -62,10 +73,7 @@ export function gltfExtensionsUsed(file: string): string[] | null {
       text = buf.toString("utf8");
     }
     const doc: unknown = JSON.parse(text);
-    if (typeof doc !== "object" || doc === null) return null;
-    const used = (doc as { extensionsUsed?: unknown }).extensionsUsed;
-    if (!Array.isArray(used)) return [];
-    return used.filter((e): e is string => typeof e === "string");
+    return typeof doc === "object" && doc !== null ? (doc as object) : null;
   } catch {
     return null;
   }
@@ -85,4 +93,91 @@ export function lostShadingCapability(sourceFile: string, shippedFile: string): 
   if (source === null || shipped === null) return [];
   const kept = new Set(shipped);
   return source.filter((e) => SHADING_EXTENSIONS.has(e) && !kept.has(e)).sort();
+}
+
+/**
+ * Which glTF extension carries a material channel, where one does.
+ *
+ * A channel absent from this map has no glTF representation at all — that is
+ * a fact about the format, not a gap in the table, and it is why the report
+ * distinguishes "the deliverable dropped it" from "no deliverable of this
+ * kind can carry it". `coatIor` and `coatTint` are deliberately absent:
+ * `KHR_materials_clearcoat` carries a factor, a roughness and a normal
+ * texture, and nothing else, so crediting them to it would report a channel
+ * as preserved that the file cannot express.
+ */
+const CHANNEL_EXTENSION: Readonly<Record<string, string>> = {
+  coat: "KHR_materials_clearcoat",
+  coatRoughness: "KHR_materials_clearcoat",
+  coatNormal: "KHR_materials_clearcoat",
+  transmission: "KHR_materials_transmission",
+  sheen: "KHR_materials_sheen",
+  sheenRoughness: "KHR_materials_sheen",
+  sheenTint: "KHR_materials_sheen",
+  anisotropic: "KHR_materials_anisotropy",
+  anisotropicRotation: "KHR_materials_anisotropy",
+  thinFilmThickness: "KHR_materials_iridescence",
+  thinFilmIor: "KHR_materials_iridescence",
+  ior: "KHR_materials_ior",
+  specular: "KHR_materials_specular",
+  specularTint: "KHR_materials_specular",
+  emissionStrength: "KHR_materials_emissive_strength",
+};
+
+/** Every material in a glTF/GLB, by name, with the extensions IT declares. */
+function gltfMaterialExtensions(file: string): Map<string, Set<string>> | null {
+  const doc = gltfDocument(file);
+  if (doc === null) return null;
+  const out = new Map<string, Set<string>>();
+  const materials = (doc as { materials?: unknown }).materials;
+  if (!Array.isArray(materials)) return out;
+  for (const m of materials) {
+    if (typeof m !== "object" || m === null) continue;
+    const name = (m as { name?: unknown }).name;
+    const ext = (m as { extensions?: unknown }).extensions;
+    out.set(
+      typeof name === "string" ? name : "",
+      new Set(ext && typeof ext === "object" ? Object.keys(ext as object) : []),
+    );
+  }
+  return out;
+}
+
+/**
+ * Channels the author wrote that the shipped glTF does not carry, PER
+ * MATERIAL.
+ *
+ * Per material because an extension is not a scene-wide capability: one
+ * material carrying `KHR_materials_clearcoat` says nothing about whether a
+ * second material's coat survived. Reading `extensionsUsed` alone reports no
+ * loss for a real loss whenever any other material happens to use the same
+ * extension.
+ *
+ * The compiler sets every authored channel on the surface it builds and the
+ * proof photographs that surface — so what is in the render is real. The
+ * deliverable is a different question: OpenUSD is the master and every
+ * container is lowered from it, so a channel `UsdPreviewSurface` cannot
+ * express does not reach the file even though it reached the picture. That
+ * gap is measured here rather than assumed, by reading the shipped container.
+ */
+export function lostAuthoredChannels(
+  authored: ReadonlyMap<string, readonly string[]>,
+  shippedFile: string,
+): Array<{ material: string; channel: string; extension: string }> {
+  const shipped = gltfMaterialExtensions(shippedFile);
+  if (shipped === null) return [];
+  const out: Array<{ material: string; channel: string; extension: string }> = [];
+  for (const material of [...authored.keys()].sort()) {
+    // A material the container does not name at all was not exported; that is
+    // a different finding than a channel being dropped, and not this one's.
+    const kept = shipped.get(material);
+    if (kept === undefined) continue;
+    for (const channel of [...new Set(authored.get(material) ?? [])].sort()) {
+      const extension = CHANNEL_EXTENSION[channel];
+      if (extension === undefined) continue; // no glTF representation to lose
+      if (kept.has(extension)) continue;
+      out.push({ material, channel, extension });
+    }
+  }
+  return out;
 }

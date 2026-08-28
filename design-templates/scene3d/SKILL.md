@@ -496,11 +496,51 @@ touching-faces, the rested-pair check) reports itself skipped rather
 than guessing, so a claim that leans on contacts is unchecked, not
 failed, above that count.
 
-**Materials.** `baseColor` (linear RGB, required unless `shader` is set),
-`roughness` (default 0.5), `metallic` (0 or 1 — the pbr rule rejects
-in-betweens), `emission` + `emissionStrength` (watts, default 1) to
-glow, and `alpha` (0–1, default 1) — anything below 1 turns on alpha
-blending, for glass, a scrim, a ghosted x-ray part.
+**Materials.** A material is a set of BINDINGS onto a surface, and every
+channel takes either a constant or a baked shader output. Those are the same
+answer at two fidelities — `roughness: 0.4` and
+`roughness: { "shader": "shd_rust" }` both say what the roughness IS — so
+there is one vocabulary to learn and nothing is a special case.
+
+The everyday channels: `baseColor` (linear RGB, required unless `shader` is
+set), `roughness` (default 0.5), `metallic` (0 or 1 — the pbr rule rejects
+in-betweens), `emission` + `emissionStrength` (watts, default 1), `alpha`
+(0–1, default 1).
+
+The rest of the surface, each a real shading behaviour rather than a texture
+trick:
+
+| channels | what they are for |
+|---|---|
+| `coat`, `coatRoughness`, `coatIor`, `coatTint`, `coatNormal` | a clear lacquer over the surface — car paint, varnish, a wet look |
+| `transmission`, `ior` | light passing THROUGH — real glass, water, a bottle. Not the same as `alpha` |
+| `sheen`, `sheenRoughness`, `sheenTint` | a retroreflective rim — cloth, velvet, dust, peach skin |
+| `subsurface`, `subsurfaceRadius`, `subsurfaceScale` | light scattering under the surface — skin, wax, marble, jade |
+| `anisotropic`, `anisotropicRotation` | a stretched highlight — brushed metal, hair, vinyl |
+| `thinFilmThickness`, `thinFilmIor` | iridescence — soap, oil on water, a beetle shell |
+| `specular`, `specularTint`, `diffuseRoughness` | dielectric reflectance and the diffuse lobe |
+| `normal` | a tangent-space normal map, bound directly (a `height` output still derives one) |
+| `displacement`, `occlusion` | bound like channels; carried on export rather than into the surface |
+
+How the surface is READ is a separate question from what it is:
+`alphaMode` (`opaque` | `mask` | `blend`), `alphaCutoff`, `doubleSided`.
+`mask` is a hard cut-out that sorts correctly in every engine — use it for
+leaves, chain-link and decals; `blend` is true translucency.
+
+`shader: "shd_x"` remains the whole-material shorthand: it binds each of that
+kernel's outputs to its matching channel. Per-channel bindings win over it, so
+a material can wear a kernel and still pin one channel to a constant, or drive
+its coat from a second kernel.
+
+**What travels.** Every channel that IS a surface input reaches the surface
+the compiler builds, so the proof frames show it. `displacement` is the
+exception in the other direction: it drives the material output rather than
+the surface, so it moves geometry in an engine that tessellates and does not
+change the proof — do not read a proof frame as evidence about it. Deliverables are a separate question:
+OpenUSD is the master and each container is lowered from it, so a channel
+`UsdPreviewSurface` and MaterialX cannot express reaches the picture and not
+the `.glb`. The compiler MEASURES that and says so (`S3D-W-903`) naming the
+channels — ship `out/scene.usda` where the effect matters.
 
 **Camera and light.** In declarative spec scenes, staging is derived from the
 solved bounds. Steer with `"camera": { "azimuthDeg": 30, "elevationDeg": 20 }`
@@ -656,17 +696,24 @@ engine interpolates with (`baseColor` must be among the outputs). `ints`
 is an array of NAMES re-typing entries already in `uniforms`
 (`"ints": ["uSteps"]`); a name with no matching uniform is refused.
 
-Outputs: `baseColor`, `emission` (sRGB), `roughness`, `metallic`
-(Non-Color), `height` (you author bump; the compiler derives a wrap-aware
-normal, `normalStrength` 0–10). Entry points are named BY OUTPUT, not by
-position: `baseColor` is the plain `vec4 kernel(vec2 uv)`; every other
+Outputs are the MATERIAL CHANNELS, plus two things that are bakeable
+without being surface inputs. Anything a material can wear, a kernel can
+write — `baseColor`, `emission`, `roughness`, `metallic`, `normal`,
+`alpha`, `coat`, `coatRoughness`, `sheen`, `transmission`, `subsurface`,
+`anisotropic`, `thinFilmThickness`, and the rest of the table above. The
+two extras: `height` (you author bump; the compiler derives a wrap-aware
+normal from it, `normalStrength` 0–10, and it is also what `displacement`
+binds to) and `occlusion` (baked to disk for you to multiply into
+`baseColor` yourself — no surface has an AO input, so a material cannot
+wear it). Colour channels are sRGB-encoded; everything else is Non-Color
+data. Entry points are named BY OUTPUT, not by position: `baseColor` is the plain `vec4 kernel(vec2 uv)`; every other
 output needs its own `vec4 kernel_<output>(vec2 uv)`. So
 `["baseColor", "roughness"]` defines `kernel` and `kernel_roughness` —
 and a height-only shader (`["height"]`) defines just `kernel_height`,
 no plain `kernel` at all. An output declared with no matching function
 is a wasted round trip, not a partial bake.
 
-**Time is a kernel dimension.** `"frames": 16` (any power of two, 2..256) bakes a
+**Time is a kernel dimension.** `"frames": 16` (any power of two >= 2) bakes a
 power-of-two atlas with `uS3dTime` ∈ [0, 1). Loop through the unit circle
 (`cos/sin(uS3dTime * 6.2832)`) so the last frame flows into the first. A
 frames shader is a sheet product, so materials cannot bind it.

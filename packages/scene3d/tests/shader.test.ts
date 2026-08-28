@@ -64,7 +64,15 @@ describe("validateShaderSpec", () => {
     // 16 columns × 1024 = 16384 sits exactly on the encode boundary; the
     // same grid at 2048 is a 32768px edge the runner would allocate in
     // full before anything could refuse it. Each factor is legal alone.
-    expect(run(spec({ frames: 256, size: 1024 }), KERNEL).errors).toEqual([]);
+    // 16 columns x 1024 sits exactly ON the encode boundary, so the EDGE
+    // rule permits it — and the byte budget does not, because that atlas is
+    // 4 GiB of float32 the runner allocates before anything measures it. The
+    // edge is a format fact; the bytes are the resource one.
+    const edgeLegal = run(spec({ frames: 256, size: 1024 }), KERNEL);
+    expect(edgeLegal.errors.some((e) => /encode boundary/.test(e))).toBe(false);
+    expect(edgeLegal.errors.some((e) => /bake budget/.test(e))).toBe(true);
+    // A sheet that fits the budget passes both.
+    expect(run(spec({ frames: 64, size: 512 }), KERNEL).errors).toEqual([]);
     const over = run(spec({ frames: 256, size: 2048 }), KERNEL);
     expect(over.errors.some((e) => /32768px atlas edge, past the 16384px encode boundary/.test(e))).toBe(true);
     // The old ceiling had the same hole: 8 columns × 4096 = 32768.

@@ -237,26 +237,80 @@ export interface PartSpec {
  * Everything the pbr lint rules judge is authorable here and nowhere else,
  * so a spec-built scene can never contain an untouched default material.
  */
+/**
+ * What drives one material channel: a constant, or a baked shader output.
+ *
+ * The two forms are the same answer at different fidelities — `roughness:
+ * 0.4` and `roughness: { shader: "shd_rust" }` both say what the roughness
+ * IS. `output` names which of the shader's baked channels to read; omitted,
+ * it is the channel being bound, which is what makes the common case short.
+ */
+export type ChannelBinding =
+  | number
+  | [number, number, number]
+  | { shader: string; output?: string };
+
+/**
+ * A material: a set of bindings onto the surface model's inputs.
+ *
+ * Every channel in `MATERIAL_CHANNELS` (`solve/channels.ts`) is legal here
+ * and takes either a constant or a shader binding — that table is the
+ * vocabulary, and this type is declared against it rather than repeating it,
+ * so a channel added there is authorable here with no second edit.
+ *
+ * The named fields below are the ones with defaults or extra rules worth
+ * stating; they are not a different kind of field.
+ */
 export interface MaterialSpec {
   /**
-   * A declared shader (from the spec's `shaders` block) whose baked
-   * outputs drive this material's textures. When set, `baseColor` may be
-   * omitted — the shader owns the surface — while `roughness`, `metallic`
-   * and emission knobs still apply unless the shader bakes that channel.
+   * A declared shader (from the spec's `shaders` block) whose baked outputs
+   * drive this material's textures — the whole-material shorthand for binding
+   * each of that shader's outputs to its matching channel. Per-channel
+   * bindings win over it, so a material can wear a kernel and still pin one
+   * channel to a constant.
    */
   shader?: string;
   /** Linear RGB, 0-1. Required unless `shader` is set. */
-  baseColor?: [number, number, number];
+  baseColor?: ChannelBinding;
   /** Default 0.5. */
-  roughness?: number;
+  roughness?: ChannelBinding;
   /** 0 (dielectric) or 1 (conductor); the pbr rule rejects in-betweens. */
-  metallic?: number;
+  metallic?: ChannelBinding;
   /** Emission colour; presence makes the material glow. */
-  emission?: [number, number, number];
+  emission?: ChannelBinding;
   /** Emission strength in watts; default 1 when `emission` is set. */
-  emissionStrength?: number;
-  /** Opacity, 0-1. Default 1. Values below 1 enable alpha blending. */
-  alpha?: number;
+  emissionStrength?: ChannelBinding;
+  /** Opacity, 0-1. Default 1. See `alphaMode` for how an engine reads it. */
+  alpha?: ChannelBinding;
+  /**
+   * How a renderer should read `alpha`. `opaque` ignores it, `mask` is a
+   * hard cut-out at `alphaCutoff` (leaves, chain-link, decals — sorts
+   * correctly in every engine), `blend` is true translucency (glass, smoke).
+   * Defaults to `blend` when an alpha below 1 is authored, which is what the
+   * value alone used to mean.
+   */
+  alphaMode?: import("./channels.js").AlphaMode;
+  /** The cut-off for `alphaMode: "mask"`, 0-1. Default 0.5. */
+  alphaCutoff?: number;
+  /** Render both faces. Default false — a single-sided surface is cheaper
+   *  and catches inside-out geometry, which is why it is not the default. */
+  doubleSided?: boolean;
+  /**
+   * A height field driving real displacement on export, bound like any other
+   * channel. The same baked map also derives the normal; this is what makes
+   * it move geometry rather than only shade it.
+   */
+  displacement?: ChannelBinding;
+  /** Ambient occlusion, bound like any other channel. Carried on export
+   *  rather than into the surface model, which has no AO input. */
+  occlusion?: ChannelBinding;
+
+  /* Every remaining channel in MATERIAL_CHANNELS — coat, sheen,
+     transmission, subsurface, anisotropic, thin-film, specular, ior,
+     normal, and their sub-channels. Declared open rather than listed twice:
+     `solve/channels.ts` is the vocabulary and the validator enforces it, so
+     an unknown key is still refused by name. */
+  [channel: string]: unknown;
 }
 
 /**

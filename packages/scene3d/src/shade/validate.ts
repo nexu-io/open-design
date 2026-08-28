@@ -23,6 +23,24 @@ import { didYouMean } from "../solve/did-you-mean.js";
  * the only author-controlled text that enters the wrapper, and they pass
  * an identifier regex that cannot contain GLSL.
  */
+/** RGBA, float32: what the bake target actually is (the RGBA8 default clamps
+ *  Inf/NaN to bytes and blinds the non-finite oracle, so this is not a knob). */
+const ATLAS_CHANNELS = 4;
+const ATLAS_BYTES_PER_CHANNEL = 4;
+
+/**
+ * Default largest float32 atlas a bake may allocate, in bytes.
+ *
+ * Resource-denominated rather than a frame cap: what hurts is the allocation,
+ * and the same number of frames is harmless at a small cell size and fatal at
+ * a large one. 1 GiB is the working set a bake can take without putting a
+ * developer machine into swap, and it clears every legitimate sheet — a
+ * 64-frame 512px flipbook is 64 MiB. Overridable per project through
+ * `conventions.shade.maxAtlasBytes`: a wall you can raise is a resource
+ * negotiation, not a refusal.
+ */
+const MAX_ATLAS_BYTES = 1024 ** 3;
+
 export function validateShaderSpec(
   name: string,
   raw: unknown,
@@ -31,7 +49,7 @@ export function validateShaderSpec(
   /** Power-of-two bake resolution bounds, from the contract. The lower bound is
    *  data (64 for pbr; the declared pxPerBlock under pixel-art), so a legitimate
    *  16-px voxel bake is not rejected by a kernel-side constant. */
-  bake: { min: number; max: number } = { min: 64, max: 4096 },
+  bake: { min: number; max: number; maxAtlasBytes?: number } = { min: 64, max: 4096 },
 ):
   | {
       spec: ShaderSpec;
@@ -149,7 +167,7 @@ export function validateShaderSpec(
   // HERE, at declaration, because the runner allocates the full float32
   // atlas before anything measures it — an over-limit combination used to
   // burn the whole bake and then fail at encode. Each factor was legal
-  // alone (size ≤ 4096, frames ≤ 256); only the product breaks.
+  // alone (size ≤ 4096, any power-of-two frame count); only the product breaks.
   // `frames` and `size` only hold non-default values that already passed
   // their own checks (POT frames, size ≤ 4096), so this never fires on garbage
   // — and it must not be gated on the whole error list, or an unrelated typo
@@ -163,6 +181,20 @@ export function validateShaderSpec(
         `${at}: ${frames} frames at size ${size} makes a ${atlasEdge}px atlas edge, past the 16384px encode boundary — shrink "size" or "frames" so grid columns (${cols}) × size stays within it`,
       );
     }
+    /* The edge alone is not a memory bound. A 16384px edge is legal and is
+       ~4 GiB of RGBA float32 — the runner allocates the whole atlas before
+       anything measures it, so an edge-legal declaration can still take the
+       machine down. The real currency is BYTES, which is why this is the
+       binding check: resource-denominated, so it scales with the declaration
+       instead of capping the frame count at a number someone picked. */
+    const budget = bake.maxAtlasBytes ?? MAX_ATLAS_BYTES;
+    const bytes = atlasEdge * atlasEdge * ATLAS_CHANNELS * ATLAS_BYTES_PER_CHANNEL;
+    if (bytes > budget) {
+      const gib = (n: number): string => `${Math.round((n / 1024 ** 3) * 100) / 100}GiB`;
+      errors.push(
+        `${at}: ${frames} frames at size ${size} allocates a ${gib(bytes)} float32 atlas, past the ${gib(budget)} bake budget — the whole atlas is allocated before it is measured, so shrink "size" or "frames", or raise conventions.shade.maxAtlasBytes on a machine with the memory`,
+      );
+    }
   }
 
   let motionVectors = false;
@@ -171,7 +203,7 @@ export function validateShaderSpec(
       errors.push(`${at}.motionVectors must be a boolean`);
     } else if (doc.motionVectors && frames <= 1) {
       errors.push(
-        `${at}: motionVectors needs a flipbook to have motion — set "frames" (a power of two, 2..256)`,
+        `${at}: motionVectors needs a flipbook to have motion — set "frames" (any power of two ≥ 2; the ceiling is the atlas edge, not a fixed count)`,
       );
     } else if (doc.motionVectors && !outputs.includes("baseColor")) {
       // The flow is block-matched on the baseColor frames, so without that

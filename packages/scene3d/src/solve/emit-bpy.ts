@@ -8,6 +8,7 @@ import {
   SolvedScene,
 } from "./types.js";
 import { sweptBox } from "./sweep.js";
+import { MATERIAL_CHANNELS, type ChannelDef } from "./channels.js";
 import type { EmitMesh } from "../kernel/mesh.js";
 
 /**
@@ -88,6 +89,13 @@ export const TESSELLATION_DEFAULTS: Tessellation = {
   maxSegments: 96,
 };
 
+/** A channel value that names a shader rather than stating a number. The one
+ *  predicate both the emitter and the binding collector read, so a value can
+ *  never be treated as a constant here and a binding there. */
+export function isChannelBinding(v: unknown): v is { shader: string; output?: string } {
+  return typeof v === "object" && v !== null && !Array.isArray(v) && "shader" in v;
+}
+
 export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {}): string {
   const tessellation = options.tessellation ?? TESSELLATION_DEFAULTS;
   const lines: string[] = [
@@ -130,12 +138,46 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
     '            bsdf.inputs["Emission Strength"].default_value = spec.get("emission_strength", 1.0)',
     '        if spec.get("alpha") is not None and spec["alpha"] < 1.0:',
     '            bsdf.inputs["Alpha"].default_value = spec["alpha"]',
-    "            # EEVEE Next names it surface_render_method; legacy EEVEE",
-    "            # names it blend_method. Set whichever this Blender has.",
-    '            if hasattr(mat, "surface_render_method"):',
-    '                mat.surface_render_method = "BLENDED"',
-    '            elif hasattr(mat, "blend_method"):',
-    '                mat.blend_method = "BLEND"',
+    "        # Every other channel the author stated, applied by SOCKET NAME.",
+    "        # The compiler ships the candidate names with the value because the",
+    "        # Principled BSDF renamed its inputs between versions (Coat Weight",
+    "        # was Clearcoat, Transmission Weight was Transmission); the first",
+    "        # name this build actually has wins, and a channel that matched",
+    "        # none is reported rather than silently dropped — a material that",
+    "        # quietly did not bind is a material that shipped wrong.",
+    '        _unbound = []',
+    '        for _chan, _spec in (spec.get("channels") or {}).items():',
+    '            _socket = next((s for s in _spec["sockets"] if s in bsdf.inputs), None)',
+    "            if _socket is None:",
+    "                _unbound.append(_chan)",
+    "                continue",
+    "            try:",
+    '                bsdf.inputs[_socket].default_value = _spec["value"]',
+    "            except Exception:",
+    "                _unbound.append(_chan)",
+    "        if _unbound:",
+    '            print("[scene3d] material %s: this Blender has no socket for %s"',
+    '                  % (name, ", ".join(sorted(_unbound))))',
+    "        # How the surface is READ, which is not the same question as what",
+    "        # its alpha IS. `mask` is a hard cut-out at a threshold and sorts",
+    "        # correctly in every engine; `blend` is true translucency. Both",
+    "        # names are set: EEVEE Next reads surface_render_method, and the",
+    "        # glTF exporter reads blend_method, so setting only one exports a",
+    "        # cut-out as a blended surface.",
+    '        _mode = spec.get("alpha_mode") or "opaque"',
+    '        _cut = spec.get("alpha_cutoff", 0.5)',
+    '        if hasattr(mat, "blend_method"):',
+    '            mat.blend_method = {"blend": "BLEND", "mask": "CLIP"}.get(_mode, "OPAQUE")',
+    '        if hasattr(mat, "surface_render_method"):',
+    '            mat.surface_render_method = "BLENDED" if _mode == "blend" else "DITHERED"',
+    '        if _mode == "mask" and hasattr(mat, "alpha_threshold"):',
+    "            mat.alpha_threshold = _cut",
+    "        # Backface culling is set EXPLICITLY either way. Blender leaves it",
+    "        # off, which exports every material as double-sided — so a surface",
+    "        # that never asked to be two-sided shipped that way, and inside-out",
+    "        # geometry stayed invisible instead of showing as a hole.",
+    '        if hasattr(mat, "use_backface_culling"):',
+    '            mat.use_backface_culling = not spec.get("double_sided", False)',
     "    _materials[name] = mat",
     "    return mat",
     "",
@@ -783,29 +825,74 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
   for (const name of referenced.sort()) {
     const spec = options.materials?.[name];
     if (spec) {
+      /* Constants travel as `channels`, keyed by the SOCKET names the runner
+         will try; bindings travel separately in `shaderBindings`. The split
+         is what lets one material pin roughness to a number while a kernel
+         drives its base colour — the two are the same field answered
+         differently, so neither can shadow the other by accident. */
+      const constants: string[] = [];
+      const pushConst = (chan: ChannelDef, value: unknown): void => {
+        if (typeof value === "number") {
+          constants.push(`${py(chan.name)}: {"sockets": [${chan.sockets.map(py).join(", ")}], "value": ${num(value)}}`);
+        } else if (Array.isArray(value) && value.length === 3) {
+          const v = value as [number, number, number];
+          const packed = chan.kind === "color" ? [...v, 1] : v;
+          constants.push(
+            `${py(chan.name)}: {"sockets": [${chan.sockets.map(py).join(", ")}], "value": (${packed.map(num).join(", ")})}`,
+          );
+        }
+      };
+      for (const chan of MATERIAL_CHANNELS) {
+        const raw = (spec as Record<string, unknown>)[chan.name];
+        if (raw === undefined || isChannelBinding(raw)) continue;
+        pushConst(chan, raw);
+      }
       // A shader material has no authored base colour — the bake owns the
       // surface. Neutral grey placeholder until the runner wires textures.
-      const base = spec.baseColor ?? [0.8, 0.8, 0.8];
+      const baseRaw = (spec as Record<string, unknown>).baseColor;
+      const base = Array.isArray(baseRaw) ? (baseRaw as [number, number, number]) : [0.8, 0.8, 0.8];
+      const alphaRaw = (spec as Record<string, unknown>).alpha;
+      const alphaConst = typeof alphaRaw === "number" ? alphaRaw : undefined;
       const entries = [
-        `"base_color": (${[...base, spec.alpha ?? 1].map(num).join(", ")})`,
-        `"roughness": ${num(spec.roughness ?? 0.5)}`,
-        `"metallic": ${num(spec.metallic ?? 0)}`,
+        `"base_color": (${[...base, alphaConst ?? 1].map(num).join(", ")})`,
+        `"roughness": ${num(typeof spec.roughness === "number" ? spec.roughness : 0.5)}`,
+        `"metallic": ${num(typeof spec.metallic === "number" ? spec.metallic : 0)}`,
       ];
-      if (spec.emission) {
-        entries.push(`"emission": (${[...spec.emission, 1].map(num).join(", ")})`);
+      const emissionRaw = (spec as Record<string, unknown>).emission;
+      if (Array.isArray(emissionRaw)) {
+        entries.push(`"emission": (${[...(emissionRaw as number[]), 1].map(num).join(", ")})`);
       }
       // Strength travels whenever the author asked for emission by EITHER
-      // means. It used to ride along with the colour, so a material lit by a
-      // baked emission map — which declares a strength and takes its colour
-      // from the texture — never emitted the key at all, and its declared
-      // value was dropped between the spec and the build script. Absent when
-      // neither is declared, so a plain material is not made to glow.
-      if (spec.emission || spec.emissionStrength !== undefined) {
-        entries.push(`"emission_strength": ${num(spec.emissionStrength ?? 1)}`);
+      // means, so a material lit by a baked emission map — which declares a
+      // strength and takes its colour from the texture — still emits.
+      const strengthRaw = (spec as Record<string, unknown>).emissionStrength;
+      if (emissionRaw !== undefined || strengthRaw !== undefined) {
+        entries.push(`"emission_strength": ${num(typeof strengthRaw === "number" ? strengthRaw : 1)}`);
       }
-      if (spec.alpha !== undefined && spec.alpha < 1) {
-        entries.push(`"alpha": ${num(spec.alpha)}`);
+      if (alphaConst !== undefined && alphaConst < 1) {
+        entries.push(`"alpha": ${num(alphaConst)}`);
       }
+      /* How the surface is READ, distinct from what it is. `blend` is the
+         historical meaning of an authored alpha below 1, so it stays the
+         default; stating a mode is how a cut-out stops being a blended
+         surface that sorts wrong in every engine. */
+      const alphaMode =
+        typeof spec.alphaMode === "string"
+          ? spec.alphaMode
+          : alphaConst !== undefined && alphaConst < 1
+            ? "blend"
+            : // An alpha driven by a TEXTURE is still an alpha. Leaving the
+              // material opaque wires a map into a socket the renderer then
+              // ignores, so a cut-out or a fade silently does nothing.
+              isChannelBinding(alphaRaw)
+              ? "blend"
+              : undefined;
+      if (alphaMode) entries.push(`"alpha_mode": ${py(alphaMode)}`);
+      if (typeof spec.alphaCutoff === "number") {
+        entries.push(`"alpha_cutoff": ${num(spec.alphaCutoff)}`);
+      }
+      if (spec.doubleSided === true) entries.push('"double_sided": True');
+      if (constants.length > 0) entries.push(`"channels": {${constants.join(", ")}}`);
       lines.push(`    ${py(name)}: {${entries.join(", ")}},`);
     } else {
       // A referenced-but-undeclared material still gets deliberate, visibly

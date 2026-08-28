@@ -93,7 +93,7 @@ it again; read this, then act.
   fixture: `tests/atelier-pipeline.test.ts` builds marble(height→normal) +
   lava(emission,spin) + water(alpha,bob) + real helmet + gold-overridden
   Fox in one compile — keep it green.
-  **Time is a kernel dimension**: `frames: 2..256 (POT)` bakes per-cell
+  **Time is a kernel dimension**: `frames` (any power of two ≥ 2; the only ceiling is the resource one — grid columns × cell size against the 16384px atlas edge) bakes per-cell
   (`uS3dTime` system uniform) into a POT atlas with a structural 2px
   anti-bleed inset; the atlas REGISTERS AS A SHEET so the existing 2D
   rules adjudicate GPU output (static kernel → W-601 emergent). Flipbook
@@ -283,6 +283,30 @@ it again; read this, then act.
   `lint/provenance.ts` drops the severity to info with `detail.provenance` so
   the report can explain its own quiet. Turning any of these back into an
   early `return`/`catch {}` reinstates the exact bug class three audits found.
+- **A material is a set of BINDINGS, not a fixed set of knobs.**
+  `src/solve/channels.ts` is the ONE vocabulary (`MATERIAL_CHANNELS`): every
+  channel takes a constant OR `{shader, output?}`, and that symmetry is why
+  coat/sheen/transmission/subsurface/anisotropy/thin-film/direct-normal are
+  rows in a table rather than eight one-off fields. The table drives the type,
+  the validator, the emitter AND the runner — it is shipped to Python as
+  `job.channelSockets` rather than duplicated there, so there is no second
+  list to drift. Socket names are Blender's and were RENAMED across versions
+  (`Coat Weight` was `Clearcoat`, `Transmission Weight` was `Transmission`),
+  so each channel carries a candidate list, the runner binds the first that
+  exists, and what matched nothing is REPORTED. `shader:` stays the
+  whole-material shorthand; per-channel bindings win over it. `ShaderOutput`
+  is derived from the same table, so "bake it" and "bind it" are one
+  vocabulary. Read-side facts, not channels: `alphaMode`/`alphaCutoff`
+  (`mask` sets `blend_method=CLIP` AND `surface_render_method`, since glTF
+  reads the former and EEVEE the latter) and `doubleSided` (set EXPLICITLY
+  both ways — Blender leaves `use_backface_culling` off, which exported every
+  material double-sided). **Deliverable parity is MEASURED**: every channel
+  reaches the built surface and the proof (except `displacement`, which drives
+  the material OUTPUT and so moves geometry in an engine without changing the
+  proof frame), but USD is the master and each
+  container is lowered from it, so `lostAuthoredChannels` reads the shipped
+  glTF and reports what did not travel (S3D-W-903) — coat survives,
+  sheen/anisotropy/thin-film do not.
 - **The camera is four primitives, not a pile of flags.** `read/shot.ts` owns
   **station** (where the eye is: `{orbit}` / `{at, offset}` / `{point}`) ×
   **gaze** (where it points: `{at}` / `{heading, pitchDeg}` / `{toward}`) ×

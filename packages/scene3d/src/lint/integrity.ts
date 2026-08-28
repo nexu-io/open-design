@@ -23,6 +23,21 @@ export function lintIntegrity(ctx: LintContext, issues: Issue[]): void {
     });
   }
 
+  // Material channels this Blender had no socket for. The author wrote a
+  // capability, the compiler knew it, and the runtime that ran did not carry
+  // it — so the material shipped without it. Reported per channel because
+  // "some materials degraded" is not something anyone can act on.
+  const unbound = census.unboundChannels ?? [];
+  if (unbound.length > 0) {
+    issues.push({
+      code: ISSUE_CODES.MASTER_MATERIAL_CAPABILITY,
+      severity: "warning",
+      message: `this Blender has no socket for ${unbound.join(", ")} — those channels were authored and did not reach the build`,
+      hint: "the socket was renamed or removed in this Blender version; upgrade the runtime, or drop the channel",
+      detail: { unbound },
+    });
+  }
+
   // Viewer edits that did not survive the replay. Same code as an unreadable
   // tweaks.json (S3D-W-208): from the author's side both are "the edit I made
   // is not in the build", and the message says which half failed.
@@ -58,12 +73,25 @@ export function lintIntegrity(ctx: LintContext, issues: Issue[]): void {
       hint: "add a camera and set it as the active scene camera",
     });
   }
-  if (census.lightCount === 0) {
+  /* A scene with no light OBJECT is not necessarily a dark scene: an emissive
+     surface is a lamp, and lighting a piece by its own lanterns, signage or
+     fire is a deliberate shot — the one this rule used to call a mistake while
+     the frames came back lit. So the rule asks what actually emits, not what
+     was placed. A scene with neither is still the real finding. */
+  const emitters = (census.materials ?? []).filter((m) => {
+    const p = m.principled;
+    // Bound to something, or it lights nothing: an emissive material sitting
+    // in the file with no object wearing it is not a lamp, and counting it
+    // would let a genuinely dark scene pass as lit.
+    if ((m.usedByObjectCount ?? 0) <= 0) return false;
+    return (p?.emissionStrength ?? 0) > 0 && (p?.emission ?? []).some((c) => c > 0);
+  });
+  if (census.lightCount === 0 && emitters.length === 0) {
     issues.push({
       code: ISSUE_CODES.MISSING_LIGHTS,
       severity: "warning",
-      message: "scene has no lights",
-      hint: "add at least one light so materials are visible",
+      message: "scene has no lights and no emissive materials",
+      hint: "add a light, or give a material emission — an emissive surface lights what is near it once the key is down (light.key)",
     });
   }
   for (const name of census.offCameraObjects) {

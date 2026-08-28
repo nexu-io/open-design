@@ -19,7 +19,7 @@ import { ISSUE_CODES, summarize } from "./errors.js";
 import { DEFAULT_CONTRACT, normalizeContract, validateContract, contractCacheKey } from "./contract.js";
 import { discoverSources, existingSourceFiles } from "./parse/sources.js";
 import { companionFiles } from "./parse/companions.js";
-import { lostShadingCapability } from "./read/gltf-capability.js";
+import { lostAuthoredChannels, lostShadingCapability } from "./read/gltf-capability.js";
 import { parseUsda, UsdaParseError } from "./parse/usda.js";
 import { authorStageModel } from "./usd/stage-model.js";
 import { renderUsdGraph } from "./usd/graph.js";
@@ -52,6 +52,9 @@ import { changeImpact, formatImpact, type ImpactReport } from "./read/impact.js"
 import { renderOrthoSvg, orthoDimensions } from "./read/ortho.js";
 import { renderOrthoAscii } from "./read/ortho-ascii.js";
 import { renderContactSheet } from "./read/contact.js";
+import { isChannelBinding } from "./solve/emit-bpy.js";
+import { MATERIAL_CHANNELS } from "./solve/channels.js";
+import type { ShaderOutput } from "./shade/types.js";
 import { resolveLook } from "./read/look.js";
 import { resolveSweep, type ResolvedPose } from "./read/shot.js";
 import { describeProofViews, orbitEye, type ProofView } from "./read/views.js";
@@ -140,6 +143,13 @@ export interface CompileControl {
    *  cross-platform process-tree management, deliberately out of scope. */
   shouldCancel?: () => boolean;
 }
+
+/** The channel table as the runner receives it — derived from the one
+ *  vocabulary, never restated. */
+const CHANNEL_SOCKETS: Record<string, { sockets: string[]; nonColor: boolean }> =
+  Object.fromEntries(
+    MATERIAL_CHANNELS.map((c) => [c.name, { sockets: [...c.sockets], nonColor: c.nonColor === true }]),
+  );
 
 export async function compile(
   request: CompileRequest,
@@ -241,6 +251,11 @@ export async function compile(
      generated build script the rest of the pipeline runs unchanged. The
      author writes relations; the compiler owns every coordinate. */
   let spec: SceneSpec | undefined;
+  /** Channels each material authored, by material name — read by the
+   *  deliverable-parity report. Per material because an extension is not a
+   *  scene-wide capability: one material carrying clearcoat says nothing about
+   *  whether another material's coat survived the export. */
+  const authoredChannels = new Map<string, string[]>();
   let solved: SolvedScene | undefined;
   /** This solve frozen as the NEXT compile's prediction frame. */
   let solveSnapshot: SolveSnapshot | undefined;
@@ -587,6 +602,14 @@ export async function compile(
           }
         }
       }
+      /* Every channel any material authored, for the deliverable-parity
+         report: a channel that reached the render and not the .glb is a fact
+         only the compiler can tell the author. Collected here, beside the
+         emit, so it is independent of whether the scene declares shaders. */
+      for (const [matName, mat] of Object.entries(spec.materials ?? {})) {
+        const keys = Object.keys(mat as Record<string, unknown>).filter((k) => k !== "shader");
+        if (keys.length > 0) authoredChannels.set(matName, keys);
+      }
       if (!unresolved && !missingAssets && !recipeFailed) {
         specScript = emitBlenderScript(solved, {
           ...(spec.materials ? { materials: spec.materials } : {}),
@@ -632,6 +655,7 @@ export async function compile(
       const validated = validateShaderSpec(name, shaderSpec, kernelText, shaderErrors, {
         min: normalized.shade.bakeMin,
         max: normalized.shade.bakeMax,
+        maxAtlasBytes: normalized.shade.maxAtlasBytes,
       });
       if (!validated) {
         for (const message of shaderErrors) {
@@ -660,22 +684,69 @@ export async function compile(
       );
     }
     const referenced = new Set<string>();
+    /* A shader reaches a material two ways, and both land in one binding
+       list. `shader:` is the whole-material shorthand — bind every output the
+       kernel declares to its matching channel. A per-channel binding names
+       one channel and one output, and WINS over the shorthand, which is what
+       lets a material wear a kernel and still drive its coat from a second
+       one (or pin a channel to a constant). */
+    const flipbookRefused = (matName: string, job: { name: string; frames: number }): boolean => {
+      if (job.frames <= 1) return false;
+      issues.push({
+        code: ISSUE_CODES.SHADER_INVALID,
+        severity: "error",
+        message: `material '${matName}' references flipbook shader '${job.name}' — a frames shader is a sheet product, not a surface`,
+        file: "scene.json",
+        target: matName,
+      });
+      return true;
+    };
     for (const [matName, mat] of Object.entries(spec.materials ?? {})) {
-      if (!mat.shader) continue;
-      referenced.add(mat.shader);
-      const job = shaderJobs.find((j) => j.name === mat.shader);
-      if (!job) continue;
-      if (job.frames > 1) {
-        issues.push({
-          code: ISSUE_CODES.SHADER_INVALID,
-          severity: "error",
-          message: `material '${matName}' references flipbook shader '${job.name}' — a frames shader is a sheet product, not a surface`,
-          file: "scene.json",
-          target: matName,
-        });
-        continue;
+      const record = mat as unknown as Record<string, unknown>;
+      // Per-channel bindings first, so the channels they claim are known
+      // before the whole-material shorthand fills in the rest.
+      const perChannel = new Map<string, { shader: string; output: string }>();
+      for (const key of Object.keys(record)) {
+        const v = record[key];
+        if (!isChannelBinding(v)) continue;
+        const job = shaderJobs.find((j) => j.name === v.shader);
+        if (!job) continue;
+        referenced.add(v.shader);
+        if (flipbookRefused(matName, job)) continue;
+        perChannel.set(key, { shader: v.shader, output: v.output ?? key });
       }
-      shaderBindings.push({ material: matName, shader: mat.shader, outputs: job.outputs });
+      for (const [channel, b] of perChannel) {
+        shaderBindings.push({
+          material: matName,
+          shader: b.shader,
+          outputs: [b.output as ShaderOutput],
+          ...(b.output !== channel ? { channel } : { channel }),
+        });
+      }
+      if (typeof mat.shader === "string") {
+        referenced.add(mat.shader);
+        const job = shaderJobs.find((j) => j.name === mat.shader);
+        if (!job) continue;
+        if (flipbookRefused(matName, job)) continue;
+        /* The shorthand fills only what no per-channel binding already claimed,
+           and only outputs that ARE channels: a kernel may bake things a
+           surface has no input for — `occlusion` has no slot on the surface
+           model, `height` reaches it as a derived normal — so binding every
+           output by name would report a channel as unbound for the crime of
+           having been baked. */
+        const claimed = new Set(perChannel.keys());
+        // `height` is not bound as itself — it reaches the surface as the
+        // DERIVED normal map. So a per-channel `normal` binding claims the
+        // shorthand's `height` too; without this the material would carry two
+        // competing normal inputs and the explicit override would lose to the
+        // shader it was written to overrule.
+        if (claimed.has("normal")) claimed.add("height");
+        const bindable = new Set([...MATERIAL_CHANNELS.map((c) => c.name), "height"]);
+        const outputs = job.outputs.filter((o) => !claimed.has(o) && bindable.has(o));
+        if (outputs.length > 0) {
+          shaderBindings.push({ material: matName, shader: mat.shader, outputs });
+        }
+      }
     }
     for (const job of shaderJobs) {
       // A flipbook shader is self-justifying: its atlas IS the product.
@@ -769,7 +840,9 @@ export async function compile(
    *  bake happens at scene-load time so census, proof, and export all see
    *  the same textured materials. */
   const shaderPayload =
-    shaderJobs.length > 0 ? { shaders: shaderJobs, shaderBindings } : {};
+    shaderJobs.length > 0
+      ? { shaders: shaderJobs, shaderBindings, channelSockets: CHANNEL_SOCKETS }
+      : {};
   let probe: BlenderProbe | null = null;
   if (wanted.has("build") || wanted.has("proof") || wanted.has("export")) {
     probe = await probeBlender({ blenderBin: request.blenderBin, pythonBin: request.pythonBin });
@@ -1413,7 +1486,7 @@ export async function compile(
            made W-903 fire once and vanish on the next identical compile:
            the exact stale-state-read-as-flakiness failure the cache
            discipline above exists to prevent. */
-        emitMaterialCapabilityParity(request.projectDir, source, solved, cached.artifacts, issues);
+        emitMaterialCapabilityParity(request.projectDir, source, solved, cached.artifacts, issues, authoredChannels);
         /* Same for W-904: the packaging facts were recorded when the export
            ran. Legacy cache entries predate the record — infer from the
            lowering record instead (no AR stage + non-Y contract axis means
@@ -1496,7 +1569,7 @@ export async function compile(
              iridescence, sheen, IOR and volume destroyed end to end with every
              stage reporting success. Read the capability off both ends and
              name what the shape of this pipeline costs. */
-          emitMaterialCapabilityParity(request.projectDir, source, solved, rel, issues);
+          emitMaterialCapabilityParity(request.projectDir, source, solved, rel, issues, authoredChannels);
 
           /*
            * Author the model hierarchy onto the stage Blender just wrote.
@@ -2509,6 +2582,8 @@ function emitMaterialCapabilityParity(
   solved: SolvedScene | undefined,
   exported: string[],
   issues: Issue[],
+  /** Channel names the spec authored, across every material. */
+  authoredChannels: ReadonlyMap<string, readonly string[]> = new Map(),
 ): void {
   const shipped = exported.find((a) => a.toLowerCase().endsWith(".glb"));
   if (shipped === undefined) return;
@@ -2523,6 +2598,41 @@ function emitMaterialCapabilityParity(
   for (const part of solved?.parts ?? []) {
     if (part.file !== undefined && /\.(glb|gltf)$/i.test(part.file)) {
       sources.add(path.join(projectDir, part.file));
+    }
+  }
+
+  /* Channels the AUTHOR wrote that the shipped container does not carry.
+     The compiler sets every one of them on the surface it builds and the
+     proof photographs that surface — so the render is honest. The deliverable
+     is a separate question: OpenUSD is the master and every container is
+     lowered from it, so a channel UsdPreviewSurface cannot express reaches the
+     picture and not the file. Measured by reading the shipped glTF, and
+     reported per channel, because an author who wrote `sheen` and shipped a
+     GLB has no other way to learn it did not travel. */
+  if (authoredChannels.size > 0) {
+    const lostChannels = lostAuthoredChannels(authoredChannels, shippedAbs);
+    if (lostChannels.length > 0) {
+      // Grouped by material, because that is the granularity the loss happens
+      // at and the granularity an author can act on.
+      const byMaterial = new Map<string, string[]>();
+      for (const l of lostChannels) {
+        byMaterial.set(l.material, [...(byMaterial.get(l.material) ?? []), l.channel]);
+      }
+      const described = [...byMaterial.entries()]
+        .map(([m, cs]) => `${m} (${cs.sort().join(", ")})`)
+        .sort()
+        .join("; ");
+      issues.push({
+        code: ISSUE_CODES.MASTER_MATERIAL_CAPABILITY,
+        severity: "warning",
+        message: `the shipped glTF does not carry channels authored on ${described} — the proof frames show them, the .glb does not`,
+        hint: "OpenUSD is the master and every container is lowered from it; out/scene.usda carries what UsdPreviewSurface and MaterialX can express, so ship the USD where the effect matters",
+        detail: {
+          lost: lostChannels.map((l) => `${l.material}.${l.channel}`).sort(),
+          extensions: [...new Set(lostChannels.map((l) => l.extension))].sort(),
+          shipped,
+        },
+      });
     }
   }
 
