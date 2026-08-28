@@ -277,3 +277,87 @@
   opacity: 0.7;
   white-space: nowrap;
 }
+
+/* Manual path-entry sub-view: replaces the menu list when the user picks
+   "Type a path…" (the fallback for daemons where the native OS folder
+   dialog can't work — e.g. a remote/headless daemon). */
+.manualForm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 2px 4px;
+}
+
+.manualHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-strong);
+}
+
+.manualBack {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted, var(--text));
+  cursor: pointer;
+  transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.manualBack:hover,
+.manualBack:focus-visible {
+  outline: none;
+  background: var(--bg-subtle);
+}
+
+.manualInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 9px;
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 13px;
+}
+.manualInput:focus-visible {
+  outline: none;
+  border-color: var(--text-muted, var(--border));
+}
+
+.manualError {
+  font-size: 12px;
+  color: var(--danger, #e5484d);
+}
+
+.manualSubmit {
+  appearance: none;
+  width: 100%;
+  min-height: 32px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.manualSubmit:hover:not(:disabled),
+.manualSubmit:focus-visible {
+  outline: none;
+  background: var(--bg-panel);
+}
+.manualSubmit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

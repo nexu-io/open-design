@@ -32,6 +32,16 @@ interface Props {
   placement?: 'down' | 'up';
   /** Fired when the panel opens, so the host can re-validate freshness. */
   onOpen?: () => void;
+  /**
+   * Submit a manually-typed absolute path as an alternative to the native OS
+   * folder dialog. When omitted, the "Type a path…" menu item is hidden
+   * entirely — this is the mechanism that keeps manual entry off surfaces
+   * (e.g. the desktop host) where it isn't appropriate. Resolves with
+   * `{ ok: true }` on success (the caller has already applied the path) or
+   * `{ ok: false, message }` to show an inline error without closing the
+   * panel.
+   */
+  onSubmitPath?: (path: string) => Promise<{ ok: boolean; message?: string }>;
 }
 
 function basename(dir: string): string {
@@ -57,15 +67,23 @@ export function WorkingDirPicker({
   placement = 'down',
   invalid = false,
   onOpen,
+  onSubmitPath,
 }: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [recentOpen, setRecentOpen] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualValue, setManualValue] = useState('');
+  const [manualError, setManualError] = useState<string | null>(null);
+  const [manualSubmitting, setManualSubmitting] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!open) {
       setRecentOpen(false);
+      setManualOpen(false);
+      setManualValue('');
+      setManualError(null);
       return;
     }
     function onPointer(event: MouseEvent) {
@@ -82,6 +100,25 @@ export function WorkingDirPicker({
       document.removeEventListener('keydown', onKey);
     };
   }, [open]);
+
+  async function handleManualSubmit() {
+    if (!onSubmitPath || manualSubmitting) return;
+    const path = manualValue.trim();
+    setManualSubmitting(true);
+    setManualError(null);
+    try {
+      const result = await onSubmitPath(path);
+      if (result.ok) {
+        setManualOpen(false);
+        setManualValue('');
+        setOpen(false);
+      } else {
+        setManualError(result.message ?? null);
+      }
+    } finally {
+      setManualSubmitting(false);
+    }
+  }
 
   return (
     <div
@@ -117,84 +154,153 @@ export function WorkingDirPicker({
           role="menu"
           data-testid="working-dir-panel"
         >
-          <button
-            type="button"
-            role="menuitem"
-            className={styles.item}
-            data-testid="working-dir-pick"
-            onClick={() => {
-              setOpen(false);
-              onPickDirectory();
-            }}
-          >
-            <Icon name="folder" size={14} className={styles.itemIcon} />
-            <span>{workingDir ? t('homeWorkingDir.replace') : t('homeWorkingDir.pick')}</span>
-          </button>
-
-          <div
-            className={styles.submenuRow}
-            onMouseEnter={() => setRecentOpen(true)}
-            onMouseLeave={() => setRecentOpen(false)}
-          >
-            <button
-              type="button"
-              role="menuitem"
-              className={styles.item}
-              aria-haspopup="menu"
-              aria-expanded={recentOpen}
-              data-testid="working-dir-recent"
-              onClick={() => setRecentOpen((v) => !v)}
-            >
-              <Icon name="history" size={14} className={styles.itemIcon} />
-              <span>{t('homeWorkingDir.recent')}</span>
-              <Icon name="chevron-right" size={14} className={styles.itemChevron} />
-            </button>
-            {recentOpen ? (
-              <div
-                className={`${styles.flyout}${placement === 'up' ? ` ${styles.flyoutUp}` : ''}`}
-                role="menu"
-                data-testid="working-dir-recent-list"
-              >
-                {recentDirs.length === 0 ? (
-                  <div className={styles.empty}>{t('homeWorkingDir.recentEmpty')}</div>
-                ) : (
-                  recentDirs.map((dir) => (
-                    <button
-                      key={dir}
-                      type="button"
-                      role="menuitem"
-                      className={styles.recentItem}
-                      title={dir}
-                      onClick={() => {
-                        onSelectRecent(dir);
-                        setOpen(false);
-                      }}
-                    >
-                      <Icon name="folder" size={14} className={styles.itemIcon} />
-                      <span className={styles.recentName}>{basename(dir)}</span>
-                      <span className={styles.recentPath}>{dir}</span>
-                    </button>
-                  ))
-                )}
-              </div>
-            ) : null}
-          </div>
-
-          {workingDir && onClear ? (
-            <button
-              type="button"
-              role="menuitem"
-              className={styles.item}
-              data-testid="working-dir-clear"
-              onClick={() => {
-                onClear();
-                setOpen(false);
+          {manualOpen ? (
+            <form
+              className={styles.manualForm}
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleManualSubmit();
               }}
             >
-              <Icon name="close" size={14} className={styles.itemIcon} />
-              <span>{t('homeWorkingDir.clear')}</span>
-            </button>
-          ) : null}
+              <div className={styles.manualHeader}>
+                <button
+                  type="button"
+                  className={styles.manualBack}
+                  data-testid="working-dir-manual-back"
+                  aria-label={t('homeWorkingDir.recent')}
+                  onClick={() => {
+                    setManualOpen(false);
+                    setManualError(null);
+                  }}
+                >
+                  <Icon name="chevron-left" size={14} />
+                </button>
+                <span>{t('homeWorkingDir.typePath')}</span>
+              </div>
+              <input
+                type="text"
+                className={styles.manualInput}
+                data-testid="working-dir-manual-input"
+                placeholder={t('homeWorkingDir.manualPlaceholder')}
+                value={manualValue}
+                autoFocus
+                onChange={(e) => {
+                  setManualValue(e.target.value);
+                  if (manualError) setManualError(null);
+                }}
+              />
+              {manualError ? (
+                <div className={styles.manualError} data-testid="working-dir-manual-error">
+                  {manualError}
+                </div>
+              ) : null}
+              <button
+                type="submit"
+                className={styles.manualSubmit}
+                data-testid="working-dir-manual-submit"
+                disabled={manualSubmitting}
+              >
+                {t('homeWorkingDir.manualSubmit')}
+              </button>
+            </form>
+          ) : (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.item}
+                data-testid="working-dir-pick"
+                onClick={() => {
+                  setOpen(false);
+                  onPickDirectory();
+                }}
+              >
+                <Icon name="folder" size={14} className={styles.itemIcon} />
+                <span>{workingDir ? t('homeWorkingDir.replace') : t('homeWorkingDir.pick')}</span>
+              </button>
+
+              {onSubmitPath ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.item}
+                  data-testid="working-dir-manual"
+                  onClick={() => {
+                    setManualOpen(true);
+                    setManualError(null);
+                  }}
+                >
+                  <Icon name="edit" size={14} className={styles.itemIcon} />
+                  <span>{t('homeWorkingDir.typePath')}</span>
+                </button>
+              ) : null}
+
+              <div
+                className={styles.submenuRow}
+                onMouseEnter={() => setRecentOpen(true)}
+                onMouseLeave={() => setRecentOpen(false)}
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.item}
+                  aria-haspopup="menu"
+                  aria-expanded={recentOpen}
+                  data-testid="working-dir-recent"
+                  onClick={() => setRecentOpen((v) => !v)}
+                >
+                  <Icon name="history" size={14} className={styles.itemIcon} />
+                  <span>{t('homeWorkingDir.recent')}</span>
+                  <Icon name="chevron-right" size={14} className={styles.itemChevron} />
+                </button>
+                {recentOpen ? (
+                  <div
+                    className={`${styles.flyout}${placement === 'up' ? ` ${styles.flyoutUp}` : ''}`}
+                    role="menu"
+                    data-testid="working-dir-recent-list"
+                  >
+                    {recentDirs.length === 0 ? (
+                      <div className={styles.empty}>{t('homeWorkingDir.recentEmpty')}</div>
+                    ) : (
+                      recentDirs.map((dir) => (
+                        <button
+                          key={dir}
+                          type="button"
+                          role="menuitem"
+                          className={styles.recentItem}
+                          title={dir}
+                          onClick={() => {
+                            onSelectRecent(dir);
+                            setOpen(false);
+                          }}
+                        >
+                          <Icon name="folder" size={14} className={styles.itemIcon} />
+                          <span className={styles.recentName}>{basename(dir)}</span>
+                          <span className={styles.recentPath}>{dir}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                ) : null}
+              </div>
+
+              {workingDir && onClear ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.item}
+                  data-testid="working-dir-clear"
+                  onClick={() => {
+                    onClear();
+                    setOpen(false);
+                  }}
+                >
+                  <Icon name="close" size={14} className={styles.itemIcon} />
+                  <span>{t('homeWorkingDir.clear')}</span>
+                </button>
+              ) : null}
+            </>
+          )}
         </div>
       ) : null}
     </div>
