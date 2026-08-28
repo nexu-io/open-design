@@ -340,8 +340,12 @@ the active-run staging implementation is in
 - Follow-up turns persist Kilo's backing session id and resume it with
   `session/load`. Load requests resend the cwd and per-run MCP descriptors, as
   required by Kilo's ACP schema, and preserve the requested id because a
-  successful load response does not repeat it. A stale load handle is cleared
-  and transparently reseeded with the full OpenDesign transcript.
+  successful load response does not repeat it. A successful load that omits
+  `configOptions` does not re-send `session/set_model` or
+  `session/set_config_option` — the durable session already has its model, and
+  the legacy RPC is rejected. A stale load handle is cleared and transparently
+  reseeded with the full OpenDesign transcript only when the error is JSON-RPC
+  `-32603` with `data.service === "session"`.
 - Image attachments are forwarded as ACP `resource_link` blocks using
   absolute `file://` URLs. Bare filesystem paths are not equivalent in Kilo:
   its ACP content adapter intentionally treats them as text.
