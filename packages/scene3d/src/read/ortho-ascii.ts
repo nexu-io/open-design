@@ -48,6 +48,10 @@ function partBoxes(census: Census): Box[] {
 }
 
 function metres(n: number): string {
+  // A non-finite span (a corrupted/degenerate census: NaN or ±Infinity bounds)
+  // must not surface as the literal text "NaNm"/"Infinitym" in the callout — the
+  // grid already degrades to a finite fallback, so the label degrades in step.
+  if (!Number.isFinite(n)) return "—";
   const mm = Math.round(n * 1000);
   if (Math.abs(mm) < 1000) return `${mm}mm`;
   return `${Math.round(n * 1000) / 1000}m`;

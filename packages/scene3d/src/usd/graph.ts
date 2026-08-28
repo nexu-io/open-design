@@ -18,6 +18,18 @@ import type { UsdaPrim } from "../types.js";
 const unquote = (s: string | undefined): string | undefined =>
   s === undefined ? undefined : s.replace(/^"(.*)"$/s, "$1");
 
+/**
+ * Strip control characters — NEWLINES included — from any text taken verbatim
+ * from the .usda (a prim name, a `kind`, a material path, a shader id). Without
+ * this, a prim whose quoted name contains a newline becomes MULTIPLE lines in
+ * the graph, and a crafted name reads as a legitimate child prim (type, `kind=`,
+ * transform) — a forged row in the very text an agent trusts as the shipped
+ * asset's ground truth. USD source can be third-party (imported glTF/FBX names,
+ * a hand-authored usda), so this is not a friendly-input assumption. Found by an
+ * adversarial fuzz pass.
+ */
+const clean = (s: string): string => s.replace(/[\u0000-\u001f\u007f]/g, "\uFFFD");
+
 /** The material/shader target `</root/_materials/mtl_wood>` → `mtl_wood`. */
 const lastSegment = (path: string): string =>
   path.replace(/[<>]/g, "").split("/").filter(Boolean).pop() ?? path;
@@ -79,7 +91,7 @@ export function renderUsdGraph(usda: string): string {
   }
   const st = tree.stage;
   const header =
-    `stage: ${st.defaultPrim ?? "?"}` +
+    `stage: ${clean(st.defaultPrim ?? "?")}` +
     ` (up=${st.upAxis ?? "?"}, metersPerUnit=${st.metersPerUnit ?? 1}` +
     `${st.hasAssetInfo ? ", assetInfo" : ""}` +
     `${st.startTimeCode !== undefined ? `, frames ${st.startTimeCode}–${st.endTimeCode ?? st.startTimeCode}` : ""})`;
@@ -104,7 +116,9 @@ export function renderUsdGraph(usda: string): string {
       const shaderId = unquote(prim.attributes.get("info:id"));
       if (shaderId) bits.push(shaderId);
     }
-    lines.push(`${indent}${prim.name}  ${type}${bits.length ? "  " + bits.join("  ") : ""}`);
+    lines.push(
+      `${indent}${clean(prim.name)}  ${clean(type)}${bits.length ? "  " + bits.map(clean).join("  ") : ""}`,
+    );
   };
 
   // Manual DFS so the shader NETWORK under a Material can be pruned — its guts
