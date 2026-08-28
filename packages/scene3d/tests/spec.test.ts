@@ -2077,6 +2077,25 @@ describe("did-you-mean on unknown keys", () => {
     ).toBe(true);
   });
 
+  it("carries a token suggestion into the message an author actually reads", () => {
+    /*
+     * `nearestKey` being right is not the same fact as the validator saying so:
+     * the suggestion has to survive into the E-105 text, which is the only
+     * place an author or an agent ever sees it. Field reports named this exact
+     * key — `colr` earned "not a material field" and a vocabulary list to scan,
+     * while `materail` next to it earned a suggestion.
+     */
+    const errors = validateSceneSpec({
+      schemaVersion: 1,
+      materials: { mtl_a: { colr: [0.5, 0.5, 0.5] } },
+      parts: [{ id: "prp_a", size: [1, 1, 1], material: "mtl_a" }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    }).errors;
+    expect(errors.some((e) => e.includes("colr") && e.includes('did you mean "baseColor"?'))).toBe(
+      true,
+    );
+  });
+
   it("says nothing when nothing is close, rather than guessing", () => {
     const message = validateSceneSpec({
       schemaVersion: 1,
@@ -2091,6 +2110,39 @@ describe("did-you-mean on unknown keys", () => {
     expect(nearestKey("zz", ["id", "at", "by"])).toBeUndefined();
     // One edit on a short key is still a real match.
     expect(nearestKey("ax", ["at", "by"])).toBe("at");
+  });
+
+  it("suggests the field an author named by its distinguishing token", () => {
+    /*
+     * Authors name a field by the word that distinguishes it and drop the
+     * qualifier. Whole-key edit distance scores `colr` and `baseColor` as
+     * unrelated words — correctly, at four characters — so the suggestion that
+     * was obviously right never appeared, while `materail` got one. Token
+     * matching is ranked strictly below every whole-key match, so it only
+     * speaks when the alternative was saying nothing at all.
+     */
+    const fields = ["baseColor", "roughness", "metallic", "emissionStrength", "alpha", "ior"];
+    expect(nearestKey("colr", fields)).toBe("baseColor");
+    expect(nearestKey("strength", fields)).toBe("emissionStrength");
+    // A whole-key match still outranks any token match.
+    expect(nearestKey("rougness", fields)).toBe("roughness");
+    // A word close to nothing still earns silence rather than noise.
+    expect(nearestKey("zzzzzz", fields)).toBeUndefined();
+  });
+
+  it("spends the typed key's edit budget on tokens, not the token's own", () => {
+    /*
+     * The conservatism scales with what the AUTHOR typed: a four-character key
+     * gets one edit. Letting a longer token spend its own larger budget would
+     * put `colr` two edits from `colour` — a two-edit guess at a short word,
+     * which is the noise the policy refuses. `colr` still reaches `baseColor`,
+     * because that is one edit.
+     */
+    expect(nearestKey("colr", ["baseColor"])).toBe("baseColor");
+    expect(nearestKey("colr", ["baseColour"])).toBeUndefined();
+    // Tokens earn the same prefix relation whole keys do, so a truncation
+    // resolves rather than falling off the end of the budget.
+    expect(nearestKey("stren", ["emissionStrength", "roughness"])).toBe("emissionStrength");
   });
 
   it("prefers a case slip, then a prefix, then an edit — deterministically", () => {

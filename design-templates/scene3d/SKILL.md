@@ -488,9 +488,19 @@ that arithmetic is what this relation deletes.
 `repeat` × `scatter` on the same part is refused, and so is `around`
 beside `repeat`, `scatter`, another `around`, or a `span`. Contacts and repeat
 pitches floor 1 mm from flush. Loud ceilings, never a silent shortfall:
-`repeat` refuses past 4000 instances, and a scene refuses past 4000 parts
-after expansion — backstops against a runaway count, far above any scene
-you would mean. Below those, a big scatter still changes what the
+`repeat` refuses past 100,000 instances, and a scene refuses past 100,000
+parts after expansion — backstops against a runaway count, far above any scene
+you would mean. Below them a large scene is slow rather than refused: 5,000
+instances is a legal scene that takes as long as building 5,000 objects takes.
+
+Recipe and kernel geometry is guarded separately, by the work meter: a
+resource-denominated ceiling counted in work units, one unit being roughly one
+vertex or face produced, so an accidental `subdivide(1000000)` or a runaway
+loop stops with a diagnostic instead of exhausting the machine. Raise it with
+`workBudget` on the compile request (`--work-budget` on the CLI) when the asset
+and the machine are both bigger.
+
+A big scatter also changes what the
 compiler can *measure*: past ~60 meshes the contact scan (grounding,
 touching-faces, the rested-pair check) reports itself skipped rather
 than guessing, so a claim that leans on contacts is unchecked, not

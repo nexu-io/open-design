@@ -582,6 +582,114 @@ describe.skipIf(!hasBlender)("declarative spec pipeline (real Blender)", () => {
     expect(b.meanLuminance, "luminance must survive the cache").toBe(a.meanLuminance);
   }, 600_000);
 
+  /** A scene written inline, for cases no fixture covers. */
+  const sceneDir = (name: string, spec: unknown) => {
+    const dir = path.join(__dirname, ".work", `${name}-spec-${++workSeq}`);
+    rmForSetup(dir);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "scene.json"), JSON.stringify(spec, null, 2));
+    return dir;
+  };
+
+  it("calls a dark frame unlit, not empty, when the subject is measurably in it", async () => {
+    /*
+     * One predicate used to OR "luminance below the floor" with "no lit pixels
+     * at all" and then print the framing hint for both, so a night scene whose
+     * camera was aimed correctly got told to move the camera. They are two
+     * faults with two different repairs; coverage is the measurement that
+     * separates them.
+     */
+    const dir = sceneDir("unlit", {
+      schemaVersion: 1,
+      light: { preset: "studio", key: 0, ambient: [0, 0, 0] },
+      materials: { mtl_stone: { baseColor: [0.4, 0.4, 0.42], roughness: 0.8 } },
+      parts: [{ id: "prp_block", size: [1, 1, 1], material: "mtl_stone" }],
+      relations: [{ type: "at", part: "prp_block", center: [0, 0, 0.5] }],
+    });
+    const r = await compile({ projectDir: dir, noCache: true, timeoutMs: 600_000 });
+    const unlit = r.issues.find((i) => i.code === ISSUE_CODES.UNLIT_PROOF);
+    expect(unlit, "an unlit-but-framed scene must report UNLIT_PROOF").toBeTruthy();
+    expect(r.issues.some((i) => i.code === ISSUE_CODES.EMPTY_PROOF)).toBe(false);
+    // The claim is only honest if the subject really is in frame: assert the
+    // measurement the diagnosis rests on, not just the code.
+    const d = unlit!.detail as { coverage: number; meanLuminance: number };
+    expect(d.coverage).toBeGreaterThan(0.1);
+    expect(d.meanLuminance).toBeLessThanOrEqual(0.002);
+    expect(unlit!.hint).toContain("light");
+    // It must not send the author to fix the framing, which was already right.
+    expect(unlit!.message).not.toContain("empty");
+    expect(unlit!.hint).toContain("not the fault");
+  }, 900_000);
+
+  it("gives compiler-authored tube and wedge meshes the UVs its own linter demands", async () => {
+    /*
+     * The ops-based primitives come out of Blender unwrapped; meshes authored
+     * from explicit vertices did not, so a shader on a tube failed S3D-E-441
+     * with a fix — unwrap the mesh — that this language has no word for. The
+     * compiler authored the geometry, so the compiler owes it coordinates.
+     */
+    const dir = sceneDir("tube_uv", {
+      schemaVersion: 1,
+      shaders: { shd_rust: { kernel: "rust.glsl", size: 256 } },
+      materials: { mtl_iron: { baseColor: { shader: "shd_rust" }, roughness: 0.7 } },
+      parts: [
+        { id: "prp_cage", shape: "tube", thickness: 0.012, size: [0.3, 0.3, 0.4], material: "mtl_iron" },
+        { id: "prp_ramp", shape: "wedge", axis: "x", size: [0.4, 0.3, 0.2], material: "mtl_iron" },
+      ],
+      relations: [
+        { type: "at", part: "prp_cage", center: [0, 0, 0.2] },
+        { type: "at", part: "prp_ramp", center: [0.6, 0, 0.1] },
+      ],
+    });
+    fs.writeFileSync(
+      path.join(dir, "rust.glsl"),
+      `vec4 kernel(vec2 uv) {
+  float n = fract(sin(dot(floor(uv * 8.0), vec2(3.0, 7.0))) * 43.0);
+  return vec4(0.45 + 0.25 * n, 0.22 + 0.10 * n, 0.10, 1.0);
+}
+`,
+    );
+    const r = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "lint"],
+      noCache: true,
+      timeoutMs: 900_000,
+    });
+    expect(r.issues.filter((i) => i.code === "S3D-E-441")).toEqual([]);
+    expect(r.ok).toBe(true);
+  }, 900_000);
+
+  it("orbits the turntable at the authored camera elevation, and says so", async () => {
+    /*
+     * `camera.elevationDeg` placed the scene camera object and was ignored by
+     * the turntable, which orbited at a constant 30 in the runner. The pixels
+     * are asserted, not just the label: the same value reaches the runner and
+     * the view describer, so a caption that changed while the render did not
+     * would be the exact bug this pins against.
+     */
+    const build = async (elevationDeg: number) => {
+      const dir = sceneDir(`orbit${elevationDeg}`, {
+        schemaVersion: 1,
+        camera: { elevationDeg },
+        materials: { mtl_a: { baseColor: [0.6, 0.6, 0.6] } },
+        parts: [{ id: "prp_a", size: [1, 1, 1], material: "mtl_a" }],
+        relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+      });
+      const r = await compile({ projectDir: dir, noCache: true, timeoutMs: 900_000 });
+      const frame = (r.manifest?.proofImages ?? [])[0]!;
+      return {
+        elevations: (r.manifest?.proofViews ?? []).map((v) => v.elevationDeg),
+        bytes: fs.readFileSync(path.join(dir, frame)),
+      };
+    };
+    const low = await build(18);
+    const high = await build(30);
+    expect(new Set(low.elevations)).toEqual(new Set([18]));
+    expect(new Set(high.elevations)).toEqual(new Set([30]));
+    // The render moved, not merely its caption.
+    expect(low.bytes.equals(high.bytes)).toBe(false);
+  }, 1_800_000);
+
   it("conventions.animation.maxFrames is a budget the built clip is measured against", async () => {
     /*
      * The knob was validated, normalized, and then read by nothing — a project

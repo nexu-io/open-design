@@ -183,10 +183,10 @@ export interface Trace {
  * vertex or face produced/processed — a memory-proportional measure). This is
  * NOT a cap on how large an asset may be; it is a resource-denominated guard
  * sized so only a genuine RUNAWAY trips it — an accidental `subdivide(1000000)`,
- * an infinite `while` in a recipe — never a legitimately large model. A very
- * detailed real asset is single-digit millions of units; this default clears
- * ~10× that, at roughly the geometry that fills a few GB of RAM, so the meter
- * fires (with a diagnostic) before the machine would OOM. Overridable per
+ * an infinite `while` in a recipe — never a legitimately large model, so the
+ * meter fires (with a diagnostic) before the machine would OOM. What "generous"
+ * means in units is quantified in the calibration paragraph below, against this
+ * constant. Overridable per
  * compile via `EvalOptions.workBudget` for a bigger machine and a bigger asset —
  * a wall you can raise is a resource negotiation, not a refusal.
  *

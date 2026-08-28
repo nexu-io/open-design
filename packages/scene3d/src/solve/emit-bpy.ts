@@ -257,7 +257,42 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
     "    obj.select_set(True)",
     "    bpy.context.view_layer.objects.active = obj",
     "    obj.location = center",
+    "    _uv_unwrap(obj)",
     "    return obj",
+    "",
+    "",
+    "def _uv_unwrap(obj):",
+    '    """Author a UV layer for a hand-built mesh.',
+    "",
+    "    The ops-based primitives (cube, cylinder, cone, sphere, torus) come out",
+    "    of Blender already unwrapped; a mesh authored from explicit vertices",
+    "    does not. Without this, every tube, wedge and kernel part reached the",
+    "    linter with no UV layer and failed the compiler's OWN S3D-E-441 with a",
+    "    fix — unwrap the mesh — that this language has no word for. The",
+    "    compiler authored the geometry, so the compiler owes it coordinates.",
+    "",
+    "    Smart-project is the floor E-441's own hint names. It is skipped when",
+    "    UVs already exist, so a script that authored its own layout keeps it.",
+    '    """',
+    '    if obj.type != "MESH" or obj.data.uv_layers:',
+    "        return",
+    "    prev_mode = bpy.context.object.mode if bpy.context.object else \"OBJECT\"",
+    "    if prev_mode != \"OBJECT\":",
+    '        bpy.ops.object.mode_set(mode="OBJECT")',
+    '    bpy.ops.object.select_all(action="DESELECT")',
+    "    obj.select_set(True)",
+    "    bpy.context.view_layer.objects.active = obj",
+    '    bpy.ops.object.mode_set(mode="EDIT")',
+    '    bpy.ops.mesh.select_all(action="SELECT")',
+    "    # 66 degrees, Blender's own smart-project default, in radians.",
+    "    bpy.ops.uv.smart_project(angle_limit=1.15192, island_margin=0.02)",
+    '    bpy.ops.object.mode_set(mode="OBJECT")',
+    "    # Restore the selection contract _mesh_object documents: this object",
+    "    # alone selected and active, because transform_apply acts on the",
+    "    # SELECTION and a stale one bakes this part's scale into another.",
+    '    bpy.ops.object.select_all(action="DESELECT")',
+    "    obj.select_set(True)",
+    "    bpy.context.view_layer.objects.active = obj",
     "",
     "",
     "def _wedge_verts(axis, flip):",
@@ -1110,7 +1145,7 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
         "",
       );
     } else {
-      const key = framing.radius * 2.5;
+      const key = framing.radius * KEY_DISTANCE_RADII;
       // Where the key stands. Omitted, it sits on the camera's own quarter
       // (+X, -Y, up) — the flattering default that keeps a derived shot from
       // ever looking unlit. Stated, it uses the ONE pose convention the camera
@@ -1128,7 +1163,20 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
                 framing.center[2] + Math.sin(el) * key,
               ] as const;
             })()
-          : ([framing.center[0] + key, framing.center[1] - key, framing.center[2] + key] as const);
+          : (() => {
+              /* The default quarter, placed at the SAME distance an authored
+                 angle gets. It used to be `key` on each axis, which puts the
+                 lamp at key·sqrt(3) — so writing out the angles the default
+                 already implies (az 45, el 35.26) moved the lamp from 4.33 to
+                 2.5 radii and made the scene three times brighter. Stating a
+                 default must reproduce it. */
+              const d = key / Math.sqrt(3);
+              return [
+                framing.center[0] + d,
+                framing.center[1] - d,
+                framing.center[2] + d,
+              ] as const;
+            })();
       lines.push(
         "# Key light scaled to the subject so exposure does not depend on how",
         "# large the model happens to be.",
@@ -1166,18 +1214,39 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
 }
 
 /**
+ * Where the key stands, in bounding radii. One constant for both the default
+ * quarter and an authored azimuth/elevation, so the two cannot disagree about
+ * exposure — and so writing out the angles the default already implies
+ * changes nothing.
+ */
+const KEY_DISTANCE_RADII = 2.5 * Math.sqrt(3);
+
+/**
  * Key-light power for a subject of one metre radius, in watts. Every other
  * size scales from here by radius squared, which is what keeps the subject's
  * illumination — not the lamp's number — the thing that stays constant.
  *
- * Calibrated WITH indirect light transport on, which is the only honest place
- * to calibrate it: the proof renders bounce, so a key tuned against direct
- * light alone lands about a third too hot and the overexposure rule fires on
- * scenes that are correctly authored. The corpus is what sets this number —
- * it is the largest value at which the fixtures photograph without tripping
- * S3D-W-385, not a figure derived from first principles.
+ * The number answers one physical question: what power makes a pixel read as
+ * the ALBEDO that produced it? A Lambertian surface of albedo 1 facing the key
+ * must land just under clipping, so every real albedo below it maps to a
+ * distinct value and nothing saturates. The neutral world contributes 0.28 of
+ * that budget on its own (an environment of radiance L lights an albedo-1
+ * surface to exactly L, measured at 0.2805), which leaves the key 0.62 — the
+ * value this constant delivers, with the remainder held as headroom for
+ * indirect bounce.
+ *
+ * That target is what makes the render legible rather than merely bright:
+ * a mid-grey 0.18 card lands at 0.44 sRGB, close to the 0.47 that photographic
+ * middle grey is defined as.
+ *
+ * Measured, not fitted to the corpus: an albedo-1 sphere under this rig reads
+ * its peak lit pixel at 0.90, and `tests/exposure.test.ts` re-measures that on
+ * every run. A corpus fit would make the fixtures the authority on exposure —
+ * the next scene with a brighter albedo would break it again, which is exactly
+ * what happened when the previous value was carried across a change in light
+ * transport with only a docstring claiming it still held.
  */
-const KEY_WATTS_AT_ONE_METRE = 2800;
+const KEY_WATTS_AT_ONE_METRE = 100;
 
 /**
  * Camera placement derived from the solved bounding box.

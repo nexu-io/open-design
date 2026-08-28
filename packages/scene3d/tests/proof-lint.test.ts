@@ -190,16 +190,22 @@ describe("lintProof", () => {
 
   it("honours contract-supplied proof-quality thresholds (PF-2)", () => {
     // A stylized asset the project declares darker-tolerant: a frame at 0.05
-    // luminance is empty under the default 0.002 floor only if we IGNORE the
-    // override. With a stricter 0.1 floor it reads as empty; with the default
-    // it does not.
+    // luminance is under the floor only if we IGNORE the override. With a
+    // stricter 0.1 floor it trips; with the default it does not.
+    //
+    // It trips as UNLIT (E-389) rather than EMPTY (E-383) because its coverage
+    // is 0.4 — the subject is in the frame and dark, which is a lighting fault
+    // with a lighting repair. The threshold is what this test is about, and it
+    // is honoured either way.
     const dim = [frame({ path: "a.png", meanLuminance: 0.05, coverage: 0.4 })];
     const strict: Issue[] = [];
     lintProof(dim, strict, { emptyLuminance: 0.1, sparseCoverage: 0.01, blownRatio: 0.6 });
-    expect(strict.some((i) => i.code === "S3D-E-383")).toBe(true);
+    expect(strict.some((i) => i.code === "S3D-E-389")).toBe(true);
+    expect(strict.some((i) => i.code === "S3D-E-383")).toBe(false);
 
     const lenient: Issue[] = [];
     lintProof(dim, lenient, { emptyLuminance: 0.002, sparseCoverage: 0.01, blownRatio: 0.6 });
+    expect(lenient.some((i) => i.code === "S3D-E-389")).toBe(false);
     expect(lenient.some((i) => i.code === "S3D-E-383")).toBe(false);
   });
 });
@@ -256,6 +262,92 @@ describe("statistic validity + threshold immutability (bug-shaker round 5)", () 
     const note = issues.find((i) => i.code === "S3D-W-387")!;
     expect(note).toBeDefined();
     expect(note.detail).toMatchObject({ measured: 0, skipped: 2 });
+  });
+
+  it("separates an unlit frame from an empty one by the coverage it measured", () => {
+    /*
+     * One predicate ORed "luminance under the floor" with "no lit pixels at
+     * all", then printed the framing hint for both. A frame at coverage 0.22
+     * has the subject squarely in it and is merely dark; sending its author to
+     * re-aim the camera sends them to fix the one thing already right.
+     */
+    const issues: Issue[] = [];
+    lintProof(
+      [
+        frame({ path: "lit.png", meanLuminance: 0.3, coverage: 0.4 }),
+        frame({ path: "dark.png", meanLuminance: 0.0003, coverage: 0.22 }),
+        frame({ path: "blank.png", meanLuminance: 0.0, coverage: 0 }),
+      ],
+      issues,
+    );
+    const unlit = issues.find((i) => i.code === "S3D-W-389")!;
+    const empty = issues.find((i) => i.code === "S3D-W-386")!;
+    expect(unlit.target).toBe("dark.png");
+    expect(unlit.hint).toContain("do not re-aim");
+    expect(empty.target).toBe("blank.png");
+    expect(empty.hint).toContain("leaves frame");
+  });
+
+  it("refuses to call a tone-mapped proof a measurement", () => {
+    /*
+     * The proof asks Blender for a straight encode so a pixel is the radiance
+     * that produced it. A colour config that will not honour that renders
+     * through some other curve, and every verdict below — blown, empty,
+     * unlit — is then measured against thresholds calibrated for a different
+     * response. Logging it to stderr is not a verdict; the reader of the
+     * issues is the one who has to know.
+     */
+    const frames = [frame({ path: "a.png", meanLuminance: 0.3, coverage: 0.4 })];
+    const managed: Issue[] = [];
+    lintProof(frames, managed, undefined, undefined, undefined, []);
+    expect(managed.some((i) => i.code === "S3D-W-390")).toBe(false);
+
+    const unmanaged: Issue[] = [];
+    lintProof(frames, unmanaged, undefined, undefined, undefined, [
+      "view_transform=Standard unavailable",
+    ]);
+    const note = unmanaged.find((i) => i.code === "S3D-W-390")!;
+    expect(note).toBeDefined();
+    expect(note.message).toContain("view_transform=Standard unavailable");
+    expect(note.detail).toMatchObject({ colourNotes: ["view_transform=Standard unavailable"] });
+
+    // Absent is not the same as empty: a runner too old to report the fact
+    // must not be described as having rendered a straight encode.
+    const unknown: Issue[] = [];
+    lintProof(frames, unknown, undefined, undefined, undefined, undefined);
+    expect(unknown.some((i) => i.code === "S3D-W-390")).toBe(false);
+  });
+
+  it("names EEVEE's screen-space GI when emission is the only light", () => {
+    /*
+     * Measured, not asserted: a lamp in a three-walled niche reads
+     * 0.157/0.066/0.0003/0.0004/0.0003/0.0003/0.0003/0.067 across an EEVEE
+     * turntable and 0.421/0.313/0.138/0.019/0.0003/0.019/0.137/0.313 in
+     * Cycles. Five angles are lost, not dimmed, because an emitter outside
+     * the frame contributes nothing to a screen-space solution. The author
+     * cannot act on "your frames are dark" without that sentence.
+     */
+    const dark = [frame({ path: "d.png", meanLuminance: 0.0003, coverage: 0.22 })];
+    const withNote: Issue[] = [];
+    lintProof(dark, withNote, undefined, undefined, {
+      engine: "BLENDER_EEVEE",
+      emissionOnly: true,
+    });
+    expect(withNote[0]!.hint).toContain("screen-space");
+    expect(withNote[0]!.hint).toContain("CYCLES");
+
+    // Cycles has no such limit, so the note would be false there.
+    const cycles: Issue[] = [];
+    lintProof(dark, cycles, undefined, undefined, { engine: "CYCLES", emissionOnly: true });
+    expect(cycles[0]!.hint).not.toContain("screen-space");
+
+    // Neither does a scene that has a key light and is simply too dark.
+    const keyed: Issue[] = [];
+    lintProof(dark, keyed, undefined, undefined, {
+      engine: "BLENDER_EEVEE",
+      emissionOnly: false,
+    });
+    expect(keyed[0]!.hint).not.toContain("screen-space");
   });
 
   it("ships frozen default thresholds — a caller cannot retune every later invocation", async () => {

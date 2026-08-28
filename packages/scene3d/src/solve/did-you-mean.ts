@@ -32,6 +32,24 @@ function editBudget(key: string): number {
 const MIN_PREFIX = 3;
 
 /**
+ * The words inside a compound key: `baseColor` → `base`, `color`;
+ * `texelDensity.maxRatio` → `texel`, `density`, `max`, `ratio`.
+ *
+ * Authors name a field by the token that distinguishes it and drop the
+ * qualifier — `colr` for `baseColor`, `strength` for `emissionStrength`.
+ * Whole-key edit distance scores those as unrelated words, so the suggestion
+ * that was obviously right never appeared.
+ */
+function tokens(key: string): string[] {
+  return key
+    .replace(/[._-]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .split(" ")
+    .filter((t) => t.length >= MIN_PREFIX);
+}
+
+/**
  * Levenshtein distance, capped: anything past `limit` is reported as
  * `limit + 1` rather than computed exactly, since the caller only ever asks
  * whether it is small.
@@ -85,8 +103,39 @@ export function nearestKey(key: string, known: Iterable<string>): string | undef
       score = 0.5 + Math.abs(candidate.length - key.length) / 1000;
     } else {
       const d = distance(lower, candidateLower, budget);
-      if (d > budget) continue;
-      score = d;
+      if (d <= budget) {
+        score = d;
+      } else {
+        /* Nothing matched the key as a whole. Fall back to its words: a token
+           hit is ranked strictly below every whole-key match above, so it only
+           ever speaks when the alternative was saying nothing at all.
+           
+           The budget is the QUERY's, never the token's — the conservatism this
+           module documents scales with what the author actually typed, and
+           spending a longer token's budget on a short query would let `colr`
+           reach `colour` on two edits, which is the guess-at-a-short-key noise
+           the policy exists to refuse. Tokens earn the same case and prefix
+           relations whole keys do, so a truncation like `stren` still finds
+           `emissionStrength`. */
+        let bestToken = Infinity;
+        for (const token of tokens(candidate)) {
+          if (token === lower) {
+            bestToken = 0;
+            break;
+          }
+          if (
+            Math.min(token.length, lower.length) >= MIN_PREFIX &&
+            (token.startsWith(lower) || lower.startsWith(token))
+          ) {
+            if (0.5 < bestToken) bestToken = 0.5;
+            continue;
+          }
+          const td = distance(lower, token, budget);
+          if (td <= budget && td < bestToken) bestToken = td;
+        }
+        if (bestToken === Infinity) continue;
+        score = 2.5 + bestToken + Math.abs(candidate.length - key.length) / 1000;
+      }
     }
     if (score < bestScore) {
       bestScore = score;

@@ -4331,6 +4331,45 @@ def proof(job):
     else:
         log("light transport: none available on %s — emissive surfaces will not"
             " illuminate their surroundings" % scene.render.engine)
+    # The proof is a MEASUREMENT DEVICE, so it renders scene-linear radiance
+    # through a straight encode: no film emulation between the light that hit
+    # the surface and the byte the linter reads.
+    #
+    # Blender's default view transform is AgX, which compresses highlights and
+    # desaturates them toward white. Only the id-map pass set Standard, so the
+    # frames the agent is told to trust went through AgX while this file's
+    # comments described a straight encode. It made a correctly-baked rust
+    # texture photograph as pale cream, and made the rig's response to lamp
+    # power SUBLINEAR (measured: an albedo-1 sphere read 0.59 / 0.70 / 0.77 at
+    # key 0.05 / 0.10 / 0.15, where irradiance is linear in power by
+    # construction), which is why every exposure calibration against it landed
+    # on a different number.
+    #
+    # Probed, not assumed: the names are OpenColorIO config values and a config
+    # that lacks one must not take the render down with it — what could not be
+    # set is reported, exactly like light transport above.
+    colour_notes = []
+    for attr, value in (("view_transform", "Standard"), ("look", "None")):
+        try:
+            setattr(scene.view_settings, attr, value)
+        except Exception:
+            colour_notes.append("%s=%s unavailable" % (attr, value))
+    try:
+        scene.view_settings.exposure = 0.0
+        scene.view_settings.gamma = 1.0
+    except Exception:
+        colour_notes.append("exposure/gamma unavailable")
+    if colour_notes:
+        log("colour management: %s — proof pixels are NOT a straight encode"
+            % ", ".join(colour_notes))
+    else:
+        log("colour management: Standard, look None, exposure 0, gamma 1")
+    # Reported, not merely logged. A stderr line is not a verdict: without this
+    # the linter would measure exposure and blowout from tone-mapped pixels and
+    # call them straight, which is the same silent-wrong-measurement class the
+    # transform bug itself was.
+    globals()["_S3D_COLOUR_NOTES"] = colour_notes
+
     res = int(opts.get("resolution", 1024))
     scene.render.resolution_x = res
     scene.render.resolution_y = res
@@ -4474,7 +4513,11 @@ def _proof_frames(job, scene, opts, auto_cam, is_auto, steps, filepaths, turntab
     # only that case falls back to a fixed one.
     span = (diag / 2.0) / math.tan(cam_data.angle / 2.0) * 1.25
     dist = span if span > 0 else 1.0
-    elevation = math.radians(30.0)
+    # The orbit elevation the pipeline resolved: 30 degrees unless the scene
+    # authored `camera.elevationDeg`, in which case the turntable rides the
+    # author's eye. The pipeline sends the SAME number to the view describer,
+    # so the compass names and the gnomon describe the pose rendered here.
+    elevation = math.radians(float(opts.get("orbitElevationDeg", 30.0)))
 
     # Clip planes derived from the framing distance, for the same reason the
     # distance itself is derived: Blender's defaults are 0.1m and 100m, two
@@ -4641,6 +4684,9 @@ def _proof_frames(job, scene, opts, auto_cam, is_auto, steps, filepaths, turntab
             "materialBallsSkipped": len(balls["skipped"]),
             "materialBallNotes": balls["skipped"],
             "looks": looks,
+            # Empty means the proof IS a straight encode; anything here names
+            # what this Blender's colour config would not honour.
+            "colourNotes": globals().get("_S3D_COLOUR_NOTES", []),
         },
     })
 

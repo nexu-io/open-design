@@ -43,3 +43,22 @@ describe("resolveScriptsDir", () => {
     expect(fs.existsSync(runnerPath())).toBe(true);
   });
 });
+
+/**
+ * Facts the TypeScript side and the Python runner must agree on.
+ *
+ * A constant that exists in two languages is a constant that can drift, and
+ * the drift is silent: the render happens in Python, the compass names that
+ * describe it are computed in TypeScript, so a disagreement produces frames
+ * labelled with a pose they were not photographed from. There is no type
+ * system spanning the JSON boundary, so the agreement is pinned here.
+ */
+describe("cross-language constants", () => {
+  it("agrees with the runner about the turntable's default elevation", async () => {
+    const { PROOF_ELEVATION_DEG } = await import("../src/read/views.js");
+    const source = fs.readFileSync(runnerPath(path.join(__dirname, "..", "scripts")), "utf8");
+    const match = source.match(/opts\.get\("orbitElevationDeg",\s*([0-9.]+)\)/);
+    expect(match, "the runner must still read orbitElevationDeg with a fallback").toBeTruthy();
+    expect(Number(match![1])).toBe(PROOF_ELEVATION_DEG);
+  });
+});

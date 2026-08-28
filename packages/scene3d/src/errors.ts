@@ -220,6 +220,25 @@ export const ISSUE_CODES = {
      was built. The knob was validated and normalized and then read by nothing,
      so a project could declare a limit and never be told it was passed. */
   ANIMATION_TOO_LONG: "S3D-W-388",
+  /* Every proof frame is dark, but the subject IS in frame — lit pixels were
+     measured. That is a LIGHTING fault, and it is a different repair from an
+     empty frame: add or raise a light, do not re-aim the camera. Splitting it
+     from EMPTY_PROOF is the whole point — one predicate used to OR "dark" and
+     "nothing rendered" together and then print the framing hint for both, so
+     an author whose night scene was merely unlit got sent to move a camera
+     that was pointed correctly. */
+  UNLIT_PROOF: "S3D-E-389",
+  /* One angle is in frame and unlit. Same split as above, at the milder
+     severity PARTIAL_EMPTY_PROOF already uses for a single bad angle. */
+  PARTIAL_UNLIT_PROOF: "S3D-W-389",
+  /* The proof did not render through a straight encode: this Blender's colour
+     configuration would not take the view transform, look, exposure or gamma
+     the proof asks for. Every exposure verdict below — blown, empty, unlit —
+     is then measured through whatever curve remained, so the numbers are not
+     comparable to the ones the thresholds were calibrated against. Probed and
+     reported for the same reason the GPU readback and light transport are: a
+     guarantee that varies by machine must never be assumed on one. */
+  PROOF_UNMANAGED: "S3D-W-390",
 
   /* lint: world placement + budgets (325-339) */
   NOT_GROUNDED: "S3D-W-325",

@@ -108,6 +108,9 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-W-386': 'Some proof angles empty',
   'S3D-W-387': 'Proof frames unmeasured',
   'S3D-W-388': 'Animation over budget',
+  'S3D-E-389': 'Proof is unlit',
+  'S3D-W-389': 'Proof angle unlit',
+  'S3D-W-390': 'Proof not colour-managed',
 
   /* lint: uv */
   'S3D-E-441': 'UVs missing',

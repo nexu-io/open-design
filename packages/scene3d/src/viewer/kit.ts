@@ -54,6 +54,16 @@ export interface KitEntry {
     x?: number;
   }>;
   /**
+   * How many parts the scene actually has, when `tree` could not carry all of
+   * them. Absent means the tree IS the whole inventory.
+   *
+   * A silent `.slice()` is the one thing a truncation must never be: the rail
+   * would show a complete-looking hierarchy that quietly omits parts, and a
+   * reader counting rows would draw a wrong conclusion about the scene. Same
+   * discipline as `scenesTruncated` and `deliverablesTruncated`.
+   */
+  treeTotal?: number;
+  /**
    * Material name → display hex colour, for the part card's swatches.
    * Entry-level (not per row) so a material bound to thirty parts costs
    * its colour once.
@@ -356,6 +366,7 @@ export function renderKitHtml(page: KitPage): string {
   .chip .caret.open { transform: rotate(90deg); }
   .tree { margin: 0 0 3px; }
   .tree[hidden] { display: none; }
+  .tree-note { padding: 3px 8px; font-size: 10px; opacity: 0.62; font-style: italic; }
   .tree-row {
     display: flex; align-items: center; gap: 5px; width: 100%;
     font-family: inherit; font-size: 11.5px; font-weight: 400; line-height: 1.5;
@@ -7694,6 +7705,15 @@ function buildTree(treeHost, entry, chipButton) {
     }
   };
   walk(null, 0);
+  /* A truncated inventory says so. Without this the rail renders a
+     complete-looking hierarchy that quietly omits parts, and a reader
+     counting rows draws a wrong conclusion about the scene. */
+  if (entry.treeTotal && entry.treeTotal > tree.length) {
+    const note = document.createElement('div');
+    note.className = 'tree-note';
+    note.textContent = 'showing ' + tree.length + ' of ' + entry.treeTotal + ' parts';
+    treeHost.appendChild(note);
+  }
 }
 
 /** Keep tree rows highlighting whatever the viewport has selected. A

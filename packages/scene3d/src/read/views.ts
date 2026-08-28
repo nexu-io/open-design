@@ -195,6 +195,11 @@ export function describeProofViews(input: {
    *  derived one — used to give an authored still an honest compass name. */
   authoredAzimuthDeg?: number;
   authoredElevationDeg?: number;
+  /** Elevation the turntable actually orbited at. Defaults to the 30° the
+   *  proof uses when a scene authors no camera; an authored
+   *  `camera.elevationDeg` steers it, and the SAME value reaches the runner,
+   *  so the compass names describe the pose that was rendered. */
+  orbitElevationDeg?: number;
 }): ProofView[] | undefined {
   if (input.frameCount <= 0) return undefined;
   if (input.authoredCamera) {
@@ -209,8 +214,9 @@ export function describeProofViews(input: {
     }
     return undefined;
   }
-  if (!input.turntable) return input.frameCount === 1 ? stillView() : undefined;
-  return turntableViews(input.frameCount);
+  const orbitEl = input.orbitElevationDeg ?? PROOF_ELEVATION_DEG;
+  if (!input.turntable) return input.frameCount === 1 ? stillView(orbitEl) : undefined;
+  return turntableViews(input.frameCount, orbitEl);
 }
 
 /** One view as a compact label: `[3] back-right · az 135°`. */

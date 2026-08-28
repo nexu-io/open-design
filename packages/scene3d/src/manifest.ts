@@ -507,6 +507,9 @@ export function writeViewer(
                contain, instead of assuming the two always agree. */
             ...(manifest.bakedTweaks ? { bakedTweaks: manifest.bakedTweaks } : {}),
             tree: entryTree(manifest, facts),
+            ...(manifest.partTree.length > MAX_TREE_PARTS
+              ? { treeTotal: manifest.partTree.length }
+              : {}),
             ...(facts && Object.keys(facts.matColors).length > 0
               ? { matColors: facts.matColors }
               : {}),
@@ -554,6 +557,8 @@ function entryTree(
   manifest: Scene3dManifest,
   facts?: PartFacts,
 ): NonNullable<KitEntry["tree"]> {
+  // The caller owns the cap, so the caller is told when it bit: entryTree's
+  // result is paired with `treeTotal` at the call site below.
   return manifest.partTree.slice(0, MAX_TREE_PARTS).map((part) => ({
     n: part.name,
     p: part.parent,
@@ -840,6 +845,9 @@ export function writeProjectKit(
       ...(partIssues ? { partIssues } : {}),
       parts: manifest.partTree.length,
       tree: entryTree(manifest, facts),
+            ...(manifest.partTree.length > MAX_TREE_PARTS
+              ? { treeTotal: manifest.partTree.length }
+              : {}),
       ...(facts && Object.keys(facts.matColors).length > 0 ? { matColors: facts.matColors } : {}),
       ...(facts && Object.keys(facts.mats).length > 0 ? { mats: facts.mats } : {}),
       ...(facts && facts.clips.length > 0 ? { clips: facts.clips } : {}),

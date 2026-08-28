@@ -107,7 +107,7 @@ export const DEFAULT_CONTRACT: Scene3dContract = {
       roughnessRange: [0, 1],
       iorRange: [1, 2.5],
     },
-    animation: { fps: 24, maxFrames: 10_000 },
+    animation: { fps: 24, maxFrames: 0 },
     uv: {
       require: "textured",
       maxOverlapFraction: 0.05,
@@ -190,6 +190,10 @@ export interface NormalizedContract {
   /** Dark-metal realism heatmap thresholds (see conventions.pbr.realism). */
   pbrRealism: { enabled: boolean; darkLuminanceMax: number; metalMin: number; roughMax: number };
   fps: number;
+  /** Longest clip this project ships, in frames. ZERO MEANS NO BUDGET, and is
+   *  the default: a project that never declared a clip length has not asked to
+   *  be told its animation is long, and inventing a ceiling for it would be a
+   *  limit nobody chose. The rule fires only once somebody states a number. */
   maxFrames: number;
   grounding: { enabled: boolean; tolerance: number; exempt: string[] };
   uv: {
@@ -407,7 +411,7 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
       roughMax: numOr(p.realism?.roughMax, 0.1),
     },
     fps: numOr(a.fps, 24),
-    maxFrames: numOr(a.maxFrames, 10_000),
+    maxFrames: numOr(a.maxFrames, 0),
     grounding: {
       // Off by default: grounding is meaningful for props and wrong for a
       // scene composed in world space, so it is opted into per project.

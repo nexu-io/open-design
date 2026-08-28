@@ -193,6 +193,13 @@ export interface RunnerJob {
     turntable: boolean;
     turntableSteps: number;
     respectSceneCamera: boolean;
+    /**
+     * Elevation the turntable orbits at, degrees above the horizon. Always
+     * sent: the same number reaches the view describer that names the frames,
+     * so a default living in both TypeScript and Python cannot drift into a
+     * render whose compass describes a pose it did not photograph.
+     */
+    orbitElevationDeg: number;
     background?: string;
     filepaths: string[];
     /**

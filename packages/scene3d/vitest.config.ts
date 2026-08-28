@@ -34,6 +34,7 @@ const BLENDER_FILES = [
   "tests/contact-math.test.ts",
   "tests/findings2-real.test.ts",
   "tests/findings3-real.test.ts",
+  "tests/exposure.test.ts",
   "tests/formats.test.ts",
   "tests/kernel-recipe-pipeline.test.ts",
   "tests/kit-viewer-real.test.ts",

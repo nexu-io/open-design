@@ -26,7 +26,11 @@ import { ISSUE_CODES } from "../errors.js";
 export interface ProofThresholds {
   /** Below this mean luminance a frame carries no recoverable detail. */
   emptyLuminance: number;
-  /** Below this lit-pixel fraction the subject is a speck in an empty frame. */
+  /** Below this covered-pixel fraction the subject is a speck in an empty
+   *  frame. Coverage is an ALPHA mask, not a brightness test: the runner counts
+   *  pixels the subject occupies (alpha > 0.02) regardless of how dark they
+   *  are, which is exactly what lets a black frame be classified as unlit
+   *  rather than empty. Reading it as a "lit-pixel fraction" inverts that. */
   sparseCoverage: number;
   /** Above this fraction of lit pixels near white, the frame is blown out. */
   blownRatio: number;
@@ -48,8 +52,43 @@ export function lintProof(
   /** Largest dimension of the scene, metres — measured, for the empty-frame
    *  diagnosis. Absent when there is no census to measure it from. */
   sceneSizeMetres?: number,
+  /** Engine + whether emission is the only light, for the screen-space note. */
+  lighting?: { engine: string; emissionOnly: boolean },
+  /** What this Blender's colour config would not honour. Empty = straight
+   *  encode; anything here means every verdict below is measured through a
+   *  curve the thresholds were not calibrated against. */
+  colourNotes?: readonly string[],
 ): void {
+  if (colourNotes !== undefined && colourNotes.length > 0) {
+    issues.push({
+      code: ISSUE_CODES.PROOF_UNMANAGED,
+      severity: "warning",
+      message:
+        `the proof did not render through a straight encode: ${colourNotes.join(", ")}` +
+        " — exposure, blowout and emptiness below are measured through whatever" +
+        " curve remained",
+      hint:
+        "this Blender's OpenColorIO configuration does not offer the Standard view" +
+        " transform; the frames are still usable to look at, but their measured" +
+        " numbers are not comparable to the thresholds",
+      detail: { colourNotes: [...colourNotes] },
+    });
+  }
+
   if (!frames || frames.length === 0) return;
+
+  /*
+   * EEVEE's ray-traced GI is screen-space, so an emitter outside the frame
+   * contributes nothing and a scene lit only by emission goes black off-angle
+   * by construction. That is an engine fact, not an authoring mistake, and the
+   * author cannot act on "your frames are dark" without it.
+   */
+  const screenSpaceNote =
+    lighting?.emissionOnly === true && /EEVEE/i.test(lighting.engine)
+      ? " — this scene is lit only by emissive surfaces, and EEVEE's ray-traced" +
+        " GI is screen-space, so an emitter outside the frame contributes nothing;" +
+        " render with engine CYCLES to light from emission at every angle"
+      : "";
 
   // Valid-range-only: NaN/Infinity from a corrupt readback satisfies a null
   // check and then sails past every threshold comparison, and a FINITE
@@ -78,19 +117,45 @@ export function lintProof(
   }
   if (measured.length === 0) return;
 
-  const empty = measured.filter(
-    (f) => f.meanLuminance! <= thresholds.emptyLuminance || f.coverage! === 0,
-  );
+  /*
+   * "Dark" and "nothing rendered" are two different faults with two different
+   * repairs, and ORing them into one `empty` set meant the framing hint was
+   * printed for both. A frame with coverage 0.17 and luminance 0.002 has the
+   * subject squarely in frame — it is unlit, and telling its author to re-aim
+   * the camera sends them to fix the one thing that was already right.
+   *
+   * Coverage is the discriminator because it is the measurement that answers
+   * the question: lit pixels exist, so something is in front of the lens.
+   */
+  const isBlank = (f: ProofFrameStats): boolean => f.coverage! === 0;
+  const isUnlit = (f: ProofFrameStats): boolean =>
+    f.coverage! > 0 && f.meanLuminance! <= thresholds.emptyLuminance;
+  // Filtered in FRAME order, not classified into two lists and concatenated:
+  // a reader scanning the report walks the turntable in the order it was shot,
+  // and grouping blanks ahead of dark frames silently reorders that walk.
+  const empty = measured.filter((f) => isBlank(f) || isUnlit(f));
+  const unlit = empty.filter(isUnlit);
   // The compile-failing "EVERY frame rendered empty" claim requires every
   // frame to have been MEASURED: with unmeasured frames in the set, an
   // all-measured-empty result only proves the frames it saw, so it degrades
   // to the per-frame warning instead of overclaiming a total render failure.
   if (empty.length === measured.length && measured.length === frames.length) {
+    // Every frame carrying lit pixels means the camera found the subject in
+    // all of them; the fault is that nothing lights it.
+    const allUnlit = unlit.length === measured.length;
     issues.push({
-      code: ISSUE_CODES.EMPTY_PROOF,
+      code: allUnlit ? ISSUE_CODES.UNLIT_PROOF : ISSUE_CODES.EMPTY_PROOF,
       severity: "error",
-      message: `every proof frame rendered empty (${measured.length} frame(s))`,
-      hint: "check the camera aim, the scene lights, and that the subject is in front of the camera",
+      message: allUnlit
+        ? `every proof frame is unlit (${measured.length} frame(s), mean luminance ` +
+          `${measured[0]!.meanLuminance!.toFixed(4)} at ${Math.round(measured[0]!.coverage! * 100)}% coverage)` +
+          ` — the subject is in frame and no light reaches it`
+        : `every proof frame rendered empty (${measured.length} frame(s))`,
+      hint: allUnlit
+        ? "raise light.key, raise light.ambient, or add an emissive material; " +
+          "the camera aim is not the fault" +
+          screenSpaceNote
+        : "check the camera aim, the scene lights, and that the subject is in front of the camera",
       // Scene size travels with the finding because scale WAS the cause of
       // every empty-frame report worth investigating here: a fixed camera
       // distance and Blender's fixed clip planes each blanked one end of the
@@ -101,6 +166,7 @@ export function lintProof(
       detail: {
         frames: measured.length,
         meanLuminance: measured[0]!.meanLuminance,
+        coverage: measured[0]!.coverage,
         ...(sceneSizeMetres !== undefined ? { sceneSizeMetres } : {}),
       },
     });
@@ -111,10 +177,19 @@ export function lintProof(
         // compile-failing EMPTY_PROOF error that EVERY frame black is: 7 of 8
         // good frames is a materially milder defect than a total render
         // failure, and one off-angle should not fail the whole compile.
-        code: ISSUE_CODES.PARTIAL_EMPTY_PROOF,
+        code: frame.coverage! > 0 ? ISSUE_CODES.PARTIAL_UNLIT_PROOF : ISSUE_CODES.PARTIAL_EMPTY_PROOF,
         severity: "warning",
-        message: `proof frame rendered empty: ${basename(frame.path)}`,
-        hint: "the subject leaves frame at this turntable angle",
+        message:
+          frame.coverage! > 0
+            ? `proof frame is unlit: ${basename(frame.path)} — ` +
+              `${Math.round(frame.coverage! * 100)}% of the frame is the subject at luminance ` +
+              `${frame.meanLuminance!.toFixed(4)}`
+            : `proof frame rendered empty: ${basename(frame.path)}`,
+        hint:
+          frame.coverage! > 0
+            ? "the subject is in frame at this angle and unlit — light it, do not re-aim" +
+              screenSpaceNote
+            : "the subject leaves frame at this turntable angle",
         target: basename(frame.path),
         detail: { meanLuminance: frame.meanLuminance, coverage: frame.coverage },
       });

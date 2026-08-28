@@ -26,6 +26,22 @@ export interface LintInput {
   /** Coverage stats from the proof stage, when it ran. */
   proofFrames?: ProofFrameStats[];
   /**
+   * How the proof was lit and by which engine — the two facts that turn "some
+   * frames are black" into a named cause.
+   *
+   * EEVEE's ray-traced GI is screen-space: an emissive surface lights what it
+   * can see AND what can see it, so the moment the emitter leaves the frame
+   * its contribution goes with it. Measured on a lamp in a three-walled niche,
+   * a turntable reads 0.157 / 0.066 / 0.0003 / 0.0004 / 0.0003 / 0.0003 /
+   * 0.0003 / 0.067 in EEVEE against 0.421 / 0.313 / 0.138 / 0.019 / 0.0003 /
+   * 0.019 / 0.137 / 0.313 in Cycles — five angles lost entirely, not dimmed.
+   * A scene lit only by emission is therefore expected to go dark off-angle in
+   * EEVEE, and saying so is the difference between a diagnosis and a shrug.
+   */
+  lighting?: { engine: string; emissionOnly: boolean };
+  /** What the proof's colour management would not honour, from the runner. */
+  colourNotes?: readonly string[];
+  /**
    * Per-frame off-camera facts from the proof turntable: which meshes fell
    * out of which orbit frame. The census's own off-camera check measures
    * ONE camera pose; this is the honest version across all N frames a
@@ -151,7 +167,14 @@ export function runLint(input: LintInput): Issue[] {
   // Scene size comes from the census the rest of the linter already uses:
   // the empty-frame error needs it to tell 'aimed wrong' from 'too small
   // to render'.
-  lintProof(input.proofFrames, issues, input.contract.proofThresholds, sceneSizeMetres(input.census));
+  lintProof(
+    input.proofFrames,
+    issues,
+    input.contract.proofThresholds,
+    sceneSizeMetres(input.census),
+    input.lighting,
+    input.colourNotes,
+  );
   lintIntent(input.census, input.contract, input.solved, issues);
 
   // The kernel's exact prediction vs the built census — the compiler

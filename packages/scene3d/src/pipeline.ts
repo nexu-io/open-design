@@ -57,7 +57,7 @@ import { MATERIAL_CHANNELS } from "./solve/channels.js";
 import type { ShaderOutput } from "./shade/types.js";
 import { resolveLook } from "./read/look.js";
 import { resolveSweep, type ResolvedPose } from "./read/shot.js";
-import { describeProofViews, orbitEye, type ProofView } from "./read/views.js";
+import { describeProofViews, orbitEye, PROOF_ELEVATION_DEG, type ProofView } from "./read/views.js";
 import { validateSceneSpec, specDeclarationLines } from "./solve/validate.js";
 import { solveScene } from "./solve/solver.js";
 import { motionEnvelopeIssues } from "./solve/sweep.js";
@@ -1059,6 +1059,8 @@ export async function compile(
   const materialBalls: string[] = [];
   let materialBallsSkipped = 0;
   let materialBallsSkippedNames: string[] = [];
+  /** What the proof's colour management would not honour, from the runner. */
+  let proofColourNotes: string[] = [];
   let materialBallStats: Array<{ material: string; clipped: number }> = [];
   let proofFrames: ProofFrameStats[] | undefined;
   /** Per-frame off-camera facts from the proof turntable, when it ran. */
@@ -1253,6 +1255,18 @@ export async function compile(
               resolution: proofOpts.resolution ?? 1024,
               turntable: proofOpts.turntable ?? true,
               turntableSteps: steps,
+              /* The orbit rides the authored camera's elevation when the scene
+                 set one. It used to be a constant 30° in the runner, so an
+                 author who wrote a low dusk eye got a render that ignored it
+                 and a compass that described the render — the value was
+                 honoured for the scene camera object and nowhere else. */
+              /* Always sent, never conditional: a default that lives in two
+                 languages is a default that can disagree with itself, and the
+                 disagreement would be a render whose compass names describe a
+                 different pose than the one photographed. The TS constant is
+                 the single source; the runner's own fallback is only reached
+                 when the key is missing entirely. */
+              orbitElevationDeg: spec?.camera?.elevationDeg ?? PROOF_ELEVATION_DEG,
               respectSceneCamera: proofOpts.respectSceneCamera ?? false,
               ...(proofOpts.background ? { background: proofOpts.background } : {}),
               filepaths: abs,
@@ -1333,6 +1347,14 @@ export async function compile(
              The runner measures them ({material, reason}); a bare count
              left the reader unable to tell which surfaces went unpreviewed
              — a cap and a bake failure looked identical. */
+          /* Whether the proof rendered through a straight encode. A stderr
+             line is not a verdict: without carrying this, every exposure
+             number below would be measured through an unknown curve and
+             reported as if it were comparable to the thresholds. */
+          const rawColour = (result.data as { colourNotes?: unknown } | undefined)?.colourNotes;
+          proofColourNotes = Array.isArray(rawColour)
+            ? rawColour.filter((n): n is string => typeof n === "string")
+            : [];
           const rawNotes = (result.data as { materialBallNotes?: unknown } | undefined)?.materialBallNotes;
           materialBallsSkippedNames = Array.isArray(rawNotes)
             ? rawNotes
@@ -1983,6 +2005,26 @@ export async function compile(
       census,
       primTree,
       proofFrames,
+      /* Engine plus "is emission the only light here", so a dark off-angle can
+         be named as EEVEE's screen-space GI rather than left as a shrug. Key
+         and ambient are read from the resolved light spec; a scene with no
+         light block has the studio default and is not emission-only. */
+      lighting: {
+        engine: proofOpts.engine ?? "BLENDER_EEVEE",
+        emissionOnly: (() => {
+          const light = spec?.light;
+          if (light === undefined || typeof light === "string") return false;
+          const key = light.key ?? 1;
+          const amb = light.ambient;
+          const ambientLit =
+            Array.isArray(amb) ? amb.some((c) => c > 0.02) : typeof amb === "number" ? amb > 0.02 : false;
+          if (key > 0.02 || ambientLit) return false;
+          return Object.values(spec?.materials ?? {}).some(
+            (m) => m !== null && typeof m === "object" && "emission" in m,
+          );
+        })(),
+      },
+      ...(proofColourNotes.length > 0 ? { colourNotes: proofColourNotes } : {}),
       ...(offByFrame ? { offByFrame } : {}),
       ...(exportedUsda ? { exportedUsda } : {}),
       ...(sheets ? { sheets } : {}),
@@ -2203,6 +2245,8 @@ export async function compile(
           ...(census?.camera.elevationDeg !== undefined
             ? { authoredElevationDeg: census.camera.elevationDeg }
             : {}),
+          // The same value the runner orbited at, so the names match the pose.
+          orbitElevationDeg: spec?.camera?.elevationDeg ?? PROOF_ELEVATION_DEG,
         });
 
 
