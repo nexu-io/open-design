@@ -351,6 +351,72 @@ describe.skipIf(!hasBlender)("FINDINGS2 mechanisms (real Blender)", () => {
     expect((mesh as { evaluated?: boolean }).evaluated).toBeUndefined();
   }, 400_000);
 
+  it("survives degenerate geometry instead of crashing the runner", async () => {
+    /*
+     * The corpus is made of well-formed assets, so the paths that only
+     * degenerate meshes reach were never walked — which is how `dfm_facts`
+     * shipped a two-value early-out under a three-value unpack. Python raises
+     * on arity only when control actually gets there, and nothing got there.
+     *
+     * These are the shapes that take those branches: a mesh with vertices but
+     * no faces, a mesh with nothing at all, and a face with zero area. The
+     * assertion is that the compiler REACHES A VERDICT on each — a traceback
+     * is not a verdict, and neither is a silent drop.
+     */
+    const dir = mkProject({
+      "scene3d.json": JSON.stringify({
+        schemaVersion: 1,
+        conventions: {
+          naming: { forbidDefaultNames: false },
+          geometry: { allowOpenMeshes: true },
+        },
+      }),
+      "build.py": [
+        "import bpy",
+        "for o in list(bpy.data.objects): bpy.data.objects.remove(o, do_unlink=True)",
+        "",
+        "# Vertices, no faces at all.",
+        "me = bpy.data.meshes.new('m_verts')",
+        "me.from_pydata([(0,0,0), (1,0,0), (0,1,0)], [], [])",
+        "me.update()",
+        "bpy.context.collection.objects.link(bpy.data.objects.new('prp_noface', me))",
+        "",
+        "# Nothing whatsoever.",
+        "me2 = bpy.data.meshes.new('m_empty')",
+        "me2.from_pydata([], [], [])",
+        "me2.update()",
+        "bpy.context.collection.objects.link(bpy.data.objects.new('prp_empty', me2))",
+        "",
+        "# A face with three collinear points: real face, zero area.",
+        "me3 = bpy.data.meshes.new('m_sliver')",
+        "me3.from_pydata([(0,0,0), (1,0,0), (2,0,0)], [], [(0,1,2)])",
+        "me3.update()",
+        "bpy.context.collection.objects.link(bpy.data.objects.new('prp_sliver', me3))",
+        "",
+        "# One ordinary solid, so the scene has something to frame.",
+        "bpy.ops.mesh.primitive_cube_add(size=1, location=(3,0,0.5))",
+        "bpy.context.object.name = 'prp_solid'",
+        "",
+      ].join(String.fromCharCode(10)),
+    });
+    const r = await run(dir);
+    // The runner must not die: a traceback surfaces as a build-stage failure
+    // with no census at all, which is the shape this pins against.
+    expect(r.census, "the runner must reach a census, not a traceback").toBeTruthy();
+    const names = r.census!.meshes.map((m) => m.object).sort();
+    expect(names).toContain("prp_noface");
+    expect(names).toContain("prp_empty");
+    expect(names).toContain("prp_sliver");
+    expect(names).toContain("prp_solid");
+    // And every degenerate mesh is described, not silently normalised away.
+    const empty = r.census!.meshes.find((m) => m.object === "prp_empty")!;
+    expect(empty.verts).toBe(0);
+    expect(empty.faces).toBe(0);
+    const noface = r.census!.meshes.find((m) => m.object === "prp_noface")!;
+    expect(noface.verts).toBe(3);
+    expect(noface.faces).toBe(0);
+  }, 400_000);
+
   /* ---- Bedrock oriented cube (real rotated geometry) --------------- */
 
   it("Bedrock: a real rotated cube exports with its un-rotated size + rotation", async () => {

@@ -202,8 +202,12 @@ export function lintSheets(input: SheetLintInput, issues: Issue[]): void {
     // family brackets its subject. The path stays in `file`. Without a
     // target, a scene with two flipbooks printed findings no reader could
     // attribute from the terse stream, where only the brackets survive.
-    const stem = spec.file.split(/[\\/]/).pop()!.replace(/\.[^.]+$/, "");
-    const at = { file: spec.file, target: stem };
+    /* The subject is the sheet's PATH, not its stem. A stem is a display
+       convenience, and two sheets in different directories share one —
+       which made two independent defects one identity, so the second was
+       deduped away and never reported. A subject is what a finding is
+       ABOUT, so it has to be the thing that is unique. */
+    const at = { file: spec.file, target: spec.file };
 
     // POT is judged on the addressing unit. For a flipbook whose grid divides
     // evenly the shader addresses CELLS, so a 768² sheet of 256² cells is

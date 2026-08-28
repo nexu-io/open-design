@@ -677,3 +677,54 @@ describe("compiler-owned motion honours the contract's frame rate", () => {
     expect(emitBlenderScript(solveScene(spinScene), {} as never)).toContain("frame_end = 49");
   });
 });
+
+describe("coincident faces are reported, whoever produced them", () => {
+  it("names a ring whose instances meet exactly flush", () => {
+    /*
+     * `repeat` and `scatter` both floor their spacing 1mm from flush so a
+     * shared plane is structurally impossible. `around` has no such floor, and
+     * the intersection reporter exempted flush contact WHOLESALE — as a proxy
+     * for "this contact was designed", which is a semantic fact a geometric
+     * test cannot see. So a radius that put two instances edge to edge landed
+     * two surfaces on one plane, z-fighting, with every diagnostic silent.
+     *
+     * Two 1×1 boxes at radius 0.5 sit exactly 1.0 apart centre to centre:
+     * touching, not overlapping.
+     */
+    const solved = solveScene({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_hub", size: [0.1, 0.1, 0.1] },
+        { id: "prp_arm", size: [1, 1, 1] },
+      ],
+      relations: [
+        { type: "at", part: "prp_hub", center: [0, 0, 0.5] },
+        // `around` fixes the ring plane; z still needs its own anchor.
+        { type: "align", part: "prp_arm", to: "prp_hub", axes: ["z"] },
+        { type: "around", part: "prp_arm", center: "prp_hub", count: 2, radius: 0.5, axis: "z" },
+      ],
+    } as never);
+    const coincident = solved.diagnostics.filter((d) => d.code === "SOLVE-COINCIDENT");
+    expect(coincident.length).toBeGreaterThan(0);
+    expect(coincident[0]!.message).toContain("exactly flush");
+  });
+
+  it("stays quiet when a declared relation owns the interface", () => {
+    // `sits_on` embeds a part into its support on purpose, and siblings on one
+    // support share its top plane by the solver's own arithmetic. Reporting
+    // those trained authors to float parts instead of seating them.
+    const solved = solveScene({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_base", size: [2, 2, 0.2] },
+        { id: "prp_top", size: [0.4, 0.4, 0.4] },
+      ],
+      relations: [
+        { type: "at", part: "prp_base", center: [0, 0, 0.1] },
+        { type: "sits_on", part: "prp_top", on: "prp_base" },
+        { type: "repeat", part: "prp_top", count: 3, along: "x", every: 0.6 },
+      ],
+    } as never);
+    expect(solved.diagnostics.filter((d) => d.code === "SOLVE-COINCIDENT")).toEqual([]);
+  });
+});

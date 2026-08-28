@@ -273,7 +273,25 @@ function charge(meter: WorkMeter, units: number, opIndex: number, opKind: string
   // a cancelled deep subdivide stops between levels without ever building the
   // next one. Cheap (a bool read) and keeps the one hot path single-purpose.
   if (meter.shouldCancel?.()) throw new EvalCancelledError(opIndex, opKind);
-  meter.spent += units;
+  /*
+   * Every act of asking costs at least one unit, and the floor lives HERE
+   * rather than at any call site, because a call site that can reach zero is
+   * a call site that defeats the meter entirely.
+   *
+   * `subdivide` proved it: its charge is proportional to the faces and
+   * vertices it is about to produce, and on an empty cage — legal to
+   * construct — that product is exactly zero at every level. The budget could
+   * then never be exceeded no matter how many levels were asked for, which is
+   * precisely the runaway this meter is the only guard against. The fork
+   * refuses arbitrary caps and relies on the meter instead, so a meter that
+   * can be driven to zero is not a small bug.
+   *
+   * This is not a cap: it is the honest statement that iterating IS work. The
+   * interpreter executed the loop body, so the loop body costs something. One
+   * unit per dispatch is resource-denominated, monotone, and cannot be gamed
+   * to nothing by any degenerate input, including ones nobody has thought of.
+   */
+  meter.spent += 1 + Math.max(0, units);
   if (meter.spent > meter.budget) throw new WorkBudgetError(opIndex, opKind, meter.spent, meter.budget);
 }
 

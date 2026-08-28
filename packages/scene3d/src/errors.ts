@@ -141,6 +141,14 @@ export const ISSUE_CODES = {
      without this a thin wall on a dense mesh is indistinguishable from a
      sound one. Same discipline as DOUBLE_VERTICES_UNCHECKED. */
   WALL_THICKNESS_UNCHECKED: "S3D-W-391",
+  /* Two solved placements meet exactly flush and no declared relation asked
+     them to. `repeat` and `scatter` floor their spacing 1mm from flush so a
+     shared plane is structurally impossible; `around` had no such floor, so a
+     ring radius that put its instances edge to edge landed two surfaces on one
+     plane — z-fighting, with every diagnostic silent because the intersection
+     reporter exempted flush contact wholesale rather than by what the author
+     actually asked for. */
+  SPEC_COINCIDENT: "S3D-W-392",
   /* A mesh object hidden in the scene still exports, counts against budget,
      and can z-fight — yet the master exporter may drop it, so a hidden mesh
      is both a silent shipper and a likely parity-loss source. */

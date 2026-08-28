@@ -591,6 +591,46 @@ describe.skipIf(!hasBlender)("declarative spec pipeline (real Blender)", () => {
     return dir;
   };
 
+  it("builds a scene whose only complaint is one it calls buildable", async () => {
+    /*
+     * Severity and the build gate are two readings of one fact — "did the
+     * graph solve" — and they were kept as separate literals. They drifted:
+     * SOLVE-SUSPECT was classed buildable and reported as a warning while the
+     * gate still counted it unresolved, so a compile could answer "warning"
+     * and quietly produce no asset at all. SOLVE-COINCIDENT would have
+     * inherited exactly that.
+     *
+     * A ring of two boxes meeting flush is the cheapest scene that trips a
+     * buildable diagnostic, so it is the one that proves the two readings
+     * agree: warning in the report AND geometry on disk.
+     */
+    const dir = sceneDir("coincident-builds", {
+      schemaVersion: 1,
+      materials: { mtl_a: { baseColor: [0.6, 0.6, 0.6] } },
+      parts: [
+        { id: "prp_hub", size: [0.1, 0.1, 0.1], material: "mtl_a" },
+        { id: "prp_arm", size: [1, 1, 1], material: "mtl_a" },
+      ],
+      relations: [
+        { type: "at", part: "prp_hub", center: [0, 0, 0.5] },
+        { type: "align", part: "prp_arm", to: "prp_hub", axes: ["z"] },
+        { type: "around", part: "prp_arm", center: "prp_hub", count: 2, radius: 0.5, axis: "z" },
+      ],
+    });
+    const r = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "lint"],
+      noCache: true,
+      timeoutMs: 600_000,
+    });
+    const coincident = r.issues.find((i) => i.code === ISSUE_CODES.SPEC_COINCIDENT);
+    expect(coincident, "flush instances must be reported").toBeTruthy();
+    expect(coincident!.severity).toBe("warning");
+    // The claim under test: it warned, and it still built.
+    expect(r.census, "a buildable diagnostic must not skip the build").toBeTruthy();
+    expect((r.census!.meshes ?? []).length).toBeGreaterThan(0);
+  }, 900_000);
+
   it("calls a dark frame unlit, not empty, when the subject is measurably in it", async () => {
     /*
      * One predicate used to OR "luminance below the floor" with "no lit pixels

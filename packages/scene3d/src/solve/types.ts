@@ -682,7 +682,15 @@ export interface SolveDiagnostic {
     /** Solved exactly as asked, but the result asserts something the author
      *  almost certainly did not mean (a span bridging air). Advisory. */
     | "SOLVE-SUSPECT"
-    | "SOLVE-LIMIT";
+    | "SOLVE-LIMIT"
+    /* The solve produced a size its own shape cannot be built from — a ring
+       narrower than its tube, a wall thicker than its bore. The authored size
+       passed; a relation rewrote it afterwards. */
+    | "SOLVE-SHAPE"
+    /* Two placements meet exactly flush and no declared relation asked
+       them to. The surfaces share a plane and z-fight. Buildable — it
+       renders, it renders wrong — so it warns rather than refusing. */
+    | "SOLVE-COINCIDENT";
   message: string;
   part?: string;
 }

@@ -17,6 +17,7 @@ import {
   rotatedShapeSize,
 } from "./types.js";
 import { Rng } from "./rng.js";
+import { shapeViolations } from "./shape-sanity.js";
 
 /**
  * Resolve a declarative scene into world-space placements.
@@ -715,6 +716,23 @@ export function solveScene(
   // order — the property the stage cache and the compile diff both rely on.
   solved.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   reportGeneratedIntersections(solved, diagnostics);
+  /* The solver validates its own OUTPUT against the same predicate the
+     validator used on the input. Shape sanity ran against the authored size
+     and nothing re-ran it afterwards, but a relation can rewrite a size after
+     validation has finished — `span` sets an axis from the gap between two
+     anchors — so a ring could be pulled narrower than its own tube and reach
+     the emitter as a negative radius. Checking the RESULT rather than any
+     particular relation covers every relation, including ones not yet
+     written. */
+  for (const part of solved) {
+    for (const violation of shapeViolations(part.shape, part.size, part.axis, part.thickness)) {
+      diagnostics.push({
+        code: "SOLVE-SHAPE",
+        message: `the solve made '${part.id}' unbuildable: ${violation}`,
+        part: part.id,
+      });
+    }
+  }
   return { parts: solved, diagnostics };
 }
 
@@ -740,7 +758,14 @@ export function solveScene(
  * Reported once per pair of families, carrying the deepest overlap.
  */
 function reportGeneratedIntersections(parts: SolvedPart[], diagnostics: SolveDiagnostic[]): void {
-  const generated = parts.filter((p) => p.from !== undefined);
+  /* The clones AND the parts they were minted from. Filtering to `from`
+     alone compared clones only with each other, so a clone was never checked
+     against its own base — and a two-instance ring, which is a base plus a
+     single clone, was not checked at all. The base is as much a placement of
+     that relation as any clone is. */
+  const minted = parts.filter((p) => p.from !== undefined);
+  const bases = new Set(minted.map((p) => p.from!));
+  const generated = parts.filter((p) => p.from !== undefined || bases.has(p.id));
   if (generated.length < 2) return;
   const worst = new Map<string, { a: string; b: string; depth: number; axis: Axis }>();
 
@@ -762,8 +787,21 @@ function reportGeneratedIntersections(parts: SolvedPart[], diagnostics: SolveDia
           axis = AXES[k]!;
         }
       }
-      // The contact floor is the boundary between "touching" and "inside".
-      if (depth <= MIN_CONTACT) continue;
+      // Genuinely apart: a negative penetration on any axis means the boxes
+      // never meet, so there is no contact to judge.
+      if (depth < -1e-9) continue;
+      /* COINCIDENT FACES, which the blanket floor below used to swallow.
+         `repeat` and `scatter` both floor their spacing 1mm from flush so a
+         shared plane is structurally impossible; `around` has no such floor,
+         so a ring radius that puts its instances exactly edge to edge lands
+         two surfaces on one plane and z-fights, with every diagnostic silent.
+         Reported unless a declared relation OWNS that interface — see the
+         exemptions below, which are keyed on what the author asked for rather
+         than on the geometry happening to be flush. */
+      const flush = depth <= 1e-9;
+      const restsOnEachOther = a.restsOn === b.id || b.restsOn === a.id;
+      if (!flush && depth <= MIN_CONTACT && !restsOnEachOther) continue;
+      if (restsOnEachOther && depth <= MIN_CONTACT + 1e-9) continue;
       // The AABB depth above over-reports for ROTATED clones: an oriented
       // ring's turned bars have world boxes that interpenetrate while the
       // boxes themselves stand clear. When either part is rotated, the
@@ -788,6 +826,20 @@ function reportGeneratedIntersections(parts: SolvedPart[], diagnostics: SolveDia
       const sharedSupport =
         a.restsOn !== undefined && a.restsOn === b.restsOn;
       if (sharedSupport && axis === "z" && depth <= 2 * MIN_CONTACT + 1e-9) continue;
+      // A flush pair no declared relation placed in contact is a coincident
+      // plane: the two surfaces render into the same depth and fight.
+      if (flush) {
+        const fa0 = a.from ?? a.id;
+        const fb0 = b.from ?? b.id;
+        diagnostics.push({
+          code: "SOLVE-COINCIDENT",
+          message:
+            `'${a.id}' and '${b.id}' meet exactly flush on ${axis} — coincident faces z-fight; ` +
+            `space them at least ${MIN_CONTACT}m apart, the floor every other placement relation keeps`,
+          part: fa0 === fb0 ? fa0 : fa0,
+        });
+        continue;
+      }
       const fa = a.from ?? a.id;
       const fb = b.from ?? b.id;
       const key = fa < fb ? `${fa}\u0000${fb}` : `${fb}\u0000${fa}`;

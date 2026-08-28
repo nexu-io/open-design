@@ -112,6 +112,7 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-W-389': 'Proof angle unlit',
   'S3D-W-390': 'Proof not colour-managed',
   'S3D-W-391': 'Wall thickness unchecked',
+  'S3D-W-392': 'Coincident faces',
 
   /* lint: uv */
   'S3D-E-441': 'UVs missing',

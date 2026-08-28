@@ -335,10 +335,45 @@ export function runLint(input: LintInput): Issue[] {
     }
   }
 
+  /*
+   * An issue's identity is STRUCTURE, not prose.
+   *
+   * Keying on the message made two things go wrong at once. `target` carries a
+   * subject's short name — for a sheet, its file stem — so two blank sheets
+   * called `frame.png` in different directories were one key; and a rule whose
+   * message interpolates nothing made that key identical, so the second file's
+   * independent defect was dropped and the compile was never flagged for it. A
+   * dedup that can delete a real finding is the failure this module exists to
+   * prevent.
+   *
+   * So identity is the code, the SUBJECT, and the MEASURED FACTS — and the
+   * message does not participate at all. A message is presentation: two
+   * defects with identical prose are still two defects, and one defect
+   * reworded is still one defect. Keying on it made both mistakes at once.
+   *
+   * That puts the weight on two things being right. A subject must be a
+   * canonical path, never a basename, so two files cannot share one identity.
+   * And a rule whose findings are genuinely distinct must say what
+   * distinguishes them in `detail` — which is where a measured fact belongs
+   * anyway. When `detail` cannot tell two findings apart, the missing fact is
+   * the bug, not the dedup.
+   *
+   * The FILE stays out of the key deliberately: dedup also exists so that a
+   * Blender object and the same-named USD prim cannot double-report one
+   * defect, and those two views carry different files by construction.
+   */
+  const stableKey = (value: unknown): string => {
+    if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+    if (Array.isArray(value)) return `[${value.map(stableKey).join(",")}]`;
+    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) =>
+      a < b ? -1 : a > b ? 1 : 0,
+    );
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableKey(v)}`).join(",")}}`;
+  };
   const seen = new Set<string>();
   const deduped: Issue[] = [];
   for (const issue of issues) {
-    const key = `${issue.code}|${issue.target ?? ""}|${issue.message}`;
+    const key = [issue.code, issue.target ?? "", stableKey(issue.detail)].join("\u0000");
     if (seen.has(key)) continue;
     seen.add(key);
     deduped.push(issue);

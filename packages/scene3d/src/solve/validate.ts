@@ -13,6 +13,7 @@ import {
   Vec3,
 } from "./types.js";
 import { didYouMean } from "./did-you-mean.js";
+import { shapeViolations } from "./shape-sanity.js";
 import {
   ALPHA_MODES,
   MATERIAL_CHANNELS,
@@ -839,15 +840,21 @@ function validatePart(
   // language already has the word for it.
   if (shape === "capsule" && size) {
     const across = crossExtents(size, axis);
-    const along = size[AXES.indexOf(axis)]!;
     if (Math.abs(across[0] - across[1]) > CIRCULAR_TOLERANCE) {
       errors.push(
         `${at}: a capsule must be circular across its axis — the two cross extents are ${across[0]} and ${across[1]}`,
       );
-    } else if (along < across[0] - CIRCULAR_TOLERANCE) {
-      errors.push(
-        `${at}: capsule length ${along} along ${axis} is shorter than its ${across[0]} diameter — a capsule is a cylinder capped by two hemispheres, so it can never be shorter than it is wide; use shape "sphere" for a rounded blob`,
-      );
+    }
+  }
+  /* Whether the box can be built as this shape at all, through the SAME
+     predicate the solver re-runs on what it derives. A torus builds its ring
+     from `across / 2 - tube`, so a ring no wider than its own tube is a
+     negative radius handed to Blender — and nothing checked it, authored or
+     solved. One predicate, two askers: here the author's own numbers, with
+     their JSON path; there the numbers a relation produced. */
+  if (size) {
+    for (const violation of shapeViolations(shape, size, axis, thickness)) {
+      errors.push(`${at}: ${violation}`);
     }
   }
 

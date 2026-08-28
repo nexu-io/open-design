@@ -241,6 +241,39 @@ describe("validateSceneSpec", () => {
     expect(oval.errors.some((e) => e.includes("a tube must be circular"))).toBe(true);
   });
 
+  it("refuses a torus whose ring is narrower than its own tube", () => {
+    /*
+     * A torus builds its ring from `across / 2 - tube`, so a ring no wider
+     * than its tube is a NEGATIVE radius handed to Blender. Nothing checked
+     * it — not on the authored size, and not on a size a relation derived.
+     */
+    const r = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_ring", size: [0.2, 0.2, 0.3], shape: "torus", axis: "z" }],
+      relations: [{ type: "at", part: "prp_ring", center: [0, 0, 0.15] }],
+    });
+    expect(r.errors.some((e) => e.includes("ring radius"))).toBe(true);
+
+    // A legal one still passes: ring 1.0 across, tube 0.2 → radius 0.4.
+    const ok = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_ring", size: [1, 1, 0.2], shape: "torus", axis: "z" }],
+      relations: [{ type: "at", part: "prp_ring", center: [0, 0, 0.1] }],
+    });
+    expect(ok.errors.filter((e) => e.includes("ring radius"))).toEqual([]);
+  });
+
+  it("refuses a tube whose walls leave no bore", () => {
+    const r = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_pipe", size: [0.2, 0.2, 0.5], shape: "tube", axis: "z", thickness: 0.15 },
+      ],
+      relations: [{ type: "at", part: "prp_pipe", center: [0, 0, 0.25] }],
+    });
+    expect(r.errors.some((e) => e.includes("no bore"))).toBe(true);
+  });
+
   it("refuses a capsule shorter than its own diameter, and a non-circular one", () => {
     const stubby = validateSceneSpec({
       schemaVersion: 1,

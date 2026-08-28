@@ -624,3 +624,39 @@ describe("kernel trace: malformed recipes fail loudly", () => {
     expect(() => evalTrace({ version: 2 as never, ops: [] })).toThrow(/version/);
   });
 });
+
+describe("the work meter cannot be driven to zero", () => {
+  it("charges a runaway subdivide on an empty cage", () => {
+    /*
+     * `subdivide`'s charge is proportional to the faces and vertices it is
+     * about to produce. On an empty cage — legal to construct — that product
+     * is exactly zero at every level, so the budget could never be exceeded no
+     * matter how many levels were requested. The fork refuses arbitrary caps
+     * and relies on this meter instead, so a meter reachable at zero cost is
+     * not a small bug: it is the whole guard, off.
+     */
+    expect(() =>
+      evalTrace(
+        {
+          version: 1,
+          ops: [
+            { op: "cage", points: [], faces: [] },
+            { op: "subdivide", levels: 50_000_000 },
+          ],
+        } as never,
+        { workBudget: 10_000 },
+      ),
+    ).toThrow(/budget/i);
+  });
+
+  it("still lets an ordinary recipe through", () => {
+    // The floor must not turn a legitimate build into a refusal: one unit per
+    // dispatch is noise beside any real geometry.
+    expect(() =>
+      evalTrace(
+        { version: 1, ops: [...new Recorder().box().trace().ops, { op: "subdivide", levels: 2 }] } as never,
+        { workBudget: 2_000_000 },
+      ),
+    ).not.toThrow();
+  });
+});

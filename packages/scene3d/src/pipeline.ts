@@ -151,6 +151,23 @@ const CHANNEL_SOCKETS: Record<string, { sockets: string[]; nonColor: boolean }> 
     MATERIAL_CHANNELS.map((c) => [c.name, { sockets: [...c.sockets], nonColor: c.nonColor === true }]),
   );
 
+/**
+ * Solver diagnostics that describe a scene which BUILT.
+ *
+ * They are warnings about geometry the author should look at, not a failure to
+ * solve the graph — so they must not block the build, and they must not be
+ * reported as errors. Both of those are decisions made from this one set:
+ * keeping the severity mapping and the build gate as separate literals let
+ * them drift, and they had — a diagnostic could be a warning in the report and
+ * a hard stop in the pipeline at the same time.
+ */
+const BUILDABLE_DIAGNOSTICS: ReadonlySet<string> = new Set([
+  "SOLVE-EPSILON-FLOOR",
+  "SOLVE-INTERSECTION",
+  "SOLVE-SUSPECT",
+  "SOLVE-COINCIDENT",
+]);
+
 export async function compile(
   request: CompileRequest,
   control: CompileControl = {},
@@ -486,10 +503,7 @@ export async function compile(
         // adjusted an offset, one where it placed instances inside each other.
         // Both are warnings about geometry the author should look at; the rest
         // mean the graph could not be solved at all.
-        const buildable =
-          diagnostic.code === "SOLVE-EPSILON-FLOOR" ||
-          diagnostic.code === "SOLVE-INTERSECTION" ||
-          diagnostic.code === "SOLVE-SUSPECT";
+        const buildable = BUILDABLE_DIAGNOSTICS.has(diagnostic.code);
         issues.push({
           code:
             diagnostic.code === "SOLVE-EPSILON-FLOOR"
@@ -498,7 +512,9 @@ export async function compile(
                 ? ISSUE_CODES.SPEC_INSTANCES_INTERSECT
                 : diagnostic.code === "SOLVE-SUSPECT"
                   ? ISSUE_CODES.SPEC_SUSPECT
-                  : ISSUE_CODES.SPEC_UNRESOLVED,
+                  : diagnostic.code === "SOLVE-COINCIDENT"
+                    ? ISSUE_CODES.SPEC_COINCIDENT
+                    : ISSUE_CODES.SPEC_UNRESOLVED,
           severity: buildable ? "warning" : "error",
           message: diagnostic.message,
           file: "scene.json",
@@ -526,9 +542,12 @@ export async function compile(
         normalized.voxel.enabled ? { grid: normalized.voxel.gridSize } : {},
         hashJson,
       );
-      const unresolved = solved.diagnostics.some(
-        (d) => d.code !== "SOLVE-EPSILON-FLOOR" && d.code !== "SOLVE-INTERSECTION",
-      );
+      /* The SAME set that decided severity above. Two hand-kept lists of the
+         same fact disagreed: SOLVE-SUSPECT was classed buildable and reported
+         as a warning, while this gate still counted it unresolved and skipped
+         the build — so a compile could say "warning" and quietly produce no
+         asset. One list, read twice. */
+      const unresolved = solved.diagnostics.some((d) => !BUILDABLE_DIAGNOSTICS.has(d.code));
       // Recipe parts run BEFORE emit: each is ordinary Python executed in
       // plain CPython (no bpy) that authors an operator trace, which the one
       // kernel evaluator turns into exact geometry and an exact predicted
@@ -1190,6 +1209,10 @@ export async function compile(
            that line is to stop a reader taking a photograph of a wall for a
            framed subject. Losing it on the second compile is losing it exactly
            when the loop is iterating fastest. */
+        const cachedColour = (cached.data as { colourNotes?: unknown } | null)?.colourNotes;
+        if (Array.isArray(cachedColour)) {
+          proofColourNotes = cachedColour.filter((n): n is string => typeof n === "string");
+        }
         const cachedLookStats = (cached.data as { lookStats?: unknown } | null)?.lookStats;
         if (Array.isArray(cachedLookStats)) {
           for (const [i, stat] of cachedLookStats.entries()) {
@@ -1457,6 +1480,12 @@ export async function compile(
                   ...(pose.meanLuminance !== undefined ? { meanLuminance: pose.meanLuminance } : {}),
                 })),
                 offByFrame: offByFrame ?? [],
+                /* Whether the proof rendered through a straight encode. An
+                   environment fact, so it does not change between compiles of
+                   one scene — which is exactly why omitting it here made the
+                   warning appear on the cold compile and vanish on every warm
+                   one, telling a reader the problem had gone away. */
+                colourNotes: proofColourNotes,
                 ...(proofRects ? { screenRects: proofRects } : {}),
                 ...(proofIdParts ? { idParts: proofIdParts } : {}),
                 /* Cached alongside the frame statistics for the same reason
@@ -2151,57 +2180,6 @@ export async function compile(
     if (!wanted.has("export") && exportedAssets.length === 0) {
       exportedAssets.push(...previousManifestArtifacts(request.projectDir, "exportedAssets"));
     }
-    const allIssues = attributeIssues([...issues, ...lintIssues], census);
-
-    /* ---- the read model ---------------------------------------------
-     * A compile that only says pass/fail makes the reader open the result
-     * and look. These two artifacts let them read instead: a budgeted
-     * summary of what the scene IS, and a report of what this edit
-     * changed — including the relationships that changed without anything
-     * the author touched having moved.
-     *
-     * Both are derived from measurements already taken, so they cost no
-     * extra Blender time and cannot disagree with the census.
-     */
-    const prior = previousReadModel(request.projectDir);
-    impact = changeImpact(prior?.census, census, prior?.issues ?? [], allIssues);
-    /* The codec pass: classify this solve against the previous one —
-       authored edits and their graph-predicted propagation compress to
-       counts; only the residual (a change nothing authored explains)
-       earns lines in the report. Absent baseline or basis mismatch
-       degrades to no delta, never a fabricated one. */
-    if (solveSnapshot && prior?.solve) {
-      solveDelta = classifySolveDelta(prior.solve, solveSnapshot);
-    }
-    digest = census ? describeScene(census, allIssues) : "no census — build stage did not run";
-    try {
-      /* The baseline is the last SUCCESSFUL build, held across failures: a
-         failed compile writes its own issues (the parse error IS the delta
-         worth diffing against) but keeps the prior census, so the first
-         success after a red stretch diffs against the world as it last
-         measurably was — not against the empty world of the failure, which
-         used to re-announce the whole scene as `appeared`. The carry is
-         marked so a read-model reader can tell measurement from memory. */
-      writeReadModel(request.projectDir, {
-        version: READ_MODEL_VERSION,
-        census: census ?? prior?.census,
-        ...(census === undefined && prior?.census !== undefined
-          ? { censusFrom: "previous successful build" }
-          : {}),
-        issues: allIssues,
-        digest,
-        impact,
-        ...(solveSnapshot ? { solve: solveSnapshot } : {}),
-      });
-    } catch (err: any) {
-      /* Disk full / permissions. The compile finished; the response still
-         carries the digest and impact. Say what is missing on disk. */
-      issues.push({
-        code: ISSUE_CODES.DELIVERABLE_WRITE_FAILED,
-        severity: "warning",
-        message: `could not write the read model (digest.md, ortho.svg): ${String(err?.message ?? err)}`,
-      });
-    }
 
     /* Where each frame was photographed from.
        The compiler always knew this and never said it, so `proof-<hash>-003`
@@ -2327,14 +2305,83 @@ export async function compile(
         });
       }
     }
-    /* Recomputed AGAIN after the contact-sheet write, for the same reason the
-       read-model write forced the recompute above: writeContactSheet can push a
-       DELIVERABLE_WRITE_FAILED, and a manifest built from the pre-contact-sheet
-       issues would report the warning in the response while the persisted
-       manifest denied it — the response-versus-disk split the single-manifest
-       discipline exists to prevent. Rebuilt from the SAME inputs (one
-       definition, not a hand-patched field) only when the list actually grew;
-       baseManifest — already drawn from for its metrics — stands otherwise. */
+    /* One recompute past finalization, and only one: the read-model write
+       ABOVE can itself fail and push DELIVERABLE_WRITE_FAILED. That is the
+       deliberate fixed point — a report cannot carry the news of its own
+       failed write — so the manifest and the response pick it up here while
+       digest.md cannot. Everything else has already appended, which is why
+       the derived views above now render from a complete list rather than a
+       snapshot. Rebuilt from the SAME inputs (one definition, not a
+       hand-patched field) only when the list actually grew; baseManifest —
+       already drawn from for its metrics — stands otherwise. */
+    /* ---- finalization: the issue list is complete HERE ---------------
+     * Everything that can append has appended by this point — the export
+     * writes, the lint pass, the contact sheet. The digest, the impact
+     * report and the persisted read model are DERIVED VIEWS of the issue
+     * list, so they are all rendered from this one list rather than from a
+     * snapshot taken earlier.
+     *
+     * They used to be computed before the contact sheet was written, which
+     * could still push DELIVERABLE_WRITE_FAILED — so `manifest.json` and
+     * `digest.md` could disagree about the issue count for one compile, and
+     * the next compile measured its delta against an incomplete baseline.
+     * The manifest already recomputed twice to dodge this; the derived
+     * views never did.
+     *
+     * One fixed point remains and is deliberate: the read-model write can
+     * itself fail, and a report cannot carry the news of its own failed
+     * write. That failure reaches the response and the manifest instead. */
+    const allIssues = attributeIssues([...issues, ...lintIssues], census);
+
+    /* ---- the read model ---------------------------------------------
+     * A compile that only says pass/fail makes the reader open the result
+     * and look. These two artifacts let them read instead: a budgeted
+     * summary of what the scene IS, and a report of what this edit
+     * changed — including the relationships that changed without anything
+     * the author touched having moved.
+     *
+     * Both are derived from measurements already taken, so they cost no
+     * extra Blender time and cannot disagree with the census.
+     */
+    const prior = previousReadModel(request.projectDir);
+    impact = changeImpact(prior?.census, census, prior?.issues ?? [], allIssues);
+    /* The codec pass: classify this solve against the previous one —
+       authored edits and their graph-predicted propagation compress to
+       counts; only the residual (a change nothing authored explains)
+       earns lines in the report. Absent baseline or basis mismatch
+       degrades to no delta, never a fabricated one. */
+    if (solveSnapshot && prior?.solve) {
+      solveDelta = classifySolveDelta(prior.solve, solveSnapshot);
+    }
+    digest = census ? describeScene(census, allIssues) : "no census — build stage did not run";
+    try {
+      /* The baseline is the last SUCCESSFUL build, held across failures: a
+         failed compile writes its own issues (the parse error IS the delta
+         worth diffing against) but keeps the prior census, so the first
+         success after a red stretch diffs against the world as it last
+         measurably was — not against the empty world of the failure, which
+         used to re-announce the whole scene as `appeared`. The carry is
+         marked so a read-model reader can tell measurement from memory. */
+      writeReadModel(request.projectDir, {
+        version: READ_MODEL_VERSION,
+        census: census ?? prior?.census,
+        ...(census === undefined && prior?.census !== undefined
+          ? { censusFrom: "previous successful build" }
+          : {}),
+        issues: allIssues,
+        digest,
+        impact,
+        ...(solveSnapshot ? { solve: solveSnapshot } : {}),
+      });
+    } catch (err: any) {
+      /* Disk full / permissions. The compile finished; the response still
+         carries the digest and impact. Say what is missing on disk. */
+      issues.push({
+        code: ISSUE_CODES.DELIVERABLE_WRITE_FAILED,
+        severity: "warning",
+        message: `could not write the read model (digest.md, ortho.svg): ${String(err?.message ?? err)}`,
+      });
+    }
     const finalManifestIssues = attributeIssues([...issues, ...lintIssues], census);
     const builtManifest =
       finalManifestIssues.length === manifestIssues.length
