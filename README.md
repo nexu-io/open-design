@@ -135,6 +135,8 @@ Inside a project's Studio, the conversation, generated files, and live preview s
 
 For DeepSeek Harness, install the official `dsh` CLI first, then select it in OpenDesign or run `od agent setup deepseek-harness` to install/repair OD's connection component. For MCP integrations: `od mcp install <agent> --print` for a dry-run preview · `--uninstall` to remove · full list with `od mcp install --help`.
 
+For the runtime-side details behind this integration—profiles, plugins, MCP boundaries, sandbox behavior, and evidence-driven troubleshooting—see the independent multilingual [DeepSeek Harness Handbook](https://github.com/sandbaseai/deepseek-harness-handbook/).
+
 ¹ Automatic MCP configuration for Claude Desktop is currently supported on macOS and Windows only.
 
 <p align="center">
