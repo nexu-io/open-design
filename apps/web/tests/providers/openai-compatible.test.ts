@@ -21,6 +21,11 @@ describe('isOpenAICompatible', () => {
     expect(isOpenAICompatible('deepseek-ai/DeepSeek-V3.1', 'https://api.siliconflow.com/v1')).toBe(true);
   });
 
+  it('routes the Ofox gateway through OpenAI-compatible chat completions', () => {
+    expect(isOpenAICompatible('deepseek/deepseek-v4-flash-0731', 'https://api.ofox.ai/v1')).toBe(true);
+    expect(isOpenAICompatible('anthropic/claude-sonnet-4.5', 'https://api.ofox.ai/v1')).toBe(true);
+  });
+
   it('routes MiniMax Anthropic endpoint paths away from OpenAI-compatible chat completions', () => {
     expect(isOpenAICompatible('MiniMax-M2.7-highspeed', 'https://api.minimax.io/v1/anthropic')).toBe(false);
     expect(isOpenAICompatible('MiniMax-M2.7-highspeed', 'https://api.minimax.io/anthropic/v1')).toBe(false);

@@ -43,4 +43,21 @@ describe('apiProtocols table consistency', () => {
     expect(atlasCloudProvider?.preferredModels).toContain('qwen/qwen3.5-flash');
     expect(atlasCloudProvider?.preferredModels).toContain('deepseek-ai/deepseek-v4-flash');
   });
+
+  it('keeps the Ofox preset wired to OpenAI-compatible chat models', () => {
+    const ofoxProvider = KNOWN_PROVIDERS.find(
+      (provider) =>
+        provider.protocol === 'openai' && provider.baseUrl === 'https://api.ofox.ai/v1',
+    );
+
+    expect(ofoxProvider).toMatchObject({
+      label: 'Ofox',
+      apiKeyConsoleLink: {
+        host: 'ofox.ai',
+        url: 'https://ofox.ai/?utm_source=open_design&utm_medium=provider_preset&utm_campaign=ofox_byok',
+      },
+    });
+    expect(ofoxProvider?.preferredModels).toContain('google/gemini-3.7-flash');
+    expect(ofoxProvider?.preferredModels).toContain('deepseek/deepseek-v4-flash-0731');
+  });
 });
