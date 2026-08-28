@@ -258,6 +258,53 @@ describe('byok-opencode runtime config', () => {
     });
   });
 
+  it('builds the same Gemini URL shape as the connection test for third-party gateways', () => {
+    const result = buildOpenCodeByokProviderConfig(
+      { protocol: 'google', apiKey: 'gw-key', baseUrl: 'https://gateway.example/gemini' },
+      'google/gemini-3.7-flash',
+    );
+    expect(result?.modelId).toBe(`${BYOK_OPENCODE_PROVIDER_ID}/models/google/gemini-3.7-flash`);
+    expect(result?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          npm: '@ai-sdk/google',
+          options: { baseURL: 'https://gateway.example/gemini/v1beta' },
+          models: {
+            'models/google/gemini-3.7-flash': { name: 'google/gemini-3.7-flash' },
+          },
+        },
+      },
+    });
+  });
+
+  it('does not double the /v1beta suffix on a Gemini gateway base URL', () => {
+    expect(buildOpenCodeByokProviderConfig(
+      { protocol: 'google', apiKey: 'gw-key', baseUrl: 'https://gateway.example/gemini/v1beta/' },
+      'google/gemini-3.7-flash',
+    )?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          options: { baseURL: 'https://gateway.example/gemini/v1beta' },
+        },
+      },
+    });
+  });
+
+  it('keeps plain Google model ids unprefixed and strips a stray models/ prefix', () => {
+    expect(buildOpenCodeByokProviderConfig(
+      { protocol: 'google', apiKey: 'AIza', baseUrl: 'https://generativelanguage.googleapis.com' },
+      'gemini-3.5-flash',
+    )?.modelId).toBe(`${BYOK_OPENCODE_PROVIDER_ID}/gemini-3.5-flash`);
+    expect(buildOpenCodeByokProviderConfig(
+      { protocol: 'google', apiKey: 'AIza', baseUrl: 'https://generativelanguage.googleapis.com' },
+      'models/gemini-3.5-flash',
+    )?.modelId).toBe(`${BYOK_OPENCODE_PROVIDER_ID}/gemini-3.5-flash`);
+    expect(buildOpenCodeByokProviderConfig(
+      { protocol: 'google', apiKey: 'gw-key', baseUrl: 'https://gateway.example/gemini' },
+      'models/google/gemini-3.7-flash',
+    )?.modelId).toBe(`${BYOK_OPENCODE_PROVIDER_ID}/models/google/gemini-3.7-flash`);
+  });
+
   it('preserves Azure deployment-based URL mode for classic Azure OpenAI resources', () => {
     expect(buildOpenCodeByokProviderConfig(
       { protocol: 'azure', apiKey: 'azure-key', baseUrl: 'https://example.openai.azure.com', apiVersion: '2024-10-21' },

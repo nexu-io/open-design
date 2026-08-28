@@ -1,5 +1,10 @@
 import type { ByokChatProviderConfig } from '@open-design/contracts';
 
+import {
+  googleGenerativeLanguageBaseUrl,
+  normalizeGoogleModelId,
+} from '../integrations/google-models.js';
+
 export const BYOK_OPENCODE_AGENT_ID = 'byok-opencode';
 export const BYOK_OPENCODE_PROVIDER_ID = 'open-design-byok';
 export const BYOK_OPENCODE_API_KEY_ENV = 'OPEN_DESIGN_BYOK_API_KEY';
@@ -62,7 +67,8 @@ export function buildOpenCodeByokProviderConfig(
   if (!rawModel || rawModel.toLowerCase() === 'default') return null;
   if (!baseUrl) return null;
 
-  const modelId = opencodeByokModelId(rawModel);
+  const wireModel = protocol === 'google' ? googleRunModelId(rawModel) : rawModel;
+  const modelId = opencodeByokModelId(wireModel);
   if (!modelId) return null;
 
   const providerEntry = buildProviderEntry(
@@ -77,7 +83,7 @@ export function buildOpenCodeByokProviderConfig(
         name: 'OpenDesign BYOK',
         ...providerEntry,
         models: {
-          [rawModel]: {
+          [wireModel]: {
             name: rawModel,
             limit: {
               context: DEFAULT_CONTEXT_TOKEN_LIMIT,
@@ -109,8 +115,8 @@ function normalizeProviderBaseUrl(
   if (protocol === 'openai' && isExactOrigin(trimmed, 'https://api.openai.com')) {
     return 'https://api.openai.com/v1';
   }
-  if (protocol === 'google' && isExactOrigin(trimmed, 'https://generativelanguage.googleapis.com')) {
-    return 'https://generativelanguage.googleapis.com/v1beta';
+  if (protocol === 'google') {
+    return googleRunBaseUrl(trimmed);
   }
   if (protocol === 'ollama') {
     if (isExactOrigin(trimmed, 'https://ollama.com')) return 'https://ollama.com/v1';
@@ -247,6 +253,39 @@ function buildProviderEntry(
         },
       };
   }
+}
+
+/**
+ * Gemini BYOK runs must target `<base>/v1beta` exactly once, on any host.
+ *
+ * Reuses the daemon's Google URL normalizer so the OpenCode run path resolves
+ * the same endpoint as the Settings connection test, model discovery, and
+ * finalize requests. A base URL that already ends in `/v1beta` or `/v1` is
+ * collapsed before the segment is appended. Unparseable input is returned
+ * unchanged so the provider-config guard downstream still sees it.
+ */
+function googleRunBaseUrl(baseUrl: string): string {
+  try {
+    return `${googleGenerativeLanguageBaseUrl(baseUrl)}/v1beta`;
+  } catch {
+    return baseUrl;
+  }
+}
+
+/**
+ * Gemini model ids must reach `@ai-sdk/google` in a form its `getModelPath`
+ * forwards to `<base>/models/<id>`.
+ *
+ * The SDK prepends `models/` only when the id contains no `/`; any other id is
+ * used as the path verbatim. Vendor-prefixed ids from multi-vendor gateways
+ * (`google/gemini-3.7-flash`) therefore carry an explicit `models/` segment,
+ * while plain Google ids stay bare so the SDK's own `gemini-` prefix checks
+ * keep applying. A stray leading `models/` from a catalogue listing is
+ * removed first so neither shape is ever doubled.
+ */
+function googleRunModelId(model: string): string {
+  const normalized = normalizeGoogleModelId(model);
+  return normalized.includes('/') ? `models/${normalized}` : normalized;
 }
 
 function safeUrlPathname(value: string): string {
