@@ -582,6 +582,45 @@ describe.skipIf(!hasBlender)("declarative spec pipeline (real Blender)", () => {
     expect(b.meanLuminance, "luminance must survive the cache").toBe(a.meanLuminance);
   }, 600_000);
 
+  it("conventions.animation.maxFrames is a budget the built clip is measured against", async () => {
+    /*
+     * The knob was validated, normalized, and then read by nothing — a project
+     * could declare a clip-length budget and never be told it was passed. It
+     * is measured against the BUILT frame range, like the triangle budgets:
+     * the author is not the authority on how long the animation turned out.
+     */
+    const dir = workDir("good/spec_pavilion");
+    const scene = JSON.parse(fs.readFileSync(path.join(dir, "scene.json"), "utf8"));
+    scene.parts[0].spin = { seconds: 4 };
+    fs.writeFileSync(path.join(dir, "scene.json"), JSON.stringify(scene, null, 2));
+    const withBudget = async (maxFrames: number) => {
+      fs.writeFileSync(
+        path.join(dir, "scene3d.json"),
+        JSON.stringify({ schemaVersion: 1, conventions: { animation: { maxFrames } } }, null, 2),
+      );
+      const r = await compile({
+        projectDir: dir,
+        stages: ["parse", "build", "lint"],
+        noCache: true,
+        timeoutMs: 300_000,
+      });
+      return r.issues.find((i) => i.code === "S3D-W-388");
+    };
+    const over = await withBudget(30);
+    expect(over, "a 4s clip must exceed a 30-frame budget").toBeTruthy();
+    expect((over!.detail as { frames: number }).frames).toBeGreaterThan(30);
+    // The duration it prints is the SPAN, matching how the clip's length is
+    // measured everywhere else — not the inclusive frame count over fps.
+    const d = over!.detail as { frames: number; fps: number };
+    expect(over!.message).toContain(`${d.frames} frames`);
+    expect(over!.message).toContain(`at ${d.fps}fps`);
+    // …and the rule stays silent when the clip fits, or it is just noise.
+    expect(await withBudget(10_000)).toBeUndefined();
+    // Exactly at the budget is within it — a budget is a ceiling, not a wall
+    // one short of itself.
+    expect(await withBudget(d.frames)).toBeUndefined();
+  }, 600_000);
+
   it("conventions.animation.fps sets the clip's real duration", async () => {
     /*
      * The rate was validated and cache-keyed, then overridden by a constant,

@@ -38,6 +38,32 @@ export function lintIntegrity(ctx: LintContext, issues: Issue[]): void {
     });
   }
 
+  /* A clip longer than the project's declared budget. Measured against the
+     built frame range, not the request: the author is not the authority on
+     how long the animation turned out. */
+  const anim = census.animation;
+  const maxFrames = ctx.contract.maxFrames;
+  if (anim && maxFrames > 0) {
+    const built = anim.frameEnd - anim.frameStart + 1;
+    if (built > maxFrames) {
+      /* Duration is the SPAN, not the frame count: the range ends one past the
+         last pose so a loop does not repeat it, which is the same convention
+         the clip's own duration uses everywhere else. Dividing the inclusive
+         count by fps reports a clip one frame longer than the compiler
+         elsewhere says it is. */
+      const seconds = anim.fps > 0 ? (anim.frameEnd - anim.frameStart) / anim.fps : null;
+      issues.push({
+        code: ISSUE_CODES.ANIMATION_TOO_LONG,
+        severity: "warning",
+        message:
+          `the built animation is ${built} frames${seconds !== null ? ` (${Math.round(seconds * 100) / 100}s at ${anim.fps}fps)` : ""},` +
+          ` past the ${maxFrames} this project allows`,
+        hint: "shorten the motion, or raise conventions.animation.maxFrames",
+        detail: { frames: built, maxFrames, fps: anim.fps },
+      });
+    }
+  }
+
   // Viewer edits that did not survive the replay. Same code as an unreadable
   // tweaks.json (S3D-W-208): from the author's side both are "the edit I made
   // is not in the build", and the message says which half failed.

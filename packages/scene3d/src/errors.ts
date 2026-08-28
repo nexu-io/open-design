@@ -214,6 +214,12 @@ export const ISSUE_CODES = {
      PNG, a stats pass that returned nulls) — unmeasured is not evidence the
      render is fine. Same discipline as Z_FIGHTING_UNCHECKED. */
   PROOF_UNCHECKED: "S3D-W-387",
+  /* The built animation is longer than `conventions.animation.maxFrames`
+     allows. A delivery budget, like the triangle budgets: the contract states
+     how long a clip this project ships may be, and the census measures what
+     was built. The knob was validated and normalized and then read by nothing,
+     so a project could declare a limit and never be told it was passed. */
+  ANIMATION_TOO_LONG: "S3D-W-388",
 
   /* lint: world placement + budgets (325-339) */
   NOT_GROUNDED: "S3D-W-325",
