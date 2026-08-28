@@ -110,6 +110,9 @@ deploy/agent-bins/
 .slim/worktrees/
 .slim/worktrees.json
 
+# superpowers:using-git-worktrees fallback worktree directory
+.worktrees/
+
 # Python bytecode from workflow helper self-checks / local compile.
 __pycache__/
 *.py[cod]
