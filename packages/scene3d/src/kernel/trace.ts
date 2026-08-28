@@ -322,9 +322,8 @@ const ceilLog2 = (n: number): number => {
  * bit-length-exploding runaway would spend real seconds while reading as "under
  * budget".
  *
- * Reads EVERY vertex's bit-length, not a stride sample. An earlier version
- * sampled every ⌊n/32⌋-th coordinate; a red-team proved the blindspot — a
- * region-selected op (`scale`/`move` on a `y`-band) can drive only the UNSAMPLED
+ * Reads EVERY vertex's bit-length, rather than sampling a stride of them. A
+ * stride sample has a blindspot a region-selected op walks straight through: it (`scale`/`move` on a `y`-band) can drive only the UNSAMPLED
  * vertices to 10^300 while the sampler reads ~1, so wall-clock went quadratic
  * while `spent` stayed linear and "under budget". A subset-deep coordinate is
  * exactly the adversarial shape, so the scan must be exhaustive. `bitLen` is
@@ -375,7 +374,7 @@ const regionStrings = (r: Region): string[] =>
  * factor/pivot, a `clip` plane, region bounds.
  *
  * The sampled-scan gap was one axis of the meter's blindness; the PARAMETER axis
- * is the other, and the required reviewer found it. Every param-bearing op
+ * is the other. Every param-bearing op
  * parses these strings and does arithmetic with them across the mesh, so a giant
  * parameter (a 10⁵-digit factor, a deep clip normal) costs real O(digits) parse
  * plus per-vertex BigInt work that the INPUT mesh's coordinates never reveal — a
@@ -389,12 +388,12 @@ const regionStrings = (r: Region): string[] =>
  * SUMS each parameter's cost, not the max: an op parses and computes with EVERY
  * one of its parameters (scale touches six factor/pivot strings plus up to six
  * region bounds), so six giant parameters are six times the work, not one
- * (reviewer risk finding). Returns the RAW sum, which is 0 for anything whose
+ * Returns the RAW sum, which is 0 for anything whose
  * parameters are all under 8 characters — so it is ADDED to the mesh's own
  * coordinate complexity at the call site: an op like `scale` or `clip`
  * multiplies a parameter INTO each coordinate (factor·coord, normal·coord), so
  * the exact-arithmetic bit-length is the SUM of the two depths, not their max
- * (reviewer risk finding). Because the sum is 0 for ordinary short parameters,
+ * Because the sum is 0 for ordinary short parameters,
  * a normal recipe adds nothing and its charge is exactly the mesh term.
  */
 const paramUnits = (...strings: Array<string | undefined>): number => {
@@ -509,7 +508,7 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number, meter: WorkMet
       // a future front-end that does not flow through recipe.ts) gets a NAMED
       // error, never an opaque `undefined.split` out of Rational.parse. This must
       // precede the parameter charge so a malformed payload's error does not
-      // depend on its length or the remaining budget (reviewer warn).
+      // depend on its length or the remaining budget.
       if (
         !Array.isArray(op.normal) ||
         op.normal.length !== 3 ||
@@ -520,7 +519,7 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number, meter: WorkMet
       }
       // Meter BEFORE parsing — the parse of a giant rational (BigInt build +
       // `bgcd` normalize, plain Euclid → super-linear on deep integers) is real
-      // unmetered CPU otherwise (reviewer risk). cc folds the plane's own
+      // unmetered CPU otherwise. cc folds the plane's own
       // string-length depth in (additive), uniform with move/scale/extrude. clip runs
       // exact rational dot/crossingPoint per vertex and per straddling edge, so
       // per-corner cost is O(coordinate bit length); the cap ear-clip (~O(L²) per
@@ -534,7 +533,7 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number, meter: WorkMet
       // unmetered one — a normal zero normal still gets its named error.
       // One-time parse (mesh-independent) + per-corner arithmetic (additive: clip
       // multiplies normal INTO each coordinate — dot products, crossing divisions
-      // — so per-corner cost is coord + plane depth). Both reviewer risks.
+      // — so per-corner cost is coord + plane depth).
       const pu = paramUnits(op.normal[0], op.normal[1], op.normal[2], op.d);
       const cc = coordComplexity(m) + pu;
       charge(meter, pu + m.faces.reduce((a, f) => a + f.length, 0) * cc, i, "clip");
@@ -551,9 +550,10 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number, meter: WorkMet
       // Two costs: the one-time parameter PARSE (mesh-size independent — a giant
       // literal is parsed once whether the mesh has a million vertices or none,
       // so charging it × mesh size would let an empty/tiny mesh slip the parse;
-      // reviewer risk) plus the per-element ARITHMETIC (additive: when both the
+      // so charging it × mesh size would let an empty or tiny mesh slip the
+      // parse) plus the per-element ARITHMETIC (additive: when both the
       // mesh coordinate and the region comparison are deep the cost is their sum,
-      // not their max; reviewer risk).
+      // not their max).
       const pu = paramUnits(op.offset[0], op.offset[1], op.offset[2], ...regionStrings(op.region));
       charge(meter, pu + meshWorkCC(m, coordComplexity(m) + pu), i, "move");
       const region = parseRegion(op.region);
@@ -585,7 +585,7 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number, meter: WorkMet
       // face-corners: the inRegion predicate walks every face corner (which can
       // exceed the vertex count), and a giant region bound that selects no faces
       // leaves the output shallow, so the post-build meshWork(out) cannot recover
-      // this cost (reviewer risk finding).
+      // this cost.
       const pu = paramUnits(op.offset[0], op.offset[1], op.offset[2], ...regionStrings(op.region));
       if (pu > 0) {
         // Flat one-time parse (mesh-independent, so an empty/faceless mesh cannot
@@ -602,7 +602,7 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number, meter: WorkMet
     case "inset": {
       const m = need();
       // Meter BEFORE parsing the factor — a giant rational's parse (BigInt +
-      // `bgcd`) is unmetered CPU otherwise (reviewer risk). Over verts +
+      // `bgcd`) is unmetered CPU otherwise. Over verts +
       // face-corners: the inRegion scan can exceed the vertex count, and a giant
       // region bound selecting no faces leaves the output shallow so meshWork(out)
       // cannot recover it. A normal factor charges ~0 and still reaches its
@@ -622,14 +622,14 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number, meter: WorkMet
     }
     case "scale": {
       const m = need();
-      // A shallow mesh scaled by an astronomical factor is the reviewer's Block
-      // case: the factor's parse + per-vertex multiply is real work the input
+      // A shallow mesh scaled by an astronomical factor is the case that
+      // escapes a mesh-only charge: the factor's parse + per-vertex multiply is real work the input
       // mesh's complexity cannot see, and a lone/alternating scale never lets a
       // later op's coordComplexity catch the resulting depth. Fold the parameters
       // into the up-front charge, BEFORE parsing them.
       // One-time parse (mesh-independent) + per-element arithmetic (additive:
       // scale multiplies factor INTO each coordinate, so bit-length is coord +
-      // factor, not their max). Both reviewer risks.
+      // factor, not their max).
       const pu = paramUnits(
         op.factor[0], op.factor[1], op.factor[2],
         op.pivot[0], op.pivot[1], op.pivot[2],
@@ -717,7 +717,7 @@ export function evalTraceShapes(
       // `extrude`/`inset` (region selection on coordinates), `move`/`scale`/
       // `crease` (region selection) all decide something from geometry, so a
       // deformed shape would diverge from the base — silently mismatching vertex
-      // counts or crease sets (both red-teams found this). Author them BEFORE the
+      // counts or crease sets. Author them BEFORE the
       // first shape, or inside the shape bracket.
       if (shapes.length > 0 && op.op !== "subdivide" && op.op !== "triangulate") {
         throw new Error(

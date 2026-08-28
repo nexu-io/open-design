@@ -194,6 +194,15 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
       if (looks.length !== (body.looks ?? []).length) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'each look must be an object');
       }
+      if (body.shots !== undefined && !Array.isArray(body.shots)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'shots must be an array of shot specs');
+      }
+      const shots = (body.shots ?? []).filter(
+        (s): s is NonNullable<typeof s> => typeof s === 'object' && s !== null,
+      );
+      if (shots.length !== (body.shots ?? []).length) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'each shot must be an object');
+      }
 
       let sceneDir: string;
       let scenePath: string;
@@ -264,6 +273,7 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
               // that exist), so validating shapes here would only turn an
               // answerable rejection into an opaque 400.
               ...(looks.length > 0 ? { looks } : {}),
+              ...(shots.length > 0 ? { shots } : {}),
             },
             {
               // No hardTimeoutMs: a legit dense asset may compile for minutes, so
@@ -329,14 +339,26 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
               looks: result.looks.map((l) => ({
                 label: l.pose.label,
                 ...(l.path ? { image: artifactRef(project.id, scenePath, l.path) } : {}),
-                targetName: l.pose.targetName,
-                target: [...l.pose.target] as [number, number, number],
                 eye: [...l.pose.eye] as [number, number, number],
-                azimuthDeg: l.pose.azimuthDeg,
-                elevationDeg: l.pose.elevationDeg,
-                distance: l.pose.distance,
+                forward: [...l.pose.forward] as [number, number, number],
+                headingDeg: l.pose.headingDeg,
+                pitchDeg: l.pose.pitchDeg,
+                facing: l.pose.facing,
+                /* The subject-derived facts are spread conditionally: a shot
+                   that turns in place has none, and emitting `targetName:
+                   undefined` beside a `distance: 0` would hand the caller two
+                   values that read as measurements of a subject there isn't. */
+                ...(l.pose.targetName !== undefined ? { targetName: l.pose.targetName } : {}),
+                ...(l.pose.target ? { target: [...l.pose.target] as [number, number, number] } : {}),
+                ...(l.pose.azimuthDeg !== undefined ? { azimuthDeg: l.pose.azimuthDeg } : {}),
+                ...(l.pose.elevationDeg !== undefined ? { elevationDeg: l.pose.elevationDeg } : {}),
+                ...(l.pose.distance !== undefined ? { distance: l.pose.distance } : {}),
+                ...(l.pose.name !== undefined ? { name: l.pose.name } : {}),
                 fovDeg: l.pose.fovDeg,
-                name: l.pose.name,
+                ...(l.pose.frameSpanM !== undefined ? { frameSpanM: l.pose.frameSpanM } : {}),
+                ...(l.pose.sampleIndex !== undefined ? { sampleIndex: l.pose.sampleIndex } : {}),
+                ...(l.pose.coverage !== undefined ? { coverage: l.pose.coverage } : {}),
+                ...(l.pose.meanLuminance !== undefined ? { meanLuminance: l.pose.meanLuminance } : {}),
                 notes: l.pose.notes,
               })),
             }

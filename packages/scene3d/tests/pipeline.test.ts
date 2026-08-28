@@ -578,9 +578,12 @@ expect(codes.has("S3D-W-381")).toBe(true); // no lights
     expect(lamp.pose.name).toBe("left");
     expect(lamp.pose.azimuthDeg).toBe(270);
     const lampSpatial = result.census!.meshes.find((m) => m.object === "prp_lamp")!.spatial!;
+    // An aimed look always resolves a subject — a turn-in-place shot would not,
+    // which is why the field is optional on the general pose record.
+    expect(lamp.pose.target).toBeDefined();
     for (let a = 0; a < 3; a++) {
       const centre = (lampSpatial.worldMin[a]! + lampSpatial.worldMax[a]!) / 2;
-      expect(lamp.pose.target[a]).toBeCloseTo(centre, 6);
+      expect(lamp.pose.target![a]).toBeCloseTo(centre, 6);
     }
 
     // The frames actually exist, and are distinct files from the proof still.
@@ -641,6 +644,133 @@ expect(codes.has("S3D-W-381")).toBe(true); // no lights
     expect(result.looksRejected).toHaveLength(1);
     expect(result.looksRejected![0]!.reason).toContain("proof");
     expect(renderAgentReport(result)).toContain("REFUSED");
+  }, LONG);
+
+  it("says the same for a general shot, not just an aimed look", async () => {
+    // The refusal counts BOTH request lists. A `--shot` that vanished silently
+    // under --fast was the same hole as a `--look` that did.
+    const dir = workDir("good/spec_pavilion");
+    const result = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "lint"],
+      shots: [{ station: { at: "prp_plinth" }, gaze: { heading: "front" } }],
+      timeoutMs: LONG,
+    });
+    expect(result.looks).toHaveLength(0);
+    expect(result.looksRejected).toHaveLength(1);
+    expect(result.looksRejected![0]!.reason).toContain("proof");
+  }, LONG);
+
+  it("renders a panorama: stand at a part, turn all the way around", async () => {
+    /*
+     * The composition, end to end. A panorama is not a feature — it is
+     * `station.at + gaze.heading + sweep over headingDeg`, three primitives the
+     * resolver already had, and this proves the whole chain honours it: the
+     * pipeline expands the sweep into samples, each sample reaches Blender as
+     * its own pose, and every frame lands on disk.
+     */
+    const dir = workDir("good/spec_pavilion");
+    const result = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "proof"],
+      proof: { turntable: false, resolution: 256 },
+      shots: [
+        {
+          station: { at: "prp_plinth", offset: [0, 0, 1.6] },
+          gaze: { heading: 0 },
+          lens: { fovDeg: 90 },
+          sweep: { frames: 4, over: { headingDeg: [0, 360] } },
+          label: "pano",
+        },
+      ],
+      timeoutMs: LONG,
+    });
+
+    expect(result.looksRejected ?? []).toHaveLength(0);
+    expect(result.looks).toHaveLength(4); // one sweep, four samples
+    const headings = result.looks.map((l) => Math.round(l.pose.headingDeg));
+    expect(headings).toEqual([0, 90, 180, 270]);
+
+    for (const [i, look] of result.looks.entries()) {
+      // A turn-in-place shot has no subject: the record must say so by absence
+      // rather than by a zero that would read as a measurement.
+      expect(look.pose.targetName).toBeUndefined();
+      expect(look.pose.distance).toBeUndefined();
+      expect(look.pose.sampleIndex).toBe(i);
+      // The station never moves — that is what "in place" means.
+      expect(look.pose.eye).toEqual(result.looks[0]!.pose.eye);
+      expect(look.path, `sample ${i} wrote no frame`).toBeTruthy();
+      expect(fs.existsSync(path.join(dir, look.path!))).toBe(true);
+    }
+    // Four different directions are four different pictures.
+    const bytes = result.looks.map((l) => fs.readFileSync(path.join(dir, l.path!)));
+    for (let i = 1; i < bytes.length; i++) {
+      expect(Buffer.compare(bytes[0]!, bytes[i]!)).not.toBe(0);
+    }
+    // The report prints station-and-facing for a subject-less shot, never a
+    // target it does not have.
+    const report = renderAgentReport(result);
+    expect(report).toContain("facing");
+    expect(report).not.toContain("at undefined");
+  }, LONG);
+
+  it("a time sweep photographs genuinely different instants of the animation", async () => {
+    /*
+     * `sweep.time` claims a shot can ride the clip. This proves the claim end
+     * to end, because the failure mode is silent and total: the poses resolve,
+     * N frames render, every one of them looks correct — and they are all the
+     * SAME instant, because the timeline never moved. Only the pixels can tell
+     * the difference between "rode the animation" and "rendered frame 1 four
+     * times", so the assertion is on the pixels.
+     */
+    const dir = workDir("good/spec_pavilion");
+    // A part that spins: one turn over the clip, so a quarter-turn apart is
+    // unmistakably a different picture.
+    const scene = JSON.parse(fs.readFileSync(path.join(dir, "scene.json"), "utf8"));
+    for (const part of scene.parts) {
+      if (part.id === "prp_ring") part.spin = { seconds: 2 };
+    }
+    fs.writeFileSync(path.join(dir, "scene.json"), JSON.stringify(scene, null, 2));
+
+    const result = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "proof"],
+      proof: { turntable: false, resolution: 256 },
+      shots: [
+        {
+          gaze: { at: "prp_ring" },
+          station: { orbit: { azimuthDeg: 0, elevationDeg: 20 } },
+          sweep: { frames: 4, time: true },
+          label: "ride",
+        },
+      ],
+      timeoutMs: LONG,
+    });
+
+    expect(result.looksRejected ?? []).toHaveLength(0);
+    expect(result.looks).toHaveLength(4);
+    // Every sample carries the instant it was taken at, and they are distinct
+    // and increasing — the timeline actually advanced.
+    const frames = result.looks.map((l) => l.pose.timeFrame);
+    expect(frames.every((f) => typeof f === "number")).toBe(true);
+    expect(new Set(frames).size).toBe(4);
+    for (let i = 1; i < frames.length; i++) {
+      expect(frames[i]!).toBeGreaterThan(frames[i - 1]!);
+    }
+    // The camera never moved — only time did. So any difference between these
+    // pictures IS the animation.
+    for (const look of result.looks) {
+      expect(look.pose.eye).toEqual(result.looks[0]!.pose.eye);
+      expect(look.path).toBeTruthy();
+    }
+    const bytes = result.looks.map((l) => fs.readFileSync(path.join(dir, l.path!)));
+    for (let i = 1; i < bytes.length; i++) {
+      expect(
+        Buffer.compare(bytes[0]!, bytes[i]!),
+        `sample ${i} is byte-identical to sample 0 — the timeline did not advance`,
+      ).not.toBe(0);
+    }
+    expect(renderAgentReport(result)).toContain("ride");
   }, LONG);
 
   it("does not cache a look batch whose frame failed to render", async () => {

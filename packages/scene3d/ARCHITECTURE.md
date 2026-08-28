@@ -40,6 +40,8 @@ available provenance for the source or imported asset that caused it.
 ├─ Proof ────────────────────────────────────────────────────────────────┤
 │ EEVEE turntable, neutral ambient world + transparent film, frame       │
 │ statistics measured (luminance/coverage/blown)                         │
+│ aimed shots: station × gaze × lens × sweep resolved against the census │
+│ (read/shot.ts), rendered in the same session, pose echoed back         │
 ├─ Export — USD IS THE MASTER ───────────────────────────────────────────┤
 │ the stage (scene.usda) is authored FIRST with the writer's full payload│
 │ (UsdSkel, blend shapes, animation, textures materialised, MaterialX    │
@@ -430,6 +432,81 @@ attribute's PRESENCE and its refs survive, the numbers never mattered to
 any rule. Pinned in `tests/usda-parser.test.ts` ("elides bulk array
 payloads…"). If a future rule needs numeric array content, extend the
 lexer with a targeted keep-list; do not revert to full tokenization.
+
+## The viewport: station × gaze × lens × sweep
+
+The turntable photographs one subject from a fixed orbit. A **shot** aims,
+and it aims by naming things the census measured — never by taking a
+coordinate, which an author cannot derive and an agent cannot guess.
+
+A camera is four independent primitives, and every camera question the
+compiler answers is a composition of them (`src/read/shot.ts`):
+
+| | decides | forms |
+|---|---|---|
+| `station` | where the eye is | `{orbit:{of?,azimuthDeg,elevationDeg?,distance?,margin?}}` · `{at,offset?}` · `{point}` |
+| `gaze` | where it points | `{at?}` · `{heading,pitchDeg?}` · `{toward}` |
+| `lens` | how much it sees | `{fovDeg?,projection?}` |
+| `sweep` | the same shot, n times | `{frames,time?,over?}` |
+
+Keeping station and gaze independent is what makes the surface small.
+Welding them looks harmless — an aimed shot derives its position from its
+target — but it cannot express standing somewhere and turning around, which
+has no subject, nothing to orbit, and no distance to fit. Aiming is the
+special case. So a panorama is `station.at + gaze.heading + sweep over
+headingDeg`; riding a moving part is `station.at` re-resolved per sample
+plus `sweep.time`; stepping off an anchor is a changed `offset`. None is a
+code path. The proof turntable itself is `orbit + sweep over azimuthDeg
+with time on`, and the composition reproduces `turntableViews` to the last
+bit — the standard any change here keeps meeting.
+
+Properties the layer holds:
+
+- **Sugar, not a second implementation.** `LookSpec` (`read/look.ts`) is
+  the ergonomic aimed form; `lookToShot` desugars one direction into
+  `resolveShot`. One arithmetic path, so the aimed and turn-in-place cases
+  cannot drift.
+- **Stateless.** A resolved pose is absolute and complete; the relative
+  ops (`nudgePose`) are pure rewrites of that record. Nothing is stored
+  between compiles — the pose lives in the caller's context, echoed by the
+  report, which is the only place agent state is reliable.
+- **Absence over a false zero.** A turn-in-place pose has no
+  `targetName`/`target`/`distance`/`frameSpanM`. The report, the CLI and
+  the daemon DTO all branch on that; a zero would read as a measurement.
+- **Sweep is re-resolution, not interpolation.** Each sample substitutes
+  `t = i/frames` into the ranged scalars and runs the whole resolver
+  again, which is what lets a station attached to a moving part follow its
+  curve instead of the chord between its endpoints. `sweep.time` samples
+  with the runner's own expression, so a swept shot and a turntable of the
+  same length land on the same instants.
+- **Attachment is a derivation, never a relationship.** `station.at`
+  re-measures the part's world box per sample. Nothing is parented and
+  nothing is stored.
+- **Verbs that need a subject refuse without one.** `orbit`/`rise`/`dolly`
+  on a turn-in-place shot, and `turn`/`tilt` on an aimed one, throw by name
+  with the verb that was wanted. A silent no-op reads as a broken camera.
+- **Angles outrank vectors.** After an exact clamp, re-deriving azimuth
+  and elevation from the direction vector returns 89.8999999999998 for a
+  value set to 89.9, so a derived value never overwrites the exact one it
+  came from.
+- **The runner photographs, it does not decide.** Poses arrive fully
+  resolved (eye, target, fov, optional `timeFrame`); the aim point for a
+  subject-less shot is derived TypeScript-side as `eye + forward·distance`.
+  Camera state and the timeline are saved and restored per shot, so a
+  leaked field of view or a moved frame cannot mis-register the id-map
+  pass that renders after.
+- **Two measured facts travel with every frame.** `frameSpanM =
+  2·d·tan(fov/2)` — a 2mm screw and a 2m door make the same picture, so
+  scale is what pixels cannot carry — and `coverage`/`meanLuminance` from
+  the same measurement the orbit frames report. `coverage: 0` states that
+  the pose is exact and aimed at empty space, which is the one result a
+  reader cannot diagnose from the picture.
+
+Wire: `looks` (sugar) and `shots` (general) on `CompileRequest` and
+`Scene3dCompileRequest`; the daemon validates only the envelope, since the
+compiler rejects a bad spec by naming the parts that exist and a schema
+check could only downgrade that to an opaque 400. CLI: `od scene3d compile
+--look <spec> --shot '<json>'`, both repeatable.
 
 ## Viewer continuity and the animated proof
 
@@ -1000,6 +1077,29 @@ scoped decision to defer, not an unknown; each names its cost and where the
 work would land. (The Minecraft-specific follow-ups stay in the Minecraft
 section above.)
 
+- **Panoramic lenses.** `LensSpec` is rectilinear only. Blender offers
+  equirectangular and fisheye camera types, but nothing in the package sets
+  `cam.data.type` and the proof engine is EEVEE, whose panoramic support is
+  version-dependent — so a `projection` field would have to be gated on a
+  PROBED capability rather than assumed, or it silently renders rectilinear
+  and lies. The cheaper answer for spatial coverage is already expressible:
+  a cube cross is six rectilinear shots (`gaze.heading` × `pitchDeg`), which
+  is complete, per-tile labellable, and needs no new machinery. Cost: a
+  capability probe beside `gpu_warmup`, the lens field, and a degrade path
+  that reports the substitution.
+- **Attachment tracks the part's box, not its motion.** `station.at`
+  re-measures the census box per sweep sample, so a station rides a part
+  that MOVES BETWEEN COMPILES. Riding an animated part within one compile
+  needs the box measured per timeline frame, which the census does not carry.
+  The fix is the runner returning two points per requested (part, frame) —
+  keeping every angle in TypeScript — and NOT a per-part motion track on the
+  census, which would land in `buildInputHash` and make every new camera
+  angle re-run the build stage.
+- **Nothing is burned into the pixels.** The pose, the frame span and the
+  coverage travel as text beside the image. A facing indicator and a scale
+  bar drawn onto the frame would survive being passed around detached from
+  the report; the contact sheet's labeller (`read/contact.ts`, `read/font.ts`)
+  already has the machinery.
 - **X-ray-aware picking.** `pickPart` (`src/viewer/kit-runtime.ts`) iterates
   every draw with no reference to the x-ray state, so in x-ray mode the user
   sees the interior and clicks the shell. Cost: a visibility/depth-order

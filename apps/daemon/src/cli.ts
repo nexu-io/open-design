@@ -734,7 +734,7 @@ const SCENE3D_STRING_FLAGS = new Set([
   // `od scene3d compile --look`: an aimed viewport shot. Repeatable — the flag
   // parser keeps only the last value for a repeated key, so the compile handler
   // re-scans argv for every occurrence (the same escape the positional args use).
-  'look',
+  'look', 'shot',
   // `od scene3d tweaks`: the edits the viewer's gizmo writes. --set takes
   // JSON inline, --set-file takes a path or `-` for stdin, matching the
   // --prompt-file convention the rest of the CLI uses for long input.
@@ -920,6 +920,22 @@ Options:
                                                             (stand at the stool, 1.2m up)
                            Keys: at, from, elevation (level|eye|high|top|low|bottom),
                            fov, margin, distance, eyeHeight, label.
+  --shot <json>            The same viewport in its general form, for the shots an
+                           aimed --look cannot express. Repeatable. A shot is
+                           station (where the eye is) x gaze (where it points) x
+                           lens x sweep (the same shot, n times):
+                             # stand on the counter at eye height, turn all the way around
+                             --shot '{"station":{"at":"prp_counter","offset":[0,0,1.6]},
+                                      "gaze":{"heading":"front"},"lens":{"fovDeg":90},
+                                      "sweep":{"frames":8,"over":{"headingDeg":[0,360]}}}'
+                             # ride the animation from a fixed angle
+                             --shot '{"gaze":{"at":"prp_fan"},"sweep":{"frames":16,"time":true}}'
+                           station: {orbit:{of?,azimuthDeg,elevationDeg?,distance?,margin?}}
+                                  | {at:"<part>",offset?:[x,y,z]} | {point:[x,y,z]}
+                           gaze:    {at?:"<part>"} | {heading:<word|deg>,pitchDeg?}
+                                  | {toward:[x,y,z]}
+                           sweep.over: azimuthDeg | elevationDeg | headingDeg |
+                                       pitchDeg | distance | fovDeg, each [from,to]
   --frames                 Show the proof frames as ASCII in the report even when clean (implies --agent-message)
   --fail-on <sev>          error | warning | none — exit 1 threshold (default error)
   --agent-message          Emit the <scene3d-report> block: per-issue fixes, measured
@@ -1275,6 +1291,32 @@ async function runScene3d(args) {
     }
   }
   if (looks.length > 0) body.looks = looks;
+  /* `--shot` takes JSON rather than a key=value shorthand. A station × gaze ×
+     lens × sweep spec is genuinely structured — nested objects and ranges — and
+     inventing a flat mini-language for it would be exactly the bloat the
+     primitive factoring exists to avoid. `--look` remains the ergonomic form
+     for the aimed shot, which is the one people type by hand. */
+  const shots = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    let text = null;
+    if (a === '--shot') text = args[i + 1];
+    else if (typeof a === 'string' && a.startsWith('--shot=')) text = a.slice('--shot='.length);
+    if (text === null || text === undefined) continue;
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (err) {
+      console.error(`invalid --shot JSON: ${err.message}`);
+      process.exit(2);
+    }
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      console.error('each --shot must be a JSON object (station/gaze/lens/sweep/label)');
+      process.exit(2);
+    }
+    shots.push(parsed);
+  }
+  if (shots.length > 0) body.shots = shots;
   // `--fast` is the structure-loop alias: parse + build + lint + manifest,
   // no proofs, no export. The iteration gear for grid/naming/relation work —
   // a full compile pays ~7s of proof for findings these stages already
@@ -1421,12 +1463,26 @@ async function runScene3d(args) {
        is the answer to "where did that put me", and a reader who never asks
        for the full letter still needs it to aim the next one. */
     for (const [i, look] of (result.looks ?? []).entries()) {
-      const az = Math.round(look.azimuthDeg);
-      const el = Math.round(look.elevationDeg);
-      const dist = Math.round(look.distance * 1000) / 1000;
+      // A shot that turns in place has no subject: report where it STANDS and
+      // what it FACES rather than printing a target it does not have.
+      const aimed = look.targetName !== undefined && look.distance !== undefined;
+      const geometry = aimed
+        ? `at ${look.targetName} · ${look.name} az ${Math.round(look.azimuthDeg ?? 0)}° ` +
+          `el ${Math.round(look.elevationDeg ?? 0)}° · ${Math.round(look.distance! * 1000) / 1000}m · ` +
+          `fov ${Math.round(look.fovDeg)}°`
+        : `from (${look.eye.map((n: number) => Math.round(n * 1000) / 1000).join(', ')}) · ` +
+          `facing ${look.facing} ${Math.round(look.headingDeg)}° pitch ${Math.round(look.pitchDeg)}° · ` +
+          `fov ${Math.round(look.fovDeg)}°`;
+      const caught =
+        look.coverage === undefined
+          ? ''
+          : look.coverage <= 0
+            ? '\n        caught: nothing — the pose is exact; it points at empty space'
+            : `\n        caught: subject fills ${Math.round(look.coverage * 1000) / 10}% of frame`;
+      const sample = look.sampleIndex !== undefined ? ` (sample ${look.sampleIndex})` : '';
       console.log(
-        `look[${i}] ${look.label} — ${look.image?.path ?? '(no frame rendered)'}\n` +
-          `        at ${look.targetName} · ${look.name} az ${az}° el ${el}° · ${dist}m · fov ${Math.round(look.fovDeg)}°`,
+        `look[${i}] ${look.label}${sample} — ${look.image?.path ?? '(no frame rendered)'}\n` +
+          `        ${geometry}${caught}`,
       );
     }
     for (const r of result.looksRejected ?? []) {

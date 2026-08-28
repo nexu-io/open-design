@@ -271,6 +271,53 @@ export interface Scene3dCompileRequest {
    * anything between calls.
    */
   looks?: Scene3dLookSpec[];
+  /**
+   * The same viewport in its general form — station × gaze × lens × sweep.
+   *
+   * A `look` aims at something, which covers most questions but not all: a shot
+   * that stands in a room and turns around has no subject to aim at, and a shot
+   * that rides a moving part is one spec resolved many times. `looks` desugars
+   * onto this, so both are one render queue with one arithmetic path behind it.
+   *
+   * Deliberately not re-validated at the wire: the compiler resolves every
+   * field against the census it measured and rejects a bad one by NAMING the
+   * parts that exist, which is an answer. A schema check here could only turn
+   * that into an opaque 400.
+   */
+  shots?: Scene3dShotSpec[];
+}
+
+/**
+ * One shot in the general form. Every field is optional: `{}` is a fitted front
+ * view of the whole scene, the same subject the turntable photographs.
+ */
+export interface Scene3dShotSpec {
+  /** Where the eye is. Exactly one form. */
+  station?:
+    | { orbit: { of?: string; azimuthDeg: number; elevationDeg?: number; distance?: number; margin?: number } }
+    | { at: string; offset?: [number, number, number] }
+    | { point: [number, number, number] };
+  /** Where it points. Exactly one form. `heading` turns in place — no subject,
+   *  no distance, no framing. */
+  gaze?:
+    | { at?: string }
+    | { heading: string | number; pitchDeg?: number }
+    | { toward: [number, number, number] };
+  lens?: { fovDeg?: number };
+  /** Resolve this shot `frames` times, advancing time and/or any pose scalar.
+   *  Re-resolution, not interpolation — which is what lets a station attached
+   *  to a moving part actually follow it. */
+  sweep?: {
+    frames: number;
+    time?: true | [number, number];
+    over?: Partial<
+      Record<
+        "azimuthDeg" | "elevationDeg" | "headingDeg" | "pitchDeg" | "distance" | "fovDeg",
+        [number, number]
+      >
+    >;
+  };
+  label?: string;
 }
 
 /**
@@ -309,16 +356,37 @@ export interface Scene3dLook {
   label: string;
   /** The rendered frame, absent when the pose resolved but the render failed. */
   image?: Scene3dArtifactRef;
-  /** The census object aimed at, or `"scene"`. */
-  targetName: string;
-  target: [number, number, number];
+  /** Where the eye is. Always present — a shot always stands somewhere. */
   eye: [number, number, number];
-  azimuthDeg: number;
-  elevationDeg: number;
-  distance: number;
+  /** Unit vector the camera looks along. Always present; the only thing the
+   *  renderer strictly needs. */
+  forward: [number, number, number];
+  /** The gaze direction, in the compiler's one azimuth convention. */
+  headingDeg: number;
+  pitchDeg: number;
+  /** Compass name for what the camera POINTS AT. */
+  facing: string;
+  /* --- present only when the shot was aimed at a subject. A shot that turns
+     in place genuinely has none, and says so by their absence rather than by a
+     zero that would read as a measurement. --- */
+  targetName?: string;
+  target?: [number, number, number];
+  azimuthDeg?: number;
+  elevationDeg?: number;
+  distance?: number;
+  /** Compass name for where the camera STANDS relative to its subject. */
+  name?: string;
   fovDeg: number;
-  /** Compass name for the azimuth; `~`-prefixed when between octants. */
-  name: string;
+  /** Metres the frame spans at the aim depth — the one fact pixels cannot
+   *  carry, since a 2mm screw and a 2m door make the same picture. */
+  frameSpanM?: number;
+  /** Index within a sweep, when this pose is one sample of many. */
+  sampleIndex?: number;
+  /** Measured on the rendered pixels: the fraction of frame the subject fills,
+   *  and its mean luminance. A pose can resolve perfectly and photograph
+   *  nothing; `coverage: 0` is how the caller learns that without guessing. */
+  coverage?: number;
+  meanLuminance?: number;
   /** What the resolver had to substitute or thought worth stating. */
   notes: string[];
 }

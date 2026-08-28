@@ -28,6 +28,7 @@ it again; read this, then act.
 | Presentation rules (deliverable grouping, assetKind labels, kit hydration) | `apps/web/src/runtime/scene3d-assets.ts` |
 | Interactive kit page + orbit/edit runtime (generated HTML) | `packages/scene3d/src/viewer/kit.ts`, `kit-runtime.ts` |
 | Camera-pose truth (azimuth→compass, screen basis; authored-camera pose is MEASURED by the runner → `census.camera.azimuthDeg/elevationDeg`, so an authored still gets an honest compass) | `packages/scene3d/src/read/views.ts` |
+| **The viewport — station × gaze × lens × sweep** (`resolveShot`/`resolveSweep`/`nudgePose`; the aimed `look` is SUGAR over it in `read/look.ts`) | `packages/scene3d/src/read/shot.ts` |
 | Off-thread compile (whole `compile()` on a worker; JSON boundary; cooperative-cancel via `AbortSignal`→SharedArrayBuffer polled at the kernel meter checkpoints) | `packages/scene3d/src/compile-in-worker.ts`, `compile-worker.ts` |
 | Exact O(n log n) triangulation (Lee–Preparata monotone sweep + deterministic treap; replaced the ear-clip; used by `triangulateFace`) | `packages/scene3d/src/kernel/triangulate.ts` |
 | Agent-facing spatial/USD text (ASCII ortho triptych `out/ortho.txt`; USD scene-graph `out/scene.tree.txt`) | `packages/scene3d/src/read/ortho-ascii.ts`, `usd/graph.ts` |
@@ -282,6 +283,30 @@ it again; read this, then act.
   `lint/provenance.ts` drops the severity to info with `detail.provenance` so
   the report can explain its own quiet. Turning any of these back into an
   early `return`/`catch {}` reinstates the exact bug class three audits found.
+- **The camera is four primitives, not a pile of flags.** `read/shot.ts` owns
+  **station** (where the eye is: `{orbit}` / `{at, offset}` / `{point}`) ×
+  **gaze** (where it points: `{at}` / `{heading, pitchDeg}` / `{toward}`) ×
+  **lens** × **sweep** (re-resolve the spec `frames` times over `time` and/or
+  any pose scalar). Everything composes from these: panorama = `station.at +
+  gaze.heading + sweep over headingDeg`; riding a moving part = `station.at`
+  re-derived per sample + `sweep.time`; stepping off an anchor = a changed
+  `offset`. The factoring is load-bearing and self-validating — an
+  `orbit + sweep over azimuthDeg` reproduces `turntableViews` to the last bit
+  (pinned in `tests/shot.test.ts`), which is why the aimed `LookSpec` is now
+  SUGAR (`lookToShot`) rather than a second implementation. Rules that keep
+  biting: a turn-in-place pose has NO subject, so `targetName`/`target`/
+  `distance`/`frameSpanM` are absent rather than zero (report, CLI and DTO all
+  branch on that — a zero would read as a measurement); sweep is
+  RE-RESOLUTION, never interpolation between endpoints (that is what lets an
+  attached station follow a curve); attachment is a per-request derivation with
+  NO stored relationship anywhere; ops that need a subject (`orbit`/`rise`/
+  `dolly`) and ops that fight one (`turn`/`tilt`) REFUSE by name rather than
+  silently no-op. `frameSpanM = 2·d·tan(fov/2)` is the one fact pixels cannot
+  carry (a 2mm screw and a 2m door are the same picture). Every rendered shot
+  reports MEASURED `coverage`/`meanLuminance`, so "the pose is exact; it points
+  at empty space" is a stated fact instead of an unexplained blank frame. Wire:
+  `looks` (sugar) + `shots` (general) on `CompileRequest`/`Scene3dCompileRequest`,
+  `od scene3d compile --look <spec> --shot <json>`.
 - **The agent is never told where it is standing by accident.** A proof
   frame's camera pose is DERIVED in one place (`read/views.ts`: azimuth 0 =
   camera on −Y = front, +az toward +X, elevation 30°, frame i of n at

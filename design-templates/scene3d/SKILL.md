@@ -236,6 +236,69 @@ Read this before you type a coordinate. It is the frame every `size`,
 So the face you want met first points at `-Y`, and a part at `+X` appears
 on the right in frame 0.
 
+## Aiming the camera
+
+The turntable answers *what did I build*. A **shot** answers *what does
+that part look like from there* — and you aim it by naming parts and
+directions, never by typing coordinates. The compiler resolves the pose
+against the census it just measured and hands the pose back, so you always
+know exactly where you were standing.
+
+```bash
+scene3d compile --look prp_lamp:left
+scene3d compile --look at=prp_bar,from=part:prp_stool,eyeHeight=1.2
+```
+
+`--look` is repeatable. Its keys: `at` (the part to aim at; omit for the
+whole scene), `from` (a compass word, `<az>/<el>` degrees, or
+`part:<name>` to stand AT that part), `elevation`
+(`level|eye|high|top|low|bottom`), `fov`, `margin`, `distance`,
+`eyeHeight`, `label`.
+
+A camera is four independent things, and `--shot '<json>'` is the general
+form when a look cannot say what you mean:
+
+| | decides | forms |
+|---|---|---|
+| `station` | where the eye is | `{orbit:{of?,azimuthDeg,elevationDeg?,distance?,margin?}}` · `{at:"<part>",offset?:[x,y,z]}` · `{point:[x,y,z]}` |
+| `gaze` | where it points | `{at?:"<part>"}` · `{heading:<word\|deg>,pitchDeg?}` · `{toward:[x,y,z]}` |
+| `lens` | how much it sees | `{fovDeg?}` |
+| `sweep` | the same shot, n times | `{frames,time?,over?}` |
+
+They compose, so there is nothing else to learn:
+
+```bash
+# stand on the counter at eye height and turn all the way around
+scene3d compile --shot '{"station":{"at":"prp_counter","offset":[0,0,1.6]},
+                         "gaze":{"heading":"front"},"lens":{"fovDeg":90},
+                         "sweep":{"frames":8,"over":{"headingDeg":[0,360]}}}'
+
+# hold one angle and ride the animation
+scene3d compile --shot '{"gaze":{"at":"prp_fan"},"sweep":{"frames":16,"time":true}}'
+```
+
+`sweep.over` takes any pose scalar — `azimuthDeg`, `elevationDeg`,
+`headingDeg`, `pitchDeg`, `distance`, `fovDeg` — as `[from, to]`, sampled
+at `i/frames`. `sweep.time: true` uses the scene's own frame range and holds the camera
+still while the clip plays under it.
+
+What comes back per shot, in the report and under `--json`:
+
+- the **full absolute pose** — station, compass, azimuth/elevation,
+  distance, lens — enough to re-issue it or nudge it. Nothing is stored
+  between compiles; the pose in your context is the state.
+- **`frame spans`** — the metres across the frame at the aim depth. A 2mm
+  screw and a 2m door make the same picture; this is the number that
+  tells them apart.
+- **`caught`** — the measured fraction of frame the subject fills.
+  `caught: nothing` means the pose is exact and pointed at empty space,
+  which is not a defect in your geometry.
+
+Two rules that save a round: shots are rendered by the **proof** stage, so
+`--fast` produces none (it says so rather than going quiet); and a shot
+that turns in place has no subject, so it reports where it *stands* and
+what it *faces* instead of a target and a distance.
+
 ## The language
 
 Say what you mean, never where things go. Parts fill stated boxes.
@@ -739,6 +802,8 @@ ask for `--agent-message` when you are the one reading the result.
 | `scene3d compile --frames --agent-message` | You cannot read images: frames arrive as ASCII ramps. |
 | `scene3d compile --no-turntable` | One still instead of an orbit. |
 | `scene3d compile --respect-scene-camera` | One still through the camera the SCENE places. No compass name is claimed for it. |
+| `scene3d compile --look prp_x:left` | Photograph one part from one side. Repeatable. Needs the proof stage. |
+| `scene3d compile --shot '<json>'` | Turn in place, sweep an angle, ride the animation. The general form. |
 | `scene3d manifest --json` | Last compile, no Blender. |
 | `scene3d tweaks --json` | Read the user's bench. |
 | `scene3d tweaks --set '<json>' --merge` | Write or compose edits. |
@@ -826,7 +891,14 @@ How to read it. This is the whole method:
      lines with the same compass and part facts as text.
 
    You are never actually blind to the shot.
-6. **`out/ortho.svg`, every structural change, no exceptions.** A
+6. **The `looks:` block**, when you asked for a shot. Each entry carries
+   the pose it resolved to — subject, compass, azimuth and elevation,
+   distance, lens — plus `frame spans` (metres across the frame, so you
+   can size what you see) and `caught` (how much of the frame the subject
+   fills). `caught: nothing` is the pose reporting that it is exact and
+   aimed at empty space; move the camera, not the geometry. The pose is
+   also the input to your next shot: change one number and re-issue.
+7. **`out/ortho.svg`, every structural change, no exceptions.** A
    dimensioned plan/front/side drawing — and it is SVG, so it is
    readable as text even without vision. A 2-second look catches a
    proportion or overlap mistake the turntable's angle hides; a field

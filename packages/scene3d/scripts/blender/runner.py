@@ -4553,7 +4553,15 @@ def _render_look(scene, cam, spec):
         data.clip_start,
         data.clip_end,
     )
+    # The timeline is scene state, so it is saved and restored exactly like the
+    # camera is: a shot that sweeps time must not leave the scene on its last
+    # sample for the shots (and the id-map pass) that come after it.
+    saved_frame = scene.frame_current
     try:
+        time_frame = spec.get("timeFrame")
+        if time_frame is not None:
+            scene.frame_set(int(time_frame))
+            bpy.context.view_layer.update()
         data.angle = math.radians(float(spec["fovDeg"]))
         offset = eye - target
         dist = offset.length
@@ -4576,6 +4584,8 @@ def _render_look(scene, cam, spec):
         return out
     finally:
         cam.location, cam.rotation_euler, data.angle, data.clip_start, data.clip_end = saved
+        if scene.frame_current != saved_frame:
+            scene.frame_set(saved_frame)
         bpy.context.view_layer.update()
 
 

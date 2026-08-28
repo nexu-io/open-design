@@ -52,7 +52,8 @@ import { changeImpact, formatImpact, type ImpactReport } from "./read/impact.js"
 import { renderOrthoSvg, orthoDimensions } from "./read/ortho.js";
 import { renderOrthoAscii } from "./read/ortho-ascii.js";
 import { renderContactSheet } from "./read/contact.js";
-import { resolveLook, type ResolvedLook } from "./read/look.js";
+import { resolveLook } from "./read/look.js";
+import { resolveSweep, type ResolvedPose } from "./read/shot.js";
 import { describeProofViews, orbitEye, type ProofView } from "./read/views.js";
 import { validateSceneSpec, specDeclarationLines } from "./solve/validate.js";
 import { solveScene } from "./solve/solver.js";
@@ -1001,7 +1002,7 @@ export async function compile(
   /** Aimed viewport shots: the poses that resolved, and the specs that did not.
    *  Both travel to the result — a shot the compiler refused is a fact the agent
    *  needs, and silence would read as "rendered, and it was empty". */
-  const resolvedLooks: ResolvedLook[] = [];
+  const resolvedLooks: ResolvedPose[] = [];
   const looksRejected: Array<{ index: number; reason: string }> = [];
   /** Project-relative path of each resolved look's frame, by index; absent
    *  where the render failed. */
@@ -1022,17 +1023,32 @@ export async function compile(
          entry's files all exist, so the hit sticks until --no-cache), and a
          `--stages parse,proof` run — census undefined, so 8 frames — would
          write a differently-sized frame set under the same hash. */
-      /* Aimed shots are resolved HERE, before the hash, because resolution is
-         pure arithmetic over the census and its result — not the request — is
-         what the renderer is handed. Resolving first also means a spec naming a
-         part that does not exist is rejected with the available names before
-         Blender is asked to photograph anything. A rejected shot is recorded,
-         never dropped. */
+      /* Shots resolve BEFORE the hash: resolution is pure arithmetic over the
+         census, and its result — not the request — is what the renderer is
+         handed and what the cache key must cover. Resolving first also rejects a
+         spec naming a part that does not exist, with the available names, before
+         Blender is asked to photograph anything. */
+      const forResolve = census ?? ({ objects: [], meshes: [] } as unknown as Census);
+      /* One queue, two front doors. A `look` desugars to a shot, so both lists
+         run the same resolver and land in the same render batch — there is no
+         second arithmetic path to keep in step. A sweep expands here, into as
+         many poses as it has samples, because from the renderer's side a swept
+         shot IS n shots. */
       for (const [index, spec] of (request.looks ?? []).entries()) {
         try {
-          resolvedLooks.push(resolveLook(spec, census ?? ({ objects: [], meshes: [] } as unknown as Census)));
+          resolvedLooks.push(resolveLook(spec, forResolve));
         } catch (err) {
           looksRejected.push({ index, reason: (err as Error).message });
+        }
+      }
+      const lookCount = request.looks?.length ?? 0;
+      for (const [i, spec] of (request.shots ?? []).entries()) {
+        try {
+          resolvedLooks.push(...resolveSweep(spec, forResolve));
+        } catch (err) {
+          // Indices continue past the looks so a caller reading the rejection
+          // list can find the entry it sent, whichever list it came from.
+          looksRejected.push({ index: lookCount + i, reason: (err as Error).message });
         }
       }
       /* The resolved poses are hash INPUTS: two compiles that differ only in
@@ -1147,8 +1163,20 @@ export async function compile(
                     looks: resolvedLooks.map((pose, i) => ({
                       filepath: lookAbs[i]!,
                       eye: [...pose.eye] as [number, number, number],
-                      target: [...pose.target] as [number, number, number],
+                      /* The runner aims at a POINT, and a turn-in-place shot has
+                         no subject to supply one — so the aim point is derived
+                         here, from the pose's own forward vector, one metre out
+                         when there is no depth to borrow. Deriving it in
+                         TypeScript keeps the runner's contract unchanged and
+                         keeps every camera semantic on this side of the
+                         boundary, where it is testable without Blender. */
+                      target: [
+                        pose.eye[0] + pose.forward[0] * (pose.distance ?? 1),
+                        pose.eye[1] + pose.forward[1] * (pose.distance ?? 1),
+                        pose.eye[2] + pose.forward[2] * (pose.distance ?? 1),
+                      ] as [number, number, number],
                       fovDeg: pose.fovDeg,
+                      ...(pose.timeFrame !== undefined ? { timeFrame: pose.timeFrame } : {}),
                     })),
                   }
                 : {}),
@@ -1239,6 +1267,22 @@ export async function compile(
                 : undefined,
             );
           }
+          /* What each shot actually CAUGHT, measured on its own pixels. A pose
+             can resolve perfectly and still photograph the void — and a blank
+             frame with no explanation sends an agent to debug its geometry when
+             the fact it needed was "you were pointed at empty space". The
+             runner measures the same coverage/luminance it reports for orbit
+             frames, so the two are comparable. */
+          const rawLookStats = (result.data as { looks?: unknown } | undefined)?.looks;
+          if (Array.isArray(rawLookStats)) {
+            for (const [i, entry] of rawLookStats.entries()) {
+              const stats = (entry as { stats?: { coverage?: unknown; meanLuminance?: unknown } })?.stats;
+              const pose = resolvedLooks[i];
+              if (!pose || !stats) continue;
+              if (typeof stats.coverage === "number") pose.coverage = stats.coverage;
+              if (typeof stats.meanLuminance === "number") pose.meanLuminance = stats.meanLuminance;
+            }
+          }
           const lostLooks = lookPaths.filter((p) => p === undefined).length;
           if (lostLooks > 0) {
             issues.push({
@@ -1315,11 +1359,12 @@ export async function compile(
      nothing. Say so, per part and by name: an empty `looks` array beside a
      clean compile is indistinguishable from "you asked for no shots", which is
      exactly the silence that teaches a reader their request worked. */
-  if ((request.looks?.length ?? 0) > 0 && resolvedLooks.length === 0 && looksRejected.length === 0) {
+  const askedFor = (request.looks?.length ?? 0) + (request.shots?.length ?? 0);
+  if (askedFor > 0 && resolvedLooks.length === 0 && looksRejected.length === 0) {
     const why = !wanted.has("proof")
-      ? "the proof stage was not selected (looks are rendered by proof — drop --fast, or include 'proof' in --stages)"
+      ? "the proof stage was not selected (shots are rendered by proof — drop --fast, or include 'proof' in --stages)"
       : "the proof stage did not run (no Blender runtime, or nothing to render)";
-    for (let i = 0; i < request.looks!.length; i++) {
+    for (let i = 0; i < askedFor; i++) {
       looksRejected.push({ index: i, reason: `not rendered — ${why}` });
     }
   }

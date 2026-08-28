@@ -12,7 +12,8 @@
 // Type-only, so the circular reference between this file and the read
 // module costs nothing at runtime — impact.ts imports Census from here.
 import type { ImpactReport } from "./read/impact.js";
-import type { LookSpec, ResolvedLook } from "./read/look.js";
+import type { LookSpec } from "./read/look.js";
+import type { ResolvedPose, ShotSpec } from "./read/shot.js";
 import type { SolveDelta } from "./read/solve-delta.js";
 import type { SolvedScene } from "./solve/types.js";
 
@@ -429,6 +430,16 @@ export interface CompileRequest {
    * back in the report, which is what lets the next request nudge it.
    */
   looks?: LookSpec[];
+  /**
+   * The same viewport, in its general form — station × gaze × lens × sweep.
+   *
+   * A `look` aims at something, which covers most questions but not all of
+   * them: standing in a room and turning around has no subject to aim at, and
+   * a shot that rides a moving part is one spec resolved many times. Both are
+   * shots. `looks` desugars onto this, so the two lists are one render queue
+   * and there is a single arithmetic path behind them.
+   */
+  shots?: ShotSpec[];
   /** Per-stage wall-clock timeout in milliseconds. */
   timeoutMs?: number;
   /** Extra environment variables for the Blender/python child process. */
@@ -472,7 +483,7 @@ export interface CompileResult {
     /** Project-relative path of the rendered frame; absent when the render
      *  failed (the pose still resolved, so the failure is attributable). */
     path?: string;
-    pose: ResolvedLook;
+    pose: ResolvedPose;
   }>;
   /**
    * Look specs that could not be resolved, with the reason. A rejected shot is

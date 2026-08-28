@@ -647,13 +647,41 @@ function appendLooks(lines: string[], result: CompileResult): void {
   for (const [i, look] of looks.entries()) {
     const p = look.pose;
     const where = look.path ?? "(no frame — the render failed; the pose is still exact)";
+    // A shot that turns in place has no subject, no distance and no framing, so
+    // it reports where it STANDS and what it FACES. A target it does not have —
+    // or a zero distance — would be the report inventing the one fact the reader
+    // most needs to trust.
+    const aimed =
+      p.targetName !== undefined && p.distance !== undefined && p.azimuthDeg !== undefined;
+    const geometry = aimed
+      ? `at ${p.targetName} · ${p.name} az ${Math.round(p.azimuthDeg!)}° el ${Math.round(p.elevationDeg ?? 0)}°` +
+        ` · ${fmtM(p.distance!)} out · fov ${Math.round(p.fovDeg)}°`
+      : `from (${p.eye.map((n) => Math.round(n * 1000) / 1000).join(", ")})` +
+        ` · facing ${p.facing} ${Math.round(p.headingDeg)}° pitch ${Math.round(p.pitchDeg)}°` +
+        ` · fov ${Math.round(p.fovDeg)}°`;
+    // The metres the frame spans at the aim depth: an image of a 2mm screw and
+    // an image of a 2m door are the same picture, so scale is the one fact the
+    // pixels genuinely cannot carry.
+    const span = p.frameSpanM !== undefined ? ` · frame spans ${fmtM(p.frameSpanM)}` : "";
+    const sample = p.sampleIndex !== undefined ? ` (sample ${p.sampleIndex})` : "";
     lines.push(
       // The caller's own label leads: a batch of shots comes back in request
       // order, and the name it gave them is how it tells them apart.
-      `  [${i}] ${p.label} — ${where}` +
-        `\n      at ${p.targetName} · ${p.name} az ${Math.round(p.azimuthDeg)}° el ${Math.round(p.elevationDeg)}°` +
-        ` · ${fmtM(p.distance)} out · fov ${Math.round(p.fovDeg)}°`,
+      `  [${i}] ${p.label}${sample} — ${where}` + `\n      ${geometry}${span}`,
     );
+    /* What the frame CAUGHT, measured on its own pixels. A pose can resolve
+       perfectly and still photograph nothing — aiming out of a small scene sees
+       the void, correctly — and a blank frame is the one result a reader cannot
+       diagnose from the picture, so the empty case is stated in words. */
+    if (p.coverage !== undefined) {
+      const pct = Math.round(p.coverage * 1000) / 10;
+      const lum = p.meanLuminance !== undefined ? `, lum ${Math.round(p.meanLuminance * 100) / 100}` : "";
+      lines.push(
+        p.coverage <= 0
+          ? `      caught: nothing — no geometry in frame${lum}. The pose is exact; it points at empty space.`
+          : `      caught: subject fills ${pct}% of frame${lum}`,
+      );
+    }
     if (p.notes.length > 0) lines.push(`      note: ${p.notes.join("; ")}`);
   }
   for (const r of rejected) {
@@ -663,6 +691,14 @@ function appendLooks(lines: string[], result: CompileResult): void {
     lines.push(
       "  to move: re-request with the same `at` and a different `from`" +
         " (a compass word, an {azimuthDeg, elevationDeg}, or {part: \"<name>\"} to stand there).",
+    );
+    // The general form, named once: an agent that only learns `look` can never
+    // ask what is around it, or what a scene does over time.
+    lines.push(
+      "  to turn in place or sweep: send `shots` instead —" +
+        ' {station:{at:"<part>",offset:[0,0,1.6]}, gaze:{heading:"back"}} stands somewhere and looks a direction;' +
+        " adding sweep:{frames:8, over:{headingDeg:[0,360]}} turns all the way around;" +
+        " sweep:{frames:16, time:true} rides the animation.",
     );
   }
 }

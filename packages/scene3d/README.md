@@ -912,6 +912,7 @@ route + contract type + UI + `od` subcommand, landed together.
 od scene3d compile  --project <id> --scene <path> [--fast] [--json] [--agent-message]
                     [--stages parse,build,lint] [--no-cache] [--no-turntable]
                     [--fail-on error|warning|none]
+                    [--look <spec>]... [--shot '<json>']...
 od scene3d manifest --project <id> --scene <path> [--json]
 od scene3d describe --project <id> --scene <path> [--json]
                     [--region x0,y0,z0,x1,y1,z1] [--focus <part>] [--budget <tokens>]
@@ -922,6 +923,49 @@ od scene3d tweaks   --project <id> --scene <path> [--json]
 `--json` is the machine envelope. Long-form prompts go through
 `--prompt-file` on other `od` commands; scene3d's `--set-file -` is the
 equivalent for piping a tweaks map.
+
+### The viewport: aiming by naming things
+
+The turntable answers *what did I build*. A **shot** answers *what does that
+part look like from there*, and it is aimed by naming parts and directions —
+never by typing coordinates, which an agent cannot guess and should not have to.
+
+```bash
+# the aimed form: a part, a side
+od scene3d compile … --look prp_lamp:left --look at=prp_bar,from=part:prp_stool,eyeHeight=1.2
+
+# the general form: station x gaze x lens x sweep
+od scene3d compile … --shot '{"station":{"at":"prp_counter","offset":[0,0,1.6]},
+                              "gaze":{"heading":"front"},"lens":{"fovDeg":90},
+                              "sweep":{"frames":8,"over":{"headingDeg":[0,360]}}}'
+```
+
+A camera is four independent things, and every question composes from them:
+
+| primitive | what it decides | forms |
+|---|---|---|
+| `station` | where the eye is | `{orbit:{of?,azimuthDeg,elevationDeg?,distance?,margin?}}` · `{at,offset?}` · `{point}` |
+| `gaze` | where it points | `{at?}` · `{heading,pitchDeg?}` · `{toward}` |
+| `lens` | how much it sees | `{fovDeg?}` |
+| `sweep` | the same shot, n times | `{frames,time?,over?}` |
+
+- **panorama** = `station.at` + `gaze.heading` + `sweep.over.headingDeg`
+- **watch a clip from one eye** = `sweep.time` (the camera holds, the scene plays)
+- **step off an anchor** = a changed `station.offset`
+- **the existing proof turntable** = `orbit` + `sweep.over.azimuthDeg` + `time`
+  — it falls out of the primitives and matches `turntableViews` to the last bit,
+  which is the evidence the factoring was discovered rather than invented.
+
+Every resolved shot echoes its **full absolute pose** back (station, heading,
+compass, distance, lens, and `frameSpanM` — the metres the frame spans, since a
+2mm screw and a 2m door make the same picture). Nothing is stored between
+calls: the pose lives in the caller's context, where it is visible, and the
+relative ops (`nudgePose`) are pure rewrites of that record. A shot that turns
+in place has no subject, so `targetName`/`target`/`distance` are **absent**
+rather than zero. Each rendered shot also reports measured `coverage`, so
+"the pose is exact; it points at empty space" is a stated fact rather than an
+unexplained blank frame. A spec that cannot be resolved is refused **by naming
+the parts that do exist**.
 
 ### Web
 

@@ -141,6 +141,34 @@ The frame every coordinate and every proof frame lives in:
   orbit runs `0` front, `1` front-right, `2` right, `3` back-right, `4`
   back, `5` back-left, `6` left, `7` front-left.
 
+## Aiming the camera
+
+The turntable answers *what did I build*. A shot answers *what does that
+part look like from there* — aimed by naming parts and directions, never
+by typing coordinates. Both need the proof stage, so `--fast` renders none.
+
+```bash
+scene3d compile --look prp_lamp:left            # one part, one side
+scene3d compile --look at=prp_bar,from=part:prp_stool,eyeHeight=1.2
+```
+
+`--shot '<json>'` is the general form — `station` (where the eye is) ×
+`gaze` (where it points) × `lens` × `sweep` (the same shot, n times):
+
+```bash
+# stand somewhere and turn all the way around
+--shot '{"station":{"at":"prp_counter","offset":[0,0,1.6]},
+         "gaze":{"heading":"front"},"lens":{"fovDeg":90},
+         "sweep":{"frames":8,"over":{"headingDeg":[0,360]}}}'
+# hold one angle while the clip plays
+--shot '{"gaze":{"at":"prp_fan"},"sweep":{"frames":16,"time":true}}'
+```
+
+Every shot reports the pose it resolved to — enough to re-issue or nudge
+it — plus `frame spans` (metres across the frame, so you can size what you
+see) and `caught` (how much of the frame the subject fills).
+`caught: nothing` means the pose is exact and aimed at empty space.
+
 ## Reading the letter
 
 1. `ok` and the counts — errors first; info is a hint, not a gate.

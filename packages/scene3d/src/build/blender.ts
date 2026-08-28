@@ -208,6 +208,10 @@ export interface RunnerJob {
       eye: [number, number, number];
       target: [number, number, number];
       fovDeg: number;
+      /** The timeline frame to photograph this shot at, when the shot sweeps
+       *  time. Absent holds the scene's current frame — a shot that does not
+       *  sweep time must not silently move the timeline for the ones after it. */
+      timeFrame?: number;
     }>;
   };
   /** Viewport edits keyed by part name, replayed after the build —
