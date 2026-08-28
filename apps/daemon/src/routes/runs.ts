@@ -6,12 +6,14 @@ import { createHash, randomUUID } from 'node:crypto';
 import {
   composeOdNextStrategyContinuationV2,
   defaultScenarioPluginIdForProjectMetadata,
+  InstalledPluginRecordSchema,
   RUN_RESULT_PACKAGE_SCHEMA,
   type AppliedPluginSnapshot,
   type ArtifactManifest,
   type ByokChatProviderConfig,
   type ChatRunStatus,
   type ChatRunStatusResponse,
+  type InstalledPluginRecord,
   type StrategyTaskProjectionV2,
   type ProjectMetadata as ContractProjectMetadata,
   type RunResultPackageResponse,
@@ -108,7 +110,7 @@ import {
   buildOdNextTaskConfigurationV1,
   createOdNextTaskInputSnapshot,
   OdNextTaskInputSnapshotError,
-  removeOdNextTaskInputSnapshot,
+  removeOdNextTaskInputSnapshotBestEffort,
   type OdNextTaskInputSnapshotDescriptor,
 } from '../strategies/od-next/task-input-snapshot.js';
 import {
@@ -130,6 +132,10 @@ import {
   type ResolveSnapshotResult,
 } from '../plugins/index.js';
 import { getSnapshot, linkSnapshotToRun } from '../plugins/snapshots.js';
+import {
+  digestExampleSkillManifest,
+  readVerifiedProjectExampleBinding,
+} from '../plugins/example-binding.js';
 import {
   assertSandboxProjectRootAvailable,
   isSafeId,
@@ -868,10 +874,46 @@ function toOdNativeEvent(record: RunEventRecord): OdNativeEvent | null {
   return { kind: record.event, ...toJsonRecord(record.data) } as OdNativeEvent;
 }
 
+export function sendStructuredRunCreateFailure(
+  res: ApiResponse,
+  sendApiError: RegisterRunRoutesDeps['http']['sendApiError'],
+  error: unknown,
+  requestId: string = randomUUID(),
+): Response<unknown> | void {
+  const rawCode = (error as NodeJS.ErrnoException)?.code;
+  const code = typeof rawCode === 'string' && /^[A-Z0-9_]+$/.test(rawCode)
+    ? rawCode
+    : 'UNKNOWN';
+  console.error(`[runs] preparation failed request=${requestId} code=${code}`);
+  return sendApiError(
+    res,
+    500,
+    'INTERNAL_ERROR',
+    'Run preparation failed.',
+    { requestId },
+  );
+}
+
+export function registerRunCreateRoute(
+  app: Express,
+  handleRunCreate: (req: ApiRequest, res: ApiResponse) => Promise<unknown>,
+  sendApiError: RegisterRunRoutesDeps['http']['sendApiError'],
+): void {
+  app.post('/api/runs', async (req: ApiRequest, res: ApiResponse) => {
+    try {
+      return await handleRunCreate(req, res);
+    } catch (error) {
+      if (res.headersSent) throw error;
+      return sendStructuredRunCreateFailure(res, sendApiError, error);
+    }
+  });
+}
+
 export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
   const { db, design } = ctx;
   const { createSseResponse, sendApiError } = ctx.http;
   const { BUNDLED_PLUGINS_DIR, PROJECTS_DIR, RUNTIME_DATA_DIR } = ctx.paths;
+  const taskInputSnapshotsRoot = path.join(RUNTIME_DATA_DIR, 'od-next-task-inputs');
   const { detectAgents, getAgentDef } = ctx.agents;
   const { startChatRun } = ctx.chat;
   const prepareOdNextInitialPromptBundle = ctx.chat.prepareOdNextInitialPromptBundle
@@ -1489,7 +1531,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     }
   }
 
-  app.post('/api/runs', async (req: ApiRequest, res: ApiResponse) => {
+  const handleRunCreate = async (req: ApiRequest, res: ApiResponse) => {
     if (ctx.lifecycle.isDaemonShuttingDown()) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
@@ -1703,10 +1745,44 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       const verifiedStrategyBinding = readVerifiedProjectStrategyBinding(
         rolloutProject?.metadata as ContractProjectMetadata | null | undefined,
       );
+      const verifiedExampleBinding = readVerifiedProjectExampleBinding(
+        rolloutProject?.metadata as ContractProjectMetadata | null | undefined,
+      );
+      let selectedExamplePlugin: InstalledPluginRecord | null = null;
+      if (verifiedExampleBinding) {
+        try {
+          const candidate = await ctx.plugins.getLocalPluginBySource?.(
+            verifiedExampleBinding.pluginId,
+            verifiedExampleBinding.pluginSource,
+          );
+          const parsed = InstalledPluginRecordSchema.safeParse(candidate);
+          if (
+            !parsed.success
+            || parsed.data.id !== verifiedExampleBinding.pluginId
+            || parsed.data.source !== verifiedExampleBinding.pluginSource
+            || await digestExampleSkillManifest(parsed.data.fsPath)
+              !== verifiedExampleBinding.manifestSourceDigest
+          ) {
+            throw new Error('the bound example no longer resolves to its frozen identity');
+          }
+          selectedExamplePlugin = parsed.data;
+        } catch (error) {
+          console.warn(
+            `[plugins] selected example ${verifiedExampleBinding.pluginId} is unavailable for ordinary fallback: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      }
       const projectPinIsAutomaticDefault = Boolean(
         projectHasExplicitPin
         && verifiedScenarioBinding?.provenance === 'automatic_default'
         && verifiedScenarioBinding.pluginId === defaultPluginId,
+      );
+      const suppressAutomaticDefaultPinFallback = Boolean(
+        projectPinIsAutomaticDefault
+        && verifiedExampleBinding
+        && !selectedExamplePlugin,
       );
       const suppliedContextPluginWasNamed = Boolean(
         Array.isArray((rolloutProject?.metadata as ContractProjectMetadata | undefined)?.contextPlugins)
@@ -1883,11 +1959,21 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             pluginId: 'od-next-strategy',
             appliedPluginSnapshotId: undefined,
           };
-        } else if (!hasPin) {
-          const fallbackPluginId = defaultPluginId;
-          if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
+        } else if (!hasPin || (projectPinIsAutomaticDefault && selectedExamplePlugin)) {
+          // An official example card is the user's concrete choice inside this
+          // task type. When OD Next is not active, execute that exact example
+          // on the ordinary route instead of silently substituting the
+          // project-kind default (for decks, the unrelated simple-deck/COO
+          // template). A stale/unavailable binding deliberately yields no
+          // plugin rather than a different template.
+          const fallbackPluginId = selectedExamplePlugin?.id
+            ?? (verifiedExampleBinding ? null : defaultPluginId);
+          if (
+            fallbackPluginId
+            && (selectedExamplePlugin || getInstalledPlugin(db, fallbackPluginId))
+          ) {
             runResolveBody = { ...requestBody, pluginId: fallbackPluginId };
-            synthesizedAutomaticDefault = true;
+            synthesizedAutomaticDefault = !selectedExamplePlugin;
           }
         }
       }
@@ -1929,10 +2015,15 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         return res.status(500).json({ error: String(err) });
       }
       if (!explicitUserPlugin && strategyRolloutDecision?.effectiveMode === 'active') {
-        automaticOrdinaryFallbackPluginId = defaultPluginId;
-        const fallbackBody = !projectHasExplicitPin && defaultPluginId
-          && getInstalledPlugin(db, defaultPluginId)
-          ? { ...requestBody, pluginId: defaultPluginId }
+        automaticOrdinaryFallbackPluginId = selectedExamplePlugin?.id
+          ?? (verifiedExampleBinding ? null : defaultPluginId);
+        const fallbackBody = (
+          !projectHasExplicitPin
+          || (projectPinIsAutomaticDefault && selectedExamplePlugin)
+        )
+          && automaticOrdinaryFallbackPluginId
+          && (selectedExamplePlugin || getInstalledPlugin(db, automaticOrdinaryFallbackPluginId))
+          ? { ...requestBody, pluginId: automaticOrdinaryFallbackPluginId }
           : requestBody;
         resolveAutomaticOrdinaryFallback = () => resolvePluginSnapshot({
           db,
@@ -1942,7 +2033,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           registry: registryView,
           connectorProbe: buildConnectorProbe(connectorService),
           requireSnapshotProjectMatch: true,
-          ...(defaultPluginId
+          allowProjectPinFallback: !suppressAutomaticDefaultPinFallback,
+          ...(selectedExamplePlugin ? { plugin: selectedExamplePlugin } : {}),
+          ...(selectedExamplePlugin ? { runScopedActivation: true } : {}),
+          ...(!selectedExamplePlugin && defaultPluginId
             ? {
                 projectBinding: {
                   provenance: 'automatic_default' as const,
@@ -1964,6 +2058,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         registry: registryView,
         connectorProbe: buildConnectorProbe(connectorService),
         requireSnapshotProjectMatch: true,
+        allowProjectPinFallback: !suppressAutomaticDefaultPinFallback,
+        ...(selectedExamplePlugin ? { plugin: selectedExamplePlugin } : {}),
+        ...(selectedExamplePlugin && runResolveBody.pluginId === selectedExamplePlugin.id
+          ? { runScopedActivation: true }
+          : {}),
         ...(!activatingStrategy && !explicitExecutablePlugin
           && (projectPinIsAutomaticDefault || synthesizedAutomaticDefault)
           && defaultPluginId
@@ -2580,7 +2679,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           mode: 'unresolved',
         });
         createdTaskInputSnapshot = createOdNextTaskInputSnapshot({
-          snapshotsRoot: path.join(RUNTIME_DATA_DIR, 'od-next-task-inputs'),
+          snapshotsRoot: taskInputSnapshotsRoot,
           taskExecutionId,
           taskConfiguration,
           projectRoot,
@@ -2611,7 +2710,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         });
         preparedPromptBundleText = preparedPrompt.text;
       } catch (error) {
-        removeOdNextTaskInputSnapshot(createdTaskInputSnapshot);
+        removeOdNextTaskInputSnapshotBestEffort(
+          createdTaskInputSnapshot,
+          taskInputSnapshotsRoot,
+          'initial-bundle',
+        );
         createdTaskInputSnapshot = null;
         preparedPromptBundleText = null;
         frozenSkillPackage = undefined;
@@ -2711,7 +2814,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         },
       });
     } catch (error) {
-      removeOdNextTaskInputSnapshot(createdTaskInputSnapshot);
+      removeOdNextTaskInputSnapshotBestEffort(
+        createdTaskInputSnapshot,
+        taskInputSnapshotsRoot,
+        'run-claim',
+      );
       createdTaskInputSnapshot = null;
       if (error instanceof AutomaticOdNextPreparationError) {
         preparedPromptBundleText = null;
@@ -2750,7 +2857,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       }
     }
     if (preparedRun.kind !== 'ready') {
-      removeOdNextTaskInputSnapshot(createdTaskInputSnapshot);
+      removeOdNextTaskInputSnapshotBestEffort(
+        createdTaskInputSnapshot,
+        taskInputSnapshotsRoot,
+        'non-ready',
+      );
       if (
         resolvedSnapshot?.created === true
         && resolvedSnapshot.snapshot.pluginId === 'od-next-strategy'
@@ -2966,7 +3077,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       },
       () => startChatRun(executionMeta, run),
     );
-  });
+  };
+
+  registerRunCreateRoute(app, handleRunCreate, sendApiError);
 
   app.get('/api/runs', async (req: ApiRequest, res: ApiResponse) => {
     const { projectId, conversationId, status } = req.query;

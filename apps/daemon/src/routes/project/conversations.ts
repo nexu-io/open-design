@@ -577,6 +577,17 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     if (existing === null && getMessage(db, req.params.mid) !== null) {
       return res.status(404).json({ error: 'message not found' });
     }
+    // A create-only write claims the row exactly once. The client asking for
+    // it owns a payload whose identity is decided before the send (an inline
+    // question form's answer belongs to one occurrence), and it cannot make
+    // "read, then write" atomic against a second tab. Refusing the overwrite
+    // here — the one place the check and the write are the same operation —
+    // keeps the first accepted answer authoritative, and returning the stored
+    // row tells the loser what actually ran instead of leaving it showing an
+    // answer no run ever saw.
+    if (m.createOnly === true && existing !== null) {
+      return res.json({ message: existing });
+    }
     const normalizedMessage = Array.isArray(m.events)
       ? { ...m, events: compactAdjacentMessageAgentEvents(m.events) }
       : m;

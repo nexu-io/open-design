@@ -642,8 +642,15 @@ describe('AssistantMessage question forms', () => {
       target: { value: 'Product evaluators' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Send answers' }));
+    // The trailing arguments carry the answer's occupancy: the form id (and,
+    // from ChatPane, the asking message's id) is what gives the answer a
+    // stable identity instead of a fresh one per send.
     expect(onSubmitQuestionForm).toHaveBeenCalledWith(
       expect.stringContaining('- Who is this for?: Product evaluators'),
+      undefined,
+      undefined,
+      undefined,
+      'discovery',
     );
     expect(screen.queryByText('Quick brief — 30 seconds')).toBeNull();
     expect(screen.queryByText('What are we making?')).toBeNull();
@@ -827,6 +834,8 @@ describe('AssistantMessage question forms', () => {
             },
           ],
         },
+        undefined,
+        'references',
       );
     });
   });
@@ -1005,6 +1014,8 @@ describe('AssistantMessage question forms', () => {
           expect.objectContaining({ path: 'uploads/brief.png' }),
         ],
         expect.any(Object),
+        undefined,
+        'references',
       );
     });
     expect(deleteProjectFileMock).toHaveBeenCalledTimes(1);
