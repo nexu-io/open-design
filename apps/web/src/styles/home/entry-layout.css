@@ -1163,29 +1163,14 @@
   scrollbar-gutter: stable;
 }
 
-/* Floating top-right cluster (portaled to document.body): campaign badge on
-   the left, account module on the right, one flex row. Owns the fixed
-   position + z-index that used to live on the badge itself. Must clear
-   .workspace-tabs-chrome (z-index: 120).
-
-   `top` vertically centers the cluster's 26px pills in the 44px tabs-chrome
-   row — (44 − 26) / 2 = 9 — so their centerline matches the pinned Home
-   tab's (32px, strip-centered). The chrome height is a hard 44px in shell.css; its
-   --workspace-tabs-chrome-height var is scoped to .workspace-shell and
-   unreadable from this body-level portal. */
+/* Top-right cluster inside the tabs chrome's dedicated no-drag actions host:
+   campaign badge on the left, account module on the right, one flex row. */
 .entry-top-right-cluster {
-  position: fixed;
-  z-index: 150;
-  top: 9px;
-  right: 22px;
   display: flex;
   align-items: center;
   gap: 10px;
 }
-/* The cluster overlaps the desktop window's draggable chrome strip
-   (.workspace-tabs-chrome). app-region is not inherited, so without an
-   explicit no-drag on every node the drag region swallows hover/click —
-   the account menu could never open. */
+/* app-region is not inherited, so keep every interactive descendant explicit. */
 .entry-top-right-cluster,
 .entry-top-right-cluster * {
   -webkit-app-region: no-drag;
@@ -1243,11 +1228,6 @@
 }
 
 @media (max-width: 760px) {
-  /* Tighter right inset only — the vertical centering against the 44px
-     chrome row is the same at every width. */
-  .entry-top-right-cluster {
-    right: 12px;
-  }
   .entry-deepseek-campaign-badge {
     max-width: calc(100vw - 88px);
   }

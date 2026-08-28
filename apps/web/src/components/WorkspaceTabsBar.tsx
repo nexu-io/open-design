@@ -30,6 +30,7 @@ import {
 import { homeHeroChipLabel } from './home-hero/chip-labels';
 import { useGlideIndicator } from '../hooks/useGlideIndicator';
 import { useLiquidGlass } from '../hooks/useLiquidGlass';
+import { WORKSPACE_CHROME_ACCOUNT_ACTIONS_ID } from './workspaceChromeActions';
 
 type WorkspaceChromeTab =
   | {
@@ -1685,9 +1686,9 @@ export function WorkspaceTabsBar({
       aria-label="Workspace tabs"
     >
       <div className="app-chrome-traffic-space workspace-tabs-traffic" aria-hidden />
-      {/* Docked mode: the chrome row keeps only the brand-logo button (the
-          floating account cluster rides fixed at the window's top-right on
-          its own); the strip renders in the chat column's dock, level with
+      {/* Docked mode: the chrome row keeps the brand-logo button plus the
+          account actions host at the window's top-right; the strip renders in
+          the chat column's dock, level with
           the workspace 设计文件 row. The strip's own pinned entry tab hides
           inside the dock (CSS) — this button is its chrome-row stand-in.
           In chat the logo means 回到首页. */}
@@ -1866,6 +1867,11 @@ export function WorkspaceTabsBar({
       </div>
       </>,
       )}
+      <div
+        id={WORKSPACE_CHROME_ACCOUNT_ACTIONS_ID}
+        className="workspace-chrome-account-actions"
+        data-testid="workspace-chrome-account-actions"
+      />
       {radialMenu ? createPortal(
         <div className="workspace-radial-layer" onMouseDown={() => setRadialMenu(null)}>
           <div
