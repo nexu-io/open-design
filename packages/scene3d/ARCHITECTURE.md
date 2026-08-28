@@ -393,6 +393,25 @@ reproduction and fixed:
   (AABB overlap −0.3m) now read `separation 0.1, intersects false`.
   Vert-capped (400k combined) with the AABB verdict standing beyond the
   cap, per the honesty-budget doctrine.
+- **The contact scan sweeps and prunes** rather than testing every pair
+  against every other. It used to refuse outright past 60 meshes and return
+  NO contacts — grounding, touching, z-fighting and every claim resting on
+  them, deleted wholesale for a 61-mesh scene, because pairwise enumeration
+  got expensive. Contact is a LOCAL relation, so the fix is to stop looking
+  at far pairs, not to stop looking. Boxes are sorted by their low edge on
+  the axis the scene is most spread along (ties to the lowest index, so the
+  choice is deterministic), and each box reaches only the contiguous run
+  within `CONTACT_RECORD_RANGE` of its high edge — a pair further apart than
+  that on one axis can never pass a `max`-of-axes test, so pruning on it
+  drops nothing. The sweep is INVISIBLE to the output: it only chooses which
+  pairs to examine, every survivor goes through the unchanged exact per-axis
+  test, and the pair list is sorted back into the `(i, j)` order the nested
+  loops produced, so the census is byte-identical on scenes that fit under
+  the old cap. Vertex samples are retained lazily (only meshes surviving the
+  broad phase are asked), and a mesh with non-finite world coordinates is
+  named rather than silently matching nothing. Measured: 96 meshes → 185
+  contacts in 3.8s, 721 meshes → 720 contacts in 43.9s, both with an empty
+  skip list where the old code returned nothing at all.
 - **`symmetry_facts`** no longer assumes the mirror plane is world X on a
   world-space (rotation-baked) mesh: it tests six candidate planes — three
   world axes plus the three PRINCIPAL planes of the vertex covariance
@@ -1120,11 +1139,6 @@ section above.)
   scatter over a cylindrical slab can land samples on the box corners where
   no geometry exists. Self-consistent (the contact report measures the same
   way) but visually wrong on curved supports.
-- **`contact_report` caps at 60 meshes** while the language admits 500
-  parts; above the cap the compile still succeeds but grounding/contact
-  facts are reported as skipped. The cap is reported, not silent — but the
-  language gives no warning at authoring time that a large scatter changes
-  what the compiler can see.
 - **Screen→NDC picking half is verified by inspection only.**
   `tests/kit-picking.test.ts` pins the ray/mesh half; the DOM-layout half
   (resize/DPR) has no automated coverage.
@@ -1146,10 +1160,6 @@ section above.)
   4-frame ≈0.167s cycle with no notice. Sub-frame periods are near the
   validator's 0.1s floor and rarely visible, but the quantization is
   unstated anywhere the author can read.
-- **The contact-scan mesh cap (60) and the language's part ceiling (4000)
-  disagree by two orders of magnitude** — above the cap every contact
-  fact degrades at once (loudly, but wholesale). A spatial-hash broad
-  phase would let the scan scale with the language.
 - **The pxr oracle inspects less than its name implies** (whole-tree
   audit): material-binding conformance checks a subset of binding shapes,
   and stages with unresolved sublayers/references can come back "ok" —

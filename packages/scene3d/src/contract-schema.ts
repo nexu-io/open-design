@@ -134,7 +134,11 @@ export const CONTRACT_FIELDS: readonly FieldSpec[] = [
 
   /* animation */
   { path: "conventions.animation.fps", kind: "number", min: 0, exclusiveMin: true },
-  { path: "conventions.animation.maxFrames", kind: "number", min: 1, integer: true },
+  // Zero is legal and is the default: it means NO clip-length budget. A
+  // minimum of 1 would make the shipped default contract fail its own
+  // validator, and would force every project to carry a ceiling it never
+  // asked for.
+  { path: "conventions.animation.maxFrames", kind: "number", min: 0, integer: true },
 
   /* grounding */
   { path: "conventions.grounding.enabled", kind: "boolean" },

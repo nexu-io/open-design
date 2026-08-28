@@ -500,11 +500,12 @@ loop stops with a diagnostic instead of exhausting the machine. Raise it with
 `workBudget` on the compile request (`--work-budget` on the CLI) when the asset
 and the machine are both bigger.
 
-A big scatter also changes what the
-compiler can *measure*: past ~60 meshes the contact scan (grounding,
-touching-faces, the rested-pair check) reports itself skipped rather
-than guessing, so a claim that leans on contacts is unchecked, not
-failed, above that count.
+The contact scan (grounding, touching-faces, the rested-pair check) runs at
+any part count: it sweeps and prunes along the scene's longest axis, so it
+costs what the NEARBY pairs cost rather than what every pair would. A pair too
+heavy to refine falls back to its axis bound and is named, and anything the
+scan excludes it reports by name — an empty contact list still means "nothing
+within range", never "nobody looked".
 
 **Materials.** A material is a set of BINDINGS onto a surface, and every
 channel takes either a constant or a baked shader output. Those are the same

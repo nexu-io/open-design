@@ -26,6 +26,7 @@ with fixed epsilons so results are bit-stable across runs.
 import array
 import base64
 import json
+import bisect
 import math
 import os
 import re
@@ -3253,6 +3254,76 @@ def _face_connected_points(me, mw):
 _EVAL_FALLBACKS = []
 
 
+def _face_connected_bounds(me, mw):
+    """The AABB of `_face_connected_points`, without materialising them.
+
+    Same predicate, same transform, same operand order — reduced as it goes
+    rather than collected — so the box is bit-identical to taking min/max over
+    the returned list. The contact scan needs every mesh's box but only a
+    minority's points, and building the list for all of them just to throw it
+    away is what forced that scan to refuse large scenes.
+    """
+    import mathutils
+    verts = me.vertices
+    if not verts:
+        return None
+    used = set()
+    for p in me.polygons:
+        used.update(p.vertices)
+    idxs = sorted(used) if used else range(len(verts))
+    lo = [float("inf")] * 3
+    hi = [float("-inf")] * 3
+    for i in idxs:
+        w = mw @ mathutils.Vector(verts[i].co)
+        for k in range(3):
+            if w[k] < lo[k]:
+                lo[k] = w[k]
+            if w[k] > hi[k]:
+                hi[k] = w[k]
+    return lo, hi
+
+
+def _on_evaluated_mesh(o, reduce_fn, empty):
+    """Run `reduce_fn(mesh, matrix_world)` against the EVALUATED mesh.
+
+    The depsgraph dance lives here once so the points predicate and the bounds
+    predicate cannot drift about WHICH mesh they measure — modifiers,
+    armatures and mirrors write into the evaluated object, not into `o.data`,
+    and a reader that forgets it measures a rigged import's rest cage.
+    """
+    if o.type != "MESH" or not o.data.vertices:
+        return empty
+    try:
+        # Local import, like every other function here. Without it `bpy` is not
+        # a name in this module, the lookup raises NameError, the except below
+        # swallows it, and EVERY mesh silently measures its rest cage instead
+        # of the evaluated result — modifiers, armatures and mirrors included.
+        import bpy
+        dg = bpy.context.evaluated_depsgraph_get()
+        eo = o.evaluated_get(dg)
+        me = None
+        try:
+            me = eo.to_mesh()
+            if me is not None:
+                return reduce_fn(me, eo.matrix_world)
+        finally:
+            if me is not None:
+                try:
+                    eo.to_mesh_clear()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    if o.name not in _EVAL_FALLBACKS:
+        _EVAL_FALLBACKS.append(o.name)
+    return reduce_fn(o.data, o.matrix_world)
+
+
+def face_connected_world_bounds(o):
+    """World AABB over the same vertices `face_connected_world_points` uses."""
+    return _on_evaluated_mesh(o, _face_connected_bounds, None)
+
+
 def face_connected_world_points(o):
     """World-space positions of the vertices that belong to at least one face.
 
@@ -3274,32 +3345,7 @@ def face_connected_world_points(o):
     Falls back to the original data only when evaluation cannot produce a
     mesh, and NAMES the fallback in _EVAL_FALLBACKS for the census.
     """
-    if o.type != "MESH" or not o.data.vertices:
-        return []
-    try:
-        # Local import, like every other function here. Without it `bpy` is not
-        # a name in this module, the lookup raises NameError, the except below
-        # swallows it, and EVERY mesh silently measures its rest cage instead
-        # of the evaluated result — modifiers, armatures and mirrors included.
-        import bpy
-        dg = bpy.context.evaluated_depsgraph_get()
-        eo = o.evaluated_get(dg)
-        me = None
-        try:
-            me = eo.to_mesh()
-            if me is not None:
-                return _face_connected_points(me, eo.matrix_world)
-        finally:
-            if me is not None:
-                try:
-                    eo.to_mesh_clear()
-                except Exception:
-                    pass
-    except Exception:
-        pass
-    if o.name not in _EVAL_FALLBACKS:
-        _EVAL_FALLBACKS.append(o.name)
-    return _face_connected_points(o.data, o.matrix_world)
+    return _on_evaluated_mesh(o, _face_connected_points, [])
 
 
 def deformed_world_points(o, depsgraph, failures=None):
@@ -3533,8 +3579,26 @@ def animated_bounds(scene, meshes):
 # missing measurement.
 CONTACT_RECORD_RANGE = 0.05
 
+# Two resource budgets for the contact scan, both denominated in WORK rather
+# than in scene size, both reported when they bite, and both degrading a pair
+# to a coarser-but-true verdict instead of deleting the fact class.
+#
+# They exist because contact is only USUALLY local. A scene whose parts are
+# genuinely all co-located has a quadratic number of near pairs, and that is
+# real work rather than a mistake to refuse — but it must not become an
+# unbounded allocation or a hang with no verdict. The old 60-mesh refusal was
+# the wrong shape for exactly this: it keyed on the number of meshes (a shape)
+# rather than on the work they imply (a resource), and it deleted every contact
+# fact at once instead of coarsening the ones it could not afford.
+#
+# A pair past CONTACT_PAIR_BUDGET is never examined and is NAMED as such; a
+# pair past CONTACT_REFINE_BUDGET still reports its axis bound, which remains a
+# true lower bound on separation, just coarser than the measured distance.
+CONTACT_PAIR_BUDGET = 2000000
+CONTACT_REFINE_BUDGET = 50000
 
-def contact_report(objects, limit=60):
+
+def contact_report(objects):
     """Separation between every nearby pair of meshes.
 
     Two numbers per pair, from two different geometries — labelled because
@@ -3565,8 +3629,6 @@ def contact_report(objects, limit=60):
     import mathutils
     meshes = [o for o in objects if o.type == "MESH"]
     skipped = []
-    if len(meshes) > limit:
-        return [], ["scene has %d meshes, above the %d-mesh contact limit" % (len(meshes), limit)]
 
     # Every degraded pair is NAMED — the docstring above promises a measured
     # surface distance certified by a support witness, and any pair that
@@ -3600,25 +3662,51 @@ def contact_report(objects, limit=60):
             [max(c[a] for c in corners) for a in range(3)],
         )
 
-    # Points retained per mesh for the oblique-axis refinement below; the
-    # AABB is exact support along the WORLD axes, but those three axes are
-    # not always where the separation lives.
-    pts_of = {o.name: face_connected_world_points(o) for o in meshes}
+    # Points for the oblique-axis refinement below — the AABB is exact support
+    # along the WORLD axes, but those three axes are not always where the
+    # separation lives. Retained LAZILY: only meshes that survive the broad
+    # phase are ever asked, so a scene of thousands of parts holds the working
+    # set rather than every sample in the scene at once.
+    pts_cache = {}
 
-    def world_aabb_of(o):
-        pts = pts_of[o.name]
-        if pts:
-            return (
-                [min(p[k] for p in pts) for k in range(3)],
-                [max(p[k] for p in pts) for k in range(3)],
-            )
-        return world_aabb(o)
+    def pts_for(o):
+        got = pts_cache.get(o.name)
+        if got is None:
+            got = face_connected_world_points(o)
+            pts_cache[o.name] = got
+        return got
 
-    boxes = {o.name: world_aabb_of(o) for o in meshes}
+    # The box comes from the SAME sampling it always did, streamed so the
+    # points need not be kept. Falling back to `bound_box` here instead would
+    # change the recorded gaps (it is the AABB of a transformed box, looser
+    # than the tight one) and, with modifiers, can read SMALLER than the real
+    # geometry — a missed contact wearing an optimisation's clothes.
+    boxes = {}
+    for o in meshes:
+        # STREAMED: the box is reduced as the vertices are visited, so this
+        # pass is O(1) memory per mesh. Collecting the points here instead
+        # would hold every sample in the scene at once — the memory wall the
+        # old 60-mesh refusal was standing in front of — and discarding them
+        # only to re-extract for survivors would traverse the geometry twice.
+        streamed = face_connected_world_bounds(o)
+        if streamed is not None:
+            lo, hi = streamed
+        else:
+            lo, hi = world_aabb(o)
+        if not all(math.isfinite(v) for v in list(lo) + list(hi)):
+            # A non-finite coordinate poisons min/max and yields a box that
+            # matches nothing, so the mesh would silently drop out of every
+            # pair with no verdict. Named instead.
+            skipped.append("'%s' has non-finite world coordinates — excluded from the contact scan" % o.name)
+            continue
+        boxes[o.name] = (lo, hi)
+    meshes = [o for o in meshes if o.name in boxes]
     # Above this many combined vertices the oblique refinement is skipped
     # (the AABB verdict stands, as it always has) — the cap is the caller's
     # honesty budget, same doctrine as every other heavy measurement here.
     REFINE_VERT_CAP = 400000
+    # Mutable cell: the counter is read and written inside the pair loop.
+    refined = [0]
 
     # World-space BVH per mesh, built lazily (only pairs that get this far
     # pay for it). FromPolygons over world-transformed vertices, NOT
@@ -3723,91 +3811,170 @@ def contact_report(objects, limit=60):
         return p, q
 
     out = []
-    for i, a in enumerate(meshes):
+    # Broad phase: sweep and prune along one axis, so a scene of thousands of
+    # parts costs O(n log n + pairs-that-are-actually-near) instead of testing
+    # every pair against every other. This used to be a flat 60-mesh refusal
+    # that returned NO contacts at all — grounding, touching, z-fighting and
+    # every claim that leans on them, deleted for any scene with 61 meshes,
+    # because pairwise enumeration got expensive. Contact is a LOCAL relation;
+    # the fix is to stop looking at far pairs, not to stop looking.
+    #
+    # The sweep is deliberately INVISIBLE to the output: it only decides which
+    # pairs to examine, and every survivor is then put through the exact
+    # per-axis test below, unchanged. So the recorded numbers cannot shift with
+    # the ordering, and the pair list is sorted back into the (i, j) order the
+    # nested loops produced.
+    #
+    # A pair whose sweep-axis slabs are further apart than the record range can
+    # never pass the test — that axis alone already exceeds it, and `widest` is
+    # a max — so pruning on it drops nothing. Sorting by each box's LOW edge
+    # makes the reachable set a contiguous run, including the case where one
+    # box wholly contains another.
+    if meshes:
+        centres = [
+            [(boxes[o.name][0][k] + boxes[o.name][1][k]) * 0.5 for k in range(3)]
+            for o in meshes
+        ]
+        # The axis the scene is most spread along separates the most pairs.
+        # Ties break to the lowest axis index, so the choice is deterministic.
+        spreads = [
+            max(c[k] for c in centres) - min(c[k] for c in centres) for k in range(3)
+        ]
+        sweep_axis = max(range(3), key=lambda k: (spreads[k], -k))
+        order = sorted(range(len(meshes)), key=lambda idx: boxes[meshes[idx].name][0][sweep_axis])
+        lows = [boxes[meshes[idx].name][0][sweep_axis] for idx in order]
+        candidates = []
+        swept = 0
+        exhausted = False
+        for position, idx in enumerate(order):
+            reach = boxes[meshes[idx].name][1][sweep_axis] + CONTACT_RECORD_RANGE
+            end = bisect.bisect_right(lows, reach, position + 1)
+            # Bounded INSIDE the append loop: one mesh overlapping thousands of
+            # others would otherwise blow past the budget within a single outer
+            # step, which is precisely the co-located scene the budget is for.
+            room = CONTACT_PAIR_BUDGET - len(candidates)
+            if end - (position + 1) > room:
+                end = position + 1 + max(0, room)
+                exhausted = True
+            for other in order[position + 1:end]:
+                candidates.append((idx, other) if idx < other else (other, idx))
+            swept += 1
+            if exhausted:
+                skipped.append(
+                    "contact sweep stopped at %d candidate pairs (budget %d) after %d of %d"
+                    " meshes — pairs beyond it were not examined"
+                    % (len(candidates), CONTACT_PAIR_BUDGET, swept, len(meshes)))
+                break
+        candidates.sort()
+    else:
+        candidates = []
+
+    for i, j in candidates:
+        a, b = meshes[i], meshes[j]
         alo, ahi = boxes[a.name]
-        for b in meshes[i + 1:]:
-            blo, bhi = boxes[b.name]
-            # Broad phase, per axis: negative where the spans overlap.
-            gap = [max(blo[k] - ahi[k], alo[k] - bhi[k]) for k in range(3)]
-            widest = max(gap)
-            # Only report pairs near enough to be a relationship rather than
-            # two unrelated parts of the scene (see CONTACT_RECORD_RANGE).
-            if widest > CONTACT_RECORD_RANGE:
-                continue
-            separation = widest
-            intersects = None
-            pa, pb = pts_of[a.name], pts_of[b.name]
-            refinable = pa and pb and len(pa) + len(pb) <= REFINE_VERT_CAP
-            if not refinable:
-                # The axis bound stands alone for this pair: for a rotated
-                # pair the world-axis slabs can overlap while the surfaces
-                # are metres apart, so the recorded separation is a proxy,
-                # not a measurement — say so.
+        blo, bhi = boxes[b.name]
+        # Broad phase, per axis: negative where the spans overlap.
+        gap = [max(blo[k] - ahi[k], alo[k] - bhi[k]) for k in range(3)]
+        widest = max(gap)
+        # Only report pairs near enough to be a relationship rather than
+        # two unrelated parts of the scene (see CONTACT_RECORD_RANGE).
+        if widest > CONTACT_RECORD_RANGE:
+            continue
+        separation = widest
+        intersects = None
+        pa, pb = pts_for(a), pts_for(b)
+        refinable = pa and pb and len(pa) + len(pb) <= REFINE_VERT_CAP
+        over_refine_budget = False
+        if refinable and refined[0] >= CONTACT_REFINE_BUDGET:
+            over_refine_budget = True
+            # Consumed in (i, j) order, so WHICH pairs stay coarse is a
+            # property of the scene rather than of the machine.
+            refinable = False
+            if refined[0] == CONTACT_REFINE_BUDGET:
+                refined[0] += 1
+                skipped.append(
+                    "narrow-phase budget %d pairs exhausted — later pairs carry their axis"
+                    " bound, a true lower bound on separation rather than the measured"
+                    " distance" % CONTACT_REFINE_BUDGET)
+        elif refinable:
+            refined[0] += 1
+        if not refinable:
+            # The axis bound stands alone for this pair: for a rotated
+            # pair the world-axis slabs can overlap while the surfaces
+            # are metres apart, so the recorded separation is a proxy,
+            # not a measurement — say so.
+            # Name the budget that actually bit. Printing the vertex cap for a
+            # pair the NARROW-PHASE budget coarsened would send a reader to
+            # raise the wrong number.
+            if over_refine_budget:
+                note_degraded("'%s <-> %s' separation is the axis bound only (narrow-phase budget of %d pairs spent)"
+                              % (a.name, b.name, CONTACT_REFINE_BUDGET))
+            else:
                 note_degraded("'%s <-> %s' separation is the axis bound only (%d combined verts over the %d refine cap)"
                               % (a.name, b.name, len(pa) + len(pb), REFINE_VERT_CAP))
-            if refinable:
-                # One more support direction — centre to centre — before
-                # the narrow phase: cheap, and for rotated pairs it is the
-                # direction the world axes structurally cannot test.
-                ca = [(alo[k] + ahi[k]) / 2.0 for k in range(3)]
-                cb = [(blo[k] + bhi[k]) / 2.0 for k in range(3)]
-                axis = [cb[k] - ca[k] for k in range(3)]
-                norm = math.sqrt(sum(v * v for v in axis))
-                lower = widest
-                seed = None
-                if norm > 1e-9:
-                    axis = [v / norm for v in axis]
-                    g = support_gap(pa, pb, axis)
-                    if g > lower:
-                        lower = g
-                    # Seed the narrow phase at A's support witness along the
-                    # centre direction — the point most exposed toward B.
-                    seed = max(pa, key=lambda p: p[0] * axis[0] + p[1] * axis[1] + p[2] * axis[2])
-                if seed is None:
-                    seed = pa[0]
-                if lower > 0.0:
-                    # Proven disjoint. The directional gap is only a lower
-                    # bound of the true distance (equality needs the optimal
-                    # direction), so refine to the measured point pair.
-                    pair = nearest_pair(a, b, seed)
-                    if pair is not None:
-                        dist = (pair[1] - pair[0]).length
-                        separation = dist if dist > lower else lower
-                    else:
-                        # Disjointness is still certified (the support gap
-                        # proved it), but the DISTANCE is only the lower
-                        # bound — the witness pair never converged.
-                        note_degraded("'%s <-> %s' separation is a lower bound only (no converged witness pair)"
-                                      % (a.name, b.name))
-                        separation = lower
-                    intersects = False
+        if refinable:
+            # One more support direction — centre to centre — before
+            # the narrow phase: cheap, and for rotated pairs it is the
+            # direction the world axes structurally cannot test.
+            ca = [(alo[k] + ahi[k]) / 2.0 for k in range(3)]
+            cb = [(blo[k] + bhi[k]) / 2.0 for k in range(3)]
+            axis = [cb[k] - ca[k] for k in range(3)]
+            norm = math.sqrt(sum(v * v for v in axis))
+            lower = widest
+            seed = None
+            if norm > 1e-9:
+                axis = [v / norm for v in axis]
+                g = support_gap(pa, pb, axis)
+                if g > lower:
+                    lower = g
+                # Seed the narrow phase at A's support witness along the
+                # centre direction — the point most exposed toward B.
+                seed = max(pa, key=lambda p: p[0] * axis[0] + p[1] * axis[1] + p[2] * axis[2])
+            if seed is None:
+                seed = pa[0]
+            if lower > 0.0:
+                # Proven disjoint. The directional gap is only a lower
+                # bound of the true distance (equality needs the optimal
+                # direction), so refine to the measured point pair.
+                pair = nearest_pair(a, b, seed)
+                if pair is not None:
+                    dist = (pair[1] - pair[0]).length
+                    separation = dist if dist > lower else lower
                 else:
-                    # Not yet proven either way: ask the narrow phase for a
-                    # candidate pair and test ITS direction — the GJK move.
-                    pair = nearest_pair(a, b, seed)
-                    if pair is not None and (pair[1] - pair[0]).length > 1e-9:
-                        d = (pair[1] - pair[0]).normalized()
-                        g = support_gap(pa, pb, (d.x, d.y, d.z))
-                        if g > 0.0:
-                            separation = (pair[1] - pair[0]).length
-                            intersects = False
-                    if intersects is None:
-                        if pair is None:
-                            # No witness at all: the verdict below rests on
-                            # the axis bound, which cannot distinguish a
-                            # rotated near-miss from a true overlap.
-                            note_degraded("'%s <-> %s' verdict rests on the axis bound (narrow phase yielded no witness)"
-                                          % (a.name, b.name))
-                        separation = lower
-                        intersects = separation <= 0.0
-            if intersects is None:
-                intersects = separation <= 0.0
-            out.append({
-                "a": a.name, "b": b.name,
-                "gap": [R6(g) for g in gap],
-                "separation": R6(separation),
-                "intersects": intersects,
-            })
+                    # Disjointness is still certified (the support gap
+                    # proved it), but the DISTANCE is only the lower
+                    # bound — the witness pair never converged.
+                    note_degraded("'%s <-> %s' separation is a lower bound only (no converged witness pair)"
+                                  % (a.name, b.name))
+                    separation = lower
+                intersects = False
+            else:
+                # Not yet proven either way: ask the narrow phase for a
+                # candidate pair and test ITS direction — the GJK move.
+                pair = nearest_pair(a, b, seed)
+                if pair is not None and (pair[1] - pair[0]).length > 1e-9:
+                    d = (pair[1] - pair[0]).normalized()
+                    g = support_gap(pa, pb, (d.x, d.y, d.z))
+                    if g > 0.0:
+                        separation = (pair[1] - pair[0]).length
+                        intersects = False
+                if intersects is None:
+                    if pair is None:
+                        # No witness at all: the verdict below rests on
+                        # the axis bound, which cannot distinguish a
+                        # rotated near-miss from a true overlap.
+                        note_degraded("'%s <-> %s' verdict rests on the axis bound (narrow phase yielded no witness)"
+                                      % (a.name, b.name))
+                    separation = lower
+                    intersects = separation <= 0.0
+        if intersects is None:
+            intersects = separation <= 0.0
+        out.append({
+            "a": a.name, "b": b.name,
+            "gap": [R6(g) for g in gap],
+            "separation": R6(separation),
+            "intersects": intersects,
+        })
     out.sort(key=lambda r: r["separation"])
     return out, skipped
 

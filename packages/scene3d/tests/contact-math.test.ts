@@ -101,4 +101,58 @@ describe.skipIf(!hasBlender)("contact separation is a real distance (real Blende
     });
     expect(result.census?.contactRange).toBeCloseTo(0.05, 9);
   }, LONG);
+
+  it("measures contacts in a scene far past the old sixty-mesh refusal", async () => {
+    /*
+     * The scan used to return NOTHING above 60 meshes — grounding,
+     * touching-faces, z-fighting and every claim resting on them, deleted
+     * wholesale, because pairwise enumeration got expensive. Contact is a
+     * LOCAL relation, so the broad phase sweeps and prunes and the fact class
+     * survives at any part count.
+     *
+     * The assertion is the count, not merely "no error": a scan that silently
+     * returned an empty list would also raise nothing, and an empty contact
+     * list is precisely the shape of the bug being pinned against.
+     */
+    const dir = path.join(__dirname, ".work", `contact-many-${++seq}`);
+    rmForSetup(dir);
+    fs.mkdirSync(dir, { recursive: true });
+    const parts: unknown[] = [{ id: "prp_floor", size: [8, 4, 0.1], material: "mtl_m" }];
+    const relations: unknown[] = [
+      { type: "at", part: "prp_floor", center: [0, 0, 0.05] },
+    ];
+    let n = 0;
+    for (let gx = 0; gx < 5; gx++) {
+      for (let gy = 0; gy < 19; gy++) {
+        n += 1;
+        const id = `prp_b${String(n).padStart(3, "0")}`;
+        parts.push({ id, size: [0.2, 0.15, 0.2], material: "mtl_m" });
+        relations.push({
+          type: "at",
+          part: id,
+          center: [-3 + gx * 0.35, -1.6 + gy * 0.18, 0.2],
+        });
+      }
+    }
+    expect(parts.length).toBeGreaterThan(60);
+    fs.writeFileSync(
+      path.join(dir, "scene.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        materials: { mtl_m: { baseColor: [0.5, 0.5, 0.5], roughness: 0.6 } },
+        parts,
+        relations,
+      }),
+    );
+    const result = await compile({
+      projectDir: dir,
+      stages: ["parse", "build"],
+      timeoutMs: LONG,
+      noCache: true,
+    });
+    // Every block rests on the floor, so there is at least one contact per
+    // block; the scan must find them rather than excusing itself.
+    expect((result.census?.contacts ?? []).length).toBeGreaterThanOrEqual(n);
+    expect(result.census?.contactsSkipped ?? []).toEqual([]);
+  }, LONG);
 });
