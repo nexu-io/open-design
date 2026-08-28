@@ -56,7 +56,7 @@ describe("resolveScriptsDir", () => {
 describe("cross-language constants", () => {
   it("agrees with the runner about the turntable's default elevation", async () => {
     const { PROOF_ELEVATION_DEG } = await import("../src/read/views.js");
-    const source = fs.readFileSync(runnerPath(path.join(__dirname, "..", "scripts")), "utf8");
+    const source = fs.readFileSync(runnerPath(), "utf8");
     const match = source.match(/opts\.get\("orbitElevationDeg",\s*([0-9.]+)\)/);
     expect(match, "the runner must still read orbitElevationDeg with a fallback").toBeTruthy();
     expect(Number(match![1])).toBe(PROOF_ELEVATION_DEG);
