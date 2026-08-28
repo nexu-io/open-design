@@ -307,8 +307,7 @@ export function validateSceneSpec(
   }
   let light: SceneSpec["light"];
   if (doc.light !== undefined) {
-    if (doc.light === "studio" || doc.light === "sun") light = doc.light;
-    else errors.push('light must be "studio" or "sun"');
+    light = validateLight(doc.light, errors);
   }
   let claims: ClaimsSpec | undefined;
   if (doc.claims !== undefined) {
@@ -1271,6 +1270,83 @@ function validateRelation(index: number, value: unknown, errors: string[]): Rela
       );
       return undefined;
   }
+}
+
+/**
+ * The light: a preset word, or a spec that scales the same derived rig.
+ *
+ * The word stays legal because it is the whole answer for the two shots that
+ * need no steering. The object exists because the rig is otherwise
+ * unreachable, and an author who wants a dark scene has nothing to turn —
+ * `emission` on a material makes a surface glow, but against a full-power key
+ * and a bright world it can only ever blow out.
+ */
+function validateLight(value: unknown, errors: string[]): SceneSpec["light"] {
+  if (value === "studio" || value === "sun") return value;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    errors.push(
+      'light must be "studio", "sun", or an object like { "preset": "studio", "key": 0.05, "ambient": 0.01 } — the object scales the same derived rig, which is what a night shot needs',
+    );
+    return undefined;
+  }
+  const spec = value as Record<string, unknown>;
+  const before = errors.length;
+
+  let preset: "studio" | "sun" | undefined;
+  if (spec.preset !== undefined) {
+    if (spec.preset === "studio" || spec.preset === "sun") preset = spec.preset;
+    else errors.push('light.preset must be "studio" or "sun"');
+  }
+
+  const num = (key: string, min: number, max: number): number | undefined => {
+    if (spec[key] === undefined) return undefined;
+    const v = spec[key];
+    if (typeof v === "number" && Number.isFinite(v) && v >= min && v <= max) return v;
+    errors.push(`light.${key} must be a number in [${min}, ${max}]`);
+    return undefined;
+  };
+  // `key` is a MULTIPLIER on the derived power, not watts: the derivation is
+  // what keeps one number correct at every subject scale, so an absolute
+  // wattage here would be right for exactly one size of scene.
+  const key = num("key", 0, 100);
+  const azimuthDeg = num("azimuthDeg", -360, 360);
+  const elevationDeg = num("elevationDeg", -89, 89);
+
+  let ambient: number | [number, number, number] | undefined;
+  if (spec.ambient !== undefined) {
+    const v = spec.ambient;
+    if (typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 100) {
+      ambient = v;
+    } else if (
+      Array.isArray(v) &&
+      v.length === 3 &&
+      v.every((c) => typeof c === "number" && Number.isFinite(c) && c >= 0 && c <= 100)
+    ) {
+      ambient = [v[0] as number, v[1] as number, v[2] as number];
+    } else {
+      errors.push(
+        "light.ambient must be a linear grey level (a number) or an [r, g, b] triple — it is the world the subject sits in, so 0 is a void and the default is bright enough for a metal to have something to reflect",
+      );
+    }
+  }
+
+  const KNOWN_LIGHT_KEYS = new Set(["preset", "key", "ambient", "azimuthDeg", "elevationDeg"]);
+  for (const k of Object.keys(spec)) {
+    if (isCommentKey(k)) continue;
+    if (!KNOWN_LIGHT_KEYS.has(k)) {
+      errors.push(
+        `light.${k} is not a light field — ${didYouMean(k, KNOWN_LIGHT_KEYS)}known fields: ${[...KNOWN_LIGHT_KEYS].join(", ")}`,
+      );
+    }
+  }
+  if (errors.length > before) return undefined;
+  return {
+    ...(preset !== undefined ? { preset } : {}),
+    ...(key !== undefined ? { key } : {}),
+    ...(ambient !== undefined ? { ambient } : {}),
+    ...(azimuthDeg !== undefined ? { azimuthDeg } : {}),
+    ...(elevationDeg !== undefined ? { elevationDeg } : {}),
+  };
 }
 
 function validateCamera(value: unknown, errors: string[]): SceneSpec["camera"] {

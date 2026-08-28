@@ -504,8 +504,34 @@ blending, for glass, a scrim, a ghosted x-ray part.
 
 **Camera and light.** In declarative spec scenes, staging is derived from the
 solved bounds. Steer with `"camera": { "azimuthDeg": 30, "elevationDeg": 20 }`
-and `"light": "studio" | "sun"`. Raw scenes may author their own camera and
-light directly.
+and `"light"`. Raw scenes may author their own camera and light directly.
+
+`"light"` is `"studio"` (default), `"sun"`, or an object that scales the same
+derived rig:
+
+```json
+"light": { "preset": "studio", "key": 0.04, "ambient": 0.008 }
+```
+
+| field | what it does |
+|---|---|
+| `key` | multiplier on the derived key power. `1` is the default; `0` removes the key entirely |
+| `ambient` | the world's own light — a linear grey level, or an `[r, g, b]` triple for a coloured cast |
+| `azimuthDeg` / `elevationDeg` | where the key stands, in the same compass the camera and orbit use |
+
+**To light a scene by its own lamps, you must turn the room off.** `key` and
+`ambient` answer different questions and a night shot needs both near zero: a
+dim key against a bright world is an overcast afternoon, and a bright key
+against a black world is a subject in a void. With the key down, `emission` on
+a material stops being a glow and starts being a lamp — an emissive surface
+casts real light onto what is near it, so a lantern pools warmth on the counter
+under it and a lit sign rims what it hangs over. At full key it can only ever
+blow out, which is why an emissive part in a default shot looks like a white
+blob rather than a light.
+
+Judge emission on `out/materials/ball-<material>.png` before the turntable. The
+report says `ball clips N%` when the material's output exceeds display range —
+that number, not the frame, is what tells you the strength is too hot.
 
 **Omit `distance`.** Left out, it AUTO-FITS: the compiler solves
 `d = r / (tan(fov/2) × 0.8)` against its own 50mm lens, so the subject

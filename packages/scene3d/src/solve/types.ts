@@ -390,6 +390,56 @@ export interface CameraSpec {
   distance?: number;
 }
 
+/** The two shots that need no steering: an indoor key, or an outdoor sun. */
+export type LightPreset = "studio" | "sun";
+
+/**
+ * How the scene is lit.
+ *
+ * The rig is derived from the subject — key power goes as the bounding
+ * radius squared so illumination, not the lamp's number, is what stays
+ * constant across scales. Every field here scales that derivation rather
+ * than replacing it, which is why one spec reads the same on a 26cm lantern
+ * and a 26m hangar.
+ *
+ * The two knobs that matter are `key` and `ambient`, and they are separate
+ * because they answer different questions. `key` is the lamp: lower it and
+ * shadows deepen. `ambient` is the world the subject sits in: lower it and
+ * everything not directly lit goes toward black. A night shot needs BOTH
+ * near zero — a dim key against a bright world is an overcast afternoon, and
+ * a bright key against a black world is a subject in a void. Neither reads
+ * as night, which is exactly what a scene lit only by its own lanterns
+ * needs. Emissive materials are what fills that darkness back in.
+ */
+export interface LightSpec {
+  /** Which derived rig to scale. Default `studio`. */
+  preset?: LightPreset;
+  /**
+   * Multiplier on the derived key power. `1` is the calibrated default, `0`
+   * removes the key entirely (leaving the world and any emissive surfaces as
+   * the only light). Values below ~0.1 are where a lit sign or a lantern
+   * starts to be the brightest thing in frame.
+   */
+  key?: number;
+  /**
+   * The world's own light, as a linear grey level or an RGB triple. The
+   * default is a neutral fill bright enough that a PBR metal has an
+   * environment to reflect — against a black world a real metal renders
+   * near-black and reads as a broken pipeline. Lower it for night; give it a
+   * colour for a dusk or moonlit cast.
+   */
+  ambient?: number | [number, number, number];
+  /**
+   * Where the key stands, in the SAME compass convention the camera and the
+   * proof orbit use: azimuth 0 is the front (−Y), increasing toward +X.
+   * Omitted, the key comes from the camera's own quarter, which is the
+   * flattering default and the reason a derived shot never looks unlit.
+   */
+  azimuthDeg?: number;
+  /** Elevation of the key above the horizon, degrees. */
+  elevationDeg?: number;
+}
+
 /**
  * The lens the compiler's derived camera is authored with, in millimetres,
  * and the sensor it exposes — emitted EXPLICITLY by the backend rather than
@@ -500,8 +550,11 @@ export interface SceneSpec {
   parts: PartSpec[];
   relations: Relation[];
   camera?: CameraSpec;
-  /** Lighting style: derived studio key (default) or an outdoor sun. */
-  light?: "studio" | "sun";
+  /**
+   * The light. A preset word for the two common shots, or a spec that steers
+   * the same derived rig — the shape {@link CameraSpec} already has.
+   */
+  light?: LightPreset | LightSpec;
   claims?: ClaimsSpec;
 }
 

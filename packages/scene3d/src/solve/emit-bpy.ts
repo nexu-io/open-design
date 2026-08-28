@@ -43,7 +43,7 @@ export interface EmitOptions {
   camera?: boolean | CameraSpec;
   lights?: boolean;
   /** Lighting style: derived studio key (default) or an outdoor sun. */
-  light?: "studio" | "sun";
+  light?: import("./types.js").LightPreset | import("./types.js").LightSpec;
   /** Named material definitions from the spec's `materials` block. */
   materials?: Record<string, MaterialSpec>;
   /** How finely curved primitives are emitted. See TESSELLATION_DEFAULTS. */
@@ -955,19 +955,75 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
   /* ---- lights ------------------------------------------------------ */
   if (options.lights !== false) {
     const framing = frameScene(scene, typeof options.camera === "object" ? options.camera : {});
-    if (options.light === "sun") {
+    // A preset word and a spec are the same rig; the spec only scales it.
+    const lightSpec = typeof options.light === "object" && options.light !== null ? options.light : {};
+    const preset = typeof options.light === "string" ? options.light : lightSpec.preset ?? "studio";
+    const keyScale = lightSpec.key ?? 1;
+    // The world is authored here rather than left to the runner's neutral
+    // default whenever the author states one: a dim key against a bright world
+    // is an overcast afternoon, so a night shot has to be able to reach BOTH.
+    if (lightSpec.ambient !== undefined) {
+      const a = lightSpec.ambient;
+      const rgb = typeof a === "number" ? [a, a, a] : a;
+      lines.push(
+        "# Authored world light. This is what everything not directly lit gets,",
+        "# so it is the difference between a dark scene and a subject in a void.",
+        "world = bpy.context.scene.world",
+        'if world is None:',
+        '    world = bpy.data.worlds.new("S3D_World")',
+        "    bpy.context.scene.world = world",
+        "world.use_nodes = True",
+        '_bg = next((n for n in world.node_tree.nodes if n.type == "BACKGROUND"), None)',
+        "if _bg is None:",
+        '    _bg = world.node_tree.nodes.new("ShaderNodeBackground")',
+        '    _out = next((n for n in world.node_tree.nodes if n.type == "OUTPUT_WORLD"), None)',
+        "    if _out is None:",
+        '        _out = world.node_tree.nodes.new("ShaderNodeOutputWorld")',
+        '    world.node_tree.links.new(_bg.outputs["Background"], _out.inputs["Surface"])',
+        `_bg.inputs["Color"].default_value = (${num(rgb[0]!)}, ${num(rgb[1]!)}, ${num(rgb[2]!)}, 1.0)`,
+        "",
+      );
+    }
+    // A key scaled to zero is not a lamp at 0W — it is NO lamp, so the scene
+    // is lit by its world and its own emissive surfaces alone. Emitting a
+    // dead light object would leave a part in the census that lights nothing.
+    if (keyScale <= 0) {
+      lines.push(
+        "# light.key = 0: no key at all. The world and any emissive materials",
+        "# are the only light in this scene.",
+        "",
+      );
+    } else if (preset === "sun") {
       lines.push(
         "# Outdoor sun: parallel light, so energy is irradiance and does not",
         "# need to scale with the subject.",
         `bpy.ops.object.light_add(type="SUN", location=(${num(framing.center[0] + framing.radius)}, ${num(framing.center[1] - framing.radius)}, ${num(framing.center[2] + framing.radius * 2)}))`,
         "key = bpy.context.object",
         'key.name = "lgt_key"',
-        "key.data.energy = 3.0",
+        `key.data.energy = ${num(3.0 * keyScale)}`,
         "key.rotation_euler = (0.6, 0.2, 0.8)",
         "",
       );
     } else {
       const key = framing.radius * 2.5;
+      // Where the key stands. Omitted, it sits on the camera's own quarter
+      // (+X, -Y, up) — the flattering default that keeps a derived shot from
+      // ever looking unlit. Stated, it uses the ONE pose convention the camera
+      // and the proof orbit already speak, so "the key is behind it" means the
+      // same thing here as everywhere else: azimuth 0 is the front (-Y),
+      // increasing toward +X.
+      const keyPos =
+        lightSpec.azimuthDeg !== undefined || lightSpec.elevationDeg !== undefined
+          ? (() => {
+              const az = ((lightSpec.azimuthDeg ?? 45) * Math.PI) / 180;
+              const el = ((lightSpec.elevationDeg ?? 35) * Math.PI) / 180;
+              return [
+                framing.center[0] + Math.cos(el) * Math.sin(az) * key,
+                framing.center[1] - Math.cos(el) * Math.cos(az) * key,
+                framing.center[2] + Math.sin(el) * key,
+              ] as const;
+            })()
+          : ([framing.center[0] + key, framing.center[1] - key, framing.center[2] + key] as const);
       lines.push(
         "# Key light scaled to the subject so exposure does not depend on how",
         "# large the model happens to be.",
@@ -987,11 +1043,15 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
         "# Squared power makes irradiance constant, so one calibration holds",
         "# at every scale: 4000W at a 1m radius, which is what the sizes that",
         "# always looked right were already getting.",
-        `bpy.ops.object.light_add(type="AREA", location=(${num(framing.center[0] + key)}, ${num(framing.center[1] - key)}, ${num(framing.center[2] + key)}))`,
+        `bpy.ops.object.light_add(type="AREA", location=(${num(keyPos[0])}, ${num(keyPos[1])}, ${num(keyPos[2])}))`,
         "key = bpy.context.object",
         'key.name = "lgt_key"',
-        `key.data.energy = ${num(KEY_WATTS_AT_ONE_METRE * framing.radius * framing.radius)}`,
+        `key.data.energy = ${num(KEY_WATTS_AT_ONE_METRE * framing.radius * framing.radius * keyScale)}`,
         `key.data.size = ${num(framing.radius * 2)}`,
+        // An area lamp is directional: it emits along its own -Z. The default
+        // quarter happened to face the subject; any authored angle does not,
+        // so the lamp is aimed the same way the camera is.
+        `key.rotation_euler = __import__("mathutils").Vector((${num(keyPos[0] - framing.center[0])}, ${num(keyPos[1] - framing.center[1])}, ${num(keyPos[2] - framing.center[2])})).to_track_quat("Z", "Y").to_euler()`,
         "",
       );
     }
@@ -1004,8 +1064,15 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
  * Key-light power for a subject of one metre radius, in watts. Every other
  * size scales from here by radius squared, which is what keeps the subject's
  * illumination — not the lamp's number — the thing that stays constant.
+ *
+ * Calibrated WITH indirect light transport on, which is the only honest place
+ * to calibrate it: the proof renders bounce, so a key tuned against direct
+ * light alone lands about a third too hot and the overexposure rule fires on
+ * scenes that are correctly authored. The corpus is what sets this number —
+ * it is the largest value at which the fixtures photograph without tripping
+ * S3D-W-385, not a figure derived from first principles.
  */
-const KEY_WATTS_AT_ONE_METRE = 4000;
+const KEY_WATTS_AT_ONE_METRE = 2800;
 
 /**
  * Camera placement derived from the solved bounding box.

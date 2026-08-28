@@ -2597,3 +2597,44 @@ describe("error voice (field-audit inconsistencies)", () => {
     expect(suspect[0]!.message).toContain("bridging air");
   });
 });
+
+describe("light validation: the object is legal, nonsense is named", () => {
+  const base = {
+    schemaVersion: 1,
+    parts: [{ id: "prp_box", size: [1, 1, 1] }],
+    relations: [{ type: "at", part: "prp_box", center: [0, 0, 0.5] }],
+  };
+  const check = (light: unknown) => validateSceneSpec({ ...base, light });
+
+  it("accepts the preset words and the steering object alike", () => {
+    expect(check("studio").errors).toEqual([]);
+    expect(check("sun").errors).toEqual([]);
+    expect(check({ key: 0.05, ambient: 0.01 }).errors).toEqual([]);
+    expect(check({ preset: "sun", key: 0.5, azimuthDeg: 200, elevationDeg: 12 }).errors).toEqual([]);
+    expect(check({ ambient: [0.02, 0.01, 0.05] }).errors).toEqual([]);
+  });
+
+  it("names an unknown light field and suggests the one meant", () => {
+    const { errors } = check({ energy: 0.5 });
+    expect(errors.join(" ")).toContain("not a light field");
+    // `energy` is what an author reaches for; `key` is what it is called.
+    expect(errors.join(" ")).toContain("key");
+  });
+
+  it("refuses a bad type by saying what the object is for", () => {
+    expect(check(3).errors.join(" ")).toContain("night shot");
+    expect(check("bright").errors.join(" ")).toContain("night shot");
+    expect(check({ preset: "moon" }).errors.join(" ")).toContain('light.preset must be');
+    expect(check({ key: -1 }).errors.join(" ")).toContain("light.key");
+    expect(check({ ambient: "dark" }).errors.join(" ")).toContain("light.ambient");
+    expect(check({ ambient: [1, 2] }).errors.join(" ")).toContain("light.ambient");
+  });
+
+  it("a rejected light does not silently become the default", () => {
+    // The scene fails to validate, so nothing downstream sees a light the
+    // author did not write.
+    const { spec, errors } = check({ key: "bright" });
+    expect(errors.length).toBeGreaterThan(0);
+    expect(spec).toBeUndefined();
+  });
+});

@@ -4214,6 +4214,27 @@ def proof(job):
     except Exception:
         scene.render.engine = "BLENDER_EEVEE"
     scene.render.image_settings.file_format = "PNG"
+    # Light transport, so an emissive surface is a LIGHT and not just a bright
+    # colour. Without this an authored `emission` lights nothing: the emitter
+    # blows out while everything around it stays exactly as dark as the key
+    # left it, which makes any scene lit by its own lamps, signage or windows
+    # impossible to photograph. Probed rather than assumed — the attribute
+    # moved between EEVEE generations and does not exist on every engine — and
+    # what could not be turned on is reported, since a scene that quietly
+    # renders without indirect light looks like an authoring mistake.
+    light_transport = []
+    for attr, value in (("use_raytracing", True), ("use_gtao", True)):
+        try:
+            if hasattr(scene.eevee, attr):
+                setattr(scene.eevee, attr, value)
+                light_transport.append(attr)
+        except Exception:
+            pass
+    if light_transport:
+        log("light transport: %s" % ", ".join(light_transport))
+    else:
+        log("light transport: none available on %s — emissive surfaces will not"
+            " illuminate their surroundings" % scene.render.engine)
     res = int(opts.get("resolution", 1024))
     scene.render.resolution_x = res
     scene.render.resolution_y = res

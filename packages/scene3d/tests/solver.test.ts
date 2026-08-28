@@ -581,3 +581,72 @@ describe("the part ceiling applies to every path that mints parts", () => {
     expect(solved.parts).toHaveLength(13);
   });
 });
+
+/**
+ * The light is a derived rig the author can scale, not a two-word menu.
+ *
+ * A scene lit by its own lanterns, signage or windows is impossible to
+ * photograph while the key is unreachable: `emission` makes a surface glow,
+ * but against a full-power key and a bright world it can only blow out. These
+ * pin that the rig is steerable, that scaling it is what the numbers do, and
+ * that the preset words still mean exactly what they meant.
+ */
+describe("light: a derived rig, steerable", () => {
+  const scene = (light: SceneSpec["light"]): SceneSpec => ({
+    schemaVersion: 1,
+    parts: [{ id: "prp_box", size: [1, 1, 1] }],
+    relations: [{ type: "at", part: "prp_box", center: [0, 0, 0.5] }],
+    ...(light !== undefined ? { light } : {}),
+  });
+  const emit = (light: SceneSpec["light"]): string =>
+    emitBlenderScript(solveScene(scene(light)), { light } as never);
+
+  it("scales the key rather than replacing it, so one number holds at every scale", () => {
+    const full = emit("studio");
+    const dim = emit({ key: 0.05 });
+    const fullWatts = Number(/key\.data\.energy = ([\d.eE+-]+)/.exec(full)![1]);
+    const dimWatts = Number(/key\.data\.energy = ([\d.eE+-]+)/.exec(dim)![1]);
+    expect(dimWatts).toBeCloseTo(fullWatts * 0.05, 6);
+  });
+
+  it("key 0 emits NO lamp — the world and emissive surfaces are the only light", () => {
+    // A 0W lamp would still be a part in the census that lights nothing.
+    const out = emit({ key: 0 });
+    expect(out).not.toContain("light_add");
+    expect(out).toContain("no key at all");
+  });
+
+  it("authors the world when ambient is stated, so a dark scene is reachable", () => {
+    const out = emit({ key: 0, ambient: 0.006 });
+    expect(out).toContain("ShaderNodeBackground");
+    expect(out).toContain("0.006");
+  });
+
+  it("an ambient triple is a coloured world, not a grey one", () => {
+    const out = emit({ key: 0, ambient: [0.02, 0.01, 0.05] });
+    expect(out).toMatch(/default_value = \(0\.02, 0\.01, 0\.05, 1\.0\)/);
+  });
+
+  it("places the key on the ONE pose convention when an angle is stated", () => {
+    // azimuth 180 is behind the subject (+Y), which is the whole point of
+    // being able to say it: a rim light is a key you moved.
+    const out = emit({ azimuthDeg: 180, elevationDeg: 0 });
+    const loc = /light_add\(type="AREA", location=\(([-\d.eE+]+), ([-\d.eE+]+), ([-\d.eE+]+)\)\)/.exec(out)!;
+    expect(Number(loc[2])).toBeGreaterThan(0); // +Y — behind
+    expect(Math.abs(Number(loc[1]))).toBeLessThan(1e-6); // no X offset
+    // and it is AIMED, or moving it would point the lamp at nothing
+    expect(out).toContain("to_track_quat");
+  });
+
+  it("the preset words still mean what they meant", () => {
+    expect(emit("sun")).toContain('type="SUN"');
+    expect(emit("studio")).toContain('type="AREA"');
+    expect(emit({ preset: "sun" })).toContain('type="SUN"');
+    // an unsteered spec is the unsteered default
+    const bare = emit({});
+    const word = emit("studio");
+    expect(/key\.data\.energy = ([\d.eE+-]+)/.exec(bare)![1]).toBe(
+      /key\.data\.energy = ([\d.eE+-]+)/.exec(word)![1],
+    );
+  });
+});
