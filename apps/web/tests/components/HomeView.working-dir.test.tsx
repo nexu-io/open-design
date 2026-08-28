@@ -9,7 +9,7 @@ vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
 
 import { HomeView } from '../../src/components/HomeView';
 import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
-import { openFolderDialog } from '../../src/providers/registry';
+import { dirExists, openFolderDialog } from '../../src/providers/registry';
 
 vi.mock('@open-design/host', async () => {
   const actual = await vi.importActual<typeof import('@open-design/host')>('@open-design/host');
@@ -27,6 +27,7 @@ vi.mock('../../src/providers/registry', async () => {
   return {
     ...actual,
     openFolderDialog: vi.fn(),
+    dirExists: vi.fn(),
     fetchProjectFiles: vi.fn().mockResolvedValue([]),
   };
 });
@@ -34,6 +35,7 @@ vi.mock('../../src/providers/registry', async () => {
 const mockedIsHostAvailable = vi.mocked(isOpenDesignHostAvailable);
 const mockedPickHostWorkingDir = vi.mocked(pickHostWorkingDir);
 const mockedOpenFolderDialog = vi.mocked(openFolderDialog);
+const mockedDirExists = vi.mocked(dirExists);
 
 function renderHome() {
   return render(
@@ -50,6 +52,7 @@ describe('HomeView working-dir picker host fallback', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedOpenFolderDialog.mockResolvedValue(null);
+    mockedDirExists.mockResolvedValue(false);
   });
 
   afterEach(() => {
@@ -111,5 +114,71 @@ describe('HomeView working-dir picker host fallback', () => {
       expect(mockedPickHostWorkingDir).toHaveBeenCalledTimes(1);
     });
     expect(mockedOpenFolderDialog).not.toHaveBeenCalled();
+  });
+
+  it('accepts a manually typed path that exists on disk', async () => {
+    mockedIsHostAvailable.mockReturnValue(false);
+    mockedDirExists.mockResolvedValue(true);
+
+    renderHome();
+
+    fireEvent.click(screen.getByTestId('working-dir-trigger'));
+    fireEvent.click(screen.getByTestId('working-dir-manual'));
+    fireEvent.change(screen.getByTestId('working-dir-manual-input'), {
+      target: { value: '/repos/my-app' },
+    });
+    fireEvent.click(screen.getByTestId('working-dir-manual-submit'));
+
+    await waitFor(() => {
+      expect(mockedDirExists).toHaveBeenCalledWith('/repos/my-app');
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId('working-dir-panel')).toBeNull();
+    });
+    expect(screen.getByTestId('working-dir-trigger').textContent).toContain('my-app');
+  });
+
+  it('rejects a manually typed path that does not exist', async () => {
+    mockedIsHostAvailable.mockReturnValue(false);
+    mockedDirExists.mockResolvedValue(false);
+
+    renderHome();
+
+    fireEvent.click(screen.getByTestId('working-dir-trigger'));
+    fireEvent.click(screen.getByTestId('working-dir-manual'));
+    fireEvent.change(screen.getByTestId('working-dir-manual-input'), {
+      target: { value: '/does/not/exist' },
+    });
+    fireEvent.click(screen.getByTestId('working-dir-manual-submit'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('working-dir-manual-error').textContent).toBe(
+        "That folder doesn't exist on the server.",
+      );
+    });
+  });
+
+  it('does not offer manual path entry when the desktop host is available', () => {
+    mockedIsHostAvailable.mockReturnValue(true);
+    renderHome();
+
+    fireEvent.click(screen.getByTestId('working-dir-trigger'));
+    expect(screen.queryByTestId('working-dir-manual')).toBeNull();
+  });
+
+  it('surfaces an error when the browser folder dialog itself fails', async () => {
+    mockedIsHostAvailable.mockReturnValue(false);
+    mockedOpenFolderDialog.mockRejectedValue(
+      new Error('Could not open folder picker: cannot open display'),
+    );
+
+    renderHome();
+
+    fireEvent.click(screen.getByTestId('working-dir-trigger'));
+    fireEvent.click(screen.getByTestId('working-dir-pick'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Couldn't open the folder picker/i)).toBeTruthy();
+    });
   });
 });
