@@ -2607,13 +2607,29 @@ export interface PluginMarketplaceMutationOutcome {
   message: string;
 }
 
+export type PluginApplyDiagnosis =
+  | { code: 'PLUGIN_INPUTS_MISSING'; fields: string[] }
+  | {
+      code: 'PLUGIN_CONFIGURATION_INVALID';
+      reason: 'manifest_invalid' | 'internal_strategy_invalid';
+    }
+  | { code: 'PLUGIN_RESOURCE_UNAVAILABLE' }
+  | { code: 'PLUGIN_APPLY_FAILED' }
+  | { code: 'WORKSPACE_CONTEXT_INCOMPLETE' }
+  | { code: 'PLUGIN_NOT_FOUND' };
+
+export type PluginApplyFailure = {
+  ok: false;
+  diagnosis: PluginApplyDiagnosis;
+};
+
 export type ApplyPluginOutcome =
   | (ApplyResult & { ok?: true })
-  | { ok: false; message: string };
+  | PluginApplyFailure;
 
 export function pluginApplyFailed(
   result: ApplyPluginOutcome | null,
-): result is { ok: false; message: string } {
+): result is PluginApplyFailure {
   return result !== null && result.ok === false;
 }
 
@@ -2745,8 +2761,8 @@ export async function applyPlugin(
     // silently substituting different local bytes.
     if (!resp.ok) {
       if (await isDaemonProxyConnectionFailure(resp)) return null;
-      const message = await readPluginApplyErrorMessage(resp);
-      return message ? { ok: false, message } : null;
+      const diagnosis = await readPluginApplyDiagnosis(resp);
+      return diagnosis ? { ok: false, diagnosis } : null;
     }
     const json = (await resp.json()) as ApplyPluginOutcome;
     return json;
@@ -2755,9 +2771,11 @@ export async function applyPlugin(
   }
 }
 
-async function readPluginApplyErrorMessage(resp: Response): Promise<string> {
+async function readPluginApplyDiagnosis(
+  resp: Response,
+): Promise<PluginApplyDiagnosis | null> {
   const contentType = (resp.headers.get('content-type') ?? '').toLowerCase();
-  if (contentType.includes('text/html')) return '';
+  if (contentType.includes('text/html')) return null;
 
   if (!contentType || contentType.includes('application/json')) {
     try {
@@ -2766,36 +2784,41 @@ async function readPluginApplyErrorMessage(resp: Response): Promise<string> {
       if (parsed.success) {
         const diagnosis = parsed.data.error;
         if (diagnosis.code === 'PLUGIN_INPUTS_MISSING') {
-          return `Missing required plugin inputs: ${diagnosis.details.fields.join(', ')}`;
+          return { code: diagnosis.code, fields: diagnosis.details.fields };
         }
-        return diagnosis.message;
+        if (diagnosis.code === 'PLUGIN_CONFIGURATION_INVALID') {
+          return { code: diagnosis.code, reason: diagnosis.details.reason };
+        }
+        return { code: diagnosis.code };
       }
 
       const legacy = LegacyPluginApplyErrorResponseSchema.safeParse(json);
       if (legacy.success) {
         if (legacy.data.error === 'missing_inputs') {
-          return `Missing required plugin inputs: ${legacy.data.fields.join(', ')}`;
+          return { code: 'PLUGIN_INPUTS_MISSING', fields: legacy.data.fields };
         }
         if (legacy.data.error === 'plugin_apply_failed') {
-          return 'Plugin application failed. Try again.';
+          return { code: 'PLUGIN_APPLY_FAILED' };
         }
-        return legacy.data.error;
+        return { code: 'PLUGIN_NOT_FOUND' };
       }
 
       const workspaceContext = PluginApplyWorkspaceContextErrorResponseSchema.safeParse(json);
-      if (workspaceContext.success) return workspaceContext.data.error.message;
-      return '';
+      if (workspaceContext.success) return { code: 'WORKSPACE_CONTEXT_INCOMPLETE' };
+      return null;
     } catch {
-      if (contentType.includes('application/json')) return '';
+      if (contentType.includes('application/json')) return null;
     }
   }
 
-  if (contentType && !contentType.includes('text/plain')) return '';
+  if (contentType && !contentType.includes('text/plain')) return null;
   try {
     const message = (await resp.text()).trim();
-    return message === 'not found' || message === 'plugin not found' ? message : '';
+    return message === 'not found' || message === 'plugin not found'
+      ? { code: 'PLUGIN_NOT_FOUND' }
+      : null;
   } catch {
-    return '';
+    return null;
   }
 }
 

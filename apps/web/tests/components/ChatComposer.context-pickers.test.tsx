@@ -1163,15 +1163,16 @@ describe('ChatComposer context pickers', () => {
         },
       },
     };
-    renderComposer();
+    renderComposer({}, { locale: 'zh-CN' });
     await flushMounts();
 
     await typeAndSettle('@export');
     fireEvent.click(await screen.findByText('My Export'));
 
     await waitFor(() => expect(screen.getByText(
-      'Apply failed: A required plugin resource is unavailable. Reinstall or update the plugin and try again.',
+      '应用失败：所需的插件资源不可用。请重新安装或更新插件后重试。',
     )).toBeTruthy());
+    expect(screen.queryByText(/A required plugin resource|Reinstall or update/)).toBeNull();
     expect(composerText()).toBe('@export');
     expect(stagedPluginChip()).toBeNull();
     expect(screen.getByText('My Export')).toBeTruthy();

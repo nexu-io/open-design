@@ -20,6 +20,7 @@ import {
   resolvePluginQueryFallback,
 } from '../state/projects';
 import { useI18n } from '../i18n';
+import { formatPluginApplyFailure } from '../i18n/pluginApplyErrors';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { Icon } from './Icon';
@@ -157,7 +158,7 @@ export function PluginLoopHome({ onSubmit }: Props) {
     if (!result || pluginApplyFailed(result)) {
       setError(
         pluginApplyFailed(result)
-          ? `Failed to apply ${record.title}: ${result.message}`
+          ? formatPluginApplyFailure(result, t, record.title)
           : `Failed to apply ${record.title}. Make sure the daemon is reachable.`,
       );
       return;

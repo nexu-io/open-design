@@ -145,7 +145,10 @@ describe('PluginDetailView Use hands the plugin to Home', () => {
   it('shows the preserved backend diagnosis when applying the plugin fails', async () => {
     vi.mocked(applyPlugin).mockResolvedValue({
       ok: false,
-      message: 'Plugin configuration is invalid. Reinstall or update the plugin and try again.',
+      diagnosis: {
+        code: 'PLUGIN_CONFIGURATION_INVALID',
+        reason: 'manifest_invalid',
+      },
     } as never);
     await renderDetailAndUse();
 
@@ -157,12 +160,12 @@ describe('PluginDetailView Use hands the plugin to Home', () => {
   it('distinguishes a safe daemon failure from the unreachable fallback', async () => {
     vi.mocked(applyPlugin).mockResolvedValue({
       ok: false,
-      message: 'Plugin application failed. Try again.',
+      diagnosis: { code: 'PLUGIN_APPLY_FAILED' },
     } as never);
     await renderDetailAndUse();
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Apply failed: Plugin application failed. Try again.',
+      'Apply failed: The plugin could not be applied. Try again.',
     );
     expect(screen.getByRole('alert')).not.toHaveTextContent('daemon is reachable');
   });

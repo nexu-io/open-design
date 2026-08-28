@@ -467,7 +467,10 @@ describe('applyPlugin', () => {
 
     await expect(applyPlugin('bundled-plugin', {
       pluginSource: 'bundled:bundled-plugin',
-    })).resolves.toEqual({ ok: false, message: 'not found' });
+    })).resolves.toEqual({
+      ok: false,
+      diagnosis: { code: 'PLUGIN_NOT_FOUND' },
+    });
 
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       '/api/plugins/bundled-plugin/apply-local',
@@ -489,7 +492,10 @@ describe('applyPlugin', () => {
 
     await expect(applyPlugin('shared-plugin-id', {
       pluginSource: 'team:plugin:workspace-a:shared-plugin-id',
-    })).resolves.toEqual({ ok: false, message: 'plugin not found' });
+    })).resolves.toEqual({
+      ok: false,
+      diagnosis: { code: 'PLUGIN_NOT_FOUND' },
+    });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -519,7 +525,7 @@ describe('applyPlugin', () => {
 
     await expect(applyPlugin('sample-plugin')).resolves.toEqual({
       ok: false,
-      message: 'Missing required plugin inputs: workspace_name',
+      diagnosis: { code: 'PLUGIN_INPUTS_MISSING', fields: ['workspace_name'] },
     });
   });
 
@@ -531,7 +537,7 @@ describe('applyPlugin', () => {
 
     await expect(applyPlugin('sample-plugin')).resolves.toEqual({
       ok: false,
-      message: 'Plugin application failed. Try again.',
+      diagnosis: { code: 'PLUGIN_APPLY_FAILED' },
     });
   });
 
@@ -545,7 +551,7 @@ describe('applyPlugin', () => {
 
     await expect(applyPlugin('sample-plugin')).resolves.toEqual({
       ok: false,
-      message: 'both workspace and member identity are required',
+      diagnosis: { code: 'WORKSPACE_CONTEXT_INCOMPLETE' },
     });
   });
 
@@ -585,7 +591,7 @@ describe('applyPlugin', () => {
           details: { reason: 'required_resource_missing' },
         },
       },
-      'A required plugin resource is unavailable. Reinstall or update the plugin and try again.',
+      { code: 'PLUGIN_RESOURCE_UNAVAILABLE' },
     ],
     [
       422,
@@ -596,16 +602,16 @@ describe('applyPlugin', () => {
           details: { reason: 'manifest_invalid' },
         },
       },
-      'Plugin configuration is invalid. Reinstall or update the plugin and try again.',
+      { code: 'PLUGIN_CONFIGURATION_INVALID', reason: 'manifest_invalid' },
     ],
   ] as const)('maps a diagnosed daemon apply failure with status %i to an actionable state', async (
     status,
     body,
-    message,
+    diagnosis,
   ) => {
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json(body, { status })));
 
-    await expect(applyPlugin('sample-plugin')).resolves.toEqual({ ok: false, message });
+    await expect(applyPlugin('sample-plugin')).resolves.toEqual({ ok: false, diagnosis });
   });
 
   it('rejects a daemon diagnosis that adds an unbounded raw path', async () => {

@@ -26,6 +26,7 @@ import {
 import { useWorkspaceInvalidation } from '../collab/workspace-events';
 import { useWorkspaceSnapshotActivation } from '../collab/workspace-snapshot-activation';
 import { useI18n } from '../i18n';
+import { formatPluginApplyFailure } from '../i18n/pluginApplyErrors';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 
 interface Props {
@@ -58,7 +59,7 @@ interface Props {
 }
 
 export function InlinePluginsRail(props: Props) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const shellWorkspace = useWorkspaceContext();
   const projectCollab = useProjectCollabContext();
   const workspaceContext = props.projectId
@@ -180,7 +181,7 @@ export function InlinePluginsRail(props: Props) {
     if (!result || pluginApplyFailed(result)) {
       setError(
         pluginApplyFailed(result)
-          ? `Failed to apply ${record.title}: ${result.message}`
+          ? formatPluginApplyFailure(result, t, record.title)
           : `Failed to apply ${record.title}. Make sure the daemon is reachable.`,
       );
       return;

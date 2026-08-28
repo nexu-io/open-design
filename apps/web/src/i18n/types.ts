@@ -5342,6 +5342,13 @@ export interface Dict {
   'pluginDetail.loadFailed': string;
   'pluginDetail.applyFailed': string;
   'pluginDetail.applyFailedWithReason': string;
+  'pluginApply.inputsMissing': string;
+  'pluginApply.configurationInvalid': string;
+  'pluginApply.resourceUnavailable': string;
+  'pluginApply.genericFailure': string;
+  'pluginApply.workspaceContextIncomplete': string;
+  'pluginApply.notFound': string;
+  'pluginApply.failedNamedWithReason': string;
   'pluginDetail.examples': string;
   'skillDetail.providedBy': string;
   'skillDetail.markdownNotice': string;

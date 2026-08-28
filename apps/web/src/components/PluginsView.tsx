@@ -83,6 +83,7 @@ import { humanizeCategory } from './SkillsSection';
 import { buildCategoryCatalog, extractCategories } from './plugins-home/facets';
 import { TrustBadge } from './TrustBadge';
 import { useI18n } from '../i18n';
+import { formatPluginApplyFailure } from '../i18n/pluginApplyErrors';
 import { useDismissOnOutsideInteraction } from '../hooks/useDismissOnOutsideInteraction';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
@@ -414,7 +415,7 @@ export function PluginsView({
       setNotice({
         ok: false,
         message: pluginApplyFailed(result)
-          ? `Failed to apply ${record.title}: ${result.message}`
+          ? formatPluginApplyFailure(result, t, record.title)
           : `Failed to apply ${record.title}. Make sure the daemon is reachable.`,
       });
       return;
