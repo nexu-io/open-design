@@ -1428,6 +1428,11 @@ export interface Dict {
   'homeWorkingDir.replace': string;
   'homeWorkingDir.recent': string;
   'homeWorkingDir.recentEmpty': string;
+  'homeWorkingDir.typePath': string;
+  'homeWorkingDir.manualPlaceholder': string;
+  'homeWorkingDir.manualSubmit': string;
+  'homeWorkingDir.manualEmpty': string;
+  'homeWorkingDir.manualNotFound': string;
   'homeWorkingDir.clear': string;
   'homeWorkingDir.hint': string;
   'homeWorkingDir.missing': string;
