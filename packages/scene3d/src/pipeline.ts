@@ -52,6 +52,7 @@ import { changeImpact, formatImpact, type ImpactReport } from "./read/impact.js"
 import { renderOrthoSvg, orthoDimensions } from "./read/ortho.js";
 import { renderOrthoAscii } from "./read/ortho-ascii.js";
 import { renderContactSheet } from "./read/contact.js";
+import { resolveLook, type ResolvedLook } from "./read/look.js";
 import { describeProofViews, orbitEye, type ProofView } from "./read/views.js";
 import { validateSceneSpec, specDeclarationLines } from "./solve/validate.js";
 import { solveScene } from "./solve/solver.js";
@@ -997,6 +998,14 @@ export async function compile(
   /** The contact sheet's own report: which badge named which part, and which
    *  parts the orbit never showed. Filled at manifest time (below). */
   let contactSheetSummary: ContactSheetSummary | undefined;
+  /** Aimed viewport shots: the poses that resolved, and the specs that did not.
+   *  Both travel to the result — a shot the compiler refused is a fact the agent
+   *  needs, and silence would read as "rendered, and it was empty". */
+  const resolvedLooks: ResolvedLook[] = [];
+  const looksRejected: Array<{ index: number; reason: string }> = [];
+  /** Project-relative path of each resolved look's frame, by index; absent
+   *  where the render failed. */
+  const lookPaths: Array<string | undefined> = [];
   const proofOpts: ProofOptions = { ...normalized.proof, ...(request.proof ?? {}) };
   if (wanted.has("proof")) {
     const tp = performance.now();
@@ -1013,9 +1022,29 @@ export async function compile(
          entry's files all exist, so the hit sticks until --no-cache), and a
          `--stages parse,proof` run — census undefined, so 8 frames — would
          write a differently-sized frame set under the same hash. */
-      const proofHash = hashJson({ build: buildInputHash, proof: proofOpts, steps });
+      /* Aimed shots are resolved HERE, before the hash, because resolution is
+         pure arithmetic over the census and its result — not the request — is
+         what the renderer is handed. Resolving first also means a spec naming a
+         part that does not exist is rejected with the available names before
+         Blender is asked to photograph anything. A rejected shot is recorded,
+         never dropped. */
+      for (const [index, spec] of (request.looks ?? []).entries()) {
+        try {
+          resolvedLooks.push(resolveLook(spec, census ?? ({ objects: [], meshes: [] } as unknown as Census)));
+        } catch (err) {
+          looksRejected.push({ index, reason: (err as Error).message });
+        }
+      }
+      /* The resolved poses are hash INPUTS: two compiles that differ only in
+         where the camera stood are different renders, and without this the
+         second would hit the first's cache and hand back the wrong picture. */
+      const proofHash = hashJson({ build: buildInputHash, proof: proofOpts, steps, looks: resolvedLooks });
       const names = Array.from({ length: steps }, (_, i) => `proof-${proofHash}-${String(i).padStart(3, "0")}.png`);
       const abs = names.map((n) => path.join(request.projectDir, OUT_DIR, "proof", n));
+      const lookNames = resolvedLooks.map(
+        (_, i) => `look-${proofHash}-${String(i).padStart(2, "0")}.png`,
+      );
+      const lookAbs = lookNames.map((n) => path.join(request.projectDir, OUT_DIR, "proof", n));
       const cached = request.noCache ? null : readCache(request.projectDir, "proof", proofHash);
       /* Material balls are outputs, so they are not hash INPUTS — but they
          are artifacts of this entry, so a hit has to prove they still exist.
@@ -1034,7 +1063,26 @@ export async function compile(
            in doubled the frame count on every cached recompile, and the
            frame player, the ascii sampler and the panel all read that list
            as one orbit of one subject. */
-        proofImages.push(...cached.artifacts.filter((a) => !a.toLowerCase().endsWith(".idx.png")));
+        proofImages.push(
+          ...cached.artifacts.filter(
+            (a) =>
+              !a.toLowerCase().endsWith(".idx.png") &&
+              // Aimed shots ride the same entry (a hit must prove they still
+              // exist) but they are NOT turntable frames: every consumer of
+              // proofImages reads that list as one orbit of one subject.
+              !path.basename(a).startsWith("look-"),
+          ),
+        );
+        // The look filenames are a pure function of the hash that produced the
+        // hit, so a cached rerun recovers them by name — no second list to keep
+        // in step with the first.
+        for (const n of lookNames) {
+          lookPaths.push(
+            fs.existsSync(path.join(request.projectDir, OUT_DIR, "proof", n))
+              ? `${PROOF_DIR}/${n}`
+              : undefined,
+          );
+        }
         materialBalls.push(...cachedBalls);
         const cachedNames = (cached.data as { materialBallsSkippedNames?: unknown } | null)
           ?.materialBallsSkippedNames;
@@ -1094,6 +1142,16 @@ export async function compile(
               ...(proofOpts.background ? { background: proofOpts.background } : {}),
               filepaths: abs,
               materialBallDir: path.join(request.projectDir, OUT_DIR, "materials"),
+              ...(resolvedLooks.length > 0
+                ? {
+                    looks: resolvedLooks.map((pose, i) => ({
+                      filepath: lookAbs[i]!,
+                      eye: [...pose.eye] as [number, number, number],
+                      target: [...pose.target] as [number, number, number],
+                      fovDeg: pose.fovDeg,
+                    })),
+                  }
+                : {}),
             },
           },
           timeoutMs,
@@ -1132,7 +1190,7 @@ export async function compile(
           // Each compile hashes to a new frame set; without pruning, a scene
           // iterated a handful of times leaves tens of megabytes of orphaned
           // renders sitting in the user's project.
-          pruneStaleProofFrames(request.projectDir, [...names, ...idxNames]);
+          pruneStaleProofFrames(request.projectDir, [...names, ...idxNames, ...lookNames]);
           proofImages.push(...rel);
           /* The runner names the balls (only it knows the material names), so
              it reports absolute paths and the project-relative form is derived
@@ -1168,6 +1226,28 @@ export async function compile(
                     typeof s.material === "string" && typeof s.clipped === "number",
                 )
             : [];
+          /* Which aimed shots actually landed on disk. Checked by NAME rather
+             than trusted from the runner's reply for the same reason the orbit
+             frames are: "the renderer reported success" and "the file exists"
+             are different facts, and only the second one can be shown to
+             anybody. A missing look is left undefined so the result can pair
+             the failure with the pose that was requested. */
+          for (const n of lookNames) {
+            lookPaths.push(
+              fs.existsSync(path.join(request.projectDir, OUT_DIR, "proof", n))
+                ? `${PROOF_DIR}/${n}`
+                : undefined,
+            );
+          }
+          const lostLooks = lookPaths.filter((p) => p === undefined).length;
+          if (lostLooks > 0) {
+            issues.push({
+              code: ISSUE_CODES.PROOF_FAILED,
+              severity: "warning",
+              message: `${lostLooks} of ${lookNames.length} requested look(s) did not render — the pose resolved but the frame is not on disk`,
+              detail: { requested: lookNames.length, missing: lostLooks },
+            });
+          }
           proofFrames = asProofFrames((result.data as { frames?: unknown } | undefined)?.frames);
           offByFrame = (result.data as { offByFrame?: unknown } | undefined)?.offByFrame as
             | Array<{ frame: number; objects: string[] }>
@@ -1184,9 +1264,23 @@ export async function compile(
             Array.isArray(rawIdParts) && rawIdParts.length > 0 && idxWritten.length === names.length
               ? (rawIdParts as string[])
               : undefined;
-          if (!request.noCache && rel.length === names.length) {
+          /* A batch with a failed look must NOT be cached. The entry's artifact
+             list can only hold the frames that exist, so a later identical
+             compile would hit it, find every listed artifact present, and hand
+             back the missing shot as though it had never been asked for —
+             permanently, until someone thought to pass --no-cache. An
+             incomplete render is a reason to re-run, not a result to keep. */
+          const looksComplete = lookPaths.every((p) => p !== undefined);
+          if (!request.noCache && rel.length === names.length && looksComplete) {
             writeCache(request.projectDir, "proof", proofHash, {
-              artifacts: [...rel, ...idxWritten.map((n) => `${PROOF_DIR}/${n}`)],
+              artifacts: [
+                ...rel,
+                ...idxWritten.map((n) => `${PROOF_DIR}/${n}`),
+                // Aimed shots are artifacts of this entry, so a later hit has
+                // to prove they still exist — the same rule the id maps and the
+                // material balls follow.
+                ...lookPaths.filter((p): p is string => p !== undefined),
+              ],
               data: {
                 frames: proofFrames ?? null,
                 offByFrame: offByFrame ?? [],
@@ -1214,6 +1308,19 @@ export async function compile(
           message: "proof skipped — no Blender runtime available",
         });
       }
+    }
+  }
+  /* Aimed shots are rendered BY the proof stage, so a request that skipped it
+     (`--fast`, an explicit --stages without proof, or no Blender) photographs
+     nothing. Say so, per part and by name: an empty `looks` array beside a
+     clean compile is indistinguishable from "you asked for no shots", which is
+     exactly the silence that teaches a reader their request worked. */
+  if ((request.looks?.length ?? 0) > 0 && resolvedLooks.length === 0 && looksRejected.length === 0) {
+    const why = !wanted.has("proof")
+      ? "the proof stage was not selected (looks are rendered by proof — drop --fast, or include 'proof' in --stages)"
+      : "the proof stage did not run (no Blender runtime, or nothing to render)";
+    for (let i = 0; i < request.looks!.length; i++) {
+      looksRejected.push({ index: i, reason: `not rendered — ${why}` });
     }
   }
 
@@ -2109,6 +2216,14 @@ export async function compile(
         : {}),
       }),
     proofImages,
+    /* Every resolved pose travels back, whether or not its frame landed: the
+       pose IS the answer to "where was I standing", and a shot that failed to
+       render is still a shot the agent asked for and must be told about. */
+    looks: resolvedLooks.map((pose, i) => ({
+      ...(lookPaths[i] ? { path: lookPaths[i]! } : {}),
+      pose,
+    })),
+    ...(looksRejected.length > 0 ? { looksRejected } : {}),
     materialBalls,
     ...(materialBallsSkipped > 0 ? { materialBallsSkipped } : {}),
     ...(materialBallsSkippedNames.length > 0 ? { materialBallsSkippedNames } : {}),

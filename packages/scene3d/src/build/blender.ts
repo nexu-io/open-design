@@ -195,6 +195,20 @@ export interface RunnerJob {
      * names; omitting the field turns the previews off.
      */
     materialBallDir?: string;
+    /**
+     * Extra aimed shots to render after the orbit, each already RESOLVED to an
+     * absolute pose by `read/look.ts`. The runner does no resolution of its own:
+     * the semantic layer ("the counter, from the left") is arithmetic over the
+     * census, which is TypeScript's to own, so the runner is handed eye/target/
+     * fov and simply photographs them. Keeping it that way is what makes a
+     * shot's pose testable without Blender.
+     */
+    looks?: Array<{
+      filepath: string;
+      eye: [number, number, number];
+      target: [number, number, number];
+      fovDeg: number;
+    }>;
   };
   /** Viewport edits keyed by part name, replayed after the build —
    *  transform deltas plus the absolute material channel. */

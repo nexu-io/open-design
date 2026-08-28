@@ -4460,6 +4460,21 @@ def _proof_frames(job, scene, opts, auto_cam, is_auto, steps, filepaths, turntab
         screen_rects.append(rects)
         if (turntable_on or is_auto) and gone:
             off_by_frame.append({"frame": i, "objects": sorted(gone)})
+    # Aimed shots ("looks") next, while the scene is still the one the orbit
+    # photographed: they are beauty renders and must run BEFORE the id pass
+    # flattens the view transform, for exactly the reason the balls do. Each
+    # pose arrives fully resolved (eye, target, fov) — the runner photographs,
+    # it does not decide where to stand.
+    looks = []
+    for spec in (opts.get("looks") or []):
+        try:
+            looks.append(_render_look(scene, auto_cam, spec))
+        except Exception:
+            # One bad shot must not cost the caller the whole proof. Name it;
+            # the pipeline pairs the failure back to its requested pose.
+            log("look %s skipped: %s" % (spec.get("filepath"), traceback.format_exc(limit=4)))
+            looks.append({"filepath": spec.get("filepath"), "ok": False})
+
     # Material balls BEFORE the id pass, deliberately: the balls are a
     # beauty render that borrows this scene's view transform, and the id
     # pass flattens it (Standard, zero filter, transparent film) with no
@@ -4508,8 +4523,60 @@ def _proof_frames(job, scene, opts, auto_cam, is_auto, steps, filepaths, turntab
             # The caller owns the cap, so the caller is told what it cost.
             "materialBallsSkipped": len(balls["skipped"]),
             "materialBallNotes": balls["skipped"],
+            "looks": looks,
         },
     })
+
+
+def _render_look(scene, cam, spec):
+    """Photograph one already-resolved pose.
+
+    Every quantity here arrives from `read/look.ts`, which derived it from the
+    census: this function places the camera, sets the lens, renders, and puts
+    both back. It holds no opinion about where a good shot is — that is the
+    resolver's arithmetic, and keeping the split means a pose can be tested
+    without starting Blender.
+
+    Camera state is SAVED AND RESTORED because the id-map pass renders after
+    this and re-aims through the orbit's own helper: a leaked field of view
+    would silently mis-register every id map against its frame.
+    """
+    import bpy
+    import mathutils
+    eye = mathutils.Vector(spec["eye"])
+    target = mathutils.Vector(spec["target"])
+    data = cam.data
+    saved = (
+        cam.location.copy(),
+        cam.rotation_euler.copy(),
+        data.angle,
+        data.clip_start,
+        data.clip_end,
+    )
+    try:
+        data.angle = math.radians(float(spec["fovDeg"]))
+        offset = eye - target
+        dist = offset.length
+        # Clip planes derived from THIS shot's range, for the reason the orbit
+        # derives its own: Blender's 0.1m/100m defaults are absolute metres in a
+        # shot whose every other quantity scales with the subject, and a look is
+        # free to stand far closer than the turntable ever does.
+        data.clip_start = max(dist * 1e-3, 1e-7)
+        data.clip_end = max(dist * 1e3, 1.0)
+        aim_camera(cam, target, offset)
+        scene.render.filepath = spec["filepath"]
+        bpy.ops.render.render(write_still=True)
+        log("rendered look %s" % spec["filepath"])
+        out = {"filepath": spec["filepath"], "ok": True}
+        stats = frame_stats(spec["filepath"])
+        if isinstance(stats, dict):
+            # The measured facts about what the shot actually captured travel
+            # with it — the same numbers the orbit's frames report.
+            out["stats"] = stats
+        return out
+    finally:
+        cam.location, cam.rotation_euler, data.angle, data.clip_start, data.clip_end = saved
+        bpy.context.view_layer.update()
 
 
 # ------------------------------------------------------------------

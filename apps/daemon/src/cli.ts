@@ -731,6 +731,10 @@ async function runExport(args) {
 const SCENE3D_STRING_FLAGS = new Set([
   'daemon-url', 'project', 'scene', 'stages', 'engine', 'resolution',
   'turntable-steps', 'fail-on', 'work-budget',
+  // `od scene3d compile --look`: an aimed viewport shot. Repeatable — the flag
+  // parser keeps only the last value for a repeated key, so the compile handler
+  // re-scans argv for every occurrence (the same escape the positional args use).
+  'look',
   // `od scene3d tweaks`: the edits the viewer's gizmo writes. --set takes
   // JSON inline, --set-file takes a path or `-` for stdin, matching the
   // --prompt-file convention the rest of the CLI uses for long input.
@@ -904,6 +908,18 @@ Options:
   --region <box>           describe: only parts intersecting "x0,y0,z0,x1,y1,z1" (world metres)
   --focus <part>           describe: expand the group containing this part in full
   --budget <tokens>        describe: roughly how many tokens the digest may occupy
+  --look <spec>            Photograph an aimed shot, in ADDITION to the turntable.
+                           Repeatable. You aim by NAMING things — the compiler
+                           resolves the pose against the census it measured, and
+                           echoes back exactly where the camera stood.
+                             --look prp_lamp                (that part, fitted, from the front)
+                             --look prp_lamp:left           (that part, from its left)
+                             --look :back                   (the whole scene, from behind)
+                             --look at=prp_bar,from=20/60   (azimuth 20°, elevation 60°)
+                             --look at=prp_bar,from=part:prp_stool,eyeHeight=1.2
+                                                            (stand at the stool, 1.2m up)
+                           Keys: at, from, elevation (level|eye|high|top|low|bottom),
+                           fov, margin, distance, eyeHeight, label.
   --frames                 Show the proof frames as ASCII in the report even when clean (implies --agent-message)
   --fail-on <sev>          error | warning | none — exit 1 threshold (default error)
   --agent-message          Emit the <scene3d-report> block: per-issue fixes, measured
@@ -932,6 +948,83 @@ Examples:
   od scene3d tweaks --scene scenes/crate --merge \
     --set '{"prp_lid":{"material":{"assign":"mtl_gold","roughness":0.2}}}'
   jq '.tweaks' saved.json | od scene3d tweaks --scene scenes/crate --set-file -`);
+}
+
+/**
+ * One `--look` argument as a look spec.
+ *
+ * Two forms, because the two uses are different. The shorthand
+ * `part:direction` is what a person types at a prompt ("prp_lamp:left"), and
+ * the key=value form is what stays readable once a shot needs a lens or a
+ * viewpoint ("at=prp_lamp,from=part:prp_stool,eyeHeight=1.2"). Both produce the
+ * same spec the HTTP body carries, so the CLI and the UI reach one endpoint
+ * with one shape.
+ *
+ * Nothing here knows what a legal part name or direction is: the compiler
+ * resolves that against the measured census and rejects a bad one by naming the
+ * parts that exist. This parser only decides which characters were which field.
+ */
+function parseLookSpec(text) {
+  const raw = String(text).trim();
+  if (!raw) throw new Error('empty look');
+  const spec = {};
+  const numeric = (key, value) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) throw new Error(`${key} must be a number (got ${JSON.stringify(value)})`);
+    return n;
+  };
+  /** `left`, `part:prp_stool`, or `20/60` (azimuth/elevation). */
+  const parseFrom = (value) => {
+    if (value.startsWith('part:')) {
+      const part = value.slice('part:'.length).trim();
+      if (!part) throw new Error('from=part: needs a part name');
+      return { part };
+    }
+    if (value.includes('/')) {
+      const [az, el] = value.split('/', 2);
+      return {
+        azimuthDeg: numeric('from azimuth', az),
+        ...(el !== undefined && el !== '' ? { elevationDeg: numeric('from elevation', el) } : {}),
+      };
+    }
+    return value;
+  };
+  if (raw.includes('=')) {
+    for (const pair of raw.split(',')) {
+      const eq = pair.indexOf('=');
+      if (eq < 0) throw new Error(`'${pair.trim()}' is not key=value`);
+      const key = pair.slice(0, eq).trim();
+      const value = pair.slice(eq + 1).trim();
+      switch (key) {
+        case 'at': spec.at = value; break;
+        case 'from': spec.from = parseFrom(value); break;
+        case 'elevation': spec.elevation = value; break;
+        case 'label': spec.label = value; break;
+        case 'fov': case 'fovDeg': spec.fovDeg = numeric(key, value); break;
+        case 'margin': spec.margin = numeric(key, value); break;
+        case 'distance': spec.distance = numeric(key, value); break;
+        case 'eyeHeight': case 'eye-height': spec.eyeHeight = numeric(key, value); break;
+        default:
+          throw new Error(
+            `unknown look key '${key}' (expected at, from, elevation, fov, margin, distance, eyeHeight, label)`,
+          );
+      }
+    }
+    return spec;
+  }
+  // Shorthand: `part`, `part:direction`, or `:direction` for the whole scene.
+  // A part-viewpoint shorthand would collide with this colon, so that form is
+  // only available in the key=value syntax — where it reads unambiguously.
+  const colon = raw.indexOf(':');
+  if (colon < 0) {
+    spec.at = raw;
+    return spec;
+  }
+  const at = raw.slice(0, colon).trim();
+  const from = raw.slice(colon + 1).trim();
+  if (at) spec.at = at;
+  if (from) spec.from = parseFrom(from);
+  return spec;
 }
 
 async function runScene3d(args) {
@@ -1165,6 +1258,23 @@ async function runScene3d(args) {
     }
     body.workBudget = workBudget;
   }
+  /* Aimed viewport shots. Repeatable, so read straight from argv: the flag
+     parser keeps only the last value for a repeated key. */
+  const looks = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    let text = null;
+    if (a === '--look') text = args[i + 1];
+    else if (typeof a === 'string' && a.startsWith('--look=')) text = a.slice('--look='.length);
+    if (text === null || text === undefined) continue;
+    try {
+      looks.push(parseLookSpec(text));
+    } catch (err) {
+      console.error(`invalid --look ${JSON.stringify(text)}: ${err.message}`);
+      process.exit(2);
+    }
+  }
+  if (looks.length > 0) body.looks = looks;
   // `--fast` is the structure-loop alias: parse + build + lint + manifest,
   // no proofs, no export. The iteration gear for grid/naming/relation work —
   // a full compile pays ~7s of proof for findings these stages already
@@ -1268,6 +1378,12 @@ async function runScene3d(args) {
       ...(result.materialBalls
         ? { materialBalls: result.materialBalls.map((a: { path: string }) => a.path) }
         : {}),
+      /* Aimed shots keep their RESOLVED pose in the machine-readable envelope,
+         not just their path: a caller scripting an iteration reads the pose to
+         compute its next request, and a bare filename would send it back to
+         guessing. */
+      ...(result.looks ? { looks: result.looks } : {}),
+      ...(result.looksRejected ? { looksRejected: result.looksRejected } : {}),
       /* The report rides the envelope under the same flags that print it in
          the prose stream. It used to be dropped here unconditionally, which
          made `--json --agent-message` a silent no-op and `--frames --json`
@@ -1300,6 +1416,21 @@ async function runScene3d(args) {
     console.log(result.ok ? `compiles clean — ${counts}` : `compile failed — ${counts}`);
     if (result.proofImages.length > 0) {
       console.log(`proof: ${result.proofImages.length} frame(s) — ${result.proofImages[0].path}`);
+    }
+    /* Aimed shots print their resolved pose in the terse stream too: the pose
+       is the answer to "where did that put me", and a reader who never asks
+       for the full letter still needs it to aim the next one. */
+    for (const [i, look] of (result.looks ?? []).entries()) {
+      const az = Math.round(look.azimuthDeg);
+      const el = Math.round(look.elevationDeg);
+      const dist = Math.round(look.distance * 1000) / 1000;
+      console.log(
+        `look[${i}] ${look.label} — ${look.image?.path ?? '(no frame rendered)'}\n` +
+          `        at ${look.targetName} · ${look.name} az ${az}° el ${el}° · ${dist}m · fov ${Math.round(look.fovDeg)}°`,
+      );
+    }
+    for (const r of result.looksRejected ?? []) {
+      console.log(`look[${r.index}] REFUSED — ${r.reason}`);
     }
     /* The orientation facts, in the terse stream too. A serial-numbered
        frame set says nothing about which side it photographs, so without

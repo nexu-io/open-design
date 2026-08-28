@@ -12,6 +12,7 @@
 // Type-only, so the circular reference between this file and the read
 // module costs nothing at runtime — impact.ts imports Census from here.
 import type { ImpactReport } from "./read/impact.js";
+import type { LookSpec, ResolvedLook } from "./read/look.js";
 import type { SolveDelta } from "./read/solve-delta.js";
 import type { SolvedScene } from "./solve/types.js";
 
@@ -415,6 +416,19 @@ export interface CompileRequest {
    * with the memory), the "wall you can raise" the scalability doctrine promises.
    */
   workBudget?: number;
+  /**
+   * Extra camera angles to photograph this compile from — the viewport.
+   *
+   * The turntable answers "what did I build"; a look answers "what does THAT
+   * part look like from THERE". Each spec names a part and a direction
+   * (`{ at: "prp_counter", from: "left" }`) or stands at another part
+   * (`{ from: { part: "prp_stool" } }`), and the compiler resolves it against
+   * the census it just measured — so the author aims by naming things and never
+   * types a coordinate. Rendered in the same Blender session as the proof, so a
+   * batch of looks costs no extra startup; the resolved pose of each is echoed
+   * back in the report, which is what lets the next request nudge it.
+   */
+  looks?: LookSpec[];
   /** Per-stage wall-clock timeout in milliseconds. */
   timeoutMs?: number;
   /** Extra environment variables for the Blender/python child process. */
@@ -443,6 +457,29 @@ export interface CompileResult {
    * answered at a fraction of a turntable's cost.
    */
   materialBalls: string[];
+  /**
+   * The viewport shots this compile was asked for, each with the pose it
+   * actually resolved to.
+   *
+   * Separate from `proofImages` for the same reason material balls are: those
+   * are one orbit of one subject and every consumer reads them that way. A look
+   * is an aimed answer to a specific question, and the RESOLVED pose travelling
+   * beside the image is the point — it is what tells the agent where it was
+   * standing, and it is complete enough to re-issue or nudge without the
+   * compiler remembering anything.
+   */
+  looks: Array<{
+    /** Project-relative path of the rendered frame; absent when the render
+     *  failed (the pose still resolved, so the failure is attributable). */
+    path?: string;
+    pose: ResolvedLook;
+  }>;
+  /**
+   * Look specs that could not be resolved, with the reason. A rejected shot is
+   * reported, never dropped: silence would read as "rendered, and it was
+   * empty".
+   */
+  looksRejected?: Array<{ index: number; reason: string }>;
   /**
    * How many bound materials got no ball — over the per-compile cap, or a
    * render that raised. Absent when nothing was skipped, so the number never

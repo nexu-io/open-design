@@ -180,6 +180,20 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
       if (proof === null) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid proof options');
       }
+      /* Only the ENVELOPE is checked here — that `looks` is a list of objects.
+         Everything inside it (part names, direction words, lens) is resolved
+         against the measured census by the compiler, which rejects a bad spec
+         by NAMING the parts that exist. Re-validating that here could only
+         downgrade an answerable rejection into an opaque 400. */
+      if (body.looks !== undefined && !Array.isArray(body.looks)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'looks must be an array of look specs');
+      }
+      const looks = (body.looks ?? []).filter(
+        (l): l is NonNullable<typeof l> => typeof l === 'object' && l !== null,
+      );
+      if (looks.length !== (body.looks ?? []).length) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'each look must be an object');
+      }
 
       let sceneDir: string;
       let scenePath: string;
@@ -245,6 +259,11 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
               ...(typeof body.workBudget === "number" && Number.isFinite(body.workBudget) && body.workBudget > 0
                 ? { workBudget: body.workBudget }
                 : {}),
+              // Aimed shots pass through as authored: the compiler resolves them
+              // against the census and REPORTS what it refused (naming the parts
+              // that exist), so validating shapes here would only turn an
+              // answerable rejection into an opaque 400.
+              ...(looks.length > 0 ? { looks } : {}),
             },
             {
               // No hardTimeoutMs: a legit dense asset may compile for minutes, so
@@ -300,6 +319,29 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
         ...(result.materialBalls.length > 0
           ? { materialBalls: result.materialBalls.map((p) => artifactRef(project.id, scenePath, p)) }
           : {}),
+        /* Aimed shots, each flattened to the wire shape: the resolved pose is
+           carried beside the image because it, not the filename, is what lets
+           the caller re-issue or nudge the shot. A look whose render failed
+           still reports its pose — the caller asked a question and is owed the
+           part of the answer that exists. */
+        ...(result.looks.length > 0
+          ? {
+              looks: result.looks.map((l) => ({
+                label: l.pose.label,
+                ...(l.path ? { image: artifactRef(project.id, scenePath, l.path) } : {}),
+                targetName: l.pose.targetName,
+                target: [...l.pose.target] as [number, number, number],
+                eye: [...l.pose.eye] as [number, number, number],
+                azimuthDeg: l.pose.azimuthDeg,
+                elevationDeg: l.pose.elevationDeg,
+                distance: l.pose.distance,
+                fovDeg: l.pose.fovDeg,
+                name: l.pose.name,
+                notes: l.pose.notes,
+              })),
+            }
+          : {}),
+        ...(result.looksRejected ? { looksRejected: result.looksRejected } : {}),
         /* Resolved like every other artifact on this response, and for the
            same reason. The manifest stores paths SCENE-relative
            (`out/contact.png`); every consumer outside the scene directory

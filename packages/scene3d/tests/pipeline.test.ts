@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { compile, probeBlender, clearProbeCache, describeProofViews } from "../src/index.js";
+import { compile, probeBlender, clearProbeCache, describeProofViews, renderAgentReport } from "../src/index.js";
 import { rmForSetup } from "./helpers/fs.js";
 import { assertBlenderIfRequired } from "./helpers/blender-gate.js";
 
@@ -543,6 +543,130 @@ expect(result.ok).toBe(false);
     expect(codes.has("S3D-E-381")).toBe(true); // no camera
     expect(codes.has("S3D-W-341")).toBe(true); // untouched default material
 expect(codes.has("S3D-W-381")).toBe(true); // no lights
+  }, LONG);
+
+  /*
+   * The viewport: an aimed shot at a NAMED part, rendered by real Blender.
+   *
+   * The resolver is unit-tested without Blender (tests/look.test.ts) because
+   * its whole job is arithmetic over the census. What only a real compile can
+   * prove is the other half: that the pose it computes actually reaches the
+   * renderer, that the renderer photographs THAT pose, and that the frame lands
+   * on disk paired with the pose that produced it.
+   */
+  it("renders an aimed look at a named part and echoes the pose it resolved", async () => {
+    const dir = workDir("good/spec_pavilion");
+    const result = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "proof"],
+      proof: { turntable: false, resolution: 256 },
+      looks: [
+        { at: "prp_lamp", from: "left", label: "lamp-from-left" },
+        { at: "prp_plinth", from: { azimuthDeg: 20, elevationDeg: 60 } },
+      ],
+      timeoutMs: LONG,
+    });
+
+    expect(result.looks).toHaveLength(2);
+    expect(result.looksRejected ?? []).toHaveLength(0);
+
+    // Each look resolved against the MEASURED census: the aim point is the
+    // named part's own centre, not the scene's.
+    const lamp = result.looks[0]!;
+    expect(lamp.pose.targetName).toBe("prp_lamp");
+    expect(lamp.pose.label).toBe("lamp-from-left");
+    expect(lamp.pose.name).toBe("left");
+    expect(lamp.pose.azimuthDeg).toBe(270);
+    const lampSpatial = result.census!.meshes.find((m) => m.object === "prp_lamp")!.spatial!;
+    for (let a = 0; a < 3; a++) {
+      const centre = (lampSpatial.worldMin[a]! + lampSpatial.worldMax[a]!) / 2;
+      expect(lamp.pose.target[a]).toBeCloseTo(centre, 6);
+    }
+
+    // The frames actually exist, and are distinct files from the proof still.
+    for (const look of result.looks) {
+      expect(look.path, `look ${look.pose.label} wrote no frame`).toBeTruthy();
+      const abs = path.join(dir, look.path!);
+      expect(fs.existsSync(abs)).toBe(true);
+      expect(fs.statSync(abs).size).toBeGreaterThan(0);
+      expect(result.proofImages).not.toContain(look.path);
+    }
+    // Two different poses are two different pictures — a leaked camera would
+    // silently render the same frame twice.
+    const [a, b] = result.looks.map((l) => fs.readFileSync(path.join(dir, l.path!)));
+    expect(Buffer.compare(a!, b!)).not.toBe(0);
+
+    // The report carries the pose back, which is the whole point: it is the
+    // only place the agent learns where it was standing.
+    const report = renderAgentReport(result);
+    expect(report).toContain("looks (aimed shots");
+    expect(report).toContain("lamp-from-left");
+    expect(report).toContain("az 270°");
+  }, LONG);
+
+  it("refuses a look at a part that does not exist, naming the parts that do", async () => {
+    const dir = workDir("good/spec_pavilion");
+    const result = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "proof"],
+      proof: { turntable: false, resolution: 256 },
+      looks: [{ at: "prp_lamp", from: "front" }, { at: "prp_nonexistent" }],
+      timeoutMs: LONG,
+    });
+    // The good one still rendered — one bad spec does not cost the batch.
+    expect(result.looks).toHaveLength(1);
+    expect(result.looks[0]!.path).toBeTruthy();
+    // …and the bad one is reported with the names that WOULD have worked,
+    // so the correction is one step rather than another guess.
+    expect(result.looksRejected).toHaveLength(1);
+    expect(result.looksRejected![0]!.index).toBe(1);
+    expect(result.looksRejected![0]!.reason).toContain("prp_nonexistent");
+    expect(result.looksRejected![0]!.reason).toContain("prp_lamp");
+    expect(renderAgentReport(result)).toContain("REFUSED");
+  }, LONG);
+
+  it("says so when looks were requested but the proof stage never ran", async () => {
+    // `--fast` (and any --stages without proof) renders nothing, so a look
+    // silently produced no picture and an empty result was indistinguishable
+    // from "you asked for no shots". A request the compiler cannot honour is a
+    // fact the caller needs, and it must name the reason and the remedy.
+    const dir = workDir("good/spec_pavilion");
+    const result = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "lint"],
+      looks: [{ at: "prp_lamp", from: "left" }],
+      timeoutMs: LONG,
+    });
+    expect(result.looks).toHaveLength(0);
+    expect(result.looksRejected).toHaveLength(1);
+    expect(result.looksRejected![0]!.reason).toContain("proof");
+    expect(renderAgentReport(result)).toContain("REFUSED");
+  }, LONG);
+
+  it("does not cache a look batch whose frame failed to render", async () => {
+    // A transient look failure cached alongside good proof frames would be
+    // served back forever: the entry lists only the artifacts that DO exist, so
+    // a later identical compile finds them all present and hands back the
+    // missing shot as though it had never been asked for. Deleting a rendered
+    // look and recompiling must therefore re-render it, not report a hit with a
+    // hole in it.
+    const dir = workDir("good/spec_pavilion");
+    const opts = {
+      projectDir: dir,
+      stages: ["parse", "build", "proof"] as const,
+      proof: { turntable: false, resolution: 256 },
+      looks: [{ at: "prp_lamp", from: "left" }],
+      timeoutMs: LONG,
+    };
+    const first = await compile({ ...opts, stages: [...opts.stages] });
+    expect(first.looks[0]!.path).toBeTruthy();
+    // Simulate the transient failure by removing the rendered look, then
+    // recompile with caching ON.
+    fs.rmSync(path.join(dir, first.looks[0]!.path!), { force: true });
+    const second = await compile({ ...opts, stages: [...opts.stages] });
+    // The shot must come back — either re-rendered, or the miss reported.
+    expect(second.looks[0]!.path).toBeTruthy();
+    expect(fs.existsSync(path.join(dir, second.looks[0]!.path!))).toBe(true);
   }, LONG);
 });
 

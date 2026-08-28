@@ -259,6 +259,68 @@ export interface Scene3dCompileRequest {
    * ignored and the default stands.
    */
   workBudget?: number;
+  /**
+   * Extra camera angles to photograph this compile from — the viewport.
+   *
+   * The turntable answers "what did I build"; a look answers "what does THAT
+   * part look like from THERE". Each entry names a part and a direction rather
+   * than carrying coordinates, and the compiler resolves it against the census
+   * it just measured — so the caller aims by naming things it can see in the
+   * report. The resolved pose of every look comes back in the response, which
+   * is what lets the next request nudge it without the daemon remembering
+   * anything between calls.
+   */
+  looks?: Scene3dLookSpec[];
+}
+
+/**
+ * One aimed shot, in the semantic terms an author (or an agent) can actually
+ * state. Every field is optional: `{}` is a fitted front view of the whole
+ * scene, the same subject the turntable photographs.
+ */
+export interface Scene3dLookSpec {
+  /** Census object name to aim at. Absent aims at the whole scene's bounds. */
+  at?: string;
+  /**
+   * Where the camera stands: a compass word (`"front"`, `"front-left"`, …), an
+   * explicit angle pair, or `{ part }` to stand AT another part — the "from the
+   * doorway", "from the stool" shot a coordinate cannot express.
+   */
+  from?: string | { azimuthDeg: number; elevationDeg?: number } | { part: string };
+  /** Elevation word (`"level"`, `"eye"`, `"high"`, `"top"`, `"low"`,
+   *  `"bottom"`) when `from` is a compass word. */
+  elevation?: string;
+  /** Extra room around the subject; >1 pulls back, <1 crops in. */
+  margin?: number;
+  /** Horizontal field of view in degrees. */
+  fovDeg?: number;
+  /** Camera height above the standing part's top, metres — only with a
+   *  `{ part }` viewpoint. */
+  eyeHeight?: number;
+  /** Explicit distance in metres, overriding the fitted framing. */
+  distance?: number;
+  /** A name carried through to the response so a batch stays identifiable. */
+  label?: string;
+}
+
+/** A rendered look: the frame, plus the exact pose the request resolved to. */
+export interface Scene3dLook {
+  /** The caller's label, or a description of the resolved pose. */
+  label: string;
+  /** The rendered frame, absent when the pose resolved but the render failed. */
+  image?: Scene3dArtifactRef;
+  /** The census object aimed at, or `"scene"`. */
+  targetName: string;
+  target: [number, number, number];
+  eye: [number, number, number];
+  azimuthDeg: number;
+  elevationDeg: number;
+  distance: number;
+  fovDeg: number;
+  /** Compass name for the azimuth; `~`-prefixed when between octants. */
+  name: string;
+  /** What the resolver had to substitute or thought worth stating. */
+  notes: string[];
 }
 
 /**
@@ -291,6 +353,20 @@ export interface Scene3dCompileResponse {
    * `proofImages`: these are not frames of the scene.
    */
   materialBalls?: Scene3dArtifactRef[];
+  /**
+   * The aimed shots this compile was asked for, in request order, each with the
+   * pose it actually resolved to. Never mixed into `proofImages`: those are one
+   * orbit of one subject, and every consumer reads them that way.
+   *
+   * The pose travelling beside the image is the point — it is what tells the
+   * caller where it was standing, and it is complete enough to re-issue or
+   * nudge without the daemon holding any state between calls.
+   */
+  looks?: Scene3dLook[];
+  /** Look specs that could not be resolved, with the reason (which names the
+   *  parts that DO exist). Reported, never dropped: silence would read as
+   *  "rendered, and there was nothing there". */
+  looksRejected?: Array<{ index: number; reason: string }>;
   /**
    * The proof contact sheet (`out/contact.png`), resolved project-relative
    * with its asset URL.

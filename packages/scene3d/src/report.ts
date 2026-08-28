@@ -267,6 +267,11 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
     );
     appendOrbit(lines, result);
   }
+  // Aimed shots after the orbit: the orbit answers "what did I build", a look
+  // answers "what does THAT part look like from THERE", and reading them in
+  // that order is how the questions actually arrive. Outside the proofImages
+  // guard on purpose — a look can be the only render a compile produced.
+  appendLooks(lines, result);
   if (result.exportedAssets.length > 0) {
     lines.push(`assets: ${result.exportedAssets.join(", ")}`);
   }
@@ -615,6 +620,49 @@ function appendOrbit(lines: string[], result: CompileResult): void {
     lines.push(
       `  never visible: ${sheet.neverVisible.join(", ")} — no pixel from any angle of the orbit` +
         " (enclosed, or hidden inside another part)",
+    );
+  }
+}
+
+/**
+ * The aimed shots this compile was asked for, each with the pose it resolved to.
+ *
+ * The pose is the payload, not the filename. An agent that asked for "the
+ * counter from the left" gets back the exact azimuth, elevation, distance and
+ * lens that request became — which is what lets the next request be a nudge
+ * ("same shot, orbit 30° further") instead of another guess. Nothing is stored
+ * between compiles, so this echo is the ONLY place that knowledge lives, and a
+ * shot whose frame failed to render still prints its pose: the agent asked a
+ * question and is owed the answer it can act on.
+ *
+ * Rejected specs print too, with the reason. A silently dropped shot reads as
+ * "rendered, and there was nothing there".
+ */
+function appendLooks(lines: string[], result: CompileResult): void {
+  const looks = result.looks ?? [];
+  const rejected = result.looksRejected ?? [];
+  if (looks.length === 0 && rejected.length === 0) return;
+  lines.push("");
+  lines.push("looks (aimed shots — the pose each request resolved to):");
+  for (const [i, look] of looks.entries()) {
+    const p = look.pose;
+    const where = look.path ?? "(no frame — the render failed; the pose is still exact)";
+    lines.push(
+      // The caller's own label leads: a batch of shots comes back in request
+      // order, and the name it gave them is how it tells them apart.
+      `  [${i}] ${p.label} — ${where}` +
+        `\n      at ${p.targetName} · ${p.name} az ${Math.round(p.azimuthDeg)}° el ${Math.round(p.elevationDeg)}°` +
+        ` · ${fmtM(p.distance)} out · fov ${Math.round(p.fovDeg)}°`,
+    );
+    if (p.notes.length > 0) lines.push(`      note: ${p.notes.join("; ")}`);
+  }
+  for (const r of rejected) {
+    lines.push(`  [${r.index}] REFUSED — ${r.reason}`);
+  }
+  if (looks.length > 0) {
+    lines.push(
+      "  to move: re-request with the same `at` and a different `from`" +
+        " (a compass word, an {azimuthDeg, elevationDeg}, or {part: \"<name>\"} to stand there).",
     );
   }
 }
