@@ -2489,11 +2489,17 @@ export function deckPreviewSrcDoc(html: string): string {
       display: block !important;
       scroll-snap-type: none !important;
     }
+    /* Scripts normally fit fixed-stage decks at runtime. Static covers remove
+       those scripts, so normalize both named wrappers as well as the direct
+       slide parent instead of letting an outer transform move slide 1 away. */
+    .deck-shell,
+    .deck-stage,
     :where(body *):has(> [data-od-cover-slide]) {
       position: absolute !important;
       inset: 0 !important;
       width: ${DECK_PREVIEW_WIDTH}px !important;
       height: ${DECK_PREVIEW_HEIGHT}px !important;
+      display: block !important;
       margin: 0 !important;
       overflow: hidden !important;
       transform: none !important;

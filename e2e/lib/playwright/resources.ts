@@ -1,4 +1,9 @@
+import { recentProjectFixedStageDeckHtml } from '../../resources/recent-project-fixed-stage-deck.ts';
 import { playwrightUiScenarios } from '../../resources/playwright.ts';
+
+export function fixedStageDeckFixtureHtml(): string {
+  return recentProjectFixedStageDeckHtml;
+}
 
 export type ScenarioKind = 'prototype' | 'deck' | 'hyperframes' | 'image' | 'audio' | 'template' | 'workspace';
 

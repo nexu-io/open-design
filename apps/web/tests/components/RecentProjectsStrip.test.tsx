@@ -220,15 +220,18 @@ describe('RecentProjectsStrip', () => {
   it('turns a script-activated deck into a deterministic visible first-page cover', () => {
     const cover = deckPreviewSrcDoc(`<!doctype html>
       <html><head><style>
-        #stage { position: fixed; top: 50%; left: 50%; width: 1920px; height: 1080px }
+        .deck-shell { position: fixed; transform: translateX(1400px) }
+        .deck-stage { position: relative; width: 1920px; height: 1080px; transform: scale(.6) }
         .slide { display: none; opacity: 0; visibility: hidden }
         .slide.active,
         .slide.is-active { display: flex; opacity: 1; visibility: visible }
         [data-anim] { opacity: 0; transform: translateY(24px) }
       </style></head><body>
-        <div id="stage">
-          <section class="slide orange"><h1 data-anim="fade-up">Launch</h1></section>
-          <section class="slide dark"><h1>Details</h1></section>
+        <div class="deck-shell">
+          <div class="deck-stage">
+            <section class="slide orange"><h1 data-anim="fade-up">Launch</h1></section>
+            <section class="slide dark"><h1>Details</h1></section>
+          </div>
         </div>
         <script>document.querySelector('.slide').classList.add('is-active')</script>
       </body></html>`);
@@ -238,7 +241,9 @@ describe('RecentProjectsStrip', () => {
       /<section class="slide orange active is-active" data-od-cover-slide(?:="")?>/,
     );
     expect(cover).toContain('[data-od-cover-slide] > *');
-    expect(cover).toContain(':where(body *):has(> [data-od-cover-slide])');
+    expect(cover).toMatch(
+      /\.deck-shell,\s*\.deck-stage,\s*:where\(body \*\):has\(> \[data-od-cover-slide\]\)\s*\{[^}]*display: block !important/s,
+    );
     expect(cover).toContain('transform-origin: 0 0 !important');
     expect(cover).toContain('[data-od-cover-slide] [data-anim]');
     expect(cover).toContain('opacity: 1 !important');
