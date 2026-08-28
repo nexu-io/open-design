@@ -83,7 +83,7 @@ export type StderrTailSummary = StreamTailSummary;
 export type StdoutTailSummary = StreamTailSummary;
 
 const STDERR_TAIL_MAX_LINES = 20;
-const STDERR_TAIL_MAX_BYTES = 4 * 1024;
+export const STDERR_TAIL_MAX_BYTES = 4 * 1024;
 
 function recordValue(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)

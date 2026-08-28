@@ -39,7 +39,7 @@ const config = {
 describe('useConversationChat authoritative message loading', () => {
   beforeEach(() => {
     mockedListMessages.mockRejectedValue(new Error('workspace directory unavailable'));
-    mockedSaveMessage.mockResolvedValue(undefined);
+    mockedSaveMessage.mockResolvedValue(null);
     mockedStreamViaDaemon.mockResolvedValue(undefined);
   });
 

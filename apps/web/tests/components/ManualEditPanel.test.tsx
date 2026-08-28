@@ -37,6 +37,7 @@ type OnClearSelection = () => void;
 type OnSaveDraft = () => void;
 type OnCancelDraft = () => void;
 type OnResetDraft = () => void;
+type OnHistoryAction = () => void;
 
 describe('ManualEditPanel', () => {
   let dom: JSDOM;
@@ -144,6 +145,26 @@ describe('ManualEditPanel', () => {
       { id: 'hero-title', kind: 'remove-element' },
       'Delete element',
     );
+  });
+
+  it('exposes enabled undo and redo controls that invoke each action once', () => {
+    const onUndo = vi.fn<OnHistoryAction>();
+    const onRedo = vi.fn<OnHistoryAction>();
+    renderPanel({ canUndo: true, canRedo: true, onUndo, onRedo });
+
+    const undo = host.querySelector('button[aria-label="Undo"]') as HTMLButtonElement | null;
+    const redo = host.querySelector('button[aria-label="Redo"]') as HTMLButtonElement | null;
+    if (!undo || !redo) throw new Error('History controls not found');
+
+    act(() => {
+      undo.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      redo.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(undo.disabled).toBe(false);
+    expect(redo.disabled).toBe(false);
+    expect(onUndo).toHaveBeenCalledTimes(1);
+    expect(onRedo).toHaveBeenCalledTimes(1);
   });
 
   it('routes footer reset, cancel, and save actions', () => {
@@ -838,6 +859,10 @@ describe('ManualEditPanel', () => {
     onCancelDraft = vi.fn<OnCancelDraft>(),
     onSaveDraft = vi.fn<OnSaveDraft>(),
     onResetDraft = vi.fn<OnResetDraft>(),
+    canUndo = false,
+    canRedo = false,
+    onUndo = vi.fn<OnHistoryAction>(),
+    onRedo = vi.fn<OnHistoryAction>(),
     attributesText = '{}',
     selectedTarget = target,
     styles = emptyManualEditStyles(),
@@ -859,6 +884,10 @@ describe('ManualEditPanel', () => {
     onCancelDraft?: OnCancelDraft;
     onSaveDraft?: OnSaveDraft;
     onResetDraft?: OnResetDraft;
+    canUndo?: boolean;
+    canRedo?: boolean;
+    onUndo?: OnHistoryAction;
+    onRedo?: OnHistoryAction;
     attributesText?: string;
     selectedTarget?: ManualEditTarget | null;
     styles?: ReturnType<typeof emptyManualEditStyles>;
@@ -886,8 +915,8 @@ describe('ManualEditPanel', () => {
           draft={draft}
           history={[]}
           error={null}
-          canUndo={false}
-          canRedo={false}
+          canUndo={canUndo}
+          canRedo={canRedo}
           resetAvailable={resetAvailable}
           pageStylesEnabled={pageStylesEnabled}
           onSelectTarget={vi.fn<(target: ManualEditTarget) => void>()}
@@ -900,8 +929,8 @@ describe('ManualEditPanel', () => {
           onCancelDraft={onCancelDraft}
           onSaveDraft={onSaveDraft}
           onResetDraft={onResetDraft}
-          onUndo={vi.fn<() => void>()}
-          onRedo={vi.fn<() => void>()}
+          onUndo={onUndo}
+          onRedo={onRedo}
           floatingStyle={floatingStyle}
           onFloatingPositionChange={onFloatingPositionChange}
           tokenSuggestions={tokenSuggestions}

@@ -44,7 +44,7 @@ import { readAppConfig, writeAppConfig } from '../src/app-config.js';
 import { listProviderModels } from '../src/integrations/provider-models.js';
 import { readVelaCredentialRevision } from '../src/integrations/vela.js';
 import { startServer } from '../src/server.js';
-import { rememberLiveModels } from '../src/runtimes/models.js';
+import { getRememberedLiveModels, rememberLiveModels } from '../src/runtimes/models.js';
 import { amrModelLoadingCache } from '../src/runtimes/amr-model-cache.js';
 import { buildAmrModelCacheKey } from '../src/runtimes/amr-model-probe.js';
 
@@ -3864,22 +3864,67 @@ process.stdin.on('end', () => {
             sample: 'ok',
           });
 
-          await expect(fsp.readFile(argvFile, 'utf8')).resolves.toBe(
-            JSON.stringify([
-              'run',
-              '--format',
-              'json',
-              '-m',
-              'github-copilot/gpt-4o',
-              '--pure',
-              '--title',
-              'Connection test',
-            ]),
-          );
+          // `--dir` pins OpenCode's workspace to the probe's own temp cwd, so
+          // a connection test cannot adopt the repository root as its
+          // worktree. The path is minted per probe; everything around it still
+          // has to match byte-for-byte, since the 1.3 compatibility this test
+          // guards is a property of the argument ORDER.
+          const argv = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
+          expect(argv.slice(0, 3)).toEqual(['run', '--format', 'json']);
+          expect(argv[3]).toBe('--dir');
+          expect(path.isAbsolute(argv[4] ?? '')).toBe(true);
+          expect(argv.slice(5)).toEqual([
+            '-m',
+            'github-copilot/gpt-4o',
+            '--pure',
+            '--title',
+            'Connection test',
+          ]);
           await expect(fsp.readFile(stdinFile, 'utf8')).resolves.toBe('Reply with only: ok');
         },
       );
     } finally {
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not reuse another OpenCode binary variant catalog for an OPENCODE_BIN connection test', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-variant-scope-'));
+    const bin = path.join(markerDir, 'opencode-other');
+    const argvFile = path.join(markerDir, 'argv.json');
+    const previousModels = getRememberedLiveModels('opencode');
+    rememberLiveModels('opencode', [{
+      id: 'openai/gpt-5.6-sol',
+      label: 'openai/gpt-5.6-sol',
+      reasoningOptions: [{ id: 'high', label: 'high' }],
+    }]);
+    try {
+      await fsp.writeFile(
+        bin,
+        `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
+process.stdin.resume();
+process.stdin.on('end', () => console.log(JSON.stringify({ type: 'text', part: { text: 'ok' } })));
+`,
+      );
+      await fsp.chmod(bin, 0o755);
+
+      const result = await testAgentConnection({
+        agentId: 'opencode',
+        model: 'openai/gpt-5.6-sol',
+        reasoning: 'high',
+        agentCliEnv: { opencode: { OPENCODE_BIN: bin } },
+      });
+
+      expect(result).toMatchObject({ ok: true, kind: 'success', agentName: 'OpenCode' });
+      const argv = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
+      expect(argv).toContain('openai/gpt-5.6-sol');
+      expect(argv).not.toContain('--variant');
+      expect(argv).not.toContain('high');
+    } finally {
+      rememberLiveModels('opencode', previousModels);
       await fsp.rm(markerDir, { recursive: true, force: true });
     }
   });

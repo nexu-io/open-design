@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type DragEvent as ReactDragEvent,
+  type CSSProperties,
   type ReactNode,
 } from 'react';
 import { Button } from '@open-design/components';
@@ -486,6 +487,15 @@ const BROWSER_KEEPALIVE_CAP = 3;
 // it again even when `src` is byte-identical, so tab A -> tab B -> tab A used
 // to refetch both artifacts and briefly return to a blank/loading preview.
 const HTML_VIEWER_KEEPALIVE_CAP = 3;
+const RETAINED_VIEWER_INACTIVE_STYLE = {
+  position: 'absolute',
+  inset: 0,
+  width: '100%',
+  height: '100%',
+  overflow: 'hidden',
+  opacity: 0,
+  pointerEvents: 'none',
+} satisfies CSSProperties;
 const QUICK_SWITCHER_DOCUMENT_CLASS = 'od-quick-switcher-open';
 const SKETCH_AUTOSAVE_DELAY_MS = 800;
 
@@ -3155,15 +3165,11 @@ export function FileWorkspace({
   const htmlViewerFileSnapshots = htmlViewerFileSnapshotsRef.current.files;
   for (const candidate of visibleFiles) {
     if (candidate.kind !== 'html') continue;
-    // Hidden viewers keep the last file revision they actually rendered.
-    // Updating mtime under an inactive iframe changes its src and defeats the
-    // keep-alive. Adopt the newest revision exactly when that tab activates.
-    if (
-      candidate.name === activeHtmlViewerFile?.name
-      || !htmlViewerFileSnapshots.has(candidate.name)
-    ) {
-      htmlViewerFileSnapshots.set(candidate.name, candidate);
-    }
+    // Retained viewers stay mounted at the real viewport size, so let them
+    // consume file revisions while inactive. They can finish the one required
+    // navigation behind the active tab; activation then remains a pure
+    // visibility swap instead of combining resize + navigation in one frame.
+    htmlViewerFileSnapshots.set(candidate.name, candidate);
   }
   useEffect(() => {
     setLiveHtmlViewerFileNames([]);
@@ -4340,6 +4346,7 @@ export function FileWorkspace({
         {initialMaterializationPending ? (
           <DesignFilesPanel
             projectId={projectId}
+            projectKind={projectKind}
             viewerOnly
             downloadPending
             files={[]}
@@ -4385,6 +4392,7 @@ export function FileWorkspace({
           <DesignFilesPanel
             key={projectId}
             projectId={projectId}
+            projectKind={projectKind}
             filesRefreshKey={filesRefreshKey}
             viewerOnly={viewerOnly}
             downloadPending={fileSyncBadge === 'downloading'}
@@ -4406,6 +4414,8 @@ export function FileWorkspace({
                   page_name: 'file_manager',
                   area: 'file_manager',
                   element: 'open_sketch',
+                  project_id: projectId,
+                  project_kind: projectKind,
                 });
               }
               openFile(name);
@@ -4417,6 +4427,8 @@ export function FileWorkspace({
                 page_name: 'file_manager',
                 area: 'file_manager',
                 element: 'delete',
+                project_id: projectId,
+                project_kind: projectKind,
               });
               void handleDelete(name);
             }}
@@ -4425,6 +4437,8 @@ export function FileWorkspace({
                 page_name: 'file_manager',
                 area: 'file_manager',
                 element: 'delete',
+                project_id: projectId,
+                project_kind: projectKind,
               });
               return handleDeleteMany(names);
             }}
@@ -4433,6 +4447,8 @@ export function FileWorkspace({
                 page_name: 'file_manager',
                 area: 'file_manager',
                 element: 'upload',
+                project_id: projectId,
+                project_kind: projectKind,
               });
               fileInputRef.current?.click();
             }}
@@ -4442,6 +4458,8 @@ export function FileWorkspace({
                 page_name: 'file_manager',
                 area: 'file_manager',
                 element: 'paste',
+                project_id: projectId,
+                project_kind: projectKind,
               });
               void createMarkdownDocument();
             }}
@@ -4450,6 +4468,8 @@ export function FileWorkspace({
                 page_name: 'file_manager',
                 area: 'file_manager',
                 element: 'new_sketch',
+                project_id: projectId,
+                project_kind: projectKind,
               });
               void startNewSketch();
             }}
@@ -4458,6 +4478,8 @@ export function FileWorkspace({
                 page_name: 'file_manager',
                 area: 'file_manager',
                 element: 'new_browser',
+                project_id: projectId,
+                project_kind: projectKind,
               });
               openBrowserTab();
             }}
@@ -4466,6 +4488,8 @@ export function FileWorkspace({
                 page_name: 'file_manager',
                 area: 'file_manager',
                 element: 'create_design_system',
+                project_id: projectId,
+                project_kind: projectKind,
               });
               setPendingDesignSystemCreateEntry('project_canvas');
               navigate({ kind: 'design-system-create' });
@@ -4479,6 +4503,8 @@ export function FileWorkspace({
                 page_name: 'file_manager',
                 area: 'file_manager',
                 element: 'library',
+                project_id: projectId,
+                project_kind: projectKind,
               });
               setShowLibraryPicker(true);
             }}
@@ -4510,6 +4536,7 @@ export function FileWorkspace({
                   area: 'sketch_editor',
                   result: result === false ? 'failed' : 'success',
                   project_id: projectId,
+                  project_kind: projectKind,
                 });
                 return result;
               }}
@@ -4520,6 +4547,7 @@ export function FileWorkspace({
                   area: 'sketch_editor',
                   result: result === false ? 'failed' : 'success',
                   project_id: projectId,
+                  project_kind: projectKind,
                 });
                 return result;
               }}
@@ -4604,16 +4632,7 @@ export function FileWorkspace({
                 minHeight: 0,
                 ...(workspaceActive
                   ? {}
-                  : {
-                      position: 'absolute',
-                      left: '-100000px',
-                      top: 0,
-                      width: 1,
-                      height: 1,
-                      overflow: 'hidden',
-                      visibility: 'hidden',
-                      pointerEvents: 'none',
-                    }),
+                  : RETAINED_VIEWER_INACTIVE_STYLE),
               }}
             >
               {renderFileViewer(file, workspaceActive)}
@@ -4634,16 +4653,7 @@ export function FileWorkspace({
               minHeight: 0,
               ...(viewerFileActive
                 ? {}
-                : {
-                    position: 'absolute',
-                    left: '-100000px',
-                    top: 0,
-                    width: 1,
-                    height: 1,
-                    overflow: 'hidden',
-                    visibility: 'hidden',
-                    pointerEvents: 'none',
-                  }),
+                : RETAINED_VIEWER_INACTIVE_STYLE),
             }}
           >
             {renderFileViewer(viewerFile, viewerFileActive)}

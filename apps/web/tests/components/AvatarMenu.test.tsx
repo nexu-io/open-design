@@ -694,10 +694,9 @@ describe('AvatarMenu', () => {
 
     expect(onAgentModelChange).not.toHaveBeenCalled();
     const target = new URL(openExternalUrlMock.mock.calls[0]![0]);
-    expect(target.searchParams.get('workspaceId')).toBe('workspace-a');
-    // `billing=plan` is B's state-aware upgrade intent, replacing the wallet
-    // page's fixed `view=plans` pricing modal.
-    expect(target.searchParams.get('billing')).toBe('plan');
+    expect(target.origin + target.pathname).toBe('https://open-design.ai/pricing/');
+    expect(target.searchParams.get('workspaceId')).toBeNull();
+    expect(target.searchParams.get('billing')).toBeNull();
   });
 
 });

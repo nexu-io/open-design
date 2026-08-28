@@ -37,9 +37,64 @@ describe('buildSrcdoc', () => {
       { baseHref: '/api/projects/project-1/preview/scope-1/' },
     );
 
+    const dom = new JSDOM(doc, {
+      url: 'http://open-design.local/',
+      runScripts: 'dangerously',
+    });
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      source: dom.window.parent,
+      data: {
+        type: 'od:preview-base-update',
+        href: '/api/projects/project-1/preview/scope-2/',
+      },
+    }));
+
     expect(doc).toContain(authored);
     expect(doc).not.toContain('/api/projects/project-1/preview/scope-1/');
-    expect(new JSDOM(doc).window.document.querySelectorAll('base')).toHaveLength(1);
+    expect(dom.window.document.querySelectorAll('base')).toHaveLength(1);
+    expect(dom.window.document.querySelector('base')?.getAttribute('href'))
+      .toBe('https://cdn.example/assets/');
+    dom.window.close();
+  });
+
+  it('updates an injected preview base in place without navigating the document', () => {
+    const doc = buildSrcdoc(
+      '<!doctype html><html><head></head><body><main>Preview</main></body></html>',
+      { baseHref: 'od://app/api/projects/project-1/preview/scope-1/' },
+    );
+    const dom = new JSDOM(doc, {
+      url: 'http://open-design.local/',
+      runScripts: 'dangerously',
+    });
+    const before = dom.window.document.documentElement;
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      source: dom.window.parent,
+      data: {
+        type: 'od:preview-base-update',
+        requestId: 'renew-1',
+        href: 'od://app/api/projects/project-1/preview/scope-2/',
+      },
+    }));
+
+    expect(dom.window.document.documentElement).toBe(before);
+    expect(dom.window.document.querySelector('base')?.getAttribute('href'))
+      .toBe('od://app/api/projects/project-1/preview/scope-2/');
+    dom.window.close();
+  });
+
+  it('keeps relative assets resolvable when Electron transports srcDoc through a Blob URL', () => {
+    const doc = buildSrcdoc(
+      '<!doctype html><html><head></head><body><img src="./asset.png"></body></html>',
+      { baseHref: 'od://app/api/projects/project-1/preview/scope-1/pages/' },
+    );
+    const dom = new JSDOM(doc, { url: 'blob:od://app/preview-document' });
+
+    expect(dom.window.document.baseURI)
+      .toBe('od://app/api/projects/project-1/preview/scope-1/pages/');
+    expect(new URL('./asset.png', dom.window.document.baseURI).href)
+      .toBe('od://app/api/projects/project-1/preview/scope-1/pages/asset.png');
+    dom.window.close();
   });
 
   it('echoes the witnessed content-size generation with separate scroll and client widths', () => {
@@ -413,6 +468,8 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('schedulePostPreviewScroll');
     expect(srcdoc).toContain("type: 'od:preview-scroll'");
     expect(srcdoc).toContain("type: 'od:preview-scroll-request'");
+    expect(srcdoc).toContain("data.type === 'od:preview-scroll-capture'");
+    expect(srcdoc).toContain('postPreviewScroll(data.requestId)');
     expect(srcdoc).toContain("data.type === 'od:preview-scroll-by'");
     expect(srcdoc).toContain('previewScrollBy(data.left, data.top)');
     expect(srcdoc).toContain('data-od-selection-bridge-style');

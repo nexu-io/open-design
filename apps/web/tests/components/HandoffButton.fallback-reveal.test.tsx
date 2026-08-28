@@ -44,7 +44,7 @@ describe('HandoffButton zero-editors fallback', () => {
 
     render(
       <I18nProvider initial="en">
-        <HandoffButton projectId="p1" />
+        <HandoffButton projectId="p1" projectKind="prototype" />
       </I18nProvider>,
     );
 
@@ -67,7 +67,7 @@ describe('HandoffButton zero-editors fallback', () => {
 
     render(
       <I18nProvider initial="en">
-        <HandoffButton projectId="p1" />
+        <HandoffButton projectId="p1" projectKind="prototype" />
       </I18nProvider>,
     );
 
@@ -109,6 +109,7 @@ describe('HandoffButton zero-editors fallback', () => {
       <I18nProvider initial="zh-CN">
         <HandoffButton
           projectId="p1"
+          projectKind="prototype"
           projectName="Landing"
           projectDir="/tmp/open-design/Landing"
           agents={agents}
@@ -159,6 +160,7 @@ describe('HandoffButton zero-editors fallback', () => {
       <I18nProvider initial="en">
         <HandoffButton
           projectId="p1"
+          projectKind="prototype"
           projectName="Landing"
           projectDir={projectDir}
         />

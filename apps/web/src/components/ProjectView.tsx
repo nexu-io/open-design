@@ -58,6 +58,10 @@ import {
 import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
 import { requestAmrArtifactUpgrade } from '../runtime/amr-artifact-upgrade';
 import {
+  resolveQuestionFormStrategyTaskExecutionId,
+  strategySettledMessageFields,
+} from '../runtime/strategy-question-continuation';
+import {
   type AmrWalletSnapshot,
   type ByokChatProviderConfig,
   type ByokMediaDefaults,
@@ -72,6 +76,7 @@ import {
   byokProtocolToTracking,
   executionModeToTracking,
   projectKindFromMetadataToTracking,
+  projectKindFromMetadataToTrackingOrLegacyDefault,
   projectKindToTracking,
   sessionModeToTracking,
 } from '@open-design/contracts/analytics';
@@ -173,6 +178,7 @@ import {
   installedBrandEnrichmentSkillIds,
   isProgrammaticBrandExtractionProject,
 } from '../runtime/brand-enrichment';
+import { useSingleFlightCallback } from '../runtime/useSingleFlightCallback';
 import { useBrandReadyPrompt } from '../runtime/useBrandReadyPrompt';
 import {
   buildDesignSystemPackageAuditRepairPrompt,
@@ -337,7 +343,7 @@ import { buildContinueInCliToast } from '../lib/build-continue-in-cli-toast';
 import { buildClipboardPrompt } from '../lib/build-clipboard-prompt';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { effectiveMaxTokens } from '../state/maxTokens';
-import { effectiveAgentModelChoice } from './agentModelSelection';
+import { effectiveAgentModelChoice, effectiveAgentModelId } from './agentModelSelection';
 import { mediaExecutionPolicyForProjectMetadata } from '../media/execution-policy';
 import { mediaModelProviderId } from '../media/models';
 import { byokProviderRequiresApiKey } from '../utils/byokProvider';
@@ -384,13 +390,17 @@ type ProjectChatSendMeta = ChatSendMeta & {
    *  the home submit (with any soft warning answered there); skip re-gating
    *  so the user is never double-prompted for one task. */
   amrGatePrechecked?: boolean;
-  /** The Home handoff owns a separately persisted prompt. Once that payload is
-   *  durably queued, report it as accepted so the handoff is consumed instead
-   *  of replaying a second copy when the queue later drains. This flag is
+  /** The caller owns a payload that must be consumed exactly once — the Home
+   *  handoff's separately persisted prompt, an inline question form's single
+   *  answer. Once the payload is durably parked in this view's queue, report
+   *  it as accepted so the caller releases it instead of offering a second
+   *  copy that the queue drain would then send twice. This flag is
    *  transport-only and is stripped before queue persistence. */
-  acceptQueuedHomeHandoff?: boolean;
+  acceptDurableQueue?: boolean;
   /** Stable task lineage for retries, resumes and clarification answers. */
   taskAnalytics?: ChatTaskExecutionAnalytics;
+  /** Explicit daemon-issued OD Next continuation handle. */
+  strategyTaskExecutionId?: string;
 };
 
 export function mergeSavedPreviewComment(current: PreviewComment[], saved: PreviewComment): PreviewComment[] {
@@ -464,10 +474,51 @@ export async function listConversationsWithRetry(
     : new Error('Could not load conversations for this project.');
 }
 
-function mergeServerMessageWithLocal(server: ChatMessage, local?: ChatMessage): ChatMessage {
+/**
+ * Server messages whose local copy is longer only because the live stream
+ * folded a LATER Run of the same logical task into it.
+ *
+ * A Full Plan turn spans several physical Runs. The live stream re-points one
+ * assistant message at each successor Run (`onRunCreated`), so that message
+ * accumulates every stage's output; the daemon meanwhile persists one message
+ * per Run. On the post-run refresh the two views meet, and the ordinary
+ * "longer local body is fresher" rule (#6396) reads the accumulation as
+ * freshness and keeps it — next to the successor's own row. The successor's
+ * answer then renders twice.
+ *
+ * Only a message with a LATER sibling in the same task qualifies: the task's
+ * final Run has nothing to have absorbed, and its local copy really is the
+ * freshest one.
+ */
+function messagesThatAbsorbedASuccessorRun(
+  serverMessages: readonly ChatMessage[],
+): Set<string> {
+  const lastRunIndexByTask = new Map<string, number>();
+  for (const message of serverMessages) {
+    const task = message.strategyTaskExecutionId;
+    if (!task) continue;
+    const runIndex = message.strategyTaskRunIndex ?? 0;
+    lastRunIndexByTask.set(task, Math.max(lastRunIndexByTask.get(task) ?? 0, runIndex));
+  }
+  const absorbed = new Set<string>();
+  for (const message of serverMessages) {
+    const task = message.strategyTaskExecutionId;
+    if (!task) continue;
+    if ((message.strategyTaskRunIndex ?? 0) < (lastRunIndexByTask.get(task) ?? 0)) {
+      absorbed.add(message.id);
+    }
+  }
+  return absorbed;
+}
+
+function mergeServerMessageWithLocal(
+  server: ChatMessage,
+  local?: ChatMessage,
+  absorbedASuccessorRun = false,
+): ChatMessage {
   if (!local) return server;
   const merged: ChatMessage = { ...server };
-  if (local.role === 'assistant' && server.role === 'assistant') {
+  if (local.role === 'assistant' && server.role === 'assistant' && !absorbedASuccessorRun) {
     if ((local.content?.length ?? 0) > (server.content?.length ?? 0)) {
       merged.content = local.content;
     }
@@ -502,8 +553,13 @@ export function mergeServerMessagesIntoConversation(
 ): ChatMessage[] {
   const currentById = new Map(current.map((message) => [message.id, message]));
   const serverIds = new Set(serverMessages.map((message) => message.id));
+  const absorbed = messagesThatAbsorbedASuccessorRun(serverMessages);
   const merged = serverMessages.map((message) =>
-    mergeServerMessageWithLocal(message, currentById.get(message.id)),
+    mergeServerMessageWithLocal(
+      message,
+      currentById.get(message.id),
+      absorbed.has(message.id),
+    ),
   );
   for (const message of current) {
     if (!serverIds.has(message.id)) merged.push(message);
@@ -1086,12 +1142,12 @@ function autoSendFirstMessageKey(projectId: string): string {
   return `od:auto-send-first:${projectId}`;
 }
 
-function stableHandoffProjectDigest(projectId: string): string {
+function stableIdentityDigest(value: string): string {
   // FNV-1a 64-bit keeps the daemon-facing id bounded while preserving a
   // deterministic identity across retries and ProjectView remounts.
   let hash = 0xcbf29ce484222325n;
-  for (let index = 0; index < projectId.length; index += 1) {
-    hash ^= BigInt(projectId.charCodeAt(index));
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= BigInt(value.charCodeAt(index));
     hash = BigInt.asUintN(64, hash * 0x100000001b3n);
   }
   return hash.toString(36).padStart(13, '0');
@@ -1101,12 +1157,46 @@ function homeAutoSendIdentity(projectId: string): Pick<
   ProjectChatSendMeta,
   'assistantMessageId' | 'clientRequestId' | 'userMessageId'
 > {
-  const handoffId = `home-auto-send-${stableHandoffProjectDigest(projectId)}`;
+  const handoffId = `home-auto-send-${stableIdentityDigest(projectId)}`;
   return {
     clientRequestId: handoffId,
     userMessageId: `${handoffId}-user`,
     assistantMessageId: `${handoffId}-assistant`,
   };
+}
+
+/**
+ * A question form's answer is one payload with one identity.
+ *
+ * "At most one user answer message and one non-failed run per
+ * sourceAssistantMessageId + formId" cannot be a property of the form's own
+ * submit lock: a second tab, a reload in a context that denies storage, and a
+ * queue replay all reach the host without that lock. Deriving the send's ids
+ * from the occurrence makes the guarantee a property of the request, and every
+ * layer that already dedupes on identity then enforces it for free — the
+ * conversation queue keys entries on `clientRequestId`, the answer row keeps
+ * one `userMessageId` instead of appending a second, and the daemon's
+ * `createOrReuse` returns the first run rather than spawning another.
+ *
+ * A form rendered without a known occurrence (no source message, no form id)
+ * keeps the per-send random identity it has always had.
+ *
+ * The row and the run are claimed by two different authorities, both of which
+ * decide on this identity. `handleSend` persists the user row before the
+ * daemon has answered, so the row's exactly-once cannot be decided here: the
+ * write goes out `createOnly`, and the daemon — where the check and the write
+ * are one operation — keeps the first accepted answer and returns it. The run
+ * is claimed by `createOrReuse` on the same key. A later submitter therefore
+ * adds neither a second answer nor a second run, and adopts the answer that
+ * actually ran instead of displaying one no run ever saw.
+ */
+function questionFormAnswerIdentity(
+  sourceAssistantMessageId: string | undefined,
+  formId: string | undefined,
+): Pick<ProjectChatSendMeta, 'clientRequestId' | 'userMessageId'> {
+  if (!sourceAssistantMessageId || !formId) return {};
+  const answerId = `qf-answer-${stableIdentityDigest(`${sourceAssistantMessageId}:${formId}`)}`;
+  return { clientRequestId: answerId, userMessageId: `${answerId}-user` };
 }
 
 function autoSendPromptKey(projectId: string): string {
@@ -1890,6 +1980,8 @@ export function ProjectView({
         : projectRunWorkspaceContext
           ? 'workspace'
           : 'pending';
+  const projectResourceAuthorityRef = useRef(projectResourceAuthority);
+  projectResourceAuthorityRef.current = projectResourceAuthority;
   const projectRunWorkspaceContextRef = useRef(projectRunWorkspaceContext);
   projectRunWorkspaceContextRef.current = projectRunWorkspaceContext;
   // The AMR pre-run balance gate uses the project's resolved scope, or the one
@@ -3076,27 +3168,60 @@ export function ProjectView({
     const reloadingCurrentConversation =
       messagesConversationIdRef.current === activeConversationId
       && messagesAuthorityKeyRef.current === projectRunAuthorityKey;
+    const liveReloadMessageIds = new Set<string>();
+    if (
+      messagesConversationIdRef.current === activeConversationId
+      && streamingConversationIdRef.current === activeConversationId
+      && abortRef.current !== null
+      && cancelRef.current !== null
+      && projectResourceAuthorityRef.current !== 'denied'
+    ) {
+      const currentMessages = messagesRef.current;
+      let assistantIndex = -1;
+      for (let index = currentMessages.length - 1; index >= 0; index -= 1) {
+        const message = currentMessages[index];
+        if (message?.role === 'assistant' && isActiveRunStatus(message.runStatus)) {
+          liveReloadMessageIds.add(message.id);
+          assistantIndex = index;
+          break;
+        }
+      }
+      for (let index = assistantIndex - 1; index >= 0; index -= 1) {
+        const message = currentMessages[index];
+        if (message?.role !== 'user') continue;
+        liveReloadMessageIds.add(message.id);
+        break;
+      }
+    }
+    const preservingLiveConversation = liveReloadMessageIds.size > 0;
     // Reset the initialized flag so auto-send waits for this authoritative DB
     // read to settle before checking messages.length. A same-conversation
-    // authority refresh keeps the prior transcript visible, but invalidates
-    // its initialized state until the refresh succeeds.
+    // authority refresh keeps the prior transcript visible. An authority-key
+    // handoff keeps only the live turn, so its pending read cannot detach the
+    // stream or later replace those rows with an empty snapshot.
     setMessagesInitialized(false);
     let cancelled = false;
     const requestWorkspaceContext = projectRunWorkspaceContextRef.current;
-    setMessagesConversationId(null);
     setFailedMessagesConversationId(null);
-    setStreaming(false);
-    streamingConversationIdRef.current = null;
-    setStreamingConversationId(null);
+    if (!preservingLiveConversation) {
+      setMessagesConversationId(null);
+      setStreaming(false);
+      streamingConversationIdRef.current = null;
+      setStreamingConversationId(null);
+    }
     if (!reloadingCurrentConversation) {
-      setMessages([]);
+      setMessages((current) =>
+        preservingLiveConversation
+          ? current.filter((message) => liveReloadMessageIds.has(message.id))
+          : [],
+      );
       commitPreviewComments([]);
       setAttachedComments([]);
       setArtifact(null);
       savedArtifactRef.current = null;
     }
     const commentsGeneration = previewCommentsGenerationRef.current;
-    if (!reloadingCurrentConversation) {
+    if (!reloadingCurrentConversation && !preservingLiveConversation) {
       messagesConversationIdRef.current = null;
       messagesAuthorityKeyRef.current = null;
     }
@@ -3124,7 +3249,14 @@ export function ProjectView({
           requestWorkspaceContext,
         );
         if (cancelled) return;
-        setMessages(normalizeConversationMessageOrder(list));
+        setMessages((current) =>
+          preservingLiveConversation
+            ? mergeServerMessagesIntoConversation(
+                current.filter((message) => liveReloadMessageIds.has(message.id)),
+                list,
+              )
+            : normalizeConversationMessageOrder(list),
+        );
         setMessagesInitialized(true);
         setAttachedComments([]);
         setArtifact(null);
@@ -3138,16 +3270,22 @@ export function ProjectView({
         if (cancelled) return;
         const message = err instanceof Error ? err.message : 'Could not load messages for this conversation.';
         if (!reloadingCurrentConversation) {
-          setMessages([]);
+          setMessages((current) =>
+            preservingLiveConversation
+              ? current.filter((item) => liveReloadMessageIds.has(item.id))
+              : [],
+          );
           commitPreviewComments([]);
           setAttachedComments([]);
           setArtifact(null);
           savedArtifactRef.current = null;
         }
         setError(message);
-        messagesConversationIdRef.current = null;
-        messagesAuthorityKeyRef.current = null;
-        setMessagesConversationId(null);
+        if (!preservingLiveConversation) {
+          messagesConversationIdRef.current = null;
+          messagesAuthorityKeyRef.current = null;
+          setMessagesConversationId(null);
+        }
         setFailedMessagesConversationId(activeConversationId);
       }
     })();
@@ -3248,12 +3386,11 @@ export function ProjectView({
     }
 
     if (cfg.desktopEnabled) {
-      // Successes only interrupt when the user is on another tab/window.
-      // Failures alert regardless — losing a long agent run silently is
-      // worse than a small interruption when the page is in focus.
+      // System notifications are useful only when the task is not already in
+      // front of the user. Sounds remain independent feedback for both states.
       const isHidden = typeof document !== 'undefined' && document.hidden;
       const isFocused = typeof document === 'undefined' ? true : document.hasFocus();
-      if (status === 'failed' || isHidden || !isFocused) {
+      if (isHidden || !isFocused) {
         const title = status === 'succeeded'
           ? t('notify.successTitle')
           : t('notify.failureTitle');
@@ -5325,11 +5462,21 @@ export function ProjectView({
           hasGenericDisconnectFailureEvent(message);
         const replayingTerminalRun =
           shouldReplayTerminalRunMessage(message) || spuriouslyFailedPending;
-        const needsFullReplay =
+        const needsReplayForMessage =
           isActiveRunStatus(message.runStatus) ||
           replayingTerminalRun ||
           spuriouslyFailedPending ||
           recoverableGenericDisconnectFailed;
+        // A predecessor can be persisted as physically succeeded immediately
+        // before the logical task advances. Probe daemon task truth even when
+        // this row otherwise looks terminal; completed task rows bail out
+        // below without replaying their final Run again.
+        const needsTaskProjectionProbe = Boolean(
+          message.strategyTaskExecutionId
+          && message.runId
+          && message.runStatus === 'succeeded',
+        );
+        const needsFullReplay = needsReplayForMessage || needsTaskProjectionProbe;
         if (!needsFullReplay) continue;
         const fallbackRun = !message.runId
           ? activeByMessage.get(message.id) ?? historicalByMessage.get(message.id) ?? null
@@ -5373,10 +5520,10 @@ export function ProjectView({
           );
         }
 
-        const status = fallbackRun
+        const physicalStatus = fallbackRun
           ?? await fetchChatRunStatus(runId, projectRunWorkspaceContext);
         if (cancelled) return;
-        if (!status) {
+        if (!physicalStatus) {
           // `fetchChatRunStatus` returns null on ANY non-OK response or fetch
           // exception (providers/daemon.ts:686), not only when the daemon has
           // permanently forgotten the run.  For a spuriously-failed pending
@@ -5416,6 +5563,66 @@ export function ProjectView({
             completedReattachRunsRef.current.add(runId);
           }
           continue;
+        }
+        const projectedActiveRunId = physicalStatus.strategyTask?.activeRunId;
+        const taskRunAdvanced = Boolean(
+          projectedActiveRunId
+          && projectedActiveRunId !== runId,
+        );
+        const reattachRunId = taskRunAdvanced && projectedActiveRunId
+          ? projectedActiveRunId
+          : runId;
+        const projectedTaskStatus: ChatMessage['runStatus'] =
+          physicalStatus.strategyTask?.terminal === true
+            ? physicalStatus.strategyTask.outcome === 'canceled'
+              ? 'canceled'
+              : physicalStatus.strategyTask.outcome === 'blocked'
+                ? 'failed'
+                : 'succeeded'
+            : 'running';
+        // A crash may persist the predecessor Run after the daemon has already
+        // advanced the logical task. Treat the daemon projection as the
+        // subscription truth: the predecessor's physical `succeeded` status
+        // is not the user task terminal state.
+        const status = taskRunAdvanced
+          ? {
+              ...physicalStatus,
+              id: reattachRunId,
+              status: projectedTaskStatus,
+            }
+          : physicalStatus;
+        if (
+          taskRunAdvanced
+          && (
+            finalizingLocalRunIdsRef.current.has(reattachRunId)
+            || reattachControllersRef.current.has(reattachRunId)
+            || completedReattachRunsRef.current.has(reattachRunId)
+          )
+        ) {
+          continue;
+        }
+        if (
+          needsTaskProjectionProbe
+          && !needsReplayForMessage
+          && !taskRunAdvanced
+          && (!status.strategyTask || status.strategyTask.terminal)
+        ) {
+          completedReattachRunsRef.current.add(runId);
+          continue;
+        }
+        if (status.strategyTask?.taskExecutionId) {
+          // A blocked verdict is stamped alongside the task handle so the
+          // turn's question form stays terminated after a reload.
+          const settledFields = strategySettledMessageFields(status.strategyTask);
+          updateMessageById(
+            message.id,
+            (prev) => ({
+              ...prev,
+              strategyTaskExecutionId: status.strategyTask!.taskExecutionId,
+              ...(settledFields ?? {}),
+            }),
+            true,
+          );
         }
         // When the daemon authoritative status is 'failed', the run ended in a
         // genuine failure.  For spuriously-failed pending messages this means
@@ -5481,7 +5688,7 @@ export function ProjectView({
           );
         }
 
-        if (shouldReplayTerminalRunMessage(message)) {
+        if (shouldReplayTerminalRunMessage(message) && !taskRunAdvanced) {
           const replayedContent = textContentFromAgentEvents(message.events);
           if (replayedContent.trim().length > 0) {
             const parser = createArtifactParser();
@@ -5612,6 +5819,7 @@ export function ProjectView({
               events: message.events,
               producedFileCount: produced.length,
               traceObjectFileCount: traceObjectFiles.length,
+              artifactCount: status.artifactCount,
               persistenceSucceeded: artifactPersistenceSucceeded,
               persistenceFailed: artifactPersistenceError !== undefined,
             });
@@ -5646,8 +5854,47 @@ export function ProjectView({
 
         const controller = new AbortController();
         const cancelController = new AbortController();
-        reattachControllersRef.current.set(runId, controller);
-        reattachCancelControllersRef.current.set(runId, cancelController);
+        const ownedReattachRunIds = new Set<string>();
+        const claimReattachRun = (claimedRunId: string) => {
+          ownedReattachRunIds.add(claimedRunId);
+          reattachControllersRef.current.set(claimedRunId, controller);
+          reattachCancelControllersRef.current.set(claimedRunId, cancelController);
+        };
+        const releaseReattachRuns = () => {
+          for (const claimedRunId of ownedReattachRunIds) {
+            if (reattachControllersRef.current.get(claimedRunId) === controller) {
+              reattachControllersRef.current.delete(claimedRunId);
+            }
+            if (reattachCancelControllersRef.current.get(claimedRunId) === cancelController) {
+              reattachCancelControllersRef.current.delete(claimedRunId);
+            }
+          }
+        };
+        const completeReattachRuns = () => {
+          for (const claimedRunId of ownedReattachRunIds) {
+            completedReattachRunsRef.current.add(claimedRunId);
+          }
+        };
+        claimReattachRun(runId);
+        claimReattachRun(reattachRunId);
+        let activeReattachRunId = reattachRunId;
+        if (taskRunAdvanced) {
+          updateMessageById(
+            message.id,
+            (prev) => ({
+              ...prev,
+              runId: reattachRunId,
+              runStatus: status.status,
+              lastRunEventId: undefined,
+              strategyTaskPrefixLength: message.content.length,
+              strategyTaskPrefixEventCount: message.events?.length ?? 0,
+              ...(status.strategyTask?.taskExecutionId
+                ? { strategyTaskExecutionId: status.strategyTask.taskExecutionId }
+                : {}),
+            }),
+            true,
+          );
+        }
         if (!isTerminalRunStatus(status.status)) {
           abortRef.current = controller;
           cancelRef.current = cancelController;
@@ -5662,6 +5909,19 @@ export function ProjectView({
           status.status === 'queued' ||
           status.status === 'running' ||
           status.status === 'succeeded';
+        const taskPrefixLength = taskRunAdvanced
+          ? message.content.length
+          : Math.max(0, message.strategyTaskPrefixLength ?? 0);
+        const taskPrefixEventCount = taskRunAdvanced
+          ? message.events?.length ?? 0
+          : Math.max(0, message.strategyTaskPrefixEventCount ?? 0);
+        const preserveTaskPrefix = needsFullReplay && taskPrefixLength > 0;
+        const preservedTaskPrefixContent = preserveTaskPrefix
+          ? message.content.slice(0, taskPrefixLength)
+          : '';
+        const preservedTaskPrefixEvents = preserveTaskPrefix
+          ? [...(message.events ?? []).slice(0, taskPrefixEventCount)]
+          : [];
         if (needsFullReplay && daemonStatusIsRecoverable) {
           updateMessageById(
             message.id,
@@ -5673,7 +5933,14 @@ export function ProjectView({
             // keep their original terminal timestamp; resetting it here causes
             // prev.endedAt ?? Date.now() to re-stamp to reload time and drifts
             // persisted run durations forward.
-            (prev) => ({ ...prev, content: '', events: [], producedFiles: undefined, ...(spuriouslyFailedPending ? { endedAt: undefined } : {}) }),
+            (prev) => ({
+              ...prev,
+              content: preservedTaskPrefixContent,
+              events: preservedTaskPrefixEvents,
+              producedFiles: undefined,
+              ...(spuriouslyFailedPending ? { endedAt: undefined } : {}),
+            }),
+            true,
           );
           // When the failed-message recovery moves back to running/succeeded,
           // clear any stale "daemon stream disconnected" error banner that the
@@ -5701,8 +5968,17 @@ export function ProjectView({
         const parser = createArtifactParser();
         let parsedArtifact: Artifact | null = null;
         let liveHtml = '';
-        let replayedContent = needsFullReplay ? '' : message.content;
-        let replayedEvents: AgentEvent[] = needsFullReplay ? [] : [...(message.events ?? [])];
+        let replayedContent = needsFullReplay
+          ? preserveTaskPrefix
+            ? preservedTaskPrefixContent
+            : ''
+          : message.content;
+        let replayedEvents: AgentEvent[] = needsFullReplay
+          ? preserveTaskPrefix
+            ? preservedTaskPrefixEvents
+            : []
+          : [...(message.events ?? [])];
+        let daemonArtifactCount = status.artifactCount;
         let latestReattachRunStatus: ChatMessage['runStatus'] = status.status;
         let authoritativeReattachArtifactPaths = status.artifactPaths;
         const applyContentDelta = (delta: string) => {
@@ -5762,20 +6038,51 @@ export function ProjectView({
 
         const shouldPublishRunFinishedEvent =
           isActiveRunStatus(message.runStatus)
+          || isActiveRunStatus(status.status)
           || spuriouslyFailedPending
           || recoverableGenericDisconnectFailed;
         void reattachDaemonRun({
           agentId: message.agentId,
-          runId,
+          runId: reattachRunId,
           projectId: project.id,
           conversationId: reattachConversationId,
           workspaceContext: projectRunWorkspaceContext,
           signal: controller.signal,
           cancelSignal: cancelController.signal,
-          initialLastEventId: needsFullReplay ? null : message.lastRunEventId ?? null,
+          initialLastEventId:
+            needsFullReplay || taskRunAdvanced ? null : message.lastRunEventId ?? null,
           publishRunFinishedEvent: shouldPublishRunFinishedEvent,
           onArtifactPaths: (paths) => {
             authoritativeReattachArtifactPaths = paths;
+          },
+          onStrategyTaskSettled: (strategyTask) => {
+            const settledFields = strategySettledMessageFields(strategyTask);
+            if (!settledFields) return;
+            updateMessageById(
+              message.id,
+              (prev) => ({ ...prev, ...settledFields }),
+              true,
+            );
+          },
+          onRunCreated: (nextRunId, strategyTask) => {
+            activeReattachRunId = nextRunId;
+            claimReattachRun(nextRunId);
+            textBuffer.flush();
+            updateMessageById(
+              message.id,
+              (prev) => ({
+                ...prev,
+                runId: nextRunId,
+                runStatus: 'running',
+                lastRunEventId: undefined,
+                strategyTaskPrefixLength: replayedContent.length,
+                strategyTaskPrefixEventCount: replayedEvents.length,
+                ...(strategyTask?.taskExecutionId
+                  ? { strategyTaskExecutionId: strategyTask.taskExecutionId }
+                  : {}),
+              }),
+              true,
+            );
           },
           handlers: {
             onDelta: (delta) => {
@@ -5805,6 +6112,9 @@ export function ProjectView({
               replayedEvents = appendCoalescedAgentEvent(replayedEvents, ev);
               textBuffer.appendEvent(ev);
             },
+            onArtifactCount: (count) => {
+              daemonArtifactCount = count;
+            },
             onDone: async () => {
               // A reattached run interrupted by a "send now" still receives a
               // late onDone from the daemon. Decide ownership first, then bail
@@ -5820,9 +6130,8 @@ export function ProjectView({
               // Clear stale retry count for successfully recovered run.
               transientFailedRetriesRef.current.delete(runId);
               genericDisconnectRetriesRef.current.delete(runId);
-              completedReattachRunsRef.current.add(runId);
-              reattachControllersRef.current.delete(runId);
-              reattachCancelControllersRef.current.delete(runId);
+              completeReattachRuns();
+              releaseReattachRuns();
               clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
               // Clear any stale error banner set by the original onError path
               // (e.g. "daemon stream disconnected") so the chat does not show it
@@ -5847,8 +6156,8 @@ export function ProjectView({
               // daemon's terminal time. Re-probe now, at the end of
               // recovery, for the authoritative terminal `updatedAt`.
               const endedAt = await resolveTerminalEndedAt(
-                runId,
-                status,
+                activeReattachRunId,
+                activeReattachRunId === runId ? status : null,
                 projectRunWorkspaceContext,
               );
               updateMessageById(
@@ -5960,6 +6269,7 @@ export function ProjectView({
                   events: deliveryEvents,
                   producedFileCount: produced.length,
                   traceObjectFileCount: traceObjectFiles.length,
+                  artifactCount: daemonArtifactCount,
                   persistenceSucceeded: artifactPersistenceSucceeded,
                   persistenceFailed: artifactPersistenceError !== undefined,
                 });
@@ -6196,9 +6506,13 @@ export function ProjectView({
                         message.id,
                         (prev) => ({
                           ...removeErrorStatusEvent(prev, err.message, errorCode),
-                          content: '',
-                          events: [],
-                          runStatus: 'succeeded',
+                          content: preservedTaskPrefixContent,
+                          events: preservedTaskPrefixEvents,
+                          // A non-empty prefix would otherwise make the
+                          // terminal-replay heuristic treat this row as fully
+                          // restored. Keep it recoverable until the active
+                          // Run's complete visible suffix is replayed.
+                          runStatus: preserveTaskPrefix ? 'running' : 'succeeded',
                           // Adopt the daemon's authoritative terminal timestamp rather
                           // than the stale disconnect-time stamp taken when the generic
                           // disconnect first fired.
@@ -6246,7 +6560,7 @@ export function ProjectView({
                       { telemetryFinalized: true },
                     );
                     skipFinalPersistNow = true;
-                    completedReattachRunsRef.current.add(runId);
+                    completeReattachRuns();
                     genericDisconnectRetriesRef.current.delete(runId);
                     genericDisconnectBackoffUntilRef.current.delete(runId);
                   }
@@ -6257,10 +6571,9 @@ export function ProjectView({
                 transientFailedRetriesRef.current.delete(runId);
                 genericDisconnectRetriesRef.current.delete(runId);
                 genericDisconnectBackoffUntilRef.current.delete(runId);
-                completedReattachRunsRef.current.add(runId);
+                completeReattachRuns();
               }
-              reattachControllersRef.current.delete(runId);
-              reattachCancelControllersRef.current.delete(runId);
+              releaseReattachRuns();
               clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
               if (!skipFinalPersistNow) persistNow({ telemetryFinalized: true });
               if (shouldRetryAfterControllerCleanup && !shouldRefreshConversationAfterCleanup) {
@@ -6291,9 +6604,8 @@ export function ProjectView({
               transientFailedRetriesRef.current.delete(runId);
               genericDisconnectRetriesRef.current.delete(runId);
               genericDisconnectBackoffUntilRef.current.delete(runId);
-              completedReattachRunsRef.current.add(runId);
-              reattachControllersRef.current.delete(runId);
-              reattachCancelControllersRef.current.delete(runId);
+              completeReattachRuns();
+              releaseReattachRuns();
               clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
             }
             if (isTerminalRunStatus(runStatus)) {
@@ -6329,8 +6641,7 @@ export function ProjectView({
             textBuffer.cancel();
             unregisterTextBuffer();
             if (persistTimer) clearProjectTimeout(persistTimer);
-            reattachControllersRef.current.delete(runId);
-            reattachCancelControllersRef.current.delete(runId);
+            releaseReattachRuns();
             clearActiveRunRefs(reattachConversationId, controller, cancelController);
           });
       }
@@ -6797,7 +7108,7 @@ export function ProjectView({
           commentAttachments,
           meta: { ...(meta ?? {}), sessionMode: runSessionMode, taskAnalytics },
         });
-        return meta?.acceptQueuedHomeHandoff === true;
+        return meta?.acceptDurableQueue === true;
       }
       // OpenDesign Cloud pre-run balance gate: a definitively insufficient
       // wallet blocks the run BEFORE any message is persisted or a daemon run
@@ -6818,7 +7129,7 @@ export function ProjectView({
             commentAttachments,
             meta: { ...(meta ?? {}), sessionMode: runSessionMode, taskAnalytics },
           });
-          return meta?.acceptQueuedHomeHandoff === true;
+          return meta?.acceptDurableQueue === true;
         }
         amrGateInFlightConversationsRef.current.add(gateConversationId);
         // Auto-open ownership is contested from here on. This send has cleared
@@ -6853,6 +7164,10 @@ export function ProjectView({
               persistedWorkspaceId.length > 0
               || projectWorkspaceScopeState.scope?.kind === 'unbound'
             );
+          const amrModelId = effectiveAgentModelId(
+            agentsById.get('amr'),
+            config.agentModels?.amr,
+          );
           const gate =
             deferAmrPreflightToDaemon
               ? { kind: 'allow' as const }
@@ -6865,6 +7180,7 @@ export function ProjectView({
                           projectRunPreflightContext.workspaceMemberId,
                       }
                     : undefined,
+                  amrModelId,
                 );
           // A blocked send parks in the conversation queue with its FULL
           // payload (prompt, attachments, comment context) — the composer
@@ -6893,8 +7209,8 @@ export function ProjectView({
             amrGatePausedQueueConversationsRef.current.add(gateConversationId);
             return queued;
           };
-          const acceptedQueuedHomeHandoff = (queued: boolean): boolean => {
-            return queued && meta?.acceptQueuedHomeHandoff === true;
+          const acceptedDurableQueue = (queued: boolean): boolean => {
+            return queued && meta?.acceptDurableQueue === true;
           };
           // Every exit from this gate that does NOT become a turn funnels
           // through here: blocked, unavailable, declined, or raced by a
@@ -6908,7 +7224,7 @@ export function ProjectView({
           const abandonGatedSend = (queued: boolean): boolean => {
             releaseAutoOpenSendIntent();
             evaluateAutoOpenSettle();
-            return acceptedQueuedHomeHandoff(queued);
+            return acceptedDurableQueue(queued);
           };
           // The await may have raced a conversation switch; re-run the entry
           // guard before touching any state so this stale closure can't write
@@ -7075,6 +7391,7 @@ export function ProjectView({
       // that just failed in the current session (the daemon status fetch is only
       // needed on reload, not for runs that are already known to have failed).
       let currentRunId: string | undefined = undefined;
+      let daemonArtifactCount: number | undefined;
       const updateConversationLatestRun = (
         status: NonNullable<ChatMessage['runStatus']>,
         endedAt?: number,
@@ -7113,7 +7430,29 @@ export function ProjectView({
       setArtifact(null);
       savedArtifactRef.current = null;
       onTouchProject();
-      if (!retryTarget) persistMessage(userMsg);
+      if (!retryTarget) {
+        // A send whose id was decided from its occupancy (an inline question
+        // form's answer) claims that row once: the daemon keeps whichever
+        // answer landed first and hands it back, and this view adopts it so
+        // the transcript shows the answer the surviving run actually read.
+        if (meta?.userMessageId) {
+          void Promise.resolve(
+            saveMessage(project.id, runConversationId, userMsg, {
+              createOnly: true,
+              workspaceContext: projectRunWorkspaceContext,
+            }),
+          ).then((stored) => {
+            if (!stored || stored.content === userMsg.content) return;
+            setMessages((current) =>
+              current.map((message) =>
+                message.id === userMsg.id ? { ...message, content: stored.content } : message,
+              ),
+            );
+          });
+        } else {
+          persistMessage(userMsg);
+        }
+      }
       // Intentionally do NOT persist `assistantMsg` here. In daemon mode it
       // starts as runStatus='running' with no runId, which the source-level
       // guard treats as a phantom — the first DB write happens inside
@@ -7310,14 +7649,45 @@ export function ProjectView({
       let streamedText = '';
 
       const updateAssistant = (updater: (prev: ChatMessage) => ChatMessage) => {
-        setMessages((curr) =>
-          curr.map((m) => {
+        setMessages((curr) => {
+          let found = false;
+          const next = curr.map((m) => {
             if (m.id !== assistantId) return m;
+            found = true;
             const updated = updater(m);
             latestAssistantMsg = updated;
             return updated;
-          }),
-        );
+          });
+          if (found) return next;
+
+          // A workspace-authority refresh can reload the same conversation
+          // while POST /runs is retrying. That authoritative read may still
+          // be empty and replace the Home handoff's client-owned user and
+          // assistant placeholders. The stream remains attached, however, so
+          // dropping later deltas here leaves a successful daemon run blank
+          // until a tab switch or reload reads the persisted transcript.
+          //
+          // Restore only the two rows owned by the live controller for the
+          // project and conversation still on screen. A revoked authority is
+          // never allowed to resurrect them, and settled historical messages
+          // keep the existing clear-on-authority-change behavior.
+          if (
+            abortRef.current !== controller
+            || projectIdRef.current !== project.id
+            || activeConversationIdRef.current !== runConversationId
+            || projectResourceAuthorityRef.current === 'denied'
+          ) {
+            return curr;
+          }
+          const updated = updater(latestAssistantMsg);
+          latestAssistantMsg = updated;
+          const userAlreadyPresent = curr.some((message) => message.id === userMsg.id);
+          return [
+            ...curr,
+            ...(userAlreadyPresent ? [] : [userMsg]),
+            updated,
+          ];
+        });
       };
       let persistTimer: ReturnType<typeof setTimeout> | null = null;
       const persistAssistantSoon = () => {
@@ -7544,6 +7914,9 @@ export function ProjectView({
           if (ev.kind === 'text') textBuffer.appendTextEvent(ev.text);
           else if (ev.kind === 'thinking') textBuffer.appendEvent(ev);
           else pushEvent(ev);
+        },
+        onArtifactCount: (count: number) => {
+          daemonArtifactCount = count;
         },
         onToolInputDelta: (id: string, name: string, delta: string) => {
           setLiveToolInput((prev) => ({
@@ -7866,6 +8239,7 @@ export function ProjectView({
                 events: deliveryCandidate.events,
                 producedFileCount: produced.length,
                 traceObjectFileCount: traceObjectFiles.length,
+                artifactCount: daemonArtifactCount,
                 persistenceSucceeded: artifactPersistenceSucceeded,
                 persistenceFailed: artifactPersistenceError !== undefined,
               });
@@ -7938,8 +8312,15 @@ export function ProjectView({
           textBuffer.flush();
           textBuffer.cancel();
           cancelSendTextBuffer();
+          // The daemon refused a duplicate design-system enrichment because the
+          // conversation already runs one (HTTP 409
+          // DESIGN_SYSTEM_ENRICHMENT_IN_PROGRESS). The surviving run is the one
+          // the user asked for, so this is not a failure worth a global banner;
+          // only the duplicate turn itself records why it went nowhere.
+          const duplicateEnrichmentRejected =
+            errorCode === 'DESIGN_SYSTEM_ENRICHMENT_IN_PROGRESS';
           if (runMayFinalize) {
-            setRunError(err.message, assistantId);
+            if (!duplicateEnrichmentRejected) setRunError(err.message, assistantId);
             appendAssistantErrorEvent(assistantId, err.message, errorCode, failure);
             updateAssistant((prev) => ({
               ...prev,
@@ -8262,17 +8643,49 @@ export function ProjectView({
             : {}),
           titleGeneration: isFirstTurn ? { enabled: true } : undefined,
           locale,
+          ...(meta?.strategyTaskExecutionId
+            ? { taskExecutionId: meta.strategyTaskExecutionId }
+            : {}),
           ...(runAnalyticsHints ? { analyticsHints: runAnalyticsHints } : {}),
-          onRunCreated: (runId) => {
+          onStrategyTaskSettled: (strategyTask) => {
+            const settledFields = strategySettledMessageFields(strategyTask);
+            if (!settledFields) return;
+            latestAssistantMsg = { ...latestAssistantMsg, ...settledFields };
+            updateMessageById(
+              assistantId,
+              (prev) => ({ ...prev, ...settledFields }),
+              true,
+            );
+          },
+          onRunCreated: (runId, strategyTask) => {
+            // A successor boundary must include the final predecessor delta
+            // and buffered text event even when the 250ms UI batch has not
+            // fired yet.
+            textBuffer.flush();
             const resolvedTaskAnalytics = {
               ...taskAnalytics,
               initialRunId: taskAnalytics.initialRunId ?? runId,
             };
+            const strategyTaskExecutionId = strategyTask?.taskExecutionId
+              ?? meta?.strategyTaskExecutionId;
+            const isTaskSuccessor = Boolean(
+              strategyTask
+              && latestAssistantMsg.runId
+              && latestAssistantMsg.runId !== runId,
+            );
             const pinnedAssistant = {
               ...latestAssistantMsg,
               runId,
               runStatus: 'queued' as const,
               taskAnalytics: resolvedTaskAnalytics,
+              ...(strategyTaskExecutionId ? { strategyTaskExecutionId } : {}),
+              ...(isTaskSuccessor
+                ? {
+                    strategyTaskPrefixLength: latestAssistantMsg.content.length,
+                    strategyTaskPrefixEventCount: latestAssistantMsg.events?.length ?? 0,
+                  }
+                : {}),
+              lastRunEventId: undefined,
             };
             latestAssistantMsg = pinnedAssistant;
             currentRunId = runId;
@@ -8286,6 +8699,14 @@ export function ProjectView({
               runId,
               runStatus: 'queued',
               taskAnalytics: resolvedTaskAnalytics,
+              ...(strategyTaskExecutionId ? { strategyTaskExecutionId } : {}),
+              ...(isTaskSuccessor
+                ? {
+                    strategyTaskPrefixLength: prev.content.length,
+                    strategyTaskPrefixEventCount: prev.events?.length ?? 0,
+                  }
+                : {}),
+              lastRunEventId: undefined,
             }));
           },
           onArtifactPaths: (paths) => {
@@ -8431,6 +8852,9 @@ export function ProjectView({
           }),
           titleGeneration: isFirstTurn ? { enabled: true } : undefined,
           locale,
+          ...(meta?.strategyTaskExecutionId
+            ? { taskExecutionId: meta.strategyTaskExecutionId }
+            : {}),
           analyticsHints: {
             ...(meta?.entryFrom ? { entryFrom: meta.entryFrom } : {}),
             ...(byokSessionTurn
@@ -8446,16 +8870,32 @@ export function ProjectView({
             recoveryActionType: taskAnalytics.recoveryActionType,
             recoveryActionInstanceId: taskAnalytics.recoveryActionInstanceId,
           },
-          onRunCreated: (runId) => {
+          onRunCreated: (runId, strategyTask) => {
+            textBuffer.flush();
             const resolvedTaskAnalytics = {
               ...taskAnalytics,
               initialRunId: taskAnalytics.initialRunId ?? runId,
             };
+            const strategyTaskExecutionId = strategyTask?.taskExecutionId
+              ?? meta?.strategyTaskExecutionId;
+            const isTaskSuccessor = Boolean(
+              strategyTask
+              && latestAssistantMsg.runId
+              && latestAssistantMsg.runId !== runId,
+            );
             const pinnedAssistant = {
               ...latestAssistantMsg,
               runId,
               runStatus: 'queued' as const,
               taskAnalytics: resolvedTaskAnalytics,
+              ...(strategyTaskExecutionId ? { strategyTaskExecutionId } : {}),
+              ...(isTaskSuccessor
+                ? {
+                    strategyTaskPrefixLength: latestAssistantMsg.content.length,
+                    strategyTaskPrefixEventCount: latestAssistantMsg.events?.length ?? 0,
+                  }
+                : {}),
+              lastRunEventId: undefined,
             };
             latestAssistantMsg = pinnedAssistant;
             void saveMessage(project.id, runConversationId, pinnedAssistant, {
@@ -8466,6 +8906,14 @@ export function ProjectView({
               runId,
               runStatus: 'queued',
               taskAnalytics: resolvedTaskAnalytics,
+              ...(strategyTaskExecutionId ? { strategyTaskExecutionId } : {}),
+              ...(isTaskSuccessor
+                ? {
+                    strategyTaskPrefixLength: prev.content.length,
+                    strategyTaskPrefixEventCount: prev.events?.length ?? 0,
+                  }
+                : {}),
+              lastRunEventId: undefined,
             }));
           },
           onRunStatus: (runStatus) => {
@@ -10827,8 +11275,11 @@ export function ProjectView({
   // brand: send the hidden seeded enrichment prompt + the default design-system
   // skill bundle, refining the SAME registered design system in place. Shared by
   // the chat "Continue" affordance and the ready-toast "AI Optimize" nudge.
-  const handleBrandEnrichment = useCallback(() => {
-    if (brandEnrichmentStarting || config.mode !== 'daemon') return;
+  // The synchronous single-flight wrapper below (not this state flag) is what
+  // stops a double trigger: `brandEnrichmentStarting` only updates after a
+  // re-render, so it cannot reject a second call inside the same tick.
+  const startBrandEnrichment = useCallback(() => {
+    if (config.mode !== 'daemon') return;
     const system = designSystemProject ?? activeDesignSystemSummary;
     const skillIds = installedBrandEnrichmentSkillIds(skills);
     trackDesignSystemEnrichClick(analytics.track, {
@@ -10839,7 +11290,7 @@ export function ProjectView({
       project_kind: 'design_system',
     });
     setBrandEnrichmentStarting(true);
-    void handleSend(
+    return handleSend(
       buildBrandEnrichmentPrompt(brandEnrichmentPromptSeed || brandEnrichmentPromptSeedCache, {
         metadata: currentProject.metadata,
         designSystemId: system?.id,
@@ -10855,7 +11306,6 @@ export function ProjectView({
     analytics,
     brandEnrichmentPromptSeed,
     brandEnrichmentPromptSeedCache,
-    brandEnrichmentStarting,
     config.mode,
     designSystemProject,
     handleSend,
@@ -10864,6 +11314,7 @@ export function ProjectView({
     projectFiles,
     skills,
   ]);
+  const handleBrandEnrichment = useSingleFlightCallback(startBrandEnrichment);
 
   const handleCreateDesignFromActiveDesignSystem = useCallback(() => {
     if (brandCreateDesignStarting) return;
@@ -11177,7 +11628,7 @@ export function ProjectView({
     void handleSend(seed, attachments, [], {
         ...(context ? { context } : {}),
         ...homeAutoSendIdentity(project.id),
-        acceptQueuedHomeHandoff: true,
+        acceptDurableQueue: true,
         // Only reuse Home's decision for the exact persisted project scope.
         // A workspace/member mismatch falls through to handleSend's normal gate.
         ...(autoSendGateStillMatches ? { amrGatePrechecked: true } : {}),
@@ -11291,9 +11742,14 @@ export function ProjectView({
     </>
   );
 
+  // The `.app` shell belongs to the caller, not to this component. App.tsx
+  // renders the same `div.app` around both this view and
+  // ProjectCreationPendingView so React reconciles one element across the
+  // hand-off. Owning the shell here would make each view mount its own
+  // element and replay the `.app` entrance animation, which reads as the
+  // project frame flashing twice on the way in from Home.
   return (
     <CollabProvider value={collabValue}>
-    <div className="app">
       <CritiqueTheaterMount
         projectId={project.id}
         enabled={critiqueTheaterEnabled}
@@ -11417,11 +11873,27 @@ export function ProjectView({
               initialDraft={chatInitialDraft}
               onboardingStarterPath={onboardingEntryRef.current?.productType ?? null}
               questionFormSubmitDisabled={currentConversationActionDisabled}
-              onSubmitQuestionForm={(text, attachments = [], context, sourceAssistantMessageId) => {
+              onSubmitQuestionForm={async (text, attachments = [], context, sourceAssistantMessageId, formId) => {
                 if (currentConversationActionDisabled) return false;
-                const sourceAssistant = sourceAssistantMessageId
+                let sourceAssistant = sourceAssistantMessageId
                   ? messages.find((message) => message.id === sourceAssistantMessageId)
                   : undefined;
+                const strategyTaskExecutionId = await resolveQuestionFormStrategyTaskExecutionId({
+                  ...(sourceAssistant?.strategyTaskExecutionId
+                    ? { persistedTaskExecutionId: sourceAssistant.strategyTaskExecutionId }
+                    : {}),
+                  ...(sourceAssistant?.runId ? { sourceRunId: sourceAssistant.runId } : {}),
+                  fetchRunStatus: (runId) => fetchChatRunStatus(
+                    runId,
+                    projectRunWorkspaceContext,
+                  ),
+                });
+                if (sourceAssistant && strategyTaskExecutionId) {
+                  sourceAssistant = {
+                    ...sourceAssistant,
+                    strategyTaskExecutionId,
+                  };
+                }
                 const questionTaskAnalytics = sourceAssistant
                   ? buildRecoveryTaskAnalytics(
                       messages,
@@ -11448,9 +11920,20 @@ export function ProjectView({
                 }
                 return handleSend(text, attachments, [], {
                   entryFrom: 'question_answer',
+                  ...questionFormAnswerIdentity(sourceAssistantMessageId, formId),
+                  // The form owns the only copy of this answer (and of any
+                  // file it uploaded). A send that parks in the conversation
+                  // queue is durably accepted, not refused: reporting it as
+                  // refused would unlock the form and roll back the uploads
+                  // the queued send still points at, so the user re-answers
+                  // and the drain sends the same brief twice.
+                  acceptDurableQueue: true,
                   ...(context ? { context } : {}),
                   ...(questionTaskAnalytics
                     ? { taskAnalytics: questionTaskAnalytics }
+                    : {}),
+                  ...(strategyTaskExecutionId
+                    ? { strategyTaskExecutionId }
                     : {}),
                 });
               }}
@@ -11637,7 +12120,7 @@ export function ProjectView({
               : readonlyNoticeText
           }
           fileSyncBadge={fileSyncBadge}
-          projectKind={projectKindFromMetadataToTracking(currentProject.metadata) ?? 'prototype'}
+          projectKind={projectKindFromMetadataToTrackingOrLegacyDefault(currentProject.metadata)}
           rootDirName={(() => {
             const baseDir = currentProject.metadata?.baseDir;
             return typeof baseDir === 'string'
@@ -11823,7 +12306,6 @@ export function ProjectView({
           />
         ) : null}
       </AnimatePresence>
-    </div>
     </CollabProvider>
   );
 }
@@ -12262,7 +12744,7 @@ function stripQueueOnlyFromMeta(
   if (!meta) return undefined;
   const {
     queueOnly: _queueOnly,
-    acceptQueuedHomeHandoff: _acceptQueuedHomeHandoff,
+    acceptDurableQueue: _acceptDurableQueue,
     ...rest
   } = meta as ProjectChatSendMeta;
   return Object.keys(rest).length > 0 ? rest : undefined;

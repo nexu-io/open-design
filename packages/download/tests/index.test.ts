@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -438,5 +438,47 @@ describe("managed download package", () => {
     } finally {
       await fixture.close();
     }
+  });
+
+  it.each([".DS_Store", "Thumbs.db", "desktop.ini", ".localized"])(
+    "claims a fresh managed base that contains only the OS-managed artifact %s",
+    async (artifactName) => {
+      const root = tmpRoot("os-artifact-fresh-claim");
+      const basePath = join(root, "downloads");
+      mkdirSync(basePath, { recursive: true });
+      writeFileSync(join(basePath, artifactName), "binary-os-junk");
+
+      const pruned = await pruneManagedDownloads({ basePath });
+
+      expect(pruned.removed).toBe(0);
+      expect(existsSync(join(basePath, ".open-design-download-root.json"))).toBe(true);
+      expect(existsSync(join(basePath, artifactName))).toBe(true);
+    },
+  );
+
+  it("still rejects a fresh managed base containing a genuine stray file alongside .DS_Store", async () => {
+    const root = tmpRoot("os-artifact-stray-file");
+    const basePath = join(root, "downloads");
+    mkdirSync(basePath, { recursive: true });
+    writeFileSync(join(basePath, ".DS_Store"), "binary-finder-junk");
+    writeFileSync(join(basePath, "stray-file.bin"), "junk");
+
+    await expect(pruneManagedDownloads({ basePath })).rejects.toMatchObject({
+      code: MANAGED_DOWNLOAD_ERROR_CODES.STORE_NOT_OWNED,
+    });
+    expect(existsSync(join(basePath, ".open-design-download-root.json"))).toBe(false);
+  });
+
+  it("does not extend the OS-artifact allowance to arbitrary directories such as a stray .git", async () => {
+    const root = tmpRoot("os-artifact-stray-dir");
+    const basePath = join(root, "downloads");
+    mkdirSync(basePath, { recursive: true });
+    writeFileSync(join(basePath, ".DS_Store"), "binary-finder-junk");
+    mkdirSync(join(basePath, ".git"));
+
+    await expect(pruneManagedDownloads({ basePath })).rejects.toMatchObject({
+      code: MANAGED_DOWNLOAD_ERROR_CODES.STORE_NOT_OWNED,
+    });
+    expect(existsSync(join(basePath, ".open-design-download-root.json"))).toBe(false);
   });
 });

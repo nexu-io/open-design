@@ -291,6 +291,19 @@
 .settings-about-version-row {
   justify-content: space-between;
 }
+/* The update action and "View release notes" are adjacent JSX siblings, so no
+   whitespace text node separates them — without an explicit row the two
+   inline-flex buttons render with their borders touching at 0px. The
+   container owns their spacing; `flex-shrink: 0` keeps the buttons off the
+   version copy when a long status string competes for the row. */
+.settings-about-update-actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
 .settings-about-list dt {
   font-size: 12px;
   color: var(--text-muted);

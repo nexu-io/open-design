@@ -1576,6 +1576,39 @@ describe('execution_failed close-reason refinement', () => {
     });
   });
 
+  it('classifies an AMR membership concurrency limit before fatal close promotion', () => {
+    const message =
+      '[code=tier_limit_exceeded] membership concurrency limit exceeded: 3/2 resets 2026-08-25T10:42:00Z';
+    expect(
+      classifyForAgent('amr', 'AGENT_EXECUTION_FAILED', message, [
+        errorEvent('AGENT_EXECUTION_FAILED', message, true),
+        runtimeCloseEvent('fatal_rpc_error'),
+      ]),
+    ).toMatchObject({
+      failure_category: 'rate_limit',
+      failure_detail: 'membership_concurrency_limit',
+      failure_stage: 'session_init',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
+  it('keeps a non-AMR membership concurrency envelope retryable', () => {
+    const message =
+      '[code=tier_limit_exceeded] membership concurrency limit exceeded: 3/2 resets 2026-08-25T10:42:00Z';
+    expect(
+      classifyForAgent('claude', 'AGENT_EXECUTION_FAILED', message, [
+        errorEvent('AGENT_EXECUTION_FAILED', message, true),
+        runtimeCloseEvent('fatal_rpc_error'),
+      ]),
+    ).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'fatal_rpc_error',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
+
   it('honors an explicit non-retryable hint on fatal close reasons', () => {
     const result = classify('AGENT_EXECUTION_FAILED', '', [
       errorEvent('AGENT_EXECUTION_FAILED', '', false),
@@ -1701,6 +1734,179 @@ describe('classifyRunFailure — AMR/vela reclassification out of execution_fail
     expect(result?.failure_category).toBe('model_unavailable');
     expect(result?.failure_detail).toBe('model_not_found');
     expect(result?.user_action).toBe('switch_model');
+  });
+
+  // BYOK OpenCode empty-output runs end with rpc_close_reason=empty_output and
+  // a fallback message that includes advisory text like "checking quota".  The
+  // structured close reason must win over the text heuristic so the run is not
+  // misclassified as a non-retryable hard quota exhaustion.
+  it('classifies rpc_close_reason=empty_output as empty_output even when error text contains advisory "checking quota"', () => {
+    const fallbackMsg =
+      'Agent completed without producing any output. The model or provider may have returned an empty response. Check the agent logs for upstream errors, then try re-authenticating the agent, checking quota, or switching models.';
+    const result = classifyForAgent(
+      'byok-opencode',
+      'AGENT_EXECUTION_FAILED',
+      fallbackMsg,
+      [
+        errorEvent('AGENT_EXECUTION_FAILED', fallbackMsg, true),
+        runtimeCloseEvent('empty_output'),
+      ],
+    );
+    expect(result?.failure_category).toBe('empty_output');
+    expect(result?.failure_detail).toBe('empty_output');
+    expect(result?.retryable).toBe(true);
+    expect(result?.user_action).toBe('retry');
+  });
+
+  it('classifies rpc_close_reason=empty_output as empty_output without advisory text', () => {
+    const result = classifyForAgent(
+      'byok-opencode',
+      'AGENT_EXECUTION_FAILED',
+      'Agent completed without producing any output.',
+      [
+        errorEvent('AGENT_EXECUTION_FAILED', 'Agent completed without producing any output.', true),
+        runtimeCloseEvent('empty_output'),
+      ],
+    );
+    expect(result?.failure_category).toBe('empty_output');
+    expect(result?.failure_detail).toBe('empty_output');
+    expect(result?.retryable).toBe(true);
+    expect(result?.user_action).toBe('retry');
+  });
+
+  it('still classifies a genuine quota-exhaustion message as hard_quota', () => {
+    const result = classify(
+      'RATE_LIMITED',
+      'You have exceeded your current quota. Please check your plan and billing details.',
+    );
+    expect(result?.failure_category).toBe('rate_limit');
+    expect(result?.failure_detail).toBe('hard_quota');
+    expect(result?.retryable).toBe(false);
+  });
+
+  // Blocking point 1: rpc_close_reason=empty_output must NOT outrank a
+  // structured RATE_LIMITED error code.  The child exits cleanly after the
+  // provider rejects the request with a rate-limit, and the daemon stamps
+  // rpc_close_reason=empty_output — but RATE_LIMITED is the authoritative
+  // signal and must win.
+  it('classifies RATE_LIMITED + rpc_close_reason=empty_output as rate_limit, not empty_output', () => {
+    const result = classify(
+      'RATE_LIMITED',
+      'HTTP 429: too many requests',
+      [
+        errorEvent('RATE_LIMITED', 'HTTP 429: too many requests', true),
+        runtimeCloseEvent('empty_output'),
+      ],
+    );
+    expect(result?.failure_category).toBe('rate_limit');
+    expect(result?.failure_detail).toBe('rate_limit_429');
+    expect(result?.retryable).toBe(true);
+  });
+
+  // Blocking point 1: hard quota text + rpc_close_reason=empty_output — the
+  // quota exhaustion text must win over the empty_output close reason.
+  it('classifies hard quota text + rpc_close_reason=empty_output as hard_quota, not empty_output', () => {
+    const result = classifyForAgent(
+      'byok-opencode',
+      'RATE_LIMITED',
+      'You have exceeded your current quota. Please check your plan and billing details.',
+      [
+        errorEvent('RATE_LIMITED', 'You have exceeded your current quota. Please check your plan and billing details.', false),
+        runtimeCloseEvent('empty_output'),
+      ],
+    );
+    expect(result?.failure_category).toBe('rate_limit');
+    expect(result?.failure_detail).toBe('hard_quota');
+    expect(result?.retryable).toBe(false);
+  });
+
+  // Blocking point 1: upstream failure + rpc_close_reason=empty_output — the
+  // upstream signal must win over the empty_output close reason.
+  it('classifies UPSTREAM_UNAVAILABLE + rpc_close_reason=empty_output as upstream_unavailable, not empty_output', () => {
+    const result = classify(
+      'UPSTREAM_UNAVAILABLE',
+      'HTTP 503 upstream unavailable',
+      [
+        errorEvent('UPSTREAM_UNAVAILABLE', 'HTTP 503 upstream unavailable', true),
+        runtimeCloseEvent('empty_output'),
+      ],
+    );
+    expect(result?.failure_category).toBe('upstream_unavailable');
+    expect(result?.failure_detail).toBe('upstream_5xx');
+    expect(result?.retryable).toBe(true);
+  });
+
+  // Blocking point 2: the bare \bquota\b word is intentionally absent from
+  // isHardQuotaText so advisory phrases like "checking quota" in the daemon's
+  // own empty-output fallback message do not match — confirmed by the existing
+  // advisory-quota test above.  This test pins the specific exhaustion phrase
+  // "exceeded your current quota" that MUST still match even without the bare
+  // \bquota\b term in the pattern.
+  it('still matches "exceeded your current quota" as hard_quota without bare \\bquota\\b in the pattern', () => {
+    // No rpc_close_reason=empty_output — goes through the text-heuristic path.
+    const result = classify(
+      'RATE_LIMITED',
+      'API error: you have exceeded your current quota for this billing period.',
+    );
+    expect(result?.failure_category).toBe('rate_limit');
+    expect(result?.failure_detail).toBe('hard_quota');
+    expect(result?.retryable).toBe(false);
+  });
+
+  // Refs mrcfps blocking comment on PR #7248.  Antigravity emits:
+  //   RESOURCE_EXHAUSTED (code 429): Individual quota reached. Contact your
+  //   administrator to enable overages. Resets in <H>h<M>m<S>s.
+  // to its log file.  The tightened pattern must recognise both `quota reached`
+  // and the bare `RESOURCE_EXHAUSTED` status code as hard quota exhaustion.
+  it('classifies Antigravity "RESOURCE_EXHAUSTED: Individual quota reached" as hard_quota', () => {
+    const result = classify(
+      'RATE_LIMITED',
+      'RESOURCE_EXHAUSTED (code 429): Individual quota reached. Contact your administrator to enable overages. Resets in 3h22m10s.',
+    );
+    expect(result?.failure_category).toBe('rate_limit');
+    expect(result?.failure_detail).toBe('hard_quota');
+    expect(result?.retryable).toBe(false);
+  });
+
+  it('classifies bare "Individual quota reached" as hard_quota', () => {
+    const result = classify(
+      'RATE_LIMITED',
+      'Individual quota reached.',
+    );
+    expect(result?.failure_category).toBe('rate_limit');
+    expect(result?.failure_detail).toBe('hard_quota');
+    expect(result?.retryable).toBe(false);
+  });
+
+  it('classifies bare RESOURCE_EXHAUSTED status code as hard_quota', () => {
+    // Antigravity log may surface the status code alone when the message is
+    // stripped by the log parser.
+    const result = classify(
+      'RATE_LIMITED',
+      'RESOURCE_EXHAUSTED',
+    );
+    expect(result?.failure_category).toBe('rate_limit');
+    expect(result?.failure_detail).toBe('hard_quota');
+    expect(result?.retryable).toBe(false);
+  });
+
+  // Advisory phrases from antigravityQuotaGuidance() — these are in the
+  // user-facing guidance string, not in any upstream error, and must NOT
+  // trigger hard_quota classification.
+  it('does not classify "has its own quota" advisory phrase as hard_quota', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'Each Antigravity model (Gemini 3 Pro / Flash, Claude 4.6, GPT-OSS) has its own quota.',
+    );
+    expect(result?.failure_detail).not.toBe('hard_quota');
+  });
+
+  it('does not classify "available quota" advisory phrase as hard_quota', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'Switch Model picker to pick a model with available quota, then retry here.',
+    );
+    expect(result?.failure_detail).not.toBe('hard_quota');
   });
 });
 

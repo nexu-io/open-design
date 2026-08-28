@@ -155,6 +155,7 @@ const CODEX_SHELL_ENVIRONMENT_INCLUDE_KEYS = [
   'OD_DATA_DIR',
   'OD_PROJECT_ID',
   'OD_PROJECT_DIR',
+  'OD_TASK_INPUT_DIR',
 ] as const;
 
 export function codexOpenDesignShellEnvironmentArgs(): string[] {

@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { SIDECAR_MESSAGES } from "@open-design/sidecar-proto";
 import { describe, expect, it, vi } from "vitest";
 
-import type { ToolPackConfig } from "../src/config.js";
+import type { ToolPackConfig } from "@/config/index.js";
 
 const requestJsonIpc = vi.hoisted(() => vi.fn());
 const listProcessSnapshots = vi.hoisted(() =>
@@ -16,12 +16,12 @@ const matchesStampedProcess = vi.hoisted(() =>
 );
 const spawnBackgroundProcess = vi.hoisted(() => vi.fn(async () => ({ pid: 12345 })));
 const stopProcesses = vi.hoisted(() => vi.fn(async () => undefined));
-const invokeNsis = vi.hoisted(() => vi.fn<typeof import("../src/win/nsis.js").invokeNsis>());
+const invokeNsis = vi.hoisted(() => vi.fn<typeof import("@/win/nsis.js").invokeNsis>());
 const queryWinRegistryEntries = vi.hoisted(() =>
-  vi.fn<typeof import("../src/win/registry.js").queryWinRegistryEntries>(async () => []),
+  vi.fn<typeof import("@/win/registry.js").queryWinRegistryEntries>(async () => []),
 );
 const resolveWinRegisteredPaths = vi.hoisted(() =>
-  vi.fn<typeof import("../src/win/registry.js").resolveWinRegisteredPaths>(async (_config, paths) => paths),
+  vi.fn<typeof import("@/win/registry.js").resolveWinRegisteredPaths>(async (_config, paths) => paths),
 );
 
 vi.mock("@open-design/sidecar", async () => {
@@ -43,16 +43,16 @@ vi.mock("@open-design/platform", async () => {
   };
 });
 
-vi.mock("../src/win/nsis.js", async () => {
-  const actual = await vi.importActual<typeof import("../src/win/nsis.js")>("../src/win/nsis.js");
+vi.mock("@/win/nsis.js", async () => {
+  const actual = await vi.importActual<typeof import("@/win/nsis.js")>("@/win/nsis.js");
   return {
     ...actual,
     invokeNsis,
   };
 });
 
-vi.mock("../src/win/registry.js", async () => {
-  const actual = await vi.importActual<typeof import("../src/win/registry.js")>("../src/win/registry.js");
+vi.mock("@/win/registry.js", async () => {
+  const actual = await vi.importActual<typeof import("@/win/registry.js")>("@/win/registry.js");
   return {
     ...actual,
     queryWinRegistryEntries,
@@ -61,9 +61,9 @@ vi.mock("../src/win/registry.js", async () => {
 });
 
 const { diagnosePackedWinIpc, inspectPackedWinApp, installPackedWinApp, stopPackedWinApp } = await import(
-  "../src/win/lifecycle.js"
+  "@/win/lifecycle.js"
 );
-const { resolveWinPaths } = await import("../src/win/paths.js");
+const { resolveWinPaths } = await import("@/win/paths.js");
 
 function createConfig(root: string): ToolPackConfig {
   return {

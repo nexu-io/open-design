@@ -7,10 +7,14 @@ import { promisify } from "node:util";
 import { NtExecutable, NtExecutableResource, Resource } from "resedit";
 import { describe, expect, it } from "vitest";
 
-import { materializeCachedUnpackedForInstaller } from "../src/win/builder.js";
-import { createLauncherRuntimeSyncPowerShellScript } from "../src/win/custom-installer.js";
-import type { WinPaths } from "../src/win/types.js";
-import { readWinExecutableVersionSnapshot } from "../src/win/version-resource.js";
+import winBuildSource from "@/win/build.ts?raw";
+import winBuilderSource from "@/win/builder.ts?raw";
+import { materializeCachedUnpackedForInstaller } from "@/win/builder.js";
+import winCustomInstallerSource from "@/win/custom-installer.ts?raw";
+import { createLauncherRuntimeSyncPowerShellScript } from "@/win/custom-installer.js";
+import winPayloadSource from "@/win/payload.ts?raw";
+import type { WinPaths } from "@/win/types.js";
+import { readWinExecutableVersionSnapshot } from "@/win/version-resource.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -144,8 +148,8 @@ describe("materializeCachedUnpackedForInstaller", () => {
 });
 
 describe("Windows pack artifact boundaries", () => {
-  it("does not build launcher payload artifacts for a pure dir target", async () => {
-    const source = await readFile(new URL("../src/win/build.ts", import.meta.url), "utf8");
+  it("does not build launcher payload artifacts for a pure dir target", () => {
+    const source = winBuildSource;
     expect(source).toContain("const hasLauncherPayloadTarget = hasNsisTarget || hasZipTarget");
     expect(source).toContain("if (hasLauncherPayloadTarget)");
     expect(source.indexOf("const hasLauncherPayloadTarget = hasNsisTarget || hasZipTarget")).toBeLessThan(
@@ -153,8 +157,8 @@ describe("Windows pack artifact boundaries", () => {
     );
   });
 
-  it("uses the electron-builder cache identity instead of hashing the unpacked tree when possible", async () => {
-    const source = await readFile(new URL("../src/win/builder.ts", import.meta.url), "utf8");
+  it("uses the electron-builder cache identity instead of hashing the unpacked tree when possible", () => {
+    const source = winBuilderSource;
     expect(source).toContain("builtApp.cacheEntryPath == null");
     expect(source).toContain("hashWinNsisBasePayloadInputs(builtApp)");
     expect(source).toContain("cacheEntryPath: builtApp.cacheEntryPath");
@@ -163,24 +167,22 @@ describe("Windows pack artifact boundaries", () => {
     );
   });
 
-  it("keeps NSIS payload archives on the fast LZMA2 path", async () => {
-    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+  it("keeps NSIS payload archives on the fast LZMA2 path", () => {
+    const source = winCustomInstallerSource;
     expect(source).toContain('"nsis:payload-base-7z"');
     expect(source).toContain('"-m0=LZMA2"');
     expect(source).toContain('"-mf=off"');
     expect(source).not.toContain('"-ms=off"');
   });
 
-  it("invalidates Windows payload caches when the archive method changes", async () => {
-    const builderSource = await readFile(new URL("../src/win/builder.ts", import.meta.url), "utf8");
-    const payloadSource = await readFile(new URL("../src/win/payload.ts", import.meta.url), "utf8");
-    expect(builderSource).toContain("const WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION = 2");
-    expect(payloadSource).toContain("const WIN_LAUNCHER_PAYLOAD_BASE_CACHE_VERSION = 2");
-    expect(payloadSource).toContain("const WIN_LAUNCHER_PAYLOAD_ARCHIVE_CACHE_VERSION = 2");
+  it("invalidates Windows payload caches when the archive method changes", () => {
+    expect(winBuilderSource).toContain("const WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION = 2");
+    expect(winPayloadSource).toContain("const WIN_LAUNCHER_PAYLOAD_BASE_CACHE_VERSION = 2");
+    expect(winPayloadSource).toContain("const WIN_LAUNCHER_PAYLOAD_ARCHIVE_CACHE_VERSION = 2");
   });
 
-  it("invalidates the NSIS installer cache when installer helper code changes", async () => {
-    const source = await readFile(new URL("../src/win/builder.ts", import.meta.url), "utf8");
+  it("invalidates the NSIS installer cache when installer helper code changes", () => {
+    const source = winBuilderSource;
     expect(source).toContain("hashWinNsisInstallerImplementation");
     expect(source).toContain("nsisInstallerImplementation");
     expect(source.indexOf("nsisInstallerImplementation")).toBeLessThan(source.indexOf('target: "nsis-installer"'));

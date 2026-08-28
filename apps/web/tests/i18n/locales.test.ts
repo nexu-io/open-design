@@ -84,6 +84,44 @@ describe('i18n locales', () => {
     }
   });
 
+  // PR #7303 round 3: the ACP handshake-refusal copy used to be an English
+  // paragraph the DAEMON wrote into `run.error`, so a Chinese UI showed a
+  // Chinese title over an English body. It is a dictionary entry now — pin the
+  // language the product signed off, and let the parity test below prove the
+  // other seventeen exist with the same placeholders.
+  it('localizes the ACP CLI session refusal card', async () => {
+    const zh = await loadDict('zh-CN');
+    expect(zh['chat.runError.title.cliSessionRefused']).toBe('智能体版本不兼容');
+    expect(zh['chat.runError.cliSessionRefusedMessage']).toBe(
+      '{agent} 拒绝开始会话。通常是当前版本与 Open Design 不兼容，换一个版本后重试。',
+    );
+
+    // `{agent}` is the ONLY slot the card fills. A locale that carries a
+    // `{version}` placeholder would render a literal `{version}` at the user,
+    // because nothing supplies one — which is exactly how a half-reverted
+    // version variant would escape into production copy.
+    for (const locale of LOCALES) {
+      const dict = await loadDict(locale);
+      expect(
+        dict['chat.runError.cliSessionRefusedMessage'],
+        `${locale}.cliSessionRefusedMessage`,
+      ).not.toMatch(/\{version\}/);
+    }
+
+    // No locale may quietly fall back to English prose for these keys.
+    for (const locale of LOCALES) {
+      if (locale === 'en') continue;
+      const dict = await loadDict(locale);
+      for (const key of [
+        'chat.runError.title.cliSessionRefused',
+        'chat.runError.cliSessionRefusedMessage',
+      ] as const) {
+        expect(dict[key], `${locale}.${key}`).not.toBe(en[key]);
+        expect(dict[key], `${locale}.${key}`).not.toMatch(/TODO/i);
+      }
+    }
+  });
+
   it('keeps locale dictionaries aligned with English keys and placeholders', async () => {
     const englishKeys = Object.keys(en).sort();
 

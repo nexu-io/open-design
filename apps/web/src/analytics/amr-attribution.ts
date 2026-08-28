@@ -80,6 +80,7 @@ const ENTRY_PAGE_BY_SOURCE: Record<TrackingAmrEntrySource, TrackingPageName> = {
   generation_preview_switch_retry_card: 'file_manager',
   settings_amr_upgrade: 'settings',
   inline_amr_upgrade: 'chat_panel',
+  go_plan_sunset_modal: 'home',
   deepseek_unpaid_modal: 'home',
   deepseek_workbench_badge: 'home',
   deepseek_model_switcher_upgrade: 'chat_panel',

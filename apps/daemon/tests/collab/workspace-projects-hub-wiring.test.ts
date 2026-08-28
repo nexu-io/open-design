@@ -281,9 +281,24 @@ describe('server.ts wiring (source boundary)', () => {
   });
 
   it('logs broad-head cooldown deferrals in catch-up completion diagnostics', () => {
+    // Matched without the closing backtick so the assertion survives further
+    // fields being appended to the same template — it is here to pin that
+    // suppressed/complete are still reported, not to freeze the line's length.
     expect(source).toContain(
-      '`suppressed=${event.suppressed ?? 0} complete=${event.complete === true}`',
+      'suppressed=${event.suppressed ?? 0} complete=${event.complete === true}',
     );
+  });
+
+  it('reports background materialization volume in catch-up completion diagnostics', () => {
+    // `candidates` counts projects CONSIDERED, which says nothing about what
+    // actually landed on a member's disk. These totals are the only reading
+    // that makes OD_COLLAB_BACKGROUND_PULL_MAX_CUMULATIVE_ENTRIES choosable
+    // from a diagnostics bundle, so the guard's `volume()` has to reach this
+    // sink — a counter nothing reads is why that ceiling stayed unset.
+    expect(source).toContain('const backgroundVolume = backgroundPullSizeGuard.volume();');
+    expect(source).toContain('processEntries=${backgroundVolume.entries}');
+    expect(source).toContain('processProjects=${backgroundVolume.countedProjects}');
+    expect(source).toContain('processUncounted=${backgroundVolume.uncountedProjects}');
   });
 
   it('wires exact-scope recovery pollers through reconciliation and bounded full recovery', () => {

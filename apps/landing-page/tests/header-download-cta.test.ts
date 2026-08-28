@@ -110,8 +110,10 @@ describe('landing header account and download entry', () => {
     assert.match(enhancer, /navPlatform\.match\(entry\.name\)/);
     assert.match(enhancer, /navNeedsLiveRefresh = navPlatform && !downloadPrompt/);
     assert.doesNotMatch(header, /data-amr-signin|className='nav-signin'/);
-    assert.match(header, /data-amr-menu hidden/);
-    assert.match(header, /data-amr-console-link/);
+    // Account chrome is opt-in so only Pricing can restore it.
+    assert.match(header, /showAccount = false/);
+    assert.match(header, /showAccount \? \(/);
+    assert.match(header, /data-amr-account/);
   });
 
   it('silently reveals the avatar for an existing session without wiring login', async () => {

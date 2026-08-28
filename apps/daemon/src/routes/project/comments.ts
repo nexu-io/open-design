@@ -3,9 +3,10 @@ import type {
   PreviewComment,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
+import { projectKindFromMetadataToTrackingOrLegacyDefault } from '@open-design/contracts/analytics';
 import type { RouteDeps } from '../../server-context.js';
 import type { BoundWorkspaceResourceMutationGate } from '../../collab/workspace-resource-mutation.js';
-import { isProjectCommentAnchorConversationId } from '../../db.js';
+import { getProject, isProjectCommentAnchorConversationId } from '../../db.js';
 
 export type ProjectCommentWorkspaceContextResolution =
   | { ok: true; context: WorkspaceCollabContext | null }
@@ -476,6 +477,7 @@ export function registerProjectCommentRoutes(app: Express, ctx: RegisterProjectC
       // Only a genuinely new, successfully persisted comment is counted.
       // Edits reuse this POST route with an id and must not inflate creation.
       if (comment && !requestedId) {
+        const project = getProject(db, req.params.id);
         const localBinding = typeof getWorkspaceProjectByProjectId === 'function'
           ? getWorkspaceProjectByProjectId(db, req.params.id) as
               | { createdByWorkspaceMemberId?: string | null }
@@ -504,6 +506,8 @@ export function registerProjectCommentRoutes(app: Express, ctx: RegisterProjectC
             result: 'success',
             target_project_relation: targetProjectRelation,
             comment_level: 'top_level',
+            project_id: req.params.id,
+            project_kind: projectKindFromMetadataToTrackingOrLegacyDefault(project?.metadata),
             ...(workspaceContext
               ? {
                   workspace_key: workspaceContext.workspaceId,

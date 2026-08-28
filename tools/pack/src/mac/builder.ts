@@ -1,14 +1,14 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import type { ToolPackConfig } from "../config.js";
+import type { ToolPackConfig } from "../config/index.js";
 import { domToPptxBundleResource } from "../dom-to-pptx-resource.js";
 import {
   assertNodePtyRuntime,
   resolveNodePtyRuntimeArch,
 } from "../node-pty-runtime.js";
-import { macResources } from "../resources.js";
-import { electronBuilderVersionForAppVersion } from "../versions.js";
+import { macResources } from "../resources/index.js";
+import { electronBuilderVersionForAppVersion } from "../versioning/index.js";
 import { execFileAsync } from "./commands.js";
 import {
   ELECTRON_BUILDER_ASAR,

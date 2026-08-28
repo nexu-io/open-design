@@ -22,7 +22,31 @@ import {
   DECK_STRUCTURED_SLIDE_SELECTOR,
   injectDeckStageFallback,
 } from '@open-design/contracts/runtime/deck-stage-fallback';
-import { buildPreviewObservabilityBridge } from '@open-design/contracts/runtime/preview-observability';
+import {
+  buildPreviewBaseHrefBridge,
+  buildPreviewObservabilityBridge,
+} from '@open-design/contracts/runtime/preview-observability';
+import {
+  PREVIEW_REDIRECT_GUARD_MAX_HOPS,
+  PREVIEW_REDIRECT_GUARD_SELF_REFRESH_MIN_DELAY_MS,
+  PREVIEW_REDIRECT_GUARD_WINDOW_MS,
+  PREVIEW_REDIRECT_LOOP_MESSAGE,
+} from '@open-design/contracts/runtime/preview-guards';
+
+import {
+  endOfTag,
+  findRealElementRange,
+  findRealTagEnd,
+  findRealTagOffset,
+  HTML_TAG_PATTERNS,
+} from '@open-design/contracts/runtime/html-injection-points';
+
+export {
+  PREVIEW_REDIRECT_GUARD_MAX_HOPS,
+  PREVIEW_REDIRECT_GUARD_SELF_REFRESH_MIN_DELAY_MS,
+  PREVIEW_REDIRECT_GUARD_WINDOW_MS,
+  PREVIEW_REDIRECT_LOOP_MESSAGE,
+} from '@open-design/contracts/runtime/preview-guards';
 
 import {
   buildManualEditBridge,
@@ -98,18 +122,6 @@ export type SrcdocOptions = {
 // unforgeable, so a JS `location.reload()` storm can only be halted host-side
 // by swapping the iframe to static content (see FileViewer). The in-iframe half
 // still fully covers the canonical meta-refresh redirect loop on its own.
-
-/** Meta-refresh hops allowed inside one window before the loop is broken. */
-export const PREVIEW_REDIRECT_GUARD_MAX_HOPS = 15;
-/** Sliding window (ms). A refresh landing after this many ms with no prior
- *  refresh restarts the count from zero, so a slow auto-refresh never trips. */
-export const PREVIEW_REDIRECT_GUARD_WINDOW_MS = 4000;
-/** A self-refresh (reload the same document) whose delay is at or under this
- *  threshold is a guaranteed freeze in a static preview and is killed on the
- *  first hop, without waiting for the hop budget. */
-export const PREVIEW_REDIRECT_GUARD_SELF_REFRESH_MIN_DELAY_MS = 2000;
-/** postMessage type the injected guard sends the host when it trips. */
-export const PREVIEW_REDIRECT_LOOP_MESSAGE = 'od:redirect-loop-blocked';
 
 export interface RedirectGuardState {
   /** Meta-refresh navigations counted in the current window. */
@@ -274,48 +286,6 @@ function decodeHtmlEntitiesForTitle(encoded: string): string {
     .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => safeFromCodePoint(parseInt(h, 16)));
 }
 
-/**
- * Find the character offset of the first real `<title>` tag in an HTML string
- * that is not inside an HTML comment (`<!-- … -->`), a `<script>` block, or a
- * `<style>` block. Returns -1 when no real title is found.
- *
- * The scan is O(n) over the head region. It keeps track of whether the current
- * cursor is inside a comment / script / style and skips any `<title>` found
- * within those contexts.
- */
-function findRealTitleOffset(html: string, searchLimit: number): number {
-  let i = 0;
-  const limit = Math.min(html.length, searchLimit);
-  while (i < limit) {
-    // Check for HTML comment start
-    if (html.charCodeAt(i) === 60 /* < */ && html.slice(i, i + 4) === '<!--') {
-      const end = html.indexOf('-->', i + 4);
-      if (end < 0) return -1; // unclosed comment — no title after this
-      i = end + 3;
-      continue;
-    }
-    // Check for <script or <style (case-insensitive)
-    if (html.charCodeAt(i) === 60 /* < */) {
-      const tagMatch = /^<(script|style)\b/i.exec(html.slice(i, i + 20));
-      if (tagMatch) {
-        const closingTag = `</${tagMatch[1]}`;
-        const end = html.toLowerCase().indexOf(closingTag.toLowerCase(), i + tagMatch[0].length);
-        if (end < 0) return -1; // unclosed script/style — no title after this
-        const closeEnd = html.indexOf('>', end);
-        i = closeEnd >= 0 ? closeEnd + 1 : end + closingTag.length;
-        continue;
-      }
-    }
-    // Check for <title (case-insensitive)
-    if (html.charCodeAt(i) === 60 /* < */) {
-      if (/^<title[\s>]/i.test(html.slice(i, i + 8))) {
-        return i;
-      }
-    }
-    i++;
-  }
-  return -1;
-}
 
 /**
  * Rewrite the <title> element in an HTML string so its text content is
@@ -335,39 +305,27 @@ function findRealTitleOffset(html: string, searchLimit: number): number {
  * @public — exported for daemon-side URL-load title sanitization.
  */
 export function sanitizeTitleInDoc(html: string): string {
-  const lower = html.toLowerCase();
+  // Only the head's own <title> names the document; an <svg><title> in the body
+  // is an accessible label for that graphic. Bound the search to the head
+  // region, located structurally so a </head> or <body> an author wrote into a
+  // script string cannot move the boundary.
+  const headClose = findRealTagOffset(html, HTML_TAG_PATTERNS.headClose);
+  const bodyOpen = findRealTagOffset(html, HTML_TAG_PATTERNS.bodyOpen);
+  const searchLimit = headClose >= 0 ? headClose : bodyOpen >= 0 ? bodyOpen : html.length;
 
-  // Find the end of the <head> region. Use the last </head> before <body>
-  // (mirrors injectBeforeHeadEnd logic) so we don't pick up </head> literals
-  // inside <script>/<style>.
-  const bodyStart = lower.indexOf('<body');
-  const headEnd = lower.lastIndexOf('</head>', bodyStart >= 0 ? bodyStart - 1 : lower.length - 1);
+  // Both ends by the parser's rules: the open tag through `endOfTag`, so a `>`
+  // inside a quoted attribute cannot cut it short, and the close by the
+  // raw-text rule, so `</title >` and `</title\n>` close it while
+  // `</title-page>` does not. `indexOf('</title>')` accepted one spelling, and
+  // the next `</title>` in a later script string became the rewrite range.
+  const range = findRealElementRange(html, HTML_TAG_PATTERNS.titleOpen, 'title');
+  if (!range || range.start >= searchLimit) return html;
 
-  // The region to search: up to (and including) </head> if found, otherwise
-  // up to <body> if found, otherwise the entire document.
-  const searchLimit = headEnd >= 0
-    ? headEnd + 7 // include the </head> tag itself
-    : bodyStart >= 0
-      ? bodyStart
-      : html.length;
-
-  // Find the real <title> start offset, skipping comments and script/style.
-  const titleStart = findRealTitleOffset(html, searchLimit);
-  if (titleStart < 0) return html;
-
-  // Locate the end of the <title> open tag.
-  const openTagEnd = html.indexOf('>', titleStart);
-  if (openTagEnd < 0) return html;
-
-  // Locate the matching </title>.
-  const closingTagStart = html.toLowerCase().indexOf('</title>', openTagEnd + 1);
-  if (closingTagStart < 0) return html;
-  const closingTagEnd = html.indexOf('>', closingTagStart);
-  if (closingTagEnd < 0) return html;
-
-  const openTag = html.slice(titleStart, openTagEnd + 1);
-  const rawContent = html.slice(openTagEnd + 1, closingTagStart);
-  const closeTag = html.slice(closingTagStart, closingTagEnd + 1);
+  const titleStart = range.start;
+  const closingTagEnd = range.end - 1;
+  const openTag = html.slice(range.start, range.contentStart);
+  const rawContent = html.slice(range.contentStart, range.contentEnd);
+  const closeTag = html.slice(range.contentEnd, range.end);
 
   const decoded = decodeHtmlEntitiesForTitle(rawContent);
   const safe = sanitizePreviewTitle(decoded);
@@ -399,11 +357,14 @@ export function buildSrcdoc(
   const withOdIds = annotateMissingOdIds(withSafeTitle);
   const withSourcePaths = options.editBridge ? annotateManualEditSourcePaths(withOdIds) : withOdIds;
   const withBase = options.baseHref ? injectBaseHref(withSourcePaths, options.baseHref) : withSourcePaths;
-  const withDeferredFonts = options.deferFontStylesheets
-    ? deferTrustedFontStylesheets(withBase)
+  const withPreviewBaseBridge = options.baseHref
+    ? injectPreviewBaseHrefBridge(withBase)
     : withBase;
+  const withDeferredFonts = options.deferFontStylesheets
+    ? deferTrustedFontStylesheets(withPreviewBaseBridge)
+    : withPreviewBaseBridge;
   const withShim = injectSandboxShim(withDeferredFonts);
-  const blockLoadTimeScriptRedirect = htmlHasLoadTimeLocationNavigation(withBase);
+  const blockLoadTimeScriptRedirect = htmlHasLoadTimeLocationNavigation(withPreviewBaseBridge);
   // Always on: a redirect loop can freeze ANY previewed artifact, and the guard
   // is inert on documents that never self-redirect. Injected right after the
   // sandbox shim so it is installed before any author script or meta refresh.
@@ -490,18 +451,46 @@ export function buildLazySrcdocTransport(): string {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <script data-od-lazy-srcdoc-transport>(function(){
+      var readyInterval = null;
+      var readyAttempts = 0;
+      function stopReadyAnnouncements(){
+        if (readyInterval !== null && typeof clearInterval === 'function') {
+          clearInterval(readyInterval);
+        }
+        readyInterval = null;
+      }
+      function announceReady(){
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'od:srcdoc-transport-ready' }, '*');
+          }
+        } catch (_) { /* sandboxed parent — host falls back to onLoad */ }
+      }
       window.addEventListener('message', function(ev){
         var data = ev && ev.data;
+        if (data && data.type === 'od:srcdoc-transport-shell-probe') {
+          announceReady();
+          return;
+        }
         if (!data || data.type !== 'od:srcdoc-transport-activate' || typeof data.html !== 'string' || typeof data.generation !== 'string' || !data.generation) return;
+        stopReadyAnnouncements();
         document.open();
         document.write(data.html);
         document.close();
       });
-      try {
-        if (window.parent && window.parent !== window) {
-          window.parent.postMessage({ type: 'od:srcdoc-transport-ready' }, '*');
-        }
-      } catch (_) { /* sandboxed parent — host falls back to onLoad */ }
+      announceReady();
+      // A cached app-lifetime Blob can finish long before React attaches the
+      // parent's listener. Keep announcing until activation instead of
+      // guessing a host-mount delay; cap the retries so a broken host cannot
+      // leave a background timer running forever. The host's probe remains a
+      // recovery path after this ten-second window.
+      if (window.parent && window.parent !== window && typeof setInterval === 'function') {
+        readyInterval = setInterval(function(){
+          announceReady();
+          readyAttempts += 1;
+          if (readyAttempts >= 100) stopReadyAnnouncements();
+        }, 100);
+      }
     })();</script>
   </head>
   <body></body>
@@ -1364,8 +1353,27 @@ function deferTrustedFontStylesheets(doc: string): string {
   return injectAfterHeadOpen(serializeHtmlDocument(parsed), script);
 }
 
+/**
+ * Install a bridge as early as the document allows: inside `<head>` when there
+ * is one, otherwise at the top of `<body>`, otherwise ahead of the whole
+ * document. Guards that must beat every authored script share this — it is the
+ * one place that decides "as early as possible".
+ *
+ * The boundaries are located structurally (see `findRealTagEnd`), so a `<head>`
+ * or `<body>` an author wrote into a script string or an attribute is not
+ * mistaken for this document's own (nexu-io/open-design#7410).
+ */
+function injectAtDocumentStart(doc: string, payload: string): string {
+  const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
+  if (headEnd >= 0) return doc.slice(0, headEnd) + payload + doc.slice(headEnd);
+  const bodyEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.bodyOpen);
+  if (bodyEnd >= 0) return doc.slice(0, bodyEnd) + payload + doc.slice(bodyEnd);
+  return payload + doc;
+}
+
 function injectAfterHeadOpen(doc: string, payload: string): string {
-  if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${payload}`);
+  const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
+  if (headEnd >= 0) return doc.slice(0, headEnd) + payload + doc.slice(headEnd);
   return payload + doc;
 }
 
@@ -1376,12 +1384,10 @@ function injectBeforeHeadEnd(doc: string, payload: string): string {
   // srcdoc-build cost; DOMParser is now only the fallback for head-less
   // fragments where we can't locate an insertion point textually. Find the real
   // </head> (last one before <body>) to skip </head> literals in <script>/<style>.
-  const lower = doc.toLowerCase();
-  const bodyStart = lower.indexOf('<body');
-  const limit = bodyStart >= 0 ? bodyStart : lower.length;
-  const idx = lower.lastIndexOf('</head>', limit - 1);
+  const idx = findRealTagOffset(doc, HTML_TAG_PATTERNS.headClose);
   if (idx >= 0) return doc.slice(0, idx) + payload + doc.slice(idx);
-  if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${payload}`);
+  const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
+  if (headEnd >= 0) return doc.slice(0, headEnd) + payload + doc.slice(headEnd);
   // No recognizable <head>: let DOMParser normalize (it synthesizes a head).
   if (typeof DOMParser !== 'undefined') {
     try {
@@ -1396,10 +1402,7 @@ function injectBeforeHeadEnd(doc: string, payload: string): string {
 function injectBeforeBodyEnd(doc: string, payload: string): string {
   // String-first (see injectBeforeHeadEnd). Find the real </body> (last one
   // before </html>) to skip </body> literals inside <script>/<style>.
-  const lower = doc.toLowerCase();
-  const htmlEnd = lower.lastIndexOf('</html>');
-  const limit = htmlEnd >= 0 ? htmlEnd : lower.length;
-  const idx = lower.lastIndexOf('</body>', limit - 1);
+  const idx = findRealTagOffset(doc, HTML_TAG_PATTERNS.bodyClose);
   if (idx >= 0) return doc.slice(0, idx) + payload + doc.slice(idx);
   // No recognizable </body>: let DOMParser normalize (it synthesizes a body).
   if (typeof DOMParser !== 'undefined') {
@@ -1413,20 +1416,22 @@ function injectBeforeBodyEnd(doc: string, payload: string): string {
 }
 
 export function htmlHasAuthoredBase(doc: string): boolean {
-  return /<base\b/i.test(doc);
+  return findRealTagOffset(doc, HTML_TAG_PATTERNS.baseOpen) >= 0;
 }
 
 function injectBaseHref(doc: string, baseHref: string): string {
   if (htmlHasAuthoredBase(doc)) return doc;
   const safeHref = escapeAttr(baseHref);
-  const tag = `<base href="${safeHref}">`;
-  if (/<head[^>]*>/i.test(doc)) {
-    return doc.replace(/<head[^>]*>/i, (m) => `${m}${tag}`);
-  }
-  if (/<html[^>]*>/i.test(doc)) {
-    return doc.replace(/<html[^>]*>/i, (m) => `${m}<head>${tag}</head>`);
-  }
+  const tag = `<base href="${safeHref}" data-od-project-preview-base>`;
+  const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
+  if (headEnd >= 0) return doc.slice(0, headEnd) + tag + doc.slice(headEnd);
+  const htmlEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.htmlOpen);
+  if (htmlEnd >= 0) return `${doc.slice(0, htmlEnd)}<head>${tag}</head>${doc.slice(htmlEnd)}`;
   return tag + doc;
+}
+
+function injectPreviewBaseHrefBridge(doc: string): string {
+  return injectAfterHeadOpen(doc, buildPreviewBaseHrefBridge());
 }
 
 function escapeAttr(value: string): string {
@@ -1540,11 +1545,7 @@ function injectSandboxShim(doc: string): string {
     }
   });
 })();</script>`;
-  if (/<head[^>]*>/i.test(doc))
-    return doc.replace(/<head[^>]*>/i, (m) => `${m}${shim}`);
-  if (/<body[^>]*>/i.test(doc))
-    return doc.replace(/<body[^>]*>/i, (m) => `${m}${shim}`);
-  return shim + doc;
+  return injectAtDocumentStart(doc, shim);
 }
 
 function injectPreviewFocusGuard(doc: string): string {
@@ -1583,11 +1584,7 @@ function injectPreviewFocusGuard(doc: string): string {
     });
   } catch (_) {}
 })();</script>`;
-  if (/<head[^>]*>/i.test(doc))
-    return doc.replace(/<head[^>]*>/i, (m) => `${m}${script}`);
-  if (/<body[^>]*>/i.test(doc))
-    return doc.replace(/<body[^>]*>/i, (m) => `${m}${script}`);
-  return script + doc;
+  return injectAtDocumentStart(doc, script);
 }
 
 // In-iframe redirect-loop circuit breaker. See the "Redirect-loop guard"
@@ -1743,11 +1740,7 @@ function injectPreviewRedirectGuard(
     evaluate();
   }
 })();</script>`;
-  if (/<head[^>]*>/i.test(doc))
-    return doc.replace(/<head[^>]*>/i, (m) => `${m}${script}`);
-  if (/<body[^>]*>/i.test(doc))
-    return doc.replace(/<body[^>]*>/i, (m) => `${m}${script}`);
-  return script + doc;
+  return injectAtDocumentStart(doc, script);
 }
 
 // Selection bridge: shared substrate for Comment mode and Inspect mode.
@@ -2155,17 +2148,19 @@ function meaningfulDomFallbackTarget(el) {
     schedulePostTargets();
     schedulePostPreviewScroll();
   }
-  function postPreviewScroll(){
+  function postPreviewScroll(requestId){
     var el = previewScrollElement();
     if (!el) return;
     var frame = document.scrollingElement || document.documentElement;
-    window.parent.postMessage({
+    var payload = {
       type: 'od:preview-scroll',
       canvasLeft: Math.round(el.scrollLeft || 0),
       canvasTop: Math.round(el.scrollTop || 0),
       frameLeft: Math.round(frame.scrollLeft || 0),
       frameTop: Math.round(frame.scrollTop || 0)
-    }, '*');
+    };
+    if (typeof requestId === 'string' && requestId) payload.requestId = requestId;
+    window.parent.postMessage(payload, '*');
   }
   function schedulePostPreviewScroll(){
     if (postPreviewScrollPending) return;
@@ -2467,6 +2462,10 @@ function meaningfulDomFallbackTarget(el) {
     if (!data || !data.type) return;
     if (data.type === 'od:preview-runtime-state-restore') {
       scheduleRuntimeStateRestore(data.state);
+      return;
+    }
+    if (data.type === 'od:preview-scroll-capture') {
+      postPreviewScroll(data.requestId);
       return;
     }
     if (data.type === 'od:comment-mode') {
@@ -2896,9 +2895,7 @@ function injectDeckKeydownRegistryHook(doc: string): string {
   wrap(window);
   wrap(document);
 })();</script>`;
-  if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${hook}`);
-  if (/<body[^>]*>/i.test(doc)) return doc.replace(/<body[^>]*>/i, (m) => `${m}${hook}`);
-  return hook + doc;
+  return injectAtDocumentStart(doc, hook);
 }
 
 // Whether the artifact ships its own keyboard slide navigation, judged from
@@ -2957,7 +2954,9 @@ function injectDeckBridge(
 .deck-stage { flex-shrink: 0 !important; }
 </style>`
     : `<style data-od-deck-fix>
-.stage, .deck-stage, .deck-shell { place-content: center !important; }
+.stage:not(:has(> .slide)),
+.deck-stage:not(:has(> .slide)),
+.deck-shell:not(:has(> .slide)) { place-content: center !important; }
 </style>`;
   const script = `<script data-od-deck-bridge>(function(){
   var initialSlideIndex = ${safeInitialSlideIndex};
@@ -4165,14 +4164,8 @@ function injectTweaksBridge(doc: string): string {
     setPanelVisible(!!ev.data.visible);
   });
 })();</script>`;
-  const withStyle = /<\/head>/i.test(doc)
-    ? doc.replace(/<\/head>/i, style + '</head>')
-    : /<head[^>]*>/i.test(doc)
-      ? doc.replace(/<head[^>]*>/i, (m) => m + style)
-      : style + doc;
+  const withStyle = injectBeforeHeadEnd(doc, style);
   // Inject the bridge as early as possible (inside <head>) so the synchronous
   // attribute set runs before the artifact body parses.
-  if (/<\/head>/i.test(withStyle)) return withStyle.replace(/<\/head>/i, script + '</head>');
-  if (/<head[^>]*>/i.test(withStyle)) return withStyle.replace(/<head[^>]*>/i, (m) => m + script);
-  return script + withStyle;
+  return injectBeforeHeadEnd(withStyle, script);
 }

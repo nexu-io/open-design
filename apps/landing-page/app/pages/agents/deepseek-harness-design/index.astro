@@ -30,7 +30,7 @@ const rich = page.rich;
 const tutorial = deepseekHarnessTutorialCopy(page);
 
 // This is an OpenDesign acquisition page: the hero download is the primary
-// action in every locale, followed by the Discord and Feishu community rooms.
+// action in every locale, followed by the Discord community.
 // Match by stable href so translated labels are kept.
 const heroCtas = rich ? deepseekHarnessHeroCtas(rich.heroCtaActions) : [];
 const finalCtas = rich ? downloadFirstCtas(rich.ctaActions) : [];
@@ -39,7 +39,6 @@ const finalCtas = rich ? downloadFirstCtas(rich.ctaActions) : [];
 // the existing section IDs stable for inbound links and SEO.
 const DESIGN_SECTION_ORDER = [
   'why-design',
-  'gui',
   'setup',
   'open-design',
   'detect-harness',
@@ -127,6 +126,33 @@ const jsonLd = [
       url: `${pageUrl}#${item.id}`,
     })),
   }] : []),
+  // HowTo mirrors the real five-step walkthrough (install → download →
+  // detect → connect → first task) so "how to" queries and AI answers can
+  // cite the exact sequence; every step points at its section anchor and
+  // carries the section's lead paragraph as its instructional text
+  // (markdown links/code stripped — schema text is plain).
+  ...(rich ? [{
+    '@context': 'https://schema.org',
+    '@type': 'HowTo',
+    name: tutorial.heading,
+    description: page.description,
+    step: ['setup', 'open-design', 'detect-harness', 'connect-profile', 'first-design-task']
+      .map((id, index) => {
+        const section = rich.sections.find((candidate) => candidate.id === id);
+        if (!section) return null;
+        const lead = section.blocks.find((block) => block.kind === 'p');
+        const plainText = (value: string) =>
+          value.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/`/g, '');
+        return {
+          '@type': 'HowToStep',
+          position: index + 1,
+          name: section.heading,
+          text: lead && lead.kind === 'p' ? plainText(lead.text) : section.heading,
+          url: `${pageUrl}#${id}`,
+        };
+      })
+      .filter((step) => step !== null),
+  }] : []),
   {
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
@@ -190,6 +216,10 @@ const jsonLd = [
 
         {orderedSections.map((section) => (
           <section class={`info-section agent-section--${section.id}`} id={section.id}>
+            {/* The former GUI section was folded away (2026-08 design-first
+                refocus); keep its anchor alive on the setup section so saved
+                and search-indexed /#gui deep links still land on content. */}
+            {section.id === 'setup' && <span id="gui" aria-hidden="true"></span>}
             <h2>{section.heading}</h2>
             {section.blocks.map((block) => {
               if (block.kind === 'p') return <p><Fragment set:html={renderInline(block.text)} /></p>;

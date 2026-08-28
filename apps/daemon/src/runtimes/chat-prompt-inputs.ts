@@ -1,12 +1,25 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {
+  OD_NEXT_BUNDLE_ECHO_GUARD_V2,
+  type OdNextPromptBundleHeadV2,
+  type OdNextPromptBundleRecipeIdentityV2,
+  serializeOdNextPromptBundleV2,
+} from '@open-design/contracts';
 import { renderResearchCommandContract } from '../prompts/research-contract.js';
 import {
   describeChangedStableSections,
   type StableChangedSection,
   type StableSectionHashes,
 } from '../prompts/stable-sections.js';
+import {
+  assertOdNextBundleTextContributorCoverage,
+  assertOdNextLegacyTextContributorCoverage,
+  type OdNextBundleTextContributorIdV2,
+  type OdNextExactInputStage,
+  type OdNextLegacyTextContributorId,
+} from './od-next-exact-input.js';
 
 export const MAX_CHAT_IMAGE_BYTES = 1024 * 1024;
 export const UPLOAD_DIR = path.join(os.tmpdir(), 'od-uploads');
@@ -82,6 +95,215 @@ export function composeLiveInstructionPrompt({
     parts.push(override);
   }
   return parts.join('\n\n---\n\n');
+}
+
+export function resolveOdNextRequestUserPrompt({
+  message,
+  currentPrompt,
+  hasCurrentPrompt,
+}: {
+  message: unknown;
+  currentPrompt: unknown;
+  hasCurrentPrompt: boolean;
+}): string {
+  if (hasCurrentPrompt) {
+    return typeof currentPrompt === 'string' ? currentPrompt : '';
+  }
+  return typeof message === 'string' ? message : '';
+}
+
+export function composeChatAgentTextPayload({
+  formOverride,
+  daemonSystemPrompt,
+  runtimeToolPrompt,
+  researchCommandContract,
+  runContextPrompt,
+  connectedExternalMcpReference,
+  browserUnavailableGuard,
+  titleGenerationDirective,
+  clientSystemPrompt,
+  cwdReference,
+  linkedDirectoryReferences,
+  echoGuard,
+  requestOrStageText,
+  projectAttachmentReferences,
+  commentAttachmentReferences,
+  imageReferences,
+  odNextRequestBundle,
+  strategyInputStage = null,
+}: {
+  formOverride: string;
+  daemonSystemPrompt: string;
+  runtimeToolPrompt: string;
+  researchCommandContract: string;
+  runContextPrompt: string;
+  connectedExternalMcpReference: string;
+  browserUnavailableGuard: string;
+  titleGenerationDirective: string;
+  clientSystemPrompt: string;
+  cwdReference: string;
+  linkedDirectoryReferences: string;
+  echoGuard: string;
+  requestOrStageText: string;
+  projectAttachmentReferences: string;
+  commentAttachmentReferences: string;
+  imageReferences: string;
+  odNextRequestBundle?: {
+    head: OdNextPromptBundleHeadV2;
+    recipeIdentity: OdNextPromptBundleRecipeIdentityV2;
+    runtimeFacts: string;
+    taskType: string;
+    attachments: string;
+    taskConfiguration: string;
+    stableContext: string;
+    priorTranscript: string;
+    frozenSkillPackage: string;
+    requestInputFacts: string;
+    userSelectedSkills: { skillNames: ReadonlyArray<string>; body: string } | null;
+  } | undefined;
+  strategyInputStage?: OdNextExactInputStage | null;
+}) {
+  const contributors: Record<OdNextLegacyTextContributorId, string> = {
+    form_override: formOverride,
+    daemon_system_prompt: daemonSystemPrompt,
+    runtime_tool_prompt: runtimeToolPrompt,
+    research_command_contract: researchCommandContract,
+    run_context_prompt: runContextPrompt,
+    connected_external_mcp_reference: connectedExternalMcpReference,
+    browser_unavailable_guard: browserUnavailableGuard,
+    title_generation_directive: titleGenerationDirective,
+    client_system_prompt: clientSystemPrompt,
+    cwd_reference: cwdReference,
+    linked_directory_references: linkedDirectoryReferences,
+    echo_guard: echoGuard,
+    request_text: requestOrStageText,
+    project_attachment_references: projectAttachmentReferences,
+    comment_attachment_references: commentAttachmentReferences,
+    image_references: imageReferences,
+  };
+  if (strategyInputStage && strategyInputStage !== 'request') {
+    assertOdNextLegacyTextContributorCoverage(
+      [`${strategyInputStage}_turn`],
+      strategyInputStage,
+    );
+    return {
+      composedPrompt: requestOrStageText,
+      clientInstructionPrompt: '',
+      instructionPrompt: '',
+    };
+  }
+  if (strategyInputStage === 'request') {
+    if (!odNextRequestBundle) {
+      throw new TypeError('OD Next request stage requires canonical Bundle inputs.');
+    }
+    // The echo guard names the bundle's own tag names, so the contract owns its
+    // wording. Comparing instead of overwriting makes a drifting caller fail
+    // loudly rather than shipping two different guards.
+    if (echoGuard.trim() && echoGuard.trim() !== OD_NEXT_BUNDLE_ECHO_GUARD_V2) {
+      throw new TypeError('OD Next echo guard must match the canonical Bundle contract.');
+    }
+    const bundleContributors: Record<OdNextBundleTextContributorIdV2, string> = {
+      daemon_system_prompt: odNextRequestBundle.head.coreSystemPrompt.coreStrategy,
+      echo_guard: odNextRequestBundle.head.coreSystemPrompt.echoGuard,
+      user_selected_skills: odNextRequestBundle.userSelectedSkills?.body ?? '',
+      task_type_fact: odNextRequestBundle.taskType,
+      attachment_facts: odNextRequestBundle.attachments,
+      task_config_pending_fact: odNextRequestBundle.taskConfiguration,
+      title_generation_directive: titleGenerationDirective,
+      recipe_identity: odNextRequestBundle.recipeIdentity.appliedSnapshot,
+      runtime_facts: odNextRequestBundle.runtimeFacts,
+      runtime_tool_prompt: runtimeToolPrompt,
+      stable_context_prompt: odNextRequestBundle.stableContext,
+      frozen_skill_package: odNextRequestBundle.frozenSkillPackage,
+      request_input_facts: odNextRequestBundle.requestInputFacts,
+      research_command_contract: researchCommandContract,
+      run_context_prompt: runContextPrompt,
+      connected_external_mcp_reference: connectedExternalMcpReference,
+      browser_unavailable_guard: browserUnavailableGuard,
+      client_system_prompt: clientSystemPrompt,
+      form_override: formOverride,
+      prior_transcript: odNextRequestBundle.priorTranscript,
+      request_text: requestOrStageText,
+    };
+    assertOdNextBundleTextContributorCoverage(Object.keys(bundleContributors));
+    const composedPrompt = serializeOdNextPromptBundleV2({
+      ...odNextRequestBundle.head,
+      sessionSkills: {
+        ...odNextRequestBundle.head.sessionSkills,
+        ...(odNextRequestBundle.userSelectedSkills
+          ? { userSelectedSkills: odNextRequestBundle.userSelectedSkills }
+          : {}),
+      },
+      taskMetadata: {
+        taskType: odNextRequestBundle.taskType,
+        attachments: odNextRequestBundle.attachments,
+        taskConfiguration: odNextRequestBundle.taskConfiguration,
+        titleDirective: titleGenerationDirective,
+      },
+      context: {
+        recipeIdentity: odNextRequestBundle.recipeIdentity,
+        runtimeFacts: odNextRequestBundle.runtimeFacts,
+        runtimeToolEnvironment: runtimeToolPrompt,
+        stableRequestContext: odNextRequestBundle.stableContext,
+        frozenSkillPackage: odNextRequestBundle.frozenSkillPackage,
+        requestInputFacts: odNextRequestBundle.requestInputFacts,
+        researchCommandContract,
+        runContext: runContextPrompt,
+        connectedExternalMcp: connectedExternalMcpReference,
+        browserUnavailableGuard,
+        clientSystemPrompt,
+        formOverride,
+        priorTranscript: odNextRequestBundle.priorTranscript,
+      },
+      userFirstPrompt: requestOrStageText,
+    });
+    return {
+      composedPrompt,
+      clientInstructionPrompt: '',
+      // The structured system prompt has no single flat text form; callers that
+      // need a live instruction string are on the ordinary path below.
+      instructionPrompt: '',
+    };
+  }
+
+  assertOdNextLegacyTextContributorCoverage(Object.keys(contributors), strategyInputStage);
+
+  const clientInstructionPrompt = [
+    researchCommandContract,
+    runContextPrompt,
+    connectedExternalMcpReference,
+    browserUnavailableGuard,
+    titleGenerationDirective,
+    clientSystemPrompt,
+  ]
+    .map((part) => (typeof part === 'string' ? part.trim() : ''))
+    .filter(Boolean)
+    .join('\n\n---\n\n');
+  const instructionPrompt = composeLiveInstructionPrompt({
+    daemonSystemPrompt,
+    runtimeToolPrompt,
+    clientSystemPrompt: clientInstructionPrompt,
+    finalPromptOverride: null,
+  });
+  const composedPrompt = [
+    instructionPrompt
+      ? `# Instructions (read first)\n\n${formOverride}${instructionPrompt}${cwdReference}${linkedDirectoryReferences}${echoGuard}\n\n---\n`
+      : cwdReference
+        ? `# Instructions\n\n${formOverride}${cwdReference}${linkedDirectoryReferences}${echoGuard}\n\n---\n`
+        : linkedDirectoryReferences
+          ? `# Instructions\n\n${formOverride}${linkedDirectoryReferences}${echoGuard}\n\n---\n`
+          : formOverride
+            ? `# Instructions\n\n${formOverride}${echoGuard}\n\n---\n`
+            : '',
+    `# User request\n\n${requestOrStageText}${projectAttachmentReferences}${commentAttachmentReferences}`,
+    imageReferences ? `\n\n${imageReferences}` : '',
+  ].join('');
+
+  return {
+    composedPrompt,
+    clientInstructionPrompt,
+    instructionPrompt,
+  };
 }
 
 export function resolveResearchCommandContract(
@@ -748,4 +970,13 @@ export function selectPromptImagePaths(
   amrStagedImages: string[],
 ) {
   return agentId === 'amr' ? amrStagedImages : safeImages;
+}
+
+export function excludeAcpImagePathsAlreadyDeliveredAsResources(
+  imagePaths: string[],
+  resourcePaths: string[],
+): string[] {
+  if (resourcePaths.length === 0) return imagePaths;
+  const delivered = new Set(resourcePaths);
+  return imagePaths.filter((imagePath) => !delivered.has(imagePath));
 }

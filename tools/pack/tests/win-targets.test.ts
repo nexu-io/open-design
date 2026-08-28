@@ -5,7 +5,7 @@ import {
   resolveWinTargets,
   shouldBuildWinNsisInstaller,
   shouldBuildWinPortableZip,
-} from "../src/win/report.js";
+} from "@/win/report.js";
 
 describe("resolveWinTargets", () => {
   it("returns the full target set including the portable zip for `all`", () => {

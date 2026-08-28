@@ -80,20 +80,24 @@
     will-change: transform;
   }
   .slide {
-    min-width: 100vw; height: 100vh;
+    /* Size to the flex stage after the sample banner has been subtracted. */
+    min-width: 100vw; height: 100%;
     background: var(--paper);
     display: grid; place-items: stretch;
     position: relative; overflow: hidden;
   }
   .slide-inner {
-    width: min(1320px, 92vw);
-    height: min(820px, 86vh);
-    margin: auto;
+    width: 1320px;
+    height: 820px;
+    margin: 0;
     padding: 56px 64px 48px;
     display: grid; grid-template-rows: auto 1fr auto;
     background: var(--paper);
     box-shadow: 0 30px 80px -30px rgba(0,0,0,0.35), 0 6px 18px -8px rgba(0,0,0,0.25);
-    position: relative;
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%) scale(var(--slide-scale, 1));
+    transform-origin: center center;
     border-top: 6px solid var(--ink);
   }
   /* Magazine masthead */
@@ -558,7 +562,11 @@
     .stage { display: block; transform: none !important; transition: none; }
     .slide { page-break-after: always; height: 100vh; }
     .chrome, .agent-stamp, .demo-banner { display: none; }
-    .slide-inner { box-shadow: none; }
+    .slide-inner {
+      width: 100%; height: 100%;
+      position: relative; left: auto; top: auto;
+      transform: none; box-shadow: none;
+    }
   }
 </style>
 </head>
@@ -1154,6 +1162,15 @@
   const slides = stage.querySelectorAll('.slide');
   const total  = slides.length;
   const now    = document.getElementById('now');
+  function fit(){
+    const slide = slides[0];
+    if (!slide) return;
+    const scale = Math.min(1, slide.clientWidth * 0.92 / 1320, Math.max(0, slide.clientHeight - 36) / 820);
+    stage.style.setProperty('--slide-scale', String(Math.max(0, scale)));
+  }
+  window.addEventListener('resize', fit);
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(fit).observe(stage);
+  fit();
   document.getElementById('total').textContent = String(total).padStart(2,'0');
   let i = 0;
   function go(n){
