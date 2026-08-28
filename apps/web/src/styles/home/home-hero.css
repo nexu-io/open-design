@@ -2491,11 +2491,17 @@
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
 }
 
-/* Break out of the hero's 960px column to the full home column, so the strip
-   is exactly as wide as the 最近项目 grid below. 100cqw reads the .home-view
-   size container; the symmetric margins re-center the wider box inside the
-   centered hero (they collapse to 0 when the viewport is narrower than the
-   hero cap and the two widths coincide). */
+/* Break wide example rails out of the hero's 960px column to the full home
+   column, so they share the same geometry as the 最近项目 grid below.
+   100cqw reads the .home-view size container; the symmetric margins re-center
+   the wider box inside the centered hero (they collapse to 0 when the
+   viewport is narrower than the hero cap and the two widths coincide). */
+.home-hero__prompt-examples--wide,
+.home-hero__plugin-presets-wrap {
+  width: 100cqw;
+  max-width: 100cqw;
+  margin-inline: calc((100% - 100cqw) / 2);
+}
 .home-hero__plugin-presets-wrap {
   /* One geometry contract for both the loading shell and settled cards.
      The fixed card height is the natural rendered height of the preview,
@@ -2503,9 +2509,6 @@
   --home-plugin-preset-width: 248px;
   --home-plugin-preset-preview-h: 150px;
   --home-plugin-preset-card-h: 194px;
-  width: 100cqw;
-  max-width: 100cqw;
-  margin-inline: calc((100% - 100cqw) / 2);
 }
 
 /* Positioning context so the edge auto-scroll zones anchor to just the

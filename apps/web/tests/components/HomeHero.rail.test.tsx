@@ -285,6 +285,16 @@ describe('HomeHero intent rail', () => {
     expect(screen.queryByTestId('home-hero-active-example')).toBeNull();
   });
 
+  it('widens the Website clone example rail to match the hero surfaces', () => {
+    renderHero({ activeChipId: 'web-clone' });
+
+    const examples = screen.getByTestId('home-hero-prompt-examples');
+    expect(examples.classList.contains('home-hero__prompt-examples--wide')).toBe(true);
+    expect(
+      screen.getByTestId('home-hero-prompt-examples').querySelector('.home-hero__prompt-examples-grid'),
+    ).toBeTruthy();
+  });
+
   it('reserves the example rail while the plugin catalog is still loading', () => {
     renderHero({ activeChipId: null, pluginsLoading: true });
 
