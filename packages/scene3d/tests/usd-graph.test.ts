@@ -84,6 +84,26 @@ describe("renderUsdGraph", () => {
     expect(lines.some((l) => /^\s*ghost\s+Mesh/.test(l))).toBe(false);
   });
 
+  it("sanitizes the header's upAxis too — it can't be used to forge a row", () => {
+    // upAxis is verbatim USDA (a compile-time cast, not a runtime check) and the
+    // parser passes triple-quoted multi-line strings, so it is an injection
+    // vector like the prim fields. (The first clean() pass missed it — logic
+    // review find.)
+    const usda = '#usda 1.0\n(\n  upAxis = """Y\nFORGED  Mesh  kind=component"""\n)\ndef Xform "root" {}\n';
+    const lines = renderUsdGraph(usda).split("\n");
+    expect(lines).toHaveLength(2); // header + root; a forged row would make 3
+    expect(lines.some((l) => /^FORGED\s+Mesh/.test(l))).toBe(false);
+  });
+
+  it("emits a real prim named '$stage' instead of dropping it (identity, not name)", () => {
+    // The synthetic stage root is $stage; matching it by NAME would silently drop
+    // an author's own "$stage" prim and misattribute its children. Match by
+    // identity so the real prim survives. (Logic review find.)
+    const out = renderUsdGraph('#usda 1.0\ndef Xform "$stage" {\n  def Mesh "child" {}\n}\n');
+    expect(out).toContain("$stage  Xform");
+    expect(out).toContain("child  Mesh");
+  });
+
   it("degrades to a one-line reason on unparseable input, never throws", () => {
     const g = renderUsdGraph('#usda 1.0\ndef Xform "x" {{{ broken');
     expect(typeof g).toBe("string");

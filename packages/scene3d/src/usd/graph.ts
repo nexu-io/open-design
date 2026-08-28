@@ -92,7 +92,12 @@ export function renderUsdGraph(usda: string): string {
   const st = tree.stage;
   const header =
     `stage: ${clean(st.defaultPrim ?? "?")}` +
-    ` (up=${st.upAxis ?? "?"}, metersPerUnit=${st.metersPerUnit ?? 1}` +
+    // upAxis is `unquote(value) as "Y"|"Z"` — a compile-time cast, not a runtime
+    // check, and the parser passes triple-quoted multi-line strings — so it is
+    // verbatim USDA text like every other field here and MUST be sanitised too,
+    // or a crafted `upAxis` reopens the header-row forge. (metersPerUnit and the
+    // time codes are Number-coerced, so they can't carry a newline.)
+    ` (up=${clean(String(st.upAxis ?? "?"))}, metersPerUnit=${st.metersPerUnit ?? 1}` +
     `${st.hasAssetInfo ? ", assetInfo" : ""}` +
     `${st.startTimeCode !== undefined ? `, frames ${st.startTimeCode}–${st.endTimeCode ?? st.startTimeCode}` : ""})`;
   const lines: string[] = [header];
@@ -124,7 +129,11 @@ export function renderUsdGraph(usda: string): string {
   // Manual DFS so the shader NETWORK under a Material can be pruned — its guts
   // are summarised on the Material line, not spilled node by node.
   const dfs = (prim: UsdaPrim, depth: number): void => {
-    if (prim.name !== "$stage") emit(prim, depth);
+    // Skip the SYNTHETIC stage root by IDENTITY, not by its "$stage" name — a
+    // real prim the author named "$stage" (the parser puts no restriction on
+    // quoted names) must still be emitted, not silently dropped with its
+    // children misattributed a level shallower.
+    if (prim !== tree.root) emit(prim, depth);
     if (prim.typeName === "Material") return; // pruned — summarised above
     for (const child of prim.children) dfs(child, depth + 1);
   };

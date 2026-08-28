@@ -253,6 +253,12 @@ describe('parseDescribeQuery', () => {
     expect(parseDescribeQuery({ region: '1,2,3,4,5,x' })).toBeNull();
     expect(parseDescribeQuery({ budget: '0' })).toBeNull();
     expect(parseDescribeQuery({ budget: '12.5' })).toBeNull();
+    // A present-but-non-string value (a duplicated ?region=/?focus= arrives as an
+    // array) is malformed, not absent — rejected, consistent with budget.
+    expect(parseDescribeQuery({ region: ['1,2,3,4,5,6', '7,8,9,1,2,3'] as unknown as string })).toBeNull();
+    expect(parseDescribeQuery({ focus: ['a', 'b'] as unknown as string })).toBeNull();
+    // An empty string is treated as "not provided", not malformed.
+    expect(parseDescribeQuery({ region: '', focus: '' })).toEqual({});
   });
 });
 

@@ -110,7 +110,12 @@ function compileInline(
 ): Promise<CompileResult> {
   const control = signal ? { shouldCancel: () => signal.aborted } : {};
   return compile(request, control).catch((err: unknown) => {
-    if (signal?.aborted || (err as Error)?.name === "EvalCancelledError") throw abortError();
+    // Normalise ONLY a genuine cancellation to AbortError. Keying on
+    // `signal.aborted` would coerce an UNRELATED real failure (a Blender error
+    // that happened while the caller was also aborting) into an AbortError,
+    // discarding the real bug's identity — the caller can still read
+    // `signal.aborted` itself.
+    if ((err as Error)?.name === "EvalCancelledError") throw abortError();
     throw err;
   });
 }

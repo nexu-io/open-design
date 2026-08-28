@@ -569,16 +569,22 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
       }
 
       // A scene that never compiled has no census to describe — a truthful null,
-      // not a 404 on the project.
+      // not a 404 on the project. But a census file that EXISTS yet can't be
+      // read/parsed/described is a different fact: report it (the "every sidecar
+      // that fails to load reports it" doctrine) rather than silently conflating
+      // a corrupt read-model with "never compiled".
       const readModelFile = path.join(sceneDir, 'out', 'read-model.json');
       let describe: string | null = null;
-      try {
-        const model = JSON.parse(fs.readFileSync(readModelFile, 'utf8'));
-        if (model?.census) {
-          describe = describeScene(model.census, Array.isArray(model.issues) ? model.issues : [], options);
+      if (fs.existsSync(readModelFile)) {
+        try {
+          const model = JSON.parse(fs.readFileSync(readModelFile, 'utf8'));
+          if (model?.census) {
+            describe = describeScene(model.census, Array.isArray(model.issues) ? model.issues : [], options);
+          }
+        } catch (err) {
+          console.warn(`[scene3d] describe: unreadable ${readModelFile} —`, err);
+          describe = null;
         }
-      } catch {
-        describe = null;
       }
 
       const response: Scene3dDescribeResponse = { scenePath, describe };
@@ -605,8 +611,12 @@ export function parseDescribeQuery(query: Record<string, unknown>): {
     focus?: string;
     budgetTokens?: number;
   } = {};
+  // A present-but-non-string value (e.g. a duplicated `?region=` arrives as an
+  // array) is MALFORMED, not absent — reject it, the same strictness `budget`
+  // already applies, rather than silently ignoring it.
   const region = query.region;
-  if (typeof region === 'string' && region.length > 0) {
+  if (region !== undefined && region !== '') {
+    if (typeof region !== 'string') return null;
     const n = region.split(',').map((s) => Number(s.trim()));
     if (n.length !== 6 || n.some((v) => !Number.isFinite(v))) return null;
     // Normalise per-axis so an inverted box still selects its interior.
@@ -616,7 +626,10 @@ export function parseDescribeQuery(query: Record<string, unknown>): {
     };
   }
   const focus = query.focus;
-  if (typeof focus === 'string' && focus.length > 0) out.focus = focus;
+  if (focus !== undefined && focus !== '') {
+    if (typeof focus !== 'string') return null;
+    out.focus = focus;
+  }
   const budget = query.budget;
   if (budget !== undefined) {
     const b = Number(budget);

@@ -124,7 +124,7 @@ export function renderOrthoAscii(census: Census, options: OrthoAsciiOptions = {}
     }
     const border = "+" + "-".repeat(w) + "+";
     const body = grid.map((row) => "|" + row.join("") + "|").join("\n");
-    const dims = `${metres(hSpan)} ${view.h === 0 ? "×" : "×"} ${metres(vSpan)}`;
+    const dims = `${metres(hSpan)} × ${metres(vSpan)}`;
     panes.push(`${view.label}   ${view.gnomon}   ${dims}\n${border}\n${body}\n${border}`);
   }
 
