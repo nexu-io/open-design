@@ -434,7 +434,21 @@ def set_world_background(job):
         if out is None:
             out = world.node_tree.nodes.new("ShaderNodeOutputWorld")
         world.node_tree.links.new(node.outputs["Background"], out.inputs["Surface"])
-    node.inputs["Color"].default_value = (rgb[0], rgb[1], rgb[2], 1.0)
+    # The hex an author writes is a DISPLAY colour; the socket is linear, so
+    # writing it straight in renders the backdrop about 2.3x too bright.
+    lin = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in rgb]
+    node.inputs["Color"].default_value = (lin[0], lin[1], lin[2], 1.0)
+    # The film stays TRANSPARENT here exactly as it does without a declared
+    # backdrop. Alpha is what makes coverage a subject mask rather than a count
+    # of lit pixels: with an opaque film every frame reports 100% covered, the
+    # empty and sparse proof rules cannot fire, and an aimed shot at a blank
+    # wall reports a perfect catch. The author's colour is not lost — it is
+    # written UNDER the transparent pixels as the matte, so alpha-aware readers
+    # get a real mask and everything else sees the backdrop that was asked for.
+    scene = bpy.context.scene
+    scene.render.film_transparent = True
+    global PROOF_MATTE
+    PROOF_MATTE = (lin[0], lin[1], lin[2])
 
 
 # ------------------------------------------------------------------
@@ -3263,6 +3277,11 @@ def face_connected_world_points(o):
     if o.type != "MESH" or not o.data.vertices:
         return []
     try:
+        # Local import, like every other function here. Without it `bpy` is not
+        # a name in this module, the lookup raises NameError, the except below
+        # swallows it, and EVERY mesh silently measures its rest cage instead
+        # of the evaluated result — modifiers, armatures and mirrors included.
+        import bpy
         dg = bpy.context.evaluated_depsgraph_get()
         eo = o.evaluated_get(dg)
         me = None
@@ -3624,6 +3643,12 @@ def contact_report(objects, limit=60):
             me = None
             owned = False
             try:
+                # Local import for the same reason as everywhere else in this
+                # file: without it `bpy` is not a name here, the lookup raises
+                # NameError, and the except below quietly measures the rest
+                # cage — so a rigged or modified part's contacts were computed
+                # from geometry the render never showed.
+                import bpy
                 dg = bpy.context.evaluated_depsgraph_get()
                 eo = o.evaluated_get(dg)
                 me = eo.to_mesh()
@@ -5064,6 +5089,17 @@ def scene_fingerprint():
     # other bound this compiler reports. R3 (millimetre at metre scale) is well
     # under anything an author can see and well over the drift of writing a
     # float to text and reading it back.
+    # Measured at a FIXED reference instant on both sides of the comparison.
+    # These points come from the evaluated mesh, so on a rigged asset they are
+    # a function of the current frame — and the built scene and the reimported
+    # master do not sit on the same one. Comparing them as-is contrasts two
+    # different moments of the same animation and reports a size change that
+    # never happened. frame_start is the one instant both scenes always share.
+    _scene = bpy.context.scene
+    _saved_frame = _scene.frame_current
+    if _scene.frame_current != _scene.frame_start:
+        _scene.frame_set(_scene.frame_start)
+        bpy.context.view_layer.update()
     lo = [float("inf")] * 3
     hi = [float("-inf")] * 3
     for o in bpy.context.scene.objects:
@@ -5075,6 +5111,9 @@ def scene_fingerprint():
                     lo[i] = p[i]
                 if p[i] > hi[i]:
                     hi[i] = p[i]
+    if _scene.frame_current != _saved_frame:
+        _scene.frame_set(_saved_frame)
+        bpy.context.view_layer.update()
     bounds = None
     if lo[0] != float("inf"):
         bounds = [round(hi[i] - lo[i], 3) for i in range(3)]

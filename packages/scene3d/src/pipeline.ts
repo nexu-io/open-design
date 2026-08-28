@@ -2144,7 +2144,23 @@ export async function compile(
       : describeProofViews({
           frameCount: proofImages.length,
           turntable: proofOpts.turntable !== false,
-          authoredCamera: proofOpts.respectSceneCamera === true,
+          /* The render went through the AUTHOR'S camera whenever the runner
+             did not aim one itself — which is `respectSceneCamera`, and also
+             a non-turntable proof of a scene that has its own camera: the
+             runner uses `scene.camera` there and never re-aims it. Reading
+             only the flag labelled that frame `front · az 0°` while the
+             camera sat wherever the author put it, and the wrong name then
+             travelled to the manifest, the contact sheet, its gnomon and the
+             web scrubber.
+
+             `camera.staging` deliberately does NOT enter this: the flag asks
+             "did the runner aim this camera", not "who placed it". A staging
+             camera is not re-aimed either, and its pose is measured the same
+             way — a bare import photographs at a measured 45 and is named
+             front-right, which is what it is. */
+          authoredCamera:
+            proofOpts.respectSceneCamera === true ||
+            (proofOpts.turntable === false && census?.camera.present === true),
           // The runner MEASURED the placed camera's pose, so an authored still
           // gets an honest compass name instead of silence.
           ...(census?.camera.azimuthDeg !== undefined

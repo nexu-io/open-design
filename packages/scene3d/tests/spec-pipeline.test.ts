@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as zlib from "node:zlib";
 import { compile, probeBlender, renderAgentReport } from "../src/index.js";
 import { ISSUE_CODES } from "../src/errors.js";
 import { deriveFacts } from "../src/lint/facts.js";
@@ -469,6 +470,93 @@ describe.skipIf(!hasBlender)("declarative spec pipeline (real Blender)", () => {
     // Advisory only — a warning, never a compile-blocking error.
     expect(result.issues.filter((i) => i.severity === "error")).toEqual([]);
   });
+  it("names the pose the AUTHOR'S camera actually has, not a default front", async () => {
+    /*
+     * With no turntable and a scene that owns a camera, the runner renders
+     * through THAT camera and never re-aims it. The label was derived from the
+     * `respectSceneCamera` flag alone, so the frame came back as `front, az 0`
+     * while the camera sat at 45 — and the wrong bearing travelled to the
+     * manifest, the contact sheet, its gnomon and the web scrubber. The pose
+     * is measured by the runner; the label must come from the measurement.
+     */
+    const dir = workDir("good/spec_pavilion");
+    const r = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "proof", "manifest"],
+      proof: { turntable: false, resolution: 160 },
+      noCache: true,
+      timeoutMs: 300_000,
+    });
+    const measured = r.census?.camera?.azimuthDeg;
+    expect(measured, "the runner must measure the placed camera").toBeTypeOf("number");
+    const view = r.manifest.proofViews?.[0];
+    expect(view, "a measured pose must be named").toBeTruthy();
+    expect(view!.azimuthDeg).toBeCloseTo(measured as number, 3);
+    // The fixture's hero camera is not at the front; a `front` here is the bug.
+    expect(view!.name).not.toBe("front");
+  }, 300_000);
+
+  it("a declared proof.background does not turn coverage into a lie", async () => {
+    /*
+     * Coverage is derived from the alpha mask, and the backdrop branch used to
+     * skip `film_transparent` — so with a background declared, every frame
+     * reported 100% covered, the empty and sparse proof rules could not fire,
+     * and an aimed shot at a blank wall came back as a perfect catch. The
+     * author's colour is written under the transparent pixels instead, so the
+     * backdrop survives and the mask stays real.
+     */
+    const dir = workDir("good/spec_pavilion");
+    const shoot = async (background?: string): Promise<number> => {
+      const r = await compile({
+        projectDir: dir,
+        stages: ["parse", "build", "proof"],
+        proof: { turntable: false, resolution: 160, ...(background ? { background } : {}) },
+        noCache: true,
+        timeoutMs: 300_000,
+      });
+      const cov = r.manifest.proofFrames?.[0]?.coverage;
+      expect(cov, "the proof must report a measured coverage").toBeTypeOf("number");
+      return cov as number;
+    };
+    const plain = await shoot();
+    const withBackdrop = await shoot("#100c0a");
+    expect(withBackdrop).toBeLessThan(0.95);
+    // The subject did not change, so neither may the measurement of it.
+    expect(Math.abs(withBackdrop - plain)).toBeLessThan(0.02);
+
+    /* And the author's colour still reaches the file. Keeping the film
+       transparent is only half the trade: the backdrop is written UNDER the
+       transparent pixels, so a reader that drops alpha still sees the colour
+       that was asked for instead of a void. Asserted on the bytes, because
+       "the code calls save()" is not the same fact. */
+    const r = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "proof"],
+      proof: { turntable: false, resolution: 64, background: "#FF0000" },
+      noCache: true,
+      timeoutMs: 300_000,
+    });
+    const png = fs.readFileSync(path.join(dir, r.proofImages[0]!));
+    const chunks: Buffer[] = [];
+    let at = 8;
+    let colorType = 0;
+    while (at < png.length) {
+      const len = png.readUInt32BE(at);
+      const type = png.toString("ascii", at + 4, at + 8);
+      if (type === "IHDR") colorType = png[at + 17]!;
+      if (type === "IDAT") chunks.push(png.subarray(at + 8, at + 8 + len));
+      at += 12 + len;
+    }
+    expect(colorType, "the proof must carry an alpha channel").toBe(6);
+    const raw = zlib.inflateSync(Buffer.concat(chunks));
+    // Row 0, pixel 0, past the scanline's filter byte: a corner is backdrop.
+    const [red, green, blue, alpha] = [raw[1]!, raw[2]!, raw[3]!, raw[4]!];
+    expect(red).toBeGreaterThan(200);
+    expect(green).toBeLessThan(40);
+    expect(blue).toBeLessThan(40);
+    expect(alpha, "the backdrop must stay transparent so coverage is a mask").toBe(0);
+  }, 900_000);
+
   it("light.ambient actually reaches the pixels", async () => {
     /*
      * The one test that can catch this: two compiles differing ONLY in
