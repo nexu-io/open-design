@@ -21,13 +21,16 @@ it again; read this, then act.
 | Compiler (parse→build→proof→export→lint→manifest) | `packages/scene3d/` |
 | Declarative scene language (`scene.json`: shapes/relations/repeat/materials/claims) | `packages/scene3d/src/solve/` (`types.ts` language, `validate.ts` schema, `solver.ts` fixpoint+repeat, `emit-bpy.ts` backend) + `src/lint/claims.ts` |
 | Wire contract + `buildScene3dAssetUrl` | `packages/contracts/src/api/scene3d.ts` |
-| Daemon routes (`POST …/scene3d/compile`, `GET …/scene3d/manifest`) | `apps/daemon/src/routes/scene3d.ts` |
-| CLI (`od scene3d compile|manifest`) | `apps/daemon/src/cli.ts` (`SUBCOMMAND_MAP`) |
+| Daemon routes (`POST …/scene3d/compile` — off-thread via `compileInWorker`, bounded `CompileGate`; `GET …/scene3d/manifest`, `GET …/scene3d/describe`) | `apps/daemon/src/routes/scene3d.ts` |
+| CLI (`od scene3d compile|manifest|describe|tweaks`) | `apps/daemon/src/cli.ts` (`SUBCOMMAND_MAP`) |
 | Native compile panel (frame player, parts, issues, Export) | `apps/web/src/components/Scene3dPanel.tsx` |
 | Compile hook + scene-path heuristic | `apps/web/src/hooks/useScene3dCompile.ts` |
 | Presentation rules (deliverable grouping, assetKind labels, kit hydration) | `apps/web/src/runtime/scene3d-assets.ts` |
 | Interactive kit page + orbit/edit runtime (generated HTML) | `packages/scene3d/src/viewer/kit.ts`, `kit-runtime.ts` |
-| Camera-pose truth (azimuth→compass, screen basis) | `packages/scene3d/src/read/views.ts` |
+| Camera-pose truth (azimuth→compass, screen basis; authored-camera pose is MEASURED by the runner → `census.camera.azimuthDeg/elevationDeg`, so an authored still gets an honest compass) | `packages/scene3d/src/read/views.ts` |
+| Off-thread compile (whole `compile()` on a worker; JSON boundary; cooperative-cancel via `AbortSignal`→SharedArrayBuffer polled at the kernel meter checkpoints) | `packages/scene3d/src/compile-in-worker.ts`, `compile-worker.ts` |
+| Exact O(n log n) triangulation (Lee–Preparata monotone sweep + deterministic treap; replaced the ear-clip; used by `triangulateFace`) | `packages/scene3d/src/kernel/triangulate.ts` |
+| Agent-facing spatial/USD text (ASCII ortho triptych `out/ortho.txt`; USD scene-graph `out/scene.tree.txt`) | `packages/scene3d/src/read/ortho-ascii.ts`, `usd/graph.ts` |
 | Contact sheet (`out/contact.png`) + its bitmap font | `packages/scene3d/src/read/contact.ts`, `read/font.ts` |
 | Sidecar writers | `packages/scene3d/src/manifest.ts` (`writeArtifactSidecar`, `writeKitSidecar`, `writeViewer`, `writeProjectKit`) |
 | Home chip / plugin / template | `home-hero/chips.ts` (`example-scene3d`), `plugins/_official/examples/scene3d/`, `design-templates/scene3d/` |
@@ -284,8 +287,12 @@ it again; read this, then act.
   camera on −Y = front, +az toward +X, elevation 30°, frame i of n at
   i·360/n) and consumed by the report's `orbit:` line, `manifest.proofViews`,
   the contact sheet's labels and gnomon, and the web scrubber's compass
-  label. `describeProofViews` returns `undefined` for an authored camera —
-  absent beats a confident wrong name. The report also prints the frame
+  label. For an authored camera the orbit math can't derive a pose, so the
+  runner MEASURES the placed camera's pose (`census.camera.azimuthDeg/
+  elevationDeg`, same convention) and `describeProofViews` names an authored
+  STILL from it — a measurement, not a guess; it stays `undefined` only when no
+  pose was measured or the authored render is multi-frame (absent beats a
+  confident wrong name). The report also prints the frame
   filename PATTERN and index range, never one path: the hash varies per
   compile and a reader who has to guess it gets ENOENT. Contact-sheet badges
   come from the `.idx.png` id map (which pixels ARE the part), never from

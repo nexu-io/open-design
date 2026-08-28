@@ -107,7 +107,7 @@ counts a single-surface capability as a regression.
 │  POST  /api/projects/:id/scene3d/compile                             │
 │  GET   /api/projects/:id/scene3d/manifest                            │
 │  GET|POST /api/projects/:id/scene3d/tweaks                           │
-│  od scene3d compile | manifest | tweaks                              │
+│  od scene3d compile | manifest | describe | tweaks                   │
 ├─ Web     apps/web ───────────────────────────────────────────────────┤
 │  Scene3dPanel  — native compile surface (proof player, parts, issues)│
 │  HtmlViewer    — kit pages (renderer: html, kind: scene3d)           │
@@ -822,12 +822,14 @@ scenes/<name>/
     ├── manifest.json
     ├── digest.md
     ├── ortho.svg
+    ├── ortho.txt            # plan/front/side as ASCII box-art — proportion an LLM reads
     ├── contact.png          # every proof frame on one labelled page
     ├── read-model.json
     ├── proof/proof-*.png    # + proof-*.idx.png object-index maps
     ├── materials/ball-*.png # lit-sphere preview per bound material
     ├── textures/            # baked shader maps and atlases
     ├── scene.usda / .usdz / .glb / .obj / .fbx / …
+    ├── scene.tree.txt       # the exported USD as a legible scene GRAPH (no vertex arrays)
     └── minecraft/          # when target is minecraft
 ```
 
@@ -853,10 +855,13 @@ axis gnomon on the contact sheet, `manifest.proofViews`, the compass label
 on the web panel's scrubber — so the picture and the prose cannot disagree
 about which way is front. Re-deriving it locally is how they would.
 
-`describeProofViews` is the honesty gate: a still through a camera the
-AUTHOR placed has a pose the compiler never measured, so it returns
-`undefined` rather than naming it. Absent means "not knowable", never
-"front", and every consumer stays silent instead of confident.
+`describeProofViews` is the honesty gate. The orbit math can't derive an
+author-placed camera's pose, but the runner MEASURES it — `census.camera`
+carries the placed camera's `azimuthDeg`/`elevationDeg` in this same
+convention — so an authored STILL is named from that measurement (a fact, not
+a guess). It falls back to `undefined` only when no pose was measured or the
+authored render is multi-frame: absent means "not knowable", never a confident
+"front".
 
 `out/contact.png` (`src/read/contact.ts`, drawn with the 5×9 bitmap face in
 `src/read/font.ts`) composes the whole orbit onto one page: compass name and
@@ -908,6 +913,8 @@ od scene3d compile  --project <id> --scene <path> [--fast] [--json] [--agent-mes
                     [--stages parse,build,lint] [--no-cache] [--no-turntable]
                     [--fail-on error|warning|none]
 od scene3d manifest --project <id> --scene <path> [--json]
+od scene3d describe --project <id> --scene <path> [--json]
+                    [--region x0,y0,z0,x1,y1,z1] [--focus <part>] [--budget <tokens>]
 od scene3d tweaks   --project <id> --scene <path> [--json]
                     [--set '<json>'] [--set-file <path|->] [--merge]
 ```
