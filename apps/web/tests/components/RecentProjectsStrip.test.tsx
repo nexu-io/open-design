@@ -245,6 +245,28 @@ describe('RecentProjectsStrip', () => {
     expect(cover).toContain('.slide:not([data-od-cover-slide])');
   });
 
+  it('marks the first real slide when a style comment contains a slide tag example', () => {
+    const cover = deckPreviewSrcDoc(`<!doctype html>
+      <html><head><style>
+        /* Put content inside <section class="slide"> bodies. */
+        .slide { display: none }
+        .slide.active { display: grid }
+      </style></head><body>
+        <div class="deck-shell"><div class="deck-stage">
+          <section class="slide s-title active"><h1>Real cover</h1></section>
+          <section class="slide s-details"><h2>Details</h2></section>
+        </div></div>
+      </body></html>`);
+
+    expect(cover).toContain('inside <section class="slide"> bodies');
+    expect(cover).toMatch(
+      /<section class="slide s-title active is-active" data-od-cover-slide(?:="")?>/,
+    );
+    expect(cover).not.toContain(
+      'inside <section class="slide active is-active" data-od-cover-slide> bodies',
+    );
+  });
+
   it('lets a 16:9 project cover determine its grid-card height without a taller minimum', () => {
     const css = readFileSync(
       join(process.cwd(), 'src/styles/home/recent-projects.css'),
