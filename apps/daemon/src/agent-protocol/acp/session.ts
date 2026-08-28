@@ -1142,6 +1142,23 @@ export function attachAcpSession({
         send('agent', { type: 'status', label: 'model', model: activeModel });
       }
       if (sessionId && model && model !== 'default') {
+        // A successful session/load already has the durable session's model.
+        // Standard ACP agents such as Kilo omit configOptions on load, so
+        // falling through to legacy session/set_model is a rejected RPC that
+        // then reports activeModel as default. Resume identity already rejects
+        // model_changed, so re-selecting is unnecessary. Bridges that return a
+        // model config option (or that do not declare a durable ACP session id)
+        // keep the existing set_config_option / set_model path.
+        const skipModelSelectionOnResume =
+          Boolean(resumeSessionId) && captureSessionIdAsDurable && !modelConfigId;
+        if (skipModelSelectionOnResume) {
+          if (!activeModel) {
+            activeModel = model;
+            send('agent', { type: 'status', label: 'model', model: activeModel });
+          }
+          sendPrompt();
+          return;
+        }
         setModelRequestId = nextId;
         expectedId = nextId;
         const setModelMethod = modelConfigId ? 'session/set_config_option' : 'session/set_model';

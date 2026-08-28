@@ -373,10 +373,12 @@ export function isOpencodeResumeFailure(text: string): boolean {
 
 /**
  * Kilo's ACP resume handshake always assigns request id 2 to `session/load`.
- * Its current missing-session response is intentionally generic
- * (`-32603 OpenCode service failure`), so the request id—not mutable prose—is
- * the stable signal. The caller only invokes this classifier after proving the
- * run attempted resume, which keeps a create-turn `session/new` error out.
+ * Its current missing-session response is a JSON-RPC `-32603` with structured
+ * session-service data (`data.service === "session"`). The request id alone is
+ * not enough: invalid-params, auth, and other load errors also use id 2, and
+ * treating those as a stale session would clear a live handle and auto-reseed.
+ * The caller only invokes this classifier after proving the run attempted
+ * resume, which keeps a create-turn `session/new` error out.
  */
 export function isKiloAcpLoadFailure(stdout: string): boolean {
   if (!stdout) return false;
@@ -388,18 +390,27 @@ export function isKiloAcpLoadFailure(stdout: string): boolean {
         id?: unknown;
         error?: unknown;
       };
-      if (
-        message.id === 2
-        && message.error !== null
-        && typeof message.error === 'object'
-      ) {
-        return true;
-      }
+      if (message.id !== 2) continue;
+      if (isKiloMissingSessionRpcError(message.error)) return true;
     } catch {
       // Ignore stderr/progress text and incomplete protocol frames.
     }
   }
   return false;
+}
+
+/**
+ * True when an ACP JSON-RPC error is Kilo's measured missing-session payload:
+ * code `-32603` plus structured session-service data. Does not match on the
+ * mutable OpenCode prose alone.
+ */
+function isKiloMissingSessionRpcError(error: unknown): boolean {
+  if (error === null || typeof error !== 'object') return false;
+  const payload = error as { code?: unknown; data?: unknown };
+  if (payload.code !== -32603) return false;
+  const data = payload.data;
+  if (data === null || typeof data !== 'object') return false;
+  return (data as { service?: unknown }).service === 'session';
 }
 
 /**

@@ -614,6 +614,24 @@ describe('isKiloAcpLoadFailure', () => {
     ).toBe(true);
   });
 
+  it('ignores non-session id-2 errors so auth and invalid-params stay visible', () => {
+    expect(
+      isKiloAcpLoadFailure(
+        '{"jsonrpc":"2.0","id":2,"error":{"code":-32602,"message":"Invalid params"}}',
+      ),
+    ).toBe(false);
+    expect(
+      isKiloAcpLoadFailure(
+        '{"jsonrpc":"2.0","id":2,"error":{"code":-32603,"message":"Internal error: OpenCode service failure"}}',
+      ),
+    ).toBe(false);
+    expect(
+      isKiloAcpLoadFailure(
+        '{"jsonrpc":"2.0","id":2,"error":{"code":-32603,"message":"auth required","data":{"service":"auth"}}}',
+      ),
+    ).toBe(false);
+  });
+
   it('ignores prompt errors, notifications, and malformed output', () => {
     expect(
       isKiloAcpLoadFailure(
@@ -702,9 +720,16 @@ describe('isAgentResumeFailure dispatch', () => {
 
   it('routes Kilo to the structured ACP session/load detector on stdout', () => {
     const loadError =
-      '{"jsonrpc":"2.0","id":2,"error":{"code":-32603,"message":"Internal error: OpenCode service failure"}}';
+      '{"jsonrpc":"2.0","id":2,"error":{"code":-32603,"message":"Internal error: OpenCode service failure","data":{"service":"session"}}}';
     expect(isAgentResumeFailure('kilo', '', loadError)).toBe(true);
     expect(isAgentResumeFailure('kilo', loadError, '')).toBe(false);
+    expect(
+      isAgentResumeFailure(
+        'kilo',
+        '',
+        '{"jsonrpc":"2.0","id":2,"error":{"code":-32602,"message":"Invalid params"}}',
+      ),
+    ).toBe(false);
   });
 
   it('does NOT treat a generic phrase in successful assistant stdout as a resume miss (#4629 nettee)', () => {

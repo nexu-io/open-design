@@ -3303,6 +3303,66 @@ test('attachAcpSession captures a standard ACP session id only when declared dur
   assert.equal(session.getDurableSessionId(), 'ses_kilo_created');
 });
 
+test('attachAcpSession skips legacy set_model on a durable ACP resume without config options', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  const events: Array<{ event: string; payload: unknown }> = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'continue with the selected model',
+    cwd: '/tmp/od-project',
+    model: 'claude-opus-4-6-thinking',
+    resumeSessionId: 'ses_kilo_persisted',
+    captureSessionIdAsDurable: true,
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  // Kilo's successful session/load omits sessionId and configOptions.
+  writeAcpResult(child, 2, { configOptions: [] });
+  writeAcpResult(child, 3, {});
+
+  const requests = parseRpcWrites(writes);
+  assert.equal(requests.some((entry) => entry.method === 'session/set_model'), false);
+  assert.equal(requests.some((entry) => entry.method === 'session/set_config_option'), false);
+  assert.equal(
+    (requests.find((entry) => entry.method === 'session/prompt')?.params as {
+      sessionId?: unknown;
+    })?.sessionId,
+    'ses_kilo_persisted',
+  );
+  assert.deepEqual(agentModelStatuses(events), ['claude-opus-4-6-thinking']);
+  assert.equal(session.getDurableSessionId(), 'ses_kilo_persisted');
+  assert.equal(session.completedSuccessfully(), true);
+});
+
+test('attachAcpSession still sets the model on a non-durable ACP resume without config options', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'continue',
+    cwd: '/tmp/od-project',
+    model: 'legacy-model',
+    resumeSessionId: 'oc-prev',
+    send: () => {},
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpResult(child, 3, { models: { currentModelId: 'legacy-model' } });
+  writeAcpResult(child, 4, {});
+
+  const requests = parseRpcWrites(writes);
+  assert.deepEqual(
+    requests.find((entry) => entry.method === 'session/set_model')?.params,
+    { sessionId: 'session-1', modelId: 'legacy-model' },
+  );
+});
+
 test('attachAcpSession resumes standard durable ACP session ids', () => {
   const child = new FakeAcpChild();
   const writes: string[] = [];
