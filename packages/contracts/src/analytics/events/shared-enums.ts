@@ -294,6 +294,10 @@ export type TrackingRunFailureDetail =
   // succeeds once the window rolls over — so it stays retryable and must not
   // be counted as a quota exhaustion in reliability reporting.
   | 'model_window_limit'
+  // Vela membership policy concurrency is temporarily full. The upstream
+  // reset instant makes this waitable, but it is deliberately non-retryable
+  // for automation so the daemon cannot create an immediate retry storm.
+  | 'membership_concurrency_limit'
   | 'workspace_credits_exhausted'
   | 'rate_limit_429'
   | 'amr_insufficient_balance'
@@ -560,3 +564,44 @@ export type TrackingFileSizeBucket =
   | '1_10mb'
   | '10_100mb'
   | '100mb_plus';
+
+/**
+ * Which agent harness actually produced a run.
+ *
+ * Deliberately a value, not an event-name suffix: a third harness is one more
+ * member here and every existing query keeps working. `ordinary` means the run
+ * took the pre-existing strategy route, whatever the user's Labs switch said —
+ * see `harness_fallback_reason` for why.
+ */
+export type TrackingHarness = 'od_next' | 'ordinary';
+
+/**
+ * A Labs experiment. Carried as a property so the toggle event stays generic:
+ * a second experiment adds one member here and reuses the same event.
+ */
+export type TrackingLabsItemId = 'design_harness';
+
+/** Who moved a Labs switch. `system` is not a user action — see `TrackingLabsSystemReason`. */
+export type TrackingLabsToggleSource = 'settings' | 'cli' | 'system';
+
+/**
+ * Why the system moved a Labs switch on the user's behalf. Kept separate from
+ * the opt-out reasons so "the user turned this off" and "we turned it off for
+ * them" can never be summed together by accident.
+ */
+export type TrackingLabsSystemReason = 'env_override' | 'latched' | 'restored';
+
+/**
+ * Why a user turned a Labs experiment off.
+ *
+ * `skipped` is not a reason — it is the absence of one, recorded so the share
+ * of people who declined to answer is visible instead of missing. A timeout and
+ * an explicit "skip" record the same value on purpose.
+ */
+export type TrackingLabsOptOutReason =
+  | 'worse_output'
+  | 'too_slow'
+  | 'not_what_i_wanted'
+  | 'other'
+  | 'skipped';
+

@@ -13,6 +13,7 @@ import {
   createToolCallTextSuppressor,
   type ArtifactTextSuppressor,
 } from '../../artifacts/text-suppression.js';
+import { redactSecrets } from '../../redact.js';
 import { createJsonLineStream } from '../core/index.js';
 import type { JsonRpcId, JsonObject, TimerHandle, AcpChildProcess } from './types.js';
 import {
@@ -21,6 +22,7 @@ import {
   ACP_ARTIFACT_ECHO_START_RE,
   ACP_RAW_EVENT_SHAPE_DIAGNOSTIC_LIMIT,
   AMR_STDERR_RETRY_TAIL_LIMIT,
+  ACP_STDERR_DIAGNOSTIC_TAIL_LIMIT,
 } from './constants.js';
 import { errorMessage, asObject, extractAcpUpdateText, extractAcpStatusDetail } from './json.js';
 import {
@@ -132,6 +134,13 @@ export interface AttachAcpSessionOptions {
   onCliReady?: () => void;
   onSessionInit?: () => void;
   onPromptComplete?: () => void;
+  /**
+   * Transfers process-tree teardown ownership to the caller once this
+   * one-prompt session has a clean or fatal verdict. When provided, the ACP
+   * bridge does not fall back to direct-child SIGTERM; the caller must stop the
+   * complete owned tree and gate terminal publication on its quiescence.
+   */
+  onTerminal?: (kind: 'completed' | 'fatal') => void;
 }
 /**
  * Attaches an ACP protocol session to an already-spawned child process and
@@ -179,6 +188,7 @@ export function attachAcpSession({
   onCliReady,
   onSessionInit,
   onPromptComplete,
+  onTerminal,
 }: AttachAcpSessionOptions) {
   const runStartedAt = Date.now();
   const effectiveCwd = path.resolve(cwd || process.cwd());
@@ -209,7 +219,8 @@ export function attachAcpSession({
   let rawAcpShapeDiagnosticCount = 0;
   let artifactSuppressionDiagnosticCount = 0;
   let velaChildRejectionDiagnosticCount = 0;
-  let amrStderrRetryTail = '';
+  let acpStderrTail = '';
+  let currentStage = 'initialize';
   let finished = false;
   let fatal = false;
   let aborted = false;
@@ -377,7 +388,8 @@ export function attachAcpSession({
       value.includes('model not found') ||
       value.includes('providermodelnotfounderror') ||
       value.includes('unknown model') ||
-      value.includes('invalid model')
+      value.includes('invalid model') ||
+      value.includes('modelid is not available')
     );
   };
 
@@ -389,8 +401,15 @@ export function attachAcpSession({
     finished = true;
     fatal = true;
     clearStageTimer();
+    let terminalOwnedByCaller = false;
+    try {
+      onTerminal?.('fatal');
+      terminalOwnedByCaller = onTerminal != null;
+    } catch {
+      // Fall back to direct-child termination below.
+    }
     send('error', payload);
-    if (!child.killed) child.kill('SIGTERM');
+    if (!terminalOwnedByCaller && !child.killed) child.kill('SIGTERM');
   };
 
   const fail = (
@@ -404,6 +423,13 @@ export function attachAcpSession({
     finished = true;
     fatal = true;
     clearStageTimer();
+    let terminalOwnedByCaller = false;
+    try {
+      onTerminal?.('fatal');
+      terminalOwnedByCaller = onTerminal != null;
+    } catch {
+      // Fall back to direct-child termination below.
+    }
     const useModelUnavailable =
       modelUnavailableErrorCode &&
       (options.forceModelUnavailable || isModelUnavailableError(message));
@@ -423,10 +449,11 @@ export function attachAcpSession({
               },
             },
     );
-    if (!child.killed) child.kill('SIGTERM');
+    if (!terminalOwnedByCaller && !child.killed) child.kill('SIGTERM');
   };
 
   const writeRpc = (id: JsonRpcId, method: string, params: unknown, timeoutLabel: string) => {
+    currentStage = timeoutLabel;
     resetStageTimer(timeoutLabel);
     try {
       sendRpc(stdin, id, method, params);
@@ -681,13 +708,22 @@ export function attachAcpSession({
     emitUsageIfPresent(usageSource);
     clearStageTimer();
     stdin.end();
+    let terminalOwnedByCaller = false;
+    try {
+      onTerminal?.('completed');
+      terminalOwnedByCaller = onTerminal != null;
+    } catch {
+      // Fall back to the direct-child timer below.
+    }
     // Some ACP agents keep the child process alive after stdin closes,
     // waiting for another prompt. Each OpenDesign run owns one process per
     // turn, so close it once this prompt is cleanly complete.
-    const cleanExitTimer = setTimeout(() => {
-      if (!child.killed) child.kill('SIGTERM');
-    }, 500);
-    child.once('close', () => clearTimeout(cleanExitTimer));
+    if (!terminalOwnedByCaller) {
+      const cleanExitTimer = setTimeout(() => {
+        if (!child.killed) child.kill('SIGTERM');
+      }, 500);
+      child.once('close', () => clearTimeout(cleanExitTimer));
+    }
   };
 
   const replyPermission = (raw: JsonObject) => {
@@ -742,14 +778,20 @@ export function attachAcpSession({
       if (finished) return;
       // JSON-RPC error handling:
       // -32603 unexpected-id errors are cleanup noise. Expected-id model
-      // selection failures are recoverable; all other RPC errors are real
-      // protocol failures for initialize/session/new/session/prompt.
+      // selection failures are recoverable for agents with an implicit
+      // default. AMR/Vela requires an explicit selection before prompt, so a
+      // rejected model must stay terminal instead of creating a secondary
+      // `session/set_model must be called before session/prompt` failure.
       if (
         obj.id === setModelRequestId &&
         modelSelectionErrorIsRecoverable(error?.code) &&
         promptRequestId === null
       ) {
-        recoverFromModelSelectionError();
+        if (modelUnavailableErrorCode) {
+          fail(rpcErr, { details: rpcErrorData(obj), retryable: false });
+        } else {
+          recoverFromModelSelectionError();
+        }
         return;
       }
       if (error?.code === -32603 && obj.id !== expectedId) {
@@ -1149,18 +1191,38 @@ export function attachAcpSession({
   stdout.on('data', (chunk: string) => parser.feed(chunk));
   child.stderr?.setEncoding('utf8');
   child.stderr?.on('data', (chunk: string) => {
-    if (!modelUnavailableErrorCode || finished) return;
-    amrStderrRetryTail = `${amrStderrRetryTail}${String(chunk)}`.slice(
+    if (finished) return;
+    acpStderrTail = `${acpStderrTail}${String(chunk)}`.slice(
       -AMR_STDERR_RETRY_TAIL_LIMIT,
     );
-    const promotedPayload = promotedAmrStderrPayload(amrStderrRetryTail);
+    if (!modelUnavailableErrorCode) return;
+    const promotedPayload = promotedAmrStderrPayload(acpStderrTail);
     if (promotedPayload) failWithPayload(promotedPayload);
   });
   child.on('close', (code, signal) => {
     clearStageTimer();
     parser.flush();
     if (!finished && !aborted && !fatal) {
-      fail(`ACP session exited before completion (code=${code ?? 'null'}, signal=${signal ?? 'none'})`);
+      const stderrTail = redactSecrets(
+        acpStderrTail
+          .replace(/\u001B\[[0-?]*[ -/]*[@-~]/gu, '')
+          .replace(/\r\n?/gu, '\n')
+          .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu, ''),
+      )
+        .trim()
+        .slice(-ACP_STDERR_DIAGNOSTIC_TAIL_LIMIT);
+      fail(
+        `ACP session exited before completion (code=${code ?? 'null'}, signal=${signal ?? 'none'})`,
+        {
+          details: {
+            kind: 'acp_child_exit',
+            phase: currentStage,
+            exit_code: code,
+            signal,
+            ...(stderrTail ? { stderr_tail: stderrTail } : {}),
+          },
+        },
+      );
     }
   });
   child.on('error', (err: Error) => fail(err.message));

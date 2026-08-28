@@ -66,6 +66,38 @@ describe('foldStrategyTaskTurns', () => {
     expect(foldStrategyTaskTurns(input)).toEqual(input);
   });
 
+  it('keeps a question form and its answer as two turns', () => {
+    // `buildRecoveryTaskAnalytics` deliberately carries the asking turn's
+    // `taskExecutionId` onto the answer (analytics lineage spans retries,
+    // resumes and clarifications), so an off-mode chain looks like one task in
+    // analytics while being two things the user asked for. Folding on that
+    // lineage would merge a form with the work its answer requested — the
+    // "must not wrongly merge different follow-up requests" case. Only the
+    // daemon-issued `strategyTaskRunIndex`, which off-mode never emits above
+    // 0, marks a continuation that carries no prompt of its own.
+    const input = [
+      { id: 'u1', role: 'user', content: '生成一个旅游app原型' } as ChatMessage,
+      assistant({
+        id: 'a-brief',
+        content: 'BRIEF_FORM',
+        runId: 'run-1',
+        taskAnalytics: { taskExecutionId: 'u1', taskRunIndex: 0 },
+      }),
+      { id: 'u2', role: 'user', content: '- 受众: 设计师' } as ChatMessage,
+      assistant({
+        id: 'a-answer',
+        content: 'ANSWER_WORK',
+        runId: 'run-2',
+        taskAnalytics: {
+          taskExecutionId: 'u1',
+          taskRunIndex: 1,
+          recoveryActionType: 'question_answer',
+        },
+      }),
+    ];
+    expect(foldStrategyTaskTurns(input)).toEqual(input);
+  });
+
   it('keeps separate tasks as separate turns', () => {
     const folded = foldStrategyTaskTurns([
       assistant({ id: 'a1', content: 'T1_PLAN', strategyTaskExecutionId: 'odnext_a', strategyTaskRunIndex: 0 }),

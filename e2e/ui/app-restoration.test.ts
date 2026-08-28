@@ -1851,7 +1851,7 @@ test('[P1] completed hidden-page run sends the configured desktop notification',
     }));
 });
 
-test('[P1] failed foreground run still sends the configured desktop notification', async ({ page }) => {
+test('[P0] failed foreground run does not send a desktop notification', async ({ page }) => {
   const notificationConfig = {
     soundEnabled: false,
     successSoundId: 'ding',
@@ -1976,16 +1976,17 @@ test('[P1] failed foreground run still sends the configured desktop notification
   await expect(page.getByRole('button', { name: 'Stop' })).toBeVisible();
   releaseEvents();
 
-  await expect
-    .poll(async () =>
-      page.evaluate(() => (window as typeof window & {
-        __odTestNotifications?: Array<{ title: string; body?: string }>;
-      }).__odTestNotifications ?? []),
-    )
-    .toContainEqual(expect.objectContaining({
-      title: 'Task failed',
-      body: 'The task ended with an error.',
-    }));
+  await expect(runErrorCard(page)).toBeVisible();
+  await expectStableCount(
+    () => page.evaluate(() => (window as typeof window & {
+      __odTestNotifications?: Array<{ title: string; body?: string }>;
+    }).__odTestNotifications?.length ?? 0),
+    0,
+    {
+      timeout: 750,
+      message: 'a foreground failure must remain silent after the terminal run state renders',
+    },
+  );
 });
 
 test('[P1] Browser Inspiration page_info action seeds Browser tab context into the next run request', async ({ page }) => {

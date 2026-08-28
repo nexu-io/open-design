@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearAnonymousState,
   findGoPlanSunsetMessage,
-  GO_PLAN_SUNSET_MESSAGE_KEY,
+  GO_PLAN_SUNSET_MESSAGE_KEY_PREFIX,
   pullMessageCenter,
   type MessageCenterMessage,
 } from '../src/message-center-client';
@@ -26,13 +26,17 @@ describe('message center client', () => {
     ...overrides,
   });
 
-  it('selects only the unread targeted message with the allowlisted slug', () => {
-    const expected = message({ messageKey: GO_PLAN_SUNSET_MESSAGE_KEY });
+  it.each([
+    GO_PLAN_SUNSET_MESSAGE_KEY_PREFIX,
+    `${GO_PLAN_SUNSET_MESSAGE_KEY_PREFIX}-test`,
+    `${GO_PLAN_SUNSET_MESSAGE_KEY_PREFIX}-v2`,
+  ])('selects an unread targeted message with the allowlisted prefix: %s', (messageKey) => {
+    const expected = message({ messageKey });
     expect(findGoPlanSunsetMessage([
       message({ id: 'missing-key' }),
       message({ id: 'unknown-key', messageKey: 'another-announcement' }),
-      message({ id: 'global', audienceType: 'global', messageKey: GO_PLAN_SUNSET_MESSAGE_KEY }),
-      message({ id: 'read', messageKey: GO_PLAN_SUNSET_MESSAGE_KEY, readAt: '2026-08-26T01:00:00.000Z' }),
+      message({ id: 'global', audienceType: 'global', messageKey }),
+      message({ id: 'read', messageKey, readAt: '2026-08-26T01:00:00.000Z' }),
       expected,
     ])).toBe(expected);
   });

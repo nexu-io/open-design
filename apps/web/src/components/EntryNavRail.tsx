@@ -26,6 +26,7 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -96,6 +97,7 @@ import {
   workspaceAnalyticsDimensions,
 } from '../analytics/workspace';
 import { WorkbenchCampaignBadge } from './WorkbenchCampaignBadge';
+import { workspaceChromeAccountActionsHost } from './workspaceChromeActions';
 
 const REPO_URL = 'https://github.com/nexu-io/open-design';
 const GITHUB_HELP_URL = `${REPO_URL}/issues/new`;
@@ -209,7 +211,7 @@ interface Props {
   newProjectDisabled?: boolean;
   /** When false the rail is collapsed (hidden off-canvas) on the entry view. */
   open: boolean;
-  /** Extra content for the floating top-right cluster, rendered LEFT of the
+  /** Extra content for the top-right chrome cluster, rendered LEFT of the
    *  account module (e.g. the DeepSeek campaign badge). */
   topRightSlot?: ReactNode;
   /** The one shared workspace context; null → local (no cloud identity) state. */
@@ -232,9 +234,9 @@ interface Props {
    * The update-ready host (`UpdaterPopup`), which renders nothing until the
    * updater reports a downloaded, unopened installer.
    *
-   * It is an independent control immediately after the floating credits/avatar
-   * capsule (`.entry-nav-rail__account-updater`). The footer stays as the
-   * fallback home for the signed-out shell, which has no account capsule.
+   * It is an independent control in the top-right chrome cluster
+   * (`.entry-nav-rail__account-updater`), immediately after the account capsule
+   * when one is present.
    */
   updaterSlot?: ReactNode;
   /** Optional notice shown above the footer controls. */
@@ -545,7 +547,7 @@ interface EntryTopRightClusterProps {
 }
 
 /**
- * Top-right floating cluster (portaled to document.body): an optional leading
+ * Top-right chrome cluster: an optional leading
  * slot, the standalone credits pill, and the avatar account module with its
  * hover menu — one flex row riding the workbench top-right corner.
  *
@@ -574,6 +576,21 @@ export function EntryTopRightCluster({
   const { t } = useI18n();
   const analytics = useAnalytics();
   const workspaceDimensions = workspaceAnalyticsDimensions(context);
+  const [chromeActionsHost, setChromeActionsHost] = useState<HTMLElement | null>(
+    workspaceChromeAccountActionsHost,
+  );
+
+  // On the initial App render the tabs chrome and this cluster are committed
+  // in the same pass, so the host does not exist while this component renders.
+  // A layout effect finds it after the DOM commit and moves the controls before
+  // paint. Electron can then build its first draggable-region hit map with the
+  // no-drag controls as real descendants of the drag header.
+  useLayoutEffect(() => {
+    // Isolated component harnesses do not mount the application chrome. Keep
+    // those public component tests usable without re-creating the whole App;
+    // the real shell always supplies the dedicated host above.
+    setChromeActionsHost(workspaceChromeAccountActionsHost() ?? document.body);
+  }, []);
 
   const isTeam = Boolean(context) && context!.workspaceType === 'team';
   const permissions = context?.permissions;
@@ -626,6 +643,22 @@ export function EntryTopRightCluster({
   const [accountMenuMode, setAccountMenuMode] = useState<'closed' | 'hover' | 'pinned'>(
     'closed',
   );
+  const updaterSlotHostRef = useRef<HTMLDivElement | null>(null);
+  const [updaterControlVisible, setUpdaterControlVisible] = useState(false);
+  // ReactNode truthiness cannot tell whether UpdaterPopup rendered its control;
+  // observe the stable host so signed-out chrome follows actual rendered content.
+  useLayoutEffect(() => {
+    const host = updaterSlotHostRef.current;
+    if (!host) {
+      setUpdaterControlVisible(false);
+      return;
+    }
+    const syncVisibility = () => setUpdaterControlVisible(host.hasChildNodes());
+    syncVisibility();
+    const observer = new MutationObserver(syncVisibility);
+    observer.observe(host, { childList: true });
+    return () => observer.disconnect();
+  }, [chromeActionsHost, updaterSlot]);
   const accountOpen = accountMenuMode !== 'closed';
   const closeAccountMenu = () => setAccountMenuMode('closed');
   useEffect(() => {
@@ -767,28 +800,34 @@ export function EntryTopRightCluster({
     });
   }
 
-  if ((!leadingSlot && !context) || typeof document === 'undefined') return null;
+  if (typeof document === 'undefined' || !chromeActionsHost) return null;
+  if (!leadingSlot && !context && !updaterSlot) return null;
+
+  const clusterVisible = Boolean(leadingSlot || context || updaterControlVisible);
+  const updaterHostVisible = Boolean(context || updaterControlVisible);
 
   return (
     <>
       {createPortal(
-        <div className="entry-top-right-cluster">
+        <div className={clusterVisible ? 'entry-top-right-cluster' : undefined}>
           {leadingSlot}
           {/* GitHub star chip: its own option in the cluster, right after the
               campaign badge (per product) — it used to live in the account
               menu's social row. */}
-          <a
-            className="entry-top-right-github"
-            href={REPO_URL}
-            {...externalLinkProps}
-            aria-label={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
-            title={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
-            data-testid="entry-top-right-github"
-            onClick={() => trackAccountAction('github')}
-          >
-            <Icon name="github-filled" size={14} />
-            <span>{githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)}</span>
-          </a>
+          {clusterVisible ? (
+            <a
+              className="entry-top-right-github"
+              href={REPO_URL}
+              {...externalLinkProps}
+              aria-label={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
+              title={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
+              data-testid="entry-top-right-github"
+              onClick={() => trackAccountAction('github')}
+            >
+              <Icon name="github-filled" size={14} />
+              <span>{githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)}</span>
+            </a>
+          ) : null}
           {/* One shared capsule for the account module (per product: 头像和积分
               合并成一个胶囊): credits segment on the left (same availability
               rule as the menu's billing card; clicking jumps to B's billing
@@ -1020,17 +1059,22 @@ export function EntryTopRightCluster({
               ) : null}
               </div>
               </div>
-              {/* Update-ready rocket: an independent control immediately after
-                  the credits/avatar capsule. The slot stays mounted so
-                  `:empty { display: none }` can remove it from cluster layout
-                  until an installer has downloaded. */}
-              <div className="entry-nav-rail__account-updater" data-testid="entry-nav-account-updater">
-                {updaterSlot}
-              </div>
             </>
           ) : null}
+          {/* Update-ready rocket: an independent top-right control. With an
+              account it follows the credits/avatar capsule; signed-out keeps
+              the same position without inventing an empty account shell. The
+              slot stays mounted so `:empty { display: none }` can remove it
+              until an installer has downloaded. */}
+          <div
+            ref={updaterSlotHostRef}
+            className={updaterHostVisible ? 'entry-nav-rail__account-updater' : undefined}
+            data-testid={updaterHostVisible ? 'entry-nav-account-updater' : undefined}
+          >
+            {updaterSlot}
+          </div>
         </div>,
-        document.body,
+        chromeActionsHost,
       )}
       {/* Panel + unread polling live here (outside the hover menu, which
           unmounts when closed); the 消息中心 menu row above just opens it.
@@ -1127,6 +1171,7 @@ export function WorkspaceTopRightAccountCluster({
           page="project"
           metricsConsent={metricsConsent}
           installationId={installationId}
+          loggedIn={amrLoggedIn}
         />
       ) : null}
       updaterSlot={updaterSlot}
@@ -1240,13 +1285,6 @@ export function EntryNavRail({
   const canInviteMembers = Boolean(permissions?.canInviteMembers);
   const canAccessInviteFlow = canAccessWorkspaceInviteFlow(context);
   const workspaceSettingsUrl = context?.workspaceSettingsUrl?.trim() || null;
-
-  // The updater host has exactly one home on screen at a time. The floating
-  // account row is the preferred one; the footer only takes it when there is
-  // no cloud identity, because the whole account module is absent then.
-  // Deriving both from one expression is what keeps "exactly one" true — two
-  // independent renders would double the rocket.
-  const footerUpdaterSlot = context ? null : updaterSlot;
 
   // Message-center panel for the SIGNED-OUT shell only (its rail item under
   // 设置 is the one opener there). The signed-in panel — plus the unread badge
@@ -1846,15 +1884,10 @@ export function EntryNavRail({
         )}
       </div>
       {/* The footer always has the social row to show now, so it no longer
-          collapses to nothing. `footerUpdaterSlot` is only ever set in the
-          signed-out shell: with a cloud identity the updater host rides the
-          account row instead (see `updaterSlot`), so the footer must not
-          render a second host. */}
+          collapses to nothing. The updater has one shared home in the
+          top-right cluster for both signed-in and signed-out shells. */}
       <div className="entry-nav-rail__footer">
         {footerNotice}
-        {footerUpdaterSlot ? (
-          <div className="entry-rail-actions">{footerUpdaterSlot}</div>
-        ) : null}
         <RailSocialRow page={analyticsPage} dimensions={workspaceDimensions} />
       </div>
       </div>
@@ -1893,9 +1926,9 @@ export function EntryNavRail({
             : undefined
         }
       />
-      {/* Top-right floating cluster: campaign badge (slot) + credits pill +
-          the account module, portaled to document.body so all ride the
-          workbench top-right corner in one flex row. Extracted so the project
+      {/* Top-right chrome cluster: campaign badge (slot) + credits pill +
+          the account module, mounted into the tabs chrome's no-drag actions
+          host so Electron includes it in the first native hit map. Extracted so the project
           route can mount the same cluster without the rail (see
           `EntryTopRightCluster`). */}
       <EntryTopRightCluster

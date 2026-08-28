@@ -44,4 +44,24 @@ describe('Go Plan sunset dialog responsive layout', () => {
       /<div className=\{styles\.copyPanel\}>[\s\S]*<footer className=\{styles\.actions\}>/,
     );
   });
+
+  it('lets localized action labels wrap without escaping their buttons', () => {
+    const actionRules = declarationBlocks('\\.actions \\.action');
+    expect(actionRules).toHaveLength(1);
+
+    const [baseRule] = actionRules;
+    expect(baseRule).toMatch(/height:\s*auto;/);
+    expect(baseRule).toMatch(/white-space:\s*normal;/);
+    expect(baseRule).toMatch(/overflow-wrap:\s*anywhere;/);
+  });
+
+  it('vertically centers each decision label against its number badge', () => {
+    const decisionLabelRules = declarationBlocks('\\.decisions strong');
+    expect(decisionLabelRules).toHaveLength(1);
+
+    const [baseRule] = decisionLabelRules;
+    expect(baseRule).toMatch(/display:\s*flex;/);
+    expect(baseRule).toMatch(/min-height:\s*20px;/);
+    expect(baseRule).toMatch(/align-items:\s*center;/);
+  });
 });

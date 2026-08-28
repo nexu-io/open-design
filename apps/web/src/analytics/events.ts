@@ -146,6 +146,7 @@ import type {
   FeedbackSubmitResultProps,
   ConversationForkResultProps,
   SettingsViewProps,
+  LabsItemToggledProps,
   SettingsCliTestResultProps,
   SettingsByokModelsFetchResultProps,
   SettingsByokTestResultProps,
@@ -1247,6 +1248,19 @@ export function trackSettingsView(
   props: SettingsViewProps,
 ): void {
   send(track, 'settings_view', props);
+}
+
+// ---- Labs ----------------------------------------------------------------
+
+/**
+ * Fires after the preference is persisted, not on click.
+ *
+ * The event asserts "this install now prefers X". A failed write rolls the
+ * switch back, so reporting the click would assert something that is not true
+ * of the machine. Losing the rare failed toggle is the cheaper error.
+ */
+export function trackLabsItemToggled(track: Track, props: LabsItemToggledProps): void {
+  send(track, 'labs_item_toggled', props);
 }
 
 export function trackSettingsCliTestResult(

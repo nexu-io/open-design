@@ -1282,6 +1282,19 @@ export interface Dict {
   'messageCenter.close': string;
   'messageCenter.desktopSettings': string;
   'messageCenter.desktopSettingsHint': string;
+  'goPlanSunset.closeAria': string;
+  'goPlanSunset.title': string;
+  'goPlanSunset.subtitle': string;
+  'goPlanSunset.decisionsAria': string;
+  'goPlanSunset.decisionsIntro': string;
+  'goPlanSunset.decisionStopSales': string;
+  'goPlanSunset.decisionRefund': string;
+  'goPlanSunset.decisionUnaffected': string;
+  'goPlanSunset.closing': string;
+  'goPlanSunset.dismissError': string;
+  'goPlanSunset.viewSubscriptions': string;
+  'goPlanSunset.confirming': string;
+  'goPlanSunset.acknowledge': string;
   'workspaceTabs.project': string;
   'workspaceTabs.pluginDetails': string;
   'workspaceTabs.marketplace': string;
@@ -2821,10 +2834,6 @@ export interface Dict {
 
   // Project view / chat pane / composer
   'project.backToProjects': string;
-  'project.restoreAutomaticScenario': string;
-  'project.restoreAutomaticScenarioConfirm': string;
-  'project.restoreAutomaticScenarioBusy': string;
-  'project.restoreAutomaticScenarioFailed': string;
   'project.brandReadyTitle': string;
   'project.brandReadyTitleGeneric': string;
   'project.brandReadyCta': string;
@@ -2899,6 +2908,7 @@ export interface Dict {
   'chat.runError.title.signInRequired': string;
   'chat.runError.title.rateLimited': string;
   'chat.runError.title.modelWindowLimit': string;
+  'chat.runError.title.membershipConcurrencyLimit': string;
   'chat.runError.title.cliMissing': string;
   'chat.runError.title.promptTooLarge': string;
   'chat.runError.title.modelUnavailable': string;
@@ -2924,6 +2934,8 @@ export interface Dict {
   'chat.runError.rateLimitedMessage': string;
   'chat.runError.modelWindowLimitMessage': string;
   'chat.runError.modelWindowLimitMessageNoTime': string;
+  'chat.runError.membershipConcurrencyLimitMessage': string;
+  'chat.runError.membershipConcurrencyLimitMessageNoTime': string;
   'chat.runError.upstreamUnavailableMessage': string;
   'chat.runError.toolLoopMessage': string;
   'chat.runError.outputInvalidMessage': string;
@@ -5495,4 +5507,23 @@ export interface Dict {
   'experienceSurvey.skip': string;
   'experienceSurvey.thanksTitle': string;
   'experienceSurvey.thanksBody': string;
+  'labs.title': string;
+  'labs.itemAbout': string;
+  'labs.navHint': string;
+  'labs.pageDesc': string;
+  'labs.harnessName': string;
+  'labs.harnessHint': string;
+  'labs.harnessTooltip': string;
+  'labs.harnessScope': string;
+  'labs.envOverrideNotice': string;
+  'labs.latchedNotice': string;
+  'labs.loadFailedNotice': string;
+  'labs.optOutPrompt': string;
+  'labs.optOutWorseOutput': string;
+  'labs.optOutTooSlow': string;
+  'labs.optOutNotWhatIWanted': string;
+  'labs.optOutOther': string;
+  'labs.optOutSkip': string;
+  'labs.optOutOtherPlaceholder': string;
+  'labs.optOutSubmit': string;
 }

@@ -18,6 +18,7 @@ import { eventsEndedWithUnfinishedWork } from '@open-design/contracts';
 import { migrateCollabSyncSnapshots } from './collab/sync-snapshot-store.js';
 import { migrateCommentRelayOutbox } from './collab/comment-relay-outbox.js';
 import { migratePublicFilePublications } from './collab/public-file-publication-store.js';
+import { migrateAmrTerminalReportOutbox } from './storage/amr-terminal-report-outbox.js';
 import {
   collapseWorkspaceProjectHomes,
   type WorkspaceProjectHomeRow,
@@ -568,6 +569,7 @@ function migrate(db: SqliteDb): void {
   migrateOdNextRolloutStore(db);
   migrateCollabSyncSnapshots(db);
   migrateCommentRelayOutbox(db);
+  migrateAmrTerminalReportOutbox(db);
   migratePublicFilePublications(db);
 }
 
@@ -2769,6 +2771,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     .prepare(
       `SELECT position, run_id AS runId, run_status AS runStatus,
               content, events_json AS eventsJson,
+              task_analytics_json AS taskAnalyticsJson,
               ${eventBatchProjection} AS hasEventBatches
          FROM messages WHERE id = ?`,
     )
@@ -2793,6 +2796,17 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     const nextContent = preserveDaemonEventSnapshot
       ? existing.content ?? ''
       : m.content;
+    // A turn's recovery lineage is written once, by whoever owns the turn. A
+    // rewrite that carries no opinion about it — above all the run-create seed,
+    // which rebuilds this row from the request that won the claim — must not
+    // erase it, or an accepted answer loses the logical task it belongs to
+    // after a reload. An explicit null still clears it.
+    const nextTaskAnalyticsJson =
+      m.taskAnalytics === undefined
+        ? ((existing.taskAnalyticsJson as string | null) ?? null)
+        : m.taskAnalytics
+          ? JSON.stringify(m.taskAnalytics)
+          : null;
     db.prepare(
       `UPDATE messages
           SET role = ?, content = ?, agent_id = ?, agent_name = ?,
@@ -2826,7 +2840,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.preTurnFileNames ? JSON.stringify(m.preTurnFileNames) : null,
       normalizeMessageSessionModeForStorage(m.sessionMode),
       m.runContext ? JSON.stringify(m.runContext) : null,
-      m.taskAnalytics ? JSON.stringify(m.taskAnalytics) : null,
+      nextTaskAnalyticsJson,
       m.appliedPluginSnapshot ? JSON.stringify(m.appliedPluginSnapshot) : null,
       m.telemetryFinalized === true ? 1 : 0,
       now,

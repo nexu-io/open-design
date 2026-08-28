@@ -655,6 +655,154 @@ test('[P0] active Cloud sign-out preserves BYOK and unrelated preferences while 
   });
 });
 
+test('[P1] Cloud sign-out restores usable install-local BYOK after daemon reset and cold reload', async ({ page }) => {
+  const config = await wireOnboardingMocks(page, {
+    amrAvailable: true,
+    initialLoggedIn: true,
+  });
+  Object.assign(config, {
+    mode: 'api',
+    apiProtocol: 'openai',
+    apiKey: 'persisted-private-key',
+    baseUrl: 'https://persisted.example/v1',
+    model: 'persisted-private-model',
+    agentId: 'amr',
+    onboardingCompleted: true,
+  } satisfies Partial<OnboardingConfig>);
+  await mockAmrPersonalWorkspace(page);
+  await page.route('**/api/provider/models', async (route) => {
+    await route.fulfill({
+      json: {
+        ok: true,
+        kind: 'success',
+        latencyMs: 11,
+        models: [{ id: 'persisted-private-model', label: 'Persisted Private Model' }],
+      },
+    });
+  });
+  let connectionBody: Record<string, unknown> | null = null;
+  await page.route('**/api/test/connection', async (route) => {
+    connectionBody = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      json: {
+        ok: true,
+        kind: 'success',
+        latencyMs: 13,
+        model: 'persisted-private-model',
+        sample: 'Connected',
+      },
+    });
+  });
+
+  // Seed only this first document. BYOK belongs to the local installation;
+  // unlike Cloud-owned execution prefs, its secrets never cross the daemon
+  // app-config boundary.
+  await page.goto('/api/health');
+  await page.evaluate(
+    ({ key, value }) => window.localStorage.setItem(key, JSON.stringify(value)),
+    { key: STORAGE_KEY, value: config },
+  );
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await dismissPrivacyDialog(page);
+  await expect(page.getByTestId('home-view')).toBeVisible();
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-account').hover();
+  await page.getByRole('menuitem', { name: /Sign out|退出登录/i }).click();
+  await expect(page.getByTestId('sign-out-confirm-dialog')).toBeVisible();
+
+  const daemonReset = page.waitForResponse((response) => {
+    const request = response.request();
+    return request.method() === 'PUT'
+      && new URL(request.url()).pathname === '/api/app-config';
+  });
+  await page.getByTestId('sign-out-confirm-accept').click();
+  const resetResponse = await daemonReset;
+  expect(resetResponse.ok()).toBe(true);
+  const daemonResetBody = resetResponse.request().postDataJSON() as Record<string, unknown>;
+  expect(daemonResetBody).toMatchObject({
+    onboardingCompleted: false,
+    agentId: null,
+    agentModels: {},
+  });
+  expect(daemonResetBody).not.toHaveProperty('apiKey');
+  await expect(connectLandingHeading(page)).toBeVisible();
+
+  // The shared onboarding fixture records status counters through page JS.
+  // Replace it before navigation so an in-flight polling response cannot try
+  // to write into the document while reload destroys that execution context.
+  await page.unroute('**/api/integrations/vela/status');
+  await page.route('**/api/integrations/vela/status', async (route) => {
+    await route.fulfill({
+      json: {
+        loggedIn: false,
+        loginInFlight: false,
+        sessionState: 'signed_out',
+        credentialRevision: 'signed-out',
+        profile: 'local',
+        configPath: '/tmp/.amr/config.json',
+        user: null,
+      },
+    });
+  });
+
+  // Make the daemon GET realistic for the cold boot: it owns only the Cloud
+  // reset prefs and cannot hand the BYOK secret back to the browser.
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      json: {
+        config: {
+          onboardingCompleted: false,
+          agentId: null,
+          agentModels: {},
+          agentCliEnv: {},
+          agentCliEnvIntent: {},
+        },
+      },
+    });
+  });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await dismissPrivacyDialog(page);
+  await expect(connectLandingHeading(page)).toBeVisible();
+
+  await page.getByRole('button', { name: /Bring Your Own Key/i }).click();
+  const byokPanel = onboardingByokPanel(page);
+  await expect(byokPanel).toBeVisible();
+  await expect(page.getByRole('tab', { name: /^OpenAI$/i })).toHaveAttribute('aria-selected', 'true');
+  await expect(onboardingField(byokPanel, 'API key').locator('input'))
+    .toHaveValue('persisted-private-key');
+  await expect(onboardingField(byokPanel, 'Base URL').locator('input'))
+    .toHaveValue('https://persisted.example/v1');
+  await expect(expectOnboardingTrigger(byokPanel, 'Model'))
+    .toContainText(/Persisted Private Model|persisted-private-model/i);
+
+  await expectConnectionSuccess(page);
+  await expect.poll(() => connectionBody).toMatchObject({
+    mode: 'provider',
+    protocol: 'openai',
+    apiKey: 'persisted-private-key',
+    baseUrl: 'https://persisted.example/v1',
+    model: 'persisted-private-model',
+  });
+  const continueButton = page.getByRole('button', { name: /^Continue$/i });
+  await expect(continueButton).not.toHaveAttribute('aria-disabled', 'true');
+  await continueButton.click();
+  await expectOnboardingFinished(page);
+  await pollStoredConfig(page).toMatchObject({
+    mode: 'api',
+    apiProtocol: 'openai',
+    apiKey: 'persisted-private-key',
+    baseUrl: 'https://persisted.example/v1',
+    model: 'persisted-private-model',
+    onboardingCompleted: true,
+  });
+});
+
 test('[P0] signed-out users are redirected from Home to Cloud sign-in', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
     amrAvailable: true,

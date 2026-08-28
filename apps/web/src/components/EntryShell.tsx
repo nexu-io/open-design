@@ -1633,6 +1633,7 @@ export function EntryShell({
                 page="home"
                 metricsConsent={config.telemetry?.metrics === true}
                 installationId={config.installationId}
+                loggedIn={amrLoggedIn}
               />
             ) : null
           }

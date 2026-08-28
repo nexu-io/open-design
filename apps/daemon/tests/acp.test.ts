@@ -211,6 +211,99 @@ test('attachAcpSession keeps legacy session/set_model when no model config optio
   assert.equal(requests.some((entry) => entry.method === 'session/set_config_option'), false);
 });
 
+test('attachAcpSession stops an AMR turn when session/set_model rejects the selected model', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  const events: Array<{ event: string; payload: unknown }> = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: 'claude-opus-5',
+    mcpServers: [],
+    modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  try {
+    writeAcpResult(child, 1, {});
+    writeAcpResult(child, 2, {
+      sessionId: 'session-1',
+      models: { currentModelId: null },
+    });
+    writeAcpError(child, 3, {
+      code: -32602,
+      message: 'session/set_model modelId is not available',
+    });
+
+    const requests = parseRpcWrites(writes);
+    assert.equal(requests.some((entry) => entry.method === 'session/set_model'), true);
+    assert.equal(requests.some((entry) => entry.method === 'session/prompt'), false);
+    assert.deepEqual(agentModelStatuses(events), []);
+    assert.equal(session.hasFatalError(), true);
+    assert.equal(session.completedSuccessfully(), false);
+    assert.deepEqual(events.filter((entry) => entry.event === 'error'), [
+      {
+        event: 'error',
+        payload: {
+          message: 'json-rpc id 3: session/set_model modelId is not available',
+          error: {
+            code: 'AMR_MODEL_UNAVAILABLE',
+            message: 'json-rpc id 3: session/set_model modelId is not available',
+            retryable: false,
+            details: { kind: 'amr_model', action: 'choose_model' },
+          },
+        },
+      },
+    ]);
+  } finally {
+    session.abort();
+  }
+});
+
+test('attachAcpSession preserves default-model recovery for other ACP agents', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  const events: Array<{ event: string; payload: unknown }> = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: 'optional-model',
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  try {
+    writeAcpResult(child, 1, {});
+    writeAcpResult(child, 2, {
+      sessionId: 'session-1',
+      models: { currentModelId: null },
+    });
+    writeAcpError(child, 3, {
+      code: -32602,
+      message: 'optional model selection is unavailable',
+    });
+
+    assert.equal(
+      parseRpcWrites(writes).some((entry) => entry.method === 'session/prompt'),
+      true,
+    );
+    assert.deepEqual(agentModelStatuses(events), ['default']);
+
+    writeAcpResult(child, 4, {});
+    assert.equal(session.hasFatalError(), false);
+    assert.equal(session.completedSuccessfully(), true);
+    assert.deepEqual(events.filter((entry) => entry.event === 'error'), []);
+  } finally {
+    session.abort();
+  }
+});
+
 test('attachAcpSession includes frozen PDF, text, and image attachments as ACP resource links', () => {
   const child = new FakeAcpChild();
   const writes: string[] = [];
@@ -2502,6 +2595,85 @@ test('attachAcpSession does not double-kill a child that exits cleanly on stdin.
   } finally {
     vi.useRealTimers();
   }
+});
+
+test('attachAcpSession preserves redacted stderr diagnostics for startup exits', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+  const apiKey = `sk-test-${'a'.repeat(24)}`;
+
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  child.stderr.write(`\u001b[31mHermes startup failed\u001b[0m\nAPI key: ${apiKey}\n`);
+  child.emit('close', 1, null);
+
+  assert.equal(session.hasFatalError(), true);
+  const error = events.find((entry) => entry.event === 'error')?.payload as {
+    error?: { details?: Record<string, unknown> };
+  };
+  assert.deepEqual(error.error?.details, {
+    kind: 'acp_child_exit',
+    phase: 'initialize',
+    exit_code: 1,
+    signal: null,
+    stderr_tail: 'Hermes startup failed\nAPI key: [REDACTED:sk_key]',
+  });
+  assert.equal(JSON.stringify(error).includes(apiKey), false);
+});
+
+test('attachAcpSession redacts stderr credentials split by ANSI sequences', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+  const apiKey = `sk-test-${'a'.repeat(12)}${'b'.repeat(12)}`;
+  const ansiSplitApiKey = `sk-test-${'a'.repeat(12)}\u001b[31m${'b'.repeat(12)}\u001b[0m`;
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  child.stderr.write(`API key: ${ansiSplitApiKey}\n`);
+  child.emit('close', 1, null);
+
+  const error = events.find((entry) => entry.event === 'error')?.payload as {
+    error?: { details?: Record<string, unknown> };
+  };
+  assert.equal(error.error?.details?.stderr_tail, 'API key: [REDACTED:sk_key]');
+  assert.equal(JSON.stringify(error).includes(apiKey), false);
+});
+
+test('attachAcpSession classifies exits after initialize as session setup failures', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  child.stderr.write('Kimi could not create a session\n');
+  child.emit('close', 1, null);
+
+  const error = events.find((entry) => entry.event === 'error')?.payload as {
+    error?: { details?: Record<string, unknown> };
+  };
+  assert.equal(error.error?.details?.phase, 'session/new');
 });
 
 test('attachAcpSession accepts an opted-in ACP turn_end update as prompt completion', () => {

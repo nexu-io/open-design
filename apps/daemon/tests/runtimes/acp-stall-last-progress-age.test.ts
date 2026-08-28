@@ -83,8 +83,13 @@ describe('ACP stall progress age', () => {
   const originalEnv = snapshotEnv();
   let started: StartedServer | null = null;
   let binDir: string | null = null;
+  let descendantPids: number[] = [];
 
   afterEach(async () => {
+    for (const pid of descendantPids) {
+      try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
+    }
+    descendantPids = [];
     await Promise.resolve(started?.shutdown?.());
     if (started?.server) {
       await new Promise<void>((resolve) => started?.server.close(() => resolve()));
@@ -322,6 +327,55 @@ describe('ACP stall progress age', () => {
     ).toBeGreaterThanOrEqual(ACP_STAGE_TIMEOUT_MS * 0.8);
   }, 60_000);
 
+  it('publishes run_finished only after the stalled ACP process group is silent', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-acp-terminal-silence-bin-'));
+    const activityFile = path.join(binDir, 'descendant-activity.log');
+    const descendantPidFile = path.join(binDir, 'descendant.pid');
+    const fakeVela = await writeSilentlyStallingVela(binDir, 'vela-terminal-silence', {
+      descendantActivityFile: activityFile,
+      descendantPidFile,
+    });
+
+    process.env.POSTHOG_KEY = 'phc_test_acp_terminal_silence';
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+    process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
+    process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
+    process.env.OD_ACP_STAGE_TIMEOUT_MS = String(ACP_STAGE_TIMEOUT_MS);
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = String(OUTER_INACTIVITY_TIMEOUT_MS);
+    process.env.OD_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS = '0';
+    process.env.OD_CHAT_RUN_INACTIVITY_KILL_GRACE_MS = '250';
+
+    started = await startServer({ port: 0, returnServer: true }) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'amr',
+      agentCliEnv: { amr: { VELA_BIN: fakeVela } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const run = await createAndWaitForAmrRun(started.url);
+    expect(run.status).toBe('failed');
+    await waitForRunFinished(run.id);
+
+    const descendantPid = Number(readFileSync(descendantPidFile, 'utf8').trim());
+    expect(Number.isInteger(descendantPid)).toBe(true);
+    descendantPids.push(descendantPid);
+    expect(processAlive(descendantPid)).toBe(false);
+
+    const activityAtTerminal = activityTickCount(activityFile);
+    expect(activityAtTerminal).toBeGreaterThan(0);
+
+    // This real wait protects an OS process-tree boundary: after run_finished
+    // there is no application completion signal left to await. A surviving
+    // descendant makes the counter advance; a quiescent group leaves it fixed.
+    await delay(300);
+    expect(activityTickCount(activityFile)).toBe(activityAtTerminal);
+  }, 60_000);
+
   // The worst case is a child that does BOTH: keeps logging on stderr and keeps
   // refusing to die. Retiring the watchdog at the verdict is not enough on its
   // own, because every late stderr byte reaches `noteAgentActivity` through the
@@ -454,6 +508,8 @@ async function writeSilentlyStallingVela(
     openToolBeforeStall?: boolean;
     stderrOnSigterm?: boolean;
     ignoreSigterm?: boolean;
+    descendantActivityFile?: string;
+    descendantPidFile?: string;
   } = {},
 ): Promise<string> {
   const bin = path.join(dir, name);
@@ -463,11 +519,28 @@ if [ "$1" = "agent" ] && [ "$2" = "run" ]; then
   export FAKE_VELA_TEXT_BEFORE_STALL=1
   export FAKE_VELA_STALL_HEARTBEAT_MS=0
   export FAKE_VELA_REQUIRE_SET_MODEL=0
-${options.openToolBeforeStall ? '  export FAKE_VELA_OPEN_TOOL_BEFORE_STALL=1\n' : ''}${options.stderrOnSigterm ? '  export FAKE_VELA_STDERR_ON_SIGTERM=1\n' : ''}${options.ignoreSigterm ? '  export FAKE_VELA_IGNORE_SIGTERM=1\n' : ''}fi
+${options.openToolBeforeStall ? '  export FAKE_VELA_OPEN_TOOL_BEFORE_STALL=1\n' : ''}${options.stderrOnSigterm ? '  export FAKE_VELA_STDERR_ON_SIGTERM=1\n' : ''}${options.ignoreSigterm ? '  export FAKE_VELA_IGNORE_SIGTERM=1\n' : ''}${options.descendantActivityFile ? `  export FAKE_VELA_DESCENDANT_ACTIVITY_FILE=${JSON.stringify(options.descendantActivityFile)}\n` : ''}${options.descendantPidFile ? `  export FAKE_VELA_DESCENDANT_PID_FILE=${JSON.stringify(options.descendantPidFile)}\n` : ''}fi
 exec ${JSON.stringify(process.execPath)} ${JSON.stringify(FAKE_VELA)} "$@"
 `, 'utf8');
   await chmod(bin, 0o755);
   return bin;
+}
+
+function activityTickCount(file: string): number {
+  try {
+    return readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).length;
+  } catch {
+    return 0;
+  }
+}
+
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function putConfig(url: string, patch: Record<string, unknown>): Promise<void> {

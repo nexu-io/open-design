@@ -6,7 +6,38 @@ import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const platformMocks = vi.hoisted(() => ({
+  listProcessSnapshots: vi.fn(),
+  stopProcesses: vi.fn(),
+  actualListProcessSnapshots: null as null | typeof import('@open-design/platform').listProcessSnapshots,
+  actualStopProcesses: null as null | typeof import('@open-design/platform').stopProcesses,
+}));
+
+vi.mock('@open-design/platform', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@open-design/platform')>();
+  platformMocks.actualListProcessSnapshots = actual.listProcessSnapshots;
+  platformMocks.actualStopProcesses = actual.stopProcesses;
+  platformMocks.listProcessSnapshots.mockImplementation(actual.listProcessSnapshots);
+  platformMocks.stopProcesses.mockImplementation(actual.stopProcesses);
+  return {
+    ...actual,
+    listProcessSnapshots: platformMocks.listProcessSnapshots,
+    stopProcesses: platformMocks.stopProcesses,
+  };
+});
+
 import { createChatRunService } from '../../src/runtimes/runs.js';
+
+afterEach(() => {
+  platformMocks.listProcessSnapshots.mockReset();
+  platformMocks.stopProcesses.mockReset();
+  platformMocks.listProcessSnapshots.mockImplementation(
+    platformMocks.actualListProcessSnapshots as typeof import('@open-design/platform').listProcessSnapshots,
+  );
+  platformMocks.stopProcesses.mockImplementation(
+    platformMocks.actualStopProcesses as typeof import('@open-design/platform').stopProcesses,
+  );
+});
 
 describe('chat run service shutdown', () => {
   it('exports terminal diagnostics without confusing a measured zero with missing data', () => {
@@ -664,6 +695,75 @@ describe('chat run service shutdown', () => {
       expect(run.signal).toBe('SIGKILL');
     });
 
+    it('includes descendants created during ACP abort grace in no-pgid teardown', async () => {
+      vi.useFakeTimers();
+      vi.stubEnv('PI_ABORT_GRACE_MS', '30');
+      const childPid = 41_000;
+      const descendantPid = 41_001;
+      const child = new FakeChildProcess({ closeOn: 'SIGKILL', pid: childPid });
+      platformMocks.listProcessSnapshots
+        .mockResolvedValueOnce([{ pid: childPid, ppid: 1, command: 'wrapper' }])
+        .mockResolvedValueOnce([
+          { pid: childPid, ppid: 1, command: 'wrapper' },
+          { pid: descendantPid, ppid: childPid, command: 'late descendant' },
+        ])
+        .mockResolvedValueOnce([{ pid: process.pid, ppid: 1, command: 'vitest' }]);
+      platformMocks.stopProcesses.mockResolvedValue({
+        alreadyStopped: false,
+        forcedPids: [childPid, descendantPid],
+        matchedPids: [childPid, descendantPid],
+        remainingPids: [],
+        stoppedPids: [childPid, descendantPid],
+      });
+      const runs = createRuns();
+      const run = runs.create() as any;
+      run.status = 'running';
+      run.child = child;
+      run.acpSession = { abort: vi.fn() };
+
+      const cancelPromise = runs.cancel(run);
+      await vi.advanceTimersByTimeAsync(30);
+      await cancelPromise;
+
+      expect(platformMocks.stopProcesses).toHaveBeenCalledWith(
+        [descendantPid, childPid],
+        { termGraceMs: 30, killGraceMs: 500 },
+      );
+      expect(run.events).not.toContainEqual(expect.objectContaining({
+        event: 'diagnostic',
+        data: expect.objectContaining({ type: 'termination_failed' }),
+      }));
+    });
+
+    it('records termination_failed when no-pgid process enumeration is unverifiable', async () => {
+      const childPid = 42_000;
+      const child = new FakeChildProcess({ closeOn: 'SIGTERM', pid: childPid });
+      platformMocks.listProcessSnapshots.mockResolvedValue([]);
+      platformMocks.stopProcesses.mockResolvedValue({
+        alreadyStopped: false,
+        forcedPids: [],
+        matchedPids: [childPid],
+        remainingPids: [],
+        stoppedPids: [childPid],
+      });
+      const runs = createRuns();
+      const run = runs.create() as any;
+      run.status = 'running';
+      run.child = child;
+
+      await runs.cancel(run);
+
+      expect(run.events).toContainEqual(expect.objectContaining({
+        event: 'diagnostic',
+        data: expect.objectContaining({
+          type: 'termination_failed',
+          reason: 'run_cancel',
+          child_pid: childPid,
+        }),
+      }));
+      expect(run.events.at(-1)).toMatchObject({ event: 'end', data: { status: 'canceled' } });
+    });
+
     it('waits for a real process group to exit before returning canceled status', async () => {
       if (process.platform === 'win32') return;
       vi.stubEnv('OD_CHAT_RUN_CANCEL_GRACE_MS', '25');
@@ -1151,6 +1251,7 @@ async function expectPidGone(pid: number): Promise<void> {
 }
 
 class FakeChildProcess extends EventEmitter {
+  pid: number | undefined;
   exitCode: number | null = null;
   signalCode: string | null = null;
   killed = false;
@@ -1164,8 +1265,9 @@ class FakeChildProcess extends EventEmitter {
     }),
   };
 
-  constructor(private readonly options: { closeOn: 'SIGTERM' | 'SIGKILL' }) {
+  constructor(private readonly options: { closeOn: 'SIGTERM' | 'SIGKILL'; pid?: number }) {
     super();
+    this.pid = options.pid;
   }
 
   kill(signal: string): boolean {

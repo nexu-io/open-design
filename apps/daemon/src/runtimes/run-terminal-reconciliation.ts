@@ -102,6 +102,7 @@ interface ReconciliationOptions {
     completion: Promise<unknown>;
   };
   runsLogDir: string;
+  finalizeTerminalLocally?: (run: DurableRunState, status: string, terminalAt: number) => void;
 }
 
 export interface RunTerminalReconciliationResult {
@@ -300,6 +301,24 @@ export async function reconcileDurableRunTerminals(
     writeState(entry.filePath, entry.state);
     interruptedRunIds.add(entry.state.id);
     result.interrupted += 1;
+  }
+
+  // Repair both newly interrupted Runs and terminal state snapshots that may
+  // have survived a crash before their local terminal outbox write.
+  for (const { state } of states) {
+    if (state.status !== 'failed' && state.status !== 'canceled') continue;
+    try {
+      options.finalizeTerminalLocally?.(
+        state,
+        state.status,
+        state.terminalAt ?? state.updatedAt,
+      );
+    } catch (error) {
+      console.warn(
+        '[runs] terminal local finalizer failed during restart reconciliation',
+        error,
+      );
+    }
   }
 
   const statesByRunId = new Map(states.map((entry) => [entry.state.id, entry.state]));

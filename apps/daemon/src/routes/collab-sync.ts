@@ -59,6 +59,7 @@ import { readVelaControlApiContext } from '../integrations/vela.js';
 import { isAbortedOperationError } from '../integrations/aborted-error.js';
 import { readProjectManifest } from '../project-locations.js';
 import { redactSecrets } from '../redact.js';
+import { findRealElementRange, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
 
 /** The fields register-on-pull reads out of a pulled project's manifest. */
 export interface PulledProjectManifest {
@@ -453,8 +454,15 @@ async function inferNameFromSkillManifest(projectDir: string): Promise<string | 
 async function inferNameFromHtmlTitle(projectDir: string): Promise<string | null> {
   try {
     const html = await readFile(path.join(projectDir, 'index.html'), 'utf8');
-    const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-    return cleanPulledProjectName(match?.[1]?.replace(/<[^>]*>/g, ''));
+    // The document's own <title>, not one an author stored in a script string
+    // or an attribute (nexu-io/open-design#7410). Both ends are located by the
+    // parser's rules: the open tag through `endOfTag`, so a `>` in a quoted
+    // attribute cannot cut it short, and the close by the raw-text rule, so
+    // `</title >` closes it while `</title-page>` does not.
+    const range = findRealElementRange(html, HTML_TAG_PATTERNS.titleOpen, 'title');
+    if (!range) return null;
+    const raw = html.slice(range.contentStart, range.contentEnd);
+    return cleanPulledProjectName(raw.replace(/<[^>]*>/g, ''));
   } catch {
     return null;
   }

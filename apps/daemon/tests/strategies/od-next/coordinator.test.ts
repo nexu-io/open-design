@@ -488,6 +488,44 @@ describe('OD Next planning coordinator', () => {
     expect(final.reasonCodes).toEqual([]);
   });
 
+  // OPEND-2364. The agent wrapped its clarification form in a duplicate of its
+  // own open tag. The chat renders that: the web parser treats an outer block
+  // whose body fails to parse but holds another open marker as a false
+  // positive and unwinds to the inner form. The daemon's mirror had no such
+  // unwind, scored the turn as carrying zero renderable forms, and blocked the
+  // task on `od_next_clarification_form_missing` — leaving the user filling in
+  // a live form whose answer came back 409 STRATEGY_TASK_STATE_MISMATCH,
+  // because the task it belonged to was already terminal.
+  //
+  // The turn must be accepted exactly as the un-wrapped form above is: what
+  // the daemon settles has to be what the user is looking at.
+  it('accepts a clarification form the chat renders through a duplicated wrapper tag', () => {
+    prepareStrategyRequest(db, {
+      taskExecutionId: 'task-1',
+      preference: 'full_plan',
+      directEdit: directEligible,
+      intake: intakePassed,
+      updatedAt: 110,
+    });
+    const final = finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: 'task-1',
+      runId: 'run-request',
+      protocol: protocol([
+        '<question-form id="scope" title="Quick check">',
+        '<question-form id="scope" title="Quick check">',
+        '{"questions":[{"id":"surface","label":"Surface?"}]}',
+        '</question-form>',
+        '</question-form>',
+        block('open-design-runtime-state', runtimeState({ outcome: 'clarification_required' })),
+      ].join('\n')),
+      updatedAt: 120,
+    });
+    expect(final.action).toBe('awaiting_clarification');
+    expect(final.task).toMatchObject({ outcome: 'clarification_required' });
+    expect(final.reasonCodes).not.toContain('od_next_clarification_form_missing');
+    expect(final.reasonCodes).not.toContain('od_next_question_form_unrenderable');
+  });
+
   it('allows one serialization-only repair only with a durable semantic hash anchor', () => {
     prepareStrategyRequest(db, {
       taskExecutionId: 'task-1',

@@ -668,6 +668,8 @@ export interface ChatRunStatusResponse {
   status: ChatRunStatus;
   createdAt: number;
   updatedAt: number;
+  /** The immutable instant this Run entered its terminal status, when terminal. */
+  terminalAt?: number | null;
   cancelRequested?: boolean;
   /**
    * Actor or lifecycle path that requested cancellation. Only `user_stop`
@@ -965,6 +967,19 @@ export interface ChatMessage {
    * avoid telemetry reads before content and producedFiles are finalized.
    */
   telemetryFinalized?: boolean;
+  /**
+   * Request-only marker claiming this row exactly once.
+   *
+   * An inline question form's answer belongs to one occurrence (the assistant
+   * message that asked plus the form id), and the client cannot make
+   * "check whether it is already answered, then write" atomic against another
+   * tab. With this set the daemon refuses to overwrite an existing row and
+   * returns the stored one instead, so the first accepted answer stays
+   * authoritative and a later submitter learns what actually ran.
+   *
+   * The daemon does not store or return this field.
+   */
+  createOnly?: boolean;
 }
 
 export interface ChatTaskExecutionAnalytics {

@@ -1,3 +1,5 @@
+import { findRealTagOffset, HTML_TAG_PATTERNS } from './html-injection-points';
+
 const DECK_STAGE_OPEN_TAG_RE = /<deck-stage\b/i;
 const DECK_STAGE_FALLBACK_MARKER = 'data-od-deck-stage-fallback';
 
@@ -313,7 +315,7 @@ export function injectDeckStageFallback(html: string): string {
 }
 
 function injectBeforeBodyEnd(html: string, injection: string): string {
-  const match = /<\/body\s*>/i.exec(html);
-  if (!match) return html + injection;
-  return html.slice(0, match.index) + injection + html.slice(match.index);
+  const at = findRealTagOffset(html, HTML_TAG_PATTERNS.bodyClose);
+  if (at < 0) return html + injection;
+  return html.slice(0, at) + injection + html.slice(at);
 }

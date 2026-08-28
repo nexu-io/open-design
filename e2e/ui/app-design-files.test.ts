@@ -1140,6 +1140,14 @@ test('[P0] @critical HTML file list and previews stay stable across repeated swi
   await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
 
+  // Project restore asynchronously opens the newest HTML file. If Design
+  // Files is clicked while that restore is still committing, the late file
+  // selection wins and immediately switches the tab back, making the list
+  // assertion race startup instead of testing file stability. Let the restore
+  // own its initial selection, then enter Design Files as the user would.
+  await expect(page.getByRole('tab', { name: /stable-(?:alpha|beta)\.html/i })).toBeVisible();
+  await expect(page.locator('iframe[data-od-active="true"]')).toBeVisible();
+
   await openAllProjectFiles(page);
   const alphaRow = await revealDesignFileRow(page, 'stable-alpha.html');
   const betaRow = designFileRow(page, 'stable-beta.html');
@@ -1189,6 +1197,18 @@ test('[P0] @critical HTML file list and previews stay stable across repeated swi
   const alphaFrameHandle = await captureWarmFrame('stable-alpha.html');
 
   await openAllProjectFiles(page);
+  // #7007 regressed only when the active viewer had already cached the HTML
+  // source and Design Files mounted its thumbnail from that cache on the very
+  // first render. Exercise that exact browser path, not just the jsdom style
+  // contract: the thumbnail must start with the desktop layout viewport and
+  // immediately paint the cached document.
+  const warmAlphaRow = await revealDesignFileRow(page, 'stable-alpha.html');
+  const warmAlphaThumbnail = warmAlphaRow.locator('.df-card-thumb iframe');
+  await expect(warmAlphaThumbnail).toHaveCSS('width', '1200px');
+  await expect(warmAlphaThumbnail).toHaveCSS('height', '675px');
+  await expect(warmAlphaRow.frameLocator('.df-card-thumb iframe').getByRole('heading', {
+    name: 'Stable Alpha',
+  })).toBeVisible();
   await betaRow.getByRole('button').first().click();
   const betaTab = page.getByRole('tab', { name: /stable-beta\.html/i });
   const betaHeading = page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {

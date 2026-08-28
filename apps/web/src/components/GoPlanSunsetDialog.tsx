@@ -32,7 +32,7 @@ export function GoPlanSunsetDialog({
   metricsConsent = false,
   onDismiss,
 }: Props) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const analytics = useAnalytics();
   const [dismissing, setDismissing] = useState(false);
   const [dismissError, setDismissError] = useState(false);
@@ -176,7 +176,7 @@ export function GoPlanSunsetDialog({
       data-testid="go-plan-sunset-dialog"
     >
       <Button
-        aria-label="关闭弹窗"
+        aria-label={t('goPlanSunset.closeAria')}
         className={styles.closeButton}
         disabled={dismissing}
         size="icon"
@@ -186,37 +186,35 @@ export function GoPlanSunsetDialog({
       </Button>
 
       <div className={styles.copyPanel}>
-        <h2 id={titleId} className={styles.title}>关于停售 Go 订阅的公告</h2>
+        <h2 id={titleId} className={styles.title}>{t('goPlanSunset.title')}</h2>
         <p id={descriptionId} className={styles.subtitle}>
-          尊敬的 OpenDesign 用户：OpenDesign Go 上线后获得了很多用户的关注和意见反馈，
-          我们意识到目前 OpenDesign 在额度规则/产品体验等方面仍有不足，对此我们深表歉意。
+          {t('goPlanSunset.subtitle')}
         </p>
 
-        <section className={styles.announcement} aria-label="公告决定">
-          <p className={styles.announcementIntro}>为了确保给大家提供最佳设计体验，我们决定：</p>
+        <section className={styles.announcement} aria-label={t('goPlanSunset.decisionsAria')}>
+          <p className={styles.announcementIntro}>{t('goPlanSunset.decisionsIntro')}</p>
           <ol className={styles.decisions}>
           <li>
             <span className={styles.number}>1</span>
-            <strong>即日起停售 Go 新订阅</strong>
+            <strong>{t('goPlanSunset.decisionStopSales')}</strong>
           </li>
           <li>
             <span className={styles.number}>2</span>
-            <strong>8 月 31 日前原路全额退款；退款后权益停止（到账以渠道为准）</strong>
+            <strong>{t('goPlanSunset.decisionRefund')}</strong>
           </li>
           <li>
             <span className={styles.number}>3</span>
-            <strong>除 Go 之外的其他订阅计划用户不受影响</strong>
+            <strong>{t('goPlanSunset.decisionUnaffected')}</strong>
           </li>
           </ol>
         </section>
 
         <p className={styles.closing}>
-          感谢您的理解和支持，也感谢所有提出批评的用户。我们将持续聚焦更智能的设计交付，
-          让每个人和每个团队都能更好地交付满意的设计作品！
+          {t('goPlanSunset.closing')}
         </p>
 
         {dismissError ? (
-          <p className={styles.error} role="alert">确认失败，请重试。</p>
+          <p className={styles.error} role="alert">{t('goPlanSunset.dismissError')}</p>
         ) : null}
 
         <footer className={styles.actions}>
@@ -225,7 +223,7 @@ export function GoPlanSunsetDialog({
             disabled={dismissing}
             onClick={viewSubscriptions}
           >
-            查看其他订阅
+            {t('goPlanSunset.viewSubscriptions')}
           </Button>
           <Button
             className={`${styles.action} ${styles.primaryAction}`}
@@ -233,7 +231,7 @@ export function GoPlanSunsetDialog({
             variant="primary"
             onClick={() => void dismiss('acknowledge')}
           >
-            {dismissing ? '正在确认…' : '我知道了'}
+            {dismissing ? t('goPlanSunset.confirming') : t('goPlanSunset.acknowledge')}
           </Button>
         </footer>
       </div>

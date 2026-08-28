@@ -131,7 +131,10 @@
 }
 
 .decisions strong {
+  display: flex;
   min-width: 0;
+  min-height: 20px;
+  align-items: center;
   color: #2a3027;
   font-size: 12.5px;
   font-weight: 650;
@@ -149,7 +152,7 @@
 .actions {
   display: grid;
   width: 100%;
-  grid-template-columns: 132px minmax(0, 1fr);
+  grid-template-columns: minmax(160px, 0.75fr) minmax(0, 1.25fr);
   gap: 12px;
   margin-top: 22px;
 }
@@ -158,12 +161,15 @@
   width: 100%;
   min-width: 0;
   min-height: 50px;
-  height: 50px;
-  padding: 0 16px;
+  height: auto;
+  padding: 10px 16px;
   border: 0;
   border-radius: 12px;
   font-size: 12px;
   font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .actions .secondaryAction {

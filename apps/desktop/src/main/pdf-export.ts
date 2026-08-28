@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 
 import { BrowserWindow, dialog } from "electron";
 import type { DesktopExportPdfInput, DesktopExportPdfResult } from "@open-design/sidecar-proto";
+import { findRealElementRange, findRealTagEnd, findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
 
 export type PageSize = { height: number; width: number };
 
@@ -259,8 +260,12 @@ function buildPrintableDocument(input: DesktopExportPdfInput): string {
 function injectBaseHref(doc: string, baseHref: string | undefined): string {
   if (!baseHref) return doc;
   const tag = `<base href="${escapeHtmlAttribute(baseHref)}">`;
-  if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (match) => `${match}${tag}`);
-  if (/<html[^>]*>/i.test(doc)) return doc.replace(/<html[^>]*>/i, (match) => `${match}<head>${tag}</head>`);
+  // Structural lookup: a `<head>` an author wrote into a script string or an
+  // attribute is not this document's head (nexu-io/open-design#7410).
+  const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
+  if (headEnd >= 0) return doc.slice(0, headEnd) + tag + doc.slice(headEnd);
+  const htmlEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.htmlOpen);
+  if (htmlEnd >= 0) return `${doc.slice(0, htmlEnd)}<head>${tag}</head>${doc.slice(htmlEnd)}`;
   return `<!doctype html><html><head>${tag}</head><body>${doc}</body></html>`;
 }
 
@@ -269,16 +274,25 @@ function injectTitle(doc: string, title: string): string {
   // Function replacement: a string replacement would expand `$$`, `$&`, `$``,
   // and `$'` inside the (user-derived) title via String.prototype.replace's
   // GetSubstitution, corrupting titles that contain them (#6795).
-  if (/<title[^>]*>.*?<\/title>/is.test(doc)) return doc.replace(/<title[^>]*>.*?<\/title>/is, () => tag);
-  if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (match) => `${match}${tag}`);
-  if (/<html[^>]*>/i.test(doc)) return doc.replace(/<html[^>]*>/i, (match) => `${match}<head>${tag}</head>`);
+  // The document's own <title>, not one an author stored in a script string:
+  // replacing that would rewrite their content (nexu-io/open-design#7410).
+  const existing = findRealElementRange(doc, HTML_TAG_PATTERNS.titleOpen, 'title');
+  if (existing) return doc.slice(0, existing.start) + tag + doc.slice(existing.end);
+  // Structural lookup: a `<head>` an author wrote into a script string or an
+  // attribute is not this document's head (nexu-io/open-design#7410).
+  const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
+  if (headEnd >= 0) return doc.slice(0, headEnd) + tag + doc.slice(headEnd);
+  const htmlEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.htmlOpen);
+  if (htmlEnd >= 0) return `${doc.slice(0, htmlEnd)}<head>${tag}</head>${doc.slice(htmlEnd)}`;
   return `<!doctype html><html><head>${tag}</head><body>${doc}</body></html>`;
 }
 
 function injectPrintStylesheet(doc: string, css: string): string {
   const tag = `<style data-od-desktop-pdf>${css}</style>`;
-  if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${tag}</head>`);
-  if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (match) => `${match}${tag}`);
+  const headClose = findRealTagOffset(doc, HTML_TAG_PATTERNS.headClose);
+  if (headClose >= 0) return doc.slice(0, headClose) + tag + doc.slice(headClose);
+  const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
+  if (headEnd >= 0) return doc.slice(0, headEnd) + tag + doc.slice(headEnd);
   return `${tag}${doc}`;
 }
 

@@ -127,6 +127,55 @@ test('[P0] @critical entry chrome exposes the primary home creation surface and 
   await expect(settingsDialog.getByRole('button', { name: /show pet picker/i })).toHaveCount(0);
 });
 
+test('[P1] cold Home defers Automations reads until the route becomes active', async ({ page }) => {
+  const automationsPaths = [
+    '/api/automation-templates',
+    '/api/automation-proposals',
+    '/api/routines',
+  ] as const;
+  const counts = new Map<string, number>(automationsPaths.map((path) => [path, 0]));
+  const record = (request: Request) => {
+    if (request.method() !== 'GET') return;
+    const path = new URL(request.url()).pathname;
+    if (!counts.has(path)) return;
+    counts.set(path, (counts.get(path) ?? 0) + 1);
+  };
+  page.on('request', record);
+
+  try {
+    await gotoEntryHome(page);
+    await expectStableCount(
+      () => [...counts.values()].reduce((total, count) => total + count, 0),
+      0,
+      {
+        timeout: T.short,
+        message: 'the inactive Automations view must not spend its request budget on Home launch',
+      },
+    );
+
+    await page.goto('/automations', { waitUntil: 'domcontentloaded' });
+    await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
+    await expect(page.getByTestId('entry-view-tasks')).toHaveAttribute('data-active', 'true');
+    await expect(page.getByTestId('tasks-view')).toBeVisible();
+    await expect.poll(() => [...counts.values()].every((count) => count > 0)).toBe(true);
+    const activeRouteBudget = [...counts.values()].reduce((total, count) => total + count, 0);
+    // React's development StrictMode may replay the active view once. Keep the
+    // assertion on the product contract: zero reads while inactive, then one
+    // bounded mount pass (at most two requests per resource) when activated.
+    for (const [path, count] of counts) {
+      expect(count, `${path} should load when Automations becomes active`).toBeGreaterThanOrEqual(1);
+      expect(count, `${path} should stay within one StrictMode mount pass`).toBeLessThanOrEqual(2);
+    }
+    await expectStableCount(
+      () => [...counts.values()].reduce((total, count) => total + count, 0),
+      activeRouteBudget,
+      { timeout: T.short, message: 'active Automations reads must settle within one mount pass' },
+    );
+  } finally {
+    page.off('request', record);
+  }
+});
+
 test('[P0] @critical workspace selection remains isolated across two browser tabs', async ({ page, context }) => {
   const server = { activeWorkspaceId: TAB_PERSONAL_WORKSPACE.workspaceId };
   const requestsA: WorkspaceContextRequestWitness[] = [];

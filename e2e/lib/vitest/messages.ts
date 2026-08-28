@@ -13,6 +13,15 @@ export type E2eChatMessage = {
   runId?: string;
   runStatus?: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
   startedAt?: number;
+  /** Recovery lineage the web client writes onto a turn's user row. */
+  taskAnalytics?: {
+    taskExecutionId: string;
+    taskRunIndex: number;
+    initialRunId?: string;
+    sourceRunId?: string;
+    recoveryActionType?: string;
+    recoveryActionInstanceId?: string;
+  } | null;
   telemetryFinalized?: boolean;
 };
 

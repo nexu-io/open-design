@@ -16,8 +16,8 @@ export interface MessageCenterMessage {
 }
 
 /** One-off, client-owned announcement selector. The message center remains a
- * generic inbox: only this exact slug opts into the preset strong dialog. */
-export const GO_PLAN_SUNSET_MESSAGE_KEY = 'go-plan-sunset-2026-08';
+ * generic inbox: only slugs with this prefix opt into the preset strong dialog. */
+export const GO_PLAN_SUNSET_MESSAGE_KEY_PREFIX = 'go-plan-sunset-2026-08';
 
 export function findGoPlanSunsetMessage(
   messages: readonly MessageCenterMessage[],
@@ -25,7 +25,7 @@ export function findGoPlanSunsetMessage(
   return messages.find((message) => (
     message.audienceType === 'targeted'
     && message.readAt == null
-    && message.messageKey === GO_PLAN_SUNSET_MESSAGE_KEY
+    && message.messageKey?.startsWith(GO_PLAN_SUNSET_MESSAGE_KEY_PREFIX)
   )) ?? null;
 }
 

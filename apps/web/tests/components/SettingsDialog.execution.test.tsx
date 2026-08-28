@@ -1288,6 +1288,73 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(errorStatus?.parentElement).toHaveClass('settings-autosave-layer');
   });
 
+  it('keeps a newer failed Labs save ahead of an older ordinary autosave', async () => {
+    const ordinarySave = deferred<void>();
+    const labsSave = deferred<void>();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/strategies/od-next/rollout') {
+        return new Response(JSON.stringify({
+          status: {
+            strategyId: 'od-next-strategy',
+            scope: 'daemon_instance',
+            requestedMode: 'off',
+            requestedModeSource: 'default',
+            effectiveMode: 'off',
+            latch: null,
+            revision: 0,
+            updatedAt: null,
+            lastEvent: null,
+            resetAllowed: false,
+          },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/app-config') {
+        await labsSave.promise;
+        return new Response('{}', { status: 500 });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const view = renderSettingsDialog();
+    view.onPersist.mockImplementationOnce(() => ordinarySave.promise);
+
+    fireEvent.change(screen.getByLabelText('API key'), {
+      target: { value: 'sk-ant-held' },
+    });
+    await waitFor(() => expect(view.onPersist).toHaveBeenCalledTimes(1));
+    expect(screen.getByText('Saving…')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Labs/i }));
+    const labsSwitch = await screen.findByTestId('labs-harness-switch');
+    await waitFor(() => expect(labsSwitch.getAttribute('aria-disabled')).toBe('false'));
+    fireEvent.click(labsSwitch);
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.filter(([input]) => input.toString() === '/api/app-config'))
+        .toHaveLength(1);
+    });
+
+    await act(async () => {
+      ordinarySave.resolve();
+      await ordinarySave.promise;
+      await Promise.resolve();
+    });
+    expect(screen.queryByText('All changes saved')).toBeNull();
+    expect(screen.getByText('Saving…')).toBeTruthy();
+
+    await act(async () => {
+      labsSave.resolve();
+      await labsSave.promise;
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Couldn’t save changes/i)).toBeTruthy();
+    });
+  });
+
   it('closes BYOK via the close button or backdrop', () => {
     const first = renderSettingsDialog();
 

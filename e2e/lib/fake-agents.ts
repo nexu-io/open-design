@@ -1,6 +1,7 @@
-import { chmod, mkdir, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export type FakeAgentId =
   | 'claude'
@@ -24,6 +25,59 @@ export type FakeAgentRuntimeOptions = {
   root?: string;
   runtimeIds?: FakeAgentId[];
 };
+
+export type FakeAcpHandshakeRuntime = {
+  bin: string;
+  env: Record<string, string>;
+  invocationLog: string;
+};
+
+export type FakeAcpHandshakeRuntimeOptions = {
+  root?: string;
+};
+
+/** Install the intentionally failing ACP fixture owned by the E2E harness. */
+export async function createFakeAcpHandshakeRuntime(
+  options: FakeAcpHandshakeRuntimeOptions = {},
+): Promise<FakeAcpHandshakeRuntime> {
+  const root = options.root ?? path.join(
+    tmpdir(),
+    `open-design-fake-acp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  );
+  await mkdir(root, { recursive: true });
+  const script = path.join(root, 'fake-acp-handshake-cli.mjs');
+  await copyFile(
+    fileURLToPath(new URL('../resources/fake-acp-handshake-cli.ts', import.meta.url)),
+    script,
+  );
+
+  const invocationLog = path.join(root, 'invocations.jsonl');
+  const bin = process.platform === 'win32'
+    ? path.join(root, 'fake-acp-handshake-cli.cmd')
+    : path.join(root, 'fake-acp-handshake-cli');
+  if (process.platform === 'win32') {
+    await writeFile(
+      bin,
+      `@echo off\r\nset "FAKE_ACP_INVOCATION_LOG=${invocationLog}"\r\n"${process.execPath}" "${script}" %*\r\n`,
+      'utf8',
+    );
+  } else {
+    await writeFile(
+      bin,
+      `#!/bin/sh\nFAKE_ACP_INVOCATION_LOG=${JSON.stringify(invocationLog)} exec ${JSON.stringify(process.execPath)} ${JSON.stringify(script)} "$@"\n`,
+      'utf8',
+    );
+    await chmod(bin, 0o755);
+  }
+
+  return {
+    bin,
+    invocationLog,
+    env: {
+      KIMI_BIN: bin,
+    },
+  };
+}
 
 const AGENT_BIN_NAMES: Record<FakeAgentId, string> = {
   claude: 'claude-e2e.cjs',
@@ -167,6 +221,14 @@ async function emitRun(promptText) {
   }
   if (promptText.includes('Return a daemon socket-drop failure')) {
     emitSocketDropFailure();
+    return;
+  }
+  if (promptText.includes('Return a Claude prompt-too-long failure')) {
+    emitClaudePromptTooLongFailure();
+    return;
+  }
+  if (promptText.includes('Return repeated OpenCode tool failures')) {
+    emitOpenCodeRepeatedToolFailures();
     return;
   }
   if (promptText.includes('Return an empty daemon smoke response')) {
@@ -936,6 +998,72 @@ function emitSocketDropFailure() {
   process.stderr.write(sdkError + '\\n');
   process.exitCode = 1;
   exitSoon(1);
+}
+
+// Mirrors the terminal result frame emitted by Claude Code when its composed
+// prompt exceeds the model context window. This deliberately goes through the
+// stream parser and run-failure classifier instead of pre-seeding a normalized
+// AGENT_PROMPT_TOO_LARGE event in the project message store.
+function emitClaudePromptTooLongFailure() {
+  if (agentId !== 'claude') {
+    process.stderr.write('prompt-too-long fixture requires the claude fake runtime\\n');
+    process.exitCode = 1;
+    exitSoon(1);
+    return;
+  }
+  writeJson({ type: 'system', subtype: 'init', model: 'fake-claude', session_id: 'fake-session' });
+  writeJson({
+    type: 'result',
+    subtype: 'error_during_execution',
+    is_error: true,
+    result: 'Prompt is too long',
+    stop_reason: null,
+  });
+  process.exitCode = 1;
+  exitSoon(1);
+}
+
+// Exercise the real OpenCode JSON event parser with the structured shape fixed
+// in #6933. A completed tool part with exitCode != 0 must become an errored
+// tool_result; four identical failures cross the daemon guard's default WARN
+// threshold while still allowing the run to finish (HALT is opt-in).
+function emitOpenCodeRepeatedToolFailures() {
+  if (agentId !== 'opencode') {
+    process.stderr.write('repeated tool-failure fixture requires the opencode fake runtime\\n');
+    process.exitCode = 1;
+    exitSoon(1);
+    return;
+  }
+  writeJson({ type: 'step_start', sessionID: 'fake-opencode-loop', part: { type: 'step-start' } });
+  for (let index = 0; index < 4; index += 1) {
+    writeJson({
+      type: 'tool_use',
+      sessionID: 'fake-opencode-loop',
+      part: {
+        type: 'tool',
+        tool: 'bash',
+        callID: 'fake-opencode-failure-' + index,
+        state: {
+          status: 'completed',
+          input: { command: 'cat missing-open-design-file.txt' },
+          output: 'cat: missing-open-design-file.txt: No such file or directory',
+          exitCode: 1,
+        },
+      },
+    });
+  }
+  writeJson({
+    type: 'text',
+    sessionID: 'fake-opencode-loop',
+    part: { type: 'text', text: 'Stopped retrying after repeated tool failures.' },
+  });
+  writeJson({
+    type: 'step_finish',
+    sessionID: 'fake-opencode-loop',
+    part: { type: 'step-finish', tokens: { input: 1, output: 1 }, cost: 0 },
+  });
+  process.exitCode = 0;
+  exitSoon(0);
 }
 
 function emitEmptySuccess() {

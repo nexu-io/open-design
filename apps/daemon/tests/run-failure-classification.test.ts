@@ -1576,6 +1576,39 @@ describe('execution_failed close-reason refinement', () => {
     });
   });
 
+  it('classifies an AMR membership concurrency limit before fatal close promotion', () => {
+    const message =
+      '[code=tier_limit_exceeded] membership concurrency limit exceeded: 3/2 resets 2026-08-25T10:42:00Z';
+    expect(
+      classifyForAgent('amr', 'AGENT_EXECUTION_FAILED', message, [
+        errorEvent('AGENT_EXECUTION_FAILED', message, true),
+        runtimeCloseEvent('fatal_rpc_error'),
+      ]),
+    ).toMatchObject({
+      failure_category: 'rate_limit',
+      failure_detail: 'membership_concurrency_limit',
+      failure_stage: 'session_init',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
+  it('keeps a non-AMR membership concurrency envelope retryable', () => {
+    const message =
+      '[code=tier_limit_exceeded] membership concurrency limit exceeded: 3/2 resets 2026-08-25T10:42:00Z';
+    expect(
+      classifyForAgent('claude', 'AGENT_EXECUTION_FAILED', message, [
+        errorEvent('AGENT_EXECUTION_FAILED', message, true),
+        runtimeCloseEvent('fatal_rpc_error'),
+      ]),
+    ).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'fatal_rpc_error',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
+
   it('honors an explicit non-retryable hint on fatal close reasons', () => {
     const result = classify('AGENT_EXECUTION_FAILED', '', [
       errorEvent('AGENT_EXECUTION_FAILED', '', false),

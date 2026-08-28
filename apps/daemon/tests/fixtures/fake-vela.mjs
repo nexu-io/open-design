@@ -16,6 +16,9 @@
  *                                         login route only care that the
  *                                         config file appears.
  *
+ *   `vela run terminal ... --json`      → emits a terminal receipt or a stable
+ *                                         JSON error envelope.
+ *
  *   `vela models`                       → prints production-shaped public
  *                                         model ids from the Vela catalog.
  *
@@ -32,6 +35,9 @@
  *                            { stopReason: 'end_turn', usage }
  *
  * Behaviour can be tweaked through env vars set by the test:
+ *   FAKE_VELA_TERMINAL_MODE       – success, replay, transient, unsupported,
+ *                                   auth, forbidden, or invalid
+ *   FAKE_VELA_TERMINAL_LOG        – optional JSONL argv/environment log
  *   FAKE_VELA_SESSION_ID         – session id returned by session/new
  *   FAKE_VELA_TEXT               – assistant text streamed back to the host
  *   FAKE_VELA_THOUGHT            – optional thought chunk streamed before text
@@ -65,6 +71,11 @@
  *                                   alive, modelling a CLI (or a wrapper shim)
  *                                   that is slow to die or never honours the
  *                                   signal at all
+ *   FAKE_VELA_DESCENDANT_ACTIVITY_FILE – when set, spawn a SIGTERM-ignoring
+ *                                   descendant that appends activity ticks to
+ *                                   this file while the ACP prompt is stalled
+ *   FAKE_VELA_DESCENDANT_PID_FILE – optional file that receives that
+ *                                   descendant's pid for leak-safe test cleanup
  *   FAKE_VELA_PROMPT_RESULT_DELAY_MS – delay the terminal session/prompt result
  *                                      after streaming substantive output
  *   FAKE_VELA_MODELS             – newline-separated `vela models` stdout
@@ -106,6 +117,8 @@ const TEXT_BEFORE_STALL = env.FAKE_VELA_TEXT_BEFORE_STALL === '1';
 const OPEN_TOOL_BEFORE_STALL = env.FAKE_VELA_OPEN_TOOL_BEFORE_STALL === '1';
 const STDERR_ON_SIGTERM = env.FAKE_VELA_STDERR_ON_SIGTERM === '1';
 const IGNORE_SIGTERM = env.FAKE_VELA_IGNORE_SIGTERM === '1';
+const DESCENDANT_ACTIVITY_FILE = env.FAKE_VELA_DESCENDANT_ACTIVITY_FILE || '';
+const DESCENDANT_PID_FILE = env.FAKE_VELA_DESCENDANT_PID_FILE || '';
 const PROMPT_RESULT_DELAY_MS = Number(env.FAKE_VELA_PROMPT_RESULT_DELAY_MS) || 0;
 const OMIT_PROMPT_USAGE = env.FAKE_VELA_OMIT_PROMPT_USAGE === '1';
 const STAY_ALIVE_AFTER_PROMPT_MS = Number(env.FAKE_VELA_STAY_ALIVE_AFTER_PROMPT_MS) || 0;
@@ -353,6 +366,18 @@ function handleMessage(msg) {
       }
       if (STALL_AFTER_PROMPT) {
         if (TEXT_BEFORE_STALL) emitSessionUpdates(sessionId);
+        if (DESCENDANT_ACTIVITY_FILE) {
+          const descendant = spawnChild(process.execPath, [
+            '-e',
+            `const fs = require('node:fs');
+const activityFile = ${JSON.stringify(DESCENDANT_ACTIVITY_FILE)};
+process.on('SIGTERM', () => {});
+const tick = () => fs.appendFileSync(activityFile, String(Date.now()) + '\\n');
+tick();
+setInterval(tick, 25);`,
+          ], { stdio: 'ignore' });
+          if (DESCENDANT_PID_FILE) writeFileSync(DESCENDANT_PID_FILE, String(descendant.pid));
+        }
         // A concrete tool the agent never closes. `kind: 'read'` is a
         // recognized non-think, non-write family, and `in_progress` is not a
         // terminal status, so the host keeps this call open in
@@ -602,6 +627,38 @@ function loginAndExit() {
   stdout.write('Code: FAKE-CODE\n');
   if (delayMs > 0) setTimeout(finish, delayMs);
   else finish();
+}
+
+// `vela run terminal`: idempotent AMR terminal report fixture. It logs no
+// secrets and returns the same receipt fields the delivery worker validates.
+if (argv[2] === 'run' && argv[3] === 'terminal') {
+  const flag = (name) => {
+    const index = argv.indexOf(name);
+    return index >= 0 ? argv[index + 1] : undefined;
+  };
+  const runId = flag('--run-id');
+  const outcome = flag('--outcome');
+  const terminalAt = flag('--terminal-at');
+  if (env.FAKE_VELA_TERMINAL_LOG) {
+    appendFileSync(env.FAKE_VELA_TERMINAL_LOG, `${JSON.stringify({
+      args: argv.slice(2),
+      invocationSource: env.VELA_INVOCATION_SOURCE || null,
+    })}\n`);
+  }
+  const mode = env.FAKE_VELA_TERMINAL_MODE || 'success';
+  const failures = {
+    transient: { error: 'server_error', retryable: true },
+    unsupported: { error: 'unsupported', retryable: false },
+    auth: { error: 'auth_required', retryable: false },
+    forbidden: { error: 'forbidden', retryable: false },
+    invalid: { error: 'invalid_input', retryable: false },
+  };
+  if (failures[mode]) {
+    stdout.write(`${JSON.stringify(failures[mode])}\n`);
+    exit(1);
+  }
+  stdout.write(`${JSON.stringify({ runId, outcome, terminalAt, recorded: mode !== 'replay' })}\n`);
+  exit(0);
 }
 
 // `vela --version`: the daemon's executable-resolution probe (def.versionArgs)
