@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   LegacyPluginApplyErrorResponseSchema,
   PluginApplyErrorResponseSchema,
+  PluginApplyWorkspaceContextErrorResponseSchema,
 } from '../src/index.js';
 
 describe('plugin apply error responses', () => {
@@ -53,6 +54,32 @@ describe('plugin apply error responses', () => {
     expect(LegacyPluginApplyErrorResponseSchema.safeParse({
       error: 'plugin_apply_failed',
       message: '/private/tmp/plugin.ts',
+    }).success).toBe(false);
+  });
+
+  it('accepts only the exact workspace-context route-boundary diagnosis', () => {
+    const exact = {
+      error: {
+        code: 'WORKSPACE_CONTEXT_INCOMPLETE',
+        message: 'both workspace and member identity are required',
+      },
+    };
+    expect(PluginApplyWorkspaceContextErrorResponseSchema.safeParse(exact).success).toBe(true);
+    expect(PluginApplyWorkspaceContextErrorResponseSchema.safeParse({
+      error: {
+        ...exact.error,
+        message: 'workspace failed at /Users/alice/private/plugin.ts',
+      },
+    }).success).toBe(false);
+    expect(PluginApplyWorkspaceContextErrorResponseSchema.safeParse({
+      error: {
+        ...exact.error,
+        details: { path: '/Users/alice/private/plugin.ts' },
+      },
+    }).success).toBe(false);
+    expect(PluginApplyWorkspaceContextErrorResponseSchema.safeParse({
+      ...exact,
+      stack: '/Users/alice/private/plugin.ts:1:1',
     }).success).toBe(false);
   });
 });

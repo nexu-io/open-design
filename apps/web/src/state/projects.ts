@@ -16,6 +16,7 @@ import {
   PLUGIN_APPLY_ERROR_CONTRACT_HEADER,
   PLUGIN_APPLY_ERROR_CONTRACT_VERSION,
   PluginApplyErrorResponseSchema,
+  PluginApplyWorkspaceContextErrorResponseSchema,
   type ApiErrorCode,
 } from '@open-design/contracts';
 import type {
@@ -2780,6 +2781,9 @@ async function readPluginApplyErrorMessage(resp: Response): Promise<string> {
         }
         return legacy.data.error;
       }
+
+      const workspaceContext = PluginApplyWorkspaceContextErrorResponseSchema.safeParse(json);
+      if (workspaceContext.success) return workspaceContext.data.error.message;
       return '';
     } catch {
       if (contentType.includes('application/json')) return '';

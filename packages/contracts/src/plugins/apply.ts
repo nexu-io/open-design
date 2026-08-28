@@ -138,6 +138,20 @@ export const PluginApplyErrorResponseSchema = z.object({
 
 export type PluginApplyErrorResponse = z.infer<typeof PluginApplyErrorResponseSchema>;
 
+// Plugin apply routes share workspace-authority middleware with other daemon
+// endpoints. Keep its only user-actionable boundary failure closed here rather
+// than accepting arbitrary messages from the broader ApiErrorResponse shape.
+export const PluginApplyWorkspaceContextErrorResponseSchema = z.object({
+  error: z.object({
+    code: z.literal('WORKSPACE_CONTEXT_INCOMPLETE'),
+    message: z.literal('both workspace and member identity are required'),
+  }).strict(),
+}).strict();
+
+export type PluginApplyWorkspaceContextErrorResponse = z.infer<
+  typeof PluginApplyWorkspaceContextErrorResponseSchema
+>;
+
 // Rolling upgrades can leave a browser talking to an older daemon. Keep the
 // previous bounded shapes explicit so compatibility never becomes a reason to
 // accept arbitrary daemon error strings.

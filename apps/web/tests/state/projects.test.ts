@@ -535,6 +535,46 @@ describe('applyPlugin', () => {
     });
   });
 
+  it('preserves the bounded workspace-context diagnosis from the apply route', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json({
+      error: {
+        code: 'WORKSPACE_CONTEXT_INCOMPLETE',
+        message: 'both workspace and member identity are required',
+      },
+    }, { status: 400 })));
+
+    await expect(applyPlugin('sample-plugin')).resolves.toEqual({
+      ok: false,
+      message: 'both workspace and member identity are required',
+    });
+  });
+
+  it.each([
+    {
+      error: {
+        code: 'WORKSPACE_CONTEXT_INCOMPLETE',
+        message: 'workspace failed at /Users/alice/private/plugin.ts',
+      },
+    },
+    {
+      error: {
+        code: 'WORKSPACE_CONTEXT_INCOMPLETE',
+        message: 'both workspace and member identity are required',
+        details: { path: '/Users/alice/private/plugin.ts' },
+      },
+    },
+    {
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Plugin failed at /Users/alice/private/plugin.ts',
+      },
+    },
+  ])('rejects an unsafe shared API error from plugin apply %#', async (body) => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json(body, { status: 400 })));
+
+    await expect(applyPlugin('sample-plugin')).resolves.toBeNull();
+  });
+
   it.each([
     [
       500,
