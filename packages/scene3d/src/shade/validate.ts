@@ -323,9 +323,13 @@ export function validateShaderSpec(
   /* ---- kernel text ------------------------------------------------- */
   if (kernelText !== undefined) {
     validateKernelText(at, kernelText, outputs, errors);
-    const strippedKernel = kernelText
-      .replace(/\/\*[\s\S]*?\*\//g, " ")
-      .replace(/\/\/[^\n]*/g, " ");
+    // The hardened scanner, not a second implementation of it. Stripping
+    // in two independent regex passes — block comments first, then line
+    // comments — is the exact approach `stripGlslComments` was written to
+    // replace: a `/*` inside a line comment pairs with a LATER real block
+    // comment and splices out the live code between them, so a kernel that
+    // reads a reserved uniform it never declared could pass this check.
+    const strippedKernel = stripGlslComments(kernelText);
     if (frames === 1 && /\buS3dTime\b/.test(strippedKernel)) {
       errors.push(
         `${at}: the kernel reads uS3dTime but declares no frames — time only exists for flipbook shaders; add "frames"`,

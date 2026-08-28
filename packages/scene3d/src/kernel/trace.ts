@@ -303,7 +303,7 @@ const bitLen = (x: bigint): number => {
  * charge sitting exactly on a budget boundary from pass to `WorkBudgetError`.
  * n here is a face's vertex count (small), so the loop is trivial.
  */
-const ceilLog2 = (n: number): number => {
+export const ceilLog2 = (n: number): number => {
   let bits = 0;
   let v = 1;
   while (v < n) {

@@ -311,6 +311,46 @@ describe.skipIf(!hasBlender)("FINDINGS2 mechanisms (real Blender)", () => {
     expect(r.ok).toBe(true);
   }, 400_000);
 
+  /* ---- the census measures the mesh that ships --------------------- */
+
+  it("measures the EVALUATED mesh, not the rest-cage datablock", async () => {
+    /*
+     * Modifiers and armatures write their result into the depsgraph, never
+     * into `o.data`. The bounds predicate knew that; the census's own mesh
+     * loop and the z-fighting search each read the datablock, so one census
+     * reported two different meshes depending which fact you read — bounds
+     * from the finished geometry, topology from the rest cage.
+     *
+     * A Mirror is the cleanest witness: it doubles the geometry, so the
+     * datablock and the shipped mesh disagree about the two numbers every
+     * budget and claim in the compiler is built on.
+     */
+    const dir = mkProject({
+      "scene3d.json": JSON.stringify({
+        schemaVersion: 1,
+        conventions: { naming: { forbidDefaultNames: false } },
+      }),
+      "build.py": [
+        "import bpy",
+        "for o in list(bpy.data.objects): bpy.data.objects.remove(o, do_unlink=True)",
+        "bpy.ops.mesh.primitive_cube_add(size=1, location=(0.75,0,0.5))",
+        "o = bpy.context.object; o.name = 'prp_half'",
+        "m = o.modifiers.new(name='Mirror', type='MIRROR')",
+        "m.use_axis[0] = True",
+        "",
+      ].join(String.fromCharCode(10)),
+    });
+    const r = await run(dir);
+    const mesh = r.census!.meshes.find((m) => m.object === "prp_half")!;
+    // The cube's datablock is 8 verts / 6 faces; mirrored it is 16 / 12.
+    // Reading the datablock here is the bug, and it reads as exactly half.
+    expect(mesh.verts).toBe(16);
+    expect(mesh.faces).toBe(12);
+    // And the fact is flagged as evaluated — absent `evaluated: false` means
+    // the depsgraph really produced this mesh.
+    expect((mesh as { evaluated?: boolean }).evaluated).toBeUndefined();
+  }, 400_000);
+
   /* ---- Bedrock oriented cube (real rotated geometry) --------------- */
 
   it("Bedrock: a real rotated cube exports with its un-rotated size + rotation", async () => {

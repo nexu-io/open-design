@@ -1,6 +1,7 @@
 import { Rational } from "./rational.js";
 import type { KernelMesh, RVec3 } from "./mesh.js";
 import { triangulateSimplePolygon, type P2 } from "./triangulate.js";
+import { ceilLog2 } from "./trace.js";
 
 /**
  * Exact embedding test — does a closed mesh BOUND a solid, or merely IMMERSE?
@@ -357,7 +358,12 @@ export function embeds(mesh: KernelMesh): EmbedResult {
   let triWork = 0;
   for (const f of mesh.faces) {
     projected += f.length - 2;
-    triWork += f.length * Math.max(1, Math.ceil(Math.log2(f.length)));
+    // ceilLog2, not Math.log2: this figure gates whether the embedding
+    // certificate is COMPUTED or degrades to "unchecked", and Math.log2's
+    // last-ULP result is not guaranteed identical across libm builds. A
+    // face length sitting on a power-of-two boundary could then decide the
+    // volume claim differently on two machines for one shipped mesh.
+    triWork += f.length * Math.max(1, ceilLog2(f.length));
   }
   if (projected > EMBED_FACE_CAP) {
     return { kind: "unchecked", reason: `the mesh has ${projected} triangles, over the ${EMBED_FACE_CAP} embedding-test cap` };

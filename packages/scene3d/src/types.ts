@@ -712,6 +712,11 @@ export interface CensusMesh {
    * because it was not measured, not because the mesh is clean.
    */
   doublesSampled?: boolean;
+  /** Whether the wall-thickness ray-cast actually ran. `false` means the
+   *  absence of `minWallThickness` is "not measured", not "nothing thin";
+   *  `thicknessNote` names which. Absent on an older census. */
+  thicknessSampled?: boolean;
+  thicknessNote?: string;
   /**
    * Manifold edges whose two faces disagree in winding. Engines light one
    * side of that seam inside-out; Blender's viewport hides it.

@@ -102,6 +102,30 @@ export function lintTopology(ctx: LintContext, issues: Issue[]): void {
         detail: { verts: mesh.verts },
       });
     }
+    /* The project asked for a wall-thickness floor and the ray-cast that
+       answers it did not run. The thickness rule keys on the measurement's
+       presence, so its silence would otherwise read as a sound wall. Only
+       fires when a floor was actually declared — a project that never asked
+       is not owed a warning about an answer it did not want. */
+    if (
+      ctx.contract.print.minThicknessMm !== null &&
+      mesh.thicknessSampled === false
+    ) {
+      issues.push({
+        code: ISSUE_CODES.WALL_THICKNESS_UNCHECKED,
+        severity: "warning",
+        message:
+          `mesh '${mesh.object}' was not checked against the ${ctx.contract.print.minThicknessMm}mm ` +
+          `wall-thickness floor` +
+          (mesh.thicknessNote ? ` — ${mesh.thicknessNote}` : ""),
+        hint: "decimate or split the mesh if its wall thickness must be verified",
+        target: mesh.object,
+        detail: {
+          minThicknessMm: ctx.contract.print.minThicknessMm,
+          ...(mesh.thicknessNote ? { reason: mesh.thicknessNote } : {}),
+        },
+      });
+    }
     if (!geo.allowInconsistentWinding && (mesh.inconsistentWindingEdges ?? 0) > 0) {
       issues.push({
         code: ISSUE_CODES.INCONSISTENT_WINDING,

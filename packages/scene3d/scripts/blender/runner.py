@@ -27,6 +27,7 @@ import array
 import base64
 import json
 import bisect
+import contextlib
 import math
 import os
 import re
@@ -1526,8 +1527,35 @@ def census(scene, measure_thickness=False, voxel_grid=0.0, zf_pair_budget=0):
     for o in objects:
         if o.type != "MESH":
             continue
+        # Measure the EVALUATED mesh, not the datablock. Modifiers and
+        # armatures write their result into the depsgraph, so reading `o.data`
+        # here measured a Mirror's single half, a Solidify's zero thickness and
+        # a rigged import's REST CAGE — while the proof render, the exports and
+        # this census's own bounds all described the finished geometry. Every
+        # fact below rides on it: ngons, manifold edges and vertices, doubles,
+        # zero-area faces, UV layout, symmetry, surface area, aspect ratio and
+        # the printability checks. `face_connected_world_points` was given this
+        # fix for the BOUNDS; the mesh loop never got it, so one census reported
+        # two different meshes depending on which fact you read.
+        #
+        # `bm.from_mesh` copies, and every other datablock fact below is a count
+        # or a name list, so the evaluated mesh is captured into locals here and
+        # released immediately rather than held across the whole body.
         bm = bmesh.new()
-        bm.from_mesh(o.data)
+        with measured_mesh(o) as (_src, _mw, mesh_evaluated):
+            bm.from_mesh(_src)
+            mesh_verts = len(_src.vertices)
+            mesh_faces = len(_src.polygons)
+            mesh_edges = len(_src.edges)
+            mesh_tris = sum(max(0, len(p.vertices) - 2) for p in _src.polygons)
+            mesh_uv_layers = [l.name for l in _src.uv_layers]
+            mesh_has_colors = (
+                len(_src.color_attributes) > 0
+                if hasattr(_src, "color_attributes")
+                else len(getattr(_src, "vertex_colors", [])) > 0
+            )
+            mesh_spectrum = spectrum_facts(_src)
+            mesh_poly_mats = [p.material_index for p in _src.polygons]
         ngons = sum(1 for f in bm.faces if len(f.verts) > 4)
         non_manifold = sum(1 for e in bm.edges if not e.is_manifold)
         # Pinch/bowtie vertices: a vertex whose incident faces do NOT form one
@@ -1558,15 +1586,19 @@ def census(scene, measure_thickness=False, voxel_grid=0.0, zf_pair_budget=0):
         faces_no_mat = 0
         if any(sl.material for sl in slots):
             faces_no_mat = sum(
-                1 for poly in o.data.polygons
-                if poly.material_index >= len(slots) or slots[poly.material_index].material is None)
+                1 for mi in mesh_poly_mats
+                if mi >= len(slots) or slots[mi].material is None)
         # Metric measurements happen in WORLD space, per the module's
         # determinism contract: the doubles merge distance and the texel
         # density are both stated in metres, and measuring them before the
         # transform would let an object's unapplied scale silently change
         # what the fixed epsilons mean.
         try:
-            bm.transform(o.matrix_world)
+            # `_mw` from measured_mesh, not `o.matrix_world`: constraints and
+            # drivers are evaluated too, and placing evaluated geometry with
+            # the original object's matrix measures one pose's shape at another
+            # pose's location.
+            bm.transform(_mw)
         except Exception:
             pass
         # Degenerate means "this face has no area FOR ITS OWN SIZE", which is
@@ -1629,7 +1661,7 @@ def census(scene, measure_thickness=False, voxel_grid=0.0, zf_pair_budget=0):
         # Print DfM (build direction +Z, gravity -Z). These are census FACTS;
         # only a 3d_print contract judges them, so they are cheap-always for
         # overhang and gated for the ray-cast thickness.
-        overhang_area, min_thickness = dfm_facts(bm, world_area, measure_thickness)
+        overhang_area, min_thickness, thickness_note = dfm_facts(bm, world_area, measure_thickness)
         # Bilateral symmetry error about the mesh's own bbox-centre X plane:
         # nearest-mirror distance via kd-tree, stride-sampled. Renders hide
         # asymmetry ruthlessly (Kiln measured an 8.9mm asymmetry that looked
@@ -1647,11 +1679,11 @@ def census(scene, measure_thickness=False, voxel_grid=0.0, zf_pair_budget=0):
         bm.free()
         # Triangle count as an engine would see it after triangulation —
         # the number a per-mesh budget is actually expressed in.
-        tris = sum(max(0, len(p.vertices) - 2) for p in o.data.polygons)
+        tris = mesh_tris
         # Topological, so it needs no bmesh and no world transform.
-        spectrum = spectrum_facts(o.data)
+        spectrum = mesh_spectrum
         mesh_rows.append({
-            "object": o.name, "verts": len(o.data.vertices), "faces": len(o.data.polygons),
+            "object": o.name, "verts": mesh_verts, "faces": mesh_faces,
             # Edges complete the Euler characteristic V - E + F: a
             # TESSELLATION-INDEPENDENT topological invariant (a tube is 0 at
             # any segment count, a closed sphere-like solid is 2, each extra
@@ -1664,7 +1696,7 @@ def census(scene, measure_thickness=False, voxel_grid=0.0, zf_pair_budget=0):
             # 2*shells, leaving g fractional) — a non-integer genus is the
             # SIGNAL that the mesh carries loose or open geometry, which
             # looseVerts and nonManifoldEdges then name.
-            "edges": len(o.data.edges),
+            "edges": mesh_edges,
             "tris": tris,
             # Fan-triangulated WORLD volume (kernel's own fan) at full float —
             # a recipe part's exact rational volume is adjudicated against this.
@@ -1675,15 +1707,13 @@ def census(scene, measure_thickness=False, voxel_grid=0.0, zf_pair_budget=0):
             **({"shapeKeys": [k.name for k in o.data.shape_keys.key_blocks[1:]]} if o.data.shape_keys else {}),
             "ngons": ngons, "nonManifoldEdges": non_manifold, "nonManifoldVertices": non_manifold_verts, "zeroAreaFaces": zero_area,
             "nan": nan_verts or not all(math.isfinite(v) for row in o.matrix_world for v in row),
-            "uvLayers": [l.name for l in o.data.uv_layers],
+            "uvLayers": mesh_uv_layers,
             # A colour attribute (vertex colours) is a shading source in its own
             # right — a low-poly / MagicaVoxel asset ships colour, not a material
             # — so the "no material" rule must not punish it. Blender 3.2+ uses
             # color_attributes; older meshes expose vertex_colors.
             "hasColorAttribute": (
-                len(o.data.color_attributes) > 0
-                if hasattr(o.data, "color_attributes")
-                else len(getattr(o.data, "vertex_colors", [])) > 0
+                mesh_has_colors
             ),
             "materials": sorted({sl.material.name for sl in slots if sl.material}),
             "uv": uv_block,
@@ -1693,7 +1723,15 @@ def census(scene, measure_thickness=False, voxel_grid=0.0, zf_pair_budget=0):
             # is omitted, and "not measured" must never read as "clean" — the
             # linter turns doublesSampled:false into DOUBLE_VERTICES_UNCHECKED
             # (the same discipline as the z-fighting/UV caps).
-            "doublesSampled": len(o.data.vertices) <= DOUBLES_VERT_CAP,
+            "doublesSampled": mesh_verts <= DOUBLES_VERT_CAP,
+            # True only when the ray-cast actually ran. Absent thickness with
+            # `thicknessSampled` true means "no thin wall"; with it false it
+            # means "not measured", and `thicknessNote` says why.
+            "thicknessSampled": measure_thickness and thickness_note is None,
+            **({"thicknessNote": thickness_note} if thickness_note else {}),
+            # False when the depsgraph could not produce a mesh and these facts
+            # describe the datablock instead of the geometry that ships.
+            **({"evaluated": False} if not mesh_evaluated else {}),
             "inconsistentWindingEdges": winding,
             "facesWithoutMaterial": faces_no_mat,
             "surfaceArea": R6(world_area),
@@ -1727,7 +1765,7 @@ def census(scene, measure_thickness=False, voxel_grid=0.0, zf_pair_budget=0):
         used_mats = [s.material for s in o.material_slots if s.material]
         if not used_mats:
             no_material.append(o.name)
-        elif o.data.uv_layers.keys() == [] and any(mat_has_texture(m) for m in used_mats):
+        elif not mesh_uv_layers and any(mat_has_texture(m) for m in used_mats):
             uv_no_layers.append(o.name)
 
     mat_rows = []
@@ -3182,11 +3220,15 @@ def dfm_facts(bm, world_area, measure_thickness):
     genuinely OPPOSITE wall (its normal anti-parallel to the cast, which filters
     the adjacent/corner hits a raw nearest-hit would mistake for a thin wall).
     An open surface with no wall behind it contributes nothing. Deterministic:
-    face centroids, no random sampling. Returns (overhang_area, min_thickness),
+    face centroids, no random sampling. Returns
+    (overhang_area, min_thickness, thickness_note) — the note naming why the
+    thickness is absent when it is, since unmeasured must never read as sound,
     min_thickness None when unmeasured.
     """
     if not bm.faces:
-        return 0.0, None
+        # Three values on every path: a caller unpacking a 3-tuple must not
+        # depend on which branch produced it.
+        return 0.0, None, None
     min_z = min((v.co.z for v in bm.verts), default=0.0)
     max_z = max((v.co.z for v in bm.verts), default=0.0)
     # The plate band: a slice above the lowest point, scaled to the object so a
@@ -3202,7 +3244,17 @@ def dfm_facts(bm, world_area, measure_thickness):
             continue  # resting on the plate — supported, not an overhang
         overhang_area += f.calc_area()
 
+    # "Unmeasured" and "measured, nothing thin" are DIFFERENT answers, and a
+    # bare `None` for both let a thin wall on a dense mesh read exactly like a
+    # sound one. `doublesSampled` already carries this distinction for its own
+    # gate; the thickness ray-cast never got it, so the note below says which
+    # of the three happened: nobody asked, too costly to ask, or asked and the
+    # cast failed.
     min_thickness = None
+    thickness_note = None
+    if measure_thickness and len(bm.faces) > THICKNESS_FACE_CAP:
+        thickness_note = ("mesh has %d faces, over the %d-face thickness cap"
+                          % (len(bm.faces), THICKNESS_FACE_CAP))
     if measure_thickness and len(bm.faces) <= THICKNESS_FACE_CAP:
         try:
             from mathutils.bvhtree import BVHTree
@@ -3224,9 +3276,12 @@ def dfm_facts(bm, world_area, measure_thickness):
                     thick = hit[3] + 1e-5
                     if min_thickness is None or thick < min_thickness:
                         min_thickness = thick
-        except Exception:
+        except Exception as exc:
+            # A cast that RAISED measured nothing; reporting `None` alone would
+            # be indistinguishable from a mesh with no thin wall in it.
             min_thickness = None
-    return overhang_area, min_thickness
+            thickness_note = "thickness ray-cast failed: %s" % (exc,)
+    return overhang_area, min_thickness, thickness_note
 
 
 def _face_connected_points(me, mw):
@@ -3283,40 +3338,68 @@ def _face_connected_bounds(me, mw):
     return lo, hi
 
 
-def _on_evaluated_mesh(o, reduce_fn, empty):
-    """Run `reduce_fn(mesh, matrix_world)` against the EVALUATED mesh.
+@contextlib.contextmanager
+def measured_mesh(o):
+    """THE predicate for *which mesh do we measure*.
 
-    The depsgraph dance lives here once so the points predicate and the bounds
-    predicate cannot drift about WHICH mesh they measure — modifiers,
-    armatures and mirrors write into the evaluated object, not into `o.data`,
-    and a reader that forgets it measures a rigged import's rest cage.
+    Yields `(mesh, matrix_world, evaluated)`: the depsgraph-evaluated mesh —
+    the geometry the proof renders and the exports ship — or, when evaluation
+    cannot produce one, the raw datablock with `evaluated` False so an
+    unevaluated measurement can never read as an evaluated one.
+
+    This exists because the question had three call sites and two answers. The
+    bounds predicate evaluated; the census's own mesh loop and the z-fighting
+    search each read `o.data` and so measured a Mirror's single half, a
+    Solidify's zero thickness and a rigged import's REST CAGE — while the
+    render and the exports showed the finished geometry. One census reported
+    two different meshes depending on which fact you read. Modifiers and
+    armatures write into the depsgraph, never into `o.data`, so measuring the
+    datablock is measuring something that was never delivered.
+
+    The lifetime rule is structural rather than a discipline each caller has
+    to remember: the evaluated mesh is released on exit, so anything a caller
+    needs beyond the block must be copied (`bmesh.from_mesh` copies) or
+    captured into locals inside it.
+
+    Object-level facts — shape keys, material slots — deliberately keep
+    reading the object and its original data: they are properties of the
+    object, not of the evaluated geometry.
     """
-    if o.type != "MESH" or not o.data.vertices:
-        return empty
+    if o.type != "MESH":
+        yield None, o.matrix_world, False
+        return
+    ev = None
+    me = None
     try:
         # Local import, like every other function here. Without it `bpy` is not
         # a name in this module, the lookup raises NameError, the except below
         # swallows it, and EVERY mesh silently measures its rest cage instead
         # of the evaluated result — modifiers, armatures and mirrors included.
         import bpy
-        dg = bpy.context.evaluated_depsgraph_get()
-        eo = o.evaluated_get(dg)
-        me = None
-        try:
-            me = eo.to_mesh()
-            if me is not None:
-                return reduce_fn(me, eo.matrix_world)
-        finally:
-            if me is not None:
-                try:
-                    eo.to_mesh_clear()
-                except Exception:
-                    pass
+        ev = o.evaluated_get(bpy.context.evaluated_depsgraph_get())
+        me = ev.to_mesh()
     except Exception:
-        pass
-    if o.name not in _EVAL_FALLBACKS:
-        _EVAL_FALLBACKS.append(o.name)
-    return reduce_fn(o.data, o.matrix_world)
+        me = None
+    if me is None:
+        if o.name not in _EVAL_FALLBACKS:
+            _EVAL_FALLBACKS.append(o.name)
+        yield o.data, o.matrix_world, False
+        return
+    try:
+        yield me, ev.matrix_world, True
+    finally:
+        try:
+            ev.to_mesh_clear()
+        except Exception:
+            pass
+
+
+def _on_evaluated_mesh(o, reduce_fn, empty):
+    """Run `reduce_fn(mesh, matrix_world)` on the measured mesh."""
+    if o.type != "MESH" or not o.data.vertices:
+        return empty
+    with measured_mesh(o) as (me, mw, _evaluated):
+        return reduce_fn(me, mw)
 
 
 def face_connected_world_bounds(o):
@@ -3986,8 +4069,16 @@ COPLANAR_TRI_PRODUCT_CAP = 200000
 
 
 def tri_count(o):
-    """Triangles an ngon-fanned mesh contributes, without building them."""
-    return sum(max(0, len(p.vertices) - 2) for p in o.data.polygons)
+    """Triangles an ngon-fanned mesh contributes, without building them.
+
+    Measured like `world_tris`, which it exists to estimate the cost of: a
+    count taken from a different mesh than the one that gets built would size
+    the pair budget against geometry the search never sees.
+    """
+    with measured_mesh(o) as (me, _mw, _evaluated):
+        if me is None:
+            return 0
+        return sum(max(0, len(p.vertices) - 2) for p in me.polygons)
 
 
 def z_fighting_pairs(objects, pair_budget=COPLANAR_TRI_PRODUCT_CAP):
@@ -4063,11 +4154,22 @@ def z_fighting_pairs(objects, pair_budget=COPLANAR_TRI_PRODUCT_CAP):
 
 
 def aabb_overlap(a, b):
+    """Broad phase for the z-fighting search, over the MEASURED geometry.
+
+    `bound_box` describes the datablock, so a mirrored or solidified surface
+    can sit outside it — and a pair rejected here is never handed to
+    `coplanar_overlap`, which does read the evaluated triangles. A broad phase
+    that sees less than its narrow phase is a false negative by construction.
+    """
     import mathutils
     def world_aabb(o):
-        corners = [o.matrix_world @ mathutils.Vector(c) for c in o.bound_box]
-        lo = mathutils.Vector((min(c.x for c in corners), min(c.y for c in corners), min(c.z for c in corners)))
-        hi = mathutils.Vector((max(c.x for c in corners), max(c.y for c in corners), max(c.z for c in corners)))
+        with measured_mesh(o) as (me, mw, _evaluated):
+            pts = ([mw @ mathutils.Vector(v.co) for v in me.vertices]
+                   if me is not None and me.vertices else None)
+        if not pts:
+            pts = [o.matrix_world @ mathutils.Vector(c) for c in o.bound_box]
+        lo = mathutils.Vector((min(c.x for c in pts), min(c.y for c in pts), min(c.z for c in pts)))
+        hi = mathutils.Vector((max(c.x for c in pts), max(c.y for c in pts), max(c.z for c in pts)))
         return lo, hi
     la, ha = world_aabb(a)
     lb, hb = world_aabb(b)
@@ -4076,15 +4178,24 @@ def aabb_overlap(a, b):
 
 
 def world_tris(o):
+    """World-space triangles of the MEASURED mesh.
+
+    Through `measured_mesh` for the same reason the census's mesh loop is: the
+    z-fighting search adjudicating `o.data` compared geometry the render never
+    showed, so a Mirror's unbuilt half could be declared coplanar with
+    something and a real coincidence between two modified surfaces missed.
+    """
     import mathutils
-    mw = o.matrix_world
-    verts = [mw @ mathutils.Vector(v.co) for v in o.data.vertices]
-    tris = []
-    for f in o.data.polygons:
-        vs = [verts[i] for i in f.vertices]
-        for k in range(1, len(vs) - 1):
-            tris.append((vs[0], vs[k], vs[k + 1]))
-    return tris
+    with measured_mesh(o) as (me, mw, _evaluated):
+        if me is None:
+            return []
+        verts = [mw @ mathutils.Vector(v.co) for v in me.vertices]
+        tris = []
+        for f in me.polygons:
+            vs = [verts[i] for i in f.vertices]
+            for k in range(1, len(vs) - 1):
+                tris.append((vs[0], vs[k], vs[k + 1]))
+        return tris
 
 
 def coplanar_overlap(a, b):
@@ -5282,9 +5393,6 @@ def scene_fingerprint():
     sound on all 23 assets; this is what keeps it that way."""
     import bpy
     meshes = {}
-    for o in bpy.context.scene.objects:
-        if o.type == "MESH" and o.data:
-            meshes[o.name] = sum(max(0, len(p.vertices) - 2) for p in o.data.polygons)
     # Ordered bone names per armature and ordered morph-target (shape key)
     # names per mesh. Counts alone cannot see a REORDER: a joint/morph list
     # that keeps every name but shuffles their positions still misaligns any
@@ -5313,6 +5421,23 @@ def scene_fingerprint():
     if _scene.frame_current != _scene.frame_start:
         _scene.frame_set(_scene.frame_start)
         bpy.context.view_layer.update()
+    # Counted AFTER the frame is normalised: these are EVALUATED polygons,
+    # so on rigged or procedural geometry the topology is a function of the
+    # current frame. Sampling before the frame is pinned would compare the
+    # built scene at wherever the caller left it against the master at
+    # frame_start, and report a parity loss that never happened.
+    for o in bpy.context.scene.objects:
+        if o.type == "MESH" and o.data:
+            # The EVALUATED count on both sides. USD bakes geometry, so a
+            # re-imported master carries no modifiers; counting the built
+            # scene's datablock against it would report a Mirror or Solidify
+            # as content the master lost, or hide a real loss behind a rest
+            # cage that happened to match.
+            with measured_mesh(o) as (me, _mw, _evaluated):
+                meshes[o.name] = (
+                    0 if me is None
+                    else sum(max(0, len(p.vertices) - 2) for p in me.polygons)
+                )
     lo = [float("inf")] * 3
     hi = [float("-inf")] * 3
     for o in bpy.context.scene.objects:

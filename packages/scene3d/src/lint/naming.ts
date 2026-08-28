@@ -81,15 +81,28 @@ export function lintNaming(ctx: LintContext, issues: Issue[]): void {
   }
 
   if (ctx.primTree) {
-    const depthMap = new Map<string, number>();
-    const stack: Array<{ prim: (typeof ctx.primTree.prims)[number]; depth: number }> = [];
-    for (const child of ctx.primTree.root.children) stack.push({ prim: child, depth: 1 });
-    while (stack.length > 0) {
-      const { prim, depth } = stack.pop()!;
-      depthMap.set(prim.name, depth);
-      for (const child of prim.children) stack.push({ prim: child, depth: depth + 1 });
+    /* Keyed by PATH, never by leaf name. USD lets two prims share a leaf
+       name under different parents, so a name-keyed map lets whichever
+       the walk reaches last win — and a real depth violation is erased
+       by a shallow namesake visited after it. A prim's identity is its
+       path; its name is a display fact. */
+    const depthMap = new Map<string, { name: string; depth: number }>();
+    const stack: Array<{
+      prim: (typeof ctx.primTree.prims)[number];
+      depth: number;
+      path: string;
+    }> = [];
+    for (const child of ctx.primTree.root.children) {
+      stack.push({ prim: child, depth: 1, path: `/${child.name}` });
     }
-    for (const [name, depth] of depthMap) {
+    while (stack.length > 0) {
+      const { prim, depth, path } = stack.pop()!;
+      depthMap.set(path, { name: prim.name, depth });
+      for (const child of prim.children) {
+        stack.push({ prim: child, depth: depth + 1, path: `${path}/${child.name}` });
+      }
+    }
+    for (const [, { name, depth }] of depthMap) {
       if (depth > contract.maxDepth) {
         issues.push({
           code: ISSUE_CODES.DEPTH_LIMIT,

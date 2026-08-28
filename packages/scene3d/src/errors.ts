@@ -135,6 +135,12 @@ export const ISSUE_CODES = {
   /* The doubles pass was skipped past the vertex cap: "not measured" must
      never read as "clean" — same discipline as Z_FIGHTING_UNCHECKED. */
   DOUBLE_VERTICES_UNCHECKED: "S3D-W-331",
+  /* The project declared a minimum wall thickness and the ray-cast that
+     would verify it did not run — past the face cap, or it raised. The
+     thickness rule reads a missing measurement as "no thin wall", so
+     without this a thin wall on a dense mesh is indistinguishable from a
+     sound one. Same discipline as DOUBLE_VERTICES_UNCHECKED. */
+  WALL_THICKNESS_UNCHECKED: "S3D-W-391",
   /* A mesh object hidden in the scene still exports, counts against budget,
      and can z-fight — yet the master exporter may drop it, so a hidden mesh
      is both a silent shipper and a likely parity-loss source. */
