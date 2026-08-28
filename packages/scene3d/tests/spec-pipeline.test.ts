@@ -557,6 +557,58 @@ describe.skipIf(!hasBlender)("declarative spec pipeline (real Blender)", () => {
     expect(alpha, "the backdrop must stay transparent so coverage is a mask").toBe(0);
   }, 900_000);
 
+  it("a cache hit does not drop what the shot measured", async () => {
+    /*
+     * The frames were cached and their MEASUREMENTS were not, so the second
+     * compile returned a shot with no `caught:` line — losing it exactly when
+     * the loop iterates fastest, and losing the one fact that stops a
+     * photograph of a wall reading as a framed subject.
+     */
+    const dir = workDir("good/spec_pavilion");
+    const opts = {
+      projectDir: dir,
+      stages: ["parse", "build", "proof", "manifest"] as const,
+      proof: { turntable: false, resolution: 160 },
+      looks: [{ at: "prp_lamp", from: "left" }],
+      timeoutMs: 300_000,
+    };
+    const cold = await compile({ ...opts, stages: [...opts.stages] });
+    const warm = await compile({ ...opts, stages: [...opts.stages] });
+    expect(warm.stages.find((s) => s.id === "proof")?.status).toBe("cached");
+    const a = cold.looks[0]!.pose;
+    const b = warm.looks[0]!.pose;
+    expect(a.coverage).toBeTypeOf("number");
+    expect(b.coverage, "coverage must survive the cache").toBe(a.coverage);
+    expect(b.meanLuminance, "luminance must survive the cache").toBe(a.meanLuminance);
+  }, 600_000);
+
+  it("conventions.animation.fps sets the clip's real duration", async () => {
+    /*
+     * The rate was validated and cache-keyed, then overridden by a constant,
+     * so a project asking for 30 got 24. Fixing only the frame COUNT would
+     * have been worse: 60 frames played at 24 is a 2.5s clip for two seconds
+     * of authored motion. The census measures both, so the duration is the
+     * assertion.
+     */
+    const dir = workDir("good/spec_pavilion");
+    const scene = JSON.parse(fs.readFileSync(path.join(dir, "scene.json"), "utf8"));
+    scene.parts[0].spin = { seconds: 2 };
+    fs.writeFileSync(path.join(dir, "scene.json"), JSON.stringify(scene, null, 2));
+    fs.writeFileSync(
+      path.join(dir, "scene3d.json"),
+      JSON.stringify({ schemaVersion: 1, conventions: { animation: { fps: 30 } } }, null, 2),
+    );
+    const r = await compile({
+      projectDir: dir,
+      stages: ["parse", "build"],
+      noCache: true,
+      timeoutMs: 300_000,
+    });
+    const anim = r.census?.animation;
+    expect(anim?.fps).toBe(30);
+    expect((anim!.frameEnd - anim!.frameStart) / anim!.fps).toBeCloseTo(2, 3);
+  }, 300_000);
+
   it("light.ambient actually reaches the pixels", async () => {
     /*
      * The one test that can catch this: two compiles differing ONLY in

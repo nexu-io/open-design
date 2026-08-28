@@ -49,6 +49,9 @@ export interface EmitOptions {
   materials?: Record<string, MaterialSpec>;
   /** How finely curved primitives are emitted. See TESSELLATION_DEFAULTS. */
   tessellation?: Tessellation;
+  /** Keyframe rate for compiler-owned motion, from
+   *  `conventions.animation.fps`. Absent keeps the 24fps default. */
+  fps?: number;
   /**
    * Evaluated kernel meshes, keyed by part id, for every `recipe:` part. The
    * emitter is pure and cannot run a recipe (that is I/O the pipeline owns), so
@@ -970,7 +973,10 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
   // Declarative motion, compiler-owned keyframes at 24fps. The scene's
   // frame range covers the longest single cycle; every curve loops via a
   // cycles modifier, so any playhead position is valid.
-  const FPS = 24;
+  // `conventions.animation.fps` decides this. It was validated, cache-keyed,
+  // and then overridden by a constant here, so a project that asked for 30
+  // silently got 24 keyframes per second and a clip a third too slow.
+  const FPS = options.fps && options.fps > 0 ? options.fps : 24;
   const animated = scene.parts.filter((p) => p.spin || p.bob || p.screw);
   if (animated.length > 0) {
     let maxFrames = 0;
@@ -1012,6 +1018,13 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
       }
     }
     lines.push(
+      // The RATE, not just the count. Frames are computed at this fps, so a
+      // scene left at Blender's default plays them at the wrong speed: two
+      // seconds authored at 30 becomes 60 frames played at 24, a clip that
+      // runs 2.5s. The count and the rate have to travel together or the
+      // duration is wrong in every export.
+      `bpy.context.scene.render.fps = ${Math.max(1, Math.round(FPS))}`,
+      "bpy.context.scene.render.fps_base = 1.0",
       `bpy.context.scene.frame_end = ${1 + maxFrames}`,
       "bpy.context.scene.frame_set(1)",
       "",

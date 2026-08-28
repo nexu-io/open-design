@@ -265,3 +265,32 @@ describe("unknown contract keys", () => {
     expect(problems[0]).toContain("parts is not a contract field");
     expect(problems[0]).toContain("scene.json");
   });
+
+describe("every knob the compiler consumes is a knob the contract accepts", () => {
+  /* A path the compiler reads but the schema does not declare is refused with
+     E-104 for using a field the compiler itself needs — the author is told
+     their own documented lever is invalid. These three were in that state. */
+  const accepts = (contract: unknown): string[] => validateContract(contract);
+
+  it("accepts the geometry ceilings the solver reads", () => {
+    expect(
+      accepts({
+        schemaVersion: 1,
+        conventions: { geometry: { maxParts: 250_000, maxRepeatCount: 250_000 } },
+      }),
+    ).toEqual([]);
+  });
+
+  it("accepts the bake atlas budget the shader validator names in its own refusal", () => {
+    expect(
+      accepts({ schemaVersion: 1, conventions: { shade: { maxAtlasBytes: 4 * 1024 ** 3 } } }),
+    ).toEqual([]);
+  });
+
+  it("still refuses a value of the wrong shape, so accepting the path is not accepting anything", () => {
+    expect(accepts({ schemaVersion: 1, conventions: { geometry: { maxParts: 0 } } }).length)
+      .toBeGreaterThan(0);
+    expect(accepts({ schemaVersion: 1, conventions: { shade: { maxAtlasBytes: "big" } } }).length)
+      .toBeGreaterThan(0);
+  });
+});

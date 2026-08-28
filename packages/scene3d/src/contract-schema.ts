@@ -78,6 +78,7 @@ export const CONTRACT_CONTAINERS = [
   "conventions.uv.texelDensity",
   "conventions.textures",
   "conventions.geometry",
+  "conventions.shade",
   "conventions.print",
   "conventions.voxel",
   "conventions.voxel.grid",
@@ -183,6 +184,15 @@ export const CONTRACT_FIELDS: readonly FieldSpec[] = [
   // gate a fractional budget was silently floored — the schema is the ONE
   // validator, so the truncation must be a refusal here, not a quiet edit.
   { path: "conventions.geometry.zFightingPairBudget", kind: "number", min: 1000, max: 1_000_000_000, integer: true },
+  /* The solver reads both of these and the docs name them, but neither was
+     declared here — so a project that raised either one was refused with
+     E-104 for using a knob the compiler itself consumes. Raisable ceilings on
+     a resource, not size caps: the values are the scale a machine can carry. */
+  { path: "conventions.geometry.maxParts", kind: "number", min: 1, max: 10_000_000, integer: true },
+  { path: "conventions.geometry.maxRepeatCount", kind: "number", min: 1, max: 10_000_000, integer: true },
+  /* The bake atlas budget in bytes. Same story: consumed by the shader
+     validator, named in its own refusal message, and undeclared here. */
+  { path: "conventions.shade.maxAtlasBytes", kind: "number", min: 1, max: Number.MAX_SAFE_INTEGER, integer: true },
 
   /* print (DfM) — was normalized but never validated */
   { path: "conventions.print.minThicknessMm", kind: "number", min: 0, exclusiveMin: true },

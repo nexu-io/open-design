@@ -650,3 +650,30 @@ describe("light: a derived rig, steerable", () => {
     );
   });
 });
+
+describe("compiler-owned motion honours the contract's frame rate", () => {
+  const spinScene: SceneSpec = {
+    schemaVersion: 1,
+    parts: [{ id: "prp_a", size: [1, 1, 1], spin: { seconds: 2 } }],
+    relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+  };
+
+  it("emits keyframes at the declared fps, not a constant", () => {
+    // `conventions.animation.fps` was validated and cache-keyed, then
+    // overridden by a hardcoded 24 — a project that asked for 30 got a clip a
+    // third too slow and nothing said so. Two seconds of spin is 48 frames at
+    // 24 and 60 at 30; the emitted range is the evidence.
+    const at24 = emitBlenderScript(solveScene(spinScene), { fps: 24 } as never);
+    const at30 = emitBlenderScript(solveScene(spinScene), { fps: 30 } as never);
+    expect(at24).toContain("frame_end = 49");
+    expect(at30).toContain("frame_end = 61");
+    // The RATE travels with the count, or 60 frames play at 24fps and the
+    // two-second clip runs 2.5 seconds in every export.
+    expect(at24).toContain("render.fps = 24");
+    expect(at30).toContain("render.fps = 30");
+  });
+
+  it("falls back to 24 when the contract states nothing", () => {
+    expect(emitBlenderScript(solveScene(spinScene), {} as never)).toContain("frame_end = 49");
+  });
+});

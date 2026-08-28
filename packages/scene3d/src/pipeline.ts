@@ -616,6 +616,7 @@ export async function compile(
           camera: spec.camera ?? true,
           ...(spec.light ? { light: spec.light } : {}),
           tessellation: normalized.tessellation,
+          fps: normalized.fps,
           kernelMeshes,
           kernelShapes,
         });
@@ -1140,8 +1141,17 @@ export async function compile(
          Without this, deleting `out/materials/` left the cache reporting a
          complete proof forever and the previews never came back. */
       const cachedBalls = asStringList((cached?.data as { materialBalls?: unknown } | null)?.materialBalls);
+      /* An entry written before aimed-shot measurements existed carries the
+         same hash and real image files, so it would hit forever and hand back
+         a shot with no `caught:` line — the measurements would return only
+         under --no-cache and the entry would never upgrade itself. A hit has
+         to prove it can supply what this compile asked for. */
+      const cachedLooksUsable =
+        resolvedLooks.length === 0 ||
+        Array.isArray((cached?.data as { lookStats?: unknown } | null)?.lookStats);
       if (
         cached &&
+        cachedLooksUsable &&
         [...cached.artifacts, ...cachedBalls].every((a) =>
           fs.existsSync(path.join(request.projectDir, a)),
         )
@@ -1171,6 +1181,22 @@ export async function compile(
               ? `${PROOF_DIR}/${n}`
               : undefined,
           );
+        }
+        /* The measured facts ride the entry with the frames, for the reason
+           the orbit's own statistics do: a cached rerun that dropped them
+           would report a shot with no `caught:` line, and the whole point of
+           that line is to stop a reader taking a photograph of a wall for a
+           framed subject. Losing it on the second compile is losing it exactly
+           when the loop is iterating fastest. */
+        const cachedLookStats = (cached.data as { lookStats?: unknown } | null)?.lookStats;
+        if (Array.isArray(cachedLookStats)) {
+          for (const [i, stat] of cachedLookStats.entries()) {
+            const pose = resolvedLooks[i];
+            const st = stat as { coverage?: unknown; meanLuminance?: unknown } | null;
+            if (!pose || !st) continue;
+            if (typeof st.coverage === "number") pose.coverage = st.coverage;
+            if (typeof st.meanLuminance === "number") pose.meanLuminance = st.meanLuminance;
+          }
         }
         materialBalls.push(...cachedBalls);
         const cachedNames = (cached.data as { materialBallsSkippedNames?: unknown } | null)
@@ -1400,6 +1426,14 @@ export async function compile(
               ],
               data: {
                 frames: proofFrames ?? null,
+                /* The aimed shots' MEASURED facts, beside the orbit's. Written
+                   as a plain array indexed with the poses, so a hit restores
+                   what the render measured rather than the caller re-deriving
+                   it from a file it cannot re-open. */
+                lookStats: resolvedLooks.map((pose) => ({
+                  ...(pose.coverage !== undefined ? { coverage: pose.coverage } : {}),
+                  ...(pose.meanLuminance !== undefined ? { meanLuminance: pose.meanLuminance } : {}),
+                })),
                 offByFrame: offByFrame ?? [],
                 ...(proofRects ? { screenRects: proofRects } : {}),
                 ...(proofIdParts ? { idParts: proofIdParts } : {}),
