@@ -7,7 +7,7 @@ import { evaluateRollout } from '../critique/ratchet.js';
 import { parseRolloutPhase } from '../critique/rollout.js';
 import {
   AgentCompanionSetupError,
-  installDeepSeekHarnessCompanion,
+  installDshProfileCompanion,
 } from '../agent-companion-setup.js';
 
 export interface RegisterDaemonRoutesDeps {
@@ -99,11 +99,12 @@ export function registerDaemonRoutes(app: Express, deps: RegisterDaemonRoutesDep
   });
 
   app.post('/api/agents/:agentId/companion/install', requireLocalDaemonRequest, async (req, res) => {
-    if (req.params.agentId !== 'deepseek-harness') {
-      return sendApiError(res, 400, 'BAD_REQUEST', 'This agent has no OpenDesign connection component.');
+    const agentId = req.params.agentId;
+    if (typeof agentId !== 'string' || agentId.length === 0) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'A valid agent ID is required.');
     }
     try {
-      const result = await installDeepSeekHarnessCompanion({
+      const result = await installDshProfileCompanion(agentId, {
         projectRoot: paths.PROJECT_ROOT,
         resourceRoot: paths.RESOURCE_ROOT,
         runtimeDataDir: paths.RUNTIME_DATA_DIR,
@@ -111,13 +112,17 @@ export function registerDaemonRoutes(app: Express, deps: RegisterDaemonRoutesDep
       return res.json(result);
     } catch (error) {
       if (error instanceof AgentCompanionSetupError) {
-        const status = error.code === 'AGENT_NOT_INSTALLED' ? 409 : 500;
+        const status = error.code === 'AGENT_UNSUPPORTED'
+          ? 400
+          : error.code === 'AGENT_NOT_INSTALLED'
+            ? 409
+            : 500;
         return res.status(status).json({
           error: { code: error.code, message: error.message },
         });
       }
       console.warn('[agent-companion-setup] unexpected failure', error);
-      return sendApiError(res, 500, 'INTERNAL_ERROR', 'DeepSeek Harness connection setup failed.');
+      return sendApiError(res, 500, 'INTERNAL_ERROR', 'DSH profile connection setup failed.');
     }
   });
 
