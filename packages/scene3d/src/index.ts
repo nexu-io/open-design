@@ -43,7 +43,7 @@ export { lintExportedStage } from "./lint/stage.js";
 export { decodePng, encodePng, PngDecodeError, type DecodedImage } from "./sheet/png.js";
 export { measureSheet, edgeOf, edgeDifference, type SheetMeasurement } from "./sheet/measure.js";
 export { collectSheets, type CollectedSheets } from "./sheet/collect.js";
-export { lintSheets, type SheetSpec, type SheetKind, type SheetLintInput } from "./lint/sheet.js";export { describeScene } from "./read/describe.js";
+export { lintSheets, type SheetSpec, type SheetKind, type SheetLintInput } from "./lint/sheet.js";export { describeScene, DescribeRefusal } from "./read/describe.js";
 export { changeImpact, formatImpact } from "./read/impact.js";
 export { renderOrthoSvg, orthoDimensions } from "./read/ortho.js";
 export { renderOrthoAscii } from "./read/ortho-ascii.js";

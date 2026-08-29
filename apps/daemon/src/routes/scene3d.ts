@@ -13,7 +13,7 @@ import type {
   Scene3dStageId,
 } from '@open-design/contracts';
 import { buildScene3dAssetUrl, scene3dIssueTitle } from '@open-design/contracts';
-import { compileInWorker, workerEvalAvailable, renderAgentReport, probeBlender, writeProjectKit, describeScene } from '@open-design/scene3d';
+import { compileInWorker, workerEvalAvailable, renderAgentReport, probeBlender, writeProjectKit, describeScene, DescribeRefusal } from '@open-design/scene3d';
 import type { RouteDeps } from '../server-context.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 
@@ -646,6 +646,12 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
             describe = describeScene(model.census, Array.isArray(model.issues) ? model.issues : [], options);
           }
         } catch (err) {
+          // A refusal is an ANSWER (an unknown --focus name, with the legal
+          // vocabulary), not an unreadable census — 400 it verbatim rather
+          // than letting it read as "never compiled".
+          if (err instanceof DescribeRefusal) {
+            return sendApiError(res, 400, 'BAD_REQUEST', err.message);
+          }
           console.warn(`[scene3d] describe: unreadable ${readModelFile} —`, err);
           describe = null;
         }

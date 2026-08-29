@@ -587,3 +587,54 @@ describe("the echo", () => {
     expect(line).toContain(compassName(270));
   });
 });
+
+describe("the eye inside the subject is a stated fact", () => {
+  /*
+   * The red-team exhibit: `margin=0.04` resolved a camera 66mm from a
+   * 0.888m object — inside its ring cage — while "caught: subject fills
+   * 55.5%" read as success. margin multiplies the fitted distance, and a
+   * pose that stands inside the subject's own bounding sphere must SAY so.
+   */
+  const scene = census([{ name: "prp_orrery", min: [-0.25, -0.25, 0], max: [0.25, 0.25, 0.9] }]);
+
+  it("notes a margin that walks the camera into the subject", () => {
+    const pose = resolveShot(
+      { station: { orbit: { azimuthDeg: 0, margin: 0.04 } }, gaze: { at: "prp_orrery" } },
+      scene,
+    );
+    const note = pose.notes.find((n) => n.includes("INSIDE"))!;
+    expect(note).toBeDefined();
+    expect(note).toContain("margin multiplies the fitted distance");
+  });
+
+  it("notes an explicit distance shorter than the subject's radius", () => {
+    const pose = resolveShot(
+      { station: { orbit: { azimuthDeg: 0, distance: 0.05 } }, gaze: { at: "prp_orrery" } },
+      scene,
+    );
+    const note = pose.notes.find((n) => n.includes("INSIDE"))!;
+    expect(note).toBeDefined();
+    expect(note).toContain("metres");
+  });
+
+  it("stays silent for an ordinary fitted shot", () => {
+    const pose = resolveShot({ gaze: { at: "prp_orrery" } }, scene);
+    expect(pose.notes.find((n) => n.includes("INSIDE"))).toBeUndefined();
+  });
+});
+
+describe("numeric refusals do not dump the part list", () => {
+  const scene = census([{ name: "prp_orrery", min: [0, 0, 0], max: [1, 1, 1] }]);
+  it("keeps a range error to the one sentence that fixes it", () => {
+    try {
+      resolveShot(
+        { station: { orbit: { azimuthDeg: 0, margin: 0 } }, gaze: { at: "prp_orrery" } },
+        scene,
+      );
+      expect.unreachable("margin 0 must refuse");
+    } catch (e) {
+      expect((e as Error).message).toContain("margin");
+      expect((e as Error).message).not.toContain("known parts");
+    }
+  });
+});

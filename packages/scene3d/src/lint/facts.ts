@@ -23,7 +23,8 @@ export interface DerivedFacts {
   triShareByFamily: Map<string, number>;
   /** Each family's detail rank, when its role has one. */
   rankByFamily: Map<string, number>;
-  /** Median of parts' max dimension (m). NaN when no measurable part. */
+  /** Median max dimension (m) over FAMILY representatives — designs, not
+   *  instances, so a repeat's clones count once. NaN when nothing measured. */
   medianMaxDim: number;
   /** Each part's max dimension as a ratio of the median. */
   sizeRatioByPart: Map<string, number>;
@@ -35,12 +36,15 @@ export interface DerivedFacts {
   aspectRatioByPart: Map<string, number>;
   /** Mean texel density (px/m) of each textured part's mesh. */
   texelDensityByPart: Map<string, number>;
-  /** Robust z-score of each part's SIZE within the scene's own size
-   *  distribution (log-scale, median + MAD). A part many robust deviations out
-   *  is a likely unit slip — a distribution-relative outlier, no fixed ratio. */
+  /** Robust z-score of each family's SIZE within the scene's own size
+   *  distribution (log-scale, median + MAD, one representative per family so
+   *  clones cannot own the median). Keyed by familyId — the base part's name,
+   *  which is where the judge looks it up. Many deviations out = a likely
+   *  unit slip; a distribution-relative outlier, no fixed ratio. */
   sizeOutlierZByPart: Map<string, number>;
-  /** Robust z-score of each part's TRIANGLE DENSITY (tris/m²) within the
-   *  scene's distribution — the same statistic over a different scalar. */
+  /** Robust z-score of each family's TRIANGLE DENSITY (tris/m²) within the
+   *  scene's distribution — the same statistic, population and keying as the
+   *  size outlier, over a different scalar. */
   triDensityOutlierZByPart: Map<string, number>;
   /**
    * Meshes grouped by MEASURED shape family: parts whose spectral shape-DNA
@@ -144,12 +148,20 @@ function spectralFamiliesOf(census: Census): string[][] {
  * the very outlier we are hunting inflate the spread and hide itself.
  *
  * Degenerates honestly: fewer than three measurable values ⇒ no distribution,
- * empty map (a two-part scene has no "outlier"). When the MAD is zero — a
- * majority of parts share an identical size (repeat clones), which would make
- * every non-identical part read as Infinity — Iglewicz–Hoaglin's own fallback
- * kicks in: the MEAN absolute deviation (scale 1.2533) measures the spread the
- * degenerate median cannot, so a merely-different part scores modestly and only
- * a true outlier crosses the cutoff. All values identical ⇒ every z is 0.
+ * empty map (a two-part scene has no "outlier"). When the MAD is degenerate —
+ * a majority of values identical, which would make every non-identical value
+ * read as Infinity — Iglewicz–Hoaglin's own fallback kicks in: the MEAN
+ * absolute deviation (scale 1.2533) measures the spread the degenerate median
+ * cannot, so a merely-different value scores modestly and only a true outlier
+ * crosses the cutoff. All values identical ⇒ every z is 0.
+ *
+ * "Degenerate" is judged against the MEASUREMENT'S OWN RESOLUTION, not
+ * against exact zero: census scalars arrive R6-rounded, so values within a
+ * couple of 1e-6 quanta of the median are the same measurement wearing
+ * rounding noise. A MAD in that band is not a spread — dividing by it once
+ * printed a "35,012,300.7 robust deviations" finding, a number no
+ * distribution of four parts can support — so a MAD at or below the band
+ * counts as zero and the fallback takes over.
  */
 function robustZ(values: Map<string, number>): Map<string, number> {
   const out = new Map<string, number>();
@@ -158,10 +170,19 @@ function robustZ(values: Map<string, number>): Map<string, number> {
   if (logs.length < 3) return out;
   const med = median(logs);
   const devs = logs.map((l) => Math.abs(l - med));
-  const mad = median(devs);
+  const rawMad = median(devs);
+  // One R6 quantum at the distribution's centre, in log units: values are
+  // known to ±1e-6 absolute, so log-values are known to ~1e-6/v — and the
+  // median mixes two values, so a deviation is indistinguishable from
+  // rounding noise out to a couple of quanta. A MAD in that band is
+  // quantization, not spread; treating it as spread is what printed a
+  // "35,012,300.7 robust deviations" finding. Below the band the MAD is
+  // degenerate and the meanAD fallback takes over.
+  const resolution = 1e-6 / Math.exp(med);
+  const mad = rawMad > 2 * resolution ? rawMad : 0;
   const meanAd = devs.reduce((a, b) => a + b, 0) / devs.length;
   // 1/0.6745 for MAD, sqrt(pi/2) for meanAD — the standard σ-consistent scales.
-  const scale = mad > 0 ? 1.4826 * mad : meanAd > 0 ? 1.253314 * meanAd : 0;
+  const scale = mad > 0 ? 1.4826 * mad : meanAd > 2 * resolution ? 1.253314 * meanAd : 0;
   if (scale === 0) return out; // every value identical: no outliers
   for (const [key, v] of values) {
     if (!(v > 0) || !Number.isFinite(v)) continue;
@@ -223,16 +244,37 @@ export function deriveFacts(
   }
 
   // ---- size coherence ----
-  const dims: number[] = [];
+  /* The population is FAMILIES, not instances. A scene is a set of designs,
+     and a repeat/around/scatter mints copies of one design — 74 identical
+     gear teeth are one decision, not 74 votes for what "normal size" means.
+     Counted per instance, the clones OWN the median and every structural
+     part reads as an outlier (a real compile printed 19 "verify it is not a
+     unit/scale slip" lines about its own plinth and stems). Each family
+     contributes one representative value: the base part's own measurement,
+     or — when the base itself was not measured — the first measured member
+     in name order, so the representative is deterministic. */
   const dimByPart = new Map<string, number>();
   for (const mesh of census.meshes) {
     const d = maxDimOf(mesh);
-    if (d !== undefined && d > 0) {
-      dims.push(d);
-      dimByPart.set(mesh.object, d);
-    }
+    if (d !== undefined && d > 0) dimByPart.set(mesh.object, d);
   }
-  const medianMaxDim = median(dims);
+  const representative = (perPart: Map<string, number>): Map<string, number> => {
+    const byFamily = new Map<string, number>();
+    const objects = [...perPart.keys()].sort();
+    // Members first (name order), then the base's own value wins where it
+    // exists — one deterministic pass, base preferred.
+    for (const object of objects) {
+      const fam = familyOf(object);
+      if (!byFamily.has(fam)) byFamily.set(fam, perPart.get(object)!);
+    }
+    for (const object of objects) {
+      const fam = familyOf(object);
+      if (fam === object) byFamily.set(fam, perPart.get(object)!);
+    }
+    return byFamily;
+  };
+  const dimByFamily = representative(dimByPart);
+  const medianMaxDim = median([...dimByFamily.values()]);
   const sizeRatioByPart = new Map<string, number>();
   if (Number.isFinite(medianMaxDim) && medianMaxDim > 0) {
     for (const [object, d] of dimByPart) sizeRatioByPart.set(object, d / medianMaxDim);
@@ -273,8 +315,11 @@ export function deriveFacts(
   }
 
   // ---- distribution-relative outliers (unit slips, LOD absurdity) ----
-  const sizeOutlierZByPart = robustZ(dimByPart);
-  const triDensityOutlierZByPart = robustZ(triDensityByPart);
+  // Same family-representative population as the median above, and for the
+  // same reason; the judge only fires these on base parts, whose partId IS
+  // their familyId, so the per-family keys land where the lookup happens.
+  const sizeOutlierZByPart = robustZ(dimByFamily);
+  const triDensityOutlierZByPart = robustZ(representative(triDensityByPart));
 
   // ---- measured shape families (spectral shape-DNA) ----
   const spectralFamilies = spectralFamiliesOf(census);

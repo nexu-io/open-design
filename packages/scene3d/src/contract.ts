@@ -225,10 +225,13 @@ export interface NormalizedContract {
     requireAppliedScale: boolean;
     /** Declared assembly/print/animation tolerance in metres; 0 = off. */
     minClearance: number;
-    /** Triangle-pair budget for the coplanar (z-fighting) comparison, per
-     *  mesh pair. Above it the pair is skipped LOUDLY (S3D-W-323). A knob,
-     *  because a correct sphere-on-cylinder scene can exceed the default
-     *  and the author's only prior recourse was "split the scene". */
+    /** TOTAL triangle-pair comparisons the coplanar (z-fighting) scan may
+     *  spend across the whole scene — the scan's ONE resource knob. Candidate
+     *  pairs (boxes overlapping) charge their triangle product against it in
+     *  deterministic order; a pair it cannot cover is skipped LOUDLY
+     *  (S3D-W-323) with the number it needed. There is no mesh-count or
+     *  per-mesh ceiling beside it — the second walls that once made raising
+     *  this knob reveal an unraisable one. */
     zFightingPairBudget: number;
     /** Backstop on total parts after `repeat`/`scatter`/`around` expansion, and
      *  on any single instance count — a RUNAWAY guard (a `count:` typo), not a
@@ -460,7 +463,10 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
       // The runner default, kept in one place: raising it buys the coplanar
       // check on dense pairs at quadratic cost, which is the author's
       // trade to make, not the module's.
-      zFightingPairBudget: numOr(geo.zFightingPairBudget, 200_000),
+      // 2M total tri-pair comparisons ~= a couple of seconds of narrow phase:
+      // everything the old per-pair regime actually ran still runs, and the
+      // heavy pairs it silently walled off now skip with a raisable number.
+      zFightingPairBudget: numOr(geo.zFightingPairBudget, 2_000_000),
       // Raisable runaway backstops (not size caps): default generous, an author
       // building a real crowd/forest lifts them rather than being refused.
       maxParts: Math.max(1, Math.floor(numOr(geo.maxParts, MAX_PARTS))),

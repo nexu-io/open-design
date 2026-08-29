@@ -253,7 +253,11 @@ scene3d compile --look at=prp_bar,from=part:prp_stool,eyeHeight=1.2
 whole scene), `from` (a compass word, `<az>/<el>` degrees, or
 `part:<name>` to stand AT that part), `elevation`
 (`level|eye|high|top|low|bottom`), `fov`, `margin`, `distance`,
-`eyeHeight`, `label`.
+`eyeHeight`, `label`. `margin` MULTIPLIES the fitted distance (1 = the
+subject exactly fills the frame; default 1.25; it is not padding — below 1
+walks the camera toward, then inside, the subject, and the resolved pose
+notes when the eye lands inside the subject's bounding sphere). `distance`
+and `eyeHeight` are metres.
 
 A camera is four independent things, and `--shot '<json>'` is the general
 form when a look cannot say what you mean:
@@ -471,7 +475,7 @@ scene needs at least one `at`.
 | `span` (`from`, `to`, `axis`, `embed`) | stretch between two parts, biting into both |
 | `repeat` (`count`, `along`, `every`) | array at a centre-to-centre pitch; two repeats compose a grid |
 | `scatter` (`on`, `count`, `seed`, `minGap`, `sizeJitter`) | owns the part's whole placement; deterministic; a region too small fails loudly |
-| `around` (`center`, `radius`, `count`, `axis`, `startDeg`, `orient`) | ring `count` instances evenly about another part's centre; `orient: true` turns each one to face its own angle |
+| `around` (`center`, `radius`, `count`, `axis`, `startDeg`, `orient`) | ring `count` instances evenly about another part's centre; `count: 1` is a polar placement (the part stands at `startDeg` on the radius); `orient: true` turns each one to face its own angle |
 
 `sits_on` with a non-z `axis` is an ATTACHMENT, not a resting — a pommel
 capping a Y-up grip. The face-to-face placement is the same and the

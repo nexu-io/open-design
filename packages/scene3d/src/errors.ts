@@ -30,6 +30,12 @@ export const ISSUE_CODES = {
   /* The relation graph could not place every part (unresolved axis, cycle,
      conflicting constraints, unknown reference, expansion over a limit). */
   SPEC_UNRESOLVED: "S3D-E-106",
+  /* The solved scene's estimated build cost exceeds the compile's work
+     budget — the kernel meter's verdict applied to emitted parts, so a
+     runaway repeat/around/scatter refuses deterministically at solve time
+     instead of holding a Blender process for an hour. Raisable: the message
+     names the units, the budget, and the workBudget lever. */
+  SPEC_WORK_EXCEEDED: "S3D-E-107",
   /* The spec is VALID but says something almost certainly unintended — a
      kilometre-scale size (millimetres read as metres?), a rotation about a
      shape's own symmetry axis that provably does nothing, a span whose body

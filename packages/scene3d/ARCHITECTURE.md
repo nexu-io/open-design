@@ -1060,9 +1060,12 @@ cutoff is a named constant exported as `census.contactRange`, because
   inert — `rotationIsInert`), and a span whose body never overlaps an
   anchor it names (bridging air, measured per transverse axis). The
   report's `scale:` line adds a `spread N:1 — verify units` note past
-  10⁴:1, and `conventions.geometry.zFightingPairBudget` is the audit's
-  requested knob for the W-323 pair cap (validated 1e3..5e6; plumbed
-  through the build job to `z_fighting_pairs`).
+  10⁴:1, and `conventions.geometry.zFightingPairBudget` is the z-fighting
+  scan's ONE resource knob: the TOTAL triangle-pair comparisons the scan
+  may spend across the scene (sweep-and-prune candidates charge their
+  triangle product in deterministic order; what the budget cannot cover is
+  skipped loudly as W-323). Plumbed through the build job to
+  `z_fighting_pairs`; there is no mesh-count or per-mesh ceiling beside it.
 - **Signed outliers**: `robustZ` keeps the sign; I-951's prose reads it
   (DENSER → LOD/decimation, SPARSER → proxy/fixture, subdivide only if it
   should match) — the rule used to advise decimating a 12-triangle plinth.

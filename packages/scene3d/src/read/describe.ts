@@ -1,4 +1,5 @@
 import type { Census, CensusMesh, Issue } from "../types.js";
+import { didYouMean } from "../solve/did-you-mean.js";
 
 /**
  * Level-of-detail for information.
@@ -53,6 +54,19 @@ interface Group {
 }
 
 const CHARS_PER_TOKEN = 4;
+
+/**
+ * A query the census cannot answer — an unknown `focus` name. A refusal, not
+ * an empty result: `--focus prp_nope` used to return the ordinary unfocused
+ * digest, so an agent's typo got a confidently WRONG answer where `--look`
+ * refuses a bad name and lists the legal ones. Same posture here.
+ */
+export class DescribeRefusal extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DescribeRefusal";
+  }
+}
 
 function fmt(n: number): string {
   // Millimetre precision. Finer is noise at asset scale and costs budget on
@@ -163,6 +177,21 @@ export function describeScene(
 ): string {
   const budget = (options.budgetTokens ?? 700) * CHARS_PER_TOKEN;
   let parts = partsOf(census);
+  if (options.focus !== undefined) {
+    // The focus must NAME something — a part or a group key — before any
+    // region filter narrows the view, so "focus outside your region" still
+    // resolves and an unknown name refuses with the vocabulary.
+    const names = new Set(parts.map((p) => p.name));
+    for (const g of group(parts)) names.add(g.key);
+    if (!names.has(options.focus)) {
+      const sorted = [...names].sort();
+      const shown = sorted.slice(0, 24);
+      const more = sorted.length > shown.length ? `, …${sorted.length - shown.length} more` : "";
+      throw new DescribeRefusal(
+        `no part or group named '${options.focus}' — ${didYouMean(options.focus, sorted)}known: ${shown.join(", ")}${more}`,
+      );
+    }
+  }
   if (options.region) parts = parts.filter((p) => intersects(p, options.region!));
 
   const lines: string[] = [];
@@ -215,6 +244,23 @@ export function describeScene(
   // Issues come first because they are the reason to read this at all, and
   // a budget spent describing healthy geometry while an error scrolls off
   // the end is a budget spent backwards.
+  //
+  // Scoped like everything else: a region query keeps scene-level issues
+  // (no target) and issues touching a described part, and drops findings
+  // about parts the region excluded — listing all 35 of a scene's issues
+  // under a 47-part region defeated the budget the region exists to serve.
+  // A target that names no census part at all (a material, a shader) is
+  // not spatial and always stays.
+  if (options.region) {
+    const inView = new Set(parts.map((p) => p.name));
+    const allParts = new Set(partsOf(census).map((p) => p.name));
+    issues = issues.filter((issue) => {
+      if (!issue.target) return true;
+      const named = issue.target.split(" <-> ");
+      if (!named.some((n) => allParts.has(n))) return true;
+      return named.some((n) => inView.has(n));
+    });
+  }
   if (issues.length > 0) {
     const byCode = new Map<string, { severity: string; targets: string[] }>();
     const rankOf = (s: string) => (s === "error" ? 0 : s === "warning" ? 1 : 2);

@@ -425,6 +425,14 @@ const RELATION_TYPES = [
   "at", "sits_on", "above", "align", "inset_from", "span", "repeat", "scatter", "around",
 ] as const;
 
+/** Part-field words an author plausibly writes as a relation type (`{"type":
+ *  "spin"}` for a motion, `{"type": "material"}` for a look). One vocabulary
+ *  with `validatePart`'s KNOWN_PART_KEYS — the refusal should say "wrong
+ *  half of the language", never "did you mean span". */
+const PART_FIELD_WORDS = new Set([
+  "spin", "bob", "screw", "rotate", "material", "shape", "size", "file", "script", "recipe", "role",
+]);
+
 function validatePart(
   index: number,
   value: unknown,
@@ -1338,10 +1346,18 @@ function validateRelation(index: number, value: unknown, errors: string[]): Rela
         );
       }
       let count: number | undefined;
-      if (typeof rel.count === "number" && Number.isInteger(rel.count) && rel.count >= 2) {
+      // count 1 is a legal ring: POLAR PLACEMENT. The base stands at
+      // startDeg on the radius and nothing is minted — the only way the
+      // language can say "at this angle and distance from that part"
+      // without falling back to authored coordinates. Refusing it left a
+      // grounded single-orb ring inexpressible, and "a ring of one is just
+      // a part" was wrong: a part has no angle.
+      if (typeof rel.count === "number" && Number.isInteger(rel.count) && rel.count >= 1) {
         count = rel.count;
       } else {
-        errors.push(`${at}.count must be an integer >= 2 — a ring of one is just a part`);
+        errors.push(
+          `${at}.count must be an integer >= 1 — 1 is a polar placement (the part stands at startDeg on the ring), 2+ mints instances`,
+        );
       }
       let startDeg: number | undefined;
       if (rel.startDeg !== undefined) {
@@ -1438,11 +1454,24 @@ function validateRelation(index: number, value: unknown, errors: string[]): Rela
         ...(embed !== undefined ? { embed } : {}),
       };
     }
-    default:
+    default: {
+      const typed = String(rel.type);
+      // Membership beats edit distance: `spin` is one character from `span`,
+      // but it is a real word in THIS language — a part field. Sending its
+      // author to a placement relation with unrelated semantics is a
+      // suggestion pointing at the wrong half of the vocabulary, so the
+      // part-field answer is checked first and named as what it is.
+      if (PART_FIELD_WORDS.has(typed)) {
+        errors.push(
+          `${at}.type '${typed}' is a part FIELD, not a relation — author it on the part object (parts[].${typed}); relations only place parts (${RELATION_TYPES.join(", ")})`,
+        );
+        return undefined;
+      }
       errors.push(
-        `${at}.type '${String(rel.type)}' is not a relation — ${didYouMean(String(rel.type), RELATION_TYPES)}expected ${RELATION_TYPES.join(", ")}`,
+        `${at}.type '${typed}' is not a relation — ${didYouMean(typed, RELATION_TYPES)}expected ${RELATION_TYPES.join(", ")}`,
       );
       return undefined;
+    }
   }
 }
 

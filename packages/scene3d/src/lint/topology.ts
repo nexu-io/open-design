@@ -215,7 +215,7 @@ export function lintTopology(ctx: LintContext, issues: Issue[]): void {
       code: ISSUE_CODES.Z_FIGHTING_UNCHECKED,
       severity: "warning",
       message: `z-fighting search did not cover the whole scene (${skipped.length} exclusion(s))`,
-      hint: "split the scene or reduce mesh density if this surface must be verified",
+      hint: "raise conventions.geometry.zFightingPairBudget to cover the skipped pairs — the budget is total triangle-pair comparisons for the scene, and each exclusion names what it needed",
       detail: { skipped },
     });
   }

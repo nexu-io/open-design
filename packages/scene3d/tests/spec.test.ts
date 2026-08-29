@@ -1907,12 +1907,14 @@ describe("around (radial repeat)", () => {
     });
   });
 
-  it("refuses a non-positive radius, a count below two, and a runaway startDeg", () => {
+  it("refuses a non-positive radius, a count below one, and a runaway startDeg", () => {
+    // count 1 became legal (a polar placement); zero instances is still not
+    // a ring of anything.
     const errors = errorsFor([
-      { type: "around", part: "prp_bar", center: "prp_hub", radius: 0, count: 1, startDeg: 720 },
+      { type: "around", part: "prp_bar", center: "prp_hub", radius: 0, count: 0, startDeg: 720 },
     ]);
     expect(errors.some((e) => e.includes(".radius must be a positive number"))).toBe(true);
-    expect(errors.some((e) => e.includes(".count must be an integer >= 2"))).toBe(true);
+    expect(errors.some((e) => e.includes(".count must be an integer >= 1"))).toBe(true);
     expect(errors.some((e) => e.includes(".startDeg must be greater than -360"))).toBe(true);
   });
 
@@ -2992,5 +2994,19 @@ describe("the whole-material shorthand never fights an explicit binding", () => 
       shader: "shd_n",
       output: "normal",
     });
+  });
+});
+
+describe("unknown relation type — vocabulary routing", () => {
+  it("names a part field as a part field, never 'did you mean span'", () => {
+    const { errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_ring", size: [0.2, 0.2, 0.05] }],
+      relations: [{ type: "spin", part: "prp_ring" }],
+    });
+    const hit = errors.find((e) => e.includes("'spin'"))!;
+    expect(hit).toContain("part FIELD");
+    expect(hit).toContain("parts[].spin");
+    expect(hit).not.toContain('"span"');
   });
 });

@@ -886,7 +886,7 @@ learns the codes instead of re-reading prose.
 big kit without recompiling.
 
 Exit codes: 0 clean at threshold · 1 issues at/above --fail-on ·
-2 usage · 3 daemon unreachable.
+2 usage · 3 daemon unreachable · 4 scene busy (another compile holds it — nothing ran).
 
 Options:
   --project <id>           Project id (default: OD_PROJECT_ID)
@@ -921,6 +921,10 @@ Options:
                                                             (stand at the stool, 1.2m up)
                            Keys: at, from, elevation (level|eye|high|top|low|bottom),
                            fov, margin, distance, eyeHeight, label.
+                           margin MULTIPLIES the fitted distance (1 = subject exactly
+                           fills the frame; default 1.25; it is not padding — below 1
+                           walks the camera toward, then inside, the subject).
+                           distance and eyeHeight are metres.
   --shot <json>            The same viewport in its general form, for the shots an
                            aimed --look cannot express. Repeatable. A shot is
                            station (where the eye is) x gaze (where it points) x
@@ -1398,6 +1402,29 @@ async function runScene3d(args) {
     );
     process.exit(3);
   }
+  if (resp.status === 409) {
+    // The per-scene compile gate refused: nothing ran, nothing failed. A
+    // distinct exit code — a script must be able to tell "compiled clean"
+    // from "try again later", and the generic JSON dump exited 0 here once.
+    const busyMessage =
+      'scene is busy: another compile holds it — nothing ran; retry when it finishes ' +
+      '(od scene3d manifest --json shows generatedAt when it lands)';
+    if (flags.json) {
+      // The machine-readable surface keeps its contract on refusals too.
+      let body: unknown;
+      try {
+        body = await resp.json();
+      } catch {
+        body = undefined;
+      }
+      process.stdout.write(
+        `${JSON.stringify({ ok: false, code: 'scene-busy', projectId, scenePath, message: busyMessage, ...(body !== undefined ? { response: body } : {}) }, null, 2)}\n`,
+      );
+    } else {
+      console.error(busyMessage);
+    }
+    process.exit(4);
+  }
   if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
   const result = await resp.json();
   const { summary } = result;
@@ -1453,6 +1480,14 @@ async function runScene3d(args) {
       const relaxedFrom = (issue.detail as { relaxedFrom?: string } | undefined)?.relaxedFrom;
       const arrow = relaxedFrom && relaxedFrom !== issue.severity ? `→${issue.severity}` : '';
       console.log(`${issue.code}${arrow}${target} ${issue.message}`);
+      // Multi-line detail payloads (an E-802 driver log) are the finding's
+      // only actionable content; render them as indented blocks rather than
+      // leaving them to the JSON envelope a terse reader never opens.
+      for (const [key, value] of Object.entries(issue.detail ?? {})) {
+        if (typeof value !== 'string' || !value.includes('\n')) continue;
+        console.log(`      ${key}:`);
+        for (const line of value.split('\n')) console.log(`        ${line}`);
+      }
       if (issue.hint) console.log(`      fix: ${issue.hint}`);
     }
     const counts = `${summary.errors} error${summary.errors === 1 ? '' : 's'} · ${summary.warnings} warning${summary.warnings === 1 ? '' : 's'}`;
@@ -1485,6 +1520,12 @@ async function runScene3d(args) {
         `look[${i}] ${look.label}${sample} — ${look.image?.path ?? '(no frame rendered)'}\n` +
           `        ${geometry}${caught}`,
       );
+      // The resolver's stated substitutions and warnings ("the eye is INSIDE
+      // the subject's bounding sphere") — the terse stream is where a shot
+      // that resolved exactly but photographs garbage gets its one warning.
+      for (const note of look.notes ?? []) {
+        console.log(`        note: ${note}`);
+      }
     }
     for (const r of result.looksRejected ?? []) {
       console.log(`look[${r.index}] REFUSED — ${r.reason}`);

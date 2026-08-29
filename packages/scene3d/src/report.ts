@@ -958,6 +958,13 @@ function appendSection(
     lines.push(`  ${named}${target}${where} ${issue.message}`);
     const data = compactDetail(issue.detail);
     if (data) lines.push(`    data: ${data}`);
+    // Multi-line detail payloads (an E-802 driver log) render as indented
+    // blocks: squeezed onto the one data line they truncate at the cap and
+    // the only actionable content in the finding is the part that got cut.
+    for (const [key, value] of blockDetails(issue.detail)) {
+      lines.push(`    ${key}:`);
+      for (const detailLine of value.split("\n")) lines.push(`      ${detailLine}`);
+    }
     if (issue.hint) lines.push(`    fix: ${issue.hint}`);
   }
 }
@@ -977,6 +984,7 @@ function compactDetail(detail: Record<string, unknown> | undefined): string | nu
   if (!detail) return null;
   const keys = Object.keys(detail)
     .filter((key) => key !== "origin")
+    .filter((key) => !(typeof detail[key] === "string" && (detail[key] as string).includes("\n")))
     .sort();
   if (keys.length === 0) return null;
   const line = keys.map((key) => `${key}=${fmtDetailValue(detail[key])}`).join(" ");
@@ -986,6 +994,16 @@ function compactDetail(detail: Record<string, unknown> | undefined): string | nu
   return line.length > 400
     ? `${line.slice(0, 320)}… (truncated, ${line.length - 320} more chars in out/read-model.json)`
     : line;
+}
+
+/** The multi-line string payloads of a detail, sorted — rendered as indented
+ *  blocks by the caller rather than flattened into the one data line. */
+function blockDetails(detail: Record<string, unknown> | undefined): Array<[string, string]> {
+  if (!detail) return [];
+  return Object.keys(detail)
+    .filter((key) => typeof detail[key] === "string" && (detail[key] as string).includes("\n"))
+    .sort()
+    .map((key) => [key, detail[key] as string]);
 }
 
 function fmtDetailValue(value: unknown): string {

@@ -58,8 +58,15 @@ def emit(result):
     sys.stdout.flush()
 
 
-def fail(error_code, error):
-    emit({"ok": False, "errorCode": error_code, "error": error})
+def fail(error_code, error, detail=None):
+    """Structured refusal. `detail` carries measured payloads (a driver log,
+    an offset) that belong beside the message, not glued into it — the report
+    renders detail as data lines, and a multi-line message truncates on every
+    terse surface."""
+    out = {"ok": False, "errorCode": error_code, "error": error}
+    if detail:
+        out["errorDetail"] = detail
+    emit(out)
     sys.exit(1)
 
 
@@ -844,13 +851,29 @@ def bake_shaders(job):
                 raise
         except Exception as e:
             tail = driver_log_tail(locals().get("driver_log", ""))
+            # The log's LAST line is the diagnosis (GLSL logs lead with the
+            # source dump); it rides the one-line message. The full tail is
+            # DETAIL, where the report renders it as an indented block — glued
+            # into the message, every terse surface lost everything after the
+            # first newline, which was the only actionable content.
+            last = tail.splitlines()[-1] if tail else ""
+            detail = {}
+            if tail:
+                detail["driverLog"] = tail
+            if spec.get("kernelLine"):
+                # Driver log line numbers index the ASSEMBLED fragment stage
+                # (plus any driver preamble), not the author's .glsl file —
+                # the key says so, because a bare number sends the reader to
+                # the wrong file's line N.
+                detail["kernelBodyStartsAtAssembledLine"] = int(spec["kernelLine"])
             fail("S3D-E-802",
                  "shader '%s' failed to compile on the driver: %s%s"
-                 % (name, e, ("\n" + tail) if tail else
+                 % (name, e, (" — %s" % last) if last else
                     " (the driver printed no log, so the compile failed "
                     "without saying where; check the kernel for a GLSL "
                     "version mismatch, a missing return, or a built-in this "
-                    "driver does not provide)"))
+                    "driver does not provide)"),
+                 detail=detail or None)
 
         def draw_cell(out_index, t):
             """One GPU execution of the kernel; returns (size, size, 4)
@@ -2124,6 +2147,9 @@ SYMMETRY_PROBES = 2048
 # so a "cheaper approximation" here would be a fabricated fingerprint,
 # not a coarse one.
 SPECTRUM_VERT_CAP = 2000
+# Adjacency -> spectrum result. Lives for one runner process (one compile),
+# which is exactly the scope in which clones exist.
+_SPECTRUM_CACHE = {}
 # How many nonzero eigenvalues travel. The low end of the spectrum carries the
 # coarse shape (the high end is tessellation noise), and 12 is enough to
 # separate a torus from a sphere while staying tiny in the manifest.
@@ -2204,6 +2230,15 @@ def spectrum_facts(mesh):
     this count, so the census never depends on the threshold for a fact it can
     get exactly.
 
+    CACHED by exact adjacency: a repeat/around/scatter mints hundreds of
+    clones whose edge graphs are bit-identical, and the dense eigensolve is
+    the census's single most expensive fact (a couple of seconds at the
+    2000-vertex cap). Re-solving an identical matrix per clone turned a
+    5000-instance ring into an hours-long census — a clone's spectrum IS its
+    base's, so the cache is the one-predicate rule applied to cost. The key
+    is the full (n, edge set) — exact, never a fuzzy signature — so two
+    different graphs can never share an entry.
+
     Returns {"shells": n} plus either "eigenvalues" or "skipped" (a reason,
     never silence)."""
     edge_pairs = []
@@ -2217,19 +2252,31 @@ def spectrum_facts(mesh):
     n = len(mesh.vertices)
     if n == 0:
         return None
+    # The frozenset ITSELF is the key — a hash would let two different
+    # graphs alias one entry, which is a fabricated fingerprint.
+    cache_key = (n, frozenset(
+        (a, b) if a < b else (b, a) for a, b in edge_pairs))
+    cached = _SPECTRUM_CACHE.get(cache_key)
+    if cached is not None:
+        return dict(cached)
     try:
         shells = _shell_count(n, edge_pairs)
     except Exception:
         return None
     out = {"shells": shells}
+
+    def _remember(result):
+        _SPECTRUM_CACHE[cache_key] = dict(result)
+        return result
+
     if n > SPECTRUM_VERT_CAP:
         out["skipped"] = "vertex count %d exceeds SPECTRUM_VERT_CAP %d" % (n, SPECTRUM_VERT_CAP)
-        return out
+        return _remember(out)
     try:
         import numpy as np
     except Exception:
         out["skipped"] = "numpy unavailable in this Blender python"
-        return out
+        return _remember(out)
     try:
         lap = np.zeros((n, n), dtype=np.float64)
         for a, b in edge_pairs:
@@ -2246,16 +2293,16 @@ def spectrum_facts(mesh):
         vals = np.linalg.eigvalsh(lap)
     except Exception as exc:
         out["skipped"] = "eigen solve failed: %s" % (exc.__class__.__name__,)
-        return out
+        return _remember(out)
     lam_max = float(vals[-1]) if len(vals) else 0.0
     if not math.isfinite(lam_max) or lam_max <= 0.0:
         out["skipped"] = "no positive spectrum (mesh has no edges)"
-        return out
+        return _remember(out)
     cut = 1e-8 * lam_max
     nonzero = [float(v) for v in vals if abs(float(v)) >= cut]
     if not nonzero:
         out["skipped"] = "no nonzero eigenvalues"
-        return out
+        return _remember(out)
     first = nonzero[0]
     # SIGNIFICANT digits, not decimal places. The ratios lam_k/lam_1 are
     # unbounded above (a near-disconnected mesh — two clusters joined by a
@@ -2269,7 +2316,7 @@ def spectrum_facts(mesh):
     def sig6(v):
         return float("%.6g" % v) if math.isfinite(v) else None
     out["eigenvalues"] = [sig6(v / first) for v in nonzero[:SPECTRUM_K]]
-    return out
+    return _remember(out)
 
 
 def _principal_axes(verts, stride):
@@ -2586,6 +2633,22 @@ def _uv_tri_cells(cells, a, b, c):
 
 
 def off_camera_objects(scene, objects):
+    """Objects PROVABLY outside the camera's view, with the measurement.
+
+    Separating-bound test, not a corner census: an object is reported only
+    when every corner of its box lies beyond ONE frame bound (all left of
+    x=0, all right of x=1, all below y=0, all above y=1, or all behind the
+    camera) — which proves the whole convex box invisible. The old test
+    ("no corner inside the frame") fired on a box merely STRADDLING a frame
+    edge or corner: each corner was individually outside while the part sat
+    plainly in frame, and three beads on a real ring were reported off-camera
+    with 200px of margin. A box that straddles the camera plane (corners on
+    both sides of z=0) is never judged by x/y — perspective mirrors NDC
+    behind the eye — so it is conservatively counted as visible.
+
+    Returns [{name, beyond, ndcMin, ndcMax}] — the measured NDC bounds are
+    the finding's evidence, so a reader can check the verdict instead of
+    re-rendering to disprove it."""
     import mathutils
     from bpy_extras.object_utils import world_to_camera_view
     cam = scene.camera
@@ -2610,9 +2673,27 @@ def off_camera_objects(scene, objects):
         else:
             corners = [o.matrix_world @ mathutils.Vector(c) for c in o.bound_box]
         pts = [world_to_camera_view(scene, cam, c) for c in corners]
-        if all(not (0.0 <= p.x <= 1.0 and 0.0 <= p.y <= 1.0 and p.z > 0.0) for p in pts):
-            out.append(o.name)
-    return sorted(out)
+        if all(p.z <= 0.0 for p in pts):
+            beyond = "behind the camera"
+        elif any(p.z <= 0.0 for p in pts):
+            continue
+        elif all(p.x < 0.0 for p in pts):
+            beyond = "left of frame"
+        elif all(p.x > 1.0 for p in pts):
+            beyond = "right of frame"
+        elif all(p.y < 0.0 for p in pts):
+            beyond = "below frame"
+        elif all(p.y > 1.0 for p in pts):
+            beyond = "above frame"
+        else:
+            continue
+        out.append({
+            "name": o.name,
+            "beyond": beyond,
+            "ndcMin": [R6(min(p.x for p in pts)), R6(min(p.y for p in pts))],
+            "ndcMax": [R6(max(p.x for p in pts)), R6(max(p.y for p in pts))],
+        })
+    return sorted(out, key=lambda e: e["name"])
 
 
 """Object name -> the build-script line that created it."""
@@ -4082,10 +4163,10 @@ def contact_report(objects):
     return out, skipped
 
 
-# The coplanar search is O(tris_a * tris_b); above this many pairs it is not
-# run. The cap is enforced by the CALLER so the skip can be reported — see the
-# note there.
-COPLANAR_TRI_PRODUCT_CAP = 200000
+# Fallback TOTAL budget for the coplanar search when the job carries none
+# (the contract normally sends conventions.geometry.zFightingPairBudget).
+# Spent across the scene's candidate pairs; every skip is reported.
+COPLANAR_TRI_PRODUCT_CAP = 2000000
 
 
 def tri_count(o):
@@ -4102,110 +4183,120 @@ def tri_count(o):
 
 
 def z_fighting_pairs(objects, pair_budget=COPLANAR_TRI_PRODUCT_CAP):
-    """Coplanar-overlap search, with an honest account of what it skipped.
+    """Coplanar-overlap search, governed by ONE spendable budget.
 
-    The search is quadratic in meshes and linear in faces, so it has caps.
-    Reporting an empty list when a cap was hit would tell the caller "no
-    z-fighting" when the truth is "not looked for" — the one failure mode a
-    measured contract cannot afford. Returns the pairs plus the reason any
-    part of the scene went unexamined.
+    `pair_budget` (conventions.geometry.zFightingPairBudget) is the total
+    number of triangle-pair comparisons the whole scan may spend. There is
+    deliberately no mesh-count ceiling and no per-mesh face ceiling: both
+    used to stand beside the budget as second walls with no lever, so an
+    author who raised the knob a skip message named hit "scene has 94
+    meshes, above the 40-mesh search limit" — a cap with no field in the
+    contract, which for a language built on repeat/around disabled the
+    check permanently. One resource, one knob, raisable, reported.
+
+    Candidates come from a sweep-and-prune broad phase over the measured
+    world boxes (one measurement per mesh, shared by broad phase, cost
+    product and narrow phase), are visited in deterministic name order, and
+    each charges its triangle product against the remaining budget. A pair
+    the budget cannot cover is skipped LOUDLY with the number it needed —
+    an empty pairs list with an empty skip list genuinely means "looked
+    everywhere, found nothing".
     """
     meshes = [o for o in objects if o.type == "MESH"]
     skipped = []
-    # 40 here against contact_report's 60, because the two searches cost
-    # different things at the same mesh count: contacts compare AABBs (a
-    # handful of floats per pair), this compares TRIANGLES within every
-    # overlapping pair. The asymmetry is the cost difference, not an accident —
-    # and either way the cap reports itself rather than reading as "clean".
-    if len(meshes) > 40:
-        return [], ["scene has %d meshes, above the %d-mesh search limit" % (len(meshes), 40)]
+    if len(meshes) < 2:
+        return [], skipped
 
-    # The EVALUATED polygon count per mesh, measured once. The gate below reads
-    # this rather than `o.data.polygons`, because the broad phase, the cost
-    # product and the coplanar test all read the evaluated mesh — a gate on the
-    # rest-cage datablock would pass a Mirror/Array whose cage is small but
-    # whose built geometry is heavy, and skip a modifier-reduced mesh as heavy
-    # when the search would have handled it. Same source, one predicate.
-    eval_faces = {}
+    boxes = {}
+    tris = {}
     for o in meshes:
-        with measured_mesh(o) as (me, _mw, _ev):
-            eval_faces[o.name] = 0 if me is None else len(me.polygons)
+        boxes[o.name] = measured_world_aabb(o)
+        tris[o.name] = tri_count(o)
+
+    # Sweep-and-prune on x: sort by box min, keep an active list pruned by
+    # box max, test y/z exactly. Candidate discovery then costs
+    # O(n log n + overlapping pairs) instead of O(n^2) mesh reads.
+    order = sorted(meshes, key=lambda o: (boxes[o.name][0][0], o.name))
+    candidates = []
+    active = []
+    # Discovery spends the SAME budget: every candidate's narrow phase costs
+    # at least one comparison, so once the candidate count reaches the budget
+    # no further pair could possibly run — collecting past that point is
+    # unbounded quadratic work the budget was supposed to govern. Reported,
+    # like every other exhaustion.
+    discovery_stopped = False
+    for o in order:
+        if discovery_stopped:
+            break
+        lo, hi = boxes[o.name]
+        active = [a for a in active if boxes[a.name][1][0] >= lo[0]]
+        for a in active:
+            la, ha = boxes[a.name]
+            if la[1] <= hi[1] and lo[1] <= ha[1] and la[2] <= hi[2] and lo[2] <= ha[2]:
+                candidates.append((a, o) if a.name < o.name else (o, a))
+                if len(candidates) >= pair_budget:
+                    discovery_stopped = True
+                    break
+        active.append(o)
+    if discovery_stopped:
+        skipped.append(
+            "the scene has %d+ overlapping mesh pairs — at least one comparison"
+            " each, that already exhausts the %d-comparison budget, so candidate"
+            " discovery stopped there; raise"
+            " conventions.geometry.zFightingPairBudget to see further"
+            % (len(candidates), pair_budget)
+        )
+    candidates.sort(key=lambda p: (p[0].name, p[1].name))
 
     pairs = []
     truncated = False
-    heavy = set()
-    dense = set()
-    for i, a in enumerate(meshes):
+    remaining = pair_budget
+    for a, b in candidates:
         if len(pairs) >= 20:
             truncated = True
             break
-        for b in meshes[i + 1:]:
-            if not aabb_overlap(a, b):
-                continue
-            if eval_faces[a.name] > 1500 or eval_faces[b.name] > 1500:
-                # Name BOTH when both are over: reporting one hides half the
-                # reason the pair went unexamined.
-                if eval_faces[a.name] > 1500:
-                    heavy.add(a.name)
-                if eval_faces[b.name] > 1500:
-                    heavy.add(b.name)
-                continue
-            # The triangulated-face-product cap lives HERE, where there is a
-            # caller to tell. coplanar_overlap used to apply it internally and
-            # return "no overlaps" — indistinguishable from a clean result, so
-            # two exactly coincident meshes could ship a textbook z-fight with
-            # an empty pairs list AND an empty skipped list. A cap that cannot
-            # be reported is a cap that lies.
-            cost = tri_count(a) * tri_count(b)
-            if cost > pair_budget:
-                dense.add((a.name, b.name, cost))
-                continue
-            count, area, worst = coplanar_overlap(a, b)
-            if count > 0:
-                pairs.append({
-                    "a": a.name, "b": b.name, "faceCount": count, "area": R6(area),
-                    **({"worst": worst} if worst else {}),
-                })
+        cost = tris[a.name] * tris[b.name]
+        if cost > remaining:
+            # Only reached AFTER the broad phase proved the boxes overlap, so
+            # the exclusion can honestly say raising the budget might find
+            # something — the question a reader of this note is asking.
+            skipped.append(
+                "%s vs %s needs %d triangle-pair comparisons and only %d of the"
+                " %d budget remains (their bounding boxes DO overlap, so the"
+                " comparison could find something; raise"
+                " conventions.geometry.zFightingPairBudget to cover it)"
+                % (a.name, b.name, cost, remaining, pair_budget)
+            )
+            continue
+        remaining -= cost
+        count, area, worst = coplanar_overlap(a, b)
+        if count > 0:
+            pairs.append({
+                "a": a.name, "b": b.name, "faceCount": count, "area": R6(area),
+                **({"worst": worst} if worst else {}),
+            })
     if truncated:
         skipped.append("stopped after %d reported pairs" % 20)
-    for name in sorted(heavy):
-        skipped.append("%s exceeds the %d-face per-mesh limit" % (name, 1500))
-    for a_name, b_name, cost in sorted(dense):
-        # Pairs only reach this skip AFTER their bounding boxes proved to
-        # overlap (the broad phase above), so the exclusion can honestly
-        # say raising the budget might find something — the question a
-        # reader of this note is actually asking.
-        skipped.append(
-            "%s vs %s is %d triangle pairs, above the %d-pair comparison budget"
-            " (their bounding boxes DO overlap, so the comparison could find something"
-            "; raise conventions.geometry.zFightingPairBudget to run it)"
-            % (a_name, b_name, cost, pair_budget)
-        )
     return pairs, skipped
 
 
-def aabb_overlap(a, b):
-    """Broad phase for the z-fighting search, over the MEASURED geometry.
+def measured_world_aabb(o):
+    """World AABB of the MEASURED geometry, as ([x,y,z] min, [x,y,z] max).
 
     `bound_box` describes the datablock, so a mirrored or solidified surface
-    can sit outside it — and a pair rejected here is never handed to
-    `coplanar_overlap`, which does read the evaluated triangles. A broad phase
-    that sees less than its narrow phase is a false negative by construction.
+    can sit outside it — and a pair rejected by a broad phase that sees less
+    than its narrow phase is a false negative by construction. Falls back to
+    the datablock box only when the evaluated mesh has no vertices at all.
     """
     import mathutils
-    def world_aabb(o):
-        with measured_mesh(o) as (me, mw, _evaluated):
-            pts = ([mw @ mathutils.Vector(v.co) for v in me.vertices]
-                   if me is not None and me.vertices else None)
-        if not pts:
-            pts = [o.matrix_world @ mathutils.Vector(c) for c in o.bound_box]
-        lo = mathutils.Vector((min(c.x for c in pts), min(c.y for c in pts), min(c.z for c in pts)))
-        hi = mathutils.Vector((max(c.x for c in pts), max(c.y for c in pts), max(c.z for c in pts)))
-        return lo, hi
-    la, ha = world_aabb(a)
-    lb, hb = world_aabb(b)
-    return (la.x <= hb.x and lb.x <= ha.x and la.y <= hb.y and lb.y <= ha.y
-            and la.z <= hb.z and lb.z <= ha.z)
+    with measured_mesh(o) as (me, mw, _evaluated):
+        pts = ([mw @ mathutils.Vector(v.co) for v in me.vertices]
+               if me is not None and me.vertices else None)
+    if not pts:
+        pts = [o.matrix_world @ mathutils.Vector(c) for c in o.bound_box]
+    lo = [min(c[i] for c in pts) for i in range(3)]
+    hi = [max(c[i] for c in pts) for i in range(3)]
+    return lo, hi
 
 
 def world_tris(o):
@@ -4927,10 +5018,20 @@ def _proof_frames(job, scene, opts, auto_cam, is_auto, steps, filepaths, turntab
         for o in subjects:
             world = face_connected_world_points(o)
             pts = [world_to_camera_view(scene, auto_cam, p) for p in world]
-            if world and all(
-                not (0.0 <= p.x <= 1.0 and 0.0 <= p.y <= 1.0 and p.z > 0.0) for p in pts
-            ):
-                gone.append(o.name)
+            # Separating-bound verdict, matching off_camera_objects: gone only
+            # when EVERY point lies beyond one frame bound (provably out of
+            # view). "No point inside" is not that — a span whose points
+            # straddle a frame corner has no point inside while its interior
+            # is plainly visible. Points behind the eye mirror in NDC, so a
+            # camera-plane straddler is conservatively counted visible.
+            if world and pts:
+                if all(p.z <= 0.0 for p in pts):
+                    gone.append(o.name)
+                elif not any(p.z <= 0.0 for p in pts) and (
+                    all(p.x < 0.0 for p in pts) or all(p.x > 1.0 for p in pts)
+                    or all(p.y < 0.0 for p in pts) or all(p.y > 1.0 for p in pts)
+                ):
+                    gone.append(o.name)
             visible = [p for p in pts if p.z > 0.0]
             if visible:
                 xs = [p.x for p in visible]

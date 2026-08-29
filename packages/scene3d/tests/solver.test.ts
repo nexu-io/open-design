@@ -782,3 +782,55 @@ describe("the buildability recheck reads the box the emitter builds from", () =>
     expect(bad[0]!.message).toContain("no bore");
   });
 });
+
+describe("around count 1 — polar placement", () => {
+  it("stands the base at startDeg on the radius, minting nothing", () => {
+    /*
+     * The one way the language can say "at this angle and distance from
+     * that part" without authored coordinates. Refusing count 1 left a
+     * grounded single-orb ring inexpressible.
+     */
+    const solved = solveScene({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_floor", size: [2, 2, 0.1] },
+        { id: "prp_hub", size: [0.2, 0.2, 0.2] },
+        { id: "prp_orb", size: [0.1, 0.1, 0.1] },
+      ],
+      relations: [
+        { type: "at", part: "prp_floor", center: [0, 0, 0.05] },
+        { type: "sits_on", part: "prp_hub", on: "prp_floor" },
+        // `around` owns the ring plane; z still needs its own anchor.
+        { type: "align", part: "prp_orb", to: "prp_hub", axes: ["z"] },
+        { type: "around", part: "prp_orb", center: "prp_hub", count: 1, radius: 0.5, startDeg: 90 },
+      ],
+    } as never);
+    expect(solved.diagnostics).toEqual([]);
+    expect(solved.parts.map((p) => p.id).sort()).toEqual(["prp_floor", "prp_hub", "prp_orb"]);
+    const orb = solved.parts.find((p) => p.id === "prp_orb")!;
+    // startDeg 90 about z, measured from +x: the orb stands at +y.
+    expect(orb.center[0]).toBeCloseTo(0, 9);
+    expect(orb.center[1]).toBeCloseTo(0.5, 9);
+  });
+});
+
+describe("cascade suppression covers every error class", () => {
+  it("does not add 'no placement' after a failed span already blamed the part", () => {
+    const solved = solveScene({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_base", size: [1, 1, 0.1] },
+        { id: "prp_bar", size: [0.1, 0.1, 0.1] },
+      ],
+      relations: [
+        { type: "at", part: "prp_base", center: [0, 0, 0.05] },
+        // A span to a part that does not exist: one root error, one edit.
+        { type: "span", part: "prp_bar", from: "prp_base", to: "prp_ghost", axis: "x" },
+      ],
+    } as never);
+    const aboutBar = solved.diagnostics.filter((d) => d.part === "prp_bar");
+    expect(aboutBar.length).toBeLessThanOrEqual(1);
+    const noPlacement = solved.diagnostics.filter((d) => d.message.includes("has no placement"));
+    expect(noPlacement).toEqual([]);
+  });
+});

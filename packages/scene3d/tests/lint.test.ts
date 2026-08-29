@@ -988,7 +988,7 @@ describe("lint: pbr/topology/integrity over census", () => {
       census: census({
         camera: { present: false, name: null },
         lightCount: 0,
-        offCameraObjects: ["prp_cube"],
+        offCameraObjects: [{ name: "prp_cube", beyond: "left of frame", ndcMin: [-0.4, 0.2] as [number, number], ndcMax: [-0.1, 0.5] as [number, number] }],
         objects: [
           {
             name: "prp_cube",
@@ -1041,7 +1041,7 @@ describe("lint: pbr/topology/integrity over census", () => {
     // stands alone and the census-level row is dropped.
     const issues = runLint({
       contract: contract(),
-      census: census({ offCameraObjects: ["prp_far"] }),
+      census: census({ offCameraObjects: [{ name: "prp_far", beyond: "left of frame", ndcMin: [-0.4, 0.2] as [number, number], ndcMax: [-0.1, 0.5] as [number, number] }] }),
       offByFrame: [{ frame: 1, objects: ["prp_far"] }],
     });
     const hits = issues.filter((i) => i.code === ISSUE_CODES.OFF_CAMERA && i.target === "prp_far");
@@ -1056,12 +1056,12 @@ describe("lint: pbr/topology/integrity over census", () => {
     // census-level finding.
     const issues = runLint({
       contract: contract(),
-      census: census({ offCameraObjects: ["prp_far"] }),
+      census: census({ offCameraObjects: [{ name: "prp_far", beyond: "left of frame", ndcMin: [-0.4, 0.2] as [number, number], ndcMax: [-0.1, 0.5] as [number, number] }] }),
       offByFrame: [{ frame: 1, objects: ["prp_other"] }],
     });
     const far = issues.filter((i) => i.code === ISSUE_CODES.OFF_CAMERA && i.target === "prp_far");
     expect(far).toHaveLength(1);
-    expect(far[0]!.message).toContain("outside the camera frustum");
+    expect(far[0]!.message).toContain("entirely left of frame");
   });
 
   it("attributes an orphaned material to the override only when every file part is overridden", () => {

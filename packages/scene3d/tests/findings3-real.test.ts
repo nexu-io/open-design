@@ -57,30 +57,45 @@ plate("prp_plate_a")
 plate("prp_plate_b")
 `;
 
-  it("never returns silence when the coplanar search hits its cost cap", async () => {
-    // 294 faces each -> 588 triangles -> 345,744 triangle pairs, over the
-    // 200,000-pair comparison cap. The cap used to be applied INSIDE
-    // coplanar_overlap, which returned "no overlaps found" — a result the
-    // caller could not distinguish from a clean scene. So two exactly
-    // coincident meshes shipped a textbook z-fight with an empty pairs list
-    // AND an empty skipped list: the one failure mode a measured contract
-    // cannot afford.
+  it("measures a heavy coincident pair the old per-pair cap used to wall off", async () => {
+    // 294 faces each -> 588 triangles -> 345,744 triangle-pair comparisons.
+    // Under the old PER-PAIR 200k cap this pair was permanently unmeasurable;
+    // under the spendable scene budget (default 2M) it simply runs, and the
+    // textbook z-fight is FOUND rather than skipped.
     const dir = mkProject({ "build.py": coincidentPlates(6) });
     const r = await run(dir);
     const mesh = r.census!.meshes.find((m) => m.object === "prp_plate_a")!;
-    expect(mesh.tris).toBeGreaterThan(450); // really is over the cap
+    expect(mesh.tris).toBeGreaterThan(450);
+    expect(r.issues.filter((i) => i.code === "S3D-E-324").length).toBeGreaterThan(0);
+    expect(r.issues.filter((i) => i.code === "S3D-W-323")).toEqual([]);
+  });
 
+  it("never returns silence when the coplanar search exhausts its budget", async () => {
+    // The same plates under a floored budget: the pair cannot run, and the
+    // skip must be LOUD — both mesh names, the cost it needed, and the knob.
+    // The cap used to be applied INSIDE coplanar_overlap, which returned
+    // "no overlaps found" — indistinguishable from a clean scene: the one
+    // failure mode a measured contract cannot afford.
+    const dir = mkProject({
+      "build.py": coincidentPlates(6),
+      "scene3d.json": JSON.stringify({
+        schemaVersion: 1,
+        conventions: { geometry: { zFightingPairBudget: 1000 } },
+      }),
+    });
+    const r = await run(dir);
     const zFight = r.issues.filter((i) => i.code === "S3D-E-324");
     const unchecked = r.issues.filter((i) => i.code === "S3D-W-323");
     // Either verdict is honest. Silence is not.
     expect(zFight.length + unchecked.length).toBeGreaterThan(0);
     expect(unchecked).toHaveLength(1);
-    // The reason must name BOTH meshes and the cost — "unchecked" is only
-    // useful if the reader can tell what to do about it.
+    // The reason must name BOTH meshes, the cost, and the raisable knob —
+    // "unchecked" is only useful if the reader can tell what to do about it.
     const reason = (r.census!.zFightingSkipped ?? []).join(" ");
     expect(reason).toContain("prp_plate_a");
     expect(reason).toContain("prp_plate_b");
-    expect(reason).toMatch(/\d+ triangle pairs/);
+    expect(reason).toMatch(/\d+ triangle-pair comparisons/);
+    expect(reason).toContain("zFightingPairBudget");
   });
 
   it("says so when the viewer edit sidecar is unreadable", async () => {

@@ -8,6 +8,7 @@ import {
   PartSpec,
   Relation,
   SceneSpec,
+  ADVISORY_DIAGNOSTICS,
   SolveDiagnostic,
   SolvedPart,
   SolvedScene,
@@ -35,6 +36,10 @@ import { shapeViolations } from "./shape-sanity.js";
  * answer, and silent wrong answers in geometry cost a whole compile round
  * trip to notice.
  */
+
+const diagnosticIsAdvisory = (code: SolveDiagnostic["code"]): boolean =>
+  ADVISORY_DIAGNOSTICS.has(code);
+
 export function solveScene(
   spec: SceneSpec,
   opts: { grid?: number; maxParts?: number; maxRepeatCount?: number } = {},
@@ -609,12 +614,16 @@ export function solveScene(
     const c = center.get(part.id)!;
     if (c.some((v) => v === null)) {
       // Cascade suppression: when the relation that would have placed this
-      // part already failed loudly (unknown reference, never resolved),
-      // "has no placement" is the same fact said twice — two errors, one
-      // edit. The root error is still an error, so nothing gets quieter.
+      // part already failed loudly (unknown reference, never resolved, a
+      // conflict, a shape violation, a limit), "has no placement" is the
+      // same fact said twice — two errors, one edit. Keyed on EVERY
+      // error-class diagnostic, not just SOLVE-UNRESOLVED: a failed span
+      // reports SOLVE-CONFLICT and used to still cascade a second "no
+      // placement on z" line for the very part it had just explained. The
+      // root error is still an error, so nothing gets quieter.
       const alreadyBlamed =
         placementBlocked.has(part.id) ||
-        diagnostics.some((d) => d.code === "SOLVE-UNRESOLVED" && d.part === part.id);
+        diagnostics.some((d) => !diagnosticIsAdvisory(d.code) && d.part === part.id);
       if (!alreadyBlamed) {
         diagnostics.push({
           code: "SOLVE-UNRESOLVED",
@@ -777,7 +786,10 @@ function reportGeneratedIntersections(parts: SolvedPart[], diagnostics: SolveDia
   const bases = new Set(minted.map((p) => p.from!));
   const generated = parts.filter((p) => p.from !== undefined || bases.has(p.id));
   if (generated.length < 2) return;
-  const worst = new Map<string, { a: string; b: string; depth: number; axis: Axis }>();
+  const worst = new Map<
+    string,
+    { a: string; b: string; depth: number; axis: Axis; oriented: boolean }
+  >();
 
   for (let i = 0; i < generated.length; i++) {
     for (let j = i + 1; j < generated.length; j++) {
@@ -817,6 +829,7 @@ function reportGeneratedIntersections(parts: SolvedPart[], diagnostics: SolveDia
       // boxes themselves stand clear. When either part is rotated, the
       // exact SAT verdict on the true oriented boxes decides — and its
       // penetration replaces the inflated AABB depth in the report.
+      let oriented = false;
       if (a.rotate || b.rotate) {
         const separation = obbSeparation(
           { center: a.center, size: a.localSize ?? a.size, rotate: a.rotate },
@@ -824,6 +837,11 @@ function reportGeneratedIntersections(parts: SolvedPart[], diagnostics: SolveDia
         );
         if (-separation <= MIN_CONTACT) continue;
         depth = -separation;
+        // The SAT's minimum-translation direction is generally NOT a world
+        // axis; carrying the AABB's shallowest axis into the message here
+        // once reported a 24mm "overlap on z" between boxes whose z overlap
+        // measured 10mm — a right number wearing a wrong direction.
+        oriented = true;
       }
       // Two instances that REST ON THE SAME SUPPORT legitimately share its
       // top plane: each is embedded by MIN_CONTACT on z (the solver's own
@@ -854,19 +872,30 @@ function reportGeneratedIntersections(parts: SolvedPart[], diagnostics: SolveDia
       const fb = b.from ?? b.id;
       const key = fa < fb ? `${fa}\u0000${fb}` : `${fb}\u0000${fa}`;
       const seen = worst.get(key);
-      if (!seen || depth > seen.depth) worst.set(key, { a: a.id, b: b.id, depth, axis });
+      if (!seen || depth > seen.depth) worst.set(key, { a: a.id, b: b.id, depth, axis, oriented });
     }
   }
 
   for (const [key, hit] of [...worst].sort((x, y) => (x[0] < y[0] ? -1 : 1))) {
     const [fa, fb] = key.split("\u0000") as [string, string];
     const same = fa === fb;
+    // The oriented (SAT) depth is a minimum translation along whatever
+    // direction separates cheapest — naming a world axis for it would be a
+    // measurement wearing the wrong label.
+    const where = hit.oriented
+      ? "along their tightest separating direction"
+      : `on ${hit.axis}`;
     diagnostics.push({
       code: "SOLVE-INTERSECTION",
       message: same
-        ? `'${fa}' instances overlap each other by ${hit.depth.toFixed(4)}m on ${hit.axis} ('${hit.a}' into '${hit.b}') — the pitch is smaller than the part`
-        : `generated instances of '${fa}' and '${fb}' overlap by ${hit.depth.toFixed(4)}m on ${hit.axis} ('${hit.a}' into '${hit.b}')`,
+        ? `'${fa}' instances overlap each other by ${hit.depth.toFixed(4)}m ${where} ('${hit.a}' into '${hit.b}') — the pitch is smaller than the part`
+        : `generated instances of '${fa}' and '${fb}' overlap by ${hit.depth.toFixed(4)}m ${where} ('${hit.a}' into '${hit.b}')`,
       part: fa,
+      detail: {
+        depth: Number(hit.depth.toFixed(6)),
+        ...(hit.oriented ? { oriented: true } : { axis: hit.axis }),
+        instances: [hit.a, hit.b],
+      },
     });
   }
 }

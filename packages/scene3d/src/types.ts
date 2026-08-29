@@ -1155,7 +1155,20 @@ export interface Census {
    *  anything — a platform limit reported rather than silently narrowing
    *  the S3D-E-804 guarantee. */
   shaderNotes?: string[];
-  offCameraObjects: string[];
+  /** Objects PROVABLY outside the active camera's view — a separating-bound
+   *  verdict (every corner beyond one frame bound), never a corner census,
+   *  with the measured NDC extents as evidence. */
+  offCameraObjects: OffCameraFact[];
+}
+
+export interface OffCameraFact {
+  name: string;
+  /** Which single bound the whole box lies beyond ("left of frame", "behind
+   *  the camera", ...). */
+  beyond: string;
+  /** The box corners' NDC x/y extents (0..1 is the frame). */
+  ndcMin: [number, number];
+  ndcMax: [number, number];
 }
 
 /* ------------------------------------------------------------------ */

@@ -36,7 +36,7 @@ import {
   writeCache,
 } from "./build/blender.js";
 import { runRecipe } from "./parse/recipe.js";
-import { evalTraceShapes, EvalCancelledError } from "./kernel/trace.js";
+import { evalTraceShapes, EvalCancelledError, DEFAULT_WORK_BUDGET, SPEC_PART_BUILD_UNITS } from "./kernel/trace.js";
 import { toEmitMesh, fitKernelMesh, predictCensus, type EmitMesh, type PredictedCensus } from "./kernel/mesh.js";
 import { ratFromFloat } from "./kernel/rational.js";
 
@@ -166,8 +166,12 @@ const CHANNEL_SOCKETS: Record<string, { sockets: string[]; nonColor: boolean }> 
  * not block the build. The two facts are one: buildability, expressed as
  * severity. Every issue code sits beside its literal severity, so the drift is
  * visible at a glance and `tests/code-severity.test.ts` reads it directly.
+ * The warning rows must equal `ADVISORY_DIAGNOSTICS` (solve/types.ts), which
+ * the solver reads to suppress "no placement" cascades — the pairing is
+ * pinned by `tests/code-severity.test.ts`, so the two views of buildability cannot
+ * drift apart silently.
  */
-const SOLVE_DIAGNOSTIC_MAP: Record<string, { code: string; severity: Severity }> = {
+export const SOLVE_DIAGNOSTIC_MAP: Record<string, { code: string; severity: Severity }> = {
   "SOLVE-EPSILON-FLOOR": { code: ISSUE_CODES.SPEC_ADJUSTED, severity: "warning" },
   "SOLVE-INTERSECTION": { code: ISSUE_CODES.SPEC_INSTANCES_INTERSECT, severity: "warning" },
   "SOLVE-SUSPECT": { code: ISSUE_CODES.SPEC_SUSPECT, severity: "warning" },
@@ -534,6 +538,7 @@ export async function compile(
           message: diagnostic.message,
           file: "scene.json",
           ...(diagnostic.part ? { target: diagnostic.part } : {}),
+          ...(diagnostic.detail ? { detail: diagnostic.detail } : {}),
         });
       }
       /* The kinematic linter: motion adjudicated across its whole cycle as
@@ -559,6 +564,39 @@ export async function compile(
       );
       // Reads SOLVE_DIAGNOSTIC_MAP, the same table the severity came from.
       const unresolved = solved.diagnostics.some((d) => !diagnosticIsBuildable(d.code));
+      /* The ONE work meter, applied to what the solve is about to emit.
+         Kernel recipes charge it per exact-geometry op; a spec scene's cost
+         is its PARTS (Blender build + per-mesh census), so the same budget
+         adjudicates both — a 5000-instance ring refuses here in
+         milliseconds, with the same raisable lever, instead of holding a
+         Blender process and its scene gate for an hour. */
+      let specWorkExceeded = false;
+      {
+        const budget =
+          typeof request.workBudget === "number" &&
+          Number.isFinite(request.workBudget) &&
+          request.workBudget > 0
+            ? request.workBudget
+            : DEFAULT_WORK_BUDGET;
+        const units = solved.parts.length * SPEC_PART_BUILD_UNITS;
+        if (units > budget) {
+          specWorkExceeded = true;
+          issues.push({
+            code: ISSUE_CODES.SPEC_WORK_EXCEEDED,
+            severity: "error",
+            message:
+              `the solved scene is ${solved.parts.length} parts — an estimated ${units.toLocaleString("en-US")} build work units, past the ${budget.toLocaleString("en-US")} budget. ` +
+              `This reads as a runaway repeat/around/scatter (a count typo); if the scene is genuinely this large, raise the compile's workBudget`,
+            file: "scene.json",
+            detail: {
+              parts: solved.parts.length,
+              unitsPerPart: SPEC_PART_BUILD_UNITS,
+              units,
+              budget,
+            },
+          });
+        }
+      }
       // Recipe parts run BEFORE emit: each is ordinary Python executed in
       // plain CPython (no bpy) that authors an operator trace, which the one
       // kernel evaluator turns into exact geometry and an exact predicted
@@ -567,7 +605,7 @@ export async function compile(
       // its contract is a parse-class error, and blocks the emit that would
       // otherwise ship an empty box for it.
       let recipeFailed = false;
-      if (!unresolved && !missingAssets) {
+      if (!unresolved && !missingAssets && !specWorkExceeded) {
         const recipeRunner = path.join(scriptsDir(), "kernel", "recipe_runner.py");
         for (const part of solved.parts) {
           if (!part.recipe) continue;
@@ -640,7 +678,7 @@ export async function compile(
         const keys = Object.keys(mat as Record<string, unknown>).filter((k) => k !== "shader");
         if (keys.length > 0) authoredChannels.set(matName, keys);
       }
-      if (!unresolved && !missingAssets && !recipeFailed) {
+      if (!unresolved && !missingAssets && !recipeFailed && !specWorkExceeded) {
         specScript = emitBlenderScript(solved, {
           ...(spec.materials ? { materials: spec.materials } : {}),
           camera: spec.camera ?? true,
@@ -1035,9 +1073,10 @@ export async function compile(
             // every mesh regardless, and this decides only whether the
             // grid-relative half of that measurement runs.
             ...(normalized.voxel.enabled ? { voxelGrid: normalized.voxel.gridSize } : {}),
-            ...(normalized.geometry.zFightingPairBudget !== 200_000
-              ? { zFightingPairBudget: normalized.geometry.zFightingPairBudget }
-              : {}),
+            // Always sent: the contract owns the default, and a TS sentinel
+            // mirroring a Python constant is exactly the one-fact-two-
+            // implementations drift this codebase keeps finding.
+            zFightingPairBudget: normalized.geometry.zFightingPairBudget,
             ...shaderPayload,
           };
           const result = await runRunner(probe, job, timeoutMs, request.env);
@@ -1046,6 +1085,7 @@ export async function compile(
               code: (result.errorCode ?? ISSUE_CODES.BLENDER_FAILED) as typeof ISSUE_CODES[keyof typeof ISSUE_CODES],
               severity: "error",
               message: `build failed: ${result.error ?? "unknown error"}`,
+              ...(result.errorDetail ? { detail: result.errorDetail } : {}),
             });
           } else {
             try {
@@ -1350,6 +1390,7 @@ export async function compile(
             code: (result.errorCode ?? ISSUE_CODES.PROOF_FAILED) as typeof ISSUE_CODES[keyof typeof ISSUE_CODES],
             severity: "error",
             message: `proof render failed: ${result.error ?? "unknown error"}`,
+            ...(result.errorDetail ? { detail: result.errorDetail } : {}),
           });
         } else {
           const written = names.filter((n) => fs.existsSync(path.join(request.projectDir, OUT_DIR, "proof", n)));
@@ -1645,6 +1686,7 @@ export async function compile(
             code: (result.errorCode ?? ISSUE_CODES.EXPORT_FAILED) as typeof ISSUE_CODES[keyof typeof ISSUE_CODES],
             severity: "error",
             message: `export failed: ${result.error ?? "unknown error"}`,
+            ...(result.errorDetail ? { detail: result.errorDetail } : {}),
           });
         } else {
           const payload = result.data as

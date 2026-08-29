@@ -207,6 +207,18 @@ export interface Trace {
  */
 export const DEFAULT_WORK_BUDGET = 2_000_000;
 
+/**
+ * Estimated work units one EMITTED SPEC PART costs downstream — Blender
+ * mesh creation plus the census's per-mesh measurements (spectrum, symmetry,
+ * UV facts), expressed in the same units the kernel meter spends so a
+ * repeat/around/scatter runaway trips the ONE budget at solve time, before
+ * a Blender process exists. A cost-model constant, not a cap: the wall it
+ * builds is `workBudget`, which is raisable and reported. 400 puts the
+ * default budget at 5,000 parts — the scale where a census measurably turns
+ * from seconds into minutes on a current machine.
+ */
+export const SPEC_PART_BUILD_UNITS = 400;
+
 export interface EvalOptions {
   /** Work-unit budget for this evaluation (default {@link DEFAULT_WORK_BUDGET}).
    *  Raise it to build a larger asset on a machine with the memory for it. */

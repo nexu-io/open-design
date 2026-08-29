@@ -120,11 +120,11 @@ export function lintIntegrity(ctx: LintContext, issues: Issue[]): void {
       hint: "add a light, or give a material emission — an emissive surface lights what is near it once the key is down (light.key)",
     });
   }
-  for (const name of census.offCameraObjects) {
+  for (const fact of census.offCameraObjects) {
     issues.push({
       code: ISSUE_CODES.OFF_CAMERA,
       severity: "warning",
-      message: `object '${name}' is outside the camera frustum`,
+      message: `object '${fact.name}' is entirely ${fact.beyond} — every corner of its box projects ${fmtNdcSpan(fact)}`,
       // The reflex fix ("move the part") is often wrong: the part may be
       // exactly where the author wants it and the FRAMING is what lost it —
       // a wider subject needs the camera pulled back or the lens widened,
@@ -132,8 +132,19 @@ export function lintIntegrity(ctx: LintContext, issues: Issue[]): void {
       // number: distance is in bounding radii, so the fit-everything value
       // is the same constant for every scene, and "pull it back" without
       // it cost a field agent five compiles of guessing how far.
-      hint: `move it into frame, or widen the framing: raise camera.distance toward ${AUTOFIT_DISTANCE.toFixed(2)} (the fits-everything distance, in bounding radii — omitting the field uses it) or reduce the lens`,
-      target: name,
+      hint: `move it into frame, or widen the framing: raise camera.distance toward ${AUTOFIT_DISTANCE.toFixed(2)} (scene.json camera.distance is a MULTIPLE of the scene's bounding radius, not metres; ${AUTOFIT_DISTANCE.toFixed(2)} radii fits everything, and omitting the field uses it) or reduce the lens`,
+      target: fact.name,
+      detail: { beyond: fact.beyond, ndcMin: fact.ndcMin, ndcMax: fact.ndcMax },
     });
   }
+}
+
+/** The measured evidence line for an off-camera verdict: where the box's
+ *  projection sits relative to the 0..1 frame. */
+function fmtNdcSpan(fact: { ndcMin: [number, number]; ndcMax: [number, number] }): string {
+  const r = (v: number) => Number(v.toFixed(3));
+  return (
+    `to x ${r(fact.ndcMin[0])}..${r(fact.ndcMax[0])}, y ${r(fact.ndcMin[1])}..${r(fact.ndcMax[1])} ` +
+    `(the frame is 0..1)`
+  );
 }

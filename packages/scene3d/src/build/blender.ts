@@ -15,6 +15,10 @@ export interface RunnerResult {
   ok: boolean;
   errorCode?: string;
   error?: string;
+  /** Measured payload behind a refusal (a driver log, a line offset) —
+   *  rides the failure issue's `detail` so terse surfaces render it as data
+   *  instead of losing it inside a multi-line message. */
+  errorDetail?: Record<string, unknown>;
   data?: unknown;
 }
 

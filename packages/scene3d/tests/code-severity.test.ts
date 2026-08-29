@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { SOLVE_DIAGNOSTIC_MAP } from "../src/pipeline.js";
+import { ADVISORY_DIAGNOSTICS } from "../src/solve/types.js";
 
 /**
  * One issue code names one situation at one severity.
@@ -174,5 +176,24 @@ describe("issue code severity (static)", () => {
       }
     }
     expect(mismatched, "a code's prefix must be the severity it is emitted at").toEqual([]);
+  });
+});
+
+describe("solve diagnostic buildability (one source)", () => {
+  it("keeps the pipeline's warning rows equal to ADVISORY_DIAGNOSTICS", () => {
+    /*
+     * Buildability has two readers: the pipeline assigns severities from
+     * SOLVE_DIAGNOSTIC_MAP, and the solver suppresses "no placement"
+     * cascades for parts an ERROR-class diagnostic already blamed, reading
+     * ADVISORY_DIAGNOSTICS. If the two sets drift, a part either loses its
+     * root error's suppression or — worse — a blocking diagnostic stops
+     * blocking. The map keeps literal severities so the static scan above
+     * covers it; this pin is what makes the pairing one fact.
+     */
+    const mapWarnings = Object.entries(SOLVE_DIAGNOSTIC_MAP)
+      .filter(([, v]) => v.severity === "warning")
+      .map(([k]) => k)
+      .sort();
+    expect(mapWarnings).toEqual([...ADVISORY_DIAGNOSTICS].sort());
   });
 });

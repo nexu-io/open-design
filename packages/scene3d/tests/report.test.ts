@@ -177,6 +177,34 @@ describe("renderAgentReport", () => {
     expect(dataLine).toContain("…");
   });
 
+  it("renders a multi-line detail payload as an indented block, not a truncated line", () => {
+    /*
+     * The E-802 exhibit: the driver log's diagnosis lives after the first
+     * newline, and squeezing the log onto the one data line truncated the
+     * only actionable content out of the finding.
+     */
+    const text = renderAgentReport(
+      result({
+        issues: [
+          {
+            code: "S3D-E-802",
+            severity: "error",
+            message: "shader 'shd_bad' failed to compile on the driver",
+            detail: {
+              driverLog: "0(41) : error C1103: too few parameters\nline two of the log",
+              kernelBodyStartsAtAssembledLine: 37,
+            },
+          },
+        ],
+      }),
+    );
+    expect(text).toContain("driverLog:");
+    expect(text).toContain("      0(41) : error C1103: too few parameters");
+    expect(text).toContain("      line two of the log");
+    // The scalar keys still ride the data line.
+    expect(text).toContain("data: kernelBodyStartsAtAssembledLine=37");
+  });
+
   it("does not depend on any volatile field — two compiles that differ only in timing render identically", () => {
     // The real determinism guard: the report must be a pure function of the
     // scene's measured state, NOT of how long the stages took or which of

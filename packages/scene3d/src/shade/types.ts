@@ -132,6 +132,11 @@ export interface CompiledShaderJob {
   fragmentSource: string;
   /** Assembled vertex source (fullscreen triangle, UV passthrough). */
   vertexSource: string;
+  /** 1-based line of `fragmentSource` where the author's kernel body begins.
+   *  A driver log's line numbers index the ASSEMBLED program (plus whatever
+   *  preamble the driver itself prepends), so an E-802 that quotes them
+   *  without this offset points the author at nothing they can open. */
+  kernelLine: number;
 }
 
 /** Material-to-shader wiring the runner applies after baking. */

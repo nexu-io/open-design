@@ -254,16 +254,27 @@ export interface ResolvedPose {
  *  caller can correct it in one step — a rejection that does not say what WAS
  *  available just moves the guessing game. */
 export class ShotResolveError extends Error {
+  /**
+   * `available` is the census's part names, and it belongs ONLY on refusals
+   * where a NAME failed to resolve — that is the correction the list serves.
+   * A numeric refusal (a margin out of range, a non-finite azimuth) passes
+   * `undefined`: appending a hundred part names to "must be a positive
+   * number" buries the one sentence the reader needs under a list that
+   * answers a different question.
+   */
   constructor(
     readonly reason: string,
-    readonly available: string[],
+    readonly available?: string[],
   ) {
-    const shown = available.slice(0, 24);
-    const more = available.length > shown.length ? `, …${available.length - shown.length} more` : "";
+    const shown = (available ?? []).slice(0, 24);
+    const more =
+      available && available.length > shown.length ? `, …${available.length - shown.length} more` : "";
     super(
-      available.length > 0
-        ? `${reason} — known parts: ${shown.join(", ")}${more}`
-        : `${reason} — this census names no meshes`,
+      available === undefined
+        ? reason
+        : available.length > 0
+          ? `${reason} — known parts: ${shown.join(", ")}${more}`
+          : `${reason} — this census names no meshes`,
     );
     this.name = "ShotResolveError";
   }
@@ -427,7 +438,7 @@ export function resolveShot(spec: ShotSpec, census: Census): ResolvedPose {
       );
     }
     if (!Number.isFinite(o.azimuthDeg)) {
-      throw new ShotResolveError(`azimuth ${o.azimuthDeg} is not a number`, names);
+      throw new ShotResolveError(`azimuth ${o.azimuthDeg} is not a number`);
     }
     azimuthDeg = wrap360(o.azimuthDeg);
     elevationDeg = o.elevationDeg ?? PROOF_ELEVATION_DEG;
@@ -435,15 +446,15 @@ export function resolveShot(spec: ShotSpec, census: Census): ResolvedPose {
       notes.push(`elevation defaulted to ${PROOF_ELEVATION_DEG}° (eye)`);
     }
     if (!Number.isFinite(elevationDeg) || Math.abs(elevationDeg) > 90) {
-      throw new ShotResolveError(`elevation ${elevationDeg}° is outside ±90°`, names);
+      throw new ShotResolveError(`elevation ${elevationDeg}° is outside ±90°`);
     }
     const margin = o.margin ?? DEFAULT_MARGIN;
     if (!(margin > 0) || !Number.isFinite(margin)) {
-      throw new ShotResolveError(`margin ${margin} must be a positive number`, names);
+      throw new ShotResolveError(`margin ${margin} must be a positive number`);
     }
     if (o.distance !== undefined) {
       if (!(o.distance > 0) || !Number.isFinite(o.distance)) {
-        throw new ShotResolveError(`distance ${o.distance} must be a positive number`, names);
+        throw new ShotResolveError(`distance ${o.distance} must be a positive number`);
       }
       distance = o.distance;
     } else {
@@ -461,6 +472,22 @@ export function resolveShot(spec: ShotSpec, census: Census): ResolvedPose {
         );
       }
     }
+    /* The pose is exact and the picture is garbage: an eye inside the
+       subject's own bounding sphere photographs its interior (or two ring
+       tubes crossing at macro range) while `coverage` cheerfully reports a
+       filled frame. `margin` MULTIPLIES the fitted distance (1 = the subject
+       exactly fills the lens), so a small margin walks the camera INTO the
+       subject rather than tightening a crop — a fact worth a stated note by
+       the same rule that makes `caught: nothing` worth saying. */
+    if (orbitRadius > 0 && distance <= orbitRadius) {
+      const r = (v: number) => Math.round(v * 1000) / 1000;
+      notes.push(
+        `the eye is INSIDE the subject's bounding sphere (distance ${r(distance)}m ≤ its ${r(orbitRadius)}m radius) — ` +
+          (o.distance !== undefined
+            ? `distance is in metres; give at least the subject's radius to stand outside it`
+            : `margin multiplies the fitted distance (1 = subject exactly fills the frame, default ${DEFAULT_MARGIN}); raise margin, or give distance= in metres`),
+      );
+    }
     const dir = orbitEye(azimuthDeg, elevationDeg);
     eye = [
       orbitTarget[0] + dir[0] * distance,
@@ -473,7 +500,7 @@ export function resolveShot(spec: ShotSpec, census: Census): ResolvedPose {
     const centre = centreOf(stand);
     const off = station.offset ?? [0, 0, 0];
     if (!off.every((n) => Number.isFinite(n))) {
-      throw new ShotResolveError(`station offset ${JSON.stringify(off)} must be three numbers`, names);
+      throw new ShotResolveError(`station offset ${JSON.stringify(off)} must be three numbers`);
     }
     // Top-centre, not centre: standing ON a thing is what "from the stool"
     // means, and a station buried inside its own parent renders its interior.
@@ -494,7 +521,7 @@ export function resolveShot(spec: ShotSpec, census: Census): ResolvedPose {
   } else {
     const p = station.point;
     if (!Array.isArray(p) || p.length !== 3 || !p.every((n) => Number.isFinite(n))) {
-      throw new ShotResolveError(`station point ${JSON.stringify(p)} must be three numbers`, names);
+      throw new ShotResolveError(`station point ${JSON.stringify(p)} must be three numbers`);
     }
     eye = [p[0]!, p[1]!, p[2]!];
   }
@@ -508,14 +535,14 @@ export function resolveShot(spec: ShotSpec, census: Census): ResolvedPose {
     headingDeg = headingDegrees(g.heading, names);
     pitchDeg = g.pitchDeg ?? 0;
     if (!Number.isFinite(pitchDeg) || Math.abs(pitchDeg) > 90) {
-      throw new ShotResolveError(`pitch ${pitchDeg}° is outside ±90°`, names);
+      throw new ShotResolveError(`pitch ${pitchDeg}° is outside ±90°`);
     }
     forward = orbitEye(headingDeg, pitchDeg);
   } else {
     const aim = towardPoint ?? target!;
     if (towardPoint) {
       if (!Array.isArray(aim) || aim.length !== 3 || !aim.every((n) => Number.isFinite(n))) {
-        throw new ShotResolveError(`gaze toward ${JSON.stringify(aim)} must be three numbers`, names);
+        throw new ShotResolveError(`gaze toward ${JSON.stringify(aim)} must be three numbers`);
       }
       target = [aim[0]!, aim[1]!, aim[2]!];
       targetName = undefined;

@@ -270,3 +270,74 @@ describe("motionEnvelopeIssues", () => {
     );
   });
 });
+
+describe("motionEnvelopeIssues — the swept solid is a cylinder, not a square", () => {
+  /*
+   * The red-team exhibit: a tilted ring (outer radius 0.166 after its world
+   * box grows) spinning about z, with a bead at radial distance ~0.226 —
+   * OUTSIDE the swept circle, but inside the corner of the envelope's
+   * bounding SQUARE. The AABB verdict reported a -30mm interpenetration on a
+   * pair with +40mm of true radial clearance; the disc narrow phase must
+   * stay silent.
+   */
+  it("clears a neighbour outside the swept radius but inside the corner square", () => {
+    const ring = part({
+      id: "prp_ring",
+      shape: "torus",
+      size: [0.24, 0.23, 0.11], // world box of the tilted torus
+      localSize: [0.24, 0.24, 0.04],
+      center: [0, 0, 0.5],
+      rotate: { axis: "x", deg: 23 },
+      spin: { axis: "z", seconds: 36 },
+    });
+    const env = sweptBox(ring)!;
+    expect(env.spinGrew).toBe(true);
+    expect(env.spinDisc).toBeDefined();
+    const radius = env.spinDisc!.radius;
+    // A bead whose nearest rectangle corner sits beyond the radius, while its
+    // axis-aligned coordinates stay inside the square.
+    const off = radius * 0.96; // per-axis inside the square...
+    expect(Math.hypot(off, off)).toBeGreaterThan(radius); // ...diagonally outside the circle
+    const bead = part({ id: "prp_bead", size: [0.02, 0.02, 0.02], center: [off, off, 0.5] });
+    expect(motionEnvelopeIssues({ parts: [ring, bead] })).toEqual([]);
+  });
+
+  it("still flags a neighbour genuinely inside the swept circle", () => {
+    const ring = part({
+      id: "prp_ring",
+      shape: "torus",
+      size: [0.24, 0.23, 0.11],
+      localSize: [0.24, 0.24, 0.04],
+      center: [0, 0, 0.5],
+      rotate: { axis: "x", deg: 23 },
+      spin: { axis: "z", seconds: 36 },
+    });
+    const radius = sweptBox(ring)!.spinDisc!.radius;
+    const bead = part({ id: "prp_bead", size: [0.02, 0.02, 0.02], center: [radius * 0.8, 0, 0.5] });
+    const issues = motionEnvelopeIssues({ parts: [ring, bead] });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]!.detail?.sweptRadius).toBeCloseTo(radius, 5); // detail rounds to 6 decimals
+  });
+
+  it("keeps the disc only when nothing else perturbs the cross plane", () => {
+    // A bob moves along z: with an x spin, z lies IN the cross plane, so the
+    // swept solid is no longer a cylinder and the disc must not be claimed.
+    const wheel = part({
+      id: "prp_wheel",
+      size: [0.1, 0.4, 0.4],
+      center: [0, 0, 1],
+      spin: { axis: "x", seconds: 4 },
+      bob: { amplitude: 0.1 },
+    });
+    expect(sweptBox(wheel)!.spinDisc).toBeUndefined();
+    // With a z spin the bob rides the spin axis and the disc survives.
+    const rotor = part({
+      id: "prp_rotor",
+      size: [0.4, 0.1, 0.1],
+      center: [0, 0, 1],
+      spin: { axis: "z", seconds: 4 },
+      bob: { amplitude: 0.1 },
+    });
+    expect(sweptBox(rotor)!.spinDisc).toBeDefined();
+  });
+});

@@ -367,3 +367,45 @@ describe("resolveBudgets — clone inherits family + role", () => {
     expect(map.get("prp_rock_2")!.role).toBe("background");
   });
 });
+
+describe("lintIntent — outlier population is designs, not instances", () => {
+  it("does not let repeat clones own the median and flag the structure (I-952)", () => {
+    /*
+     * The red-team exhibit: 74 identical clones defined the size median, so
+     * every structural part read as an outlier (19 info lines, up to 31σ).
+     * With one representative per family, this scene has a healthy spread
+     * and nothing fires.
+     */
+    const clones = Array.from({ length: 8 }, (_, i) =>
+      part(i === 0 ? "prp_tooth" : `prp_tooth_${i + 1}`, i === 0 ? {} : { from: "prp_tooth" }),
+    );
+    const s = scene(...clones, part("prp_plinth"), part("prp_stem"), part("prp_dial"), part("prp_knop"));
+    const c = census([
+      ...clones.map((p) => withSpatial(p.id, 12, 0.4)),
+      withSpatial("prp_plinth", 12, 0.46),
+      withSpatial("prp_stem", 12, 0.5),
+      withSpatial("prp_dial", 12, 0.3),
+      withSpatial("prp_knop", 12, 0.35),
+    ]);
+    expect(run(c, s).filter((i) => i.code === "S3D-I-952")).toEqual([]);
+  });
+
+  it("never prints an astronomically degenerate robust z (I-951)", () => {
+    /*
+     * Three densities identical up to R6 rounding noise plus one genuinely
+     * different: the noise is not a spread, and dividing by it once printed
+     * "35,012,300.7 robust deviations". The clamp routes this into the
+     * meanAD fallback, whose z is bounded by the sample count.
+     */
+    const s = scene(part("prp_a"), part("prp_b"), part("prp_c"), part("prp_d"));
+    const c = census([
+      withSpatial("prp_a", 12, 1, { triDensity: 1000.000001 }),
+      withSpatial("prp_b", 12, 1, { triDensity: 1000.000002 }),
+      withSpatial("prp_c", 12, 1, { triDensity: 1000.000003 }),
+      withSpatial("prp_d", 12, 1, { triDensity: 30 }),
+    ]);
+    for (const issue of run(c, s).filter((i) => i.code === "S3D-I-951")) {
+      expect(Math.abs(issue.detail?.robustZ as number)).toBeLessThan(100);
+    }
+  });
+});

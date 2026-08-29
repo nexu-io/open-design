@@ -100,6 +100,8 @@ export function assembleShaderJob(
     uniforms: [...uniforms].sort((a, b) => (a.name < b.name ? -1 : 1)),
     fragmentSource: assembleBakeFragment(kernelText, outputs, frames, size),
     vertexSource: BAKE_VERTEX_SOURCE,
+    // stdlib lines + the joining newline: where the author's own text starts.
+    kernelLine: SHADER_STDLIB.split("\n").length + 1,
   };
 }
 

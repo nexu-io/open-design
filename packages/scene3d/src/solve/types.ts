@@ -402,7 +402,8 @@ export type Relation =
       axis?: Axis;
       /** Circle radius in metres, centre-to-centre. */
       radius: number;
-      /** Instances around the full turn, including the base. */
+      /** Instances around the full turn, including the base. 1 is a polar
+       *  placement: the base stands at `startDeg` and nothing is minted. */
       count: number;
       /** The first instance's angle. Default 0. */
       startDeg?: number;
@@ -689,7 +690,26 @@ export interface SolveDiagnostic {
     | "SOLVE-COINCIDENT";
   message: string;
   part?: string;
+  /** Measured numbers behind the diagnostic — carried onto the issue's
+   *  `detail` so the report's data line has the figures, per the contract
+   *  that a finding's numbers never live only in prose. */
+  detail?: Record<string, unknown>;
 }
+
+/**
+ * The diagnostics that ADVISE rather than block the build — the scene still
+ * builds, the finding is a warning. Everything outside this set is an error
+ * that already blames its part. ONE set, read by the solver (to suppress the
+ * generic "no placement" cascade for parts an error already explained) and by
+ * the pipeline (to assign severities) — buildability expressed twice was the
+ * two-implementations drift this file keeps closing.
+ */
+export const ADVISORY_DIAGNOSTICS: ReadonlySet<SolveDiagnostic["code"]> = new Set([
+  "SOLVE-EPSILON-FLOOR",
+  "SOLVE-INTERSECTION",
+  "SOLVE-SUSPECT",
+  "SOLVE-COINCIDENT",
+] as const);
 
 export interface SolvedScene {
   parts: SolvedPart[];
