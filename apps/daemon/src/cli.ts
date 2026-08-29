@@ -1434,6 +1434,24 @@ async function runScene3d(args) {
     : failOn === 'warning' ? summary.errors + summary.warnings > 0
     : false;
 
+  /* Which outputs this run actually produced. A restricted pass (--fast,
+     --stages) carries the previous compile's frames and exports forward so
+     their paths stay addressable — and an agent reading the machine-readable
+     envelope is exactly the consumer that cannot tell by looking. The prose
+     stream and the report letter both mark this; leaving it out of --json
+     put the safeguard on every surface except the one built for automation. */
+  const proofStageRow = result.stages.find((s) => s.id === 'proof');
+  const exportStageRow = result.stages.find((s) => s.id === 'export');
+  // Carried means the paths BELOW name older files — a stage that was
+  // skipped with nothing to carry forward produced no paths, and calling
+  // that empty result stale would have automation branch on a staleness
+  // that has no artifact behind it.
+  const proofCarried =
+    result.proofImages.length > 0 && (!proofStageRow || proofStageRow.status === 'skipped');
+  const exportCarried =
+    result.exportedAssets.length > 0 && (!exportStageRow || exportStageRow.status === 'skipped');
+  const stale = (which: string) => `STALE — from a previous compile (${which} did not run this pass) — `;
+
   if (flags.json) {
     const envelope = {
       ok: !failed,
@@ -1445,6 +1463,12 @@ async function runScene3d(args) {
       issues: result.issues,
       proofImages: result.proofImages.map((a) => a.path),
       exportedAssets: result.exportedAssets.map((a) => a.path),
+      /* True when the paths above name files an EARLIER compile produced.
+         Present on every compile (never conditional): a field that appears
+         only in the bad case reads as absent-means-nothing-known, and a
+         consumer that has never seen it cannot branch on it. */
+      proofCarried,
+      exportCarried,
       ...(result.contactSheet ? { contactSheet: result.contactSheet.path } : {}),
       ...(result.materialBalls
         ? { materialBalls: result.materialBalls.map((a: { path: string }) => a.path) }
@@ -1493,15 +1517,8 @@ async function runScene3d(args) {
     }
     const counts = `${summary.errors} error${summary.errors === 1 ? '' : 's'} · ${summary.warnings} warning${summary.warnings === 1 ? '' : 's'}`;
     console.log(result.ok ? `compiles clean — ${counts}` : `compile failed — ${counts}`);
-    // A restricted pass (--fast, --stages) carries the previous compile's
-    // frames and exports forward so paths stay addressable — but the terse
-    // stream must never present them as this run's output: after a
-    // structural edit those files show geometry that no longer exists.
-    const proofStageRow = result.stages.find((s) => s.id === 'proof');
-    const proofCarried = !proofStageRow || proofStageRow.status === 'skipped';
-    const exportStageRow = result.stages.find((s) => s.id === 'export');
-    const exportCarried = !exportStageRow || exportStageRow.status === 'skipped';
-    const stale = (which: string) => `STALE — from a previous compile (${which} did not run this pass) — `;
+    // Same two facts the JSON envelope publishes, in words: after a
+    // structural edit these files show geometry that no longer exists.
     if (result.proofImages.length > 0) {
       console.log(
         `proof: ${proofCarried ? stale('proof') : ''}${result.proofImages.length} frame(s) — ${result.proofImages[0].path}`,

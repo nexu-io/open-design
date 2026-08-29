@@ -2645,6 +2645,35 @@ const TWEAK_CAUSED_CODES: Record<string, "scale" | "quat" | "translate"> = {
   [ISSUE_CODES.NON_UNIFORM_SCALE]: "scale",
 };
 
+/**
+ * True when a tweak channel actually MOVES the part.
+ *
+ * The viewer records a channel for any gesture, including one that ended
+ * where it began, so "the record exists" is not "the edit caused this".
+ * An identity edit blamed for an authored problem sends the reader to
+ * clear something that was never the cause — the same wrong-address bug
+ * the redirect exists to fix, pointing the other way.
+ */
+function tweakMoves(
+  channel: "scale" | "quat" | "translate",
+  edit: { translate?: unknown; quat?: unknown; scale?: unknown },
+): boolean {
+  const value = edit[channel];
+  if (!Array.isArray(value)) return false;
+  const nums = value.filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  if (nums.length !== value.length) return false;
+  const identity =
+    channel === "scale" ? [1, 1, 1] : channel === "quat" ? [0, 0, 0, 1] : [0, 0, 0];
+  if (nums.length !== identity.length) return false;
+  return nums.some((v, i) => Math.abs(v - identity[i]!) > 1e-9);
+}
+
+/** `file:line`, or the bare file when the origin has no line — the string a
+ *  reader pastes into an editor, formatted in ONE place. */
+function originLabel(at: { file: string; line: number | null }): string {
+  return at.line === null ? at.file : `${at.file}:${at.line}`;
+}
+
 export function attributeIssues(
   issues: Issue[],
   census: Census | undefined,
@@ -2670,16 +2699,41 @@ export function attributeIssues(
     const channel = TWEAK_CAUSED_CODES[issue.code];
     if (channel && tweaks) {
       const edit = tweaks[issue.target];
-      if (edit && edit[channel] !== undefined) {
+      if (edit && tweakMoves(channel, edit)) {
+        /* The AUTHORED origin travels too, when the census has one. The
+           shipped transform is the authored value with the edit applied on
+           top, so naming only tweaks.json would hide a real authored cause
+           behind a real edit — and the reader who clears the edit would
+           still have the finding. Both addresses, most-likely first. */
+        const authored = hasOrigins ? origins![issue.target] : undefined;
         return {
           ...issue,
+          // The issue's own `file` moves with the origin: a consumer that
+          // reads the top-level field (the web panel, the JSON envelope)
+          // would otherwise still be sent to the authored scene file while
+          // the hint explains the edit — the exact split this redirect
+          // exists to close.
+          file: "tweaks.json",
           hint:
-            "this comes from a saved viewport edit, not the authored scene — adjust or clear it " +
-            "(od scene3d tweaks --clear, or drag it back in the viewer), or fold it into the " +
-            "part's own size in scene.json and clear the edit",
+            "a saved viewport edit contributes this — adjust or clear it (od scene3d tweaks " +
+            "--clear, or drag it back in the viewer), or fold it into the part's own size in " +
+            "scene.json and clear the edit" +
+            (authored ? "; the part is authored at " + originLabel(authored) : ""),
           detail: {
             ...issue.detail,
-            origin: [{ part: issue.target, file: "tweaks.json", line: null, at: "tweaks.json" }],
+            origin: [
+              { part: issue.target, file: "tweaks.json", line: null, at: "tweaks.json" },
+              ...(authored
+                ? [
+                    {
+                      part: issue.target,
+                      file: authored.file,
+                      line: authored.line,
+                      at: originLabel(authored),
+                    },
+                  ]
+                : []),
+            ],
             tweakChannel: channel,
           },
         };
@@ -2704,7 +2758,7 @@ export function attributeIssues(
           // Pre-formatted because this is the string a reader wants to
           // paste into an editor, and every consumer would otherwise
           // rebuild it identically.
-          at: row.at.line === null ? row.at.file : `${row.at.file}:${row.at.line}`,
+          at: originLabel(row.at),
         })),
       },
     };
