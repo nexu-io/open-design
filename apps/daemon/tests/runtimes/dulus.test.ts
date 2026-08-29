@@ -3,8 +3,9 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { dulusAgentDef } from '../../src/runtimes/defs/dulus.js';
+import { dulusAgentDef, parseDulusVersion } from '../../src/runtimes/defs/dulus.js';
 import { DEFAULT_MODEL_OPTION } from '../../src/runtimes/defs/shared.js';
+import { detectAgent } from '../../src/runtimes/detection.js';
 import { createJsonEventStreamHandler } from '../../src/runtimes/json-event-stream.js';
 
 // Frames captured from a real `dulus 3.12.1` run, not authored here:
@@ -247,5 +248,93 @@ describe('dulus process boundary', () => {
 
     expect(success.events.some((event) => event.type === 'raw')).toBe(false);
     expect(failure.events.some((event) => event.type === 'raw')).toBe(false);
+  });
+});
+
+// `dulus --version` prints exactly `dulus v<semver>` on stdout (its argparse
+// handler answers before the REPL banner). A fake bin reproduces that one line
+// so the gate is exercised across the real process boundary the detector
+// crosses — spawn the executable, read its stdout, apply the version policy.
+function writeVersionBin(dir: string, versionLine: string): string {
+  const bin = path.join(dir, process.platform === 'win32' ? 'dulus.cmd' : 'dulus');
+  if (process.platform === 'win32') {
+    writeFileSync(bin, `@echo off\r\necho ${versionLine}\r\n`);
+  } else {
+    writeFileSync(bin, `#!/bin/sh\nprintf '%s\\n' '${versionLine}'\n`);
+    chmodSync(bin, 0o755);
+  }
+  return bin;
+}
+
+describe('parseDulusVersion (fail-closed 3.12.1 floor)', () => {
+  it.each([
+    // The floor and everything above it normalizes to a bare semver.
+    ['dulus v3.12.1', '3.12.1'],
+    ['dulus v3.12.2', '3.12.2'],
+    ['dulus v3.13.0', '3.13.0'],
+    ['dulus v4.0.0', '4.0.0'],
+    // Tolerates surrounding text and build metadata.
+    ['dulus v3.12.1+build.9', '3.12.1'],
+  ])('accepts %s -> %s', (raw, expected) => {
+    expect(parseDulusVersion(raw)).toBe(expected);
+  });
+
+  it.each([
+    // The exact build with the false-success bug, plus everything below it.
+    'dulus v3.12.0',
+    'dulus v3.11.22',
+    'dulus v3.0.0',
+    'dulus v2.99.99',
+    // A prerelease of the floor precedes the release and is still a pre-fix
+    // build, so it is rejected too.
+    'dulus v3.12.1-rc.1',
+    // Unusable lines fail closed rather than defaulting to available.
+    'dulus preview',
+    '',
+  ])('rejects %s -> null', (raw) => {
+    expect(parseDulusVersion(raw)).toBeNull();
+  });
+});
+
+describe('dulus version gate (detector boundary)', () => {
+  const detectTempDirs: string[] = [];
+  afterEach(() => {
+    while (detectTempDirs.length) {
+      const dir = detectTempDirs.pop();
+      if (dir) rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    // version line, expected available, expected reported version, warn reason
+    ['dulus v3.12.1', true, '3.12.1', undefined],
+    ['dulus v3.13.0', true, '3.13.0', undefined],
+    // Off the exercised release line but parseable and above the floor: stays
+    // available with an untested-version warning, like every other adapter.
+    ['dulus v4.5.0', true, '4.5.0', 'untested-version'],
+  ] as const)('exposes %s as available', async (versionLine, available, version, reason) => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'od-dulus-gate-'));
+    detectTempDirs.push(dir);
+    const detected = await detectAgent(dulusAgentDef, {
+      DULUS_BIN: writeVersionBin(dir, versionLine),
+    });
+    expect(detected.available).toBe(available);
+    expect(detected.version).toBe(version);
+    expect(detected.diagnostics?.[0]?.reason).toBe(reason);
+  });
+
+  it.each([
+    // 3.12.0 is the whole point: it must be unavailable, not available-with-warning.
+    'dulus v3.12.0',
+    'dulus v3.11.22',
+    'dulus v3.12.1-rc.1',
+  ])('marks the pre-fix build %s unavailable', async (versionLine) => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'od-dulus-gate-'));
+    detectTempDirs.push(dir);
+    const detected = await detectAgent(dulusAgentDef, {
+      DULUS_BIN: writeVersionBin(dir, versionLine),
+    });
+    expect(detected.available).toBe(false);
+    expect(detected.diagnostics?.[0]?.reason).toBe('version-probe-failed');
   });
 });

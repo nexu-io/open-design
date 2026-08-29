@@ -53,11 +53,62 @@ import type { RuntimeAgentDef } from '../types.js';
 //
 // Auth: Dulus owns its own credentials (its first-run wizard's `config.json`,
 // or provider API keys in the environment). The daemon injects none.
+
+// First Dulus release whose one-shot run fails closed: 3.12.1 emits an `error`
+// frame and exits 1 on a provider error, where 3.12.0 emitted a `text` frame
+// and exited 0 — a failed run that read as a success. The documentation above
+// states this floor; the check below is what enforces it. See PR review on
+// nexu-io/open-design#7572.
+const DULUS_MIN_VERSION = { major: 3, minor: 12, patch: 1 } as const;
+
+// `dulus --version` prints `dulus v<semver>` on stdout in every mode (its
+// argparse handler answers before the REPL banner). Pull the semver out of
+// that one line; `+build` metadata is dropped for precedence per semver §10.
+const DULUS_VERSION_RE = /(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?/u;
+
+/**
+ * Normalize `dulus --version` output to a bare semver, failing closed below
+ * {@link DULUS_MIN_VERSION}. Returning `null` for an unusable or too-old line
+ * is what makes `versionPolicy.requireVersion` mark the runtime unavailable
+ * (see `detectAgent`), so an installed 3.12.0 can never be selected and
+ * reproduce the false-success path. A prerelease of the floor (e.g.
+ * `3.12.1-rc.1`) sorts below the release and is therefore rejected too.
+ */
+export function parseDulusVersion(raw: string): string | null {
+  const match = DULUS_VERSION_RE.exec(raw.trim());
+  if (!match) return null;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  const patch = Number(match[3]);
+  const prerelease = match[4];
+  const core =
+    major - DULUS_MIN_VERSION.major ||
+    minor - DULUS_MIN_VERSION.minor ||
+    patch - DULUS_MIN_VERSION.patch;
+  if (core < 0) return null;
+  // A prerelease of the exact floor (3.12.1-rc.N) precedes the release and is
+  // still one of the pre-fix builds, so it stays unavailable.
+  if (core === 0 && prerelease) return null;
+  return prerelease ? `${major}.${minor}.${patch}-${prerelease}` : `${major}.${minor}.${patch}`;
+}
+
 export const dulusAgentDef = {
   id: 'dulus',
   name: 'Dulus',
   bin: 'dulus',
   versionArgs: ['--version'],
+  // Fail closed on the version probe. `parseDulusVersion` returns null for any
+  // build below 3.12.1, and `requireVersion` turns a null version into an
+  // unavailable runtime — so a documented-but-unenforced floor becomes a hard
+  // gate and an installed 3.12.0 is never selectable. `supportedVersions` is
+  // the exact release exercised by this build; a newer parseable version off
+  // it (e.g. 3.13.0) stays available but warns, matching every other adapter.
+  versionPolicy: {
+    supportedVersions: ['3.12.1'],
+    supportedVersionPattern: /^3\.(?:1[2-9]|[2-9]\d)\.\d+$/u,
+    requireVersion: true,
+    parse: parseDulusVersion,
+  },
   // Dulus is provider-independent — the model comes from its own config and
   // any upstream id is valid — so the picker ships the synthetic default and
   // leaves concrete ids to the custom-model input.
