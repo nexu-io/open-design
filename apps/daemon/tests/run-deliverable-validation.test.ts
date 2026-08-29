@@ -210,6 +210,139 @@ describe('run deliverable validation', () => {
     });
   });
 
+  describe('export-only artifact validation', () => {
+    it('accepts a touched export artifact with a complete manifest when the prototype entry is stale', async () => {
+      const fixture = await projectFixture({
+        'fitcv-settings-ui-prototype.html': '<!doctype html><title>Stale prototype</title>',
+        'fitcv-design-system-export.md': '# Design System Export',
+        'fitcv-design-system-export.md.artifact.json': JSON.stringify({
+          version: 1,
+          kind: 'markdown-document',
+          title: 'fitcv-design-system-export.md',
+          entry: 'fitcv-design-system-export.md',
+          renderer: 'markdown',
+          status: 'complete',
+          exports: ['md', 'html', 'pdf', 'zip'],
+          metadata: {
+            task: 'final-design-export-curation',
+            source: 'fitcv-settings-ui-prototype.html',
+          },
+        }),
+      });
+
+      await expect(
+        validateRunDeliverable({
+          ...fixture,
+          runStatus: 'succeeded',
+          artifactCount: 1,
+          touchedPaths: ['fitcv-design-system-export.md'],
+          projectMetadata: {
+            kind: 'other',
+            entryFile: 'fitcv-settings-ui-prototype.html',
+          },
+        }),
+      ).resolves.toMatchObject({
+        valid: true,
+        validation: 'valid',
+        entryFile: 'fitcv-design-system-export.md',
+        artifactKind: 'text',
+      });
+    });
+
+    it('still uses projectMetadata.entryFile when the prototype entry is touched', async () => {
+      const fixture = await projectFixture({
+        'index.html': '<!doctype html><title>Updated prototype</title>',
+        'export.md': '# Export',
+        'export.md.artifact.json': JSON.stringify({
+          version: 1,
+          kind: 'markdown-document',
+          title: 'export.md',
+          entry: 'export.md',
+          renderer: 'markdown',
+          status: 'complete',
+          exports: ['md'],
+          metadata: {},
+        }),
+      });
+
+      await expect(
+        validateRunDeliverable({
+          ...fixture,
+          runStatus: 'succeeded',
+          artifactCount: 2,
+          touchedPaths: ['index.html', 'export.md'],
+          projectMetadata: {
+            kind: 'prototype',
+            entryFile: 'index.html',
+          },
+        }),
+      ).resolves.toMatchObject({
+        valid: true,
+        validation: 'valid',
+        entryFile: 'index.html',
+        artifactKind: 'html',
+      });
+    });
+
+    it('rejects when neither the prototype entry nor any export artifact was touched', async () => {
+      const fixture = await projectFixture({
+        'index.html': '<!doctype html><title>Old entry</title>',
+        'notes.txt': 'unrelated output',
+      });
+
+      await expect(
+        validateRunDeliverable({
+          ...fixture,
+          runStatus: 'succeeded',
+          artifactCount: 1,
+          touchedPaths: ['notes.txt'],
+          projectMetadata: {
+            kind: 'prototype',
+            entryFile: 'index.html',
+          },
+        }),
+      ).resolves.toMatchObject({
+        valid: false,
+        validation: 'entry_not_touched',
+        entryFile: 'index.html',
+      });
+    });
+
+    it('rejects an export artifact whose manifest status is not complete', async () => {
+      const fixture = await projectFixture({
+        'index.html': '<!doctype html><title>Stale prototype</title>',
+        'export.md': '# Streaming Export',
+        'export.md.artifact.json': JSON.stringify({
+          version: 1,
+          kind: 'markdown-document',
+          title: 'export.md',
+          entry: 'export.md',
+          renderer: 'markdown',
+          status: 'streaming',
+          exports: ['md'],
+          metadata: {},
+        }),
+      });
+
+      await expect(
+        validateRunDeliverable({
+          ...fixture,
+          runStatus: 'succeeded',
+          artifactCount: 1,
+          touchedPaths: ['export.md'],
+          projectMetadata: {
+            kind: 'other',
+            entryFile: 'index.html',
+          },
+        }),
+      ).resolves.toMatchObject({
+        valid: false,
+        validation: 'entry_not_touched',
+        entryFile: 'index.html',
+      });
+    });
+  });
+
   it('does not promote a Studio route or pre-existing file without a run artifact', async () => {
     const fixture = await projectFixture({
       'index.html': '<!doctype html><title>Old artifact</title>',
