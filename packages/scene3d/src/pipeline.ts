@@ -65,7 +65,7 @@ import { motionEnvelopeIssues } from "./solve/sweep.js";
 import { claimMargins } from "./lint/claims.js";
 import { clearanceIssues } from "./solve/clearance.js";
 import { classifySolveDelta, snapshotSolve, type SolveSnapshot } from "./read/solve-delta.js";
-import { emitBlenderScript } from "./solve/emit-bpy.js";
+import { emitBlenderScript, clipPlan } from "./solve/emit-bpy.js";
 import type { SceneSpec, SolvedScene } from "./solve/types.js";
 import { validateShaderSpec } from "./shade/validate.js";
 import { packageUsdz } from "./usd/usdz.js";
@@ -685,9 +685,52 @@ export async function compile(
           ...(spec.light ? { light: spec.light } : {}),
           tessellation: normalized.tessellation,
           fps: normalized.fps,
+          maxFrames: normalized.maxFrames,
           kernelMeshes,
           kernelShapes,
         });
+        /* The clip the emitter just planned, adjudicated for LOOP SEAMS.
+           A clip that cannot close every motion's cycle inside the frame
+           budget catches the shorter periods mid-stride and snaps them back
+           at every loop — visibly, in the viewer and in every engine. The
+           compiler holds all the numbers, so it says them (S3D-W-105, the
+           valid-but-suspect family) instead of letting the author discover
+           the hitch by watching it. */
+        {
+          const plan = clipPlan(solved.parts, normalized.fps, normalized.maxFrames);
+          if (plan && !plan.loopCloses) {
+            for (const seam of plan.seams) {
+              const jump = [
+                seam.jumpM !== undefined ? `${Math.round(seam.jumpM * 10000) / 10} mm` : null,
+                seam.jumpDeg !== undefined ? `${Math.round(seam.jumpDeg * 10) / 10}°` : null,
+              ]
+                .filter(Boolean)
+                .join(" and ");
+              issues.push({
+                code: ISSUE_CODES.SPEC_SUSPECT,
+                severity: "warning",
+                message:
+                  `'${seam.id}' ${seam.motion} (${seam.periodFrames} frames) does not divide the ` +
+                  `${plan.clipFrames}-frame clip — the loop cuts it ${Math.round(seam.fraction * 100)}% ` +
+                  `through a cycle and jumps ${jump || "back"} at every seam`,
+                hint:
+                  `the loop-closing length is ${plan.loopFrames} frames (${Number((plan.loopFrames / normalized.fps).toFixed(2))}s), ` +
+                  `past the ${plan.ceilingFrames}-frame budget — raise conventions.animation.maxFrames to at least ` +
+                  `${plan.loopFrames}, or align the periods so they share a cycle`,
+                file: "scene.json",
+                target: seam.id,
+                detail: {
+                  periodFrames: seam.periodFrames,
+                  clipFrames: plan.clipFrames,
+                  loopFrames: plan.loopFrames,
+                  cutFraction: Number(seam.fraction.toFixed(4)),
+                  ...(seam.jumpM !== undefined ? { seamJumpM: Number(seam.jumpM.toFixed(5)) } : {}),
+                  ...(seam.jumpDeg !== undefined ? { seamJumpDeg: Number(seam.jumpDeg.toFixed(2)) } : {}),
+                },
+              });
+            }
+          }
+        }
         const generatedDir = path.join(request.projectDir, ".scene3d");
         fs.mkdirSync(generatedDir, { recursive: true });
         fs.writeFileSync(path.join(generatedDir, "spec.build.py"), specScript, "utf8");
@@ -2317,7 +2360,7 @@ export async function compile(
        single-manifest discipline exists to prevent. (A failed MANIFEST
        write below can only ride the response; an artifact cannot contain
        the failure to write itself.) */
-    const manifestIssues = attributeIssues([...issues, ...lintIssues], census);
+    const manifestIssues = attributeIssues([...issues, ...lintIssues], census, bakedTweaksForManifest);
     /* Everything the manifest derives from EXCEPT the issue list — a later
        fallible write (the contact sheet, below) can still grow that list, so
        the manifest is rebuilt from these once the final issues are known,
@@ -2413,7 +2456,7 @@ export async function compile(
      * One fixed point remains and is deliberate: the read-model write can
      * itself fail, and a report cannot carry the news of its own failed
      * write. That failure reaches the response and the manifest instead. */
-    const allIssues = attributeIssues([...issues, ...lintIssues], census);
+    const allIssues = attributeIssues([...issues, ...lintIssues], census, bakedTweaksForManifest);
 
     /* ---- the read model ---------------------------------------------
      * A compile that only says pass/fail makes the reader open the result
@@ -2464,7 +2507,7 @@ export async function compile(
         message: `could not write the read model (digest.md, ortho.svg): ${String(err?.message ?? err)}`,
       });
     }
-    const finalManifestIssues = attributeIssues([...issues, ...lintIssues], census);
+    const finalManifestIssues = attributeIssues([...issues, ...lintIssues], census, bakedTweaksForManifest);
     const builtManifest =
       finalManifestIssues.length === manifestIssues.length
         ? baseManifest
@@ -2515,7 +2558,7 @@ export async function compile(
   }
 
   /* ---- result ----------------------------------------------------- */
-  const allIssues = attributeIssues([...issues, ...lintIssues], census);
+  const allIssues = attributeIssues([...issues, ...lintIssues], census, bakedTweaksForManifest);
   const summary: IssueSummary = summarize(allIssues);
   return {
     ok: summary.errors === 0,
@@ -2594,15 +2637,58 @@ export async function compile(
  * Targets that name a pair ("a <-> b") resolve to both origins, because the
  * useful answer to "these two overlap" is usually the two lines, not one.
  */
-export function attributeIssues(issues: Issue[], census: Census | undefined): Issue[] {
+/** The lint codes a VIEWPORT EDIT can cause all by itself, mapped to the
+ *  tweak channel that causes them. One table, so the provenance redirect
+ *  below and anyone auditing it read the same claim. */
+const TWEAK_CAUSED_CODES: Record<string, "scale" | "quat" | "translate"> = {
+  [ISSUE_CODES.UNAPPLIED_SCALE]: "scale",
+  [ISSUE_CODES.NON_UNIFORM_SCALE]: "scale",
+};
+
+export function attributeIssues(
+  issues: Issue[],
+  census: Census | undefined,
+  /** The viewport edits this build replayed (tweaks.json), when any. */
+  tweaks?: Record<string, { translate?: unknown; quat?: unknown; scale?: unknown }>,
+): Issue[] {
   const origins = census?.provenance;
-  if (!origins || Object.keys(origins).length === 0) return issues;
+  // NOT an early return on missing provenance: the tweak redirect below
+  // depends on tweaks.json, not on the build script's line map, and gating
+  // it behind provenance left a viewport-caused finding pointing at the
+  // authored line on every scene whose census carries no origins.
+  const hasOrigins = Boolean(origins && Object.keys(origins).length > 0);
+  if (!hasOrigins && !tweaks) return issues;
 
   return issues.map((issue) => {
     if (!issue.target) return issue;
+    /* A finding a viewport edit CAUSED is blamed on the edit, not on the
+       scene.json line that authored the part: "carries unapplied scale ...
+       (scene.json:19)" pointed at a line containing no scale and prescribed
+       "apply scale before export" — impossible advice, since the tweak
+       system re-applies the edit on every compile. The provenance contract
+       is exactly about never sending a reader to a line that cannot fix it. */
+    const channel = TWEAK_CAUSED_CODES[issue.code];
+    if (channel && tweaks) {
+      const edit = tweaks[issue.target];
+      if (edit && edit[channel] !== undefined) {
+        return {
+          ...issue,
+          hint:
+            "this comes from a saved viewport edit, not the authored scene — adjust or clear it " +
+            "(od scene3d tweaks --clear, or drag it back in the viewer), or fold it into the " +
+            "part's own size in scene.json and clear the edit",
+          detail: {
+            ...issue.detail,
+            origin: [{ part: issue.target, file: "tweaks.json", line: null, at: "tweaks.json" }],
+            tweakChannel: channel,
+          },
+        };
+      }
+    }
     const names = issue.target.split("<->").map((s) => s.trim()).filter(Boolean);
+    if (!hasOrigins) return issue;
     const found = names
-      .map((name) => ({ name, at: origins[name] }))
+      .map((name) => ({ name, at: origins![name] }))
       .filter((row): row is { name: string; at: { file: string; line: number | null } } =>
         Boolean(row.at),
       );

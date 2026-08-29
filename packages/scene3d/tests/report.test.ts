@@ -71,6 +71,11 @@ function result(overrides: Partial<CompileResult> = {}): CompileResult {
       // Frames in a result mean proof ran; a result with frames and NO proof
       // stage is the stale case, which the staleness tests state explicitly.
       { id: "proof", status: "ran", durationMs: 5 },
+      // Same convention for deliverables: assets in a result mean export
+      // ran. A result carrying assets with NO export stage is the stale
+      // case — the restricted pass that reuses the previous compile's
+      // files — and its own test below states it.
+      { id: "export", status: "ran", durationMs: 7 },
     ],
     issues,
     manifest: buildManifest({
@@ -223,6 +228,7 @@ describe("renderAgentReport", () => {
         { id: "parse", status: "ran", durationMs: 9999 },
         { id: "build", status: "cached", durationMs: 12345 },
         { id: "proof", status: "ran", durationMs: 54321 },
+        { id: "export", status: "ran", durationMs: 31337 },
       ],
     });
     expect(renderAgentReport(volatile)).toBe(renderAgentReport(base));
@@ -388,6 +394,24 @@ describe("renderAgentReport", () => {
     expect(text).toContain("proof: 3 frame(s) — .scene3d/proof/proof-abc-NNN.png, N = 000..002");
     expect(text).not.toContain("proof-abc-001.png");
     expect(text).toContain("assets: .scene3d/work/scene.usda, .scene3d/work/scene.glb");
+  });
+
+  it("marks carried deliverables STALE when the export stage did not run", () => {
+    /* A restricted pass (--fast, --stages) carries the previous compile's
+       exports forward so the paths stay addressable — but listing them
+       identically to a fresh export handed a reader a GLB of geometry that
+       no longer existed. Same contract the proof line already keeps. */
+    const text = renderAgentReport(
+      result({
+        stages: [
+          { id: "parse", status: "ran", durationMs: 2 },
+          { id: "build", status: "cached", durationMs: 0 },
+          { id: "lint", status: "ran", durationMs: 1 },
+        ],
+        exportedAssets: [".scene3d/work/scene.usda", ".scene3d/work/scene.glb"],
+      }),
+    );
+    expect(text).toContain("assets: STALE — from a PREVIOUS compile (export did not run this pass)");
   });
 
   it("maps every frame to the side it photographs, and says where 0° is", () => {

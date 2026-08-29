@@ -47,6 +47,47 @@ function measureExportedBytes(
  * mirrors HyperFrames' deterministic artifact output: everything the viewer
  * and the agent need to know about the scene lands in one JSON file.
  */
+/**
+ * A census-recorded path as the manifest may publish it.
+ *
+ * Inside the project: the project-relative path, forward slashes, exactly
+ * like every sibling path in the manifest — what `buildScene3dAssetUrl`
+ * consumes. Outside it (a shared asset library): the BASENAME with
+ * `external: true`, never the host path. The census keeps the absolute path
+ * because the runner and the lint rules need to open the file; the manifest
+ * is served over HTTP, where a host path is both unusable to the client and
+ * a disclosure of the machine's layout.
+ */
+function manifestTexturePath(
+  projectDir: string | undefined,
+  filepath: string,
+): { filepath: string; external?: true } {
+  if (projectDir) {
+    const rel = path.relative(projectDir, filepath);
+    if (!rel.startsWith("..") && !path.isAbsolute(rel)) {
+      return { filepath: rel.split(path.sep).join("/") };
+    }
+  }
+  return { filepath: path.basename(filepath), external: true };
+}
+
+/**
+ * How many PARTS a part tree holds — mesh entries only.
+ *
+ * "Parts" is the noun the whole surface speaks (the report prints
+ * "23 mesh · 1 camera · 1 light"; claims adjudicate the mesh count), but the
+ * kit pages once counted every tree entry and read 25 on the same scene —
+ * two numbers, one noun. This package cannot depend on
+ * `@open-design/contracts` (see report.ts), so the web side carries the same
+ * predicate as contracts' `meshPartCount`; both are one line over the census
+ * `type` field, which is the contract that keeps them agreeing.
+ */
+function meshPartCount(partTree: ReadonlyArray<{ type: string }>): number {
+  let count = 0;
+  for (const part of partTree) if (part.type === "MESH") count += 1;
+  return count;
+}
+
 export function buildManifest(input: {
   source: SceneSource;
   /** Where the exported assets live, so their delivered size can be measured. */
@@ -261,7 +302,12 @@ export function buildManifest(input: {
     textures:
       census?.textures.map((t) => ({
         name: t.name,
-        filepath: t.filepath,
+        // Project-relative, like every sibling path: the census records where
+        // the runner found the file on ITS disk, and serving that verbatim
+        // both broke buildScene3dAssetUrl and disclosed the host filesystem
+        // to every API client. A file outside the project is published as its
+        // basename, marked external.
+        ...manifestTexturePath(input.projectDir, t.filepath),
         resolution: [t.width, t.height] as [number, number],
       })) ?? [],
     animation: census
@@ -270,8 +316,17 @@ export function buildManifest(input: {
           frameStart: census.animation.frameStart,
           frameEnd: census.animation.frameEnd,
           keyframedObjects: census.animation.keyframedObjects,
+          // The named clips, not just the frame range: the census measures
+          // them, the kit page plays them, and the manifest is the surface
+          // an agent reads without spending a Blender run.
+          ...(census.animation.actionNames && census.animation.actionNames.length > 0
+            ? { actionNames: census.animation.actionNames }
+            : {}),
         }
       : { fps: 0, frameStart: 0, frameEnd: 0, keyframedObjects: [] },
+    ...(census?.armatures && census.armatures.length > 0
+      ? { armatures: census.armatures.map((a) => ({ name: a.name, bones: a.bones })) }
+      : {}),
     camera: census?.camera ?? { present: false, name: null },
     proofImages: input.proofImages,
     ...(connectivity ? { connectivity } : {}),
@@ -501,7 +556,7 @@ export function writeViewer(
             name: "Scene",
             category: "This scene",
             glb: glb.replace(/^out\//, ""),
-            parts: manifest.partTree.length,
+            parts: meshPartCount(manifest.partTree),
             /* What this build already baked. The viewer subtracts it from
                the saved-edits file to find the edits the mesh does not yet
                contain, instead of assuming the two always agree. */
@@ -827,7 +882,7 @@ export function writeProjectKit(
       name: segments[segments.length - 1] ?? "scene",
       scenePath,
       assetKind: manifest.assetKind ?? "scene",
-      parts: manifest.partTree.length,
+      parts: meshPartCount(manifest.partTree),
       ...(manifest.bakedTweaks ? { bakedTweaks: manifest.bakedTweaks } : {}),
       triangles: manifest.metrics?.totalTriangles ?? null,
       errors: manifest.issues.errors,
@@ -843,7 +898,7 @@ export function writeProjectKit(
       category: segments.length > 1 ? segments[segments.length - 2]! : "Scenes",
       glb: sceneRel(glb),
       ...(partIssues ? { partIssues } : {}),
-      parts: manifest.partTree.length,
+      parts: meshPartCount(manifest.partTree),
       tree: entryTree(manifest, facts),
             ...(manifest.partTree.length > MAX_TREE_PARTS
               ? { treeTotal: manifest.partTree.length }
@@ -1071,7 +1126,7 @@ function writeArtifactSidecar(
       ...(input.deliverables === undefined ? {} : { deliverables: input.deliverables }),
       ...(input.scenePath === undefined ? {} : { scenePath: input.scenePath }),
       ...(input.scenes === undefined ? {} : { scenes: input.scenes }),
-      parts: input.manifest.partTree.length,
+      parts: meshPartCount(input.manifest.partTree),
       triangles: input.manifest.metrics?.totalTriangles ?? null,
       errors: input.manifest.issues.errors,
       warnings: input.manifest.issues.warnings,

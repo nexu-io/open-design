@@ -155,7 +155,22 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
         sweepBits.push(`${axis}${sign}${fmtM(Math.abs(env.screwRise))}/turn`);
       }
       const sweep = sweepBits.length > 0 ? ` · sweeps ${sweepBits.join(", ")}` : "";
-      lines.push(`  ${part.id}${origin}: (${centre}) · ${size}${rot}${sweep}${rests}`);
+      // The size printed is the AUTHORED solve; a saved viewport edit moves
+      // the shipped geometry away from it. The user-edits block below states
+      // every edit in full, but a reader scanning THIS table deserves the
+      // flag on the row itself — a tweaked part's authored size read as the
+      // shipped size once, and the reconciliation cost a scroll.
+      const partTweak = result.manifest.bakedTweaks?.[part.id];
+      const tweaked = partTweak
+        ? ` · viewport-edited (${[
+            partTweak.translate ? "moved" : null,
+            partTweak.quat ? "turned" : null,
+            partTweak.scale ? `scaled [${partTweak.scale.map((v) => Number(v.toFixed(3))).join(", ")}]` : null,
+          ]
+            .filter(Boolean)
+            .join(", ")} — see user edits below)`
+        : "";
+      lines.push(`  ${part.id}${origin}: (${centre}) · ${size}${rot}${sweep}${rests}${tweaked}`);
     }
     const total = result.solved.parts.length;
     if (total > CAP) {
@@ -286,7 +301,17 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
   // guard on purpose — a look can be the only render a compile produced.
   appendLooks(lines, result);
   if (result.exportedAssets.length > 0) {
-    lines.push(`assets: ${result.exportedAssets.join(", ")}`);
+    // Same staleness contract as the proof line: a restricted pass carries
+    // the previous compile's deliverables forward, and listing them
+    // identically to a fresh export handed a reader a GLB of geometry that
+    // no longer existed.
+    const exportStage = result.stages.find((s) => s.id === "export");
+    const exportCarried = !exportStage || exportStage.status === "skipped";
+    lines.push(
+      exportCarried
+        ? `assets: STALE — from a PREVIOUS compile (export did not run this pass): ${result.exportedAssets.join(", ")}`
+        : `assets: ${result.exportedAssets.join(", ")}`,
+    );
   }
   /* Per-material lit-sphere previews: the cheap gear between "raw kernel
      PNG" and "full proof" for judging how strength × texture × alpha

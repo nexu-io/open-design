@@ -293,3 +293,32 @@ describe("rested pairs must actually touch (W-337)", () => {
     expect(run(withContacts([]))).toEqual([]);
   });
 });
+
+describe("world plausibility (S3D-W-339)", () => {
+  it("judges the measured extent only when the author declared a bound", () => {
+    /*
+     * The 141-metre fox: a centimetre-authored bare import compiled clean
+     * and shipped faithfully into every deliverable, its absurd size printed
+     * in the scale line for the reader to catch by eye. Declared, the bound
+     * is judged; undeclared, the compiler keeps measuring and stays silent —
+     * measure always, judge on policy.
+     */
+    const tall = census([
+      { name: "prp_floor", min: 0 },
+      { name: "prp_fox", min: 140 },
+    ]);
+    const grounded = { schemaVersion: 1, conventions: { grounding: { exempt: ["prp_fox"] } } } as never;
+    expect(codes(grounded, tall)).not.toContain("S3D-W-339");
+    const bounded = {
+      schemaVersion: 1,
+      conventions: { grounding: { exempt: ["prp_fox"] }, units: { maxExtentM: 10 } },
+    } as never;
+    const issues: Issue[] = [];
+    lintWorld(normalizeContract(bounded), tall, issues);
+    const hit = issues.find((i) => i.code === "S3D-W-339")!;
+    expect(hit).toBeDefined();
+    expect(hit.message).toContain("141");
+    expect(hit.detail).toMatchObject({ worstAxis: "z", maxExtentM: 10 });
+    expect(hit.hint).toContain("maxExtentM");
+  });
+});

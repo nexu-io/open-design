@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { findCoplanarFaces, solveScene } from "../src/solve/solver.js";
-import { emitBlenderScript, frameScene } from "../src/solve/emit-bpy.js";
+import { clipPlan, emitBlenderScript, frameScene } from "../src/solve/emit-bpy.js";
 import { MIN_CONTACT, SceneSpec } from "../src/solve/types.js";
 
 /**
@@ -832,5 +832,74 @@ describe("cascade suppression covers every error class", () => {
     expect(aboutBar.length).toBeLessThanOrEqual(1);
     const noPlacement = solved.diagnostics.filter((d) => d.message.includes("has no placement"));
     expect(noPlacement).toEqual([]);
+  });
+});
+
+describe("the baked clip closes every motion's loop (clipPlan)", () => {
+  /*
+   * The round-three exhibit: a 4s vane spin beside a 3s lantern bob baked a
+   * 4s clip — the max of the periods, not their lcm — so the bob completed
+   * one and a third cycles and snapped back 42mm at every loop seam,
+   * visibly, in the viewer and in every engine. The clip must be the
+   * loop-closing length whenever it fits the budget, and when it cannot
+   * fit, the cut must be SAID with its measured jump.
+   */
+  const mixed: SceneSpec = {
+    schemaVersion: 1,
+    parts: [
+      { id: "prp_vane", size: [0.2, 0.2, 0.05], spin: { seconds: 4 } },
+      { id: "prp_lantern", size: [0.1, 0.1, 0.15], bob: { amplitude: 0.032, seconds: 3 } },
+    ],
+    relations: [
+      { type: "at", part: "prp_vane", center: [0, 0, 1] },
+      { type: "at", part: "prp_lantern", center: [0.5, 0, 1] },
+    ],
+  };
+
+  it("bakes the lcm of the periods when it fits the budget", () => {
+    const solved = solveScene(mixed);
+    const plan = clipPlan(solved.parts, 24)!;
+    // 4s = 96 frames, 3s = 72 frames, lcm = 288 (12s) — under the 1200 ceiling.
+    expect(plan.loopFrames).toBe(288);
+    expect(plan.clipFrames).toBe(288);
+    expect(plan.loopCloses).toBe(true);
+    expect(plan.seams).toEqual([]);
+    expect(emitBlenderScript(solved, {} as never)).toContain("frame_end = 289");
+  });
+
+  it("falls back to the longest period under a tight budget, and measures the seam", () => {
+    const solved = solveScene(mixed);
+    const plan = clipPlan(solved.parts, 24, 100)!;
+    expect(plan.clipFrames).toBe(96);
+    expect(plan.loopCloses).toBe(false);
+    expect(plan.loopFrames).toBe(288);
+    const seam = plan.seams.find((x) => x.id === "prp_lantern")!;
+    expect(seam).toBeDefined();
+    expect(seam.fraction).toBeCloseTo(1 / 3, 9);
+    // A hovering bob cut a third through its cycle stands sin(120°)·A off
+    // its anchor.
+    expect(seam.jumpM!).toBeCloseTo(0.032 * Math.sin((2 * Math.PI) / 3), 9);
+    // The spin divides the clip exactly and carries no seam.
+    expect(plan.seams.find((x) => x.id === "prp_vane")).toBeUndefined();
+  });
+
+  it("keeps a single motion's clip exactly one period", () => {
+    const solved = solveScene({
+      schemaVersion: 1,
+      parts: [{ id: "prp_a", size: [1, 1, 1], spin: { seconds: 2 } }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    } as SceneSpec);
+    const plan = clipPlan(solved.parts, 24)!;
+    expect(plan.clipFrames).toBe(48);
+    expect(plan.loopCloses).toBe(true);
+  });
+
+  it("returns undefined for a scene with no motion", () => {
+    const solved = solveScene({
+      schemaVersion: 1,
+      parts: [{ id: "prp_a", size: [1, 1, 1] }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    } as SceneSpec);
+    expect(clipPlan(solved.parts, 24)).toBeUndefined();
   });
 });

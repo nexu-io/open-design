@@ -28,8 +28,7 @@ import {
   type Scene3dManifest,
   type Scene3dSelectionPart,
   type Scene3dTreeNodeInput,
-  type Scene3dTreeRow,
-} from '@open-design/contracts';
+  type Scene3dTreeRow, meshPartCount } from '@open-design/contracts';
 import { useT } from '../i18n';
 import {
   displayFrames,
@@ -423,7 +422,7 @@ function Scene3dScenePanel({
   const metaSentence = useMemo(() => {
     if (!manifest || manifest.partTree.length === 0) return '';
     return [
-      t('scene3d.partsCount', { count: manifest.partTree.length }),
+      t('scene3d.partsCount', { count: meshPartCount(manifest.partTree) }),
       triangles !== null ? t('scene3d.trisCount', { count: triangles }) : null,
       formatWorldSize(manifest.metrics?.worldSize),
       manifest.blender?.version
@@ -938,7 +937,7 @@ function Scene3dScenePanel({
                   <path d="M8 2.2 13.2 5.2v5.6L8 13.8 2.8 10.8V5.2z" />
                   <path d="M2.8 5.2 8 8.2l5.2-3M8 8.2v5.6" />
                 </svg>
-                {manifest.partTree.length}
+                {meshPartCount(manifest.partTree)}
               </span>
               {triangles !== null ? (
                 <span className={styles.metaItem}>
@@ -1315,7 +1314,7 @@ function Scene3dScenePanel({
             <h4 className={styles.sectionTitle}>
               {t('scene3d.parts')}
               {manifest && manifest.partTree.length > 0 ? (
-                <span className={styles.sectionCount}>{manifest.partTree.length}</span>
+                <span className={styles.sectionCount}>{meshPartCount(manifest.partTree)}</span>
               ) : null}
             </h4>
             {manifest && manifest.partTree.length > 0 ? (

@@ -124,6 +124,18 @@ export const ISSUE_CODES = {
      zero errors — the report printed the plan and the proof showed a
      mouse, with nothing between them saying which was real. */
   FILE_PART_UNDERFILLS: "S3D-W-338",
+  /* The built world is larger than the project's declared plausible extent
+     (`conventions.units.maxExtentM`; 0 = unjudged). The classic unit slip —
+     a 141-metre fox from a centimetre-authored GLB — was always PRINTED in
+     the scale line, but catching it by eye was the reader's job; this is
+     the contract layer taking that job, when the author declares a bound.
+     `file:` parts are immune (their declared box normalises the fit); bare
+     imports are exactly where the slip ships. */
+  WORLD_EXTENT_IMPLAUSIBLE: "S3D-W-339",
+  /* The extent check ran over an INCOMPLETE census — some mesh carries no
+     measured bounds, so the world union it judged may be smaller than the
+     world. Unchecked is never passed silently. */
+  WORLD_EXTENT_UNCHECKED: "S3D-W-340",
 
   /* lint: naming */
   NAME_DEFAULT: "S3D-E-301",

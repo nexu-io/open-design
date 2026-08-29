@@ -84,3 +84,60 @@ describe("describeScene — region scopes issues", () => {
     expect(text).toContain("S3D-W-321");
   });
 });
+
+describe("describeScene — the focused part survives any budget", () => {
+  /*
+   * The round-three exhibit: a 96-clone yard focused on one clone returned
+   * every clone EXCEPT the focused one — largest-first group order plus
+   * name-order expansion truncated exactly the row the caller named, and
+   * the fold note then advised "a focus" to a caller already using one.
+   */
+  const bigCensus = (): Census => {
+    const obj = (name: string, x: number) => ({
+      name,
+      type: "MESH",
+      parent: null,
+      location: [0, 0, 0],
+      rotation: [0, 0, 0],
+      scale: [1, 1, 1],
+      dimensions: [1, 1, 1],
+      visible: true,
+      hasMeshData: true,
+      worldMin: [x, 0, 0],
+      worldMax: [x + 1, 1, 1],
+    });
+    const objects = [];
+    for (let i = 0; i < 96; i++) objects.push(obj("prp_crate_r" + Math.floor(i / 12) + "_" + (i % 12), i));
+    for (let i = 0; i < 6; i++) objects.push(obj("prp_mast_" + i, 100 + i));
+    return {
+      blenderVersion: "5.0.1",
+      sceneName: "Scene",
+      objects,
+      meshes: [],
+      materials: [],
+      textures: [],
+      uvObjectsWithoutLayers: [],
+      objectsWithoutMaterial: [],
+      zFightingPairs: [],
+      camera: { present: true, name: "cam" },
+      lightCount: 1,
+      animation: { fps: 24, frameStart: 1, frameEnd: 1, keyframedObjects: [] },
+      offCameraObjects: [],
+    } as unknown as Census;
+  };
+
+  it("prints the focused part first in its group, under the default budget", () => {
+    const text = describeScene(bigCensus(), [], { focus: "prp_crate_r3_5" });
+    expect(text).toContain("prp_crate_r3_5");
+    // First expanded row of the structure section is the focused part.
+    const rows = text.split("\n").filter((l) => l.startsWith("    prp_"));
+    expect(rows[0]).toContain("prp_crate_r3_5");
+  });
+
+  it("does not advise the focus lever to a caller already focusing", () => {
+    const text = describeScene(bigCensus(), [], { focus: "prp_crate_r3_5", budgetTokens: 200 });
+    if (text.includes("folded away")) {
+      expect(text).not.toContain("a focus to see them");
+    }
+  });
+});

@@ -117,6 +117,64 @@ def strip_png_dates(path):
             pass
 
 
+def strip_fbx_timestamp(path, lowering=None):
+    """Pin the FBX header's CreationTimeStamp to a fixed instant.
+
+    The FBX exporter stamps the wall clock into the binary header — the last
+    three bytes standing between an unchanged scene and a byte-identical
+    FBX (the FileId and CreationTime fields are already dummies, and the
+    object ids are deterministic once PYTHONHASHSEED is pinned). Each field
+    is a length-prefixed name plus an 'I' int32; the seven are patched to
+    2000-01-01 00:00:00.000 at their first occurrence, which sits in the
+    header extension near the top of the file. Field not found = format
+    changed = leave the file alone; a dated FBX beats a corrupted one.
+    """
+    fields = [
+        (b"Year", 2000), (b"Month", 1), (b"Day", 1),
+        (b"Hour", 0), (b"Minute", 0), (b"Second", 0), (b"Millisecond", 0),
+    ]
+    try:
+        with open(path, "rb") as f:
+            data = bytearray(f.read())
+        head = min(len(data), 8192)
+        # ALL SEVEN or none: patching the fields that happen to match while
+        # leaving the rest at wall clock would still ship byte-different
+        # files, and would do it while claiming the timestamp was pinned.
+        # A missing field means the format is not the one this reads, so
+        # the file is left exactly as the exporter wrote it.
+        writes = []
+        for name, value in fields:
+            marker = bytes([len(name)]) + name + b"I"
+            at = data.find(marker, 0, head)
+            if at < 0:
+                if lowering is not None:
+                    lowering["fbxTimestampNote"] = (
+                        "FBX timestamp not pinned (this exporter's header has no %s field) — "
+                        "the FBX carries a wall clock, so byte-identical recompiles are not "
+                        "guaranteed for it" % name.decode("ascii", "replace"))
+                return
+            writes.append((at + len(marker), value.to_bytes(4, "little")))
+        changed = False
+        for off, new in writes:
+            if data[off:off + 4] != new:
+                data[off:off + 4] = new
+                changed = True
+        if changed:
+            tmp = path + ".stamp.tmp"
+            with open(tmp, "wb") as f:
+                f.write(bytes(data))
+            os.replace(tmp, path)
+    except Exception as exc:
+        if lowering is not None:
+            lowering["fbxTimestampNote"] = (
+                "FBX timestamp not pinned (%s) — the FBX may carry a wall clock, so "
+                "byte-identical recompiles are not guaranteed for it" % exc)
+        try:
+            os.remove(path + ".stamp.tmp")
+        except OSError:
+            pass
+
+
 def log(msg):
     sys.stdout.write("[scene3d] %s\n" % msg)
     sys.stdout.flush()
@@ -1200,6 +1258,31 @@ the fix, so the author (or the agent) repairs the source. A silent grey
 import is the worst outcome; a named missing .mtl is a one-line fix."""
 IMPORT_NOTES = []
 
+
+def note_dropped_rig(part_name, armature_count, bone_count, clip_names):
+    """What a file: part's box-fit join threw away, said out loud.
+
+    The fit is a static placement by design — an armature cannot ride a
+    join — but an author who imports a character expecting its walk cycle
+    must not learn the truth from a statue and a clean report. Detect and
+    name, never mutate: the same posture as every other import note, and
+    the report names the path that keeps the rig.
+    """
+    shown = ", ".join(clip_names[:6]) + (", ..." if len(clip_names) > 6 else "")
+    pieces = []
+    if armature_count:
+        pieces.append("%d armature%s (%d bone%s)" % (
+            armature_count, "" if armature_count == 1 else "s",
+            bone_count, "" if bone_count == 1 else "s"))
+    if clip_names:
+        pieces.append("%d clip%s (%s)" % (
+            len(clip_names), "" if len(clip_names) == 1 else "s", shown))
+    IMPORT_NOTES.append(
+        "'%s': import dropped %s — a file: part is joined and fitted into its "
+        "declared box, which is a static placement; use a bare-asset scene "
+        "(the .glb as the scene source, no scene.json part) to keep the rig "
+        "and its clips" % (part_name, " and ".join(pieces)))
+
 # Material channels this Blender had no socket for, gathered during the bake
 # and reported with the census — the same detect-and-name posture as
 # IMPORT_NOTES, for the same reason: a silently missing capability is worse
@@ -1417,7 +1500,8 @@ def load_scene(job):
         # posture (strict, not lax).
         g = {"bpy": bpy, "bmesh": __import__("bmesh"), "mathutils": __import__("mathutils"),
              "math": math, "os": os, "json": json,
-             "_od_note_imported": note_imported_materials}
+             "_od_note_imported": note_imported_materials,
+             "_od_note_dropped_rig": note_dropped_rig}
         # The one place the project directory has to BE the cwd, and only for
         # as long as the author's script is running — see this function's docs.
         previous_cwd = os.getcwd()
@@ -5529,6 +5613,70 @@ def author_model_hierarchy(job):
     return {"assetName": asset_name, "rootObject": root.name if root else None}
 
 
+def _plain_python_interpreter():
+    """A python binary that can run usd_sort.py in a CLEAN process.
+
+    Under the bpy wheel (and Blender >= 2.92) sys.executable IS the bundled
+    interpreter. Under an older blender binary it is blender itself, and
+    handing blender a .py positional arg neither runs it as a script nor
+    exits — so anything blender-named is refused and the bundled interpreter
+    is searched for under sys.prefix instead. None = no clean interpreter;
+    the caller records the skip.
+    """
+    exe = sys.executable or ""
+    if exe and "blender" not in os.path.basename(exe).lower():
+        return exe
+    import glob as _glob
+    for pat in ("bin/python*", "bin/python*.exe", "python*.exe"):
+        for hit in sorted(_glob.glob(os.path.join(sys.prefix, pat))):
+            base = os.path.basename(hit).lower()
+            if base.startswith("python") and os.access(hit, os.X_OK):
+                return hit
+    return None
+
+
+def canonicalize_usda_order(path, lowering):
+    """Physically sort every prim's children by name, so an unchanged scene
+    authors a byte-identical stage.
+
+    Blender's USD exporter iterates the depsgraph in whatever order its
+    scheduler produced it, so eight compiles of one scene wrote eight
+    differently-ordered (content-identical) stages — and USD is the master
+    every container is lowered from, so the disorder propagated into every
+    deliverable and defeated content hashing outright.
+
+    The sort itself lives in usd_sort.py and runs as a SUBPROCESS of this
+    same interpreter: pxr ships beside bpy but their USD DLLs conflict, so
+    the real parser can only load in a process bpy has not touched. (Since
+    Blender 2.92 sys.executable is the bundled python even under the
+    blender binary, so both launch modes reach an interpreter.)
+
+    A failed sort costs reproducibility, not the deliverable — the stage
+    ships as exported and the skip is RECORDED in the lowering report.
+    """
+    import subprocess
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "usd_sort.py")
+    interp = _plain_python_interpreter()
+    if interp is None:
+        lowering["primOrderNote"] = (
+            "prim order not canonicalized (no plain python interpreter found "
+            "beside this runtime) — byte-identical recompiles are not "
+            "guaranteed for the 3D exports")
+        return
+    try:
+        proc = subprocess.run(
+            [interp, script, path],
+            capture_output=True, text=True, timeout=120,
+        )
+        if proc.returncode != 0:
+            reason = (proc.stderr or "").strip() or "exit %d" % proc.returncode
+            lowering["primOrderNote"] = (
+                "prim order not canonicalized (%s) — byte-identical recompiles "
+                "are not guaranteed for the 3D exports" % reason.splitlines()[-1])
+    except Exception as exc:
+        lowering["primOrderNote"] = "prim order not canonicalized: %s" % exc
+
+
 def post_process_usda(path, info, job):
     """Deliberately does nothing to the stage's semantics.
 
@@ -5816,6 +5964,28 @@ def transcode_stage_textures(master_path):
     return converted
 
 
+def authored_environment_image():
+    """True when the scene's world is the AUTHOR'S and is driven by an image.
+
+    `s3d_authored_world` is the marker set_world_background already honours
+    (a scene that authored its own world owns it); the image check is what
+    separates a real environment map — content a deliverable should carry —
+    from a flat ambient colour, which is staging and which Blender cannot
+    write as a valid texture anyway.
+    """
+    import bpy
+    world = bpy.context.scene.world
+    if world is None or not world.get("s3d_authored_world"):
+        return False
+    tree = getattr(world, "node_tree", None)
+    if tree is None:
+        return False
+    for node in tree.nodes:
+        if node.type in ("TEX_ENVIRONMENT", "TEX_IMAGE") and getattr(node, "image", None):
+            return True
+    return False
+
+
 def master_usd_kwargs(job, animated):
     """The master stage carries EVERYTHING the writer can author: USD is
     the core format and the only ceiling allowed here is the writer's own.
@@ -5839,6 +6009,17 @@ def master_usd_kwargs(job, animated):
         "export_textures_mode": "NEW",
         "overwrite_textures": True,
         "relative_paths": True,
+        # The world travels only when it is an AUTHORED environment IMAGE.
+        #
+        # Two facts decide this. A world the compiler staged is proof
+        # lighting, not asset content — shipping the studio with the product
+        # was always wrong. And Blender writes a NON-IMAGE world's DomeLight
+        # texture as a 490-byte file named `.png` that is not a PNG:
+        # referenced by the master, sealed into every USDZ handed to AR
+        # Quick Look, and named by no manifest. An authored HDRI is the one
+        # case that is real content AND materialises a real image, so that
+        # is the case that converts.
+        "convert_world_material": authored_environment_image(),
     }
     kwargs.update(usd_orientation_kwargs(job))
     return kwargs
@@ -6353,12 +6534,20 @@ def _export_scene(job, carry_dir_ref):
     source_usda = job.get("usdaFiles") or []
     if source_usda and "usda" not in formats:
         # A USDA-authored scene IS its own master; lower from the source.
+        # Deliberately NOT canonicalized: this is the author's own file, and
+        # the compiler does not rewrite sources. It needs no sorting anyway —
+        # a file on disk has one order, so every lowering from it is already
+        # reproducible.
         master_path = os.path.join(job.get("projectDir") or "", source_usda[0])
     else:
         master_path = os.path.join(out_dir, "scene.usda")
         try:
             dropped = usd_export_resilient(master_path, master_usd_kwargs(job, animated))
             lowering["droppedExportOptions"] = dropped
+            # BEFORE the re-import below: the lowered containers inherit
+            # whatever order they are re-imported in, so the master must be
+            # canonical first.
+            canonicalize_usda_order(master_path, lowering)
             transcode_stage_textures(master_path)
             post_process_usda(master_path, info, job)
             assets.append(master_path)
@@ -6383,6 +6572,7 @@ def _export_scene(job, carry_dir_ref):
                 })
                 try:
                     usd_export_resilient(ar_path, ar_kwargs)
+                    canonicalize_usda_order(ar_path, lowering)
                     transcode_stage_textures(ar_path)
                     post_process_usda(ar_path, info, job)
                     lowering["arMaster"] = rel_to_project(ar_path, job)
@@ -6512,6 +6702,7 @@ def _export_scene(job, carry_dir_ref):
             bpy.ops.export_scene.fbx(filepath=target, use_selection=False,
                                      bake_anim=bool(animated),
                                      path_mode="COPY", embed_textures=True)
+            strip_fbx_timestamp(target, lowering)
             assets.append(target)
             log("exported %s" % target)
         elif fmt == "stl":

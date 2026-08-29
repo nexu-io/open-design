@@ -183,6 +183,11 @@ export interface NormalizedContract {
   partPrefixes: string[];
   maxDepth: number;
   metersPerUnit: number;
+  /** Largest plausible world dimension in metres; 0 (the default) judges
+   *  nothing. Declared, the world's measured extent is held to it
+   *  (S3D-W-339) — the measure-then-judge lever for unit slips a reader
+   *  otherwise catches only by eye in the scale line. */
+  maxExtentM: number;
   upAxis: "Y" | "Z";
   metallicValues: number[];
   roughnessRange: [number, number];
@@ -403,6 +408,7 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
     // or emit NaN for) would otherwise flow through as a dead threshold.
     maxDepth: numOr(h.maxDepth, 8),
     metersPerUnit: numOr(u.metersPerUnit, 1),
+    maxExtentM: Math.max(0, numOr(u.maxExtentM, 0)),
     upAxis: u.upAxis === "Z" ? "Z" : "Y",
     metallicValues: asArray<number>(p.metallicValues, [0, 1]),
     roughnessRange: asArray<number>(p.roughnessRange, [0, 1]) as [number, number],

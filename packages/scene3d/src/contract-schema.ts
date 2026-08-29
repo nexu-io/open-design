@@ -120,6 +120,7 @@ export const CONTRACT_FIELDS: readonly FieldSpec[] = [
   { path: "conventions.hierarchy.maxDepth", kind: "number", min: 1, integer: true },
   { path: "conventions.units.metersPerUnit", kind: "number", expected: "a number" },
   { path: "conventions.units.upAxis", kind: "enum", values: ["Y", "Z"], expected: "'Y' or 'Z'" },
+  { path: "conventions.units.maxExtentM", kind: "number", min: 0, expected: "a non-negative number of metres (0 = unjudged)" },
 
   /* pbr */
   { path: "conventions.pbr.metallicValues", kind: "numberArray" },

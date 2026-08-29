@@ -66,6 +66,8 @@ export interface Scene3dContract {
     units?: {
       /** Meters per unit of the composed stage. */
       metersPerUnit?: number;
+      /** Largest plausible world dimension in metres; 0/absent = unjudged (S3D-W-339). */
+      maxExtentM?: number;
       /** Up axis: "Y" (Blender convention) or "Z" (common DCC convention). */
       upAxis?: "Y" | "Z";
     };

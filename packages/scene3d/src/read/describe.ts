@@ -325,6 +325,23 @@ export function describeScene(
 
   /* ---- structure, coarsest first ------------------------------------- */
   const groups = group(parts);
+  /* The FOCUSED group spends first, and inside it the focused part prints
+     first. Largest-first ordering plus name-order expansion meant the one
+     part the caller NAMED was the row most reliably truncated away — a
+     96-crate yard focused on crate r3_5 returned every crate but r3_5, and
+     the fold-away note then advised "a focus" to a caller already using
+     one. The zoom must land on the thing it was aimed at, at any budget. */
+  if (options.focus !== undefined) {
+    const focusIdx = groups.findIndex(
+      (g) => g.key === options.focus || g.parts.some((p) => p.name === options.focus),
+    );
+    if (focusIdx > 0) groups.unshift(groups.splice(focusIdx, 1)[0]!);
+    const fg = groups[0];
+    if (fg) {
+      const pi = fg.parts.findIndex((p) => p.name === options.focus);
+      if (pi > 0) fg.parts.unshift(fg.parts.splice(pi, 1)[0]!);
+    }
+  }
   push(`groups: ${groups.length}`);
   for (let gi = 0; gi < groups.length; gi++) {
     const g = groups[gi]!;
@@ -367,9 +384,11 @@ export function describeScene(
 
   /* ---- never imply completeness we did not deliver -------------------- */
   if (truncated > 0) {
+    // Never advise the lever the caller already pulled.
+    const levers = ["a larger budget", "a region", ...(options.focus === undefined ? ["a focus"] : [])];
     lines.push(
       `… ${truncated} more line(s) folded away by the token budget — ` +
-        `re-describe with a larger budget, a region, or a focus to see them`,
+        `re-describe with ${levers.join(", ")} to see them`,
     );
   }
   return lines.join("\n");

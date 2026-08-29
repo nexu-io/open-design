@@ -1493,8 +1493,19 @@ async function runScene3d(args) {
     }
     const counts = `${summary.errors} error${summary.errors === 1 ? '' : 's'} · ${summary.warnings} warning${summary.warnings === 1 ? '' : 's'}`;
     console.log(result.ok ? `compiles clean — ${counts}` : `compile failed — ${counts}`);
+    // A restricted pass (--fast, --stages) carries the previous compile's
+    // frames and exports forward so paths stay addressable — but the terse
+    // stream must never present them as this run's output: after a
+    // structural edit those files show geometry that no longer exists.
+    const proofStageRow = result.stages.find((s) => s.id === 'proof');
+    const proofCarried = !proofStageRow || proofStageRow.status === 'skipped';
+    const exportStageRow = result.stages.find((s) => s.id === 'export');
+    const exportCarried = !exportStageRow || exportStageRow.status === 'skipped';
+    const stale = (which: string) => `STALE — from a previous compile (${which} did not run this pass) — `;
     if (result.proofImages.length > 0) {
-      console.log(`proof: ${result.proofImages.length} frame(s) — ${result.proofImages[0].path}`);
+      console.log(
+        `proof: ${proofCarried ? stale('proof') : ''}${result.proofImages.length} frame(s) — ${result.proofImages[0].path}`,
+      );
     }
     /* Aimed shots print their resolved pose in the terse stream too: the pose
        is the answer to "where did that put me", and a reader who never asks
@@ -1556,7 +1567,7 @@ async function runScene3d(args) {
          there. Every other path in this stream is project-relative. */
       if (result.contactSheet) {
         console.log(
-          `contact sheet: ${result.contactSheet.path} — every frame on one labelled page`,
+          `contact sheet: ${proofCarried ? stale('proof') : ''}${result.contactSheet.path} — every frame on one labelled page`,
         );
       }
     }
@@ -1574,7 +1585,9 @@ async function runScene3d(args) {
       }
     }
     if (result.exportedAssets.length > 0) {
-      console.log(`assets: ${result.exportedAssets.map((a) => a.path).join(', ')}`);
+      console.log(
+        `assets: ${exportCarried ? stale('export') : ''}${result.exportedAssets.map((a) => a.path).join(', ')}`,
+      );
     }
     // --frames implies the letter: the ASCII ramps live INSIDE agentMessage,
     // so honouring the flag while withholding the message printed nothing —

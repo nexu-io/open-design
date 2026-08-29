@@ -52,6 +52,10 @@ export interface EmitOptions {
   /** Keyframe rate for compiler-owned motion, from
    *  `conventions.animation.fps`. Absent keeps the 24fps default. */
   fps?: number;
+  /** The project's clip budget (`conventions.animation.maxFrames`; 0/absent =
+   *  undeclared). When the loop-closing length fits it — or fits the default
+   *  ceiling when undeclared — the clip bakes that long; see clipPlan. */
+  maxFrames?: number;
   /**
    * Evaluated kernel meshes, keyed by part id, for every `recipe:` part. The
    * emitter is pure and cannot run a recipe (that is I/O the pipeline owns), so
@@ -97,6 +101,122 @@ export const TESSELLATION_DEFAULTS: Tessellation = {
  *  never be treated as a constant here and a binding there. */
 export function isChannelBinding(v: unknown): v is { shader: string; output?: string } {
   return typeof v === "object" && v !== null && !Array.isArray(v) && "shader" in v;
+}
+
+/**
+ * When the author declares no `conventions.animation.maxFrames`, how long the
+ * emitter may stretch a clip to CLOSE its loop, in frames. Resource-
+ * denominated (frames are keyframe, bake and export cost), raisable (declare
+ * maxFrames), and reported (a clip that cannot close within it warns with the
+ * measured seam jump). 1200 frames is 50 seconds at the default rate — room
+ * for any tasteful period combination, refusal for lcm explosions like
+ * coprime 97- and 89-frame cycles.
+ */
+export const DEFAULT_CLIP_CEILING_FRAMES = 1200;
+
+/** One motion's period in integer frames — THE expressions the emitter
+ *  keys with, so the plan and the keyframes can never disagree. */
+function motionPeriods(
+  part: SolvedScene["parts"][number],
+  fps: number,
+): Array<{ motion: string; frames: number }> {
+  const out: Array<{ motion: string; frames: number }> = [];
+  if (part.spin) out.push({ motion: "spin", frames: Math.max(2, Math.round((part.spin.seconds ?? 4) * fps)) });
+  if (part.bob) out.push({ motion: "bob", frames: Math.max(4, Math.round((part.bob.seconds ?? 3) * fps)) });
+  if (part.screw) out.push({ motion: "screw", frames: Math.max(2, Math.round((part.screw.seconds ?? 4) * fps)) });
+  return out;
+}
+
+const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+
+export interface ClipSeam {
+  id: string;
+  motion: string;
+  periodFrames: number;
+  /** Fraction of this motion cycle left dangling at the clip end. */
+  fraction: number;
+  /** Approximate world jump at the seam, metres (bob, or a screw rise). */
+  jumpM?: number;
+  /** Angular jump at the seam, degrees (spin, or a screw turn). */
+  jumpDeg?: number;
+}
+
+export interface ClipPlan {
+  /** The frame count the clip actually bakes. */
+  clipFrames: number;
+  /** The length at which EVERY motion loop closes (lcm of the periods). */
+  loopFrames: number;
+  /** True when clipFrames closes every loop — no seam exists. */
+  loopCloses: boolean;
+  /** The ceiling that decided; names the lever when the loop did not fit. */
+  ceilingFrames: number;
+  /** Every motion the baked clip cuts mid-cycle, with its measured jump. */
+  seams: ClipSeam[];
+}
+
+/**
+ * How long the baked clip is, and what that length cuts.
+ *
+ * A clip that is merely the LONGEST period catches every other period
+ * mid-stride: a 3s bob inside a 4s clip completes one and a third cycles and
+ * snaps back 42mm at every loop seam — in the viewer, and in every engine
+ * that loops the clip. The loop-closing length is the lcm of the periods, so
+ * the clip bakes that long whenever it fits the budget (declared maxFrames,
+ * or the default ceiling). When it does not fit, the clip keeps the longest
+ * single period and every cut motion is returned as a SEAM with its measured
+ * jump, for the pipeline to say out loud (S3D-W-105).
+ *
+ * One derivation: the emitter takes clipFrames from here and keys with the
+ * same per-motion frame counts, so the warning and the bake cannot drift.
+ */
+export function clipPlan(
+  parts: SolvedScene["parts"],
+  fps: number,
+  maxFrames?: number,
+): ClipPlan | undefined {
+  const motions: Array<{
+    id: string;
+    motion: string;
+    frames: number;
+    part: SolvedScene["parts"][number];
+  }> = [];
+  for (const part of parts) {
+    for (const m of motionPeriods(part, fps)) {
+      motions.push({ id: part.id, motion: m.motion, frames: m.frames, part });
+    }
+  }
+  if (motions.length === 0) return undefined;
+  const ceilingFrames = maxFrames && maxFrames > 0 ? maxFrames : DEFAULT_CLIP_CEILING_FRAMES;
+  let loopFrames = 1;
+  for (const m of motions) loopFrames = (loopFrames / gcd(loopFrames, m.frames)) * m.frames;
+  const longest = Math.max(...motions.map((m) => m.frames));
+  const clipFrames = loopFrames <= ceilingFrames ? loopFrames : longest;
+  const seams: ClipSeam[] = [];
+  if (clipFrames !== loopFrames) {
+    for (const m of motions) {
+      if (clipFrames % m.frames === 0) continue;
+      const fraction = (clipFrames % m.frames) / m.frames;
+      const phase = 2 * Math.PI * fraction;
+      const seam: ClipSeam = { id: m.id, motion: m.motion, periodFrames: m.frames, fraction };
+      if (m.motion === "bob" && m.part.bob) {
+        // The bob curve is quarter-keyed with smooth easing; the cosine
+        // model is that curve shape, so the jump it predicts is the one the
+        // seam shows. A grounded part anchors at its trough, a hoverer at
+        // mid-swing; the seam jump is the offset the cut leaves standing.
+        const amplitude = m.part.bob.amplitude;
+        seam.jumpM = m.part.restsOn
+          ? Math.abs(amplitude * (1 - Math.cos(phase)))
+          : Math.abs(amplitude * Math.sin(phase));
+      }
+      if (m.motion === "spin") seam.jumpDeg = 360 * fraction;
+      if (m.motion === "screw" && m.part.screw) {
+        seam.jumpDeg = 360 * fraction;
+        seam.jumpM = Math.abs(m.part.screw.rise * fraction);
+      }
+      seams.push(seam);
+    }
+  }
+  return { clipFrames, loopFrames, loopCloses: clipFrames === loopFrames, ceilingFrames, seams };
 }
 
 export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {}): string {
@@ -617,6 +737,7 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
     "    # a `material:` override's orphaned originals were still imported and stay",
     "    # so, because they are recorded here before the override replaces them.",
     "    mats_before = set(bpy.data.materials)",
+    "    acts_before = set(bpy.data.actions)",
     "    ext = filepath.rsplit(\".\", 1)[-1].lower()",
     '    if ext in ("glb", "gltf"):',
     "        bpy.ops.import_scene.gltf(filepath=filepath)",
@@ -631,6 +752,16 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
     '    meshes = [o for o in imported if o.type == "MESH"]',
     "    if not meshes:",
     '        raise ValueError("no mesh objects in %s" % filepath)',
+    "    # A rig cannot survive the join: fitting an asset INSIDE its box is a",
+    "    # static placement by design. Losing it is defensible; losing it",
+    "    # SILENTLY is not — measure what the asset carried and say so",
+    "    # (importNotes -> S3D-W-207), with the path that keeps it named.",
+    '    _rig_arms = [o for o in imported if o.type == "ARMATURE"]',
+    "    _rig_clips = sorted(a.name for a in set(bpy.data.actions) - acts_before)",
+    "    if _rig_arms or _rig_clips:",
+    "        _od_note_dropped_rig(",
+    "            name, len(_rig_arms),",
+    "            sum(len(a.data.bones) for a in _rig_arms), _rig_clips)",
     "    # Static placement: unparent meshes (keeping their world transform),",
     "    # strip rig modifiers, and remove imported cameras/lights/empties —",
     "    # a part is geometry, not a stowaway scene.",
@@ -1014,7 +1145,11 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
   const FPS = options.fps && options.fps > 0 ? options.fps : 24;
   const animated = scene.parts.filter((p) => p.spin || p.bob || p.screw);
   if (animated.length > 0) {
-    let maxFrames = 0;
+    // The clip length comes from the ONE plan (loop-closing lcm when it
+    // fits the budget), and the per-motion frame counts below come from the
+    // same motionPeriods the plan read — the seam warning and the bake
+    // cannot disagree about a single frame.
+    const plan = clipPlan(scene.parts, FPS, options.maxFrames)!;
     // The screw helper is authored only when a screw exists, the same
     // keyword-gating the shape parameters use at their call sites: a scene
     // that never screws must emit the byte-identical script it always did,
@@ -1022,14 +1157,12 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
     if (animated.some((p) => p.screw)) lines.push(...SCREW_HELPER, "");
     for (const part of animated) {
       if (part.spin) {
-        const frames = Math.max(2, Math.round((part.spin.seconds ?? 4) * FPS));
-        maxFrames = Math.max(maxFrames, frames);
+        const frames = motionPeriods(part, FPS).find((m) => m.motion === "spin")!.frames;
         const axisIndex = { x: 0, y: 1, z: 2 }[part.spin.axis ?? "z"];
         lines.push(`_animate_spin(${py(part.id)}, ${axisIndex}, ${frames})`);
       }
       if (part.bob) {
-        const frames = Math.max(4, Math.round((part.bob.seconds ?? 3) * FPS));
-        maxFrames = Math.max(maxFrames, frames);
+        const frames = motionPeriods(part, FPS).find((m) => m.motion === "bob")!.frames;
         // Whether this part RESTS on something decides where the swing is
         // anchored, and the author already said so by writing `sits_on`. A
         // resting part must not sink into its support; a hoverer has nothing
@@ -1044,8 +1177,7 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
         // One turn AND one rise share the period: they are one motion, and
         // splitting them across two frame counts would be a screw whose
         // thread slips.
-        const frames = Math.max(2, Math.round((part.screw.seconds ?? 4) * FPS));
-        maxFrames = Math.max(maxFrames, frames);
+        const frames = motionPeriods(part, FPS).find((m) => m.motion === "screw")!.frames;
         const axisIndex = { x: 0, y: 1, z: 2 }[part.screw.axis ?? "z"];
         lines.push(
           `_animate_screw(${py(part.id)}, ${axisIndex}, ${frames}, ${num(part.screw.rise)})`,
@@ -1060,7 +1192,7 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
       // duration is wrong in every export.
       `bpy.context.scene.render.fps = ${Math.max(1, Math.round(FPS))}`,
       "bpy.context.scene.render.fps_base = 1.0",
-      `bpy.context.scene.frame_end = ${1 + maxFrames}`,
+      `bpy.context.scene.frame_end = ${1 + plan.clipFrames}`,
       "bpy.context.scene.frame_set(1)",
       "",
     );

@@ -215,6 +215,78 @@ export function lintWorld(
       detail: { tris: total, budget: maxTrianglesTotal },
     });
   }
+
+  /* World plausibility, when the author declared what plausible means.
+     A bare import of a centimetre-authored asset ships a 141-metre fox
+     into every deliverable, and the harness always PRINTED the number (the
+     scale line, the contact sheet) while leaving the judgment to the
+     reader's eye — the one job the contract layer exists to take over.
+     Measured from the same per-mesh world bounds everything else reads;
+     judged only when `conventions.units.maxExtentM` is declared.
+
+     No metersPerUnit conversion: Blender works in metres and the census
+     measures the BUILT scene, so these bounds are already metres.
+     `units.metersPerUnit` is a declaration the USD writer applies to the
+     exported stage (usd_orientation_kwargs) — a stage that reads as
+     millimetres is the same geometry with a different unit header, not a
+     different size. Converting here would judge a millimetre project's
+     0.5m prop as 500m. */
+  const maxExtentM = contract.maxExtentM ?? 0;
+  if (maxExtentM > 0) {
+    const lo = [Infinity, Infinity, Infinity];
+    const hi = [-Infinity, -Infinity, -Infinity];
+    // A mesh with no measured spatial cannot enter the union, and one that
+    // sits outside it is exactly the oversized part this rule exists to
+    // catch — so the count travels with the verdict rather than quietly
+    // shrinking the world. Same posture as grounding, which refuses to
+    // judge what it did not measure.
+    const unmeasured = census.meshes
+      .filter((m) => !m.spatial?.worldMin || !m.spatial?.worldMax)
+      .map((m) => m.object);
+    for (const mesh of census.meshes) {
+      const min = mesh.spatial?.worldMin;
+      const max = mesh.spatial?.worldMax;
+      if (!min || !max) continue;
+      for (let a = 0; a < 3; a++) {
+        if (min[a]! < lo[a]!) lo[a] = min[a]!;
+        if (max[a]! > hi[a]!) hi[a] = max[a]!;
+      }
+    }
+    const dims = [hi[0]! - lo[0]!, hi[1]! - lo[1]!, hi[2]! - lo[2]!];
+    const worst = dims.indexOf(Math.max(...dims));
+    if (unmeasured.length > 0) {
+      issues.push({
+        code: ISSUE_CODES.WORLD_EXTENT_UNCHECKED,
+        severity: "warning",
+        message:
+          `world extent was measured over ${census.meshes.length - unmeasured.length} of ` +
+          `${census.meshes.length} meshes — ${unmeasured.length} carry no measured bounds, so a ` +
+          `part outside the measured union would not be judged against the ${fmt(maxExtentM)}m limit`,
+        hint:
+          "the unmeasured meshes are empty or all-loose geometry; give them faces, or drop them, " +
+          "to bring the whole scene under the extent check",
+        detail: { unmeasured: unmeasured.slice(0, 12), maxExtentM },
+      });
+    }
+    if (Number.isFinite(dims[worst]!) && dims[worst]! > maxExtentM) {
+      issues.push({
+        code: ISSUE_CODES.WORLD_EXTENT_IMPLAUSIBLE,
+        severity: "warning",
+        message:
+          `the world spans ${fmt(dims[worst]!)}m on ${"xyz"[worst]}, past the ${fmt(maxExtentM)}m ` +
+          `this project declares plausible — a likely unit slip (a centimetre-authored glTF, ` +
+          `an FBX 100× scale)`,
+        hint:
+          "rescale the source asset, or import it as a `file:` part whose declared box normalises " +
+          "the fit; if the scene is genuinely this large, raise conventions.units.maxExtentM",
+        detail: {
+          extent: dims.map((d) => Number(d.toFixed(4))),
+          worstAxis: "xyz"[worst],
+          maxExtentM,
+        },
+      });
+    }
+  }
 }
 
 function fmt(value: number): string {

@@ -314,7 +314,17 @@ function spawnRunner(
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, {
       windowsHide: true,
-      env: { ...process.env, ...extraEnv },
+      /* PYTHONHASHSEED pinned: the FBX exporter derives its object ids from
+         Python's hash(), which is seed-randomized per process — so the same
+         scene shipped a byte-different FBX on every compile. This is a
+         deterministic compiler; interpreter hash hardening buys nothing here
+         (the runner handles no untrusted keys), and an explicit caller env
+         still wins. */
+      env: {
+        ...process.env,
+        ...(extraEnv.PYTHONHASHSEED === undefined ? { PYTHONHASHSEED: "0" } : {}),
+        ...extraEnv,
+      },
     });
     let stdout = "";
     let stderr = "";

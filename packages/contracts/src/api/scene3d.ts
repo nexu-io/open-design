@@ -126,9 +126,33 @@ export interface Scene3dManifestMaterial {
   alpha?: number;
 }
 
+/**
+ * How many PARTS a part tree holds — mesh entries only.
+ *
+ * "Parts" is the noun the whole surface speaks (the CLI prints
+ * "23 mesh · 1 camera · 1 light"; claims are written against the mesh
+ * count), but the GUI counted every tree entry and read 25 on the same
+ * scene — two numbers, one noun, and the claims block disagreed with the
+ * header beside it. Every counter goes through this predicate.
+ */
+export function meshPartCount(partTree: ReadonlyArray<{ type: string }>): number {
+  let count = 0;
+  for (const part of partTree) if (part.type === 'MESH') count += 1;
+  return count;
+}
+
 export interface Scene3dManifestTexture {
   name: string;
+  /** PROJECT-RELATIVE path, like every other path in the manifest — build a
+   *  URL with buildScene3dAssetUrl. For an `external` texture this is the
+   *  BASENAME only: the file lives outside the project and has no
+   *  project-relative form, and the manifest never publishes a host path.
+   *  (It carried one once, the only field in the API that leaked the
+   *  machine's filesystem.) */
   filepath: string;
+  /** True when the texture lives outside the project — `filepath` is then a
+   *  basename, not a fetchable path. */
+  external?: true;
   resolution: [number, number];
 }
 
@@ -140,7 +164,18 @@ export interface Scene3dManifest {
   partTree: Scene3dManifestPart[];
   materials: Scene3dManifestMaterial[];
   textures: Scene3dManifestTexture[];
-  animation: { fps: number; frameStart: number; frameEnd: number; keyframedObjects: string[] };
+  animation: {
+    fps: number;
+    frameStart: number;
+    frameEnd: number;
+    keyframedObjects: string[];
+    /** The NAMED clips the build carries (the census's actionNames) — what a
+     *  player or an agent can actually play. The frame range alone said "250
+     *  frames" while refusing to name the three clips inside them. */
+    actionNames?: string[];
+  };
+  /** Skeletons the build carries, when any — measured by the census. */
+  armatures?: Array<{ name: string; bones: number }>;
   camera: { present: boolean; name: string | null };
   proofImages: string[];
   /**
