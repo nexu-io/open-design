@@ -1,4 +1,5 @@
 const DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
+const DEFAULT_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS = 0;
 const MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS = 60 * 1000;
 
@@ -7,6 +8,16 @@ export function assertValidRuntimeDefInactivityTimeoutMs(agentDefault?: number):
   if (!Number.isFinite(agentDefault) || agentDefault < 0 || !Number.isInteger(agentDefault)) {
     throw new RangeError(
       `RuntimeAgentDef.inactivityTimeoutMs must be a non-negative integer, got ${String(agentDefault)}. ` +
+        'Fix the runtime def — invalid values used to silently disable the watchdog.',
+    );
+  }
+}
+
+export function assertValidRuntimeDefFirstOutputTimeoutMs(agentDefault?: number): void {
+  if (agentDefault === undefined) return;
+  if (!Number.isFinite(agentDefault) || agentDefault < 0 || !Number.isInteger(agentDefault)) {
+    throw new RangeError(
+      `RuntimeAgentDef.firstOutputTimeoutMs must be a non-negative integer, got ${String(agentDefault)}. ` +
         'Fix the runtime def — invalid values used to silently disable the watchdog.',
     );
   }
@@ -22,6 +33,18 @@ export function resolveChatRunInactivityTimeoutMs(agentDefault?: number) {
     return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, agentDefault);
   }
   return DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+}
+
+export function resolveChatRunFirstOutputTimeoutMs(agentDefault?: number): number {
+  assertValidRuntimeDefFirstOutputTimeoutMs(agentDefault);
+  const env = Number(process.env.OD_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS);
+  if (Number.isFinite(env)) {
+    return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(env)));
+  }
+  if (agentDefault !== undefined) {
+    return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, agentDefault);
+  }
+  return DEFAULT_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS;
 }
 
 export function resolveChatRunArtifactQuietPeriodMs() {
@@ -116,6 +139,53 @@ export function applyClaudeStreamJsonRunBookkeeping(
     }
     run.stdinOpen = false;
   }
+}
+
+/**
+ * Whether an emission from a runtime adapter counts as *agent progress* for the
+ * inactivity clock (`run.lastAgentActivityAt`, exported to analytics as
+ * `last_progress_age_ms`).
+ *
+ * Only bytes the agent produced count. Everything the daemon manufactures while
+ * closing out a turn is excluded, because stamping the progress clock from our
+ * own bookkeeping means the last recorded "progress" is the very act of giving
+ * up — so `last_progress_age_ms` reads near zero on exactly the stalled runs
+ * whose contract says it must read "near the inactivity ceiling" (see
+ * TrackingRunFinished in packages/contracts). That is what made the 2026-07-28
+ * AMR design-system stall (run 14b04dd3, ~30 minutes of silence, reported age
+ * 664ms) look like a run that was still working when it was killed.
+ *
+ * Two kinds of emission are ours, not the agent's:
+ *
+ * 1. A terminal `error` — the daemon reporting its own verdict (an ACP
+ *    stage-watchdog timeout, a protocol failure we detected, a close with no
+ *    result).
+ * 2. Any emission flagged `hostSynthesized` — currently the terminal
+ *    `tool_use`/`tool_result` pair the ACP bridge writes for a tool the agent
+ *    left open (`flushOpenAcpTools`). These ride the normal `agent` channel and
+ *    are otherwise indistinguishable from real tool traffic, and they are
+ *    emitted on every ACP failure path immediately BEFORE the terminal error —
+ *    so excluding only case 1 still lets a stall that died with a tool in
+ *    flight report a near-zero age. That is the common stall shape, not an
+ *    edge case.
+ *
+ * Agent-originated errors are not lost by this: they arrive on the child's
+ * stdout/stderr, and those raw-chunk handlers stamp the clock already.
+ *
+ * This predicate only covers emissions that reach the daemon BEFORE the verdict
+ * — `fail()` flushes open tools and only then sends the error. Everything that
+ * arrives after it (the child's shutdown line on stderr, diagnostics promoted
+ * from it) is handled by the attempt-scoped freeze in `startChatRun`; see
+ * `freezeProgressClock`. The two together are one rule: the progress clock runs
+ * from the agent's bytes and stops when the daemon gives up.
+ */
+export function runtimeEmissionCountsAsAgentProgress(
+  channel: string,
+  meta?: { hostSynthesized?: boolean },
+): boolean {
+  if (channel === 'error') return false;
+  if (meta?.hostSynthesized === true) return false;
+  return true;
 }
 
 export function resolveChatRunShutdownGraceMs() {
@@ -235,4 +305,32 @@ export function bufferedAntigravityGeminiFirstTokenAt(
     offset = nextOffset;
   }
   return null;
+}
+
+/**
+ * Writes the composed prompt as the final chunk on the child's stdin, closes
+ * it, and reports whether that write was backpressured.
+ *
+ * `end(chunk)` cannot report this: it returns the stream rather than a boolean,
+ * and `writableNeedDrain` is already back to false by the time it returns — even
+ * for a chunk that `write(chunk)` would have rejected. Every runtime except
+ * Claude (which streams JSON and keeps stdin open) takes this path, so reading
+ * backpressure off `end()` left `stdin_backpressure` permanently false on
+ * exactly the runs whose `stdin_write` stalls it exists to attribute. Issuing
+ * the write and the close separately is what makes the signal real.
+ *
+ * Returns true when the chunk had to be buffered because the OS pipe was full,
+ * i.e. the child was not draining stdin.
+ */
+export function writePromptAndEndStdin(
+  stdin: {
+    write: (chunk: string, encoding: BufferEncoding, cb: (err?: Error | null) => void) => boolean;
+    end: () => void;
+  },
+  composed: string,
+  onFlush: (err?: Error | null) => void,
+): boolean {
+  const accepted = stdin.write(composed, 'utf8', onFlush);
+  stdin.end();
+  return accepted === false;
 }

@@ -18,7 +18,10 @@ import type {
   DesignSystemsTemplatesModalSurfaceViewProps,
   AssistantFeedbackReasonPanelSurfaceViewProps,
   QuestionsFormSurfaceViewProps,
-  PreviewRunStatusSurfaceViewProps,
+  DeepSeekCampaignModalSurfaceViewProps,
+  GoPlanSunsetModalSurfaceViewProps,
+  DeepSeekCampaignBadgeSurfaceViewProps,
+  DeepSeekCampaignModelBenefitSurfaceViewProps,
   // ui_click
   HomeNavClickProps,
   HelpPopoverClickProps,
@@ -71,9 +74,17 @@ import type {
   NextStepActionClickProps,
   QuestionsFormClickProps,
   RunFailedToastClickProps,
+  RunRecoveryActionClickProps,
   AmrAuthResultProps,
+  AmrAuthStageProps,
   AmrEntryClickProps,
+  PreviewRunStatusSurfaceViewProps,
+  DeepSeekCampaignModalClickProps,
+  GoPlanSunsetModalClickProps,
+  DeepSeekCampaignBadgeClickProps,
   RunFailedToastSurfaceViewProps,
+  RunRecoveryActionSurfaceViewProps,
+  RunStartBlockedSurfaceViewProps,
   HomeRecommendationClickProps,
   HomeRecommendationSurfaceViewProps,
   StudioOnboardingHintClickProps,
@@ -101,6 +112,7 @@ import type {
   AssistantFeedbackClickProps,
   AssistantFeedbackReasonClickProps,
   AssistantFeedbackReasonSubmitClickProps,
+  ConversationForkClickProps,
   AssistantFeedbackReasonSubmitProps,
   AssistantFeedbackReasonViewProps,
   SettingsSidebarClickProps,
@@ -111,7 +123,6 @@ import type {
   SettingsMediaProvidersClickProps,
   SettingsConnectorsClickProps,
   SettingsLanguageClickProps,
-  SettingsAppearanceClickProps,
   SettingsNotificationsClickProps,
   SettingsPetsClickProps,
   SettingsPrivacyClickProps,
@@ -126,17 +137,23 @@ import type {
   FileUploadResultProps,
   ContextLinkResultProps,
   SpeakerNotesSaveResultProps,
+  ArtifactEditResultProps,
   ArtifactExportResultProps,
   ArtifactDeployResultProps,
+  ArtifactPublishResultProps,
   SketchSaveResultProps,
   SketchExportResultProps,
   FeedbackSubmitResultProps,
+  ConversationForkResultProps,
   SettingsViewProps,
+  LabsItemToggledProps,
   SettingsCliTestResultProps,
   SettingsByokModelsFetchResultProps,
   SettingsByokTestResultProps,
   SettingsConnectorAuthResultProps,
+  ByokPreflightBlockedProps,
   OnboardingClickProps,
+  AgentDetectDiagnosticProps,
   OnboardingRuntimeScanResultProps,
   OnboardingCompleteResultProps,
   OnboardingPromptPrefilledProps,
@@ -149,13 +166,28 @@ import type {
   DesignSystemApplyResultProps,
   UpdateIndicatorSurfaceViewProps,
   UpdatePromptSurfaceViewProps,
+  UpdateCheckResultProps,
   UpdateInstallResultProps,
   WhatsNewPopupSurfaceViewProps,
   WhatsNewPopupClickProps,
+  EntryNavigationClickProps,
+  AccountMenuClickProps,
+  WorkspaceSwitcherClickProps,
+  WorkspaceInviteClickProps,
+  ProjectCollectionClickProps,
+  CommunityTemplateClickProps,
+  ExtensionMarketplaceClickProps,
+  WorkspaceSurfaceViewProps,
+  WorkspaceSwitchResultProps,
+  WorkspaceInviteResultProps,
+  WorkspaceProjectActionResultProps,
+  WorkspaceSharedProjectOpenResultProps,
+  WorkspaceResourceActionResultProps,
+  ProjectCommentCreateResultProps,
 } from '@open-design/contracts/analytics';
 
 type TrackOptions = { requestId?: string; insertId?: string };
-type Track = (
+export type Track = (
   event: string,
   properties: Record<string, unknown>,
   options?: TrackOptions,
@@ -163,6 +195,15 @@ type Track = (
 
 // Helper: forward a typed payload to the loose `track()` API. Centralized so
 // every call site stays one-line.
+import {
+  EXPERIENCE_SURVEY_ID,
+  EXPERIENCE_SURVEY_IMPROVEMENT_CHOICES,
+  EXPERIENCE_SURVEY_IMPROVEMENT_OTHER,
+  EXPERIENCE_SURVEY_QUESTION_IDS,
+  EXPERIENCE_SURVEY_QUESTION_TEXT,
+  EXPERIENCE_SURVEY_TRIGGER,
+} from './experience-survey-contract';
+
 function send<T extends object>(
   track: Track,
   event: string,
@@ -176,6 +217,64 @@ function send<T extends object>(
 
 export function trackPageView(track: Track, props: PageViewProps): void {
   send(track, 'page_view', props);
+}
+
+// ---- Workspace redesign -------------------------------------------------
+
+export function trackEntryNavigationClick(track: Track, props: EntryNavigationClickProps): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackAccountMenuClick(track: Track, props: AccountMenuClickProps): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackWorkspaceSwitcherClick(track: Track, props: WorkspaceSwitcherClickProps): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackWorkspaceInviteClick(track: Track, props: WorkspaceInviteClickProps, options?: TrackOptions): void {
+  send(track, 'ui_click', props, options);
+}
+
+export function trackProjectCollectionClick(track: Track, props: ProjectCollectionClickProps, options?: TrackOptions): void {
+  send(track, 'ui_click', props, options);
+}
+
+export function trackCommunityTemplateClick(track: Track, props: CommunityTemplateClickProps): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackExtensionMarketplaceClick(track: Track, props: ExtensionMarketplaceClickProps): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackWorkspaceSurfaceView(track: Track, props: WorkspaceSurfaceViewProps): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackWorkspaceSwitchResult(track: Track, props: WorkspaceSwitchResultProps, options?: TrackOptions): void {
+  send(track, 'workspace_switch_result', props, options);
+}
+
+export function trackWorkspaceInviteResult(track: Track, props: WorkspaceInviteResultProps, options?: TrackOptions): void {
+  send(track, 'workspace_invite_result', props, options);
+}
+
+export function trackWorkspaceProjectActionResult(track: Track, props: WorkspaceProjectActionResultProps, options?: TrackOptions): void {
+  send(track, 'workspace_project_action_result', props, options);
+}
+
+export function trackWorkspaceSharedProjectOpenResult(track: Track, props: WorkspaceSharedProjectOpenResultProps, options?: TrackOptions): void {
+  send(track, 'workspace_shared_project_open_result', props, options);
+}
+
+export function trackWorkspaceResourceActionResult(track: Track, props: WorkspaceResourceActionResultProps, options?: TrackOptions): void {
+  send(track, 'workspace_resource_action_result', props, options);
+}
+
+export function trackProjectCommentCreateResult(track: Track, props: ProjectCommentCreateResultProps): void {
+  send(track, 'project_comment_create_result', props);
 }
 
 // ---- surface_view --------------------------------------------------------
@@ -257,6 +356,20 @@ export function trackRunFailedToastSurfaceView(
   send(track, 'surface_view', props);
 }
 
+export function trackRunRecoveryActionSurfaceView(
+  track: Track,
+  props: RunRecoveryActionSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackRunStartBlockedSurfaceView(
+  track: Track,
+  props: RunStartBlockedSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
 export function trackPreviewRunStatusSurfaceView(
   track: Track,
   props: PreviewRunStatusSurfaceViewProps,
@@ -274,6 +387,13 @@ export function trackQuestionsFormSurfaceView(
 export function trackRunFailedToastGoAmrClick(
   track: Track,
   props: RunFailedToastClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackRunRecoveryActionClick(
+  track: Track,
+  props: RunRecoveryActionClickProps,
 ): void {
   send(track, 'ui_click', props);
 }
@@ -315,6 +435,55 @@ export function trackAmrEntryClick(
   send(track, 'ui_click', props);
 }
 
+export function trackDeepSeekCampaignModalSurfaceView(
+  track: Track,
+  props: DeepSeekCampaignModalSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackGoPlanSunsetModalSurfaceView(
+  track: Track,
+  props: GoPlanSunsetModalSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackDeepSeekCampaignBadgeSurfaceView(
+  track: Track,
+  props: DeepSeekCampaignBadgeSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackDeepSeekCampaignModelBenefitSurfaceView(
+  track: Track,
+  props: DeepSeekCampaignModelBenefitSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackDeepSeekCampaignModalClick(
+  track: Track,
+  props: DeepSeekCampaignModalClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackGoPlanSunsetModalClick(
+  track: Track,
+  props: GoPlanSunsetModalClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackDeepSeekCampaignBadgeClick(
+  track: Track,
+  props: DeepSeekCampaignBadgeClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
 // Fired exactly once per AMR sign-in attempt when the login poll settles.
 // Call sites go through analytics/amr-auth.ts, which owns the
 // begin/resolve dedupe — do not call this wrapper directly from
@@ -322,8 +491,17 @@ export function trackAmrEntryClick(
 export function trackAmrAuthResult(
   track: Track,
   props: AmrAuthResultProps,
+  options?: TrackOptions,
 ): void {
-  send(track, 'amr_auth_result', props);
+  send(track, 'amr_auth_result', props, options);
+}
+
+export function trackAmrAuthStage(
+  track: Track,
+  props: AmrAuthStageProps,
+  options?: TrackOptions,
+): void {
+  send(track, 'amr_auth_stage', props, options);
 }
 
 // ---- ui_click (home) -----------------------------------------------------
@@ -844,6 +1022,14 @@ export function trackAssistantFeedbackButtonClick(
   send(track, 'ui_click', props);
 }
 
+export function trackConversationForkClick(
+  track: Track,
+  props: ConversationForkClickProps,
+  options?: { requestId?: string },
+): void {
+  send(track, 'ui_click', props, options);
+}
+
 export function trackAssistantFeedbackReasonSubmitClick(
   track: Track,
   props: AssistantFeedbackReasonSubmitClickProps,
@@ -906,13 +1092,6 @@ export function trackSettingsConnectorsClick(
 export function trackSettingsLanguageClick(
   track: Track,
   props: SettingsLanguageClickProps,
-): void {
-  send(track, 'ui_click', props);
-}
-
-export function trackSettingsAppearanceClick(
-  track: Track,
-  props: SettingsAppearanceClickProps,
 ): void {
   send(track, 'ui_click', props);
 }
@@ -1017,12 +1196,26 @@ export function trackArtifactExportResult(
   send(track, 'artifact_export_result', props, options);
 }
 
+export function trackArtifactEditResult(
+  track: Track,
+  props: ArtifactEditResultProps,
+): void {
+  send(track, 'artifact_edit_result', props);
+}
+
 export function trackArtifactDeployResult(
   track: Track,
   props: ArtifactDeployResultProps,
   options?: { requestId?: string },
 ): void {
   send(track, 'artifact_deploy_result', props, options);
+}
+
+export function trackArtifactPublishResult(
+  track: Track,
+  props: ArtifactPublishResultProps,
+): void {
+  send(track, 'artifact_publish_result', props);
 }
 
 export function trackFileVersionRestoreResult(
@@ -1040,6 +1233,14 @@ export function trackFeedbackSubmitResult(
   send(track, 'feedback_submit_result', props, options);
 }
 
+export function trackConversationForkResult(
+  track: Track,
+  props: ConversationForkResultProps,
+  options?: { requestId?: string },
+): void {
+  send(track, 'conversation_fork_result', props, options);
+}
+
 // ---- Settings view + test/auth result events -----------------------------
 
 export function trackSettingsView(
@@ -1047,6 +1248,19 @@ export function trackSettingsView(
   props: SettingsViewProps,
 ): void {
   send(track, 'settings_view', props);
+}
+
+// ---- Labs ----------------------------------------------------------------
+
+/**
+ * Fires after the preference is persisted, not on click.
+ *
+ * The event asserts "this install now prefers X". A failed write rolls the
+ * switch back, so reporting the click would assert something that is not true
+ * of the machine. Losing the rare failed toggle is the cheaper error.
+ */
+export function trackLabsItemToggled(track: Track, props: LabsItemToggledProps): void {
+  send(track, 'labs_item_toggled', props);
 }
 
 export function trackSettingsCliTestResult(
@@ -1068,6 +1282,13 @@ export function trackSettingsByokModelsFetchResult(
   props: SettingsByokModelsFetchResultProps,
 ): void {
   send(track, 'settings_byok_models_fetch_result', props);
+}
+
+export function trackByokPreflightBlocked(
+  track: Track,
+  props: ByokPreflightBlockedProps,
+): void {
+  send(track, 'byok_preflight_blocked', props);
 }
 
 export function trackSettingsConnectorAuthResult(
@@ -1137,6 +1358,13 @@ export function trackOnboardingClick(
   props: OnboardingClickProps,
 ): void {
   send(track, 'ui_click', props);
+}
+
+export function trackAgentDetectDiagnostic(
+  track: Track,
+  props: AgentDetectDiagnosticProps,
+): void {
+  send(track, 'agent_detect_diagnostic', props);
 }
 
 export function trackOnboardingRuntimeScanResult(
@@ -1245,6 +1473,13 @@ export function trackUpdateInstallResult(
   send(track, 'update_install_result', props);
 }
 
+export function trackUpdateCheckResult(
+  track: Track,
+  props: UpdateCheckResultProps,
+): void {
+  send(track, 'update_check_result', props);
+}
+
 // ---- Post-update "what's new" card ---------------------------------------
 
 export function trackWhatsNewPopupSurfaceView(
@@ -1259,4 +1494,67 @@ export function trackWhatsNewPopupClick(
   props: WhatsNewPopupClickProps,
 ): void {
   send(track, 'ui_click', props);
+}
+
+// ---- experience survey ---------------------------------------------------
+// The experience survey is `type: api` in PostHog: PostHog stores and analyses
+// the responses while `ExperienceSurvey` renders the card. That makes the
+// client responsible for the three reserved event names PostHog's survey
+// analytics reads, which is the only place in this app that emits reserved
+// PostHog events rather than the v2 schema's own.
+
+export function trackExperienceSurveyShown(track: Track): void {
+  send(track, 'survey shown', {
+    $survey_id: EXPERIENCE_SURVEY_ID,
+    trigger: EXPERIENCE_SURVEY_TRIGGER,
+  });
+}
+
+export function trackExperienceSurveyDismissed(track: Track): void {
+  send(track, 'survey dismissed', {
+    $survey_id: EXPERIENCE_SURVEY_ID,
+    trigger: EXPERIENCE_SURVEY_TRIGGER,
+  });
+}
+
+/**
+ * Reports a finished response. A skipped follow-up is omitted rather than sent
+ * as null, so PostHog's per-question response counts stay honest about how
+ * many people actually answered it.
+ */
+export function trackExperienceSurveySent(
+  track: Track,
+  answers: { recommendation: number; improvement?: number; improvementOther?: string },
+): void {
+  const ids = EXPERIENCE_SURVEY_QUESTION_IDS;
+  const text = EXPERIENCE_SURVEY_QUESTION_TEXT;
+  const answered: Array<{ id: string; question: string; response: string | number }> = [];
+  const responses: Record<string, string | number> = {};
+
+  const add = (id: string, question: string, response: string | number) => {
+    answered.push({ id, question, response });
+    responses[`$survey_response_${id}`] = response;
+  };
+
+  add(ids.recommendation, text.recommendation, answers.recommendation);
+  if (typeof answers.improvementOther === 'string') {
+    // PostHog's open-choice convention: the response is what they typed. An
+    // empty field still reports the choice itself, so "none of these fit"
+    // survives instead of looking like the question was skipped.
+    add(
+      ids.improvement,
+      text.improvement,
+      answers.improvementOther.trim() || EXPERIENCE_SURVEY_IMPROVEMENT_OTHER,
+    );
+  } else if (typeof answers.improvement === 'number') {
+    const choice = EXPERIENCE_SURVEY_IMPROVEMENT_CHOICES[answers.improvement];
+    if (choice) add(ids.improvement, text.improvement, choice);
+  }
+
+  send(track, 'survey sent', {
+    $survey_id: EXPERIENCE_SURVEY_ID,
+    trigger: EXPERIENCE_SURVEY_TRIGGER,
+    $survey_questions: answered,
+    ...responses,
+  });
 }

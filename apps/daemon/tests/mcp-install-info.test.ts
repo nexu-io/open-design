@@ -38,6 +38,7 @@ interface InstallInfoPayload {
   cliExists: boolean;
   nodeExists: boolean;
   buildHint: string | null;
+  webBaseUrl: string | null;
 }
 
 interface InstallInfoApp extends express.Express {
@@ -52,7 +53,11 @@ function makeInstallInfoApp({ cliPath, port, env = {}, dataDir }: InstallInfoOpt
   const app = express();
 
   const TTL_MS = 5000;
-  let cache: { t: number; payload: object } | null = null;
+  let cache: {
+    t: number;
+    payload: object;
+    webPort: string | null;
+  } | null = null;
   let resolveCalls = 0;
 
   app.get('/api/mcp/install-info', (req, res) => {
@@ -60,7 +65,12 @@ function makeInstallInfoApp({ cliPath, port, env = {}, dataDir }: InstallInfoOpt
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const now = Date.now();
-    if (cache && now - cache.t < TTL_MS) {
+    const webPort = env[SIDECAR_ENV.WEB_PORT] ?? null;
+    if (
+      cache
+      && cache.webPort === webPort
+      && now - cache.t < TTL_MS
+    ) {
       return res.json(cache.payload);
     }
     resolveCalls += 1;
@@ -74,6 +84,17 @@ function makeInstallInfoApp({ cliPath, port, env = {}, dataDir }: InstallInfoOpt
     if (isSidecarMode) {
       sidecarEnv[SIDECAR_ENV.IPC_PATH] = sidecarIpcPath;
     }
+    for (const key of [
+      'OD_MCP_BOOTSTRAP_COMMAND',
+      'OD_MCP_BOOTSTRAP_ARGS',
+    ] as const) {
+      const value = env[key];
+      if (value != null && value.length > 0) sidecarEnv[key] = value;
+    }
+    const webPortNum = webPort == null ? Number.NaN : Number(webPort);
+    const webBaseUrl = Number.isFinite(webPortNum) && webPortNum > 0
+      ? `http://127.0.0.1:${webPortNum}`
+      : null;
     const payload = buildMcpInstallPayload({
       cliPath,
       cliExists: fs.existsSync(cliPath),
@@ -85,8 +106,9 @@ function makeInstallInfoApp({ cliPath, port, env = {}, dataDir }: InstallInfoOpt
       electronAsNode: env.ELECTRON_RUN_AS_NODE === '1',
       isSidecarMode,
       sidecarEnv,
+      webBaseUrl,
     });
-    cache = { t: now, payload };
+    cache = { t: now, payload, webPort };
     res.json(payload);
   });
 
@@ -257,6 +279,65 @@ describe('GET /api/mcp/install-info', () => {
       expect(body.env).toEqual({
         OD_DATA_DIR: dataDir,
         [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/default/daemon.sock',
+      });
+    } finally {
+      await new Promise<void>((done) => server?.close(() => done()));
+    }
+  });
+
+  it('returns the live packaged web URL immediately when the registered dynamic port changes', async () => {
+    const env: NodeJS.ProcessEnv = {
+      [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/live-web/daemon.sock',
+    };
+    const { port, server } = await startHarness(cliPath, env, dataDir);
+    try {
+      const before = await readInstallInfo(
+        await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`),
+      );
+      expect(before.webBaseUrl).toBeNull();
+
+      env[SIDECAR_ENV.WEB_PORT] = '64248';
+      const firstRegistration = await readInstallInfo(
+        await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`),
+      );
+      expect(firstRegistration.webBaseUrl).toBe('http://127.0.0.1:64248');
+
+      // A restarted packaged runtime may bind a different ephemeral port.
+      // The 5-second install-info cache must not keep returning the old one.
+      env[SIDECAR_ENV.WEB_PORT] = '53421';
+      const afterRestart = await readInstallInfo(
+        await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`),
+      );
+      expect(afterRestart.webBaseUrl).toBe('http://127.0.0.1:53421');
+    } finally {
+      await new Promise<void>((done) => server.close(() => done()));
+    }
+  });
+
+  it('pins the packaged headless bootstrap in the installed MCP config', async () => {
+    const bootstrapArgs =
+      '["-g","-j","/Applications/Open Design.app","--args","--headless"]';
+    const { port, server } = await startHarness(
+      cliPath,
+      {
+        [SIDECAR_ENV.IPC_PATH]:
+          '/tmp/open-design/ipc/default/daemon.sock',
+        OD_MCP_BOOTSTRAP_COMMAND: '/usr/bin/open',
+        OD_MCP_BOOTSTRAP_ARGS: bootstrapArgs,
+      },
+      dataDir,
+    );
+    try {
+      const res = await fetch(
+        `http://127.0.0.1:${port}/api/mcp/install-info`,
+      );
+      const body = await readInstallInfo(res);
+      expect(body.env).toEqual({
+        OD_DATA_DIR: dataDir,
+        [SIDECAR_ENV.IPC_PATH]:
+          '/tmp/open-design/ipc/default/daemon.sock',
+        OD_MCP_BOOTSTRAP_COMMAND: '/usr/bin/open',
+        OD_MCP_BOOTSTRAP_ARGS: bootstrapArgs,
       });
     } finally {
       await new Promise<void>((done) => server?.close(() => done()));

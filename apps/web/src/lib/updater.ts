@@ -1,15 +1,21 @@
 import {
   OPEN_DESIGN_HOST_UPDATER_STATES,
   checkHostUpdater,
+  clearHostUpdaterCache,
   downloadHostUpdater,
   getHostUpdaterStatus,
   installHostUpdater,
   isOpenDesignHostAvailable,
   quitHostAfterUpdaterInstallerOpen,
+  setHostUpdaterMenuLabels,
   subscribeHostUpdater,
+  subscribeHostUpdaterOpenDialog,
   type OpenDesignHostActionResult,
   type OpenDesignHostFailure,
   type OpenDesignHostUpdaterActionOptions,
+  type OpenDesignHostUpdaterMenuLabels,
+  type OpenDesignHostUpdaterOpenDialogListener,
+  type OpenDesignHostUpdaterReinstallSnapshot,
   type OpenDesignHostUpdaterResult,
   type OpenDesignHostUpdaterStatusListener,
   type OpenDesignHostUpdaterStatusSnapshot,
@@ -26,6 +32,10 @@ export type UpdaterDownloadProgress = {
 export type UpdaterActionResult =
   | { ok: true; model: UpdaterModel; status: OpenDesignHostUpdaterStatusSnapshot }
   | OpenDesignHostFailure;
+
+export type UpdaterRestartSafety =
+  | { activeRunCount: number; state: 'blocked' }
+  | { activeRunCount: null; state: 'unknown' };
 
 export type UpdaterModel = {
   availableVersion: string | null;
@@ -44,6 +54,12 @@ export type UpdaterModel = {
   installerOpened: boolean;
   updateKind: 'installer' | 'payload' | 'unknown';
   promptKey: string | null;
+  /**
+   * Present when the feed requires a full installer reinstall (broken or
+   * outdated installed outer package). UI copy priority: `reinstall.url`
+   * jump link > default i18n reinstall copy.
+   */
+  reinstall: OpenDesignHostUpdaterReinstallSnapshot | null;
   requiresManualInstall: boolean;
   upToDate: boolean;
   shouldShowControl: boolean;
@@ -149,6 +165,7 @@ export function deriveUpdaterModel(
     installerOpened,
     updateKind,
     promptKey,
+    reinstall: status?.reinstall ?? null,
     requiresManualInstall: Boolean(status?.capabilities.requiresManualInstall),
     upToDate,
     shouldShowControl: canInstallUpdate && hasDownloadedInstaller && !installerOpened,
@@ -174,6 +191,10 @@ export async function openUpdaterInstaller(options?: OpenDesignHostUpdaterAction
   return modelFromHostResult(await installHostUpdater(options));
 }
 
+export async function clearUpdaterCache(options?: OpenDesignHostUpdaterActionOptions): Promise<UpdaterActionResult> {
+  return modelFromHostResult(await clearHostUpdaterCache(options));
+}
+
 export async function quitAfterUpdaterInstallerOpen(
   options?: OpenDesignHostUpdaterActionOptions,
 ): Promise<OpenDesignHostActionResult> {
@@ -182,4 +203,45 @@ export async function quitAfterUpdaterInstallerOpen(
 
 export function subscribeToUpdaterStatus(listener: OpenDesignHostUpdaterStatusListener): () => void {
   return subscribeHostUpdater(listener);
+}
+
+export function subscribeToUpdaterOpenDialog(listener: OpenDesignHostUpdaterOpenDialogListener): () => void {
+  return subscribeHostUpdaterOpenDialog(listener);
+}
+
+export async function syncUpdaterMenuLabels(
+  labels: OpenDesignHostUpdaterMenuLabels,
+): Promise<OpenDesignHostActionResult> {
+  return await setHostUpdaterMenuLabels(labels);
+}
+
+export function restartSafetyFromUpdaterStatus(
+  status: OpenDesignHostUpdaterStatusSnapshot | null,
+): UpdaterRestartSafety | null {
+  const code = status?.error?.code;
+  if (code !== 'active-runs-blocked' && code !== 'active-runs-unknown') return null;
+  const details = status?.error?.details;
+  const activeRunCount =
+    typeof details === 'object' && details != null && 'activeRunCount' in details
+      ? (details as { activeRunCount?: unknown }).activeRunCount
+      : null;
+  if (code === 'active-runs-blocked' && typeof activeRunCount === 'number' && activeRunCount > 0) {
+    return { activeRunCount, state: 'blocked' };
+  }
+  return { activeRunCount: null, state: 'unknown' };
+}
+
+export function restartSafetyFromActionResult(result: OpenDesignHostActionResult): UpdaterRestartSafety | null {
+  if (result.ok || (result.reason !== 'active-runs-blocked' && result.reason !== 'active-runs-unknown')) {
+    return null;
+  }
+  const details = result.details;
+  const activeRunCount =
+    typeof details === 'object' && details != null && 'activeRunCount' in details
+      ? (details as { activeRunCount?: unknown }).activeRunCount
+      : null;
+  if (result.reason === 'active-runs-blocked' && typeof activeRunCount === 'number' && activeRunCount > 0) {
+    return { activeRunCount, state: 'blocked' };
+  }
+  return { activeRunCount: null, state: 'unknown' };
 }

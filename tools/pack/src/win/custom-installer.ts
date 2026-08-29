@@ -4,9 +4,9 @@ import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promi
 import { dirname, join, relative } from "node:path";
 import { promisify } from "node:util";
 
-import type { ToolPackConfig } from "../config.js";
-import { resolveToolPackLauncherLayout } from "../launcher-layout.js";
-import { winResources } from "../resources.js";
+import type { ToolPackConfig } from "../config/index.js";
+import { resolveToolPackLauncherLayout } from "../launcher/layout.js";
+import { winResources } from "../resources/index.js";
 import { PRODUCT_NAME } from "./constants.js";
 import { pathExists } from "./fs.js";
 import { resolveWinInstallIdentity } from "./identity.js";
@@ -34,10 +34,16 @@ const WIN_NSIS_OVERLAY_RELATIVE_PATHS = [
 ] as const;
 
 export const WIN_PAYLOAD_SEVEN_Z_CREATE_ARGS = ["-t7z", "-m0=LZMA2", "-mx=1", "-mf=off"] as const;
-const WIN_NSIS_PAYLOAD_SEVEN_Z_TIMEOUT_MS = 300_000;
+const WIN_NSIS_PAYLOAD_SEVEN_Z_TIMEOUT_MS = 15 * 60_000;
 
 function escapeNsisString(value: string): string {
   return value.replace(/\$/g, "$$").replace(/"/g, '$\\"').replace(/\r?\n/g, "$\\r$\\n");
+}
+
+export function createNsisQuotedCommandLiteral(args: readonly string[]): string {
+  // NSIS accepts single-quoted string literals, so embedded command quotes do
+  // not need a second escape layer that JavaScript templates can consume.
+  return `'${args.map((arg) => `"${arg}"`).join(" ")}'`;
 }
 
 function normalizeArchivePath(relativePath: string): string {
@@ -416,13 +422,21 @@ async function writeInstallerScript(config: ToolPackConfig, paths: WinPaths, pac
   const shortcutName = escapeNsisString(identity.shortcutName);
   const registryKey = escapeNsisString(identity.registryKey);
   const appPathsKey = escapeNsisString(identity.appPathsKey);
+  const inviteProtocolKey = "Software\\Classes\\opendesign";
+  const inviteProtocolCommand = createNsisQuotedCommandLiteral([`$INSTDIR\\${exeName}`, "%1"]);
+  const inviteProtocolExecutablePrefix = createNsisQuotedCommandLiteral([`$INSTDIR\\${exeName}`]);
   const namespace = escapeNsisString(config.namespace);
   const localDataRoot = `$APPDATA\\${escapeNsisString(PRODUCT_NAME)}\\namespaces\\${escapeNsisString(sanitizeNamespace(config.namespace))}`;
   const localCacheRoot = `${localDataRoot}\\cache`;
   const localUpdateDownloadsRoot = `${localDataRoot}\\updates\\downloads`;
   const localUpdateReleasesRoot = `${localDataRoot}\\updates\\releases`;
   const localUpdateStagingRoot = `${localDataRoot}\\updates\\staging`;
-  const nsisLogPath = escapeNsisString(paths.nsisLogPath);
+  const nsisLogDirectory = config.portable
+    ? `$TEMP\\${escapeNsisString(PRODUCT_NAME)}\\${escapeNsisString(sanitizeNamespace(config.namespace))}`
+    : escapeNsisString(dirname(paths.nsisLogPath));
+  const nsisLogPath = config.portable
+    ? `${nsisLogDirectory}\\nsis.log`
+    : escapeNsisString(paths.nsisLogPath);
   const runningInstancesScriptPath = join(dirname(paths.installerScriptPath), "running-instances.ps1");
   const launcherRuntimeSyncScriptPath = join(dirname(paths.installerScriptPath), "sync-launcher-runtime.ps1");
 
@@ -536,7 +550,7 @@ Var LX
 Function LogInstallerEvent
   Exch $0
   Push $1
-  CreateDirectory "${escapeNsisString(dirname(paths.nsisLogPath))}"
+  CreateDirectory "${nsisLogDirectory}"
   FileOpen $1 "${nsisLogPath}" a
   IfErrors done
   FileSeek $1 0 END
@@ -571,7 +585,7 @@ ${createLauncherRuntimeSyncScript(
 Function un.LogInstallerEvent
   Exch $0
   Push $1
-  CreateDirectory "${escapeNsisString(dirname(paths.nsisLogPath))}"
+  CreateDirectory "${nsisLogDirectory}"
   FileOpen $1 "${nsisLogPath}" a
   IfErrors done
   FileSeek $1 0 END
@@ -981,6 +995,10 @@ skip_silent_desktop_shortcut:
   WriteRegStr HKCU "${registryKey}" "QuietUninstallString" '"$INSTDIR\\${uninstallerName}" /currentuser /S'
   WriteRegStr HKCU "${registryKey}" "DisplayIcon" "$INSTDIR\\${exeName},0"
   WriteRegStr HKCU "${appPathsKey}" "" "$INSTDIR\\${exeName}"
+  WriteRegStr HKCU "${inviteProtocolKey}" "" "URL:Open Design Invite Protocol"
+  WriteRegStr HKCU "${inviteProtocolKey}" "URL Protocol" ""
+  WriteRegStr HKCU "${inviteProtocolKey}\\DefaultIcon" "" "$INSTDIR\\${exeName},0"
+  WriteRegStr HKCU "${inviteProtocolKey}\\shell\\open\\command" "" ${inviteProtocolCommand}
   Push "event=registry_after_write key=${registryKey} appPathsKey=${appPathsKey}"
   Call LogInstallerEvent
   Call SyncLauncherRuntime
@@ -1006,6 +1024,16 @@ after_desktop_shortcut:
   !insertmacro UN_LOG_PATH_STATE "start_menu_shortcut_after_delete" "$SMPROGRAMS\\${shortcutName}"
   DeleteRegKey HKCU "${registryKey}"
   DeleteRegKey HKCU "${appPathsKey}"
+  ReadRegStr $0 HKCU "${inviteProtocolKey}\\shell\\open\\command" ""
+  ; Electron refreshes the protocol command when the app starts and may change
+  ; its trailing arguments. Compare only the exact quoted executable prefix so
+  ; this install can remove its registration without touching another owner.
+  StrCpy $1 ${inviteProtocolExecutablePrefix}
+  StrLen $2 $1
+  StrCpy $3 $0 $2
+  StrCmp $3 $1 0 preserve_invite_protocol
+  DeleteRegKey HKCU "${inviteProtocolKey}"
+preserve_invite_protocol:
   Push "event=registry_after_delete key=${registryKey} appPathsKey=${appPathsKey}"
   Call un.LogInstallerEvent
   \${If} $RemoveCacheDataState == \${BST_CHECKED}

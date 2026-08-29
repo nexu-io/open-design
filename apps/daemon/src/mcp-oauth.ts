@@ -253,7 +253,7 @@ export async function registerClient(
     token_endpoint_auth_method: 'none',
     grant_types: ['authorization_code', 'refresh_token'],
     response_types: ['code'],
-    client_name: 'Open Design',
+    client_name: 'OpenDesign',
     application_type: 'web',
   };
   const res = await fetchImpl(registrationEndpoint, {

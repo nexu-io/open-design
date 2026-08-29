@@ -487,6 +487,22 @@ describe('deploy file set', () => {
     );
   });
 
+  it('places the deploy hook at the real closing body tag', () => {
+    // A prototype that builds an HTML document string writes `</body>` as
+    // ordinary content. Splicing there ends the author's script with the hook
+    // tag's own `</script>` and leaks the rest onto the deployed page
+    // (nexu-io/open-design#7410).
+    const authored = 'const doc = `<body>slip</body>`;';
+    const html = '<!doctype html><html><head></head><body>'
+      + `<script>${authored}<\/script><main>real</main></body></html>`;
+
+    const out = injectDeployHookScript(html, 'https://cdn.example.com/hook.js');
+
+    expect(out).toContain(authored);
+    expect(out.indexOf('data-open-design-deploy-hook')).toBeGreaterThan(out.indexOf('<main>real</main>'));
+    expect(out.indexOf('data-open-design-deploy-hook')).toBeLessThan(out.lastIndexOf('</body>'));
+  });
+
   it('extracts url() and @import refs from inline <style> blocks', () => {
     const refs = extractInlineCssReferences(
       '<!doctype html><style>@import "theme.css";body{background:url("bg.png")}</style>',
@@ -690,6 +706,43 @@ describe('deploy plan and analyzer', () => {
     expect(plan.files.map((f) => f.file)).toEqual(['index.html']);
     expect(plan.missing).toEqual(['missing.png']);
     expect(plan.invalid).toEqual([]);
+  });
+
+  it('reports missing landing image variants from srcset and CSS backgrounds', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await mkdir(path.join(dir, 'assets'), { recursive: true });
+    await writeFile(
+      path.join(dir, 'index.html'),
+      [
+        '<!doctype html>',
+        '<meta name="viewport" content="width=device-width">',
+        '<link rel="stylesheet" href="styles.css">',
+        '<picture>',
+        '<source srcset="assets/hero.png 1x, assets/hero@2x.png 2x">',
+        '<img src="assets/fallback.png" alt="">',
+        '</picture>',
+      ].join(''),
+    );
+    await writeFile(path.join(dir, 'styles.css'), 'body{background:url("assets/bg.png")}');
+    await writeFile(path.join(dir, 'assets/hero.png'), 'hero');
+    await writeFile(path.join(dir, 'assets/fallback.png'), 'fallback');
+
+    const plan = await buildDeployFilePlan(projectsRoot, projectId, 'index.html');
+    expect(plan.files.map((f) => f.file).sort()).toEqual([
+      'assets/fallback.png',
+      'assets/hero.png',
+      'index.html',
+      'styles.css',
+    ]);
+    expect(plan.missing.sort()).toEqual(['assets/bg.png', 'assets/hero@2x.png']);
+
+    const { warnings } = analyzeDeployPlan(plan);
+    expect(warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'broken-reference', path: 'assets/bg.png' }),
+        expect.objectContaining({ code: 'broken-reference', path: 'assets/hero@2x.png' }),
+      ]),
+    );
   });
 
   it('flags missing assets as broken-reference warnings', () => {
@@ -2245,6 +2298,160 @@ describe('cloudflare pages deploys', () => {
         },
       },
     });
+  });
+
+  // --- target / branch derivation tests (issue #4483) ---
+
+  function makeMinimalCloudflareFetchMock(options: {
+    previewDeployUrl?: string;
+  } = {}) {
+    const previewDeployUrl = options.previewDeployUrl ?? 'https://abc123.demo-pages.pages.dev';
+    const capturedFormData: { branch: string | undefined } = { branch: undefined };
+    const indexHash = cloudflarePagesAssetHash({
+      file: 'index.html',
+      data: Buffer.from('hello'),
+    });
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      const method =
+        init?.method || (input instanceof Request ? input.method : 'GET');
+
+      if (url.endsWith('/pages/projects/demo-pages') && method === 'GET') {
+        return new Response(JSON.stringify({ success: true, result: { name: 'demo-pages' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/projects/demo-pages/upload-token') && method === 'GET') {
+        return new Response(JSON.stringify({ success: true, result: { jwt: 'pages-upload-jwt' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/assets/check-missing') && method === 'POST') {
+        return new Response(JSON.stringify({ success: true, result: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/assets/upsert-hashes') && method === 'POST') {
+        return new Response(JSON.stringify({ success: true, result: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/projects/demo-pages/deployments') && method === 'POST') {
+        const form = init?.body as FormData;
+        capturedFormData.branch = form?.get('branch') as string | undefined ?? undefined;
+        return new Response(JSON.stringify({
+          success: true,
+          result: { id: 'dep_preview_1', url: previewDeployUrl },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      // HEAD check — respond 200 for any URL so waitForReachableDeploymentUrl resolves
+      if (method === 'HEAD') {
+        return new Response('', { status: 200 });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    return { fetchMock, capturedFormData, indexHash };
+  }
+
+  const minimalFiles = [
+    {
+      file: 'index.html',
+      data: Buffer.from('hello'),
+      contentType: 'text/html',
+      sourcePath: 'index.html',
+    },
+  ] as const;
+
+  const baseConfig = {
+    token: 'cloudflare-token-secret',
+    accountId: 'account_123',
+    projectName: 'demo-pages',
+  } as const;
+
+  it('sends branch=preview to Cloudflare when target is preview', async () => {
+    const { fetchMock, capturedFormData } = makeMinimalCloudflareFetchMock({
+      previewDeployUrl: 'https://abc123.demo-pages.pages.dev',
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await deployToCloudflarePages({
+      config: { ...baseConfig },
+      files: [...minimalFiles],
+      target: 'preview',
+    } as Parameters<typeof deployToCloudflarePages>[0]);
+
+    // The deployment POST must carry branch='preview', not 'main'
+    expect(capturedFormData.branch).toBe('preview');
+  });
+
+  it('sends branch=main to Cloudflare when target is production', async () => {
+    const { fetchMock, capturedFormData } = makeMinimalCloudflareFetchMock();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await deployToCloudflarePages({
+      config: { ...baseConfig },
+      files: [...minimalFiles],
+      target: 'production',
+    } as Parameters<typeof deployToCloudflarePages>[0]);
+
+    expect(capturedFormData.branch).toBe('main');
+  });
+
+  it('defaults to branch=main (production) when target is omitted', async () => {
+    const { fetchMock, capturedFormData } = makeMinimalCloudflareFetchMock();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await deployToCloudflarePages({
+      config: { ...baseConfig },
+      files: [...minimalFiles],
+    });
+
+    expect(capturedFormData.branch).toBe('main');
+  });
+
+  it('returns the per-deploy preview URL (not the production root) for a preview deploy', async () => {
+    const distinctPreviewUrl = 'https://abc123.demo-pages.pages.dev';
+    const { fetchMock } = makeMinimalCloudflareFetchMock({ previewDeployUrl: distinctPreviewUrl });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await deployToCloudflarePages({
+      config: { ...baseConfig },
+      files: [...minimalFiles],
+      target: 'preview',
+    } as Parameters<typeof deployToCloudflarePages>[0]);
+
+    // For a preview deploy the returned URL must be the per-deploy alias,
+    // not the production root https://demo-pages.pages.dev
+    expect(result.url).toBe(distinctPreviewUrl);
+    expect(result.url).not.toBe('https://demo-pages.pages.dev');
+  });
+
+  it('still returns the production root URL for a production deploy', async () => {
+    const { fetchMock } = makeMinimalCloudflareFetchMock({
+      previewDeployUrl: 'https://abc123.demo-pages.pages.dev',
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await deployToCloudflarePages({
+      config: { ...baseConfig },
+      files: [...minimalFiles],
+      target: 'production',
+    } as Parameters<typeof deployToCloudflarePages>[0]);
+
+    expect(result.url).toBe('https://demo-pages.pages.dev');
   });
 });
 

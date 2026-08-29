@@ -1,0 +1,142 @@
+/* Dot-matrix boot loader. Each ring plays one opacity track, so the grid
+   reads as a wave radiating out from a solid core.
+
+   These are CSS keyframes rather than the source asset's SMIL <animate>
+   elements for two reasons: Chrome never starts the SMIL timeline for an SVG
+   subtree React builds via createElementNS (getCurrentTime() stays pinned at
+   0, leaving every dot at its default opacity), and SMIL ignores the global
+   prefers-reduced-motion rule in base.css. Stop positions mirror SMIL's even
+   distribution of N values (value i at i/(N-1)), so the motion is unchanged. */
+
+.loader {
+  flex: none;
+}
+.loader circle {
+  /* Long-hand on purpose: the `animation` shorthand would reset
+     animation-name to `none` here, and this selector out-specifies the
+     single-class ring rules below that supply the name. */
+  animation-duration: 1.043s;
+  /* Linear, matching SMIL's default calcMode. */
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+.far {
+  animation-name: od-matrix-far;
+}
+.edge {
+  animation-name: od-matrix-edge;
+}
+.axis {
+  animation-name: od-matrix-axis;
+}
+.inner {
+  animation-name: od-matrix-inner;
+}
+
+@keyframes od-matrix-far {
+  0% { opacity: 0.103; }
+  4.3478% { opacity: 0.161; }
+  8.6957% { opacity: 0.224; }
+  13.0435% { opacity: 0.29; }
+  17.3913% { opacity: 0.352; }
+  21.7391% { opacity: 0.408; }
+  26.087% { opacity: 0.453; }
+  30.4348% { opacity: 0.484; }
+  34.7826% { opacity: 0.499; }
+  39.1304% { opacity: 0.497; }
+  43.4783% { opacity: 0.478; }
+  47.8261% { opacity: 0.444; }
+  52.1739% { opacity: 0.397; }
+  56.5217% { opacity: 0.339; }
+  60.8696% { opacity: 0.276; }
+  65.2174% { opacity: 0.21; }
+  69.5652% { opacity: 0.148; }
+  73.913% { opacity: 0.092; }
+  78.2609% { opacity: 0.047; }
+  82.6087% { opacity: 0.016; }
+  86.9565% { opacity: 0.001; }
+  91.3043% { opacity: 0.003; }
+  95.6522% { opacity: 0.022; }
+  100% { opacity: 0.056; }
+}
+
+@keyframes od-matrix-edge {
+  0% { opacity: 0.009; }
+  4.3478% { opacity: 0; }
+  8.6957% { opacity: 0.012; }
+  13.0435% { opacity: 0.044; }
+  17.3913% { opacity: 0.093; }
+  21.7391% { opacity: 0.157; }
+  26.087% { opacity: 0.23; }
+  30.4348% { opacity: 0.309; }
+  34.7826% { opacity: 0.387; }
+  39.1304% { opacity: 0.459; }
+  43.4783% { opacity: 0.521; }
+  47.8261% { opacity: 0.567; }
+  52.1739% { opacity: 0.596; }
+  56.5217% { opacity: 0.605; }
+  60.8696% { opacity: 0.593; }
+  65.2174% { opacity: 0.561; }
+  69.5652% { opacity: 0.512; }
+  73.913% { opacity: 0.448; }
+  78.2609% { opacity: 0.374; }
+  82.6087% { opacity: 0.296; }
+  86.9565% { opacity: 0.218; }
+  91.3043% { opacity: 0.146; }
+  95.6522% { opacity: 0.084; }
+  100% { opacity: 0.037; }
+}
+
+@keyframes od-matrix-axis {
+  0% { opacity: 0.079; }
+  4.3478% { opacity: 0.032; }
+  8.6957% { opacity: 0.006; }
+  13.0435% { opacity: 0.001; }
+  17.3913% { opacity: 0.018; }
+  21.7391% { opacity: 0.056; }
+  26.087% { opacity: 0.112; }
+  30.4348% { opacity: 0.182; }
+  34.7826% { opacity: 0.263; }
+  39.1304% { opacity: 0.347; }
+  43.4783% { opacity: 0.429; }
+  47.8261% { opacity: 0.505; }
+  52.1739% { opacity: 0.568; }
+  56.5217% { opacity: 0.614; }
+  60.8696% { opacity: 0.641; }
+  65.2174% { opacity: 0.646; }
+  69.5652% { opacity: 0.628; }
+  73.913% { opacity: 0.591; }
+  78.2609% { opacity: 0.534; }
+  82.6087% { opacity: 0.464; }
+  86.9565% { opacity: 0.384; }
+  91.3043% { opacity: 0.3; }
+  95.6522% { opacity: 0.217; }
+  100% { opacity: 0.142; }
+}
+
+@keyframes od-matrix-inner {
+  0% { opacity: 0.491; }
+  4.3478% { opacity: 0.394; }
+  8.6957% { opacity: 0.297; }
+  13.0435% { opacity: 0.204; }
+  17.3913% { opacity: 0.124; }
+  21.7391% { opacity: 0.06; }
+  26.087% { opacity: 0.018; }
+  30.4348% { opacity: 0; }
+  34.7826% { opacity: 0.008; }
+  39.1304% { opacity: 0.041; }
+  43.4783% { opacity: 0.097; }
+  47.8261% { opacity: 0.171; }
+  52.1739% { opacity: 0.259; }
+  56.5217% { opacity: 0.356; }
+  60.8696% { opacity: 0.453; }
+  65.2174% { opacity: 0.546; }
+  69.5652% { opacity: 0.626; }
+  73.913% { opacity: 0.69; }
+  78.2609% { opacity: 0.732; }
+  82.6087% { opacity: 0.75; }
+  86.9565% { opacity: 0.742; }
+  91.3043% { opacity: 0.709; }
+  95.6522% { opacity: 0.653; }
+  100% { opacity: 0.579; }
+}

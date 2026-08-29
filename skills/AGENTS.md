@@ -17,8 +17,9 @@ full split.
 - Asset routes (`/api/skills/:id/example`, `/api/skills/:id/assets/*`)
   span both functional skills and design templates so existing
   `srcdoc`-rewritten URLs keep resolving after the split.
-- The Settings → Skills panel surfaces this directory only; the
-  EntryView Templates tab reads the design-templates registry instead.
+- Integrations → Skills surfaces this directory only. Renderable templates are
+  read from the design-templates registry by the New project "Start from" rails;
+  the redesigned home no longer has a top-level Templates tab.
 
 ## Adding a skill
 
@@ -36,11 +37,11 @@ This directory also ships a curated catalogue of design and creative
 skills hand-picked from `VoltAgent/awesome-agent-skills` and
 `ComposioHQ/awesome-claude-skills`. Each entry is a lightweight stub —
 frontmatter + a short body that points at the upstream repo — so the
-Settings → Skills tab surfaces a rich, filterable list out of the box
+Integrations → Skills surfaces a rich, filterable list out of the box
 without vendoring every upstream workflow.
 
 - `od.category` on these stubs powers the new category filter row in
-  Settings → Skills (e.g. `image-generation`, `video-generation`,
+  Integrations → Skills (e.g. `image-generation`, `video-generation`,
   `audio-music`, `slides`, `documents`, `design-systems`, `figma`,
   `animation-motion`, `3d-shaders`, `diagrams`, `creative-direction`,
   `marketing-creative`, `screenshots`, `web-artifacts`).

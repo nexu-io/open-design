@@ -81,13 +81,13 @@ export function BrandReadyPrompt({
             <div className={styles.refineActions}>
               {onAiOptimize ? (
                 <button type="button" className={styles.refineAction} onClick={onAiOptimize}>
-                  <Icon name="sparkles" size={13} />
+                  <Icon name="sparkles" size={14} />
                   {t('project.brandReadyAiOptimize')}
                 </button>
               ) : null}
               {onEditManually ? (
                 <button type="button" className={styles.refineAction} onClick={onEditManually}>
-                  <Icon name="edit" size={13} />
+                  <Icon name="edit" size={14} />
                   {t('project.brandReadyEditManually')}
                 </button>
               ) : null}

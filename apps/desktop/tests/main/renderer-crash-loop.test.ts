@@ -8,7 +8,7 @@ import {
   RENDERER_CRASH_LOOP_WINDOW_MS,
   RendererCrashLoopBreaker,
 } from "../../src/main/renderer-crash-loop.js";
-import { isSupportMailtoUrl } from "../../src/main/runtime.js";
+import { isFirstPartyMailtoUrl, isSupportMailtoUrl } from "../../src/main/runtime.js";
 
 describe("RendererCrashLoopBreaker", () => {
   test("stays closed while crashes are below the limit inside the window", () => {
@@ -178,5 +178,48 @@ describe("isSupportMailtoUrl", () => {
       isSupportMailtoUrl("mailto:support@open-design.ai?subject=ok%0D%0ABcc:attacker@example.com"),
     ).toBe(false);
     expect(isSupportMailtoUrl("mailto:support@open-design.ai?body=line1%0Aline2")).toBe(false);
+  });
+});
+
+describe("isFirstPartyMailtoUrl", () => {
+  test("covers every address the app itself offers to email", () => {
+    // The account menu's mail badge (`CONTACT_EMAIL_URL` in EntryNavRail.tsx).
+    // Before this predicate existed, `will-navigate` only recognised http(s),
+    // so clicking that badge in the packaged shell did nothing at all.
+    expect(isFirstPartyMailtoUrl("mailto:contact@open.design")).toBe(true);
+    expect(isFirstPartyMailtoUrl("mailto:contact@open.design?subject=Hi&body=there")).toBe(true);
+    expect(isFirstPartyMailtoUrl("mailto:Contact@Open.Design")).toBe(true);
+    // The crash screen's support address stays covered.
+    expect(isFirstPartyMailtoUrl("mailto:support@open-design.ai")).toBe(true);
+  });
+
+  test("keeps the support predicate narrow so the open-external bridge does not widen", () => {
+    // `shell:open-external` is renderer-reachable and still gates on the
+    // support address only; the wider allowlist is for navigation, not IPC.
+    expect(isSupportMailtoUrl("mailto:contact@open.design")).toBe(false);
+  });
+
+  test("applies the same recipient/header hardening as the support predicate", () => {
+    expect(isFirstPartyMailtoUrl("mailto:attacker@evil.com")).toBe(false);
+    expect(isFirstPartyMailtoUrl("mailto:contact@open.design?bcc=attacker@example.com")).toBe(false);
+    expect(isFirstPartyMailtoUrl("mailto:contact@open.design?to=attacker@example.com")).toBe(false);
+    expect(isFirstPartyMailtoUrl("mailto:contact@open.design?whatever=1")).toBe(false);
+    expect(
+      isFirstPartyMailtoUrl("mailto:contact@open.design?subject=ok%0D%0ABcc:attacker@example.com"),
+    ).toBe(false);
+    expect(isFirstPartyMailtoUrl("https://open-design.ai")).toBe(false);
+    expect(isFirstPartyMailtoUrl("javascript:alert(1)")).toBe(false);
+    expect(isFirstPartyMailtoUrl("not a url")).toBe(false);
+  });
+
+  test("the main window routes a mailto navigation to the OS instead of dropping it", () => {
+    // Guards the wiring, not just the predicate: `will-navigate` must cancel
+    // the navigation and hand the URL to `shell.openExternal`.
+    const runtimeSource = readFileSync(new URL("../../src/main/runtime.ts", import.meta.url), "utf8");
+    const willNavigate = runtimeSource.slice(runtimeSource.indexOf('window.webContents.on("will-navigate"'));
+    expect(willNavigate).toContain("isFirstPartyMailtoUrl(url)");
+    expect(willNavigate.indexOf("isFirstPartyMailtoUrl(url)")).toBeLessThan(
+      willNavigate.indexOf("if (!isHttpUrl(url)"),
+    );
   });
 });

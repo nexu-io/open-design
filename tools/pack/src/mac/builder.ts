@@ -1,10 +1,14 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import type { ToolPackConfig } from "../config.js";
+import type { ToolPackConfig } from "../config/index.js";
 import { domToPptxBundleResource } from "../dom-to-pptx-resource.js";
-import { macResources } from "../resources.js";
-import { electronBuilderVersionForAppVersion } from "../versions.js";
+import {
+  assertNodePtyRuntime,
+  resolveNodePtyRuntimeArch,
+} from "../node-pty-runtime.js";
+import { macResources } from "../resources/index.js";
+import { electronBuilderVersionForAppVersion } from "../versioning/index.js";
 import { execFileAsync } from "./commands.js";
 import {
   ELECTRON_BUILDER_ASAR,
@@ -45,6 +49,7 @@ async function writeWebStandaloneHookConfig(config: ToolPackConfig, paths: MacPa
     `${JSON.stringify(
       {
         auditReportPath: paths.webStandaloneHookAuditPath,
+        hyperframesRuntimeSourceRoot: paths.assembledAppRoot,
         pruneCopiedSharp: true,
         pruneRootNext: true,
         pruneRootSharp: true,
@@ -133,6 +138,18 @@ export async function runElectronBuilder(
       notarize: config.macNotarize ? undefined : false,
       target: targets,
     },
+    // Register the workspace-invite deeplink scheme so macOS routes
+    // `opendesign://workspace/invite/continue?...` to this app (electron-builder
+    // writes it into Info.plist CFBundleURLTypes; a runtime
+    // setAsDefaultProtocolClient alone is unreliable on macOS). The scheme string
+    // must match INVITE_DEEPLINK_SCHEME in
+    // apps/desktop/src/main/invite-deeplink-core.ts.
+    protocols: [
+      {
+        name: `${PRODUCT_NAME} Invite`,
+        schemes: ["opendesign"],
+      },
+    ],
     nodeGypRebuild: false,
     npmRebuild: false,
     productName: identity.productName,
@@ -164,5 +181,10 @@ export async function runElectronBuilder(
       ...(config.signed ? {} : { CSC_IDENTITY_AUTO_DISCOVERY: "false" }),
       ...(webStandaloneHookConfigPath == null ? {} : { [WEB_STANDALONE_HOOK_CONFIG_ENV]: webStandaloneHookConfigPath }),
     },
+  });
+  await assertNodePtyRuntime({
+    appRoot: join(paths.appPath, "Contents", "Resources", "app"),
+    arch: resolveNodePtyRuntimeArch(process.arch),
+    platform: "darwin",
   });
 }

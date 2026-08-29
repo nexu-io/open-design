@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   formatFormAnswers,
+  hasUnterminatedQuestionForm,
   splitOnQuestionForms,
   parsePartialQuestionForm,
+  stripTrailingOpenQuestionForm,
 } from '../../src/artifacts/question-form';
 
 const VALID_BODY = `{
@@ -12,6 +14,61 @@ const VALID_BODY = `{
       "options": ["Mobile", "Desktop", "Responsive"], "required": true }
   ]
 }`;
+
+describe('unterminated question-form detection', () => {
+  // Production repro (OD Next strategy turn, no clarification needed): the
+  // model narrated its decision *into* an open tag instead of emitting a form.
+  // The tail is prose, so it can never become a form body — treating the tag
+  // as "a form is still streaming" spins the loading skeleton forever, hides
+  // every character after the tag, and latches the turn as awaiting input.
+  const PROSE_TAIL = '策略判断信息充足，将直接进入生产。\n\n<question-form> 无需提出';
+
+  it('does not treat a prose tail after the open tag as a form in flight', () => {
+    const result = stripTrailingOpenQuestionForm(PROSE_TAIL);
+    expect(result.hadOpenForm).toBe(false);
+    // Nothing may be swallowed: the narration after the tag is ordinary prose.
+    expect(result.text).toBe(PROSE_TAIL);
+    expect(hasUnterminatedQuestionForm(PROSE_TAIL)).toBe(false);
+  });
+
+  it('still reports a form in flight while its body is a plausible JSON prefix', () => {
+    const streaming = [
+      // stream stopped right after the tag — the body may still arrive
+      'One quick check:\n<question-form id="discovery" title="Brief">',
+      'One quick check:\n<question-form id="discovery" title="Brief">\n',
+      // bare JSON prefix
+      'One quick check:\n<question-form id="discovery" title="Brief">{',
+      'One quick check:\n<question-form id="discovery" title="Brief">{"id":"x","questions":[',
+      // fenced ```json wrapper, including the fence itself mid-stream
+      'One quick check:\n<question-form id="discovery" title="Brief">\n``',
+      'One quick check:\n<question-form id="discovery" title="Brief">\n```json',
+      'One quick check:\n<question-form id="discovery" title="Brief">\n```json\n{"questions":[',
+      // the alias tag behaves identically
+      'One quick check:\n<ask-question id="discovery">{"questions":[',
+    ];
+    for (const input of streaming) {
+      const result = stripTrailingOpenQuestionForm(input);
+      expect({ input, hadOpenForm: result.hadOpenForm }).toEqual({ input, hadOpenForm: true });
+      expect(result.text).toBe('One quick check:\n');
+      expect(hasUnterminatedQuestionForm(input)).toBe(true);
+    }
+  });
+
+  it('keeps scanning past a prose tag so a real form later in the message still counts', () => {
+    const input =
+      'Head.\n<question-form> 无需提出\n\nActually:\n<question-form id="d">{"questions":[';
+    const result = stripTrailingOpenQuestionForm(input);
+    expect(result.hadOpenForm).toBe(true);
+    expect(result.text).toBe('Head.\n<question-form> 无需提出\n\nActually:\n');
+  });
+
+  it('leaves a completed form block alone', () => {
+    const input = `Intro.\n<question-form id="discovery">\n${VALID_BODY}\n</question-form>\nOutro.`;
+    const result = stripTrailingOpenQuestionForm(input);
+    expect(result.hadOpenForm).toBe(false);
+    expect(result.text).toBe(input);
+  });
+});
 
 describe('form content language (lang)', () => {
   it('parses a top-level lang tag from the complete form body', () => {
@@ -219,6 +276,66 @@ describe('splitOnQuestionForms', () => {
     }
   });
 
+  it('parses the deliveryFormat/container array payload from Feishu acceptance', () => {
+    const input = [
+      '要的话我可以直接按这张图出 motion overlay。先选一下输出偏好:',
+      '<question-form>',
+      JSON.stringify([
+        {
+          id: 'deliveryFormat',
+          prompt: '导出格式？',
+          type: 'radio',
+          options: [
+            { id: 'mov', label: 'MOV（透明背景，可直接导入剪映 / PR / FCP 叠加）' },
+            { id: 'webm', label: 'WebM（透明背景，适合网页 / 浏览器播放）' },
+            { id: 'preview', label: '预览图 / 预览工程（适合先确认效果）' },
+            { id: 'remotion', label: 'Remotion 工程（适合继续编辑和拼装）' },
+          ],
+        },
+        {
+          id: 'container',
+          prompt: '对话外壳？',
+          type: 'radio',
+          options: [
+            { id: 'none', label: '不要外壳，只要气泡' },
+            { id: 'phone', label: '手机聊天界面' },
+          ],
+        },
+      ]),
+      '</question-form>',
+    ].join('\n');
+
+    const out = splitOnQuestionForms(input);
+    expect(out.map((s) => s.kind)).toEqual(['text', 'form']);
+    const form = out[1]?.kind === 'form' ? out[1].form : null;
+    expect(form?.questions.map((q) => [q.id, q.label, q.type])).toEqual([
+      ['deliveryFormat', '导出格式？', 'radio'],
+      ['container', '对话外壳？', 'radio'],
+    ]);
+    expect(form?.questions[0]?.options?.map((option) => option.value)).toEqual([
+      'mov',
+      'webm',
+      'preview',
+      'remotion',
+    ]);
+  });
+
+  it('normalizes partially missing question fields instead of dropping the form', () => {
+    const out = splitOnQuestionForms(
+      `<question-form>${JSON.stringify([
+        { prompt: 'Pick one', options: ['A', 'B'] },
+        { id: 'notes', type: 'textarea' },
+      ])}</question-form>`,
+    );
+
+    expect(out.map((s) => s.kind)).toEqual(['form']);
+    const form = out[0]?.kind === 'form' ? out[0].form : null;
+    expect(form?.questions).toMatchObject([
+      { id: 'q1', label: 'Pick one', type: 'radio' },
+      { id: 'notes', label: 'notes', type: 'textarea' },
+    ]);
+  });
+
   it('accepts <ask-question> as an alias for <question-form> (#1194)', () => {
     const out = splitOnQuestionForms(`<ask-question id="brief" title="Quick brief">${VALID_BODY}</ask-question>`);
     expect(out.map((s) => s.kind)).toEqual(['form']);
@@ -239,9 +356,21 @@ describe('splitOnQuestionForms', () => {
     expect(out.map((s) => s.kind)).toEqual(['text']);
   });
 
-  it('keeps malformed JSON bodies as raw text', () => {
+  it('replaces malformed JSON bodies with a safe fallback and diagnostics', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const out = splitOnQuestionForms(`<ask-question>not json</ask-question>`);
     expect(out.map((s) => s.kind)).toEqual(['text']);
+    expect(out[0]).toMatchObject({
+      kind: 'text',
+      text: 'The assistant sent a question form that could not be rendered. Please ask it to resend the questions.',
+    });
+    expect(out[0]?.kind === 'text' ? out[0].text : '').not.toContain('<ask-question>');
+    expect(out[0]?.kind === 'text' ? out[0].text : '').not.toContain('not json');
+    expect(warn).toHaveBeenCalledWith(
+      '[question-form] failed to render inline question form',
+      expect.objectContaining({ reason: 'invalid-json', tagName: 'ask-question' }),
+    );
+    warn.mockRestore();
   });
 
   it('keeps unterminated tags as prose without swallowing trailing text', () => {

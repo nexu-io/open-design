@@ -49,7 +49,7 @@ beforeEach(() => {
 });
 
 function renderGuidance(onActivate = vi.fn()) {
-  render(
+  const rendered = render(
     <AmrGuidance
       errorCode="AGENT_AUTH_REQUIRED"
       projectId="proj-1"
@@ -61,13 +61,16 @@ function renderGuidance(onActivate = vi.fn()) {
       onActivate={onActivate}
     />,
   );
-  return onActivate;
+  return { onActivate, ...rendered };
 }
 
 describe('AmrGuidance', () => {
   it('fires surface_view once on mount with the full prop set', () => {
-    renderGuidance();
+    const { container } = renderGuidance();
     expect(screen.getByTestId('amr-guidance')).toBeTruthy();
+    expect(container.querySelector('[data-user-action-card="hosted-agent-suggestion"]')).toBeTruthy();
+    const disclosure = container.querySelector('.accordion-collapsible');
+    expect(disclosure?.classList.contains('open')).toBe(false);
     expect(trackRunFailedToastSurfaceView).toHaveBeenCalledTimes(1);
     expect(vi.mocked(trackRunFailedToastSurfaceView).mock.calls[0]![1]).toMatchObject({
       page_name: 'chat_panel',
@@ -83,8 +86,8 @@ describe('AmrGuidance', () => {
   });
 
   it('fires ui_click go_amr and calls onActivate on click', () => {
-    const onActivate = renderGuidance();
-    fireEvent.click(screen.getByRole('button'));
+    const { onActivate } = renderGuidance();
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to OpenDesign Cloud & retry' }));
     expect(trackRunFailedToastGoAmrClick).toHaveBeenCalledTimes(1);
     expect(vi.mocked(trackRunFailedToastGoAmrClick).mock.calls[0]![1]).toMatchObject({
       page_name: 'chat_panel',
@@ -92,5 +95,14 @@ describe('AmrGuidance', () => {
       element: 'go_amr',
     });
     expect(onActivate).toHaveBeenCalledTimes(1);
+  });
+
+  // Long CTA must live in the footer row so a narrow ChatPane does not
+  // squeeze the Chinese title into a vertical one-character stack.
+  it('places the switch CTA in the footer rather than the head actions column', () => {
+    const { container } = renderGuidance();
+    const cta = screen.getByRole('button', { name: 'Switch to OpenDesign Cloud & retry' });
+    const footer = container.querySelector('[data-user-action-footer="true"]');
+    expect(footer?.contains(cta)).toBe(true);
   });
 });

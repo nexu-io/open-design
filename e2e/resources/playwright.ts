@@ -472,6 +472,27 @@ export const playwrightUiScenarios: UiScenario[] = [
     ],
   },
   {
+    id: 'question-form-single-answer',
+    title: 'One question form occurrence produces exactly one answer',
+    kind: 'workspace',
+    flow: 'question-form-single-answer',
+    automated: true,
+    description:
+      'Answers an inline question form, then hammers the paths that used to re-open it — a rapid double submit, leaving the project and coming back, and a full reload — asserting the daemon still holds exactly one answer message for the occurrence.',
+    create: {
+      projectName: 'Question form single answer',
+      tab: 'prototype',
+    },
+    prompt: 'Plan a small restaurant homepage',
+    expectedRunRequest: {
+      message: 'Plan a small restaurant homepage',
+    },
+    notes: [
+      'Covers OPEND-2367: the submit lock used to live in the mounted component, so any remount offered the same form again and a second answer produced a second run.',
+      'Asserts against the daemon conversation, not the rendered form, so a UI that merely looks locked cannot pass.',
+    ],
+  },
+  {
     id: 'generation-does-not-create-extra-file',
     title: 'Generated artifacts stay stable when no new prompt is sent',
     kind: 'workspace',
@@ -512,14 +533,15 @@ export const playwrightUiScenarios: UiScenario[] = [
     flow: 'deck-pagination-next-prev-correctness',
     automated: true,
     description:
-      'Should verify that deck preview pagination moves to the actual previous and next slide instead of routing both actions to the same page.',
+      'Should verify that persisted deck-stage thumbnails and pagination move the real preview while host chrome and speaker notes stay synchronized.',
     create: {
       projectName: 'Deck pagination controls',
       tab: 'deck',
     },
     prompt: 'Review pagination behavior in a multi-slide deck preview',
     notes: [
-      'Seeds deterministic deck HTML through the project files API and verifies previous/next controls in Playwright.',
+      'Seeds mixed legacy and modern slide markers through the project files API, including a decoy screen label outside the explicit deck-stage.',
+      'Verifies thumbnail selection, previous/next controls, and deck-originated navigation in Playwright.',
     ],
   },
   {

@@ -6,12 +6,29 @@ import { test } from 'vitest';
 import {
   createRunArtifactBaselines,
   diffRunArtifacts,
+  primaryArtifactChangeForRun,
   snapshotProjectArtifacts,
+  snapshotProjectArtifactsAsync,
 } from '../src/run-artifact-fs.js';
 
 function tmpProject(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'od-artifact-fs-'));
 }
+
+test('the async snapshot preserves the synchronous snapshot contract', async () => {
+  const root = tmpProject();
+  fs.mkdirSync(path.join(root, 'nested'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'node_modules'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'index.html'), '<html>page</html>');
+  fs.writeFileSync(path.join(root, 'nested', 'styles.css'), 'body {}');
+  fs.writeFileSync(path.join(root, 'nested', 'notes.txt'), 'not tracked');
+  fs.writeFileSync(path.join(root, 'node_modules', 'ignored.html'), '<html>ignored</html>');
+
+  assert.deepEqual(
+    await snapshotProjectArtifactsAsync(root),
+    snapshotProjectArtifacts(root),
+  );
+});
 
 test('a second-round edit of an existing artifact counts as touched, not zero', () => {
   const root = tmpProject();
@@ -34,6 +51,14 @@ test('a second-round edit of an existing artifact counts as touched, not zero', 
     designSystemCreated: false,
     previewModuleCount: 0,
     touchedPaths: [page],
+    contentCreated: 0,
+    contentModified: 1,
+    contentTouched: 1,
+    contentTouchedPaths: [page],
+    renderDependencyTouched: 0,
+    renderDependencyTouchedPaths: [],
+    supportingMediaTouched: 0,
+    filesWritten: 1,
   });
 });
 
@@ -53,6 +78,14 @@ test('created vs modified are reported separately and sum into touched', () => {
     designSystemCreated: false,
     previewModuleCount: 0,
     touchedPaths: [path.join(root, 'a.html'), path.join(root, 'b.png')],
+    contentCreated: 1,
+    contentModified: 1,
+    contentTouched: 2,
+    contentTouchedPaths: [path.join(root, 'a.html'), path.join(root, 'b.png')],
+    renderDependencyTouched: 0,
+    renderDependencyTouchedPaths: [],
+    supportingMediaTouched: 1,
+    filesWritten: 2,
   });
 });
 
@@ -69,6 +102,14 @@ test('a touched DESIGN.md sets designSystemCreated but not artifact_count', () =
     designSystemCreated: true,
     previewModuleCount: 0,
     touchedPaths: [],
+    contentCreated: 0,
+    contentModified: 0,
+    contentTouched: 0,
+    contentTouchedPaths: [],
+    renderDependencyTouched: 0,
+    renderDependencyTouchedPaths: [],
+    supportingMediaTouched: 0,
+    filesWritten: 1, // …but it IS a written file
   });
 
   // Editing it on a later round still flags the design-system signal.
@@ -93,7 +134,7 @@ test('preview modules are counted and also count as artifacts', () => {
   assert.equal(diff.created, 2);
 });
 
-test('non-artifact files and ignored dirs do not count', () => {
+test('non-artifact files and ignored dirs do not count as artifacts', () => {
   const root = tmpProject();
   const before = snapshotProjectArtifacts(root);
 
@@ -109,7 +150,36 @@ test('non-artifact files and ignored dirs do not count', () => {
     designSystemCreated: false,
     previewModuleCount: 0,
     touchedPaths: [],
+    contentCreated: 0,
+    contentModified: 0,
+    contentTouched: 0,
+    contentTouchedPaths: [],
+    renderDependencyTouched: 0,
+    renderDependencyTouchedPaths: [],
+    supportingMediaTouched: 0,
+    // notes.txt IS a written file; node_modules stays ignored entirely.
+    filesWritten: 1,
   });
+});
+
+test('an md-only delivery reports files_written while artifact_count stays 0', () => {
+  // The blind spot that motivated files_written_count: a run whose deliverable
+  // is a markdown brief (e.g. `PROMPTS.md`) looked identical to a pure chat
+  // turn because markdown is not an artifact extension.
+  const root = tmpProject();
+  const before = snapshotProjectArtifacts(root);
+
+  fs.writeFileSync(path.join(root, 'PROMPTS.md'), '# nine premium backgrounds');
+  const afterCreate = snapshotProjectArtifacts(root);
+  const createDiff = diffRunArtifacts(before, afterCreate);
+  assert.equal(createDiff.touched, 0, 'md never counts as an artifact');
+  assert.equal(createDiff.filesWritten, 1);
+
+  // A later run that only EDITS the md still reports its write.
+  fs.writeFileSync(path.join(root, 'PROMPTS.md'), '# nine premium backgrounds — revised');
+  const editDiff = diffRunArtifacts(afterCreate, snapshotProjectArtifacts(root));
+  assert.equal(editDiff.touched, 0);
+  assert.equal(editDiff.filesWritten, 1);
 });
 
 test('a same-size rewrite with a preserved mtime is still detected (content hash)', () => {
@@ -129,6 +199,58 @@ test('a same-size rewrite with a preserved mtime is still detected (content hash
   const diff = diffRunArtifacts(before, after);
   assert.equal(diff.modified, 1, 'same-size, same-mtime rewrite must be caught by the content hash');
   assert.equal(diff.touched, 1);
+});
+
+test('v4 ignores a timestamp-only rewrite while the legacy counter remains compatible', () => {
+  const root = tmpProject();
+  const page = path.join(root, 'index.html');
+  fs.writeFileSync(page, '<html>stable</html>');
+  const before = snapshotProjectArtifacts(root);
+  const stat = fs.statSync(page);
+  fs.utimesSync(page, stat.atimeMs / 1000, (stat.mtimeMs + 2_000) / 1000);
+  const after = snapshotProjectArtifacts(root);
+
+  const diff = diffRunArtifacts(before, after);
+  assert.equal(diff.touched, 1, 'legacy artifact_count retains timestamp semantics');
+  assert.equal(diff.contentTouched, 0, 'v4 changed_file_count requires content change');
+});
+
+test('a CSS-only visible edit modifies the primary HTML artifact without inflating artifact_count', () => {
+  const root = tmpProject();
+  fs.writeFileSync(path.join(root, 'index.html'), '<link rel="stylesheet" href="styles.css">');
+  const css = path.join(root, 'styles.css');
+  fs.writeFileSync(css, 'body { color: red; }');
+  const before = snapshotProjectArtifacts(root);
+  fs.writeFileSync(css, 'body { color: blue; }');
+  const after = snapshotProjectArtifacts(root);
+  const diff = diffRunArtifacts(before, after);
+
+  assert.equal(diff.touched, 0, 'CSS remains outside the legacy artifact_count file set');
+  assert.equal(diff.renderDependencyTouched, 1);
+  assert.equal(primaryArtifactChangeForRun({
+    diff,
+    projectKind: 'prototype',
+    hadExistingArtifacts: true,
+    interactionMode: 'design',
+    clarificationRequested: false,
+  }), 'modified');
+});
+
+test('first generation is created even when the run edits a pre-seeded HTML file', () => {
+  const root = tmpProject();
+  const page = path.join(root, 'index.html');
+  fs.writeFileSync(page, '<html>seed</html>');
+  const before = snapshotProjectArtifacts(root);
+  fs.writeFileSync(page, '<html>generated result</html>');
+  const diff = diffRunArtifacts(before, snapshotProjectArtifacts(root));
+
+  assert.equal(primaryArtifactChangeForRun({
+    diff,
+    projectKind: 'prototype',
+    hadExistingArtifacts: false,
+    interactionMode: 'design',
+    clarificationRequested: false,
+  }), 'created');
 });
 
 test('Windows-style backslash paths still classify preview modules and DESIGN.md', () => {
@@ -185,5 +307,13 @@ test('a no-op turn (no file writes) reports zero', () => {
     designSystemCreated: false,
     previewModuleCount: 0,
     touchedPaths: [],
+    contentCreated: 0,
+    contentModified: 0,
+    contentTouched: 0,
+    contentTouchedPaths: [],
+    renderDependencyTouched: 0,
+    renderDependencyTouchedPaths: [],
+    supportingMediaTouched: 0,
+    filesWritten: 0,
   });
 });

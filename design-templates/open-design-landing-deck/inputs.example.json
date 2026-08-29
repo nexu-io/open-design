@@ -1,14 +1,14 @@
 {
   "$schema": "./schema.ts",
-  "_doc": "Worked example — Open Design pitch deck. 11 slides covering cover, two sections, four content slides, one stats, one quote, one CTA, one end. Reuses brand identity and assets from the sister open-design-landing skill. Run `npx tsx scripts/compose.ts inputs.example.json example.html` to build.",
+  "_doc": "Worked example — OpenDesign pitch deck. 11 slides covering cover, two sections, four content slides, one stats, one quote, one CTA, one end. Reuses brand identity and assets from the sister open-design-landing skill. Run `npx tsx scripts/compose.ts inputs.example.json example.html` to build.",
 
   "brand": {
-    "name": "Open Design",
+    "name": "OpenDesign",
     "mark": "Ø",
     "meta": { "title": "Studio Nº 01", "subtitle": "Berlin / Open / Earth" },
     "filed_under": "Design · Intelligence",
     "tagline": "Designing intelligence with skills, taste, and your own agent.",
-    "description": "Open Design pitch deck — Vol. 01.",
+    "description": "OpenDesign pitch deck — Vol. 01.",
     "locale": "en",
     "edition": "Vol. 01 / Issue Nº 26",
     "version": "v0.3.0",
@@ -26,7 +26,7 @@
     "status": "Live · v0.3.0"
   },
 
-  "deck_title": "Open Design · Vol. 01 / Issue Nº 26",
+  "deck_title": "OpenDesign · Vol. 01 / Issue Nº 26",
 
   "slides": [
     {
@@ -114,7 +114,7 @@
         { "value": "12", "label": "Agents",  "sub": "auto-detected on your $PATH" },
         { "value": "3",  "label": "Commands","sub": "from clone to first artifact" }
       ],
-      "caption": "Open Design v0.3.0 · Apache-2.0 · MMXXVI"
+      "caption": "OpenDesign v0.3.0 · Apache-2.0 · MMXXVI"
     },
 
     {
@@ -141,7 +141,7 @@
       "body": "Every project moves through four iterative stages. The agent picks each stage's tools deterministically; you stay in control.",
       "bullets": [
         "01 · Detect — daemon scans $PATH, auto-loads skills + systems.",
-        "02 · Discover — 30s question form locks brand · audience · scale.",
+        "02 · Discover — clarify unresolved brand · audience · scale only when they materially affect the result.",
         "03 · Direct — pick one of 5 visual directions in OKLch + type stack.",
         "04 · Deliver — write to disk, preview in sandbox, export anywhere."
       ],
@@ -165,7 +165,7 @@
     {
       "kind": "quote",
       "quote": [
-        { "text": "Open Design helped us turn vague " },
+        { "text": "OpenDesign helped us turn vague " },
         { "text": "AI ideas", "em": true },
         { "text": " into a visual system that felt " },
         { "text": "sharp, believable,", "em": true },

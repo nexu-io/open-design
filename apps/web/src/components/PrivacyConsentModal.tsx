@@ -58,7 +58,7 @@ export function PrivacyConsentModal({ onShare, onDecline }: Props): JSX.Element 
         target="_blank"
         rel="noopener noreferrer"
       >
-        <Icon name="external-link" size={13} />
+        <Icon name="external-link" size={14} />
         <span>{t('settings.privacyConsentPolicyLink')}</span>
       </a>
 

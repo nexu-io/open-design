@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  continuableUnfinishedTodos,
   latestTodosFromEvents,
   latestTodoWriteInputForPinnedCard,
   parseTodoWriteInput,
@@ -304,5 +305,45 @@ describe('todo event helpers', () => {
       { content: 'Add annotation card', status: 'stopped', activeForm: undefined },
       { content: 'Run focused tests', status: 'pending', activeForm: undefined },
     ]);
+  });
+});
+
+describe('continuableUnfinishedTodos', () => {
+  const staleSnapshot: AgentEvent[] = [
+    {
+      kind: 'tool_use',
+      id: 'todo-1',
+      name: 'TodoWrite',
+      input: {
+        todos: [
+          { content: '生成品牌视觉资产', status: 'completed' },
+          { content: '写入响应式交互原型', status: 'pending' },
+          { content: '交付根目录运行入口', status: 'pending' },
+        ],
+      },
+    },
+  ] as AgentEvent[];
+
+  it('offers nothing to continue once the strategy task delivered its work', () => {
+    // The agent wrote index.html plus its assets and OD Next settled the task
+    // `completed`, but its last TodoWrite still carried two pending items.
+    // Offering "continue" there sends the user into a second task that has
+    // nothing left to write and can only block.
+    expect(
+      continuableUnfinishedTodos({
+        events: staleSnapshot,
+        strategyTaskDelivered: true,
+      }),
+    ).toEqual([]);
+  });
+
+  it('still offers the unfinished items when the task did not deliver', () => {
+    expect(
+      continuableUnfinishedTodos({ events: staleSnapshot }).map((todo) => todo.content),
+    ).toEqual(['写入响应式交互原型', '交付根目录运行入口']);
+  });
+
+  it('returns nothing for a missing message', () => {
+    expect(continuableUnfinishedTodos(undefined)).toEqual([]);
   });
 });

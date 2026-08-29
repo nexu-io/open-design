@@ -72,7 +72,7 @@ No fixed schedule, no automated cron — the check is human-driven:
   "events" / "API", run the affected agent's check. This is the
   highest-signal trigger.
 - **Before a parser refactor**: lock the contract before touching
-  `apps/daemon/src/claude-stream.ts` / `json-event-stream.ts`, so a
+  `apps/daemon/src/runtimes/claude-stream.ts` / `json-event-stream.ts`, so a
   post-refactor failure means "I broke the parser" rather than "the
   real CLI already drifted and the parser had silently caught it".
 - **Ad-hoc**: if something feels off — UI suddenly missing a tool call,

@@ -66,10 +66,13 @@ export function isOpenDesignHostBridge(value: unknown): value is OpenDesignHostB
     !isRecord(updater) ||
     !hasFunction(updater, "status") ||
     !hasFunction(updater, "check") ||
+    !hasFunction(updater, "clear-cache") ||
     !hasFunction(updater, "download") ||
     !hasFunction(updater, "install") ||
     !hasFunction(updater, "quit") ||
-    !hasFunction(updater, "subscribe")
+    !hasFunction(updater, "setMenuLabels") ||
+    !hasFunction(updater, "subscribe") ||
+    !hasFunction(updater, "subscribeOpenDialog")
   ) {
     return false;
   }
@@ -96,7 +99,7 @@ export function getOpenDesignHost(scope: OpenDesignHostGlobalScope = globalThis)
   return isOpenDesignHostBridge(candidate) ? candidate : null;
 }
 
-/** True when a valid Open Design host bridge is present on `scope`. */
+/** True when a valid OpenDesign host bridge is present on `scope`. */
 export function isOpenDesignHostAvailable(scope: OpenDesignHostGlobalScope = globalThis): boolean {
   return getOpenDesignHost(scope) != null;
 }

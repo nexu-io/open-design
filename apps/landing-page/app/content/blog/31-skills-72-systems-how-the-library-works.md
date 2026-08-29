@@ -1,22 +1,22 @@
 ---
-title: "31 skills, 72 systems: how the Open Design library works"
+title: "31 skills, 72 systems: how the OpenDesign library works"
 date: 2026-05-13
 category: "Guides"
 readingTime: 8
-summary: "A walk through the four primitives that make Open Design composable: skills, systems, adapters, and the daemon. With concrete examples of how a Markdown file becomes a pixel-perfect deliverable."
+summary: "A walk through the four primitives that make OpenDesign composable: skills, systems, adapters, and the daemon. With concrete examples of how a Markdown file becomes a pixel-perfect deliverable."
 i18n:
   zh:
-    title: "31 个 skill、72 个 system：Open Design 库是怎么运作的"
-    summary: "带你走一遍让 Open Design 可组合的四个原语：skill、system、adapter 和 daemon。并用具体例子说明一个 Markdown 文件如何变成一份像素级精确的交付物。"
+    title: "31 个 skill、72 个 system：OpenDesign 库是怎么运作的"
+    summary: "带你走一遍让 OpenDesign 可组合的四个原语：skill、system、adapter 和 daemon。并用具体例子说明一个 Markdown 文件如何变成一份像素级精确的交付物。"
     bodyHtml: |
-      <p>从机制上看，Open Design 就是四个原语层层叠起来：</p>
+      <p>从机制上看，OpenDesign 就是四个原语层层叠起来：</p>
       <ol>
       <li><strong>Skill</strong>——agent 应该做什么</li>
       <li><strong>System</strong>——输出应该长成什么样</li>
       <li><strong>Adapter</strong>——由哪个 agent 来干活</li>
       <li><strong>daemon</strong>——把它们串接起来的那个循环</li>
       </ol>
-      <p>每个原语都是一个装着文件的文件夹。它们谁都不需要数据库、插件运行时或托管服务。这就是整个库的全部——没有藏在登录墙后面的第五个概念。这篇文章会逐一走过它们，并展示当你把 agent 指向一份真实的 brief 时会发生什么。如果你想在了解「怎么做」之前先了解我们<em>为什么</em>把它塑造成这个样子，请从 <a href="/blog/why-we-built-open-design-as-a-skill-layer/">我们为什么把 Open Design 构建成一个 skill 层、而不是一款产品</a> 读起。</p>
+      <p>每个原语都是一个装着文件的文件夹。它们谁都不需要数据库、插件运行时或托管服务。这就是整个库的全部——没有藏在登录墙后面的第五个概念。这篇文章会逐一走过它们，并展示当你把 agent 指向一份真实的 brief 时会发生什么。如果你想在了解「怎么做」之前先了解我们<em>为什么</em>把它塑造成这个样子，请从 <a href="/blog/why-we-built-open-design-as-a-skill-layer/">我们为什么把 OpenDesign 构建成一个 skill 层、而不是一款产品</a> 读起。</p>
       <h2>Skill：能力的基本单位</h2>
       <p>一个 skill 就是一个文件夹，里面装着一个 <code>SKILL.md</code> 以及零个或多个辅助文件。这个 Markdown 文件是 agent 的契约——文件夹里其余的一切都是为了帮助 agent 兑现它。</p>
       <h3>一个 skill 文件夹的解剖</h3>
@@ -82,7 +82,7 @@ i18n:
       <li>把一次 skill 调用喂进去</li>
       <li>把输出收集回来</li>
       </ul>
-      <p>我们今天为 12 个 agent 提供了 adapter：Claude、Codex、Gemini、Cursor、Copilot、OpenCode、Devin、Hermes、Pi、Kimi、Kiro、Qwen。daemon 会自动检测哪些已存在，并在首次启动时以下拉菜单的形式提供它们——你什么都不用配置，只会看到你已经拥有的那些 agent。</p>
+      <p>我们今天为 25 个本地 CLI runtime 提供 adapter，包括 Claude、Codex、Cursor、Copilot、OpenCode、Devin、Hermes、Pi、Kimi、Kiro、Qwen 等。daemon 会自动检测哪些已存在，并在首次启动时以下拉菜单的形式提供它们——你什么都不用配置，只会看到你已经拥有的那些 agent。</p>
 
 
 
@@ -113,7 +113,7 @@ i18n:
 
 
       <table><thead><tr><th>原语</th><th>位于</th><th>文件</th><th>事实源</th></tr></thead><tbody><tr><td>Skill</td><td><code>skills/</code></td><td><code>SKILL.md</code></td><td>磁盘上的那个文件</td></tr><tr><td>System</td><td><code>design-systems/</code></td><td><code>DESIGN.md</code></td><td>磁盘上的那个文件</td></tr><tr><td>Adapter</td><td><code>adapters/</code></td><td>一个 <code>.ts</code> 文件</td><td>一次 <code>register()</code> 调用</td></tr></tbody></table>
-      <p>如果你想新增一个 adapter，那个文件大约是 80 行 TypeScript 加一次 <code>register()</code> 调用。没有要学的 SDK，没有要申请的权限，没有要发布到的中心注册表。你笔记本上早已信任的那个 agent，就成了引擎——Open Design 从不取代它。（姊妹篇 <a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK 设计工作流</a> 走了一遍如何把一个 adapter 指向你自己的密钥。）</p>
+      <p>如果你想新增一个 adapter，那个文件大约是 80 行 TypeScript 加一次 <code>register()</code> 调用。没有要学的 SDK，没有要申请的权限，没有要发布到的中心注册表。你笔记本上早已信任的那个 agent，就成了引擎——OpenDesign 从不取代它。（姊妹篇 <a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK 设计工作流</a> 走了一遍如何把一个 adapter 指向你自己的密钥。）</p>
       <h2>daemon：把一切系在一起的循环</h2>
       <p>daemon 是系统里唯一在运行的进程。它是你用 <code>pnpm tools-dev</code> 启动的一个小小的 Node 进程，依次做四件事：</p>
       <ol>
@@ -135,27 +135,27 @@ i18n:
       </ol>
       <p>顺着这些原语回溯，整件事就一目了然：第 3 步选了一个 <strong>skill</strong>，第 5 步锁定了一个 <strong>system</strong>，背后的那个 agent 是通过一个 <strong>adapter</strong> 接进来的，而 <strong>daemon</strong> 跑完了这四步循环。输出是真实的。文件是你的。你可以在任何编辑器里改它们，把它们交给一位设计师，或者把它们重新喂回另一个 skill。</p>
       <h2>为什么用文件，而不是数据库</h2>
-      <p>每一个原语——skill、system、adapter——都是一个装着文本文件的文件夹。没有中心数据库。没有「Open Design 账户」。没有那种必须一直运转、你的工作才能一直运转的托管服务。</p>
+      <p>每一个原语——skill、system、adapter——都是一个装着文本文件的文件夹。没有中心数据库。没有「OpenDesign 账户」。没有那种必须一直运转、你的工作才能一直运转的托管服务。</p>
       <p>这是一笔刻意的交换。我们放弃了做花哨的跨用户分析、跨项目记忆或托管协作的能力。换回来的是：可移植性、长寿、可审查性，以及任何人都能 fork 整个库并交付自己变体的能力。今天写下的一个 <code>SKILL.md</code>，两年后对一个 agent 读起来一模一样，对一个手头没有任何工具的人类也读起来一模一样——而一个被钉死在去年某个 API 上的插件可做不到这一点。</p>
       <p>如果你曾眼看着一代又一代设计工具死去、还把你的文件一并带走，你就会明白这笔交换为什么值得。</p>
       <h2>延伸阅读</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">我们为什么把 Open Design 构建成一个 skill 层、而不是一款产品</a>——这四个原语背后的赌注</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">我们为什么把 OpenDesign 构建成一个 skill 层、而不是一款产品</a>——这四个原语背后的赌注</li>
       <li><a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK 设计工作流：用你自己的密钥运行 Claude、Codex 或 Qwen</a>——adapter 如何连接到你早已付费的那个 agent</li>
       <li><a href="/blog/layout-layer-canvas-used-to-hide/">画布曾经藏起来的那一层版式</a>——为什么 DESIGN.md 里的 posture 规则胜过在画布上拖框</li>
       </ul>
   zh-tw:
-    title: "31 個技能、72 個系統：Open Design 函式庫如何運作"
-    summary: "帶你走過讓 Open Design 可組合的四個基本元件：技能、系統、轉接器，以及 daemon。並用具體範例說明一個 Markdown 檔案如何變成像素級精準的交付成果。"
+    title: "31 個技能、72 個系統：OpenDesign 函式庫如何運作"
+    summary: "帶你走過讓 OpenDesign 可組合的四個基本元件：技能、系統、轉接器，以及 daemon。並用具體範例說明一個 Markdown 檔案如何變成像素級精準的交付成果。"
     bodyHtml: |
-      <p>從機制上看，Open Design 是四個基本元件層層堆疊而成：</p>
+      <p>從機制上看，OpenDesign 是四個基本元件層層堆疊而成：</p>
       <ol>
       <li><strong>技能（Skills）</strong>——agent 應該做什麼</li>
       <li><strong>系統（Systems）</strong>——輸出應該長什麼樣</li>
       <li><strong>轉接器（Adapters）</strong>——由哪個 agent 來幹活</li>
       <li><strong>daemon</strong>——把它們串接在一起的迴圈</li>
       </ol>
-      <p>每個基本元件都是一個檔案資料夾。它們都不需要資料庫、外掛執行環境或代管服務。這就是整個函式庫——沒有藏在登入牆後面的第五個概念。這篇文章會逐一帶你走過每一個，並展示當你把 agent 指向一份真實簡報時會發生什麼。如果你想在了解<em>怎麼做</em>之前，先看我們<em>為什麼</em>把它塑造成這樣的論述，那就從<a href="/blog/why-we-built-open-design-as-a-skill-layer/">我們為什麼把 Open Design 打造成一層技能層，而不是一個產品</a>開始。</p>
+      <p>每個基本元件都是一個檔案資料夾。它們都不需要資料庫、外掛執行環境或代管服務。這就是整個函式庫——沒有藏在登入牆後面的第五個概念。這篇文章會逐一帶你走過每一個，並展示當你把 agent 指向一份真實簡報時會發生什麼。如果你想在了解<em>怎麼做</em>之前，先看我們<em>為什麼</em>把它塑造成這樣的論述，那就從<a href="/blog/why-we-built-open-design-as-a-skill-layer/">我們為什麼把 OpenDesign 打造成一層技能層，而不是一個產品</a>開始。</p>
       <h2>技能：能力的單位</h2>
       <p>一個技能是一個資料夾，裡面含有一個 <code>SKILL.md</code> 以及零個或多個輔助檔案。那個 Markdown 檔案是 agent 的契約——資料夾裡其餘的一切，都是為了幫助 agent 達成它而存在的。</p>
       <h3>一個技能資料夾的解剖</h3>
@@ -221,7 +221,7 @@ i18n:
       <li>把一次技能呼叫導進去</li>
       <li>把輸出收回來</li>
       </ul>
-      <p>我們如今為 12 個 agent 出貨轉接器：Claude、Codex、Gemini、Cursor、Copilot、OpenCode、Devin、Hermes、Pi、Kimi、Kiro、Qwen。daemon 會自動偵測哪些存在，並在首次啟動時以下拉選單提供它們——你什麼都不用設定，你只會看到你已經擁有的那些 agent。</p>
+      <p>我們如今為 25 個本機 CLI runtime 提供轉接器，包括 Claude、Codex、Cursor、Copilot、OpenCode、Devin、Hermes、Pi、Kimi、Kiro、Qwen 等。daemon 會自動偵測哪些存在，並在首次啟動時以下拉選單提供它們——你什麼都不用設定，你只會看到你已經擁有的那些 agent。</p>
 
 
 
@@ -252,7 +252,7 @@ i18n:
 
 
       <table><thead><tr><th>基本元件</th><th>位於</th><th>檔案</th><th>事實來源</th></tr></thead><tbody><tr><td>技能</td><td><code>skills/</code></td><td><code>SKILL.md</code></td><td>磁碟上的檔案</td></tr><tr><td>系統</td><td><code>design-systems/</code></td><td><code>DESIGN.md</code></td><td>磁碟上的檔案</td></tr><tr><td>轉接器</td><td><code>adapters/</code></td><td>一個 <code>.ts</code> 檔案</td><td>一次 <code>register()</code> 呼叫</td></tr></tbody></table>
-      <p>如果你想新增一個轉接器，那個檔案大約是 80 行 TypeScript，外加單獨一次 <code>register()</code> 呼叫。沒有 SDK 要學、沒有權限要申請、沒有中央登錄要發布。你在筆電上已經信任的那個 agent 成為引擎——Open Design 從不取代它。（姊妹篇 <a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK 設計工作流程</a>會帶你走過如何把一個轉接器指向你自己的金鑰。）</p>
+      <p>如果你想新增一個轉接器，那個檔案大約是 80 行 TypeScript，外加單獨一次 <code>register()</code> 呼叫。沒有 SDK 要學、沒有權限要申請、沒有中央登錄要發布。你在筆電上已經信任的那個 agent 成為引擎——OpenDesign 從不取代它。（姊妹篇 <a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK 設計工作流程</a>會帶你走過如何把一個轉接器指向你自己的金鑰。）</p>
       <h2>daemon：把一切繫在一起的迴圈</h2>
       <p>daemon 是系統裡唯一在運作的行程。它是一個你用 <code>pnpm tools-dev</code> 啟動的小型 Node 行程，它依序做四件事：</p>
       <ol>
@@ -274,27 +274,27 @@ i18n:
       </ol>
       <p>把它順著基本元件回溯，整件事就一目了然：第 3 步選了一個<strong>技能</strong>，第 5 步鎖定了一個<strong>系統</strong>，它背後的 agent 是透過一個<strong>轉接器</strong>進來的，而 <strong>daemon</strong> 跑完了那四步迴圈。輸出是真實的。檔案是你的。你可以在任何編輯器裡編輯它們、交給一位設計師，或把它們餵回另一個技能。</p>
       <h2>為什麼用檔案，而不是資料庫</h2>
-      <p>每一個基本元件——技能、系統、轉接器——都是一個文字檔案的資料夾。沒有中央資料庫。沒有「Open Design 帳號」。沒有一個必須持續運作、你的工作才能持續運作的代管服務。</p>
+      <p>每一個基本元件——技能、系統、轉接器——都是一個文字檔案的資料夾。沒有中央資料庫。沒有「OpenDesign 帳號」。沒有一個必須持續運作、你的工作才能持續運作的代管服務。</p>
       <p>這是一個刻意的取捨。我們放棄了做巧妙的跨使用者分析、跨專案記憶或代管協作的能力。換回來的是：可攜性、長壽、可稽核性，以及任何人都能分支整個函式庫並出貨自己變體的能力。今天寫的一份 <code>SKILL.md</code>，對兩年後的一個 agent，以及對一個完全沒有任何工具的人來說，讀起來都一模一樣——一個被釘在去年某個 API 上的外掛可說不出這樣的話。</p>
       <p>如果你看著一代又一代的設計工具死去、還把你的檔案一起帶走，你就會明白為什麼這個取捨值得。</p>
       <h2>延伸閱讀</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">我們為什麼把 Open Design 打造成一層技能層，而不是一個產品</a>——這四個基本元件背後的賭注</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">我們為什麼把 OpenDesign 打造成一層技能層，而不是一個產品</a>——這四個基本元件背後的賭注</li>
       <li><a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK 設計工作流程：用你自己的金鑰跑 Claude、Codex 或 Qwen</a>——轉接器如何連到你已經在付費的那個 agent</li>
       <li><a href="/blog/layout-layer-canvas-used-to-hide/">畫布過去藏起來的那一層版面</a>——為什麼一份 DESIGN.md 裡的姿態規則勝過在畫布上拖拉方塊</li>
       </ul>
   ja:
-    title: "31 のスキル、72 のシステム：Open Design ライブラリの仕組み"
-    summary: "Open Design を組み合わせ可能にしている 4 つのプリミティブ ── スキル、システム、アダプター、daemon ── を一通り見ていきます。1 つの Markdown ファイルがどのようにピクセル単位で精密な成果物になるのか、具体例とともに。"
+    title: "31 のスキル、72 のシステム：OpenDesign ライブラリの仕組み"
+    summary: "OpenDesign を組み合わせ可能にしている 4 つのプリミティブ ── スキル、システム、アダプター、daemon ── を一通り見ていきます。1 つの Markdown ファイルがどのようにピクセル単位で精密な成果物になるのか、具体例とともに。"
     bodyHtml: |
-      <p>Open Design は、機構的には、互いに積み重なった 4 つのプリミティブです。</p>
+      <p>OpenDesign は、機構的には、互いに積み重なった 4 つのプリミティブです。</p>
       <ol>
       <li><strong>スキル</strong> — エージェントが何をすべきか</li>
       <li><strong>システム</strong> — 出力がどう見えるべきか</li>
       <li><strong>アダプター</strong> — どのエージェントが作業を行うか</li>
       <li><strong>daemon</strong> — それらを結びつけるループ</li>
       </ol>
-      <p>各プリミティブはファイルのフォルダです。どれもデータベース、プラグインランタイム、ホスト型サービスを必要としません。これがライブラリのすべてです。ログイン壁の裏に隠れた 5 つ目の概念はありません。この記事ではそれぞれを順に見ていき、あなたがエージェントを実際のブリーフに向けたときに何が起きるかを示します。<em>どうやって</em>の前に<em>なぜ</em>こう形作ったのかという議論を知りたい方は、<a href="/blog/why-we-built-open-design-as-a-skill-layer/">なぜ Open Design を製品ではなくスキルレイヤーとして作ったのか</a>から始めてください。</p>
+      <p>各プリミティブはファイルのフォルダです。どれもデータベース、プラグインランタイム、ホスト型サービスを必要としません。これがライブラリのすべてです。ログイン壁の裏に隠れた 5 つ目の概念はありません。この記事ではそれぞれを順に見ていき、あなたがエージェントを実際のブリーフに向けたときに何が起きるかを示します。<em>どうやって</em>の前に<em>なぜ</em>こう形作ったのかという議論を知りたい方は、<a href="/blog/why-we-built-open-design-as-a-skill-layer/">なぜ OpenDesign を製品ではなくスキルレイヤーとして作ったのか</a>から始めてください。</p>
       <h2>スキル：能力の単位</h2>
       <p>スキルは、1 つの <code>SKILL.md</code> と 0 個以上の補助ファイルを含むフォルダです。Markdown ファイルはエージェントの契約です。フォルダ内のそれ以外のすべては、エージェントがそれを達成するのを助けるためにあります。</p>
       <h3>スキルフォルダの解剖</h3>
@@ -360,11 +360,11 @@ i18n:
       <li>スキルの呼び出しを流し込む</li>
       <li>出力を回収する</li>
       </ul>
-      <p>私たちは現在 12 のエージェント向けにアダプターを提供しています：Claude、Codex、Gemini、Cursor、Copilot、OpenCode、Devin、Hermes、Pi、Kimi、Kiro、Qwen。daemon はどれが存在するかを自動検出し、初回起動時にドロップダウンとして提示します。何も設定する必要はなく、すでに持っているエージェントが見えるだけです。</p>
+      <p>現在、Claude、Codex、Cursor、Copilot、OpenCode、Devin、Hermes、Pi、Kimi、Kiro、Qwen など、25 のローカル CLI runtime 向けにアダプターを提供しています。daemon はどれが存在するかを自動検出し、初回起動時にドロップダウンとして提示します。何も設定する必要はなく、すでに持っているエージェントが見えるだけです。</p>
 
 
       <table><thead><tr><th>プリミティブ</th><th>存在する場所</th><th>ファイル</th><th>信頼できる情報源</th></tr></thead><tbody><tr><td>スキル</td><td><code>skills/</code></td><td><code>SKILL.md</code></td><td>ディスク上のファイル</td></tr><tr><td>システム</td><td><code>design-systems/</code></td><td><code>DESIGN.md</code></td><td>ディスク上のファイル</td></tr><tr><td>アダプター</td><td><code>adapters/</code></td><td>1 つの <code>.ts</code> ファイル</td><td><code>register()</code> 呼び出し</td></tr></tbody></table>
-      <p>新しいアダプターを追加したい場合、ファイルはおよそ 80 行の TypeScript と 1 回の <code>register()</code> 呼び出しです。学ぶべき SDK も、申請すべき権限も、公開先の中央レジストリもありません。あなたがすでにノート PC で信頼しているのと同じエージェントがエンジンになります ── Open Design がそれを置き換えることは決してありません。（対になる記事 <a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK デザインワークフロー</a>では、アダプターを自分のキーに向ける方法を解説しています。）</p>
+      <p>新しいアダプターを追加したい場合、ファイルはおよそ 80 行の TypeScript と 1 回の <code>register()</code> 呼び出しです。学ぶべき SDK も、申請すべき権限も、公開先の中央レジストリもありません。あなたがすでにノート PC で信頼しているのと同じエージェントがエンジンになります ── OpenDesign がそれを置き換えることは決してありません。（対になる記事 <a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK デザインワークフロー</a>では、アダプターを自分のキーに向ける方法を解説しています。）</p>
       <h2>daemon：すべてを結びつけるループ</h2>
       <p>daemon はシステム内で唯一実行中のプロセスです。<code>pnpm tools-dev</code> で起動する小さな Node プロセスで、4 つのことを順に行います。</p>
       <ol>
@@ -386,27 +386,27 @@ i18n:
       </ol>
       <p>プリミティブをたどって振り返ると、全体が読み解けます：ステップ 3 は<strong>スキル</strong>を選び、ステップ 5 は<strong>システム</strong>を固定し、その背後のエージェントは<strong>アダプター</strong>を通して来て、<strong>daemon</strong> が 4 ステップのループを実行しました。出力は本物です。ファイルはあなたのものです。任意のエディタで編集したり、デザイナーに渡したり、別のスキルに戻して投入したりできます。</p>
       <h2>なぜデータベースではなくファイルなのか</h2>
-      <p>すべてのプリミティブ ── スキル、システム、アダプター ── はテキストファイルのフォルダです。中央データベースはありません。「Open Design アカウント」もありません。あなたの作業が動き続けるために動き続けねばならないホスト型サービスもありません。</p>
+      <p>すべてのプリミティブ ── スキル、システム、アダプター ── はテキストファイルのフォルダです。中央データベースはありません。「OpenDesign アカウント」もありません。あなたの作業が動き続けるために動き続けねばならないホスト型サービスもありません。</p>
       <p>これは意図的なトレードです。私たちは、巧妙なユーザー横断の分析、プロジェクト横断のメモリ、ホスト型のコラボレーションを行う能力を手放します。代わりに手に入れるのは、ポータビリティ、長寿命、監査可能性、そして誰もがライブラリ全体をフォークして自分のバリアントを出せる能力です。今日書かれた <code>SKILL.md</code> は、2 年後のエージェントにも、ツールを一切持たない人間にも、まったく同じように読めます ── 昨年の API に固定されたプラグインについては同じことは言えません。</p>
       <p>一世代分のデザインツールが、あなたのファイルを道連れにして死んでいくのを見てきたなら、このトレードに価値がある理由がわかるはずです。</p>
       <h2>関連する読み物</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">なぜ Open Design を製品ではなくスキルレイヤーとして作ったのか</a> — 4 つのプリミティブの裏側にある賭け</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">なぜ OpenDesign を製品ではなくスキルレイヤーとして作ったのか</a> — 4 つのプリミティブの裏側にある賭け</li>
       <li><a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK デザインワークフロー：自分のキーで Claude、Codex、Qwen を動かす</a> — アダプターが、あなたがすでに支払っているエージェントにどう接続するか</li>
       <li><a href="/blog/layout-layer-canvas-used-to-hide/">キャンバスが隠していたレイアウトレイヤー</a> — なぜ DESIGN.md の姿勢ルールが、キャンバス上でボックスをドラッグするよりも勝るのか</li>
       </ul>
   ko:
-    title: "스킬 31개, 시스템 72개: Open Design 라이브러리는 어떻게 작동하는가"
-    summary: "Open Design를 조합 가능하게 만드는 네 가지 기본 요소 — 스킬, 시스템, 어댑터, 그리고 daemon — 을 둘러본다. Markdown 파일 한 장이 어떻게 픽셀 단위로 완성된 결과물이 되는지 구체적인 예시와 함께 살펴본다."
+    title: "스킬 31개, 시스템 72개: OpenDesign 라이브러리는 어떻게 작동하는가"
+    summary: "OpenDesign를 조합 가능하게 만드는 네 가지 기본 요소 — 스킬, 시스템, 어댑터, 그리고 daemon — 을 둘러본다. Markdown 파일 한 장이 어떻게 픽셀 단위로 완성된 결과물이 되는지 구체적인 예시와 함께 살펴본다."
     bodyHtml: |
-      <p>Open Design는 구조적으로 보면 서로 차곡차곡 쌓아 올린 네 가지 기본 요소로 이루어져 있습니다:</p>
+      <p>OpenDesign는 구조적으로 보면 서로 차곡차곡 쌓아 올린 네 가지 기본 요소로 이루어져 있습니다:</p>
       <ol>
       <li><strong>스킬(Skills)</strong> — 에이전트가 무엇을 해야 하는가</li>
       <li><strong>시스템(Systems)</strong> — 결과물이 어떤 모습이어야 하는가</li>
       <li><strong>어댑터(Adapters)</strong> — 어떤 에이전트가 그 작업을 하는가</li>
       <li><strong>daemon</strong> — 이들을 서로 엮어 주는 루프</li>
       </ol>
-      <p>각 기본 요소는 파일들이 담긴 폴더 하나입니다. 그중 어느 것도 데이터베이스, 플러그인 런타임, 호스팅 서비스를 필요로 하지 않습니다. 이것이 라이브러리의 전부입니다 — 로그인 장벽 뒤에 숨어 있는 다섯 번째 개념 같은 건 없습니다. 이 글은 각 요소를 차례로 짚어 보고, 실제 브리프를 에이전트에게 던졌을 때 어떤 일이 벌어지는지 보여 줍니다. <em>어떻게</em> 만들었는지보다 <em>왜</em> 이런 형태로 만들었는지에 대한 논거가 먼저 궁금하다면, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">우리가 Open Design를 제품이 아니라 스킬 레이어로 만든 이유</a>부터 읽어 보세요.</p>
+      <p>각 기본 요소는 파일들이 담긴 폴더 하나입니다. 그중 어느 것도 데이터베이스, 플러그인 런타임, 호스팅 서비스를 필요로 하지 않습니다. 이것이 라이브러리의 전부입니다 — 로그인 장벽 뒤에 숨어 있는 다섯 번째 개념 같은 건 없습니다. 이 글은 각 요소를 차례로 짚어 보고, 실제 브리프를 에이전트에게 던졌을 때 어떤 일이 벌어지는지 보여 줍니다. <em>어떻게</em> 만들었는지보다 <em>왜</em> 이런 형태로 만들었는지에 대한 논거가 먼저 궁금하다면, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">우리가 OpenDesign를 제품이 아니라 스킬 레이어로 만든 이유</a>부터 읽어 보세요.</p>
       <h2>스킬: 역량의 단위</h2>
       <p>스킬은 하나의 <code>SKILL.md</code>와 0개 이상의 보조 파일을 담은 폴더입니다. 이 Markdown 파일이 에이전트의 계약서이며 — 폴더 안의 다른 모든 것은 에이전트가 그 계약을 충족하도록 돕기 위해 존재합니다.</p>
       <h3>스킬 폴더의 해부</h3>
@@ -472,7 +472,7 @@ i18n:
       <li>스킬 호출을 파이프로 전달</li>
       <li>출력을 다시 수집</li>
       </ul>
-      <p>오늘날 우리는 12개 에이전트에 대한 어댑터를 제공합니다: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. daemon은 어느 것이 존재하는지 자동으로 감지하고 첫 부팅 시 드롭다운으로 제시합니다 — 아무것도 설정할 필요 없이, 이미 가지고 있는 에이전트가 그냥 보일 뿐입니다.</p>
+      <p>오늘날 우리는 Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen 등을 포함한 25개의 로컬 CLI runtime용 어댑터를 제공합니다. daemon은 어느 것이 존재하는지 자동으로 감지하고 첫 부팅 시 드롭다운으로 제시합니다 — 아무것도 설정할 필요 없이, 이미 가지고 있는 에이전트가 그냥 보일 뿐입니다.</p>
 
 
 
@@ -516,7 +516,7 @@ i18n:
 
 
       <table><thead><tr><th>기본 요소</th><th>위치</th><th>파일</th><th>단일 진실 공급원</th></tr></thead><tbody><tr><td>스킬</td><td><code>skills/</code></td><td><code>SKILL.md</code></td><td>디스크 위의 파일</td></tr><tr><td>시스템</td><td><code>design-systems/</code></td><td><code>DESIGN.md</code></td><td>디스크 위의 파일</td></tr><tr><td>어댑터</td><td><code>adapters/</code></td><td><code>.ts</code> 파일 하나</td><td><code>register()</code> 호출</td></tr></tbody></table>
-      <p>새 어댑터를 추가하고 싶다면, 그 파일은 대략 80줄의 TypeScript와 단 한 번의 <code>register()</code> 호출입니다. 배워야 할 SDK도, 요청해야 할 권한도, 게시해야 할 중앙 레지스트리도 없습니다. 노트북에서 이미 신뢰하고 있는 바로 그 에이전트가 엔진이 됩니다 — Open Design는 결코 그것을 대체하지 않습니다. (동반 글 <a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK 디자인 워크플로</a>에서 어댑터를 당신의 키에 연결하는 방법을 짚어 봅니다.)</p>
+      <p>새 어댑터를 추가하고 싶다면, 그 파일은 대략 80줄의 TypeScript와 단 한 번의 <code>register()</code> 호출입니다. 배워야 할 SDK도, 요청해야 할 권한도, 게시해야 할 중앙 레지스트리도 없습니다. 노트북에서 이미 신뢰하고 있는 바로 그 에이전트가 엔진이 됩니다 — OpenDesign는 결코 그것을 대체하지 않습니다. (동반 글 <a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK 디자인 워크플로</a>에서 어댑터를 당신의 키에 연결하는 방법을 짚어 봅니다.)</p>
       <h2>daemon: 모든 것을 엮는 루프</h2>
       <p>daemon은 시스템에서 실행되는 유일한 프로세스입니다. <code>pnpm tools-dev</code>로 시작하는 작은 Node 프로세스이며, 다음 네 가지를 순서대로 수행합니다:</p>
       <ol>
@@ -538,27 +538,27 @@ i18n:
       </ol>
       <p>이를 기본 요소들로 거슬러 추적해 보면 전체가 명료하게 읽힙니다: 3단계는 <strong>스킬</strong>을 골랐고, 5단계는 <strong>시스템</strong>을 확정했으며, 그 뒤의 에이전트는 <strong>어댑터</strong>를 통해 들어왔고, <strong>daemon</strong>이 네 단계 루프를 실행했습니다. 출력은 실재합니다. 파일은 당신의 것입니다. 어떤 에디터로든 편집하거나, 디자이너에게 건네거나, 다른 스킬에 다시 집어넣을 수 있습니다.</p>
       <h2>왜 데이터베이스가 아니라 파일인가</h2>
-      <p>모든 기본 요소 — 스킬, 시스템, 어댑터 — 는 텍스트 파일이 담긴 폴더입니다. 중앙 데이터베이스는 없습니다. "Open Design 계정" 같은 것도 없습니다. 당신의 작업이 계속 작동하려면 계속 작동해야만 하는 호스팅 서비스 같은 것도 없습니다.</p>
+      <p>모든 기본 요소 — 스킬, 시스템, 어댑터 — 는 텍스트 파일이 담긴 폴더입니다. 중앙 데이터베이스는 없습니다. "OpenDesign 계정" 같은 것도 없습니다. 당신의 작업이 계속 작동하려면 계속 작동해야만 하는 호스팅 서비스 같은 것도 없습니다.</p>
       <p>이것은 의도적인 맞교환입니다. 우리는 영리한 사용자 간 분석, 프로젝트 간 메모리, 호스팅 협업의 가능성을 포기합니다. 그 대가로 얻는 것은: 이식성, 수명, 감사 가능성, 그리고 누구든 라이브러리 전체를 포크해 자신만의 변형을 배포할 수 있는 능력입니다. 오늘 작성한 <code>SKILL.md</code>는 2년 뒤의 에이전트에게도, 어떤 도구도 없는 사람에게도 똑같이 읽힙니다 — 작년의 API에 고정된 플러그인에 대해서는 같은 말을 할 수 없습니다.</p>
       <p>한 세대의 디자인 도구가 당신의 파일을 함께 끌고 사라지는 것을 지켜본 적이 있다면, 이 맞교환이 왜 그만한 가치가 있는지 이해할 것입니다.</p>
       <h2>함께 읽기</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">우리가 Open Design를 제품이 아니라 스킬 레이어로 만든 이유</a> — 네 가지 기본 요소 뒤에 있는 베팅</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">우리가 OpenDesign를 제품이 아니라 스킬 레이어로 만든 이유</a> — 네 가지 기본 요소 뒤에 있는 베팅</li>
       <li><a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK 디자인 워크플로: Claude, Codex, Qwen을 당신의 키로 실행하기</a> — 어댑터가 이미 당신이 비용을 내고 있는 에이전트에 연결되는 방식</li>
       <li><a href="/blog/layout-layer-canvas-used-to-hide/">캔버스가 숨겨 온 레이아웃 레이어</a> — DESIGN.md의 태도 규칙이 캔버스 위에서 박스를 끌어다 놓는 것을 이기는 이유</li>
       </ul>
   de:
-    title: "31 Skills, 72 Systeme: So funktioniert die Open Design Bibliothek"
-    summary: "Ein Rundgang durch die vier Primitive, die Open Design komponierbar machen: Skills, Systeme, Adapter und der daemon. Mit konkreten Beispielen, wie aus einer Markdown-Datei ein pixelgenaues Resultat wird."
+    title: "31 Skills, 72 Systeme: So funktioniert die OpenDesign Bibliothek"
+    summary: "Ein Rundgang durch die vier Primitive, die OpenDesign komponierbar machen: Skills, Systeme, Adapter und der daemon. Mit konkreten Beispielen, wie aus einer Markdown-Datei ein pixelgenaues Resultat wird."
     bodyHtml: |
-      <p>Open Design besteht mechanisch betrachtet aus vier Primitiven, die übereinander gestapelt sind:</p>
+      <p>OpenDesign besteht mechanisch betrachtet aus vier Primitiven, die übereinander gestapelt sind:</p>
       <ol>
       <li><strong>Skills</strong> — was der Agent tun soll</li>
       <li><strong>Systeme</strong> — wie das Ergebnis aussehen soll</li>
       <li><strong>Adapter</strong> — welcher Agent die Arbeit erledigt</li>
       <li><strong>Der daemon</strong> — die Schleife, die sie miteinander verbindet</li>
       </ol>
-      <p>Jedes Primitiv ist ein Ordner mit Dateien. Keines von ihnen erfordert eine Datenbank, eine Plugin-Runtime oder einen gehosteten Dienst. Das ist die ganze Bibliothek — es gibt kein fünftes Konzept, das sich hinter einer Login-Hürde versteckt. Dieser Beitrag geht jedes der Primitive der Reihe nach durch und zeigt, was passiert, wenn man seinen Agenten auf ein echtes Briefing ansetzt. Wer das Argument dafür sucht, <em>warum</em> wir es so geformt haben, bevor es um das <em>Wie</em> geht, beginnt am besten mit <a href="/blog/why-we-built-open-design-as-a-skill-layer/">warum wir Open Design als Skill-Schicht gebaut haben, nicht als Produkt</a>.</p>
+      <p>Jedes Primitiv ist ein Ordner mit Dateien. Keines von ihnen erfordert eine Datenbank, eine Plugin-Runtime oder einen gehosteten Dienst. Das ist die ganze Bibliothek — es gibt kein fünftes Konzept, das sich hinter einer Login-Hürde versteckt. Dieser Beitrag geht jedes der Primitive der Reihe nach durch und zeigt, was passiert, wenn man seinen Agenten auf ein echtes Briefing ansetzt. Wer das Argument dafür sucht, <em>warum</em> wir es so geformt haben, bevor es um das <em>Wie</em> geht, beginnt am besten mit <a href="/blog/why-we-built-open-design-as-a-skill-layer/">warum wir OpenDesign als Skill-Schicht gebaut haben, nicht als Produkt</a>.</p>
       <h2>Skills: die Einheit der Fähigkeit</h2>
       <p>Ein Skill ist ein Ordner, der eine <code>SKILL.md</code> und null oder mehr unterstützende Dateien enthält. Die Markdown-Datei ist der Vertrag des Agenten — alles andere im Ordner ist dazu da, dem Agenten zu helfen, ihn zu erfüllen.</p>
       <h3>Anatomie eines Skill-Ordners</h3>
@@ -624,7 +624,7 @@ i18n:
       <li>einen Skill-Aufruf hineinleitet</li>
       <li>die Ausgabe wieder einsammelt</li>
       </ul>
-      <p>Wir liefern heute Adapter für 12 Agenten aus: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. Der daemon erkennt automatisch, welche vorhanden sind, und bietet sie beim ersten Start als Dropdown an — du konfigurierst nichts, du siehst einfach die Agenten, die du bereits hast.</p>
+      <p>Wir liefern heute Adapter für 25 lokale CLI-Runtimes aus, darunter Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro und Qwen. Der daemon erkennt automatisch, welche vorhanden sind, und bietet sie beim ersten Start als Dropdown an — du konfigurierst nichts, du siehst einfach die Agenten, die du bereits hast.</p>
 
 
 
@@ -668,7 +668,7 @@ i18n:
 
 
       <table><thead><tr><th>Primitiv</th><th>Lebt in</th><th>Datei</th><th>Quelle der Wahrheit</th></tr></thead><tbody><tr><td>Skill</td><td><code>skills/</code></td><td><code>SKILL.md</code></td><td>die Datei auf der Festplatte</td></tr><tr><td>System</td><td><code>design-systems/</code></td><td><code>DESIGN.md</code></td><td>die Datei auf der Festplatte</td></tr><tr><td>Adapter</td><td><code>adapters/</code></td><td>eine <code>.ts</code>-Datei</td><td>ein <code>register()</code>-Aufruf</td></tr></tbody></table>
-      <p>Wenn du einen neuen Adapter hinzufügen willst, ist die Datei rund 80 Zeilen TypeScript und ein einziger <code>register()</code>-Aufruf. Kein SDK zu lernen, keine Berechtigung anzufordern, kein zentrales Register, an das man veröffentlichen muss. Derselbe Agent, dem du auf deinem Laptop bereits vertraust, wird zur Engine — Open Design ersetzt ihn nie. (Der Begleitbeitrag <a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK Design-Workflow</a> zeigt, wie man einen Adapter auf den eigenen Schlüssel richtet.)</p>
+      <p>Wenn du einen neuen Adapter hinzufügen willst, ist die Datei rund 80 Zeilen TypeScript und ein einziger <code>register()</code>-Aufruf. Kein SDK zu lernen, keine Berechtigung anzufordern, kein zentrales Register, an das man veröffentlichen muss. Derselbe Agent, dem du auf deinem Laptop bereits vertraust, wird zur Engine — OpenDesign ersetzt ihn nie. (Der Begleitbeitrag <a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK Design-Workflow</a> zeigt, wie man einen Adapter auf den eigenen Schlüssel richtet.)</p>
       <h2>Der daemon: die Schleife, die alles zusammenbindet</h2>
       <p>Der daemon ist der einzige laufende Prozess im System. Es ist ein kleiner Node-Prozess, den du mit <code>pnpm tools-dev</code> startest, und er tut nacheinander vier Dinge:</p>
       <ol>
@@ -690,27 +690,27 @@ i18n:
       </ol>
       <p>Verfolge es durch die Primitive zurück, und das Ganze ist lesbar: Schritt 3 wählte einen <strong>Skill</strong>, Schritt 5 legte ein <strong>System</strong> fest, der Agent dahinter kam über einen <strong>Adapter</strong>, und der <strong>daemon</strong> ließ die vierstufige Schleife laufen. Die Ausgabe ist echt. Die Dateien gehören dir. Du kannst sie in jedem Editor bearbeiten, sie einem Designer übergeben oder sie wieder in einen anderen Skill einspeisen.</p>
       <h2>Warum Dateien, keine Datenbank</h2>
-      <p>Jedes Primitiv — Skills, Systeme, Adapter — ist ein Ordner mit Textdateien. Es gibt keine zentrale Datenbank. Es gibt kein „Open Design-Konto“. Es gibt keinen gehosteten Dienst, der weiterlaufen muss, damit deine Arbeit weiterläuft.</p>
+      <p>Jedes Primitiv — Skills, Systeme, Adapter — ist ein Ordner mit Textdateien. Es gibt keine zentrale Datenbank. Es gibt kein „OpenDesign-Konto“. Es gibt keinen gehosteten Dienst, der weiterlaufen muss, damit deine Arbeit weiterläuft.</p>
       <p>Das ist ein bewusster Kompromiss. Wir geben die Fähigkeit auf, clevere nutzerübergreifende Analysen, projektübergreifendes Gedächtnis oder gehostete Zusammenarbeit zu betreiben. Wir bekommen dafür: Portabilität, Langlebigkeit, Prüfbarkeit und die Möglichkeit für jeden, die gesamte Bibliothek zu forken und seine eigene Variante auszuliefern. Eine heute geschriebene <code>SKILL.md</code> liest sich für einen Agenten in zwei Jahren identisch wie für einen Menschen ganz ohne Tooling — dasselbe lässt sich nicht von einem Plugin sagen, das an die API des letzten Jahres gebunden ist.</p>
       <p>Wenn du miterlebt hast, wie eine ganze Generation von Design-Tools gestorben ist und deine Dateien mitgenommen hat, wirst du verstehen, warum dieser Kompromiss es wert ist.</p>
       <h2>Weiterführende Lektüre</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Warum wir Open Design als Skill-Schicht gebaut haben, nicht als Produkt</a> — die Wette hinter den vier Primitiven</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Warum wir OpenDesign als Skill-Schicht gebaut haben, nicht als Produkt</a> — die Wette hinter den vier Primitiven</li>
       <li><a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK Design-Workflow: Claude, Codex oder Qwen mit dem eigenen Schlüssel betreiben</a> — wie Adapter sich mit dem Agenten verbinden, für den du bereits zahlst</li>
       <li><a href="/blog/layout-layer-canvas-used-to-hide/">Die Layout-Schicht, die die Canvas früher verbarg</a> — warum Haltungsregeln in einer DESIGN.md das Ziehen von Boxen auf einer Canvas schlagen</li>
       </ul>
   fr:
-    title: "31 skills, 72 systems : comment fonctionne la bibliothèque Open Design"
-    summary: "Un parcours des quatre primitives qui rendent Open Design composable : skills, systems, adaptateurs et daemon. Avec des exemples concrets de la façon dont un fichier Markdown devient un livrable au pixel près."
+    title: "31 skills, 72 systems : comment fonctionne la bibliothèque OpenDesign"
+    summary: "Un parcours des quatre primitives qui rendent OpenDesign composable : skills, systems, adaptateurs et daemon. Avec des exemples concrets de la façon dont un fichier Markdown devient un livrable au pixel près."
     bodyHtml: |
-      <p>Open Design, mécaniquement, ce sont quatre primitives empilées les unes sur les autres :</p>
+      <p>OpenDesign, mécaniquement, ce sont quatre primitives empilées les unes sur les autres :</p>
       <ol>
       <li><strong>Skills</strong> — ce que l'agent doit faire</li>
       <li><strong>Systems</strong> — à quoi la sortie doit ressembler</li>
       <li><strong>Adaptateurs</strong> — quel agent effectue le travail</li>
       <li><strong>Le daemon</strong> — la boucle qui les relie ensemble</li>
       </ol>
-      <p>Chaque primitive est un dossier de fichiers. Aucune ne nécessite de base de données, d'environnement d'exécution de plugins ou de service hébergé. C'est toute la bibliothèque — il n'y a pas de cinquième concept caché derrière un mur de connexion. Cet article parcourt chacune tour à tour et montre ce qui se passe lorsque vous pointez votre agent vers un vrai brief. Si vous voulez l'argument expliquant <em>pourquoi</em> nous l'avons façonné ainsi avant le <em>comment</em>, commencez par <a href="/blog/why-we-built-open-design-as-a-skill-layer/">pourquoi nous avons conçu Open Design comme une couche de skills, pas un produit</a>.</p>
+      <p>Chaque primitive est un dossier de fichiers. Aucune ne nécessite de base de données, d'environnement d'exécution de plugins ou de service hébergé. C'est toute la bibliothèque — il n'y a pas de cinquième concept caché derrière un mur de connexion. Cet article parcourt chacune tour à tour et montre ce qui se passe lorsque vous pointez votre agent vers un vrai brief. Si vous voulez l'argument expliquant <em>pourquoi</em> nous l'avons façonné ainsi avant le <em>comment</em>, commencez par <a href="/blog/why-we-built-open-design-as-a-skill-layer/">pourquoi nous avons conçu OpenDesign comme une couche de skills, pas un produit</a>.</p>
       <h2>Skills : l'unité de capacité</h2>
       <p>Un skill est un dossier contenant un <code>SKILL.md</code> et zéro ou plusieurs fichiers de support. Le fichier Markdown est le contrat de l'agent — tout le reste du dossier est là pour aider l'agent à l'honorer.</p>
       <h3>Anatomie d'un dossier de skill</h3>
@@ -776,7 +776,7 @@ i18n:
       <li>y acheminer une invocation de skill</li>
       <li>récupérer la sortie</li>
       </ul>
-      <p>Nous livrons aujourd'hui des adaptateurs pour 12 agents : Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. Le daemon détecte automatiquement ceux qui sont présents et les propose dans un menu déroulant au premier démarrage — vous ne configurez rien, vous voyez simplement les agents que vous avez déjà.</p>
+      <p>Nous livrons aujourd'hui des adaptateurs pour 25 runtimes CLI locaux, dont Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro et Qwen. Le daemon détecte automatiquement ceux qui sont présents et les propose dans un menu déroulant au premier démarrage — vous ne configurez rien, vous voyez simplement les agents que vous avez déjà.</p>
 
 
 
@@ -807,7 +807,7 @@ i18n:
 
 
       <table><thead><tr><th>Primitive</th><th>Réside dans</th><th>Fichier</th><th>Source de vérité</th></tr></thead><tbody><tr><td>Skill</td><td><code>skills/</code></td><td><code>SKILL.md</code></td><td>le fichier sur le disque</td></tr><tr><td>System</td><td><code>design-systems/</code></td><td><code>DESIGN.md</code></td><td>le fichier sur le disque</td></tr><tr><td>Adaptateur</td><td><code>adapters/</code></td><td>un fichier <code>.ts</code></td><td>un appel <code>register()</code></td></tr></tbody></table>
-      <p>Si vous voulez ajouter un nouvel adaptateur, le fichier fait environ 80 lignes de TypeScript et un seul appel <code>register()</code>. Aucun SDK à apprendre, aucune permission à demander, aucun registre central où publier. Le même agent auquel vous faites déjà confiance sur votre ordinateur portable devient le moteur — Open Design ne le remplace jamais. (Le pendant <a href="/blog/byok-design-workflow-claude-codex-qwen/">Workflow de design BYOK</a> explique comment pointer un adaptateur vers votre propre clé.)</p>
+      <p>Si vous voulez ajouter un nouvel adaptateur, le fichier fait environ 80 lignes de TypeScript et un seul appel <code>register()</code>. Aucun SDK à apprendre, aucune permission à demander, aucun registre central où publier. Le même agent auquel vous faites déjà confiance sur votre ordinateur portable devient le moteur — OpenDesign ne le remplace jamais. (Le pendant <a href="/blog/byok-design-workflow-claude-codex-qwen/">Workflow de design BYOK</a> explique comment pointer un adaptateur vers votre propre clé.)</p>
       <h2>Le daemon : la boucle qui relie le tout</h2>
       <p>Le daemon est le seul processus en cours d'exécution dans le système. C'est un petit processus Node que vous démarrez avec <code>pnpm tools-dev</code>, et il fait quatre choses en séquence :</p>
       <ol>
@@ -829,27 +829,27 @@ i18n:
       </ol>
       <p>Retracez-le à travers les primitives et le tout devient lisible : l'étape 3 a choisi un <strong>skill</strong>, l'étape 5 a verrouillé un <strong>system</strong>, l'agent derrière est passé par un <strong>adaptateur</strong>, et le <strong>daemon</strong> a exécuté la boucle en quatre étapes. La sortie est réelle. Les fichiers sont les vôtres. Vous pouvez les éditer dans n'importe quel éditeur, les confier à un designer, ou les réinjecter dans un autre skill.</p>
       <h2>Pourquoi des fichiers, et non une base de données</h2>
-      <p>Chaque primitive — skills, systems, adaptateurs — est un dossier de fichiers texte. Il n'y a aucune base de données centrale. Il n'y a aucun « compte Open Design ». Il n'y a aucun service hébergé qui doive continuer à fonctionner pour que votre travail continue de fonctionner.</p>
+      <p>Chaque primitive — skills, systems, adaptateurs — est un dossier de fichiers texte. Il n'y a aucune base de données centrale. Il n'y a aucun « compte OpenDesign ». Il n'y a aucun service hébergé qui doive continuer à fonctionner pour que votre travail continue de fonctionner.</p>
       <p>C'est un compromis délibéré. Nous renonçons à la capacité de faire des analyses transversales astucieuses entre utilisateurs, de la mémoire inter-projets ou de la collaboration hébergée. En échange nous obtenons : la portabilité, la longévité, l'auditabilité, et la possibilité pour quiconque de forker toute la bibliothèque et de livrer sa propre variante. Un <code>SKILL.md</code> écrit aujourd'hui se lira à l'identique pour un agent dans deux ans et pour un humain sans aucun outillage — on ne peut pas en dire autant d'un plugin épinglé à l'API de l'an dernier.</p>
       <p>Si vous avez vu une génération d'outils de design mourir en emportant vos fichiers avec eux, vous comprendrez pourquoi ce compromis en vaut la peine.</p>
       <h2>Lectures associées</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Pourquoi nous avons conçu Open Design comme une couche de skills, pas un produit</a> — le pari derrière les quatre primitives</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Pourquoi nous avons conçu OpenDesign comme une couche de skills, pas un produit</a> — le pari derrière les quatre primitives</li>
       <li><a href="/blog/byok-design-workflow-claude-codex-qwen/">Workflow de design BYOK : faites tourner Claude, Codex ou Qwen sur votre propre clé</a> — comment les adaptateurs se connectent à l'agent que vous payez déjà</li>
       <li><a href="/blog/layout-layer-canvas-used-to-hide/">La couche de mise en page que le canvas masquait</a> — pourquoi les règles de posture dans un DESIGN.md valent mieux que de faire glisser des boîtes sur un canvas</li>
       </ul>
   ru:
-    title: "31 навык, 72 системы: как устроена библиотека Open Design"
-    summary: "Прогулка по четырём примитивам, которые делают Open Design компонуемым: навыки, системы, адаптеры и daemon. С конкретными примерами того, как файл Markdown превращается в идеальный до пикселя результат."
+    title: "31 навык, 72 системы: как устроена библиотека OpenDesign"
+    summary: "Прогулка по четырём примитивам, которые делают OpenDesign компонуемым: навыки, системы, адаптеры и daemon. С конкретными примерами того, как файл Markdown превращается в идеальный до пикселя результат."
     bodyHtml: |
-      <p>Open Design с механической точки зрения — это четыре примитива, выстроенных друг на друге:</p>
+      <p>OpenDesign с механической точки зрения — это четыре примитива, выстроенных друг на друге:</p>
       <ol>
       <li><strong>Навыки (Skills)</strong> — что должен делать агент</li>
       <li><strong>Системы (Systems)</strong> — как должен выглядеть результат</li>
       <li><strong>Адаптеры (Adapters)</strong> — какой агент выполняет работу</li>
       <li><strong>Daemon</strong> — цикл, который связывает их воедино</li>
       </ol>
-      <p>Каждый примитив — это папка с файлами. Ни один из них не требует базы данных, среды выполнения плагинов или размещённого сервиса. Это вся библиотека целиком — за стеной входа не прячется никакой пятый концепт. Этот пост по очереди проходит по каждому из них и показывает, что происходит, когда вы направляете своего агента на реальный бриф. Если вам сначала нужны аргументы, <em>почему</em> мы придали этому именно такую форму, а уже потом — <em>как</em>, начните с <a href="/blog/why-we-built-open-design-as-a-skill-layer/">почему мы построили Open Design как слой навыков, а не как продукт</a>.</p>
+      <p>Каждый примитив — это папка с файлами. Ни один из них не требует базы данных, среды выполнения плагинов или размещённого сервиса. Это вся библиотека целиком — за стеной входа не прячется никакой пятый концепт. Этот пост по очереди проходит по каждому из них и показывает, что происходит, когда вы направляете своего агента на реальный бриф. Если вам сначала нужны аргументы, <em>почему</em> мы придали этому именно такую форму, а уже потом — <em>как</em>, начните с <a href="/blog/why-we-built-open-design-as-a-skill-layer/">почему мы построили OpenDesign как слой навыков, а не как продукт</a>.</p>
       <h2>Навыки: единица возможности</h2>
       <p>Навык — это папка, содержащая один файл <code>SKILL.md</code> и ноль или больше вспомогательных файлов. Файл Markdown — это контракт агента; всё остальное в папке существует, чтобы помочь агенту его выполнить.</p>
       <h3>Анатомия папки навыка</h3>
@@ -915,7 +915,7 @@ i18n:
       <li>передавать вызов навыка внутрь</li>
       <li>собирать результат обратно</li>
       </ul>
-      <p>Сегодня мы поставляем адаптеры для 12 агентов: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. Daemon автоматически определяет, какие из них присутствуют, и предлагает их в виде выпадающего списка при первом запуске — вы ничего не настраиваете, вы просто видите агентов, которые у вас уже есть.</p>
+      <p>Сегодня мы поставляем адаптеры для 25 локальных CLI runtime, включая Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro и Qwen. Daemon автоматически определяет, какие из них присутствуют, и предлагает их в виде выпадающего списка при первом запуске — вы ничего не настраиваете, вы просто видите агентов, которые у вас уже есть.</p>
 
 
 
@@ -959,7 +959,7 @@ i18n:
 
 
       <table><thead><tr><th>Примитив</th><th>Расположен в</th><th>Файл</th><th>Источник истины</th></tr></thead><tbody><tr><td>Навык</td><td><code>skills/</code></td><td><code>SKILL.md</code></td><td>файл на диске</td></tr><tr><td>Система</td><td><code>design-systems/</code></td><td><code>DESIGN.md</code></td><td>файл на диске</td></tr><tr><td>Адаптер</td><td><code>adapters/</code></td><td>один файл <code>.ts</code></td><td>вызов <code>register()</code></td></tr></tbody></table>
-      <p>Если вы хотите добавить новый адаптер, файл — это примерно 80 строк TypeScript и единственный вызов <code>register()</code>. Никакого SDK для изучения, никаких разрешений для запроса, никакого центрального реестра для публикации. Тот самый агент, которому вы уже доверяете на своём ноутбуке, становится движком — Open Design никогда его не заменяет. (Сопутствующий материал <a href="/blog/byok-design-workflow-claude-codex-qwen/">рабочий процесс дизайна BYOK</a> разбирает, как направить адаптер на ваш собственный ключ.)</p>
+      <p>Если вы хотите добавить новый адаптер, файл — это примерно 80 строк TypeScript и единственный вызов <code>register()</code>. Никакого SDK для изучения, никаких разрешений для запроса, никакого центрального реестра для публикации. Тот самый агент, которому вы уже доверяете на своём ноутбуке, становится движком — OpenDesign никогда его не заменяет. (Сопутствующий материал <a href="/blog/byok-design-workflow-claude-codex-qwen/">рабочий процесс дизайна BYOK</a> разбирает, как направить адаптер на ваш собственный ключ.)</p>
       <h2>Daemon: цикл, который связывает всё воедино</h2>
       <p>Daemon — единственный работающий процесс в системе. Это небольшой процесс Node, который вы запускаете командой <code>pnpm tools-dev</code>, и он делает четыре вещи последовательно:</p>
       <ol>
@@ -981,27 +981,27 @@ i18n:
       </ol>
       <p>Проследите это обратно через примитивы — и всё целиком становится прозрачным: шаг 3 выбрал <strong>навык</strong>, шаг 5 зафиксировал <strong>систему</strong>, агент за ним пришёл через <strong>адаптер</strong>, а <strong>daemon</strong> прогнал четырёхшаговый цикл. Результат настоящий. Файлы — ваши. Вы можете отредактировать их в любом редакторе, передать дизайнеру или скормить обратно другому навыку.</p>
       <h2>Почему файлы, а не база данных</h2>
-      <p>Каждый примитив — навыки, системы, адаптеры — это папка с текстовыми файлами. Нет центральной базы данных. Нет «аккаунта Open Design». Нет размещённого сервиса, который должен продолжать работать, чтобы продолжала работать ваша работа.</p>
+      <p>Каждый примитив — навыки, системы, адаптеры — это папка с текстовыми файлами. Нет центральной базы данных. Нет «аккаунта OpenDesign». Нет размещённого сервиса, который должен продолжать работать, чтобы продолжала работать ваша работа.</p>
       <p>Это намеренный компромисс. Мы отказываемся от возможности делать хитрую кросс-пользовательскую аналитику, кросс-проектную память или размещённую совместную работу. Взамен мы получаем: портативность, долговечность, проверяемость и возможность для любого форкнуть всю библиотеку и выпустить собственный вариант. <code>SKILL.md</code>, написанный сегодня, читается одинаково для агента через два года и для человека вообще без какого-либо инструментария — чего не скажешь о плагине, привязанном к прошлогоднему API.</p>
       <p>Если вы наблюдали, как целое поколение инструментов для дизайна умирало, унося ваши файлы с собой, вы поймёте, почему этот компромисс того стоит.</p>
       <h2>Связанные материалы</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Почему мы построили Open Design как слой навыков, а не как продукт</a> — ставка, стоящая за четырьмя примитивами</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Почему мы построили OpenDesign как слой навыков, а не как продукт</a> — ставка, стоящая за четырьмя примитивами</li>
       <li><a href="/blog/byok-design-workflow-claude-codex-qwen/">Рабочий процесс дизайна BYOK: запускайте Claude, Codex или Qwen на собственном ключе</a> — как адаптеры подключаются к агенту, за которого вы уже платите</li>
       <li><a href="/blog/layout-layer-canvas-used-to-hide/">Слой вёрстки, который раньше прятал холст</a> — почему правила позиции в DESIGN.md лучше перетаскивания прямоугольников по холсту</li>
       </ul>
   es:
-    title: "31 skills, 72 systems: cómo funciona la biblioteca de Open Design"
-    summary: "Un recorrido por las cuatro primitivas que hacen que Open Design sea componible: skills, systems, adapters y el daemon. Con ejemplos concretos de cómo un archivo Markdown se convierte en un entregable perfecto al píxel."
+    title: "31 skills, 72 systems: cómo funciona la biblioteca de OpenDesign"
+    summary: "Un recorrido por las cuatro primitivas que hacen que OpenDesign sea componible: skills, systems, adapters y el daemon. Con ejemplos concretos de cómo un archivo Markdown se convierte en un entregable perfecto al píxel."
     bodyHtml: |
-      <p>Open Design es, mecánicamente, cuatro primitivas apiladas una sobre otra:</p>
+      <p>OpenDesign es, mecánicamente, cuatro primitivas apiladas una sobre otra:</p>
       <ol>
       <li><strong>Skills</strong> — qué debe hacer el agente</li>
       <li><strong>Systems</strong> — cómo debe verse el resultado</li>
       <li><strong>Adapters</strong> — qué agente realiza el trabajo</li>
       <li><strong>El daemon</strong> — el bucle que los conecta entre sí</li>
       </ol>
-      <p>Cada primitiva es una carpeta de archivos. Ninguna de ellas requiere una base de datos, un runtime de plugins ni un servicio alojado. Eso es toda la biblioteca — no hay un quinto concepto escondido detrás de un muro de inicio de sesión. Esta publicación recorre cada una por turnos y muestra qué ocurre cuando diriges tu agente hacia un brief real. Si quieres el argumento de <em>por qué</em> lo diseñamos de esta manera antes del <em>cómo</em>, empieza por <a href="/blog/why-we-built-open-design-as-a-skill-layer/">por qué construimos Open Design como una capa de skills, no como un producto</a>.</p>
+      <p>Cada primitiva es una carpeta de archivos. Ninguna de ellas requiere una base de datos, un runtime de plugins ni un servicio alojado. Eso es toda la biblioteca — no hay un quinto concepto escondido detrás de un muro de inicio de sesión. Esta publicación recorre cada una por turnos y muestra qué ocurre cuando diriges tu agente hacia un brief real. Si quieres el argumento de <em>por qué</em> lo diseñamos de esta manera antes del <em>cómo</em>, empieza por <a href="/blog/why-we-built-open-design-as-a-skill-layer/">por qué construimos OpenDesign como una capa de skills, no como un producto</a>.</p>
       <h2>Skills: la unidad de capacidad</h2>
       <p>Un skill es una carpeta que contiene un <code>SKILL.md</code> y cero o más archivos de apoyo. El archivo Markdown es el contrato del agente — todo lo demás en la carpeta está ahí para ayudar al agente a cumplirlo.</p>
       <h3>Anatomía de una carpeta de skill</h3>
@@ -1067,13 +1067,13 @@ i18n:
       <li>canalizar una invocación de skill hacia él</li>
       <li>recopilar la salida de vuelta</li>
       </ul>
-      <p>Hoy distribuimos adapters para 12 agentes: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. El daemon detecta automáticamente cuáles están presentes y los ofrece como un desplegable en el primer arranque — no configuras nada, simplemente ves los agentes que ya tienes.</p>
+      <p>Hoy distribuimos adapters para 25 runtimes CLI locales, incluidos Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro y Qwen. El daemon detecta automáticamente cuáles están presentes y los ofrece como un desplegable en el primer arranque — no configuras nada, simplemente ves los agentes que ya tienes.</p>
 
 
 
 
       <table><thead><tr><th>Primitiva</th><th>Vive en</th><th>Archivo</th><th>Fuente de verdad</th></tr></thead><tbody><tr><td>Skill</td><td><code>skills/</code></td><td><code>SKILL.md</code></td><td>el archivo en disco</td></tr><tr><td>System</td><td><code>design-systems/</code></td><td><code>DESIGN.md</code></td><td>el archivo en disco</td></tr><tr><td>Adapter</td><td><code>adapters/</code></td><td>un archivo <code>.ts</code></td><td>una llamada a <code>register()</code></td></tr></tbody></table>
-      <p>Si quieres añadir un nuevo adapter, el archivo son aproximadamente 80 líneas de TypeScript y una única llamada a <code>register()</code>. Ningún SDK que aprender, ningún permiso que solicitar, ningún registro central donde publicar. El mismo agente en el que ya confías en tu portátil se convierte en el motor — Open Design nunca lo reemplaza. (La pieza complementaria <a href="/blog/byok-design-workflow-claude-codex-qwen/">flujo de trabajo de diseño BYOK</a> recorre cómo dirigir un adapter hacia tu propia clave.)</p>
+      <p>Si quieres añadir un nuevo adapter, el archivo son aproximadamente 80 líneas de TypeScript y una única llamada a <code>register()</code>. Ningún SDK que aprender, ningún permiso que solicitar, ningún registro central donde publicar. El mismo agente en el que ya confías en tu portátil se convierte en el motor — OpenDesign nunca lo reemplaza. (La pieza complementaria <a href="/blog/byok-design-workflow-claude-codex-qwen/">flujo de trabajo de diseño BYOK</a> recorre cómo dirigir un adapter hacia tu propia clave.)</p>
       <h2>El daemon: el bucle que lo une todo</h2>
       <p>El daemon es el único proceso en ejecución del sistema. Es un pequeño proceso de Node que inicias con <code>pnpm tools-dev</code>, y hace cuatro cosas en secuencia:</p>
       <ol>
@@ -1095,27 +1095,27 @@ i18n:
       </ol>
       <p>Recórrelo de vuelta a través de las primitivas y todo el conjunto es legible: el paso 3 eligió un <strong>skill</strong>, el paso 5 fijó un <strong>system</strong>, el agente detrás vino a través de un <strong>adapter</strong>, y el <strong>daemon</strong> ejecutó el bucle de cuatro pasos. La salida es real. Los archivos son tuyos. Puedes editarlos en cualquier editor, entregárselos a un diseñador, o alimentarlos de vuelta a otro skill.</p>
       <h2>Por qué archivos, no una base de datos</h2>
-      <p>Cada primitiva — skills, systems, adapters — es una carpeta de archivos de texto. No hay base de datos central. No hay «cuenta de Open Design». No hay servicio alojado que tenga que seguir funcionando para que tu trabajo siga funcionando.</p>
+      <p>Cada primitiva — skills, systems, adapters — es una carpeta de archivos de texto. No hay base de datos central. No hay «cuenta de OpenDesign». No hay servicio alojado que tenga que seguir funcionando para que tu trabajo siga funcionando.</p>
       <p>Esto es un compromiso deliberado. Renunciamos a la capacidad de hacer analíticas ingeniosas entre usuarios, memoria entre proyectos, o colaboración alojada. A cambio recibimos: portabilidad, longevidad, auditabilidad, y la capacidad de que cualquiera bifurque la biblioteca entera y distribuya su propia variante. Un <code>SKILL.md</code> escrito hoy se lee idéntico para un agente dentro de dos años y para un humano sin herramienta alguna — no puede decirse lo mismo de un plugin anclado a la API del año pasado.</p>
       <p>Si has visto morir a una generación de herramientas de diseño llevándose tus archivos con ellas, entenderás por qué este compromiso vale la pena.</p>
       <h2>Lecturas relacionadas</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Por qué construimos Open Design como una capa de skills, no como un producto</a> — la apuesta detrás de las cuatro primitivas</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Por qué construimos OpenDesign como una capa de skills, no como un producto</a> — la apuesta detrás de las cuatro primitivas</li>
       <li><a href="/blog/byok-design-workflow-claude-codex-qwen/">Flujo de trabajo de diseño BYOK: ejecuta Claude, Codex o Qwen con tu propia clave</a> — cómo se conectan los adapters al agente que ya pagas</li>
       <li><a href="/blog/layout-layer-canvas-used-to-hide/">La capa de layout que el canvas solía ocultar</a> — por qué las reglas de postura en un DESIGN.md superan a arrastrar cajas en un canvas</li>
       </ul>
   pt-br:
-    title: "31 skills, 72 sistemas: como funciona a biblioteca do Open Design"
-    summary: "Um passeio pelas quatro primitivas que tornam o Open Design composável: skills, sistemas, adaptadores e o daemon. Com exemplos concretos de como um arquivo Markdown vira uma entrega perfeita até o último pixel."
+    title: "31 skills, 72 sistemas: como funciona a biblioteca do OpenDesign"
+    summary: "Um passeio pelas quatro primitivas que tornam o OpenDesign composável: skills, sistemas, adaptadores e o daemon. Com exemplos concretos de como um arquivo Markdown vira uma entrega perfeita até o último pixel."
     bodyHtml: |
-      <p>O Open Design é, mecanicamente, quatro primitivas empilhadas umas sobre as outras:</p>
+      <p>O OpenDesign é, mecanicamente, quatro primitivas empilhadas umas sobre as outras:</p>
       <ol>
       <li><strong>Skills</strong> — o que o agente deve fazer</li>
       <li><strong>Sistemas</strong> — como a saída deve parecer</li>
       <li><strong>Adaptadores</strong> — qual agente faz o trabalho</li>
       <li><strong>O daemon</strong> — o loop que conecta tudo</li>
       </ol>
-      <p>Cada primitiva é uma pasta de arquivos. Nenhuma delas exige um banco de dados, um runtime de plugin ou um serviço hospedado. Essa é a biblioteca inteira — não há um quinto conceito escondido atrás de um muro de login. Este post percorre cada uma por vez e mostra o que acontece quando você aponta seu agente para um briefing real. Se você quer o argumento de <em>por que</em> a moldamos assim antes do <em>como</em>, comece com <a href="/blog/why-we-built-open-design-as-a-skill-layer/">por que construímos o Open Design como uma camada de skills, não um produto</a>.</p>
+      <p>Cada primitiva é uma pasta de arquivos. Nenhuma delas exige um banco de dados, um runtime de plugin ou um serviço hospedado. Essa é a biblioteca inteira — não há um quinto conceito escondido atrás de um muro de login. Este post percorre cada uma por vez e mostra o que acontece quando você aponta seu agente para um briefing real. Se você quer o argumento de <em>por que</em> a moldamos assim antes do <em>como</em>, comece com <a href="/blog/why-we-built-open-design-as-a-skill-layer/">por que construímos o OpenDesign como uma camada de skills, não um produto</a>.</p>
       <h2>Skills: a unidade de capacidade</h2>
       <p>Uma skill é uma pasta contendo um <code>SKILL.md</code> e zero ou mais arquivos de apoio. O arquivo Markdown é o contrato do agente — todo o resto na pasta está ali para ajudar o agente a cumpri-lo.</p>
       <h3>Anatomia de uma pasta de skill</h3>
@@ -1181,7 +1181,7 @@ i18n:
       <li>encaminhar uma invocação de skill para dentro</li>
       <li>coletar a saída de volta</li>
       </ul>
-      <p>Hoje entregamos adaptadores para 12 agentes: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. O daemon detecta automaticamente quais estão presentes e os oferece como um dropdown na primeira inicialização — você não configura nada, apenas vê os agentes que já tem.</p>
+      <p>Hoje entregamos adaptadores para 25 runtimes CLI locais, incluindo Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro e Qwen. O daemon detecta automaticamente quais estão presentes e os oferece como um dropdown na primeira inicialização — você não configura nada, apenas vê os agentes que já tem.</p>
 
 
 
@@ -1212,7 +1212,7 @@ i18n:
 
 
       <table><thead><tr><th>Primitiva</th><th>Mora em</th><th>Arquivo</th><th>Fonte da verdade</th></tr></thead><tbody><tr><td>Skill</td><td><code>skills/</code></td><td><code>SKILL.md</code></td><td>o arquivo em disco</td></tr><tr><td>Sistema</td><td><code>design-systems/</code></td><td><code>DESIGN.md</code></td><td>o arquivo em disco</td></tr><tr><td>Adaptador</td><td><code>adapters/</code></td><td>um arquivo <code>.ts</code></td><td>uma chamada <code>register()</code></td></tr></tbody></table>
-      <p>Se você quiser adicionar um novo adaptador, o arquivo tem cerca de 80 linhas de TypeScript e uma única chamada <code>register()</code>. Nenhum SDK para aprender, nenhuma permissão para solicitar, nenhum registro central para publicar. O mesmo agente em que você já confia no seu laptop vira o motor — o Open Design nunca o substitui. (O texto complementar <a href="/blog/byok-design-workflow-claude-codex-qwen/">fluxo de design BYOK</a> percorre como apontar um adaptador para a sua própria chave.)</p>
+      <p>Se você quiser adicionar um novo adaptador, o arquivo tem cerca de 80 linhas de TypeScript e uma única chamada <code>register()</code>. Nenhum SDK para aprender, nenhuma permissão para solicitar, nenhum registro central para publicar. O mesmo agente em que você já confia no seu laptop vira o motor — o OpenDesign nunca o substitui. (O texto complementar <a href="/blog/byok-design-workflow-claude-codex-qwen/">fluxo de design BYOK</a> percorre como apontar um adaptador para a sua própria chave.)</p>
       <h2>O daemon: o loop que amarra tudo</h2>
       <p>O daemon é o único processo em execução no sistema. É um pequeno processo Node que você inicia com <code>pnpm tools-dev</code>, e ele faz quatro coisas em sequência:</p>
       <ol>
@@ -1234,27 +1234,27 @@ i18n:
       </ol>
       <p>Trace de volta pelas primitivas e a coisa toda fica legível: o passo 3 escolheu uma <strong>skill</strong>, o passo 5 travou um <strong>sistema</strong>, o agente por trás veio através de um <strong>adaptador</strong>, e o <strong>daemon</strong> rodou o loop de quatro passos. A saída é real. Os arquivos são seus. Você pode editá-los em qualquer editor, entregá-los a um designer ou realimentá-los em outra skill.</p>
       <h2>Por que arquivos, não um banco de dados</h2>
-      <p>Toda primitiva — skills, sistemas, adaptadores — é uma pasta de arquivos de texto. Não há banco de dados central. Não há “conta do Open Design.” Não há serviço hospedado que precise continuar funcionando para que o seu trabalho continue funcionando.</p>
+      <p>Toda primitiva — skills, sistemas, adaptadores — é uma pasta de arquivos de texto. Não há banco de dados central. Não há “conta do OpenDesign.” Não há serviço hospedado que precise continuar funcionando para que o seu trabalho continue funcionando.</p>
       <p>Esse é um trade-off deliberado. Abrimos mão da capacidade de fazer análises espertas entre usuários, memória entre projetos ou colaboração hospedada. Em troca, ganhamos: portabilidade, longevidade, auditabilidade e a capacidade de qualquer um forkar a biblioteca inteira e entregar a própria variante. Um <code>SKILL.md</code> escrito hoje se lê de forma idêntica para um agente daqui a dois anos e para um humano sem ferramenta nenhuma — o mesmo não se pode dizer de um plugin preso à API do ano passado.</p>
       <p>Se você viu uma geração de ferramentas de design morrer levando seus arquivos junto, vai entender por que esse trade-off vale a pena.</p>
       <h2>Leitura relacionada</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Por que construímos o Open Design como uma camada de skills, não um produto</a> — a aposta por trás das quatro primitivas</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Por que construímos o OpenDesign como uma camada de skills, não um produto</a> — a aposta por trás das quatro primitivas</li>
       <li><a href="/blog/byok-design-workflow-claude-codex-qwen/">Fluxo de design BYOK: rode Claude, Codex ou Qwen com sua própria chave</a> — como os adaptadores se conectam ao agente que você já paga</li>
       <li><a href="/blog/layout-layer-canvas-used-to-hide/">A camada de layout que o canvas costumava esconder</a> — por que regras de postura num DESIGN.md ganham de arrastar caixas num canvas</li>
       </ul>
   it:
-    title: "31 skill, 72 sistemi: come funziona la libreria di Open Design"
-    summary: "Una panoramica delle quattro primitive che rendono Open Design componibile: skill, sistemi, adattatori e il daemon. Con esempi concreti di come un file Markdown diventa un deliverable perfetto al pixel."
+    title: "31 skill, 72 sistemi: come funziona la libreria di OpenDesign"
+    summary: "Una panoramica delle quattro primitive che rendono OpenDesign componibile: skill, sistemi, adattatori e il daemon. Con esempi concreti di come un file Markdown diventa un deliverable perfetto al pixel."
     bodyHtml: |
-      <p>Open Design è, meccanicamente, quattro primitive impilate una sull'altra:</p>
+      <p>OpenDesign è, meccanicamente, quattro primitive impilate una sull'altra:</p>
       <ol>
       <li><strong>Skill</strong>: cosa dovrebbe fare l'agente</li>
       <li><strong>Sistemi</strong>: come dovrebbe apparire l'output</li>
       <li><strong>Adattatori</strong>: quale agente svolge il lavoro</li>
       <li><strong>Il daemon</strong>: il ciclo che li collega tra loro</li>
       </ol>
-      <p>Ogni primitiva è una cartella di file. Nessuna di esse richiede un database, un runtime di plugin o un servizio ospitato. Questa è l'intera libreria: non c'è un quinto concetto nascosto dietro un muro di login. Questo articolo passa in rassegna ognuna a turno e mostra cosa succede quando punti il tuo agente a un brief reale. Se vuoi l'argomentazione sul <em>perché</em> l'abbiamo plasmato così prima del <em>come</em>, inizia da <a href="/blog/why-we-built-open-design-as-a-skill-layer/">perché abbiamo costruito Open Design come un livello di skill, non come un prodotto</a>.</p>
+      <p>Ogni primitiva è una cartella di file. Nessuna di esse richiede un database, un runtime di plugin o un servizio ospitato. Questa è l'intera libreria: non c'è un quinto concetto nascosto dietro un muro di login. Questo articolo passa in rassegna ognuna a turno e mostra cosa succede quando punti il tuo agente a un brief reale. Se vuoi l'argomentazione sul <em>perché</em> l'abbiamo plasmato così prima del <em>come</em>, inizia da <a href="/blog/why-we-built-open-design-as-a-skill-layer/">perché abbiamo costruito OpenDesign come un livello di skill, non come un prodotto</a>.</p>
       <h2>Skill: l'unità di capacità</h2>
       <p>Una skill è una cartella che contiene un <code>SKILL.md</code> e zero o più file di supporto. Il file Markdown è il contratto dell'agente: tutto il resto nella cartella serve ad aiutare l'agente a rispettarlo.</p>
       <h3>Anatomia di una cartella di skill</h3>
@@ -1320,13 +1320,13 @@ i18n:
       <li>inviare un'invocazione di skill</li>
       <li>raccogliere indietro l'output</li>
       </ul>
-      <p>Oggi rilasciamo adattatori per 12 agenti: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. Il daemon rileva automaticamente quali sono presenti e li offre come menu a tendina al primo avvio: non configuri nulla, vedi semplicemente gli agenti che hai già.</p>
+      <p>Oggi rilasciamo adattatori per 25 runtime CLI locali, tra cui Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro e Qwen. Il daemon rileva automaticamente quali sono presenti e li offre come menu a tendina al primo avvio: non configuri nulla, vedi semplicemente gli agenti che hai già.</p>
 
 
 
 
       <table><thead><tr><th>Primitiva</th><th>Risiede in</th><th>File</th><th>Fonte di verità</th></tr></thead><tbody><tr><td>Skill</td><td><code>skills/</code></td><td><code>SKILL.md</code></td><td>il file su disco</td></tr><tr><td>Sistema</td><td><code>design-systems/</code></td><td><code>DESIGN.md</code></td><td>il file su disco</td></tr><tr><td>Adattatore</td><td><code>adapters/</code></td><td>un file <code>.ts</code></td><td>una chiamata <code>register()</code></td></tr></tbody></table>
-      <p>Se vuoi aggiungere un nuovo adattatore, il file è all'incirca 80 righe di TypeScript e una singola chiamata <code>register()</code>. Nessun SDK da imparare, nessun permesso da richiedere, nessun registro centrale su cui pubblicare. Lo stesso agente di cui ti fidi già sul tuo laptop diventa il motore: Open Design non lo sostituisce mai. (Il pezzo complementare <a href="/blog/byok-design-workflow-claude-codex-qwen/">flusso di lavoro di design BYOK</a> illustra come puntare un adattatore alla tua chiave.)</p>
+      <p>Se vuoi aggiungere un nuovo adattatore, il file è all'incirca 80 righe di TypeScript e una singola chiamata <code>register()</code>. Nessun SDK da imparare, nessun permesso da richiedere, nessun registro centrale su cui pubblicare. Lo stesso agente di cui ti fidi già sul tuo laptop diventa il motore: OpenDesign non lo sostituisce mai. (Il pezzo complementare <a href="/blog/byok-design-workflow-claude-codex-qwen/">flusso di lavoro di design BYOK</a> illustra come puntare un adattatore alla tua chiave.)</p>
       <h2>Il daemon: il ciclo che lega tutto insieme</h2>
       <p>Il daemon è l'unico processo in esecuzione nel sistema. È un piccolo processo Node che avvii con <code>pnpm tools-dev</code>, e fa quattro cose in sequenza:</p>
       <ol>
@@ -1348,27 +1348,27 @@ i18n:
       </ol>
       <p>Ripercorrilo attraverso le primitive e l'intera cosa è leggibile: il passo 3 ha scelto una <strong>skill</strong>, il passo 5 ha bloccato un <strong>sistema</strong>, l'agente dietro è arrivato tramite un <strong>adattatore</strong>, e il <strong>daemon</strong> ha eseguito il ciclo a quattro passi. L'output è reale. I file sono tuoi. Puoi modificarli in qualsiasi editor, consegnarli a un designer o reimmetterli in un'altra skill.</p>
       <h2>Perché file, non un database</h2>
-      <p>Ogni primitiva — skill, sistemi, adattatori — è una cartella di file di testo. Non c'è alcun database centrale. Non c'è alcun "account Open Design". Non c'è alcun servizio ospitato che debba continuare a funzionare perché il tuo lavoro continui a funzionare.</p>
+      <p>Ogni primitiva — skill, sistemi, adattatori — è una cartella di file di testo. Non c'è alcun database centrale. Non c'è alcun "account OpenDesign". Non c'è alcun servizio ospitato che debba continuare a funzionare perché il tuo lavoro continui a funzionare.</p>
       <p>Questo è un compromesso deliberato. Rinunciamo alla capacità di fare analitiche cross-utente sofisticate, memoria cross-progetto o collaborazione ospitata. In cambio otteniamo: portabilità, longevità, verificabilità e la possibilità per chiunque di forkare l'intera libreria e rilasciare la propria variante. Un <code>SKILL.md</code> scritto oggi si legge in modo identico per un agente tra due anni e per un umano senza alcuno strumento: lo stesso non si può dire di un plugin ancorato all'API dell'anno scorso.</p>
       <p>Se hai visto una generazione di strumenti di design morire portandosi via i tuoi file, capirai perché questo compromesso ne vale la pena.</p>
       <h2>Letture correlate</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Perché abbiamo costruito Open Design come un livello di skill, non come un prodotto</a>: la scommessa dietro le quattro primitive</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Perché abbiamo costruito OpenDesign come un livello di skill, non come un prodotto</a>: la scommessa dietro le quattro primitive</li>
       <li><a href="/blog/byok-design-workflow-claude-codex-qwen/">Flusso di lavoro di design BYOK: usa Claude, Codex o Qwen con la tua chiave</a>: come gli adattatori si collegano all'agente che già paghi</li>
       <li><a href="/blog/layout-layer-canvas-used-to-hide/">Il livello di layout che il canvas nascondeva</a>: perché le regole di postura in un DESIGN.md battono il trascinare riquadri su un canvas</li>
       </ul>
   vi:
-    title: "31 skill, 72 system: thư viện Open Design hoạt động ra sao"
-    summary: "Một chuyến dạo qua bốn nguyên tố cốt lõi khiến Open Design có thể kết hợp linh hoạt: skill, system, adapter và daemon. Kèm ví dụ cụ thể về cách một tệp Markdown trở thành một sản phẩm chuẩn từng pixel."
+    title: "31 skill, 72 system: thư viện OpenDesign hoạt động ra sao"
+    summary: "Một chuyến dạo qua bốn nguyên tố cốt lõi khiến OpenDesign có thể kết hợp linh hoạt: skill, system, adapter và daemon. Kèm ví dụ cụ thể về cách một tệp Markdown trở thành một sản phẩm chuẩn từng pixel."
     bodyHtml: |
-      <p>Về mặt cơ chế, Open Design là bốn nguyên tố cốt lõi xếp chồng lên nhau:</p>
+      <p>Về mặt cơ chế, OpenDesign là bốn nguyên tố cốt lõi xếp chồng lên nhau:</p>
       <ol>
       <li><strong>Skill</strong> — agent nên làm gì</li>
       <li><strong>System</strong> — đầu ra nên trông như thế nào</li>
       <li><strong>Adapter</strong> — agent nào làm công việc</li>
       <li><strong>Daemon</strong> — vòng lặp nối tất cả lại với nhau</li>
       </ol>
-      <p>Mỗi nguyên tố là một thư mục chứa các tệp. Không cái nào cần cơ sở dữ liệu, runtime plugin, hay dịch vụ được host. Đó là toàn bộ thư viện — không có khái niệm thứ năm nào ẩn sau một bức tường đăng nhập. Bài viết này đi qua từng cái một và cho thấy điều gì xảy ra khi bạn trỏ agent của mình vào một brief thực. Nếu bạn muốn lập luận <em>vì sao</em> chúng tôi định hình nó theo cách này trước phần <em>như thế nào</em>, hãy bắt đầu với <a href="/blog/why-we-built-open-design-as-a-skill-layer/">vì sao chúng tôi xây Open Design như một lớp skill, không phải một sản phẩm</a>.</p>
+      <p>Mỗi nguyên tố là một thư mục chứa các tệp. Không cái nào cần cơ sở dữ liệu, runtime plugin, hay dịch vụ được host. Đó là toàn bộ thư viện — không có khái niệm thứ năm nào ẩn sau một bức tường đăng nhập. Bài viết này đi qua từng cái một và cho thấy điều gì xảy ra khi bạn trỏ agent của mình vào một brief thực. Nếu bạn muốn lập luận <em>vì sao</em> chúng tôi định hình nó theo cách này trước phần <em>như thế nào</em>, hãy bắt đầu với <a href="/blog/why-we-built-open-design-as-a-skill-layer/">vì sao chúng tôi xây OpenDesign như một lớp skill, không phải một sản phẩm</a>.</p>
       <h2>Skill: đơn vị năng lực</h2>
       <p>Một skill là một thư mục chứa một <code>SKILL.md</code> và không hoặc nhiều tệp hỗ trợ. Tệp Markdown là hợp đồng của agent — mọi thứ khác trong thư mục là để giúp agent đạt được nó.</p>
       <h3>Giải phẫu một thư mục skill</h3>
@@ -1434,7 +1434,7 @@ i18n:
       <li>đưa một lời gọi skill vào</li>
       <li>thu thập đầu ra trở lại</li>
       </ul>
-      <p>Hôm nay chúng tôi ship adapter cho 12 agent: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. Daemon tự động phát hiện cái nào hiện diện và cung cấp chúng dưới dạng menu thả xuống ở lần khởi động đầu tiên — bạn không cấu hình gì cả, bạn chỉ thấy các agent bạn đã có sẵn.</p>
+      <p>Hôm nay chúng tôi ship adapter cho 25 runtime CLI cục bộ, gồm Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro và Qwen. Daemon tự động phát hiện cái nào hiện diện và cung cấp chúng dưới dạng menu thả xuống ở lần khởi động đầu tiên — bạn không cấu hình gì cả, bạn chỉ thấy các agent bạn đã có sẵn.</p>
 
 
 
@@ -1467,7 +1467,7 @@ i18n:
 
 
       <table><thead><tr><th>Nguyên tố</th><th>Nằm ở</th><th>Tệp</th><th>Nguồn sự thật</th></tr></thead><tbody><tr><td>Skill</td><td><code>skills/</code></td><td><code>SKILL.md</code></td><td>tệp trên đĩa</td></tr><tr><td>System</td><td><code>design-systems/</code></td><td><code>DESIGN.md</code></td><td>tệp trên đĩa</td></tr><tr><td>Adapter</td><td><code>adapters/</code></td><td>một tệp <code>.ts</code></td><td>một lời gọi <code>register()</code></td></tr></tbody></table>
-      <p>Nếu bạn muốn thêm một adapter mới, tệp này khoảng 80 dòng TypeScript và một lời gọi <code>register()</code> duy nhất. Không có SDK nào phải học, không có quyền nào phải xin, không có registry trung tâm nào phải xuất bản lên. Chính agent bạn đã tin tưởng trên laptop của mình trở thành engine — Open Design không bao giờ thay thế nó. (Bài đồng hành <a href="/blog/byok-design-workflow-claude-codex-qwen/">quy trình thiết kế BYOK</a> đi qua việc trỏ một adapter tới key của riêng bạn.)</p>
+      <p>Nếu bạn muốn thêm một adapter mới, tệp này khoảng 80 dòng TypeScript và một lời gọi <code>register()</code> duy nhất. Không có SDK nào phải học, không có quyền nào phải xin, không có registry trung tâm nào phải xuất bản lên. Chính agent bạn đã tin tưởng trên laptop của mình trở thành engine — OpenDesign không bao giờ thay thế nó. (Bài đồng hành <a href="/blog/byok-design-workflow-claude-codex-qwen/">quy trình thiết kế BYOK</a> đi qua việc trỏ một adapter tới key của riêng bạn.)</p>
       <h2>Daemon: vòng lặp buộc tất cả lại với nhau</h2>
       <p>Daemon là tiến trình đang chạy duy nhất trong hệ thống. Nó là một tiến trình Node nhỏ bạn khởi động bằng <code>pnpm tools-dev</code>, và nó làm bốn việc theo trình tự:</p>
       <ol>
@@ -1489,27 +1489,27 @@ i18n:
       </ol>
       <p>Lần ngược lại qua các nguyên tố và toàn bộ chuyện trở nên dễ đọc: bước 3 chọn một <strong>skill</strong>, bước 5 chốt một <strong>system</strong>, agent đằng sau nó đi qua một <strong>adapter</strong>, và <strong>daemon</strong> chạy vòng lặp bốn bước. Đầu ra là thật. Các tệp là của bạn. Bạn có thể sửa chúng trong bất kỳ trình soạn thảo nào, giao chúng cho một nhà thiết kế, hoặc đưa chúng trở lại vào một skill khác.</p>
       <h2>Vì sao là tệp, không phải cơ sở dữ liệu</h2>
-      <p>Mỗi nguyên tố — skill, system, adapter — là một thư mục các tệp văn bản. Không có cơ sở dữ liệu trung tâm. Không có “tài khoản Open Design.” Không có dịch vụ được host nào phải tiếp tục hoạt động để công việc của bạn tiếp tục hoạt động.</p>
+      <p>Mỗi nguyên tố — skill, system, adapter — là một thư mục các tệp văn bản. Không có cơ sở dữ liệu trung tâm. Không có “tài khoản OpenDesign.” Không có dịch vụ được host nào phải tiếp tục hoạt động để công việc của bạn tiếp tục hoạt động.</p>
       <p>Đây là một sự đánh đổi có chủ ý. Chúng tôi từ bỏ khả năng làm các phân tích chéo người dùng tinh vi, bộ nhớ chéo dự án, hay cộng tác được host. Đổi lại chúng tôi có: tính di động, tuổi thọ, khả năng kiểm tra, và khả năng để bất kỳ ai fork toàn bộ thư viện và ship biến thể của riêng họ. Một <code>SKILL.md</code> viết hôm nay đọc giống hệt đối với một agent hai năm sau và đối với một con người hoàn toàn không có công cụ gì — điều tương tự không thể nói về một plugin ghim vào API của năm ngoái.</p>
       <p>Nếu bạn từng chứng kiến một thế hệ công cụ thiết kế chết đi và mang theo cả các tệp của bạn, bạn sẽ hiểu vì sao sự đánh đổi này đáng giá.</p>
       <h2>Đọc thêm</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Vì sao chúng tôi xây Open Design như một lớp skill, không phải một sản phẩm</a> — canh bạc đằng sau bốn nguyên tố</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Vì sao chúng tôi xây OpenDesign như một lớp skill, không phải một sản phẩm</a> — canh bạc đằng sau bốn nguyên tố</li>
       <li><a href="/blog/byok-design-workflow-claude-codex-qwen/">Quy trình thiết kế BYOK: chạy Claude, Codex hay Qwen bằng key của riêng bạn</a> — cách các adapter kết nối với agent bạn đã trả tiền</li>
       <li><a href="/blog/layout-layer-canvas-used-to-hide/">Lớp bố cục mà canvas từng che giấu</a> — vì sao các quy tắc tư thế trong một DESIGN.md đánh bại việc kéo các hộp trên một canvas</li>
       </ul>
   pl:
-    title: "31 umiejętności, 72 systemy: jak działa biblioteka Open Design"
-    summary: "Spacer po czterech prymitywach, które czynią Open Design komponowalnym: umiejętnościach, systemach, adapterach i daemonie. Z konkretnymi przykładami tego, jak plik Markdown staje się dopracowanym co do piksela produktem."
+    title: "31 umiejętności, 72 systemy: jak działa biblioteka OpenDesign"
+    summary: "Spacer po czterech prymitywach, które czynią OpenDesign komponowalnym: umiejętnościach, systemach, adapterach i daemonie. Z konkretnymi przykładami tego, jak plik Markdown staje się dopracowanym co do piksela produktem."
     bodyHtml: |
-      <p>Open Design to, mechanicznie rzecz biorąc, cztery prymitywy ułożone jeden na drugim:</p>
+      <p>OpenDesign to, mechanicznie rzecz biorąc, cztery prymitywy ułożone jeden na drugim:</p>
       <ol>
       <li><strong>Umiejętności</strong> — co agent powinien zrobić</li>
       <li><strong>Systemy</strong> — jak powinien wyglądać efekt</li>
       <li><strong>Adaptery</strong> — który agent wykonuje pracę</li>
       <li><strong>Daemon</strong> — pętla, która łączy je ze sobą</li>
       </ol>
-      <p>Każdy prymityw to folder z plikami. Żaden z nich nie wymaga bazy danych, środowiska uruchomieniowego wtyczek ani hostowanej usługi. To cała biblioteka — nie ma piątego pojęcia ukrytego za ścianą logowania. Ten wpis omawia kolejno każdy z nich i pokazuje, co się dzieje, gdy skierujesz swojego agenta na prawdziwy brief. Jeśli chcesz poznać argument za tym, <em>dlaczego</em> nadaliśmy temu taki kształt, zanim poznasz <em>jak</em>, zacznij od <a href="/blog/why-we-built-open-design-as-a-skill-layer/">dlaczego zbudowaliśmy Open Design jako warstwę umiejętności, a nie produkt</a>.</p>
+      <p>Każdy prymityw to folder z plikami. Żaden z nich nie wymaga bazy danych, środowiska uruchomieniowego wtyczek ani hostowanej usługi. To cała biblioteka — nie ma piątego pojęcia ukrytego za ścianą logowania. Ten wpis omawia kolejno każdy z nich i pokazuje, co się dzieje, gdy skierujesz swojego agenta na prawdziwy brief. Jeśli chcesz poznać argument za tym, <em>dlaczego</em> nadaliśmy temu taki kształt, zanim poznasz <em>jak</em>, zacznij od <a href="/blog/why-we-built-open-design-as-a-skill-layer/">dlaczego zbudowaliśmy OpenDesign jako warstwę umiejętności, a nie produkt</a>.</p>
       <h2>Umiejętności: jednostka możliwości</h2>
       <p>Umiejętność to folder zawierający jeden plik <code>SKILL.md</code> i zero lub więcej plików pomocniczych. Plik Markdown jest kontraktem agenta — wszystko inne w folderze jest po to, by pomóc agentowi go spełnić.</p>
       <h3>Anatomia folderu umiejętności</h3>
@@ -1575,7 +1575,7 @@ i18n:
       <li>przekazać do niego wywołanie umiejętności</li>
       <li>zebrać wyjście z powrotem</li>
       </ul>
-      <p>Dziś dostarczamy adaptery dla 12 agentów: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. Daemon automatycznie wykrywa, które są obecne, i oferuje je jako listę rozwijaną przy pierwszym uruchomieniu — niczego nie konfigurujesz, po prostu widzisz agentów, których już masz.</p>
+      <p>Dziś dostarczamy adaptery dla 25 lokalnych runtime CLI, w tym Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro i Qwen. Daemon automatycznie wykrywa, które są obecne, i oferuje je jako listę rozwijaną przy pierwszym uruchomieniu — niczego nie konfigurujesz, po prostu widzisz agentów, których już masz.</p>
 
 
 
@@ -1606,7 +1606,7 @@ i18n:
 
 
       <table><thead><tr><th>Prymityw</th><th>Mieszka w</th><th>Plik</th><th>Źródło prawdy</th></tr></thead><tbody><tr><td>Umiejętność</td><td><code>skills/</code></td><td><code>SKILL.md</code></td><td>plik na dysku</td></tr><tr><td>System</td><td><code>design-systems/</code></td><td><code>DESIGN.md</code></td><td>plik na dysku</td></tr><tr><td>Adapter</td><td><code>adapters/</code></td><td>jeden plik <code>.ts</code></td><td>wywołanie <code>register()</code></td></tr></tbody></table>
-      <p>Jeśli chcesz dodać nowy adapter, plik to mniej więcej 80 linii TypeScript i jedno wywołanie <code>register()</code>. Żadnego SDK do nauki, żadnego pozwolenia do uzyskania, żadnego centralnego rejestru, do którego trzeba publikować. Ten sam agent, któremu już ufasz na swoim laptopie, staje się silnikiem — Open Design nigdy go nie zastępuje. (Tekst towarzyszący <a href="/blog/byok-design-workflow-claude-codex-qwen/">Workflow projektowy BYOK</a> omawia kierowanie adaptera na własny klucz.)</p>
+      <p>Jeśli chcesz dodać nowy adapter, plik to mniej więcej 80 linii TypeScript i jedno wywołanie <code>register()</code>. Żadnego SDK do nauki, żadnego pozwolenia do uzyskania, żadnego centralnego rejestru, do którego trzeba publikować. Ten sam agent, któremu już ufasz na swoim laptopie, staje się silnikiem — OpenDesign nigdy go nie zastępuje. (Tekst towarzyszący <a href="/blog/byok-design-workflow-claude-codex-qwen/">Workflow projektowy BYOK</a> omawia kierowanie adaptera na własny klucz.)</p>
       <h2>Daemon: pętla, która wszystko łączy</h2>
       <p>Daemon to jedyny działający proces w systemie. To mały proces Node, który uruchamiasz poleceniem <code>pnpm tools-dev</code>, i robi cztery rzeczy po kolei:</p>
       <ol>
@@ -1628,27 +1628,27 @@ i18n:
       </ol>
       <p>Prześledź to wstecz przez prymitywy i całość jest czytelna: krok 3 wybrał <strong>umiejętność</strong>, krok 5 zablokował <strong>system</strong>, agent za nim przyszedł przez <strong>adapter</strong>, a <strong>daemon</strong> przeprowadził czterostopniową pętlę. Wyjście jest prawdziwe. Pliki są Twoje. Możesz je edytować w dowolnym edytorze, przekazać projektantowi albo zwrócić do innej umiejętności.</p>
       <h2>Dlaczego pliki, a nie baza danych</h2>
-      <p>Każdy prymityw — umiejętności, systemy, adaptery — to folder plików tekstowych. Nie ma centralnej bazy danych. Nie ma „konta Open Design”. Nie ma hostowanej usługi, która musi działać, by Twoja praca dalej działała.</p>
+      <p>Każdy prymityw — umiejętności, systemy, adaptery — to folder plików tekstowych. Nie ma centralnej bazy danych. Nie ma „konta OpenDesign”. Nie ma hostowanej usługi, która musi działać, by Twoja praca dalej działała.</p>
       <p>To celowy kompromis. Rezygnujemy z możliwości robienia sprytnej analityki między użytkownikami, pamięci między projektami czy hostowanej współpracy. W zamian dostajemy: przenośność, długowieczność, audytowalność oraz możliwość sforkowania całej biblioteki przez kogokolwiek i wypuszczenia własnego wariantu. <code>SKILL.md</code> napisany dzisiaj czyta się identycznie dla agenta za dwa lata i dla człowieka bez żadnego oprzyrządowania — czego nie można powiedzieć o wtyczce przypiętej do zeszłorocznego API.</p>
       <p>Jeśli oglądałeś, jak całe pokolenie narzędzi projektowych umiera, zabierając ze sobą Twoje pliki, zrozumiesz, dlaczego ten kompromis jest tego wart.</p>
       <h2>Powiązane lektury</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Dlaczego zbudowaliśmy Open Design jako warstwę umiejętności, a nie produkt</a> — zakład stojący za czterema prymitywami</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Dlaczego zbudowaliśmy OpenDesign jako warstwę umiejętności, a nie produkt</a> — zakład stojący za czterema prymitywami</li>
       <li><a href="/blog/byok-design-workflow-claude-codex-qwen/">Workflow projektowy BYOK: uruchom Claude, Codex lub Qwen na własnym kluczu</a> — jak adaptery łączą się z agentem, za którego już płacisz</li>
       <li><a href="/blog/layout-layer-canvas-used-to-hide/">Warstwa układu, którą płótno kiedyś ukrywało</a> — dlaczego reguły postawy w DESIGN.md biją przeciąganie pudełek po płótnie</li>
       </ul>
   id:
-    title: "31 skill, 72 sistem: cara kerja pustaka Open Design"
-    summary: "Telusuri empat primitif yang membuat Open Design dapat dikomposisi: skill, sistem, adapter, dan daemon. Dengan contoh konkret bagaimana sebuah file Markdown menjadi deliverable yang pixel-perfect."
+    title: "31 skill, 72 sistem: cara kerja pustaka OpenDesign"
+    summary: "Telusuri empat primitif yang membuat OpenDesign dapat dikomposisi: skill, sistem, adapter, dan daemon. Dengan contoh konkret bagaimana sebuah file Markdown menjadi deliverable yang pixel-perfect."
     bodyHtml: |
-      <p>Secara mekanis, Open Design adalah empat primitif yang ditumpuk satu di atas yang lain:</p>
+      <p>Secara mekanis, OpenDesign adalah empat primitif yang ditumpuk satu di atas yang lain:</p>
       <ol>
       <li><strong>Skill</strong> — apa yang harus dilakukan agent</li>
       <li><strong>Sistem</strong> — seperti apa output-nya seharusnya</li>
       <li><strong>Adapter</strong> — agent mana yang melakukan pekerjaan</li>
       <li><strong>Daemon</strong> — loop yang merangkai semuanya</li>
       </ol>
-      <p>Setiap primitif adalah sebuah folder berisi file. Tidak satu pun dari mereka memerlukan basis data, runtime plugin, atau layanan berbasis hosting. Itulah keseluruhan pustakanya — tidak ada konsep kelima yang bersembunyi di balik dinding login. Tulisan ini menelusuri masing-masing secara bergiliran dan menunjukkan apa yang terjadi ketika Anda mengarahkan agent Anda ke sebuah brief nyata. Jika Anda ingin argumen tentang <em>mengapa</em> kami membentuknya seperti ini sebelum <em>bagaimana</em>-nya, mulailah dengan <a href="/blog/why-we-built-open-design-as-a-skill-layer/">mengapa kami membangun Open Design sebagai lapisan skill, bukan sebagai produk</a>.</p>
+      <p>Setiap primitif adalah sebuah folder berisi file. Tidak satu pun dari mereka memerlukan basis data, runtime plugin, atau layanan berbasis hosting. Itulah keseluruhan pustakanya — tidak ada konsep kelima yang bersembunyi di balik dinding login. Tulisan ini menelusuri masing-masing secara bergiliran dan menunjukkan apa yang terjadi ketika Anda mengarahkan agent Anda ke sebuah brief nyata. Jika Anda ingin argumen tentang <em>mengapa</em> kami membentuknya seperti ini sebelum <em>bagaimana</em>-nya, mulailah dengan <a href="/blog/why-we-built-open-design-as-a-skill-layer/">mengapa kami membangun OpenDesign sebagai lapisan skill, bukan sebagai produk</a>.</p>
       <h2>Skill: unit kapabilitas</h2>
       <p>Sebuah skill adalah folder yang berisi satu <code>SKILL.md</code> dan nol atau lebih file pendukung. File Markdown adalah kontrak agent — segala hal lain di dalam folder ada untuk membantu agent memenuhinya.</p>
       <h3>Anatomi sebuah folder skill</h3>
@@ -1714,7 +1714,7 @@ i18n:
       <li>menyalurkan invokasi skill ke dalamnya</li>
       <li>mengumpulkan kembali output-nya</li>
       </ul>
-      <p>Saat ini kami mengirimkan adapter untuk 12 agent: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. Daemon mendeteksi secara otomatis mana yang ada dan menawarkannya sebagai dropdown saat boot pertama — Anda tidak mengonfigurasi apa pun, Anda hanya melihat agent yang sudah Anda miliki.</p>
+      <p>Saat ini kami mengirimkan adapter untuk 25 runtime CLI lokal, termasuk Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, dan Qwen. Daemon mendeteksi secara otomatis mana yang ada dan menawarkannya sebagai dropdown saat boot pertama — Anda tidak mengonfigurasi apa pun, Anda hanya melihat agent yang sudah Anda miliki.</p>
 
 
 
@@ -1745,7 +1745,7 @@ i18n:
 
 
       <table><thead><tr><th>Primitif</th><th>Berada di</th><th>File</th><th>Sumber kebenaran</th></tr></thead><tbody><tr><td>Skill</td><td><code>skills/</code></td><td><code>SKILL.md</code></td><td>file di disk</td></tr><tr><td>Sistem</td><td><code>design-systems/</code></td><td><code>DESIGN.md</code></td><td>file di disk</td></tr><tr><td>Adapter</td><td><code>adapters/</code></td><td>satu file <code>.ts</code></td><td>sebuah panggilan <code>register()</code></td></tr></tbody></table>
-      <p>Jika Anda ingin menambahkan adapter baru, file-nya kira-kira 80 baris TypeScript dan satu panggilan <code>register()</code>. Tidak ada SDK yang harus dipelajari, tidak ada izin yang harus diminta, tidak ada registri pusat untuk dipublikasikan. Agent yang sama yang sudah Anda percayai di laptop Anda menjadi mesinnya — Open Design tidak pernah menggantikannya. (Tulisan pendamping <a href="/blog/byok-design-workflow-claude-codex-qwen/">alur kerja desain BYOK</a> menelusuri cara mengarahkan sebuah adapter ke key Anda sendiri.)</p>
+      <p>Jika Anda ingin menambahkan adapter baru, file-nya kira-kira 80 baris TypeScript dan satu panggilan <code>register()</code>. Tidak ada SDK yang harus dipelajari, tidak ada izin yang harus diminta, tidak ada registri pusat untuk dipublikasikan. Agent yang sama yang sudah Anda percayai di laptop Anda menjadi mesinnya — OpenDesign tidak pernah menggantikannya. (Tulisan pendamping <a href="/blog/byok-design-workflow-claude-codex-qwen/">alur kerja desain BYOK</a> menelusuri cara mengarahkan sebuah adapter ke key Anda sendiri.)</p>
       <h2>Daemon: loop yang mengikat semuanya</h2>
       <p>Daemon adalah satu-satunya proses yang berjalan dalam sistem. Ia adalah proses Node kecil yang Anda mulai dengan <code>pnpm tools-dev</code>, dan ia melakukan empat hal secara berurutan:</p>
       <ol>
@@ -1767,27 +1767,27 @@ i18n:
       </ol>
       <p>Telusuri kembali melalui primitif-primitifnya dan keseluruhannya menjadi terbaca: langkah 3 memilih sebuah <strong>skill</strong>, langkah 5 mengunci sebuah <strong>sistem</strong>, agent di baliknya datang melalui sebuah <strong>adapter</strong>, dan <strong>daemon</strong> menjalankan loop empat langkah. Output-nya nyata. File-nya milik Anda. Anda dapat mengeditnya di editor mana pun, menyerahkannya ke seorang desainer, atau memasukkannya kembali ke skill lain.</p>
       <h2>Mengapa file, bukan basis data</h2>
-      <p>Setiap primitif — skill, sistem, adapter — adalah folder berisi file teks. Tidak ada basis data pusat. Tidak ada “akun Open Design.” Tidak ada layanan berbasis hosting yang harus terus berjalan agar pekerjaan Anda terus berjalan.</p>
+      <p>Setiap primitif — skill, sistem, adapter — adalah folder berisi file teks. Tidak ada basis data pusat. Tidak ada “akun OpenDesign.” Tidak ada layanan berbasis hosting yang harus terus berjalan agar pekerjaan Anda terus berjalan.</p>
       <p>Ini adalah pertukaran yang disengaja. Kami melepaskan kemampuan untuk melakukan analitik lintas-pengguna yang cerdas, memori lintas-proyek, atau kolaborasi berbasis hosting. Sebagai gantinya kami mendapatkan: portabilitas, umur panjang, keterauditan, dan kemampuan bagi siapa pun untuk mem-fork seluruh pustaka dan mengirim varian mereka sendiri. Sebuah <code>SKILL.md</code> yang ditulis hari ini terbaca identik oleh sebuah agent dua tahun dari sekarang dan oleh seorang manusia yang sama sekali tanpa tooling — hal yang sama tidak bisa dikatakan tentang sebuah plugin yang dipatok ke API tahun lalu.</p>
       <p>Jika Anda pernah menyaksikan satu generasi tool desain mati membawa serta file Anda, Anda akan mengerti mengapa pertukaran ini layak.</p>
       <h2>Bacaan terkait</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Mengapa kami membangun Open Design sebagai lapisan skill, bukan sebagai produk</a> — taruhan di balik empat primitif</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Mengapa kami membangun OpenDesign sebagai lapisan skill, bukan sebagai produk</a> — taruhan di balik empat primitif</li>
       <li><a href="/blog/byok-design-workflow-claude-codex-qwen/">Alur kerja desain BYOK: jalankan Claude, Codex, atau Qwen dengan key Anda sendiri</a> — cara adapter terhubung ke agent yang sudah Anda bayar</li>
       <li><a href="/blog/layout-layer-canvas-used-to-hide/">Lapisan tata letak yang dulu disembunyikan oleh kanvas</a> — mengapa aturan postur dalam sebuah DESIGN.md mengalahkan menyeret kotak di atas kanvas</li>
       </ul>
   nl:
-    title: "31 skills, 72 systemen: hoe de Open Design-bibliotheek werkt"
-    summary: "Een rondleiding langs de vier primitieven die Open Design samenstelbaar maken: skills, systemen, adapters en de daemon. Met concrete voorbeelden van hoe een Markdown-bestand een pixel-perfect eindproduct wordt."
+    title: "31 skills, 72 systemen: hoe de OpenDesign-bibliotheek werkt"
+    summary: "Een rondleiding langs de vier primitieven die OpenDesign samenstelbaar maken: skills, systemen, adapters en de daemon. Met concrete voorbeelden van hoe een Markdown-bestand een pixel-perfect eindproduct wordt."
     bodyHtml: |
-      <p>Open Design is, mechanisch gezien, vier primitieven die op elkaar zijn gestapeld:</p>
+      <p>OpenDesign is, mechanisch gezien, vier primitieven die op elkaar zijn gestapeld:</p>
       <ol>
       <li><strong>Skills</strong> — wat de agent zou moeten doen</li>
       <li><strong>Systemen</strong> — hoe de output eruit zou moeten zien</li>
       <li><strong>Adapters</strong> — welke agent het werk doet</li>
       <li><strong>De daemon</strong> — de lus die ze met elkaar verbindt</li>
       </ol>
-      <p>Elk primitief is een map met bestanden. Geen ervan vereist een database, een plugin-runtime of een gehoste service. Dat is de hele bibliotheek — er is geen vijfde concept dat zich achter een inlogmuur verbergt. Dit bericht loopt elk op zijn beurt door en laat zien wat er gebeurt als je je agent op een echte briefing richt. Als je het argument wilt voor <em>waarom</em> we het op deze manier hebben vormgegeven vóór het <em>hoe</em>, begin dan met <a href="/blog/why-we-built-open-design-as-a-skill-layer/">waarom we Open Design als een skill-laag bouwden, niet als een product</a>.</p>
+      <p>Elk primitief is een map met bestanden. Geen ervan vereist een database, een plugin-runtime of een gehoste service. Dat is de hele bibliotheek — er is geen vijfde concept dat zich achter een inlogmuur verbergt. Dit bericht loopt elk op zijn beurt door en laat zien wat er gebeurt als je je agent op een echte briefing richt. Als je het argument wilt voor <em>waarom</em> we het op deze manier hebben vormgegeven vóór het <em>hoe</em>, begin dan met <a href="/blog/why-we-built-open-design-as-a-skill-layer/">waarom we OpenDesign als een skill-laag bouwden, niet als een product</a>.</p>
       <h2>Skills: de eenheid van capaciteit</h2>
       <p>Een skill is een map die één <code>SKILL.md</code> bevat en nul of meer ondersteunende bestanden. Het Markdown-bestand is het contract van de agent — al het andere in de map is er om de agent te helpen het te halen.</p>
       <h3>Anatomie van een skill-map</h3>
@@ -1853,7 +1853,7 @@ i18n:
       <li>een skill-aanroep erin doorgeeft</li>
       <li>de output weer verzamelt</li>
       </ul>
-      <p>We leveren vandaag adapters voor 12 agents: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. De daemon detecteert automatisch welke aanwezig zijn en biedt ze aan als een dropdown bij de eerste start — je configureert niets, je ziet gewoon de agents die je al hebt.</p>
+      <p>We leveren vandaag adapters voor 25 lokale CLI-runtimes, waaronder Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro en Qwen. De daemon detecteert automatisch welke aanwezig zijn en biedt ze aan als een dropdown bij de eerste start — je configureert niets, je ziet gewoon de agents die je al hebt.</p>
 
 
 
@@ -1883,7 +1883,7 @@ i18n:
 
 
       <table><thead><tr><th>Primitief</th><th>Woont in</th><th>Bestand</th><th>Bron van waarheid</th></tr></thead><tbody><tr><td>Skill</td><td><code>skills/</code></td><td><code>SKILL.md</code></td><td>het bestand op schijf</td></tr><tr><td>Systeem</td><td><code>design-systems/</code></td><td><code>DESIGN.md</code></td><td>het bestand op schijf</td></tr><tr><td>Adapter</td><td><code>adapters/</code></td><td>één <code>.ts</code>-bestand</td><td>een <code>register()</code>-aanroep</td></tr></tbody></table>
-      <p>Als je een nieuwe adapter wilt toevoegen, is het bestand ongeveer 80 regels TypeScript en één <code>register()</code>-aanroep. Geen SDK om te leren, geen toestemming om aan te vragen, geen centraal register om naar te publiceren. Dezelfde agent die je al vertrouwt op je laptop wordt de motor — Open Design vervangt hem nooit. (Het bijbehorende stuk <a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK-ontwerpworkflow</a> behandelt het richten van een adapter op je eigen sleutel.)</p>
+      <p>Als je een nieuwe adapter wilt toevoegen, is het bestand ongeveer 80 regels TypeScript en één <code>register()</code>-aanroep. Geen SDK om te leren, geen toestemming om aan te vragen, geen centraal register om naar te publiceren. Dezelfde agent die je al vertrouwt op je laptop wordt de motor — OpenDesign vervangt hem nooit. (Het bijbehorende stuk <a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK-ontwerpworkflow</a> behandelt het richten van een adapter op je eigen sleutel.)</p>
       <h2>De daemon: de lus die het samenbindt</h2>
       <p>De daemon is het enige draaiende proces in het systeem. Het is een klein Node-proces dat je start met <code>pnpm tools-dev</code>, en het doet vier dingen in volgorde:</p>
       <ol>
@@ -1905,27 +1905,27 @@ i18n:
       </ol>
       <p>Volg het terug door de primitieven en het geheel is leesbaar: stap 3 koos een <strong>skill</strong>, stap 5 legde een <strong>systeem</strong> vast, de agent erachter kwam via een <strong>adapter</strong> binnen, en de <strong>daemon</strong> draaide de lus van vier stappen. De output is echt. De bestanden zijn van jou. Je kunt ze bewerken in elke editor, ze overhandigen aan een ontwerper, of ze terugvoeren in een andere skill.</p>
       <h2>Waarom bestanden, geen database</h2>
-      <p>Elk primitief — skills, systemen, adapters — is een map met tekstbestanden. Er is geen centrale database. Er is geen “Open Design-account.” Er is geen gehoste service die moet blijven werken opdat jouw werk blijft werken.</p>
+      <p>Elk primitief — skills, systemen, adapters — is een map met tekstbestanden. Er is geen centrale database. Er is geen “OpenDesign-account.” Er is geen gehoste service die moet blijven werken opdat jouw werk blijft werken.</p>
       <p>Dit is een doelbewuste afweging. We geven het vermogen op om slimme cross-user-analytics, cross-project-geheugen of gehoste samenwerking te doen. We krijgen terug: draagbaarheid, levensduur, auditeerbaarheid, en het vermogen voor iedereen om de hele bibliotheek te forken en hun eigen variant te leveren. Een <code>SKILL.md</code> die vandaag is geschreven, leest identiek voor een agent over twee jaar en voor een mens zonder enige tooling — hetzelfde kan niet gezegd worden van een plugin die is vastgepind aan de API van vorig jaar.</p>
       <p>Als je een generatie ontwerptools hebt zien sterven en je bestanden hebt zien meenemen, dan begrijp je waarom deze afweging het waard is.</p>
       <h2>Gerelateerde lectuur</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Waarom we Open Design als een skill-laag bouwden, niet als een product</a> — de gok achter de vier primitieven</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Waarom we OpenDesign als een skill-laag bouwden, niet als een product</a> — de gok achter de vier primitieven</li>
       <li><a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK-ontwerpworkflow: draai Claude, Codex of Qwen op je eigen sleutel</a> — hoe adapters verbinden met de agent waar je al voor betaalt</li>
       <li><a href="/blog/layout-layer-canvas-used-to-hide/">De lay-outlaag die het canvas vroeger verborg</a> — waarom houdingsregels in een DESIGN.md beter zijn dan vakjes slepen op een canvas</li>
       </ul>
   ar:
-    title: "31 مهارة، 72 نظامًا: كيف تعمل مكتبة Open Design"
-    summary: "جولة عبر العناصر الأساسية الأربعة التي تجعل Open Design قابلًا للتركيب: المهارات، والأنظمة، والمُحوّلات، والـ daemon. مع أمثلة ملموسة عن كيف يتحوّل ملف Markdown إلى مُنتَج تسليمي مثالي على مستوى البكسل."
+    title: "31 مهارة، 72 نظامًا: كيف تعمل مكتبة OpenDesign"
+    summary: "جولة عبر العناصر الأساسية الأربعة التي تجعل OpenDesign قابلًا للتركيب: المهارات، والأنظمة، والمُحوّلات، والـ daemon. مع أمثلة ملموسة عن كيف يتحوّل ملف Markdown إلى مُنتَج تسليمي مثالي على مستوى البكسل."
     bodyHtml: |
-      <p>Open Design، من الناحية الميكانيكية، هو أربعة عناصر أساسية مُكدّسة فوق بعضها بعضًا:</p>
+      <p>OpenDesign، من الناحية الميكانيكية، هو أربعة عناصر أساسية مُكدّسة فوق بعضها بعضًا:</p>
       <ol>
       <li><strong>المهارات</strong> — ما الذي ينبغي أن يفعله العميل</li>
       <li><strong>الأنظمة</strong> — كيف ينبغي أن يبدو المُخرَج</li>
       <li><strong>المُحوّلات</strong> — أي عميل يقوم بالعمل</li>
       <li><strong>الـ daemon</strong> — الحلقة التي تربطها معًا</li>
       </ol>
-      <p>كل عنصر أساسي هو مجلّد من الملفات. ولا يتطلّب أيٌّ منها قاعدة بيانات، أو بيئة تشغيل إضافات، أو خدمة مُستضافة. هذه هي المكتبة بأكملها — لا يوجد مفهوم خامس مختبئ خلف جدار تسجيل دخول. تتناول هذه المقالة كل عنصر بدوره وتُظهر ما يحدث عندما توجّه عميلك إلى ملخّص حقيقي. وإن أردت الحجة حول <em>لماذا</em> صمّمناه على هذا النحو قبل <em>الكيفية</em>، فابدأ بمقالة <a href="/blog/why-we-built-open-design-as-a-skill-layer/">لماذا بنينا Open Design كطبقة مهارات لا كمنتج</a>.</p>
+      <p>كل عنصر أساسي هو مجلّد من الملفات. ولا يتطلّب أيٌّ منها قاعدة بيانات، أو بيئة تشغيل إضافات، أو خدمة مُستضافة. هذه هي المكتبة بأكملها — لا يوجد مفهوم خامس مختبئ خلف جدار تسجيل دخول. تتناول هذه المقالة كل عنصر بدوره وتُظهر ما يحدث عندما توجّه عميلك إلى ملخّص حقيقي. وإن أردت الحجة حول <em>لماذا</em> صمّمناه على هذا النحو قبل <em>الكيفية</em>، فابدأ بمقالة <a href="/blog/why-we-built-open-design-as-a-skill-layer/">لماذا بنينا OpenDesign كطبقة مهارات لا كمنتج</a>.</p>
       <h2>المهارات: وحدة القدرة</h2>
       <p>المهارة هي مجلّد يحتوي على ملف <code>SKILL.md</code> واحد وصفر أو أكثر من الملفات المساعدة. ملف Markdown هو عقد العميل — وكل ما عداه في المجلّد موجود لمساعدة العميل على الوفاء به.</p>
       <h3>تشريح مجلّد المهارة</h3>
@@ -1991,9 +1991,9 @@ i18n:
       <li>يُمرّر استدعاء مهارة إليه</li>
       <li>يجمع المُخرَج عائدًا</li>
       </ul>
-      <p>نشحن اليوم مُحوّلات لـ 12 عميلًا: Claude، وCodex، وGemini، وCursor، وCopilot، وOpenCode، وDevin، وHermes، وPi، وKimi، وKiro، وQwen. تكتشف الـ daemon تلقائيًا أيّها موجود وتعرضها كقائمة منسدلة عند الإقلاع الأول — لا تُعدّ أي شيء، بل ترى فقط العملاء الذين لديك بالفعل.</p>
+      <p>نشحن اليوم مُحوّلات لـ 25 بيئة CLI محلية، منها Claude وCodex وCursor وCopilot وOpenCode وDevin وHermes وPi وKimi وKiro وQwen. تكتشف الـ daemon تلقائيًا أيّها موجود وتعرضها كقائمة منسدلة عند الإقلاع الأول — لا تُعدّ أي شيء، بل ترى فقط العملاء الذين لديك بالفعل.</p>
       <table><thead><tr><th>العنصر الأساسي</th><th>يقيم في</th><th>الملف</th><th>مصدر الحقيقة</th></tr></thead><tbody><tr><td>المهارة</td><td><code>skills/</code></td><td><code>SKILL.md</code></td><td>الملف على القرص</td></tr><tr><td>النظام</td><td><code>design-systems/</code></td><td><code>DESIGN.md</code></td><td>الملف على القرص</td></tr><tr><td>المُحوّل</td><td><code>adapters/</code></td><td>ملف <code>.ts</code> واحد</td><td>استدعاء <code>register()</code></td></tr></tbody></table>
-      <p>إذا أردت إضافة مُحوّل جديد، فالملف نحو 80 سطرًا من TypeScript واستدعاء <code>register()</code> واحد. لا SDK لتتعلّمه، ولا إذن لتطلبه، ولا سجلّ مركزي لتنشر إليه. العميل نفسه الذي تثق به فعلًا على حاسوبك المحمول يصبح المحرّك — Open Design لا يستبدله أبدًا. (تتناول القطعة المُرافقة <a href="/blog/byok-design-workflow-claude-codex-qwen/">سير عمل التصميم بنظام BYOK</a> توجيه مُحوّل إلى مفتاحك الخاص.)</p>
+      <p>إذا أردت إضافة مُحوّل جديد، فالملف نحو 80 سطرًا من TypeScript واستدعاء <code>register()</code> واحد. لا SDK لتتعلّمه، ولا إذن لتطلبه، ولا سجلّ مركزي لتنشر إليه. العميل نفسه الذي تثق به فعلًا على حاسوبك المحمول يصبح المحرّك — OpenDesign لا يستبدله أبدًا. (تتناول القطعة المُرافقة <a href="/blog/byok-design-workflow-claude-codex-qwen/">سير عمل التصميم بنظام BYOK</a> توجيه مُحوّل إلى مفتاحك الخاص.)</p>
       <h2>الـ daemon: الحلقة التي تربطها معًا</h2>
       <p>الـ daemon هي العملية الوحيدة قيد التشغيل في النظام. إنها عملية Node صغيرة تبدؤها بـ <code>pnpm tools-dev</code>، وتفعل أربعة أشياء بالتسلسل:</p>
       <ol>
@@ -2015,27 +2015,27 @@ i18n:
       </ol>
       <p>تتبّع الأمر رجوعًا عبر العناصر الأساسية فيتّضح كله: اختارت الخطوة 3 <strong>مهارة</strong>، وثبّتت الخطوة 5 <strong>نظامًا</strong>، والعميل خلفها جاء عبر <strong>مُحوّل</strong>، و<strong>الـ daemon</strong> شغّلت الحلقة المؤلّفة من أربع خطوات. المُخرَج حقيقي. الملفات لك. يمكنك تحريرها في أي محرّر، أو تسليمها لمصمّم، أو تغذيتها عائدةً إلى مهارة أخرى.</p>
       <h2>لماذا ملفات، لا قاعدة بيانات</h2>
-      <p>كل عنصر أساسي — المهارات، والأنظمة، والمُحوّلات — هو مجلّد من ملفات نصّية. لا توجد قاعدة بيانات مركزية. لا يوجد «حساب Open Design». لا توجد خدمة مُستضافة يجب أن تظلّ تعمل كي يظلّ عملك يعمل.</p>
+      <p>كل عنصر أساسي — المهارات، والأنظمة، والمُحوّلات — هو مجلّد من ملفات نصّية. لا توجد قاعدة بيانات مركزية. لا يوجد «حساب OpenDesign». لا توجد خدمة مُستضافة يجب أن تظلّ تعمل كي يظلّ عملك يعمل.</p>
       <p>هذه مقايضة مقصودة. نتخلّى عن القدرة على إجراء تحليلات ذكية عبر المستخدمين، أو ذاكرة عبر المشاريع، أو تعاون مُستضاف. ونستعيد بالمقابل: قابلية النقل، وطول العمر، وقابلية التدقيق، وقدرة أي شخص على تفريع المكتبة بأكملها وشحن نسخته الخاصة. ملف <code>SKILL.md</code> مكتوب اليوم يُقرأ على نحو مطابق لعميل بعد عامين من الآن ولإنسان بلا أي أدوات على الإطلاق — ولا يمكن قول الشيء نفسه عن إضافة مُثبَّتة على واجهة API العام الماضي.</p>
       <p>إذا كنت قد شاهدت جيلًا من أدوات التصميم يموت آخذًا ملفاتك معه، فستفهم لماذا تستحق هذه المقايضة العناء.</p>
       <h2>قراءات ذات صلة</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">لماذا بنينا Open Design كطبقة مهارات لا كمنتج</a> — الرهان وراء العناصر الأساسية الأربعة</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">لماذا بنينا OpenDesign كطبقة مهارات لا كمنتج</a> — الرهان وراء العناصر الأساسية الأربعة</li>
       <li><a href="/blog/byok-design-workflow-claude-codex-qwen/">سير عمل التصميم بنظام BYOK: شغّل Claude أو Codex أو Qwen على مفتاحك الخاص</a> — كيف تتّصل المُحوّلات بالعميل الذي تدفع مقابله بالفعل</li>
       <li><a href="/blog/layout-layer-canvas-used-to-hide/">طبقة التخطيط التي اعتاد الكانفاس إخفاءها</a> — لماذا تتفوّق قواعد الوضعية في DESIGN.md على سحب الصناديق على الكانفاس</li>
       </ul>
   tr:
-    title: "31 beceri, 72 sistem: Open Design kütüphanesi nasıl çalışır"
-    summary: "Open Design'ı birleştirilebilir kılan dört ilkel öğenin incelemesi: beceriler, sistemler, adaptörler ve daemon. Bir Markdown dosyasının nasıl piksel mükemmelliğinde bir teslimata dönüştüğüne dair somut örneklerle."
+    title: "31 beceri, 72 sistem: OpenDesign kütüphanesi nasıl çalışır"
+    summary: "OpenDesign'ı birleştirilebilir kılan dört ilkel öğenin incelemesi: beceriler, sistemler, adaptörler ve daemon. Bir Markdown dosyasının nasıl piksel mükemmelliğinde bir teslimata dönüştüğüne dair somut örneklerle."
     bodyHtml: |
-      <p>Open Design, mekanik olarak, birbirinin üzerine yığılmış dört ilkel öğedir:</p>
+      <p>OpenDesign, mekanik olarak, birbirinin üzerine yığılmış dört ilkel öğedir:</p>
       <ol>
       <li><strong>Beceriler</strong> — ajanın ne yapması gerektiği</li>
       <li><strong>Sistemler</strong> — çıktının nasıl görünmesi gerektiği</li>
       <li><strong>Adaptörler</strong> — işi hangi ajanın yaptığı</li>
       <li><strong>Daemon</strong> — bunları birbirine bağlayan döngü</li>
       </ol>
-      <p>Her ilkel öğe, bir dosya klasörüdür. Hiçbiri bir veritabanı, bir eklenti çalışma zamanı veya barındırılan bir hizmet gerektirmez. Tüm kütüphane budur — bir giriş duvarının ardında saklanan beşinci bir kavram yoktur. Bu yazı, her birini sırayla inceliyor ve ajanınızı gerçek bir brief'e yönelttiğinizde neler olduğunu gösteriyor. <em>Nasıl</em>'dan önce bunu <em>neden</em> bu şekilde biçimlendirdiğimizin argümanını isterseniz, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">Open Design'ı neden bir ürün değil, bir beceri katmanı olarak inşa ettik</a> yazısıyla başlayın.</p>
+      <p>Her ilkel öğe, bir dosya klasörüdür. Hiçbiri bir veritabanı, bir eklenti çalışma zamanı veya barındırılan bir hizmet gerektirmez. Tüm kütüphane budur — bir giriş duvarının ardında saklanan beşinci bir kavram yoktur. Bu yazı, her birini sırayla inceliyor ve ajanınızı gerçek bir brief'e yönelttiğinizde neler olduğunu gösteriyor. <em>Nasıl</em>'dan önce bunu <em>neden</em> bu şekilde biçimlendirdiğimizin argümanını isterseniz, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">OpenDesign'ı neden bir ürün değil, bir beceri katmanı olarak inşa ettik</a> yazısıyla başlayın.</p>
       <h2>Beceriler: yetenek birimi</h2>
       <p>Bir beceri, bir adet <code>SKILL.md</code> ve sıfır veya daha fazla destekleyici dosya içeren bir klasördür. Markdown dosyası ajanın sözleşmesidir — klasördeki diğer her şey, ajanın bu sözleşmeye ulaşmasına yardımcı olmak içindir.</p>
       <h3>Bir beceri klasörünün anatomisi</h3>
@@ -2101,7 +2101,7 @@ i18n:
       <li>bir beceri çağrısını içeri aktarmak</li>
       <li>çıktıyı geri toplamak</li>
       </ul>
-      <p>Bugün 12 ajan için adaptör sunuyoruz: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. Daemon, hangilerinin mevcut olduğunu otomatik olarak tespit eder ve ilk açılışta bunları bir açılır menü olarak sunar — hiçbir şey yapılandırmazsınız, sadece zaten sahip olduğunuz ajanları görürsünüz.</p>
+      <p>Bugün Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro ve Qwen dahil 25 yerel CLI runtime için adaptör sunuyoruz. Daemon, hangilerinin mevcut olduğunu otomatik olarak tespit eder ve ilk açılışta bunları bir açılır menü olarak sunar — hiçbir şey yapılandırmazsınız, sadece zaten sahip olduğunuz ajanları görürsünüz.</p>
 
 
 
@@ -2131,7 +2131,7 @@ i18n:
 
 
       <table><thead><tr><th>İlkel öğe</th><th>Şurada bulunur</th><th>Dosya</th><th>Gerçeğin kaynağı</th></tr></thead><tbody><tr><td>Beceri</td><td><code>skills/</code></td><td><code>SKILL.md</code></td><td>diskteki dosya</td></tr><tr><td>Sistem</td><td><code>design-systems/</code></td><td><code>DESIGN.md</code></td><td>diskteki dosya</td></tr><tr><td>Adaptör</td><td><code>adapters/</code></td><td>bir <code>.ts</code> dosyası</td><td>bir <code>register()</code> çağrısı</td></tr></tbody></table>
-      <p>Yeni bir adaptör eklemek isterseniz, dosya kabaca 80 satır TypeScript ve tek bir <code>register()</code> çağrısından ibarettir. Öğrenilecek bir SDK, istenecek bir izin, yayımlanacak merkezi bir kayıt defteri yoktur. Dizüstü bilgisayarınızda zaten güvendiğiniz aynı ajan motor olur — Open Design onu asla değiştirmez. (Tamamlayıcı yazı <a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK tasarım iş akışı</a>, bir adaptörü kendi anahtarınıza yöneltme konusunu inceler.)</p>
+      <p>Yeni bir adaptör eklemek isterseniz, dosya kabaca 80 satır TypeScript ve tek bir <code>register()</code> çağrısından ibarettir. Öğrenilecek bir SDK, istenecek bir izin, yayımlanacak merkezi bir kayıt defteri yoktur. Dizüstü bilgisayarınızda zaten güvendiğiniz aynı ajan motor olur — OpenDesign onu asla değiştirmez. (Tamamlayıcı yazı <a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK tasarım iş akışı</a>, bir adaptörü kendi anahtarınıza yöneltme konusunu inceler.)</p>
       <h2>Daemon: hepsini birbirine bağlayan döngü</h2>
       <p>Daemon, sistemdeki çalışan tek süreçtir. <code>pnpm tools-dev</code> ile başlattığınız küçük bir Node sürecidir ve sırayla dört şey yapar:</p>
       <ol>
@@ -2153,27 +2153,27 @@ i18n:
       </ol>
       <p>İlkel öğeler üzerinden geriye doğru izlediğinizde her şey okunaklı hale gelir: 3. adım bir <strong>beceri</strong> seçti, 5. adım bir <strong>sistem</strong> kilitledi, arkasındaki ajan bir <strong>adaptör</strong> aracılığıyla geldi ve <strong>daemon</strong> dört adımlı döngüyü çalıştırdı. Çıktı gerçektir. Dosyalar sizindir. Onları herhangi bir düzenleyicide düzenleyebilir, bir tasarımcıya verebilir veya başka bir beceriye geri besleyebilirsiniz.</p>
       <h2>Neden veritabanı değil de dosyalar</h2>
-      <p>Her ilkel öğe — beceriler, sistemler, adaptörler — bir metin dosyası klasörüdür. Merkezi bir veritabanı yoktur. Bir "Open Design hesabı" yoktur. Çalışmanızın çalışmaya devam etmesi için çalışmaya devam etmesi gereken barındırılan bir hizmet yoktur.</p>
+      <p>Her ilkel öğe — beceriler, sistemler, adaptörler — bir metin dosyası klasörüdür. Merkezi bir veritabanı yoktur. Bir "OpenDesign hesabı" yoktur. Çalışmanızın çalışmaya devam etmesi için çalışmaya devam etmesi gereken barındırılan bir hizmet yoktur.</p>
       <p>Bu kasıtlı bir ödünleşimdir. Kullanıcılar arası zekice analizler, projeler arası bellek veya barındırılan iş birliği yapma yeteneğinden vazgeçiyoruz. Karşılığında şunları kazanıyoruz: taşınabilirlik, kalıcılık, denetlenebilirlik ve herkesin tüm kütüphaneyi çatallayıp kendi varyantını gönderebilmesi. Bugün yazılan bir <code>SKILL.md</code>, iki yıl sonraki bir ajana ve hiçbir araca sahip olmayan bir insana da aynı şekilde okunur — geçen yılın API'sine sabitlenmiş bir eklenti için aynı şey söylenemez.</p>
       <p>Bir nesil tasarım aracının dosyalarınızı da yanlarında götürerek öldüğünü izlediyseniz, bu ödünleşimin neden buna değer olduğunu anlarsınız.</p>
       <h2>İlgili okumalar</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Open Design'ı neden bir ürün değil, bir beceri katmanı olarak inşa ettik</a> — dört ilkel öğenin arkasındaki bahis</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">OpenDesign'ı neden bir ürün değil, bir beceri katmanı olarak inşa ettik</a> — dört ilkel öğenin arkasındaki bahis</li>
       <li><a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK tasarım iş akışı: Claude, Codex veya Qwen'i kendi anahtarınızla çalıştırın</a> — adaptörlerin zaten ödeme yaptığınız ajana nasıl bağlandığı</li>
       <li><a href="/blog/layout-layer-canvas-used-to-hide/">Tuvalin gizlemeye alışık olduğu yerleşim katmanı</a> — bir DESIGN.md'deki duruş kurallarının bir tuvalde kutuları sürüklemeyi neden geride bıraktığı</li>
       </ul>
   uk:
-    title: "31 навичка, 72 системи: як працює бібліотека Open Design"
-    summary: "Огляд чотирьох примітивів, які роблять Open Design компонованим: навичок, систем, адаптерів і daemon. З конкретними прикладами того, як файл Markdown стає піксельно точним результатом."
+    title: "31 навичка, 72 системи: як працює бібліотека OpenDesign"
+    summary: "Огляд чотирьох примітивів, які роблять OpenDesign компонованим: навичок, систем, адаптерів і daemon. З конкретними прикладами того, як файл Markdown стає піксельно точним результатом."
     bodyHtml: |
-      <p>Механічно Open Design — це чотири примітиви, складені один на одного:</p>
+      <p>Механічно OpenDesign — це чотири примітиви, складені один на одного:</p>
       <ol>
       <li><strong>Навички</strong> — що агент має робити</li>
       <li><strong>Системи</strong> — як має виглядати результат</li>
       <li><strong>Адаптери</strong> — який агент виконує роботу</li>
       <li><strong>Daemon</strong> — цикл, що з’єднує їх разом</li>
       </ol>
-      <p>Кожен примітив — це тека з файлами. Жоден із них не потребує бази даних, середовища виконання плагінів чи хмарного сервісу. Це вся бібліотека — немає п’ятої концепції, що ховається за стіною входу. Цей допис послідовно розглядає кожен із них і показує, що відбувається, коли ви спрямовуєте свого агента на справжній бриф. Якщо вам потрібен аргумент щодо того, <em>чому</em> ми сформували це саме так, перш ніж дізнатися <em>як</em>, почніть із <a href="/blog/why-we-built-open-design-as-a-skill-layer/">чому ми побудували Open Design як рівень навичок, а не продукт</a>.</p>
+      <p>Кожен примітив — це тека з файлами. Жоден із них не потребує бази даних, середовища виконання плагінів чи хмарного сервісу. Це вся бібліотека — немає п’ятої концепції, що ховається за стіною входу. Цей допис послідовно розглядає кожен із них і показує, що відбувається, коли ви спрямовуєте свого агента на справжній бриф. Якщо вам потрібен аргумент щодо того, <em>чому</em> ми сформували це саме так, перш ніж дізнатися <em>як</em>, почніть із <a href="/blog/why-we-built-open-design-as-a-skill-layer/">чому ми побудували OpenDesign як рівень навичок, а не продукт</a>.</p>
       <h2>Навички: одиниця можливостей</h2>
       <p>Навичка — це тека, що містить один <code>SKILL.md</code> і нуль або більше допоміжних файлів. Файл Markdown — це контракт агента; усе інше в теці є там, щоб допомогти агенту його виконати.</p>
       <h3>Анатомія теки навички</h3>
@@ -2239,7 +2239,7 @@ i18n:
       <li>передавати в нього виклик навички</li>
       <li>збирати результат назад</li>
       </ul>
-      <p>Сьогодні ми постачаємо адаптери для 12 агентів: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. Daemon автоматично виявляє присутні й пропонує їх у випадному списку при першому завантаженні — ви нічого не налаштовуєте, ви просто бачите агентів, які у вас уже є.</p>
+      <p>Сьогодні ми постачаємо адаптери для 25 локальних CLI runtime, зокрема Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro та Qwen. Daemon автоматично виявляє присутні й пропонує їх у випадному списку при першому завантаженні — ви нічого не налаштовуєте, ви просто бачите агентів, які у вас уже є.</p>
 
 
 
@@ -2270,7 +2270,7 @@ i18n:
 
 
       <table><thead><tr><th>Примітив</th><th>Живе в</th><th>Файл</th><th>Джерело істини</th></tr></thead><tbody><tr><td>Навичка</td><td><code>skills/</code></td><td><code>SKILL.md</code></td><td>файл на диску</td></tr><tr><td>Система</td><td><code>design-systems/</code></td><td><code>DESIGN.md</code></td><td>файл на диску</td></tr><tr><td>Адаптер</td><td><code>adapters/</code></td><td>один файл <code>.ts</code></td><td>виклик <code>register()</code></td></tr></tbody></table>
-      <p>Якщо ви хочете додати новий адаптер, файл становить приблизно 80 рядків TypeScript і єдиний виклик <code>register()</code>. Жодного SDK для вивчення, жодного дозволу для запиту, жодного центрального реєстру для публікації. Той самий агент, якому ви вже довіряєте на своєму ноутбуці, стає рушієм — Open Design ніколи його не замінює. (Супутній матеріал <a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK-робочий процес дизайну</a> розглядає налаштування адаптера на ваш власний ключ.)</p>
+      <p>Якщо ви хочете додати новий адаптер, файл становить приблизно 80 рядків TypeScript і єдиний виклик <code>register()</code>. Жодного SDK для вивчення, жодного дозволу для запиту, жодного центрального реєстру для публікації. Той самий агент, якому ви вже довіряєте на своєму ноутбуці, стає рушієм — OpenDesign ніколи його не замінює. (Супутній матеріал <a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK-робочий процес дизайну</a> розглядає налаштування адаптера на ваш власний ключ.)</p>
       <h2>Daemon: цикл, що зв’язує все докупи</h2>
       <p>Daemon — єдиний запущений процес у системі. Це невеликий процес Node, який ви запускаєте за допомогою <code>pnpm tools-dev</code>, і він робить чотири речі по черзі:</p>
       <ol>
@@ -2292,25 +2292,25 @@ i18n:
       </ol>
       <p>Простежте це назад крізь примітиви — і все стає прозорим: крок 3 обрав <strong>навичку</strong>, крок 5 зафіксував <strong>систему</strong>, агент за нею прийшов через <strong>адаптер</strong>, а <strong>daemon</strong> запустив чотирикроковий цикл. Результат реальний. Файли — ваші. Ви можете редагувати їх у будь-якому редакторі, передати дизайнеру чи подати назад в іншу навичку.</p>
       <h2>Чому файли, а не база даних</h2>
-      <p>Кожен примітив — навички, системи, адаптери — це тека з текстовими файлами. Немає центральної бази даних. Немає «акаунта Open Design». Немає хмарного сервісу, який має продовжувати працювати, щоб ваша робота продовжувала працювати.</p>
+      <p>Кожен примітив — навички, системи, адаптери — це тека з текстовими файлами. Немає центральної бази даних. Немає «акаунта OpenDesign». Немає хмарного сервісу, який має продовжувати працювати, щоб ваша робота продовжувала працювати.</p>
       <p>Це навмисний компроміс. Ми відмовляємося від здатності робити хитру міжкористувацьку аналітику, міжпроєктну пам’ять чи хмарну співпрацю. Натомість отримуємо: портативність, довговічність, можливість аудиту та здатність будь-кого форкнути всю бібліотеку й випустити власний варіант. <code>SKILL.md</code>, написаний сьогодні, читається ідентично для агента через два роки й для людини взагалі без жодного інструментарію — чого не скажеш про плагін, прив’язаний до торішнього API.</p>
       <p>Якщо ви спостерігали, як ціле покоління дизайнерських інструментів вмирало, забираючи з собою ваші файли, ви зрозумієте, чому цей компроміс того вартий.</p>
       <h2>Пов’язане для читання</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Чому ми побудували Open Design як рівень навичок, а не продукт</a> — ставка за чотирма примітивами</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Чому ми побудували OpenDesign як рівень навичок, а не продукт</a> — ставка за чотирма примітивами</li>
       <li><a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK-робочий процес дизайну: запускайте Claude, Codex чи Qwen на власному ключі</a> — як адаптери з’єднуються з агентом, за якого ви вже платите</li>
       <li><a href="/blog/layout-layer-canvas-used-to-hide/">Рівень макета, який полотно колись приховувало</a> — чому правила постави в DESIGN.md перевершують перетягування блоків на полотні</li>
       </ul>
 ---
 
-Open Design is, mechanically, four primitives stacked on top of each other:
+OpenDesign is, mechanically, four primitives stacked on top of each other:
 
 1. **Skills** — what the agent should do
 2. **Systems** — what the output should look like
 3. **Adapters** — which agent does the work
 4. **The daemon** — the loop that wires them together
 
-Each primitive is a folder of files. None of them require a database, a plugin runtime, or a hosted service. That's the whole library — there is no fifth concept hiding behind a login wall. This post walks through each in turn and shows what happens when you point your agent at a real brief. If you want the argument for *why* we shaped it this way before the *how*, start with [why we built Open Design as a skill layer, not a product](/blog/why-we-built-open-design-as-a-skill-layer/).
+Each primitive is a folder of files. None of them require a database, a plugin runtime, or a hosted service. That's the whole library — there is no fifth concept hiding behind a login wall. This post walks through each in turn and shows what happens when you point your agent at a real brief. If you want the argument for *why* we shaped it this way before the *how*, start with [why we built OpenDesign as a skill layer, not a product](/blog/why-we-built-open-design-as-a-skill-layer/).
 
 ## Skills: the unit of capability
 
@@ -2404,7 +2404,7 @@ Skills and systems are inert text. Adapters are the small amount of code that co
 - pipe a skill invocation in
 - collect the output back
 
-We ship adapters for 12 agents today: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. The daemon auto-detects which ones are present and offers them as a dropdown on first boot — you don't configure anything, you just see the agents you already have.
+We ship adapters for 25 local CLI runtimes today, including Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen, and more. The daemon auto-detects which ones are present and offers them as a dropdown on first boot — you don't configure anything, you just see the agents you already have.
 
 | Primitive | Lives in | File | Source of truth |
 | --- | --- | --- | --- |
@@ -2412,7 +2412,7 @@ We ship adapters for 12 agents today: Claude, Codex, Gemini, Cursor, Copilot, Op
 | System | `design-systems/` | `DESIGN.md` | the file on disk |
 | Adapter | `adapters/` | one `.ts` file | a `register()` call |
 
-If you want to add a new adapter, the file is roughly 80 lines of TypeScript and a single `register()` call. No SDK to learn, no permission to request, no central registry to publish to. The same agent you already trust on your laptop becomes the engine — Open Design never replaces it. (The companion piece [BYOK design workflow](/blog/byok-design-workflow-claude-codex-qwen/) walks through pointing an adapter at your own key.)
+If you want to add a new adapter, the file is roughly 80 lines of TypeScript and a single `register()` call. No SDK to learn, no permission to request, no central registry to publish to. The same agent you already trust on your laptop becomes the engine — OpenDesign never replaces it. (The companion piece [BYOK design workflow](/blog/byok-design-workflow-claude-codex-qwen/) walks through pointing an adapter at your own key.)
 
 ## The daemon: the loop that ties it together
 
@@ -2440,7 +2440,7 @@ Trace it back through the primitives and the whole thing is legible: step 3 chos
 
 ## Why files, not a database
 
-Every primitive — skills, systems, adapters — is a folder of text files. There is no central database. There is no "Open Design account." There is no hosted service that has to keep working for your work to keep working.
+Every primitive — skills, systems, adapters — is a folder of text files. There is no central database. There is no "OpenDesign account." There is no hosted service that has to keep working for your work to keep working.
 
 This is a deliberate trade. We give up the ability to do clever cross-user analytics, cross-project memory, or hosted collaboration. We get back: portability, longevity, auditability, and the ability for anyone to fork the entire library and ship their own variant. A `SKILL.md` written today reads identically to an agent two years from now and to a human with no tooling at all — the same can't be said of a plugin pinned to last year's API.
 
@@ -2448,6 +2448,6 @@ If you've watched a generation of design tools die taking your files with them, 
 
 ## Related reading
 
-- [Why we built Open Design as a skill layer, not a product](/blog/why-we-built-open-design-as-a-skill-layer/) — the bet behind the four primitives
+- [Why we built OpenDesign as a skill layer, not a product](/blog/why-we-built-open-design-as-a-skill-layer/) — the bet behind the four primitives
 - [BYOK design workflow: run Claude, Codex, or Qwen on your own key](/blog/byok-design-workflow-claude-codex-qwen/) — how adapters connect to the agent you already pay for
 - [The layout layer the canvas used to hide](/blog/layout-layer-canvas-used-to-hide/) — why posture rules in a DESIGN.md beat dragging boxes on a canvas

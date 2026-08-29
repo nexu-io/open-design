@@ -2,6 +2,13 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
+import linuxPack from "@/linux.ts?raw";
+import macBuild from "@/mac/build.ts?raw";
+import macFs from "@/mac/fs.ts?raw";
+import macWorkspace from "@/mac/workspace.ts?raw";
+import winApp from "@/win/app.ts?raw";
+import winLifecycle from "@/win/lifecycle.ts?raw";
+
 function sectionBetween(content: string, start: string, end: string): string {
   const startIndex = content.indexOf(start);
   expect(startIndex).toBeGreaterThanOrEqual(0);
@@ -21,11 +28,24 @@ function countOccurrences(content: string, needle: string): number {
 }
 
 describe("release workflows", () => {
-  it("requires Vela CLI only for beta mac arm64 packaging", async () => {
-    const [beta, betaSelfHosted, preview, prerelease, stable, stablePrepare, buildMac, buildWin, prepareMac, prepareWin, publishPlatform, winLifecycle, desktopUpdater, macBuild, macFs, installUnsafeDmg, winApp, macWorkspace, linuxPack] = await Promise.all([
+  it("retains only the newest outer tools-pack cache for each release lane", async () => {
+    const workflows = await Promise.all([
       readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),
-      readFile(new URL("../../../.github/workflows/release-beta-s.yml", import.meta.url), "utf8"),
-      readFile(new URL("../../../.github/workflows/release-preview.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-prerelease.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-stable.yml", import.meta.url), "utf8"),
+    ]);
+
+    expect(workflows.map((workflow) => countOccurrences(workflow, "keep=1"))).toEqual([2, 2, 0]);
+    expect(workflows.map((workflow) => countOccurrences(workflow, "$keep = 1"))).toEqual([1, 1, 1]);
+    for (const workflow of workflows) {
+      expect(workflow).not.toContain("keep=3");
+      expect(workflow).not.toContain("$keep = 3");
+    }
+  });
+
+  it("requires Vela CLI for every beta desktop packaging target", async () => {
+    const [beta, prerelease, stable, stablePrepare, buildMac, buildWin, prepareMac, prepareWin, publishPlatform, desktopUpdater, installUnsafeDmg] = await Promise.all([
+      readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),
       readFile(new URL("../../../.github/workflows/release-prerelease.yml", import.meta.url), "utf8"),
       readFile(new URL("../../../.github/workflows/release-stable.yml", import.meta.url), "utf8"),
       readFile(new URL("../../../tools/release/src/metadata/prepare-stable.ts", import.meta.url), "utf8"),
@@ -34,14 +54,8 @@ describe("release workflows", () => {
       readFile(new URL("../../../tools/release/scripts/prepare-platform-assets.sh", import.meta.url), "utf8"),
       readFile(new URL("../../../tools/release/scripts/prepare-platform-assets.ps1", import.meta.url), "utf8"),
       readFile(new URL("../../../tools/release/src/storage/publish-platform.ts", import.meta.url), "utf8"),
-      readFile(new URL("../src/win/lifecycle.ts", import.meta.url), "utf8"),
-      readFile(new URL("../../../apps/desktop/src/main/updater.ts", import.meta.url), "utf8"),
-      readFile(new URL("../src/mac/build.ts", import.meta.url), "utf8"),
-      readFile(new URL("../src/mac/fs.ts", import.meta.url), "utf8"),
+      readFile(new URL("../../../apps/desktop/src/main/updater/payload.ts", import.meta.url), "utf8"),
       readFile(new URL("../../../scripts/install-unsafe-dmg.sh", import.meta.url), "utf8"),
-      readFile(new URL("../src/win/app.ts", import.meta.url), "utf8"),
-      readFile(new URL("../src/mac/workspace.ts", import.meta.url), "utf8"),
-      readFile(new URL("../src/linux.ts", import.meta.url), "utf8"),
     ]);
     const mac = sectionBetween(beta, "  build_mac_arm64:", "  build_mac_x64:");
     const macX64 = sectionBetween(beta, "  build_mac_x64:", "  build_win_x64:");
@@ -49,11 +63,6 @@ describe("release workflows", () => {
     const linux = sectionBetween(beta, "  build_linux_x64:", "  publish:");
     const betaMetadata = sectionBetween(beta, "  metadata:", "  build_mac_arm64:");
     const betaPublish = sectionAfter(beta, "  publish:");
-    const previewMetadata = sectionBetween(preview, "  metadata:", "  verify:");
-    const previewPublish = sectionBetween(preview, "  publish:", "  cleanup_partial_release_assets:");
-    const previewMac = sectionBetween(preview, "  build_mac:", "  build_mac_intel:");
-    const previewMacX64 = sectionBetween(preview, "  build_mac_intel:", "  build_win:");
-    const previewWin = sectionBetween(preview, "  build_win:", "  build_linux:");
     const prereleaseMetadata = sectionBetween(prerelease, "  metadata:", "  verify:");
     const prereleasePublish = sectionBetween(prerelease, "  publish:", "  cleanup_partial_release_assets:");
     const prereleaseMac = sectionBetween(prerelease, "  build_mac:", "  build_mac_intel:");
@@ -61,16 +70,13 @@ describe("release workflows", () => {
     const prereleaseWin = sectionBetween(prerelease, "  build_win:", "  build_linux:");
     const stableMetadata = sectionBetween(stable, "  metadata:", "  verify:");
     const stablePublish = sectionBetween(stable, "  publish:", "  cleanup_partial_release_assets:");
-    const selfHostedMac = sectionBetween(betaSelfHosted, "  build_mac_arm64:", "  build_win_x64:");
-    const selfHostedWin = sectionBetween(betaSelfHosted, "  build_win_x64:", "  publish:");
 
     expect(mac).not.toContain("bash tools/release/scripts/build-platform.sh");
     expect(macX64).not.toContain("bash tools/release/scripts/build-platform.sh");
-    expect(selfHostedMac).toContain("fnm exec --using=24 -- bash tools/release/scripts/build-platform.sh");
-    expect(mac).toContain("--require-vela-cli");
-    expect(selfHostedMac).toContain("REQUIRE_VELA_CLI: \"true\"");
+    expect(countOccurrences(mac, "--require-vela-cli")).toBe(3);
+    expect(countOccurrences(macX64, "--require-vela-cli")).toBe(2);
+    expect(countOccurrences(win, "--require-vela-cli")).toBe(3);
     expect(mac.match(/RELEASE_ARTIFACT_MODE: dmg-and-payload/g)?.length ?? 0).toBe(2);
-    expect(selfHostedMac.match(/RELEASE_ARTIFACT_MODE: dmg-and-payload/g)?.length ?? 0).toBe(2);
     expect(macX64.match(/RELEASE_ARTIFACT_MODE: \$\{\{ inputs\.mac_x64_target == 'all' && 'all' \|\| 'dmg-and-payload' \}\}/g)?.length ?? 0).toBe(2);
     expect(mac).toContain("uses: actions/cache/restore@v5");
     expect(mac).toContain("uses: actions/cache/save@v5");
@@ -80,6 +86,7 @@ describe("release workflows", () => {
     expect(mac).toContain("build_args+=(--signed --notarize)");
     expect(mac).toContain("Build beta mac_arm64 update fixture");
     expect(mac).toContain("OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH: ${{ steps.mac_arm64_update_fixture.outputs.update_build_json_path }}");
+    expect(mac).toContain("OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE: ${{ inputs.mac_arm64_smoke_mode == 'full' && inputs.mac_arm64_update_metadata_url == '' && inputs.mac_arm64_update_target_version == '' && 'tools-serve' || '' }}");
     expect(mac).toContain("pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts");
     expect(mac).toContain("bash .github/scripts/release/cache/mac.sh");
     expect(macX64).toContain("uses: actions/cache/restore@v5");
@@ -89,20 +96,15 @@ describe("release workflows", () => {
     expect(macX64).toContain("exec tools-pack mac build");
     expect(macX64).toContain("pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts");
     expect(buildMac).toContain("build_args+=(--require-vela-cli)");
+    expect(buildMac).toContain("update_args+=(--require-vela-cli)");
     expect(buildMac).toContain('--cache-dir "$TOOLS_PACK_CACHE_DIR"');
     expect(buildMac).toContain('tools-pack mac build update fixture');
     expect(buildMac).toContain('OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH="$update_build_json_path"');
     expect(buildMac).toContain('OD_PACKAGED_E2E_MAC_UPDATE_VERSION="${OD_PACKAGED_E2E_MAC_UPDATE_VERSION:-$update_version}"');
     expect(buildMac).not.toContain("::warning::Expected Electron framework symlink");
-    expect(macX64).not.toContain("REQUIRE_VELA_CLI: \"true\"");
-    expect(macX64).not.toContain("--require-vela-cli");
-    expect(win).not.toContain("--require-vela-cli");
     expect(linux).not.toContain("--require-vela-cli");
     expect(beta).not.toContain("REQUIRE_VELA_CLI: \"true\"");
     expect(beta).toContain("release-beta publish requires win_x64_target=nsis or all");
-    expect(betaSelfHosted).toContain("release-beta-s publish requires win_x64_target=nsis or all");
-    expect(betaSelfHosted).toContain("sparse-checkout disable");
-    expect(betaSelfHosted).toContain("metadata checkout is missing packages/");
     expect(beta).toContain("mac_arm64_update_metadata_url:");
     expect(beta).toContain("win_x64_update_metadata_url:");
     expect(beta).toContain("OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_arm64_update_metadata_url }}");
@@ -117,47 +119,35 @@ describe("release workflows", () => {
     expect(beta).toContain("tools-release publish-metadata");
     expect(beta).toContain("tools-release verify-metadata");
     expect(beta).toContain("tools-release summary-metadata");
-    for (const workflow of [beta, betaSelfHosted, preview, prerelease, stable]) {
+    for (const workflow of [beta, prerelease, stable]) {
       expect(workflow).not.toContain(".github/scripts/release/r2/");
     }
-    for (const workflow of [beta, preview, prerelease, stable]) {
+    for (const workflow of [beta, prerelease, stable]) {
       expect(workflow).toContain("tools-release check-storage");
     }
-    expect(betaSelfHosted).not.toContain("tools-release check-storage");
     expect(win).not.toContain("tools\\release\\scripts\\build-platform.ps1");
     expect(win).toContain("uses: actions/cache/restore@v5");
     expect(win).toContain("uses: actions/cache/save@v5");
     expect(win).toContain("tools-pack-win-v1-beta-$env:RUNNER_OS-");
     expect(win).toContain('pnpm.cmd exec tools-pack win cleanup --dir "${{ runner.temp }}\\tools-pack" --namespace release-beta-win --json');
     expect(win).toContain('"tools-pack", "win", "build"');
+    expect(buildWin).toContain('$buildArgs += "--require-vela-cli"');
+    expect(buildWin).toContain('$updateArgs += "--require-vela-cli"');
     expect(win).toContain("tools-pack win validate-payload");
     expect(win).toContain("pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts");
     expect(win).toContain(".\\.github\\scripts\\release\\cache\\win.ps1");
-    for (const metadata of [betaMetadata, previewMetadata, prereleaseMetadata, stableMetadata]) {
+    for (const metadata of [betaMetadata, prereleaseMetadata, stableMetadata]) {
       expect(metadata).toContain("uses: pnpm/action-setup@v5");
       expect(metadata).toContain("run: pnpm install --frozen-lockfile");
       expect(metadata.indexOf("run: pnpm install --frozen-lockfile")).toBeLessThan(metadata.indexOf("tools-release prepare"));
     }
-    for (const publish of [betaPublish, previewPublish, prereleasePublish, stablePublish]) {
+    for (const publish of [betaPublish, prereleasePublish, stablePublish]) {
       expect(publish).toContain("uses: pnpm/action-setup@v5");
       expect(publish).toContain("run: pnpm install --frozen-lockfile");
       expect(publish.indexOf("run: pnpm install --frozen-lockfile")).toBeLessThan(
         publish.indexOf("tools-release publish-metadata"),
       );
     }
-    expect(betaSelfHosted).toContain("mac_arm64_update_metadata_url:");
-    expect(betaSelfHosted).toContain("mac_arm64_delivery_mode:");
-    expect(betaSelfHosted).toContain('default: "https://s3.nexu.space/od-releases"');
-    expect(betaSelfHosted).toContain("internal-updater");
-    expect(betaSelfHosted).toContain("public-notarized");
-    expect(selfHostedMac).toContain("RELEASE_DELIVERY_MODE: ${{ inputs.mac_arm64_delivery_mode }}");
-    expect(selfHostedMac).toContain("RELEASE_SIGN_MODE: ${{ inputs.mac_arm64_delivery_mode == 'internal-updater' && 'sign-only' || inputs.mac_arm64_sign_mode }}");
-    expect(selfHostedMac).toContain("OD_UPDATE_METADATA_URL: ${{ inputs.release_public_origin }}/betas/latest/metadata.json");
-    expect(selfHostedMac).toContain("RELEASE_CHANNEL: betas");
-    expect(betaSelfHosted).toContain("public-notarized mac_arm64_delivery_mode requires mac_arm64_sign_mode=notarize");
-    expect(betaSelfHosted).toContain("RELEASE_SIGNED: ${{ inputs.enable_mac_arm64 && (inputs.mac_arm64_delivery_mode == 'internal-updater' || inputs.mac_arm64_sign_mode != 'no') && 'true' || 'false' }}");
-    expect(selfHostedMac).toContain("OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_arm64_update_metadata_url }}");
-    expect(selfHostedMac).toContain("RELEASE_ARTIFACT_MODE: dmg-and-payload");
     expect(macBuild).toContain('runPhase("xattr-scrub"');
     expect(macBuild).toContain("scrubMacExtendedAttributes(paths.appPath)");
     expect(macFs).toContain("com.apple.provenance");
@@ -166,19 +156,7 @@ describe("release workflows", () => {
     expect(desktopUpdater).toContain('execFileAsync("xattr", ["-dr", attribute, input.destinationRoot])');
     expect(desktopUpdater).toContain("com.apple.macl");
     expect(installUnsafeDmg).toContain("com.apple.macl");
-    expect(betaSelfHosted).not.toContain("publish-beta-metadata.ts");
-    expect(betaSelfHosted).not.toContain("verify-beta-metadata.ts");
-    expect(betaSelfHosted).not.toContain("summary-beta.ts");
-    expect(betaSelfHosted).toContain("tools-release publish-metadata");
-    expect(betaSelfHosted).toContain("tools-release download-platform-manifest");
-    expect(betaSelfHosted).not.toContain('curl -fsSL "$manifest_url" -o "$RELEASE_MANIFEST_DIR/$RELEASE_TARGET.json"');
-    expect(betaSelfHosted).not.toContain("tools-release verify-metadata");
-    expect(betaSelfHosted).not.toContain("tools-release summary-metadata");
-    expect(betaSelfHosted).toContain("release-beta-s publishes to an internal S3 namespace; public metadata fetch verification is intentionally skipped.");
     expect(win).toContain("-IncludeZip $${{ inputs.win_x64_target == 'all' || inputs.win_x64_target == 'zip' }}");
-    expect(selfHostedWin).toContain("OD_UPDATE_METADATA_URL: ${{ inputs.release_public_origin }}/betas/latest/metadata.json");
-    expect(selfHostedWin).toContain("RELEASE_CHANNEL: betas");
-    expect(selfHostedWin).toContain("-IncludeZip $${{ inputs.win_x64_target == 'all' || inputs.win_x64_target == 'zip' }}");
     expect(prepareMac).not.toContain("required RELEASE_ASSET_SUFFIX");
     expect(prepareMac).toContain('RELEASE_ASSET_SUFFIX="${RELEASE_ASSET_SUFFIX:-}"');
     expect(prepareWin).toContain("[AllowEmptyString()]");
@@ -202,51 +180,14 @@ describe("release workflows", () => {
       const sidecarProtoBuild = 'await runPnpm(config, ["--filter", "@open-design/sidecar-proto", "build"])';
       const launcherProtoBuild = 'await runPnpm(config, ["--filter", "@open-design/launcher-proto", "build"])';
       const sidecarBuild = 'await runPnpm(config, ["--filter", "@open-design/sidecar", "build"])';
+      const dshRuntimeBuild = 'await runPnpm(config, ["--filter", "@open-design/dsh-runtime", "build"])';
+      const daemonBuild = 'await runPnpm(config, ["--filter", "@open-design/daemon", "build"])';
       expect(workspaceBuild).toContain(launcherProtoBuild);
+      expect(workspaceBuild).toContain(dshRuntimeBuild);
       expect(workspaceBuild.indexOf(sidecarProtoBuild)).toBeLessThan(workspaceBuild.indexOf(launcherProtoBuild));
       expect(workspaceBuild.indexOf(launcherProtoBuild)).toBeLessThan(workspaceBuild.indexOf(sidecarBuild));
+      expect(workspaceBuild.indexOf(dshRuntimeBuild)).toBeLessThan(workspaceBuild.indexOf(daemonBuild));
     }
-    expect(preview).not.toContain(".github/scripts/release/assets/mac.sh");
-    expect(preview).not.toContain(".github/scripts/release/assets/mac-intel.sh");
-    expect(preview).not.toContain(".github/scripts/release/assets/win.ps1");
-    expect(preview).not.toContain(".github/scripts/release/assets/linux.sh");
-    expect(preview).not.toContain(".github/scripts/release/r2/publish.sh");
-    expect(preview).not.toContain(".github/scripts/release/r2/verify.sh");
-    expect(preview).not.toContain(".github/scripts/release/r2/summary.sh");
-    expect(countOccurrences(preview, "tools/release/scripts/prepare-platform-assets.sh")).toBeGreaterThanOrEqual(3);
-    expect(preview).toContain("tools\\release\\scripts\\prepare-platform-assets.ps1");
-    expect(countOccurrences(preview, "tools-release publish-platform")).toBeGreaterThanOrEqual(4);
-    expect(preview).toContain("tools-release publish-metadata");
-    expect(preview).toContain("tools-release verify-metadata");
-    expect(preview).toContain("tools-release summary-metadata");
-    expect(preview).toContain("RELEASE_ARTIFACT_MODE: all");
-    expect(preview).toContain("open-design-preview-mac-arm64-publish-manifest");
-    expect(preview).toContain("open-design-preview-win-x64-publish-manifest");
-    expect(preview).toContain("workflow_call:");
-    expect(preview).toContain("OPEN_DESIGN_PREVIEW_VERSION: ${{ inputs.release_version }}");
-    expect(preview).toContain("GITHUB_SHA: ${{ needs.metadata.outputs.commit }}");
-    expect(preview).toContain("previous_commit: ${{ steps.prev.outputs.previous_commit }}");
-    expect(preview).toContain("version_metadata_url: ${{ steps.outputs.outputs.version_metadata_url }}");
-    expect(previewPublish).toContain('GITHUB_RELEASE_ENABLED: "false"');
-    expect(preview).not.toContain("gh release");
-    expect(previewMac).toContain("uses: actions/cache/restore@v5");
-    expect(previewMac).toContain("uses: actions/cache/save@v5");
-    expect(previewMac).toContain("tools-pack-mac-v1-preview-${RUNNER_OS}-arm64-");
-    expect(previewMac).toContain("pnpm exec tools-pack mac cleanup --dir \"$RUNNER_TEMP/tools-pack\" --namespace release-preview --json");
-    expect(previewMac).toContain("exec tools-pack mac build");
-    expect(previewMac).toContain("--cache-dir \"$RUNNER_TEMP/tools-pack-cache\"");
-    expect(previewMac).toContain("tools-release write-report");
-    expect(previewMacX64).toContain("uses: actions/cache/restore@v5");
-    expect(previewMacX64).toContain("uses: actions/cache/save@v5");
-    expect(previewMacX64).toContain("tools-pack-mac-v1-preview-${RUNNER_OS}-x64-");
-    expect(previewMacX64).toContain("pnpm exec tools-pack mac cleanup --dir \"$RUNNER_TEMP/tools-pack\" --namespace release-preview-intel --json");
-    expect(previewMacX64).toContain("exec tools-pack mac build");
-    expect(previewMacX64).toContain("--cache-dir \"$RUNNER_TEMP/tools-pack-cache\"");
-    expect(previewMacX64).toContain("tools-release write-report");
-    expect(previewWin).toContain("tools-pack-win-v1-preview-$env:RUNNER_OS-");
-    expect(previewWin).toContain("tools-pack win validate-payload");
-    expect(previewWin).toContain("release-build\\win_x64\\build.json");
-    expect(previewWin).toContain("tools-release write-report");
     expect(prerelease).toContain("name: release-prerelease");
     expect(prerelease).toContain("pnpm exec tools-release prepare prerelease");
     expect(prerelease).toContain("OPEN_DESIGN_PRERELEASE_METADATA_URL");
@@ -270,6 +211,21 @@ describe("release workflows", () => {
     expect(prereleaseMac).toContain("pnpm exec tools-pack mac cleanup --dir \"$RUNNER_TEMP/tools-pack\" --namespace release-prerelease --json");
     expect(prereleaseMac).toContain("exec tools-pack mac build");
     expect(prereleaseMac).toContain("--cache-dir \"$RUNNER_TEMP/tools-pack-cache\"");
+    expect(countOccurrences(prereleaseMac, "--notarize")).toBe(2);
+    // Both the primary build and the cache-miss retry must carry Apple notary
+    // env, or notarization fails closed on the retry path.
+    expect(
+      countOccurrences(prereleaseMac, "APPLE_ID: ${{ secrets.APPLE_ID }}"),
+    ).toBe(2);
+    expect(
+      countOccurrences(
+        prereleaseMac,
+        "APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}",
+      ),
+    ).toBe(2);
+    expect(
+      countOccurrences(prereleaseMac, "APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}"),
+    ).toBe(2);
     expect(prereleaseMac).toContain("tools-release write-report");
     expect(prereleaseMacX64).toContain("uses: actions/cache/restore@v5");
     expect(prereleaseMacX64).toContain("uses: actions/cache/save@v5");
@@ -277,7 +233,33 @@ describe("release workflows", () => {
     expect(prereleaseMacX64).toContain("pnpm exec tools-pack mac cleanup --dir \"$RUNNER_TEMP/tools-pack\" --namespace release-prerelease-intel --json");
     expect(prereleaseMacX64).toContain("exec tools-pack mac build");
     expect(prereleaseMacX64).toContain("--cache-dir \"$RUNNER_TEMP/tools-pack-cache\"");
+    expect(countOccurrences(prereleaseMacX64, "--notarize")).toBe(2);
+    expect(
+      countOccurrences(prereleaseMacX64, "APPLE_ID: ${{ secrets.APPLE_ID }}"),
+    ).toBe(2);
+    expect(
+      countOccurrences(
+        prereleaseMacX64,
+        "APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}",
+      ),
+    ).toBe(2);
+    expect(
+      countOccurrences(prereleaseMacX64, "APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}"),
+    ).toBe(2);
     expect(prereleaseMacX64).toContain("tools-release write-report");
+    for (const [prereleaseMacJob, nextStep] of [
+      [prereleaseMac, "Smoke prerelease mac"],
+      [prereleaseMacX64, "Write mac_x64 release report"],
+    ] as const) {
+      expect(prereleaseMacJob).toContain("Verify prerelease mac");
+      expect(prereleaseMacJob).toContain('hdiutil attach "$dmg_path" -nobrowse -readonly -mountpoint "$mount_point"');
+      expect(prereleaseMacJob).toContain('codesign --verify --deep --strict "$candidate_app"');
+      expect(prereleaseMacJob).toContain('xcrun stapler validate "$candidate_app"');
+      expect(prereleaseMacJob).toContain('spctl --assess --type execute --verbose=4 "$candidate_app"');
+      expect(prereleaseMacJob.indexOf("Verify prerelease mac")).toBeLessThan(
+        prereleaseMacJob.indexOf(nextStep),
+      );
+    }
     expect(prereleaseWin).toContain("tools-pack-win-v1-prerelease-$env:RUNNER_OS-");
     expect(prereleaseWin).toContain("tools-pack win validate-payload");
     expect(prereleaseWin).toContain("release-build\\win_x64\\build.json");
@@ -331,5 +313,113 @@ describe("release workflows", () => {
     expect(stablePrepare).toContain('parseStableDryRunMode');
     expect(stablePrepare).toContain('setOutput("run_prepublish_jobs"');
     expect(stablePrepare).toContain('setOutput("publish_side_effects_enabled"');
+  });
+
+  it("never hands a shipping lane an empty windows smoke mode", async () => {
+    const notify = await readFile(
+      new URL("../../../.github/workflows/notify-release-feishu.yml", import.meta.url),
+      "utf8",
+    );
+
+    // A `workflow_call` `default:` applies only when an input is OMITTED, so
+    // forwarding an empty string defeats the declared `core` default. The empty
+    // value then survives `??` in the spec, `smokeProfile === 'core'` is false,
+    // and the run takes the `full` path — which demands an updater fixture only
+    // a genuine `full` request wires up, and dies before the smoke starts.
+    // That is how release/v0.18.1's first prerelease failed on its branch-cut
+    // commit; release/v0.18.0 stayed hidden behind a branch-name special case
+    // that produced `skip`, so its smoke never ran at all.
+    const modeLine = notify
+      .split("\n")
+      .find((line) => line.includes("win_x64_smoke_mode:") && line.includes("inputs.win_x64_smoke_mode"));
+    expect(modeLine, "notify-release-feishu must forward win_x64_smoke_mode").toBeDefined();
+    expect(modeLine).not.toMatch(/\|\|\s*''\s*\}\}/);
+    expect(modeLine).toMatch(/\|\|\s*'core'\s*\}\}/);
+  });
+
+  it("bakes both halves of the workspace-team gate into every shipping lane", async () => {
+    const [beta, prerelease, stable, canary] = await Promise.all([
+      readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-prerelease.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-stable.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/main-prerelease-win-smoke.yml", import.meta.url), "utf8"),
+    ]);
+
+    // workspaceTeamTransportEnv (apps/packaged/src/workspace-team.ts) enables the
+    // four vela transports only when a known AMR profile AND a non-empty vela web
+    // origin are both baked in. A lane that bakes neither still builds, still
+    // installs, and still starts — the gap only surfaces as "Workspace Team does
+    // nothing" once a package reaches a user. So the presence of both halves is
+    // asserted per lane rather than left to the packaging step to notice.
+    for (const workflow of [beta, prerelease, stable]) {
+      expect(workflow).toContain("OPEN_DESIGN_AMR_PROFILE:");
+      expect(workflow).toContain("OD_VELA_WEB_URL:");
+    }
+
+    // Every package-capable lane must carry the complete map. Otherwise a
+    // stable/prod package can switch its AMR API to feature-test while its
+    // console and Workspace links remain on prod (or disappear).
+    for (const workflow of [beta, prerelease, stable, canary]) {
+      expect(workflow).toContain(
+        "OD_VELA_WEB_URL_FEATURE_TEST: ${{ secrets.VELA_WEB_URL_FEATURE_TEST }}",
+      );
+      expect(workflow).toContain(
+        "OD_VELA_WEB_URL_TEST: ${{ secrets.VELA_WEB_URL_TEST }}",
+      );
+      expect(workflow).toContain(
+        "OD_VELA_WEB_URL_PROD: ${{ secrets.VELA_WEB_URL_PROD }}",
+      );
+    }
+
+    // beta and prerelease are validation lanes and stay dispatch-driven, so an
+    // operator can aim a build at feature-test or test.
+    expect(beta).toContain("OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}");
+    expect(prerelease).toContain("OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}");
+    expect(beta).toContain(
+      "(inputs.amr_profile == 'prod' || inputs.amr_profile == '') && secrets.VELA_WEB_URL_PROD || ''",
+    );
+
+    // stable is a production channel by definition. Pinning the pair
+    // instead of accepting an input removes the footgun of publishing a stable
+    // build wired to the test backend — there is no legitimate reason for one.
+    for (const workflow of [stable]) {
+      expect(workflow).toContain("OPEN_DESIGN_AMR_PROFILE: prod");
+      expect(workflow).toContain("OD_VELA_WEB_URL: ${{ secrets.VELA_WEB_URL_PROD }}");
+      expect(workflow).not.toContain("inputs.amr_profile");
+    }
+  });
+
+  it("passes launcher version floor repo vars through to metadata publish and verify verbatim", async () => {
+    const [beta, prerelease, stable] = await Promise.all([
+      readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-prerelease.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-stable.yml", import.meta.url), "utf8"),
+    ]);
+
+    const passthrough = (suffix: string): string[] => [
+      `RELEASE_LAUNCHER_VERSION_MIN_${suffix}: \${{ vars.RELEASE_LAUNCHER_VERSION_MIN_${suffix} }}`,
+      `RELEASE_LAUNCHER_VERSION_MIN_URL_${suffix}: \${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_${suffix} }}`,
+    ];
+
+    // Each channel workflow forwards its own repo-vars pair plus the STABLE
+    // fallback pair verbatim; channel policy (pair-level stable fallback,
+    // format/https/floor validation) lives only in
+    // tools/release/src/storage/launcher-version-floor.ts, never in YAML.
+    const lanes: Array<{ minSteps: number; suffix: string; workflow: string }> = [
+      { minSteps: 2, suffix: "BETA", workflow: beta },
+      { minSteps: 2, suffix: "PRERELEASE", workflow: prerelease },
+    ];
+    for (const lane of lanes) {
+      for (const key of [...passthrough(lane.suffix), ...passthrough("STABLE")]) {
+        // publish-metadata always carries the pair; lanes with a
+        // verify-metadata step must carry it there too.
+        expect(countOccurrences(lane.workflow, key)).toBeGreaterThanOrEqual(lane.minSteps);
+      }
+      expect(lane.workflow).not.toContain(`vars.RELEASE_LAUNCHER_VERSION_MIN_${lane.suffix} ||`);
+    }
+    for (const key of passthrough("STABLE")) {
+      expect(countOccurrences(stable, key)).toBeGreaterThanOrEqual(2);
+    }
+    expect(stable).not.toContain("vars.RELEASE_LAUNCHER_VERSION_MIN_STABLE ||");
   });
 });

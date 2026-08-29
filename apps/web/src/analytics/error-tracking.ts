@@ -98,7 +98,7 @@ export function installErrorHandlers(): void {
   installed = true;
 
   window.addEventListener('error', (event) => {
-    captureException(event.error, event.message ?? 'Uncaught error', {
+    captureException(event.error, event.message || 'Uncaught error', {
       filename: typeof event.filename === 'string' ? event.filename : undefined,
       lineno: typeof event.lineno === 'number' ? event.lineno : undefined,
       colno: typeof event.colno === 'number' ? event.colno : undefined,
@@ -117,7 +117,7 @@ export function installErrorHandlers(): void {
 // want it visible in PostHog (e.g. an ErrorBoundary's componentDidCatch).
 // Unhandled errors go through the window listeners above.
 export function reportHandledException(error: unknown, message?: string): void {
-  captureException(error, message ?? defaultMessage(error), { handled: true });
+  captureException(error, message || defaultMessage(error), { handled: true });
 }
 
 interface CaptureMetadata {
@@ -344,12 +344,19 @@ function buildExceptionList(
   metadata: CaptureMetadata,
 ): Array<Record<string, unknown>> {
   const isError = error instanceof Error;
-  const type = isError ? error.name : typeof error === 'string' ? 'Error' : 'NonError';
-  const value = isError
-    ? error.message
-    : typeof error === 'string'
-      ? error
-      : fallbackMessage;
+  // Every branch below must yield a NON-EMPTY type and value. An empty string
+  // here ships an exception PostHog cannot type or group — in production 70
+  // events on the current release carried neither. `error.name` can be '' when
+  // a minifier mangles a `this.name = new.target.name` subclass, and
+  // `error.message` is '' for a bare `new Error()`.
+  const type =
+    (isError ? error.name : typeof error === 'string' ? 'Error' : 'NonError') || 'Error';
+  const value =
+    (isError
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : fallbackMessage) || fallbackMessage || 'Unknown error';
   const stack = isError && typeof error.stack === 'string' ? error.stack : '';
   const chunkIds = getFilenameToChunkIdMap();
   // Stamp `platform` on every frame. PostHog's exception ingestion treats
@@ -395,22 +402,47 @@ function buildExceptionList(
 const STACK_RE_V8 = /^\s*at\s+(?:(.+?)\s+\()?(.+?):(\d+):(\d+)\)?$/;
 const STACK_RE_SPIDERMONKEY = /^(.*?)@(.+?):(\d+):(\d+)$/;
 
+/**
+ * Never ship a zero-frame stacktrace.
+ *
+ * PostHog derives `$exception_types` / `$exception_values` from
+ * `$exception_list` during ingestion and skips entries that fail frame-level
+ * validation, so an empty `frames` array is how an exception lands with neither
+ * field set — the `Error` row with no value in the stability report.
+ *
+ * The guard runs on the PARSED result, not on the raw string: a header-only
+ * stack (`"Error: Script error."`) is truthy yet yields no frames, because the
+ * first line is dropped as a message rather than a frame. Checking the input
+ * only would let exactly that case through.
+ */
 function parseStack(stack: string, metadata: CaptureMetadata): Array<Record<string, unknown>> {
-  if (!stack) {
-    if (metadata.filename) {
-      return [
-        {
-          function: '<anonymous>',
-          filename: metadata.filename,
-          abs_path: metadata.filename,
-          lineno: metadata.lineno ?? 0,
-          colno: metadata.colno ?? 0,
-          in_app: true,
-        },
-      ];
-    }
-    return [];
+  const parsed = stack ? parseStackFrames(stack) : [];
+  if (parsed.length > 0) return parsed;
+  if (metadata.filename) {
+    return [
+      {
+        function: '<anonymous>',
+        filename: metadata.filename,
+        abs_path: metadata.filename,
+        lineno: metadata.lineno ?? 0,
+        colno: metadata.colno ?? 0,
+        in_app: true,
+      },
+    ];
   }
+  return [
+    {
+      function: '<unknown>',
+      filename: '<no stack>',
+      abs_path: '<no stack>',
+      lineno: metadata.lineno ?? 0,
+      colno: metadata.colno ?? 0,
+      in_app: true,
+    },
+  ];
+}
+
+function parseStackFrames(stack: string): Array<Record<string, unknown>> {
   const lines = stack.split('\n');
   // The first line is usually the message (e.g. "TypeError: foo is not a
   // function") rather than a frame — skip it when it doesn't start with

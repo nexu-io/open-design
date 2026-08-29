@@ -13,7 +13,7 @@ import { installWhiteScreenDetector } from '../../src/observability/white-screen
  * (don't fire when the app actually rendered something) but must fire
  * when the user is really stuck on a non-app screen. The critical case —
  * called out by codex review on PR #2527 — is the dynamic-import loading
- * shell: `<div class="od-loading-shell">Loading Open Design…</div>`. That
+ * shell: `<div class="od-loading-shell">Loading OpenDesign…</div>`. That
  * string is well above the visible-text floor, so an earlier
  * implementation that only checked `body.innerText.length` would silently
  * treat the loading sentinel as a successful mount and cancel the timer.
@@ -55,10 +55,10 @@ function lastSentEvent(): { event: string; properties: Record<string, unknown> }
 describe('observability/white-screen', () => {
   it('fires client_white_screen when only the dynamic-import loading shell is in the DOM after the timeout', () => {
     // Reproduces the codex-review reported bug: the loading shell text
-    // "Loading Open Design…" is longer than the legacy 10-char floor.
+    // "Loading OpenDesign…" is longer than the legacy 10-char floor.
     const shell = document.createElement('div');
     shell.className = 'od-loading-shell';
-    shell.textContent = 'Loading Open Design…';
+    shell.textContent = 'Loading OpenDesign…';
     document.body.appendChild(shell);
 
     installWhiteScreenDetector();
@@ -89,7 +89,7 @@ describe('observability/white-screen', () => {
     // Start with only the loading shell.
     const shell = document.createElement('div');
     shell.className = 'od-loading-shell';
-    shell.textContent = 'Loading Open Design…';
+    shell.textContent = 'Loading OpenDesign…';
     document.body.appendChild(shell);
 
     installWhiteScreenDetector();

@@ -92,6 +92,19 @@ async function withFakeAgent<T>(
   }
 }
 
+async function withHeadlessOpencode<T>(run: () => Promise<T>): Promise<T> {
+  return await withFakeAgent(
+    'opencode',
+    `
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'text', part: { text: 'headless-ok' } }));
+});
+`,
+    run,
+  );
+}
+
 async function runCli(
   args: string[],
   options: { timeout?: number } = {},
@@ -316,56 +329,61 @@ describe('Plan §8 e2e-3 (entry slice) — headless install → project → run'
     expect(createBody.project.id).toBe(projectId);
     expect(createBody.appliedPluginSnapshotId).toBeTruthy();
 
-    // 3. Start a run that re-uses the same applied snapshot id.
-    const runResp = await fetch(`${baseUrl}/api/runs`, {
-      method:  'POST',
-      headers: { 'content-type': 'application/json' },
-      body:    JSON.stringify({
-        projectId,
-        pluginId:                 'sample-plugin',
-        appliedPluginSnapshotId:  createBody.appliedPluginSnapshotId,
-        pluginInputs:             { topic: 'agentic design' },
-      }),
+    await withHeadlessOpencode(async () => {
+      // 3. Start a non-AMR run that re-uses the same applied snapshot id.
+      // This plugin contract test intentionally has no Workspace headers.
+      const runResp = await fetch(`${baseUrl}/api/runs`, {
+        method:  'POST',
+        headers: { 'content-type': 'application/json' },
+        body:    JSON.stringify({
+          projectId,
+          agentId:                  'opencode',
+          pluginId:                 'sample-plugin',
+          appliedPluginSnapshotId:  createBody.appliedPluginSnapshotId,
+          pluginInputs:             { topic: 'agentic design' },
+        }),
+      });
+      expect(runResp.status).toBe(202);
+      const runBody = (await runResp.json()) as {
+        runId: string;
+        pluginId?: string;
+        appliedPluginSnapshotId?: string;
+      };
+      expect(runBody.runId).toBeTruthy();
+      expect(runBody.pluginId).toBe('sample-plugin');
+      expect(runBody.appliedPluginSnapshotId).toBe(createBody.appliedPluginSnapshotId);
+
+      // 4. The headerless run status surfaces the snapshot id so a polling
+      // client can reach replay without parsing the SSE stream.
+      const statusResp = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runBody.runId)}`);
+      expect(statusResp.status).toBe(200);
+      const statusBody = (await statusResp.json()) as {
+        id: string;
+        projectId: string;
+        pluginId: string | null;
+        appliedPluginSnapshotId: string | null;
+      };
+      expect(statusBody.pluginId).toBe('sample-plugin');
+      expect(statusBody.appliedPluginSnapshotId).toBe(createBody.appliedPluginSnapshotId);
+
+      // 5. Replay reads the same snapshot row.
+      const snapResp = await fetch(`${baseUrl}/api/applied-plugins/${encodeURIComponent(createBody.appliedPluginSnapshotId!)}`);
+      expect(snapResp.status).toBe(200);
+      const snap = (await snapResp.json()) as {
+        snapshotId: string;
+        pluginId: string;
+        query?: string;
+        inputs?: Record<string, string | number | boolean>;
+      };
+      expect(snap.snapshotId).toBe(createBody.appliedPluginSnapshotId);
+      expect(snap.pluginId).toBe('sample-plugin');
+      expect(snap.query).toBe('Generate a {{topic}} brief for {{audience}}.');
+      expect(snap.inputs).toEqual({ audience: 'general', topic: 'agentic design' });
+
+      // Cancel the run before restoring PATH so a deferred start cannot resolve
+      // the user's real OpenCode binary after the controlled fake disappears.
+      await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runBody.runId)}/cancel`, { method: 'POST' });
     });
-    expect(runResp.status).toBe(202);
-    const runBody = (await runResp.json()) as {
-      runId: string;
-      pluginId?: string;
-      appliedPluginSnapshotId?: string;
-    };
-    expect(runBody.runId).toBeTruthy();
-    expect(runBody.pluginId).toBe('sample-plugin');
-    expect(runBody.appliedPluginSnapshotId).toBe(createBody.appliedPluginSnapshotId);
-
-    // 4. The run status surfaces the snapshot id so a polling client
-    // can reach replay without parsing the SSE stream.
-    const statusResp = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runBody.runId)}`);
-    expect(statusResp.status).toBe(200);
-    const statusBody = (await statusResp.json()) as {
-      id: string;
-      projectId: string;
-      pluginId: string | null;
-      appliedPluginSnapshotId: string | null;
-    };
-    expect(statusBody.pluginId).toBe('sample-plugin');
-    expect(statusBody.appliedPluginSnapshotId).toBe(createBody.appliedPluginSnapshotId);
-
-    // 5. Replay reads the same snapshot row.
-    const snapResp = await fetch(`${baseUrl}/api/applied-plugins/${encodeURIComponent(createBody.appliedPluginSnapshotId!)}`);
-    expect(snapResp.status).toBe(200);
-    const snap = (await snapResp.json()) as {
-      snapshotId: string;
-      pluginId: string;
-      query?: string;
-      inputs?: Record<string, string | number | boolean>;
-    };
-    expect(snap.snapshotId).toBe(createBody.appliedPluginSnapshotId);
-    expect(snap.pluginId).toBe('sample-plugin');
-    expect(snap.query).toBe('Generate a {{topic}} brief for {{audience}}.');
-    expect(snap.inputs).toEqual({ audience: 'general', topic: 'agentic design' });
-
-    // Cancel the run so the test cleans up the in-memory child path.
-    await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runBody.runId)}/cancel`, { method: 'POST' });
   });
 
   it('creates share projects for publishing and contributing a user plugin', async () => {
@@ -399,7 +417,7 @@ describe('Plan §8 e2e-3 (entry slice) — headless install → project → run'
     expect(shareBody.sourcePluginId).toBe('sample-plugin');
     expect(shareBody.appliedPluginSnapshotId).toBeTruthy();
     expect(shareBody.stagedPath).toBe('plugin-source/sample-plugin');
-    expect(shareBody.prompt).toContain('Publish the local Open Design plugin');
+    expect(shareBody.prompt).toContain('Publish the local OpenDesign plugin');
     expect(shareBody.prompt).toContain('/api/projects/$OD_PROJECT_ID/plugins/publish-github');
     expect(shareBody.prompt).toContain('plugin-source/sample-plugin');
     expect(shareBody.project.pendingPrompt).toBe(shareBody.prompt);
@@ -461,9 +479,9 @@ describe('Plan §8 e2e-3 (entry slice) — headless install → project → run'
     const previousGitCommitterName = process.env.GIT_COMMITTER_NAME;
     const previousGitCommitterEmail = process.env.GIT_COMMITTER_EMAIL;
     process.env.OD_REAL_GIT = realGit;
-    process.env.GIT_AUTHOR_NAME = 'Open Design Test';
+    process.env.GIT_AUTHOR_NAME = 'OpenDesign Test';
     process.env.GIT_AUTHOR_EMAIL = 'open-design-test@example.com';
-    process.env.GIT_COMMITTER_NAME = 'Open Design Test';
+    process.env.GIT_COMMITTER_NAME = 'OpenDesign Test';
     process.env.GIT_COMMITTER_EMAIL = 'open-design-test@example.com';
     try {
       await withFakeAgent(
@@ -516,13 +534,34 @@ if (args[0] === 'push') {
   console.log('pushed');
   process.exit(0);
 }
+if (args[0] === 'sparse-checkout') {
+  process.exit(0);
+}
+if (args[0] === 'checkout' && args[1] === '-b' && args[2]) {
+  const branch = spawnSync(
+    process.env.OD_REAL_GIT,
+    ['symbolic-ref', 'HEAD', 'refs/heads/' + args[2]],
+    { cwd: process.cwd(), encoding: 'utf8' },
+  );
+  if (branch.stderr) process.stderr.write(branch.stderr);
+  process.exit(branch.status ?? 0);
+}
 if (args[0] === 'clone') {
   const dest = args[args.length - 1];
   fs.mkdirSync(dest, { recursive: true });
-  const init = spawnSync(process.env.OD_REAL_GIT, ['init', '-b', 'main'], { cwd: dest, encoding: 'utf8' });
+  const init = spawnSync(process.env.OD_REAL_GIT, ['init'], { cwd: dest, encoding: 'utf8' });
   if (init.status !== 0) {
     if (init.stderr) process.stderr.write(init.stderr);
     process.exit(init.status ?? 1);
+  }
+  const branch = spawnSync(
+    process.env.OD_REAL_GIT,
+    ['symbolic-ref', 'HEAD', 'refs/heads/main'],
+    { cwd: dest, encoding: 'utf8' },
+  );
+  if (branch.status !== 0) {
+    if (branch.stderr) process.stderr.write(branch.stderr);
+    process.exit(branch.status ?? 1);
   }
   const remote = args.find((arg) => String(arg).startsWith('https://')) || 'https://github.com/test-user/open-design.git';
   const remoteAdd = spawnSync(process.env.OD_REAL_GIT, ['remote', 'add', 'origin', remote], { cwd: dest, encoding: 'utf8' });
@@ -566,11 +605,16 @@ process.exit(result.status ?? 0);
                   body: JSON.stringify({ path: contributeBody.stagedPath }),
                 },
               );
-              expect(contributeEndpointResp.status).toBe(200);
               const contributeEndpointBody = (await contributeEndpointResp.json()) as {
                 ok: boolean;
                 url?: string;
+                message?: string;
+                log?: string[];
               };
+              expect(
+                contributeEndpointResp.status,
+                JSON.stringify(contributeEndpointBody),
+              ).toBe(200);
               expect(contributeEndpointBody.ok).toBe(true);
               expect(contributeEndpointBody.url).toBe('https://github.com/nexu-io/open-design/pull/123');
             },
@@ -808,67 +852,71 @@ process.stdin.on('end', () => {
     };
     expect(createBody.appliedPluginSnapshotId).toBeTruthy();
 
-    const runResp = await fetch(`${baseUrl}/api/runs`, {
-      method:  'POST',
-      headers: { 'content-type': 'application/json' },
-      body:    JSON.stringify({
-        projectId,
-        pluginId:                'pipeline-plugin',
-        appliedPluginSnapshotId: createBody.appliedPluginSnapshotId,
-      }),
-    });
-    expect(runResp.status).toBe(202);
-    const runBody = (await runResp.json()) as { runId: string };
+    await withHeadlessOpencode(async () => {
+      const runResp = await fetch(`${baseUrl}/api/runs`, {
+        method:  'POST',
+        headers: { 'content-type': 'application/json' },
+        body:    JSON.stringify({
+          projectId,
+          agentId:                 'opencode',
+          pluginId:                'pipeline-plugin',
+          appliedPluginSnapshotId: createBody.appliedPluginSnapshotId,
+        }),
+      });
+      expect(runResp.status).toBe(202);
+      const runBody = (await runResp.json()) as { runId: string };
 
-    // The pipeline emits its first event synchronously inside POST
-    // /api/runs (firePipelineForRun runs before design.runs.start
-    // schedules the agent), so by the time we GET /api/runs/:id/events
-    // the run buffer already contains pipeline_stage_started.
-    // Wait briefly for the async tail (devloop iteration log) to settle.
-    await new Promise((r) => setTimeout(r, 30));
+      // The pipeline emits its first event synchronously inside POST
+      // /api/runs (firePipelineForRun runs before design.runs.start
+      // schedules the agent), so by the time we GET /api/runs/:id/events
+      // the run buffer already contains pipeline_stage_started.
+      // Wait briefly for the async tail (devloop iteration log) to settle.
+      await new Promise((r) => setTimeout(r, 30));
 
-    const statusResp = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runBody.runId)}`);
-    const statusBody = (await statusResp.json()) as { id: string };
-    expect(statusBody.id).toBe(runBody.runId);
+      const statusResp = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runBody.runId)}`);
+      const statusBody = (await statusResp.json()) as { id: string };
+      expect(statusBody.id).toBe(runBody.runId);
 
-    // Read the run's event buffer through the SSE stream — the
-    // server pipes every record through res.write, so reading the
-    // body until 'end' or pipeline_stage_completed surfaces the
-    // first events. We don't actually wait for end (the run is
-    // long-running); we just look for the stage-start anchor.
-    const eventsResp = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runBody.runId)}/events`, {
-      headers: { accept: 'text/event-stream' },
-    });
-    expect(eventsResp.body).toBeTruthy();
-    const reader = eventsResp.body!.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let firstStageEvent: string | null = null;
-    let messageChunkSeen = false;
-    const start = Date.now();
-    while (Date.now() - start < 1500) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const blocks = buffer.split('\n\n');
-      buffer = blocks.pop() ?? '';
-      for (const block of blocks) {
-        const eventLine = block.split('\n').find((l) => l.startsWith('event: '));
-        if (!eventLine) continue;
-        const event = eventLine.slice('event: '.length);
-        if (event === 'pipeline_stage_started' && !firstStageEvent && !messageChunkSeen) {
-          firstStageEvent = event;
+      // Read the run's event buffer through the headerless SSE stream — the
+      // server pipes every record through res.write, so reading the body until
+      // 'end' or pipeline_stage_completed surfaces the first events. We don't
+      // actually wait for end; we just look for the stage-start anchor.
+      const eventsResp = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runBody.runId)}/events`, {
+        headers: { accept: 'text/event-stream' },
+      });
+      expect(eventsResp.body).toBeTruthy();
+      const reader = eventsResp.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let firstStageEvent: string | null = null;
+      let messageChunkSeen = false;
+      const start = Date.now();
+      while (Date.now() - start < 1500) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const blocks = buffer.split('\n\n');
+        buffer = blocks.pop() ?? '';
+        for (const block of blocks) {
+          const eventLine = block.split('\n').find((l) => l.startsWith('event: '));
+          if (!eventLine) continue;
+          const event = eventLine.slice('event: '.length);
+          if (event === 'pipeline_stage_started' && !firstStageEvent && !messageChunkSeen) {
+            firstStageEvent = event;
+          }
+          if (event === 'message_chunk') messageChunkSeen = true;
+          if (firstStageEvent || event === 'end') break;
         }
-        if (event === 'message_chunk') messageChunkSeen = true;
-        if (firstStageEvent || event === 'end') break;
+        if (firstStageEvent) break;
       }
-      if (firstStageEvent) break;
-    }
-    void reader.cancel().catch(() => undefined);
+      void reader.cancel().catch(() => undefined);
 
-    expect(firstStageEvent).toBe('pipeline_stage_started');
+      expect(firstStageEvent).toBe('pipeline_stage_started');
 
-    await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runBody.runId)}/cancel`, { method: 'POST' });
+      // Keep the fake binary installed through cancellation for the same
+      // fire-and-forget startup guarantee as the snapshot-pinning case.
+      await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runBody.runId)}/cancel`, { method: 'POST' });
+    });
     await fs.rm(tmpRoot, { recursive: true, force: true });
   });
 });

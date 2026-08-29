@@ -57,4 +57,7 @@ OD_MAX_DEVLOOP_ITERATIONS`. Use:
 
 ## Status
 
-Reserved id, prompt-only fragment in v1.
+Implemented by the daemon runner in
+`apps/daemon/src/plugins/atoms/patch-edit.ts`. It validates step ownership and
+risk, applies unified diffs with atomic writes, and records receipts and
+progress.

@@ -868,10 +868,10 @@ describe('connector routes', () => {
     expect(response.status).toBe(200);
     expect(html).toContain('<main aria-labelledby="callback-title">');
     expect(html).toContain('GitHub connected');
-    expect(html).toContain('Open Design');
+    expect(html).toContain('OpenDesign');
     expect(html).toContain('open-design:connector-connected');
     expect(html).toContain('function requestClose()');
-    expect(html).toContain('Your browser blocked automatic closing. You can close this tab and return to Open Design.');
+    expect(html).toContain('Your browser blocked automatic closing. You can close this tab and return to OpenDesign.');
     expect(html).not.toContain('<p>Connector connected. You can close this window.</p>');
     expect(readComposioConfig().authConfigIds.github).toBe('ac_github');
 
@@ -998,13 +998,23 @@ describe('connector routes', () => {
             ok: true,
             headers: new Headers({ 'content-type': 'image/png' }),
             arrayBuffer: async () => {
-              await new Promise((resolve) => setTimeout(resolve, 2_100));
-              if (!init?.signal) throw new Error('expected fetch timeout signal');
-              if (init.signal.aborted) {
-                firstBodyReadAborted = true;
-                throw (init.signal.reason ?? new DOMException('Aborted', 'AbortError'));
-              }
-              return Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+              const signal = init?.signal;
+              if (!signal) throw new Error('expected fetch timeout signal');
+              // Reject as soon as the route's AbortSignal fires (2s production
+              // timeout) instead of sleeping past it with a fixed wall clock.
+              // That preserves the cancellation assertion without adding a
+              // guaranteed multi-second wait to every CI run.
+              await new Promise<never>((_, reject) => {
+                const abort = () => {
+                  firstBodyReadAborted = true;
+                  reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+                };
+                if (signal.aborted) {
+                  abort();
+                  return;
+                }
+                signal.addEventListener('abort', abort, { once: true });
+              });
             },
           } as unknown as Response;
         }
@@ -1067,6 +1077,80 @@ describe('connector routes', () => {
     expect(secondResponse.headers.get('content-type')).toBe('image/png');
     expect(Buffer.from(await secondResponse.arrayBuffer())).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
     expect(upstreamRequests).toBe(2);
+  });
+
+  it('cancels the upstream stream when a Composio logo exceeds the cap mid-stream', async () => {
+    let cancelled = false;
+    let signal: AbortSignal | undefined;
+    const slug = 'streaming_oversized_logo';
+    const chunk = new Uint8Array(600 * 1024); // 600 KiB chunks; the cap is 1 MiB
+    mockComposioFetch({
+      logoFetch: async (_parsed, init) => {
+        signal = init?.signal ?? undefined;
+        const stream = new ReadableStream<Uint8Array>({
+          pull(streamController) {
+            // Keep feeding chunks so the running total crosses the cap on the
+            // second read (no content-length, so this takes the streaming path).
+            streamController.enqueue(chunk);
+          },
+          cancel() {
+            cancelled = true;
+          },
+        });
+        return {
+          ok: true,
+          headers: new Headers({ 'content-type': 'image/png' }),
+          body: stream,
+        } as unknown as Response;
+      },
+    });
+
+    const response = await fetch(`${baseUrl}/api/connectors/logos/${slug}?theme=dark`);
+
+    expect(response.status).toBe(404);
+    // the half-read upstream body is both cancelled and aborted, not leaked
+    expect(cancelled).toBe(true);
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it('aborts an oversized-Content-Length Composio logo before reading its body', async () => {
+    let signal: AbortSignal | undefined;
+    mockComposioFetch({
+      logoFetch: async (_parsed, init) => {
+        signal = init?.signal ?? undefined;
+        return {
+          ok: true,
+          headers: new Headers({ 'content-type': 'image/png', 'content-length': '1048577' }),
+          body: new ReadableStream<Uint8Array>(),
+        } as unknown as Response;
+      },
+    });
+
+    const response = await fetch(`${baseUrl}/api/connectors/logos/cl_oversized?theme=dark`);
+
+    expect(response.status).toBe(404);
+    // the content-length check rejects it and aborts the connection, not leaks it
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it('aborts a non-2xx Composio logo response body', async () => {
+    let signal: AbortSignal | undefined;
+    mockComposioFetch({
+      logoFetch: async (_parsed, init) => {
+        signal = init?.signal ?? undefined;
+        return {
+          ok: false,
+          status: 502,
+          headers: new Headers({ 'content-type': 'text/plain' }),
+          body: new ReadableStream<Uint8Array>(),
+        } as unknown as Response;
+      },
+    });
+
+    const response = await fetch(`${baseUrl}/api/connectors/logos/missing_slug?theme=dark`);
+
+    expect(response.status).toBe(404);
+    expect(signal?.aborted).toBe(true);
   });
 
   it('evicts the least recently used Composio logo cache entry when the cache is full', async () => {

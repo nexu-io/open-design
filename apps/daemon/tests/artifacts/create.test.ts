@@ -160,4 +160,45 @@ describe('normal artifact create helper', () => {
       await rm(projectsRoot, { recursive: true, force: true });
     }
   });
+
+  it('persists declared PNG supporting files for generated HTML artifacts', async () => {
+    const projectsRoot = await mkdtemp(path.join(tmpdir(), 'od-artifact-create-assets-'));
+    try {
+      await writeProjectFile(projectsRoot, 'project-1', 'assets/hero.png', Buffer.from('hero-png'));
+      await writeProjectFile(projectsRoot, 'project-1', 'assets/gallery/card.png', Buffer.from('card-png'));
+      await createProjectArtifactFile({
+        projectsRoot,
+        projectId: 'project-1',
+        input: {
+          name: 'landing.html',
+          content: [
+            '<!doctype html>',
+            '<img src="assets/hero.png">',
+            '<img src="assets/gallery/card.png">',
+          ].join(''),
+          artifactManifest: {
+            kind: 'html',
+            renderer: 'html',
+            exports: ['html', 'pdf', 'zip'],
+            title: 'Landing with PNG assets',
+            supportingFiles: ['assets/hero.png', 'assets/gallery/card.png'],
+          },
+        },
+        writeProjectFile: writeProjectFile as any,
+      });
+
+      const files = await listFiles(projectsRoot, 'project-1');
+      expect(files.find((file) => file.name === 'landing.html')).toEqual(
+        expect.objectContaining({
+          artifactKind: 'html',
+          artifactManifest: expect.objectContaining({
+            entry: 'landing.html',
+            supportingFiles: ['assets/hero.png', 'assets/gallery/card.png'],
+          }),
+        }),
+      );
+    } finally {
+      await rm(projectsRoot, { recursive: true, force: true });
+    }
+  });
 });

@@ -1,23 +1,109 @@
 * { box-sizing: border-box; }
 
+@font-face {
+  font-family: "Albert Sans";
+  src: url("/fonts/AlbertSans-VariableFont_wght.ttf") format("truetype");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 100 900;
+}
+
+@font-face {
+  font-family: "Albert Sans";
+  src: url("/fonts/AlbertSans-Italic-VariableFont_wght.ttf") format("truetype");
+  font-display: swap;
+  font-style: italic;
+  font-weight: 100 900;
+}
+
+@font-face {
+  font-family: "JiduMono Pro";
+  src: url("/fonts/JiduMonoPro-Regular.otf") format("opentype");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+}
+
 html, body, #root { height: 100%; margin: 0; }
 
 body {
   font-family: var(--sans);
   color: var(--text);
   background: var(--bg-app);
-  font-size: 13.5px;
-  line-height: 1.5;
+  font-size: var(--font-size-14, 14px);
+  line-height: 125%;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-.od-loading-shell {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  color: var(--text-muted);
-  background: var(--bg-app);
-  font: 500 13px/1.4 var(--sans);
+:root {
+  --font-size-12: 12px;
+  --font-size-13: 13px;
+  --font-size-14: 14px;
+  --font-size-16: 16px;
+  --font-size-18: 18px;
+  --font-size-20: 20px;
+  --font-size-24: 24px;
+  --font-size-28: 28px;
+  --font-size-32: 32px;
+  --font-size-36: 36px;
+  --font-size-48: 48px;
+  --font-size-52: 52px;
+  --font-size-64: 64px;
+  --spacing-2: 2px;
+  --spacing-4: 4px;
+  --spacing-6: 6px;
+  --spacing-8: 8px;
+  --spacing-10: 10px;
+  --spacing-12: 12px;
+  --spacing-16: 16px;
+  --spacing-18: 18px;
+  --spacing-20: 20px;
+  --spacing-22: 22px;
+  --spacing-24: 24px;
+  --spacing-28: 28px;
+  --spacing-32: 32px;
+  --spacing-36: 36px;
+  --spacing-38: 38px;
+  --spacing-42: 42px;
+  --spacing-48: 48px;
+  --spacing-52: 52px;
+  --spacing-58: 58px;
+  --spacing-62: 62px;
+  --spacing-68: 68px;
 }
 
+.numeric,
+code,
+kbd,
+pre,
+.monospace {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Centered row: the dot-matrix loader leads, the label follows. Was a grid
+   with `place-items: center`, which would stack the two children instead. */
+.od-loading-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text-muted);
+  /* Opaque base (not the see-through veil) so the pastel app-wash corner
+     blobs don't bleed through the loading screen. */
+  background: var(--bg-app);
+  font: 500 var(--font-size-13)/125% var(--sans);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

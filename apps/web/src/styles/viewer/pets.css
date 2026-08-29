@@ -76,6 +76,29 @@
   align-items: center;
   gap: 6px;
 }
+/* Match the "默认位置" pill so the two right-aligned action buttons read as one
+   style — same grey capsule, border, radius, size, and weight. */
+.pet-wake-controls .seg-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.pet-wake-controls .seg-btn:not(.active) {
+  background: var(--bg-subtle);
+}
+.pet-wake-controls .seg-btn span {
+  font-size: 12px;
+  font-weight: 600;
+  color: inherit;
+}
+/* Hide-pet button: drop the dark accent ring in its active state so it reads
+   as a plain grey capsule (no black outline). */
+.pet-wake-controls .seg-btn.small.active {
+  border-color: transparent;
+}
 .pet-source-head {
   margin-top: 14px;
   display: grid;
@@ -138,7 +161,7 @@
 }
 .pet-current-summary__label {
   color: var(--text-faint);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -153,7 +176,7 @@
 .pet-current-summary__copy span:last-child {
   min-width: 0;
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -199,6 +222,11 @@
 }
 .pet-tabs-top-row .subtab-pill {
   flex: 0 0 auto;
+  /* Full-capsule to match the pill action buttons on the same row. */
+  border-radius: var(--radius-pill);
+}
+.pet-tabs-top-row .subtab-pill button {
+  border-radius: var(--radius-pill);
 }
 .pet-tabs-hint {
   margin: 0;
@@ -286,7 +314,7 @@
   color: var(--text-strong);
 }
 .pet-card-flavor {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
   line-height: 1.3;
   overflow: hidden;
@@ -300,7 +328,7 @@
   position: absolute;
   top: 8px;
   right: 8px;
-  font-size: 10.5px;
+  font-size: 12px;
   padding: 2px 7px;
   border-radius: var(--radius-pill);
   background: var(--bg-subtle);
@@ -365,7 +393,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text);
   /* Allow the text column to shrink past its intrinsic content width
      so long greetings wrap instead of pushing the sprite. */
@@ -449,11 +477,11 @@
   min-width: 0;
 }
 .welcome-pet-copy strong {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text-strong);
 }
 .welcome-pet-copy span {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   line-height: 1.35;
 }
@@ -461,7 +489,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--accent-strong);
   font-weight: 600;
   white-space: nowrap;
@@ -507,8 +535,10 @@
   right: 0;
   z-index: 30;
   width: 260px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius);
   box-shadow: var(--shadow-md);
   padding: 10px;
@@ -528,7 +558,7 @@
   color: var(--text-strong);
 }
 .composer-pet-menu-head span {
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--text-muted);
   font-family: var(--mono);
 }
@@ -569,7 +599,7 @@
   background: var(--bg-subtle);
   border: 1px solid transparent;
   cursor: pointer;
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 .composer-pet-menu-pet:hover {
@@ -636,8 +666,10 @@
   z-index: 30;
   min-width: 184px;
   padding: 5px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius);
   box-shadow: var(--shadow-md);
   display: flex;
@@ -704,6 +736,20 @@
 .composer-toolbox-trigger {
   position: relative;
 }
+.composer-tools-at {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  font-family: var(--sans);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0;
+  color: currentColor;
+  transform: translateY(-0.5px);
+}
 .composer-tools-trigger.active {
   background: var(--bg-subtle);
   color: var(--text);
@@ -720,8 +766,10 @@
   width: 320px;
   max-width: calc(100vw - 32px);
   z-index: 30;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius);
   box-shadow: var(--shadow-md);
   display: flex;
@@ -759,8 +807,8 @@
   min-width: 0;
   flex: 1;
   color: var(--text);
-  font-size: 12.5px;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 600;
 }
 .composer-design-toolbox-row {
   align-items: flex-start;
@@ -802,7 +850,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-faint);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 .composer-design-toolbox-badge {
@@ -816,8 +864,8 @@
   border-radius: var(--radius-sm);
   background: var(--bg-subtle);
   color: var(--text-muted);
-  font-size: 10.5px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1.2;
 }
 .composer-tools-tabs {
@@ -836,7 +884,7 @@
   gap: 5px;
   min-height: 30px;
   padding: 6px 6px;
-  font-size: 11.5px;
+  font-size: 12px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -902,7 +950,7 @@
   background: transparent;
   color: var(--text-muted);
   font: inherit;
-  font-size: 11.5px;
+  font-size: 12px;
   cursor: pointer;
   min-width: 0;
 }
@@ -934,7 +982,6 @@
 }
 .composer-tools-search:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .composer-tools-empty {
   padding: 14px 10px;
@@ -951,7 +998,7 @@
 .composer-tools-section-label {
   padding: 4px 6px 2px;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -989,7 +1036,7 @@
   font-size: 12px;
 }
 .composer-tools-row-meta {
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--text-faint);
   text-transform: lowercase;
 }
@@ -1051,7 +1098,7 @@
   background: var(--bg-subtle);
 }
 .composer-tools-row-pending {
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--text-faint);
   margin-left: auto;
 }
@@ -1076,7 +1123,7 @@
   padding: 0 4px 4px;
 }
 .composer-tools-pet-head .hint {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 .composer-tools-pet-grid {
@@ -1096,7 +1143,7 @@
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
   color: var(--text-muted);
-  font-size: 10.5px;
+  font-size: 12px;
   cursor: pointer;
 }
 .composer-tools-pet-item:hover {
@@ -1155,7 +1202,7 @@
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 .composer-ds-picker-back:hover { background: var(--bg-subtle); color: var(--text); }
 .composer-ds-picker-title {
@@ -1183,7 +1230,7 @@
 }
 .composer-ds-picker-group { display: flex; flex-direction: column; gap: 2px; }
 .composer-ds-picker-group-title {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1213,12 +1260,12 @@
   min-width: 0;
 }
 .composer-ds-picker-item-title {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text);
 }
 .composer-ds-picker-item-summary {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -1234,7 +1281,7 @@
 }
 .composer-ds-picker-swatch { width: 6px; height: 6px; }
 .composer-ds-picker-current-tag {
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-faint);

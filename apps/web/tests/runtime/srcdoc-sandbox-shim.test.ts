@@ -203,3 +203,131 @@ describe('buildSrcdoc shim isolates Web Storage from a sandboxed window (#1403 v
     expect(survived).toBe('dark');
   });
 });
+
+// Deck main-canvas-blank repro (recvq6BovMieyc): a generated deck's own
+// slide-navigation function commonly does
+//   slide.classList.toggle('active', ...);      // 1. paint the new slide
+//   history.replaceState(null, '', '#/' + i);   // 2. keep the hash in sync
+// (or the reverse order in other templates). Deck previews always render
+// through buildSrcdoc (the deck bridge needs the srcDoc path), which also
+// injects `<base href="…/raw/">` for asset resolution. A bare-hash
+// replaceState/pushState call resolves against that <base> into a real
+// http(s) URL, and the browser throws SecurityError because the document's
+// own origin is the opaque "null" of about:srcdoc — no concrete origin can
+// ever match it. When a template's navigation function calls replaceState
+// BEFORE finishing its own DOM update, that throw aborts the function early
+// and the main canvas goes blank on next/prev; when replaceState comes last
+// (as in the fixture below), the throw is merely a console error. Either way
+// the shim must prevent it from propagating at all.
+describe('buildSrcdoc shim absorbs a srcDoc SecurityError from history.pushState/replaceState (recvq6BovMieyc)', () => {
+  // Mirrors a generated deck's show()/next(): paint first, sync the hash
+  // second, then do one more thing a real template commonly does after
+  // (e.g. announce the slide change) — that trailing statement only runs if
+  // the shim actually swallowed the SecurityError instead of letting it
+  // unwind out of the function.
+  const DECK_ARTIFACT = `<!doctype html>
+<html>
+  <head><meta charset="utf-8"></head>
+  <body>
+    <div id="root"></div>
+    <script>
+      function show(i) {
+        window.__slidePainted = i;
+        history.replaceState(null, '', '#/' + i);
+        window.__afterReplaceStateRan = true;
+      }
+      show(1);
+    </script>
+  </body>
+</html>`;
+
+  // Models the exact browser failure mode: in a real about:srcdoc document
+  // with an injected <base href> to a concrete http(s) origin, ANY
+  // pushState/replaceState call throws SecurityError regardless of the URL
+  // argument, because the document's own origin can never match one.
+  function createOpaqueSrcdocVmContext(): vm.Context {
+    const ctx = vm.createContext({});
+    vm.runInContext(
+      `(function () {
+         this.window = this;
+         this.globalThis = this;
+         this.document = { addEventListener: function () {} };
+         function throwSecurityError() {
+           var err = new Error("Failed to execute 'replaceState' on 'History': A history state object with URL cannot be created in a document with origin 'null' and URL 'about:srcdoc'.");
+           err.name = 'SecurityError';
+           throw err;
+         }
+         this.history = { pushState: throwSecurityError, replaceState: throwSecurityError };
+       }).call(this);`,
+      ctx,
+    );
+    return ctx;
+  }
+
+  it('injects a history.pushState/replaceState shim into the srcDoc output', () => {
+    const doc = buildSrcdoc(DECK_ARTIFACT, { baseHref: 'http://127.0.0.1:17590/api/projects/p1/raw/' });
+    expect(doc).toContain('shimHistoryMethod');
+  });
+
+  it('places the shim BEFORE the user script so the deck\'s own navigation is already covered on first call', () => {
+    const doc = buildSrcdoc(DECK_ARTIFACT, { baseHref: 'http://127.0.0.1:17590/api/projects/p1/raw/' });
+    const shimIdx = doc.indexOf('shimHistoryMethod');
+    const userIdx = doc.indexOf('function show(i)');
+    expect(shimIdx).toBeGreaterThan(0);
+    expect(userIdx).toBeGreaterThan(0);
+    expect(shimIdx).toBeLessThan(userIdx);
+  });
+
+  it('the shim keeps a deck\'s own show() running to completion when replaceState throws SecurityError (the repro)', () => {
+    const doc = buildSrcdoc(DECK_ARTIFACT, { baseHref: 'http://127.0.0.1:17590/api/projects/p1/raw/' });
+    const scripts = extractScriptBodies(doc);
+    const shimScript = scripts.find((s) => /shimHistoryMethod/.test(s));
+    const bootScript = scripts.find((s) => /function show\(i\)/.test(s));
+    expect(shimScript, 'shim script body must be present').toBeDefined();
+    expect(bootScript, 'deck boot script body must be present').toBeDefined();
+
+    const ctx = createOpaqueSrcdocVmContext();
+    // 1. Confirm the bare sandbox model actually throws — otherwise this test
+    //    would not be exercising the failure the fix targets. (The error's
+    //    `name` is 'SecurityError'; toThrow matches against `message`, which
+    //    carries the browser's actual wording.)
+    expect(() => vm.runInContext("history.replaceState(null, '', '#/1');", ctx)).toThrow(/about:srcdoc/);
+
+    // 2. Run the shim. It must not itself throw while installing.
+    vm.runInContext(shimScript as string, ctx);
+
+    // 3. Run the deck's own boot script. Pre-fix, `show(1)` would abort at
+    //    the replaceState call: `__slidePainted` would be set but
+    //    `__afterReplaceStateRan` never would, and the call would throw out
+    //    of the VM run entirely.
+    expect(() => vm.runInContext(bootScript as string, ctx)).not.toThrow();
+    expect(vm.runInContext('window.__slidePainted', ctx)).toBe(1);
+    expect(vm.runInContext('window.__afterReplaceStateRan', ctx)).toBe(true);
+  });
+
+  it('the shim leaves a working native pushState/replaceState untouched (no clobber outside a srcDoc sandbox)', () => {
+    const doc = buildSrcdoc(DECK_ARTIFACT, { baseHref: 'http://127.0.0.1:17590/api/projects/p1/raw/' });
+    const scripts = extractScriptBodies(doc);
+    const shimScript = scripts.find((s) => /shimHistoryMethod/.test(s));
+    expect(shimScript).toBeDefined();
+
+    const calls: Array<{ url: unknown }> = [];
+    const ctx = vm.createContext({});
+    vm.runInContext(
+      `(function () {
+         this.window = this;
+         this.globalThis = this;
+         this.document = { addEventListener: function () {} };
+         this.__calls = [];
+         this.history = { pushState: function(){}, replaceState: function(s, t, url){ __calls.push({ url: url }); } };
+       }).call(this);`,
+      ctx,
+    );
+    vm.runInContext(shimScript as string, ctx);
+    vm.runInContext("history.replaceState(null, '', '#/2');", ctx);
+    const observed = vm.runInContext('__calls', ctx) as Array<{ url: string }>;
+    expect(observed).toHaveLength(1);
+    expect(observed[0]!.url).toBe('#/2');
+    void calls; // unused outside the VM; kept for type clarity above
+  });
+});

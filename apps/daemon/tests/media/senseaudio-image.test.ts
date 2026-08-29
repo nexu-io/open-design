@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateMedia } from '../../src/media/index.js';
 
 const TEST_SENSEAUDIO_BASE_URL = 'https://senseaudio-gateway.example.test';
-const TEST_IMAGE_URL = 'https://cdn.example.test/generated/abc.png';
+const TEST_IMAGE_URL = 'https://93.184.216.34/generated/abc.png';
 const TEST_IMAGE_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01]);
 
 function buildOkResponse(url = TEST_IMAGE_URL) {

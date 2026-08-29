@@ -48,27 +48,37 @@ function renderSkillsSection(
     locale?: 'en' | 'zh-CN';
     onSkillsRefresh?: () => void | Promise<void>;
     onSkillsChanged?: (id?: string) => void;
+    filesById?: Record<string, Array<{ path: string; kind: 'file' | 'directory'; size: number | null }>>;
   },
 ) {
   const setCfg = vi.fn();
   const onSkillsRefresh = options?.onSkillsRefresh;
   const onSkillsChanged = options?.onSkillsChanged;
+  let catalog = [...skills];
+  const filesById = options?.filesById ?? {};
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = input.toString();
     if (url === '/api/skills' && (!init || init.method === undefined)) {
-      return new Response(JSON.stringify({ skills }), {
+      return new Response(JSON.stringify({ skills: catalog }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
     }
     if (url === '/api/skills/import' && init?.method === 'POST') {
+      const payload = init.body
+        ? (JSON.parse(init.body as string) as { name?: string; description?: string; body?: string; triggers?: string[] })
+        : {};
+      const skill = makeSkill({
+        id: 'new-skill',
+        name: payload.name ?? 'New skill',
+        description: payload.description ?? '',
+        triggers: payload.triggers ?? [],
+        source: 'user',
+      });
+      catalog = [skill, ...catalog];
       return new Response(
         JSON.stringify({
-          skill: makeSkill({
-            id: 'new-skill',
-            name: 'New skill',
-            source: 'user',
-          }),
+          skill,
         }),
         {
           status: 200,
@@ -77,6 +87,8 @@ function renderSkillsSection(
       );
     }
     if (url.startsWith('/api/skills/') && init?.method === 'DELETE') {
+      const id = decodeURIComponent(url.split('/').pop() ?? '');
+      catalog = catalog.filter((skill) => skill.id !== id);
       return new Response(JSON.stringify({ ok: true }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -100,7 +112,8 @@ function renderSkillsSection(
       });
     }
     if (url.match(/^\/api\/skills\/[^/]+\/files$/) && (!init || init.method === undefined)) {
-      return new Response(JSON.stringify({ files: [] }), {
+      const id = decodeURIComponent(url.split('/').at(-2) ?? '');
+      return new Response(JSON.stringify({ files: filesById[id] ?? [] }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
@@ -159,6 +172,113 @@ describe('SkillsSection', () => {
     expect(within(row).queryByTestId('skills-delete-confirm')).toBeNull();
   });
 
+  it('hides a source filter when no skills belong to that source', async () => {
+    renderSkillsSection([
+      makeSkill({
+        id: 'builtin-skill',
+        name: 'Built-in skill',
+        source: 'built-in',
+      }),
+    ]);
+
+    const sourceSelect = await screen.findByLabelText('Source');
+
+    await waitFor(() => {
+      expect(
+        sourceSelect.querySelector('option[value="built-in"]')?.textContent,
+      ).toContain('(1)');
+    });
+    expect(sourceSelect.querySelector('option[value="user"]')).toBeNull();
+  });
+
+  it('shows and applies the user source filter when user skills exist', async () => {
+    renderSkillsSection([
+      makeSkill({
+        id: 'builtin-skill',
+        name: 'Built-in skill',
+        source: 'built-in',
+      }),
+      makeSkill({
+        id: 'user-skill',
+        name: 'User skill',
+        source: 'user',
+      }),
+    ]);
+
+    const sourceSelect = await screen.findByLabelText('Source');
+
+    await waitFor(() => {
+      expect(
+        sourceSelect.querySelector('option[value="user"]')?.textContent,
+      ).toContain('(1)');
+    });
+
+    fireEvent.change(sourceSelect, { target: { value: 'user' } });
+
+    expect(await screen.findByTestId('skill-row-user-skill')).toBeTruthy();
+    expect(screen.queryByTestId('skill-row-builtin-skill')).toBeNull();
+  });
+
+  it('keeps the source selected when other filters hide its skills', async () => {
+    renderSkillsSection([
+      makeSkill({
+        id: 'builtin-skill',
+        name: 'Built-in skill',
+        source: 'built-in',
+      }),
+      makeSkill({
+        id: 'user-skill',
+        name: 'User skill',
+        source: 'user',
+      }),
+    ]);
+
+    const sourceSelect = await screen.findByLabelText('Source');
+    await waitFor(() => {
+      expect(sourceSelect.querySelector('option[value="user"]')).not.toBeNull();
+    });
+    fireEvent.change(sourceSelect, { target: { value: 'user' } });
+    expect(await screen.findByTestId('skill-row-user-skill')).toBeTruthy();
+
+    fireEvent.change(screen.getByPlaceholderText('Search...'), {
+      target: { value: 'Built-in skill' },
+    });
+
+    await waitFor(() => {
+      expect(sourceSelect).toHaveValue('user');
+      expect(sourceSelect.querySelector('option[value="user"]')?.textContent).toContain('(0)');
+      expect(screen.queryByTestId('skill-row-builtin-skill')).toBeNull();
+    });
+  });
+
+  it('treats an omitted source as built-in for counts and filtering', async () => {
+    renderSkillsSection([
+      makeSkill({
+        id: 'legacy-skill',
+        name: 'Legacy skill',
+        source: undefined,
+      }),
+      makeSkill({
+        id: 'builtin-skill',
+        name: 'Built-in skill',
+        source: 'built-in',
+      }),
+    ]);
+
+    const sourceSelect = await screen.findByLabelText('Source');
+
+    await waitFor(() => {
+      expect(
+        sourceSelect.querySelector('option[value="built-in"]')?.textContent,
+      ).toContain('(2)');
+    });
+
+    fireEvent.change(sourceSelect, { target: { value: 'built-in' } });
+
+    expect(await screen.findByTestId('skill-row-legacy-skill')).toBeTruthy();
+    expect(screen.getByTestId('skill-row-builtin-skill')).toBeTruthy();
+  });
+
   it('keeps delete confirmation and commit available for user skills', async () => {
     const { fetchMock } = renderSkillsSection([
       makeSkill({
@@ -177,6 +297,36 @@ describe('SkillsSection', () => {
         method: 'DELETE',
       });
     });
+  });
+
+  it('resets the source selection after deleting its last skill', async () => {
+    const { fetchMock } = renderSkillsSection([
+      makeSkill({
+        id: 'user-skill',
+        name: 'User skill',
+        source: 'user',
+      }),
+      makeSkill({
+        id: 'builtin-skill',
+        name: 'Built-in skill',
+        source: 'built-in',
+      }),
+    ]);
+
+    const sourceSelect = await screen.findByLabelText('Source');
+    const row = await screen.findByTestId('skill-row-user-skill');
+    fireEvent.change(sourceSelect, { target: { value: 'user' } });
+    fireEvent.click(within(row).getByTestId('skills-delete'));
+    fireEvent.click(within(row).getByTestId('skills-delete-confirm'));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/skills/user-skill', {
+        method: 'DELETE',
+      });
+      expect(sourceSelect).toHaveValue('all');
+    });
+    expect(await screen.findByTestId('skill-row-builtin-skill')).toBeTruthy();
+    expect(sourceSelect.querySelector('option[value="user"]')).toBeNull();
   });
 
   it('warns before editing a built-in skill creates a user override', async () => {
@@ -375,6 +525,38 @@ describe('SkillsSection', () => {
           url.toString() === '/api/skills/import' && init?.method === 'POST',
       ),
     ).toBe(true);
+  });
+
+  it('loads the file tree for a newly created skill when its row is expanded automatically', async () => {
+    const { fetchMock } = renderSkillsSection([], {
+      filesById: {
+        'new-skill': [{ path: 'SKILL.md', kind: 'file', size: 28 }],
+      },
+    });
+
+    fireEvent.click(await screen.findByTestId('skills-new'));
+    const form = await screen.findByTestId('skills-create-form');
+    fireEvent.change(within(form).getByPlaceholderText('my-skill'), {
+      target: { value: 'New skill' },
+    });
+    fireEvent.change(within(form).getAllByRole('textbox').at(-1)!, {
+      target: { value: '# New skill\n\nDo the thing.' },
+    });
+    fireEvent.click(within(form).getByTestId('skills-save'));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            url.toString() === '/api/skills/new-skill/files' && init?.method === undefined,
+        ),
+      ).toBe(true);
+    });
+    const row = await screen.findByTestId('skill-row-new-skill');
+    const fileTree = row.querySelector('.skills-file-tree');
+    expect(fileTree).toBeTruthy();
+    expect(within(fileTree as HTMLElement).getByText('SKILL.md')).toBeTruthy();
+    expect(within(row).queryByText(en['settings.skillsNoFiles'])).toBeNull();
   });
 
   // Regression for the mrcfps follow-up on PR #2190: when a user edits

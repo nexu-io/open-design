@@ -2,6 +2,7 @@ import { projectKindFromMetadataToTracking } from '@open-design/contracts/analyt
 import {
   countDesignSystemPreviewModules,
   countNewArtifacts,
+  countWrittenFiles,
   didRunCreateDesignSystemFile,
   extractToolFilePath,
   isArtifactPath,
@@ -144,6 +145,10 @@ export interface RunSideEffectLedger {
   directArtifactEventSeen: boolean;
   liveArtifactSeen: boolean;
   artifactPaths: Set<string>;
+  // Every successfully written/edited path regardless of extension — the
+  // truncation-proof source for `run_finished.files_written_count`'s
+  // tool-stream fallback. `artifactPaths` is the renderable-extension subset.
+  writtenFilePaths: Set<string>;
   designSystemFileWritten: boolean;
   previewModulePaths: Set<string>;
   // Only WRITE/EDIT tool_use ids awaiting their tool_result live here, and each
@@ -162,6 +167,7 @@ export function createRunSideEffectLedger(): RunSideEffectLedger {
     directArtifactEventSeen: false,
     liveArtifactSeen: false,
     artifactPaths: new Set(),
+    writtenFilePaths: new Set(),
     designSystemFileWritten: false,
     previewModulePaths: new Set(),
     pendingWritePathById: new Map(),
@@ -207,6 +213,7 @@ export function foldEventIntoRunSideEffectLedger(
     if (path === undefined) return;
     ledger.pendingWritePathById.delete(id);
     if (readToolResultIsError(data)) return; // a failed write does not count
+    ledger.writtenFilePaths.add(path);
     if (isArtifactPath(path)) ledger.artifactPaths.add(path);
     if (isDesignSystemFile(path)) ledger.designSystemFileWritten = true;
     if (isPreviewModulePath(path)) ledger.previewModulePaths.add(path);
@@ -252,6 +259,17 @@ export function runArtifactCountForRun(run: {
 }): number {
   if (run?.sideEffectLedger) return run.sideEffectLedger.artifactPaths.size;
   return countNewArtifacts(Array.isArray(run?.events) ? run.events : []);
+}
+
+// Truncation-proof all-file-types write count, same ledger-preferred contract.
+// Tool-stream fallback for `run_finished.files_written_count` when the
+// filesystem baseline diff is unavailable (no cwd, contended, snapshot error).
+export function runFilesWrittenForRun(run: {
+  sideEffectLedger?: RunSideEffectLedger;
+  events?: unknown;
+}): number {
+  if (run?.sideEffectLedger) return run.sideEffectLedger.writtenFilePaths.size;
+  return countWrittenFiles(Array.isArray(run?.events) ? run.events : []);
 }
 
 // Truncation-proof `design_system_created`, same ledger-preferred contract.

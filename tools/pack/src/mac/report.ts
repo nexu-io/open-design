@@ -1,7 +1,7 @@
 import { join } from "node:path";
 
-import type { ToolPackConfig } from "../config.js";
-import { MAC_PREBUNDLED_APP_DIR_NAME } from "../mac-prebundle.js";
+import type { ToolPackConfig } from "../config/index.js";
+import { MAC_PREBUNDLED_APP_DIR_NAME } from "./prebundle.js";
 import {
   ELECTRON_BUILDER_ASAR,
   ELECTRON_BUILDER_BUILD_DEPENDENCIES_FROM_SOURCE,

@@ -79,6 +79,27 @@ describe('od project handoff CLI', () => {
     expect(stdout.join('')).toContain('## Context');
   });
 
+  it('sends exact workspace identity for a bound project handoff', async () => {
+    const result = await runProjectHandoff([
+      'proj-1',
+      '--conversation', 'conv-9',
+      '--api-key', 'sk-test',
+      '--model', 'claude-opus-4-7',
+      '--workspace', 'workspace-a',
+      '--workspace-member', 'member-a',
+      '--daemon-url', DAEMON,
+      '--json',
+    ]);
+
+    expect(result.exitCode).toBe(0);
+    const headers = new Headers(
+      (fetchMock.mock.calls[0]![1] as RequestInit).headers,
+    );
+    expect(headers.get('x-od-workspace-id')).toBe('workspace-a');
+    expect(headers.get('x-od-workspace-member-id')).toBe('member-a');
+    expect(JSON.parse(stdout.join(''))).toEqual(HANDOFF_RESPONSE);
+  });
+
   it('emits the full response as JSON under --json', async () => {
     const result = await runProjectHandoff([
       'proj-1',

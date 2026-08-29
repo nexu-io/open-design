@@ -10,7 +10,7 @@
 */
 @font-face {
   font-family: "remixicon";
-  src: url("/remixicon.woff2") format("woff2");
+  src: url("/remixicon.ttf") format("truetype");
   font-display: swap;
 }
 
@@ -3267,4 +3267,3 @@
 .ri-zhipu-ai-line:before { content: "\f69b"; }
 .ri-connector-fill:before { content: "\f69c"; }
 .ri-connector-line:before { content: "\f69d"; }
-

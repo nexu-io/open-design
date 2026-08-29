@@ -1,0 +1,222 @@
+/* Material system — frosted materials, vibrancy foregrounds, and liquid
+   glass for functional-layer surfaces (menus, popovers, tooltips, toasts,
+   floating toolbars). Content-layer cards keep their solid tokens.
+
+   Structure:
+     1. Tokens — light (:root) + dark, mirroring tokens.css's contract that
+        the explicit [data-theme='dark'] block and the prefers-color-scheme
+        html:not([data-theme]) block stay in sync.
+     2. Utility classes + the SDF-refraction surface (.od-glass-refract).
+     3. Accessibility fallbacks — redefined at the TOKEN level so every
+        consumer (any stylesheet, any CSS module) degrades at once.
+
+   Consumption pattern (any stylesheet):
+     background: var(--glass-regular);
+     -webkit-backdrop-filter: var(--glass-backdrop);
+     backdrop-filter: var(--glass-backdrop);
+*/
+
+:root {
+  /* Blur radii per material thickness. --glass-regular and
+     --glass-regular-blur come from tokens.css (defined there first for the
+     nav-rail panel) — this file builds on them instead of redefining. */
+  --material-ultrathin-blur: 8px;
+  --material-thin-blur: 16px;
+  --material-regular-blur: 24px;
+  --material-thick-blur: 40px;
+
+  /* Composite backdrop filters — one var per tier so consumers stay 3 lines */
+  --material-ultrathin-backdrop: blur(var(--material-ultrathin-blur)) saturate(1.6);
+  --material-thin-backdrop: blur(var(--material-thin-blur)) saturate(1.6);
+  --material-regular-backdrop: blur(var(--material-regular-blur)) saturate(1.6);
+  --material-thick-backdrop: blur(var(--material-thick-blur)) saturate(1.6);
+  --glass-backdrop: blur(var(--glass-regular-blur, 28px)) saturate(1.8);
+  /* Unified scrim blur behind modals/drawers — the scrim's own tint color
+     stays with each component; only the blur amount is standardized. */
+  --scrim-backdrop: blur(4px);
+
+  /* Standard material surfaces (content-layer separation) */
+  --material-ultrathin: rgba(250, 250, 250, 0.45);
+  --material-thin: rgba(250, 250, 250, 0.6);
+  --material-regular: rgba(250, 250, 250, 0.72);
+  --material-thick: rgba(250, 250, 250, 0.85);
+
+  /* Liquid glass surfaces (--glass-regular itself lives in tokens.css) */
+  --glass-clear: rgba(250, 250, 250, 0.18);
+  --glass-clear-dim: rgba(0, 0, 0, 0.35);
+
+  /* Vibrancy — foreground on top of any material; never hardcode neutral
+     text colors on a material surface. */
+  --vibrancy-label: rgba(32, 32, 32, 0.92);
+  --vibrancy-label-secondary: rgba(73, 73, 73, 0.62);
+  --vibrancy-label-tertiary: rgba(73, 73, 73, 0.4);
+  --vibrancy-label-quaternary: rgba(73, 73, 73, 0.24);
+  --vibrancy-fill: rgba(73, 73, 73, 0.2);
+  --vibrancy-fill-secondary: rgba(73, 73, 73, 0.14);
+  --vibrancy-fill-tertiary: rgba(73, 73, 73, 0.08);
+  --material-separator: rgba(73, 73, 73, 0.18);
+
+  /* SDF refraction highlight ring (halved alphas in dark) */
+  --glass-refract-ring-top: rgba(255, 255, 255, 0.6);
+  --glass-refract-ring-edge: rgba(255, 255, 255, 0.18);
+  --glass-refract-ring-bottom: rgba(255, 255, 255, 0.25);
+}
+
+/* Dark appearance — keep this block and the media-query block below in sync
+   (same contract as tokens.css). Surfaces sit on the elevated neutral
+   (#353535) so translucent layers still read as lifted off #202020. */
+[data-theme='dark'] {
+  --material-ultrathin: rgba(53, 53, 53, 0.45);
+  --material-thin: rgba(53, 53, 53, 0.6);
+  --material-regular: rgba(53, 53, 53, 0.72);
+  --material-thick: rgba(53, 53, 53, 0.85);
+  --glass-clear: rgba(32, 32, 32, 0.18);
+  --glass-clear-dim: rgba(0, 0, 0, 0.35);
+  --vibrancy-label: rgba(250, 250, 250, 0.92);
+  --vibrancy-label-secondary: rgba(237, 237, 237, 0.62);
+  --vibrancy-label-tertiary: rgba(237, 237, 237, 0.4);
+  --vibrancy-label-quaternary: rgba(237, 237, 237, 0.24);
+  --vibrancy-fill: rgba(255, 255, 255, 0.2);
+  --vibrancy-fill-secondary: rgba(255, 255, 255, 0.13);
+  --vibrancy-fill-tertiary: rgba(255, 255, 255, 0.07);
+  --material-separator: rgba(255, 255, 255, 0.16);
+  --glass-refract-ring-top: rgba(255, 255, 255, 0.3);
+  --glass-refract-ring-edge: rgba(255, 255, 255, 0.09);
+  --glass-refract-ring-bottom: rgba(255, 255, 255, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) {
+    --material-ultrathin: rgba(53, 53, 53, 0.45);
+    --material-thin: rgba(53, 53, 53, 0.6);
+    --material-regular: rgba(53, 53, 53, 0.72);
+    --material-thick: rgba(53, 53, 53, 0.85);
+    --glass-clear: rgba(32, 32, 32, 0.18);
+    --glass-clear-dim: rgba(0, 0, 0, 0.35);
+    --vibrancy-label: rgba(250, 250, 250, 0.92);
+    --vibrancy-label-secondary: rgba(237, 237, 237, 0.62);
+    --vibrancy-label-tertiary: rgba(237, 237, 237, 0.4);
+    --vibrancy-label-quaternary: rgba(237, 237, 237, 0.24);
+    --vibrancy-fill: rgba(255, 255, 255, 0.2);
+    --vibrancy-fill-secondary: rgba(255, 255, 255, 0.13);
+    --vibrancy-fill-tertiary: rgba(255, 255, 255, 0.07);
+    --material-separator: rgba(255, 255, 255, 0.16);
+    --glass-refract-ring-top: rgba(255, 255, 255, 0.3);
+    --glass-refract-ring-edge: rgba(255, 255, 255, 0.09);
+    --glass-refract-ring-bottom: rgba(255, 255, 255, 0.12);
+  }
+}
+
+/* ── Utility classes (for NEW surfaces; existing surfaces consume the tokens
+   in their own stylesheets instead of taking on extra classes) ─────────── */
+.od-material,
+.od-material-regular {
+  background: var(--material-regular);
+  -webkit-backdrop-filter: var(--material-regular-backdrop);
+  backdrop-filter: var(--material-regular-backdrop);
+}
+.od-material-ultrathin {
+  background: var(--material-ultrathin);
+  -webkit-backdrop-filter: var(--material-ultrathin-backdrop);
+  backdrop-filter: var(--material-ultrathin-backdrop);
+}
+.od-material-thin {
+  background: var(--material-thin);
+  -webkit-backdrop-filter: var(--material-thin-backdrop);
+  backdrop-filter: var(--material-thin-backdrop);
+}
+.od-material-thick {
+  background: var(--material-thick);
+  -webkit-backdrop-filter: var(--material-thick-backdrop);
+  backdrop-filter: var(--material-thick-backdrop);
+}
+.od-glass {
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+}
+
+/* ── SDF refraction surface ──────────────────────────────────────────────
+   Base state doubles as the fallback: plain frosted glass. useLiquidGlass()
+   sets data-od-glass-sdf only after the runtime confirms Chromium support and builds the
+   displacement map (JS sets --flt to url(#lg-N)). */
+.od-glass-refract {
+  position: relative;
+  overflow: hidden;
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+}
+.od-glass-refract[data-od-glass-sdf] {
+  background: transparent;
+  -webkit-backdrop-filter: var(--flt) blur(0.4px) contrast(1.12) brightness(1.06) saturate(1.12);
+  backdrop-filter: var(--flt) blur(0.4px) contrast(1.12) brightness(1.06) saturate(1.12);
+  box-shadow:
+    inset 0 1px 0.5px var(--glass-refract-ring-top),
+    inset 0 0 0 1px var(--glass-refract-ring-edge),
+    inset 0 -10px 22px -10px var(--glass-refract-ring-bottom),
+    0 6px 18px rgba(0, 0, 0, 0.2);
+}
+/* Text-dense refraction surfaces (e.g. the account menu): keep the lens
+   bend at the edges but back the center with a solid enough frost that the
+   menu's own text wins over whatever bleeds through. */
+.od-glass-refract[data-od-glass-sdf].od-glass-refract--tinted {
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--flt) blur(16px) saturate(1.4);
+  backdrop-filter: var(--flt) blur(16px) saturate(1.4);
+}
+
+/* ── Accessibility fallbacks ─────────────────────────────────────────────
+   Redefined at the token level so every consumer degrades together. The
+   html:root selector (0,1,1) matches the specificity of the dark-mode
+   html:not([data-theme]) block and wins by source order. */
+@media (prefers-reduced-transparency: reduce) {
+  html:root {
+    --material-ultrathin: var(--bg-elevated);
+    --material-thin: var(--bg-elevated);
+    --material-regular: var(--bg-elevated);
+    --material-thick: var(--bg-elevated);
+    --glass-regular: var(--bg-elevated);
+    --glass-clear: var(--bg-elevated);
+    --material-ultrathin-backdrop: none;
+    --material-thin-backdrop: none;
+    --material-regular-backdrop: none;
+    --material-thick-backdrop: none;
+    --glass-backdrop: none;
+    --scrim-backdrop: none;
+    --vibrancy-label: var(--text-strong);
+    --vibrancy-label-secondary: var(--text-muted);
+    --vibrancy-label-tertiary: var(--text-soft);
+    --vibrancy-label-quaternary: var(--text-faint);
+    --vibrancy-fill: var(--bg-fill);
+    --vibrancy-fill-secondary: var(--bg-fill-secondary);
+    --vibrancy-fill-tertiary: var(--bg-fill-tertiary);
+    --material-separator: var(--border);
+  }
+  .od-glass-refract,
+  .od-glass-refract.od-glass-refract--sdf,
+  .od-glass-refract[data-od-glass-sdf].od-glass-refract--tinted {
+    background: var(--bg-elevated);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  html:root {
+    --material-ultrathin: var(--bg-elevated);
+    --material-thin: var(--bg-elevated);
+    --material-regular: var(--bg-elevated);
+    --material-thick: var(--bg-elevated);
+    --glass-regular: var(--bg-elevated);
+    --glass-clear: var(--bg-elevated);
+    --vibrancy-label: var(--text-strong);
+    --vibrancy-label-secondary: var(--text-muted);
+    --vibrancy-label-tertiary: var(--text-soft);
+    --vibrancy-label-quaternary: var(--text-faint);
+    --vibrancy-fill: var(--bg-fill);
+    --vibrancy-fill-secondary: var(--bg-fill-secondary);
+    --vibrancy-fill-tertiary: var(--bg-fill-tertiary);
+    --material-separator: var(--border);
+  }
+}

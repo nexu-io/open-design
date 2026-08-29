@@ -2,9 +2,9 @@ import type { SolutionLocaleCopy } from './types';
 
 export const KO: SolutionLocaleCopy = {
   aiWireframeGenerator: {
-    title: 'AI 와이어프레임 생성기 — Open Design으로 프롬프트에서 와이어프레임까지',
+    title: 'AI 와이어프레임 생성기 — OpenDesign으로 프롬프트에서 와이어프레임까지',
     description:
-      '프롬프트를 편집 가능한 멀티 스크린 와이어프레임으로 바꾸고, 나아가 출시할 수 있는 코드까지 끌고 가는 무료 오픈소스 AI 와이어프레임 생성기입니다. Open Design은 이미 사용 중인 코딩 에이전트 안에서 실행되므로 와이어프레임과 실제 제품이 하나의 원천을 공유합니다.',
+      '프롬프트를 편집 가능한 멀티 스크린 와이어프레임으로 바꾸고, 나아가 출시할 수 있는 코드까지 끌고 가는 무료 오픈소스 AI 와이어프레임 생성기입니다. OpenDesign은 이미 사용 중인 코딩 에이전트 안에서 실행되므로 와이어프레임과 실제 제품이 하나의 원천을 공유합니다.',
     breadcrumb: 'AI 와이어프레임 생성기',
     label: '도구 · AI 와이어프레임 생성기',
     heading: '프롬프트의 속도로 와이어프레임',
@@ -13,12 +13,12 @@ export const KO: SolutionLocaleCopy = {
       '프롬프트가 편집 가능한 와이어프레임으로, 다시 완성된 UI로 바뀌고 초록색 선택 상자로 둘러싸인 에디토리얼 일러스트',
     tldrTitle: '한 줄로 말하면',
     tldrBody:
-      '대부분의 AI 와이어프레임 생성기는 나중에 다시 만들어야 할 그림 하나를 건넵니다. Open Design은 코딩 에이전트 안에서 와이어프레임을 생성하고 프롬프트에서 출시 코드까지 그대로 끌고 갑니다 — 내보내기 단계도, 인계의 단절도, 좌석당 과금도 없이.',
+      '대부분의 AI 와이어프레임 생성기는 나중에 다시 만들어야 할 그림 하나를 건넵니다. OpenDesign은 코딩 에이전트 안에서 와이어프레임을 생성하고 프롬프트에서 출시 코드까지 그대로 끌고 갑니다 — 내보내기 단계도, 인계의 단절도, 좌석당 과금도 없이.',
     stepsTitle: 'AI 와이어프레임 생성기가 작동하는 방식',
     steps: [
       {
         title: '화면을 설명한다',
-        body: '무엇을 와이어프레임으로 만들지 평범한 언어로 에이전트에게 말합니다 — "사이드바, 통계 행, 최근 활동 테이블이 있는 대시보드"처럼. Open Design이 와이어프레임 기술을 불러와 에이전트가 단일 정적 이미지가 아니라 구조와 위계를 배치하게 합니다.',
+        body: '무엇을 와이어프레임으로 만들지 평범한 언어로 에이전트에게 말합니다 — "사이드바, 통계 행, 최근 활동 테이블이 있는 대시보드"처럼. OpenDesign이 와이어프레임 기술을 불러와 에이전트가 단일 정적 이미지가 아니라 구조와 위계를 배치하게 합니다.',
         imageAlt: '평범한 언어로 된 화면 설명을 터미널에 입력하는 일러스트',
       },
       {
@@ -37,9 +37,9 @@ export const KO: SolutionLocaleCopy = {
         imageAlt: '와이어프레임이 초록색 선택 프레임에 담긴 출시 코드로 흘러 들어가는 일러스트',
       },
     ],
-    tableTitle: 'Open Design vs 일반적인 AI 와이어프레임 생성기',
+    tableTitle: 'OpenDesign vs 일반적인 AI 와이어프레임 생성기',
     tableColCapability: '필요한 것',
-    tableColWithOd: 'Open Design이라면',
+    tableColWithOd: 'OpenDesign이라면',
     tableColWithout: '일반적인 AI 와이어프레임 생성기',
     tableRows: [
       {
@@ -101,7 +101,7 @@ export const KO: SolutionLocaleCopy = {
         thumb: 'example-kami-landing',
       },
     ],
-    galleryTitle: 'Open Design으로 만든 와이어프레임',
+    galleryTitle: 'OpenDesign으로 만든 와이어프레임',
     galleryLead:
       '모두가 프롬프트로 시작해 편집 가능하고 클릭 가능한 산출물로 렌더링되었습니다. 아이디어에 가까운 템플릿을 고르고 변형을 설명하면 에이전트가 그것을 적응시킵니다 — 와이어프레임에서 출시 코드까지.',
     gallery: [
@@ -116,7 +116,7 @@ export const KO: SolutionLocaleCopy = {
     faq: [
       {
         q: 'AI 와이어프레임 생성기는 무료인가요?',
-        a: '네. Open Design은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — 와이어프레임 생성기 자체에는 좌석당이나 크레딧당 과금이 없습니다.',
+        a: '네. OpenDesign은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — 와이어프레임 생성기 자체에는 좌석당이나 크레딧당 과금이 없습니다.',
       },
       {
         q: '와이어프레임은 편집 가능한가요, 아니면 그냥 이미지인가요?',
@@ -128,24 +128,24 @@ export const KO: SolutionLocaleCopy = {
       },
       {
         q: '어떤 에이전트와 함께 작동하나요?',
-        a: 'Open Design은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키를 가져오며, 무엇도 대신 호스팅되지 않습니다.',
+        a: 'OpenDesign은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키를 가져오며, 무엇도 대신 호스팅되지 않습니다.',
       },
     ],
     ctaTitle: '오늘 밤 첫 와이어프레임을 생성하세요',
     ctaBody:
-      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, 다음 화면 아이디어를 편집 가능한 와이어프레임으로 — 그리고 출시 코드로 — 이미 사용 중인 에이전트 안에서 바꿔 보세요.',
+      '리포지토리에 스타를 누르고 OpenDesign을 설치한 뒤, 다음 화면 아이디어를 편집 가능한 와이어프레임으로 — 그리고 출시 코드로 — 이미 사용 중인 에이전트 안에서 바꿔 보세요.',
     relatedTitle: '관련 도구와 가이드',
     related: [
       { href: '/solutions/ai-ui-generator/', label: 'AI UI 생성기' },
-      { href: '/solutions/design-to-code/', label: 'Open Design으로 디자인에서 코드로' },
+      { href: '/solutions/design-to-code/', label: 'OpenDesign으로 디자인에서 코드로' },
       { href: '/blog/design-to-code-tools/', label: '최고의 디자인-투-코드 도구' },
-      { href: '/solutions/prototype/', label: 'Open Design으로 프로토타이핑' },
+      { href: '/solutions/prototype/', label: 'OpenDesign으로 프로토타이핑' },
     ],
   },
   aiUiGenerator: {
-    title: 'AI UI 생성기 — Open Design으로 프롬프트에서 프로덕션 UI까지',
+    title: 'AI UI 생성기 — OpenDesign으로 프롬프트에서 프로덕션 UI까지',
     description:
-      '프롬프트를 진짜 컴포넌트 기반 인터페이스로 바꾸고, 나아가 출시할 수 있는 코드까지 끌고 가는 무료 오픈소스 AI UI 생성기입니다. Open Design은 이미 사용 중인 코딩 에이전트 안에서 실행되므로 생성된 UI와 프로덕션 코드가 같은 산출물입니다.',
+      '프롬프트를 진짜 컴포넌트 기반 인터페이스로 바꾸고, 나아가 출시할 수 있는 코드까지 끌고 가는 무료 오픈소스 AI UI 생성기입니다. OpenDesign은 이미 사용 중인 코딩 에이전트 안에서 실행되므로 생성된 UI와 프로덕션 코드가 같은 산출물입니다.',
     breadcrumb: 'AI UI 생성기',
     label: '도구 · AI UI 생성기',
     heading: '진짜로 출시할 수 있는 UI를 생성하세요',
@@ -154,12 +154,12 @@ export const KO: SolutionLocaleCopy = {
       '프롬프트가 컴포넌트 기반 UI로, 다시 프로덕션 코드로 바뀌고 초록색 선택 상자로 둘러싸인 에디토리얼 일러스트',
     tldrTitle: '한 줄로 말하면',
     tldrBody:
-      '대부분의 AI UI 생성기는 목업이나 한 번 쓰고 버릴 React 스니펫을 줍니다. Open Design은 코딩 에이전트 안에서 UI를 생성하고 프롬프트에서 출시 코드까지 그대로 끌고 갑니다 — 진짜 컴포넌트, 내 디자인 시스템, 내보내기 단계도 좌석당 과금도 없이.',
+      '대부분의 AI UI 생성기는 목업이나 한 번 쓰고 버릴 React 스니펫을 줍니다. OpenDesign은 코딩 에이전트 안에서 UI를 생성하고 프롬프트에서 출시 코드까지 그대로 끌고 갑니다 — 진짜 컴포넌트, 내 디자인 시스템, 내보내기 단계도 좌석당 과금도 없이.',
     stepsTitle: 'AI UI 생성기가 작동하는 방식',
     steps: [
       {
         title: '인터페이스를 설명한다',
-        body: '무엇을 만들지 평범한 언어로 에이전트에게 말합니다 — "사이드바, 탭으로 나뉜 섹션, 저장 바가 있는 설정 페이지"처럼. Open Design이 UI 기술을 불러와 에이전트가 일회성 화면이 아니라 진짜 컴포넌트와 디자인 시스템을 끌어옵니다.',
+        body: '무엇을 만들지 평범한 언어로 에이전트에게 말합니다 — "사이드바, 탭으로 나뉜 섹션, 저장 바가 있는 설정 페이지"처럼. OpenDesign이 UI 기술을 불러와 에이전트가 일회성 화면이 아니라 진짜 컴포넌트와 디자인 시스템을 끌어옵니다.',
         imageAlt: '평범한 언어로 된 UI 설명을 터미널에 입력하는 일러스트',
       },
       {
@@ -178,9 +178,9 @@ export const KO: SolutionLocaleCopy = {
         imageAlt: '생성된 UI가 초록색 선택 프레임에 담긴 출시 코드로 흘러 들어가는 일러스트',
       },
     ],
-    tableTitle: 'Open Design vs 일반적인 AI UI 생성기',
+    tableTitle: 'OpenDesign vs 일반적인 AI UI 생성기',
     tableColCapability: '필요한 것',
-    tableColWithOd: 'Open Design이라면',
+    tableColWithOd: 'OpenDesign이라면',
     tableColWithout: '일반적인 AI UI 생성기',
     tableRows: [
       {
@@ -242,7 +242,7 @@ export const KO: SolutionLocaleCopy = {
         thumb: 'example-kami-landing',
       },
     ],
-    galleryTitle: 'Open Design으로 만든 UI',
+    galleryTitle: 'OpenDesign으로 만든 UI',
     galleryLead:
       '모두가 프롬프트로 시작해 진짜 컴포넌트 기반 산출물로 렌더링되었습니다. 아이디어에 가까운 템플릿을 고르고 변형을 설명하면 에이전트가 그것을 적응시킵니다 — UI에서 출시 코드까지.',
     gallery: [
@@ -257,7 +257,7 @@ export const KO: SolutionLocaleCopy = {
     faq: [
       {
         q: 'AI UI 생성기는 무료인가요?',
-        a: '네. Open Design은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — UI 생성기 자체에는 좌석당이나 크레딧당 과금이 없습니다.',
+        a: '네. OpenDesign은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — UI 생성기 자체에는 좌석당이나 크레딧당 과금이 없습니다.',
       },
       {
         q: '진짜 컴포넌트를 생성하나요, 아니면 그냥 목업인가요?',
@@ -269,22 +269,22 @@ export const KO: SolutionLocaleCopy = {
       },
       {
         q: '어떤 에이전트와 함께 작동하나요?',
-        a: 'Open Design은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키를 가져오며, 무엇도 대신 호스팅되지 않습니다.',
+        a: 'OpenDesign은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키를 가져오며, 무엇도 대신 호스팅되지 않습니다.',
       },
     ],
     ctaTitle: '오늘 밤 첫 UI를 생성하세요',
     ctaBody:
-      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, 다음 인터페이스 아이디어를 진짜 컴포넌트 기반 UI로 — 그리고 출시 코드로 — 이미 사용 중인 에이전트 안에서 바꿔 보세요.',
+      '리포지토리에 스타를 누르고 OpenDesign을 설치한 뒤, 다음 인터페이스 아이디어를 진짜 컴포넌트 기반 UI로 — 그리고 출시 코드로 — 이미 사용 중인 에이전트 안에서 바꿔 보세요.',
     relatedTitle: '관련 도구와 가이드',
     related: [
       { href: '/solutions/ai-wireframe-generator/', label: 'AI 와이어프레임 생성기' },
-      { href: '/solutions/design-to-code/', label: 'Open Design으로 디자인에서 코드로' },
+      { href: '/solutions/design-to-code/', label: 'OpenDesign으로 디자인에서 코드로' },
       { href: '/blog/best-ai-design-tools/', label: '최고의 AI 디자인 도구' },
-      { href: '/solutions/designer/', label: '디자이너를 위한 Open Design' },
+      { href: '/solutions/designer/', label: '디자이너를 위한 OpenDesign' },
     ],
   },
   designToCode: {
-    title: '디자인에서 코드로 — Open Design으로 디자인을 출시 코드로 바꾸기',
+    title: '디자인에서 코드로 — OpenDesign으로 디자인을 출시 코드로 바꾸기',
     description:
       '프롬프트나 디자인을 진짜 편집 가능한 코드로 바꾸는 무료 오픈소스 디자인-투-코드 워크플로우입니다 — 이미 사용 중인 코딩 에이전트 안에서. 내보내기도, 인계도 없이: 디자인과 프로덕션 코드가 내가 소유하고 출시하는 하나의 산출물입니다.',
     breadcrumb: '디자인에서 코드로',
@@ -295,12 +295,12 @@ export const KO: SolutionLocaleCopy = {
       '디자인이 깔끔한 프로덕션 코드로 바뀌고 초록색 선택 상자로 둘러싸인 에디토리얼 일러스트',
     tldrTitle: '한 줄로 말하면',
     tldrBody:
-      '대부분의 디자인-투-코드 도구는 그 뒤로 계속 손봐야 할 일회성 스냅샷을 내보냅니다. Open Design은 디자인과 코드를 에이전트 안의 하나의 살아있는 산출물로 유지합니다 — 대화하며 반복하고, 내가 소유한 코드를 출시하며, 좌석당 과금이 없습니다.',
+      '대부분의 디자인-투-코드 도구는 그 뒤로 계속 손봐야 할 일회성 스냅샷을 내보냅니다. OpenDesign은 디자인과 코드를 에이전트 안의 하나의 살아있는 산출물로 유지합니다 — 대화하며 반복하고, 내가 소유한 코드를 출시하며, 좌석당 과금이 없습니다.',
     stepsTitle: '디자인에서 코드로가 작동하는 방식',
     steps: [
       {
         title: '프롬프트나 디자인에서 시작한다',
-        body: '화면을 평범한 언어로 설명하거나 에이전트에게 디자인 방향을 가리킵니다. Open Design이 알맞은 기술을 불러와 에이전트가 부서지기 쉬운 일회성 변환이 아니라 구조와 컴포넌트를 만듭니다.',
+        body: '화면을 평범한 언어로 설명하거나 에이전트에게 디자인 방향을 가리킵니다. OpenDesign이 알맞은 기술을 불러와 에이전트가 부서지기 쉬운 일회성 변환이 아니라 구조와 컴포넌트를 만듭니다.',
         imageAlt: '디자인과 프롬프트가 터미널로 들어가는 일러스트',
       },
       {
@@ -319,9 +319,9 @@ export const KO: SolutionLocaleCopy = {
         imageAlt: '초록색 선택 프레임에 담겨 출시 준비가 된 완성 코드의 일러스트',
       },
     ],
-    tableTitle: 'Open Design vs 일반적인 디자인-투-코드 도구',
+    tableTitle: 'OpenDesign vs 일반적인 디자인-투-코드 도구',
     tableColCapability: '필요한 것',
-    tableColWithOd: 'Open Design이라면',
+    tableColWithOd: 'OpenDesign이라면',
     tableColWithout: '일반적인 디자인-투-코드 도구',
     tableRows: [
       {
@@ -383,7 +383,7 @@ export const KO: SolutionLocaleCopy = {
         thumb: 'example-gamified-app',
       },
     ],
-    galleryTitle: 'Open Design으로 디자인에서 출시까지',
+    galleryTitle: 'OpenDesign으로 디자인에서 출시까지',
     galleryLead:
       '모두가 프롬프트나 디자인으로 시작해 출시할 수 있는 코드가 되었습니다. 아이디어에 가까운 템플릿을 고르고 변형을 설명하면 에이전트가 그것을 변환합니다 — 인계 없는 디자인에서 코드로.',
     gallery: [
@@ -398,7 +398,7 @@ export const KO: SolutionLocaleCopy = {
     faq: [
       {
         q: '디자인-투-코드 워크플로우는 무료인가요?',
-        a: '네. Open Design은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — 디자인-투-코드 워크플로우 자체에는 좌석당이나 크레딧당 과금이 없습니다.',
+        a: '네. OpenDesign은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — 디자인-투-코드 워크플로우 자체에는 좌석당이나 크레딧당 과금이 없습니다.',
       },
       {
         q: '어떤 종류의 코드를 만들어 내나요?',
@@ -410,24 +410,24 @@ export const KO: SolutionLocaleCopy = {
       },
       {
         q: '어떤 에이전트와 함께 작동하나요?',
-        a: 'Open Design은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키를 가져오며, 무엇도 대신 호스팅되지 않습니다.',
+        a: 'OpenDesign은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키를 가져오며, 무엇도 대신 호스팅되지 않습니다.',
       },
     ],
     ctaTitle: '오늘 밤 다음 디자인을 코드로 바꾸세요',
     ctaBody:
-      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, 다음 화면을 — 프롬프트, 와이어프레임, 또는 디자인을 — 이미 사용 중인 에이전트 안에서 깔끔하고 출시 가능한 코드로 바꿔 보세요.',
+      '리포지토리에 스타를 누르고 OpenDesign을 설치한 뒤, 다음 화면을 — 프롬프트, 와이어프레임, 또는 디자인을 — 이미 사용 중인 에이전트 안에서 깔끔하고 출시 가능한 코드로 바꿔 보세요.',
     relatedTitle: '관련 도구와 가이드',
     related: [
       { href: '/solutions/ai-wireframe-generator/', label: 'AI 와이어프레임 생성기' },
       { href: '/solutions/ai-ui-generator/', label: 'AI UI 생성기' },
       { href: '/blog/design-to-code-tools/', label: '최고의 디자인-투-코드 도구' },
-      { href: '/solutions/engineering/', label: '엔지니어링을 위한 Open Design' },
+      { href: '/solutions/engineering/', label: '엔지니어링을 위한 OpenDesign' },
     ],
   },
   aiLandingPageGenerator: {
     title: 'AI 랜딩 페이지 생성기 — 프롬프트에서 출시하는 랜딩 페이지까지',
     description:
-      '프롬프트를 진짜 반응형 랜딩 페이지로 바꾸고, 나아가 출시할 수 있는 코드까지 끌고 가는 무료 오픈소스 AI 랜딩 페이지 생성기입니다. Open Design은 이미 사용 중인 코딩 에이전트 안에서 실행되므로 생성된 페이지와 배포된 페이지가 내가 소유한 같은 산출물입니다.',
+      '프롬프트를 진짜 반응형 랜딩 페이지로 바꾸고, 나아가 출시할 수 있는 코드까지 끌고 가는 무료 오픈소스 AI 랜딩 페이지 생성기입니다. OpenDesign은 이미 사용 중인 코딩 에이전트 안에서 실행되므로 생성된 페이지와 배포된 페이지가 내가 소유한 같은 산출물입니다.',
     breadcrumb: 'AI 랜딩 페이지 생성기',
     label: '도구 · AI 랜딩 페이지 생성기',
     heading: '출시할 수 있는 랜딩 페이지를 생성하세요',
@@ -436,12 +436,12 @@ export const KO: SolutionLocaleCopy = {
       '프롬프트가 반응형 랜딩 페이지로, 다시 프로덕션 코드로 바뀌고 초록색 선택 상자로 둘러싸인 에디토리얼 일러스트',
     tldrTitle: '한 줄로 말하면',
     tldrBody:
-      '대부분의 AI 랜딩 페이지 빌더는 페이지를 자기네 에디터 안에 가두고 좌석당 과금합니다. Open Design은 코딩 에이전트 안에서 랜딩 페이지를 생성하고 프롬프트에서 출시 코드까지 그대로 끌고 갑니다 — 진짜 섹션, 내 브랜드, 내보내기 단계도 좌석당 과금도 없이.',
+      '대부분의 AI 랜딩 페이지 빌더는 페이지를 자기네 에디터 안에 가두고 좌석당 과금합니다. OpenDesign은 코딩 에이전트 안에서 랜딩 페이지를 생성하고 프롬프트에서 출시 코드까지 그대로 끌고 갑니다 — 진짜 섹션, 내 브랜드, 내보내기 단계도 좌석당 과금도 없이.',
     stepsTitle: 'AI 랜딩 페이지 생성기가 작동하는 방식',
     steps: [
       {
         title: '페이지를 설명한다',
-        body: '무엇을 만들지 평범한 언어로 에이전트에게 알려 줍니다 — "메모 앱을 위한 출시 페이지: 히어로, 기능 세 개, 요금, 대기자 명단 폼"처럼. Open Design이 랜딩 페이지 기술을 불러와 에이전트가 명확한 위계를 갖춘 진짜 섹션을 배치합니다.',
+        body: '무엇을 만들지 평범한 언어로 에이전트에게 알려 줍니다 — "메모 앱을 위한 출시 페이지: 히어로, 기능 세 개, 요금, 대기자 명단 폼"처럼. OpenDesign이 랜딩 페이지 기술을 불러와 에이전트가 명확한 위계를 갖춘 진짜 섹션을 배치합니다.',
         imageAlt: '평범한 언어로 된 랜딩 페이지 브리프가 터미널에 입력되는 일러스트',
       },
       {
@@ -460,9 +460,9 @@ export const KO: SolutionLocaleCopy = {
         imageAlt: '랜딩 페이지가 초록색 선택 프레임에 담긴 출시 코드로 흘러 들어가는 일러스트',
       },
     ],
-    tableTitle: 'Open Design vs 일반적인 AI 랜딩 페이지 빌더',
+    tableTitle: 'OpenDesign vs 일반적인 AI 랜딩 페이지 빌더',
     tableColCapability: '필요한 것',
-    tableColWithOd: 'Open Design이라면',
+    tableColWithOd: 'OpenDesign이라면',
     tableColWithout: '일반적인 AI 랜딩 페이지 빌더',
     tableRows: [
       {
@@ -524,7 +524,7 @@ export const KO: SolutionLocaleCopy = {
         thumb: 'example-gamified-app',
       },
     ],
-    galleryTitle: 'Open Design으로 만든 랜딩 페이지',
+    galleryTitle: 'OpenDesign으로 만든 랜딩 페이지',
     galleryLead:
       '모두가 프롬프트로 시작해 진짜 반응형 산출물로 렌더링되었습니다. 아이디어에 가까운 템플릿을 고르고 변형을 설명하면 에이전트가 그것을 맞춥니다 — 랜딩 페이지에서 출시 코드까지.',
     gallery: [
@@ -539,7 +539,7 @@ export const KO: SolutionLocaleCopy = {
     faq: [
       {
         q: 'AI 랜딩 페이지 생성기는 무료인가요?',
-        a: '네. Open Design은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — 랜딩 페이지 생성기 자체에는 좌석당이나 페이지당 과금이 없습니다.',
+        a: '네. OpenDesign은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — 랜딩 페이지 생성기 자체에는 좌석당이나 페이지당 과금이 없습니다.',
       },
       {
         q: '페이지를 어디에나 호스팅할 수 있나요?',
@@ -551,22 +551,22 @@ export const KO: SolutionLocaleCopy = {
       },
       {
         q: '어떤 에이전트와 함께 작동하나요?',
-        a: 'Open Design은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키를 가져오며, 무엇도 대신 호스팅되지 않습니다.',
+        a: 'OpenDesign은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키를 가져오며, 무엇도 대신 호스팅되지 않습니다.',
       },
     ],
     ctaTitle: '오늘 밤 첫 랜딩 페이지를 생성하세요',
     ctaBody:
-      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, 다음 출시 아이디어를 진짜 반응형 랜딩 페이지로 — 그리고 다시 출시 코드로 — 이미 사용 중인 에이전트 안에서 바꿔 보세요.',
+      '리포지토리에 스타를 누르고 OpenDesign을 설치한 뒤, 다음 출시 아이디어를 진짜 반응형 랜딩 페이지로 — 그리고 다시 출시 코드로 — 이미 사용 중인 에이전트 안에서 바꿔 보세요.',
     relatedTitle: '관련 도구와 가이드',
     related: [
       { href: '/solutions/ai-ui-generator/', label: 'AI UI 생성기' },
-      { href: '/solutions/design-to-code/', label: 'Open Design으로 디자인에서 코드로' },
-      { href: '/solutions/marketing/', label: '마케팅을 위한 Open Design' },
+      { href: '/solutions/design-to-code/', label: 'OpenDesign으로 디자인에서 코드로' },
+      { href: '/solutions/marketing/', label: '마케팅을 위한 OpenDesign' },
       { href: '/blog/best-ai-design-tools/', label: '최고의 AI 디자인 도구' },
     ],
   },
   figmaToCode: {
-    title: 'Figma에서 코드로 — Open Design으로 Figma 디자인을 출시 코드로 바꾸기',
+    title: 'Figma에서 코드로 — OpenDesign으로 Figma 디자인을 출시 코드로 바꾸기',
     description:
       'Figma 디자인을 깔끔한 컴포넌트 기반 코드로 바꾸는 무료 오픈소스 Figma-투-코드 워크플로우입니다 — 이미 사용 중인 코딩 에이전트 안에서, Claude Code부터 Codex까지. Figma MCP를 통해 디자인을 끌어오면 에이전트가 잠금 없는 내보내기로 내가 소유하고 출시하는 진짜 코드를 만듭니다.',
     breadcrumb: 'Figma에서 코드로',
@@ -577,12 +577,12 @@ export const KO: SolutionLocaleCopy = {
       'Figma 디자인이 코딩 에이전트 안에서 깔끔한 프로덕션 코드로 바뀌고 초록색 선택 상자로 둘러싸인 에디토리얼 일러스트',
     tldrTitle: '한 줄로 말하면',
     tldrBody:
-      '대부분의 Figma-투-코드 플러그인은 그 뒤로 다시 작성해야 할 절대 위치 지정 마크업의 일회성 스냅샷을 내보냅니다. Open Design은 디자인과 코드를 에이전트 안의 하나의 살아있는 산출물로 유지합니다 — Figma MCP를 통해 프레임을 끌어오고, 대화하며 반복하고, 내가 소유한 코드를 출시합니다.',
+      '대부분의 Figma-투-코드 플러그인은 그 뒤로 다시 작성해야 할 절대 위치 지정 마크업의 일회성 스냅샷을 내보냅니다. OpenDesign은 디자인과 코드를 에이전트 안의 하나의 살아있는 산출물로 유지합니다 — Figma MCP를 통해 프레임을 끌어오고, 대화하며 반복하고, 내가 소유한 코드를 출시합니다.',
     stepsTitle: 'Figma에서 코드로가 작동하는 방식',
     steps: [
       {
         title: 'Figma를 에이전트에 연결한다',
-        body: 'Figma MCP를 설정해 두면 코딩 에이전트가 — Claude Code, Codex, Cursor Agent가 — Figma 파일이나 선택한 프레임을 직접 읽을 수 있습니다. Open Design이 알맞은 기술을 불러와 에이전트가 부서지기 쉬운 픽셀 복사가 아니라 디자인 의도를 구조로 바꿉니다.',
+        body: 'Figma MCP를 설정해 두면 코딩 에이전트가 — Claude Code, Codex, Cursor Agent가 — Figma 파일이나 선택한 프레임을 직접 읽을 수 있습니다. OpenDesign이 알맞은 기술을 불러와 에이전트가 부서지기 쉬운 픽셀 복사가 아니라 디자인 의도를 구조로 바꿉니다.',
         imageAlt: 'Figma 프레임이 MCP 링크를 통해 터미널에 연결되는 일러스트',
       },
       {
@@ -601,9 +601,9 @@ export const KO: SolutionLocaleCopy = {
         imageAlt: '초록색 선택 프레임에 담겨 출시 준비가 된 완성 코드의 일러스트',
       },
     ],
-    tableTitle: 'Open Design vs 일반적인 Figma-투-코드 도구',
+    tableTitle: 'OpenDesign vs 일반적인 Figma-투-코드 도구',
     tableColCapability: '필요한 것',
-    tableColWithOd: 'Open Design이라면',
+    tableColWithOd: 'OpenDesign이라면',
     tableColWithout: '일반적인 Figma-투-코드 도구',
     tableRows: [
       {
@@ -665,7 +665,7 @@ export const KO: SolutionLocaleCopy = {
         thumb: 'example-gamified-app',
       },
     ],
-    galleryTitle: 'Open Design으로 Figma에서 출시까지',
+    galleryTitle: 'OpenDesign으로 Figma에서 출시까지',
     galleryLead:
       '모두가 Figma 프레임으로 시작해 출시할 수 있는 코드가 되었습니다. 디자인에 가까운 템플릿을 고르고 변형을 설명하면 에이전트가 그것을 변환합니다 — 잠금 없는 내보내기로 Figma에서 코드로.',
     gallery: [
@@ -679,7 +679,7 @@ export const KO: SolutionLocaleCopy = {
     faqTitle: 'Figma에서 코드로 FAQ',
     faq: [
       {
-        q: 'Open Design은 Figma를 어떻게 코드로 바꾸나요?',
+        q: 'OpenDesign은 Figma를 어떻게 코드로 바꾸나요?',
         a: 'Figma MCP를 통해 코딩 에이전트가 — Claude Code, Codex, Cursor Agent가 — Figma 파일이나 선택한 프레임을 직접 읽고, 플러그인에서 일회성 스냅샷을 내보내는 대신 깔끔한 컴포넌트 기반 코드를 생성합니다.',
       },
       {
@@ -688,26 +688,26 @@ export const KO: SolutionLocaleCopy = {
       },
       {
         q: '무료인가요?',
-        a: '네. Open Design은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — Figma-투-코드 워크플로우 자체에는 좌석당이나 내보내기당 과금이 없습니다.',
+        a: '네. OpenDesign은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — Figma-투-코드 워크플로우 자체에는 좌석당이나 내보내기당 과금이 없습니다.',
       },
       {
         q: '어떤 에이전트와 함께 작동하나요?',
-        a: 'Open Design은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키와 자신의 Figma MCP 설정을 가져오며, 무엇도 대신 호스팅되지 않습니다.',
+        a: 'OpenDesign은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키와 자신의 Figma MCP 설정을 가져오며, 무엇도 대신 호스팅되지 않습니다.',
       },
     ],
     ctaTitle: '오늘 밤 다음 Figma 프레임을 코드로 바꾸세요',
     ctaBody:
-      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, Figma MCP를 연결하고, 다음 Figma 디자인을 이미 사용 중인 에이전트 안에서 깔끔하고 출시 가능한 코드로 바꿔 보세요.',
+      '리포지토리에 스타를 누르고 OpenDesign을 설치한 뒤, Figma MCP를 연결하고, 다음 Figma 디자인을 이미 사용 중인 에이전트 안에서 깔끔하고 출시 가능한 코드로 바꿔 보세요.',
     relatedTitle: '관련 도구와 가이드',
     related: [
-      { href: '/solutions/design-to-code/', label: 'Open Design으로 디자인에서 코드로' },
+      { href: '/solutions/design-to-code/', label: 'OpenDesign으로 디자인에서 코드로' },
       { href: '/solutions/ai-ui-generator/', label: 'AI UI 생성기' },
-      { href: '/agents/claude-code-design/', label: 'Claude Code를 위한 Open Design' },
-      { href: '/solutions/engineering/', label: '엔지니어링을 위한 Open Design' },
+      { href: '/agents/claude-code-design/', label: 'Claude Code를 위한 OpenDesign' },
+      { href: '/solutions/engineering/', label: '엔지니어링을 위한 OpenDesign' },
     ],
   },
   screenshotToCode: {
-    title: '스크린샷을 코드로 — Open Design으로 스크린샷을 코드로 바꾸기',
+    title: '스크린샷을 코드로 — OpenDesign으로 스크린샷을 코드로 바꾸기',
     description:
       '어떤 UI의 스크린샷이든 이미 사용 중인 코딩 에이전트 안에서 깔끔한 컴포넌트 기반 코드로 바꿔 주는 무료 오픈소스 스크린샷-투-코드 워크플로우입니다. 이미지를 넣고 원하는 것을 설명하면, 에이전트가 그것을 당신이 소유하고 출시할 수 있는 진짜 코드로 다시 만들어 줍니다 — 잠긴 내보내기는 없습니다.',
     breadcrumb: '스크린샷을 코드로',
@@ -718,12 +718,12 @@ export const KO: SolutionLocaleCopy = {
       'UI 스크린샷이 코딩 에이전트 안에서 깔끔한 프로덕션 코드로 바뀌고 초록색 선택 박스로 둘러싸인 모습을 그린 에디토리얼 일러스트',
     tldrTitle: '한 줄로 말하면',
     tldrBody:
-      '대부분의 스크린샷-투-코드 도구는 이후에 다시 작성해야 하는 일회성 절대 위치 지정 마크업을 뱉어냅니다. Open Design은 당신의 코딩 에이전트 안에서 스크린샷을 깔끔한 컴포넌트 기반 코드로 다시 만듭니다 — 진짜 구조, 당신의 디자인 시스템, 내보내기 단계 없음, 좌석당 과금 없음.',
+      '대부분의 스크린샷-투-코드 도구는 이후에 다시 작성해야 하는 일회성 절대 위치 지정 마크업을 뱉어냅니다. OpenDesign은 당신의 코딩 에이전트 안에서 스크린샷을 깔끔한 컴포넌트 기반 코드로 다시 만듭니다 — 진짜 구조, 당신의 디자인 시스템, 내보내기 단계 없음, 좌석당 과금 없음.',
     stepsTitle: '스크린샷을 코드로 바꾸는 방식',
     steps: [
       {
         title: '스크린샷을 넣기',
-        body: '원하는 화면의 이미지를 에이전트에게 주세요 — 앱, 웹사이트, 또는 디자인의 스크린샷. Open Design이 알맞은 스킬을 불러와 에이전트가 픽셀만이 아니라 레이아웃과 의도를 읽게 합니다.',
+        body: '원하는 화면의 이미지를 에이전트에게 주세요 — 앱, 웹사이트, 또는 디자인의 스크린샷. OpenDesign이 알맞은 스킬을 불러와 에이전트가 픽셀만이 아니라 레이아웃과 의도를 읽게 합니다.',
         imageAlt: 'UI 스크린샷을 터미널에 넣는 모습을 그린 일러스트',
       },
       {
@@ -742,9 +742,9 @@ export const KO: SolutionLocaleCopy = {
         imageAlt: '초록색 선택 프레임에 담겨 출시 준비가 된 완성된 코드를 그린 일러스트',
       },
     ],
-    tableTitle: 'Open Design vs. 일반적인 스크린샷-투-코드 도구',
+    tableTitle: 'OpenDesign vs. 일반적인 스크린샷-투-코드 도구',
     tableColCapability: '필요한 것',
-    tableColWithOd: 'Open Design과 함께',
+    tableColWithOd: 'OpenDesign과 함께',
     tableColWithout: '일반적인 스크린샷-투-코드 도구',
     tableRows: [
       {
@@ -806,7 +806,7 @@ export const KO: SolutionLocaleCopy = {
         thumb: 'example-gamified-app',
       },
     ],
-    galleryTitle: 'Open Design으로 스크린샷에서 다시 만든 것들',
+    galleryTitle: 'OpenDesign으로 스크린샷에서 다시 만든 것들',
     galleryLead:
       '모두 이미지에서 시작해 출시할 수 있는 코드가 되었습니다. 당신의 스크린샷과 가까운 템플릿을 고르고 변형을 설명하면 에이전트가 다시 만들어 줍니다 — 스크린샷을 코드로, 잠긴 내보내기 없이.',
     gallery: [
@@ -820,8 +820,8 @@ export const KO: SolutionLocaleCopy = {
     faqTitle: '스크린샷을 코드로 FAQ',
     faq: [
       {
-        q: 'Open Design은 스크린샷을 어떻게 코드로 바꾸나요?',
-        a: '코딩 에이전트에게 화면 이미지를 주면 Open Design이 알맞은 스킬을 불러와 에이전트가 그것을 깔끔한 컴포넌트 기반 코드로 다시 만듭니다 — 픽셀을 단순히 따라 그리는 게 아니라 레이아웃과 의도를 읽습니다.',
+        q: 'OpenDesign은 스크린샷을 어떻게 코드로 바꾸나요?',
+        a: '코딩 에이전트에게 화면 이미지를 주면 OpenDesign이 알맞은 스킬을 불러와 에이전트가 그것을 깔끔한 컴포넌트 기반 코드로 다시 만듭니다 — 픽셀을 단순히 따라 그리는 게 아니라 레이아웃과 의도를 읽습니다.',
       },
       {
         q: '어떤 종류의 코드를 만들어 내나요?',
@@ -829,26 +829,26 @@ export const KO: SolutionLocaleCopy = {
       },
       {
         q: '무료인가요?',
-        a: '네. Open Design은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — 스크린샷-투-코드 워크플로우 자체에는 좌석당이나 크레딧당 과금이 없습니다.',
+        a: '네. OpenDesign은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — 스크린샷-투-코드 워크플로우 자체에는 좌석당이나 크레딧당 과금이 없습니다.',
       },
       {
         q: '어떤 에이전트와 함께 작동하나요?',
-        a: 'Open Design은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키를 가져오며, 무엇도 대신 호스팅되지 않습니다.',
+        a: 'OpenDesign은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키를 가져오며, 무엇도 대신 호스팅되지 않습니다.',
       },
     ],
     ctaTitle: '오늘 밤 다음 스크린샷을 코드로 바꾸세요',
     ctaBody:
-      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, 원하는 화면의 스크린샷을 이미 사용 중인 에이전트 안에서 깔끔하고 출시 가능한 코드로 바꿔 보세요.',
+      '리포지토리에 스타를 누르고 OpenDesign을 설치한 뒤, 원하는 화면의 스크린샷을 이미 사용 중인 에이전트 안에서 깔끔하고 출시 가능한 코드로 바꿔 보세요.',
     relatedTitle: '관련 도구와 가이드',
     related: [
-      { href: '/solutions/figma-to-code/', label: 'Open Design으로 Figma에서 코드로' },
-      { href: '/solutions/design-to-code/', label: 'Open Design으로 디자인에서 코드로' },
+      { href: '/solutions/figma-to-code/', label: 'OpenDesign으로 Figma에서 코드로' },
+      { href: '/solutions/design-to-code/', label: 'OpenDesign으로 디자인에서 코드로' },
       { href: '/solutions/ai-ui-generator/', label: 'AI UI 생성기' },
-      { href: '/solutions/engineering/', label: '엔지니어링을 위한 Open Design' },
+      { href: '/solutions/engineering/', label: '엔지니어링을 위한 OpenDesign' },
     ],
   },
   htmlToPpt: {
-    title: 'HTML to PPT — Open Design으로 HTML을 편집 가능한 PowerPoint로 바꾸기',
+    title: 'HTML to PPT — OpenDesign으로 HTML을 편집 가능한 PowerPoint로 바꾸기',
     description:
       '무료 오픈소스 HTML-to-PPT 워크플로우: 코딩 에이전트가 깔끔한 HTML 덱을 만들고, 진짜 편집 가능한 .pptx로 내보냅니다 — 이미 사용 중인 에이전트 안에서. 클라우드 변환기도, 납작한 슬라이드 이미지도, 잠긴 내보내기도 없습니다. HTML과 PowerPoint 모두 당신이 소유하는 파일입니다.',
     breadcrumb: 'HTML to PPT',
@@ -859,12 +859,12 @@ export const KO: SolutionLocaleCopy = {
       '코딩 에이전트 안에서 HTML 덱이 편집 가능한 PowerPoint 파일로 변환되는 모습을, 초록색 선택 상자로 감싼 에디토리얼 일러스트',
     tldrTitle: '한 줄로 말하면',
     tldrBody:
-      '대부분의 HTML-to-PPT 변환기는 페이지를 편집할 수 없는 정적 슬라이드 이미지로 납작하게 만듭니다. Open Design은 코딩 에이전트 안에서 덱을 HTML로 만들고 진짜 편집 가능한 .pptx로 내보냅니다 — 네이티브 텍스트와 도형, 당신의 디자인 시스템, 좌석당 과금도 벤더 종속도 없이.',
+      '대부분의 HTML-to-PPT 변환기는 페이지를 편집할 수 없는 정적 슬라이드 이미지로 납작하게 만듭니다. OpenDesign은 코딩 에이전트 안에서 덱을 HTML로 만들고 진짜 편집 가능한 .pptx로 내보냅니다 — 네이티브 텍스트와 도형, 당신의 디자인 시스템, 좌석당 과금도 벤더 종속도 없이.',
     stepsTitle: 'HTML to PPT가 작동하는 방식',
     steps: [
       {
         title: 'HTML, 문서, 프롬프트에서 시작한다',
-        body: '에이전트를 HTML 페이지, markdown 문서로 향하게 하거나, 그냥 덱을 설명하세요. Open Design이 알맞은 기술을 불러와 에이전트가 원시 마크업만이 아니라 구조와 의도 — 제목, 섹션, 데이터 — 를 읽어냅니다.',
+        body: '에이전트를 HTML 페이지, markdown 문서로 향하게 하거나, 그냥 덱을 설명하세요. OpenDesign이 알맞은 기술을 불러와 에이전트가 원시 마크업만이 아니라 구조와 의도 — 제목, 섹션, 데이터 — 를 읽어냅니다.',
         imageAlt: 'HTML과 markdown 문서가 코딩 에이전트에게 건네지는 일러스트',
       },
       {
@@ -874,7 +874,7 @@ export const KO: SolutionLocaleCopy = {
       },
       {
         title: '편집 가능한 .pptx로 내보낸다',
-        body: 'Open Design의 pptx-generator가 HTML 덱을 진짜 PowerPoint로 바꿉니다 — 네이티브 도형, 편집 가능한 텍스트, 여전히 바꿀 수 있는 차트 — 슬라이드마다 납작한 이미지가 아니라 HTML-to-PPTX 충실도 감사와 함께.',
+        body: 'OpenDesign의 pptx-generator가 HTML 덱을 진짜 PowerPoint로 바꿉니다 — 네이티브 도형, 편집 가능한 텍스트, 여전히 바꿀 수 있는 차트 — 슬라이드마다 납작한 이미지가 아니라 HTML-to-PPTX 충실도 감사와 함께.',
         imageAlt: 'HTML 덱이 편집 가능한 PowerPoint 파일로 내보내지는 일러스트',
       },
       {
@@ -883,9 +883,9 @@ export const KO: SolutionLocaleCopy = {
         imageAlt: '완성된 슬라이드가 초록색 선택 프레임에 담겨 넘길 준비가 된 일러스트',
       },
     ],
-    tableTitle: 'Open Design vs 일반적인 HTML-to-PPT 변환기',
+    tableTitle: 'OpenDesign vs 일반적인 HTML-to-PPT 변환기',
     tableColCapability: '필요한 것',
-    tableColWithOd: 'Open Design이라면',
+    tableColWithOd: 'OpenDesign이라면',
     tableColWithout: '일반적인 HTML-to-PPT 변환기',
     tableRows: [
       {
@@ -930,7 +930,7 @@ export const KO: SolutionLocaleCopy = {
     ],
     galleryTitle: '시작점으로 삼을 수 있는 슬라이드 템플릿',
     galleryLead:
-      'Open Design이 렌더링한 진짜 덱, 편집 가능한 .pptx로 내보낼 준비가 되어 있습니다. 당신의 내용에 가까운 테마를 고르고, 원하는 변형을 설명하면 에이전트가 덱을 만들어 — 당신이 소유하는 PowerPoint를 넘겨줍니다.',
+      'OpenDesign이 렌더링한 진짜 덱, 편집 가능한 .pptx로 내보낼 준비가 되어 있습니다. 당신의 내용에 가까운 테마를 고르고, 원하는 변형을 설명하면 에이전트가 덱을 만들어 — 당신이 소유하는 PowerPoint를 넘겨줍니다.',
     gallery: [
       { thumb: 'deck-pitch', caption: '피치 덱' },
       { thumb: 'deck-product-launch', caption: '제품 출시 덱' },
@@ -944,8 +944,8 @@ export const KO: SolutionLocaleCopy = {
     faqTitle: 'HTML to PPT FAQ',
     faq: [
       {
-        q: 'Open Design은 HTML을 어떻게 PPT로 바꾸나요?',
-        a: '코딩 에이전트가 내용을 깔끔한 HTML 덱으로 만들고, Open Design의 pptx-generator 기술이 그것을 진짜 편집 가능한 .pptx로 내보냅니다 — 슬라이드마다 납작한 이미지가 아니라 HTML-to-PPTX 충실도를 감사한 네이티브 도형과 텍스트로.',
+        q: 'OpenDesign은 HTML을 어떻게 PPT로 바꾸나요?',
+        a: '코딩 에이전트가 내용을 깔끔한 HTML 덱으로 만들고, OpenDesign의 pptx-generator 기술이 그것을 진짜 편집 가능한 .pptx로 내보냅니다 — 슬라이드마다 납작한 이미지가 아니라 HTML-to-PPTX 충실도를 감사한 네이티브 도형과 텍스트로.',
       },
       {
         q: 'HTML을 편집 가능한 PowerPoint로 변환할 수 있나요?',
@@ -957,22 +957,22 @@ export const KO: SolutionLocaleCopy = {
       },
       {
         q: '무료인가요?',
-        a: '네. Open Design은 오픈소스이며 이미 사용 중인 코딩 에이전트 안에서 자신의 키로 실행됩니다 — HTML-to-PPT 워크플로우에 파일당·크레딧당 과금은 없습니다.',
+        a: '네. OpenDesign은 오픈소스이며 이미 사용 중인 코딩 에이전트 안에서 자신의 키로 실행됩니다 — HTML-to-PPT 워크플로우에 파일당·크레딧당 과금은 없습니다.',
       },
       {
         q: '슬라이드를 생성하는 것과 무엇이 다른가요?',
-        a: '덱 생성은 보통 프롬프트나 아웃라인에서 시작하지만, HTML to PPT는 이미 가지고 있는 HTML이나 markdown에서 시작해 편집 가능한 .pptx 내보내기에 집중합니다. 둘 다 같은 Open Design 덱 엔진을 사용합니다 — 아웃라인 우선 흐름은 슬라이드 활용 사례를 참고하세요.',
+        a: '덱 생성은 보통 프롬프트나 아웃라인에서 시작하지만, HTML to PPT는 이미 가지고 있는 HTML이나 markdown에서 시작해 편집 가능한 .pptx 내보내기에 집중합니다. 둘 다 같은 OpenDesign 덱 엔진을 사용합니다 — 아웃라인 우선 흐름은 슬라이드 활용 사례를 참고하세요.',
       },
     ],
     ctaTitle: '다음 HTML 덱을 편집 가능한 PPT로 바꾸세요',
     ctaBody:
-      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, HTML을 — 또는 프롬프트를 — 이미 사용 중인 에이전트 안에서 깔끔한 덱과 진짜 편집 가능한 .pptx로 바꿔 보세요.',
+      '리포지토리에 스타를 누르고 OpenDesign을 설치한 뒤, HTML을 — 또는 프롬프트를 — 이미 사용 중인 에이전트 안에서 깔끔한 덱과 진짜 편집 가능한 .pptx로 바꿔 보세요.',
     relatedTitle: '관련 도구와 가이드',
     related: [
       { href: '/solutions/slides/', label: '프레젠테이션 덱 생성하기' },
-      { href: '/solutions/design-to-code/', label: 'Open Design으로 디자인에서 코드로' },
+      { href: '/solutions/design-to-code/', label: 'OpenDesign으로 디자인에서 코드로' },
       { href: '/plugins/templates/', label: '덱 템플릿 둘러보기' },
-      { href: '/solutions/marketing/', label: '마케팅을 위한 Open Design' },
+      { href: '/solutions/marketing/', label: '마케팅을 위한 OpenDesign' },
     ],
   },
   aiPrototypeGenerator: {
@@ -982,17 +982,17 @@ export const KO: SolutionLocaleCopy = {
     breadcrumb: 'AI 프로토타입 생성기',
     label: '도구 · AI 프로토타입 생성기',
     heading: '코드를 출시하는 AI 프로토타입 생성기',
-    lead: '플로우를 설명하면 에이전트가 진짜 클릭 가능한 프로토타입을 만들어 냅니다 — 연결된 화면, 일관된 스타일, 작동하는 인터랙션. 목업에서 멈추는 프로토타입 생성기와 달리, Open Design은 이미 실행 중인 에이전트 안에서 같은 산출물을 출시된 코드까지 이어 갑니다.',
+    lead: '플로우를 설명하면 에이전트가 진짜 클릭 가능한 프로토타입을 만들어 냅니다 — 연결된 화면, 일관된 스타일, 작동하는 인터랙션. 목업에서 멈추는 프로토타입 생성기와 달리, OpenDesign은 이미 실행 중인 에이전트 안에서 같은 산출물을 출시된 코드까지 이어 갑니다.',
     heroImageAlt:
       '프롬프트가 클릭 가능한 멀티 스크린 프로토타입으로, 그다음 프로덕션 코드로 바뀌고 초록색 선택 박스로 둘러싸인 모습을 그린 에디토리얼 일러스트',
     tldrTitle: '한 줄로 말하면',
     tldrBody:
-      '대부분의 AI 프로토타입 생성기(Figma, Cursor, Penpot)는 이후에 다시 만들어야 하는 클릭 가능한 목업에서 멈춥니다. Open Design은 당신의 코딩 에이전트 안에서 프로토타입을 만들고 프롬프트에서 출시된 코드까지 이어 갑니다 — 내보내기 단계 없음, 핸드오프 간극 없음, 좌석당 과금 없음.',
+      '대부분의 AI 프로토타입 생성기(Figma, Cursor, Penpot)는 이후에 다시 만들어야 하는 클릭 가능한 목업에서 멈춥니다. OpenDesign은 당신의 코딩 에이전트 안에서 프로토타입을 만들고 프롬프트에서 출시된 코드까지 이어 갑니다 — 내보내기 단계 없음, 핸드오프 간극 없음, 좌석당 과금 없음.',
     stepsTitle: 'AI 프로토타입 생성기가 작동하는 방식',
     steps: [
       {
         title: '플로우를 설명하기',
-        body: '"온보딩 플로우: 가입, 요금제 선택, 그리고 대시보드"처럼 여정을 평범한 말로 에이전트에게 알려 주세요. Open Design이 프로토타입 스킬을 불러와 에이전트가 하나의 정적 프레임이 아니라 연결된 화면들을 배치합니다.',
+        body: '"온보딩 플로우: 가입, 요금제 선택, 그리고 대시보드"처럼 여정을 평범한 말로 에이전트에게 알려 주세요. OpenDesign이 프로토타입 스킬을 불러와 에이전트가 하나의 정적 프레임이 아니라 연결된 화면들을 배치합니다.',
         imageAlt: '평범한 말로 된 플로우 설명을 터미널에 입력하는 모습을 그린 일러스트',
       },
       {
@@ -1011,9 +1011,9 @@ export const KO: SolutionLocaleCopy = {
         imageAlt: '프로토타입이 초록색 선택 프레임에 담긴 출시된 코드로 흘러 들어가는 모습을 그린 일러스트',
       },
     ],
-    tableTitle: 'Open Design vs. 일반적인 AI 프로토타입 생성기',
+    tableTitle: 'OpenDesign vs. 일반적인 AI 프로토타입 생성기',
     tableColCapability: '필요한 것',
-    tableColWithOd: 'Open Design과 함께',
+    tableColWithOd: 'OpenDesign과 함께',
     tableColWithout: 'Figma / Cursor / Penpot 프로토타입 생성기',
     tableRows: [
       {
@@ -1075,7 +1075,7 @@ export const KO: SolutionLocaleCopy = {
         thumb: 'example-kami-landing',
       },
     ],
-    galleryTitle: 'Open Design으로 만든 프로토타입',
+    galleryTitle: 'OpenDesign으로 만든 프로토타입',
     galleryLead:
       '모두 프롬프트에서 시작해 클릭 가능하고 편집 가능한 산출물로 렌더링되었습니다. 당신의 아이디어와 가까운 템플릿을 고르고 변형을 설명하면 에이전트가 그것을 맞춰 줍니다 — 프로토타입에서 출시된 코드까지.',
     gallery: [
@@ -1090,11 +1090,11 @@ export const KO: SolutionLocaleCopy = {
     faq: [
       {
         q: 'AI 프로토타입 생성기는 무료인가요?',
-        a: '네. Open Design은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — 프로토타입 생성기 자체에는 좌석당이나 크레딧당 과금이 없습니다.',
+        a: '네. OpenDesign은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — 프로토타입 생성기 자체에는 좌석당이나 크레딧당 과금이 없습니다.',
       },
       {
         q: 'Figma, Cursor, Penpot 프로토타입 생성기와 어떻게 다른가요?',
-        a: '그것들은 자신의 앱 안에서 클릭 가능한 목업에서 멈춥니다. Open Design은 당신의 코딩 에이전트 안에서 프로토타입을 만들고 같은 산출물을 당신이 소유하는 출시된 코드까지 이어 갑니다 — 내보내기 없음, 프로덕션을 위한 재작성 없음.',
+        a: '그것들은 자신의 앱 안에서 클릭 가능한 목업에서 멈춥니다. OpenDesign은 당신의 코딩 에이전트 안에서 프로토타입을 만들고 같은 산출물을 당신이 소유하는 출시된 코드까지 이어 갑니다 — 내보내기 없음, 프로덕션을 위한 재작성 없음.',
       },
       {
         q: '프로토타입은 클릭 가능하고 멀티 스크린인가요?',
@@ -1102,24 +1102,24 @@ export const KO: SolutionLocaleCopy = {
       },
       {
         q: '어떤 에이전트와 함께 작동하나요?',
-        a: 'Open Design은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키를 가져오며, 무엇도 대신 호스팅되지 않습니다.',
+        a: 'OpenDesign은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키를 가져오며, 무엇도 대신 호스팅되지 않습니다.',
       },
     ],
     ctaTitle: '오늘 밤 첫 프로토타입을 생성하세요',
     ctaBody:
-      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, 다음 플로우를 클릭 가능한 프로토타입으로 — 그리고 출시된 코드로 — 이미 사용 중인 에이전트 안에서 바꿔 보세요.',
+      '리포지토리에 스타를 누르고 OpenDesign을 설치한 뒤, 다음 플로우를 클릭 가능한 프로토타입으로 — 그리고 출시된 코드로 — 이미 사용 중인 에이전트 안에서 바꿔 보세요.',
     relatedTitle: '관련 도구와 가이드',
     related: [
-      { href: '/solutions/prototype/', label: 'Open Design으로 프로토타이핑' },
+      { href: '/solutions/prototype/', label: 'OpenDesign으로 프로토타이핑' },
       { href: '/solutions/ai-wireframe-generator/', label: 'AI 와이어프레임 생성기' },
       { href: '/solutions/ai-ui-generator/', label: 'AI UI 생성기' },
-      { href: '/solutions/design-to-code/', label: 'Open Design으로 디자인에서 코드로' },
+      { href: '/solutions/design-to-code/', label: 'OpenDesign으로 디자인에서 코드로' },
     ],
   },
   prototype: {
-    title: 'Open Design + Claude Code로 인터랙티브 프로토타입 만들기',
+    title: 'OpenDesign + Claude Code로 인터랙티브 프로토타입 만들기',
     description:
-      '프롬프트 하나를, 터미널을 벗어나지 않고 클릭 가능한 멀티 스크린 프로토타입으로 바꿉니다. Open Design은 코딩 에이전트에게 디자인 기술, 템플릿, 디자인 시스템을 제공하여 브라우저에서 열 수 있는 진짜 프로토타입을 만들어 냅니다.',
+      '프롬프트 하나를, 터미널을 벗어나지 않고 클릭 가능한 멀티 스크린 프로토타입으로 바꿉니다. OpenDesign은 코딩 에이전트에게 디자인 기술, 템플릿, 디자인 시스템을 제공하여 브라우저에서 열 수 있는 진짜 프로토타입을 만들어 냅니다.',
     breadcrumb: '프로토타입',
     label: '활용 사례 · 프로토타입',
     heading: '프롬프트의 속도로 프로토타이핑',
@@ -1128,18 +1128,18 @@ export const KO: SolutionLocaleCopy = {
       '손이 와이어프레임을 스케치하고 그것이 클릭 가능한 멀티 스크린 앱 프로토타입으로 바뀌는 모습을 그린 에디토리얼 일러스트',
     tldrTitle: '한 줄로 말하면',
     tldrBody:
-      'Open Design은 이미 사용 중인 코딩 에이전트를 위한 디자인 레이어입니다. 프로토타이핑에서는 한 단락짜리 아이디어에서 탐색 가능하고 스타일이 잡힌 프로토타입까지 한 번의 세션으로 간다는 뜻입니다 — 디자인 도구도, 내보내기 단계도, 인계의 단절도 없이.',
-    stepsTitle: 'Open Design에서 프로토타이핑이 작동하는 방식',
+      'OpenDesign은 이미 사용 중인 코딩 에이전트를 위한 디자인 레이어입니다. 프로토타이핑에서는 한 단락짜리 아이디어에서 탐색 가능하고 스타일이 잡힌 프로토타입까지 한 번의 세션으로 간다는 뜻입니다 — 디자인 도구도, 내보내기 단계도, 인계의 단절도 없이.',
+    stepsTitle: 'OpenDesign에서 프로토타이핑이 작동하는 방식',
     steps: [
       {
         title: '플로우를 설명한다',
-        body: '무엇을 만드는지 평범한 언어로 에이전트에게 말합니다 — "환영 화면, 요금제 선택, 확인 화면이 있는 온보딩 플로우"처럼. Open Design이 프로토타입 기술을 불러와 에이전트가 단일 페이지가 아니라 여러 화면을 만들어야 한다는 것을 알게 합니다.',
+        body: '무엇을 만드는지 평범한 언어로 에이전트에게 말합니다 — "환영 화면, 요금제 선택, 확인 화면이 있는 온보딩 플로우"처럼. OpenDesign이 프로토타입 기술을 불러와 에이전트가 단일 페이지가 아니라 여러 화면을 만들어야 한다는 것을 알게 합니다.',
         imageAlt:
           '앱 플로우 설명을 평범한 언어로 터미널에 입력하는 사람의 일러스트',
       },
       {
         title: '스타일이 잡힌 화면을 생성한다',
-        body: '에이전트는 Open Design의 디자인 시스템과 프로토타입 템플릿을 적용하므로 모든 화면이 타이포그래피, 여백, 컴포넌트를 공유하며 거친 초안처럼 보이지 않습니다. 동떨어진 목업이 아니라 일관된 화면 묶음을 얻습니다.',
+        body: '에이전트는 OpenDesign의 디자인 시스템과 프로토타입 템플릿을 적용하므로 모든 화면이 타이포그래피, 여백, 컴포넌트를 공유하며 거친 초안처럼 보이지 않습니다. 동떨어진 목업이 아니라 일관된 화면 묶음을 얻습니다.',
         imageAlt:
           '여러 앱 화면이 차례로 나타나며 모두 하나의 일관된 비주얼 스타일을 공유하는 일러스트',
       },
@@ -1156,9 +1156,9 @@ export const KO: SolutionLocaleCopy = {
           '프로토타입이 수정된 뒤 엔지니어에게 넘겨지고, 디자인과 코드가 하나의 파일로 합쳐지는 일러스트',
       },
     ],
-    tableTitle: 'Open Design 프로토타이핑 vs 기존 방식',
+    tableTitle: 'OpenDesign 프로토타이핑 vs 기존 방식',
     tableColCapability: '필요한 것',
-    tableColWithOd: 'Open Design이라면',
+    tableColWithOd: 'OpenDesign이라면',
     tableColWithout: '기존 프로토타이핑 도구',
     tableRows: [
       {
@@ -1225,7 +1225,7 @@ export const KO: SolutionLocaleCopy = {
         thumb: 'example-gamified-app',
       },
     ],
-    galleryTitle: '사람들이 Open Design으로 만든 프로토타입',
+    galleryTitle: '사람들이 OpenDesign으로 만든 프로토타입',
     galleryLead:
       '이 모두가 프롬프트로 시작해 클릭 가능한 산출물로 렌더링되었습니다. 아이디어에 가까운 템플릿을 고르고 변형을 설명하면 에이전트가 그것을 적응시킵니다.',
     gallery: [
@@ -1239,8 +1239,8 @@ export const KO: SolutionLocaleCopy = {
     faqTitle: '프로토타이핑 FAQ',
     faq: [
       {
-        q: 'Open Design으로 프로토타이핑하려면 Figma 같은 디자인 도구가 필요한가요?',
-        a: '아니요. Open Design은 코딩 에이전트 안에서 실행되며 프로토타입을 HTML로 렌더링합니다. 플로우를 언어로 설명하면 에이전트가 화면을 만들어 냅니다. 따로 배우거나 비용을 낼 캔버스 도구가 없습니다.',
+        q: 'OpenDesign으로 프로토타이핑하려면 Figma 같은 디자인 도구가 필요한가요?',
+        a: '아니요. OpenDesign은 코딩 에이전트 안에서 실행되며 프로토타입을 HTML로 렌더링합니다. 플로우를 언어로 설명하면 에이전트가 화면을 만들어 냅니다. 따로 배우거나 비용을 낼 캔버스 도구가 없습니다.',
       },
       {
         q: '프로토타입은 인터랙티브한가요, 아니면 그냥 정적 목업인가요?',
@@ -1248,7 +1248,7 @@ export const KO: SolutionLocaleCopy = {
       },
       {
         q: '어떤 에이전트를 쓸 수 있나요?',
-        a: 'Open Design은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키를 가져오며, 무엇도 대신 호스팅되지 않습니다.',
+        a: 'OpenDesign은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키를 가져오며, 무엇도 대신 호스팅되지 않습니다.',
       },
       {
         q: '프로토타입이 실제 제품이 될 수 있나요?',
@@ -1257,22 +1257,22 @@ export const KO: SolutionLocaleCopy = {
     ],
     ctaTitle: '다음 아이디어를 오늘 밤 프로토타입으로',
     ctaBody:
-      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, 다음 "만약에"를, 이미 사용 중인 에이전트 안에서 클릭할 수 있는 무언가로 바꿔 보세요.',
+      '리포지토리에 스타를 누르고 OpenDesign을 설치한 뒤, 다음 "만약에"를, 이미 사용 중인 에이전트 안에서 클릭할 수 있는 무언가로 바꿔 보세요.',
   },
   dashboard: {
-    title: 'Open Design + Claude Code로 데이터 대시보드 생성하기',
+    title: 'OpenDesign + Claude Code로 데이터 대시보드 생성하기',
     description:
       '추적하는 지표를 설명하기만 하면 코딩 에이전트가 스타일이 잡힌 반응형 대시보드를 만듭니다 — 차트, KPI 카드, 테이블이 어디에나 호스팅할 수 있는 HTML로 렌더링됩니다. BI 도구 좌석도, 드래그 앤 드롭 빌더도 없이.',
     breadcrumb: '대시보드',
     label: '활용 사례 · 대시보드',
     heading: '드래그 앤 드롭 빌더가 아니라, 설명에서 나오는 대시보드',
-    lead: '무엇을 보여줄지, 어떤 느낌이어야 할지 에이전트에게 말하세요. Open Design이 차트 패턴, 레이아웃 시스템, 비주얼 언어를 제공하므로 기본 스타일 위젯의 벽이 아니라 일관되고 보여줄 만한 대시보드를 얻습니다.',
+    lead: '무엇을 보여줄지, 어떤 느낌이어야 할지 에이전트에게 말하세요. OpenDesign이 차트 패턴, 레이아웃 시스템, 비주얼 언어를 제공하므로 기본 스타일 위젯의 벽이 아니라 일관되고 보여줄 만한 대시보드를 얻습니다.',
     heroImageAlt:
       '왼쪽의 원시 숫자가 오른쪽의 차트와 KPI 카드로 이루어진 깔끔한 대시보드로 흘러 들어가는 에디토리얼 일러스트',
     tldrTitle: '한 줄로 말하면',
     tldrBody:
-      'Open Design은 지표를 평범한 언어로 적은 명세를, 에이전트가 HTML로 렌더링하는 스타일이 잡힌 대시보드로 바꿉니다 — 리포지토리에서 버전 관리되고, 어디에나 호스팅 가능하며, 좌석당 BI 구독이 없습니다.',
-    stepsTitle: 'Open Design에서 대시보드가 작동하는 방식',
+      'OpenDesign은 지표를 평범한 언어로 적은 명세를, 에이전트가 HTML로 렌더링하는 스타일이 잡힌 대시보드로 바꿉니다 — 리포지토리에서 버전 관리되고, 어디에나 호스팅 가능하며, 좌석당 BI 구독이 없습니다.',
+    stepsTitle: 'OpenDesign에서 대시보드가 작동하는 방식',
     steps: [
       {
         title: '지표를 설명한다',
@@ -1281,7 +1281,7 @@ export const KO: SolutionLocaleCopy = {
       },
       {
         title: '차트 패턴을 고른다',
-        body: 'Open Design은 차트와 레이아웃 템플릿을 제공하므로 추세는 선 차트로, 분해는 막대로, 비율은 알맞은 비주얼로 바뀝니다 — 어긋나는 기본값 대신 일관된 타이포그래피와 여백이 전체를 관통합니다.',
+        body: 'OpenDesign은 차트와 레이아웃 템플릿을 제공하므로 추세는 선 차트로, 분해는 막대로, 비율은 알맞은 비주얼로 바뀝니다 — 어긋나는 기본값 대신 일관된 타이포그래피와 여백이 전체를 관통합니다.',
         imageAlt: '여러 차트 유형이 일관된 그리드로 배열된 일러스트',
       },
       {
@@ -1295,9 +1295,9 @@ export const KO: SolutionLocaleCopy = {
         imageAlt: '대시보드가 다듬어진 뒤 배포되는 일러스트',
       },
     ],
-    tableTitle: 'Open Design 대시보드 vs 기존 방식',
+    tableTitle: 'OpenDesign 대시보드 vs 기존 방식',
     tableColCapability: '필요한 것',
-    tableColWithOd: 'Open Design이라면',
+    tableColWithOd: 'OpenDesign이라면',
     tableColWithout: 'BI 도구 / 직접 코딩',
     tableRows: [
       {
@@ -1340,7 +1340,7 @@ export const KO: SolutionLocaleCopy = {
       { title: "소셜과 마케팅", body: "채널 성과와 캠페인 추적을 한 화면에.", thumb: "example-social-media-dashboard" },
       { title: "도메인 리포트", body: "어떤 분야든 구조화된 리포트 — 임상부터 트레이딩까지.", thumb: "example-clinical-case-report" },
     ],
-    galleryTitle: '사람들이 Open Design으로 만든 대시보드',
+    galleryTitle: '사람들이 OpenDesign으로 만든 대시보드',
     galleryLead:
       '프롬프트와 데이터 소스로 렌더링된 진짜 대시보드. 자신에게 가까운 것에서 시작해 추적하는 지표를 설명하세요.',
     gallery: [
@@ -1355,7 +1355,7 @@ export const KO: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Tableau나 Looker 같은 BI 도구가 필요한가요?',
-        a: '아니요. Open Design은 코딩 에이전트 안에서 대시보드를 HTML로 렌더링합니다. 지표를 설명하고 데이터로 향하게 하기만 하면 되고, 라이선스를 사거나 배워야 할 별도 BI 플랫폼이 없습니다.',
+        a: '아니요. OpenDesign은 코딩 에이전트 안에서 대시보드를 HTML로 렌더링합니다. 지표를 설명하고 데이터로 향하게 하기만 하면 되고, 라이선스를 사거나 배워야 할 별도 BI 플랫폼이 없습니다.',
       },
       {
         q: '데이터는 어디서 오나요?',
@@ -1372,22 +1372,22 @@ export const KO: SolutionLocaleCopy = {
     ],
     ctaTitle: '오늘 밤 당신의 대시보드를 만드세요',
     ctaBody:
-      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, 당신의 지표를, 이미 사용 중인 에이전트 안에서 어디에나 호스팅할 수 있는 대시보드로 바꿔 보세요.',
+      '리포지토리에 스타를 누르고 OpenDesign을 설치한 뒤, 당신의 지표를, 이미 사용 중인 에이전트 안에서 어디에나 호스팅할 수 있는 대시보드로 바꿔 보세요.',
   },
   slides: {
-    title: 'Open Design + Claude Code로 프레젠테이션 덱 생성하기',
+    title: 'OpenDesign + Claude Code로 프레젠테이션 덱 생성하기',
     description:
-      '아웃라인을, 프레젠테이션 앱을 열지 않고 디자인되고 브랜드에 맞는 슬라이드 덱으로 바꿉니다. Open Design은 코딩 에이전트에게 덱 템플릿과 비주얼 시스템을 주어, 발표하고 내보내고 공유할 수 있는 HTML로 슬라이드를 렌더링합니다.',
+      '아웃라인을, 프레젠테이션 앱을 열지 않고 디자인되고 브랜드에 맞는 슬라이드 덱으로 바꿉니다. OpenDesign은 코딩 에이전트에게 덱 템플릿과 비주얼 시스템을 주어, 발표하고 내보내고 공유할 수 있는 HTML로 슬라이드를 렌더링합니다.',
     breadcrumb: '슬라이드',
     label: '활용 사례 · 슬라이드',
     heading: '디자인된 듯 보이는 덱을, 프롬프트로 쓴다',
-    lead: '에이전트에게 아웃라인과 톤을 건네세요. Open Design이 덱 템플릿과 비주얼 시스템을 적용하므로 모든 슬라이드가 레이아웃되고, 조판되고, 브랜드에 맞습니다 — 빈 배경 위의 글머리 기호 목록이 아니라.',
+    lead: '에이전트에게 아웃라인과 톤을 건네세요. OpenDesign이 덱 템플릿과 비주얼 시스템을 적용하므로 모든 슬라이드가 레이아웃되고, 조판되고, 브랜드에 맞습니다 — 빈 배경 위의 글머리 기호 목록이 아니라.',
     heroImageAlt:
       '왼쪽의 아웃라인이 오른쪽의 디자인된 프레젠테이션 슬라이드 연속으로 바뀌는 에디토리얼 일러스트',
     tldrTitle: '한 줄로 말하면',
     tldrBody:
-      'Open Design은 아웃라인을, 에이전트가 한 번의 세션으로 렌더링하는 디자인된 HTML 덱으로 바꿉니다 — 브라우저에서 발표하고, PDF나 PPTX로 내보내며, 소스는 리포지토리에 보관합니다.',
-    stepsTitle: 'Open Design에서 덱이 작동하는 방식',
+      'OpenDesign은 아웃라인을, 에이전트가 한 번의 세션으로 렌더링하는 디자인된 HTML 덱으로 바꿉니다 — 브라우저에서 발표하고, PDF나 PPTX로 내보내며, 소스는 리포지토리에 보관합니다.',
+    stepsTitle: 'OpenDesign에서 덱이 작동하는 방식',
     steps: [
       {
         title: '아웃라인을 준다',
@@ -1396,7 +1396,7 @@ export const KO: SolutionLocaleCopy = {
       },
       {
         title: '덱 스타일을 고른다',
-        body: 'Open Design은 덱 템플릿을 제공합니다 — 에디토리얼, 스위스 인터내셔널, 다크 테크니컬 등. 에이전트가 하나를 적용해 타이포그래피, 그리드, 강조가 모든 슬라이드에서 일관되게 유지됩니다.',
+        body: 'OpenDesign은 덱 템플릿을 제공합니다 — 에디토리얼, 스위스 인터내셔널, 다크 테크니컬 등. 에이전트가 하나를 적용해 타이포그래피, 그리드, 강조가 모든 슬라이드에서 일관되게 유지됩니다.',
         imageAlt: '여러 덱 스타일 선택지가 나란히 놓인 일러스트',
       },
       {
@@ -1410,9 +1410,9 @@ export const KO: SolutionLocaleCopy = {
         imageAlt: '덱이 발표되고 여러 형식으로 내보내지는 일러스트',
       },
     ],
-    tableTitle: 'Open Design 덱 vs 기존 방식',
+    tableTitle: 'OpenDesign 덱 vs 기존 방식',
     tableColCapability: '필요한 것',
-    tableColWithOd: 'Open Design이라면',
+    tableColWithOd: 'OpenDesign이라면',
     tableColWithout: 'PowerPoint / Keynote / AI 슬라이드 도구',
     tableRows: [
       {
@@ -1455,7 +1455,7 @@ export const KO: SolutionLocaleCopy = {
       { title: "발표자 모드", body: "브라우저에서 실시간 발표하도록 만든 Reveal 스타일 덱.", thumb: "example-html-ppt-presenter-mode-reveal" },
       { title: "기술 블루프린트", body: "복잡한 시스템을 그려내는 아키텍처와 지식 덱.", thumb: "example-html-ppt-knowledge-arch-blueprint" },
     ],
-    galleryTitle: '사람들이 Open Design으로 만든 덱',
+    galleryTitle: '사람들이 OpenDesign으로 만든 덱',
     galleryLead:
       '아웃라인으로 렌더링된 진짜 덱. 당신의 발표에 가까운 스타일을 고르고 내용을 설명하세요.',
     gallery: [
@@ -1470,7 +1470,7 @@ export const KO: SolutionLocaleCopy = {
     faq: [
       {
         q: 'PowerPoint나 Keynote가 필요한가요?',
-        a: '아니요. Open Design은 코딩 에이전트 안에서 덱을 HTML로 렌더링하며 PDF나 PPTX로 내보낼 수 있습니다. 브라우저에서 발표하거나 파일을 넘기면 되고, 만들기 위해 프레젠테이션 앱이 필요 없습니다.',
+        a: '아니요. OpenDesign은 코딩 에이전트 안에서 덱을 HTML로 렌더링하며 PDF나 PPTX로 내보낼 수 있습니다. 브라우저에서 발표하거나 파일을 넘기면 되고, 만들기 위해 프레젠테이션 앱이 필요 없습니다.',
       },
       {
         q: '이건 그냥 AI가 만든 글머리 기호 아닌가요?',
@@ -1478,7 +1478,7 @@ export const KO: SolutionLocaleCopy = {
       },
       {
         q: '편집 가능한 PowerPoint로 내보낼 수 있나요?',
-        a: '네. Open Design의 pptx-generator가 덱을 네이티브하고 편집 가능한 텍스트와 도형을 갖춘 진짜 .pptx로 내보냅니다 — 납작한 슬라이드 이미지가 아니라 HTML-to-PPTX 충실도를 감사해서 — 여기에 PDF와 당신이 발표하는 HTML까지. 변환 우선 흐름은 HTML to PPT 도구를 참고하세요.',
+        a: '네. OpenDesign의 pptx-generator가 덱을 네이티브하고 편집 가능한 텍스트와 도형을 갖춘 진짜 .pptx로 내보냅니다 — 납작한 슬라이드 이미지가 아니라 HTML-to-PPTX 충실도를 감사해서 — 여기에 PDF와 당신이 발표하는 HTML까지. 변환 우선 흐름은 HTML to PPT 도구를 참고하세요.',
       },
       {
         q: '어떤 에이전트를 쓸 수 있나요?',
@@ -1487,29 +1487,29 @@ export const KO: SolutionLocaleCopy = {
     ],
     ctaTitle: '다음 덱을 오늘 밤 만드세요',
     ctaBody:
-      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, 당신의 아웃라인을, 이미 사용 중인 에이전트 안에서 디자인된 덱으로 바꿔 보세요.',
+      '리포지토리에 스타를 누르고 OpenDesign을 설치한 뒤, 당신의 아웃라인을, 이미 사용 중인 에이전트 안에서 디자인된 덱으로 바꿔 보세요.',
     relatedTitle: '관련 도구와 가이드',
     related: [
-      { href: '/solutions/html-to-ppt/', label: 'Open Design으로 HTML to PPT' },
-      { href: '/solutions/design-to-code/', label: 'Open Design으로 디자인에서 코드로' },
+      { href: '/solutions/html-to-ppt/', label: 'OpenDesign으로 HTML to PPT' },
+      { href: '/solutions/design-to-code/', label: 'OpenDesign으로 디자인에서 코드로' },
       { href: '/plugins/templates/', label: '덱 템플릿 둘러보기' },
-      { href: '/solutions/marketing/', label: '마케팅을 위한 Open Design' },
+      { href: '/solutions/marketing/', label: '마케팅을 위한 OpenDesign' },
     ],
   },
   image: {
-    title: 'Open Design + Claude Code로 브랜드에 맞는 그래픽 생성하기',
+    title: 'OpenDesign + Claude Code로 브랜드에 맞는 그래픽 생성하기',
     description:
       '소셜 카드, 아티클 커버, 마케팅 그래픽을 프롬프트에서 만들어 냅니다 — 진짜 타이포그래피와 브랜드 시스템으로 레이아웃되고, PNG로 내보낼 수 있는 선명한 HTML로 렌더링됩니다. 디자인 앱도, 템플릿 구독도 없이.',
     breadcrumb: '이미지',
     label: '활용 사례 · 이미지',
     heading: '브랜드에 맞는 그래픽을, 생성하고 레이아웃까지',
-    lead: '필요한 카드나 커버를 설명하세요. Open Design이 진짜 타입, 그리드, 브랜드 컬러로 구성한 뒤 이미지로 내보낼 수 있는 HTML로 렌더링합니다 — 디자인 앱과 씨름하거나 평범한 템플릿을 쓰는 대신.',
+    lead: '필요한 카드나 커버를 설명하세요. OpenDesign이 진짜 타입, 그리드, 브랜드 컬러로 구성한 뒤 이미지로 내보낼 수 있는 HTML로 렌더링합니다 — 디자인 앱과 씨름하거나 평범한 템플릿을 쓰는 대신.',
     heroImageAlt:
       '프롬프트가 레이아웃된 소셜 카드와 아티클 커버 한 세트로 바뀌는 에디토리얼 일러스트',
     tldrTitle: '한 줄로 말하면',
     tldrBody:
-      'Open Design은 프롬프트를, 에이전트가 HTML로 렌더링해 PNG로 내보내는 조판되고 브랜드에 맞는 그래픽으로 바꿉니다 — 반복 가능하고, 버전 관리되며, 좌석당 디자인 도구에서 자유롭습니다.',
-    stepsTitle: 'Open Design에서 그래픽이 작동하는 방식',
+      'OpenDesign은 프롬프트를, 에이전트가 HTML로 렌더링해 PNG로 내보내는 조판되고 브랜드에 맞는 그래픽으로 바꿉니다 — 반복 가능하고, 버전 관리되며, 좌석당 디자인 도구에서 자유롭습니다.',
+    stepsTitle: 'OpenDesign에서 그래픽이 작동하는 방식',
     steps: [
       {
         title: '그래픽을 설명한다',
@@ -1518,7 +1518,7 @@ export const KO: SolutionLocaleCopy = {
       },
       {
         title: '브랜드 시스템을 적용한다',
-        body: 'Open Design이 재사용 가능한 디자인 시스템에서 당신의 컬러, 타입, 여백을 가져오므로 모든 카드가 일회성처럼 보이는 대신 브랜드의 나머지와 어울립니다.',
+        body: 'OpenDesign이 재사용 가능한 디자인 시스템에서 당신의 컬러, 타입, 여백을 가져오므로 모든 카드가 일회성처럼 보이는 대신 브랜드의 나머지와 어울립니다.',
         imageAlt: '브랜드 컬러와 타입이 카드 레이아웃에 적용되는 일러스트',
       },
       {
@@ -1532,9 +1532,9 @@ export const KO: SolutionLocaleCopy = {
         imageAlt: '하나의 카드 템플릿이 일관된 그래픽 시리즈를 만들어 내는 일러스트',
       },
     ],
-    tableTitle: 'Open Design 그래픽 vs 기존 방식',
+    tableTitle: 'OpenDesign 그래픽 vs 기존 방식',
     tableColCapability: '필요한 것',
-    tableColWithOd: 'Open Design이라면',
+    tableColWithOd: 'OpenDesign이라면',
     tableColWithout: '디자인 앱 / 평범한 템플릿',
     tableRows: [
       {
@@ -1577,7 +1577,7 @@ export const KO: SolutionLocaleCopy = {
       { title: "캐러셀", body: "프레임 간 일관성을 유지하는 다중 슬라이드 소셜 캐러셀.", thumb: "example-social-carousel" },
       { title: "UI 목 프레임", body: "제품 스토리텔링을 위한 알림과 기기 프레임.", thumb: "example-frame-macos-notification" },
     ],
-    galleryTitle: '사람들이 Open Design으로 만든 그래픽',
+    galleryTitle: '사람들이 OpenDesign으로 만든 그래픽',
     galleryLead:
       '프롬프트로 렌더링된 진짜 카드와 커버. 필요한 것에 가까운 하나를 골라 당신의 카피로 바꿔 넣으세요.',
     gallery: [
@@ -1592,7 +1592,7 @@ export const KO: SolutionLocaleCopy = {
     faq: [
       {
         q: '이건 Midjourney 같은 AI 이미지 생성기인가요?',
-        a: '아니요. Open Design은 진짜 레이아웃과 타이포그래피로 그래픽을 구성합니다 — 당신의 헤드라인, 당신의 브랜드, 정확한 치수로 — 그리고 PNG로 내보내는 HTML로 렌더링합니다. 픽셀 생성이 아니라 디자인 구성입니다.',
+        a: '아니요. OpenDesign은 진짜 레이아웃과 타이포그래피로 그래픽을 구성합니다 — 당신의 헤드라인, 당신의 브랜드, 정확한 치수로 — 그리고 PNG로 내보내는 HTML로 렌더링합니다. 픽셀 생성이 아니라 디자인 구성입니다.',
       },
       {
         q: '일관된 카드 시리즈를 만들 수 있나요?',
@@ -1609,22 +1609,22 @@ export const KO: SolutionLocaleCopy = {
     ],
     ctaTitle: '다음 그래픽을 오늘 밤 만드세요',
     ctaBody:
-      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, 프롬프트를, 이미 사용 중인 에이전트 안에서 브랜드에 맞는 그래픽으로 바꿔 보세요.',
+      '리포지토리에 스타를 누르고 OpenDesign을 설치한 뒤, 프롬프트를, 이미 사용 중인 에이전트 안에서 브랜드에 맞는 그래픽으로 바꿔 보세요.',
   },
   video: {
-    title: 'Open Design + Claude Code로 모션 그래픽과 숏폼 영상 생성하기',
+    title: 'OpenDesign + Claude Code로 모션 그래픽과 숏폼 영상 생성하기',
     description:
       '스크립트를, 애니메이션 프레임과 숏폼 영상으로 바꿉니다 — 타이틀 카드, 모션 배경, 아웃트로가 당신의 브랜드 시스템으로 구성되고 HTML에서 렌더링됩니다. 모션 그래픽 스위트도, 타임라인 스크러빙도 없이.',
     breadcrumb: '영상',
     label: '활용 사례 · 영상',
     heading: '타임라인이 아니라, 스크립트에서 나오는 모션 그래픽',
-    lead: '원하는 순간을 설명하세요 — 타이틀 등장, 데이터 애니메이션, 로고 아웃트로. Open Design이 당신의 브랜드 시스템으로 애니메이션 프레임을 구성해 영상으로 렌더링합니다 — 모션 그래픽 스위트가 필요 없습니다.',
+    lead: '원하는 순간을 설명하세요 — 타이틀 등장, 데이터 애니메이션, 로고 아웃트로. OpenDesign이 당신의 브랜드 시스템으로 애니메이션 프레임을 구성해 영상으로 렌더링합니다 — 모션 그래픽 스위트가 필요 없습니다.',
     heroImageAlt:
       '스크립트가 애니메이션되는 영상 프레임의 연속으로 바뀌는 에디토리얼 일러스트',
     tldrTitle: '한 줄로 말하면',
     tldrBody:
-      'Open Design은 스크립트를, 에이전트가 숏폼 영상으로 렌더링하는 애니메이션되고 브랜드에 맞는 프레임으로 바꿉니다 — HTML로 구성되고, 리포지토리에서 버전 관리되며, 배워야 할 타임라인 에디터가 없습니다.',
-    stepsTitle: 'Open Design에서 모션이 작동하는 방식',
+      'OpenDesign은 스크립트를, 에이전트가 숏폼 영상으로 렌더링하는 애니메이션되고 브랜드에 맞는 프레임으로 바꿉니다 — HTML로 구성되고, 리포지토리에서 버전 관리되며, 배워야 할 타임라인 에디터가 없습니다.',
+    stepsTitle: 'OpenDesign에서 모션이 작동하는 방식',
     steps: [
       {
         title: '순간을 설명한다',
@@ -1633,7 +1633,7 @@ export const KO: SolutionLocaleCopy = {
       },
       {
         title: '브랜드와 모션 스타일을 적용한다',
-        body: 'Open Design이 프레임 템플릿을 제공합니다 — 시네마틱 라이트 릭, 글리치 타이틀, 로고 아웃트로 — 그리고 당신의 컬러와 타입을 적용하므로 모션이 의도적이고 브랜드에 맞게 보입니다.',
+        body: 'OpenDesign이 프레임 템플릿을 제공합니다 — 시네마틱 라이트 릭, 글리치 타이틀, 로고 아웃트로 — 그리고 당신의 컬러와 타입을 적용하므로 모션이 의도적이고 브랜드에 맞게 보입니다.',
         imageAlt: '브랜드 스타일링이 애니메이션 프레임에 적용되는 일러스트',
       },
       {
@@ -1647,9 +1647,9 @@ export const KO: SolutionLocaleCopy = {
         imageAlt: '영상 클립이 다듬어지고 소셜용으로 내보내지는 일러스트',
       },
     ],
-    tableTitle: 'Open Design 모션 vs 기존 방식',
+    tableTitle: 'OpenDesign 모션 vs 기존 방식',
     tableColCapability: '필요한 것',
-    tableColWithOd: 'Open Design이라면',
+    tableColWithOd: 'OpenDesign이라면',
     tableColWithout: 'After Effects / 모션 스위트',
     tableRows: [
       {
@@ -1692,7 +1692,7 @@ export const KO: SolutionLocaleCopy = {
       { title: "글리치 타이틀", body: "모션과 텍스처가 있는 타이틀 등장.", thumb: "example-frame-glitch-title" },
       { title: "로고 아웃트로", body: "어떤 클립에도 어울리는 브랜드 마무리 애니메이션.", thumb: "example-frame-logo-outro" },
     ],
-    galleryTitle: '사람들이 Open Design으로 만든 모션',
+    galleryTitle: '사람들이 OpenDesign으로 만든 모션',
     galleryLead:
       '프롬프트로 렌더링된 진짜 애니메이션 프레임과 클립. 아이디어에 가까운 하나를 골라 모션을 설명하세요.',
     gallery: [
@@ -1707,7 +1707,7 @@ export const KO: SolutionLocaleCopy = {
     faq: [
       {
         q: 'After Effects나 모션 그래픽 스위트가 필요한가요?',
-        a: '아니요. Open Design은 코딩 에이전트 안에서 애니메이션 프레임을 HTML로 구성하고 영상으로 렌더링합니다. 배우거나 라이선스를 살 타임라인 에디터가 없습니다.',
+        a: '아니요. OpenDesign은 코딩 에이전트 안에서 애니메이션 프레임을 HTML로 구성하고 영상으로 렌더링합니다. 배우거나 라이선스를 살 타임라인 에디터가 없습니다.',
       },
       {
         q: '이건 어떤 종류의 영상에 적합한가요?',
@@ -1724,31 +1724,31 @@ export const KO: SolutionLocaleCopy = {
     ],
     ctaTitle: '다음 아이디어를 오늘 밤 모션으로',
     ctaBody:
-      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, 스크립트를, 이미 사용 중인 에이전트 안에서 모션으로 바꿔 보세요.',
+      '리포지토리에 스타를 누르고 OpenDesign을 설치한 뒤, 스크립트를, 이미 사용 중인 에이전트 안에서 모션으로 바꿔 보세요.',
   },
   designSystem: {
-    title: 'Open Design + Claude Code로 디자인 시스템 구축하고 적용하기',
+    title: 'OpenDesign + Claude Code로 디자인 시스템 구축하고 적용하기',
     description:
       '브랜드를, 코딩 에이전트가 모든 산출물에 적용하는 재사용 가능한 디자인 시스템으로 담아냅니다 — 컬러, 타입, 컴포넌트, 톤을 하나의 DESIGN.md에. 한 번 정의하면 모든 프로토타입, 덱, 대시보드가 브랜드에 맞게 유지됩니다.',
     breadcrumb: '디자인 시스템',
     label: '활용 사례 · 디자인 시스템',
     heading: '하나의 디자인 시스템을, 에이전트가 만드는 모든 것에 적용',
-    lead: '브랜드를 한 번 정의하면 Open Design이 그것을 모든 출력으로 가져갑니다 — 프로토타입, 덱, 대시보드, 그래픽. 시스템은 에이전트가 읽는 DESIGN.md로 리포지토리에 있으므로 일관성은 수동이 아니라 자동입니다.',
+    lead: '브랜드를 한 번 정의하면 OpenDesign이 그것을 모든 출력으로 가져갑니다 — 프로토타입, 덱, 대시보드, 그래픽. 시스템은 에이전트가 읽는 DESIGN.md로 리포지토리에 있으므로 일관성은 수동이 아니라 자동입니다.',
     heroImageAlt:
       '하나의 디자인 시스템이 브랜드에 맞는 여러 산출물로 방사형으로 퍼져 나가는 에디토리얼 일러스트',
     tldrTitle: '한 줄로 말하면',
     tldrBody:
-      'Open Design은 브랜드를, 에이전트가 모든 산출물에 적용하는 이식 가능한 디자인 시스템으로 담아냅니다 — 리포지토리에서 한 번 정의하고, 어디서나 강제되며, 그것을 통제하는 중앙 디자인 도구가 없습니다.',
-    stepsTitle: 'Open Design에서 디자인 시스템이 작동하는 방식',
+      'OpenDesign은 브랜드를, 에이전트가 모든 산출물에 적용하는 이식 가능한 디자인 시스템으로 담아냅니다 — 리포지토리에서 한 번 정의하고, 어디서나 강제되며, 그것을 통제하는 중앙 디자인 도구가 없습니다.',
+    stepsTitle: 'OpenDesign에서 디자인 시스템이 작동하는 방식',
     steps: [
       {
         title: '시스템을 담아낸다',
-        body: '브랜드를 설명합니다 — 컬러, 타입, 여백, 보이스 — 또는 기존 사이트를 에이전트에게 가리켜 추출하게 합니다. Open Design이 그것을 프로젝트 안에 있는 DESIGN.md에 적습니다.',
+        body: '브랜드를 설명합니다 — 컬러, 타입, 여백, 보이스 — 또는 기존 사이트를 에이전트에게 가리켜 추출하게 합니다. OpenDesign이 그것을 프로젝트 안에 있는 DESIGN.md에 적습니다.',
         imageAlt: '브랜드가 하나의 디자인 시스템 파일로 담기는 일러스트',
       },
       {
         title: '검증된 기반에서 시작한다',
-        body: 'Open Design은 140개 이상의 참조 디자인 시스템을 제공합니다 — Apple과 Linear부터 에디토리얼, 브루탈리스트까지. 빈 페이지에서 시작하는 대신 당신의 브랜드에 가까운 것을 포크하세요.',
+        body: 'OpenDesign은 140개 이상의 참조 디자인 시스템을 제공합니다 — Apple과 Linear부터 에디토리얼, 브루탈리스트까지. 빈 페이지에서 시작하는 대신 당신의 브랜드에 가까운 것을 포크하세요.',
         imageAlt: '참조 디자인 시스템 갤러리를 둘러보는 일러스트',
       },
       {
@@ -1762,9 +1762,9 @@ export const KO: SolutionLocaleCopy = {
         imageAlt: '디자인 시스템이 갱신되어 모든 출력으로 전파되는 일러스트',
       },
     ],
-    tableTitle: 'Open Design 디자인 시스템 vs 기존 방식',
+    tableTitle: 'OpenDesign 디자인 시스템 vs 기존 방식',
     tableColCapability: '필요한 것',
-    tableColWithOd: 'Open Design이라면',
+    tableColWithOd: 'OpenDesign이라면',
     tableColWithout: '디자인 도구 라이브러리 / 스타일 가이드',
     tableRows: [
       {
@@ -1807,7 +1807,7 @@ export const KO: SolutionLocaleCopy = {
       { title: "OpenAI", body: "미니멀하고 중립적이며 연구급.", thumb: "design-system-openai" },
       { title: "GitHub", body: "밀도 높고 기술적이며 개발자 네이티브.", thumb: "design-system-github" },
     ],
-    galleryTitle: 'Open Design의 디자인 시스템',
+    galleryTitle: 'OpenDesign의 디자인 시스템',
     galleryLead:
       '출발점으로 포크할 수 있는 140개 이상의 참조 시스템 중 일부. 당신의 브랜드에 가까운 하나를 골라 적응시키세요.',
     gallery: [
@@ -1822,11 +1822,11 @@ export const KO: SolutionLocaleCopy = {
     faq: [
       {
         q: '여기서 말하는 디자인 시스템이 정확히 무엇인가요?',
-        a: '컬러, 타입, 여백, 컴포넌트, 보이스를 담은 리포지토리 안의 DESIGN.md 파일입니다. 모든 Open Design 기술이 그것을 읽으므로 당신의 브랜드가 에이전트가 만들어 내는 무엇에든 자동으로 적용됩니다.',
+        a: '컬러, 타입, 여백, 컴포넌트, 보이스를 담은 리포지토리 안의 DESIGN.md 파일입니다. 모든 OpenDesign 기술이 그것을 읽으므로 당신의 브랜드가 에이전트가 만들어 내는 무엇에든 자동으로 적용됩니다.',
       },
       {
         q: '처음부터 시작해야 하나요?',
-        a: '아니요. Open Design은 포크할 수 있는 140개 이상의 참조 디자인 시스템을 제공합니다 — Apple과 Linear부터 에디토리얼, 브루탈리스트까지 — 그런 다음 당신의 브랜드에 맞게 적응시킵니다.',
+        a: '아니요. OpenDesign은 포크할 수 있는 140개 이상의 참조 디자인 시스템을 제공합니다 — Apple과 Linear부터 에디토리얼, 브루탈리스트까지 — 그런 다음 당신의 브랜드에 맞게 적응시킵니다.',
       },
       {
         q: '덱, 대시보드, 프로토타입을 넘나들며 어떻게 일관성을 유지하나요?',
@@ -1839,12 +1839,12 @@ export const KO: SolutionLocaleCopy = {
     ],
     ctaTitle: '오늘 밤 당신의 디자인 시스템을 정의하세요',
     ctaBody:
-      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, 이미 사용 중인 에이전트에게 어디에나 적용할 하나의 브랜드를 주세요.',
+      '리포지토리에 스타를 누르고 OpenDesign을 설치한 뒤, 이미 사용 중인 에이전트에게 어디에나 적용할 하나의 브랜드를 주세요.',
   },
   roleSoloBuilder: {
-    title: '솔로 빌더와 인디 해커를 위한 Open Design',
+    title: '솔로 빌더와 인디 해커를 위한 OpenDesign',
     description:
-      '혼자서도 한 팀처럼 출시하세요. Open Design은 당신의 코딩 에이전트를 스타트업의 디자인 절반으로 바꿔줍니다. 프로토타입, 랜딩 페이지, 대시보드, 브랜드 비주얼까지, 모두 프롬프트 한 줄로, 모두 브랜드에 맞게, 모두 당신의 저장소 안에서.',
+      '혼자서도 한 팀처럼 출시하세요. OpenDesign은 당신의 코딩 에이전트를 스타트업의 디자인 절반으로 바꿔줍니다. 프로토타입, 랜딩 페이지, 대시보드, 브랜드 비주얼까지, 모두 프롬프트 한 줄로, 모두 브랜드에 맞게, 모두 당신의 저장소 안에서.',
     breadcrumb: '솔로 빌더',
     label: '대상 · 솔로 빌더',
     heading: '당신의 디자인 팀은 이미 돌리고 있는 그 에이전트입니다',
@@ -1853,8 +1853,8 @@ export const KO: SolutionLocaleCopy = {
       '일관된 스타일의 랜딩 페이지, 앱, 대시보드, 소셜 카드에 둘러싸여 책상에 앉아 있는 한 사람을 그린 에디토리얼 일러스트',
     tldrTitle: '한 줄로 말하면',
     tldrBody:
-      'Open Design은 솔로 창업자가 가져본 적 없던 디자인 부서입니다. 제품에 필요한 모든 영역에서 프롬프트가 곧 결과물로. 하나의 브랜드로, 인수인계 없이, 추가 도구 없이.',
-    stepsTitle: '솔로 빌더는 Open Design을 이렇게 씁니다',
+      'OpenDesign은 솔로 창업자가 가져본 적 없던 디자인 부서입니다. 제품에 필요한 모든 영역에서 프롬프트가 곧 결과물로. 하나의 브랜드로, 인수인계 없이, 추가 도구 없이.',
+    stepsTitle: '솔로 빌더는 OpenDesign을 이렇게 씁니다',
     steps: [
       {
         title: '브랜드를 한 번만 정의하세요',
@@ -1872,9 +1872,9 @@ export const KO: SolutionLocaleCopy = {
         imageAlt: '결과물이 프롬프트에서 라이브까지 곧장 가는 일러스트',
       },
     ],
-    tableTitle: 'Open Design으로 혼자 만들기 vs. 힘들게 직접 하기',
+    tableTitle: 'OpenDesign으로 혼자 만들기 vs. 힘들게 직접 하기',
     tableColCapability: '필요한 것',
-    tableColWithOd: 'Open Design이라면',
+    tableColWithOd: 'OpenDesign이라면',
     tableColWithout: '지금 혼자 한다면',
     tableRows: [
       { capability: '모든 디자인 영역 커버', withOd: '하나의 에이전트가 프로토타입, 랜딩, 대시보드, 브랜드를 담당', without: '다섯 개의 SaaS 도구와 튜토리얼을 이어 붙이기' },
@@ -1892,7 +1892,7 @@ export const KO: SolutionLocaleCopy = {
       { title: '모바일 플로우', body: '웹을 넘어설 때의 앱 화면.', thumb: 'example-mobile-app' },
       { title: '소셜 카드', body: '모든 채널을 위한 출시·업데이트 카드.', thumb: 'example-card-twitter' },
     ],
-    galleryTitle: 'Open Design으로 혼자 만든 것',
+    galleryTitle: 'OpenDesign으로 혼자 만든 것',
     galleryLead:
       '1인 스타트업에 필요한 모든 영역을, 프롬프트 한 줄로. 다음 행보에 가까운 것을 골라 설명해 보세요.',
     gallery: [
@@ -1912,12 +1912,12 @@ export const KO: SolutionLocaleCopy = {
     ],
     ctaTitle: '오늘 밤, 당신의 모든 것을 만드세요',
     ctaBody:
-      '저장소에 스타를 누르고, Open Design을 설치하고, 하나의 에이전트를 당신의 디자인 팀으로 만드세요. 이미 쓰고 있는 그 에이전트 안에서.',
+      '저장소에 스타를 누르고, OpenDesign을 설치하고, 하나의 에이전트를 당신의 디자인 팀으로 만드세요. 이미 쓰고 있는 그 에이전트 안에서.',
   },
   roleDesigner: {
-    title: '디자이너를 위한 Open Design',
+    title: '디자이너를 위한 OpenDesign',
     description:
-      '시간을 안목에 쓰고, 잡일에는 쓰지 마세요. Open Design은 반복적인 제작 작업(변형, 상태, 디자인 시스템 전체)을 에이전트가 맡게 하고, 당신은 룩을 디렉팅하며 최종 결정권을 쥡니다.',
+      '시간을 안목에 쓰고, 잡일에는 쓰지 마세요. OpenDesign은 반복적인 제작 작업(변형, 상태, 디자인 시스템 전체)을 에이전트가 맡게 하고, 당신은 룩을 디렉팅하며 최종 결정권을 쥡니다.',
     breadcrumb: '디자이너',
     label: '대상 · 디자이너',
     heading: '디자인을 디렉팅하고, 제작은 에이전트에게',
@@ -1926,8 +1926,8 @@ export const KO: SolutionLocaleCopy = {
       '디자이너가 디렉팅하는 동안 에이전트가 화면, 변형, 디자인 시스템을 채워 넣는 에디토리얼 일러스트',
     tldrTitle: '한 줄로 말하면',
     tldrBody:
-      'Open Design은 결코 지치지 않는 제작 어시스턴트입니다. 당신이 디자인 시스템을 정의하고 안목으로 판단하면, 에이전트가 나머지를 시스템에 맞게, 당신의 저장소 안에서 생성합니다.',
-    stepsTitle: '디자이너는 Open Design을 이렇게 씁니다',
+      'OpenDesign은 결코 지치지 않는 제작 어시스턴트입니다. 당신이 디자인 시스템을 정의하고 안목으로 판단하면, 에이전트가 나머지를 시스템에 맞게, 당신의 저장소 안에서 생성합니다.',
+    stepsTitle: '디자이너는 OpenDesign을 이렇게 씁니다',
     steps: [
       {
         title: '시스템을 코드화하세요',
@@ -1945,9 +1945,9 @@ export const KO: SolutionLocaleCopy = {
         imageAlt: '디자이너가 지시를 내리고 디자인이 갱신되는 일러스트',
       },
     ],
-    tableTitle: 'Open Design으로 디자인하기 vs. 수작업 방식',
+    tableTitle: 'OpenDesign으로 디자인하기 vs. 수작업 방식',
     tableColCapability: '필요한 것',
-    tableColWithOd: 'Open Design이라면',
+    tableColWithOd: 'OpenDesign이라면',
     tableColWithout: '수작업 디자인 도구',
     tableRows: [
       { capability: '디자인 시스템 구축', withOd: '에이전트가 어디에나 적용하는 DESIGN.md', without: '도구마다 손으로 유지하는 라이브러리' },
@@ -1965,7 +1965,7 @@ export const KO: SolutionLocaleCopy = {
       { title: '앱 화면', body: '고충실도 모바일·웹 화면.', thumb: 'example-mobile-app' },
       { title: '대시보드', body: '당신의 시스템을 존중하는 데이터 UI.', thumb: 'example-dashboard' },
     ],
-    galleryTitle: 'Open Design으로 디렉팅한 것',
+    galleryTitle: 'OpenDesign으로 디렉팅한 것',
     galleryLead:
       '디렉팅으로부터 에이전트가 만들어낸, 시스템에 맞는 고충실도 작업. 당신의 스타일에 가까운 것을 골라 다듬어 보세요.',
     gallery: [
@@ -1985,12 +1985,12 @@ export const KO: SolutionLocaleCopy = {
     ],
     ctaTitle: '오늘 밤, 다음 디자인을 디렉팅하세요',
     ctaBody:
-      '저장소에 스타를 누르고, Open Design을 설치하고, 제작은 에이전트에게 맡기고 안목은 당신이 판단하세요. 이미 쓰고 있는 그 에이전트 안에서.',
+      '저장소에 스타를 누르고, OpenDesign을 설치하고, 제작은 에이전트에게 맡기고 안목은 당신이 판단하세요. 이미 쓰고 있는 그 에이전트 안에서.',
   },
   roleEngineering: {
-    title: '엔지니어를 위한 Open Design',
+    title: '엔지니어를 위한 OpenDesign',
     description:
-      '디자인 인수인계를 건너뛰세요. Open Design은 DESIGN.md를, 당신의 코딩 에이전트가 직접 작성하는 진짜 프론트엔드로 바꿉니다. 시스템에 맞는 UI, 프로토타입, 대시보드를 저장소 안에서, Figma 왕복 없이.',
+      '디자인 인수인계를 건너뛰세요. OpenDesign은 DESIGN.md를, 당신의 코딩 에이전트가 직접 작성하는 진짜 프론트엔드로 바꿉니다. 시스템에 맞는 UI, 프로토타입, 대시보드를 저장소 안에서, Figma 왕복 없이.',
     breadcrumb: '엔지니어링',
     label: '대상 · 엔지니어링',
     heading: '스펙에서 프론트엔드까지, 그 사이에 인수인계 없이',
@@ -1999,8 +1999,8 @@ export const KO: SolutionLocaleCopy = {
       'DESIGN.md가 인수인계 단계를 건너뛰고 곧장 프론트엔드 코드와 렌더링된 UI로 흘러가는 에디토리얼 일러스트',
     tldrTitle: '한 줄로 말하면',
     tldrBody:
-      'Open Design은 디자인 시스템을 기계가 읽을 수 있게 만들어 디자이너에서 엔지니어로 가는 간극을 메웁니다. 당신의 코드를 쓰는 같은 에이전트가 시스템을 적용하고 진짜 UI를 렌더링합니다.',
-    stepsTitle: '엔지니어는 Open Design을 이렇게 씁니다',
+      'OpenDesign은 디자인 시스템을 기계가 읽을 수 있게 만들어 디자이너에서 엔지니어로 가는 간극을 메웁니다. 당신의 코드를 쓰는 같은 에이전트가 시스템을 적용하고 진짜 UI를 렌더링합니다.',
+    stepsTitle: '엔지니어는 OpenDesign을 이렇게 씁니다',
     steps: [
       {
         title: '레드라인이 아니라 시스템을 읽으세요',
@@ -2018,9 +2018,9 @@ export const KO: SolutionLocaleCopy = {
         imageAlt: '생성된 UI가 리뷰 가능한 PR로 안착하는 일러스트',
       },
     ],
-    tableTitle: 'Open Design으로 프론트엔드 vs. 인수인계 방식',
+    tableTitle: 'OpenDesign으로 프론트엔드 vs. 인수인계 방식',
     tableColCapability: '필요한 것',
-    tableColWithOd: 'Open Design이라면',
+    tableColWithOd: 'OpenDesign이라면',
     tableColWithout: '디자인-개발 인수인계',
     tableRows: [
       { capability: '만들 기준이 될 디자인 확보', withOd: '에이전트가 직접 읽는 DESIGN.md', without: '손으로 다시 해석하는 Figma 파일' },
@@ -2038,7 +2038,7 @@ export const KO: SolutionLocaleCopy = {
       { title: '랜딩 페이지', body: '디자인을 기다리지 않는 마케팅 페이지.', thumb: 'example-saas-landing' },
       { title: 'Kanban / 보드', body: '내부 워크플로우 UI.', thumb: 'example-kanban-board' },
     ],
-    galleryTitle: '엔지니어가 Open Design으로 만든 것',
+    galleryTitle: '엔지니어가 OpenDesign으로 만든 것',
     galleryLead:
       '저장소 안에서 곧장 생성된, 시스템에 맞는 진짜 프론트엔드. 만들고 있는 것에 가까운 것을 골라 설명해 보세요.',
     gallery: [
@@ -2058,12 +2058,12 @@ export const KO: SolutionLocaleCopy = {
     ],
     ctaTitle: '오늘 밤, 다음 UI를 생성하세요',
     ctaBody:
-      '저장소에 스타를 누르고, Open Design을 설치하고, DESIGN.md를 프론트엔드로 바꾸세요. 이미 쓰고 있는 그 에이전트 안에서.',
+      '저장소에 스타를 누르고, OpenDesign을 설치하고, DESIGN.md를 프론트엔드로 바꾸세요. 이미 쓰고 있는 그 에이전트 안에서.',
   },
   roleProductManagers: {
-    title: '프로덕트 매니저를 위한 Open Design',
+    title: '프로덕트 매니저를 위한 OpenDesign',
     description:
-      '아이디어를 전달하려고 디자인 여력을 더는 기다리지 마세요. Open Design은 PM이 프롬프트를 클릭 가능한 프로토타입이나 와이어프레임으로 바꿀 수 있게 합니다. 이해관계자의 합의를 이루고 팀에 브리핑하기 위해, 디자인 티켓 없이.',
+      '아이디어를 전달하려고 디자인 여력을 더는 기다리지 마세요. OpenDesign은 PM이 프롬프트를 클릭 가능한 프로토타입이나 와이어프레임으로 바꿀 수 있게 합니다. 이해관계자의 합의를 이루고 팀에 브리핑하기 위해, 디자인 티켓 없이.',
     breadcrumb: '프로덕트 매니저',
     label: '대상 · 프로덕트 매니저',
     heading: '킥오프 전에 아이디어를 클릭 가능하게',
@@ -2072,8 +2072,8 @@ export const KO: SolutionLocaleCopy = {
       'PM이 글로 쓴 아이디어를 이해관계자에게 보여주는 클릭 가능한 프로토타입으로 바꾸는 에디토리얼 일러스트',
     tldrTitle: '한 줄로 말하면',
     tldrBody:
-      'Open Design은 PM에게 디자인 없이 아이디어를 실체화하는 방법을 줍니다. 합의와 브리핑을 위한 프롬프트에서 프로토타입으로. 팀의 디자인 예산을 쓰지 않고.',
-    stepsTitle: 'PM은 Open Design을 이렇게 씁니다',
+      'OpenDesign은 PM에게 디자인 없이 아이디어를 실체화하는 방법을 줍니다. 합의와 브리핑을 위한 프롬프트에서 프로토타입으로. 팀의 디자인 예산을 쓰지 않고.',
+    stepsTitle: 'PM은 OpenDesign을 이렇게 씁니다',
     steps: [
       {
         title: '플로우를 설명하세요',
@@ -2091,9 +2091,9 @@ export const KO: SolutionLocaleCopy = {
         imageAlt: '프로토타입이 합의를 위해 공유된 뒤 팀에 넘겨지는 일러스트',
       },
     ],
-    tableTitle: 'Open Design으로 하는 PM 업무 vs. 디자인 대기',
+    tableTitle: 'OpenDesign으로 하는 PM 업무 vs. 디자인 대기',
     tableColCapability: '필요한 것',
-    tableColWithOd: 'Open Design이라면',
+    tableColWithOd: 'OpenDesign이라면',
     tableColWithout: '지금 그것 없이',
     tableRows: [
       { capability: '아이디어를 실체화', withOd: '프롬프트 → 직접 만드는 클릭 가능한 프로토타입', without: '디자인 티켓을 올리고 여력을 기다리기' },
@@ -2111,7 +2111,7 @@ export const KO: SolutionLocaleCopy = {
       { title: '웹 프로토타입', body: '리뷰용 멀티 스크린 웹 플로우.', thumb: 'example-web-prototype' },
       { title: '트렌드 뷰', body: '맥락을 위한 30일·트렌드 스냅샷.', thumb: 'example-last30days' },
     ],
-    galleryTitle: 'PM이 Open Design으로 프로토타이핑한 것',
+    galleryTitle: 'PM이 OpenDesign으로 프로토타이핑한 것',
     galleryLead:
       '설명으로부터 렌더링된, 이해관계자 리뷰에 바로 쓸 수 있는 클릭 가능한 플로우. 당신의 아이디어에 가까운 것을 골라 설명해 보세요.',
     gallery: [
@@ -2131,12 +2131,12 @@ export const KO: SolutionLocaleCopy = {
     ],
     ctaTitle: '오늘 밤, 당신의 아이디어를 클릭 가능하게',
     ctaBody:
-      '저장소에 스타를 누르고, Open Design을 설치하고, 다음 스펙을 사람들이 클릭할 수 있는 것으로 바꾸세요. 이미 쓰고 있는 그 에이전트 안에서.',
+      '저장소에 스타를 누르고, OpenDesign을 설치하고, 다음 스펙을 사람들이 클릭할 수 있는 것으로 바꾸세요. 이미 쓰고 있는 그 에이전트 안에서.',
   },
   roleMarketing: {
-    title: '마케팅 팀을 위한 Open Design',
+    title: '마케팅 팀을 위한 OpenDesign',
     description:
-      '콘텐츠의 속도로 캠페인을 출시하세요. Open Design은 당신의 에이전트가 랜딩 페이지, 소셜 카드, 캠페인 비주얼을 프롬프트로 만들어내게 합니다. 브랜드에 맞게, 온디맨드로, 디자인 줄 서기 없이.',
+      '콘텐츠의 속도로 캠페인을 출시하세요. OpenDesign은 당신의 에이전트가 랜딩 페이지, 소셜 카드, 캠페인 비주얼을 프롬프트로 만들어내게 합니다. 브랜드에 맞게, 온디맨드로, 디자인 줄 서기 없이.',
     breadcrumb: '마케팅',
     label: '대상 · 마케팅',
     heading: '프롬프트의 속도로 만드는 캠페인 비주얼',
@@ -2145,8 +2145,8 @@ export const KO: SolutionLocaleCopy = {
       '마케터가 브리프를 랜딩 페이지와 브랜드에 맞는 소셜 카드 세트로 바꾸는 에디토리얼 일러스트',
     tldrTitle: '한 줄로 말하면',
     tldrBody:
-      'Open Design은 마케팅을 위한 상시 가동 디자인 리소스입니다. 랜딩 페이지와 소셜을 위한 프롬프트에서 에셋으로. 브랜드에 맞게. 그래서 캠페인이 카피를 쓰는 속도로 출시됩니다.',
-    stepsTitle: '마케팅 팀은 Open Design을 이렇게 씁니다',
+      'OpenDesign은 마케팅을 위한 상시 가동 디자인 리소스입니다. 랜딩 페이지와 소셜을 위한 프롬프트에서 에셋으로. 브랜드에 맞게. 그래서 캠페인이 카피를 쓰는 속도로 출시됩니다.',
+    stepsTitle: '마케팅 팀은 OpenDesign을 이렇게 씁니다',
     steps: [
       {
         title: '브랜드를 고정하세요',
@@ -2164,9 +2164,9 @@ export const KO: SolutionLocaleCopy = {
         imageAlt: '캠페인 에셋이 빠르게 출시되고 반복되는 일러스트',
       },
     ],
-    tableTitle: 'Open Design으로 하는 마케팅 vs. 늘 있는 허둥지둥',
+    tableTitle: 'OpenDesign으로 하는 마케팅 vs. 늘 있는 허둥지둥',
     tableColCapability: '필요한 것',
-    tableColWithOd: 'Open Design이라면',
+    tableColWithOd: 'OpenDesign이라면',
     tableColWithout: '지금 그것 없이',
     tableRows: [
       { capability: '랜딩 페이지 공개', withOd: '프롬프트 → 브랜드에 맞는 페이지, 배포 가능', without: '디자인에 의뢰하거나 사이트 빌더와 씨름' },
@@ -2184,7 +2184,7 @@ export const KO: SolutionLocaleCopy = {
       { title: '아티클 커버', body: '블로그와 뉴스레터 커버.', thumb: 'example-article-magazine' },
       { title: '웹 페이지', body: '마이크로사이트와 캠페인 페이지.', thumb: 'example-web-prototype' },
     ],
-    galleryTitle: '마케팅이 Open Design으로 출시한 것',
+    galleryTitle: '마케팅이 OpenDesign으로 출시한 것',
     galleryLead:
       '프롬프트로부터 렌더링된, 브랜드에 맞는 캠페인 에셋. 당신의 캠페인에 가까운 것을 골라 카피를 바꿔 넣으세요.',
     gallery: [
@@ -2204,6 +2204,6 @@ export const KO: SolutionLocaleCopy = {
     ],
     ctaTitle: '오늘 밤, 다음 캠페인을 출시하세요',
     ctaBody:
-      '저장소에 스타를 누르고, Open Design을 설치하고, 브리프를 브랜드에 맞는 에셋으로 바꾸세요. 이미 쓰고 있는 그 에이전트 안에서.',
+      '저장소에 스타를 누르고, OpenDesign을 설치하고, 브리프를 브랜드에 맞는 에셋으로 바꾸세요. 이미 쓰고 있는 그 에이전트 안에서.',
   },
 };

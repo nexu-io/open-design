@@ -1,12 +1,9 @@
 import { expect, test } from '@/playwright/suite';
 import type { Locator, Page } from '@playwright/test';
-import { openSettingsDialog } from '../lib/playwright/amr.js';
 import { routeAgents } from '../lib/playwright/mock-factory.js';
 import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
-const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定|Account & settings/i;
-
 test.describe.configure({ timeout: T.xlong });
 
 const CONNECTORS = [
@@ -64,21 +61,7 @@ function connectorCard(scope: Page | Locator, id: string) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: T.long });
-}
-
-async function gotoEntryHome(page: Page) {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
-  const privacyRegion = page.getByRole('region', { name: /Help us improve Open Design/i });
-  if (await privacyRegion.isVisible().catch(() => false)) {
-    await privacyRegion.getByRole('button', { name: /I get it|not now|got it/i }).click();
-  }
-  await expect(page.getByTestId('home-hero')).toBeVisible();
-}
-
-async function openSettingsDialogFromEntry(page: Page) {
-  return openSettingsDialog(page);
+  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0, { timeout: T.long });
 }
 
 async function openConnectorsSettings(
@@ -238,12 +221,16 @@ async function openConnectorsSettings(
     });
   });
 
-  await gotoEntryHome(page);
-  const dialog = await openSettingsDialogFromEntry(page);
-  await dialog.getByRole('button', { name: /Connectors|连接器/i }).click();
-  await expect(dialog.getByTestId('connector-grid-wrap')).toBeVisible();
-  await expect(connectorCard(dialog, 'github')).toBeVisible();
-  return dialog;
+  await page.goto('/integrations', { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  const view = page.locator('.integrations-view');
+  await expect(view).toBeVisible();
+  const connectorsTab = view.getByTestId('integrations-tab-connectors');
+  await connectorsTab.click();
+  await expect(connectorsTab).toHaveAttribute('aria-selected', 'true');
+  await expect(view.getByTestId('connector-grid-wrap')).toBeVisible();
+  await expect(connectorCard(view, 'github')).toBeVisible();
+  return view;
 }
 
 test.describe('Settings connectors auth happy path', () => {

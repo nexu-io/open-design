@@ -9,8 +9,10 @@ name: cut-patch-release
 #   2. A pre-flight guard: the current line's minor base X.Y.0 must be a PUBLISHED
 #      stable GitHub Release (tag open-design-vX.Y.0, isDraft=false, isPrerelease=false
 #      — i.e. release-stable ran `gh release edit --draft=false --latest`). If it is
-#      not published yet, do NOT cut a branch or build anything; instead post a
-#      Feishu notice that the patch cut was skipped, and stop.
+#      not published yet, do NOT cut a branch or launch a prerelease publication;
+#      instead post a Feishu notice that the patch cut was skipped, and stop. The
+#      independent scheduled Windows canary remains an advisory product-smoke
+#      signal and does not block this branch cut or its prerelease package.
 #   3. On the happy path it is otherwise identical to cut-release: create
 #      release/vX.Y.(Z+1), bump apps/packaged/package.json, push with the App token
 #      (which triggers notify-release-feishu -> prerelease build + Feishu card), and
@@ -39,7 +41,7 @@ on:
         default: false
 
 permissions:
-  contents: read               # actual writes go through the App token below
+  contents: read               # branch/label writes still go through the App token below
 
 concurrency:
   group: cut-patch-release
@@ -58,7 +60,8 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          ref: main            # always cut from main HEAD, even on a manual dispatch from another branch
+          # Smoke is advisory; release cuts always use the current main tip.
+          ref: main
           fetch-depth: 0
           token: ${{ steps.app.outputs.token }}
 
@@ -100,10 +103,12 @@ jobs:
           # (e.g. version=0.15.1 gates open-design-v0.15.0, not the latest 0.14.0).
           vmajor=${V%%.*}; vrest=${V#*.}; vminor=${vrest%%.*}
           MINOR_BASE="${vmajor}.${vminor}.0"
-          echo "version=$V"                          >> "$GITHUB_OUTPUT"
-          echo "branch=release/v$V"                  >> "$GITHUB_OUTPUT"
-          echo "minor_base=$MINOR_BASE"              >> "$GITHUB_OUTPUT"
-          echo "minor_tag=open-design-v$MINOR_BASE"  >> "$GITHUB_OUTPUT"
+          {
+            echo "version=$V"
+            echo "branch=release/v$V"
+            echo "minor_base=$MINOR_BASE"
+            echo "minor_tag=open-design-v$MINOR_BASE"
+          } >> "$GITHUB_OUTPUT"
           echo "Cutting patch v$V (branch release/v$V); gating on stable v$MINOR_BASE"
 
       # Guard: the minor this patch sits on (the Tuesday cut) must already be a
@@ -134,7 +139,7 @@ jobs:
           echo "release $MINOR_TAG -> published=$published"
           echo "published=$published" >> "$GITHUB_OUTPUT"
 
-      # ---- Skip path: minor not published yet -> notify Feishu and stop ----
+      # ---- Skip path: minor not published yet -> no branch/release build; notify and stop ----
       # feishu-notice.ts imports only node:crypto (no workspace deps), so the
       # setup-node above is all it needs — no pnpm install, same as feishu.ts.
       - name: Notify Feishu that the patch cut was skipped
