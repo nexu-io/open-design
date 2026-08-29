@@ -1527,6 +1527,7 @@ describe("lintClaims", () => {
     tris: 12,
     ngons: 0,
     nonManifoldEdges: 0,
+    nonManifoldVertices: 0,
     zeroAreaFaces: 0,
     nan: false,
     uvLayers: [],
