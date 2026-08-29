@@ -593,10 +593,26 @@ export function lintClaims(
 
   if (claims.watertight === true) {
     for (const mesh of census.meshes) {
+      // The SAME predicate the kernel and the world linter use: a closed
+      // 2-manifold has no non-manifold EDGE and no pinch/bowtie VERTEX. Checking
+      // edges alone let a build corrupted into a pinch (two shells touching at a
+      // single vertex — manifold edges, non-manifold vertex) claim watertight
+      // and pass. One physical relation, one predicate.
       if (mesh.nonManifoldEdges > 0) {
         fail("watertight", `'${mesh.object}' has ${mesh.nonManifoldEdges} non-manifold edges — it is not a closed solid`, {
           target: mesh.object,
           nonManifoldEdges: mesh.nonManifoldEdges,
+        });
+      } else if ((mesh.nonManifoldVertices ?? 0) > 0) {
+        fail("watertight", `'${mesh.object}' has ${mesh.nonManifoldVertices} pinch/bowtie vertex(es) — shells meeting at a point are not a closed solid`, {
+          target: mesh.object,
+          nonManifoldVertices: mesh.nonManifoldVertices,
+        });
+      } else if (mesh.nonManifoldVertices === undefined) {
+        // Pinch vertices were not measured (an older census), so the claim
+        // cannot be fully adjudicated — unchecked, not silently passed.
+        unchecked("watertight", `'${mesh.object}' pinch-vertex count is unmeasured in this census`, {
+          target: mesh.object,
         });
       }
     }

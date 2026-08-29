@@ -26,34 +26,44 @@ export interface LintContext {
  */
 export function lintNaming(ctx: LintContext, issues: Issue[]): void {
   const { contract } = ctx;
-  const targets = new Map<string, { source: "prim" | "object"; depth?: number }>();
-  if (ctx.primTree) {
-    for (const prim of ctx.primTree.prims) targets.set(prim.name, { source: "prim" });
-  }
-  if (ctx.census) {
-    for (const obj of ctx.census.objects) targets.set(obj.name, { source: "object" });
-  }
-
-  for (const [name, info] of targets) {
+  /*
+   * The naming checks run PER PRIM and PER OBJECT, not over a name-keyed set.
+   * USD lets two prims share a leaf name under different parents (the same fact
+   * the depth check below is careful about), so a map keyed on name would let
+   * one prim's naming violation overwrite another's and report only the last —
+   * an under-count on a naming-strict contract, and a finding that cannot say
+   * WHICH prim it means. `where` carries the parent so the two are told apart
+   * in the message, and `line` makes their issue identities distinct so the
+   * dedup keeps both. Census object names are unique, so they need no such
+   * discriminator.
+   */
+  const checkName = (
+    name: string,
+    source: "prim" | "object",
+    where: string,
+    identity: Record<string, unknown>,
+  ): void => {
     if (contract.forbidDefaultNames && BLENDER_DEFAULT_NAMES.has(baseName(name))) {
       issues.push({
         code: ISSUE_CODES.NAME_DEFAULT,
         severity: "error",
-        message: `'${name}' is a Blender default name`,
-        hint: `give the ${info.source} a descriptive name`,
+        message: `${where} is a Blender default name`,
+        hint: `give the ${source} a descriptive name`,
         target: name,
+        detail: identity,
       });
-      continue;
+      return;
     }
     if (!contract.objectPattern.test(name)) {
       issues.push({
         code: ISSUE_CODES.NAME_PATTERN,
         severity: "error",
-        message: `'${name}' does not match ${contract.objectPattern}`,
+        message: `${where} does not match ${contract.objectPattern}`,
         hint: "use [A-Za-z][A-Za-z0-9_]{2,63}",
         target: name,
+        detail: identity,
       });
-      continue;
+      return;
     }
     if (contract.partPrefixes.length > 0 && !contract.partPrefixes.some((p) => name.startsWith(p))) {
       // Suggest the closest prefix rather than just listing them: a model
@@ -73,10 +83,24 @@ export function lintNaming(ctx: LintContext, issues: Issue[]): void {
       issues.push({
         code: ISSUE_CODES.NAME_PREFIX,
         severity: "error",
-        message: `'${name}' must start with one of ${contract.partPrefixes.join(", ")}`,
+        message: `${where} must start with one of ${contract.partPrefixes.join(", ")}`,
         hint: `did you mean '${suggestion}${name}'?`,
         target: name,
+        detail: identity,
       });
+    }
+  };
+
+  if (ctx.primTree) {
+    for (const prim of ctx.primTree.prims) {
+      const where =
+        prim.parent !== null ? `'${prim.name}' (under '${prim.parent}')` : `'${prim.name}'`;
+      checkName(prim.name, "prim", where, { parent: prim.parent, line: prim.line });
+    }
+  }
+  if (ctx.census) {
+    for (const obj of ctx.census.objects) {
+      checkName(obj.name, "object", `'${obj.name}'`, {});
     }
   }
 

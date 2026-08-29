@@ -91,3 +91,44 @@ describe("clip — exact half-space cut", () => {
     expect(c.mass!.embed).toEqual({ kind: "embedded" });
   });
 });
+
+describe("clip — cut plane coincident with existing geometry", () => {
+  it("caps a diagonal cut that passes exactly through the box's vertices", () => {
+    /*
+     * The plane x+z=1 passes exactly through v1=(1,0,0), v2=(1,1,0),
+     * v4=(0,0,1), v7=(0,1,1). The cap is the quad through those four vertices.
+     * The old per-face cut-edge collection missed the two on-plane edges whose
+     * OTHER face was dropped or kept verbatim, so it produced only two of the
+     * four boundary edges and emitted NO cap — an open, non-watertight solid.
+     * The residual (unmatched half-edge) boundary sees all four.
+     */
+    const cut = clip(box(1, 1, 1), plane(1, 0, 1, rat(1)));
+    const c = predictCensus(cut, { mass: true });
+    expect(c.watertight, "a cut through existing vertices must still cap").toBe(true);
+    expect(c.genus).toBe(0);
+    // Keep x+z ≤ 1 of the unit cube. The removed region is the corner prism
+    // above the plane; the kept volume is exact.
+    expect(c.mass!.embed).toEqual({ kind: "embedded" });
+    expect(c.mass!.volumeExact).toBe("1/2");
+  });
+
+  it("keeps a coplanar face that faces the kept side, and does not double-cap it", () => {
+    // Plane z=0 (the box's own bottom face), keeping z ≤ 0. The bottom face is
+    // coplanar and faces the kept (below) side... actually its outward normal is
+    // -z, and we keep z ≤ 0 (below), so the interior is above it — it faces the
+    // REMOVED side and must DROP, leaving no solid.
+    const slab = clip(box(1, 1, 1), plane(0, 0, 1, rat(0)));
+    // Everything is on or above z=0, so keeping z ≤ 0 removes the volume: an
+    // empty or degenerate result, never a doubled zero-thickness cap.
+    expect(slab.faces.length).toBe(0);
+  });
+
+  it("returns the solid unchanged when the plane grazes a single vertex", () => {
+    // Plane x+y+z ≤ 3 touches only the far corner (1,1,1) of the unit cube.
+    // Nothing is removed; the result is the input, still watertight, no cap.
+    const grazed = clip(box(1, 1, 1), plane(1, 1, 1, rat(3)));
+    const c = predictCensus(grazed, { mass: true });
+    expect(c.watertight).toBe(true);
+    expect(c.mass!.volumeExact).toBe("1");
+  });
+});

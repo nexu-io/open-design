@@ -76,8 +76,6 @@ export function clip(mesh: KernelMesh, plane: Plane, onEarClip?: (loopLength: nu
     return id;
   };
   const faces: number[][] = [];
-  // Directed on-plane cut edges from straddling faces, in the face's own winding.
-  const cutEdges: Array<[number, number]> = [];
 
   for (const face of mesh.faces) {
     const n = face.length;
@@ -87,57 +85,104 @@ export function clip(mesh: KernelMesh, plane: Plane, onEarClip?: (loopLength: nu
       if (side[vi]! > 0) anyOut = true;
       else if (side[vi]! < 0) anyIn = true;
     }
+    if (!anyOut && !anyIn) {
+      // COPLANAR: every vertex on the plane. Its normal is ±plane-normal. Keep
+      // it only when it faces the KEPT side (it IS the cap there); a coplanar
+      // face on the removed side (a box clipped by its own bottom-face plane,
+      // keeping the outside) drops, so a zero-thickness slab is not returned as
+      // a solid. Interior edges of a kept coplanar face cancel against its kept
+      // neighbours in the residual pass below, so it is never double-capped.
+      const emitted = face.map((vi) => intern(mesh.verts[vi]!));
+      if (newellDotNormal(emitted, pts, normal).cmp(ZERO) > 0) faces.push(emitted);
+      continue;
+    }
     if (!anyOut) {
-      // Nothing outside — keep the face verbatim (a grazing on-plane edge here is
-      // an interior edge of the kept solid, not a cut boundary, so record none).
       faces.push(face.map((vi) => intern(mesh.verts[vi]!)));
       continue;
     }
     if (!anyIn) continue; // entirely outside — dropped
 
-    // Straddling: Sutherland–Hodgman clip, emitting the inside endpoint of each
-    // edge and every strict crossing, tracking which output verts lie on-plane.
+    // Straddling: Sutherland–Hodgman clip. Emit the inside endpoint of each edge
+    // and every STRICT crossing (t ∈ (0,1), so a crossing never coincides with an
+    // existing vertex).
     const outIdx: number[] = [];
-    const onPlane: boolean[] = [];
     for (let i = 0; i < n; i++) {
       const a = face[i]!;
       const b = face[(i + 1) % n]!;
       const sa = side[a]!;
       const sb = side[b]!;
-      if (sa <= 0) {
-        outIdx.push(intern(mesh.verts[a]!));
-        onPlane.push(sa === 0);
-      }
+      if (sa <= 0) outIdx.push(intern(mesh.verts[a]!));
       if ((sa < 0 && sb > 0) || (sa > 0 && sb < 0)) {
         outIdx.push(intern(crossingPoint(mesh.verts[a]!, mesh.verts[b]!, f[a]!, f[b]!)));
-        onPlane.push(true);
       }
     }
-    if (outIdx.length < 3) continue; // clipped to a sliver on the plane — no area
-    faces.push(outIdx);
-    // The on-plane boundary of this clipped face: consecutive on-plane output
-    // verts. For a convex face that is exactly one edge (the two crossings).
-    const m = outIdx.length;
+    if (outIdx.length >= 3) faces.push(outIdx);
+  }
+
+  /*
+   * The cap boundary is the set of UNMATCHED half-edges of the emitted faces.
+   *
+   * On a closed oriented 2-manifold every undirected edge is traversed by
+   * exactly two faces in opposite directions. After emitting the kept, clipped
+   * and coplanar-kept faces, cancel every directed edge against its reverse
+   * twin; the residue is the boundary of the kept surface, and for a closed
+   * input it lies entirely on the plane. This is why classifying cut edges
+   * per-face was wrong: an on-plane edge whose OTHER face was dropped (the
+   * removed side) never got recorded, so the cap could not close — the residual
+   * pass sees the missing twin and keeps it. An on-plane edge between two KEPT
+   * faces cancels, so it is correctly not a cap edge.
+   */
+  const openEdges = new Map<string, [number, number]>();
+  const edgeKey = (a: number, b: number): string => `${a},${b}`;
+  for (const face of faces) {
+    const m = face.length;
     for (let i = 0; i < m; i++) {
-      const j = (i + 1) % m;
-      if (onPlane[i] && onPlane[j] && outIdx[i] !== outIdx[j]) cutEdges.push([outIdx[i]!, outIdx[j]!]);
+      const a = face[i]!;
+      const b = face[(i + 1) % m]!;
+      if (a === b) continue;
+      const twin = edgeKey(b, a);
+      if (openEdges.has(twin)) openEdges.delete(twin);
+      else openEdges.set(edgeKey(a, b), [a, b]);
     }
   }
 
-  capCut(cutEdges, pts, normal, faces, onEarClip);
+  // A cap face traverses each boundary half-edge in the direction the missing
+  // twin would have — the REVERSAL of the residual — so the cap's normal is
+  // +plane-normal (it faces the removed half-space) and the whole mesh closes.
+  // Sorted by (tail, head) so loop assembly is deterministic regardless of the
+  // Map's insertion order.
+  const capEdges: Array<[number, number]> = [...openEdges.values()]
+    .map(([a, b]) => [b, a] as [number, number])
+    .sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+
+  // Every residual endpoint must be ON the plane for a closed input. An
+  // off-plane endpoint means the input was already open along that edge — the
+  // check never proceeds as if it were closed. `d` in scope is the plane offset.
+  for (const [a, b] of capEdges) {
+    for (const id of [a, b]) {
+      if (dot(normal, pts[id]!).sub(d).cmp(ZERO) !== 0) {
+        // Open input: leave the mesh as clipped without a cap. meshOf/the
+        // embedding certificate then reports it as not bounding a solid — the
+        // honest outcome, never a guessed cap over a hole.
+        if (faces.length === 0) return { verts: [], faces: [], vertId: [] };
+        return meshOf(pts, faces);
+      }
+    }
+  }
+
+  capCut(capEdges, pts, normal, faces, onEarClip);
 
   if (faces.length === 0) return { verts: [], faces: [], vertId: [] };
   return meshOf(pts, faces);
 }
 
 /**
- * Assemble directed cut edges into closed loops and triangulate each into a cap.
- * Loops are followed head→tail; a component that fails to close (an open chain
- * from a degenerate cut) is skipped rather than guessed — the embedding
- * certificate then reports the result as not bounding a solid, the honest
- * outcome. Each loop is wound so its cap faces OUT of the kept solid: if the
- * loop's Newell normal opposes the plane normal it is reversed before clipping,
- * so the cap's normal is +plane-normal (away from the `normal·x ≤ d` interior).
+ * Assemble the cap-boundary edges into closed loops and triangulate each into a
+ * cap. The edges arrive already oriented (reversed residuals), so a loop winds
+ * with +plane-normal by construction; the Newell check below is a safety net
+ * that only flips a loop wound against it. A component that fails to close is
+ * skipped rather than guessed — the embedding certificate then reports the
+ * result as not bounding a solid, the honest outcome.
  */
 function capCut(
   cutEdges: Array<[number, number]>,

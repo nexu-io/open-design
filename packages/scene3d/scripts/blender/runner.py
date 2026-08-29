@@ -2945,8 +2945,17 @@ def material_graph_signature(mat):
         ):
             parts.append("%s.%s>%s.%s" % (l.from_node.type, l.from_socket.name,
                                           l.to_node.type, l.to_socket.name))
-    except Exception:
-        return ""
+    except Exception as exc:
+        # The walk FAILED — we do not know this material's graph. Returning ""
+        # (the value a genuinely graph-less material carries) would make two
+        # materials whose walk both threw look identical, and merge two the
+        # tiebreaker exists to keep apart. Return a sentinel UNIQUE to this
+        # material so it can never coincide with another's signature: an
+        # unmeasurable graph is treated as "cannot compare", never "same".
+        return "unmeasured:%s:%s" % (
+            hashlib.sha256(mat.name.encode("utf-8")).hexdigest()[:12],
+            type(exc).__name__,
+        )
     return hashlib.sha256(chr(10).join(parts).encode("utf-8")).hexdigest()[:16]
 
 
@@ -5536,8 +5545,19 @@ def rebuild_object_animation(known=None):
     if end <= start:
         return
     present = {o.name for o in scene.objects if o.type in ("MESH", "EMPTY")}
-    movers = sorted(present & set(known)) if known else []
-    if not movers:
+    if known is not None:
+        # `known` is the AUTHORITATIVE set of objects the build scene animated.
+        # An EMPTY set means "nothing to rebuild" — every animated object's
+        # clips were already restored by the carry — and must SKIP the probe,
+        # not fall into it. `if known` was falsy for both None and set(), so a
+        # fully-carried rig (animated_names - carried_objects == set()) took the
+        # probe path and re-baked keyframes onto objects whose animation had
+        # just been restored, the .001-duplicate-clip bug this function's own
+        # docstring says it fixed. `is not None` tells the two apart.
+        movers = sorted(present & set(known))
+    else:
+        # No authoritative set (a USDA-authored source): probe the timeline to
+        # discover which objects actually move.
         probes = sorted({start, (start + end) // 2, end})
         snapshots = {}
         for frame in probes:

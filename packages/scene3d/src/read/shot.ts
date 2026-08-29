@@ -542,7 +542,13 @@ export function resolveShot(spec: ShotSpec, census: Census): ResolvedPose {
       azimuthDeg = s.headingDeg;
       elevationDeg = s.pitchDeg;
     }
-    if (distance === undefined) distance = dist;
+    // The reported distance is the AIM DEPTH — eye to what the camera looks at —
+    // always, even when an orbit branch set a placement distance first. That
+    // placement distance frames the ORBITED part; when the gaze aims at a
+    // DIFFERENT part, the two differ, and `frameSpanM = 2·distance·tan(fov/2)`
+    // must be the span at what is actually in frame, not at the part being
+    // circled. The orbit-fit value already did its one job, placing the eye.
+    distance = dist;
   }
 
   const halfFov = (fovDeg * Math.PI) / 360;

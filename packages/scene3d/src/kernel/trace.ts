@@ -540,9 +540,10 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number, meter: WorkMet
       // unmetered CPU otherwise. cc folds the plane's own
       // string-length depth in (additive), uniform with move/scale/extrude. clip runs
       // exact rational dot/crossingPoint per vertex and per straddling edge, so
-      // per-corner cost is O(coordinate bit length); the cap ear-clip (~O(L²) per
-      // cross-section loop) is charged as each loop forms — a grazing cut that
-      // makes a huge cap trips the meter, not just the linear output.
+      // per-corner cost is O(coordinate bit length); the cap triangulation
+      // (exact O(L log L) monotone sweep — triangulateFace, which replaced the
+      // ear-clip's O(L²) corner) is charged as each loop forms, so a grazing cut
+      // that makes a huge cap trips the meter, not just the linear output.
       //
       // Consequence, BY DESIGN: a normal plane charges ~faceSum·1 and still
       // reaches its non-zero-normal check below; only an adversarially-GIANT
@@ -560,7 +561,13 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number, meter: WorkMet
         throw new Error(`evalTrace: op ${i} 'clip' needs a non-zero normal — a plane has a direction`);
       }
       const plane: Plane = { normal, d: Rational.parse(op.d) };
-      const out = clip(m, plane, (loopLength) => charge(meter, loopLength * loopLength * cc, i, "clip"));
+      // L·ceilLog2(L), matching the cap's actual O(L log L) triangulator rather
+      // than the retired ear-clip's L^2 — a legitimately large but cheap cap was
+      // over-billed quadratically and could trip the meter on geometry that is
+      // not a runaway by the meter's own resource calibration.
+      const out = clip(m, plane, (loopLength) =>
+        charge(meter, loopLength * Math.max(1, ceilLog2(loopLength)) * cc, i, "clip"),
+      );
       return out;
     }
     case "move": {

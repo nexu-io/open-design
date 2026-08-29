@@ -125,6 +125,18 @@ describe("the factoring: station and gaze are genuinely independent", () => {
     expect(pose.eye[0]).toBe(0);
     expect(pose.eye[1]).toBeLessThan(2.5);
     near(pose.eye[2], 0.55); // the counter's centre height, level orbit
+    // The reported distance is the AIM depth — eye to the STOOL it points at —
+    // not the fit distance to the counter it circles. frameSpanM must describe
+    // what is in frame, so it uses this. The two genuinely differ here: the
+    // counter fit is larger than the eye-to-stool distance.
+    const stoolCentre = [0, 0.7, 0.375]; // (min+max)/2 of prp_stool
+    const aimDist = Math.hypot(
+      pose.eye[0] - stoolCentre[0]!,
+      pose.eye[1] - stoolCentre[1]!,
+      pose.eye[2] - stoolCentre[2]!,
+    );
+    expect(pose.distance).toBeCloseTo(aimDist, 6);
+    expect(pose.frameSpanM).toBeCloseTo(2 * aimDist * Math.tan((39.6 * Math.PI) / 360), 4);
   });
 
   it("the coordinate escape hatches exist but are not the path", () => {
