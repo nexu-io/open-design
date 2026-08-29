@@ -2,7 +2,7 @@
  * @module store
  *
  * Managed-download root ownership and directory lifecycle. Reads/writes the
- * ownership sentinel that marks a base directory as Open Design-owned, refuses to
+ * ownership sentinel that marks a base directory as OpenDesign-owned, refuses to
  * take over foreign/non-empty directories, ensures the `.state`/`.partial`/`.locks`
  * scratch layout exists, and resets an owned base by clearing its contents.
  * Depends on constants, errors, and the fs-io primitives.
@@ -13,7 +13,26 @@ import { join } from "node:path";
 
 import { LOCK_DIR, PARTIAL_DIR, STATE_DIR, STORE_KIND, STORE_SCHEMA_VERSION, STORE_SENTINEL } from "./constants.js";
 import { MANAGED_DOWNLOAD_ERROR_CODES, ManagedDownloadError } from "./errors.js";
-import { directoryIsEmpty, readJson, writeJson } from "./fs-io.js";
+import { readJson, writeJson } from "./fs-io.js";
+
+/**
+ * @internal Filesystem-browser artifacts the OS drops into any directory it
+ * renders, independent of anything this package does. Their mere presence
+ * must never be treated as "not empty": Finder writes .DS_Store the moment a
+ * managed base is viewed even once, and Explorer does the same with
+ * Thumbs.db/desktop.ini. Mirrors apps/desktop's isOsManagedRootArtifact —
+ * duplicated rather than shared since apps/desktop depends on this package,
+ * not the reverse.
+ */
+const OS_MANAGED_ROOT_ARTIFACTS = new Set([".DS_Store", "Thumbs.db", "desktop.ini", ".localized"]);
+
+/**
+ * @internal Whether `name` is a benign, OS-managed root artifact that should
+ * never count as real content when deciding whether a directory is claimable.
+ */
+function isOsManagedRootArtifact(name: string): boolean {
+  return OS_MANAGED_ROOT_ARTIFACTS.has(name);
+}
 
 /**
  * @internal On-disk ownership marker written at the root of a managed base.
@@ -71,7 +90,7 @@ async function ensureStoreDirs(basePath: string): Promise<void> {
 }
 
 /**
- * Ensure `basePath` is an Open Design-owned managed base: create it if missing,
+ * Ensure `basePath` is an OpenDesign-owned managed base: create it if missing,
  * claim an empty unmarked directory, reject foreign/non-empty or invalid-marker
  * directories, and guarantee the scratch layout exists.
  */
@@ -84,7 +103,9 @@ export async function ensureManagedBase(basePath: string): Promise<void> {
   const sentinelPath = join(basePath, STORE_SENTINEL);
   const sentinel = await readJson<unknown>(sentinelPath);
   if (sentinel == null) {
-    if (!(await directoryIsEmpty(basePath))) {
+    const entries = await readdir(basePath);
+    const content = entries.filter((name) => !isOsManagedRootArtifact(name));
+    if (content.length > 0) {
       throw new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.STORE_NOT_OWNED, `download base is not empty and has no ownership marker: ${basePath}`);
     }
     await writeSentinel(basePath);

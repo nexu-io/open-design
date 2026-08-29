@@ -3,13 +3,33 @@
  * The shared Dialog chrome supplies the backdrop, elevation, and the
  * 220ms pop-in (scale 0.97 + opacity, custom cubic-bezier). */
 
+/* 480px, not 400: the insufficient-balance line carries an inline amount, so it
+ * always wraps — the narrower panel broke it mid-phrase ("升级套 / 餐"). The
+ * extra width gives the wrap a clean phrase boundary and lets the benefits card
+ * and the side-by-side action row breathe. */
 .panel {
   position: relative;
-  width: 400px;
+  width: min(480px, calc(100vw - 32px));
   align-items: center;
   text-align: center;
-  padding: 32px 28px 20px;
+  padding: 36px 24px 24px;
   gap: 0;
+  overflow: hidden;
+}
+
+/* Bleeds to the panel's edges (negative margin cancels .panel's own padding)
+ * so the artwork reaches the dialog's rounded corners; .panel's overflow:
+ * hidden clips it to match instead of duplicating the radius here. */
+.banner {
+  margin: -36px -24px 24px;
+}
+
+/* No object-fit crop — width:100% + height:auto keeps the source's native
+ * aspect ratio intact rather than cropping it to fit a fixed box. */
+.bannerImage {
+  display: block;
+  width: 100%;
+  height: auto;
 }
 
 .closeButton {
@@ -39,29 +59,16 @@
   outline-offset: 2px;
 }
 
-.iconBadge {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  color: var(--accent);
-  background: var(--accent-tint);
-  /* Soft halo ring so the badge reads as a glow, not a flat chip. */
-  box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent-tint) 45%, transparent);
-  margin-bottom: 18px;
-}
-
 .title {
-  margin: 0 0 8px;
-  font-size: 17px;
+  margin: 0 0 10px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text-strong);
 }
 
 .message {
-  margin: 0 0 18px;
+  margin: 0 0 14px;
   font-size: 13.5px;
   line-height: 1.6;
   color: var(--text-muted);
@@ -71,11 +78,12 @@
 
 .benefitsCard {
   width: 100%;
-  margin: 0 0 20px;
-  padding: 14px 16px;
+  margin: 0 0 18px;
+  padding: 12px 16px;
   text-align: start;
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius);
-  background: var(--bg-subtle);
+  background: var(--bg-panel);
 }
 
 /* Eyebrow label naming whose advantages the list below sells. Accent, not
@@ -84,9 +92,9 @@
 .benefitsTitle {
   display: block;
   margin-bottom: 10px;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
   color: var(--accent);
 }
 
@@ -96,15 +104,18 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .benefit {
-  display: flex;
-  /* Top-align so the check hugs the first line when an item wraps. */
-  align-items: flex-start;
+  display: grid;
+  /* Fixed icon column so wrapped labels stay aligned to the text, not the
+   * icon — matches the row rhythm of the artifact-upgrade gate's benefit list. */
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
   gap: 10px;
-  font-size: 13px;
+  font-size: 13.5px;
+  line-height: 1.45;
   color: var(--text);
   /* Rare dialog → a light cascade adds delight without slowing anyone down. */
   opacity: 0;
@@ -127,26 +138,43 @@
 .benefitIcon {
   display: grid;
   place-items: center;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   flex: none;
-  border-radius: 50%;
+  /* Full radius: a circular tick chip, matching the pill action row below. */
+  border-radius: var(--radius-pill, 999px);
   color: var(--accent);
   background: var(--accent-tint);
 }
 
+/* Side-by-side pair: dismissal on the left, the upgrade CTA on the right,
+ * which is also their DOM order so focus follows what the eye reads. The CTA
+ * keeps the dominant share of the row via `flex: 1`. */
 .actions {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
   width: 100%;
 }
 
 .cta {
-  width: 100%;
-  height: 38px;
+  flex: 1 1 auto;
+  width: auto;
+  height: 40px;
+  border-radius: var(--radius-pill, 999px);
   font-size: 13.5px;
-  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent),
+    0 8px 20px color-mix(in srgb, var(--accent) 20%, transparent);
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.cta:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent),
+    0 10px 24px color-mix(in srgb, var(--accent) 26%, transparent);
 }
 
 .cta:active {
@@ -157,7 +185,8 @@
  * dialog's full-width primary CTA (the pill supplies the vela-login flow,
  * activation-link fallback, and polling; we only restyle its button). */
 .signInPill {
-  width: 100%;
+  flex: 1 1 auto;
+  width: auto;
 }
 
 .signInPill :global(.amr-account-control) {
@@ -167,18 +196,25 @@
 
 .signInPill :global(.amr-account-control__action) {
   width: 100%;
-  height: 38px;
+  height: 40px;
   font-size: 13.5px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill, 999px);
   border: none;
   background: var(--accent);
   color: #fff;
   font-weight: 500;
-  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), background 120ms ease;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent),
+    0 8px 20px color-mix(in srgb, var(--accent) 20%, transparent);
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), background 120ms ease, box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .signInPill :global(.amr-account-control__action:hover) {
   background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent),
+    0 10px 24px color-mix(in srgb, var(--accent) 26%, transparent);
 }
 
 .signInPill :global(.amr-account-control__action:active) {
@@ -186,10 +222,18 @@
 }
 
 /* Quiet text button: the bordered ghost chrome would compete with the CTA.
- * Scoped under .actions to outrank the shared Button variant class. */
+ * Scoped under .actions to outrank the shared Button variant class. Sits a
+ * size step down from the CTA so the pair reads as primary/secondary rather
+ * than two equally-weighted buttons sharing the row. Content-width (not
+ * flexed) so the CTA takes the remaining space. */
 .actions .later {
-  width: 100%;
+  flex: 0 0 auto;
+  width: auto;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: var(--radius-pill, 999px);
   color: var(--text-muted);
+  font-size: 12.5px;
   border-color: transparent;
   background: transparent;
   box-shadow: none;

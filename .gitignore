@@ -1,4 +1,4 @@
-node_modules/
+node_modules
 dist/
 out/
 .next/
@@ -6,7 +6,7 @@ out/
 .tmp/
 .DS_Store
 *.log
-/OpenDesign.exe
+/Open Design.exe
 .vite
 .astro/
 .wrangler/
@@ -50,6 +50,7 @@ apps/desktop/vendor/dom-to-pptx/dom-to-pptx.bundle.js
 
 .cursor/
 .agents/
+.pi/
 .opencode/
 .claude/*
 # Exception: od-contribute skill ships with the repo so the OD app can mount it
@@ -101,3 +102,14 @@ deploy/agent-bins/
 
 # Looper harness attachments (bug screenshots etc.) — agent scratch, not repo content
 .looper-attachments/
+
+# Deepwork local progress (git-local; OpenCode-readable via .ignore)
+.slim/deepwork/
+
+# Local agent worktrees (must stay git-ignored so pnpm guard does not scan them)
+.slim/worktrees/
+.slim/worktrees.json
+
+# Python bytecode from workflow helper self-checks / local compile.
+__pycache__/
+*.py[cod]

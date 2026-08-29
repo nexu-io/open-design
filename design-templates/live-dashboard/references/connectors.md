@@ -9,10 +9,10 @@ When `inputs.connector === mock` (or the daemon cannot resolve the
 configured connector), the artifact falls back to seeded sample data.
 This keeps screenshots, the picker preview, and offline use working.
 
-> **Status — relationship to `skills/live-artifact/`.**
+> **Status — relationship to `design-templates/live-artifact/`.**
 >
 > The canonical, currently-shipping live-artifact contract lives in
-> [`skills/live-artifact/SKILL.md`](../../live-artifact/SKILL.md): it is
+> [`design-templates/live-artifact/SKILL.md`](../../live-artifact/SKILL.md): it is
 > *file-shaped* (`artifact.json` + `template.html` + `data.json` +
 > `provenance.json`) and *CLI-shaped* on the agent side (the agent calls
 > `"$OD_NODE_BIN" "$OD_BIN" tools live-artifacts {create,update}` and
@@ -100,17 +100,13 @@ same shape with provider-specific `endpoint` strings.
 
 1. Read `connectors.json` from the artifact dir.
 2. Look up `bindings[primary].provider` in the Composio catalog.
-3. Resolve `auth_ref` against the daemon's `media-config.json`. The
-   actual lookup is environment-aware (see
-   [`apps/daemon/src/media-config.ts`](../../../apps/daemon/src/media-config.ts),
-   `configFile()` — precedence high → low):
-   - `<OD_MEDIA_CONFIG_DIR>/media-config.json` when that env var is set;
-   - else `<OD_DATA_DIR>/media-config.json` when `OD_DATA_DIR` is set
-     (relative paths are anchored to the active project root, `$HOME`
-     and `~` shorthands are expanded);
-   - else daemon-managed media configuration for the active project. Before
-     documenting daemon storage paths, read root `AGENTS.md` → **Daemon data
-     directory contract**.
+3. Resolve `auth_ref` against the daemon-owned media configuration. The narrow
+   `OD_MEDIA_CONFIG_DIR` override applies to `media-config.json` only;
+   otherwise the daemon must derive the file from its already-resolved
+   `RUNTIME_DATA_DIR`. Do not infer a path from the project cwd or restate one
+   here. Before changing this lookup, read root `AGENTS.md` → **Daemon data
+   directory contract** and
+   [`apps/daemon/src/media/config.ts`](../../../apps/daemon/src/media/config.ts).
 
    The artifact never opens any of these paths itself — it always goes
    through the daemon poll endpoint, and the daemon enforces the

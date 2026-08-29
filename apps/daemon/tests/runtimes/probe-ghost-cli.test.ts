@@ -1,5 +1,5 @@
 /**
- * Regression coverage for issue #658: Open Design kept advertising
+ * Regression coverage for issue #658: OpenDesign kept advertising
  * `Codex CLI` in Settings > Local CLI after the user had uninstalled
  * the binary. The probe in `apps/daemon/src/runtimes/detection.ts`
  * swallowed every `--version` failure and returned `available: true`

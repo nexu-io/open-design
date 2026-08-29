@@ -43,7 +43,7 @@ function consumptionDb() {
   };
 }
 
-test('download attribution mint only accepts Open Design GitHub release assets', async () => {
+test('download attribution mint only accepts OpenDesign GitHub release assets', async () => {
   const records = new Map<string, string>();
   const request = new Request('https://download.open-design.ai/api/attribution/mint', {
     method: 'POST',

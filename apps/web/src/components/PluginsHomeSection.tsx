@@ -16,7 +16,10 @@
 
 import { Button, Input } from '@open-design/components';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type {
+  InstalledPluginRecord,
+  WorkspaceCollabContext,
+} from '@open-design/contracts';
 import { useI18n, useT } from '../i18n';
 import type { PluginShareAction } from '../state/projects';
 import { Icon } from './Icon';
@@ -58,6 +61,7 @@ interface Props {
   // 'gallery' renders each card as a minimal live example.html preview
   // tile (Community); 'rich' keeps the hover-overlay metadata card.
   cardLayout?: 'rich' | 'gallery';
+  workspaceContext?: WorkspaceCollabContext | null;
 }
 
 export function PluginsHomeSection({
@@ -77,6 +81,7 @@ export function PluginsHomeSection({
   subtitle,
   emptyMessage,
   cardLayout = 'rich',
+  workspaceContext = null,
 }: Props) {
   const { locale, t } = useI18n();
   const { savedPluginIds, savePluginId } = useSavedPluginIds();
@@ -107,7 +112,7 @@ export function PluginsHomeSection({
   } = usePluginFacets({
     plugins,
     savedPluginIds,
-    preferDefaultFacet,
+    preferDefaultFacet: cardLayout === 'gallery' ? false : preferDefaultFacet,
     locale,
   });
   const renderedPlugins = useMemo(
@@ -115,9 +120,7 @@ export function PluginsHomeSection({
     [filtered, renderLimit],
   );
   const hasMorePlugins = renderLimit < filtered.length;
-  const categoryAllVisible = cardLayout !== 'gallery';
   const handlePickCategory = (slug: string | null): void => {
-    if (!categoryAllVisible && slug === selection.category) return;
     pickCategory(slug);
   };
 
@@ -207,7 +210,7 @@ export function PluginsHomeSection({
               onToggleSaved={() =>
                 setMode(mode === 'saved' ? 'all' : 'saved')
               }
-              showAll={categoryAllVisible}
+              showAll
               query={query}
               onQueryChange={setQuery}
               sortOrder={sortOrder}
@@ -258,6 +261,7 @@ export function PluginsHomeSection({
                   onSave={handleSavePlugin}
                   onShareAction={onPluginShareAction}
                   layout={cardLayout}
+                  workspaceContext={workspaceContext}
                 />
               ))}
               {hasMorePlugins ? (
@@ -348,7 +352,7 @@ function CategoryRow({
             aria-pressed={savedActive}
             data-testid="plugins-home-chip-saved"
           >
-            <Icon name="star" size={11} />
+            <Icon name="star" size={14} />
             <span>{t('pluginsHome.featured')}</span>
             <span className="plugins-home__chip-count">{savedCount}</span>
           </button>
@@ -556,7 +560,7 @@ function SearchInput({ value, onChange }: SearchInputProps) {
   const t = useT();
   return (
     <div className="plugins-home__search">
-      <Icon name="search" size={12} className="plugins-home__search-icon" />
+      <Icon name="search" size={14} className="plugins-home__search-icon" />
       <Input
         type="search"
         className="plugins-home__search-input"
@@ -576,7 +580,7 @@ function SearchInput({ value, onChange }: SearchInputProps) {
           aria-label={t('pluginsHome.clearSearch')}
           data-testid="plugins-home-search-clear"
         >
-          <Icon name="close" size={12} />
+          <Icon name="close" size={14} />
         </Button>
       ) : null}
     </div>

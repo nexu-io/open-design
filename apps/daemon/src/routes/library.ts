@@ -48,6 +48,13 @@ import { reconcileLibrary, type ReconcileLibraryResult } from '../library-sync.j
 import { fetchExternalBrandAsset } from '../brands/safe-fetch.js';
 import { ensureProjectSubdir } from '../projects.js';
 import {
+  authorizeCreatedProjectWorkspace,
+  bindCreatedProjectToWorkspace,
+  sendCreatedProjectWorkspaceError,
+} from '../collab/created-project-workspace.js';
+import type { BoundWorkspaceResourceMutationGate } from '../collab/workspace-resource-mutation.js';
+import type { WorkspaceDirectoryFetchResult } from '../collab/vela-workspace-context.js';
+import {
   confirmPairing,
   libraryConnectionStatus,
   startPairing,
@@ -57,7 +64,10 @@ import {
 export interface RegisterLibraryRoutesDeps
   extends RouteDeps<
     'db' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'auth'
-  > {}
+  > {
+  fetchProjectCreationWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
+  enforceWorkspaceProjectMutation?: BoundWorkspaceResourceMutationGate;
+}
 
 const MAX_REMOTE_BYTES = 25 * 1024 * 1024;
 
@@ -162,10 +172,29 @@ export function registerLibraryRoutes(app: Express, ctx: RegisterLibraryRoutesDe
   const { sendApiError, createSseResponse, requireLocalDaemonRequest, isLocalSameOrigin, resolvedPortRef } =
     ctx.http;
   const { LIBRARY_DIR, PROJECTS_DIR, USER_DESIGN_SYSTEMS_DIR } = ctx.paths;
-  const { getProject, insertProject } = ctx.projectStore;
+  const {
+    getProject,
+    insertProject,
+    ensureWorkspaceProject,
+    getWorkspaceProject,
+    getWorkspaceProjectByProjectId,
+  } = ctx.projectStore;
   const { writeProjectFile } = ctx.projectFiles;
   const { insertConversation } = ctx.conversations;
   const { authorizeToolRequest } = ctx.auth;
+  async function enforceProjectWrite(req: Request, res: Response, projectId: string) {
+    if (!ctx.enforceWorkspaceProjectMutation) return true;
+    return ctx.enforceWorkspaceProjectMutation(
+      req,
+      res,
+      sendApiError,
+      getWorkspaceProject,
+      getWorkspaceProjectByProjectId,
+      db,
+      projectId,
+      'writeFiles',
+    );
+  }
 
   // Copy an asset's bytes into a project (under a `library/` subdir) and record
   // the project usage as a source back-link. Shared by the loopback apply route
@@ -580,6 +609,7 @@ export function registerLibraryRoutes(app: Express, ctx: RegisterLibraryRoutesDe
     if (!asset) return sendApiError(res, 404, 'NOT_FOUND', 'asset not found');
     const projectId = typeof req.body?.projectId === 'string' ? req.body.projectId : '';
     if (!projectId) return sendApiError(res, 400, 'BAD_REQUEST', 'projectId is required');
+    if (!await enforceProjectWrite(req, res, projectId)) return;
     try {
       const includeElement = req.body?.includeElement === true;
       const result = await applyAssetToProject(asset, projectId, 'manual-upload', req.body?.dir, includeElement);
@@ -603,6 +633,13 @@ export function registerLibraryRoutes(app: Express, ctx: RegisterLibraryRoutesDe
     if (!asset) return sendApiError(res, 404, 'NOT_FOUND', 'asset not found');
     if (asset.kind !== 'html') {
       return sendApiError(res, 400, 'NOT_HTML', 'only html captures can be opened as an editable page');
+    }
+    const createWorkspace = await authorizeCreatedProjectWorkspace(
+      req,
+      ctx.fetchProjectCreationWorkspaceDirectory,
+    );
+    if (!createWorkspace.ok) {
+      return sendCreatedProjectWorkspaceError(res, createWorkspace);
     }
     const bytesPath = resolveAssetBytesPath(asset, PROJECTS_DIR);
     if (!bytesPath) return sendApiError(res, 404, 'NOT_FOUND', 'asset bytes not available');
@@ -634,6 +671,16 @@ export function registerLibraryRoutes(app: Express, ctx: RegisterLibraryRoutesDe
         createdAt: now,
         updatedAt: now,
       });
+      // A capture opened as an editable page is a project the user will
+      // immediately chat into, so it needs the same home workspace every other
+      // created project gets; otherwise it can only use the account-scoped
+      // local run lane and has no durable Workspace for later mutations.
+      bindCreatedProjectToWorkspace(
+        (input) => ensureWorkspaceProject(db, input),
+        createWorkspace.context,
+        projectId,
+        now,
+      );
       // writeProjectFile ensures the project dir; write the capture as the
       // editable entry file. No artifact manifest — a plain HTML file avoids
       // the publication/stub guards (a captured page is arbitrary markup) while
@@ -673,6 +720,7 @@ export function registerLibraryRoutes(app: Express, ctx: RegisterLibraryRoutesDe
     if (!asset) return sendApiError(res, 404, 'NOT_FOUND', 'asset not found');
     const projectId = grant.projectId ?? (typeof req.body?.projectId === 'string' ? req.body.projectId : '');
     if (!projectId) return sendApiError(res, 400, 'BAD_REQUEST', 'projectId is required');
+    if (!await enforceProjectWrite(req, res, projectId)) return;
     try {
       const includeElement = req.body?.includeElement === true;
       const result = await applyAssetToProject(asset, projectId, 'agent-task', req.body?.dir, includeElement);

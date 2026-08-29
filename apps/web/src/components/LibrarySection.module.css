@@ -68,7 +68,7 @@
   height: 36px;
   padding: 0 12px 0 34px;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius-large, 8px);
   background: var(--bg-panel);
   color: var(--text);
   font-size: 14px;
@@ -83,7 +83,7 @@
   height: 36px;
   padding: 0 32px 0 12px;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius-large, 8px);
   background-color: var(--bg-panel);
   color: var(--text);
   font-size: 14px;
@@ -109,7 +109,7 @@
   padding: 3px;
   gap: 2px;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius-large, 8px);
   background: var(--bg-panel);
 }
 .viewToggleBtn {
@@ -118,7 +118,7 @@
   gap: 6px;
   padding: 0 12px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-medium, 4px);
   background: none;
   color: var(--text-muted);
   font-size: 13px;
@@ -210,7 +210,7 @@
 .timelineDate {
   margin: 0;
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--text);
 }
 .timelineCount {
@@ -295,7 +295,9 @@
      data-loaded). Starts hidden so the skeleton — not a half-painted image —
      is what shows while loading. */
   opacity: 0;
-  transition: opacity 220ms cubic-bezier(0.23, 1, 0.32, 1);
+  transition:
+    opacity 220ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .thumbFrame {
   width: 100%;
@@ -304,11 +306,19 @@
   background: #fff;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 220ms cubic-bezier(0.23, 1, 0.32, 1);
+  transition:
+    opacity 220ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .thumbImg[data-loaded='true'],
 .thumbFrame[data-loaded='true'] {
   opacity: 1;
+}
+/* Cover zoom on hover — same effect as the home recent-projects cards; the
+   .thumb container clips, so the media scales in place. */
+.card:hover .thumbImg,
+.card:hover .thumbFrame {
+  transform: scale(1.04);
 }
 
 /* Shimmer skeleton shown while an image / video / html / design-system
@@ -408,7 +418,7 @@
   height: 22px;
   padding: 0;
   border: 2px solid rgba(255, 255, 255, 0.95);
-  border-radius: 6px;
+  border-radius: var(--radius-medium, 4px);
   background: rgba(17, 24, 39, 0.35);
   color: #fff;
   cursor: pointer;
@@ -434,13 +444,14 @@
   left: 8px;
   z-index: 2;
   pointer-events: none;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 999px;
   background: rgba(17, 24, 39, 0.78);
   color: #fff;
-  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(var(--material-ultrathin-blur));
+  backdrop-filter: blur(var(--material-ultrathin-blur));
 }
 .badge[data-source='clipper'] {
   background: color-mix(in srgb, var(--accent) 88%, transparent);
@@ -465,14 +476,15 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   padding: 2px 7px 2px 6px;
   border-radius: 999px;
   color: var(--kind-tint, #374151);
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
-  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(var(--material-ultrathin-blur));
+  backdrop-filter: blur(var(--material-ultrathin-blur));
 }
 
 .meta {
@@ -547,7 +559,7 @@
   margin: 0 0 16px;
   padding: 8px 12px;
   border: 1px solid var(--selected);
-  border-radius: 10px;
+  border-radius: var(--radius-large, 8px);
   background: color-mix(in srgb, var(--selected) 7%, var(--bg-panel));
 }
 .selectionCount {
@@ -664,7 +676,7 @@
   text-overflow: ellipsis;
 }
 .dsMenuItemSub {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 .dsMenuDivider {
@@ -674,7 +686,7 @@
 }
 .dsMenuHeader {
   padding: 4px 10px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -717,7 +729,8 @@
   pointer-events: none;
   border-radius: 16px;
   background: color-mix(in srgb, var(--accent) 10%, rgba(255, 255, 255, 0.7));
-  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
   animation: libraryDropFade 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .dropOverlayInner {
@@ -733,7 +746,7 @@
   box-shadow: 0 12px 40px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .dropOverlayText {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
 }
 @keyframes libraryDropFade {

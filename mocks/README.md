@@ -1,18 +1,23 @@
-# `mocks/` — replay-based mock CLIs for OD's supported agents
+# `mocks/` — replay-based mock CLIs and protocol fixtures
 
-A drop-in replacement for the real agent CLIs (`claude`, `opencode`,
+A PATH-overlay replay harness for selected agent CLI contracts (`amp`, `claude`, `opencode`,
 `codex`, `gemini`, `cursor-agent`, `deepseek`, `qwen`, `grok`, the
 ACP family `devin` / `hermes` / `kilo` / `kimi` / `kiro` / `vibe`, and
 the AMR `vela` CLI) that replays pre-recorded sessions in each CLI's
 native protocol — stdout streaming for most, JSON-RPC over stdio for
 ACP and AMR. **Zero LLM tokens.**
 
+Some wrappers cover registered Open Design runtimes; others are retained
+legacy protocol fixtures, and this set is not an exhaustive mirror of
+`apps/daemon/src/runtimes/registry.ts`. In particular, `gemini` is retained as
+a parser/replay fixture and is not a registered Open Design runtime.
+
 Used by:
 
 - **E2E tests** in `apps/daemon/tests/` — run the full chat-server
   pipeline against a known agent trace, assert UI events / artifacts.
-- **Local self-tests during development** — iterate on `chat-routes.ts`,
-  `claude-stream.ts`, `json-event-stream.ts` parser changes without
+- **Local self-tests during development** — iterate on `routes/chat.ts`,
+  `runtimes/claude-stream.ts`, `runtimes/json-event-stream.ts` parser changes without
   burning provider budget.
 - **Demo / onboarding** — show what a 17-tool `claude` editing session
   looks like end-to-end, offline.
@@ -143,41 +148,43 @@ release or before a parser refactor, not on a cron. Full doc:
 
 ## What gets emitted
 
-Each renderer matches the EXACT event shapes the OD daemon expects, as
-verified line-by-line against the parsers in `apps/daemon/src/`:
+The table records the daemon contract alongside known legacy or obsolete
+replay gaps:
 
 | CLI | OD streamFormat | Parser source |
 |---|---|---|
-| `opencode`        | `json-event-stream` (opencode kind)     | `json-event-stream.ts:handleOpenCodeEvent`   |
-| `codex`           | `json-event-stream` (codex kind)        | `json-event-stream.ts:handleCodexEvent`      |
-| `claude`          | `claude-stream-json`                    | `claude-stream.ts:createClaudeStreamHandler` |
-| `gemini`          | `json-event-stream` (gemini kind)       | `json-event-stream.ts:handleGeminiEvent`     |
-| `cursor-agent`    | `json-event-stream` (cursor-agent kind) | `json-event-stream.ts:handleCursorEvent`     |
+| `opencode`        | `json-event-stream` (opencode kind)     | `runtimes/json-event-stream.ts:handleOpenCodeEvent`   |
+| `codex`           | `json-event-stream` (codex kind)        | `runtimes/json-event-stream.ts:handleCodexEvent`      |
+| `amp` `claude`    | `claude-stream-json`                    | `runtimes/claude-stream.ts:createClaudeStreamHandler` |
+| `gemini` (legacy fixture; no registered runtime) | `json-event-stream` (gemini kind) | `runtimes/json-event-stream.ts:handleGeminiEvent` |
+| `cursor-agent`    | `json-event-stream` (cursor-agent kind) | `runtimes/json-event-stream.ts:handleCursorEvent`     |
 | `deepseek` `qwen` `grok` | `plain`                          | `server.ts` (raw stdout = final assistant text) |
-| `kimi`            | `json-event-stream` (kimi kind)         | `json-event-stream.ts:handleKimiEvent`         |
-| `devin` `hermes` `kilo` `kiro` `vibe` | `acp-json-rpc` | `acp.ts:attachAcpSession`                       |
+| `kimi`            | `acp-json-rpc` in the live daemon; the replay wrapper still uses obsolete `json-event-stream` | `agent-protocol/acp/session.ts:attachAcpSession` |
+| `devin` `hermes` `kilo` `kiro` `vibe` | `acp-json-rpc` | `agent-protocol/acp/session.ts:attachAcpSession`         |
 | `vela` (AMR) | `acp-json-rpc` + `login` / `models` subcommands | `runtimes/defs/amr.ts` + `apps/daemon/tests/fixtures/fake-vela.mjs` (sibling stub) |
 
 > **Note on `cursor-agent`**: OD's parser does NOT recognize tool-call
 > events — only init / assistant text / usage. The renderer therefore emits
 > only the final assistant text wrapped in the expected init/text/usage
 > envelope. Tool calls present in the source recording are silently dropped.
-> `gemini` recognizes the current Gemini CLI `stream-json` tool_use /
-> tool_result frames and replays recorded tool calls through that envelope.
+> The retained `gemini` parser and renderer recognize `stream-json` tool_use /
+> tool_result frames and replay recorded tool calls through that envelope.
 
-> **Note on ACP agents** (`devin` / `hermes` / `kilo` / `kiro` /
+> **Note on live ACP agents** (`devin` / `hermes` / `kilo` / `kimi` / `kiro` /
 > `vibe`): These do NOT stream stdout — they speak JSON-RPC v2 over stdio.
 > OD's daemon sends `initialize` → `session/new` → (optional `session/set_model`)
 > → `session/prompt`; the mock responds in order, streams text via
 > `session/update` notifications carrying `agent_message_chunk` parts,
-> then responds to the prompt request with usage stats. Tool calls
-> aren't part of the ACP protocol on this path (tools surface via MCP or
-> other side channels), so they're dropped from playback.
+> then responds to the prompt request with usage stats. Live agents may also
+> send `tool_call` / `tool_call_update` notifications; the daemon maps completed
+> artifact-write calls to canonical `tool_use` / `tool_result` events. The
+> current generic ACP mock emits only message-chunk text, so it does not cover
+> that part of the live contract.
 
-> **Note on `kimi`**: Modern Kimi CLI is not an ACP stdio adapter in Open
-> Design. The runtime launches it in prompt mode (`kimi -p ... --output-format
-> stream-json`), so the mock replays Kimi-flavored JSON-event-stream frames
-> instead of JSON-RPC.
+> **Note on `kimi`**: Open Design's registered runtime now launches `kimi acp`
+> and uses ACP JSON-RPC. The current `mocks/bin/kimi` replay wrapper still
+> models the retired prompt-mode stream-json contract; do not treat it as live
+> Kimi contract coverage until the wrapper and its smoke test are migrated.
 
 > **Note on `vela` (AMR)**: vela is the bin OD's AMR runtime spawns. It
 > extends the generic ACP shape with `agentCapabilities` + `models`
@@ -427,22 +434,22 @@ mocks/
 │   ├── format-gemini.mjs         ← matches handleGeminiEvent
 │   ├── format-cursor-agent.mjs   ← matches handleCursorEvent
 │   ├── format-acp.mjs            ← JSON-RPC server matching attachAcpSession
-│   ├── format-kimi.mjs           ← kimi stream-json renderer
+│   ├── format-kimi.mjs           ← retained obsolete Kimi stream-json renderer
 │   ├── format-vela.mjs           ← AMR vela: ACP + models block + set_model gate
 │   ├── vela-subcommands.mjs      ← `vela login` + `vela models` handlers
 │   └── format-plain.mjs          ← raw stdout (deepseek/qwen/grok)
 ├── bin/
-│   ├── opencode  claude  codex
+│   ├── amp  claude  codex  opencode  opencode-cli
 │   ├── gemini    cursor-agent
 │   ├── deepseek  qwen    grok
-│   ├── devin hermes kilo kimi kiro vibe
-│   └── vela                       ← 15 bash wrappers, PATH-overlay
+│   ├── devin hermes kilo kimi kiro kiro-cli vibe vibe-acp
+│   └── vela                       ← 19 PATH-overlay wrappers
 ├── manifest.json                 ← committed: 179 entries' metadata + sha256 + provenance + R2 storage hints
 ├── golden/                       ← committed: daemon-event regression snapshots
 │   ├── README.md
 │   └── *.events.json             ← 3 representative traces (claude/codex/opencode)
 ├── scripts/
-│   ├── smoke-test.sh             ← 21 checks; auto-fetches recordings if empty
+│   ├── smoke-test.sh             ← protocol smoke matrix; auto-fetches recordings if empty
 │   ├── fetch-recordings.sh       ← pull from R2 (parallel, sha256-verified, idempotent)
 │   ├── upload-recording.sh       ← maintainer-local: validate + wrangler put + manifest update
 │   ├── contract-check.sh         ← real-CLI vs mock protocol drift check (manual)
@@ -464,8 +471,9 @@ under any Node ≥18.
   rendered as their native protocols — they fall back to the plain
   renderer for now. If you need them, add a `format-<agent>.mjs`
   following the same pattern as `format-codex.mjs`; the parsers are
-  in `apps/daemon/src/{copilot-stream,qoder-stream}.ts` and the pi-rpc
-  handler inside `apps/daemon/src/server.ts`.
+  in `apps/daemon/src/copilot-stream.ts`,
+  `apps/daemon/src/runtimes/qoder-stream.ts`, and
+  `apps/daemon/src/agent-protocol/pi-rpc/session.ts`.
 - The mock does not honor CLI flags that change semantics (`--model`,
   `--permission-mode`, `--allowed-tools`). They're silently ignored.
 

@@ -1,10 +1,13 @@
-import { chmod, mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import http from 'node:http';
+import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { promisify } from 'node:util';
+import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 
 const execFileAsync = promisify(execFile);
@@ -90,6 +93,157 @@ describe('CLI startup boundaries', () => {
     }
   });
 
+  it('reconciles a durable running message after a real daemon process restart', { timeout: 60_000 }, async () => {
+    const root = await mkdtemp(join(tmpdir(), 'od-cli-daemon-restart-'));
+    const dataDir = join(root, 'data');
+    await mkdir(dataDir);
+    const port = await findFreePort();
+    const env = {
+      ...process.env,
+      OD_BIND_HOST: '127.0.0.1',
+      OD_DATA_DIR: dataDir,
+      POSTHOG_KEY: '',
+      POSTHOG_HOST: '',
+      OPEN_DESIGN_VELA_TELEMETRY: 'off',
+      OPEN_DESIGN_TELEMETRY_RELAY_URL: '',
+      LANGFUSE_PUBLIC_KEY: '',
+      LANGFUSE_SECRET_KEY: '',
+    };
+    const args = [
+      '--import', 'tsx', cliEntry,
+      'daemon', 'start', '--headless', '--port', String(port),
+    ];
+    const first = spawn(process.execPath, args, { cwd: daemonRoot, env });
+    const runId = 'run-real-process-restart';
+    const messageId = 'message-real-process-restart';
+    const conversationId = 'conversation-real-process-restart';
+    const projectId = 'project-real-process-restart';
+    const runDir = join(dataDir, 'runs', runId);
+    const statePath = join(runDir, 'state.json');
+
+    try {
+      await waitForStdoutLine(first, /\[od\] listening on (http:\/\/[^\s]+)/u);
+      const db = new Database(join(dataDir, 'app.sqlite'));
+      try {
+        const now = Date.now();
+        db.exec('PRAGMA foreign_keys = ON');
+        db.prepare(
+          `INSERT INTO projects (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)`,
+        ).run(projectId, 'restart fixture', now, now);
+        db.prepare(
+          `INSERT INTO conversations (id, project_id, title, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?)`,
+        ).run(conversationId, projectId, 'restart fixture', now, now);
+        db.prepare(
+          `INSERT INTO messages
+             (id, conversation_id, role, content, run_id, run_status,
+              events_json, position, created_at, started_at)
+           VALUES (?, ?, 'assistant', '', ?, 'running', '[]', 0, ?, ?)`,
+        ).run(messageId, conversationId, runId, now, now);
+      } finally {
+        db.close();
+      }
+      await mkdir(runDir, { recursive: true });
+      await writeFile(statePath, `${JSON.stringify({
+        schemaVersion: 1,
+        id: runId,
+        projectId,
+        conversationId,
+        assistantMessageId: messageId,
+        agentId: 'claude',
+        status: 'running',
+        createdAt: Date.now() - 1_000,
+        updatedAt: Date.now(),
+        analyticsRecovery: {
+          context: {},
+          properties: { project_id: projectId, conversation_id: conversationId, run_id: runId },
+          insertId: 'restart-fixture-created',
+        },
+      })}\n`);
+
+      // SIGKILL models the process-loss case; graceful SIGTERM would run the
+      // normal shutdown path and would not exercise boot reconciliation.
+      first.kill('SIGKILL');
+      await waitForExit(first);
+
+      const second = spawn(process.execPath, args, { cwd: daemonRoot, env });
+      try {
+        const line = await waitForStdoutLine(second, /\[od\] listening on (http:\/\/[^\s]+)/u);
+        expect(line).toContain(`127.0.0.1:${port}`);
+        await waitFor(() => {
+          const state = JSON.parse(readFileSync(statePath, 'utf8')) as {
+            status?: string;
+            analyticsRecovery?: { completedAt?: number };
+          };
+          const checkDb = new Database(join(dataDir, 'app.sqlite'), { readonly: true });
+          try {
+            const row = checkDb.prepare(`SELECT run_status AS status FROM messages WHERE id = ?`).get(messageId) as { status?: string } | undefined;
+            return state.status === 'failed'
+              && row?.status === 'failed'
+              && typeof state.analyticsRecovery?.completedAt === 'number';
+          } finally {
+            checkDb.close();
+          }
+        });
+        const recoveredState = JSON.parse(await readFile(statePath, 'utf8')) as {
+          status: string;
+          errorCode?: string;
+          terminalRecoveryReason?: string;
+          analyticsRecovery?: { completedAt?: number };
+        };
+        expect(recoveredState).toMatchObject({
+          status: 'failed',
+          errorCode: 'DAEMON_RESTARTED',
+          terminalRecoveryReason: 'daemon_restart',
+          analyticsRecovery: { completedAt: expect.any(Number) },
+        });
+
+        const checkpoint = recoveredState.analyticsRecovery?.completedAt;
+        await terminateChild(second);
+        const reconciliationSentinelId = 'run-third-boot-reconciliation-sentinel';
+        const reconciliationSentinelDir = join(dataDir, 'runs', reconciliationSentinelId);
+        const reconciliationSentinelPath = join(reconciliationSentinelDir, 'state.json');
+        await mkdir(reconciliationSentinelDir, { recursive: true });
+        await writeFile(reconciliationSentinelPath, `${JSON.stringify({
+          schemaVersion: 1,
+          id: reconciliationSentinelId,
+          projectId: null,
+          conversationId: null,
+          assistantMessageId: null,
+          agentId: null,
+          status: 'running',
+          createdAt: Date.now() - 1_000,
+          updatedAt: Date.now(),
+          langfuseCompletedAt: Date.now(),
+        })}\n`);
+        const third = spawn(process.execPath, args, { cwd: daemonRoot, env });
+        try {
+          await Promise.all([
+            waitForStdoutLine(third, /\[od\] listening on (http:\/\/[^\s]+)/u),
+            waitForStdoutLine(third, /\[runs\] reconciled interrupted run terminals/u),
+          ]);
+          const replayedState = JSON.parse(await readFile(statePath, 'utf8')) as {
+            status?: string;
+            analyticsRecovery?: { completedAt?: number };
+          };
+          const sentinelState = JSON.parse(await readFile(reconciliationSentinelPath, 'utf8')) as {
+            status?: string;
+          };
+          expect(sentinelState.status).toBe('failed');
+          expect(replayedState.status).toBe('failed');
+          expect(replayedState.analyticsRecovery?.completedAt).toBe(checkpoint);
+        } finally {
+          await terminateChild(third);
+        }
+      } finally {
+        await terminateChild(second);
+      }
+    } finally {
+      await terminateChild(first);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('does not import daemon startup code for media client commands', async () => {
     const root = await mkdtemp(join(tmpdir(), 'od-cli-media-'));
     const dataDir = join(root, 'data');
@@ -129,8 +283,14 @@ describe('CLI startup boundaries', () => {
       const failed = error as { code?: number; stderr?: string };
       const stderr = failed.stderr ?? '';
       expect(failed.code).toBe(3);
-      expect(stderr).toContain('failed to reach daemon');
+      expect(JSON.parse(stderr)).toEqual({
+        error: {
+          code: 'MEDIA_DISPATCHER_UNREACHABLE',
+          message: 'local media dispatcher could not be reached',
+        },
+      });
       expect(stderr).not.toContain('OD_DATA_DIR');
+      expect(stderr).not.toContain('127.0.0.1');
     } finally {
       await chmod(dataDir, 0o700).catch(() => undefined);
       await rm(root, { recursive: true, force: true });
@@ -443,6 +603,33 @@ function waitForStdoutLine(
     child.on('error', onError);
     child.on('exit', onExit);
   });
+}
+
+async function findFreePort(): Promise<number> {
+  const server = net.createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => resolve());
+  });
+  const address = server.address();
+  const port = typeof address === 'object' && address ? address.port : 0;
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  if (!port) throw new Error('failed to allocate a free TCP port');
+  return port;
+}
+
+async function waitFor(predicate: () => boolean, timeoutMs = 10_000): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error('timed out waiting for daemon restart reconciliation');
+}
+
+async function waitForExit(child: ChildProcessWithoutNullStreams): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  await new Promise<void>((resolve) => child.once('exit', () => resolve()));
 }
 
 async function terminateChild(child: ChildProcessWithoutNullStreams): Promise<void> {

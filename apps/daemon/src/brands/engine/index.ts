@@ -26,7 +26,7 @@ export { generate, presets } from "./palette.js";
 export { defaultSeed, seedFromBrand, seedFromMaterial } from "./seed.js";
 
 // ── derive: Seed → full DesignTokens for an algorithm ──
-export { deriveTokens } from "./derive.js";
+export { deriveTokens, defaultThemeAlgorithm } from "./derive.js";
 
 // ── export: serializers ──
 export { tokensToJson, tokensToCssVars, tokensToThemeJson } from "./export.js";

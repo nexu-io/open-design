@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Validate a user-supplied DESIGN.md (Open Design "design system" submission).
+# Validate a user-supplied DESIGN.md (OpenDesign "design system" submission).
 # Usage: validate-design-system.sh <DESIGN.md path> [--reference <existing-DESIGN.md>]
 #
 # Strategy: instead of hardcoding a schema, we read 1-3 existing DESIGN.md files

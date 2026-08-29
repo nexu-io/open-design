@@ -81,9 +81,9 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
 
-      - name: Cache generated previews
+      - name: Restore generated previews
         id: previews-cache
-        uses: actions/cache@v5.0.5
+        uses: actions/cache/restore@v5
         with:
           path: apps/landing-page/public/previews
           key: landing-page-previews-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'apps/landing-page/package.json', 'apps/landing-page/scripts/generate-previews.ts', 'apps/landing-page/scripts/fallback-preview-card.ts', 'skills/**', 'design-templates/**', 'templates/live-artifacts/**', 'plugins/_official/**') }}
@@ -124,6 +124,13 @@ jobs:
         env:
           OD_LANDING_NOINDEX: '1'
         run: pnpm --filter @open-design/landing-page build:static
+
+      - name: Save generated previews
+        if: ${{ steps.previews-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+        uses: actions/cache/save@v5
+        with:
+          path: apps/landing-page/public/previews
+          key: landing-page-previews-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'apps/landing-page/package.json', 'apps/landing-page/scripts/generate-previews.ts', 'apps/landing-page/scripts/fallback-preview-card.ts', 'skills/**', 'design-templates/**', 'templates/live-artifacts/**', 'plugins/_official/**') }}
 
       - name: Lint changed blog SEO
         # The build above sets OD_LANDING_NOINDEX=1, so every rendered page in

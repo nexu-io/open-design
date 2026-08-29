@@ -83,9 +83,10 @@ describe('server route inventory', () => {
       'POST /api/plugins/events/purge',
       'GET /api/plugins/events',
     ];
-    const pluginLifecycleRouteKeys = [
-      'GET /api/plugins',
-      'GET /api/plugins/:id',
+  const pluginLifecycleRouteKeys = [
+    'GET /api/plugins',
+    'GET /api/plugins/stats',
+    'GET /api/plugins/:id',
       'POST /api/plugins/upload-zip',
       'POST /api/plugins/upload-folder',
       'POST /api/plugins/install',
@@ -96,7 +97,6 @@ describe('server route inventory', () => {
       'POST /api/plugins/:id/share-project',
       'POST /api/plugins/:id/doctor',
       'POST /api/plugins/:id/trust',
-      'GET /api/plugins/stats',
       'GET /api/applied-plugins/:snapshotId',
       'GET /api/applied-plugins/:snapshotId/canon',
       'GET /api/applied-plugins',
@@ -221,11 +221,20 @@ describe('server route inventory', () => {
       'POST /api/orbit/run',
       'POST /api/system/open-external',
       'POST /api/dialog/open-folder',
+      'POST /api/projects/:id/media/hyperframes/scaffold',
+      'POST /api/tools/media/hyperframes/scaffold',
       'POST /api/projects/:id/media/generate',
       'POST /api/tools/media/generate',
       'POST /api/research/search',
       'POST /api/media/tasks/:id/wait',
       'GET /api/projects/:id/media/tasks',
+    ];
+    // Website Clone agents use these project-scoped routes to ask the daemon
+    // to launch system Chrome outside their process sandbox. This is also the
+    // headless `od` CLI path, so it must remain registered without Electron.
+    const browserSessionRouteKeys = [
+      'POST /api/projects/:id/browser-sessions',
+      'DELETE /api/projects/:id/browser-sessions/:sessionId',
     ];
 
     expect(routeKeys).toEqual(expect.arrayContaining([
@@ -257,6 +266,7 @@ describe('server route inventory', () => {
     expect(routeKeys.filter((key) => designSystemRouteKeys.includes(key))).toEqual(designSystemRouteKeys);
     expect(routeKeys.filter((key) => staticCatalogRouteKeys.includes(key))).toEqual(staticCatalogRouteKeys);
     expect(routeKeys.filter((key) => mediaConfigRouteKeys.includes(key))).toEqual(mediaConfigRouteKeys);
+    expect(routeKeys.filter((key) => browserSessionRouteKeys.includes(key))).toEqual(browserSessionRouteKeys);
 
     expect(fallbackIndex).toBeGreaterThan(-1);
     expect(routeKeys.indexOf('GET /api/health')).toBeLessThan(fallbackIndex);
@@ -335,19 +345,17 @@ describe('bootstrap route regressions', () => {
     expect(velaProxyUnknownPath.status).toBe(404);
     expect(await velaProxyUnknownPath.json()).toEqual({ error: 'unknown_amr_api_proxy_path' });
 
-    expect(genuiRunList.status).toBe(200);
-    expect(await genuiRunList.json()).toEqual({ runId: 'missing-run', surfaces: [] });
+    expect(genuiRunList.status).toBe(404);
+    expect(await genuiRunList.json()).toEqual({ error: 'run not found' });
 
     expect(genuiRunSurfaceMissing.status).toBe(404);
-    expect(await genuiRunSurfaceMissing.json()).toEqual({ error: 'surface not found' });
+    expect(await genuiRunSurfaceMissing.json()).toEqual({ error: 'run not found' });
 
-    expect(devloopIterations.status).toBe(200);
-    expect(await devloopIterations.json()).toEqual({ runId: 'missing-run', iterations: [] });
+    expect(devloopIterations.status).toBe(404);
+    expect(await devloopIterations.json()).toEqual({ error: 'run not found' });
 
-    expect(replayMissingSnapshot.status).toBe(400);
-    expect(await replayMissingSnapshot.json()).toEqual({
-      error: 'snapshotId is required (runs are in-memory; pass the snapshotId returned by /api/plugins/:id/apply)',
-    });
+    expect(replayMissingSnapshot.status).toBe(404);
+    expect(await replayMissingSnapshot.json()).toEqual({ error: 'run not found' });
   });
 
   it('keeps extracted design-system and template example responses stable', async () => {
@@ -457,8 +465,16 @@ describe('bootstrap route regressions', () => {
       paths,
       projectFiles: {} as never,
       projectStore: {} as never,
+      verifyWorkspaceRequestAuthority: async () => {
+        throw new Error('unbound fixture must not verify Workspace authority');
+      },
+      workspaceResources: {
+        getWorkspaceResource: () => undefined,
+        getWorkspaceResourceByResourceId: () => undefined,
+      },
       designSystems: {
         buildUserDesignSystemArchive: async () => null,
+        canMutateUserDesignSystem: async () => true,
         createUserDesignSystem: async () => designSystemSummary as never,
         deleteUserDesignSystem: async () => false,
         ensureUserDesignSystemWorkspaceProject: async () => null,
@@ -475,6 +491,8 @@ describe('bootstrap route regressions', () => {
           `<!doctype html><title>${id} preview</title><main>${body}</main>`,
         renderDesignSystemShowcase: (id: string, body: string) =>
           `<!doctype html><title>${id} showcase</title><main>${body}</main>`,
+        syncUserDesignSystemAssetsFromWorkspace: async () => ({ ok: false, reason: 'not-found' }),
+        unshareTeamDesignSystemIfShared: async () => false,
         updateUserDesignSystem: async () => null,
         updateUserDesignSystemRevisionStatus: async () => null,
       },
@@ -486,6 +504,9 @@ describe('bootstrap route regressions', () => {
       },
     });
     registerStaticResourceRoutes(app, {
+      // Not exercised: this smoke test only hits GET example/asset routes,
+      // none of which touch the skill workspace-mutation gate that reads it.
+      db: {} as any,
       http: httpDeps,
       paths,
       resources: {

@@ -14,12 +14,22 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { hasOdCard } from '@open-design/contracts';
+import { hasOdCard, OD_NEXT_STRATEGY_ID } from '@open-design/contracts';
 import { useAnalytics } from '../analytics/provider';
 import { getResolvedDeviceId } from '../analytics/client';
-import { trackChatPanelClick, trackMessageQueueClick, trackRunFailedToastSurfaceView } from '../analytics/events';
+import {
+  trackChatPanelClick,
+  trackMessageQueueClick,
+  trackRunFailedToastSurfaceView,
+  trackRunRecoveryActionClick,
+  trackRunRecoveryActionSurfaceView,
+} from '../analytics/events';
+import {
+  buildRecoveryTaskAnalytics,
+  runAgentProviderId,
+} from '../analytics/run-task';
 import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
-import { useT } from '../i18n';
+import { useI18n, useT } from '../i18n';
 import { startersForProduct, type ProductType } from '../onboarding/recommendation';
 import { starterCopyFor } from '../onboarding/starter-copy';
 import {
@@ -29,25 +39,45 @@ import {
   type DesignToolboxActionId,
 } from '../runtime/design-toolbox';
 import { isRetryableAssistantTerminalFailure } from '../runtime/design-delivery';
+import {
+  isInternalStrategySnapshot,
+  shouldShowSessionModeChip,
+} from '../runtime/strategy-turn-chrome';
 import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
+import { useLiquidGlass } from '../hooks/useLiquidGlass';
 import { projectRawUrl } from '../providers/registry';
+import { appendResourceQuery } from '../collab/workspace-identity';
+import { useProjectCollabContext } from '../collab/collab-context';
 import { takeComposerSeedFor } from '../state/libraryHandoff';
 import { splitOnQuestionForms } from '../artifacts/question-form';
 import { stripArtifact } from '../artifacts/strip';
 import type { TodoItem } from '../runtime/todos';
-import type { AppliedPluginSnapshot, ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
-import type { TrackingProjectKind } from '@open-design/contracts/analytics';
+import type {
+  AppliedPluginSnapshot,
+  ChatSessionMode,
+  RunContextSelection,
+  WorkspaceContextItem,
+} from '@open-design/contracts';
+import type {
+  TrackingProjectKind,
+  TrackingRunRecoveryActionType,
+} from '@open-design/contracts/analytics';
 import {
   DESIGN_SYSTEM_WORKSPACE_DISPLAY_DESCRIPTION,
   DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE,
   isDesignSystemWorkspacePrompt,
 } from '../design-system-auto-prompt';
-import { isTodoWriteToolName, latestTodoWriteInputForPinnedCard } from '../runtime/todos';
+import {
+  continuableUnfinishedTodos,
+  isTodoWriteToolName,
+  latestTodoWriteInputForPinnedCard,
+} from '../runtime/todos';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, DesignSystemSummary, PreviewComment, Project, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
 import { agentDisplayName } from '../utils/agentLabels';
 import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } from '../comments';
-import { AssistantMessage, type QuestionFormOpenRequest } from './AssistantMessage';
+import { AssistantMessage, type QuestionFormSubmitHandler } from './AssistantMessage';
+import { TodoCard } from './ToolCard';
 import type { BrandBrowserAssistConfirm } from './OdCard';
 import {
   DESIGN_SYSTEM_NEXT_STEP_ACTIONS,
@@ -58,10 +88,12 @@ import { AmrLoginPill } from './AmrLoginPill';
 import {
   AMR_LOGIN_STATUS_EVENT,
   amrLoginStatusEventReason,
+  isAmrSessionAuthenticated,
 } from './amrLoginPolling';
 import {
   amrPlansUrlForProfile,
   amrRechargeUrlForProfile,
+  formatModelWindowRetryAt,
   resolveRunFailureUi,
 } from '../runtime/amr-guidance';
 import {
@@ -69,6 +101,11 @@ import {
   type VelaLoginStatus,
 } from '../providers/daemon';
 import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
+import {
+  canConsumeAmrAuthRetryContinuation,
+  type AmrAuthRetryContinuation,
+  type AmrAuthRetryPersonalAdoptionWitness,
+} from '../runtime/amr-auth-retry-continuation';
 import {
   ChatComposer,
   type ChatComposerHandle,
@@ -79,6 +116,7 @@ import type { PlaceholderScenario } from './home-hero/placeholderScenarios';
 import { listDesignArtifactCandidates } from './design-files/designArtifacts';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { Icon, type IconName } from './Icon';
+import { UserActionCard, type UserActionCardTone } from './UserActionCard';
 import { repoConnectCopy } from './design-system-github-evidence';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 import type { SettingsSection } from './SettingsDialog';
@@ -142,6 +180,27 @@ const DEFAULT_STARTER_KEYS: Array<{
 
 const IMPORTED_ARTIFACTS_INITIAL_VISIBLE_COUNT = 5;
 const IMPORTED_ARTIFACTS_REVEAL_COUNT = 5;
+const CHAT_RAIL_MIN_USER_MESSAGES = 2;
+// Above this the rail becomes a compact rolling wheel with faded extremes;
+// at or below it the full column shows with no mask occlusion.
+const CHAT_RAIL_WHEEL_MIN_USER_MESSAGES = 40;
+const CHAT_RAIL_HIGHLIGHT_MS = 1200;
+
+// Dock-style proximity effect: every dash rests at the same base length;
+// the hovered dash grows to the full module width and only its 4 neighbors
+// on each side are pulled along, easing off with distance.
+const CHAT_RAIL_DASH_BASE_PX = 8;
+const CHAT_RAIL_DASH_HOVER_PX = 16;
+const CHAT_RAIL_DASH_NEIGHBOR_SPAN = 4;
+
+function chatRailDashWidth(distance: number): number {
+  if (distance > CHAT_RAIL_DASH_NEIGHBOR_SPAN) return CHAT_RAIL_DASH_BASE_PX;
+  const falloff = 1 - distance / (CHAT_RAIL_DASH_NEIGHBOR_SPAN + 1);
+  return (
+    CHAT_RAIL_DASH_BASE_PX +
+    (CHAT_RAIL_DASH_HOVER_PX - CHAT_RAIL_DASH_BASE_PX) * falloff * falloff
+  );
+}
 
 const IMAGE_STARTERS: StarterPrompt[] = [
   {
@@ -384,13 +443,23 @@ function ChatArtifactPreview({
   projectId: string | null;
   file: ProjectFile;
 }) {
+  const { workspaceContext } = useProjectCollabContext();
   if (!projectId) {
     return <ChatArtifactFallback kind={file.kind} />;
   }
 
-  const url = `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}`;
+  const url = appendResourceQuery(
+    projectRawUrl(projectId, file.name, workspaceContext),
+    `v=${Math.round(file.mtime)}`,
+  );
   if (isRenderableSketchJson(file)) {
-    return <SketchPreview projectId={projectId} file={file} />;
+    return (
+      <SketchPreview
+        projectId={projectId}
+        file={file}
+        workspaceContext={workspaceContext}
+      />
+    );
   }
   if (file.kind === 'image' || file.kind === 'sketch') {
     return <img src={url} alt="" loading="lazy" />;
@@ -457,6 +526,10 @@ interface Props {
   streaming: boolean;
   loading?: boolean;
   error: string | null;
+  // Identifies a pane-level error produced by an assistant run. This lets the
+  // pane distinguish a stale run error from a later failure with identical
+  // canonical text; non-run errors leave the source undefined.
+  errorSourceAssistantId?: string | null;
   projectId: string | null;
   sessionMode?: ChatSessionMode;
   onSessionModeChange?: (mode: ChatSessionMode) => void;
@@ -470,6 +543,11 @@ interface Props {
   hasActiveDesignSystem?: boolean;
   activeDesignSystem?: DesignSystemSummary | null;
   sendDisabled?: boolean;
+  // Read-only viewer of a team-shared project. Beyond `sendDisabled` (which only
+  // blocks the send action), this also disables the composer input itself and
+  // hides the empty-state starter cards, since a member cannot start a
+  // conversation on someone else's shared project.
+  viewerOnly?: boolean;
   queuedItems?: QueuedSendItem[];
   onRemoveQueuedSend?: (id: string) => void;
   onUpdateQueuedSend?: (id: string, update: QueuedSendUpdate) => void;
@@ -493,7 +571,23 @@ interface Props {
     commentAttachments: ChatCommentAttachment[],
     meta?: ChatSendMeta,
   ) => ChatSendOutcome | Promise<ChatSendOutcome>;
-  onRetry?: (assistantMessage: ChatMessage) => void;
+  onRetry?: (
+    assistantMessage: ChatMessage,
+    recoveryActionType?: TrackingRunRecoveryActionType,
+  ) => void;
+  amrAuthRetryContinuation?: AmrAuthRetryContinuation | null;
+  amrAuthRetryMountId?: string;
+  amrAuthRetryWorkspaceIdentityKey?: string;
+  amrAuthRetryPersonalAdoptionWitness?: AmrAuthRetryPersonalAdoptionWitness | null;
+  onArmAmrAuthRetryContinuation?: (
+    continuation: Omit<AmrAuthRetryContinuation, 'accountIdAtArm' | 'createdAtMs'>,
+  ) => void;
+  onConsumeAmrAuthRetryContinuation?: (
+    continuation: AmrAuthRetryContinuation,
+  ) => boolean;
+  onDiscardAmrAuthRetryContinuation?: (
+    continuation: AmrAuthRetryContinuation,
+  ) => void;
   onResumeRun?: (assistantMessage: ChatMessage) => void;
   onStop: () => void;
   // Skills available for @-mention assembly. ProjectView filters out the
@@ -511,7 +605,7 @@ interface Props {
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
-  // "Share to Open Design" button on each completed assistant message —
+  // "Share to OpenDesign" button on each completed assistant message —
   // wired by ProjectView to handleSend with the bundled
   // `od-share-to-community` scenario's trigger prompt.
   onShareToOpenDesign?: (assistantMessageId: string) => void;
@@ -527,9 +621,12 @@ interface Props {
   // starters — one-click composer replacements — instead of the generic set.
   onboardingStarterPath?: ProductType | null;
   composerPlaceholder?: string;
-  // Focus the right-hand Questions tab from the chat banner.
-  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
-  onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
+  onSubmitQuestionForm?: QuestionFormSubmitHandler;
+  questionFormSubmitDisabled?: boolean;
+  onContinueRemainingTasks?: (
+    assistantMessage: ChatMessage,
+    todos: TodoItem[],
+  ) => boolean | void | Promise<boolean | void>;
   onAssistantFeedback?: (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => void;
   // Client-side action for a brand-browser-assist od-card: open/focus the
   // Browser tab. Routed through the stable callbacks ref.
@@ -627,7 +724,9 @@ interface Props {
   onTogglePet?: () => void;
   onOpenPetSettings?: () => void;
   projectMetadata?: ProjectMetadata;
-  onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
+  // Authoritative post-patch project from the daemon — see ChatComposer's
+  // prop of the same name for the recency invariant.
+  onProjectMetadataChange?: (updated: Project) => void;
   activeWorkspaceContext?: WorkspaceContextItem | null;
   initialWorkspaceContexts?: WorkspaceContextItem[];
   workspaceContexts?: WorkspaceContextItem[];
@@ -670,6 +769,12 @@ interface Props {
   // into the top of the chat pane. ProjectView owns the project record so it
   // renders these as slots rather than ChatPane re-deriving the data.
   onBack?: () => void;
+  /** Collapse the conversation pane into workspace-focused mode (#5517's
+   *  panel-left control). Takes precedence over onBack in the header. */
+  onCollapse?: () => void;
+  /** True when the collapse control renders OUTSIDE this pane (lifted into
+   *  the tabs dock row) — suppresses the header's collapse/back slot. */
+  collapseControlLifted?: boolean;
   backLabel?: string;
   projectHeader?: ReactNode;
   designSystemPicker?: ReactNode;
@@ -719,6 +824,66 @@ interface QueuedSendUpdate {
 // Gap left above the anchored user message when it is pinned to the top.
 const ANCHOR_TOP_PADDING = 12;
 
+/**
+ * Fold an OD Next logical task into ONE conversation turn.
+ *
+ * A Full Plan turn runs as several physical Runs (request -> production). The
+ * user asked once, and the daemon-issued continuation carries no prompt of its
+ * own, so rendering each Run as its own message shows an answer nobody asked
+ * for — with its own author line and its own "finished" affordances mid-turn.
+ *
+ * The daemon stays the single writer of one message per Run; only the view is
+ * folded. Every continuation's content, events and produced files are appended
+ * to the turn's first message in Run order, so nothing is dropped and nothing
+ * is duplicated.
+ */
+export function foldStrategyTaskTurns(messages: ChatMessage[]): ChatMessage[] {
+  if (!messages.some((message) => (message.strategyTaskRunIndex ?? 0) > 0)) {
+    return messages;
+  }
+  const folded: ChatMessage[] = [];
+  const turnHeadIndexByTask = new Map<string, number>();
+  for (const message of messages) {
+    const taskId = message.strategyTaskExecutionId;
+    const runIndex = message.strategyTaskRunIndex ?? 0;
+    if (message.role !== 'assistant' || !taskId) {
+      folded.push(message);
+      continue;
+    }
+    if (runIndex === 0 || !turnHeadIndexByTask.has(taskId)) {
+      turnHeadIndexByTask.set(taskId, folded.length);
+      folded.push(message);
+      continue;
+    }
+    const headIndex = turnHeadIndexByTask.get(taskId)!;
+    const head = folded[headIndex]!;
+    const headContent = head.content ?? '';
+    const tailContent = message.content ?? '';
+    folded[headIndex] = {
+      ...head,
+      content: tailContent
+        ? `${headContent}${headContent && !headContent.endsWith('\n') ? '\n\n' : ''}${tailContent}`
+        : headContent,
+      events: [...(head.events ?? []), ...(message.events ?? [])],
+      producedFiles: [...(head.producedFiles ?? []), ...(message.producedFiles ?? [])],
+      // The turn's status is the latest Run's: the earlier Runs finishing is an
+      // internal step, not the turn ending.
+      runId: message.runId ?? head.runId,
+      runStatus: message.runStatus ?? head.runStatus,
+      // Likewise the task verdict: only the final Run of the chain carries it,
+      // and the folded turn is what the pinned todo card reads.
+      ...(message.strategyTaskDelivered
+        ? { strategyTaskDelivered: message.strategyTaskDelivered }
+        : {}),
+      ...(message.endedAt ? { endedAt: message.endedAt } : {}),
+      ...(message.resultDeliveryState
+        ? { resultDeliveryState: message.resultDeliveryState }
+        : {}),
+    };
+  }
+  return folded;
+}
+
 function shouldHideEmptyBrandAssistantMessage(message: ChatMessage, metadata?: ProjectMetadata): boolean {
   if (metadata?.importedFrom !== 'brand-extraction' && metadata?.kind !== 'brand') return false;
   if (message.role !== 'assistant') return false;
@@ -744,6 +909,7 @@ const HIDDEN_BRAND_ASSISTANT_STATUS_LABELS = new Set([
   'streaming',
   'starting',
   'running',
+  'working',
   'requesting',
   'thinking',
   'empty_response',
@@ -780,8 +946,10 @@ export function ChatPane({
   streaming,
   loading = false,
   sendDisabled = false,
+  viewerOnly = false,
   queuedItems = [],
   error,
+  errorSourceAssistantId,
   projectId,
   sessionMode = 'design',
   onSessionModeChange,
@@ -800,6 +968,13 @@ export function ChatPane({
   onDeleteComment,
   onSend,
   onRetry,
+  amrAuthRetryContinuation = null,
+  amrAuthRetryMountId,
+  amrAuthRetryWorkspaceIdentityKey,
+  amrAuthRetryPersonalAdoptionWitness = null,
+  onArmAmrAuthRetryContinuation,
+  onConsumeAmrAuthRetryContinuation,
+  onDiscardAmrAuthRetryContinuation,
   onResumeRun,
   onStop,
   onRemoveQueuedSend,
@@ -819,7 +994,8 @@ export function ChatPane({
   initialDraft,
   onboardingStarterPath = null,
   composerPlaceholder,
-  onOpenQuestions,
+  onSubmitQuestionForm,
+  questionFormSubmitDisabled = false,
   onContinueRemainingTasks,
   onAssistantFeedback,
   onBrandBrowserAssistConfirm,
@@ -889,39 +1065,38 @@ export function ChatPane({
   onShowToast,
   chatLogTray,
   onBack,
+  onCollapse,
+  collapseControlLifted,
   backLabel,
   projectHeader,
   designSystemPicker,
   config,
 }: Props) {
-  const t = useT();
+  const { workspaceContext } = useProjectCollabContext();
+  const { t, locale } = useI18n();
   const analytics = useAnalytics();
   const displayMessages = useMemo(
-    () => messages.filter((message) => !shouldHideEmptyBrandAssistantMessage(message, projectMetadata)),
+    () => foldStrategyTaskTurns(
+      messages.filter((message) => !shouldHideEmptyBrandAssistantMessage(message, projectMetadata)),
+    ),
     [messages, projectMetadata],
   );
   const amrProfile = config?.agentCliEnv?.amr?.[AMR_PROFILE_ENV_KEY] ?? null;
   const [inlineAmrLoginStatus, setInlineAmrLoginStatus] =
     useState<VelaLoginStatus | null>(null);
+  const amrAuthRetrySignedOutWitnessRef =
+    useRef<AmrAuthRetryContinuation | null>(null);
   const logRef = useRef<HTMLDivElement | null>(null);
-  // Guards the inline AMR sign-in card so a successful login auto-retries the
-  // failed run exactly once (the pill's onStatusChange fires loggedIn on every
-  // poll). Keyed by the failed assistant's id.
-  const amrAuthRetriedRef = useRef<string | null>(null);
-  // Tracks the last observed AMR login state so we retry only on a real
-  // signed-out -> signed-in transition. Without this, a run that keeps failing
-  // AMR_AUTH_REQUIRED while /status already reports signed-in would auto-retry
-  // forever (each retry is a new assistant id, so the id guard alone never
-  // converges).
-  const amrAuthPrevLoggedInRef = useRef<boolean | undefined>(undefined);
   const chatLogScrollIdleTimerRef = useRef<number | null>(null);
   const historyWrapRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<ChatComposerHandle | null>(null);
   const composerSlotRef = useRef<HTMLDivElement | null>(null);
   const composerLayerRef = useRef<HTMLDivElement | null>(null);
+  const pinnedTodoRef = useRef<HTMLDivElement | null>(null);
   const queuedSendStripRef = useRef<HTMLDivElement | null>(null);
   const didInitialScrollRef = useRef(false);
   const runFailedToastSurfaceKeysRef = useRef<Set<string>>(new Set());
+  const runRecoverySurfaceKeysRef = useRef<Set<string>>(new Set());
   // Tracks whether the user is glued close enough to the bottom that
   // streamed content should auto-follow. Distinct from the jump-button
   // state below, which uses a wider threshold (120px) so the affordance
@@ -974,6 +1149,9 @@ export function ChatPane({
   const anchorPendingRef = useRef(false);
   const anchorActiveRef = useRef(false);
   const tailSpacerRef = useRef<HTMLDivElement | null>(null);
+  const chatRailHighlightTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const [chatRailHighlightedMessageId, setChatRailHighlightedMessageId] =
+    useState<string | null>(null);
   const prevStreamingRef = useRef(streaming);
   const prevLastUserIdRef = useRef<string | undefined>(undefined);
   // AssistantMessage's interaction callbacks are re-created per render and
@@ -981,6 +1159,7 @@ export function ChatPane({
   // message). Route them through this ref so a memoized message still calls the
   // LATEST handler. See areAssistantMessagePropsEqual in AssistantMessage.tsx.
   const assistantCallbacksRef = useRef<AssistantCallbacks>({
+    onSubmitQuestionForm,
     onContinueRemainingTasks,
     onAssistantFeedback,
     onBrandBrowserAssistConfirm,
@@ -994,6 +1173,7 @@ export function ChatPane({
     onNextStepCreateDesignSystem: onCreateDesignSystemFromProject,
   });
   assistantCallbacksRef.current = {
+    onSubmitQuestionForm,
     onContinueRemainingTasks,
     onAssistantFeedback,
     onBrandBrowserAssistConfirm,
@@ -1025,6 +1205,36 @@ export function ChatPane({
       sessionMode: options?.sessionMode,
     });
   }, [onSessionModeChange, sessionMode]);
+
+  const handleChatRailNavigate = useCallback(
+    (message: ChatMessage, messageIndex: number) => {
+      const log = logRef.current;
+      if (!log) return;
+      pinnedToBottomRef.current = false;
+      anchorActiveRef.current = false;
+      setScrolledFromBottom(true);
+      scrollChatLogToMessage(log, displayMessages, message.id, messageIndex);
+      setChatRailHighlightedMessageId(message.id);
+      if (chatRailHighlightTimerRef.current) {
+        clearTimeout(chatRailHighlightTimerRef.current);
+      }
+      chatRailHighlightTimerRef.current = setTimeout(() => {
+        setChatRailHighlightedMessageId((current) =>
+          current === message.id ? null : current,
+        );
+        chatRailHighlightTimerRef.current = undefined;
+      }, CHAT_RAIL_HIGHLIGHT_MS);
+    },
+    [displayMessages],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (chatRailHighlightTimerRef.current) {
+        clearTimeout(chatRailHighlightTimerRef.current);
+      }
+    };
+  }, []);
   const handlePickSkill = useCallback((skillId: string) => {
     composerRef.current?.applyDesignToolboxSkill(skillId);
   }, []);
@@ -1065,19 +1275,6 @@ export function ChatPane({
     })),
     [projectMetadata, t],
   );
-  // Empty-conversation starter cards. A recommendation-started project shows
-  // its OWN product path's starters — clicking replaces the composer draft, so
-  // the pre-filled first request and the cards complement rather than compete.
-  // The general fallback path and every other project keep the generic set.
-  const starterTemplateCards = useMemo<StarterPrompt[]>(() => {
-    if (onboardingStarterPath && onboardingStarterPath !== 'general') {
-      return startersForProduct(onboardingStarterPath).map((starter) => {
-        const copy = starterCopyFor(starter.id);
-        return { icon: '✦', title: t(copy.title), tag: '', prompt: t(copy.firstPrompt) };
-      });
-    }
-    return pickStarters(projectMetadata, t);
-  }, [onboardingStarterPath, projectMetadata, t]);
   const followUpComposerScenarios = useMemo<PlaceholderScenario[]>(() => {
     if (nextStepVariant === 'design-system') {
       return DESIGN_SYSTEM_NEXT_STEP_ACTIONS.map((action) => ({
@@ -1135,6 +1332,8 @@ export function ChatPane({
   const [conversationSearch, setConversationSearch] = useState('');
   const deferredConversationSearch = useDeferredValue(conversationSearch);
   const [scrolledFromBottom, setScrolledFromBottom] = useState(false);
+  // SDF liquid-glass refraction on the jump pill (frosted fallback via CSS).
+  const jumpBtnGlassRef = useLiquidGlass<HTMLButtonElement>({ strength: 0.2 });
   const [chatLogScrollable, setChatLogScrollable] = useState(false);
   const [chatLogScrolling, setChatLogScrolling] = useState(false);
   const [composerPortalTarget, setComposerPortalTarget] = useState<HTMLElement | null>(null);
@@ -1175,32 +1374,148 @@ export function ChatPane({
         failedRunErrorEvent?.code,
         failedRunErrorEvent?.failureDetail,
         retryAssistant.agentId,
+        // The raw upstream sentence, so a failure whose copy names something the
+        // gateway reported (the instant a model window reopens) can read it back
+        // out. Same string the card renders under 「查看详情」.
+        failedRunErrorEvent?.detail,
       )
     : null;
   const hasInlineAmrAuthorizeFailure = Boolean(
     retryAssistant && onRetry && runFailureUi?.primaryAction === 'authorize',
   );
   useEffect(() => {
+    if (
+      !amrAuthRetryContinuation
+      || !onDiscardAmrAuthRetryContinuation
+      || loading
+      || !projectId
+      || !activeConversationId
+      || messagesConversationId !== activeConversationId
+    ) {
+      return;
+    }
+    const personalAdoptionAuthorityTransition =
+      amrAuthRetryContinuation.workspaceIdentityKey === 'none'
+      && amrAuthRetryContinuation.originMountId === amrAuthRetryMountId
+      && amrAuthRetryPersonalAdoptionWitness?.workspaceIdentityKey
+        === amrAuthRetryWorkspaceIdentityKey;
+    const mismatched =
+      amrAuthRetryContinuation.projectId !== projectId
+      || amrAuthRetryContinuation.conversationId !== activeConversationId
+      || amrAuthRetryContinuation.assistantId !== retryAssistant?.id
+      || (
+        amrAuthRetryWorkspaceIdentityKey !== undefined
+        && amrAuthRetryContinuation.workspaceIdentityKey
+          !== amrAuthRetryWorkspaceIdentityKey
+        && !personalAdoptionAuthorityTransition
+      );
+    if (mismatched) {
+      onDiscardAmrAuthRetryContinuation(amrAuthRetryContinuation);
+    }
+  }, [
+    activeConversationId,
+    amrAuthRetryContinuation,
+    amrAuthRetryMountId,
+    amrAuthRetryPersonalAdoptionWitness,
+    amrAuthRetryWorkspaceIdentityKey,
+    loading,
+    messagesConversationId,
+    onDiscardAmrAuthRetryContinuation,
+    projectId,
+    retryAssistant?.id,
+  ]);
+  const consumeAmrAuthRetryIfAuthorized = useCallback((status: VelaLoginStatus | null) => {
+    if (!isAmrSessionAuthenticated(status)) {
+      if (
+        status?.loginInFlight === true
+        && amrAuthRetryContinuation
+        && amrAuthRetryContinuation.workspaceIdentityKey === 'none'
+        && amrAuthRetryContinuation.originMountId === amrAuthRetryMountId
+      ) {
+        amrAuthRetrySignedOutWitnessRef.current = amrAuthRetryContinuation;
+      }
+      return;
+    }
+    if (
+      !isAmrSessionAuthenticated(status)
+      || !amrAuthRetryContinuation
+      || !amrAuthRetryMountId
+      || !amrAuthRetryWorkspaceIdentityKey
+      || !projectId
+      || !activeConversationId
+      || !retryAssistant
+      || !onRetry
+      || !onConsumeAmrAuthRetryContinuation
+    ) {
+      return;
+    }
+    const originMountObservedSignedOut =
+      amrAuthRetrySignedOutWitnessRef.current === amrAuthRetryContinuation;
+    // Every continuation is consumed against the account identity returned by
+    // this exact status observation. An ambient shell snapshot can belong to a
+    // prior account during sign-out/sign-in transitions.
+    const loggedInAccountId = status?.user?.id ?? null;
+    if (!canConsumeAmrAuthRetryContinuation(amrAuthRetryContinuation, {
+      projectId,
+      conversationId: activeConversationId,
+      assistantId: retryAssistant.id,
+      workspaceIdentityKey: amrAuthRetryWorkspaceIdentityKey,
+      mountId: amrAuthRetryMountId,
+      loggedInAccountId,
+      nowMs: Date.now(),
+      originMountObservedSignedOut,
+      personalAdoptionWitness: amrAuthRetryPersonalAdoptionWitness,
+    })) {
+      return;
+    }
+    if (onConsumeAmrAuthRetryContinuation(amrAuthRetryContinuation)) {
+      amrAuthRetrySignedOutWitnessRef.current = null;
+      onRetry(
+        retryAssistant,
+        retryAssistant.agentId === 'amr'
+          ? 'authorize_and_retry'
+          : 'switch_runtime_retry',
+      );
+    }
+  }, [
+    activeConversationId,
+    amrAuthRetryContinuation,
+    amrAuthRetryMountId,
+    amrAuthRetryPersonalAdoptionWitness,
+    amrAuthRetryWorkspaceIdentityKey,
+    onConsumeAmrAuthRetryContinuation,
+    onRetry,
+    projectId,
+    retryAssistant,
+  ]);
+  useEffect(() => {
+    if (!amrAuthRetryContinuation || !isAmrSessionAuthenticated(inlineAmrLoginStatus)) return;
+    // A Settings handoff remounts the whole project surface, so there is no
+    // inline AmrLoginPill callback to drive consumption. The fresh pane's own
+    // status read may request the one-shot retry; the common guard above still
+    // requires the exact project, conversation, failed assistant, account,
+    // fresh mount and Workspace authority.
+    consumeAmrAuthRetryIfAuthorized(inlineAmrLoginStatus);
+  }, [
+    amrAuthRetryContinuation,
+    consumeAmrAuthRetryIfAuthorized,
+    inlineAmrLoginStatus,
+  ]);
+  useEffect(() => {
+    if (
+      amrAuthRetrySignedOutWitnessRef.current
+      && amrAuthRetrySignedOutWitnessRef.current !== amrAuthRetryContinuation
+    ) {
+      amrAuthRetrySignedOutWitnessRef.current = null;
+    }
+  }, [amrAuthRetryContinuation]);
+  useEffect(() => {
     if (!hasInlineAmrAuthorizeFailure || !retryAssistant || !onRetry) return;
     let stopped = false;
     const retryIfSignedIn = async () => {
       const next = await refreshInlineAmrLoginStatus();
       if (stopped) return;
-      // Retry only on a real signed-out -> signed-in transition. A null/unknown
-      // status is NOT treated as signed-out, so it can't fabricate a transition;
-      // and once signed-in we never retry again until an explicit signed-out is
-      // seen. Otherwise a run that keeps failing auth while /status reports
-      // signed-in would retry forever (each retry is a new assistant id).
-      if (next?.loggedIn === true) {
-        const wasSignedOut = amrAuthPrevLoggedInRef.current === false;
-        amrAuthPrevLoggedInRef.current = true;
-        if (wasSignedOut && amrAuthRetriedRef.current !== retryAssistant.id) {
-          amrAuthRetriedRef.current = retryAssistant.id;
-          onRetry(retryAssistant);
-        }
-      } else if (next && next.loggedIn === false) {
-        amrAuthPrevLoggedInRef.current = false;
-      }
+      consumeAmrAuthRetryIfAuthorized(next);
     };
     void retryIfSignedIn();
     const interval = window.setInterval(() => {
@@ -1211,6 +1526,7 @@ export function ChatPane({
       window.clearInterval(interval);
     };
   }, [
+    consumeAmrAuthRetryIfAuthorized,
     hasInlineAmrAuthorizeFailure,
     onRetry,
     refreshInlineAmrLoginStatus,
@@ -1231,17 +1547,41 @@ export function ChatPane({
     !!retryAssistant?.resumable &&
     !!retryAssistant?.agentId &&
     retryAssistant.agentId === config?.agentId;
+  // `error` is a shared escape hatch for both run failures and unrelated pane
+  // errors. A run error also lives durably on its assistant message. Suppress
+  // it only when its exact source assistant owns the persisted diagnostic and
+  // a later assistant has succeeded; canonical error text alone cannot prove
+  // ownership because a new run can fail with the same detail.
+  const historicalRunError = useMemo(
+    () =>
+      !retryAssistant &&
+      isRecoveredAssistantRunError(
+        displayMessages,
+        error,
+        errorSourceAssistantId,
+      ),
+    [displayMessages, error, errorSourceAssistantId, retryAssistant],
+  );
+  const currentGlobalError = historicalRunError ? null : error;
   // Prefer a case-specific message (AMR auth / balance) over the raw upstream
-  // string; fall back to the live global error (also covers conversation-load
-  // / audio errors) then the persisted run error so a reload still shows it.
-  const rawError = error ?? failedRunErrorEvent?.detail ?? null;
+  // string; otherwise keep a current pane-level error ahead of the persisted
+  // failed-run detail. Historical run errors were already removed above.
+  const rawError = currentGlobalError ?? failedRunErrorEvent?.detail ?? null;
   // Friendly agent name for {agent} interpolation in failure copy (e.g. the
   // sign-in messages). Falls back to a neutral word when unreadable, never null.
   const failedAgentLabel =
     agentDisplayName(retryAssistant?.agentId, retryAssistant?.agentName) ??
     t('chat.runError.agentFallback');
+  // Values the failure copy names, localized before interpolation: the gateway
+  // reports a UTC instant, the reader waits on their own clock.
+  const runFailureMessageVars = runFailureUi?.messageVars?.retryAt
+    ? {
+        ...runFailureUi.messageVars,
+        retryAt: formatModelWindowRetryAt(runFailureUi.messageVars.retryAt, locale),
+      }
+    : runFailureUi?.messageVars;
   const displayError = runFailureUi?.messageKey
-    ? t(runFailureUi.messageKey, { agent: failedAgentLabel })
+    ? t(runFailureUi.messageKey, { agent: failedAgentLabel, ...runFailureMessageVars })
     : rawError;
   const errorDiagnosticText = displayError
     ? buildRunErrorDiagnosticText({
@@ -1255,21 +1595,17 @@ export function ChatPane({
         agentId: retryAssistant?.agentId,
       })
     : null;
-  // First non-empty line of the diagnostics — shown as the one-line peek when
-  // the error-source area is collapsed.
-  const errorSourcePeek =
-    errorDiagnosticText?.split('\n').find((line) => line.trim().length > 0)?.trim() ?? null;
-  // Status-dot tone for the unified card. Brand (accent) for AMR sign-in/top-up
-  // — the commercial recovery path; warn (amber) for the self-healing
-  // connection drop; error (red) for everything else. Purely visual.
-  const runErrorTone: 'error' | 'warn' | 'brand' =
+  // Brand (accent) for AMR sign-in/top-up, warning for a self-healing
+  // connection drop, danger for everything else. The shared action card only
+  // tints its icon; the surface itself stays neutral.
+  const runErrorTone: UserActionCardTone =
     runFailureUi?.primaryAction === 'authorize' ||
     runFailureUi?.primaryAction === 'recharge' ||
     runFailureUi?.primaryAction === 'upgrade'
       ? 'brand'
       : failedRunErrorEvent?.code === 'AGENT_CONNECTION_DROPPED'
-        ? 'warn'
-        : 'error';
+        ? 'warning'
+        : 'danger';
   const [copiedErrorDiagnostic, setCopiedErrorDiagnostic] = useState(false);
   // Collapsed by default: the error source area shows one line until expanded.
   const [errorSourceOpen, setErrorSourceOpen] = useState(false);
@@ -1314,7 +1650,6 @@ export function ChatPane({
           runId: retryAssistant.runId ?? null,
         }
       : null;
-  const showByokRecoveryCta = showByokRecoveryAction && Boolean(onSwitchToLocalCli);
   // A `primaryAction: 'none'` failure (e.g. a hard quota where retrying is
   // futile) contributes no button of its own — it relies on the AMR switch card
   // below. Only claim the actions row when a real control will render, so a
@@ -1327,14 +1662,90 @@ export function ChatPane({
         runFailureUi.secondaryRetry ||
         canResumeFailedRun),
   );
+  // The generic local-CLI escape hatch is only used when the failure card has
+  // no direct recovery action. AMR guidance remains visible whenever the
+  // classifier asks for it, alongside a case-specific retry when applicable.
+  const showByokRecoveryCta =
+    showByokRecoveryAction && Boolean(onSwitchToLocalCli) && !runFailureHasAction;
   const showErrorActions = showByokRecoveryCta || runFailureHasAction;
+  const showAmrGuidance = Boolean(amrSwitchPayload);
+  const visibleRecoveryActionTypes = useMemo(() => {
+    const actions: TrackingRunRecoveryActionType[] = [];
+    if (!retryAssistant || !onRetry || !runFailureUi) return actions;
+    if (runFailureUi.primaryAction === 'authorize') actions.push('authorize_and_retry');
+    if (canResumeFailedRun) actions.push('resume_run');
+    else if (runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry) {
+      actions.push('manual_retry');
+    }
+    if (showAmrGuidance && onSwitchToAmrAndRetry) actions.push('switch_runtime_retry');
+    return actions;
+  }, [
+    canResumeFailedRun,
+    onRetry,
+    onSwitchToAmrAndRetry,
+    retryAssistant,
+    runFailureUi,
+    showAmrGuidance,
+  ]);
+  const recoveryAnalyticsProps = useCallback((
+    assistantMessage: ChatMessage,
+    actionType: TrackingRunRecoveryActionType,
+  ) => {
+    const task = buildRecoveryTaskAnalytics(displayMessages, assistantMessage, actionType);
+    return {
+      task_execution_id: task.taskExecutionId,
+      recovery_action_instance_id: task.recoveryActionInstanceId!,
+      recovery_action_type: actionType,
+      ...(task.sourceRunId ? { source_run_id: task.sourceRunId } : {}),
+      ...(assistantMessage.agentId
+        ? { source_agent_provider_id: runAgentProviderId(assistantMessage.agentId) }
+        : {}),
+      ...(failedRunErrorEvent?.failureCategory
+        ? { failure_category: failedRunErrorEvent.failureCategory }
+        : {}),
+      ...(failedRunErrorEvent?.failureDetail
+        ? { failure_reason: failedRunErrorEvent.failureDetail }
+        : {}),
+    };
+  }, [displayMessages, failedRunErrorEvent]);
+  useEffect(() => {
+    if (!retryAssistant) return;
+    for (const actionType of visibleRecoveryActionTypes) {
+      const props = recoveryAnalyticsProps(retryAssistant, actionType);
+      const key = `${props.recovery_action_instance_id}:surface`;
+      if (runRecoverySurfaceKeysRef.current.has(key)) continue;
+      runRecoverySurfaceKeysRef.current.add(key);
+      trackRunRecoveryActionSurfaceView(analytics.track, {
+        page_name: 'chat_panel',
+        area: 'chat_panel',
+        element: 'run_recovery_action',
+        ...props,
+      });
+    }
+  }, [analytics.track, recoveryAnalyticsProps, retryAssistant, visibleRecoveryActionTypes]);
+  const trackRecoveryClick = useCallback((
+    assistantMessage: ChatMessage,
+    actionType: TrackingRunRecoveryActionType,
+    target?: { agentProviderId?: string; modelId?: string },
+  ) => {
+    trackRunRecoveryActionClick(analytics.track, {
+      page_name: 'chat_panel',
+      area: 'chat_panel',
+      element: 'run_recovery_action',
+      ...recoveryAnalyticsProps(assistantMessage, actionType),
+      ...(target?.agentProviderId
+        ? { target_agent_provider_id: target.agentProviderId }
+        : {}),
+      ...(target?.modelId ? { target_model_id: target.modelId } : {}),
+    });
+  }, [analytics.track, recoveryAnalyticsProps]);
   useEffect(() => {
     if (!displayError || !failedRunErrorEvent?.code || !retryAssistant) return;
     // The hosted-AMR nudge owns this same surface_view when it renders below
     // the error card. For all other failed-run guidance (AMR auth/balance,
     // Antigravity auth/quota, upstream outage, generic retry), the chat error
     // card itself is the visible run_failed_toast surface.
-    if (amrSwitchPayload) return;
+    if (showAmrGuidance) return;
 
     const key = [
       projectId ?? '',
@@ -1360,7 +1771,7 @@ export function ChatPane({
   }, [
     activeConversationId,
     analytics.track,
-    amrSwitchPayload,
+    showAmrGuidance,
     displayError,
     failedRunErrorEvent?.code,
     projectId,
@@ -1380,13 +1791,6 @@ export function ChatPane({
   const composerDraftStorageKey = projectId && activeConversationId
     ? `od:chat-composer:draft:${projectId}:${activeConversationId}`
     : undefined;
-  // Only the first user message gets the active-plugin chip — the
-  // plugin is project-scoped so re-stamping it on every reply would be
-  // noise. Subsequent messages still run under the same snapshot.
-  const firstUserMessageId = useMemo(
-    () => displayMessages.find((m) => m.role === 'user')?.id,
-    [displayMessages],
-  );
   const shouldBalanceFinishedTranscript =
     !loading &&
     !streaming &&
@@ -1394,8 +1798,8 @@ export function ChatPane({
     !hasActiveRunMessage &&
     displayMessages.length > 0;
   // Map each assistant message id to the user message that follows it (if any)
-  // so the chat-side Questions banner can reopen that exact answered form in
-  // the right-hand panel later.
+  // so structured form replies collapse into a readable summary on the
+  // assistant message that asked them.
   const nextUserContentByAssistantId = useMemo(() => {
     const map = new Map<string, string>();
     for (let i = 0; i < displayMessages.length - 1; i++) {
@@ -1499,9 +1903,10 @@ export function ChatPane({
         const formEl = lastAssistantEl?.querySelector<HTMLElement>('[data-form-id]');
         if (formEl && !scrolledToFormRef.current.has(formEl.dataset.formId!)) {
           scrolledToFormRef.current.add(formEl.dataset.formId!);
+          const distance = distanceFromBottomAfterAligningTop(el, formEl);
           formEl.scrollIntoView({ block: 'start', behavior: 'smooth' });
-          pinnedToBottomRef.current = false;
-          setScrolledFromBottom(true);
+          pinnedToBottomRef.current = distance < 80;
+          setScrolledFromBottom(distance > 120);
           return;
         }
         // Already handled by the auto-scroll effect — don't bottom-scroll.
@@ -1591,9 +1996,10 @@ export function ChatPane({
         const formEl = lastAssistantEl?.querySelector<HTMLElement>('[data-form-id]');
         if (formEl && !scrolledToFormRef.current.has(formEl.dataset.formId!)) {
           scrolledToFormRef.current.add(formEl.dataset.formId!);
+          const distance = distanceFromBottomAfterAligningTop(el, formEl);
           formEl.scrollIntoView({ block: 'start', behavior: 'smooth' });
-          pinnedToBottomRef.current = false;
-          setScrolledFromBottom(true);
+          pinnedToBottomRef.current = distance < 80;
+          setScrolledFromBottom(distance > 120);
           return;
         }
         // Form tag in content but the DOM element isn't ready yet (partial
@@ -1781,7 +2187,20 @@ export function ChatPane({
       }
     };
 
+    let observedPinnedTodo: Element | null = null;
     let observedQueuedSendStrip: Element | null = null;
+    const syncPinnedTodo = () => {
+      if (!resizeObserver) return;
+      const pinnedEl = pinnedTodoRef.current;
+      if (pinnedEl && observedPinnedTodo !== pinnedEl) {
+        if (observedPinnedTodo) resizeObserver.unobserve(observedPinnedTodo);
+        resizeObserver.observe(pinnedEl);
+        observedPinnedTodo = pinnedEl;
+      } else if (!pinnedEl && observedPinnedTodo) {
+        resizeObserver.unobserve(observedPinnedTodo);
+        observedPinnedTodo = null;
+      }
+    };
     const syncQueuedSendStrip = () => {
       if (!resizeObserver) return;
       const queuedEl = queuedSendStripRef.current;
@@ -1798,12 +2217,14 @@ export function ChatPane({
     };
 
     syncObservedChildren();
+    syncPinnedTodo();
     syncQueuedSendStrip();
 
     const mutationObserver =
       typeof MutationObserver !== 'undefined'
         ? new MutationObserver(() => {
             syncObservedChildren();
+            syncPinnedTodo();
             syncQueuedSendStrip();
             followLatestIfPinned();
           })
@@ -1816,11 +2237,9 @@ export function ChatPane({
       childList: true,
       subtree: true,
     });
-    // QueuedSendStrip lives outside the chat-log subtree (it is a sibling of
-    // .chat-log-wrap inside .pane). The MutationObserver above only fires for
-    // changes inside el, so it cannot detect that surface mounting or
-    // unmounting. Watch the nearest common ancestor (.pane) with childList-only
-    // to keep its observer current.
+    // PinnedTodoSlot and QueuedSendStrip live outside the chat-log subtree.
+    // Watch their nearest common ancestor so resize observation follows those
+    // surfaces when they mount or unmount.
     const paneEl = el.parentElement?.parentElement ?? null;
     if (paneEl && mutationObserver) {
       mutationObserver.observe(paneEl, { childList: true });
@@ -1879,6 +2298,25 @@ export function ChatPane({
     const elRect = el.getBoundingClientRect();
     const msgRect = msgEl.getBoundingClientRect();
     return el.scrollTop + (msgRect.top - elRect.top);
+  }
+
+  // Predicts the post-settle "distance from bottom" (same metric `onScroll`
+  // computes) after aligning `target`'s top edge with `el`'s top edge, the
+  // way `target.scrollIntoView({ block: 'start' })` does. Reads current
+  // geometry synchronously instead of waiting on the (possibly smooth,
+  // possibly no-op) actual scroll to land: a short `target` — e.g. a
+  // question form that is also the last thing in the log — clamps to the
+  // real bottom, which never fires a native `scroll` event to correct a
+  // hardcoded "still scrolled away" guess. That stale guess is what left the
+  // jump-to-latest button stuck visible with nothing left to jump to
+  // (recvqajMdAnfmd).
+  function distanceFromBottomAfterAligningTop(el: HTMLDivElement, target: HTMLElement): number {
+    const elRect = el.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const targetTopInContent = el.scrollTop + (targetRect.top - elRect.top);
+    const maxScrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+    const predictedScrollTop = Math.min(Math.max(0, targetTopInContent), maxScrollTop);
+    return Math.max(0, maxScrollTop - predictedScrollTop);
   }
 
   // Resize the tail spacer so the anchored message can sit at the top with
@@ -2008,6 +2446,9 @@ export function ChatPane({
   }, [composerPortalRect, composerPortalTarget, tab]);
 
   const composerNode = (
+    <>
+      {/* 插件 / 设计百宝箱 live inside the composer's "+" menu (below 工作目录,
+          hover to expand); they no longer sit as quick pills above the input. */}
     <ChatComposer
       ref={composerRef}
       designSystemPicker={designSystemPicker}
@@ -2019,6 +2460,7 @@ export function ChatPane({
       skills={skills}
       streaming={streaming}
       sendDisabled={sendDisabled}
+      inputDisabled={viewerOnly}
       initialDraft={initialDraft}
       composerPlaceholder={composerPlaceholder}
       placeholderScenarios={composerPlaceholderScenarios}
@@ -2092,6 +2534,7 @@ export function ChatPane({
       onActiveDesignSystemChange={onActiveDesignSystemChange}
       onShowToast={onShowToast}
     />
+    </>
   );
   const shouldPortalComposer =
     tab === 'chat'
@@ -2105,7 +2548,20 @@ export function ChatPane({
   return (
     <div className="pane">
       <div className="chat-project-header">
-        {onBack ? (
+        {collapseControlLifted ? null : onCollapse ? (
+          <button
+            type="button"
+            className="chat-project-back od-tooltip"
+            onClick={onCollapse}
+            title={t('chat.collapsePane')}
+            aria-label={t('chat.collapsePane')}
+            data-tooltip={t('chat.collapsePane')}
+            data-tooltip-placement="bottom"
+            data-testid="chat-collapse-toggle"
+          >
+            <Icon name="panel-left" size={16} />
+          </button>
+        ) : onBack ? (
           <button
             type="button"
             className="chat-project-back"
@@ -2239,6 +2695,14 @@ export function ChatPane({
       {tab === 'chat' ? (
         <>
           <div className={`chat-log-wrap${chatLogTray ? ' has-chat-log-tray' : ''}`}>
+            <ChatMessageRail
+              messages={displayMessages}
+              loading={loading}
+              logRef={logRef}
+              activeConversationKey={activeConversationId ?? 'no-conversation'}
+              onNavigate={handleChatRailNavigate}
+              t={t}
+            />
             <div
               className={[
                 'chat-log',
@@ -2277,47 +2741,9 @@ export function ChatPane({
                     />
                   ) : (
                     <>
-                      <div className="chat-empty">
-                        <span className="chat-empty-title">
-                          {t('chat.startTitle')}
-                        </span>
-                      </div>
-                      <div className="chat-examples" role="list">
-                        {starterTemplateCards.map((ex, i) => (
-                          <button
-                            key={`${ex.title}-${i}`}
-                            type="button"
-                            role="listitem"
-                            className="chat-example"
-                            style={{ animationDelay: `${i * 70}ms` }}
-                            onClick={() => {
-                              trackChatPanelClick(analytics.track, {
-                                page_name: 'chat_panel',
-                                area: 'chat_panel',
-                                element: 'template_card',
-                              });
-                              composerRef.current?.setDraft(ex.prompt);
-                            }}
-                            title={t('chat.fillInputTitle')}
-                          >
-                            <span className="chat-example-icon" aria-hidden>
-                              {ex.icon}
-                            </span>
-                            <span className="chat-example-body">
-                              <span className="chat-example-head">
-                                <span className="chat-example-title">{ex.title}</span>
-                                {ex.tag ? (
-                                  <span className="chat-example-tag">{ex.tag}</span>
-                                ) : null}
-                              </span>
-                              <span className="chat-example-prompt">{ex.prompt}</span>
-                            </span>
-                            <span className="chat-example-cta" aria-hidden>
-                              ↵
-                            </span>
-                          </button>
-                        ))}
-                      </div>
+                      {/* #5517 leaves the empty conversation pane clean — no
+                          "start a conversation" title or starter template
+                          cards; only the connect-repo note below survives. */}
                       {connectRepoNeeded ? (
                         <div className="chat-connect-repo" role="note">
                           <span className="chat-connect-repo-icon" aria-hidden>
@@ -2368,14 +2794,12 @@ export function ChatPane({
                 shareToOpenDesignBusyMessageId={shareToOpenDesignBusyMessageId}
                 forceStreamingMessageIds={forceStreamingMessageIds}
                 lastAssistantId={lastAssistantId}
-                firstUserMessageId={firstUserMessageId}
                 activePluginSnapshot={activePluginSnapshot}
                 activeDesignSystem={activeDesignSystem}
                 hasActiveDesignSystem={hasActiveDesignSystem}
                 errorCardOwnerId={errorCardOwnerId}
                 nextUserContentByAssistantId={nextUserContentByAssistantId}
                 assistantCallbacksRef={assistantCallbacksRef}
-                onContinueRemainingTasks={onContinueRemainingTasks}
                 onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm}
                 onArtifactShare={onArtifactShare}
                 onToolboxAction={handleToolboxAction}
@@ -2395,71 +2819,52 @@ export function ChatPane({
                 nextStepSkills={skills}
                 toolboxSkillNames={featuredToolboxSkillNames}
                 nextStepVariant={nextStepVariant}
-                onForkFromMessage={onForkFromMessage}
+                onForkFromMessage={viewerOnly ? undefined : onForkFromMessage}
                 onAssistantFeedback={onAssistantFeedback}
                 forkingMessageId={forkingMessageId}
                 t={t}
-                onOpenQuestions={onOpenQuestions}
+                onSubmitQuestionForm={onSubmitQuestionForm}
+                questionFormSubmitDisabled={questionFormSubmitDisabled}
                 scrollContainerRef={logRef}
+                highlightedUserMessageId={chatRailHighlightedMessageId}
               />
               {displayError ? (
-                <div className="run-error" data-tone={runErrorTone}>
-                  {/* ① type title + ② detail */}
-                  <div className="run-error__main">
-                    <span className="run-error__icon" aria-hidden="true">
-                      <svg viewBox="0 0 16 16" fill="none">
-                        <circle cx="8" cy="8" r="6.4" stroke="currentColor" strokeWidth="1.4" />
-                        <path d="M8 4.5v4M8 11h.01" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                      </svg>
-                    </span>
-                    <div className="run-error__copy">
-                      {runFailureUi ? (
-                        <p className="run-error__title">{t(runFailureUi.titleKey)}</p>
+                <UserActionCard
+                  dataKind="run-recovery"
+                  icon="alert-triangle"
+                  tone={runErrorTone}
+                  title={
+                    runFailureUi
+                      ? t(runFailureUi.titleKey)
+                      : t('chat.runError.title.generic')
+                  }
+                  open={errorSourceOpen}
+                  onOpenChange={setErrorSourceOpen}
+                  detailsLabel={t('brand.viewDetails')}
+                  details={
+                    <div className="run-error__details">
+                      <p className="run-error__description">{displayError}</p>
+                      {errorDiagnosticText ? (
+                        <div className="run-error__diagnostic">
+                          <div className="run-error__diagnostic-head">
+                            <span>{t('chat.runError.sourceLabel')}</span>
+                            <button
+                              type="button"
+                              className="run-error__source-copy"
+                              onClick={() => void copyErrorDiagnostic()}
+                              aria-label={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
+                              title={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
+                            >
+                              <Icon name={copiedErrorDiagnostic ? 'check' : 'copy'} size={13} />
+                            </button>
+                          </div>
+                          <pre>{errorDiagnosticText}</pre>
+                        </div>
                       ) : null}
-                      <p className="run-error__desc">{displayError}</p>
                     </div>
-                  </div>
-                  {/* ④ collapsible error source */}
-                  {errorDiagnosticText ? (
-                    <div className={`run-error__source${errorSourceOpen ? ' is-open' : ''}`}>
-                      <div className="run-error__source-head">
-                        <button
-                          type="button"
-                          className="run-error__source-bar"
-                          aria-expanded={errorSourceOpen}
-                          aria-label={
-                            errorSourceOpen
-                              ? t('chat.runError.sourceCollapseAria')
-                              : t('chat.runError.sourceExpandAria')
-                          }
-                          onClick={() => setErrorSourceOpen((open) => !open)}
-                        >
-                          <svg className="run-error__source-chevron" viewBox="0 0 12 12" fill="none">
-                            <path d="M4.5 2.5 8 6l-3.5 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                          <span className="run-error__source-label">{t('chat.runError.sourceLabel')}</span>
-                          {errorSourcePeek ? (
-                            <span className="run-error__source-peek">{errorSourcePeek}</span>
-                          ) : null}
-                        </button>
-                        <button
-                          type="button"
-                          className="run-error__source-copy"
-                          onClick={() => void copyErrorDiagnostic()}
-                          aria-label={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
-                          title={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
-                        >
-                          <Icon name={copiedErrorDiagnostic ? 'check' : 'copy'} size={13} />
-                        </button>
-                      </div>
-                      <div className="run-error__source-full">
-                        <pre>{errorDiagnosticText}</pre>
-                      </div>
-                    </div>
-                  ) : null}
-                  {/* ③ fix actions */}
-                  {showErrorActions ? (
-                    <div className="run-error__actions">
+                  }
+                  footerActions={showErrorActions ? (
+                    <>
                       {showByokRecoveryCta ? (
                         <button
                           type="button"
@@ -2488,28 +2893,28 @@ export function ChatPane({
                               hideSignedOutStatus
                               revealPendingCancelAction
                               onSignInStarted={() => {
-                                amrAuthPrevLoggedInRef.current = false;
+                                trackRecoveryClick(
+                                  retryAssistant,
+                                  'authorize_and_retry',
+                                );
+                                if (
+                                  projectId
+                                  && activeConversationId
+                                  && amrAuthRetryMountId
+                                  && amrAuthRetryWorkspaceIdentityKey
+                                  && onArmAmrAuthRetryContinuation
+                                ) {
+                                  onArmAmrAuthRetryContinuation({
+                                    projectId,
+                                    conversationId: activeConversationId,
+                                    assistantId: retryAssistant.id,
+                                    workspaceIdentityKey: amrAuthRetryWorkspaceIdentityKey,
+                                    originMountId: amrAuthRetryMountId,
+                                  });
+                                }
                               }}
                               onStatusChange={(loginStatus) => {
-                                // Retry only on a real signed-out -> signed-in
-                                // transition (see amrAuthPrevLoggedInRef).
-                                if (loginStatus?.loggedIn === true) {
-                                  const wasSignedOut =
-                                    amrAuthPrevLoggedInRef.current === false;
-                                  amrAuthPrevLoggedInRef.current = true;
-                                  if (
-                                    wasSignedOut &&
-                                    amrAuthRetriedRef.current !== retryAssistant.id
-                                  ) {
-                                    amrAuthRetriedRef.current = retryAssistant.id;
-                                    onRetry(retryAssistant);
-                                  }
-                                } else if (
-                                  loginStatus &&
-                                  loginStatus.loggedIn === false
-                                ) {
-                                  amrAuthPrevLoggedInRef.current = false;
-                                }
+                                consumeAmrAuthRetryIfAuthorized(loginStatus);
                               }}
                             />
                           ) : runFailureUi.primaryAction === 'launch-terminal-auth' ? (
@@ -2616,37 +3021,47 @@ export function ChatPane({
                             // re-sending Retry path, which would resume + repeat.
                             <button
                               type="button"
-                              className="ghost chat-error-retry"
+                              className="chat-error-action"
                               onClick={() =>
-                                onResumeRun
-                                  ? onResumeRun(retryAssistant)
-                                  : onSend(RESUME_CONTINUE_PROMPT, [], [])
+                                {
+                                  trackRecoveryClick(retryAssistant, 'resume_run');
+                                  if (onResumeRun) onResumeRun(retryAssistant);
+                                  else onSend(RESUME_CONTINUE_PROMPT, [], []);
+                                }
                               }
                             >
                               {t('chat.resumeRunCta')}
                             </button>
-                          ) : runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry ? (
+                          ) : runFailureUi.primaryAction === 'retry' ||
+                            runFailureUi.secondaryRetry ? (
                             <button
                               type="button"
-                              className="ghost chat-error-retry"
-                              onClick={() => onRetry(retryAssistant)}
+                              className="chat-error-action chat-error-retry"
+                              onClick={() => {
+                                trackRecoveryClick(retryAssistant, 'manual_retry');
+                                onRetry(retryAssistant, 'manual_retry');
+                              }}
                             >
                               {t('promptTemplates.retry')}
                             </button>
                           ) : null}
                         </>
                       ) : null}
-                    </div>
-                  ) : null}
-                </div>
+                    </>
+                  ) : undefined}
+                />
               ) : null}
-              {amrSwitchPayload ? (
+              {showAmrGuidance && amrSwitchPayload ? (
                 <AmrGuidance
                   {...amrSwitchPayload}
                   sourceDetail="chat_error_switch_retry_card"
                   metricsConsent={config?.telemetry?.metrics === true}
                   onActivate={() => {
                     if (retryAssistant && onSwitchToAmrAndRetry) {
+                      trackRecoveryClick(retryAssistant, 'switch_runtime_retry', {
+                        agentProviderId: 'amr',
+                        modelId: config?.agentModels?.amr?.model?.trim() || 'default',
+                      });
                       onSwitchToAmrAndRetry(retryAssistant);
                     } else {
                       onOpenAmrSettings?.();
@@ -2669,16 +3084,24 @@ export function ChatPane({
                 without this the button bleeds through it (#4123). */}
             <button
               type="button"
-              className={`chat-jump-btn${scrolledFromBottom && !showConvList ? ' chat-jump-btn-active' : ''}`}
+              ref={jumpBtnGlassRef}
+              className={`chat-jump-btn od-glass-refract${scrolledFromBottom && !showConvList ? ' chat-jump-btn-active' : ''}`}
               onClick={jumpToBottom}
               title={t('chat.scrollToLatest')}
               aria-hidden={!scrolledFromBottom || showConvList}
               tabIndex={scrolledFromBottom && !showConvList ? 0 : -1}
             >
-              <Icon name="arrow-up" size={12} style={{ transform: 'rotate(180deg)' }} />
+              <Icon name="arrow-up" size={14} style={{ transform: 'rotate(180deg)' }} />
               <span>{t('chat.jumpToLatest')}</span>
             </button>
           </div>
+          <PinnedTodoSlot
+            messages={displayMessages}
+            streaming={streaming}
+            conversationId={activeConversationId}
+            onContinueRemainingTasks={onContinueRemainingTasks}
+            containerRef={pinnedTodoRef}
+          />
           <QueuedSendStrip
             containerRef={queuedSendStripRef}
             items={queuedItems}
@@ -2750,6 +3173,7 @@ export function ChatPane({
 }
 
 interface AssistantCallbacks {
+  onSubmitQuestionForm: QuestionFormSubmitHandler | undefined;
   onContinueRemainingTasks:
     | ((assistantMessage: ChatMessage, todos: TodoItem[]) => void)
     | undefined;
@@ -2767,11 +3191,266 @@ interface AssistantCallbacks {
   onNextStepCreateDesignSystem: (() => void) | undefined;
 }
 
+type ChatRailMessage = {
+  message: ChatMessage;
+  messageIndex: number;
+  userIndex: number;
+};
+
+function ChatMessageRail({
+  messages,
+  loading,
+  logRef,
+  activeConversationKey,
+  onNavigate,
+  t,
+}: {
+  messages: ChatMessage[];
+  loading: boolean;
+  logRef: MutableRefObject<HTMLDivElement | null>;
+  activeConversationKey: string;
+  onNavigate: (message: ChatMessage, messageIndex: number) => void;
+  t: TranslateFn;
+}) {
+  const userMessages = useMemo<ChatRailMessage[]>(
+    () =>
+      messages.reduce<ChatRailMessage[]>((items, message, messageIndex) => {
+        if (message.role !== 'user') return items;
+        items.push({
+          message,
+          messageIndex,
+          userIndex: items.length,
+        });
+        return items;
+      }, []),
+    [messages],
+  );
+  const [preview, setPreview] = useState<{ id: string; y: number } | null>(null);
+  const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
+  // Picking a message retracts the module until the pointer leaves it, so the
+  // jump lands without the rail lingering over the destination.
+  const [retracted, setRetracted] = useState(false);
+  const navRef = useRef<HTMLElement | null>(null);
+  const trackRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setPreview(null);
+    setRetracted(false);
+    setActiveMessageId(userMessages[0]?.message.id ?? null);
+  }, [activeConversationKey, userMessages]);
+
+  // Roll the wheel: keep the active dot at the vertical middle of the track
+  // viewport, so the dot column scrolls under the top/bottom fade masks as
+  // the chat scrolls. The browser clamps the target at both extremes.
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track || !activeMessageId) return;
+    // While the pointer is on the rail the user may be wheel-scrolling it
+    // manually; auto-follow would yank their position, so it yields until
+    // the pointer leaves.
+    if (navRef.current?.matches(':hover')) return;
+    const index = userMessages.findIndex(
+      (item) => item.message.id === activeMessageId,
+    );
+    if (index < 0) return;
+    // Marker pitch is 11px (8px marker + 3px gap); +4 targets the dot center.
+    const top = index * 11 + 4 - track.clientHeight / 2;
+    if (typeof track.scrollTo === 'function') {
+      track.scrollTo({ top, behavior: 'smooth' });
+    } else {
+      track.scrollTop = top;
+    }
+  }, [activeMessageId, userMessages]);
+
+  // The track scrolls, so the preview anchor is measured from the marker's
+  // on-screen position at hover time instead of derived from its index.
+  const showPreview = (id: string, marker: HTMLElement) => {
+    if (retracted) return;
+    const nav = navRef.current;
+    const y = nav
+      ? marker.getBoundingClientRect().top - nav.getBoundingClientRect().top + 4
+      : 0;
+    setPreview({ id, y });
+  };
+
+  useEffect(() => {
+    const log = logRef.current;
+    if (!log || userMessages.length < CHAT_RAIL_MIN_USER_MESSAGES) return;
+    let frame = 0;
+    const updateActiveMessage = () => {
+      frame = 0;
+      const visible = userMessages
+        .map((item) => {
+          const node = findChatMessageElement(log, item.message.id);
+          if (!node) return null;
+          return {
+            id: item.message.id,
+            distance: Math.abs(node.offsetTop - log.scrollTop),
+          };
+        })
+        .filter((item): item is { id: string; distance: number } => item != null)
+        .sort((a, b) => a.distance - b.distance)[0];
+
+      if (visible) {
+        setActiveMessageId(visible.id);
+        return;
+      }
+
+      const maxScrollTop = Math.max(1, log.scrollHeight - log.clientHeight);
+      const index = Math.round(
+        (log.scrollTop / maxScrollTop) * (userMessages.length - 1),
+      );
+      const boundedIndex = Math.min(
+        userMessages.length - 1,
+        Math.max(0, index),
+      );
+      setActiveMessageId(userMessages[boundedIndex]?.message.id ?? null);
+    };
+    const scheduleUpdate = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(updateActiveMessage);
+    };
+    scheduleUpdate();
+    log.addEventListener('scroll', scheduleUpdate, { passive: true });
+    return () => {
+      log.removeEventListener('scroll', scheduleUpdate);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [logRef, userMessages]);
+
+  if (loading || userMessages.length < CHAT_RAIL_MIN_USER_MESSAGES) {
+    return null;
+  }
+
+  const previewItem =
+    userMessages.find((item) => item.message.id === preview?.id) ?? null;
+  const hoverIndex =
+    !retracted && preview
+      ? userMessages.findIndex((item) => item.message.id === preview.id)
+      : -1;
+
+  return (
+    <nav
+      ref={navRef}
+      className={`chat-message-rail${retracted ? ' is-retracted' : ''}`}
+      aria-label={t('chat.messageRail.aria')}
+      onMouseLeave={() => {
+        setPreview(null);
+        setRetracted(false);
+      }}
+      onWheel={(ev) => {
+        // The nav is a full-height hit zone; wheeling over its empty parts
+        // (outside the track, which scrolls natively) still rolls the wheel.
+        const track = trackRef.current;
+        if (!track || track.contains(ev.target as Node)) return;
+        track.scrollTop += ev.deltaY;
+      }}
+      data-wheel={userMessages.length > CHAT_RAIL_WHEEL_MIN_USER_MESSAGES ? 'true' : 'false'}
+      data-testid="chat-message-rail"
+    >
+      <div className="chat-message-rail__track" ref={trackRef}>
+        {userMessages.map((item) => {
+          const active = item.message.id === activeMessageId;
+          const previewing = item.message.id === preview?.id;
+          return (
+            <button
+              key={item.message.id}
+              type="button"
+              className={[
+                'chat-message-rail__marker',
+                active ? 'is-active' : '',
+                previewing ? 'is-previewing' : '',
+              ].filter(Boolean).join(' ')}
+              aria-label={t('chat.messageRail.jumpAria', {
+                index: item.userIndex + 1,
+              })}
+              style={{
+                '--chat-rail-dash': `${
+                  hoverIndex < 0
+                    ? CHAT_RAIL_DASH_BASE_PX
+                    : chatRailDashWidth(Math.abs(item.userIndex - hoverIndex))
+                }px`,
+              } as CSSProperties}
+              onMouseEnter={(ev) => showPreview(item.message.id, ev.currentTarget)}
+              onFocus={(ev) => showPreview(item.message.id, ev.currentTarget)}
+              onBlur={() => setPreview(null)}
+              onClick={() => {
+                setPreview(null);
+                setRetracted(true);
+                onNavigate(item.message, item.messageIndex);
+              }}
+            >
+              <span aria-hidden />
+            </button>
+          );
+        })}
+      </div>
+      {/* Sibling of the track, not a child: the track fades its extremes with
+          a mask, which must not wash out the hover preview card. */}
+      {previewItem && preview ? (
+        <div
+          className="chat-message-rail__preview"
+          style={{
+            '--chat-message-rail-y': `${preview.y}px`,
+          } as CSSProperties}
+          role="tooltip"
+        >
+          <p>
+            {previewItem.message.content.trim() || t('chat.messageRail.empty')}
+          </p>
+        </div>
+      ) : null}
+    </nav>
+  );
+}
+
+function findChatMessageElement(
+  log: HTMLElement,
+  messageId: string,
+): HTMLElement | null {
+  const nodes = log.querySelectorAll<HTMLElement>('[data-chat-message-id]');
+  for (const node of nodes) {
+    if (node.dataset.chatMessageId === messageId) return node;
+  }
+  return null;
+}
+
+function scrollChatLogToMessage(
+  log: HTMLElement,
+  messages: ChatMessage[],
+  messageId: string,
+  messageIndex: number,
+) {
+  const target = findChatMessageElement(log, messageId);
+  if (target) {
+    target.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    return;
+  }
+
+  const maxScrollTop = Math.max(0, log.scrollHeight - log.clientHeight);
+  const ratio =
+    messages.length <= 1
+      ? 0
+      : Math.min(1, Math.max(0, messageIndex / (messages.length - 1)));
+  log.scrollTo({ top: maxScrollTop * ratio, behavior: 'smooth' });
+  window.requestAnimationFrame(() => {
+    findChatMessageElement(log, messageId)?.scrollIntoView?.({
+      block: 'center',
+      behavior: 'smooth',
+    });
+  });
+}
+
 type ChatRenderItem = {
   kind: 'message';
   key: string;
   message: ChatMessage;
 };
+
+type AppliedContextItem =
+  | { kind: 'plugin'; title: string; pluginId: string }
+  | { kind: 'skill'; title: string }
+  | { kind: 'design-system'; title: string; system?: DesignSystemSummary };
 
 function ChatConversationLoading({ t }: { t: TranslateFn }) {
   return (
@@ -2813,14 +3492,12 @@ function ChatRows({
   shareToOpenDesignBusyMessageId,
   forceStreamingMessageIds,
   lastAssistantId,
-  firstUserMessageId,
   activePluginSnapshot,
   activeDesignSystem,
   hasActiveDesignSystem,
   errorCardOwnerId,
   nextUserContentByAssistantId,
   assistantCallbacksRef,
-  onContinueRemainingTasks,
   onBrandBrowserAssistConfirm,
   onArtifactShare,
   onToolboxAction,
@@ -2844,8 +3521,10 @@ function ChatRows({
   onAssistantFeedback,
   forkingMessageId,
   t,
-  onOpenQuestions,
+  onSubmitQuestionForm,
+  questionFormSubmitDisabled,
   scrollContainerRef,
+  highlightedUserMessageId,
 }: {
   messages: ChatMessage[];
   streaming: boolean;
@@ -2870,14 +3549,12 @@ function ChatRows({
   shareToOpenDesignBusyMessageId?: string | null;
   forceStreamingMessageIds?: Set<string>;
   lastAssistantId: string | undefined;
-  firstUserMessageId: string | undefined;
   activePluginSnapshot?: AppliedPluginSnapshot | null;
   activeDesignSystem?: DesignSystemSummary | null;
   hasActiveDesignSystem: boolean;
   errorCardOwnerId: string | null;
   nextUserContentByAssistantId: Map<string, string>;
   assistantCallbacksRef: MutableRefObject<AssistantCallbacks>;
-  onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
   onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
   onArtifactShare?: (fileName: string) => void;
   onToolboxAction?: (id: DesignToolboxActionId) => void;
@@ -2904,21 +3581,86 @@ function ChatRows({
   onAssistantFeedback?: (message: ChatMessage, change: ChatMessageFeedbackChange) => void;
   forkingMessageId?: string | null;
   t: TranslateFn;
-  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
+  onSubmitQuestionForm?: QuestionFormSubmitHandler;
+  questionFormSubmitDisabled: boolean;
   scrollContainerRef: MutableRefObject<HTMLDivElement | null>;
+  highlightedUserMessageId?: string | null;
 }) {
-  const conversationTodoInput = useMemo(
-    () => latestTodoWriteInputForPinnedCard(messages),
-    [messages],
-  );
-  const conversationTodoAnchorMessageId = useMemo(
-    () => firstTodoWriteAssistantMessageId(messages),
-    [messages],
-  );
   const items = useMemo(
     () => buildChatRenderItems(messages),
     [messages],
   );
+  const appliedContextByMessageId = useMemo(() => {
+    const skillNames = new Map(
+      (nextStepSkills ?? []).map((skill) => [skill.id, skill.name || skill.id]),
+    );
+    const byMessageId = new Map<string, AppliedContextItem[]>();
+    let previousSignature = '';
+
+    for (const message of messages) {
+      if (message.role !== 'user') continue;
+      const pluginSnapshot = message.appliedPluginSnapshot ?? activePluginSnapshot ?? null;
+      const contextItems: AppliedContextItem[] = [];
+
+      // A strategy package is daemon-applied plumbing, never a plugin the
+      // user chose, so it stays out of the applied-context line in both the
+      // snapshot and the raw-id form.
+      if (pluginSnapshot && !isInternalStrategySnapshot(pluginSnapshot)) {
+        contextItems.push({
+          kind: 'plugin',
+          title: pluginSnapshot.pluginTitle ?? pluginSnapshot.pluginId,
+          pluginId: pluginSnapshot.pluginId,
+        });
+      }
+      for (const pluginId of message.runContext?.pluginIds ?? []) {
+        if (pluginSnapshot?.pluginId === pluginId) continue;
+        if (pluginId === OD_NEXT_STRATEGY_ID) continue;
+        contextItems.push({ kind: 'plugin', title: pluginId, pluginId });
+      }
+      for (const skillId of message.runContext?.skillIds ?? []) {
+        contextItems.push({ kind: 'skill', title: skillNames.get(skillId) ?? skillId });
+      }
+      if (activeDesignSystem) {
+        contextItems.push({
+          kind: 'design-system',
+          title: activeDesignSystem.title,
+          system: activeDesignSystem,
+        });
+      }
+      for (const item of message.runContext?.workspaceItems ?? []) {
+        if (item.kind !== 'design-system') continue;
+        if (contextItems.some((candidate) => candidate.kind === 'design-system' && candidate.title === item.label)) {
+          continue;
+        }
+        contextItems.push({ kind: 'design-system', title: item.label });
+      }
+
+      const deduped = contextItems.filter((item, index, all) =>
+        all.findIndex((candidate) => candidate.kind === item.kind && candidate.title === item.title) === index,
+      );
+      const signature = deduped.map((item) => `${item.kind}:${item.title}`).join('|');
+      if (signature && signature !== previousSignature) {
+        byMessageId.set(message.id, deduped);
+      }
+      previousSignature = signature;
+    }
+    return byMessageId;
+  }, [activeDesignSystem, activePluginSnapshot, messages, nextStepSkills]);
+  const assistantRoleByMessageId = useMemo(() => {
+    const byMessageId = new Map<string, boolean>();
+    let previousAssistantIdentity: string | null = null;
+
+    for (const message of messages) {
+      if (message.role !== 'assistant') {
+        previousAssistantIdentity = null;
+        continue;
+      }
+      const identity = message.agentId ?? message.agentName ?? 'assistant';
+      byMessageId.set(message.id, identity !== previousAssistantIdentity);
+      previousAssistantIdentity = identity;
+    }
+    return byMessageId;
+  }, [messages]);
   const virtualized = items.length > CHAT_MESSAGE_VIRTUALIZE_THRESHOLD;
   const virtualWindow = useMeasuredVirtualWindow(items, {
     enabled: virtualized,
@@ -2927,10 +3669,6 @@ function ChatRows({
     overscanPx: CHAT_MESSAGE_OVERSCAN_PX,
     resetKey: activeConversationKey,
     initialTailRows: CHAT_VIRTUAL_INITIAL_TAIL_ROWS,
-    alwaysIncludeKey:
-      conversationTodoInput != null && conversationTodoAnchorMessageId
-        ? `message:${conversationTodoAnchorMessageId}`
-        : undefined,
   });
 
   const renderItem = (item: ChatRenderItem) => {
@@ -2951,16 +3689,9 @@ function ChatRows({
           onRequestPluginDetails={onRequestPluginDetails}
           onRequestDesignSystemDetails={onRequestDesignSystemDetails}
           t={t}
-          activePluginSnapshot={
-            m.id === firstUserMessageId
-              ? activePluginSnapshot ?? null
-              : null
-          }
-          activeDesignSystem={
-            m.id === firstUserMessageId
-              ? activeDesignSystem ?? null
-              : null
-          }
+          appliedContextItems={appliedContextByMessageId.get(m.id) ?? []}
+          showSessionModeChip={shouldShowSessionModeChip(m.sessionMode)}
+          highlighted={highlightedUserMessageId === m.id}
         />
       );
     }
@@ -2972,8 +3703,6 @@ function ChatRows({
         // get a stable `undefined`, so adding `liveToolInput` to the memo
         // comparator re-renders just this row per `tool_input_delta`, not all N.
         liveToolInput={messageStreaming ? liveToolInput : undefined}
-        showConversationTodoCard={m.id === conversationTodoAnchorMessageId}
-        conversationTodoInput={conversationTodoInput}
         projectId={projectId}
         projectKind={projectKindForTracking}
         conversationId={activeConversationId}
@@ -2991,20 +3720,28 @@ function ChatRows({
             : undefined
         }
         shareToOpenDesignBusy={shareToOpenDesignBusyMessageId === m.id}
+        showRole={assistantRoleByMessageId.get(m.id) ?? true}
         isLast={m.id === lastAssistantId}
         errorCardOwnerId={errorCardOwnerId}
         nextUserContent={nextUserContentByAssistantId.get(m.id)}
         suppressDirectionForms={hasActiveDesignSystem}
         hasDesignSystemContext={hasActiveDesignSystem || !!activeDesignSystem}
-        onOpenQuestions={onOpenQuestions}
+        onSubmitQuestionForm={
+          onSubmitQuestionForm
+            ? (text, attachments, context, _sourceAssistantMessageId, formId) =>
+                assistantCallbacksRef.current.onSubmitQuestionForm?.(
+                  text,
+                  attachments,
+                  context,
+                  m.id,
+                  formId,
+                )
+            : undefined
+        }
+        questionFormSubmitDisabled={questionFormSubmitDisabled}
         onBrandBrowserAssistConfirm={
           onBrandBrowserAssistConfirm
             ? (card) => assistantCallbacksRef.current.onBrandBrowserAssistConfirm?.(card)
-            : undefined
-        }
-        onContinueRemainingTasks={
-          m.id === lastAssistantId && onContinueRemainingTasks
-            ? (todos) => assistantCallbacksRef.current.onContinueRemainingTasks?.(m, todos)
             : undefined
         }
         onForkFromMessage={
@@ -3138,6 +3875,12 @@ function buildChatRenderItems(messages: ChatMessage[]): ChatRenderItem[] {
   const items: ChatRenderItem[] = [];
   for (let i = 0; i < messages.length; i += 1) {
     const message = messages[i]!;
+    // Structured form answers are rendered as a compact summary on the
+    // preceding assistant message. Keeping the raw machine payload in a
+    // separate user bubble duplicates the same decision and exposes stable IDs.
+    if (message.role === 'user' && /^\[form answers\b/i.test(message.content.trim())) {
+      continue;
+    }
     items.push({
       kind: 'message',
       key: `message:${message.id}`,
@@ -3145,17 +3888,6 @@ function buildChatRenderItems(messages: ChatMessage[]): ChatRenderItem[] {
     });
   }
   return items;
-}
-
-function firstTodoWriteAssistantMessageId(messages: ChatMessage[]): string | null {
-  const message = messages.find(
-    (candidate) =>
-      candidate.role === 'assistant' &&
-      candidate.events?.some(
-        (event) => event.kind === 'tool_use' && isTodoWriteToolName(event.name),
-      ),
-  );
-  return message?.id ?? null;
 }
 
 function estimateChatRenderItemHeight(item: ChatRenderItem): number {
@@ -3332,6 +4064,105 @@ function includeVirtualRowByKey<T extends { key: string }>(
       top: offsets[index] ?? 0,
     },
   ].sort((a, b) => a.index - b.index);
+}
+
+function PinnedTodoSlot({
+  messages,
+  streaming,
+  conversationId,
+  onContinueRemainingTasks,
+  containerRef,
+}: {
+  messages: ChatMessage[];
+  streaming: boolean;
+  conversationId: string | null;
+  onContinueRemainingTasks?: (
+    assistantMessage: ChatMessage,
+    todos: TodoItem[],
+  ) => boolean | void | Promise<boolean | void>;
+  containerRef?: MutableRefObject<HTMLDivElement | null>;
+}) {
+  const storageKey = `od:chat:continued-todo:${conversationId ?? 'none'}`;
+  const [dismissal, setDismissal] = useState(() => ({
+    storageKey,
+    snapshotKey: readContinuedTodoSnapshotKey(storageKey),
+  }));
+  useEffect(() => {
+    setDismissal({
+      storageKey,
+      snapshotKey: readContinuedTodoSnapshotKey(storageKey),
+    });
+  }, [storageKey]);
+  const dismissedSnapshotKey =
+    dismissal.storageKey === storageKey ? dismissal.snapshotKey : null;
+  const input = latestTodoWriteInputForPinnedCard(messages);
+  if (input == null) return null;
+
+  const owner = [...messages].reverse().find(
+    (message) =>
+      message.role === 'assistant' &&
+      message.events?.some(
+        (event) => event.kind === 'tool_use' && isTodoWriteToolName(event.name),
+      ),
+  );
+  const ownerTodoEvent = owner?.events
+    ? [...owner.events].reverse().find(
+        (event) => event.kind === 'tool_use' && isTodoWriteToolName(event.name),
+      )
+    : undefined;
+  const snapshotKey =
+    owner &&
+    ownerTodoEvent &&
+    'id' in ownerTodoEvent &&
+    typeof ownerTodoEvent.id === 'string'
+      ? `${owner.id}:${ownerTodoEvent.id}`
+      : null;
+  if (snapshotKey != null && snapshotKey === dismissedSnapshotKey) return null;
+  const unfinishedTodos = continuableUnfinishedTodos(owner);
+
+  return (
+    <div
+      className="chat-pinned-todo"
+      ref={containerRef}
+    >
+      <TodoCard
+        input={input}
+        runStreaming={streaming}
+        runSucceeded={!streaming}
+        onContinue={
+          owner && snapshotKey && unfinishedTodos.length > 0 && onContinueRemainingTasks
+            ? () => {
+                void Promise.resolve(onContinueRemainingTasks(owner, unfinishedTodos))
+                  .then((accepted) => {
+                    if (accepted === false) return;
+                    setDismissal({ storageKey, snapshotKey });
+                    writeContinuedTodoSnapshotKey(storageKey, snapshotKey);
+                  })
+                  .catch(() => {});
+              }
+            : undefined
+        }
+      />
+    </div>
+  );
+}
+
+function readContinuedTodoSnapshotKey(storageKey: string): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.sessionStorage.getItem(storageKey);
+  } catch {
+    return null;
+  }
+}
+
+function writeContinuedTodoSnapshotKey(storageKey: string, snapshotKey: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(storageKey, snapshotKey);
+  } catch {
+    // sessionStorage may be unavailable in sandboxed or privacy-restricted contexts.
+  }
 }
 
 function QueuedSendStrip({
@@ -3731,6 +4562,31 @@ export function retryableAssistantMessage(
   return isRetryableAssistantTerminalFailure(last) ? last : null;
 }
 
+function isRecoveredAssistantRunError(
+  messages: ChatMessage[],
+  error: string | null,
+  sourceAssistantId: string | null | undefined,
+): boolean {
+  const target = error?.trim();
+  if (!target || !sourceAssistantId) return false;
+  const sourceIndex = messages.findIndex(
+    (message) =>
+      message.role === 'assistant' && message.id === sourceAssistantId,
+  );
+  if (sourceIndex < 0) return false;
+  const source = messages[sourceIndex]!;
+  const ownsPersistedError = (source.events ?? []).some(
+    (event) =>
+      event.kind === 'status' &&
+      event.label === 'error' &&
+      event.detail?.trim() === target,
+  );
+  if (!ownsPersistedError) return false;
+  return messages.slice(sourceIndex + 1).some(
+    (message) => message.role === 'assistant' && message.runStatus === 'succeeded',
+  );
+}
+
 export function isAssistantMessageStreaming(
   message: ChatMessage,
   paneStreaming: boolean,
@@ -3738,12 +4594,12 @@ export function isAssistantMessageStreaming(
   forceStreamingMessageIds?: Set<string>,
 ): boolean {
   if (message.role !== 'assistant') return false;
+  if (isTerminalRunStatus(message.runStatus)) return false;
   if (forceStreamingMessageIds?.has(message.id)) return true;
   if (isActiveRunStatus(message.runStatus)) return true;
   if (message.id !== lastAssistantId) return false;
   if (!paneStreaming) return false;
   if (message.endedAt !== undefined) return false;
-  if (isTerminalRunStatus(message.runStatus)) return false;
   return true;
 }
 
@@ -3755,7 +4611,7 @@ export function buildRunErrorDiagnosticText(input: RunErrorDiagnosticInput): str
   }
 
   lines.push(
-    'Open Design run error diagnostics',
+    'OpenDesign run error diagnostics',
     `trace_id: ${input.traceId ?? 'n/a'}`,
     `run_id: ${input.traceId ?? 'n/a'}`,
     `error_code: ${input.errorCode ?? 'n/a'}`,
@@ -3881,8 +4737,9 @@ function UserMessageImpl({
   onRequestPluginDetails,
   onRequestDesignSystemDetails,
   t,
-  activePluginSnapshot,
-  activeDesignSystem,
+  appliedContextItems,
+  showSessionModeChip,
+  highlighted,
 }: {
   message: ChatMessage;
   projectId: string | null;
@@ -3891,18 +4748,19 @@ function UserMessageImpl({
   onRequestPluginDetails?: (pluginId: string) => void;
   onRequestDesignSystemDetails?: (system: DesignSystemSummary) => void;
   t: TranslateFn;
-  activePluginSnapshot?: AppliedPluginSnapshot | null;
-  activeDesignSystem?: DesignSystemSummary | null;
+  appliedContextItems: AppliedContextItem[];
+  showSessionModeChip: boolean;
+  highlighted?: boolean;
 }) {
+  const { workspaceContext } = useProjectCollabContext();
   const attachments = sortChatAttachmentsForDisplay(message.attachments ?? []);
   const commentAttachments = message.commentAttachments ?? [];
   const workspaceItems = message.runContext?.workspaceItems ?? [];
-  const messagePluginSnapshot = message.appliedPluginSnapshot ?? activePluginSnapshot ?? null;
+  const visibleWorkspaceItems = workspaceItems.filter((item) => item.kind !== 'design-system');
   const hasRunContext = Boolean(
-    message.sessionMode ||
-      workspaceItems.length > 0 ||
-      messagePluginSnapshot ||
-      activeDesignSystem,
+    showSessionModeChip ||
+      visibleWorkspaceItems.length > 0 ||
+      appliedContextItems.length > 0,
   );
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -3928,31 +4786,29 @@ function UserMessageImpl({
   const isDesignSystemWorkspaceRequest = isDesignSystemWorkspacePrompt(message.content);
 
   return (
-    <div className="msg user">
+    <div
+      className={`msg user${highlighted ? ' is-chat-rail-highlighted' : ''}`}
+      data-chat-message-id={message.id}
+    >
       <span className="sr-only">{t('chat.you')}</span>
       {hasRunContext ? (
         <div className="msg-run-context-row" data-testid="msg-run-context-row">
-          {message.sessionMode ? (
+          {showSessionModeChip && message.sessionMode ? (
             <MessageSessionModeChip mode={message.sessionMode} t={t} />
           ) : null}
-          {workspaceItems.map((item) => (
+          {visibleWorkspaceItems.map((item) => (
             <ActiveWorkspaceContextChip
               key={`${item.kind}:${item.id}`}
               item={item}
               onOpen={onRequestOpenFile}
             />
           ))}
-          {messagePluginSnapshot ? (
-            <ActivePluginChip
-              snapshot={messagePluginSnapshot}
+          {appliedContextItems.length > 0 ? (
+            <AppliedContextDisclosure
+              items={appliedContextItems}
               t={t}
-              onOpenDetails={onRequestPluginDetails}
-            />
-          ) : null}
-          {activeDesignSystem ? (
-            <ActiveDesignSystemChip
-              system={activeDesignSystem}
-              onOpenDetails={onRequestDesignSystemDetails}
+              onOpenPlugin={onRequestPluginDetails}
+              onOpenDesignSystem={onRequestDesignSystemDetails}
             />
           ) : null}
         </div>
@@ -3980,7 +4836,10 @@ function UserMessageImpl({
                   {index + 1}
                 </span>
                 {a.kind === 'image' && projectId ? (
-                  <img src={projectRawUrl(projectId, a.path)} alt={a.name} />
+                  <img
+                    src={projectRawUrl(projectId, a.path, workspaceContext)}
+                    alt={a.name}
+                  />
                 ) : (
                   <Icon name="file" size={14} />
                 )}
@@ -4034,58 +4893,83 @@ function UserMessageImpl({
   );
 }
 
-// Context chip rendered above a user message when the project pinned a
-// plugin at create time (PluginLoopHome on Home). Replaces the noisy
-// in-composer plugin rail so the user is not re-prompted to pick
-// something they already chose; instead the active plugin lives inside
-// the run message it kicked off.
-function ActivePluginChip({
-  snapshot,
-  t: _t,
-  onOpenDetails,
+// Plugin, skill and design-system inputs are supporting context, not separate
+// cards. Collapse them into one line and only render that line when the
+// selection changes (the caller performs the conversation-level dedupe).
+function AppliedContextDisclosure({
+  items,
+  t,
+  onOpenPlugin,
+  onOpenDesignSystem,
 }: {
-  snapshot: AppliedPluginSnapshot;
+  items: AppliedContextItem[];
   t: TranslateFn;
-  onOpenDetails?: (pluginId: string) => void;
+  onOpenPlugin?: (pluginId: string) => void;
+  onOpenDesignSystem?: (system: DesignSystemSummary) => void;
 }) {
-  const title = snapshot.pluginTitle ?? snapshot.pluginId;
-  const version = snapshot.pluginVersion;
-  const taskKind = snapshot.taskKind;
-  const content = (
-    <>
-      <span className="msg-plugin-chip__dot" aria-hidden />
-      <span className="msg-plugin-chip__label">
-        <span className="msg-plugin-chip__kind">Plugin</span>
-        <span className="msg-plugin-chip__title">{title}</span>
-        {version ? (
-          <span className="msg-plugin-chip__version">@{version}</span>
-        ) : null}
-      </span>
-      {taskKind ? (
-        <span className="msg-plugin-chip__task">{taskKind}</span>
-      ) : null}
-    </>
-  );
-  // One clean chip per message — the plugin's full resolved context still
-  // rides the run via the persisted snapshot; we no longer fan it out into
-  // per-category (design-system / asset / skill) chips here.
+  const [open, setOpen] = useState(false);
+  const names = items.map((item) => item.title).join(' · ');
+  const summary = t('brand.appliedToChat', { name: names });
   return (
-    <div className="msg-plugin-context" data-testid="msg-plugin-context">
-      {onOpenDetails ? (
-        <button
-          type="button"
-          className="msg-plugin-chip msg-plugin-chip--action"
-          data-testid="msg-plugin-chip"
-          title={title}
-          onClick={() => onOpenDetails(snapshot.pluginId)}
-        >
-          {content}
-        </button>
-      ) : (
-        <div className="msg-plugin-chip" data-testid="msg-plugin-chip">
-          {content}
+    <div className="msg-applied-context" data-testid="msg-applied-context">
+      <button
+        type="button"
+        className="msg-applied-context__toggle"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        title={summary}
+      >
+        <span className="msg-applied-context__icon" aria-hidden>
+          <Icon name="blocks" size={11} />
+        </span>
+        <span className="msg-applied-context__summary">{summary}</span>
+        <span className={`msg-applied-context__chevron${open ? ' is-open' : ''}`} aria-hidden>
+          <Icon name="chevron-down" size={11} />
+        </span>
+      </button>
+      <div className={`accordion-collapsible${open ? ' open' : ''}`}>
+        <div className="accordion-collapsible-inner">
+          <div className="msg-applied-context__details">
+            {items.map((item, index) => {
+              const label = item.kind === 'plugin'
+                ? 'Plugin'
+                : item.kind === 'skill'
+                  ? 'Skill'
+                  : 'Design System';
+              const canOpenPlugin = item.kind === 'plugin' && !!onOpenPlugin;
+              const canOpenSystem = item.kind === 'design-system' && !!item.system && !!onOpenDesignSystem;
+              const content = (
+                <>
+                  <span className="msg-applied-context__kind">{label}</span>
+                  <span>{item.title}</span>
+                </>
+              );
+              return canOpenPlugin || canOpenSystem ? (
+                <button
+                  key={`${item.kind}:${item.title}:${index}`}
+                  type="button"
+                  className="msg-applied-context__item is-action"
+                  onClick={() => {
+                    if (item.kind === 'plugin') onOpenPlugin?.(item.pluginId);
+                    if (item.kind === 'design-system' && item.system) {
+                      onOpenDesignSystem?.(item.system);
+                    }
+                  }}
+                >
+                  {content}
+                </button>
+              ) : (
+                <span
+                  key={`${item.kind}:${item.title}:${index}`}
+                  className="msg-applied-context__item"
+                >
+                  {content}
+                </span>
+              );
+            })}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -4112,45 +4996,6 @@ function MessageSessionModeChip({
       <Icon name={icon} size={12} />
       <span>{label}</span>
     </div>
-  );
-}
-
-function ActiveDesignSystemChip({
-  system,
-  onOpenDetails,
-}: {
-  system: DesignSystemSummary;
-  onOpenDetails?: (system: DesignSystemSummary) => void;
-}) {
-  const content = (
-    <>
-      <span className="msg-plugin-chip__dot" aria-hidden />
-      <span className="msg-plugin-chip__label">
-        <span className="msg-plugin-chip__kind">Design System</span>
-        <span className="msg-plugin-chip__title">{system.title}</span>
-      </span>
-      {system.category ? (
-        <span className="msg-plugin-chip__task">{system.category}</span>
-      ) : null}
-    </>
-  );
-  if (!onOpenDetails) {
-    return (
-      <div className="msg-plugin-chip msg-plugin-chip--design-system" data-testid="msg-design-system-chip">
-        {content}
-      </div>
-    );
-  }
-  return (
-    <button
-      type="button"
-      className="msg-plugin-chip msg-plugin-chip--design-system msg-plugin-chip--action"
-      data-testid="msg-design-system-chip"
-      title={system.title}
-      onClick={() => onOpenDetails(system)}
-    >
-      {content}
-    </button>
   );
 }
 

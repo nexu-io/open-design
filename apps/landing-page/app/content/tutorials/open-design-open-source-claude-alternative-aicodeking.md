@@ -1,7 +1,7 @@
 ---
-title: 'Open Design for Teams — Versioned Skills, Your Own Brand System, and Anti-Slop Guardrails'
+title: 'OpenDesign for Teams — Versioned Skills, Your Own Brand System, and Anti-Slop Guardrails'
 youtubeId: w2_ZwhzB1g4
-summary: How to use Open Design as a real, versionable design workflow for a team — build your own skills and brand DESIGN.md, lean on the anti-slop critique gate, and keep expectations honest about production use. Based on AICodeKing's analysis.
+summary: How to use OpenDesign as a real, versionable design workflow for a team — build your own skills and brand DESIGN.md, lean on the anti-slop critique gate, and keep expectations honest about production use. Based on AICodeKing's analysis.
 date: 2026-04-29
 category: Demo
 durationSeconds: 744
@@ -9,14 +9,14 @@ author: 'AICodeKing'
 official: false
 ---
 
-This guide is about using Open Design as a **real, versionable design workflow** — not just a one-off prototype generator. The combination that makes it interesting for a team: your existing agent, file-based skills, and brand `DESIGN.md` systems, with anti-slop guardrails to keep the output from looking generated. It follows the analysis **AICodeKing** gives in [his video](https://www.youtube.com/watch?v=w2_ZwhzB1g4), rewritten and brought up to date with the current release. Watch the video above for the full breakdown, or read on for the written version.
+This guide is about using OpenDesign as a **real, versionable design workflow** — not just a one-off prototype generator. The combination that makes it interesting for a team: your existing agent, file-based skills, and brand `DESIGN.md` systems, with anti-slop guardrails to keep the output from looking generated. It follows the analysis **AICodeKing** gives in [his video](https://www.youtube.com/watch?v=w2_ZwhzB1g4), rewritten and brought up to date with the current release. Watch the video above for the full breakdown, or read on for the written version.
 
-![The Open Design plugin library, with installable skills.](/tutorials/open-design-open-source-claude-alternative-aicodeking/plugin-library.webp)
+![The OpenDesign plugin library, with installable skills.](/tutorials/open-design-open-source-claude-alternative-aicodeking/plugin-library.webp)
 *The plugin library: install skills straight from the registry — including anti-slop design skills.*
 
-## What is Open Design?
+## What is OpenDesign?
 
-Open Design is a local-first, open-source design app that connects to the coding agent you already use. Instead of shipping its own model, it detects tools like Claude Code, Codex, Cursor, Gemini, OpenCode, and Qwen Code from your path and uses that agent as the design engine — with an Anthropic API (BYOK) fallback if none are installed. It's Apache-2.0, and the only cost is whatever model you choose. As AICodeKing puts it, it's "a design shell around the agents you already have."
+OpenDesign is a local-first, open-source design app that connects to the coding agent you already use. Instead of shipping its own model, it detects tools like Claude Code, Codex, Cursor, OpenCode, and Qwen Code from your path and uses that agent as the design engine — with configured BYOK providers routed through an isolated OpenCode adapter when no local CLI is selected. It's Apache-2.0, and the only cost is whatever model you choose. As AICodeKing puts it, it's "a design shell around the agents you already have."
 
 ## Why it's a team workflow, not just a chat box
 
@@ -28,12 +28,12 @@ The reason AICodeKing rates it: it isn't a blank prompt box with a preview. The 
 
 Because skills and design systems are files, a team can **create its own internal dashboard skill and its own brand `DESIGN.md`, commit them to git, and have Claude Code, Codex, or any agent generate artifacts that follow those rules.** That's a versioned, forkable, reviewable design workflow — something a locked-down design chat box can't offer.
 
-![The Open Design plugins hub.](/tutorials/open-design-open-source-claude-alternative-aicodeking/plugins-hub.webp)
+![The OpenDesign plugins hub.](/tutorials/open-design-open-source-claude-alternative-aicodeking/plugins-hub.webp)
 *The plugins hub: browse the registry, import plugins, and prepare them for your team.*
 
 ## The anti-slop machinery
 
-AICodeKing's favourite part, and the reason team output stays presentable: Open Design fights the tells of AI-generated UI. The prompt stack runs a **multi-dimensional critique before emitting an artifact** (design philosophy, hierarchy, execution, specificity, restraint), each skill can ship a **P0/P1/P2 checklist** the agent must satisfy, and the repo explicitly bans the usual failure modes — aggressive purple gradients, generic emoji icons, random rounded cards with left-border accents, fake metrics, decorative filler. Paired with the **discovery form** (it asks about surface, audience, tone, brand, scale before writing) and the **direction picker** (curated visual directions with deterministic palettes), the agent has a stable source of truth instead of drifting on every refinement.
+AICodeKing's favourite part, and the reason team output stays presentable: OpenDesign fights the tells of AI-generated UI. The prompt stack runs a **multi-dimensional critique before emitting an artifact** (design philosophy, hierarchy, execution, specificity, restraint), each skill can ship a **P0/P1/P2 checklist** the agent must satisfy, and the repo explicitly bans the usual failure modes — aggressive purple gradients, generic emoji icons, random rounded cards with left-border accents, fake metrics, decorative filler. Paired with the **discovery form** (it asks about surface, audience, tone, brand, scale before writing) and the **direction picker** (curated visual directions with deterministic palettes), the agent has a stable source of truth instead of drifting on every refinement.
 
 ## Install
 
@@ -50,7 +50,7 @@ Open the local URL it prints (a dynamic port — don't hardcode one). Prefer no 
 
 AICodeKing's suggested flow maps cleanly to real work: pick **Codex or Claude Code** as the agent, choose a **skill** (SaaS landing or dashboard), and a **design system** (e.g. Linear or Stripe — easy to judge). Prompt something concrete like a landing page for an internal product, fill in the discovery form, pick a direction, and let it run. The plan streams in, the agent reads the skill and the `DESIGN.md`, and writes real files.
 
-![The HyperFrames motion and video gallery in Open Design.](/tutorials/open-design-open-source-claude-alternative-aicodeking/motion-gallery.webp)
+![The HyperFrames motion and video gallery in OpenDesign.](/tutorials/open-design-open-source-claude-alternative-aicodeking/motion-gallery.webp)
 *The HyperFrames gallery: code-driven motion and video pieces you can fork and remix.*
 
 Outputs render in a sandboxed preview and export to HTML, PDF, ZIP, and Markdown (PPTX-style for deck skills). Because the design system and skill stay in the prompt stack, refinements don't drift — the agent keeps a stable reference instead of reinventing the look each turn.

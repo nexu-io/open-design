@@ -426,4 +426,27 @@ describe('LexicalComposerInput', () => {
     });
     await waitFor(() => expect(onEnterSend).toHaveBeenCalledTimes(1));
   });
+
+  it('does not send when the browser repeats a held Enter key', async () => {
+    const { onEnterSend, getByTestId } = setup({ draft: 'hi' });
+    const editable = getByTestId('chat-composer-input') as HTMLElement & {
+      __lexicalEditor?: import('lexical').LexicalEditor;
+    };
+    const editor = editable.__lexicalEditor;
+    expect(editor).toBeTruthy();
+
+    act(() => {
+      editor?.dispatchCommand(KEY_ENTER_COMMAND, {
+        key: 'Enter',
+        shiftKey: false,
+        metaKey: false,
+        ctrlKey: false,
+        altKey: false,
+        repeat: true,
+        preventDefault() {},
+      } as unknown as KeyboardEvent);
+    });
+
+    await waitFor(() => expect(onEnterSend).not.toHaveBeenCalled());
+  });
 });

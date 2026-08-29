@@ -22,9 +22,9 @@ od:
 
 AI creative director with recursive self-assessment: 20+ methodologies (SIT, TRIZ, Bisociation, SCAMPER, Synectics), 3-axis evaluation calibrated against Cannes/D&AD/HumanKind, 5-phase process from brief to presentation.
 
-## Open Design orchestration mode
+## OpenDesign orchestration mode
 
-When this skill is invoked inside Open Design, treat it as the design-flow
+When this skill is invoked inside OpenDesign, treat it as the design-flow
 director, not as a single polish checklist.
 
 1. Define what "good-looking" means before changing pixels: audience, product
@@ -33,7 +33,7 @@ director, not as a single polish checklist.
    generic AI gradients, empty cards, vague copy, and template symmetry.
 2. Inspect the current target: HTML/page element, browser tab, design file,
    active design system, attached image, or project folder.
-3. Search across every available Open Design resource, not only this skill:
+3. Search across every available OpenDesign resource, not only this skill:
    skills, plugins, MCP servers and templates, connected connectors, design
    files, active browser/context, and user-provided assets.
 4. Match resources into a staged workflow. Typical lanes are critique,
@@ -54,7 +54,7 @@ director, not as a single polish checklist.
 
 ## How to use
 
-This catalogue entry advertises the skill in Open Design so the agent
+This catalogue entry advertises the skill in OpenDesign so the agent
 discovers it during planning. To run the full upstream workflow with
 its original assets, scripts, and references, install the upstream
 bundle into your active agent's skills directory:

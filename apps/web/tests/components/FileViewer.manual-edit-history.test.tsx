@@ -36,6 +36,50 @@ function clickAgentTool(testId: string) {
   fireEvent.click(screen.getByTestId(testId));
 }
 
+async function enterManualEditMode() {
+  const initialFrame = await waitFor(() => {
+    const node = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    if (!node.contentWindow) throw new Error('Preview frame not ready');
+    return node;
+  });
+  const postMessageSpy = vi.spyOn(initialFrame.contentWindow!, 'postMessage');
+
+  clickManualTool('manual-edit-mode-toggle');
+
+  const captureRequest = postMessageSpy.mock.calls
+    .map(([value]) => value)
+    .find((value) => (
+      typeof value === 'object' &&
+      value !== null &&
+      (value as { type?: unknown }).type === 'od:preview-runtime-state-capture'
+    )) as { type: string; id: string } | undefined;
+  if (captureRequest) {
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: {
+          type: 'od:preview-runtime-state-captured',
+          id: captureRequest.id,
+          state: {
+            version: 1,
+            hash: '',
+            htmlAttrs: {},
+            bodyAttrs: {},
+            entries: [],
+          },
+        },
+        source: initialFrame.contentWindow,
+      }));
+    });
+  }
+
+  await waitFor(() => {
+    expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('true');
+    const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(activeFrame.getAttribute('data-od-active')).toBe('true');
+    expect(activeFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+  });
+}
+
 // Pins the inspector to a target. Hover no longer auto-selects, so selection
 // rides the explicit click path (od-edit-select), matching the bridge sending
 // it when the user clicks the hover affordance or a container/image body.
@@ -95,7 +139,7 @@ describe('FileViewer manual edit history regressions', () => {
       />,
     );
 
-    clickManualTool('manual-edit-mode-toggle');
+    await enterManualEditMode();
     await selectManualEditTarget();
 
     act(() => {
@@ -133,7 +177,7 @@ describe('FileViewer manual edit history regressions', () => {
       />,
     );
 
-    clickManualTool('manual-edit-mode-toggle');
+    await enterManualEditMode();
     await selectManualEditTarget();
 
     const editFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
@@ -187,7 +231,7 @@ describe('FileViewer manual edit history regressions', () => {
       />,
     );
 
-    clickManualTool('manual-edit-mode-toggle');
+    await enterManualEditMode();
     await selectManualEditTarget();
 
     act(() => {
@@ -217,7 +261,7 @@ describe('FileViewer manual edit history regressions', () => {
     expect(savedSources[2]).not.toContain('rgb(239, 68, 68)');
   });
 
-  it('refreshes the manual edit canvas after non-style source patches', async () => {
+  it('updates the manual edit canvas after text patches without replacing its transport', async () => {
     const initialSource = '<!doctype html><html><body><h1 data-od-id="hero">Hero</h1></body></html>';
     const savedSources: string[] = [];
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -249,7 +293,7 @@ describe('FileViewer manual edit history regressions', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await enterManualEditMode();
     await selectManualEditTarget();
     const getActivePreviewFrame = () => screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
 
@@ -259,6 +303,9 @@ describe('FileViewer manual edit history regressions', () => {
       expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
       expect(panelState.props?.draft.fullSource).toContain('Hero');
     });
+    const frame = getActivePreviewFrame();
+    const transportBeforeSave = frame.srcdoc;
+    const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
     act(() => {
       panelState.props?.onApplyPatch(
         { id: 'hero', kind: 'set-text', value: 'Updated hero' },
@@ -269,8 +316,14 @@ describe('FileViewer manual edit history regressions', () => {
     await waitFor(() => expect(savedSources).toHaveLength(1));
     await waitFor(() => expect(panelState.props?.draft.fullSource).toContain('Updated hero'));
     await waitFor(() => {
-      expect(getActivePreviewFrame().srcdoc).toContain('Updated hero');
+      expect(postMessage).toHaveBeenCalledWith({
+        type: 'od-edit-preview-text',
+        id: 'hero',
+        value: 'Updated hero',
+      }, '*');
     });
+    expect(getActivePreviewFrame()).toBe(frame);
+    expect(frame.srcdoc).toBe(transportBeforeSave);
   });
 
   it('only exposes reset after the selected element draft changes', async () => {
@@ -296,7 +349,7 @@ describe('FileViewer manual edit history regressions', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await enterManualEditMode();
     await selectManualEditTarget();
 
     expect(panelState.props?.resetAvailable).toBe(false);
@@ -350,7 +403,7 @@ describe('FileViewer manual edit history regressions', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await enterManualEditMode();
     await selectManualEditTarget();
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     const postMessageSpy = vi.spyOn(frame.contentWindow!, 'postMessage');

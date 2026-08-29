@@ -129,6 +129,25 @@ export function deriveFileOps(events: AgentEvent[] | undefined): FileOpEntry[] {
   return Array.from(byPath.values());
 }
 
+/**
+ * True when the run attempted any file mutation (write/edit/delete tool call,
+ * or a simple Bash rm/unlink), regardless of whether the attempt succeeded.
+ * Tool names must stay aligned with the daemon's cross-runtime
+ * `WRITE_OR_EDIT_TOOL_NAMES` set in `apps/daemon/src/runtimes/run-artifacts.ts`.
+ */
+export function hasFileMutationToolUse(events: AgentEvent[] | undefined): boolean {
+  for (const ev of events ?? []) {
+    if (ev.kind !== 'tool_use') continue;
+    if (ev.name === 'Bash') {
+      if (extractSimpleBashDeletes(ev.input).length > 0) return true;
+      continue;
+    }
+    const kind = classify(ev.name);
+    if (kind === 'write' || kind === 'edit' || kind === 'delete') return true;
+  }
+  return false;
+}
+
 export type FileOpCounts = Record<FileOpKind, number>;
 
 /** Total tool_use count per op family across `entries`. */
@@ -141,6 +160,28 @@ export function countFileOps(entries: FileOpEntry[]): FileOpCounts {
     counts.delete += entry.opCounts.delete;
   }
   return counts;
+}
+
+export interface ArtifactFileOpCounts {
+  write: number;
+  edit: number;
+}
+
+/**
+ * Count unique produced files for the "Files from this turn" disclosure
+ * header, categorized by each file's primary artifact op (edit > write).
+ * Unlike `countFileOps`, a file written (or edited) several times counts
+ * once — the header must match the number of delivered files, not the number
+ * of write operations (#5909).
+ */
+export function countArtifactFileOps(entries: FileOpEntry[]): ArtifactFileOpCounts {
+  let write = 0;
+  let edit = 0;
+  for (const entry of entries) {
+    if (entry.ops.includes('edit')) edit += 1;
+    else if (entry.ops.includes('write')) write += 1;
+  }
+  return { write, edit };
 }
 
 function extractSimpleBashDeletes(input: unknown): string[] {

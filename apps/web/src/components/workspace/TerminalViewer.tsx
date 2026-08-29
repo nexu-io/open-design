@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ITheme, Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
-import type { TerminalDataEvent, TerminalExitEvent } from '@open-design/contracts';
+import type {
+  TerminalDataEvent,
+  TerminalExitEvent,
+  WorkspaceCollabContext,
+} from '@open-design/contracts';
 import { useT } from '../../i18n';
 import { Icon } from '../Icon';
 import {
@@ -17,6 +21,7 @@ interface Props {
   /** PTY session id (the `terminal:<id>` tab's suffix). */
   terminalId: string;
   projectId: string;
+  workspaceContext?: WorkspaceCollabContext | null;
   /** Close the owning workspace tab (the close button / no-restart paths). */
   onClose: () => void;
   /**
@@ -166,7 +171,13 @@ function subscribeToAppearanceChanges(onChange: () => void): () => void {
  *   with no auto-retry, or a Restart could not spawn a fresh PTY. Both `ended`
  *   and `unavailable` offer Restart (spawn a new PTY in place) and Close.
  */
-export function TerminalViewer({ terminalId, projectId, onClose, onSessionIdChange }: Props) {
+export function TerminalViewer({
+  terminalId,
+  projectId,
+  workspaceContext,
+  onClose,
+  onSessionIdChange,
+}: Props) {
   const t = useT();
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -208,8 +219,8 @@ export function TerminalViewer({ terminalId, projectId, onClose, onSessionIdChan
     const last = lastSizeRef.current;
     if (last && last.cols === cols && last.rows === rows) return;
     lastSizeRef.current = { cols, rows };
-    void resizeTerminal(projectId, sessionId, cols, rows);
-  }, [projectId, sessionId]);
+    void resizeTerminal(projectId, sessionId, cols, rows, workspaceContext);
+  }, [projectId, sessionId, workspaceContext]);
 
   useEffect(() => {
     const container = surfaceRef.current;
@@ -268,7 +279,7 @@ export function TerminalViewer({ terminalId, projectId, onClose, onSessionIdChan
         if (!stdinBuffer) return;
         const data = stdinBuffer;
         stdinBuffer = '';
-        void sendTerminalStdin(projectId, sessionId, data);
+        void sendTerminalStdin(projectId, sessionId, data, workspaceContext);
       };
       dataSub = xterm.onData((data: string) => {
         stdinBuffer += data;
@@ -284,7 +295,9 @@ export function TerminalViewer({ terminalId, projectId, onClose, onSessionIdChan
 
       // SSE down. EventSource auto-reconnects with Last-Event-ID, so the daemon
       // replays buffered output we missed during a transient gap.
-      const es = new EventSource(terminalStreamUrl(projectId, sessionId));
+      const es = new EventSource(
+        terminalStreamUrl(projectId, sessionId, workspaceContext),
+      );
       source = es;
       es.addEventListener('open', () => {
         setPhase((prev) => (prev === 'ended' ? prev : 'live'));
@@ -346,7 +359,7 @@ export function TerminalViewer({ terminalId, projectId, onClose, onSessionIdChan
       // or when the daemon shuts down.
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, sessionId]);
+  }, [projectId, sessionId, workspaceContext]);
 
   // Re-fit when the banner appears/disappears so the surface reclaims the row.
   useEffect(() => {
@@ -360,15 +373,18 @@ export function TerminalViewer({ terminalId, projectId, onClose, onSessionIdChan
     // the ended/unavailable states (old session already gone), so this is
     // usually a no-op — but since unmount no longer kills, it's the guard that
     // stops a stale session from lingering on the daemon if that ever changes.
-    void killTerminal(projectId, sessionId, { keepalive: true });
-    const next = await createTerminal(projectId);
+    void killTerminal(projectId, sessionId, {
+      keepalive: true,
+      workspaceContext,
+    });
+    const next = await createTerminal(projectId, undefined, workspaceContext);
     if (next?.id) {
       lastSizeRef.current = null;
       setSessionId(next.id);
     } else {
       setPhase('unavailable');
     }
-  }, [projectId, sessionId]);
+  }, [projectId, sessionId, workspaceContext]);
 
   const stopped = phase === 'ended' || phase === 'unavailable';
   const connecting = phase === 'connecting';
@@ -425,7 +441,7 @@ export function TerminalViewer({ terminalId, projectId, onClose, onSessionIdChan
             data-testid="terminal-restart"
             onClick={() => void restart()}
           >
-            <Icon name="reload" size={12} />
+            <Icon name="reload" size={14} />
             {t('workspace.terminalRestart')}
           </button>
           <button
@@ -434,7 +450,7 @@ export function TerminalViewer({ terminalId, projectId, onClose, onSessionIdChan
             data-testid="terminal-close"
             onClick={onClose}
           >
-            <Icon name="close" size={12} />
+            <Icon name="close" size={14} />
             {t('workspace.closeTab')}
           </button>
         </div>

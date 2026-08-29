@@ -24,7 +24,9 @@ import {
   planDeckImageCapture,
   requestPreviewSnapshot,
   sourceLooksLikeExportableDeck,
+  sourceLooksLikeNavigableDeck,
 } from '../../src/runtime/exports';
+import { workspaceContextFixture } from '../helpers/workspace-context';
 
 describe('planDeckImageCapture (#4604 current-slide capture for runtime decks)', () => {
   it('whole-deck capture renders off-screen with no index (stitch all)', () => {
@@ -124,6 +126,40 @@ describe('sourceLooksLikeExportableDeck (#4604 horizontal deck export)', () => {
     expect(sourceLooksLikeExportableDeck('')).toBe(false);
     expect(sourceLooksLikeExportableDeck(null)).toBe(false);
     expect(sourceLooksLikeExportableDeck(undefined)).toBe(false);
+  });
+});
+
+describe('sourceLooksLikeNavigableDeck', () => {
+  it('does not turn ordinary prototype annotations into deck chrome', () => {
+    expect(
+      sourceLooksLikeNavigableDeck('<h1 data-screen-label="Hero title">Prototype</h1>'),
+    ).toBe(false);
+    expect(sourceLooksLikeNavigableDeck(
+      '<main><h1 data-screen-label="Hero">Prototype</h1>' +
+      '<button data-screen-label="CTA">Buy</button></main>',
+    )).toBe(false);
+    expect(sourceLooksLikeNavigableDeck(
+      '<main><section data-screen-label="01 Hero">One</section>' +
+      '<div><section data-screen-label="02 CTA">Two</section></div></main>',
+    )).toBe(false);
+  });
+
+  it('ignores deck-shaped text inside report comments and scripts', () => {
+    expect(sourceLooksLikeNavigableDeck(
+      '<main class="doc"><h1>Annual report</h1></main>' +
+      '<!-- print support waits for a <deck-stage> when one exists -->' +
+      '<script>const example = "<deck-stage></deck-stage>";</script>',
+    )).toBe(false);
+  });
+
+  it('keeps explicit and multi-screen persisted decks navigable', () => {
+    expect(sourceLooksLikeNavigableDeck(
+      '<deck-stage><section data-screen-label="Cover">A</section></deck-stage>',
+    )).toBe(true);
+    expect(sourceLooksLikeNavigableDeck(
+      '<main><section data-screen-label="01 Cover">A</section>' +
+      '<section data-screen-label="02 Agenda">B</section></main>',
+    )).toBe(true);
   });
 });
 
@@ -571,16 +607,19 @@ describe('exportProjectAsHtml', () => {
     await exportProjectAsHtml({
       projectId: 'proj 1',
       filePath: 'screens/main page.html',
-      fallbackHtml: '<script type="module" src="/src/main.tsx"></script>',
       fallbackTitle: 'Main Page',
     });
 
-    expect(fetch).toHaveBeenCalledWith('/api/projects/proj%201/export/screens/main%20page.html?inline=1');
+    expect(fetch).toHaveBeenCalledWith('/api/projects/proj%201/export/html', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ fileName: 'screens/main page.html', title: 'Main Page' }),
+    });
     expect(capturedFilename).toBe('Main-Page.html');
     expect(await capturedBlob!.text()).toBe('<!doctype html><p>inlined</p>');
   });
 
-  it('passes versionId to the daemon inline HTML export endpoint', async () => {
+  it('passes versionId so the daemon can explicitly reject mixed-version dependencies', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('<!doctype html><p>version</p>', {
       headers: { 'content-type': 'text/html' },
       status: 200,
@@ -589,29 +628,36 @@ describe('exportProjectAsHtml', () => {
     await exportProjectAsHtml({
       projectId: 'proj 1',
       filePath: 'screens/main page.html',
-      fallbackHtml: '<main>fallback</main>',
       fallbackTitle: 'Main Page v1',
       versionId: 'v1',
     });
 
-    expect(fetch).toHaveBeenCalledWith('/api/projects/proj%201/export/screens/main%20page.html?inline=1&versionId=v1');
+    expect(fetch).toHaveBeenCalledWith('/api/projects/proj%201/export/html', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        fileName: 'screens/main page.html',
+        title: 'Main Page v1',
+        versionId: 'v1',
+      }),
+    });
     expect(capturedFilename).toBe('Main-Page-v1.html');
     expect(await capturedBlob!.text()).toBe('<!doctype html><p>version</p>');
   });
 
-  it('falls back to the source HTML export when the daemon inline endpoint fails', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 500 })));
+  it('surfaces structured daemon failures instead of downloading broken source HTML', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+      error: { message: 'missing local dependency: assets/hero.png' },
+    }, { status: 422 })));
 
-    await exportProjectAsHtml({
+    await expect(exportProjectAsHtml({
       projectId: 'proj-1',
       filePath: 'index.html',
-      fallbackHtml: '<main>fallback</main>',
       fallbackTitle: 'Fallback',
-    });
+    })).rejects.toThrow('missing local dependency: assets/hero.png');
 
-    expect(capturedFilename).toBe('Fallback.html');
-    expect(await capturedBlob!.text()).toContain('<main>fallback</main>');
+    expect(capturedFilename).toBeUndefined();
+    expect(capturedBlob).toBeUndefined();
   });
 });
 
@@ -632,10 +678,12 @@ describe('exportProjectImageDataUrl', () => {
       fileName: 'screens/main page.html',
       index: 2,
       deck: false,
+      width: 390,
+      height: 844,
       versionId: 'v1',
     });
 
-    expect(result).toEqual({ ok: false, unavailable: true });
+    expect(result).toEqual({ ok: false, unavailable: true, reason: 'no-renderer' });
     expect(fetch).toHaveBeenCalledWith('/api/projects/proj%201/export/image', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -643,8 +691,29 @@ describe('exportProjectImageDataUrl', () => {
         fileName: 'screens/main page.html',
         index: 2,
         deck: false,
+        width: 390,
+        height: 844,
         versionId: 'v1',
       }),
+    });
+  });
+
+  it('omits viewport dimensions when the caller uses renderer defaults', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: { message: 'desktop only' } }), { status: 501 })),
+    );
+
+    await exportProjectImageDataUrl({
+      projectId: 'proj-1',
+      fileName: 'index.html',
+      deck: false,
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/projects/proj-1/export/image', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ fileName: 'index.html', deck: false }),
     });
   });
 });
@@ -701,6 +770,80 @@ describe('binary project/design-system downloads', () => {
     });
     expect(capturedFilename).toBe('pitch.pptx');
     expect(await capturedBlob!.text()).toBe('PK-fake-pptx');
+  });
+
+  it('carries the project-pinned Workspace identity across every project export transport', async () => {
+    const workspaceContext = workspaceContextFixture({
+      workspaceId: 'workspace-a',
+      workspaceMemberId: 'member-a',
+    });
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/export/pdf')) {
+        return Response.json({ ok: true });
+      }
+      if (url.endsWith('/export/image')) {
+        return Response.json(
+          { error: { message: 'desktop only' } },
+          { status: 501 },
+        );
+      }
+      if (url.endsWith('/export/html')) {
+        return new Response('<!doctype html><p>exported</p>', { status: 200 });
+      }
+      return new Response('archive-or-rendered-bytes', {
+        status: 200,
+        headers: {
+          'content-type': 'application/octet-stream',
+          'content-disposition': 'attachment; filename="export.bin"',
+        },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await exportProjectAsHtml({
+      projectId: 'project-a',
+      filePath: 'index.html',
+      fallbackTitle: 'HTML',
+      workspaceContext,
+    });
+    await exportProjectAsPdf({
+      deck: false,
+      fallbackPdf: vi.fn(),
+      filePath: 'index.html',
+      projectId: 'project-a',
+      title: 'PDF',
+      workspaceContext,
+    });
+    await exportProjectAsPptx({
+      projectId: 'project-a',
+      fileName: 'index.html',
+      workspaceContext,
+    });
+    await exportProjectImageDataUrl({
+      projectId: 'project-a',
+      fileName: 'index.html',
+      workspaceContext,
+    });
+    await exportProjectAsZip({
+      projectId: 'project-a',
+      filePath: 'index.html',
+      fallbackHtml: '<p>fallback</p>',
+      fallbackTitle: 'ZIP',
+      workspaceContext,
+    });
+    await downloadProjectArchive({
+      projectId: 'project-a',
+      fallbackTitle: 'Archive',
+      workspaceContext,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+    for (const [, init] of fetchMock.mock.calls) {
+      const headers = new Headers(init?.headers);
+      expect(headers.get('x-od-workspace-id')).toBe('workspace-a');
+      expect(headers.get('x-od-workspace-member-id')).toBe('member-a');
+    }
   });
 
   it('requests editable PPTX when the caller selects native shapes and text', async () => {
@@ -789,7 +932,7 @@ describe('binary project/design-system downloads', () => {
 
     const res = await exportProjectAsPptx({ projectId: 'p', fileName: 'deck.html' });
 
-    expect(res).toEqual({ ok: false, unavailable: true });
+    expect(res).toEqual({ ok: false, unavailable: true, reason: 'no-renderer' });
   });
 
   it('surfaces a semantic failure (non-501) as an error, not unavailable', async () => {
@@ -810,7 +953,7 @@ describe('binary project/design-system downloads', () => {
 
     const res = await exportProjectAsPptx({ projectId: 'p', fileName: 'deck.html' });
 
-    expect(res).toEqual({ ok: false, unavailable: true });
+    expect(res).toEqual({ ok: false, unavailable: true, reason: 'unreachable' });
   });
 
   it('a post-response failure (renderer already produced bytes) is an error, not unavailable', async () => {
@@ -1050,7 +1193,9 @@ describe('sandboxed preview Blob exports', () => {
 
     expect(capturedBlob).toBeDefined();
     const wrapper = await capturedBlob!.text();
-    expect(wrapper).toContain('&lt;base href=&quot;https://open-design.test/&quot;&gt;');
+    expect(wrapper).toContain(
+      '&lt;base href=&quot;https://open-design.test/&quot; data-od-project-preview-base&gt;',
+    );
   });
 
   it('passes srcdoc options through the sandboxed new-tab wrapper', async () => {
@@ -1065,7 +1210,9 @@ describe('sandboxed preview Blob exports', () => {
     const wrapper = await capturedBlob!.text();
     expect(wrapper).toContain('sandbox="allow-scripts"');
     expect(wrapper).not.toContain('allow-same-origin');
-    expect(wrapper).toContain('&lt;base href=&quot;/artifacts/project/assets/&quot;&gt;');
+    expect(wrapper).toContain(
+      '&lt;base href=&quot;/artifacts/project/assets/&quot; data-od-project-preview-base&gt;',
+    );
     expect(wrapper).toContain('od:slide');
   });
 

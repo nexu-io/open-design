@@ -433,31 +433,31 @@ export const playwrightUiScenarios: UiScenario[] = [
     ],
   },
   {
-    id: 'question-form-selection-limit',
-    title: 'Question form checkbox limits block selecting more than the allowed maximum',
+    id: 'question-form-single-selection',
+    title: 'Visual style question keeps exactly one selected direction',
     kind: 'workspace',
-    flow: 'question-form-selection-limit',
+    flow: 'question-form-single-selection',
     automated: true,
     description:
-      'Verifies that a discovery-style checkbox question with maxSelections=2 cannot be pushed past two selected options.',
+      'Verifies that choosing another visual style replaces the previous discovery direction.',
     create: {
-      projectName: 'Question form selection limit',
+      projectName: 'Single visual style',
       tab: 'prototype',
     },
     prompt: 'Help me plan a restaurant homepage',
     notes: [
       'Mocks a question-form response instead of an artifact so the test can exercise the inline clarifying UI.',
-      'Confirms both the interaction guard and the rendered checked state stay capped at two options.',
+      'Confirms the visual card picker exposes radio semantics and keeps exactly one selected option.',
     ],
   },
   {
     id: 'question-form-submit-persistence',
-    title: 'Question form answers persist into chat history and reload in a locked state',
+    title: 'Question form answers persist as a chat summary after reload',
     kind: 'workspace',
     flow: 'question-form-submit-persistence',
     automated: true,
     description:
-      'Verifies that answering a question form writes a user follow-up message, then rehydrates the form in an answered and locked state after reload.',
+      'Verifies that answering an inline question form writes a structured follow-up and restores its readable summary after reload.',
     create: {
       projectName: 'Question form submit persistence',
       tab: 'prototype',
@@ -469,6 +469,27 @@ export const playwrightUiScenarios: UiScenario[] = [
     notes: [
       'Mocks an inline question form on the first assistant turn and a plain acknowledgment on the follow-up turn.',
       'Confirms the answered state survives a full page reload instead of relying only on local submit state.',
+    ],
+  },
+  {
+    id: 'question-form-single-answer',
+    title: 'One question form occurrence produces exactly one answer',
+    kind: 'workspace',
+    flow: 'question-form-single-answer',
+    automated: true,
+    description:
+      'Answers an inline question form, then hammers the paths that used to re-open it — a rapid double submit, leaving the project and coming back, and a full reload — asserting the daemon still holds exactly one answer message for the occurrence.',
+    create: {
+      projectName: 'Question form single answer',
+      tab: 'prototype',
+    },
+    prompt: 'Plan a small restaurant homepage',
+    expectedRunRequest: {
+      message: 'Plan a small restaurant homepage',
+    },
+    notes: [
+      'Covers OPEND-2367: the submit lock used to live in the mounted component, so any remount offered the same form again and a second answer produced a second run.',
+      'Asserts against the daemon conversation, not the rendered form, so a UI that merely looks locked cannot pass.',
     ],
   },
   {
@@ -512,14 +533,15 @@ export const playwrightUiScenarios: UiScenario[] = [
     flow: 'deck-pagination-next-prev-correctness',
     automated: true,
     description:
-      'Should verify that deck preview pagination moves to the actual previous and next slide instead of routing both actions to the same page.',
+      'Should verify that persisted deck-stage thumbnails and pagination move the real preview while host chrome and speaker notes stay synchronized.',
     create: {
       projectName: 'Deck pagination controls',
       tab: 'deck',
     },
     prompt: 'Review pagination behavior in a multi-slide deck preview',
     notes: [
-      'Seeds deterministic deck HTML through the project files API and verifies previous/next controls in Playwright.',
+      'Seeds mixed legacy and modern slide markers through the project files API, including a decoy screen label outside the explicit deck-stage.',
+      'Verifies thumbnail selection, previous/next controls, and deck-originated navigation in Playwright.',
     ],
   },
   {

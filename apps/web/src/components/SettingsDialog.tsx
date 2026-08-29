@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import { Button, VisuallyHidden } from '@open-design/components';
-import type { AmrWalletSnapshot } from '@open-design/contracts';
+import type {
+  AmrWalletSnapshot,
+  WorkspaceCollabContext,
+} from '@open-design/contracts';
 import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 import {
   agentIdToTracking,
@@ -10,6 +13,7 @@ import {
   settingsSectionToTracking,
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
+import { byokErrorCode } from '../analytics/byok-error-code';
 import {
   amrHandoffDeviceId,
   attributedAmrUrl,
@@ -18,7 +22,7 @@ import {
 } from '../analytics/amr-attribution';
 import { getResolvedDeviceId } from '../analytics/client';
 import {
-  trackSettingsAppearanceClick,
+  trackByokPreflightBlocked,
   trackSettingsByokModelsFetchResult,
   trackSettingsByokTestResult,
   trackSettingsCliTestResult,
@@ -39,27 +43,31 @@ import type { Locale } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { AgentIcon } from './AgentIcon';
 import { AgentDiagnosticRow } from './AgentDiagnosticRow';
+import { DeepSeekHarnessSetupDialog } from './DeepSeekHarnessSetupDialog';
 import { AmrLoginPill } from './AmrLoginPill';
 import { PlanBadge } from './PlanBadge';
 import { orderAgentsWithOpenDesignFirst } from './agentOrdering';
 import {
   AMR_LOGIN_STATUS_EVENT,
   amrLoginStatusEventReason,
+  isAmrSessionAuthenticated,
 } from './amrLoginPolling';
 import {
-  canUpgradeVelaPlan,
   fetchAmrWalletSnapshot,
   fetchVelaLoginStatus,
   formatVelaBalanceUsd,
   type VelaLoginStatus,
 } from '../providers/daemon';
+import { installDeepSeekHarnessCompanion } from '../providers/agent-companion';
+import { amrProfileBadgeLabel } from '../runtime/amr-guidance';
 import {
-  amrPlansUrlForProfile,
-  amrProfileBadgeLabel,
-} from '../runtime/amr-guidance';
-import { isVisibleLocalCliAgent } from '../utils/visibleAgents';
+  availableVisibleAgentCount,
+  deepSeekHarnessNeedsSetup,
+  isVisibleLocalCliAgent,
+} from '../utils/visibleAgents';
 import { ExportDiagnosticsRow } from './ExportDiagnosticsButton';
 import { Icon } from './Icon';
+import { LabsSection } from './LabsSection';
 import { defaultAgentModelId, effectiveAgentModelChoice } from './agentModelSelection';
 import {
   CUSTOM_MODEL_SENTINEL,
@@ -67,14 +75,15 @@ import {
   SearchableModelSelect,
 } from './modelOptions';
 import {
+  BYOK_PROVIDER_PRESETS,
   DEFAULT_NOTIFICATIONS,
   DEFAULT_ORBIT,
+  defaultKnownProviderModel,
   isStoredMediaProviderEntryEmpty,
   isStoredMediaProviderEntryPresent,
   KNOWN_PROVIDERS,
   hasAnyConfiguredProvider,
   mergeDaemonMediaProviders,
-  saveConfig,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
@@ -109,7 +118,6 @@ import type {
   ApiProtocol,
   ApiProtocolConfig,
   AppConfig,
-  AppTheme,
   AppVersionInfo,
   ConnectionTestResponse,
   DesignSystemGenerationJob,
@@ -120,11 +128,15 @@ import type {
   ProviderModelsResponse,
   SkillSummary,
 } from '../types';
-import { testAgent, testApiProvider } from '../providers/connection-test';
+import {
+  testAgent,
+  testApiProvider,
+} from '../providers/connection-test';
 import { fetchProviderModels } from '../providers/provider-models';
 import {
   fetchConnectors,
   fetchDesignTemplates,
+  liveArtifactPreviewUrl,
   openExternalUrl,
 } from '../providers/registry';
 import { MEDIA_PROVIDERS } from '../media/models';
@@ -136,14 +148,18 @@ import type { MediaProvider } from '../media/models';
 import { Toast } from './Toast';
 import {
   checkForUpdaterUpdate,
+  clearUpdaterCache,
   deriveUpdaterModel,
   downloadUpdaterUpdate,
   openUpdaterInstaller,
   quitAfterUpdaterInstallerOpen,
   readUpdaterStatus,
+  restartSafetyFromActionResult,
+  restartSafetyFromUpdaterStatus,
   subscribeToUpdaterStatus,
   type UpdaterActionResult,
   type UpdaterModel,
+  type UpdaterRestartSafety,
 } from '../lib/updater';
 import { PetSettings } from './pet/PetSettings';
 import { McpClientSection } from './McpClientSection';
@@ -151,6 +167,17 @@ import { DesignSystemsSection } from './DesignSystemsSection';
 import { PrivacySection } from './PrivacySection';
 import { ProjectLocationsSection } from './ProjectLocationsSection';
 import { RoutinesSection } from './RoutinesSection';
+import { SettingsWorkspaceSection } from './SettingsWorkspaceSection';
+import {
+  useWorkspaceBillingResponse,
+  useWorkspaceContext,
+  workspaceBillingBalanceUsd,
+  workspaceBillingSummaryForContext,
+} from '../collab/useWorkspaceContext';
+import { canUpgradeFromPlanTier, resolvePlanTier } from '../collab/team-plan';
+import { planBadgeTierForWorkspace } from './PlanWordmark';
+import { workspaceUpgradeUrl } from './EntryNavRail';
+import { canShowWorkspaceSettings } from '../collab/settings-access';
 import { ConnectorsBrowser } from './ConnectorsBrowser';
 import { MemoryModelInline } from './MemoryModelInline';
 import { MemorySection } from './MemorySection';
@@ -159,6 +186,7 @@ import { ByokKeyField } from './byok/ByokKeyField';
 import { ByokModelField } from './byok/ByokModelField';
 import { ByokProviderBaseUrl } from './byok/ByokProviderBaseUrl';
 import { ByokProviderPicker } from './byok/ByokProviderPicker';
+import { byokPreflightBlockReason } from './byok/preflight';
 import {
   blockingByokDraftFields,
   blockingByokDraftIssues,
@@ -174,10 +202,12 @@ import {
   useCritiqueTheaterEnabled,
 } from './Theater';
 import {
-  ACCENT_SWATCHES,
-  DEFAULT_ACCENT_COLOR,
+  projectWorkspaceContext,
+  projectWorkspaceScopeReady,
+  useProjectWorkspaceScope,
+} from '../collab/useProjectWorkspaceScope';
+import {
   applyAppearanceToDocument,
-  normalizeAccentColor,
   resolveAccentColor,
 } from '../state/appearance';
 import { isAutosaveDraftOnlyChange } from '../App';
@@ -191,7 +221,10 @@ import {
 } from '../utils/notifications';
 
 export type SettingsSection =
+  | 'general'
+  | 'labs'
   | 'execution'
+  | 'workspace'
   | 'instructions'
   | 'media'
   | 'composio'
@@ -216,12 +249,42 @@ export type SettingsSection =
   | 'library'
   | 'about';
 
+// Maps a requested section token onto the section that actually owns a nav
+// item. Only tokens whose content is *folded into* another section belong
+// here: language / appearance / notifications / pet / projectLocations /
+// critiqueTheater all render inside General, so a deep link to any of them
+// must land on General and highlight the General nav item. `pet` joined that
+// list when #5517's General page absorbed the pet picker — the composer's
+// "pet settings" entry point (App.openPetSettings) has no other destination,
+// so leaving it unmapped would deep-link into a section that renders nothing.
+//
+// Sections that keep their own render block but no longer have a nav item
+// (workspace, mcpClient, composio, designSystems) must NOT be listed: they
+// stay individually addressable through `initialSection`, and folding them
+// here would silently swallow a deep link into the wrong section.
+// `privacy` and `about` must not be listed either — they own nav items, and
+// mapping them to General used to send deep links to the wrong section with
+// the wrong nav item highlighted.
+function normalizeSettingsSection(section: SettingsSection): SettingsSection {
+  switch (section) {
+    case 'language':
+    case 'appearance':
+    case 'notifications':
+    case 'pet':
+    case 'projectLocations':
+    case 'critiqueTheater':
+      return 'general';
+    default:
+      return section;
+  }
+}
+
 interface ByokProviderPreset {
   id: string;
   title: string;
   protocol: ApiProtocol;
   baseUrl: string;
-  model: string;
+  preferredModels: readonly string[];
   custom?: boolean;
 }
 
@@ -315,8 +378,8 @@ export function deriveAboutUpdateControl(
           primaryAction: 'quit',
           primaryLabelKey: 'updater.quitButton',
           showReleaseLink: false,
-          statusKey: 'settings.updateQuitFailed',
-          statusTone: 'warning',
+          statusKey: model.updateKind === 'payload' ? 'updater.installingRestart' : 'updater.opening',
+          statusTone: 'neutral',
         };
       }
       const canInstallUpdate = model.canOpenInstaller || model.canApplyInPlace;
@@ -343,14 +406,22 @@ export function deriveAboutUpdateControl(
         statusKey: 'settings.updateStatusInstalling',
         statusTone: 'neutral',
       };
-    case 'error':
+    case 'error': {
+      const canRetryInstall = model.status.downloadPath != null
+        && (model.canOpenInstaller || model.canApplyInPlace);
+      const primaryAction: AboutUpdatePrimaryAction = canRetryInstall
+        ? 'install'
+        : model.availableVersion != null && model.canDownload
+          ? 'download'
+          : 'check';
       return {
-        primaryAction: 'check',
+        primaryAction,
         primaryLabelKey: 'settings.updateRetry',
         showReleaseLink: true,
-        statusKey: 'settings.updateStatusFailed',
+        statusKey: 'updater.failed',
         statusTone: 'error',
       };
+    }
     case 'unsupported':
       return {
         primaryAction: null,
@@ -372,6 +443,13 @@ export function deriveAboutUpdateControl(
 }
 
 interface Props {
+  /**
+   * How the settings surface is hosted. `'modal'` (default) renders the
+   * classic dialog inside a backdrop; `'page'` renders the same surface as
+   * the full-page `/settings` route — no backdrop, no dialog chrome, with a
+   * back-to-home nav head above the section list.
+   */
+  presentation?: 'modal' | 'page';
   initial: AppConfig;
   agents: AgentInfo[];
   agentsLoading?: boolean;
@@ -380,6 +458,8 @@ interface Props {
   welcome?: boolean;
   initialSection?: SettingsSection;
   initialHighlight?: SettingsHighlight;
+  /** Workspace id persisted on the currently-open project, when any. */
+  persistedProjectWorkspaceId?: string | null;
   providerModelsCache?: ProviderModelsCache;
   /**
    * Persist the current draft. Invoked by the dialog's autosave loop on
@@ -414,10 +494,14 @@ interface Props {
    */
   composioConfigLoading?: boolean;
   onClose: () => void;
+  /** Hand the explicit onboarding reset back to App, the config state owner. */
+  onResetOnboarding?: (next: AppConfig) => void;
   onRefreshAgents: (
     options?: AgentRefreshOptions,
   ) => AgentInfo[] | Promise<AgentInfo[] | void> | void;
   onAmrLoginStatusChange?: (status: VelaLoginStatus | null) => void;
+  /** Clear app-owned execution state after a confirmed active Cloud sign-out. */
+  onAmrSignedOut?: () => void | Promise<void>;
   daemonMediaProviders?: AppConfig['mediaProviders'] | null;
   daemonMediaProvidersFetchState?: 'idle' | 'ok' | 'error';
   mediaProvidersNotice?: string | null;
@@ -802,7 +886,7 @@ function cleanAgentVersionLabel(
 }
 
 function displayAgentName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
-  return agent.id === 'amr' ? 'Open Design' : agent.name;
+  return agent.id === 'amr' ? 'OpenDesign' : agent.name;
 }
 
 const AGENT_CLI_ENV_FIELDS = [
@@ -866,7 +950,7 @@ function defaultApiProtocolConfig(protocol: ApiProtocol): ApiProtocolConfig {
   return {
     apiKey: '',
     baseUrl: provider?.baseUrl ?? '',
-    model: provider?.model ?? '',
+    model: defaultKnownProviderModel(provider),
     apiVersion: '',
     apiProviderBaseUrl: provider ? provider.baseUrl : null,
   };
@@ -910,7 +994,7 @@ function nextApiProtocolConfig(
     return {
       ...defaultApiProtocolConfig(protocol),
       baseUrl: siblingProvider.baseUrl,
-      model: siblingProvider.model,
+      model: defaultKnownProviderModel(siblingProvider),
       apiProviderBaseUrl: siblingProvider.baseUrl,
     };
   }
@@ -975,6 +1059,90 @@ function byokProviderKeyForConfig(config: AppConfig): string {
     apiConfig.apiProviderBaseUrl,
     apiConfig.baseUrl,
   );
+}
+
+/**
+ * Keeps an incomplete replacement BYOK form durable without promoting it to
+ * the active execution config. The selected provider's current fields are
+ * stored under `byokProviderConfigDrafts`; the last successfully persisted
+ * execution mode and BYOK projection stay active until the replacement is
+ * complete.
+ */
+export function resolveSettingsAutosavePayload(
+  draft: AppConfig,
+  active: AppConfig,
+  intent: { commitClearedActiveApiKey?: boolean } = {},
+): AppConfig {
+  if (draft.mode !== 'api') return draft;
+  if (byokPreflightBlockReason(draft) === null) {
+    if (!draft.byokPendingProviderKey) return draft;
+    return { ...draft, byokPendingProviderKey: undefined };
+  }
+
+  const draftKey = byokProviderKeyForConfig(draft);
+  const clearsActiveApiKey =
+    intent.commitClearedActiveApiKey === true
+    && active.mode === 'api'
+    && draftKey === byokProviderKeyForConfig(active)
+    && active.apiKey.trim() !== ''
+    && draft.apiKey.trim() === '';
+  if (clearsActiveApiKey) {
+    if (!draft.byokPendingProviderKey) return draft;
+    return { ...draft, byokPendingProviderKey: undefined };
+  }
+
+  const withCurrentDraft = persistByokProviderConfigDraft(
+    draft,
+    draftKey,
+    currentApiProtocolConfig(draft),
+  );
+  return {
+    ...withCurrentDraft,
+    byokPendingProviderKey: draftKey,
+    mode: active.mode,
+    apiKey: active.apiKey,
+    apiProtocol: active.apiProtocol,
+    apiVersion: active.apiVersion,
+    apiProviderBaseUrl: active.apiProviderBaseUrl,
+    apiProtocolConfigs: active.apiProtocolConfigs,
+    baseUrl: active.baseUrl,
+    model: active.model,
+    byokImageModel: active.byokImageModel,
+    byokVideoModel: active.byokVideoModel,
+    byokSpeechModel: active.byokSpeechModel,
+    byokSpeechVoice: active.byokSpeechVoice,
+    maxTokens: active.maxTokens,
+  };
+}
+
+function apiProtocolFromProviderDraftKey(draftKey: string): ApiProtocol | null {
+  const separator = draftKey.indexOf(':');
+  if (separator <= 0) return null;
+  const protocol = draftKey.slice(0, separator);
+  return API_PROTOCOL_TABS.some((tab) => tab.id === protocol)
+    ? (protocol as ApiProtocol)
+    : null;
+}
+
+function restorePendingByokProviderDraft(config: AppConfig): AppConfig {
+  const currentDraftKey = byokProviderKeyForConfig(config);
+  const candidateKeys = config.byokPendingProviderKey
+    ? [config.byokPendingProviderKey, currentDraftKey]
+    : [currentDraftKey];
+  for (const draftKey of candidateKeys) {
+    const draft = config.byokProviderConfigDrafts?.[draftKey];
+    const protocol = apiProtocolFromProviderDraftKey(draftKey);
+    if (!draft || !protocol) continue;
+    return applyApiProtocolConfig(
+      {
+        ...config,
+        maxTokens: draft.maxTokens,
+      },
+      protocol,
+      draft.apiConfig,
+    );
+  }
+  return config;
 }
 
 function applyApiProtocolConfig(
@@ -1118,7 +1286,8 @@ function sameAgentModelChoice(
   right: AgentModelChoice | undefined,
 ): boolean {
   return (left?.model ?? null) === (right?.model ?? null)
-    && (left?.reasoning ?? null) === (right?.reasoning ?? null);
+    && (left?.reasoning ?? null) === (right?.reasoning ?? null)
+    && (left?.serviceTier ?? null) === (right?.serviceTier ?? null);
 }
 
 export function reconcileAmrProfileEnv(
@@ -1290,6 +1459,7 @@ export function sanitizeSettingsSavePayload(
     apiVersion: initial.apiVersion,
     apiProtocolConfigs: initial.apiProtocolConfigs,
     byokProviderConfigDrafts: initial.byokProviderConfigDrafts,
+    byokPendingProviderKey: initial.byokPendingProviderKey,
     apiProviderBaseUrl: initial.apiProviderBaseUrl,
     baseUrl: initial.baseUrl,
     model: initial.model,
@@ -1327,21 +1497,25 @@ export function switchApiProtocolConfig(
 }
 
 export function SettingsDialog({
+  presentation = 'modal',
   initial,
   agents,
   agentsLoading = false,
   daemonLive,
   appVersionInfo,
   welcome,
-  initialSection = 'execution',
+  initialSection = 'general',
   initialHighlight = null,
+  persistedProjectWorkspaceId = null,
   onPersist,
   onSilentUpdatePreferenceChange,
   onPersistComposioKey,
   composioConfigLoading = false,
   onClose,
+  onResetOnboarding,
   onRefreshAgents,
   onAmrLoginStatusChange,
+  onAmrSignedOut,
   daemonMediaProviders,
   daemonMediaProvidersFetchState = 'idle',
   mediaProvidersNotice,
@@ -1358,19 +1532,23 @@ export function SettingsDialog({
   // Backfill the fixed-origin base URL on mount too, so a config persisted with
   // an empty baseUrl (e.g. selected AIHubMix before this resolution existed)
   // isn't stuck blocking the live model fetch until the user re-selects the tab.
-  const [cfg, setCfg] = useState<AppConfig>(() => ({
+  const normalizedInitialConfig: AppConfig = {
     ...initial,
     baseUrl: resolveFixedOriginBaseUrl(initial.apiProtocol ?? 'anthropic', initial.baseUrl),
-  }));
+  };
+  const initialFormConfig = initial.mode === 'api'
+    ? restorePendingByokProviderDraft(normalizedInitialConfig)
+    : normalizedInitialConfig;
+  const [cfg, setCfg] = useState<AppConfig>(() => initialFormConfig);
   const [maxTokensInput, setMaxTokensInput] = useState(
-    initial.maxTokens == null ? '' : String(initial.maxTokens),
+    initialFormConfig.maxTokens == null ? '' : String(initialFormConfig.maxTokens),
   );
   const [pendingMediaProviderEditIds, setPendingMediaProviderEditIds] = useState<
     ReadonlySet<string>
   >(() => new Set());
   const previousInitialRef = useRef(initial);
+  // Accent only — the theme is a constant now that the app ships light-only.
   const lastSavedAppearanceRef = useRef({
-    theme: initial.theme ?? 'system',
     accentColor: resolveAccentColor(initial.accentColor),
   });
 
@@ -1386,10 +1564,9 @@ export function SettingsDialog({
 
   useEffect(() => {
     lastSavedAppearanceRef.current = {
-      theme: initial.theme ?? 'system',
       accentColor: resolveAccentColor(initial.accentColor),
     };
-  }, [initial.theme, initial.accentColor]);
+  }, [initial.accentColor]);
 
   useEffect(() => {
     const previousInitial = previousInitialRef.current;
@@ -1457,9 +1634,41 @@ export function SettingsDialog({
       ? { [initial.apiProtocol ?? 'anthropic']: byokProviderKeyForConfig(initial) }
       : {},
   );
-  const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection);
+  const [activeSection, setActiveSection] = useState<SettingsSection>(() => normalizeSettingsSection(initialSection));
+  // Workspace region gating (E-frontend, D4.3). One shared read of the workspace
+  // context; the Workspace section only renders for a team workspace whose
+  // viewer may see workspace settings. Gate on the folded permission bits,
+  // never a role re-derivation (see `../collab/settings-access`).
+  // The Workspace nav item was removed to match the agreed 8-item nav, so this
+  // gate now guards the deep-link (`initialSection='workspace'`) path — it must
+  // stay, otherwise a deep link would hand workspace settings to a viewer the
+  // permission bits exclude.
+  const {
+    context: workspaceContext,
+    loading: workspaceContextLoading,
+  } = useWorkspaceContext();
+  // Workspace billing drives both the plan and the money shown beside it. The
+  // CLI identity remains account-scoped, but a Team badge must never be paired
+  // with that account's personal wallet: the entry chrome and Settings must
+  // describe the same selected environment + workspace.
+  const workspaceBillingResponse = useWorkspaceBillingResponse();
+  // Same partition for the plan half: `response.summary` is an ACCOUNT read, so
+  // the AMR card's plan badge and both upgrade routes must consume it projected
+  // onto the selected workspace. See `workspaceBillingSummaryForContext`.
+  const workspaceBilling = workspaceBillingSummaryForContext(
+    workspaceBillingResponse,
+    workspaceContext,
+  );
+  const showWorkspaceSettings = canShowWorkspaceSettings(workspaceContext);
+  // All generic AMR upgrade buttons route through public Pricing. While the
+  // workspace read is pending, hide the owner-only action to avoid a flash for
+  // admins or members.
+  const amrUpgradeUrl = (profile: string | null | undefined): string | null =>
+    workspaceContextLoading
+      ? null
+      : workspaceUpgradeUrl(workspaceContext, workspaceBilling, { fallbackProfile: profile });
   const [settingsSidebarCollapsed, setSettingsSidebarCollapsed] = useState(false);
-  const [settingsFullscreen, setSettingsFullscreen] = useState(false);
+  const [settingsFullscreen, setSettingsFullscreen] = useState(true);
   // Scroll the right-hand content pane back to the top whenever the user
   // picks a different settings section. Without this, switching from a
   // long section the user had scrolled (e.g. Library) into a short one
@@ -1478,6 +1687,7 @@ export function SettingsDialog({
   // authorize button — once the user has found it, the hint has done its job.
   const [amrCoachmarkDismissed, setAmrCoachmarkDismissed] = useState(false);
   const [agentRescanRunning, setAgentRescanRunning] = useState(false);
+  const [dshSetup, setDshSetup] = useState<{ busy: boolean; error: string | null } | null>(null);
   const [agentRescanNotice, setAgentRescanNotice] =
     useState<RescanNotice | null>(null);
   const [agentTestState, setAgentTestState] = useState<TestState>({
@@ -1485,6 +1695,7 @@ export function SettingsDialog({
   });
   const [amrCardStatus, setAmrCardStatus] = useState<VelaLoginStatus | null>(null);
   const [amrCardStatusReady, setAmrCardStatusReady] = useState(false);
+  const amrCardSignedIn = isAmrSessionAuthenticated(amrCardStatus);
   const [amrWalletSnapshot, setAmrWalletSnapshot] = useState<AmrWalletSnapshot | null>(null);
   const [amrWalletReady, setAmrWalletReady] = useState(false);
   const [hoveredAgentCardId, setHoveredAgentCardId] = useState<string | null>(null);
@@ -1496,24 +1707,20 @@ export function SettingsDialog({
     onAmrLoginStatusChange?.(amrCardStatus);
   }, [amrCardStatus, onAmrLoginStatusChange]);
 
-  const formatAmrWalletBalance = useCallback((balanceUsd: string | null | undefined) => {
-    if (!balanceUsd) return null;
-    const amount = Number(balanceUsd);
-    if (!Number.isFinite(amount)) return `$${balanceUsd}`;
-    return new Intl.NumberFormat(locale, {
-      currency: 'USD',
-      maximumFractionDigits: 2,
-      minimumFractionDigits: 2,
-      style: 'currency',
-    }).format(amount);
-  }, [locale]);
-
   const refreshAmrWalletSnapshot = useCallback(async (options: { refresh?: boolean } = {}) => {
+    // The wallet endpoint is account-scoped. Until the selected workspace is
+    // known, fetching it can race a Team context read and briefly put personal
+    // money (or a personal auth error) on the Team card.
+    if (workspaceContextLoading || workspaceContext?.workspaceType === 'team') {
+      setAmrWalletSnapshot(null);
+      setAmrWalletReady(false);
+      return;
+    }
     setAmrWalletReady(false);
     const next = await fetchAmrWalletSnapshot(options);
     setAmrWalletSnapshot(next);
     setAmrWalletReady(true);
-  }, []);
+  }, [workspaceContext?.workspaceType, workspaceContextLoading]);
 
   useEffect(() => {
     const hasAmrAgent = agents.some((agent) => agent.id === 'amr' && agent.available);
@@ -1544,7 +1751,12 @@ export function SettingsDialog({
 
   useEffect(() => {
     const hasAmrAgent = agents.some((agent) => agent.id === 'amr' && agent.available);
-    if (!hasAmrAgent || amrCardStatus?.loggedIn !== true) {
+    if (
+      !hasAmrAgent ||
+      !amrCardSignedIn ||
+      workspaceContextLoading ||
+      workspaceContext?.workspaceType === 'team'
+    ) {
       setAmrWalletSnapshot(null);
       setAmrWalletReady(false);
       return;
@@ -1561,10 +1773,12 @@ export function SettingsDialog({
     };
   }, [
     agents,
-    amrCardStatus?.loggedIn,
+    amrCardSignedIn,
     amrCardStatus?.profile,
     amrCardStatus?.user?.id,
     amrCardStatus?.user?.email,
+    workspaceContext?.workspaceType,
+    workspaceContextLoading,
   ]);
 
   // Reconcile AMR sign-in state whenever the user returns to the window. The
@@ -1588,7 +1802,7 @@ export function SettingsDialog({
       void fetchVelaLoginStatus({ refresh: true }).then((next) => {
         if (cancelled || !next) return;
         setAmrCardStatus(next);
-        if (next.loggedIn) void refreshAmrWalletSnapshot({ refresh: true });
+        if (isAmrSessionAuthenticated(next)) void refreshAmrWalletSnapshot({ refresh: true });
       });
     };
     window.addEventListener('focus', resyncAmrStatus);
@@ -1668,6 +1882,7 @@ export function SettingsDialog({
   const providerTestRevisionRef = useRef(0);
   const providerModelsRevisionRef = useRef(0);
   const providerTestFirstResetRef = useRef(true);
+  const providerTestSkipNextResetRef = useRef(false);
   const providerModelsFirstResetRef = useRef(true);
   const providerModelsSkipNextResetRef = useRef(false);
   const deferAfterKeyCleanRef = useRef(false);
@@ -1690,17 +1905,25 @@ export function SettingsDialog({
   >(() => new Set());
   const [aboutUpdaterModel, setAboutUpdaterModel] = useState<UpdaterModel>(() => deriveUpdaterModel(null));
   const [aboutUpdateActionBusy, setAboutUpdateActionBusy] = useState(false);
+  const [aboutUpdateQuitFailed, setAboutUpdateQuitFailed] = useState(false);
   const [aboutToast, setAboutToast] = useState<string | null>(null);
+  // Two-stage inline confirm for the destructive manual cache clear.
+  const [clearUpdaterCacheStage, setClearUpdaterCacheStage] = useState<'idle' | 'confirm'>('idle');
+  const [clearUpdaterCacheBusy, setClearUpdaterCacheBusy] = useState(false);
 
   useEffect(() => {
     let mounted = true;
     const unsubscribe = subscribeToUpdaterStatus((status) => {
       if (!mounted) return;
-      setAboutUpdaterModel(deriveUpdaterModel(status, { hostAvailable: true }));
+      const nextModel = deriveUpdaterModel(status, { hostAvailable: true });
+      setAboutUpdaterModel(nextModel);
+      if (!nextModel.installerOpened) setAboutUpdateQuitFailed(false);
     });
     void readUpdaterStatus({ payload: { source: 'settings-about:mount' } }).then((result) => {
       if (!mounted) return;
-      setAboutUpdaterModel(result.ok ? result.model : deriveUpdaterModel(null, { hostAvailable: false }));
+      const nextModel = result.ok ? result.model : deriveUpdaterModel(null, { hostAvailable: false });
+      setAboutUpdaterModel(nextModel);
+      if (!nextModel.installerOpened) setAboutUpdateQuitFailed(false);
     });
     return () => {
       mounted = false;
@@ -1708,9 +1931,30 @@ export function SettingsDialog({
     };
   }, []);
 
-  const aboutUpdateControl = useMemo(
-    () => deriveAboutUpdateControl(aboutUpdaterModel, appVersionInfo),
-    [aboutUpdaterModel, appVersionInfo],
+  const aboutUpdateControl = useMemo(() => {
+    const control = deriveAboutUpdateControl(aboutUpdaterModel, appVersionInfo);
+    if (!aboutUpdateQuitFailed || !aboutUpdaterModel.installerOpened) return control;
+    return {
+      ...control,
+      primaryAction: 'quit' as const,
+      primaryLabelKey: 'updater.quitButton' as const,
+      showReleaseLink: false,
+      statusKey: 'updater.quitFailedTitle' as const,
+      statusTone: 'warning' as const,
+    };
+  }, [aboutUpdateQuitFailed, aboutUpdaterModel, appVersionInfo]);
+
+  // Restart-safety preflight denials stay hard-blocked in Settings → About
+  // (the force path lives in the app-menu UpdateDialog), but the toast must
+  // explain the active-run situation instead of a generic failure.
+  const aboutUpdaterToastText = useCallback(
+    (safety: UpdaterRestartSafety | null, fallback: string): string => {
+      if (safety == null) return fallback;
+      return safety.state === 'blocked'
+        ? t('updater.activeRunsBody', { count: safety.activeRunCount })
+        : t('updater.activeRunsUnknownBody');
+    },
+    [t],
   );
 
   const applyAboutUpdaterResult = useCallback((result: UpdaterActionResult): boolean => {
@@ -1720,15 +1964,18 @@ export function SettingsDialog({
     }
     setAboutUpdaterModel(result.model);
     if (result.model.errorMessage != null) {
-      setAboutToast(t('settings.updateActionFailed'));
+      const safety = restartSafetyFromUpdaterStatus(result.status);
+      setAboutToast(aboutUpdaterToastText(safety, t('settings.updateActionFailed')));
       return false;
     }
     return true;
-  }, [t]);
+  }, [aboutUpdaterToastText, t]);
 
   const handleAboutUpdateAction = useCallback(async () => {
     if (aboutUpdateActionBusy || aboutUpdaterModel.busy || aboutUpdateControl.primaryAction == null) return;
     setAboutUpdateActionBusy(true);
+    setAboutUpdateQuitFailed(false);
+    let quitAttempted = false;
     try {
       const options = { payload: { source: 'settings-about' } };
       if (aboutUpdateControl.primaryAction === 'check') {
@@ -1736,16 +1983,25 @@ export function SettingsDialog({
       } else if (aboutUpdateControl.primaryAction === 'download') {
         applyAboutUpdaterResult(await downloadUpdaterUpdate(options));
       } else if (aboutUpdateControl.primaryAction === 'quit') {
+        quitAttempted = true;
         const quitResult = await quitAfterUpdaterInstallerOpen(options);
-        if (!quitResult.ok) setAboutToast(t('settings.updateQuitFailed'));
+        if (!quitResult.ok) {
+          setAboutUpdateQuitFailed(true);
+          setAboutToast(aboutUpdaterToastText(restartSafetyFromActionResult(quitResult), t('updater.quitFailedTitle')));
+        }
       } else {
         const installed = applyAboutUpdaterResult(await openUpdaterInstaller(options));
         if (installed) {
+          quitAttempted = true;
           const quitResult = await quitAfterUpdaterInstallerOpen(options);
-          if (!quitResult.ok) setAboutToast(t('settings.updateQuitFailed'));
+          if (!quitResult.ok) {
+            setAboutUpdateQuitFailed(true);
+            setAboutToast(aboutUpdaterToastText(restartSafetyFromActionResult(quitResult), t('updater.quitFailedTitle')));
+          }
         }
       }
     } catch {
+      if (quitAttempted) setAboutUpdateQuitFailed(true);
       setAboutToast(t('settings.updateActionFailed'));
     } finally {
       setAboutUpdateActionBusy(false);
@@ -1754,6 +2010,7 @@ export function SettingsDialog({
     aboutUpdateActionBusy,
     aboutUpdateControl.primaryAction,
     aboutUpdaterModel.busy,
+    aboutUpdaterToastText,
     applyAboutUpdaterResult,
     t,
   ]);
@@ -1762,24 +2019,34 @@ export function SettingsDialog({
     void openExternalUrl(OPEN_DESIGN_RELEASES_URL);
   }, []);
 
-  // Precise inverse of App.handleCompleteOnboarding: flip
-  // onboardingCompleted back to false, mirror it to localStorage and the
-  // daemon through the same config-persist path, then route the user into
-  // the first-run flow so they can replay setup (including brand extraction).
-  const handleResetOnboarding = useCallback(() => {
-    const next: AppConfig = { ...cfg, onboardingCompleted: false };
-    setCfg(next);
-    saveConfig(next);
-    void syncConfigToDaemon(next);
-    onClose();
-    navigateRoute({ kind: 'home', view: 'onboarding' });
-  }, [cfg, onClose]);
+  // Manual updater/launcher cache clear — the disaster-recovery action for
+  // stuck update state. The desktop owns the capability; this handler only
+  // reports the outcome and refreshes the About updater model.
+  const handleClearUpdaterCache = useCallback(() => {
+    if (clearUpdaterCacheBusy) return;
+    setClearUpdaterCacheBusy(true);
+    void (async () => {
+      try {
+        const result = await clearUpdaterCache();
+        if (result.ok) {
+          setAboutUpdaterModel(result.model);
+          setAboutToast(t('settings.clearUpdaterCacheSuccess'));
+        } else {
+          setAboutToast(t('settings.clearUpdaterCacheFailed'));
+        }
+      } finally {
+        setClearUpdaterCacheBusy(false);
+        setClearUpdaterCacheStage('idle');
+      }
+    })();
+  }, [clearUpdaterCacheBusy, t]);
+
 
   // Imperative handle for the External MCP section. The dialog footer Save
   // routes through this when the MCP tab is active so the user can press the
   // single Save button at the bottom instead of hunting for the inner one.
   useEffect(() => {
-    setActiveSection(initialSection);
+    setActiveSection(normalizeSettingsSection(initialSection));
   }, [initialSection]);
 
   // settings_view — fires whenever the active section changes (and once on
@@ -1869,6 +2136,10 @@ export function SettingsDialog({
       providerTestFirstResetRef.current = false;
       return;
     }
+    if (providerTestSkipNextResetRef.current) {
+      providerTestSkipNextResetRef.current = false;
+      return;
+    }
     providerTestRevisionRef.current += 1;
     providerAutoTestKeyRef.current = null;
     setByokPreconditionNotice(null);
@@ -1931,6 +2202,9 @@ export function SettingsDialog({
           mode_before: modeBefore,
           mode_after: modeAfter,
         });
+      }
+      if (mode === 'api' && c.mode !== 'api') {
+        return restorePendingByokProviderDraft({ ...c, mode });
       }
       return { ...c, mode };
     });
@@ -2040,7 +2314,7 @@ export function SettingsDialog({
       return updateCurrentApiProtocolConfig(switchedWithCurrentDraft, {
         ...(providerChanged ? { apiKey: '' } : {}),
         baseUrl: provider.baseUrl,
-        model: provider.model,
+        model: provider.preferredModels[0] ?? '',
         apiProviderBaseUrl: provider.baseUrl,
       });
     });
@@ -2075,12 +2349,42 @@ export function SettingsDialog({
       const nextAgents = Array.isArray(refreshed) ? refreshed : agents;
       setAgentRescanNotice({
         kind: 'success',
-        count: nextAgents.filter((a) => a.available).length,
+        count: availableVisibleAgentCount(nextAgents),
       });
     } catch {
       setAgentRescanNotice({ kind: 'error' });
     } finally {
       setAgentRescanRunning(false);
+    }
+  };
+  const handleConfirmDshSetup = async () => {
+    if (dshSetup?.busy) return;
+    setDshSetup({ busy: true, error: null });
+    try {
+      await installDeepSeekHarnessCompanion();
+      const refreshed = await onRefreshAgents(agentRefreshOptionsForConfig(cfg));
+      const nextAgents = Array.isArray(refreshed) ? refreshed : agents;
+      const installed = nextAgents.find(
+        (agent) => agent.id === 'deepseek-harness' && agent.available,
+      );
+      if (!installed) throw new Error(t('settings.dshSetupRequired'));
+      setCfg((current) => ({ ...current, agentId: installed.id, mode: 'daemon' }));
+      setDshSetup(null);
+      setAgentTestState({ status: 'running' });
+      const choice = cfg.agentModels?.[installed.id] ?? {};
+      const result = await testAgent({
+        agentId: installed.id,
+        model: choice.model || undefined,
+        reasoning: choice.reasoning || undefined,
+        serviceTier: choice.serviceTier || undefined,
+        agentCliEnv: cfg.agentCliEnv ?? {},
+      });
+      setAgentTestState({ status: 'done', result });
+    } catch (error) {
+      setDshSetup({
+        busy: false,
+        error: error instanceof Error ? error.message : t('settings.dshSetupRequired'),
+      });
     }
   };
   const attributedAmrSettingsUrl = (
@@ -2168,7 +2472,7 @@ export function SettingsDialog({
   const agentsRef = useRef(agents);
   agentsRef.current = agents;
   useEffect(() => {
-    if (amrCardStatus?.loggedIn !== true) return;
+    if (!amrCardSignedIn) return;
     const amr = agentsRef.current.find((agent) => agent.id === 'amr');
     if (!amr || (amr.models?.length ?? 0) > 0) return;
     if (amrRescanInFlightRef.current) return;
@@ -2206,7 +2510,7 @@ export function SettingsDialog({
       cancelled = true;
       amrRescanInFlightRef.current = false;
     };
-  }, [amrCardStatus?.loggedIn]);
+  }, [amrCardSignedIn]);
 
   const handleTestAgent = async () => {
     if (agentTestState.status === 'running') {
@@ -2232,6 +2536,7 @@ export function SettingsDialog({
           agentId: selected.id,
           model: choice.model || undefined,
           reasoning: choice.reasoning || undefined,
+          serviceTier: choice.serviceTier || undefined,
           agentCliEnv: cfg.agentCliEnv ?? {},
         },
         controller.signal,
@@ -2368,7 +2673,7 @@ export function SettingsDialog({
           area: 'execution_model',
           provider_id: byokProviderId,
           result: byokTrackingTestResult(result),
-          ...(result.ok ? {} : { error_code: result.kind || 'UNKNOWN' }),
+          ...(result.ok ? {} : { error_code: byokErrorCode(result) }),
           ...(result.ok ? {} : { error_kind: result.kind || 'UNKNOWN' }),
           field_missing: 'none',
           config_key_changed: configKeyChanged,
@@ -2718,187 +3023,13 @@ export function SettingsDialog({
   const apiProtocol = cfg.apiProtocol ?? 'anthropic';
   const defaultApiKeyConsoleLink = API_KEY_CONSOLE_LINKS[apiProtocol];
   const byokProviderPresets: ReadonlyArray<ByokProviderPreset> = [
-    {
-      id: 'anthropic',
-      title: 'Anthropic',
-      protocol: 'anthropic',
-      baseUrl: 'https://api.anthropic.com',
-      model: 'claude-sonnet-4-5',
-    },
-    {
-      id: 'openai',
-      title: 'OpenAI',
-      protocol: 'openai',
-      baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
-    },
-    {
-      id: 'atlascloud',
-      title: 'Atlas Cloud',
-      protocol: 'openai',
-      baseUrl: 'https://api.atlascloud.ai/v1',
-      model: 'qwen/qwen3.5-flash',
-    },
-    {
-      id: 'google-ai-studio',
-      title: 'Google Gemini',
-      protocol: 'google',
-      baseUrl: 'https://generativelanguage.googleapis.com',
-      model: 'gemini-3.5-flash',
-    },
-    {
-      id: 'ollama',
-      title: 'Ollama Cloud',
-      protocol: 'ollama',
-      baseUrl: 'https://ollama.com',
-      model: 'gpt-oss:120b',
-    },
-    {
-      id: 'azure',
-      title: 'Azure OpenAI',
-      protocol: 'azure',
-      baseUrl: '',
-      model: '',
-    },
-    {
-      id: 'siliconflow-cn',
-      title: 'SiliconFlow (CN)',
-      protocol: 'openai',
-      baseUrl: 'https://api.siliconflow.cn/v1',
-      model: 'deepseek-ai/DeepSeek-V3.1',
-    },
-    {
-      id: 'siliconflow-global',
-      title: 'SiliconFlow (Global)',
-      protocol: 'openai',
-      baseUrl: 'https://api.siliconflow.com/v1',
-      model: 'deepseek-ai/DeepSeek-V3.1',
-    },
-    {
-      id: 'ppio',
-      title: 'PPIO',
-      protocol: 'openai',
-      baseUrl: 'https://api.ppinfra.com/v3/openai',
-      model: 'deepseek/deepseek-v3.1',
-    },
-    {
-      id: 'nvidia',
-      title: 'NVIDIA',
-      protocol: 'openai',
-      baseUrl: 'https://integrate.api.nvidia.com/v1',
-      model: 'openai/gpt-oss-120b',
-    },
-    {
-      id: 'stepfun',
-      title: 'StepFun',
-      protocol: 'openai',
-      baseUrl: 'https://api.stepfun.ai/v1',
-      model: 'step-2-mini',
-    },
-    {
-      id: 'deepseek',
-      title: 'DeepSeek',
-      protocol: 'openai',
-      baseUrl: 'https://api.deepseek.com',
-      model: 'deepseek-chat',
-    },
-    {
-      id: 'openrouter',
-      title: 'OpenRouter',
-      protocol: 'openai',
-      baseUrl: 'https://openrouter.ai/api/v1',
-      model: 'anthropic/claude-3.7-sonnet',
-    },
-    {
-      id: 'mistral',
-      title: 'Mistral AI',
-      protocol: 'openai',
-      baseUrl: 'https://api.mistral.ai/v1',
-      model: 'mistral-large-latest',
-    },
-    {
-      id: 'xai',
-      title: 'xAI',
-      protocol: 'openai',
-      baseUrl: 'https://api.x.ai/v1',
-      model: 'grok-4',
-    },
-    {
-      id: 'together',
-      title: 'Together AI',
-      protocol: 'openai',
-      baseUrl: 'https://api.together.xyz/v1',
-      model: 'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo',
-    },
-    {
-      id: 'huggingface',
-      title: 'Hugging Face',
-      protocol: 'openai',
-      baseUrl: 'https://router.huggingface.co/v1',
-      model: 'openai/gpt-oss-120b',
-    },
-    {
-      id: 'qwen',
-      title: '千问',
-      protocol: 'openai',
-      baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-      model: 'qwen-plus',
-    },
-    {
-      id: 'volcengine',
-      title: '火山引擎',
-      protocol: 'openai',
-      baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
-      model: 'doubao-seed-1-6',
-    },
-    {
-      id: 'qianfan',
-      title: '百度千帆',
-      protocol: 'openai',
-      baseUrl: 'https://qianfan.baidubce.com/v2',
-      model: 'ernie-4.5-turbo-128k',
-    },
-    {
-      id: 'vllm',
-      title: 'vLLM',
-      protocol: 'openai',
-      baseUrl: 'http://127.0.0.1:8000/v1',
-      model: 'model',
-    },
-    {
-      id: 'mimo',
-      title: '小米 MiMo',
-      protocol: 'openai',
-      baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
-      model: 'mimo-v2.5-pro',
-    },
-    {
-      id: 'minimax',
-      title: 'MiniMax',
-      protocol: 'anthropic',
-      baseUrl: 'https://api.minimaxi.com/anthropic',
-      model: 'MiniMax-M2.7-highspeed',
-    },
-    {
-      id: 'moonshot',
-      title: 'Moonshot',
-      protocol: 'openai',
-      baseUrl: 'https://api.moonshot.cn/v1',
-      model: 'kimi-k2-0711-preview',
-    },
-    {
-      id: 'zhipu',
-      title: '智谱',
-      protocol: 'openai',
-      baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-      model: 'glm-4.6',
-    },
+    ...BYOK_PROVIDER_PRESETS,
     {
       id: 'custom',
       title: t('settings.customProvider'),
       protocol: apiProtocol,
       baseUrl: cfg.baseUrl,
-      model: cfg.model,
+      preferredModels: cfg.model ? [cfg.model] : [],
       custom: true,
     },
   ];
@@ -2907,7 +3038,7 @@ export function SettingsDialog({
     title: t('settings.customProvider'),
     protocol: apiProtocol,
     baseUrl: cfg.baseUrl,
-    model: cfg.model,
+    preferredModels: cfg.model ? [cfg.model] : [],
     custom: true,
   };
   const byokPresetProtocols = new Set(
@@ -2924,7 +3055,9 @@ export function SettingsDialog({
         title: tab.title,
         protocol: tab.id,
         baseUrl: fallback.baseUrl || DEFAULT_BASE_URL_BY_PROTOCOL[tab.id],
-        model: fallback.model || SUGGESTED_MODELS_BY_PROTOCOL[tab.id][0] || '',
+        preferredModels: [
+          fallback.model || SUGGESTED_MODELS_BY_PROTOCOL[tab.id][0] || '',
+        ].filter(Boolean),
       };
     }),
     customByokProvider,
@@ -3044,8 +3177,32 @@ export function SettingsDialog({
   // The status here drives the footer indicator: 'idle' = no draft to
   // flush, 'pending' = scheduled, 'saving' = request in flight, 'saved'
   // = recent successful sync, 'error' = recent failure.
-  const [autosaveStatus, setAutosaveStatus] =
-    useState<'idle' | 'pending' | 'saving' | 'saved' | 'error'>('idle');
+  type AutosaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
+  const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>('idle');
+  // The indicator is one shared surface: every section drives this same pill.
+  // A section whose write outlives it — Labs writes immediately and can settle
+  // after unmount — must not relabel a newer save's outcome, so every writer
+  // takes a claim and only the current claim may settle. Comparing the
+  // displayed value would not be enough: a newer section can legitimately be
+  // showing the same `saving` an older write left behind.
+  const autosaveClaimRef = useRef(0);
+  const claimAutosaveStatus = useCallback((next: AutosaveStatus): number => {
+    autosaveClaimRef.current += 1;
+    setAutosaveStatus(next);
+    return autosaveClaimRef.current;
+  }, []);
+  const settleAutosaveStatus = useCallback((claim: number, next: AutosaveStatus): void => {
+    if (claim !== autosaveClaimRef.current) return;
+    setAutosaveStatus(next);
+  }, []);
+  const labsAutosave = useMemo(() => ({
+    claim: () => claimAutosaveStatus('saving'),
+    settle: (claim: number, status: 'saved' | 'error' | 'idle') => {
+      // Settling does not hand the indicator to anyone else, so the claim
+      // stays valid for this writer's own follow-up (saved -> idle).
+      settleAutosaveStatus(claim, status);
+    },
+  }), [claimAutosaveStatus, settleAutosaveStatus]);
   // Skip the very first effect tick so just opening the dialog doesn't
   // appear to "save" anything before the user has touched a field.
   const autosaveSkipFirstRef = useRef(true);
@@ -3058,6 +3215,9 @@ export function SettingsDialog({
   const autosaveSavedTimerRef = useRef<number | null>(null);
   const autosaveRetryTimerRef = useRef<number | null>(null);
   const autosavePendingFlushRef = useRef(false);
+  const explicitOnboardingResetRef = useRef(false);
+  const byokPreflightTrackingRef = useRef<string | null>(null);
+  const committedClearedByokProviderKeyRef = useRef<string | null>(null);
   const autosaveLatestRef = useRef<AppConfig>(cfg);
   // Baseline used by the draft-only detector: the snapshot at the most
   // recent successful autosave (or the initial cfg on mount). Compared
@@ -3065,22 +3225,43 @@ export function SettingsDialog({
   // since last save are intentionally-stripped fields like the
   // Composio API key — in which case we must NOT flash "All changes
   // saved", because the draft has not actually been persisted.
-  const autosaveLastSavedRef = useRef<AppConfig>(cfg);
+  const autosaveLastSavedRef = useRef<AppConfig>(normalizedInitialConfig);
   const mediaProvidersChangeVersionRef = useRef(0);
   const lastSyncedMediaProvidersVersionRef = useRef(0);
+  const [autosaveCommitTick, setAutosaveCommitTick] = useState(0);
   const [autosaveRetryTick, setAutosaveRetryTick] = useState(0);
   autosaveLatestRef.current = cfg;
+
+  // App owns the config transition and persistence. Settings only supplies
+  // its latest draft with the explicit reset intent. Cancel a queued autosave
+  // before handing off: the dialog unmounts immediately, and its normal
+  // pending-draft flush must not replay the pre-reset `true` snapshot.
+  const handleResetOnboarding = useCallback(() => {
+    if (!onResetOnboarding) return;
+    explicitOnboardingResetRef.current = true;
+    autosavePendingFlushRef.current = false;
+    if (autosaveTimerRef.current != null) {
+      window.clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+    if (autosaveRetryTimerRef.current != null) {
+      window.clearTimeout(autosaveRetryTimerRef.current);
+      autosaveRetryTimerRef.current = null;
+    }
+    claimAutosaveStatus('idle');
+    onResetOnboarding({ ...cfg, onboardingCompleted: false });
+  }, [cfg, claimAutosaveStatus, onResetOnboarding]);
+
   useEffect(() => {
     if (autosaveSkipFirstRef.current) {
       autosaveSkipFirstRef.current = false;
-      autosaveLastSavedRef.current = cfg;
       return;
     }
     if (suppressNextAutosaveRef.current) {
       suppressNextAutosaveRef.current = false;
       return;
     }
-    setAutosaveStatus('pending');
+    const autosaveClaim = claimAutosaveStatus('pending');
     if (autosaveSavedTimerRef.current != null) {
       window.clearTimeout(autosaveSavedTimerRef.current);
       autosaveSavedTimerRef.current = null;
@@ -3097,6 +3278,38 @@ export function SettingsDialog({
       autosavePendingFlushRef.current = false;
       autosaveTimerRef.current = null;
       const snapshot = autosaveLatestRef.current;
+      const preflightReason = snapshot.mode === 'api'
+        ? byokPreflightBlockReason(snapshot)
+        : null;
+      if (preflightReason) {
+        const providerId = byokProtocolToTracking(snapshot.apiProtocol) ?? 'unknown';
+        const activeExecutionMode = executionModeToTracking(autosaveLastSavedRef.current.mode);
+        const trackingKey = [
+          byokProviderKeyForConfig(snapshot),
+          preflightReason,
+          activeExecutionMode,
+        ].join(':');
+        if (byokPreflightTrackingRef.current !== trackingKey) {
+          byokPreflightTrackingRef.current = trackingKey;
+          trackByokPreflightBlocked(analytics.track, {
+            source: 'settings',
+            reason: preflightReason,
+            provider_id: providerId,
+            active_execution_mode: activeExecutionMode,
+          });
+        }
+      } else {
+        byokPreflightTrackingRef.current = null;
+      }
+      const committedClearedProviderKey = committedClearedByokProviderKeyRef.current;
+      const persistedSnapshot = resolveSettingsAutosavePayload(
+        snapshot,
+        autosaveLastSavedRef.current,
+        {
+          commitClearedActiveApiKey:
+            committedClearedProviderKey === byokProviderKeyForConfig(snapshot),
+        },
+      );
       const mediaProvidersVersion = mediaProvidersChangeVersionRef.current;
       const persistOptions = {
         forceMediaProviderSync: mediaProvidersVersion > lastSyncedMediaProvidersVersionRef.current,
@@ -3112,37 +3325,42 @@ export function SettingsDialog({
       // hasn't changed.
       if (
         !persistOptions.forceMediaProviderSync
-        && isAutosaveDraftOnlyChange(snapshot, autosaveLastSavedRef.current)
+        && isAutosaveDraftOnlyChange(persistedSnapshot, autosaveLastSavedRef.current)
       ) {
-        setAutosaveStatus('idle');
+        settleAutosaveStatus(autosaveClaim, 'idle');
         return;
       }
-      setAutosaveStatus('saving');
+      settleAutosaveStatus(autosaveClaim, 'saving');
       void (async () => {
         try {
-          await onPersist(snapshot, persistOptions);
-          autosaveLastSavedRef.current = snapshot;
+          await onPersist(persistedSnapshot, persistOptions);
+          autosaveLastSavedRef.current = persistedSnapshot;
+          if (
+            committedClearedProviderKey
+            && committedClearedByokProviderKeyRef.current === committedClearedProviderKey
+          ) {
+            committedClearedByokProviderKeyRef.current = null;
+          }
           lastSavedAppearanceRef.current = {
-            theme: snapshot.theme ?? 'system',
-            accentColor: resolveAccentColor(snapshot.accentColor),
+            accentColor: resolveAccentColor(persistedSnapshot.accentColor),
           };
           // If a newer edit landed while the request was in flight,
           // leave the status as 'pending' so the next debounce tick
           // owns the indicator instead of flashing "Saved".
           if (autosaveLatestRef.current !== snapshot) {
-            setAutosaveStatus('pending');
+            settleAutosaveStatus(autosaveClaim, 'pending');
             return;
           }
           if (persistOptions.forceMediaProviderSync) {
             lastSyncedMediaProvidersVersionRef.current = mediaProvidersVersion;
             setPendingMediaProviderEditIds(new Set());
           }
-          setAutosaveStatus('saved');
+          settleAutosaveStatus(autosaveClaim, 'saved');
           autosaveSavedTimerRef.current = window.setTimeout(() => {
             autosaveSavedTimerRef.current = null;
             // Settle to idle after a moment so the indicator doesn't
             // stay on "Saved" forever and become noise.
-            setAutosaveStatus((curr) => (curr === 'saved' ? 'idle' : curr));
+            settleAutosaveStatus(autosaveClaim, 'idle');
           }, 1800);
         } catch {
           if (
@@ -3151,7 +3369,7 @@ export function SettingsDialog({
             && mediaProvidersChangeVersionRef.current === mediaProvidersVersion
             && lastSyncedMediaProvidersVersionRef.current < mediaProvidersVersion
           ) {
-            setAutosaveStatus('pending');
+            settleAutosaveStatus(autosaveClaim, 'pending');
             autosaveRetryTimerRef.current = window.setTimeout(() => {
               autosaveRetryTimerRef.current = null;
               if (
@@ -3165,7 +3383,7 @@ export function SettingsDialog({
             }, 1500);
             return;
           }
-          setAutosaveStatus('error');
+          settleAutosaveStatus(autosaveClaim, 'error');
         }
       })();
     }, 400);
@@ -3175,19 +3393,39 @@ export function SettingsDialog({
         autosaveTimerRef.current = null;
       }
     };
-  }, [cfg, onPersist, autosaveRetryTick]);
+  }, [
+    analytics.track,
+    autosaveCommitTick,
+    autosaveRetryTick,
+    cfg,
+    claimAutosaveStatus,
+    onPersist,
+    settleAutosaveStatus,
+  ]);
   // Flush any pending autosave on unmount so a fast-closing dialog
   // never strands an in-flight edit. We also clear the "Saved" toast
   // timer to avoid setState after unmount.
   useEffect(() => {
     return () => {
-      if (autosavePendingFlushRef.current) {
+      if (
+        autosavePendingFlushRef.current
+        && !explicitOnboardingResetRef.current
+      ) {
         const mediaProvidersVersion = mediaProvidersChangeVersionRef.current;
         // Best-effort flush; if it rejects, localStorage already has
         // the latest copy from the synchronous saveConfig call inside
         // onPersist.
         autosavePendingFlushRef.current = false;
-        void Promise.resolve(onPersist(autosaveLatestRef.current, {
+        const persistedSnapshot = resolveSettingsAutosavePayload(
+          autosaveLatestRef.current,
+          autosaveLastSavedRef.current,
+          {
+            commitClearedActiveApiKey:
+              committedClearedByokProviderKeyRef.current ===
+              byokProviderKeyForConfig(autosaveLatestRef.current),
+          },
+        );
+        void Promise.resolve(onPersist(persistedSnapshot, {
           forceMediaProviderSync: mediaProvidersVersion > lastSyncedMediaProvidersVersionRef.current,
         })).catch(() => undefined);
       }
@@ -3218,11 +3456,15 @@ export function SettingsDialog({
     [apiProtocol],
   );
   const selectedProviderIndex =
-    cfg.apiProviderBaseUrl == null
-      ? -1
-      : protocolProviders.findIndex(
-          (p) => p.baseUrl === cfg.apiProviderBaseUrl && p.baseUrl === cfg.baseUrl,
-        );
+    protocolProviders.findIndex((p) => {
+      if (cfg.apiProviderBaseUrl == null) {
+        return apiProtocol === 'azure' && p.baseUrl === '' && Boolean(cfg.baseUrl?.trim());
+      }
+      return (
+        p.baseUrl === cfg.apiProviderBaseUrl &&
+        (p.baseUrl === cfg.baseUrl || (apiProtocol === 'azure' && p.baseUrl === ''))
+      );
+    });
   const selectedProvider = selectedProviderIndex >= 0 ? protocolProviders[selectedProviderIndex] : undefined;
   const apiKeyConsoleLink =
     selectedProvider?.apiKeyConsoleLink ?? defaultApiKeyConsoleLink;
@@ -3253,7 +3495,12 @@ export function SettingsDialog({
           ? undefined
           : cfg.apiProtocolConfigs?.[provider.protocol]
       );
-    if (!entry || entry.baseUrl !== provider.baseUrl) return false;
+    if (!entry) return false;
+    if (provider.baseUrl) {
+      if (entry.baseUrl !== provider.baseUrl) return false;
+    } else if (provider.protocol !== 'azure' && entry.baseUrl !== provider.baseUrl) {
+      return false;
+    }
     const knownProvider = KNOWN_PROVIDERS.find((item) => item.baseUrl === provider.baseUrl);
     return canRunProviderConnectionTest(entry, {
       requiresApiKey: byokProviderRequiresApiKey(
@@ -3298,6 +3545,16 @@ export function SettingsDialog({
     () => blockingByokDraftIssues(byokDraftValidation),
     [byokDraftValidation],
   );
+  const byokActivationPreflightReason = useMemo(
+    () => byokPreflightBlockReason(cfg),
+    [
+      cfg.apiKey,
+      cfg.apiProtocol,
+      cfg.apiProviderBaseUrl,
+      cfg.baseUrl,
+      cfg.model,
+    ],
+  );
   const apiKeyDraftInvalid = byokBlockingDraftIssues.some((issue) =>
     issue.field === 'api_key' && issue.code !== 'api_key_required'
   );
@@ -3337,10 +3594,41 @@ export function SettingsDialog({
     apiProtocol !== 'azure' &&
     apiProtocol !== 'ollama' &&
     isProviderModelDiscoveryUnsupported(apiProtocol, cfg.baseUrl);
+  const providerModelDiscoverySupported =
+    apiProtocol !== 'azure' &&
+    apiProtocol !== 'ollama' &&
+    !providerModelDiscoveryUnavailable;
   const fetchedApiModelOptions =
     providerModelDiscoveryUnavailable
       ? []
       : activeProviderModelsCache[providerModelsKey] ?? [];
+  const providerPreferredModels =
+    selectedProvider?.preferredModels ?? SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol];
+  const providerManagedModelIds = useMemo(
+    () => new Set([
+      ...providerPreferredModels,
+      ...(selectedProvider?.retiredModels ?? []),
+    ]),
+    [providerPreferredModels, selectedProvider],
+  );
+  const fetchedApiModelIds = useMemo(
+    () => new Set(fetchedApiModelOptions.map((model) => model.id.trim())),
+    [fetchedApiModelOptions],
+  );
+  const pendingProviderModelReconciliation = (() => {
+    if (cfg.mode !== 'api' || apiModelCustomEditing) return null;
+    if (apiModelUserSelectedRef.current) return null;
+    if (fetchedApiModelOptions.length === 0) return null;
+    const currentModel = cfg.model.trim();
+    if (currentModel && fetchedApiModelIds.has(currentModel)) return null;
+    if (currentModel && !providerManagedModelIds.has(currentModel)) return null;
+    const preference = resolveByokModelPreference({
+      currentModel: '',
+      accountModels: fetchedApiModelOptions,
+      providerPreferredModels,
+    });
+    return preference.model === currentModel ? null : preference.model;
+  })();
   const commitProviderModelsInputs = () => {
     if (
       byokFirstPartyBaseUrl?.hostTypo ||
@@ -3358,22 +3646,32 @@ export function SettingsDialog({
     // characters — otherwise a key like "sk-ant-...\n" would only raise a
     // non-blocking warning yet still go out malformed over the wire.
     const cleanedApiKey = cleanByokApiKey(cfg.apiKey);
+    const currentProviderKey = byokProviderKeyForConfig(cfg);
+    const activeConfig = autosaveLastSavedRef.current;
+    const commitsClearedActiveApiKey =
+      cleanedApiKey === ''
+      && activeConfig.mode === 'api'
+      && activeConfig.apiKey.trim() !== ''
+      && currentProviderKey === byokProviderKeyForConfig(activeConfig);
+    committedClearedByokProviderKeyRef.current = commitsClearedActiveApiKey
+      ? currentProviderKey
+      : null;
+    if (commitsClearedActiveApiKey) {
+      setAutosaveCommitTick((tick) => tick + 1);
+    }
     if (cleanedApiKey !== cfg.apiKey) {
       // Writing the cleaned key changes cfg.apiKey, which re-runs the reset
       // effects above: one nulls providerModelsCommittedKey, the other bumps
       // providerTestRevisionRef / clears providerAutoTestKeyRef. So committing
       // the model key or starting the auto-test here would be clobbered — the
-      // model commit before the auto-fetch effect reads it, and the auto-test
-      // result dropped by the stale-revision guard. Defer both until the
-      // cleaned value has landed (effect below), otherwise account models
-      // never auto-load and the auto-test success/error never reaches the UI
-      // for the exact dirty-paste case this handles.
+      // model commit before the auto-fetch effect reads it. Defer the commit
+      // until the cleaned value has landed (effect below); connection testing
+      // waits for model discovery and reconciliation.
       deferAfterKeyCleanRef.current = true;
       updateApiConfig({ apiKey: cleanedApiKey });
       return;
     }
     commitProviderModelsInputs();
-    handleAutoTestProvider();
   };
   useEffect(() => {
     if (!deferAfterKeyCleanRef.current) return;
@@ -3386,9 +3684,6 @@ export function SettingsDialog({
     } else {
       setProviderModelsCommittedKey(providerModelsKey);
     }
-    // Runs after the provider-test reset effect (declaration order) bumped the
-    // revision for the cleaned key, so this auto-test is not flagged stale.
-    handleAutoTestProvider();
   }, [
     byokFirstPartyBaseUrl?.hostTypo,
     byokModelFetchDraftValidation,
@@ -3401,11 +3696,34 @@ export function SettingsDialog({
     if (providerTestState.status === 'running') return;
     if (byokFirstPartyBaseUrl?.hostTypo) return;
     if (blockingByokDraftIssues(byokDraftValidation).length > 0) return;
+    if (providerModelDiscoverySupported) {
+      if (
+        apiProtocol !== 'aihubmix' &&
+        providerModelsCommittedKey !== providerModelsKey
+      ) {
+        const timer = window.setTimeout(() => {
+          setProviderModelsCommittedKey(providerModelsKey);
+        }, 200);
+        return () => window.clearTimeout(timer);
+      }
+      if (
+        providerModelsState.status !== 'done' ||
+        providerModelsState.cacheKey !== providerModelsKey
+      ) return;
+      if (
+        !providerModelsState.result.ok &&
+        (
+          providerModelsState.result.kind === 'auth_failed' ||
+          providerModelsState.result.kind === 'forbidden'
+        )
+      ) return;
+      if (pendingProviderModelReconciliation !== null) return;
+    }
     const key = providerConnectionTestKey(apiProtocol, cfg);
     if (providerAutoTestKeyRef.current === key) return;
     const timer = window.setTimeout(() => {
       handleAutoTestProvider();
-    }, 500);
+    }, providerModelDiscoverySupported ? 0 : 500);
     return () => window.clearTimeout(timer);
   }, [
     apiProtocol,
@@ -3416,6 +3734,11 @@ export function SettingsDialog({
     cfg.baseUrl,
     cfg.mode,
     cfg.model,
+    providerModelDiscoverySupported,
+    pendingProviderModelReconciliation,
+    providerModelsCommittedKey,
+    providerModelsKey,
+    providerModelsState,
     providerTestState.status,
     visualStabilityMode,
   ]);
@@ -3490,13 +3813,13 @@ export function SettingsDialog({
   const suggestedApiModelIds = useMemo(
     () => {
       if (providerModelDiscoveryUnavailable) {
-        return selectedProvider?.models?.length
-          ? Array.from(new Set(selectedProvider.models))
+        return selectedProvider?.preferredModels.length
+          ? Array.from(new Set(selectedProvider.preferredModels))
           : [];
       }
       return Array.from(new Set(
-        selectedProvider?.models?.length
-          ? selectedProvider.models
+        selectedProvider?.preferredModels.length
+          ? selectedProvider.preferredModels
           : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
       ));
     },
@@ -3514,42 +3837,15 @@ export function SettingsDialog({
   const byokImageModelOptions = useByokImageModelOptions(apiProtocol);
   const byokVideoModelOptions = useByokVideoModelOptions(apiProtocol);
   const byokSpeechModelOptions = useByokSpeechModelOptions(apiProtocol);
-  const fetchedApiModelIds = useMemo(
-    () => new Set(fetchedApiModelOptions.map((model) => model.id.trim())),
-    [fetchedApiModelOptions],
-  );
   const apiModelIds = useMemo(
     () => apiModelOptions.map((m) => m.id),
     [apiModelOptions],
   );
-  const providerDefaultModel =
-    selectedProvider?.model.trim() || suggestedApiModelIds[0] || '';
   useEffect(() => {
-    if (cfg.mode !== 'api') return;
-    if (apiModelCustomEditing) return;
-    // Respect an explicit user pick — even when it equals the provider preset
-    // id, the user deliberately chose it and discovery must not rewrite it.
-    if (apiModelUserSelectedRef.current) return;
-    if (fetchedApiModelOptions.length === 0) return;
-    const currentModel = cfg.model.trim();
-    if (currentModel && fetchedApiModelIds.has(currentModel)) return;
-    if (currentModel && currentModel !== providerDefaultModel) return;
-
-    const preference = resolveByokModelPreference({
-      currentModel: '',
-      accountModels: fetchedApiModelOptions,
-      providerDefaultModel,
-    });
-    if (preference.source !== 'account') return;
-    if (preference.model === currentModel) return;
-    updateApiConfig({ model: preference.model });
+    if (pendingProviderModelReconciliation === null) return;
+    updateApiConfig({ model: pendingProviderModelReconciliation });
   }, [
-    apiModelCustomEditing,
-    cfg.mode,
-    cfg.model,
-    fetchedApiModelIds,
-    fetchedApiModelOptions,
-    providerDefaultModel,
+    pendingProviderModelReconciliation,
   ]);
   const apiModelCustomActive =
     shouldShowCustomModelInput(
@@ -3585,7 +3881,10 @@ export function SettingsDialog({
   // BYOK content so "Local CLI" only renders once (in the seg-control tab),
   // not twice (heading + tab).
   const sectionHeader: Record<SettingsSection, { title: string; subtitle: string }> = {
+    general: { title: t('settings.general'), subtitle: t('settings.generalHint') },
+    labs: { title: t('labs.title'), subtitle: t('labs.navHint') },
     execution: { title: t('settings.title'), subtitle: t('settings.subtitle') },
+    workspace: { title: t('settings.workspace'), subtitle: t('settings.workspaceHint') },
     instructions: {
       title: t('settings.instructionsTitle'),
       subtitle: t('settings.instructionsSubtitle'),
@@ -3600,7 +3899,11 @@ export function SettingsDialog({
     integrations: { title: t('settings.mcpServerTitle'), subtitle: t('settings.mcpServerHint') },
     mcpClient: { title: t('settings.externalMcpTitle'), subtitle: t('settings.externalMcpHint') },
     language: { title: t('settings.language'), subtitle: t('settings.languageHint') },
-    appearance: { title: t('settings.appearance'), subtitle: t('settings.appearanceHint') },
+    // The theme setting is gone (the app ships light-only), so `appearance` has
+    // no copy of its own. It survives only as a legacy deep-link token that
+    // `normalizeSettingsSection` folds into General, so this entry can never be
+    // the active header — it exists to keep the Record exhaustive.
+    appearance: { title: t('settings.general'), subtitle: t('settings.generalHint') },
     critiqueTheater: {
       title: t('critiqueTheater.settingsNav'),
       subtitle: t('critiqueTheater.settingsNavHint'),
@@ -3625,15 +3928,18 @@ export function SettingsDialog({
   const activeHeader = sectionHeader[activeSection];
   const visibleAgents = agents.filter(isVisibleLocalCliAgent);
   const installedAgents = orderAgentsWithOpenDesignFirst(
-    visibleAgents.filter((a) => a.available),
+    visibleAgents.filter((agent) => agent.available || deepSeekHarnessNeedsSetup(agent)),
   );
-  const unavailableAgents = visibleAgents.filter((a) => !a.available);
+  const unavailableAgents = visibleAgents.filter(
+    (agent) => !agent.available && !deepSeekHarnessNeedsSetup(agent),
+  );
   const initialAgentScanRunning = agentsLoading && agents.length === 0;
   const agentModelOptionLabel = (
     model: ProviderModelOption | undefined,
     fallback: string,
   ) => {
     if (!model) return fallback;
+    if (model.id === 'default') return t('settings.modelUsesCliDefault');
     const label = model.label?.trim();
     const id = model.id.trim();
     if (label && label !== id) {
@@ -3656,14 +3962,20 @@ export function SettingsDialog({
   const renderAgentModelConfig = (selected: AgentInfo) => {
     const hasModels =
       Array.isArray(selected.models) && selected.models.length > 0;
+    const configuredModelId =
+      cfg.agentModels?.[selected.id]?.model ?? defaultAgentModelId(selected);
+    const modelReasoningOptions = selected.models?.find(
+      (model) => model.id === configuredModelId,
+    )?.reasoningOptions;
+    const activeReasoningOptions = modelReasoningOptions ?? selected.reasoningOptions;
     const hasReasoning =
-      Array.isArray(selected.reasoningOptions) &&
-      selected.reasoningOptions.length > 0;
+      Array.isArray(activeReasoningOptions) &&
+      activeReasoningOptions.length > 0;
     // AMR's live catalog only lands a beat after sign-in. While the user is
     // signed in but the model list hasn't arrived yet, show the picker in a
     // loading state instead of hiding it — so the dropdown appears at sign-in
     // and simply fills in, rather than popping in seconds later.
-    if (selected.id === 'amr' && !hasModels && (amrCardStatus?.loggedIn ?? false)) {
+    if (selected.id === 'amr' && !hasModels && amrCardSignedIn) {
       return (
         <div className="agent-card-config">
           <label className="field">
@@ -3688,19 +4000,21 @@ export function SettingsDialog({
               </div>
             </div>
           </label>
-          <p className="hint agent-model-row-hint">
-            {t('settings.modelPickerLiveHint')}
-          </p>
         </div>
       );
     }
     if (!hasModels && !hasReasoning) return null;
     const choice = cfg.agentModels?.[selected.id] ?? {};
     const effectiveChoice = effectiveAgentModelChoice(selected, choice) ?? choice;
-    const modelsForSelect =
+    const modelsForSelect = (
       selected.id === 'amr' && selected.models
         ? orderModelOptionsByAvailability(selected.models)
-        : selected.models;
+        : selected.models
+    )?.map((model) =>
+      model.id === 'default'
+        ? { ...model, label: t('settings.modelUsesCliDefault') }
+        : model,
+    );
     const knownModelIds = selected.models?.map((m) => m.id) ?? [];
     // Adapters opt out via `supportsCustomModel: false` on their
     // RuntimeAgentDef when their CLI has no `--model` flag (Antigravity,
@@ -3708,41 +4022,55 @@ export function SettingsDialog({
     // (AMR routes through ACP `session/set_model` and validates against
     // a live catalog). Undefined === allow, matching today's UX.
     const allowCustomModel = selected.supportsCustomModel !== false;
+    const explicitCustomMode = agentCustomModelIds.has(selected.id);
     const configuredModel =
       typeof effectiveChoice.model === 'string' && effectiveChoice.model
         ? effectiveChoice.model
         : null;
+    const customModelDraft =
+      explicitCustomMode && typeof choice.model === 'string'
+        ? choice.model
+        : null;
     const setChoice = (
-      next: { model?: string; reasoning?: string },
+      next: { model?: string; reasoning?: string; serviceTier?: string },
     ) => {
       setCfg((c) => {
         const prev = c.agentModels?.[selected.id] ?? {};
+        const merged = { ...prev, ...next };
+        if (
+          Object.prototype.hasOwnProperty.call(next, 'serviceTier') &&
+          next.serviceTier === undefined
+        ) {
+          delete merged.serviceTier;
+        }
         return {
           ...c,
           agentModels: {
             ...(c.agentModels ?? {}),
-            [selected.id]: { ...prev, ...next },
+            [selected.id]: merged,
           },
         };
       });
     };
-    const modelValue =
+    const fallbackModelValue =
       selected.id === 'amr' &&
       configuredModel &&
       !knownModelIds.includes(configuredModel)
         ? defaultAgentModelId(selected) ?? ''
         : configuredModel ?? defaultAgentModelId(selected) ?? '';
+    const modelValue = customModelDraft ?? fallbackModelValue;
     const reasoningValue =
-      effectiveChoice.reasoning ??
-      choice.reasoning ??
-      selected.reasoningOptions?.[0]?.id ?? '';
+      activeReasoningOptions?.some((option) => option.id === effectiveChoice.reasoning)
+        ? effectiveChoice.reasoning!
+        : activeReasoningOptions?.find((option) => option.default)?.id ??
+          activeReasoningOptions?.[0]?.id ?? '';
     const customActive =
       allowCustomModel &&
       hasModels &&
       shouldShowCustomModelInput(
         modelValue,
         knownModelIds,
-        agentCustomModelIds.has(selected.id),
+        explicitCustomMode,
       );
     const selectValue = customActive
       ? CUSTOM_MODEL_SENTINEL
@@ -3752,12 +4080,6 @@ export function SettingsDialog({
       modelSource === 'live'
         ? t('settings.modelSourceLive')
         : t('settings.modelSourceFallback');
-    const modelSourceHint =
-      modelSource === 'live'
-        ? selected.supportsCustomModel === false
-          ? t('settings.modelPickerLiveCatalogOnlyHint')
-          : t('settings.modelPickerLiveHint')
-        : t('settings.modelPickerFallbackHint');
     return (
       <div className="agent-card-config">
         {hasModels ? (
@@ -3775,6 +4097,7 @@ export function SettingsDialog({
               <div className="agent-model-select-wrap">
                 <SearchableModelSelect
                   className="inline-switcher__select settings-model-select"
+                  popoverClassName="settings-model-popover"
                   value={selectValue}
                   aria-label={t('settings.modelPicker')}
                   searchPlaceholder={t('designs.searchPlaceholder')}
@@ -3782,6 +4105,11 @@ export function SettingsDialog({
                   popoverTestId={`settings-agent-model-popover-${selected.id}`}
                   minSearchableOptions={5}
                   popoverMinWidth={340}
+                  // Only AMR's catalog genuinely spans multiple model
+                  // vendors — every other agent's model list is one
+                  // provider's own raw ids, which the company heuristic
+                  // would otherwise split into misleading fake "companies".
+                  groupByCompany={selected.id === 'amr'}
                   models={modelsForSelect!}
                   onChange={(nextValue) => {
                     if (nextValue === CUSTOM_MODEL_SENTINEL) {
@@ -3790,7 +4118,7 @@ export function SettingsDialog({
                         next.add(selected.id);
                         return next;
                       });
-                      setChoice({ model: '' });
+                      setChoice({ model: '', serviceTier: undefined });
                     } else {
                       setAgentCustomModelIds((prev) => {
                         if (!prev.has(selected.id)) return prev;
@@ -3798,7 +4126,17 @@ export function SettingsDialog({
                         next.delete(selected.id);
                         return next;
                       });
-                      setChoice({ model: nextValue });
+                      const nextModelOption = selected.models?.find((m) => m.id === nextValue);
+                      const nextServiceTierOptions =
+                        nextModelOption?.serviceTierOptions ?? [];
+                      setChoice({
+                        model: nextValue,
+                        serviceTier: nextServiceTierOptions.some(
+                          (tier) => tier.id === choice.serviceTier,
+                        )
+                          ? choice.serviceTier
+                          : undefined,
+                      });
                     }
                   }}
                   additionalOptions={
@@ -3820,22 +4158,22 @@ export function SettingsDialog({
                       : undefined
                   }
                   onDisabledOptionUpgrade={
-                    selected.id === 'amr'
-                      ? () =>
+                    selected.id === 'amr' &&
+                    !workspaceContextLoading &&
+                    (!workspaceContext ||
+                      workspaceContext.permissions?.canManageBilling === true)
+                      ? () => {
+                          const upgradeUrl = amrUpgradeUrl(amrCardStatus?.profile);
+                          if (!upgradeUrl) return;
                           void openExternalUrl(
-                            attributedAmrSettingsUrl(
-                              amrPlansUrlForProfile(amrCardStatus?.profile),
-                              'settings_amr_upgrade',
-                            ),
-                          )
+                            attributedAmrSettingsUrl(upgradeUrl, 'settings_amr_upgrade'),
+                          );
+                        }
                       : undefined
                   }
                 />
               </div>
             </label>
-            <p className="hint agent-model-row-hint">
-              {modelSourceHint}
-            </p>
           </>
         ) : null}
         {customActive ? (
@@ -3848,7 +4186,7 @@ export function SettingsDialog({
               value={modelValue}
               placeholder={t('settings.modelCustomPlaceholder')}
               onChange={(e) =>
-                setChoice({ model: e.target.value.trim() })
+                setChoice({ model: e.target.value.trim(), serviceTier: undefined })
               }
             />
           </label>
@@ -3865,7 +4203,7 @@ export function SettingsDialog({
                   setChoice({ reasoning: e.target.value })
                 }
               >
-                {selected.reasoningOptions!.map((r) => (
+                {activeReasoningOptions!.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.label}
                   </option>
@@ -3889,36 +4227,26 @@ export function SettingsDialog({
   const settingsFullscreenLabel = settingsFullscreen
     ? t('common.exitFullscreen')
     : t('common.fullscreen');
+  const pageMode = presentation === 'page';
 
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
+  const surface = (
       <div
         className={
           'modal modal-settings' +
+          (pageMode ? ' settings-page-surface' : '') +
           (settingsSidebarCollapsed ? ' settings-sidebar-collapsed' : '') +
-          (settingsFullscreen ? ' settings-fullscreen' : '')
+          (!pageMode && settingsFullscreen ? ' settings-fullscreen' : '')
         }
-        role="dialog"
-        aria-modal="true"
+        role={pageMode ? 'region' : 'dialog'}
+        aria-modal={pageMode ? undefined : true}
         aria-labelledby="settings-dialog-title"
-        onClick={(e) => e.stopPropagation()}
+        onClick={pageMode ? undefined : (e) => e.stopPropagation()}
       >
-        {/* Top-right chrome strip — anchored to the modal corner so the
-            autosave indicator and the close button float above the
-            sidebar/content rhythm without competing with the title.
-            We use `position: absolute` instead of putting these inside
-            `.modal-head` so the welcome variant's tall hero (kicker /
-            title / subtitle / pet teaser) keeps its centred reading
-            measure, and the close button always lands at the same
-            optical location regardless of how much copy the header
-            renders. */}
-        <div className="settings-chrome" aria-hidden={false}>
-          {/* Autosave status pill. Only renders something while a save
-              is in flight or has just completed — idle = invisible so
-              first-open feels calm. The chrome strip itself stays
-              mounted so the close button never shifts when the pill
-              appears, and the pill is announced via aria-live for
-              assistive tech. */}
+        {/* Autosave feedback is viewport-level rather than part of the
+            top-right dialog chrome: it rides the app's own top chrome row, so
+            a passive status never covers the Local CLI pickers that occupy the
+            panel's upper band (OPEND-2148). */}
+        <div className="settings-autosave-layer">
           <div
             className={`settings-autosave is-${autosaveStatus}`}
             role="status"
@@ -3941,20 +4269,27 @@ export function SettingsDialog({
               </>
             ) : null}
           </div>
-          <button
-            type="button"
-            className="settings-chrome-btn settings-fullscreen-toggle"
-            onClick={() => setSettingsFullscreen((current) => !current)}
-            aria-label={settingsFullscreenLabel}
-            aria-pressed={settingsFullscreen}
-            title={settingsFullscreenLabel}
-          >
-            <Icon
-              name={settingsFullscreen ? 'minimize' : 'maximize'}
-              size={15}
-              strokeWidth={2}
-            />
-          </button>
+        </div>
+        {/* Top-right chrome strip — anchored to the modal corner so the
+            close and fullscreen controls stay at a stable optical location
+            regardless of the header copy. */}
+        <div className="settings-chrome" aria-hidden={false}>
+          {pageMode ? null : (
+            <button
+              type="button"
+              className="settings-chrome-btn settings-fullscreen-toggle"
+              onClick={() => setSettingsFullscreen((current) => !current)}
+              aria-label={settingsFullscreenLabel}
+              aria-pressed={settingsFullscreen}
+              title={settingsFullscreenLabel}
+            >
+              <Icon
+                name={settingsFullscreen ? 'minimize' : 'maximize'}
+                size={15}
+                strokeWidth={2}
+              />
+            </button>
+          )}
           <button
             type="button"
             className="settings-chrome-btn settings-close"
@@ -4005,15 +4340,50 @@ export function SettingsDialog({
             aria-label="Settings sections"
             aria-hidden={settingsSidebarCollapsed ? true : undefined}
           >
+            {pageMode ? (
+              <div className="settings-page-nav-head">
+                <button
+                  type="button"
+                  className="settings-page-back"
+                  onClick={onClose}
+                >
+                  <Icon name="arrow-left" size={15} />
+                  <span>{t('settings.pageBackToHome')}</span>
+                </button>
+              </div>
+            ) : null}
             <button
               type="button"
               className={`settings-nav-item${activeSection === 'execution' ? ' active' : ''}`}
               onClick={() => setActiveSection('execution')}
+              data-testid="settings-nav-execution"
             >
               <Icon name="sliders" size={18} />
               <span>
                 <strong>{t('settings.envConfigure')}</strong>
                 <small>{`${t('settings.localCli')} / ${t('settings.modeApiMeta')}`}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'general' ? ' active' : ''}`}
+              onClick={() => setActiveSection('general')}
+            >
+              <Icon name="settings" size={18} />
+              <span>
+                <strong>{t('settings.general')}</strong>
+                <small>{t('settings.generalHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'labs' ? ' active' : ''}`}
+              onClick={() => setActiveSection('labs')}
+            >
+              <Icon name="sparkles" size={18} />
+              <span>
+                <strong>{t('labs.title')}</strong>
+                <small>{t('labs.navHint')}</small>
               </span>
             </button>
             <button
@@ -4032,7 +4402,7 @@ export function SettingsDialog({
               className={`settings-nav-item${activeSection === 'memory' ? ' active' : ''}`}
               onClick={() => setActiveSection('memory')}
             >
-              <Icon name="history" size={18} />
+              <Icon name="brain" size={18} />
               <span>
                 <strong>{t('settings.memory')}</strong>
                 <small>{t('settings.memoryHint')}</small>
@@ -4051,112 +4421,13 @@ export function SettingsDialog({
             </button>
             <button
               type="button"
-              className={`settings-nav-item${activeSection === 'mcpClient' ? ' active' : ''}`}
-              onClick={() => setActiveSection('mcpClient')}
-            >
-              <Icon name="sparkles" size={18} />
-              <span>
-                <strong>{t('settings.externalMcpTitle')}</strong>
-                <small>{t('settings.externalMcpHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'composio' ? ' active' : ''}`}
-              onClick={() => setActiveSection('composio')}
-            >
-              <Icon name="sliders" size={18} />
-              <span>
-                <strong>{t('connectors.title')}</strong>
-                <small>{t('settings.connectorsNavHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
               className={`settings-nav-item${activeSection === 'integrations' ? ' active' : ''}`}
               onClick={() => setActiveSection('integrations')}
             >
-              <Icon name="link" size={18} />
+              <Icon name="puzzle" size={18} />
               <span>
                 <strong>{t('settings.mcpServerTitle')}</strong>
                 <small>{t('settings.mcpServerHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'language' ? ' active' : ''}`}
-              onClick={() => setActiveSection('language')}
-            >
-              <Icon name="languages" size={18} />
-              <span>
-                <strong>{t('settings.language')}</strong>
-                <small>{t('settings.languageHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'appearance' ? ' active' : ''}`}
-              onClick={() => setActiveSection('appearance')}
-            >
-              <Icon name="sun-moon" size={18} />
-              <span>
-                <strong>{t('settings.appearance')}</strong>
-                <small>{t('settings.appearanceHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'critiqueTheater' ? ' active' : ''}`}
-              onClick={() => setActiveSection('critiqueTheater')}
-            >
-              <Icon name="comment" size={18} />
-              <span>
-                <strong>{t('critiqueTheater.settingsNav')}</strong>
-                <small>{t('critiqueTheater.settingsNavHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'notifications' ? ' active' : ''}`}
-              onClick={() => setActiveSection('notifications')}
-            >
-              <Icon name="bell" size={18} />
-              <span>
-                <strong>{t('settings.notifications')}</strong>
-                <small>{t('settings.notificationsHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'pet' ? ' active' : ''}`}
-              onClick={() => setActiveSection('pet')}
-            >
-              <Icon name="sparkles" size={18} />
-              <span>
-                <strong>{t('pet.navTitle')}</strong>
-                <small>{t('pet.navHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'designSystems' ? ' active' : ''}`}
-              onClick={() => setActiveSection('designSystems')}
-            >
-              <Icon name="draw" size={18} />
-              <span>
-                <strong>{t('settings.designSystems')}</strong>
-                <small>{t('settings.designSystemsHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'projectLocations' ? ' active' : ''}`}
-              onClick={() => setActiveSection('projectLocations')}
-            >
-              <Icon name="folder" size={18} />
-              <span>
-                <strong>{t('settings.projectLocations')}</strong>
-                <small>{t('settings.projectLocationsHint')}</small>
               </span>
             </button>
             <button
@@ -4185,6 +4456,12 @@ export function SettingsDialog({
           <div className="settings-content" ref={settingsContentRef}>
           {activeSection === 'execution' ? (
             <>
+              {/* Sticky shell: the 本机 CLI / API 提供商 switch stays pinned
+                  while the agent list scrolls. The wrapper (not .seg-control
+                  itself) is sticky so it can paint an opaque full-width strip
+                  behind the pill — otherwise cards would show through around
+                  the pill's rounded corners mid-scroll. */}
+              <div className="settings-execution-sticky">
               <div
                 className="seg-control"
                 role="tablist"
@@ -4228,6 +4505,38 @@ export function SettingsDialog({
                   <span className="seg-meta">{t('settings.modeApi')}</span>
                 </button>
               </div>
+              </div>
+              {cfg.mode === 'daemon' && !amrCardSignedIn ? (
+                // Only prompt to sign into OpenDesign Cloud when NOT already
+                // signed in — the AMR/vela session IS the cloud identity (one
+                // session drives both), so a logged-in user has nothing to do
+                // here and the callout was showing spuriously.
+                <div className="settings-cloud-signin-callout">
+                  <div>
+                    <strong>{t('settings.cloudCalloutTitle')}</strong>
+                    <p>{t('settings.cloudCalloutBody')}</p>
+                  </div>
+                  {/* Same device-auth flow as the 授权 button on the OpenDesign
+                      agent card below — the AMR/vela session IS the cloud
+                      identity, so signing in here is that one flow. This used to
+                      navigate to onboarding, which walked the user through the
+                      whole first-run tour to reach the same authorization. */}
+                  <AmrLoginPill
+                    className="settings-cloud-signin-callout__button"
+                    hideSignedOutStatus
+                    hideSignedInStatus
+                    initialStatus={amrCardStatus}
+                    skipInitialRefresh
+                    signInLabel={t('settings.cloudCalloutButton')}
+                    signInIcon="log-in"
+                    amrEntrySourceDetail="settings_cloud_callout"
+                    metricsConsent={cfg.telemetry?.metrics === true}
+                    installationId={cfg.installationId}
+                    onStatusChange={setAmrCardStatus}
+                    onSignedOut={onAmrSignedOut}
+                  />
+                </div>
+              ) : null}
               {cfg.mode === 'api' ? (
                 <div
                   className="protocol-chips protocol-chips--providers"
@@ -4364,7 +4673,8 @@ export function SettingsDialog({
                     {installedAgents.length > 0 ? (
                       <div className="agent-grid agent-grid-installed">
                         {installedAgents.map((a) => {
-                          const active = cfg.agentId === a.id;
+                          const needsSetup = deepSeekHarnessNeedsSetup(a);
+                          const active = !needsSetup && cfg.agentId === a.id;
                           const running =
                             active && agentTestState.status === 'running';
                           const isAmrAgent = a.id === 'amr';
@@ -4397,40 +4707,109 @@ export function SettingsDialog({
                               : (a.path ?? '');
                           const amrHighlighted = isAmrAgent && amrHighlightActive;
                           const amrCardEmail =
-                            isAmrAgent && active && amrCardStatus?.loggedIn
-                              ? amrCardStatus.user?.email || t('settings.amrSignedIn')
+                            isAmrAgent && active && amrCardSignedIn
+                              ? amrCardStatus?.user?.email || t('settings.amrSignedIn')
                               : '';
                           const amrCardProfileBadge =
-                            isAmrAgent && active && amrCardStatus?.loggedIn
-                              ? amrProfileBadgeLabel(amrCardStatus.profile)
+                            isAmrAgent && active && amrCardSignedIn
+                              ? amrProfileBadgeLabel(amrCardStatus?.profile)
                               : null;
                           const amrWalletVisible =
-                            isAmrAgent && active && amrCardStatus?.loggedIn === true;
+                            isAmrAgent && active && amrCardSignedIn;
                           const amrStatusBalance =
                             amrWalletVisible
                               ? formatVelaBalanceUsd(amrCardStatus?.account?.balanceUsd)
                               : null;
                           const amrWalletBalance =
                             amrWalletVisible && amrWalletSnapshot?.status === 'available'
-                              ? formatAmrWalletBalance(amrWalletSnapshot.balanceUsd)
+                              ? formatVelaBalanceUsd(amrWalletSnapshot.balanceUsd)
                               : null;
+                          // recvqakgSc1Pwd: this must read `balanceUsd` — the
+                          // dollar figure vela already computed — not
+                          // `totalAvailableCredits`, a raw credits COUNT on a
+                          // completely different scale (vela reports
+                          // thousands of credits per dollar). Formatting the
+                          // credits count as a dollar amount is what put
+                          // "Balance $388307.00" on a workspace whose real
+                          // balance was under $39.
+                          const workspaceBalanceUsd = workspaceBillingBalanceUsd(
+                            workspaceBillingResponse,
+                            workspaceContext,
+                          );
+                          const amrWorkspaceBalance =
+                            amrWalletVisible && workspaceBalanceUsd
+                              ? formatVelaBalanceUsd(workspaceBalanceUsd)
+                              : null;
+                          const amrCardIsTeam =
+                            workspaceContext?.workspaceType === 'team';
                           const amrCardBalanceLabel =
-                            isAmrAgent && active && amrCardStatus?.loggedIn
-                              ? amrStatusBalance ?? amrWalletBalance
+                            isAmrAgent &&
+                            active &&
+                            amrCardSignedIn &&
+                            !workspaceContextLoading
+                              ? amrCardIsTeam
+                                ? amrWorkspaceBalance
+                                : amrWorkspaceBalance ?? amrStatusBalance ?? amrWalletBalance
                               : null;
-                          const amrCardPlanLabel =
-                            isAmrAgent && active && amrCardStatus?.loggedIn
-                              ? amrCardStatus.account?.plan?.trim() || null
+                          const amrCardBalanceReady =
+                            !workspaceContextLoading &&
+                            (amrCardIsTeam
+                              ? Boolean(workspaceBillingResponse) || Boolean(amrWorkspaceBalance)
+                              : amrWalletReady || Boolean(amrCardBalanceLabel));
+                          // vela's `account.plan` is ACCOUNT-scoped, so a member
+                          // whose plan is held by the team workspace reads
+                          // `free` there — the workspace context wins.
+                          //
+                          // The badge names the plan FAMILY, so a TEAM workspace
+                          // reads `team` at every tier — free through max —
+                          // while the personal ladder keeps its tier word
+                          // (product ruling; 「设置中的这里应该一样的逻辑」, so
+                          // this goes through the SAME helper as the nav-rail
+                          // account row and cannot drift from it). An id outside
+                          // the badge set still renders verbatim.
+                          const amrCardResolvedPlan =
+                            isAmrAgent && active && amrCardSignedIn
+                              ? resolvePlanTier({
+                                  billing: workspaceBilling,
+                                  context: workspaceContext,
+                                  accountPlan: amrCardStatus?.account?.plan,
+                                })
                               : null;
+                          const amrCardPlanLabel = amrCardResolvedPlan
+                            ? planBadgeTierForWorkspace({
+                                tier: amrCardResolvedPlan,
+                                workspaceType: workspaceContext?.workspaceType,
+                              }) ?? amrCardResolvedPlan
+                            : null;
+                          // recvqfYKutwWlQ: a team member without billing
+                          // permission (owner-only) can't act on an upgrade
+                          // even when the plan tier itself is upgradeable, so
+                          // the entry point must not render for them. Personal
+                          // workspaces always resolve `canManageBilling` true
+                          // (the user is their own owner), so this does not
+                          // affect the personal-workspace upgrade path.
+                          //
+                          // The TIER half asks `canUpgradeFromPlanTier` — the
+                          // one rule the account menu's billing card shares —
+                          // about `amrCardResolvedPlan`, the SAME resolved tier
+                          // the badge above renders. It used to ask a
+                          // personal-ladder question about
+                          // `account.plan` instead: that projection is
+                          // ACCOUNT-scoped and reports `free` for a user whose
+                          // entitlement is held by a team workspace, so a
+                          // 团队版 Max owner was measured as "free" and offered
+                          // an upgrade to the top tier they already hold, while
+                          // the badge beside it correctly read Max.
                           const amrCardCanUpgrade =
-                            isAmrAgent && active && amrCardStatus?.loggedIn
-                              ? canUpgradeVelaPlan(amrCardStatus.account?.plan)
+                            isAmrAgent && active && amrCardSignedIn
+                              ? canUpgradeFromPlanTier(amrCardResolvedPlan) &&
+                                Boolean(workspaceContext?.permissions?.canManageBilling)
                               : false;
                           const amrRevealPendingCancelAction =
                             isAmrAgent &&
                             active &&
                             hoveredAgentCardId === a.id &&
-                            amrCardStatus?.loggedIn !== true &&
+                            !amrCardSignedIn &&
                             amrCardStatus?.loginInFlight === true;
                           const cardEl = (
                             <div
@@ -4440,6 +4819,7 @@ export function SettingsDialog({
                               className={
                                 'agent-card agent-card-installed' +
                                 (active ? ' active' : '') +
+                                (needsSetup ? ' agent-card-needs-setup' : '') +
                                 (amrHighlighted ? ' agent-card--amr-highlight' : '')
                               }
                               onMouseEnter={() => {
@@ -4464,6 +4844,10 @@ export function SettingsDialog({
                                       cli_provider_id: agentIdToTracking(a.id),
                                       install_status: 'installed',
                                     });
+                                    if (needsSetup) {
+                                      setDshSetup({ busy: false, error: null });
+                                      return;
+                                    }
                                     if (isAmrAgent) {
                                       recordAmrEntry(
                                         analytics.track,
@@ -4525,7 +4909,11 @@ export function SettingsDialog({
                                           </VisuallyHidden>
                                         ) : null}
                                       </div>
-                                      {metaLabel ? (
+                                      {needsSetup ? (
+                                        <div className="agent-card-meta">
+                                          <span>{t('settings.dshSetupRequired')}</span>
+                                        </div>
+                                      ) : metaLabel ? (
                                         <div className="agent-card-meta">
                                           <span title={metaTitle}>
                                             {metaLabel}
@@ -4559,24 +4947,22 @@ export function SettingsDialog({
                                               {amrCardProfileBadge}
                                             </span>
                                           ) : null}
-                                        </div>
-                                      ) : null}
-                                      {amrWalletVisible ? (
-                                        <div className="agent-card-amr-meta-row">
-                                          <span className="agent-card-amr-balance">
-                                            <span className="agent-card-amr-balance-label">
-                                              {t('settings.amrBalance')}
+                                          {amrWalletVisible ? (
+                                            <span className="agent-card-amr-balance">
+                                              <span className="agent-card-amr-balance-label">
+                                                {t('settings.amrBalance')}
+                                              </span>
+                                              <span className="agent-card-amr-balance-value">
+                                                {amrWalletValueLabel({
+                                                  balance: amrCardBalanceLabel,
+                                                  loadingLabel: t('common.loading'),
+                                                  ready: amrCardBalanceReady,
+                                                  snapshot: amrCardIsTeam ? null : amrWalletSnapshot,
+                                                  unavailableLabel: t('settings.amrWalletUnavailable'),
+                                                })}
+                                              </span>
                                             </span>
-                                            <span className="agent-card-amr-balance-value">
-                                              {amrWalletValueLabel({
-                                                balance: amrCardBalanceLabel,
-                                                loadingLabel: t('common.loading'),
-                                                ready: amrWalletReady || Boolean(amrCardBalanceLabel),
-                                                snapshot: amrWalletSnapshot,
-                                                unavailableLabel: t('settings.amrWalletUnavailable'),
-                                              })}
-                                            </span>
-                                          </span>
+                                          ) : null}
                                         </div>
                                       ) : null}
                                       {!active && modelSummary ? (
@@ -4594,7 +4980,7 @@ export function SettingsDialog({
                                       onMouseEnter={() => setAmrCoachmarkDismissed(true)}
                                     >
                                       {amrCoachmarkArmed &&
-                                      amrCardStatus?.loggedIn === false &&
+                                      !amrCardSignedIn &&
                                       !amrCoachmarkDismissed ? (
                                         <span className="amr-coachmark" aria-hidden="true">
                                           <span className="amr-coachmark__ring" />
@@ -4620,17 +5006,29 @@ export function SettingsDialog({
                                           type="button"
                                           className="agent-card-amr-upgrade"
                                           data-testid="settings-agent-card-amr-upgrade"
-                                          onClick={() =>
+                                          onClick={() => {
+                                            const upgradeUrl = amrUpgradeUrl(
+                                              amrCardStatus?.profile,
+                                            );
+                                            if (!upgradeUrl) return;
                                             void openExternalUrl(
                                               attributedAmrSettingsUrl(
-                                                amrPlansUrlForProfile(
-                                                  amrCardStatus?.profile,
-                                                ),
+                                                upgradeUrl,
                                                 'settings_amr_upgrade',
                                               ),
-                                            )
-                                          }
+                                            );
+                                          }}
                                         >
+                                          <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            viewBox="0 0 24 24"
+                                            fill="currentColor"
+                                            width={14}
+                                            height={14}
+                                            aria-hidden
+                                          >
+                                            <path d="M10.6144 17.7956 11.492 15.7854C12.2731 13.9966 13.6789 12.5726 15.4325 11.7942L17.8482 10.7219C18.6162 10.381 18.6162 9.26368 17.8482 8.92277L15.5079 7.88394C13.7092 7.08552 12.2782 5.60881 11.5105 3.75894L10.6215 1.61673C10.2916.821765 9.19319.821767 8.8633 1.61673L7.97427 3.75892C7.20657 5.60881 5.77553 7.08552 3.97685 7.88394L1.63658 8.92277C.868537 9.26368.868536 10.381 1.63658 10.7219L4.0523 11.7942C5.80589 12.5726 7.21171 13.9966 7.99275 15.7854L8.8704 17.7956C9.20776 18.5682 10.277 18.5682 10.6144 17.7956ZM19.4014 22.6899 19.6482 22.1242C20.0882 21.1156 20.8807 20.3125 21.8695 19.8732L22.6299 19.5353C23.0412 19.3526 23.0412 18.7549 22.6299 18.5722L21.9121 18.2532C20.8978 17.8026 20.0911 16.9698 19.6586 15.9269L19.4052 15.3156C19.2285 14.8896 18.6395 14.8896 18.4628 15.3156L18.2094 15.9269C17.777 16.9698 16.9703 17.8026 15.956 18.2532L15.2381 18.5722C14.8269 18.7549 14.8269 19.3526 15.2381 19.5353L15.9985 19.8732C16.9874 20.3125 17.7798 21.1156 18.2198 22.1242L18.4667 22.6899C18.6473 23.104 19.2207 23.104 19.4014 22.6899Z" />
+                                          </svg>
                                           {t('settings.amrUpgrade')}
                                         </button>
                                       ) : null}
@@ -4641,13 +5039,14 @@ export function SettingsDialog({
                                         initialStatus={amrCardStatus}
                                         skipInitialRefresh
                                         signInLabel={t('settings.amrAuthorize')}
-                                        showConsoleAction={amrCardStatus?.loggedIn === true}
+                                        showConsoleAction={amrCardSignedIn}
                                         iconOnlySignOut
                                         amrEntrySourceDetail="settings_amr_authorize"
                                         metricsConsent={cfg.telemetry?.metrics === true}
                                         installationId={cfg.installationId}
                                         revealPendingCancelAction={amrRevealPendingCancelAction}
                                         onStatusChange={setAmrCardStatus}
+                                        onSignedOut={onAmrSignedOut}
                                       />
                                     </span>
                                   ) : (
@@ -4683,13 +5082,19 @@ export function SettingsDialog({
                                   </button>
                                 ) : null}
                               </div>
-                              {(a.diagnostics ?? []).map((diagnostic, i) => (
-                                <AgentDiagnosticRow
-                                  key={`${diagnostic.reason}-${i}`}
-                                  diagnostic={diagnostic}
-                                  handlers={diagnosticHandlers}
-                                />
-                              ))}
+                              {/* Diagnostics belong to the expanded card only:
+                                  collapsed cards all present the same compact
+                                  summary regardless of agent health. */}
+                              {active
+                                ? (a.diagnostics ?? []).map((diagnostic, i) => (
+                                    <AgentDiagnosticRow
+                                      key={`${diagnostic.reason}-${i}`}
+                                      diagnostic={diagnostic}
+                                      handlers={diagnosticHandlers}
+                                      className="agent-card-diagnostic"
+                                    />
+                                  ))
+                                : null}
                               {active ? renderAgentModelConfig(a) : null}
                             </div>
                           );
@@ -4806,7 +5211,6 @@ export function SettingsDialog({
                         {unavailableAgents.map((a) => {
                           const installUrl = sanitizeHttpsUrl(a.installUrl);
                           const docsUrl = sanitizeHttpsUrl(a.docsUrl);
-                          const hasLinks = Boolean(installUrl || docsUrl);
                           const description = AGENT_SHORT_DESCRIPTIONS[a.id];
                           const agentName = displayAgentName(a);
                           const diagnosticHandlers = diagnosticHandlersForAgent(a);
@@ -4830,56 +5234,67 @@ export function SettingsDialog({
                                     </div>
                                   ) : null}
                                 </div>
-                                {hasLinks ? (
-                                  <div className="agent-card-actions agent-card-actions--inline">
-                                    {docsUrl ? (
-                                      <a
-                                        href={docsUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="agent-card-link agent-card-link--muted agent-card-link--icon"
-                                        onClick={markAgentInstallIntent}
-                                        title={t('settings.agentInstall.docs')}
-                                        aria-label={t('settings.agentInstall.docs')}
-                                      >
-                                        <Icon name="file" size={15} />
-                                      </a>
-                                    ) : null}
-                                    {installUrl ? (
-                                      <a
-                                        href={installUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="agent-card-link agent-card-link--ghost"
-                                        onClick={(event) => {
-                                          markAgentInstallIntent();
-                                          if (a.id === 'amr') {
-                                            event.currentTarget.href = attributedAmrSettingsUrl(
-                                              installUrl,
-                                              'settings_amr_install',
-                                            );
-                                          }
-                                        }}
-                                      >
-                                        {t('settings.agentInstall.install')}
-                                      </a>
-                                    ) : null}
-                                  </div>
-                                ) : null}
                               </div>
                               {/* Why is it unavailable? not-on-path vs a broken
                                   shim vs a bad *_BIN override each get a
-                                  distinct, actionable line. It spans the full
-                                  card width on its own row below the
-                                  logo/name/links so it never crowds the inline
-                                  Docs/Install actions. */}
+                                  distinct, actionable line, full-width below the
+                                  logo/name. Rendered message-only: the fix
+                                  actions are hoisted into the shared footer bar
+                                  so every control lives on one row. */}
                               {(a.diagnostics ?? []).map((diagnostic, i) => (
                                 <AgentDiagnosticRow
                                   key={`${diagnostic.reason}-${i}`}
                                   diagnostic={diagnostic}
-                                  handlers={diagnosticHandlers}
                                 />
                               ))}
+                              {/* Every action for the card collapses into one
+                                  horizontal bar at the foot, fenced from the
+                                  content above by a hair divider: Docs + Rescan
+                                  as quiet icon buttons, Install as the primary
+                                  labelled CTA holding the right edge. */}
+                              <div className="agent-card-footer">
+                                {docsUrl ? (
+                                  <a
+                                    href={docsUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="agent-card-link agent-card-link--muted agent-card-link--icon"
+                                    onClick={markAgentInstallIntent}
+                                    title={t('settings.agentInstall.docs')}
+                                    aria-label={t('settings.agentInstall.docs')}
+                                  >
+                                    <Icon name="file" size={15} />
+                                  </a>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  className="agent-card-link agent-card-link--muted agent-card-link--icon"
+                                  onClick={() => diagnosticHandlers.onRescan?.()}
+                                  title={t('settings.rescan')}
+                                  aria-label={t('settings.rescan')}
+                                >
+                                  <Icon name="reload" size={15} />
+                                </button>
+                                {installUrl ? (
+                                  <a
+                                    href={installUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="agent-card-link agent-card-link--ghost"
+                                    onClick={(event) => {
+                                      markAgentInstallIntent();
+                                      if (a.id === 'amr') {
+                                        event.currentTarget.href = attributedAmrSettingsUrl(
+                                          installUrl,
+                                          'settings_amr_install',
+                                        );
+                                      }
+                                    }}
+                                  >
+                                    {t('settings.agentInstall.install')}
+                                  </a>
+                                ) : null}
+                              </div>
                             </div>
                           );
                         })}
@@ -5103,6 +5518,15 @@ export function SettingsDialog({
                   onTestProvider={() => handleTestProvider()}
                 />
               </div>
+              {byokActivationPreflightReason ? (
+                <p
+                  className="settings-test-status warn"
+                  role="status"
+                  data-testid="settings-byok-draft-notice"
+                >
+                  {t('settings.byokDraftNotice')}
+                </p>
+              ) : null}
               {byokPreconditionNotice && !byokPreconditionNotice.field ? (
                 <p
                   className="settings-test-status error"
@@ -5131,7 +5555,7 @@ export function SettingsDialog({
                     setApiModelCustomEditing(false);
                     updateApiConfig({
                       baseUrl: p.baseUrl,
-                      model: p.model,
+                      model: defaultKnownProviderModel(p),
                       apiProviderBaseUrl: p.baseUrl,
                     });
                   }}
@@ -5164,7 +5588,10 @@ export function SettingsDialog({
                 )}
                 showApiKey={showApiKey}
                 onBlur={onByokKeyCommit}
-                onChange={(value) => updateApiConfig({ apiKey: value })}
+                onChange={(value) => {
+                  committedClearedByokProviderKeyRef.current = null;
+                  updateApiConfig({ apiKey: value });
+                }}
                 onFocus={() => {
                   const byokProviderId = byokProtocolToTracking(apiProtocol);
                   if (byokProviderId) {
@@ -5197,7 +5624,12 @@ export function SettingsDialog({
                     azureHint: t('settings.azureBaseUrlHint'),
                   }}
                   onBlur={commitProviderModelsInputs}
-                  onChange={(value) => updateApiConfig({ baseUrl: value, apiProviderBaseUrl: null })}
+                  onChange={(value) =>
+                    updateApiConfig({
+                      baseUrl: value,
+                      apiProviderBaseUrl: apiProtocol === 'azure' ? '' : null,
+                    })
+                  }
                   onCustomize={() => {
                     updateApiConfig({ apiProviderBaseUrl: null });
                     window.setTimeout(() => baseUrlInputRef.current?.focus(), 0);
@@ -5239,7 +5671,7 @@ export function SettingsDialog({
                     ? t('settings.azureCustomDeploymentName')
                     : t('settings.modelCustomLabel'),
                   customModelPlaceholder: apiProtocol === 'azure'
-                    ? 'e.g. gpt-4o-production'
+                    ? t('settings.azureDeploymentModel')
                     : t('settings.modelCustomPlaceholder'),
                   fetchModelsUnsupported: t('settings.fetchModelsUnsupported'),
                   model: apiProtocol === 'azure'
@@ -5276,6 +5708,7 @@ export function SettingsDialog({
                     : null
                 }
                 providerModelsFailureMessage={providerModelsFailureMessage}
+                forceTextInput={apiProtocol === 'azure'}
                 showAzureModelFetchHint={apiProtocol === 'azure'}
                 showFetchModelsUnsupportedHint={
                   apiProtocol !== 'azure' &&
@@ -5311,13 +5744,6 @@ export function SettingsDialog({
                 <summary className="agent-cli-env-summary">
                   <span className="agent-cli-env-summary-title">
                     {t('settings.memoryModelInlineLabel')}
-                  </span>
-                  <span className="settings-memory-summary-value">
-                    {cfg.model.trim()
-                      ? t('settings.memoryModelInlineSameAsChatWithModel', {
-                          model: cfg.model.trim(),
-                        })
-                      : t('settings.memoryModelInlineSameAsChat')}
                   </span>
                 </summary>
                 <div className="agent-cli-env-body">
@@ -5489,6 +5915,7 @@ export function SettingsDialog({
               composioApiKeyConfigured={Boolean(cfg.composio?.apiKeyConfigured)}
               daemonMediaProviders={daemonMediaProviders}
               daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
+              workspaceContext={workspaceContext}
               onOpenComposioSection={() => setActiveSection('composio')}
               onLeaveForOrbitProject={(runConfig) => {
                 // Persist any in-flight Orbit edits (toggle / time) before
@@ -5503,60 +5930,78 @@ export function SettingsDialog({
             />
           ) : null}
 
-          {activeSection === 'language' ? (
-          <section className="settings-section">
-            <div className="settings-language-grid" role="radiogroup" aria-label={t('settings.language')}>
-              {LOCALES.map((code) => {
-                const active = locale === code;
-                return (
-                  <button
-                    key={code}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    className={`settings-language-tile${active ? ' active' : ''}`}
-                    onClick={() => {
-                      // P1 ui_click area=language — record the locale id
-                      // that was picked, regardless of whether it differs
-                      // from the current one (user clicked = signal).
-                      trackSettingsLanguageClick(analytics.track, {
-                        page_name: 'settings',
-                        area: 'language',
-                        element: code,
-                      });
-                      setLocale(code as Locale);
-                    }}
-                  >
-                    <span className="settings-language-tile-text">
-                      <span className="settings-language-tile-title">
-                        {LOCALE_LABEL[code]}
-                      </span>
-                      <span className="settings-language-tile-code">
-                        {code}
-                      </span>
-                    </span>
-                    {active ? <Icon name="check" size={16} /> : null}
-                  </button>
-                );
-              })}
-            </div>
-          </section>
+          {/* General is one scrollable page of `settings-general-block`
+              sections, per #5517. Every token that used to address a piece of
+              it (language / appearance / notifications / pet /
+              projectLocations / critiqueTheater) is folded into 'general' by
+              normalizeSettingsSection, so this single guard covers them all —
+              there is no longer a standalone render block for any of them. */}
+          {activeSection === 'general' ? (
+            <section className="settings-section settings-general-section">
+              <div className="settings-general-block">
+                <div className="settings-general-field">
+                  <span className="settings-general-label">{t('settings.language')}</span>
+                  <label className="settings-general-select">
+                    <select
+                      value={locale}
+                      aria-label={t('settings.language')}
+                      onChange={(event) => {
+                        const next = event.target.value as Locale;
+                        // P1 ui_click area=language — record the locale id
+                        // that was picked, regardless of whether it differs
+                        // from the current one (user clicked = signal).
+                        trackSettingsLanguageClick(analytics.track, {
+                          page_name: 'settings',
+                          area: 'language',
+                          element: next,
+                        });
+                        setLocale(next);
+                      }}
+                    >
+                      {LOCALES.map((code) => (
+                        <option key={code} value={code}>
+                          {LOCALE_LABEL[code]} · {code}
+                        </option>
+                      ))}
+                    </select>
+                    <Icon name="chevron-down" size={14} />
+                  </label>
+                </div>
+              </div>
+
+              <div className="settings-general-block">
+                <div className="settings-general-block-head">
+                  <h3>{t('settings.systemPrefsTitle')}</h3>
+                  <p className="hint">{t('settings.systemPrefsHint')}</p>
+                </div>
+                <NotificationsSection cfg={cfg} setCfg={setCfg} />
+              </div>
+
+              <div className="settings-general-block">
+                <div className="settings-general-block-head">
+                  <h3>{t('pet.navTitle')}</h3>
+                </div>
+                <PetSettings cfg={cfg} setCfg={setCfg} />
+              </div>
+
+              <div className="settings-general-block">
+                <div className="settings-general-block-head">
+                  <h3>{t('settings.projectLocations')}</h3>
+                </div>
+                <ProjectLocationsSection cfg={cfg} setCfg={setCfg} onProjectsRefresh={onProjectsRefresh} />
+              </div>
+
+              <div className="settings-general-block">
+                <CritiqueTheaterSection
+                  callerWorkspaceContext={workspaceContext}
+                  persistedProjectWorkspaceId={persistedProjectWorkspaceId}
+                />
+              </div>
+            </section>
           ) : null}
 
-          {activeSection === 'appearance' ? (
-            <AppearanceSection cfg={cfg} setCfg={setCfg} />
-          ) : null}
-
-          {activeSection === 'critiqueTheater' ? (
-            <CritiqueTheaterSection />
-          ) : null}
-
-          {activeSection === 'notifications' ? (
-            <NotificationsSection cfg={cfg} setCfg={setCfg} />
-          ) : null}
-
-          {activeSection === 'pet' ? (
-            <PetSettings cfg={cfg} setCfg={setCfg} />
+          {activeSection === 'labs' ? (
+            <LabsSection autosave={labsAutosave} />
           ) : null}
 
           {activeSection === 'designSystems' ? (
@@ -5566,10 +6011,6 @@ export function SettingsDialog({
               onDesignSystemsChanged={onDesignSystemsChanged}
               onDesignSystemImportRebuildJob={onDesignSystemImportRebuildJob}
             />
-          ) : null}
-
-          {activeSection === 'projectLocations' ? (
-            <ProjectLocationsSection cfg={cfg} setCfg={setCfg} onProjectsRefresh={onProjectsRefresh} />
           ) : null}
 
           {activeSection === 'instructions' ? (
@@ -5712,6 +6153,7 @@ export function SettingsDialog({
                         allowSilentUpdates,
                       }));
                       if (onSilentUpdatePreferenceChange == null) return;
+                      const autosaveClaim = claimAutosaveStatus('saving');
                       setSilentUpdateBusy(true);
                       void (async () => {
                         try {
@@ -5725,13 +6167,13 @@ export function SettingsDialog({
                             ...autosaveLastSavedRef.current,
                             allowSilentUpdates,
                           };
-                          setAutosaveStatus('saved');
+                          settleAutosaveStatus(autosaveClaim, 'saved');
                           if (autosaveSavedTimerRef.current != null) {
                             window.clearTimeout(autosaveSavedTimerRef.current);
                           }
                           autosaveSavedTimerRef.current = window.setTimeout(() => {
                             autosaveSavedTimerRef.current = null;
-                            setAutosaveStatus((curr) => (curr === 'saved' ? 'idle' : curr));
+                            settleAutosaveStatus(autosaveClaim, 'idle');
                           }, 1800);
                         } catch {
                           if (writeToken !== silentUpdateWriteTokenRef.current) return;
@@ -5740,7 +6182,7 @@ export function SettingsDialog({
                             ...current,
                             allowSilentUpdates: previous,
                           }));
-                          setAutosaveStatus('error');
+                          settleAutosaveStatus(autosaveClaim, 'error');
                         } finally {
                           if (writeToken === silentUpdateWriteTokenRef.current) {
                             setSilentUpdateBusy(false);
@@ -5755,6 +6197,41 @@ export function SettingsDialog({
                   </span>
                 </label>
               </div>
+              {aboutUpdaterModel.environment === 'desktop'
+                && aboutUpdaterModel.supported
+                && appVersionInfo?.packaged !== false ? (
+                <div className="settings-about-diagnostics">
+                  <div className="settings-about-diagnostics-text">
+                    <h4>{t('settings.clearUpdaterCacheTitle')}</h4>
+                    <p className="hint">{t('settings.clearUpdaterCacheHint')}</p>
+                  </div>
+                  {clearUpdaterCacheStage === 'confirm' ? (
+                    <>
+                      <Button
+                        disabled={clearUpdaterCacheBusy}
+                        onClick={() => setClearUpdaterCacheStage('idle')}
+                      >
+                        {t('common.cancel')}
+                      </Button>
+                      <Button
+                        data-testid="settings-clear-updater-cache-confirm"
+                        disabled={clearUpdaterCacheBusy || aboutUpdaterModel.busy}
+                        onClick={handleClearUpdaterCache}
+                      >
+                        {t('settings.clearUpdaterCacheConfirmButton')}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      data-testid="settings-clear-updater-cache"
+                      disabled={clearUpdaterCacheBusy || aboutUpdaterModel.busy}
+                      onClick={() => setClearUpdaterCacheStage('confirm')}
+                    >
+                      {t('settings.clearUpdaterCacheButton')}
+                    </Button>
+                  )}
+                </div>
+              ) : null}
               <div className="settings-about-diagnostics">
                 <div className="settings-about-diagnostics-text">
                   <h4>{t('diagnostics.exportTitle')}</h4>
@@ -5773,6 +6250,10 @@ export function SettingsDialog({
               </div>
             </section>
           ) : null}
+
+          {activeSection === 'workspace' && showWorkspaceSettings ? (
+            <SettingsWorkspaceSection context={workspaceContext} />
+          ) : null}
           {aboutToast ? (
             <Toast
               message={aboutToast}
@@ -5782,6 +6263,39 @@ export function SettingsDialog({
           </div>
         </div>
       </div>
+  );
+
+  if (pageMode) {
+    return (
+      <div className="settings-page-shell">
+        {surface}
+        {dshSetup ? (
+          <DeepSeekHarnessSetupDialog
+            busy={dshSetup.busy}
+            error={dshSetup.error}
+            onCancel={() => {
+              if (!dshSetup.busy) setDshSetup(null);
+            }}
+            onConfirm={() => void handleConfirmDshSetup()}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      {surface}
+      {dshSetup ? (
+        <DeepSeekHarnessSetupDialog
+          busy={dshSetup.busy}
+          error={dshSetup.error}
+          onCancel={() => {
+            if (!dshSetup.busy) setDshSetup(null);
+          }}
+          onConfirm={() => void handleConfirmDshSetup()}
+        />
+      ) : null}
     </div>
   );
 }
@@ -6275,6 +6789,14 @@ interface OrbitRunStartResponse {
   agentRunId: string;
 }
 
+export function orbitLiveArtifactHref(
+  projectId: string,
+  artifactId: string,
+  workspaceContext: WorkspaceCollabContext | null,
+): string {
+  return liveArtifactPreviewUrl(projectId, artifactId, 'rendered', workspaceContext);
+}
+
 export async function persistConfigAndRunOrbit(
   config: AppConfig,
   options?: {
@@ -6298,14 +6820,26 @@ export async function persistConfigAndRunOrbit(
   return await response.json() as OrbitRunStartResponse;
 }
 
-export function configForManualOrbitRun(config: AppConfig): AppConfig {
+export function configForManualOrbitRun(
+  config: AppConfig,
+  workspaceContext: WorkspaceCollabContext | null = null,
+): AppConfig {
   const effectiveTemplateSkillId = config.orbit?.templateSkillId || DEFAULT_ORBIT.templateSkillId || '';
-  if (!effectiveTemplateSkillId) return config;
   return {
     ...config,
     orbit: {
       ...(config.orbit ?? DEFAULT_ORBIT),
-      templateSkillId: effectiveTemplateSkillId,
+      ...(effectiveTemplateSkillId ? { templateSkillId: effectiveTemplateSkillId } : {}),
+      ...(workspaceContext
+        ? {
+            workspaceScope: {
+              workspaceId: workspaceContext.workspaceId,
+              workspaceMemberId: workspaceContext.workspaceMemberId,
+            },
+          }
+        : config.orbit?.workspaceScope
+          ? { workspaceScope: config.orbit.workspaceScope }
+          : {}),
     },
   };
 }
@@ -6337,6 +6871,7 @@ function OrbitSection({
   composioApiKeyConfigured,
   daemonMediaProviders,
   daemonMediaProvidersFetchState,
+  workspaceContext,
   onOpenComposioSection,
   onLeaveForOrbitProject,
 }: {
@@ -6349,6 +6884,7 @@ function OrbitSection({
   composioApiKeyConfigured: boolean;
   daemonMediaProviders?: AppConfig['mediaProviders'] | null;
   daemonMediaProvidersFetchState?: 'idle' | 'ok' | 'error';
+  workspaceContext: WorkspaceCollabContext | null;
   /** Switch the parent settings dialog to the Connectors (Composio) tab.
    *  Used by the Orbit gate's primary CTA so the user can fix the
    *  prerequisite without leaving the dialog. */
@@ -6398,7 +6934,20 @@ function OrbitSection({
   const updateOrbit = (patch: Partial<NonNullable<AppConfig['orbit']>>) => {
     setCfg((curr) => ({
       ...curr,
-      orbit: { ...(curr.orbit ?? DEFAULT_ORBIT), ...patch },
+      orbit: {
+        ...(curr.orbit ?? DEFAULT_ORBIT),
+        ...patch,
+        ...(workspaceContext
+          ? {
+              workspaceScope: {
+                workspaceId: workspaceContext.workspaceId,
+                workspaceMemberId: workspaceContext.workspaceMemberId,
+              },
+            }
+          : curr.orbit?.workspaceScope
+            ? { workspaceScope: curr.orbit.workspaceScope }
+            : {}),
+      },
     }));
   };
 
@@ -6508,7 +7057,7 @@ function OrbitSection({
 
     void (async () => {
       try {
-        const runConfig = configForManualOrbitRun(cfg);
+        const runConfig = configForManualOrbitRun(cfg, workspaceContext);
         const payload = await persistConfigAndRunOrbit(runConfig, {
           daemonProviders: daemonMediaProviders,
           syncMediaProviders: daemonMediaProvidersFetchState === 'ok',
@@ -6553,7 +7102,11 @@ function OrbitSection({
   const lastRunAbs = lastRun ? new Date(lastRun.completedAt).toLocaleString() : null;
   const lastRunRel = formatRelative(lastRun?.completedAt, t);
   const liveArtifactHref = lastRun?.artifactId && lastRun?.artifactProjectId
-    ? `/api/live-artifacts/${encodeURIComponent(lastRun.artifactId)}/preview?projectId=${encodeURIComponent(lastRun.artifactProjectId)}`
+    ? orbitLiveArtifactHref(
+        lastRun.artifactProjectId,
+        lastRun.artifactId,
+        workspaceContext,
+      )
     : null;
   const isBusy = running || Boolean(status?.running);
 
@@ -7257,6 +7810,49 @@ function MediaProvidersSection({
       return next;
     });
   };
+  // #5517 redesign: the section renders a pill selector (one pill per
+  // available provider, with a configured-state dot) plus ONE detail card
+  // for the selected provider, instead of a flat stack of rows.
+  //
+  // The initial selection is pinned eagerly (not left null): the pill order
+  // re-sorts live as entries become configured/cleared, so deriving the
+  // default from `availableProviders[0]` on every render would make the
+  // detail card jump to a different provider mid-edit (e.g. right after
+  // Clear). Pinning keeps the card stable; clicking a pill re-pins.
+  const [activeProviderId, setActiveProviderId] = useState<string | null>(
+    () => availableProviders[0]?.id ?? null,
+  );
+  const activeProvider = availableProviders.find((p) => p.id === activeProviderId)
+    ?? availableProviders[0]
+    ?? null;
+  // Capability chip copy is derived from the provider's marketing hint —
+  // deliberately English tags ("Image · Audio · Custom configuration"), matching
+  // the reference design.
+  const providerCapabilityLabel = (provider: MediaProvider) => {
+    const hint = provider.hint.toLowerCase();
+    const parts: string[] = [];
+    if (/image|imagen|flux|dall|banana|leonardo|gpt-image|seedream/.test(hint)) parts.push('Image');
+    if (/video|sora|veo|wan|seedance|grok-imagine/.test(hint)) parts.push('Video');
+    if (/voice|speech|audio|sfx|tts|clone/.test(hint) || provider.id === 'senseaudio') parts.push('Audio');
+    if (/research|search/.test(hint)) parts.push('Research');
+    if (provider.supportsCustomModel) parts.push('Custom configuration');
+    if (parts.length === 0) {
+      return provider.credentialsRequired === false
+        ? t('settings.mediaProviderNoKeyRequired')
+        : 'API key';
+    }
+    return parts.slice(0, 3).join(' · ');
+  };
+  const activeEntry = activeProvider
+    ? cfg.mediaProviders?.[activeProvider.id] ?? { apiKey: '', baseUrl: '', model: '' }
+    : null;
+  const activeHasPendingEdit = Boolean(activeEntry?.apiKey.trim());
+  const activeIsSavedState = Boolean(
+    activeEntry && (activeHasPendingEdit || activeEntry.apiKeyConfigured) && !activeHasPendingEdit,
+  );
+  const activeClearable = Boolean(activeEntry && isStoredMediaProviderEntryPresent(activeEntry));
+  const activeApiKeyVisible = activeProvider ? visibleApiKeys.has(activeProvider.id) : false;
+  const activeRequiresCredentials = activeProvider?.credentialsRequired !== false;
 
   return (
     <section className="settings-section">
@@ -7278,8 +7874,12 @@ function MediaProvidersSection({
           {reloadNotice.message}
         </VisuallyHidden>
       ) : null}
-      {onReloadMediaProviders ? (
-        <div className="media-provider-reload-row">
+      <div className="media-provider-page-head">
+        <div>
+          <h3>{t('settings.mediaProviders')}</h3>
+          <p>{t('settings.mediaProvidersHint')}</p>
+        </div>
+        {onReloadMediaProviders ? (
           <button
             type="button"
             className={`ghost media-provider-reload-btn${
@@ -7301,7 +7901,7 @@ function MediaProvidersSection({
             ) : reloadNotice?.kind === 'success' ? (
               <>
                 <Icon name="check" size={13} />
-                <span style={{ marginLeft: 4 }}>Reloaded</span>
+                <span style={{ marginLeft: 4 }}>{t('settings.mediaProviderReload')}</span>
               </>
             ) : (
               <>
@@ -7310,169 +7910,211 @@ function MediaProvidersSection({
               </>
             )}
           </button>
+        ) : null}
+      </div>
+      <div
+        className="protocol-chips protocol-chips--providers media-provider-tabs"
+        role="tablist"
+        aria-label={t('settings.mediaProviders')}
+      >
+        <div className="protocol-chip-group protocol-chip-group--providers">
+          <span className="protocol-chip-group-label">{t('settings.mediaProviderModelProviders')}</span>
+          <div className="protocol-chip-group-options">
+            {availableProviders.map((provider) => {
+              const active = activeProvider?.id === provider.id;
+              const entry = cfg.mediaProviders?.[provider.id];
+              const connected = provider.credentialsRequired === false
+                || isStoredMediaProviderEntryPresent(entry);
+              const statusLabel = connected
+                ? t('settings.mediaProviderConfigured')
+                : t('settings.mediaProviderUnset');
+              return (
+                <button
+                  key={provider.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  className={'protocol-chip' + (active ? ' active' : '')}
+                  title={`${provider.label} · ${statusLabel}`}
+                  onClick={() => setActiveProviderId(provider.id)}
+                >
+                  <span
+                    className={`media-provider-chip-status${connected ? ' is-connected' : ' is-disconnected'}`}
+                    aria-hidden
+                  />
+                  <span>{provider.label}</span>
+                  <VisuallyHidden>{statusLabel}</VisuallyHidden>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      ) : null}
-      <div className="media-provider-list">
-        {availableProviders.map((provider) => {
-          const entry = cfg.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
-          const hasPendingEdit = Boolean(entry.apiKey.trim());
-          const isSavedState = Boolean((hasPendingEdit || entry.apiKeyConfigured) && !hasPendingEdit);
-          const tail = entry.apiKeyTail?.trim();
-          // Every provider rendered in the main list is integrated by
-          // construction (see availableProviders filter), so the inputs
-          // are always editable here. Non-integrated entries live in
-          // the "Coming soon" <details> below.
-          const disabled = false;
-          const supportsCustomModel = provider.supportsCustomModel === true;
-          const requiresCredentials = provider.credentialsRequired !== false;
-          const clearable = isStoredMediaProviderEntryPresent(entry);
-          const apiKeyVisible = visibleApiKeys.has(provider.id);
-          return (
-            <div key={provider.id} className="media-provider-row">
-              <div className="media-provider-head">
-                <div className="media-provider-meta">
-                  {/*
-                    Provider name + "Saved" badge sit on a single row.
-                    The badge used to render below the name with a green
-                    success-pill treatment, which clashed with the green
-                    "Integrated" badge on the right of the same row and
-                    pushed the model hint two lines down. Inline + a
-                    neutral muted treatment keeps the row scannable: green
-                    means "we support this", blue means "you configured
-                    it", gray means "your key is persisted" — three
-                    distinct hues, three distinct meanings.
-                  */}
-                  <div className="media-provider-name-row">
-                    <span className="media-provider-name">{provider.label}</span>
-                    {isSavedState ? (
-                      <span
-                        className="field-status-badge field-status-badge--inline"
-                        title={t('settings.connectorsSavedTitle')}
-                      >
-                        {tail
-                          ? t('settings.connectorsSavedWithTail', { tail })
-                          : t('settings.connectorsSaved')}
-                      </span>
-                    ) : null}
-                  </div>
-                  <span className="media-provider-hint">{provider.hint}</span>
-                </div>
-                {/*
-                  Right-side badges deliberately omitted now: every row
-                  in this list is "Integrated" by definition and the
-                  "Configured" pill duplicated the inline "Saved" chip
-                  next to the provider name. Three pills per row read
-                  as warnings; one chip reads as status.
-                */}
+      </div>
+      {activeProvider && activeEntry ? (
+        <article className="media-provider-detail">
+          <div className="media-provider-detail-head">
+            <div className="media-provider-meta">
+              <div className="media-provider-name-row">
+                <h3>{activeProvider.label}</h3>
+                {activeIsSavedState ? (
+                  <span
+                    className="field-status-badge field-status-badge--inline"
+                    title={t('settings.mediaProviderConfigured')}
+                  >
+                    {t('settings.mediaProviderConfigured')}
+                  </span>
+                ) : null}
               </div>
-              {provider.id === 'grok' ? <XaiOAuthControl /> : null}
-              {requiresCredentials ? (
-                <div className="media-provider-body">
-                  <div className="media-provider-secret-field">
-                    <input
-                      type={apiKeyVisible ? 'text' : 'password'}
-                      value={entry.apiKey}
-                      placeholder={isSavedState ? t('settings.connectorsReplaceKeyPlaceholder') : t('settings.mediaProviderPlaceholder')}
-                      aria-label={`${provider.label} ${t('settings.mediaProviderApiKey')}`}
-                      disabled={disabled}
-                      onFocus={() => {
-                        trackSettingsMediaProvidersClick(analytics.track, {
-                          page_name: 'settings',
-                          area: 'media_providers',
-                          element: 'key_input',
-                          providers_id: provider.id,
-                          is_configured: clearable,
-                        });
-                      }}
-                      onChange={(e) => updateProvider(provider, { apiKey: e.target.value })}
-                    />
-                    <button
-                      type="button"
-                      className="secret-visibility-button"
-                      disabled={disabled}
-                      aria-label={
-                        apiKeyVisible
-                          ? `${provider.label} ${t('settings.hideKey')}`
-                          : `${provider.label} ${t('settings.showKey')}`
-                      }
-                      aria-pressed={apiKeyVisible}
-                      onClick={() => toggleApiKeyVisibility(provider.id)}
-                    >
-                        <Icon name={apiKeyVisible ? 'eye' : 'eye-off'} size={15} />
-                      </button>
-                    </div>
+              <p>{activeProvider.hint || providerCapabilityLabel(activeProvider)}</p>
+            </div>
+            <div className="media-provider-badges">
+              <span className="media-provider-badge integrated">
+                {providerCapabilityLabel(activeProvider)}
+              </span>
+              {activeProvider.credentialsRequired === false ? (
+                <span className="media-provider-badge on">
+                  {t('settings.mediaProviderNoKeyRequired')}
+                </span>
+              ) : null}
+            </div>
+          </div>
+          {activeProvider.id === 'grok' ? <XaiOAuthControl /> : null}
+          {activeRequiresCredentials ? (
+            <div className="media-provider-detail-grid">
+              <label className="media-provider-detail-field">
+                <span>{t('settings.mediaProviderApiKey')}</span>
+                <div className="media-provider-secret-field">
                   <input
-                    value={entry.baseUrl}
-                    placeholder={provider.defaultBaseUrl || t('settings.mediaProviderBaseUrlPlaceholder')}
-                    aria-label={`${provider.label} ${t('settings.mediaProviderBaseUrl')}`}
-                    disabled={disabled}
+                    type={activeApiKeyVisible ? 'text' : 'password'}
+                    value={activeEntry.apiKey}
+                    placeholder={activeIsSavedState ? t('settings.connectorsReplaceKeyPlaceholder') : t('settings.mediaProviderPlaceholder')}
+                    aria-label={`${activeProvider.label} ${t('settings.mediaProviderApiKey')}`}
                     onFocus={() => {
                       trackSettingsMediaProvidersClick(analytics.track, {
                         page_name: 'settings',
                         area: 'media_providers',
-                        element: 'url_input',
-                        providers_id: provider.id,
-                        is_configured: clearable,
+                        element: 'key_input',
+                        providers_id: activeProvider.id,
+                        is_configured: activeClearable,
                       });
                     }}
-                    onChange={(e) => updateProvider(provider, { baseUrl: e.target.value })}
+                    onChange={(e) => updateProvider(activeProvider, { apiKey: e.target.value })}
                   />
-                  {supportsCustomModel ? (
-                    <input
-                      value={entry.model ?? ''}
-                      placeholder="gemini-3.1-flash-image-preview"
-                      aria-label={`${provider.label} model`}
-                      disabled={disabled}
-                      onChange={(e) => updateProvider(provider, { model: e.target.value })}
-                    />
-                  ) : null}
                   <button
                     type="button"
-                    className="ghost"
-                    disabled={!clearable}
-                    onClick={() => {
-                      trackSettingsMediaProvidersClick(analytics.track, {
-                        page_name: 'settings',
-                        area: 'media_providers',
-                        element: 'clear',
-                        providers_id: provider.id,
-                        // The click reports the state at the moment the
-                        // user pressed Clear; the actual clear only lands
-                        // after they confirm the dialog below, but the
-                        // dashboard cares about the intent signal.
-                        is_configured: clearable,
-                      });
-                      // Match the existing window.confirm guard the rest of
-                      // the app uses for destructive actions (conversation
-                      // delete, design delete, file delete in FileWorkspace).
-                      // Without this a stray click on the row's Clear button
-                      // wipes the saved key with no recovery. Issue #737.
-                      if (
-                        !confirm(
-                          t('settings.mediaProviderClearConfirm', {
-                            name: provider.label,
-                          }),
-                        )
-                      ) {
-                        return;
-                      }
-                      updateProvider(provider, {
-                        apiKey: '',
-                        baseUrl: '',
-                        model: '',
-                        apiKeyConfigured: false,
-                        apiKeyTail: '',
-                      });
-                    }}
+                    className="secret-visibility-button"
+                    aria-label={
+                      activeApiKeyVisible
+                        ? `${activeProvider.label} ${t('settings.hideKey')}`
+                        : `${activeProvider.label} ${t('settings.showKey')}`
+                    }
+                    aria-pressed={activeApiKeyVisible}
+                    onClick={() => toggleApiKeyVisibility(activeProvider.id)}
                   >
-                    {t('settings.mediaProviderClear')}
+                    <Icon name={activeApiKeyVisible ? 'eye' : 'eye-off'} size={15} />
                   </button>
                 </div>
-              ) : null}
+              </label>
+              <label className="media-provider-detail-field">
+                <span>{t('settings.mediaProviderBaseUrl')}</span>
+                <input
+                  value={activeEntry.baseUrl}
+                  placeholder={activeProvider.defaultBaseUrl || t('settings.mediaProviderBaseUrlPlaceholder')}
+                  aria-label={`${activeProvider.label} ${t('settings.mediaProviderBaseUrl')}`}
+                  onFocus={() => {
+                    trackSettingsMediaProvidersClick(analytics.track, {
+                      page_name: 'settings',
+                      area: 'media_providers',
+                      element: 'url_input',
+                      providers_id: activeProvider.id,
+                      is_configured: activeClearable,
+                    });
+                  }}
+                  onChange={(e) => updateProvider(activeProvider, { baseUrl: e.target.value })}
+                />
+              </label>
+              <label className="media-provider-detail-field">
+                <span>{t('settings.mediaProviderModel')}</span>
+                <input
+                  value={activeEntry.model ?? ''}
+                  placeholder={activeProvider.customModelPlaceholder ?? t('settings.mediaProviderModelPlaceholder')}
+                  aria-label={`${activeProvider.label} ${t('settings.mediaProviderModel')}`}
+                  onChange={(e) => updateProvider(activeProvider, { model: e.target.value })}
+                />
+              </label>
             </div>
-          );
-        })}
-      </div>
+          ) : (
+            <div className="media-provider-no-key">
+              <Icon name="check" size={15} />
+              <div>
+                <strong>{t('settings.mediaProviderNoKeyRequired')}</strong>
+                <span>{t('settings.mediaProviderNoKeyHint')}</span>
+              </div>
+            </div>
+          )}
+          <div className="media-provider-docs-callout">
+            <div>
+              <strong>{t('settings.mediaProviderDocsTitle')}</strong>
+              <span>{t('settings.mediaProviderDocsHint')}</span>
+            </div>
+            {activeProvider.docsUrl ? (
+              <a
+                href={sanitizeHttpsUrl(activeProvider.docsUrl) ?? undefined}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ghost-link"
+              >
+                {t('settings.agentInstall.docs')}
+                <Icon name="external-link" size={14} />
+              </a>
+            ) : null}
+          </div>
+          <div className="media-provider-detail-actions">
+            <span className="hint">{t('settings.mediaProviderSaveHint')}</span>
+            <button
+              type="button"
+              className="ghost"
+              disabled={!activeClearable}
+              onClick={() => {
+                trackSettingsMediaProvidersClick(analytics.track, {
+                  page_name: 'settings',
+                  area: 'media_providers',
+                  element: 'clear',
+                  providers_id: activeProvider.id,
+                  // The click reports the state at the moment the
+                  // user pressed Clear; the actual clear only lands
+                  // after they confirm the dialog below, but the
+                  // dashboard cares about the intent signal.
+                  is_configured: activeClearable,
+                });
+                // Match the existing window.confirm guard the rest of
+                // the app uses for destructive actions (conversation
+                // delete, design delete, file delete in FileWorkspace).
+                // Without this a stray click on the Clear button wipes
+                // the saved key with no recovery. Issue #737.
+                if (
+                  !confirm(
+                    t('settings.mediaProviderClearConfirm', {
+                      name: activeProvider.label,
+                    }),
+                  )
+                ) {
+                  return;
+                }
+                updateProvider(activeProvider, {
+                  apiKey: '',
+                  baseUrl: '',
+                  model: '',
+                  apiKeyConfigured: false,
+                  apiKeyTail: '',
+                });
+              }}
+            >
+              {t('settings.mediaProviderClear')}
+            </button>
+          </div>
+        </article>
+      ) : null}
       {comingSoonProviders.length > 0 ? (
         // Roadmap drawer. We still want to advertise that we know
         // these providers exist (so users don't ask "where is Fal?"),
@@ -7487,7 +8129,7 @@ function MediaProvidersSection({
               {t('tasks.comingSoon')}
             </span>
             <span className="filter-pill-count">
-              {comingSoonProviders.length}
+              ({comingSoonProviders.length})
             </span>
           </summary>
           <p className="hint" style={{ marginTop: 4, marginBottom: 8 }}>
@@ -7536,7 +8178,7 @@ function MediaProvidersSection({
 //
 // Schemas drift between clients in deliberate ways. VS Code keys
 // servers under "servers" with a required "type" field; Zed uses
-// "context_servers"; Cursor, Windsurf, and Antigravity share
+// "context_servers"; Cursor, Kiro, Windsurf, and Antigravity share
 // "mcpServers"; Claude Code is best served by its CLI which writes
 // to the local config for you. Verified against each tool's official
 // docs in May 2026.
@@ -7544,13 +8186,14 @@ function MediaProvidersSection({
 // Important: every snippet uses absolute paths to the daemon's current
 // Node-compatible runtime and built cli.js, fetched at runtime. macOS
 // and Linux ship a system /usr/bin/od (octal-dump) that shadows any
-// `od` we might add to PATH, and most Open Design users run from
+// `od` we might add to PATH, and most OpenDesign users run from
 // source where `od` is not installed globally. The installer panel
 // must NOT reference bare `od`.
 type McpClientId =
   | 'claude'
   | 'codex'
   | 'cursor'
+  | 'kiro'
   | 'vscode'
   | 'zed'
   | 'windsurf'
@@ -7815,6 +8458,17 @@ function IntegrationsSection() {
       deeplinkLabel: () => t('settings.mcpDeeplinkInstallCursor'),
     },
     {
+      id: 'kiro',
+      label: 'Kiro CLI',
+      buildMethod: () => t('settings.mcpMethodJson'),
+      buildInstruction: (info) =>
+        t('settings.mcpInstructionKiro', {
+          path: homeConfigPath(info.platform, '~/.kiro/settings/mcp.json', '%USERPROFILE%\\.kiro\\settings\\mcp.json'),
+        }),
+      buildSnippet: buildSharedMcpJson,
+      buildSnippetLang: () => 'json',
+    },
+    {
       id: 'vscode',
       label: 'VS Code',
       buildMethod: () => t('settings.mcpMethodJson'),
@@ -7951,6 +8605,10 @@ function IntegrationsSection() {
   return (
     <section className="settings-section">
       <div className="mcp-client-body">
+        <div className="mcp-page-head">
+          <h3>{t('settings.mcpTitle')}</h3>
+        </div>
+
         {infoError ? (
           <div
             className="empty-card"
@@ -7960,7 +8618,6 @@ function IntegrationsSection() {
           </div>
         ) : null}
 
-        {/* Group 1: what the MCP server does */}
         <div className="mcp-capabilities-card">
           <p className="mcp-capabilities-label">
             {t('settings.mcpCapabilitiesTitle')}
@@ -7972,7 +8629,7 @@ function IntegrationsSection() {
           </ul>
         </div>
 
-        {/* Group 2: setup flow */}
+        {/* Setup flow */}
         <div className="mcp-setup-card">
           <div
             className="ds-picker"
@@ -8034,7 +8691,7 @@ function IntegrationsSection() {
           ) : null}
         </div>
 
-        {info ? (
+        {info && client.id !== 'claude' ? (
           <p style={{ margin: 0 }}>{client.buildInstruction(info)}</p>
         ) : null}
 
@@ -8079,15 +8736,14 @@ function IntegrationsSection() {
             style={{
               background: 'var(--surface-2, #11141a)',
               color: 'var(--fg-1, #e6e6e6)',
-              // Reserve top clearance for the absolutely-positioned
-              // Copy button so the first line of the snippet does not
-              // sit underneath it, and reserve right clearance so a
-              // wrapped bash one-liner stops short of the button rather
-              // than scrolling behind it. The right padding is sized
-              // for the wider "Copied" post-click state (icon + text +
-              // button padding + the 8px right offset) with a few px
-              // of buffer for elevated font sizes / zoom. Issue #632.
-              padding: '40px 104px 12px 14px',
+              // Top-align the snippet (first line sits at the top, level with
+              // the Copy button) — the right padding already reserves the
+              // button's horizontal lane so the first line never runs under it.
+              // The right padding is sized for the wider "Copied" post-click
+              // state (icon + text + button padding + the 8px right offset)
+              // with a few px of buffer for elevated font sizes / zoom.
+              // Issue #632.
+              padding: '12px 104px 12px 14px',
               borderRadius: 8,
               overflowX: 'auto',
               fontFamily:
@@ -8113,9 +8769,11 @@ function IntegrationsSection() {
                 background: 'transparent',
                 padding: 0,
                 borderRadius: 0,
-                color: 'inherit',
                 fontFamily: 'inherit',
                 fontSize: 'inherit',
+                // Terminal-green text on the bare dark surface (#3BBF7D = the
+                // dark theme --green; the block stays dark in both themes).
+                color: '#3BBF7D',
               }}
             >
               {snippet ||
@@ -8135,11 +8793,12 @@ function IntegrationsSection() {
               right: 8,
               padding: '4px 10px',
               fontSize: 12,
+              borderRadius: 999,
             }}
             aria-label={t('settings.mcpCopyAria')}
           >
             <Icon name={copied ? 'check' : 'copy'} size={14} />
-            <span style={{ marginLeft: 6 }}>{copied ? t('settings.mcpCopied') : t('settings.mcpCopy')}</span>
+            <span style={{ marginLeft: 4 }}>{copied ? t('settings.mcpCopied') : t('settings.mcpCopy')}</span>
           </button>
         </div>
 
@@ -8162,130 +8821,10 @@ function IntegrationsSection() {
           </div>
         ) : null}
 
-        {/* Restart note is a "next step" after running the command,
-            not an error — keep it right after the code block. */}
-        <div
-          style={{
-            padding: '10px 12px',
-            background: 'var(--bg-subtle)',
-            border: '1px solid var(--border)',
-            borderLeft: '3px solid var(--border-strong)',
-            borderRadius: 6,
-            fontSize: 13,
-            lineHeight: 1.5,
-          }}
-        >
-          <strong>{t('settings.mcpRestartNote')}</strong>{' '}
-          <span style={{ color: 'var(--text-muted)' }}>
-            {t('settings.mcpRestartDetail')}
-          </span>
-        </div>
-
-          <p className="mcp-running-note">
-            {t('settings.mcpRunningNote')}
-          </p>
+        <p className="mcp-running-note">
+          {t('settings.mcpRunningNote')}
+        </p>
         </div>{/* end mcp-setup-card */}
-      </div>
-    </section>
-  );
-}
-
-const THEMES: Array<{ value: AppTheme; labelKey: 'settings.themeSystem' | 'settings.themeLight' | 'settings.themeDark'; icon?: 'sun' | 'moon' }> = [
-  { value: 'system', labelKey: 'settings.themeSystem' },
-  { value: 'light', labelKey: 'settings.themeLight', icon: 'sun' },
-  { value: 'dark', labelKey: 'settings.themeDark', icon: 'moon' },
-];
-
-function AppearanceSection({
-  cfg,
-  setCfg,
-}: {
-  cfg: AppConfig;
-  setCfg: Dispatch<SetStateAction<AppConfig>>;
-}) {
-  const { t } = useI18n();
-  const analytics = useAnalytics();
-  const current = cfg.theme ?? 'system';
-  const currentAccent = normalizeAccentColor(cfg.accentColor) ?? DEFAULT_ACCENT_COLOR;
-  const accentLabel = t('pet.fieldAccent');
-  const defaultAccentLabel = t('pet.fieldAccentDefault');
-  const customAccentLabel = t('pet.fieldAccentCustom');
-
-  // Apply the draft theme immediately so the user sees a live preview
-  // before hitting Save. SettingsDialog's cleanup reverts this on cancel.
-  useLayoutEffect(() => {
-    applyAppearanceToDocument({
-      theme: current,
-      accentColor: currentAccent,
-    });
-  }, [current, currentAccent]);
-
-  const setAccentColor = (color: string) => {
-    setCfg((c) => ({ ...c, accentColor: normalizeAccentColor(color) ?? c.accentColor ?? DEFAULT_ACCENT_COLOR }));
-  };
-
-  return (
-    <section className="settings-section">
-      <div className="seg-control" role="group" aria-label={t('settings.appearance')} style={{ '--seg-cols': THEMES.length } as React.CSSProperties}>
-        {THEMES.map(({ value, labelKey, icon }) => (
-          <button
-            key={value}
-            type="button"
-            className={'seg-btn' + (current === value ? ' active' : '')}
-            aria-pressed={current === value}
-            onClick={() => {
-              // P1 ui_click area=appearance — `system|light|dark` only
-              // emits from the segmented control; accent swatch picks
-              // use `accent_color` with the swatch hex below.
-              if (value === 'system' || value === 'light' || value === 'dark') {
-                trackSettingsAppearanceClick(analytics.track, {
-                  page_name: 'settings',
-                  area: 'appearance',
-                  element: value,
-                });
-              }
-              setCfg((c) => ({ ...c, theme: value }));
-            }}
-          >
-            {icon ? <Icon name={icon} size={14} aria-hidden="true" /> : null}
-            <span className="seg-title">{t(labelKey)}</span>
-          </button>
-        ))}
-      </div>
-      <div className="field">
-        <span className="field-label">{accentLabel}</span>
-        <div className="pet-swatches" role="radiogroup" aria-label={accentLabel}>
-          {ACCENT_SWATCHES.map((color) => {
-            const active = currentAccent === color;
-            return (
-              <button
-                key={color}
-                type="button"
-                className={`pet-swatch${active ? ' active' : ''}`}
-                style={{ background: color }}
-                aria-label={color === DEFAULT_ACCENT_COLOR ? defaultAccentLabel : color}
-                aria-checked={active}
-                role="radio"
-                onClick={() => {
-                  trackSettingsAppearanceClick(analytics.track, {
-                    page_name: 'settings',
-                    area: 'appearance',
-                    element: 'accent_color',
-                    color,
-                  });
-                  setAccentColor(color);
-                }}
-              />
-            );
-          })}
-          <input
-            type="color"
-            aria-label={customAccentLabel}
-            className="pet-swatch-picker"
-            value={currentAccent}
-            onChange={(e) => setAccentColor(e.target.value)}
-          />
-        </div>
       </div>
     </section>
   );
@@ -8318,12 +8857,88 @@ function AppearanceSection({
  * the user that per-project persistence requires opening a project
  * first. That matches the actual scope of the wire-up.
  */
-function CritiqueTheaterSection() {
+function CritiqueTheaterSection({
+  callerWorkspaceContext,
+  persistedProjectWorkspaceId,
+}: {
+  callerWorkspaceContext: WorkspaceCollabContext | null;
+  persistedProjectWorkspaceId: string | null;
+}) {
+  const route = useRoute();
+  const activeProjectId = route.kind === 'project' ? route.projectId : null;
+  return activeProjectId
+    ? (
+      <ProjectScopedCritiqueTheaterSection
+        projectId={activeProjectId}
+        callerWorkspaceContext={callerWorkspaceContext}
+        persistedProjectWorkspaceId={persistedProjectWorkspaceId}
+      />
+    )
+    : (
+      <CritiqueTheaterSectionContent
+        activeProjectId={null}
+        projectScopeReady
+        workspaceContext={null}
+      />
+    );
+}
+
+function ProjectScopedCritiqueTheaterSection({
+  projectId,
+  callerWorkspaceContext,
+  persistedProjectWorkspaceId,
+}: {
+  projectId: string;
+  callerWorkspaceContext: WorkspaceCollabContext | null;
+  persistedProjectWorkspaceId: string | null;
+}) {
+  const projectScope = useProjectWorkspaceScope(
+    projectId,
+    callerWorkspaceContext,
+    persistedProjectWorkspaceId,
+  );
+  return (
+    <CritiqueTheaterSectionContent
+      activeProjectId={projectId}
+      projectScopeReady={projectWorkspaceScopeReady(projectScope.scope)}
+      workspaceContext={projectWorkspaceContext(projectScope.scope)}
+    />
+  );
+}
+
+function CritiqueTheaterSectionContent({
+  activeProjectId,
+  projectScopeReady,
+  workspaceContext,
+}: {
+  activeProjectId: string | null;
+  projectScopeReady: boolean;
+  workspaceContext: WorkspaceCollabContext | null;
+}) {
   const { t } = useI18n();
   const analytics = useAnalytics();
   const enabled = useCritiqueTheaterEnabled();
-  const route = useRoute();
-  const activeProjectId = route.kind === 'project' ? route.projectId : null;
+
+  const handleToggle = () => {
+    const next = !enabled;
+    trackSettingsDesignReviewClick(analytics.track, {
+      page_name: 'settings',
+      area: 'design_review',
+      element: 'enable_toggle',
+      status_before: enabled ? 'on' : 'off',
+      status_after: next ? 'on' : 'off',
+      has_active_project: activeProjectId !== null,
+    });
+    if (activeProjectId !== null && projectScopeReady) {
+      void setCritiqueTheaterEnabled(next, {
+        projectId: activeProjectId,
+        workspaceContext,
+      });
+    } else {
+      void setCritiqueTheaterEnabled(next);
+    }
+  };
+
   return (
     <section className="settings-section">
       <div className="section-head">
@@ -8332,44 +8947,32 @@ function CritiqueTheaterSection() {
           <p className="hint">{t('critiqueTheater.settingsNavHint')}</p>
         </div>
       </div>
-      <label className="field">
-        <span className="field-label">
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(e) => {
-              const next = e.target.checked;
-              trackSettingsDesignReviewClick(analytics.track, {
-                page_name: 'settings',
-                area: 'design_review',
-                element: 'enable_toggle',
-                status_before: enabled ? 'on' : 'off',
-                status_after: next ? 'on' : 'off',
-                has_active_project: activeProjectId !== null,
-              });
-              if (activeProjectId !== null) {
-                void setCritiqueTheaterEnabled(next, { projectId: activeProjectId });
-              } else {
-                void setCritiqueTheaterEnabled(next);
-              }
-            }}
-          />
-          {' '}
-          {t('critiqueTheater.settingsEnabledLabel')}
+      {/* Renders as the same `toggle-row` switch the rest of General uses, per
+          #5517 — the bare checkbox this replaces floated free of the label
+          because `.settings-general-block` hides the section-head that used to
+          anchor it. The .critique-theater-toggle styles were already shipped. */}
+      <button
+        type="button"
+        className={`toggle-row critique-theater-toggle${enabled ? ' on' : ''}`}
+        role="switch"
+        aria-checked={enabled}
+        onClick={handleToggle}
+      >
+        <span className="toggle-row-text">
+          <span className="toggle-row-label">
+            {t('critiqueTheater.settingsEnabledLabel')}
+          </span>
+          <span className="toggle-row-hint">
+            {t('critiqueTheater.settingsEnabledDescription')}
+          </span>
+          <span className="toggle-row-hint">
+            {activeProjectId !== null
+              ? t('critiqueTheater.settingsEnabledProjectHint')
+              : t('critiqueTheater.settingsEnabledNoProjectHint')}
+          </span>
         </span>
-        <small className="hint">
-          {t('critiqueTheater.settingsEnabledDescription')}
-        </small>
-        {activeProjectId !== null ? (
-          <small className="hint">
-            {t('critiqueTheater.settingsEnabledProjectHint')}
-          </small>
-        ) : (
-          <small className="hint">
-            {t('critiqueTheater.settingsEnabledNoProjectHint')}
-          </small>
-        )}
-      </label>
+        <span className="toggle-row-switch" aria-hidden="true" />
+      </button>
     </section>
   );
 }
@@ -8499,19 +9102,26 @@ function NotificationsSection({
           <div className="settings-notify-card-header">
             <h4>{t('settings.notifyCompletionSound')}</h4>
             <div className="section-head-actions">
-              <div className="seg-control" role="group" aria-label={t('settings.notifyCompletionSound')} style={{ '--seg-cols': 1 } as React.CSSProperties}>
+              <div className="seg-control" role="group" aria-label={t('settings.notifyCompletionSound')} style={{ '--seg-cols': 2 } as React.CSSProperties}>
                 <button
                   type="button"
-                  className={'seg-btn' + (notif.soundEnabled ? ' active' : '')}
+                  className={'seg-btn seg-btn--on' + (notif.soundEnabled ? ' active' : '')}
                   aria-pressed={notif.soundEnabled}
-                  onClick={toggleSound}
+                  onClick={() => { if (!notif.soundEnabled) toggleSound(); }}
                 >
-                  <span className="seg-title">{notif.soundEnabled ? t('common.active') : t('common.offline')}</span>
+                  <span className="seg-title">{t('common.active')}</span>
+                </button>
+                <button
+                  type="button"
+                  className={'seg-btn' + (!notif.soundEnabled ? ' active' : '')}
+                  aria-pressed={!notif.soundEnabled}
+                  onClick={() => { if (notif.soundEnabled) toggleSound(); }}
+                >
+                  <span className="seg-title">{t('common.inactive')}</span>
                 </button>
               </div>
             </div>
           </div>
-          <p className="hint settings-notify-card-hint">{t('settings.notifyCompletionSoundHint')}</p>
         </div>
 
         {notif.soundEnabled ? (
@@ -8578,20 +9188,28 @@ function NotificationsSection({
           <div className="settings-notify-card-header">
             <h4>{t('settings.notifyDesktop')}</h4>
             <div className="section-head-actions">
-              <div className="seg-control" role="group" aria-label={t('settings.notifyDesktop')} style={{ '--seg-cols': 1 } as React.CSSProperties}>
+              <div className="seg-control" role="group" aria-label={t('settings.notifyDesktop')} style={{ '--seg-cols': 2 } as React.CSSProperties}>
                 <button
                   type="button"
-                  className={'seg-btn' + (notif.desktopEnabled ? ' active' : '')}
+                  className={'seg-btn seg-btn--on' + (notif.desktopEnabled ? ' active' : '')}
                   aria-pressed={notif.desktopEnabled}
                   disabled={permission === 'unsupported'}
-                  onClick={() => { void toggleDesktop(); }}
+                  onClick={() => { if (!notif.desktopEnabled) void toggleDesktop(); }}
                 >
-                  <span className="seg-title">{notif.desktopEnabled ? t('common.active') : t('common.offline')}</span>
+                  <span className="seg-title">{t('common.active')}</span>
+                </button>
+                <button
+                  type="button"
+                  className={'seg-btn' + (!notif.desktopEnabled ? ' active' : '')}
+                  aria-pressed={!notif.desktopEnabled}
+                  disabled={permission === 'unsupported'}
+                  onClick={() => { if (notif.desktopEnabled) void toggleDesktop(); }}
+                >
+                  <span className="seg-title">{t('common.inactive')}</span>
                 </button>
               </div>
             </div>
           </div>
-          <p className="hint settings-notify-card-hint">{t('settings.notifyDesktopHint')}</p>
         </div>
         {permission === 'unsupported' ? (
           <p className="hint">{t('settings.notifyDesktopUnsupported')}</p>

@@ -1,7 +1,7 @@
 ---
 title: 'Forget Claude Design. This FREE Open Source Version Is Better?'
 youtubeId: 2QyC5juxtro
-summary: 'Open Design installation walkthrough and comparison with Claude Design, demonstrating local setup and live landing page generation with multiple export formats.'
+summary: 'OpenDesign installation walkthrough and comparison with Claude Design, demonstrating local setup and live landing page generation with multiple export formats.'
 date: 2026-05-07
 category: Getting started
 durationSeconds: 446

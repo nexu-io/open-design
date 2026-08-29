@@ -6,8 +6,9 @@
   position: fixed;
   inset: 0;
   z-index: 920;
-  background: rgba(28, 27, 26, 0.48);
-  backdrop-filter: blur(8px) saturate(1.1);
+  background: rgba(28, 27, 26, 0.42);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
   display: flex;
   align-items: flex-start;
   justify-content: center;

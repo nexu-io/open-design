@@ -7,11 +7,15 @@ import type {
   OpenDesignHostFailure,
   OpenDesignHostGlobalScope,
   OpenDesignHostPdfPrintOptions,
+  OpenDesignHostPreviewNavigationFailure,
+  OpenDesignHostPreviewNavigationFailureListener,
   OpenDesignHostPickWorkingDirResult,
   OpenDesignHostProjectImportInit,
   OpenDesignHostProjectImportResult,
   OpenDesignHostProjectReplaceWorkingDirResult,
   OpenDesignHostUpdaterActionOptions,
+  OpenDesignHostUpdaterMenuLabels,
+  OpenDesignHostUpdaterOpenDialogListener,
   OpenDesignHostUpdaterResult,
   OpenDesignHostUpdaterStatusAction,
   OpenDesignHostUpdaterStatusListener,
@@ -44,7 +48,7 @@ function unavailable(reason: string): OpenDesignHostFailure {
 /** Open an external URL through the host shell. */
 export async function openHostExternalUrl(url: string, scope: OpenDesignHostGlobalScope = globalThis): Promise<OpenDesignHostActionResult> {
   const host = getOpenDesignHost(scope);
-  if (host == null) return unavailable("Open Design host is not available");
+  if (host == null) return unavailable("OpenDesign host is not available");
   try {
     return await host.shell.openExternal(url);
   } catch (error) {
@@ -55,7 +59,7 @@ export async function openHostExternalUrl(url: string, scope: OpenDesignHostGlob
 /** Reveal a project's path through the host shell. */
 export async function openHostProjectPath(projectId: string, scope: OpenDesignHostGlobalScope = globalThis): Promise<OpenDesignHostActionResult> {
   const host = getOpenDesignHost(scope);
-  if (host == null) return unavailable("Open Design host is not available");
+  if (host == null) return unavailable("OpenDesign host is not available");
   try {
     return await host.shell.openPath(projectId);
   } catch (error) {
@@ -69,7 +73,7 @@ export async function clearHostBrowserData(
   scope: OpenDesignHostGlobalScope = globalThis,
 ): Promise<OpenDesignHostActionResult> {
   const host = getOpenDesignHost(scope);
-  if (host == null) return unavailable("Open Design host is not available");
+  if (host == null) return unavailable("OpenDesign host is not available");
   try {
     return await host.browser.clearData(options);
   } catch (error) {
@@ -83,7 +87,7 @@ export async function captureHostPage(
   scope: OpenDesignHostGlobalScope = globalThis,
 ): Promise<OpenDesignHostCaptureResult> {
   const host = getOpenDesignHost(scope);
-  if (host == null) return unavailable("Open Design host is not available");
+  if (host == null) return unavailable("OpenDesign host is not available");
   try {
     return await host.capture.page(options);
   } catch (error) {
@@ -97,7 +101,7 @@ export async function pickAndImportHostProject(
   scope: OpenDesignHostGlobalScope = globalThis,
 ): Promise<OpenDesignHostProjectImportResult> {
   const host = getOpenDesignHost(scope);
-  if (host == null) return unavailable("Open Design host is not available");
+  if (host == null) return unavailable("OpenDesign host is not available");
   try {
     return await host.project.pickAndImport(init);
   } catch (error) {
@@ -111,7 +115,7 @@ export async function pickAndReplaceHostProjectWorkingDir(
   scope: OpenDesignHostGlobalScope = globalThis,
 ): Promise<OpenDesignHostProjectReplaceWorkingDirResult> {
   const host = getOpenDesignHost(scope);
-  if (host == null) return unavailable("Open Design host is not available");
+  if (host == null) return unavailable("OpenDesign host is not available");
   try {
     return await host.project.pickAndReplaceWorkingDir(projectId);
   } catch (error) {
@@ -127,7 +131,7 @@ export async function pickHostWorkingDir(
   scope: OpenDesignHostGlobalScope = globalThis,
 ): Promise<OpenDesignHostPickWorkingDirResult> {
   const host = getOpenDesignHost(scope);
-  if (host == null) return unavailable("Open Design host is not available");
+  if (host == null) return unavailable("OpenDesign host is not available");
   if (typeof host.project.pickWorkingDir !== "function") {
     return unavailable("host build does not support pickWorkingDir");
   }
@@ -146,7 +150,7 @@ export async function printHostPdf(
   scope: OpenDesignHostGlobalScope = globalThis,
 ): Promise<OpenDesignHostActionResult> {
   const host = getOpenDesignHost(scope);
-  if (host == null) return unavailable("Open Design host is not available");
+  if (host == null) return unavailable("OpenDesign host is not available");
   try {
     return await host.pdf.print(html, nonce, options);
   } catch (error) {
@@ -157,12 +161,39 @@ export async function printHostPdf(
 /** Toggle host pet visibility. */
 export function setHostPetVisible(visible: boolean, scope: OpenDesignHostGlobalScope = globalThis): OpenDesignHostActionResult {
   const host = getOpenDesignHost(scope);
-  if (host == null) return unavailable("Open Design host is not available");
+  if (host == null) return unavailable("OpenDesign host is not available");
   try {
     host.pet.setVisible(visible);
     return { ok: true };
   } catch (error) {
     return unavailable(error instanceof Error ? error.message : String(error));
+  }
+}
+
+/** Read the latest Electron-observed preview subframe navigation failure. */
+export function getLatestHostPreviewNavigationFailure(
+  scope: OpenDesignHostGlobalScope = globalThis,
+): OpenDesignHostPreviewNavigationFailure | null {
+  const host = getOpenDesignHost(scope);
+  if (typeof host?.preview?.getLatestNavigationFailure !== "function") return null;
+  try {
+    return host.preview.getLatestNavigationFailure();
+  } catch {
+    return null;
+  }
+}
+
+/** Subscribe to Electron-observed preview subframe navigation failures. */
+export function subscribeHostPreviewNavigationFailure(
+  listener: OpenDesignHostPreviewNavigationFailureListener,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): () => void {
+  const host = getOpenDesignHost(scope);
+  if (typeof host?.preview?.subscribeNavigationFailure !== "function") return () => undefined;
+  try {
+    return host.preview.subscribeNavigationFailure(listener);
+  } catch {
+    return () => undefined;
   }
 }
 
@@ -173,7 +204,7 @@ async function runHostUpdaterAction(
   scope: OpenDesignHostGlobalScope = globalThis,
 ): Promise<OpenDesignHostUpdaterResult> {
   const host = getOpenDesignHost(scope);
-  if (host == null) return unavailable("Open Design host is not available");
+  if (host == null) return unavailable("OpenDesign host is not available");
   try {
     return {
       ok: true,
@@ -208,6 +239,14 @@ export async function downloadHostUpdater(
   return await runHostUpdaterAction(OPEN_DESIGN_HOST_UPDATER_ACTIONS.DOWNLOAD, options, scope);
 }
 
+/** Clear the host updater/launcher caches and reset one-shot update state. */
+export async function clearHostUpdaterCache(
+  options?: OpenDesignHostUpdaterActionOptions,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): Promise<OpenDesignHostUpdaterResult> {
+  return await runHostUpdaterAction(OPEN_DESIGN_HOST_UPDATER_ACTIONS.CLEAR_CACHE, options, scope);
+}
+
 /** Trigger a host updater install. */
 export async function installHostUpdater(
   options?: OpenDesignHostUpdaterActionOptions,
@@ -222,7 +261,7 @@ export async function quitHostAfterUpdaterInstallerOpen(
   scope: OpenDesignHostGlobalScope = globalThis,
 ): Promise<OpenDesignHostActionResult> {
   const host = getOpenDesignHost(scope);
-  if (host == null) return unavailable("Open Design host is not available");
+  if (host == null) return unavailable("OpenDesign host is not available");
   try {
     return await host.updater.quit(options);
   } catch (error) {
@@ -241,5 +280,33 @@ export function subscribeHostUpdater(
     return host.updater.subscribe(listener);
   } catch {
     return () => undefined;
+  }
+}
+
+/** Subscribe to native host requests to open the updater dialog. */
+export function subscribeHostUpdaterOpenDialog(
+  listener: OpenDesignHostUpdaterOpenDialogListener,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): () => void {
+  const host = getOpenDesignHost(scope);
+  if (host == null) return () => undefined;
+  try {
+    return host.updater.subscribeOpenDialog(listener);
+  } catch {
+    return () => undefined;
+  }
+}
+
+/** Synchronize renderer-localized updater menu labels to the native host. */
+export async function setHostUpdaterMenuLabels(
+  labels: OpenDesignHostUpdaterMenuLabels,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): Promise<OpenDesignHostActionResult> {
+  const host = getOpenDesignHost(scope);
+  if (host == null) return unavailable("OpenDesign host is not available");
+  try {
+    return await host.updater.setMenuLabels(labels);
+  } catch (error) {
+    return unavailable(error instanceof Error ? error.message : String(error));
   }
 }

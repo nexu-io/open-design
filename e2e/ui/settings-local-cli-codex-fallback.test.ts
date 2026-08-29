@@ -65,17 +65,23 @@ function baseConfig(overrides: Partial<AppConfigSeed> = {}): AppConfigSeed {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
 }
 
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
-  await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
+  await expect(
+    page
+      .getByTestId('entry-settings-button')
+      .or(page.getByTestId('entry-nav-settings'))
+      .or(page.getByRole('button', { name: OPEN_SETTINGS_LABEL }))
+      .first(),
+  ).toBeVisible();
 }
 
 async function openLocalCliSettings(
@@ -166,6 +172,7 @@ async function openLocalCliSettings(
 
   await gotoEntryHome(page);
   const dialog = await openSettingsDialog(page);
+  await dialog.getByTestId('settings-nav-execution').click();
   await dialog.getByRole('tab', { name: LOCAL_CLI_LABEL }).click();
   const codexCard = dialog
     .locator('[data-testid="settings-agent-select-codex"], .agent-card-select', {

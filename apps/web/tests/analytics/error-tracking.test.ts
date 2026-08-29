@@ -464,3 +464,83 @@ describe('error-tracking', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Attribution guards for the un-typable exception.
+ *
+ * The stability report's frontend Top 5 carries a row literally rendered as
+ * `Error  — 235 次 / ~74 台`: an exception with a type but no value, which no
+ * amount of dashboard work can turn into a cause. Two independent sources:
+ *
+ *   1. `buildExceptionList` copied `error.name` / `error.message` straight
+ *      through, and both can legitimately be '' (a bare `new Error()`, or a
+ *      subclass whose `name` a minifier mangled away).
+ *   2. `parseStack` returned `[]` for a stackless error. PostHog derives
+ *      `$exception_types` / `$exception_values` from `$exception_list` at
+ *      ingestion and drops entries failing frame validation, so a zero-frame
+ *      entry lands with neither field set — this is how a cross-origin
+ *      "Script error." disappears.
+ */
+describe('exception attribution', () => {
+  beforeEach(() => {
+    setExceptionTrackingContext({
+      apiKey: 'phc_test',
+      host: 'https://us.i.posthog.com',
+      distinctId: 'user-attrib',
+    });
+  });
+
+  it('never ships an empty exception value for a message-less Error', () => {
+    reportHandledException(new Error(''));
+
+    const props = lastFetchedBody().properties as Record<string, unknown>;
+    const list = props.$exception_list as Array<{ type: string; value: string }>;
+    expect(list[0]!.type).not.toBe('');
+    expect(list[0]!.value).not.toBe('');
+    expect(props.$exception_message).not.toBe('');
+  });
+
+  it('never ships an empty exception type when the name was mangled away', () => {
+    const mangled = new Error('boom');
+    Object.defineProperty(mangled, 'name', { value: '', configurable: true });
+
+    reportHandledException(mangled);
+
+    const list = (lastFetchedBody().properties as Record<string, unknown>)
+      .$exception_list as Array<{ type: string; value: string }>;
+    expect(list[0]!.type).toBe('Error');
+    expect(list[0]!.value).toBe('boom');
+  });
+
+  it.each([
+    ['missing stack', undefined],
+    ['empty stack', ''],
+    ['header-only stack', 'Error: Script error.'],
+    ['unparseable stack', 'some vendor noise\nmore noise'],
+  ])('ships a non-empty stacktrace for a %s', (_label, stackValue) => {
+    const err = new Error('Script error.');
+    if (stackValue === undefined) {
+      delete (err as { stack?: string }).stack;
+    } else {
+      Object.defineProperty(err, 'stack', { value: stackValue, configurable: true });
+    }
+
+    reportHandledException(err);
+
+    const list = (lastFetchedBody().properties as Record<string, unknown>)
+      .$exception_list as Array<{ stacktrace?: { frames?: unknown[] } }>;
+    expect(list[0]!.stacktrace?.frames?.length).toBeGreaterThan(0);
+  });
+
+  it('ships a synthetic frame rather than a zero-frame stacktrace', () => {
+    // A cross-origin "Script error.": no stack, no filename, nothing to parse.
+    const stackless = new Error('Script error.');
+    delete (stackless as { stack?: string }).stack;
+
+    reportHandledException(stackless);
+
+    const list = (lastFetchedBody().properties as Record<string, unknown>)
+      .$exception_list as Array<{ stacktrace?: { frames?: unknown[] } }>;
+    expect(list[0]!.stacktrace?.frames?.length).toBeGreaterThan(0);
+  });
+});

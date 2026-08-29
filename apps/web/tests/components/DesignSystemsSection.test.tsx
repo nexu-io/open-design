@@ -74,7 +74,7 @@ afterEach(() => {
 const cfg = { disabledDesignSystems: [] } as unknown as AppConfig;
 
 describe('DesignSystemsSection rename (issue #2811)', () => {
-  it('renames an editable design system from Settings', async () => {
+  it('renames an editable design system through the internal component', async () => {
     render(<DesignSystemsSection cfg={cfg} setCfg={() => {}} />);
 
     const renameButton = await screen.findByRole('button', {
@@ -89,7 +89,7 @@ describe('DesignSystemsSection rename (issue #2811)', () => {
     await waitFor(() => {
       expect(vi.mocked(updateDesignSystemDraft)).toHaveBeenCalledWith('user:acme', {
         title: 'Acme v2',
-      });
+      }, null);
     });
   });
 

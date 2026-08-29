@@ -3,6 +3,8 @@ name: backport-label-guard
 # when someone applies a backport label, verify they have write+ permission (this includes
 # outside collaborators granted write). If not, remove the label and comment. Removing a label
 # fires the "unlabeled" event, not "labeled", so there is no loop.
+# GitHub App bots never appear in the collaborators API (permission reads as "none"), so
+# trusted automation apps are allowlisted by login instead.
 
 on:
   pull_request_target:
@@ -31,6 +33,10 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          if [ "$ACTOR" = "open-design-crew[bot]" ]; then
+            echo "Authorized: $ACTOR (allowlisted app)"
+            exit 0
+          fi
           perm=$(gh api "repos/$REPO/collaborators/$ACTOR/permission" --jq '.permission' 2>/dev/null || echo none)
           case "$perm" in
             admin|maintain|write)

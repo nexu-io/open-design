@@ -133,7 +133,24 @@ export async function persistPlainStreamArtifacts(options: {
   writeProjectFile?: WriteProjectFile;
   listFiles?: ListFiles;
 }): Promise<PersistedPlainStreamArtifact[]> {
-  const artifacts = extractPlainStreamArtifacts(options.stdout);
+  return persistPlainStreamArtifactList({
+    ...options,
+    artifacts: extractPlainStreamArtifacts(options.stdout),
+  });
+}
+
+// Persist an already-extracted (and possibly merged/deduped) artifact list.
+// Split out from persistPlainStreamArtifacts so the finalizer can union
+// artifacts from two truncation-complementary sources before persisting.
+export async function persistPlainStreamArtifactList(options: {
+  projectsRoot: string;
+  projectId: string;
+  artifacts: PlainStreamArtifact[];
+  metadata?: unknown;
+  writeProjectFile?: WriteProjectFile;
+  listFiles?: ListFiles;
+}): Promise<PersistedPlainStreamArtifact[]> {
+  const artifacts = options.artifacts;
   if (artifacts.length === 0) return [];
 
   const listFiles = options.listFiles ?? (defaultListFiles as ListFiles);

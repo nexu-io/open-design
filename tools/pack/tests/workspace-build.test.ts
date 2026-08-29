@@ -4,9 +4,9 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { ToolPackCache } from "../src/cache.js";
-import type { ToolPackConfig } from "../src/config.js";
-import { ensureWorkspaceBuildArtifacts } from "../src/workspace-build.js";
+import { ToolPackCache } from "@/cache/index.js";
+import type { ToolPackConfig } from "@/config/index.js";
+import { ensureWorkspaceBuildArtifacts } from "@/workspace-build.js";
 
 const PACKAGE_DIRS = [
   "packages/release",
@@ -22,6 +22,7 @@ const PACKAGE_DIRS = [
   "packages/agui-adapter",
   "packages/plugin-runtime",
   "packages/diagnostics",
+  "packages/dsh-runtime",
   "apps/daemon",
   "apps/web",
   "apps/desktop",
@@ -55,6 +56,8 @@ const OUTPUT_FILES = [
   "packages/plugin-runtime/dist/index.d.ts",
   "packages/diagnostics/dist/index.mjs",
   "packages/diagnostics/dist/index.d.ts",
+  "packages/dsh-runtime/dist/index.js",
+  "packages/dsh-runtime/dist/types/index.d.ts",
   "apps/daemon/dist/cli.js",
   "apps/daemon/dist/cli.d.ts",
   "apps/daemon/dist/sidecar/index.js",

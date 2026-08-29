@@ -9,12 +9,24 @@ import {
   type PagesFunction,
 } from '../../../_lib/attribution';
 
+// Download URLs are minted only as `/{windows|macos|linux}/{arch}/{token}/{asset}`
+// (see `functions/api/attribution/mint.ts`). This function's file-path route
+// `/[os]/[arch]/[token]/[asset]` structurally matches ANY four-segment path,
+// though — including localized static pages such as
+// `/zh/plugins/templates/deck/` (os=`zh`, arch=`plugins`, token=`templates`,
+// asset=`deck`). Because Pages Functions run before static-asset serving, an
+// unguarded function would shadow every four-segment page with a JSON 404
+// (`download_not_found`). Gate on the platform segment so anything that isn't a
+// real download request falls through to the static asset instead.
+const DOWNLOAD_PLATFORMS = new Set(['windows', 'macos', 'linux']);
+
 export const onRequest: PagesFunction<AttributionEnv, {
   os: string;
   arch: string;
   token: string;
   asset: string;
-}> = async ({ request, env, params }) => {
+}> = async ({ request, env, params, next }) => {
+  if (!DOWNLOAD_PLATFORMS.has(params.os)) return next();
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     return json(405, { error: 'method_not_allowed' });
   }

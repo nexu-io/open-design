@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   composeSystemPrompt,
-  renderCodexImagegenOverride,
-  resolveCodexImagegenModelId,
 } from '../src/prompts/system.js';
 
 // These tests pin the rendering of metadata.promptTemplate inside the
@@ -45,7 +43,7 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(overrideIdx).toBeGreaterThanOrEqual(0);
     expect(discoveryIdx).toBeGreaterThanOrEqual(0);
     expect(overrideIdx).toBeLessThan(discoveryIdx);
-    expect(out).toMatch(/do NOT emit `<question-form id="discovery">`/);
+    expect(out).toMatch(/do NOT emit a project-opening `<question-form id="discovery">`/);
   });
 
   it('pins Plan mode above default artifact discovery and suppresses artifact brief forms', () => {
@@ -99,14 +97,16 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toContain('license MIT');
   });
 
-  it('asks for image model and aspect ratio when they are unset (not silently defaulted)', () => {
+  it('marks unset image metadata as unresolved without forcing questions', () => {
     const out = composeSystemPrompt({
       metadata: { kind: 'image' },
     });
 
-    // The composer no longer seeds imageModel/imageAspect — the agent must ask.
-    expect(out).toContain('**imageModel**: (unknown — ask: which image model/provider to use)');
-    expect(out).toContain('**aspectRatio**: (unknown — ask: 1:1, 16:9 for landscape, 9:16 for portrait)');
+    expect(out).toContain('**imageModel**: (not provided)');
+    expect(out).toContain(
+      '**aspectRatio**: (not provided; common choices include 1:1, 16:9, or 9:16)',
+    );
+    expect(out).toContain('Missing fields are unresolved facts, not mandatory questions');
     expect(out).not.toContain('gpt-image-2 (default');
     expect(out).not.toContain('1:1 (default');
   });
@@ -256,48 +256,6 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).not.toContain('Source:');
   });
 
-  it('adds a Codex-only built-in imagegen override for gpt-image image projects', () => {
-    const out = composeSystemPrompt({
-      agentId: 'codex',
-      metadata: {
-        kind: 'image',
-        imageModel: 'gpt-image-2',
-        imageAspect: '1:1',
-        promptTemplate: { ...baseSummary },
-      },
-    });
-
-    const mediaContractIdx = out.indexOf('## Media generation contract');
-    const codexOverrideIdx = out.indexOf('## Codex built-in imagegen override');
-    expect(mediaContractIdx).toBeGreaterThan(-1);
-    expect(codexOverrideIdx).toBeGreaterThan(mediaContractIdx);
-    expect(out).toContain('use Codex\'s built-in image generation capability');
-    expect(out).toContain('intentional exception to the media generation contract');
-    expect(out).toContain('Do not require, request, or mention `OPENAI_API_KEY`');
-    expect(out).toContain('Generate the image with Codex built-in imagegen');
-    expect(out).toMatch(
-      /actual\s+output path returned by the built-in imagegen result/,
-    );
-    expect(out).toContain('${CODEX_HOME:-$HOME/.codex}/generated_images/.../ig_*.png');
-    expect(out).toContain('When the user asked for one image, produce exactly one final project image');
-    expect(out).toContain('If Codex built-in imagegen returns multiple candidate files, previews, or');
-    expect(out).toContain('select the single best match and import only that file into');
-    expect(out).toContain('Do not copy every generated variant');
-    expect(out).toContain('verify the exact destination file exists under');
-    expect(out).toMatch(
-      /report the exact source path, destination path, and access\/copy\s+error/,
-    );
-    expect(out).toContain('Do not claim success, silently fall back, or ask about OpenAI/Azure');
-    expect(out).toMatch(
-      /unless the user explicitly chooses fallback in a later\s+turn/,
-    );
-    expect(out).toContain('$OD_PROJECT_DIR');
-    expect(out).toMatch(/ask the user for one-time\s+confirmation/);
-    expect(out).toContain('"$OD_NODE_BIN" "$OD_BIN"');
-    expect(out).toContain('media generate --surface image --model gpt-image-2');
-    expect(out).toContain('Do not silently fall');
-  });
-
   it('keeps non-Codex image projects on the daemon media dispatcher contract', () => {
     const out = composeSystemPrompt({
       agentId: 'claude',
@@ -317,28 +275,12 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).not.toContain('## Codex built-in imagegen override');
   });
 
-  it('normalizes Codex agent selection before applying the imagegen override', () => {
+  it('keeps Codex image projects on the shared media dispatcher contract', () => {
     const out = composeSystemPrompt({
       agentId: '  CoDeX  ',
       metadata: {
         kind: 'image',
-        imageModel: 'gpt-image-2',
-        imageAspect: '1:1',
-        promptTemplate: { ...baseSummary },
-      },
-    });
-
-    expect(out).toContain('## Codex built-in imagegen override');
-    expect(out).toContain('use Codex\'s built-in image generation capability');
-  });
-
-  it('can omit the Codex imagegen override so live chat appends it after the client system prompt', () => {
-    const out = composeSystemPrompt({
-      agentId: 'codex',
-      includeCodexImagegenOverride: false,
-      metadata: {
-        kind: 'image',
-        imageModel: 'gpt-image-2',
+        imageModel: 'vela/gpt-image-2',
         imageAspect: '1:1',
         promptTemplate: { ...baseSummary },
       },
@@ -361,31 +303,12 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     });
 
     expect(out).toContain('## Media generation policy');
-    expect(out).toContain('Open Design-owned media execution is **disabled for this run**');
+    expect(out).toContain('OpenDesign-owned media execution is **disabled for this run**');
     expect(out).toContain('External MCP media tools, when explicitly configured for this run, are outside');
     expect(out).toMatch(/Do not call\s+`"\$OD_NODE_BIN" "\$OD_BIN" media generate`/);
     expect(out).not.toContain('## Media generation contract');
     expect(out).not.toContain('## Codex built-in imagegen override');
     expect(out).not.toContain('Generate the image with Codex built-in imagegen');
-  });
-
-  it('suppresses the Codex imagegen override when the enabled policy denies the selected model', () => {
-    const out = composeSystemPrompt({
-      agentId: 'codex',
-      metadata: {
-        kind: 'image',
-        imageModel: 'gpt-image-2',
-        imageAspect: '1:1',
-        promptTemplate: { ...baseSummary },
-      },
-      mediaExecution: {
-        mode: 'enabled',
-        allowedModels: ['different-image-model'],
-      },
-    });
-
-    expect(out).toContain('## Media generation contract');
-    expect(out).not.toContain('## Codex built-in imagegen override');
   });
 
   it('renders enabled media allowlists in the media contract', () => {
@@ -409,7 +332,7 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toContain('Allowed surfaces for this run: `image`.');
     expect(out).toContain('Allowed models for this run: `gpt-image-2`.');
     expect(out).toContain('### Allowed model IDs (per surface)');
-    expect(out).not.toContain('Open Design-owned media execution is **disabled for this run**');
+    expect(out).not.toContain('OpenDesign-owned media execution is **disabled for this run**');
   });
 
   it('renders BYOK media defaults in the media contract', () => {
@@ -544,7 +467,7 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
       audioVoiceOptions: voiceOptions,
     });
 
-    expect(out).toContain('ElevenLabs voice options');
+    expect(out).toContain('ElevenLabs voice selection policy');
     expect(out).toContain('<question-form id="elevenlabs-voice" title="Choose an ElevenLabs voice">');
     expect(out).toContain('"type": "select"');
     expect(out).toContain('"allowCustom": false');
@@ -554,6 +477,13 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toContain('"label": "Voice 50 — mandarin"');
     expect(out).toContain('"value": "voice-50"');
     expect(out).not.toContain('showing the first 12');
+    expect(out).toContain('If the provider default can safely satisfy the brief');
+    expect(out).toContain(
+      'Only when voice selection would materially change the requested result',
+    );
+    expect(out).toContain(
+      'Conditional template — do not emit unless the voice-selection policy above requires clarification',
+    );
   });
 
   it('surfaces ElevenLabs voice lookup failures for project discovery', () => {
@@ -575,49 +505,4 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).not.toContain('<question-form id="elevenlabs-voice"');
   });
 
-  it('does not add the Codex imagegen override for non-gpt-image models', () => {
-    const out = composeSystemPrompt({
-      agentId: 'codex',
-      metadata: {
-        kind: 'image',
-        imageModel: 'grok-imagine-image',
-        imageAspect: '1:1',
-        promptTemplate: { ...baseSummary, model: 'grok-imagine-image' },
-      },
-    });
-
-    expect(out).toContain('## Media generation contract');
-    expect(out).not.toContain('## Codex built-in imagegen override');
-  });
-
-  it('does not render a Codex override for unrecognized gpt-image-like request metadata', () => {
-    const override = renderCodexImagegenOverride('codex', {
-      kind: 'image',
-      imageModel: 'gpt-image-2-preview-not-whitelisted',
-      imageAspect: '1:1',
-    });
-
-    expect(override).toBe('');
-  });
-
-  it('resolves only known OpenAI gpt-image model ids for the Codex override', () => {
-    expect(
-      resolveCodexImagegenModelId({
-        kind: 'image',
-        imageModel: 'gpt-image-2',
-      }),
-    ).toBe('gpt-image-2');
-    expect(
-      resolveCodexImagegenModelId({
-        kind: 'image',
-        imageModel: 'dall-e-3',
-      }),
-    ).toBe('');
-    expect(
-      resolveCodexImagegenModelId({
-        kind: 'image',
-        imageModel: 'gpt-image-2-preview-not-whitelisted',
-      }),
-    ).toBe('');
-  });
 });

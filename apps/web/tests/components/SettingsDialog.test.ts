@@ -8,10 +8,12 @@ import {
   deriveComposioCredentialState,
   configForManualOrbitRun,
   isOrbitRunDisabled,
+  orbitLiveArtifactHref,
   isProviderModelDiscoveryUnsupported,
   isValidApiBaseUrl,
   mergeProviderModelOptions,
   providerModelsCacheKey,
+  resolveSettingsAutosavePayload,
   sanitizeSettingsSavePayload,
   shouldEnableSettingsSave,
   shouldShowCustomModelInput,
@@ -24,6 +26,7 @@ import {
 import { deriveUpdaterModel } from '../../src/lib/updater';
 import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
 import type { AppConfig, AppVersionInfo, ConnectionTestResponse } from '../../src/types';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 
 const originalFetch = globalThis.fetch;
 
@@ -73,6 +76,33 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe('SettingsDialog Orbit artifact scope', () => {
+  const context = {
+    workspaceId: 'workspace-team',
+    workspaceType: 'team',
+    workspaceMemberId: 'member-1',
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    permissions: {
+      canShareProjects: false,
+      canWriteSyncedFiles: false,
+    },
+  } as WorkspaceCollabContext;
+
+  it('adds navigation scope for a bound Workspace artifact', () => {
+    expect(orbitLiveArtifactHref('project-1', 'artifact-1', context)).toBe(
+      '/api/live-artifacts/artifact-1/preview?projectId=project-1&workspaceId=workspace-team&workspaceMemberId=member-1',
+    );
+  });
+
+  it('preserves the unscoped local artifact URL for legacy projects', () => {
+    expect(orbitLiveArtifactHref('project-1', 'artifact-1', null)).toBe(
+      '/api/live-artifacts/artifact-1/preview?projectId=project-1',
+    );
+  });
 });
 
 describe('SettingsDialog about update control', () => {
@@ -219,7 +249,7 @@ describe('SettingsDialog about update control', () => {
     });
   });
 
-  it('offers a quit retry after the installer has opened', () => {
+  it('shows installer handoff without claiming that quit failed', () => {
     const control = deriveAboutUpdateControl(
       deriveUpdaterModel(
         updateStatus({
@@ -247,8 +277,8 @@ describe('SettingsDialog about update control', () => {
       primaryAction: 'quit',
       primaryLabelKey: 'updater.quitButton',
       showReleaseLink: false,
-      statusKey: 'settings.updateQuitFailed',
-      statusTone: 'warning',
+      statusKey: 'updater.opening',
+      statusTone: 'neutral',
     });
   });
 
@@ -261,9 +291,33 @@ describe('SettingsDialog about update control', () => {
     expect(control).toMatchObject({
       primaryAction: 'check',
       primaryLabelKey: 'settings.updateRetry',
-      statusKey: 'settings.updateStatusFailed',
+      statusKey: 'updater.failed',
       statusTone: 'error',
     });
+  });
+
+  it('retries updater errors from the last actionable phase', () => {
+    const downloadRetry = deriveAboutUpdateControl(
+      deriveUpdaterModel(
+        updateStatus({ availableVersion: '1.2.3-beta.4', state: 'error' }),
+        { hostAvailable: true },
+      ),
+      packagedVersion,
+    );
+    const installRetry = deriveAboutUpdateControl(
+      deriveUpdaterModel(
+        updateStatus({
+          availableVersion: '1.2.3-beta.4',
+          downloadPath: '/tmp/Open Design Beta.dmg',
+          state: 'error',
+        }),
+        { hostAvailable: true },
+      ),
+      packagedVersion,
+    );
+
+    expect(downloadRetry.primaryAction).toBe('download');
+    expect(installRetry.primaryAction).toBe('install');
   });
 
   it('does not offer in-app update actions in development or web-only contexts', () => {
@@ -1278,6 +1332,52 @@ describe('SettingsDialog Orbit run behavior', () => {
       method: 'POST',
     });
   });
+
+  it('pins a manual Orbit run to the exact tab Workspace identity', () => {
+    const configured = configForManualOrbitRun(
+      {
+        ...baseConfig,
+        orbit: {
+          enabled: true,
+          time: '09:30',
+          templateSkillId: null,
+        },
+      },
+      {
+        workspaceId: 'workspace-a',
+        workspaceMemberId: 'member-a',
+        workspaceType: 'team',
+        workspaceName: 'A',
+        role: 'owner',
+        memberStatus: 'active',
+        lifecycleState: 'active',
+        billingState: 'active',
+        planId: 'team_basic',
+        providerMode: 'platform_credits',
+        seatSummary: {
+          seatLimit: 3,
+          usedSeats: 1,
+          availableSeats: 2,
+          isSeatFull: false,
+        },
+        permissions: {
+          canManageMembers: true,
+          canManageBilling: true,
+          canInviteMembers: true,
+          canManageAutoRecharge: true,
+          canShareProjects: true,
+          canWriteSyncedFiles: true,
+          canViewWorkspaceSettings: true,
+          canManageSharedResources: true,
+        },
+      },
+    );
+
+    expect(configured.orbit?.workspaceScope).toEqual({
+      workspaceId: 'workspace-a',
+      workspaceMemberId: 'member-a',
+    });
+  });
 });
 
 describe('shouldEnableSettingsSave', () => {
@@ -1500,5 +1600,105 @@ describe('sanitizeSettingsSavePayload', () => {
     expect(sanitized.mode).toBe('daemon');
     expect(sanitized.agentId).toBe('claude-code');
     expect(sanitized.theme).toBe('system');
+  });
+});
+
+describe('resolveSettingsAutosavePayload', () => {
+  const activeDaemon: AppConfig = {
+    ...baseConfig,
+    mode: 'daemon',
+    agentId: 'claude-code',
+    apiKey: '',
+  };
+
+  it('persists a cleared API key for the active provider', () => {
+    const activeOpenAi: AppConfig = {
+      ...baseConfig,
+      apiProtocol: 'openai',
+      apiKey: 'sk-openai-test',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    };
+    const clearedKey: AppConfig = {
+      ...activeOpenAi,
+      apiKey: '',
+    };
+
+    expect(
+      resolveSettingsAutosavePayload(clearedKey, activeOpenAi, {
+        commitClearedActiveApiKey: true,
+      }),
+    ).toBe(clearedKey);
+  });
+
+  it.each([
+    {
+      name: 'API key',
+      draft: {
+        ...activeDaemon,
+        mode: 'api' as const,
+        apiKey: '',
+      },
+    },
+    {
+      name: 'model',
+      draft: {
+        ...activeDaemon,
+        mode: 'api' as const,
+        apiKey: 'sk-ant-draft',
+        model: '',
+      },
+    },
+    {
+      name: 'base URL',
+      draft: {
+        ...activeDaemon,
+        mode: 'api' as const,
+        apiKey: 'sk-ant-draft',
+        baseUrl: '',
+      },
+    },
+  ])('keeps an incomplete $name in a provider draft', ({ draft }) => {
+    const payload = resolveSettingsAutosavePayload(draft, activeDaemon);
+
+    expect(payload.mode).toBe('daemon');
+    expect(payload.agentId).toBe('claude-code');
+    expect(payload).toMatchObject({
+      byokPendingProviderKey: expect.any(String),
+    });
+    expect(Object.values(payload.byokProviderConfigDrafts ?? {})).toContainEqual(
+      expect.objectContaining({
+        apiConfig: expect.objectContaining({
+          apiKey: draft.apiKey,
+          baseUrl: draft.baseUrl,
+          model: draft.model,
+        }),
+      }),
+    );
+  });
+
+  it('promotes a statically complete BYOK config to active', () => {
+    const complete: AppConfig = {
+      ...activeDaemon,
+      mode: 'api',
+      apiKey: 'sk-ant-complete',
+    };
+
+    expect(resolveSettingsAutosavePayload(complete, activeDaemon)).toBe(complete);
+  });
+
+  it('promotes a complete keyless local provider config to active', () => {
+    const local: AppConfig = {
+      ...activeDaemon,
+      mode: 'api',
+      apiProtocol: 'ollama',
+      apiKey: '',
+      baseUrl: 'http://localhost:11434',
+      model: 'llama3.2',
+      apiProviderBaseUrl: 'http://localhost:11434',
+    };
+
+    expect(resolveSettingsAutosavePayload(local, activeDaemon)).toBe(local);
   });
 });

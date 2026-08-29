@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { harvestFonts, type FontFile } from "./fonts.js";
 import { fetchExternalBrandAsset } from "./safe-fetch.js";
+import { findRealElementRange, findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
 
 /**
  * Deterministic brand-material prefetch. Given a site URL, fetch the HTML +
@@ -216,10 +217,32 @@ export function isChallengePage(html: string): boolean {
   return false;
 }
 
+/**
+ * Captured pages are stored as READ-ONLY source evidence. Defuse every script
+ * tag so previewing a capture can never run the source site's live code —
+ * auth widgets (Google One Tap sign-in bubbles), analytics beacons, consent
+ * SDKs. The markup stays readable: only execution is disabled, by leading the
+ * tag with a non-JS type attribute (on duplicate attributes the HTML parser
+ * keeps the first, so an original type="module" further right is inert).
+ */
+function defuseScripts(html: string): string {
+  return html.replace(/<script\b/gi, '<script type="text/od-defused-script"');
+}
+
+/** Text of the document's own <title>, or "" — never one held in a string. */
+function readRealTitleText(html: string): string {
+  // The close is found by the raw-text rule rather than as text: `</title-page>`
+  // is not a close, and `toLowerCase()` is not length-preserving, so offsets
+  // taken from it would not line up with `html`.
+  const range = findRealElementRange(html, HTML_TAG_PATTERNS.titleOpen, 'title');
+  return range ? html.slice(range.contentStart, range.contentEnd) : "";
+}
+
 export function previewablePrefetchHtml(html: string, cap = HTML_CAP): string {
-  const out = html.slice(0, cap);
-  if (/<body\b/i.test(out) || out.length < cap) return out;
-  const title = decodeEntities(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(out)?.[1] ?? "").trim();
+  const raw = html.slice(0, cap);
+  const out = defuseScripts(raw);
+  if (findRealTagOffset(out, HTML_TAG_PATTERNS.bodyOpen) >= 0 || raw.length < cap) return out;
+  const title = decodeEntities(readRealTitleText(out)).trim();
   return [
     "<!doctype html>",
     "<html>",

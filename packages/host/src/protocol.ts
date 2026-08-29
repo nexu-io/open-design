@@ -3,7 +3,7 @@ import type { ReleaseChannel } from "@open-design/release";
 /**
  * @module protocol
  *
- * The Open Design renderer host-bridge wire contract: the injected-global name
+ * The OpenDesign renderer host-bridge wire contract: the injected-global name
  * and version, client/updater constant registries, and every request/result
  * type that crosses the host bridge — including the {@link OpenDesignHostBridge}
  * shape itself. Pure declarations only; depends on nothing else in the package.
@@ -39,10 +39,42 @@ export type OpenDesignHostActionResult =
   | { ok: true }
   | OpenDesignHostFailure;
 
+/**
+ * The workspace attribution the renderer gives the host so a folder import
+ * lands in the caller's current workspace instead of the host's ambient one.
+ *
+ * This is a deliberate structural subset of the daemon/web
+ * `WorkspaceCollabContext`, redeclared here rather than imported: this package
+ * is the renderer host-bridge wire contract and must stay independent of the
+ * daemon/web contracts package (enforced by the "stays independent from
+ * daemon/web contracts" test). A full `WorkspaceCollabContext` is structurally
+ * assignable to this type, so callers pass theirs unchanged.
+ *
+ * Only the fields the host actually forwards are modelled, and the enum-like
+ * fields stay `string` because the host treats them as opaque pass-through
+ * values — the daemon remains the authority that parses and validates them.
+ * Deliberately no index signature: an interface never satisfies one, so adding
+ * it would reject the very `WorkspaceCollabContext` callers pass. Callers hand
+ * over a variable, not a fresh literal, so the extra fields ride along fine.
+ */
+export type OpenDesignHostWorkspaceContext = {
+  lifecycleState: string;
+  memberStatus: string;
+  permissions: {
+    canShareProjects: boolean;
+    canWriteSyncedFiles: boolean;
+  };
+  role: string;
+  workspaceId: string;
+  workspaceMemberId: string;
+  workspaceType: string;
+};
+
 export type OpenDesignHostProjectImportInit = {
   designSystemId?: string | null;
   name?: string;
   skillId?: string | null;
+  workspaceContext?: OpenDesignHostWorkspaceContext | null;
 };
 
 export type OpenDesignHostProjectImportSuccess = {
@@ -101,13 +133,42 @@ export type OpenDesignHostCaptureOptions = { clip?: OpenDesignHostCaptureClip };
 export type OpenDesignHostCaptureSuccess = { dataUrl: string; h: number; ok: true; w: number };
 export type OpenDesignHostCaptureResult = OpenDesignHostCaptureSuccess | OpenDesignHostFailure;
 
+export type OpenDesignHostPreviewNavigationFailure = {
+  errorCode: number;
+  eventId: number;
+  frameName?: string;
+  occurredAtMs: number;
+  validatedUrl: string;
+};
+
+export type OpenDesignHostPreviewNavigationFailureListener = (
+  failure: OpenDesignHostPreviewNavigationFailure,
+) => void;
+
 export type OpenDesignHostBrowserClearDataOptions = {
   cookies?: boolean;
   storage?: boolean;
 };
 
+/**
+ * App theme values the renderer may pin the host window appearance to.
+ * `light`/`dark` force the native window material (macOS under-window
+ * vibrancy glass follows the OS appearance by default, which reads as a
+ * muddy gray when the OS is dark but the app theme is explicitly light);
+ * `system` restores following the OS.
+ */
+export const OPEN_DESIGN_HOST_APPEARANCE_THEMES = Object.freeze({
+  DARK: "dark",
+  LIGHT: "light",
+  SYSTEM: "system",
+} as const);
+
+export type OpenDesignHostAppearanceTheme =
+  (typeof OPEN_DESIGN_HOST_APPEARANCE_THEMES)[keyof typeof OPEN_DESIGN_HOST_APPEARANCE_THEMES];
+
 export const OPEN_DESIGN_HOST_UPDATER_ACTIONS = Object.freeze({
   CHECK: "check",
+  CLEAR_CACHE: "clear-cache",
   DOWNLOAD: "download",
   INSTALL: "install",
   QUIT: "quit",
@@ -217,7 +278,7 @@ export type OpenDesignHostUpdaterIncomingSnapshot = {
   version: string;
 };
 
-export type OpenDesignHostUpdaterCacheLifecycleTrigger = "cold-start" | "next-version-ready";
+export type OpenDesignHostUpdaterCacheLifecycleTrigger = "cold-start" | "manual" | "next-version-ready";
 
 export type OpenDesignHostUpdaterReleaseLifecycleState =
   | "cleanup-deferred"
@@ -245,6 +306,24 @@ export type OpenDesignHostUpdaterCacheSnapshot = {
   lifecycle?: OpenDesignHostUpdaterCacheLifecycleSummary;
 };
 
+export type OpenDesignHostUpdaterReinstallReason =
+  | "launcher-schema"
+  | "outer-below-min"
+  | "outer-version-unreadable";
+
+/**
+ * Present when the release feed requires a full installer reinstall instead of
+ * an in-place payload update. `installedVersion` is the physically installed
+ * outer package version; `url` is an optional operator-supplied explanation
+ * link.
+ */
+export type OpenDesignHostUpdaterReinstallSnapshot = {
+  installedVersion?: string;
+  minVersion?: string;
+  reason: OpenDesignHostUpdaterReinstallReason;
+  url?: string;
+};
+
 export type OpenDesignHostUpdaterStatusSnapshot = {
   active?: OpenDesignHostUpdaterReleaseSnapshot;
   arch: string;
@@ -267,6 +346,7 @@ export type OpenDesignHostUpdaterStatusSnapshot = {
   paths?: OpenDesignHostUpdaterPathSnapshot;
   platform: string;
   progress?: OpenDesignHostUpdaterProgressSnapshot;
+  reinstall?: OpenDesignHostUpdaterReinstallSnapshot;
   state: OpenDesignHostUpdaterState;
   supported: boolean;
 };
@@ -277,7 +357,27 @@ export type OpenDesignHostUpdaterResult =
 
 export type OpenDesignHostUpdaterStatusListener = (status: OpenDesignHostUpdaterStatusSnapshot) => void;
 
+export type OpenDesignHostUpdaterMenuLabels = {
+  check: string;
+  checking: string;
+  downloading: string;
+  install: string;
+  installing: string;
+  restart: string;
+};
+
+export type OpenDesignHostUpdaterOpenDialogRequest = {
+  source: string;
+};
+
+export type OpenDesignHostUpdaterOpenDialogListener = (request: OpenDesignHostUpdaterOpenDialogRequest) => void;
+
 export type OpenDesignHostBridge = {
+  // Optional so older host builds still satisfy the bridge shape; callers
+  // must feature-detect before invoking.
+  appearance?: {
+    setTheme(theme: OpenDesignHostAppearanceTheme): void;
+  };
   browser: {
     clearData(options?: OpenDesignHostBrowserClearDataOptions): Promise<OpenDesignHostActionResult>;
   };
@@ -290,6 +390,13 @@ export type OpenDesignHostBridge = {
   };
   pet: {
     setVisible(visible: boolean): void;
+  };
+  // Optional so web builds and older desktop hosts keep the same contract.
+  // Electron is the only layer that can observe a compositor-affecting
+  // subframe navigation failure after the iframe DOM remains healthy.
+  preview?: {
+    getLatestNavigationFailure(): OpenDesignHostPreviewNavigationFailure | null;
+    subscribeNavigationFailure(listener: OpenDesignHostPreviewNavigationFailureListener): () => void;
   };
   project: {
     pickAndImport(init?: OpenDesignHostProjectImportInit): Promise<OpenDesignHostProjectImportResult>;
@@ -304,11 +411,14 @@ export type OpenDesignHostBridge = {
   };
   updater: {
     check(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
+    "clear-cache"(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
     download(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
     install(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
     quit(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostActionResult>;
+    setMenuLabels(labels: OpenDesignHostUpdaterMenuLabels): Promise<OpenDesignHostActionResult>;
     status(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
     subscribe(listener: OpenDesignHostUpdaterStatusListener): () => void;
+    subscribeOpenDialog(listener: OpenDesignHostUpdaterOpenDialogListener): () => void;
   };
   version: typeof OPEN_DESIGN_HOST_VERSION;
 };

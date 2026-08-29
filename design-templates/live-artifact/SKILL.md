@@ -1,7 +1,7 @@
 ---
 name: live-artifact
 description: |
-  Create refreshable, auditable Open Design artifacts backed by connector or local data.
+  Create refreshable, auditable OpenDesign artifacts backed by connector or local data.
   Trigger when the user asks for live dashboards, refreshable reports, synced views, or reusable data-backed artifacts.
 triggers:
   - "live artifact"
@@ -35,7 +35,7 @@ od:
 
 # Live Artifact Skill
 
-Create an Open Design live artifact: a project-scoped, previewable HTML artifact whose data can later be refreshed without redesigning the presentation.
+Create an OpenDesign live artifact: a project-scoped, previewable HTML artifact whose data can later be refreshed without redesigning the presentation.
 
 ## Resource map
 
@@ -94,7 +94,7 @@ Before creating files, decide whether the user actually wants a live artifact or
    - Use escaped `html_template_v1` interpolation only. Raw/unescaped HTML interpolation is not allowed.
 
 5. **Register or update through daemon wrappers**
-   - Use the Open Design daemon wrapper commands via `"$OD_NODE_BIN" "$OD_BIN"` instead of raw `curl`, bare `node`, or bare `od`:
+   - Use the OpenDesign daemon wrapper commands via `"$OD_NODE_BIN" "$OD_BIN"` instead of raw `curl`, bare `node`, or bare `od`:
 
      ```bash
      "$OD_NODE_BIN" "$OD_BIN" tools live-artifacts create --input artifact.json

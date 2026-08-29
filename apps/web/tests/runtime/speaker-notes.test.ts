@@ -7,6 +7,7 @@ import {
   PRESENTER_WINDOW_MIN_HEIGHT,
   PRESENTER_WINDOW_MIN_WIDTH,
   removeSpeakerNotesFromHtml,
+  sourcesDifferOnlyInSpeakerNotes,
   upsertSpeakerNotesInHtml,
 } from '../../src/runtime/speaker-notes';
 
@@ -403,5 +404,119 @@ describe('speaker notes HTML helpers', () => {
       expect(tag).toContain('sandbox="allow-scripts"');
       expect(tag).not.toContain('allow-same-origin');
     }
+  });
+});
+
+// Regression for issue #6271: when the speaker-notes panel holds a long note
+// (hundreds of words), the notes must scroll *inside* `.notes-body` instead of
+// growing the body grid row past the viewport. With `body { overflow: hidden }`
+// the latter case clips the bottom of the note silently — the user cannot reach
+// it. The fix has two parts: (1) `body { grid-template-rows: minmax(0, 1fr) }`
+// locks the implicit grid row to the viewport height so the row cannot grow to
+// natural content height, and (2) `.notes { min-height: 0 }` lets the grid item
+// shrink inside its track so `.notes-body { overflow: auto }` actually fires.
+describe('speaker-notes presenter long-note scrolling (#6271)', () => {
+  const labels = {
+    title: 'Speaker notes',
+    edit: 'Edit',
+    save: 'Save notes',
+    pause: 'Pause',
+    resume: 'Resume',
+    reset: 'Reset',
+    previous: 'Previous',
+    next: 'Next',
+    empty: 'Empty',
+    slide: 'Slide {current} / {total}',
+  };
+
+  // Roughly 800 words — well past any viewport's available height at the
+  // default 21px / 1.58 line-height (each line ~33px, 800 words ~60 lines
+  // ~2000px, easily taller than a 1080p viewport after subtracting chrome).
+  const longNote = Array.from({ length: 80 }, (_, i) =>
+    `Line ${i + 1}: keep talking past the bottom of the panel without losing the thread.`
+  ).join('\n');
+
+  const buildHtml = () => buildSpeakerNotesPresenterHtml({
+    previewHtml: '<section class="slide">One</section>',
+    title: 'Deck',
+    projectId: 'project-1',
+    fileName: 'deck.html',
+    notes: [longNote],
+    initialSlideIndex: 0,
+    slideCount: 1,
+    labels,
+  });
+
+  it('locks the body grid row to the viewport so .notes cannot grow past it', () => {
+    const html = buildHtml();
+    // The body grid must constrain its implicit row to a `minmax(0, 1fr)`
+    // track; an auto row would expand to the natural content height and let
+    // long notes blow past the viewport (then body { overflow: hidden } clips
+    // them silently). The selector is specific enough to survive minification.
+    expect(html).toMatch(/body\s*\{[^}]*grid-template-rows:\s*minmax\(0,\s*1fr\)[^}]*\}/);
+  });
+
+  it('lets the .notes grid item shrink so .notes-body can scroll inside it', () => {
+    const html = buildHtml();
+    // `.notes` is a grid item whose parent row is now bounded, but without
+    // `min-height: 0` the item itself defaults to `min-height: auto` and
+    // refuses to shrink — pushing the overflow back to the body. Mirror the
+    // pattern already used on `.stage` (`min-height: 0`) so the sidebar can
+    // actually honor its bounded row.
+    expect(html).toMatch(/\.notes\s*\{[^}]*min-height:\s*0[^}]*\}/);
+  });
+
+  it('keeps the .notes-body scroll container that the long note lives in', () => {
+    const html = buildHtml();
+    // The actual scroll happens here — the inner body must keep `overflow: auto`
+    // (or `overflow-y: auto`) so the long note scrolls inside the panel rather
+    // than depending on the parent window to scroll.
+    expect(html).toMatch(/\.notes-body\s*\{[^}]*overflow:\s*auto[^}]*\}/);
+  });
+
+  it('ships the long note into the panel for the presenter to read', () => {
+    const html = buildHtml();
+    // The data payload must carry the full long note verbatim so the
+    // presenter-side render has something to scroll through; truncating here
+    // would silently hide the regression.
+    expect(html).toContain('Line 1: keep talking past the bottom');
+    expect(html).toContain('Line 80: keep talking past the bottom');
+  });
+});
+
+describe('speaker-notes-only difference detection', () => {
+  // Notes live in a <script type="application/json"> the browser never
+  // renders, so a change confined to it needs no preview repaint. Callers use
+  // this to skip an iframe reload — a white flash and a scroll-restore gamble
+  // — for an edit that is invisible on the page.
+  const page = '<!doctype html><html><body><section class="slide">Hi</section></body></html>';
+
+  it('sees adding notes to a page as notes-only, padding included', () => {
+    // upsertSpeakerNotesInHtml pads its insertion with newlines, so a plain
+    // block removal is NOT its inverse — the padding alone used to make an
+    // added-notes document compare as a real visual change.
+    const withNotes = upsertSpeakerNotesInHtml(page, ['Open on the ask.']);
+    expect(withNotes).not.toBe(page);
+    expect(sourcesDifferOnlyInSpeakerNotes(page, withNotes)).toBe(true);
+    expect(sourcesDifferOnlyInSpeakerNotes(withNotes, page)).toBe(true);
+  });
+
+  it('sees an edit between two notes payloads as notes-only', () => {
+    const first = upsertSpeakerNotesInHtml(page, ['First take']);
+    const second = upsertSpeakerNotesInHtml(page, ['Second take', 'And a next slide']);
+    expect(sourcesDifferOnlyInSpeakerNotes(first, second)).toBe(true);
+  });
+
+  it('never calls a visible body change notes-only', () => {
+    const edited = page.replace('Hi', 'Hello');
+    expect(sourcesDifferOnlyInSpeakerNotes(page, edited)).toBe(false);
+    // Even when the notes change in the SAME write, the body change must win.
+    const editedWithNotes = upsertSpeakerNotesInHtml(edited, ['Note']);
+    const pageWithNotes = upsertSpeakerNotesInHtml(page, ['Other note']);
+    expect(sourcesDifferOnlyInSpeakerNotes(pageWithNotes, editedWithNotes)).toBe(false);
+  });
+
+  it('reports identical documents as not differing at all', () => {
+    expect(sourcesDifferOnlyInSpeakerNotes(page, page)).toBe(false);
   });
 });

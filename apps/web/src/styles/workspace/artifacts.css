@@ -56,7 +56,7 @@
   min-width: 0;
 }
 .orbit-artifact-strip-kicker {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -66,8 +66,8 @@
   color: var(--text-muted);
 }
 .orbit-artifact-strip-title {
-  font-size: 13.5px;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text-strong);
   line-height: 1.25;
@@ -76,7 +76,7 @@
   text-overflow: ellipsis;
 }
 .orbit-artifact-strip-meta {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
   line-height: 1.4;
 }
@@ -93,7 +93,7 @@
   align-items: center;
   gap: 5px;
   padding: 6px 10px;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text);
   background: var(--bg-panel);
@@ -149,7 +149,7 @@
   padding: 2px 0;
   cursor: pointer;
   list-style: none;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text-muted);
@@ -199,52 +199,73 @@
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  /* Rows are separated by hairline dividers, not gaps between bordered cards. */
+  gap: 0;
 }
 .mcp-client-body {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
+.mcp-page-head h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+}
 
-/* Group 1: what the MCP server does */
 .mcp-capabilities-card {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 12px 14px;
+  /* Borderless: the panel fill alone separates the card from the page. */
   background: var(--bg-panel);
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-sm);
   line-height: 1.55;
 }
 .mcp-capabilities-label {
   margin: 0;
-  font-size: 11px;
-  font-weight: 600;
   color: var(--text-muted);
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 .mcp-capabilities-list {
   margin: 0;
   padding-left: 18px;
-  font-size: 13px;
   color: var(--text);
+  font-size: 13px;
 }
 
-/* Group 2: setup flow */
+/* MCP setup flow */
 .mcp-setup-card {
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 14px;
+  /* Borderless: the panel fill alone separates the card from the page. */
   background: var(--bg-panel);
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-sm);
 }
 .mcp-setup-card .ds-picker {
   margin-bottom: 0;
+}
+/* Client trigger reads as one line — "Claude Code  CLI 命令" side by side
+   instead of the shared picker's stacked title/sub column. */
+.mcp-setup-card .ds-picker-meta {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
+}
+.mcp-setup-card .ds-picker-title {
+  flex: none;
+}
+.mcp-setup-card .ds-picker-sub {
+  min-width: 0;
 }
 .mcp-running-note {
   margin: 0;
@@ -256,14 +277,32 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  /* Surfaceless rows split by hairline dividers instead of individual bordered
+     cards — no fill, no border, no radius; the last row drops its divider. */
+  padding: 14px 2px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  border-radius: 0;
+}
+.settings-about-list > div:last-child {
+  border-bottom: 0;
 }
 .settings-about-version-row {
   justify-content: space-between;
-  align-items: flex-start;
+}
+/* The update action and "View release notes" are adjacent JSX siblings, so no
+   whitespace text node separates them — without an explicit row the two
+   inline-flex buttons render with their borders touching at 0px. The
+   container owns their spacing; `flex-shrink: 0` keeps the buttons off the
+   version copy when a long status string competes for the row. */
+.settings-about-update-actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
 }
 .settings-about-list dt {
   font-size: 12px;
@@ -279,8 +318,9 @@
 }
 .settings-notify-card {
   padding: 12px;
+  /* Borderless: the panel fill alone separates the card from the page. */
   background: var(--bg-panel);
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-sm);
 }
 .settings-notify-card-header {
@@ -298,179 +338,191 @@
 .settings-about-version-left {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  min-width: 0;
-  column-gap: 12px;
-  row-gap: 6px;
-}
-.settings-about-version-copy {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 6px;
+  gap: 12px;
 }
 .settings-about-version-num {
   color: var(--text);
   font-size: 13px;
   font-weight: 600;
 }
-.settings-about-list dd.settings-about-update-status {
+.settings-about-download-link {
   display: inline-flex;
   align-items: center;
-  min-width: 0;
-  max-width: 100%;
-  min-height: 22px;
-  margin: 0;
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.2;
-  border: 1px solid color-mix(in srgb, var(--accent-strong) 30%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent-strong);
-  text-align: start;
-  white-space: normal;
-}
-.settings-about-list dd.settings-about-update-status--success {
-  color: var(--green, #137a3d);
-  border-color: color-mix(in srgb, var(--green, #137a3d) 28%, transparent);
-  background: color-mix(in srgb, var(--green, #137a3d) 12%, transparent);
-}
-.settings-about-list dd.settings-about-update-status--warning {
-  color: var(--accent-strong);
-  border-color: color-mix(in srgb, var(--accent-strong) 30%, transparent);
-  background: color-mix(in srgb, var(--accent-strong) 10%, transparent);
-}
-.settings-about-list dd.settings-about-update-status--error {
-  color: var(--red);
-  border-color: color-mix(in srgb, var(--red) 32%, transparent);
-  background: color-mix(in srgb, var(--red) 10%, transparent);
-}
-.settings-about-update-actions {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  max-width: min(42%, 300px);
-  gap: 8px;
-}
-.settings-about-update-button,
-.settings-about-release-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  max-width: 100%;
-  min-height: 26px;
   padding: 2px 9px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
-  line-height: 1.2;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
   text-decoration: none;
-  transition:
-    background 120ms var(--ease-out),
-    box-shadow 120ms var(--ease-out),
-    color 120ms var(--ease-out),
-    border-color 120ms var(--ease-out),
-    transform 80ms var(--ease-out);
-  text-align: center;
-  overflow-wrap: anywhere;
-  white-space: normal;
+  transition: background 120ms var(--ease-out), color 120ms var(--ease-out), border-color 120ms var(--ease-out);
+  white-space: nowrap;
 }
-.settings-about-update-button {
-  color: var(--accent-strong);
-  border-color: color-mix(in srgb, var(--accent-strong) 34%, var(--border));
-  background: var(--accent-tint);
-}
-.settings-about-update-button--primary {
-  color: var(--accent-contrast, #ffffff);
-  border-color: color-mix(in srgb, var(--accent-strong) 72%, var(--border-strong));
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--accent-strong) 88%, #ffffff 12%),
-      var(--accent-strong)
-    );
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--accent-strong) 20%, transparent),
-    0 8px 18px color-mix(in srgb, var(--accent-strong) 20%, transparent);
-}
-.settings-about-release-link {
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--text) 18%, var(--border));
-}
-.settings-about-update-button:hover:not(:disabled) {
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  border-color: color-mix(in srgb, var(--accent-strong) 48%, var(--border-strong));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-strong) 12%, transparent);
-}
-.settings-about-release-link:hover:not(:disabled) {
+.settings-about-download-link:hover:not(:disabled) {
   background: var(--bg-subtle);
   color: var(--text);
   border-color: var(--border-strong);
 }
-.settings-about-update-button:not(.settings-about-update-button--primary):active:not(:disabled) {
-  transform: translateY(1px);
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  box-shadow: inset 0 1px 3px color-mix(in srgb, var(--accent-strong) 18%, transparent);
-}
-.settings-about-update-button--primary:hover:not(:disabled) {
-  color: var(--accent-contrast, #ffffff);
-  border-color: color-mix(in srgb, var(--accent-strong) 88%, #ffffff);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--accent-strong) 78%, #ffffff 22%),
-      color-mix(in srgb, var(--accent-strong) 94%, #000000 6%)
-    );
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--accent-strong) 30%, transparent),
-    0 10px 22px color-mix(in srgb, var(--accent-strong) 28%, transparent);
-}
-.settings-about-update-button--primary:active:not(:disabled) {
-  transform: translateY(1px);
-  background: color-mix(in srgb, var(--accent-strong) 86%, #000000 14%);
-  box-shadow:
-    inset 0 1px 4px color-mix(in srgb, #000000 28%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--accent-strong) 34%, transparent);
-}
-.settings-about-update-button:disabled,
-.settings-about-release-link:disabled {
+.settings-about-download-link:disabled {
   opacity: 0.5;
   cursor: default;
 }
-@media (max-width: 720px) {
-  .settings-about-version-row {
-    flex-direction: column;
-  }
-  .settings-about-update-actions {
-    max-width: 100%;
-    width: 100%;
-    justify-content: flex-start;
-  }
-}
 
-.media-provider-reload-row {
+.media-provider-page-head {
   display: flex;
-  justify-content: flex-start;
-  margin-bottom: 4px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+.media-provider-page-head h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.media-provider-page-head p {
+  max-width: 58ch;
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
 }
 .media-provider-reload-btn {
   font-size: 12px;
   color: var(--text-muted);
-  padding: 4px 8px;
+  min-height: 34px;
+  padding: 6px 10px;
   gap: 4px;
+  white-space: nowrap;
 }
 .media-provider-reload-btn:hover {
   color: var(--text);
+}
+
+.media-provider-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  max-width: 960px;
+}
+
+.media-provider-card-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.media-provider-group-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--border-soft, var(--border));
+}
+
+.media-provider-group-head h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.media-provider-group-head p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.media-provider-group-head > span {
+  flex: 0 0 auto;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 8px;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 22px;
+  text-align: center;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+
+.media-provider-card-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.media-provider-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.03);
+}
+
+.media-provider-card:hover {
+  border-color: color-mix(in srgb, var(--accent, #d46445) 20%, var(--border));
+  box-shadow: 0 10px 24px rgb(15 23 42 / 0.05);
+}
+
+.media-provider-card-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+}
+
+.media-provider-card-head h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.media-provider-card-head p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.media-provider-card-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.media-provider-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 30px;
+  margin-top: auto;
+  padding-top: 2px;
+}
+
+.media-provider-card-actions .ghost {
+  min-height: 30px;
+  padding: 5px 10px;
+  font-size: 12px;
 }
 .settings-about-diagnostics {
   display: flex;
@@ -558,28 +610,121 @@
 .diagnostics-export-status.success { color: var(--text); }
 .diagnostics-export-status.error { color: var(--danger, #d4543b); }
 
-.media-provider-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.media-provider-split {
+  display: grid;
+  grid-template-columns: minmax(210px, 260px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
 }
-.media-provider-row {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
+.media-provider-nav,
+.media-provider-detail {
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.03);
 }
-.media-provider-row.pending {
-  background: var(--bg-subtle);
-  border-style: dashed;
-}
-.media-provider-head {
+.media-provider-nav {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 14px;
+  padding: 10px;
+}
+.media-provider-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.media-provider-nav-title {
+  padding: 4px 8px 3px;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.media-provider-nav-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 10px;
+  min-height: 52px;
+  padding: 9px 10px;
+  color: var(--text);
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  box-shadow: none;
+  cursor: pointer;
+  transition:
+    background 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.media-provider-nav-item:hover {
+  background: var(--bg-subtle);
+}
+.media-provider-nav-item.active {
+  background: color-mix(in srgb, var(--accent, #d46445) 9%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent, #d46445) 24%, var(--border));
+}
+.media-provider-nav-item strong {
+  display: block;
+  overflow: hidden;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.media-provider-nav-item small {
+  display: block;
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.media-provider-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #20a464;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #20a464 16%, transparent);
+}
+.media-provider-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  /* Uniform 18px inset on all four sides; content fills the white card so the
+     left/right gaps stay equal (no max-width cap that would leave the content
+     left-flush with a wider right margin inside the card). */
+  padding: 18px;
+}
+.media-provider-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-soft, var(--border));
+}
+.media-provider-detail-head h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+.media-provider-detail-head p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
 }
 .media-provider-meta {
   display: flex;
@@ -599,12 +744,12 @@
   color: var(--text);
 }
 .media-provider-hint {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 .media-provider-badge {
   align-self: flex-start;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   padding: 2px 7px;
   border-radius: var(--radius-pill);
@@ -631,10 +776,117 @@
   background: color-mix(in srgb, #4169e1 10%, transparent);
   border-color: color-mix(in srgb, #4169e1 28%, var(--border));
 }
-.media-provider-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+.media-provider-detail-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.media-provider-detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+.media-provider-detail-field > span {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.media-provider-detail-field input {
+  width: 100%;
+}
+.media-provider-detail-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 4px;
+}
+.media-provider-no-key {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  color: #137a3d;
+  background: color-mix(in srgb, #1f9d55 8%, var(--bg-panel));
+  border: 1px solid color-mix(in srgb, #1f9d55 24%, var(--border));
+  border-radius: var(--radius);
+}
+.media-provider-no-key div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.media-provider-no-key strong {
+  color: var(--text);
+  font-size: 13px;
+}
+.media-provider-no-key span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.media-provider-cloud-callout {
+  margin: 0 0 14px;
+  max-width: 760px;
+}
+.media-provider-tabs {
+  max-width: 760px;
+  margin: 0 0 12px;
+}
+.protocol-chips--providers .protocol-chip {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
+}
+.media-provider-tabs .protocol-chip-group {
+  align-items: flex-start;
+}
+.media-provider-tabs .protocol-chip-group-label {
+  padding-top: 5px;
+}
+.media-provider-chip-status {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  background: var(--text-disabled);
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 10%, transparent);
+}
+.media-provider-chip-status.is-connected {
+  background: #16a36a;
+}
+.media-provider-chip-status.is-disconnected {
+  background: #c7c7c7;
+}
+.protocol-chip.active .media-provider-chip-status {
+  box-shadow: 0 0 0 2px color-mix(in srgb, #fff 38%, transparent);
+}
+.media-provider-docs-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg-subtle);
+  /* Borderless — the gray fill alone reads the callout; the outline was heavy. */
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+}
+.media-provider-docs-callout div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.media-provider-docs-callout strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+.media-provider-docs-callout span {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 /*
  * "Coming soon" drawer under the media provider list. We render the
@@ -646,10 +898,19 @@
  */
 .media-provider-coming-soon {
   margin-top: 12px;
+  max-width: 760px;
   padding: 10px 12px;
-  background: var(--bg-subtle);
+  /* Lighter panel fill + matching 16px radius so it reads as the same card
+     family as the provider card above (.media-provider-detail). */
+  background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 16px;
+}
+.media-provider-coming-soon--nav {
+  margin-top: 0;
+  padding: 8px 10px;
+  background: var(--bg-subtle);
+  border-radius: 12px;
 }
 .media-provider-coming-soon[open] {
   padding-bottom: 12px;
@@ -712,6 +973,18 @@
   color: var(--text-faint);
   cursor: not-allowed;
 }
+@media (max-width: 900px) {
+  .media-provider-page-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .media-provider-card-list {
+    grid-template-columns: 1fr;
+  }
+  .media-provider-split {
+    grid-template-columns: 1fr;
+  }
+}
 .section-head {
   display: flex;
   justify-content: space-between;
@@ -758,7 +1031,7 @@
 }
 .field-error,
 .field-inline-status {
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.35;
 }
 .field-error {
@@ -780,6 +1053,194 @@
 }
 .settings-base-url-customize {
   flex-shrink: 0;
+}
+.settings-general-section {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  /* 24px section rhythm — matches the 24px horizontal inset and the blocks'
+     24px bottom padding, so the spacing around each divider is a symmetric 24. */
+  gap: var(--spacing-24);
+  overflow-x: hidden;
+}
+.settings-general-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-18);
+  min-width: 0;
+  /* Section-to-section vertical rhythm = 24px, matching the 24px horizontal
+     inset (was 32px). */
+  padding: 0 0 var(--spacing-24);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+.settings-general-block:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.settings-general-block-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-6);
+}
+.settings-general-block-head h3 {
+  margin: 0;
+  color: var(--text-strong);
+  /* Sub-heading per the type spec: 16 / 600, line-height 125%. Matches the
+     界面语言 field label below so every section title reads at one level. */
+  font-size: var(--font-size-16);
+  font-weight: 600;
+  line-height: 1.25;
+}
+.settings-general-block-head .hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-13);
+  line-height: 1.25;
+}
+.settings-general-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-12);
+  min-width: 0;
+}
+.settings-general-label {
+  display: block;
+  color: var(--text-strong);
+  font-size: var(--font-size-16);
+  font-weight: 600;
+  line-height: 1.25;
+}
+.settings-general-select {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+}
+.settings-general-select select {
+  width: auto;
+  max-width: min(420px, 100%);
+  field-sizing: content;
+  height: var(--spacing-48);
+  appearance: none;
+  border: 0;
+  border-radius: var(--radius-md, 12px);
+  background: color-mix(in srgb, var(--bg-subtle) 74%, var(--bg-panel));
+  color: var(--text);
+  padding: 0 var(--spacing-42) 0 var(--spacing-16);
+  font: inherit;
+  font-size: var(--font-size-14);
+  font-weight: 500;
+  line-height: 1.25;
+  outline: 0;
+  cursor: pointer;
+  box-shadow: none;
+}
+.settings-general-select select:hover {
+  background: color-mix(in srgb, var(--bg-subtle) 88%, var(--bg-panel));
+}
+.settings-general-select select:focus-visible {
+  border-color: var(--selected);
+}
+/* The chevron renders as an <i class="od-icon"> font glyph, not an <svg>, so
+   anchor it to the pill's right edge (inside the 42px right padding). */
+.settings-general-select svg,
+.settings-general-select .od-icon {
+  position: absolute;
+  right: var(--spacing-12);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.settings-general-block .settings-section {
+  gap: var(--spacing-16);
+  min-width: 0;
+}
+.settings-general-block .settings-section-card {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.settings-general-block .section-head {
+  display: none;
+}
+.settings-general-block .seg-control {
+  max-width: 100%;
+  min-width: 0;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-subtle) 58%, var(--bg-panel));
+}
+.settings-general-block .project-locations-section,
+.settings-general-block .project-location-card,
+.settings-general-block .project-location-edit {
+  max-width: 100%;
+  min-width: 0;
+}
+.settings-general-block .project-location-card code,
+.settings-general-block .project-location-edit input {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.settings-cloud-signin-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--brand, #87ea5c) 22%, var(--border-soft));
+  border-radius: 14px;
+  background: var(--brand-soft, #ebffde);
+}
+.settings-cloud-signin-callout strong {
+  display: block;
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 600;
+}
+.settings-cloud-signin-callout p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+/* Solid pill mirroring the community selected-tab treatment: black fill,
+   green ink (icon + label share currentColor). */
+.settings-cloud-signin-callout__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-large, 8px);
+  background: var(--text-strong);
+  color: var(--brand, #87ea5c);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.settings-cloud-signin-callout__button:hover {
+  background: color-mix(in srgb, var(--text-strong) 88%, var(--brand, #87ea5c));
+}
+/* The pill wrapper (AmrLoginPill's .amr-account-control root) carries the
+   callout button's border + fill; the inner action <button> would otherwise
+   add the global button primitive's own border/fill as a second box around
+   the label. Flatten it so only the outer shell paints. */
+.settings-cloud-signin-callout__button .amr-account-control__action,
+.settings-cloud-signin-callout__button .amr-account-control__action:hover:not(:disabled) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
 }
 .settings-language-grid {
   display: grid;
@@ -813,7 +1274,7 @@
   overflow-wrap: anywhere;
 }
 .settings-language-tile-code {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
@@ -911,7 +1372,7 @@
 
 .agent-scan-card__stage strong {
   color: var(--text);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   line-height: 1.25;
 }
@@ -1061,7 +1522,7 @@
 .agent-group-head h4 {
   margin: 0;
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--text);
 }
 .agent-group-head-actions {
@@ -1070,16 +1531,30 @@
   gap: 10px;
   min-width: 0;
 }
-.agent-group-rescan-btn {
+/* button.… specificity so it beats `button.icon-btn` (radius) in primitives. */
+button.agent-group-rescan-btn {
   min-width: 92px;
   min-height: 32px;
+  height: auto;
+  /* Gray capsule (matches the composer footer pill family). */
+  border-radius: var(--radius-pill);
+  border-color: transparent;
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+button.agent-group-rescan-btn:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--bg-muted);
 }
 .agent-install-collapse {
   margin-top: 10px;
   padding: 10px 12px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
-  background: var(--bg-subtle);
+  border: 1px solid transparent;
+  /* Same 14px family as .agent-card / the cloud sign-in callout. */
+  border-radius: 14px;
+  /* Match the installed-agent cards above (--bg-panel) instead of the grayer
+     --bg-subtle, so the "installable" group reads as the same surface. */
+  background: var(--bg-panel);
 }
 .agent-install-collapse-summary {
   list-style: none;
@@ -1138,8 +1613,13 @@
   min-height: 64px;
   padding: 6px 10px;
   background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  /* Borderless: the panel fill + grid gaps delineate cards (transparent 1px
+     keeps geometry stable across states). */
+  border: 1px solid transparent;
+  /* Corner radius matches the cloud sign-in callout above the list
+     (.settings-cloud-signin-callout, 14px) so the whole 本机 CLI column
+     reads as one card family. */
+  border-radius: 14px;
   cursor: pointer;
   text-align: left;
   position: relative;
@@ -1152,7 +1632,7 @@
   overflow: hidden;
 }
 
-/* Failed-run AMR nudge: when the chat error card's "Try Open Design AMR" link
+/* Failed-run AMR nudge: when the chat error card's "Try OpenDesign AMR" link
    opens Settings, the AMR card scrolls into view and pulses a couple of times.
    The card's own box-shadow is not clipped by `overflow: hidden`, so the glow
    reads fully even though inner content is clipped. */
@@ -1180,8 +1660,13 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 0 14px;
-  border-left: 1px solid var(--border-soft);
+  /* Account actions (Upgrade / console / sign-out) belong to the card's
+     header row — top-aligned with the agent logo + name + benefit badges —
+     instead of floating vertically centered mid-card. The top margin matches
+     the active card's select padding so the action pills line up with the
+     name row. */
+  align-self: flex-start;
+  margin: 13px 16px 0 8px;
 }
 .amr-coachmark {
   position: absolute;
@@ -1240,9 +1725,6 @@
   align-items: stretch;
   min-width: 0;
 }
-.agent-card-installed:has(.agent-card-amr-auth) .agent-card-main {
-  flex-wrap: wrap;
-}
 .agent-card-select {
   flex: 1;
   min-width: 0;
@@ -1257,67 +1739,68 @@
   text-align: left;
   cursor: pointer;
 }
-.agent-card-installed:has(.agent-card-amr-auth) .agent-card-select {
-  flex: 1 1 420px;
-}
-.agent-card-test-btn {
-  align-self: stretch;
-  flex-shrink: 0;
-  min-width: 112px;
-  margin: 0;
-  padding: 0 18px;
-  border: 0;
-  border-left: 1px solid var(--border-soft);
-  border-radius: 0;
+/* The row is a bare <button>, so the global `button:hover` repaint in
+   primitives.css would wash `--bg-subtle` over the card's own fill. Selection
+   is the only state this row expresses; the test pill keeps its own hover.
+   Needs :not(:disabled) to out-specify that global rule. */
+.agent-card-select:hover:not(:disabled) {
   background: transparent;
-  color: var(--text);
-  font-weight: 600;
+  border-color: transparent;
 }
-.agent-card-test-btn:hover:not(:disabled) {
+/* Pill action, vertically centered against the agent icon (not a full-height
+   divider strip). Spec: outline pill, weight 500, medium size. The compound
+   selector out-specifies `button.icon-btn` (height/radius/padding base). */
+.agent-card-installed .agent-card-test-btn {
+  align-self: center;
+  flex-shrink: 0;
+  margin: 0 16px 0 4px;
+  padding: 0 18px;
+  height: 36px;
+  min-width: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+.agent-card-installed .agent-card-test-btn:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent-tint) 58%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
   color: var(--accent-strong);
 }
 .agent-card:hover:not(.disabled) {
-  border-color: var(--border-strong);
+  border-color: transparent;
 }
-.agent-card.active {
-  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+.agent-card.active,
+.agent-card.active:hover:not(.disabled) {
+  /* Selected card keeps its hairline stroke — including on hover, where the
+     generic `.agent-card:hover` rule above would otherwise clear it. */
+  border-color: var(--border);
   background: var(--bg-panel);
-  box-shadow:
-    0 1px 0 color-mix(in srgb, var(--bg-panel) 88%, transparent) inset,
-    0 10px 28px color-mix(in srgb, var(--text) 9%, transparent);
+  box-shadow: none;
 }
-.agent-card.active::before {
-  content: '';
-  position: absolute;
-  inset: 12px auto 12px 0;
-  width: 4px;
-  border-radius: 0 999px 999px 0;
-  background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 56%, var(--selected)));
-}
-.agent-card-installed.active .agent-card-main {
+/* One continuous fill for the whole active card — header + model config share
+   it, so there is no tone seam between the two halves (they are one module). */
+.agent-card-installed.active {
   background:
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--accent-tint) 32%, var(--bg-panel)),
-      color-mix(in srgb, var(--accent-tint) 10%, var(--bg-panel))
+      color-mix(in srgb, var(--accent-tint) 22%, var(--bg-panel)),
+      var(--bg-panel)
     );
 }
-.agent-card-installed:has(.agent-card-amr-auth) .agent-card-main {
-  flex-wrap: nowrap;
+.agent-card-installed.active .agent-card-main {
+  background: transparent;
 }
 .agent-card-installed.active .agent-card-select {
   min-height: 78px;
   padding: 14px 18px 12px 22px;
 }
-.agent-card-installed:has(.agent-card-amr-auth) .agent-card-select {
-  flex: 1;
-}
 .agent-card-installed.active .agent-icon {
   border-radius: var(--radius-md);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--accent) 16%, var(--border-soft)),
-    0 8px 18px color-mix(in srgb, var(--accent) 16%, transparent);
+  /* No ring / drop shadow on the selected logo — flat mark. */
+  box-shadow: none;
 }
 .agent-card-installed.active .agent-card-name {
   font-size: 13px;
@@ -1329,8 +1812,19 @@
   cursor: not-allowed;
   opacity: 0.55;
 }
+/* Installable ("可安装") cards keep their brand logos in full color. A
+   parent `opacity` would multiply down onto the masked/`<img>` marks and
+   grey them out (and can't be undone by a child `opacity`), so the
+   "not installed" hint lives on the text tokens below instead — the logo
+   stays true to the brand. */
 .agent-card.disabled.agent-card-unavailable {
-  opacity: 0.72;
+  opacity: 1;
+}
+.agent-card.agent-card-unavailable .agent-card-name {
+  color: var(--text);
+}
+.agent-card.agent-card-unavailable .agent-card-description {
+  color: var(--text-muted);
 }
 /* Unavailable cards stack vertically: the logo/name/links live in a single
    top row, and any diagnostic reason gets its own full-width row underneath
@@ -1339,12 +1833,31 @@
   flex-direction: column;
   align-items: stretch;
   gap: 0;
+  /* White base card (theme-aware: --bg is #fff light / #202020 dark) so each
+     installable card reads as a clean surface on the group background. */
+  background: var(--bg);
 }
 .agent-card-unavailable-row {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
+}
+/* All of an installable card's actions collapse into one horizontal bar at
+   the card's foot, fenced off from the logo/name/diagnostics above by a hair
+   divider. Docs + rescan read as quiet icon buttons; Install keeps its label
+   as the primary call-to-action and takes the right edge. */
+.agent-card-unavailable .agent-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft, var(--border));
+}
+.agent-card-unavailable .agent-card-footer .agent-card-link--ghost {
+  margin-left: auto;
 }
 .agent-card-actions {
   display: flex;
@@ -1363,7 +1876,7 @@
   align-items: center;
 }
 .agent-card-link {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-muted);
   text-decoration: none;
@@ -1394,6 +1907,10 @@
   justify-content: center;
   width: 26px;
   height: 26px;
+  /* Borderless: the rescan control is a <button>, which picks up the global
+     1px button border (primitives.css); drop it so docs + rescan read as
+     quiet icon buttons as intended. */
+  border: 0;
   border-radius: var(--radius-sm);
 }
 .agent-card-link--icon:hover {
@@ -1440,8 +1957,8 @@
   align-items: baseline;
   gap: 5px;
   min-width: 0;
-  font-size: 12.5px;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -1462,33 +1979,22 @@
   gap: 8px;
   row-gap: 5px;
   flex-wrap: wrap;
-  max-width: 100%;
   white-space: normal;
-  overflow: hidden;
+  overflow: visible;
 }
 .agent-card-name.agent-card-name--amr .agent-card-title {
-  flex: 0 1 auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex: 0 0 auto;
+  overflow: visible;
+  text-overflow: clip;
   white-space: nowrap;
 }
 .agent-card-benefits {
   display: inline-flex;
   align-items: center;
-  flex: 0 0 auto;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 5px;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-}
-.agent-card-plan-badge-slot {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-}
-.agent-card-plan-badge {
-  flex: 0 0 auto;
+  min-width: min(100%, 220px);
+  overflow: visible;
 }
 .agent-card-benefit {
   display: inline-flex;
@@ -1500,8 +2006,8 @@
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
   color: color-mix(in srgb, var(--accent-strong) 82%, var(--text-strong));
-  font-size: 10.5px;
-  font-weight: 680;
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
 }
@@ -1515,14 +2021,14 @@
 }
 .agent-card-description {
   margin-top: 1px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .agent-card-meta {
-  font-size: 11px; color: var(--text-muted);
+  font-size: 12px; color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   line-height: 1.35;
@@ -1535,7 +2041,7 @@
   max-width: 100%;
   margin-top: 4px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   line-height: 1.35;
@@ -1554,100 +2060,96 @@
   border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
   border-radius: 999px;
   color: var(--accent-strong);
-  font-size: 9px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 700;
   line-height: 1.2;
 }
-.agent-card-amr-meta-row {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 4px 20px;
-  margin-top: 4px;
+.agent-card-plan-badge-slot {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
 }
-.agent-card-amr-meta-row .agent-card-amr-balance {
-  margin-top: 0;
+/* Balance rides on the same account row as the email + plan/profile chips
+   (row 2 of the card), separated by a hairline instead of its own row. */
+.agent-card-amr-email .agent-card-amr-balance {
+  margin-left: 4px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border-soft);
 }
 .agent-card-amr-balance {
   display: inline-flex;
   align-items: baseline;
-  gap: 6px;
-  margin-top: 4px;
+  gap: 4px;
+  flex: 0 0 auto;
   font-size: 12px;
   line-height: 1.35;
 }
 .agent-card-amr-balance-label {
-  color: var(--text-muted);
-  font-weight: 500;
+  color: var(--text-soft);
+  font-weight: 600;
 }
 .agent-card-amr-balance-value {
-  color: var(--text-strong);
+  color: var(--text);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.agent-card-amr-wallet__meta {
-  min-width: 0;
-  margin-top: 2px;
-  color: var(--text-soft);
-  font-size: 10.5px;
-  font-weight: 500;
+.agent-card-amr-wallet {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 8px;
+  max-width: 100%;
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 12px;
   line-height: 1.25;
+}
+.agent-card-amr-wallet__label {
+  color: var(--text-soft);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.agent-card-amr-wallet__value {
+  min-width: 0;
+  color: var(--text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.agent-card-amr-upgrade {
-  appearance: none;
-  flex: 0 0 auto;
+.agent-card-amr-wallet__meta {
+  grid-column: 1 / -1;
+  min-width: 0;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-card-amr-wallet-refresh {
+  align-self: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 32px;
-  padding: 0 14px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: var(--accent);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 650;
-  letter-spacing: 0.01em;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--bg-panel);
+  color: var(--text-muted);
   cursor: pointer;
-  white-space: nowrap;
-  box-shadow:
-    0 1px 2px color-mix(in srgb, var(--accent) 38%, transparent),
-    inset 0 1px 0 color-mix(in srgb, #fff 20%, transparent);
-  transition:
-    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
-    background-color 160ms ease,
-    box-shadow 160ms ease;
+  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
-@media (hover: hover) and (pointer: fine) {
-  /* `:not(:disabled)` raises specificity above the global
-     `button:hover:not(:disabled)` reset (primitives.css), which would
-     otherwise paint this filled CTA with a pale `--bg-subtle` on hover. */
-  .agent-card-amr-upgrade:hover:not(:disabled) {
-    background: var(--accent-hover);
-    border-color: transparent;
-    color: #fff;
-    box-shadow:
-      0 3px 10px color-mix(in srgb, var(--accent) 42%, transparent),
-      inset 0 1px 0 color-mix(in srgb, #fff 24%, transparent);
-  }
+.agent-card-amr-wallet-refresh:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+  background: color-mix(in srgb, var(--accent-tint) 62%, var(--bg-panel));
+  color: var(--accent-strong);
 }
-.agent-card-amr-upgrade:active {
-  transform: scale(0.97);
-}
-.agent-card-amr-upgrade:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
-  outline-offset: 2px;
-}
-@media (prefers-reduced-motion: reduce) {
-  .agent-card-amr-upgrade {
-    transition: background-color 160ms ease;
-  }
-  .agent-card-amr-upgrade:active {
-    transform: none;
-  }
+.agent-card-amr-wallet-refresh:disabled {
+  cursor: default;
+  opacity: 0.62;
 }
 .agent-card-model-summary {
   display: flex;
@@ -1656,7 +2158,7 @@
   margin-top: 4px;
   min-width: 0;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
@@ -1672,12 +2174,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* The auth pill is one cluster of header-row actions; the old full-height
+   divider column (border-left + stretch + centered) is gone — the actions sit
+   inline with the Upgrade CTA inside `.amr-auth-anchor`. */
 .agent-card-amr-auth {
-  flex: 0 1 auto;
-  max-width: 280px;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
 }
 .agent-card-amr-auth--placeholder {
   visibility: hidden;
@@ -1686,10 +2190,37 @@
 .agent-card-amr-auth .amr-account-control {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   min-width: 0;
-  gap: 8px;
+  gap: 6px;
   padding: 0;
+}
+/* Upgrade is the card's primary account CTA: a solid accent pill sized like
+   the neighboring account-control actions so the header action cluster reads
+   as one row of coherent buttons. */
+.agent-card-amr-upgrade {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  /* 品牌主色 #00ff04 (opendesign spec), not the theme --green: the label and
+     its sparkle icon share currentColor on the ink fill. */
+  color: #00ff04;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms var(--ease-out), transform 120ms var(--ease-out);
+}
+.agent-card-amr-upgrade:hover:not(:disabled) {
+  background: var(--accent-strong, var(--accent));
+  transform: translateY(-1px);
 }
 .agent-card-amr-auth .amr-account-control__status {
   display: inline-flex;
@@ -1698,7 +2229,7 @@
   max-width: 150px;
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1716,11 +2247,11 @@
   min-height: 32px;
   padding: 0 14px;
   border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--accent-tint) 62%, var(--bg-panel));
   color: var(--text);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
@@ -1762,7 +2293,7 @@
   flex: 1 1 100%;
   max-width: 100%;
   color: var(--danger-text, #991b1b);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.25;
   overflow-wrap: anywhere;
@@ -1791,12 +2322,12 @@
   margin-top: 4px;
   padding: 8px 10px;
   border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
-  border-radius: 10px;
+  border-radius: var(--radius-large, 8px);
   background: color-mix(in srgb, var(--accent) 6%, transparent);
   text-align: left;
 }
 .amr-login-activation__hint {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
   color: var(--text-muted, #6b7280);
 }
@@ -1813,7 +2344,7 @@
   border-radius: 8px;
   background: var(--accent);
   color: var(--accent-contrast, #fff);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   text-decoration: none;
   white-space: nowrap;
@@ -1827,8 +2358,8 @@
   border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
   border-radius: 999px;
   color: var(--accent-strong);
-  font-size: 9px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 700;
   line-height: 1.2;
 }
 .agent-model-row-head {
@@ -1847,17 +2378,19 @@
   border-radius: var(--radius-sm);
   background: var(--bg-panel);
 }
+/* Diagnostic rows inside an installed card are card content, not a full-bleed
+   strip: inset them to the same 24px gutter the model-config fields use. */
+.agent-card-installed .agent-card-diagnostic {
+  margin: 6px 24px 0;
+}
 .agent-card-config {
   display: grid;
   gap: 9px;
   padding: 16px 24px 18px;
-  border-top: 1px solid color-mix(in srgb, var(--accent) 14%, var(--border-soft));
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--bg-subtle) 52%, var(--bg-panel)),
-      color-mix(in srgb, var(--bg-panel) 92%, var(--bg-subtle))
-    );
+  border-top: 0;
+  /* Transparent: the card owns one continuous fill (see the active-card rule),
+     so the header and this model section read as a single module with no seam. */
+  background: transparent;
 }
 .agent-card-config select,
 .agent-card-config input,
@@ -1876,7 +2409,8 @@
 */
 .settings-section-card {
   padding: 16px;
-  border: 1px solid var(--border-soft);
+  /* Borderless: the panel fill alone separates the card from the page. */
+  border: 0;
   border-radius: var(--radius-sm);
   background: var(--bg-panel);
 }
@@ -1962,11 +2496,21 @@
 .settings-section-byok .field-label {
   color: var(--text);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
 }
 .settings-section-byok select,
 .settings-section-byok input {
   background-color: var(--bg-panel);
+}
+/* Roomier field stack: every text box in this section shares one 40px box and
+   14px text. A fixed-height <input> centers its own text, so this needs no
+   padding/line-height pairing — unlike the picker below, which is a <button>.
+   `.settings-byok-key-input-wrap > input` still out-specifies the
+   padding-right that clears the show/hide toggle. */
+.settings-section-byok input {
+  height: 40px;
+  padding: 0 12px;
+  font-size: 14px;
 }
 .settings-section-byok .settings-base-url-readonly .field-row input[readonly] {
   background-color: var(--bg-panel);
@@ -1995,6 +2539,70 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+.settings-section-byok .settings-byok-key-row {
+  align-items: center;
+  gap: var(--spacing-12);
+}
+.settings-section-byok .settings-byok-key-input-wrap {
+  position: relative;
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.settings-section-byok .settings-byok-key-input-wrap > input {
+  width: 100%;
+  padding-right: 56px;
+}
+.settings-section-byok .settings-byok-key-toggle {
+  position: absolute;
+  top: 50%;
+  right: var(--spacing-6);
+  width: auto;
+  height: 28px;
+  min-width: 42px;
+  padding: 0 var(--spacing-8);
+  border: 0;
+  border-radius: var(--radius-medium);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  transform: translateY(-50%);
+}
+.settings-section-byok .settings-byok-key-toggle:hover:not(:disabled),
+.settings-section-byok .settings-byok-key-toggle:focus-visible {
+  background: var(--bg-subtle);
+  color: var(--text);
+  box-shadow: none;
+}
+/* Outline pill, sized to sit level with the 40px key input beside it. Stays
+   outline rather than filled so it never competes with this section's filled
+   "test connection" CTA; keeps the link's `--selected` text as its
+   affordance. Overrides `.field-label-link`'s 12px + hover underline. */
+.settings-section-byok .settings-byok-key-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  height: 40px;
+  padding: 0 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--bg-panel);
+  color: var(--selected);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.settings-section-byok .settings-byok-key-link:hover,
+.settings-section-byok .settings-byok-key-link:focus-visible {
+  border-color: color-mix(in srgb, var(--selected) 40%, var(--border));
+  background: color-mix(in srgb, var(--selected) 8%, var(--bg-panel));
+  color: var(--selected);
+  text-decoration: none;
+}
 .settings-section-byok .settings-byok-key-label,
 .settings-section-byok .settings-byok-field-label {
   display: inline-flex;
@@ -2005,7 +2613,7 @@
 .settings-section-byok .field-label-error {
   margin-left: 8px;
   color: var(--red);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1.35;
 }
@@ -2048,11 +2656,6 @@
   font-size: 12px;
   font-weight: 500;
 }
-.settings-memory-summary-value::before {
-  content: '·';
-  margin: 0 6px 0 2px;
-  color: var(--text-muted);
-}
 .agent-card-config .field,
 .agent-model-row .field { gap: 4px; }
 .agent-card-config .field-label,
@@ -2061,14 +2664,14 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  font-size: 11.5px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);
 }
 .agent-card-config .field-label {
   margin-bottom: 2px;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.06em;
 }
 .agent-model-source-badge {
@@ -2080,7 +2683,7 @@
   border-radius: var(--radius-pill);
   background: var(--bg-subtle);
   color: var(--text-muted);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1;
   letter-spacing: 0;
@@ -2098,7 +2701,7 @@
   border-radius: 0;
   background: transparent;
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 500;
 }
 .agent-model-source-badge.fallback::before {
@@ -2107,7 +2710,7 @@
   color: var(--text-muted);
 }
 .agent-card-config .hint,
-.agent-model-row .hint { margin: 0; font-size: 11.5px; }
+.agent-model-row .hint { margin: 0; font-size: 12px; }
 
 /* Model picker loading row — shown for AMR between sign-in and the moment
    vela's live catalog arrives, so the dropdown appears immediately rather
@@ -2117,7 +2720,7 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-height: 34px;
+  min-height: 40px;
   padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -2140,15 +2743,42 @@
   top: calc(100% + 6px);
   left: 0;
   right: 0;
-  z-index: 1401;
+  /* Above every modal layer: the popover portals to <body>, and the settings
+     dialog backdrop sits at 1700 (app-modal at 10000) — at the old 1401 the
+     dropdown OPENED but rendered underneath the dialog, reading as "click
+     does nothing". */
+  z-index: 10500;
+  /* Wide enough for the two-level company + models layout even when the
+     trigger that anchors it is narrow. */
+  min-width: 380px;
+  /* Constant breathing room above/below the scrolling list — padding inside
+     the scroller scrolls away with the content and reads as flush rows. */
+  padding-block: 8px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
+/* Settings agent model picker: flat popover (no elevation), the border alone
+   separates it from the page. */
+.model-select-searchable__popover.settings-model-popover {
+  box-shadow: none;
+}
+/* One 14px text size across this popover, matching the trigger that opens it.
+   Every rule here out-specifies an explicit size on the base class, so a
+   font-size on the popover root alone would not inherit through. The selected
+   row carries no size of its own, so it follows the label rule. */
+.settings-model-popover .model-select-searchable__option-label,
+.settings-model-popover .model-select-searchable__option-meta,
+.settings-model-popover .model-select-searchable__empty,
+.settings-model-popover .model-select-searchable__input {
+  font-size: 14px;
+}
 .model-select-searchable__search-row {
-  padding: 0;
+  /* Breathing room around the search input so the row's border-bottom reads
+     as a real divider instead of hugging the input's own border. */
+  padding: 12px 14px;
   border-bottom: 1px solid var(--border);
 }
 .model-select-searchable__input {
@@ -2161,17 +2791,110 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  padding: 6px;
+  gap: 10px;
+  /* Vertical breathing room lives on the popover, outside the scroller. */
+  padding: 0 6px;
+}
+/* Two-level browse layout: companies on the left, hovered company's models on
+   the right. */
+.model-select-searchable__body {
+  display: flex;
+  align-items: stretch;
+  min-height: 0;
+  max-height: 280px;
+}
+.model-select-searchable__companies {
+  flex: 0 0 auto;
+  min-width: 148px;
+  max-width: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border-right: 1px solid var(--border);
+}
+.model-select-searchable__company {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 10px;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.model-select-searchable__company:hover {
+  background: var(--bg-subtle);
+}
+.model-select-searchable__company.is-active {
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+  font-weight: 600;
+}
+.model-select-searchable__company-count {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 500;
+}
+.model-select-searchable__company-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.model-select-searchable__company-logo {
+  flex: 0 0 auto;
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
+/* The selected model's company gets the brand dot so you can find it at a
+   glance across the company list. */
+.model-select-searchable__company.has-selected .model-select-searchable__company-name::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--green, #00aa54);
+  vertical-align: middle;
+}
+.model-select-searchable__models {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px;
 }
 .model-select-searchable__option {
   appearance: none;
   border: 0;
   background: transparent;
   text-align: left;
-  padding: 8px 30px 8px 10px;
+  /* 8px above the title line and below the cost line (dogfood 2026-07-28).
+     height:auto releases the global button primitive's 36px clamp — a row
+     with a cost/meta line is two lines tall, and the clamp made the text
+     overflow the plate instead of sitting 8px inside it. */
+  height: auto;
+  padding: 8px 12px;
   border-radius: var(--radius);
   display: flex;
   flex-direction: column;
+  /* Column flex makes the cross axis horizontal, so the button base's
+     `align-items: center` would center each shrink-to-fit label and make
+     `text-align: left` above inert. */
+  align-items: flex-start;
   gap: 2px;
   color: var(--text);
   cursor: pointer;
@@ -2191,25 +2914,12 @@
   background: var(--accent-tint);
   color: var(--accent-strong);
 }
-.model-select-searchable__option[data-selected='true']::after {
-  content: '✓';
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 12px;
-  font-weight: 700;
-  color: currentColor;
-}
 .settings-byok-select-popover .model-select-searchable__option.is-active {
   background: color-mix(in srgb, var(--selected) 10%, var(--bg-panel));
   color: var(--text);
 }
 .settings-byok-select-popover .model-select-searchable__option.is-active:hover {
   background: color-mix(in srgb, var(--selected) 14%, var(--bg-panel));
-}
-.settings-byok-select-popover .model-select-searchable__option[data-selected='true']::after {
-  color: var(--selected);
 }
 .model-select-searchable__value,
 .model-select-searchable__option-content {
@@ -2234,7 +2944,7 @@
 .model-select-searchable__option-label {
   display: inline-flex;
   align-items: center;
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.35;
   min-width: 0;
   overflow: hidden;
@@ -2282,8 +2992,33 @@
   opacity: 0.88;
   flex: 0 0 auto;
 }
+/* Composer inline model dropdown: the selected model shows a leading dot in
+   the same ink as its label; hovering an unselected row slides its label
+   forward as a "reach" affordance. */
+.inline-model-popover .model-select-searchable__option-label {
+  display: inline-flex;
+  align-items: center;
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.inline-model-popover .model-select-searchable__option.is-active .model-select-searchable__option-label::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.inline-model-popover .model-select-searchable__option:not(.is-active):hover .model-select-searchable__option-label {
+  transform: translateX(6px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .inline-model-popover .model-select-searchable__option-label {
+    transition: none;
+  }
+}
 .model-select-searchable__option-meta {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.3;
   color: var(--text-muted);
   min-width: 0;
@@ -2363,14 +3098,29 @@
   justify-content: space-between;
 }
 .settings-section-byok .model-select-searchable > .settings-model-select {
-  height: 34px;
+  height: 40px;
   min-height: auto;
-  padding: 7px 32px 7px 10px;
-  line-height: 18px;
+  /* Matches the 40px input box above: 9 + 20 + 9 + 2px border. This is a
+     block-display <button>, so the padding/line-height pair does the
+     vertical centering an <input> gets for free. */
+  padding: 9px 32px 9px 12px;
+  font-size: 14px;
+  line-height: 20px;
   background:
     var(--bg-panel)
     url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2374716b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E")
     no-repeat right 10px center / 12px 12px;
+}
+/* Agent-card picker: a taller box than the 32px `.inline-switcher__select`
+   default, at the same 14px as the options in the popover it opens (that
+   default would otherwise hold the selected value at 12px). `.settings-model-select`
+   makes this a block, so the padding + line-height pair (9 + 20 + 9 + 2px
+   border = 40px) does the vertical centering `align-items` would on the flex base. */
+.agent-model-select-wrap .model-select-searchable > .settings-model-select {
+  height: 40px;
+  padding: 9px 32px 9px 12px;
+  font-size: 14px;
+  line-height: 20px;
 }
 .settings-model-select--byok {
   min-width: min(420px, 100%);
@@ -2406,8 +3156,11 @@
 }
 .agent-cli-env {
   padding: 10px 12px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  /* Same 14px family as .agent-card / the cloud sign-in callout. */
+  border-radius: 14px;
+  /* Same surface as the "可安装" collapse (.agent-install-collapse, --bg-panel)
+     so the two folded sections read as one family. */
   background: var(--bg-panel);
 }
 .agent-cli-env-summary {
@@ -2447,7 +3200,7 @@
 }
 .agent-cli-env-body .hint {
   margin: 0;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 .agent-cli-env-grid {
   display: grid;
@@ -2531,7 +3284,7 @@
   margin-left: auto;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
-  font-size: 11px;
+  font-size: 12px;
 }
 .activity-list {
   list-style: none;
@@ -2556,7 +3309,7 @@
   display: inline-block;
   padding: 1px 6px;
   border-radius: var(--radius-xs);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.02em;
   background: var(--bg-subtle);
@@ -2578,7 +3331,7 @@
 .activity-item .detail { flex: 1; min-width: 0; overflow-wrap: break-word; word-break: break-word; }
 .activity-item .detail.muted { color: var(--text-muted); }
 .activity-item .thinking-text { font-style: italic; color: var(--text-muted); }
-.activity-waiting { font-size: 11px; color: var(--text-muted); font-style: italic; }
+.activity-waiting { font-size: 12px; color: var(--text-muted); font-style: italic; }
 
 /* ============================================================
    Entry view — left sidebar + right tabs
@@ -2588,7 +3341,7 @@
   grid-template-rows: auto minmax(0, 1fr);
   height: 100vh;
   min-height: 0;
-  background: var(--bg);
+  background: var(--veil-page);
 }
 /* Note: `.entry-shell--no-header` and the rest of the entry-view
    redesign live in `src/styles/home/`. Keeping that bundle out of
@@ -2599,7 +3352,7 @@
   grid-template-columns: var(--entry-rail-width, 64px) 1fr;
   height: 100%;
   min-height: 0;
-  background: var(--bg);
+  background: var(--veil-page);
 }
 
 .entry-side {
@@ -2777,9 +3530,8 @@
 }
 .newproj-title {
   margin: 0;
-  font-size: 13.5px;
-  font-weight: 600;
-  letter-spacing: -0.005em;
+  font-size: 13px;
+  font-weight: 500;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2794,7 +3546,7 @@
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2963,7 +3715,7 @@
 .platform-picker-hint {
   margin: 0;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
 }
 /* PlatformPicker reuses the DS picker visual language (`.ds-picker-*`)
@@ -2972,7 +3724,7 @@
    `.ds-picker-trigger` / `.ds-picker-popover` / `.ds-picker-item` styles
    for a neutral, accent-free look that matches the rest of the panel. */
 .newproj-label {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
   font-weight: 500;
 }
@@ -3002,7 +3754,7 @@
   align-items: center;
   gap: 8px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.11em;
   text-transform: uppercase;
@@ -3010,7 +3762,7 @@
 .newproj-provider-badge {
   border-radius: var(--radius-pill);
   padding: 2px 8px;
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.08em;
 }
 .newproj-provider-badge.configured {
@@ -3092,7 +3844,7 @@
 }
 .newproj-option-card small {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .aspect-grid .newproj-option-card {
   flex-direction: column;
@@ -3110,15 +3862,15 @@
 }
 .aspect-copy strong {
   color: var(--text-muted);
-  font-size: 12.5px;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 600;
   letter-spacing: -0.005em;
   max-width: 100%;
   overflow-wrap: anywhere;
 }
 .aspect-copy small {
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 .aspect-glyph {
   flex: none;
@@ -3166,7 +3918,7 @@
 .skill-radio input { width: auto; margin-top: 2px; }
 .skill-radio-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .skill-radio-name { font-weight: 500; font-size: 13px; }
-.skill-radio-desc { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+.skill-radio-desc { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
 .newproj-empty {
   font-size: 12px; color: var(--text-muted);
   font-style: italic; padding: 8px 0;
@@ -3228,7 +3980,7 @@
   gap: 8px;
   width: 100%;
   padding: 6px 10px;
-  font-size: 12.5px;
+  font-size: 13px;
   border-radius: var(--radius-sm);
 }
 .newproj-create svg,
@@ -3244,7 +3996,7 @@
 }
 .newproj-footer {
   padding: 6px 24px 16px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   text-align: center;
   flex: 0 0 auto;
@@ -3293,7 +4045,7 @@
 .fidelity-card.active .fidelity-thumb { border-color: var(--selected-soft); }
 .fidelity-label {
   text-align: center;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text);
 }
@@ -3304,6 +4056,9 @@
   align-items: center;
   gap: 12px;
   width: 100%;
+  /* Buttons inherit nowrap from the shared button base; the hint copy must
+     wrap or it clips under the switch on narrow panes. */
+  white-space: normal;
   padding: 12px 14px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -3322,6 +4077,16 @@
 }
 .toggle-row.disabled:hover,
 .toggle-row:disabled:hover { border-color: var(--border); }
+/* Critique-theater setting reads as a flat section row, not a filled card:
+   drop the panel background + border (incl. the .on tinted fill) so it sits
+   inline with the surrounding settings instead of looking like a module. */
+.toggle-row.critique-theater-toggle,
+.toggle-row.critique-theater-toggle:hover,
+.toggle-row.critique-theater-toggle.on {
+  padding-inline: 0;
+  background: transparent;
+  border-color: transparent;
+}
 .toggle-row-text {
   flex: 1;
   min-width: 0;
@@ -3335,7 +4100,7 @@
   color: var(--text);
 }
 .toggle-row-hint {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
   line-height: 1.4;
 }
@@ -3362,6 +4127,15 @@
 }
 .toggle-row.on .toggle-row-switch { background: var(--text); }
 .toggle-row.on .toggle-row-switch::after { transform: translateX(14px); }
+.critique-theater-toggle {
+  /* Span the full section width so the switch sits flush at the right edge,
+     lined up with the "默认位置" button above it. */
+  max-width: none;
+  margin-top: 14px;
+}
+.critique-theater-toggle .toggle-row-label {
+  font-weight: 600;
+}
 
 /* -------- Compact toggle (lightweight inline variant used by
    SurfaceOptions; one-line, no border, hint moves to a native tooltip). -- */
@@ -3396,7 +4170,7 @@
 .compact-toggle-label {
   flex: 1;
   min-width: 0;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3425,6 +4199,58 @@
 }
 .compact-toggle.on .compact-toggle-switch { background: var(--text); }
 .compact-toggle.on .compact-toggle-switch::after { transform: translateX(12px); }
+
+/* Dark-mode visibility for off-state toggles (#5298).
+   The default off-state track uses --border-strong, which in dark mode is
+   #46433c — only ~5% lighter than the --bg-subtle (#252321) panel behind it.
+   That makes the toggle track nearly invisible when the control is off,
+   leaving users unsure whether the setting is enabled. Bump the off-state
+   track to a clearly lighter neutral and outline the thumb so the white
+   knob stays visible against the (now lighter) track. On-state already
+   used --text (#e8e4dc) which is high-contrast, so it is left alone.
+
+   Two selector paths needed because OpenDesign supports both explicit
+   [data-theme='dark'] AND system dark via @media prefers-color-scheme
+   (the default "system" theme removes data-theme and falls back on the
+   media query in tokens.css). */
+
+/* --- Explicit dark theme --- */
+[data-theme='dark'] .toggle-row-switch,
+[data-theme='dark'] .compact-toggle-switch {
+  background: #6b6862;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.28);
+}
+[data-theme='dark'] .toggle-row-switch::after,
+[data-theme='dark'] .compact-toggle-switch::after {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+/* Hover: only lift the track when off, or the on-state bright track gets
+   overridden by a higher-specificity hover rule. */
+[data-theme='dark'] .compact-toggle:not(.on):hover .compact-toggle-switch,
+[data-theme='dark'] .toggle-row:not(.on):hover .toggle-row-switch {
+  background: #75726c;
+}
+
+/* --- System dark theme (the default — no data-theme attr set) --- */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .toggle-row-switch,
+  html:not([data-theme]) .compact-toggle-switch {
+    background: #6b6862;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.28);
+  }
+  html:not([data-theme]) .toggle-row-switch::after,
+  html:not([data-theme]) .compact-toggle-switch::after {
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.4),
+      0 0 0 1px rgba(0, 0, 0, 0.18);
+  }
+  html:not([data-theme]) .compact-toggle:not(.on):hover .compact-toggle-switch,
+  html:not([data-theme]) .toggle-row:not(.on):hover .toggle-row-switch {
+    background: #75726c;
+  }
+}
 
 /* -------- Template picker (template tab) ---------------------------- */
 .template-list {
@@ -3507,7 +4333,7 @@
   color: var(--text);
 }
 .template-option-desc {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
   line-height: 1.4;
 }
@@ -3521,12 +4347,12 @@
   border-radius: var(--radius-sm);
 }
 .template-howto-title {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text);
 }
 .template-howto-body {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
   line-height: 1.45;
 }
@@ -3541,7 +4367,7 @@
 }
 .newproj-connectors-manage {
   padding: 2px 8px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.02em;
   color: var(--text-muted);
@@ -3557,7 +4383,7 @@
   background: var(--bg-subtle);
 }
 .newproj-connectors-hint {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
   line-height: 1.45;
 }
@@ -3574,7 +4400,7 @@
   align-items: center;
   gap: 6px;
   padding: 4px 10px 4px 8px;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text);
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -3599,7 +4425,7 @@
 }
 .newproj-connector-account {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3652,18 +4478,18 @@
   min-width: 0;
 }
 .newproj-connectors-empty-title {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text);
 }
 .newproj-connectors-empty-body {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
   line-height: 1.45;
 }
 .newproj-connectors-empty-cta {
   margin-top: 4px;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--accent);
 }

@@ -27,7 +27,32 @@ import {
 // (`DESIGN.md`). Preview modules (`preview/*.html`) are already covered by the
 // artifact-extension check; they are classified at diff time.
 function isTrackedRunFile(name: string): boolean {
-  return isArtifactPath(name) || isDesignSystemFile(name);
+  return isArtifactPath(name) || isDesignSystemFile(name) || isRenderDependencyPath(name);
+}
+
+const RENDER_DEPENDENCY_EXTENSIONS = new Set([
+  '.css',
+  '.js',
+  '.jsx',
+  '.ts',
+  '.tsx',
+]);
+
+const SUPPORTING_MEDIA_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.svg',
+  '.mp4', '.mov', '.webm', '.mp3', '.wav', '.m4a',
+]);
+
+function extensionOf(filePath: string): string {
+  return path.extname(filePath).toLowerCase();
+}
+
+function isRenderDependencyPath(filePath: string): boolean {
+  return RENDER_DEPENDENCY_EXTENSIONS.has(extensionOf(filePath));
+}
+
+function isSupportingMediaPath(filePath: string): boolean {
+  return SUPPORTING_MEDIA_EXTENSIONS.has(extensionOf(filePath));
 }
 
 export interface ArtifactFingerprint {
@@ -58,6 +83,22 @@ function fingerprintFile(full: string, size: number, mtimeMs: number): ArtifactF
   return { size, mtimeMs, hash };
 }
 
+async function fingerprintFileAsync(
+  full: string,
+  size: number,
+  mtimeMs: number,
+): Promise<ArtifactFingerprint> {
+  let hash: string | null = null;
+  if (size <= HASH_MAX_BYTES) {
+    try {
+      hash = createHash('sha1').update(await fs.promises.readFile(full)).digest('hex');
+    } catch {
+      hash = null;
+    }
+  }
+  return { size, mtimeMs, hash };
+}
+
 // path -> fingerprint for every artifact-extension file under the project root.
 export type ArtifactSnapshot = Map<string, ArtifactFingerprint>;
 
@@ -79,13 +120,35 @@ const IGNORED_DIR_NAMES: ReadonlySet<string> = new Set([
 // minor undercount, never a hang.
 const MAX_FILES = 5000;
 
-// Walk `rootDir` and fingerprint every artifact file (HTML + image/video/audio,
-// per `run-artifacts.ts`). Best-effort: unreadable dirs/files are skipped, never
-// thrown. Returns an empty snapshot when the root does not exist.
+// Separate cap for files outside the tracked-extension set (markdown, docs,
+// code, JSON, …). These feed only the coarse `files_written_count` signal, so
+// they get their own budget instead of competing with — and on a large
+// imported repo starving — the artifact fingerprints that the primary
+// `artifact_count` funnel depends on.
+const MAX_OTHER_FILES = 5000;
+
+// Cheap fingerprint for non-tracked files: size + mtime only, no content read.
+// `files_written_count` is a boolean-ish "did the run write anything" signal,
+// so the pathological same-size-same-mtime rewrite these miss is acceptable —
+// hashing every code file in an imported repo at run finish is not.
+function statOnlyFingerprint(size: number, mtimeMs: number): ArtifactFingerprint {
+  return { size, mtimeMs, hash: null };
+}
+
+// Walk `rootDir` and fingerprint every file: tracked files (artifact
+// extensions + DESIGN.md + render dependencies, per `run-artifacts.ts`) get a
+// full content fingerprint; every other file gets a cheap size+mtime stamp so
+// the diff can also report the all-file-types `files_written_count`. Each class
+// has its own cap (`MAX_FILES` / `MAX_OTHER_FILES`) so a code-heavy imported
+// repo cannot starve artifact tracking. Best-effort: unreadable dirs/files are
+// skipped, never thrown. Returns an empty snapshot when the root does not
+// exist.
 export function snapshotProjectArtifacts(rootDir: string): ArtifactSnapshot {
   const snapshot: ArtifactSnapshot = new Map();
+  let trackedCount = 0;
+  let otherCount = 0;
   const walk = (dir: string): void => {
-    if (snapshot.size >= MAX_FILES) return;
+    if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) return;
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -93,15 +156,24 @@ export function snapshotProjectArtifacts(rootDir: string): ArtifactSnapshot {
       return;
     }
     for (const entry of entries) {
-      if (snapshot.size >= MAX_FILES) return;
+      if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) return;
       if (entry.isDirectory()) {
         if (IGNORED_DIR_NAMES.has(entry.name) || entry.name.startsWith('.')) continue;
         walk(path.join(dir, entry.name));
-      } else if (entry.isFile() && isTrackedRunFile(entry.name)) {
+      } else if (entry.isFile()) {
+        const tracked = isTrackedRunFile(entry.name);
+        if (tracked ? trackedCount >= MAX_FILES : otherCount >= MAX_OTHER_FILES) continue;
         const full = path.join(dir, entry.name);
         try {
           const stat = fs.statSync(full);
-          snapshot.set(full, fingerprintFile(full, stat.size, stat.mtimeMs));
+          snapshot.set(
+            full,
+            tracked
+              ? fingerprintFile(full, stat.size, stat.mtimeMs)
+              : statOnlyFingerprint(stat.size, stat.mtimeMs),
+          );
+          if (tracked) trackedCount += 1;
+          else otherCount += 1;
         } catch {
           // Race (file removed mid-walk) or permission error — skip.
         }
@@ -109,6 +181,78 @@ export function snapshotProjectArtifacts(rootDir: string): ArtifactSnapshot {
     }
   };
   walk(rootDir);
+  return snapshot;
+}
+
+// Async counterpart used by the normal run start/finish path. It deliberately
+// preserves the synchronous snapshot's traversal order, cap, filtering, and
+// best-effort error behavior; the only difference is that directory, stat, and
+// content reads yield the daemon event loop instead of pausing unrelated HTTP
+// and SSE traffic while a large project is scanned.
+export async function snapshotProjectArtifactsAsync(rootDir: string): Promise<ArtifactSnapshot> {
+  const snapshot: ArtifactSnapshot = new Map();
+  const files: Array<{ full: string; tracked: boolean }> = [];
+  let trackedCount = 0;
+  let otherCount = 0;
+  const walk = async (dir: string): Promise<void> => {
+    if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) return;
+      if (entry.isDirectory()) {
+        if (IGNORED_DIR_NAMES.has(entry.name) || entry.name.startsWith('.')) continue;
+        await walk(path.join(dir, entry.name));
+      } else if (entry.isFile()) {
+        const tracked = isTrackedRunFile(entry.name);
+        if (tracked ? trackedCount >= MAX_FILES : otherCount >= MAX_OTHER_FILES) continue;
+        files.push({ full: path.join(dir, entry.name), tracked });
+        if (tracked) trackedCount += 1;
+        else otherCount += 1;
+      }
+    }
+  };
+  await walk(rootDir);
+
+  // A small worker pool prevents a 5k-file project from turning the async
+  // safety fix into a long serial tail, while still bounding filesystem load.
+  // Results are committed in traversal order so diff output remains stable.
+  // Non-tracked files only need a stat (size+mtime stamp), never a content
+  // read, so widening the walk to all files adds no hashing cost.
+  const fingerprints = new Array<readonly [string, ArtifactFingerprint] | null>(files.length);
+  let nextIndex = 0;
+  const fingerprintWorker = async (): Promise<void> => {
+    for (;;) {
+      const index = nextIndex;
+      if (index >= files.length) return;
+      nextIndex += 1;
+      const { full, tracked } = files[index]!;
+      try {
+        const stat = await fs.promises.stat(full);
+        fingerprints[index] = [
+          full,
+          tracked
+            ? await fingerprintFileAsync(full, stat.size, stat.mtimeMs)
+            : statOnlyFingerprint(stat.size, stat.mtimeMs),
+        ];
+      } catch {
+        fingerprints[index] = null;
+      }
+    }
+  };
+  await Promise.all(
+    Array.from(
+      { length: Math.min(16, files.length) },
+      () => fingerprintWorker(),
+    ),
+  );
+  for (const fingerprint of fingerprints) {
+    if (fingerprint) snapshot.set(fingerprint[0], fingerprint[1]);
+  }
   return snapshot;
 }
 
@@ -134,6 +278,27 @@ export interface RunArtifactDiff {
   // that need per-file side effects, such as HTML version snapshots, can filter
   // this list without re-walking the project tree.
   touchedPaths: string[];
+  // Content-only v4 counters. For hashable files, a timestamp-only rewrite is
+  // excluded; the legacy counters above intentionally keep their old mtime
+  // semantics during the compatibility window.
+  contentCreated: number;
+  contentModified: number;
+  contentTouched: number;
+  contentTouchedPaths: string[];
+  // HTML rendering dependencies are not legacy artifacts, but changing them
+  // can visibly modify the primary preview and must inform
+  // primary_artifact_change.
+  renderDependencyTouched: number;
+  renderDependencyTouchedPaths: string[];
+  supportingMediaTouched: number;
+  // Distinct files of ANY type this run created or modified — markdown briefs,
+  // docx exports, JSON data, code, plus everything the counters above already
+  // cover. `artifact_count` deliberately only counts renderable outputs, which
+  // makes a run that delivered `PROMPTS.md` or `report.docx` look identical to
+  // a pure chat turn in the funnel; this counter closes that blind spot
+  // (`run_finished.files_written_count`). Same mtime-inclusive touched
+  // semantics as `touched`; deletions are ignored.
+  filesWritten: number;
 }
 
 // Classify created vs modified tracked files between two snapshots into the
@@ -149,6 +314,13 @@ export function diffRunArtifacts(
   let previewModuleCount = 0;
   let designSystemCreated = false;
   const touchedPaths: string[] = [];
+  let contentCreated = 0;
+  let contentModified = 0;
+  let renderDependencyTouched = 0;
+  let supportingMediaTouched = 0;
+  let filesWritten = 0;
+  const contentTouchedPaths: string[] = [];
+  const renderDependencyTouchedPaths: string[] = [];
   for (const [filePath, fingerprint] of after) {
     const prior = before.get(filePath);
     const isNew = !prior;
@@ -158,6 +330,12 @@ export function diffRunArtifacts(
         prior.mtimeMs !== fingerprint.mtimeMs ||
         prior.hash !== fingerprint.hash);
     if (!isNew && !isChanged) continue;
+    filesWritten += 1;
+    const contentChanged = isNew || (!!prior && (
+      prior.hash !== null && fingerprint.hash !== null
+        ? prior.hash !== fingerprint.hash
+        : prior.size !== fingerprint.size || prior.mtimeMs !== fingerprint.mtimeMs
+    ));
     // Snapshot keys are native paths (`path.join` → backslashes on Windows),
     // but `isPreviewModulePath` / `isDesignSystemFile` match forward slashes
     // only. Normalize separators so the design-system / preview signals work on
@@ -167,6 +345,16 @@ export function diffRunArtifacts(
       if (isNew) created += 1;
       else modified += 1;
       touchedPaths.push(filePath);
+      if (contentChanged) {
+        if (isNew) contentCreated += 1;
+        else contentModified += 1;
+        contentTouchedPaths.push(filePath);
+        if (isSupportingMediaPath(classifyPath)) supportingMediaTouched += 1;
+      }
+    }
+    if (contentChanged && isRenderDependencyPath(classifyPath)) {
+      renderDependencyTouched += 1;
+      renderDependencyTouchedPaths.push(filePath);
     }
     if (isPreviewModulePath(classifyPath)) previewModuleCount += 1;
     if (isDesignSystemFile(classifyPath)) designSystemCreated = true;
@@ -178,7 +366,70 @@ export function diffRunArtifacts(
     designSystemCreated,
     previewModuleCount,
     touchedPaths,
+    contentCreated,
+    contentModified,
+    contentTouched: contentCreated + contentModified,
+    contentTouchedPaths,
+    renderDependencyTouched,
+    renderDependencyTouchedPaths,
+    supportingMediaTouched,
+    filesWritten,
   };
+}
+
+export type PrimaryArtifactChange = 'none' | 'created' | 'modified';
+
+export function primaryArtifactChangeForRun(input: {
+  diff: RunArtifactDiff;
+  projectKind: string | null;
+  hadExistingArtifacts: boolean;
+  interactionMode?: string;
+  clarificationRequested: boolean;
+}): PrimaryArtifactChange | undefined {
+  if (
+    input.projectKind === 'design_system'
+    || input.interactionMode === 'ask'
+    || input.interactionMode === 'plan'
+    || input.clarificationRequested
+  ) {
+    return undefined;
+  }
+
+  const changed = (() => {
+    switch (input.projectKind) {
+      case 'prototype':
+      case 'live_artifact':
+      case 'slide_deck':
+      case 'template':
+        return input.diff.contentTouchedPaths.some((filePath) => /\.html?$/i.test(filePath))
+          || input.diff.renderDependencyTouched > 0;
+      case 'image':
+        return input.diff.contentTouchedPaths.some((filePath) =>
+          /\.(?:png|jpe?g|gif|webp|avif|svg)$/i.test(filePath));
+      case 'video':
+        return input.diff.contentTouchedPaths.some((filePath) =>
+          /\.(?:mp4|mov|webm)$/i.test(filePath));
+      case 'audio':
+        return input.diff.contentTouchedPaths.some((filePath) =>
+          /\.(?:mp3|wav|m4a)$/i.test(filePath));
+      default:
+        return input.diff.contentTouched > 0 || input.diff.renderDependencyTouched > 0;
+    }
+  })();
+  if (!changed) return 'none';
+  return input.hadExistingArtifacts ? 'modified' : 'created';
+}
+
+export function supportingAssetFilesChangedForRun(
+  diff: RunArtifactDiff,
+  projectKind: string | null,
+): number | undefined {
+  return projectKind === 'prototype'
+    || projectKind === 'live_artifact'
+    || projectKind === 'slide_deck'
+    || projectKind === 'template'
+    ? diff.supportingMediaTouched
+    : undefined;
 }
 
 export interface RunArtifactBaseline {

@@ -9,14 +9,6 @@ cli
       await import("./metadata/prepare-beta.ts");
       return;
     }
-    if (channel === "betas") {
-      await import("./metadata/prepare-betas.ts");
-      return;
-    }
-    if (channel === "preview") {
-      await import("./metadata/prepare-preview.ts");
-      return;
-    }
     if (channel === "prerelease" || channel === "stable") {
       process.env.OPEN_DESIGN_RELEASE_CHANNEL = channel;
       await import("./metadata/prepare-stable.ts");
@@ -42,6 +34,18 @@ cli
   .command("publish-platform", "Publish one platform's release artifacts and manifest")
   .action(async () => {
     await import("./storage/publish-platform.ts");
+  });
+
+cli
+  .command("publish-dogfood", "Upload unpublished build artifacts to the dogfood prefix for manual distribution")
+  .action(async () => {
+    await import("./storage/publish-dogfood.ts");
+  });
+
+cli
+  .command("publish-dsh-bootstrap", "Publish immutable DeepSeek Harness bootstrap installers")
+  .action(async () => {
+    await import("./storage/publish-dsh-bootstrap.ts");
   });
 
 cli

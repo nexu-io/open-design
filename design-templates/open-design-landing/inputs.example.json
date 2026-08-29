@@ -1,14 +1,14 @@
 {
   "$schema": "./schema.ts",
-  "_doc": "Worked example — Open Design as the brand. Run `pnpm dlx tsx scripts/compose.ts inputs.example.json out/example.html` to regenerate the canonical example.html from this file. Every field maps to a typed entry in schema.ts.",
+  "_doc": "Worked example — OpenDesign as the brand. Run `pnpm dlx tsx scripts/compose.ts inputs.example.json out/example.html` to regenerate the canonical example.html from this file. Every field maps to a typed entry in schema.ts.",
 
   "brand": {
-    "name": "Open Design",
+    "name": "OpenDesign",
     "mark": "Ø",
     "meta": { "title": "Studio Nº 01", "subtitle": "Berlin / Open / Earth" },
     "filed_under": "Design · Intelligence",
     "tagline": "Designing intelligence with skills, taste, and your own agent.",
-    "description": "Open Design is the open-source alternative to Claude Design. 12 coding-agent CLIs · 31 composable skills · 72 brand-grade design systems. Local-first, web-deployable, BYOK at every layer.",
+    "description": "OpenDesign is the open-source alternative to Claude Design. 12 coding-agent CLIs · 31 composable skills · 72 brand-grade design systems. Local-first, web-deployable, BYOK at every layer.",
     "locale": "en",
     "edition": "Vol. 01 / Issue Nº 26",
     "version": "v0.3.0",
@@ -24,7 +24,7 @@
     "year_roman": "MMXXVI",
     "founded": "Est. MMXXVI",
     "rails": {
-      "right": "Open Design — Vol. 01 · Issue Nº 26 · Apache-2.0",
+      "right": "OpenDesign — Vol. 01 · Issue Nº 26 · Apache-2.0",
       "left": "Skills · Systems · Agents · BYOK · Local-first"
     },
     "languages": ["EN", "DE", "中文", "日本語"],
@@ -40,11 +40,11 @@
   ],
 
   "rules": {
-    "about":        { "roman": "II.",   "meta": ["About / Manifesto",            "•", "Open Design / Volume 01"], "pagination": "002 / 008" },
+    "about":        { "roman": "II.",   "meta": ["About / Manifesto",            "•", "OpenDesign / Volume 01"], "pagination": "002 / 008" },
     "capabilities": { "roman": "III.",  "meta": ["Capabilities · Skills · Systems", "•", "4 surfaces / 1 loop"],   "pagination": "003 / 008" },
     "labs":         { "roman": "IV.",   "meta": ["Labs / Skills Catalog",         "•", "05 of 31 ongoing"],         "pagination": "004 / 008" },
     "method":       { "roman": "V.",    "meta": ["Method / Loop",                 "•", "04 stages, iterative"],     "pagination": "005 / 008" },
-    "work":         { "roman": "VI.",   "meta": ["Selected Work · 2026 Catalog",  "•", "Edited by Open Design"],    "pagination": "006 / 008" },
+    "work":         { "roman": "VI.",   "meta": ["Selected Work · 2026 Catalog",  "•", "Edited by OpenDesign"],    "pagination": "006 / 008" },
     "testimonial":  { "roman": "VII.",  "meta": ["Collaborators / Lineage",       "•", "Standing on shoulders"],    "pagination": "007 / 008" },
     "cta":          { "roman": "VIII.", "meta": ["Contact / Conversation",        "•", "Three commands to ship"],   "pagination": "008 / 008" }
   },
@@ -80,7 +80,7 @@
       "tl": "FIG. 01 / OD-26",
       "tr": "Plate Nº 08",
       "bl": "SHA · a1b2c3d",
-      "br": "Composed in&nbsp;<span style='color:var(--coral);'>Open Design</span>"
+      "br": "Composed in&nbsp;<span style='color:var(--coral);'>OpenDesign</span>"
     }
   },
 
@@ -104,7 +104,7 @@
     "side_note": "From model behavior<br/>to visual taste, we<br/>prototype the full<br/>stack of creative<br/>systems.",
     "caption": {
       "bold": "Studies in form · perception · machine imagination.",
-      "rest": "(Open Design, MMXXVI)"
+      "rest": "(OpenDesign, MMXXVI)"
     }
   },
 
@@ -118,7 +118,7 @@
       { "text": ".", "dot": true }
     ],
     "lead": "We blend human taste with whichever agent you already trust to ship interfaces, decks, and editorial pages that feel intentional, expressive, and alive.",
-    "ribbon": "<b>OPEN DESIGN</b> &nbsp;·&nbsp; CAPABILITIES MATRIX &nbsp;·&nbsp; OD/26",
+    "ribbon": "<b>OPENDESIGN</b> &nbsp;·&nbsp; CAPABILITIES MATRIX &nbsp;·&nbsp; OD/26",
     "cards": [
       {
         "num": "01",
@@ -179,7 +179,7 @@
     "cards": [
       { "badge": "Deck",     "num": "Nº 01", "year": "2026", "title": "Magazine Decks",     "body": "Editorial-grade slide decks with <code class='code-inline sm'>guizang-ppt</code>. Magazine layout, WebGL hero.", "href": "https://github.com/nexu-io/open-design/tree/main/skills/guizang-ppt" },
       { "badge": "Media",    "num": "Nº 02", "year": "2026", "title": "Synthetic Matter",   "body": "Gpt-image-2 + Seedance + HyperFrames. Image, video, audio — same chat surface as code.",                       "href": "https://github.com/nexu-io/open-design/tree/main/skills/hyperframes" },
-      { "badge": "Loop",     "num": "Nº 03", "year": "2026", "title": "Prompt Choreography","body": "The interactive question form pops before a single pixel is improvised. 30s of radios beats 30min of redirects.","href": "https://github.com/nexu-io/open-design/tree/main/skills/design-brief" },
+      { "badge": "Loop",     "num": "Nº 03", "year": "2026", "title": "Prompt Choreography","body": "When unresolved choices would materially change the result, a focused question form keeps the next iteration on track.","href": "https://github.com/nexu-io/open-design/tree/main/skills/design-brief" },
       { "badge": "Critique", "num": "Nº 04", "year": "2026", "title": "Visual Reasoning",   "body": "5-dim self-critique gates every artifact: philosophy · hierarchy · execution · specificity · restraint.",       "href": "https://github.com/nexu-io/open-design/tree/main/skills/critique" },
       { "badge": "Runtime",  "num": "Nº 05", "year": "2026", "title": "Soft Systems",       "body": "Sandboxed iframe preview. Streaming todos. Real-cwd filesystem. Adaptive loops between human and machine.",      "href": "https://github.com/nexu-io/open-design/tree/main/apps/daemon" }
     ],
@@ -199,7 +199,7 @@
     "right": "Every stage is iterative, visual, and research-driven — composable files, not opaque prompts.",
     "steps": [
       { "num": "01", "title": "Detect",   "body": "The daemon scans your $PATH for 12 coding agents and auto-loads 31 skills + 72 systems on boot." },
-      { "num": "02", "title": "Discover", "body": "Turn 1 is a question form — surface, audience, tone, scale, brand context. Locked in 30 seconds." },
+      { "num": "02", "title": "Discover", "body": "Clarify only when it matters — focused questions for unresolved surface, audience, tone, scale, or brand context." },
       { "num": "03", "title": "Direct",   "body": "Pick one of 5 deterministic visual directions. Palette in OKLch, font stack, layout posture cues." },
       { "num": "04", "title": "Deliver",  "body": "The agent writes to disk, you preview in a sandboxed iframe, export HTML / PDF / PPTX / ZIP / Markdown." }
     ],
@@ -243,7 +243,7 @@
     "label": "Collaborators",
     "ix": "· Nº 06",
     "quote": [
-      { "text": "Open Design helped us turn vague " },
+      { "text": "OpenDesign helped us turn vague " },
       { "text": "AI ideas", "em": true },
       { "text": " into a visual system that felt " },
       { "text": "sharp, believable,", "em": true },
@@ -276,7 +276,7 @@
     ],
     "lead": "Star us on GitHub, drop into the issues, or run <code class='code-inline'>pnpm tools-dev</code> tonight. Three commands and the loop is yours.",
     "primary": { "label": "Star on GitHub", "href": "https://github.com/nexu-io/open-design" },
-    "ribbon": "OPEN DESIGN &nbsp;·&nbsp; FIN."
+    "ribbon": "OPENDESIGN &nbsp;·&nbsp; FIN."
   },
 
   "wire": {

@@ -3,7 +3,7 @@ name: open-design-landing
 description: >
   Produce a world-class single-page editorial landing site in the
   Atelier Zero visual language (Monocle / Apartamento / Études editorial
-  collage) — the same aesthetic Open Design uses for its own marketing
+  collage) — the same aesthetic OpenDesign uses for its own marketing
   surface. The agent fills a typed `inputs.json` from a brand brief,
   optionally generates 16 collage assets via gpt-image-2, then runs a
   pure-function composer that emits a self-contained HTML file; a
@@ -122,7 +122,7 @@ Tight + Playfair Display, italic serif emphasis spans, dotted hairline
 rules, coral terminating dots, scroll-reveal motion, and 16 surreal
 collage plates.
 
-This is the canonical Open Design marketing-page recipe — the example
+This is the canonical OpenDesign marketing-page recipe — the example
 output is the very page you see at [open-design](https://github.com/nexu-io/open-design).
 
 The skill is fully **parameterized**. The agent fills one typed
@@ -185,7 +185,7 @@ The eight question groups, in order:
 | 8     | `cta` + `footer.{columns[4],mega}`                      | All         | Mega kicker is a `MixedText` like the headlines |
 
 Open [`inputs.example.json`](./inputs.example.json) for a complete
-worked example (Open Design itself).
+worked example (OpenDesign itself).
 
 ### 2. Decide the image strategy
 
@@ -281,19 +281,19 @@ Before marking done, the agent **must** verify:
 ## Files in this skill
 
 ```text
-skills/open-design-landing/
+design-templates/open-design-landing/
 ├── SKILL.md                 # this contract
 ├── README.md                # quick-start
 ├── schema.ts                # typed inputs (single source of truth)
 ├── styles.css               # Atelier Zero stylesheet (single source of truth)
-├── inputs.example.json      # Open Design as the worked example
+├── inputs.example.json      # OpenDesign as the worked example
 ├── example.html             # canonical rendering (regenerated from inputs.example.json)
 ├── scripts/
 │   ├── compose.ts           # inputs.json + styles.css → index.html
 │   ├── imagegen.ts          # gpt-image-2 wrapper (fal.ai)
 │   └── placeholder.ts       # SVG paper-textured frames
 └── assets/
-    ├── *.png                # 16 collage plates (Open Design instance)
+    ├── *.png                # 16 collage plates (OpenDesign instance)
     ├── image-manifest.json  # slot → file/dimensions/prompt mapping
     └── imagegen-prompts.md  # human-readable prompt pack
 ```
@@ -318,4 +318,4 @@ skills/open-design-landing/
 
 - [`design-systems/atelier-zero/DESIGN.md`](../../design-systems/atelier-zero/DESIGN.md) — token spec.
 - [`apps/landing-page/`](../../apps/landing-page/) — deployable Astro static counterpart.
-- [`skills/open-design-landing-deck/`](../open-design-landing-deck/) — sibling slides skill that reuses this design system.
+- [`design-templates/open-design-landing-deck/`](../open-design-landing-deck/) — sibling slides skill that reuses this design system.

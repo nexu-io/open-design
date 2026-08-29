@@ -256,9 +256,10 @@ describe('FileViewer version download actions', () => {
   ] as const)('shows a loading toast while running the version %s action', async (menuItemName, exporter) => {
     exporter.mockReturnValueOnce(new Promise(() => {}));
     const { file } = setupVersionFetch();
-    const versionDialog = await renderVersionDialog(file);
+    const currentVersion = menuItemName === 'Export as standalone HTML';
+    const versionDialog = await renderVersionDialog(file, currentVersion ? 'current' : undefined);
 
-    openVersionDownloadMenu(versionDialog);
+    openVersionDownloadMenu(versionDialog, currentVersion ? 2 : undefined);
     fireEvent.click(within(versionDialog).getByRole('menuitem', { name: menuItemName }));
 
     await waitFor(() => {
@@ -322,24 +323,13 @@ describe('FileViewer version download actions', () => {
     expect(requestPreviewSnapshotMock).not.toHaveBeenCalled();
   });
 
-  it('routes version HTML and ZIP actions through the selected version content', async () => {
+  it('hides historical HTML while routing ZIP through the selected version content', async () => {
     const { file, priorContent } = setupVersionFetch();
     const versionDialog = await renderVersionDialog(file);
 
     openVersionDownloadMenu(versionDialog);
-    fireEvent.click(within(versionDialog).getByRole('menuitem', { name: 'Export as standalone HTML' }));
+    expect(within(versionDialog).queryByRole('menuitem', { name: 'Export as standalone HTML' })).toBeNull();
 
-    await waitFor(() => {
-      expect(exportProjectAsHtmlMock).toHaveBeenCalledWith(expect.objectContaining({
-        fallbackHtml: priorContent,
-        fallbackTitle: 'index-v1',
-        filePath: 'index.html',
-        projectId: 'project-1',
-        versionId: 'v1',
-      }));
-    });
-
-    openVersionDownloadMenu(versionDialog);
     fireEvent.click(within(versionDialog).getByRole('menuitem', { name: 'Download as .zip' }));
 
     await waitFor(() => {
@@ -351,6 +341,7 @@ describe('FileViewer version download actions', () => {
         versionId: 'v1',
       }));
     });
+    expect(exportProjectAsHtmlMock).not.toHaveBeenCalled();
     expect(exportAsHtmlMock).not.toHaveBeenCalled();
     expect(exportAsZipMock).not.toHaveBeenCalled();
   });
@@ -364,7 +355,6 @@ describe('FileViewer version download actions', () => {
 
     await waitFor(() => {
       expect(exportProjectAsHtmlMock).toHaveBeenCalledWith(expect.objectContaining({
-        fallbackHtml: '<html><body><h1>Current</h1></body></html>',
         fallbackTitle: 'index',
         filePath: 'index.html',
         projectId: 'project-1',
@@ -388,17 +378,25 @@ describe('FileViewer version download actions', () => {
     expect(exportAsZipMock).not.toHaveBeenCalled();
   });
 
-  it('keeps version export popovers and feedback above the preview modal layers', () => {
+  it('keeps version export popovers and feedback above the version panel layers', () => {
     const css = readExpandedIndexCss();
-    expect(Number(cssValue(cssRule(css, '.file-version-head'), 'z-index'))).toBeGreaterThan(10);
-    expect(Number(cssValue(cssRule(css, '.file-version-download-menu.share-menu-popover'), 'z-index'))).toBeGreaterThan(
-      Number(cssValue(cssRule(css, '.file-version-preview-overlay'), 'z-index')),
-    );
-    expect(Number(cssValue(cssRule(css, '.viewer-modal-backdrop.file-version-export-backdrop.modal-backdrop'), 'z-index'))).toBeGreaterThan(
-      Number(cssValue(cssRule(css, '.file-version-backdrop.modal-backdrop'), 'z-index')),
-    );
-    expect(Number(cssValue(cssRule(css, '.od-toast.file-version-export-toast.placement-top'), 'z-index'))).toBeGreaterThan(
-      Number(cssValue(cssRule(css, '.file-version-backdrop.modal-backdrop'), 'z-index')),
-    );
+    const panelZ = Number(cssValue(cssRule(css, '.artifact-version-panel'), 'z-index'));
+    expect(panelZ).toBeGreaterThan(0);
+    // The foot popovers open *inside* the floating panel (it clips its own
+    // overflow), so they have to stack over the panel's preview-loading overlay
+    // rather than over a full-window backdrop.
+    expect(
+      Number(cssValue(
+        cssRule(
+          css,
+          '.artifact-version-panel .artifact-version-panel__popover.file-version-download-menu.share-menu-popover',
+        ),
+        'z-index',
+      )),
+    ).toBeGreaterThan(Number(cssValue(cssRule(css, '.file-version-preview-overlay'), 'z-index')));
+    // The image-export dialog and its toast are full-window layers, so they must
+    // sit above the panel itself.
+    expect(Number(cssValue(cssRule(css, '.viewer-modal-backdrop.file-version-export-backdrop.modal-backdrop'), 'z-index'))).toBeGreaterThan(panelZ);
+    expect(Number(cssValue(cssRule(css, '.od-toast.file-version-export-toast.placement-top'), 'z-index'))).toBeGreaterThan(panelZ);
   });
 });
