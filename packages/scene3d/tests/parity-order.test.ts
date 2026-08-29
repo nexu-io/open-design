@@ -5,6 +5,7 @@ import {
   isCompilerProofFrame,
   isCompilerMaterialBall,
   boundsShift,
+  materialCapabilityLosses,
 } from "../src/pipeline.js";
 
 /**
@@ -160,5 +161,67 @@ describe("boundsShift — parity asks WHERE the geometry is", () => {
     expect(boundsShift(at(null), at([1, 1, 1]))).toBeNull();
     expect(boundsShift({}, {})).toBeNull();
     expect(boundsShift(at([0, 0, 0]), at([0, 0, 0]))).toBeNull();
+  });
+});
+
+/**
+ * Material capability parity under RENAMES (the master round-trip can rename a
+ * material). The rule: a legal rename never cries a false loss, a real
+ * degradation is always reported, and a material that resolves to neither a
+ * name nor a unique signature is UNCHECKED with candidates — never silently
+ * skipped, which was a green badge over a real loss.
+ */
+describe("materialCapabilityLosses", () => {
+  const cap = (roles: Record<string, string> = {}, backfaceCulling?: boolean) => ({
+    roles,
+    ...(backfaceCulling !== undefined ? { backfaceCulling } : {}),
+  });
+
+  it("says nothing when a material kept every binding under the same name", () => {
+    const fp = { materialCaps: { gold: cap({ baseColor: "t0", normal: "t1" }) } };
+    const r = materialCapabilityLosses(fp, fp);
+    expect(r.losses).toEqual([]);
+    expect(r.unchecked).toEqual([]);
+  });
+
+  it("reports a dropped binding on a same-named material", () => {
+    const build = { materialCaps: { gold: cap({ baseColor: "t0", normal: "t1" }) } };
+    const master = { materialCaps: { gold: cap({ baseColor: "t0" }) } };
+    const r = materialCapabilityLosses(build, master);
+    expect(r.losses).toEqual(["material 'gold' texture binding(s) normal"]);
+    expect(r.unchecked).toEqual([]);
+  });
+
+  it("does NOT cry loss when a material was renamed but kept its capabilities", () => {
+    // gold -> gold.001, identical caps. A unique signature match resolves it.
+    const build = { materialCaps: { gold: cap({ baseColor: "t0", normal: "t1" }) } };
+    const master = { materialCaps: { "gold.001": cap({ baseColor: "t0", normal: "t1" }) } };
+    const r = materialCapabilityLosses(build, master);
+    expect(r.losses).toEqual([]);
+    expect(r.unchecked).toEqual([]);
+  });
+
+  it("reports a material that resolves to neither name nor unique signature as UNCHECKED", () => {
+    // gold vanished from the name set AND its caps do not uniquely match any
+    // master — renamed-and-degraded, or gone. Cannot be told apart here, so it
+    // is unchecked with candidates, never a silent pass.
+    const build = { materialCaps: { gold: cap({ baseColor: "t0", normal: "t1" }) } };
+    const master = { materialCaps: { "Material.001": cap({ baseColor: "t0" }) } };
+    const r = materialCapabilityLosses(build, master);
+    expect(r.losses).toEqual([]);
+    expect(r.unchecked).toHaveLength(1);
+    expect(r.unchecked[0]).toContain("gold");
+    expect(r.unchecked[0]).toContain("Material.001");
+  });
+
+  it("does not rescue by signature when the signature is ambiguous", () => {
+    // Two masters share the renamed material's signature — the match is not
+    // unique, so it cannot be resolved and is reported rather than guessed.
+    const build = { materialCaps: { gold: cap({ baseColor: "t0" }) } };
+    const master = {
+      materialCaps: { "a.001": cap({ baseColor: "t0" }), "b.002": cap({ baseColor: "t0" }) },
+    };
+    const r = materialCapabilityLosses(build, master);
+    expect(r.unchecked).toHaveLength(1);
   });
 });

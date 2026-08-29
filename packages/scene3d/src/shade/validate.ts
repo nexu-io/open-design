@@ -149,7 +149,9 @@ export function validateShaderSpec(
     // atlas-edge check below (grid columns × cell size vs the 16384px encode
     // boundary), which allows many small-cell frames and few large-cell ones.
     const f = doc.frames as number;
-    if (typeof f === "number" && Number.isInteger(f) && f >= 2 && Number.isInteger(Math.log2(f))) {
+    // Exact integer power-of-two test — no Math.log2, whose last ULP is not
+    // bit-identical across libm builds and here gates an accept/reject verdict.
+    if (typeof f === "number" && Number.isInteger(f) && f >= 2 && (f & (f - 1)) === 0) {
       frames = f;
     } else {
       errors.push(`${at}.frames must be a power of two ≥ 2 (power-of-two atlas grids)`);
@@ -174,7 +176,13 @@ export function validateShaderSpec(
   // would hide it. This is the SOLE upper bound on the frame count: a resource
   // fact (the encodable atlas edge), not an arbitrary number.
   if (frames > 1) {
-    const cols = 2 ** Math.ceil(Math.log2(Math.sqrt(frames)));
+    // The smallest power-of-two grid width whose square covers the frames,
+    // by exact integer doubling rather than 2 ** ceil(log2(sqrt(frames))): this
+    // feeds the 16384px accept/reject verdict, and Math.log2/Math.sqrt of an
+    // even power of two can land a last ULP either side of the boundary and
+    // flip `cols` — the atlas edge — between machines.
+    let cols = 1;
+    while (cols * cols < frames) cols *= 2;
     const atlasEdge = cols * size;
     if (atlasEdge > 16384) {
       errors.push(

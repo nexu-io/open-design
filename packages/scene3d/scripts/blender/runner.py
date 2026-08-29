@@ -4100,6 +4100,17 @@ def z_fighting_pairs(objects, pair_budget=COPLANAR_TRI_PRODUCT_CAP):
     if len(meshes) > 40:
         return [], ["scene has %d meshes, above the %d-mesh search limit" % (len(meshes), 40)]
 
+    # The EVALUATED polygon count per mesh, measured once. The gate below reads
+    # this rather than `o.data.polygons`, because the broad phase, the cost
+    # product and the coplanar test all read the evaluated mesh — a gate on the
+    # rest-cage datablock would pass a Mirror/Array whose cage is small but
+    # whose built geometry is heavy, and skip a modifier-reduced mesh as heavy
+    # when the search would have handled it. Same source, one predicate.
+    eval_faces = {}
+    for o in meshes:
+        with measured_mesh(o) as (me, _mw, _ev):
+            eval_faces[o.name] = 0 if me is None else len(me.polygons)
+
     pairs = []
     truncated = False
     heavy = set()
@@ -4111,12 +4122,12 @@ def z_fighting_pairs(objects, pair_budget=COPLANAR_TRI_PRODUCT_CAP):
         for b in meshes[i + 1:]:
             if not aabb_overlap(a, b):
                 continue
-            if len(a.data.polygons) > 1500 or len(b.data.polygons) > 1500:
+            if eval_faces[a.name] > 1500 or eval_faces[b.name] > 1500:
                 # Name BOTH when both are over: reporting one hides half the
                 # reason the pair went unexamined.
-                if len(a.data.polygons) > 1500:
+                if eval_faces[a.name] > 1500:
                     heavy.add(a.name)
-                if len(b.data.polygons) > 1500:
+                if eval_faces[b.name] > 1500:
                     heavy.add(b.name)
                 continue
             # The triangulated-face-product cap lives HERE, where there is a
@@ -4519,9 +4530,14 @@ def render_scale_guard(scene):
     snapshotted and restored, rather than re-derived by scaling back (which
     would leave float residue on every transform in the file).
 
-    Lamp power scales with k^2. Distances scale by k, so irradiance falls by
-    k^2; without the compensation a rescaled scene renders at a completely
-    different exposure than the one the lighting was calibrated for.
+    A POSITIONED lamp's power scales with k^2. Distances scale by k, so its
+    irradiance falls by k^2; without the compensation a rescaled scene renders
+    at a completely different exposure than the one the lighting was calibrated
+    for. A DIRECTIONAL lamp (SUN) is the exception: its energy is irradiance,
+    independent of distance, so it is left untouched — scaling it would blow the
+    scene out by k^2. The default staging light is a sun, so this exception is
+    what a bare out-of-band import depends on. (The calibration below was
+    measured on the declarative AREA key, where the k^2 is correct.)
 
     Lamp SHAPE needs no compensation, which is worth recording because it
     reads like an omission: an area light's `data.size` is unchanged by the
@@ -4550,8 +4566,17 @@ def render_scale_guard(scene):
     center = (lo + hi) / 2.0
     objects = list(scene.objects)
     saved_matrices = [(o, o.matrix_world.copy()) for o in objects]
+    # DIRECTIONAL lamps are excluded: a SUN's `energy` is irradiance (W/m^2),
+    # delivered the same at every distance, so a similarity rescale leaves its
+    # contribution unchanged — scaling it by k^2 would render a 0.5mm import's
+    # sun at 4,000,000x and blow every frame white, the exact failure this
+    # guard exists to prevent. Only lamps with a distance term (POINT/AREA/
+    # SPOT), whose irradiance falls as distance^2, need the k^2 compensation.
+    # The staging light (ensure_staging) and the material-ball key are both
+    # SUNs, so this path is reached by every out-of-band bare import.
     saved_energies = [(o, o.data.energy) for o in objects
-                      if o.type == "LIGHT" and hasattr(o.data, "energy")]
+                      if o.type == "LIGHT" and hasattr(o.data, "energy")
+                      and getattr(o.data, "type", None) != "SUN"]
 
     about_centre = (mathutils.Matrix.Translation(center)
                     @ mathutils.Matrix.Scale(k, 4)

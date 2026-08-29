@@ -3268,6 +3268,21 @@ function emitMasterParity(lowering: LoweringRecord | null | undefined, issues: I
         file: lowering.master ?? "scene.usda",
       });
     }
+    // Materials the master could not be matched to by name OR unique content
+    // signature — vanished, or renamed and degraded, which cannot be told apart
+    // without the importer's rename rule. Reported UNCHECKED, never skipped, so
+    // a capability the master silently dropped does not read as verified.
+    for (const note of materialCapabilityLosses(
+      lowering.buildFingerprint,
+      lowering.masterFingerprint,
+    ).unchecked) {
+      issues.push({
+        code: ISSUE_CODES.MASTER_UNCHECKED,
+        severity: "warning",
+        message: `${note} — its texture bindings could not be checked across lowering`,
+        file: lowering.master ?? "scene.usda",
+      });
+    }
     const shift = boundsShift(lowering.buildFingerprint, lowering.masterFingerprint);
     if (shift) {
       issues.push({
@@ -3380,10 +3395,20 @@ export function orderDrifts(build: Fingerprint, master: Fingerprint): string[] {
 }
 
 /**
- * What the build had that the master does not — the losses that make a
- * master non-total. Names are compared as SETS (importer round-trips can
- * legally suffix or sanitise), counts as totals with tolerance for the
- * triangulation differences an interchange round-trip introduces.
+ * What the build had that the master does not — the losses that make a master
+ * non-total.
+ *
+ * Meshes, armatures, bones, actions and morphs are compared by COUNT, not by
+ * name set: the importer round-trip can legally rename or suffix an entity
+ * (`gold` → `gold.001`, a sanitised prim path), so a name-set difference would
+ * cry a false loss on every legal rename. A net count DROP is an unambiguous
+ * loss; a one-for-one substitution that preserves the count is a blindspot a
+ * count cannot see, closed only by the identity-matching ladder these entity
+ * types do not yet run (materials do — see `materialCapabilityLosses`).
+ *
+ * Material CAPABILITIES are matched by name, then by unique content signature,
+ * and what resolves to neither is reported UNCHECKED rather than skipped, so a
+ * renamed-and-degraded material cannot pass wearing the count's green badge.
  */
 export function fingerprintLosses(build: Fingerprint, master: Fingerprint): string[] {
   const losses: string[] = [];
@@ -3430,7 +3455,7 @@ export function fingerprintLosses(build: Fingerprint, master: Fingerprint): stri
   if (masterMorphs < buildMorphs) {
     losses.push(`${buildMorphs - masterMorphs} of ${buildMorphs} morph target(s)`);
   }
-  losses.push(...materialCapabilityLosses(build, master));
+  losses.push(...materialCapabilityLosses(build, master).losses);
   return losses;
 }
 
@@ -3443,16 +3468,49 @@ export function fingerprintLosses(build: Fingerprint, master: Fingerprint): stri
  * per material and per role because "the helmet lost its occlusion map" is a
  * fact somebody can act on, while "materials differ" is not.
  */
-function materialCapabilityLosses(build: Fingerprint, master: Fingerprint): string[] {
+/** A material's capability content, independent of its NAME — the sorted role
+ *  set plus its flags. Two materials with the same signature carry the same
+ *  bindings, so a signature match across a rename is a match with its caps
+ *  intact, verified. */
+function capabilitySignature(cap: MaterialCapability): string {
+  const roles = Object.entries(cap.roles ?? {})
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([role, tex]) => `${role}=${tex}`);
+  return JSON.stringify([roles, cap.backfaceCulling ?? null]);
+}
+
+/**
+ * Texture bindings and sidedness the master lost, and materials it could not
+ * account for.
+ *
+ * The master round-trip can RENAME a material (`gold` → `gold.001`, or a
+ * sanitised prim name), so an exact-name miss is not proof the material
+ * vanished — comparing by name alone would either cry a false loss on every
+ * legal rename or, as it did, silently skip the renamed material and pass a
+ * real degradation with a green badge. Neither is allowed: a check never exits
+ * without a verdict, and a relaxation is never a suppression.
+ *
+ * A material with no exact-name master is resolved by CONTENT SIGNATURE first:
+ * a legal rename keeps its caps, so a uniquely-matching signature IS this
+ * material under a new name, and its capabilities are verified intact. Only a
+ * material that matches no name AND no unique signature is genuinely
+ * unaccounted for — a vanished material, or one renamed AND degraded, which
+ * cannot be told apart without the importer's exact rename rule. That is
+ * reported UNCHECKED with its candidates, never dropped.
+ */
+export function materialCapabilityLosses(
+  build: Fingerprint,
+  master: Fingerprint,
+): { losses: string[]; unchecked: string[] } {
   const losses: string[] = [];
+  const unchecked: string[] = [];
   const buildCaps = build.materialCaps ?? {};
   const masterCaps = master.materialCaps ?? {};
   // Absent on BOTH sides means a runner that predates the field, not a total
   // wipe — say nothing rather than invent a loss for every older cache entry.
-  if (Object.keys(buildCaps).length === 0) return losses;
-  for (const [name, buildCap] of Object.entries(buildCaps)) {
-    const masterCap = masterCaps[name];
-    if (!masterCap) continue; // the material itself vanished; counted above.
+  if (Object.keys(buildCaps).length === 0) return { losses, unchecked };
+
+  const diff = (name: string, buildCap: MaterialCapability, masterCap: MaterialCapability) => {
     const dropped = Object.keys(buildCap.roles ?? {}).filter(
       (role) => !(masterCap.roles ?? {})[role],
     );
@@ -3464,6 +3522,39 @@ function materialCapabilityLosses(build: Fingerprint, master: Fingerprint): stri
     if (buildCap.backfaceCulling === true && masterCap.backfaceCulling === false) {
       losses.push(`material '${name}' single-sidedness (came back two-sided)`);
     }
+  };
+
+  // Master materials not yet bound to a build material, for the signature
+  // rescue and the candidate list.
+  const freeMasters = new Set(Object.keys(masterCaps));
+  const masterSig = new Map<string, string>();
+  for (const [m, cap] of Object.entries(masterCaps)) masterSig.set(m, capabilitySignature(cap));
+
+  for (const [name, buildCap] of Object.entries(buildCaps)) {
+    if (masterCaps[name]) {
+      diff(name, buildCap, masterCaps[name]!);
+      freeMasters.delete(name);
+      continue;
+    }
+    // No exact-name master. A rename keeps its caps, so a UNIQUE signature
+    // match among the still-free masters is this material, verified intact.
+    const sig = capabilitySignature(buildCap);
+    const matches = [...freeMasters].filter((m) => masterSig.get(m) === sig);
+    if (matches.length === 1) {
+      freeMasters.delete(matches[0]!);
+      continue;
+    }
+    // Name gone, no unique cap-identical master: vanished, or renamed AND
+    // degraded. Which one cannot be decided without the importer's rename
+    // rule, so it is UNCHECKED — with candidates, so a reader can verify — not
+    // silently skipped and not a possibly-false loss.
+    const candidates = [...freeMasters].sort();
+    unchecked.push(
+      candidates.length > 0
+        ? `material '${name}' has no counterpart of its name in the master; ` +
+          `candidates by content: ${candidates.map((c) => `'${c}'`).join(", ")}`
+        : `material '${name}' has no counterpart in the master`,
+    );
   }
-  return losses;
+  return { losses, unchecked };
 }

@@ -311,6 +311,60 @@ describe.skipIf(!hasBlender)("FINDINGS2 mechanisms (real Blender)", () => {
     expect(r.ok).toBe(true);
   }, 400_000);
 
+  /* ---- the scale guard leaves directional lamps alone -------------- */
+
+  it("does not blow out an out-of-band bare import lit by the staging sun", async () => {
+    /*
+     * A bare import (no authored camera or light) gets the staging SUN, and a
+     * scene outside the renderer's resolvable band gets similarity-rescaled so
+     * it photographs at all. The rescale compensated EVERY lamp's energy by
+     * k^2 — correct for a positioned lamp whose irradiance falls with distance,
+     * but a SUN is directional: its energy is irradiance, scale-invariant. A
+     * 0.5mm asset (k=2000) had its sun scaled by 4,000,000x and rendered pure
+     * white — the exact black/blown failure the guard exists to prevent.
+     *
+     * The assertion is a MEASURED proof: the frames are lit and legible, not
+     * blown to a flat white field.
+     */
+    const dir = mkProject({
+      "scene3d.json": JSON.stringify({
+        schemaVersion: 1,
+        conventions: { naming: { forbidDefaultNames: false } },
+      }),
+      "build.py": [
+        "import bpy",
+        "for o in list(bpy.data.objects): bpy.data.objects.remove(o, do_unlink=True)",
+        "# A 0.5mm cube: far below the renderer's 2mm floor, so the scale guard",
+        "# fires and rescales by ~2000x (k=2000).",
+        "bpy.ops.mesh.primitive_cube_add(size=0.0005, location=(0, 0, 0.00025))",
+        "bpy.context.object.name = 'prp_grain'",
+        "# A SUN, as the staging rig uses for a bare import. Its energy is",
+        "# irradiance and must survive the rescale untouched; scaling it by k^2",
+        "# would blow the frame to white.",
+        "_sun = bpy.data.lights.new('lgt_sun', type='SUN')",
+        "_sun.energy = 3.0",
+        "_o = bpy.data.objects.new('lgt_sun', _sun)",
+        "bpy.context.collection.objects.link(_o)",
+        "_o.rotation_euler = (0.6, 0.2, 0.8)",
+        "",
+      ].join(String.fromCharCode(10)),
+    });
+    const r = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "proof"],
+      proof: { turntable: false },
+      noCache: true,
+      timeoutMs: LONG,
+    });
+    const frame = (r.manifest?.proofFrames ?? [])[0];
+    expect(frame, "the tiny import must render a proof frame").toBeTruthy();
+    // Not blown: a k^2-scaled sun drives blownRatio to ~1.0 (every lit pixel
+    // near white). A correctly-untouched sun leaves the frame legible.
+    expect(frame!.blownRatio ?? 0).toBeLessThan(0.6);
+    // And actually lit — the guard did not crush it either.
+    expect(frame!.meanLuminance ?? 0).toBeGreaterThan(0.01);
+  }, 400_000);
+
   /* ---- the census measures the mesh that ships --------------------- */
 
   it("measures the EVALUATED mesh, not the rest-cage datablock", async () => {
