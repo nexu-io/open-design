@@ -10,9 +10,10 @@
  * lets the host advance / rewind slides without relying on the iframe
  * having keyboard focus. The host posts:
  *   { type: 'od:slide', action: 'next' | 'prev' | 'first' | 'last' | 'go', index?: number }
- * and the iframe responds with:
- *   { type: 'od:slide-state', active: number, count: number }
- * after every navigation so the host can render its own counter / dots.
+ * A v1-native artifact first announces `od:deck-ready`, then responds after
+ * every navigation with versioned `od:slide-state` events so the host can
+ * render its own counter / dots. Persisted legacy decks remain supported by
+ * the injected keyboard/hash/DOM adapters below.
  */
 import {
   DECK_EXPLICIT_SLIDE_SELECTOR,
@@ -22,6 +23,10 @@ import {
   DECK_STRUCTURED_SLIDE_SELECTOR,
   injectDeckStageFallback,
 } from '@open-design/contracts/runtime/deck-stage-fallback';
+import {
+  DECK_PROTOCOL_VERSION,
+  DECK_READY_MESSAGE_TYPE,
+} from '@open-design/contracts/runtime/deck-protocol';
 import {
   buildPreviewBaseHrefBridge,
   buildPreviewObservabilityBridge,
@@ -2929,6 +2934,12 @@ function injectDeckBridge(
     : 0;
   const hasInlineSlideMessageListener =
     /addEventListener\s*\(\s*['"]message['"]/i.test(doc) && /\bod:slide\b/.test(doc);
+  const artifactDeckProtocolVersion = new RegExp(
+    `\\bdata-od-deck-protocol\\s*=\\s*['"]${DECK_PROTOCOL_VERSION}['"]`,
+    'i',
+  ).test(doc)
+    ? DECK_PROTOCOL_VERSION
+    : 0;
   const hasInlineKeydownListener = !!options.artifactHasKeydownNavigation;
   const hasInlineHashNavigation =
     /(?:hashchange|onhashchange)/i.test(doc) && /location\.hash/i.test(doc);
@@ -3579,6 +3590,8 @@ function injectDeckBridge(
   // deferred artifact handler still runs afterwards, advancing a second time
   // and desyncing the artifact's internal index from the visible slide.
   var KEY_PROBE_WINDOW_MS = 48;
+  var KEYBOARD_UNLOCK_TIMEOUT_MS = 600;
+  var KEYBOARD_UNLOCK_RETRY_MS = 40;
   var DIRECT_INDEX_UNLOCK_TIMEOUT_MS = 1500;
   var preferredKeyTarget = null;
   var odNavigationSequence = 0;
@@ -3662,16 +3675,33 @@ function injectDeckBridge(
   }
   function stepToIndexViaKeys(target, navigationSequence, onDone){
     var guard = slides().length + 4;
+    var unlockDeadline = 0;
     function isCurrent(){ return navigationSequence === odNavigationSequence; }
     function step(){
       if (!isCurrent()) return;
       var current = activeIndex(slides());
       if (current === target) { onDone(true); return; }
       if (guard <= 0) { onDone(false); return; }
-      guard -= 1;
       goViaArtifactKeys(target > current ? 'ArrowRight' : 'ArrowLeft', function(moved){
         if (!isCurrent()) return;
-        if (!moved) { onDone(false); return; }
+        if (!moved) {
+          // A target that moved the deck on an earlier step is available but
+          // may be temporarily rejecting keys during an authored transition.
+          // Retry that same remaining step briefly before falling through to
+          // direct-index/DOM navigation, which would desynchronize private
+          // artifact state from the visible canvas.
+          if (preferredKeyTarget) {
+            if (!unlockDeadline) unlockDeadline = Date.now() + KEYBOARD_UNLOCK_TIMEOUT_MS;
+            if (Date.now() < unlockDeadline) {
+              setTimeout(function(){ if (isCurrent()) step(); }, KEYBOARD_UNLOCK_RETRY_MS);
+              return;
+            }
+          }
+          onDone(false);
+          return;
+        }
+        unlockDeadline = 0;
+        guard -= 1;
         step();
       }, isCurrent);
     }
@@ -3777,12 +3807,18 @@ function injectDeckBridge(
     if (navigateViaDeckStage(list, 'go', target)) return;
     if (isScrollDeck(list)) { scrollGo(target); return; }
     if (activeIndex(list) === target) { report(); return; }
-    goViaArtifactIndex(target, navigationSequence, function(moved){
+    // A thumbnail selection and the footer prev/next controls must enter the
+    // artifact through the same navigation path. Trying nav dots/hash routes
+    // first makes an otherwise keyboard-responsive deck wait out the direct
+    // index retry deadline before the bridge finally dispatches the keys that
+    // the footer uses immediately. Keep direct-index navigation as a fallback
+    // for dot/hash-only decks, but prefer the proven keyboard path.
+    stepToIndexViaKeys(target, navigationSequence, function(stepped){
       if (navigationSequence !== odNavigationSequence) return;
-      if (moved) { report(); return; }
-      stepToIndexViaKeys(target, navigationSequence, function(stepped){
+      if (stepped) { report(); return; }
+      goViaArtifactIndex(target, navigationSequence, function(moved){
         if (navigationSequence !== odNavigationSequence) return;
-        if (stepped) { report(); return; }
+        if (moved) { report(); return; }
         var now = slides();
         if (canSetActive(now) && setActive(target)) return;
         if (transformGo(target)) return;
@@ -3884,7 +3920,8 @@ function injectDeckBridge(
   }
   var odSlideMessageBeforeIndex = -1;
   var odDeckBridgeInstallingMessageListener = false;
-  var odHasExternalSlideMessageListener = ${JSON.stringify(hasInlineSlideMessageListener)};
+  var odDeckProtocolVersion = ${artifactDeckProtocolVersion};
+  var odHasExternalSlideMessageListener = ${JSON.stringify(hasInlineSlideMessageListener)} || odDeckProtocolVersion === ${DECK_PROTOCOL_VERSION};
   function odMaybeHandlesSlideMessages(listener) {
     try {
       var source = '';
@@ -3929,7 +3966,19 @@ function injectDeckBridge(
   }
   addOdSlideMessageListener(function(ev){
     var data = ev && ev.data;
-    if (!data || data.type !== 'od:slide') return;
+    if (!data || data.type !== ${JSON.stringify(DECK_READY_MESSAGE_TYPE)}) return;
+    if (data.protocolVersion !== ${DECK_PROTOCOL_VERSION}) return;
+    odDeckProtocolVersion = ${DECK_PROTOCOL_VERSION};
+    odHasExternalSlideMessageListener = true;
+  });
+  function odIsSupportedSlideMessage(data) {
+    return !!data &&
+      data.type === 'od:slide' &&
+      (data.protocolVersion == null || data.protocolVersion === ${DECK_PROTOCOL_VERSION});
+  }
+  addOdSlideMessageListener(function(ev){
+    var data = ev && ev.data;
+    if (!odIsSupportedSlideMessage(data)) return;
     var before = activeIndex(slides());
     odSlideMessageBeforeIndex = before;
     setTimeout(function(){
@@ -3938,7 +3987,7 @@ function injectDeckBridge(
   }, true);
   addOdSlideMessageListener(function(ev){
     var data = ev && ev.data;
-    if (!data || data.type !== 'od:slide') return;
+    if (!odIsSupportedSlideMessage(data)) return;
     // Every newer host intent cancels an older multi-step jump, including a
     // request for the slide that is CURRENTLY visible. The older jump may not
     // have dispatched its first accepted key yet (the artifact can register on

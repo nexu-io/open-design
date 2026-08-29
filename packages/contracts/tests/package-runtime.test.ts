@@ -41,6 +41,12 @@ describe('@open-design/contracts package runtime shape', () => {
     expect(pkg.exports?.['./runtime/deck-stage-fallback']?.types).toBe(
       './dist/runtime/deck-stage-fallback.d.ts',
     );
+    expect(pkg.exports?.['./runtime/deck-protocol']?.default).toBe(
+      './dist/runtime/deck-protocol.mjs',
+    );
+    expect(pkg.exports?.['./runtime/deck-protocol']?.types).toBe(
+      './dist/runtime/deck-protocol.d.ts',
+    );
     expect(pkg.exports?.['./api/handoff']?.default).toBe('./dist/api/handoff.mjs');
     expect(pkg.exports?.['./api/handoff']?.types).toBe('./dist/api/handoff.d.ts');
     expect(pkg.exports?.['./critique']?.default).toBe('./dist/critique.mjs');
@@ -68,6 +74,7 @@ describe('@open-design/contracts package runtime shape', () => {
     const handoff = await import('@open-design/contracts/api/handoff');
     const critique = await import('@open-design/contracts/critique');
     const deckStageFallback = await import('@open-design/contracts/runtime/deck-stage-fallback');
+    const deckProtocol = await import('@open-design/contracts/runtime/deck-protocol');
 
     expect(contracts.composeSystemPrompt).toEqual(expect.any(Function));
     expect(contracts.exampleHealthResponse).toEqual({ ok: true, service: 'daemon' });
@@ -86,6 +93,11 @@ describe('@open-design/contracts package runtime shape', () => {
     expect(connectionTest.isBlockedExternalApiHostname).toEqual(expect.any(Function));
     expect(research.RESEARCH_DEFAULT_MAX_SOURCES.shallow).toBe(5);
     expect(deckStageFallback.injectDeckStageFallback).toEqual(expect.any(Function));
+    expect(deckProtocol.DECK_PROTOCOL_VERSION).toBe(1);
+    expect(deckProtocol.DECK_PROTOCOL_V1_CAPABILITIES).toEqual([
+      'absolute-navigation',
+      'state-events',
+    ]);
     // The handoff DTO module is interface-only except for HANDOFF_SCHEMA_VERSION,
     // which exists precisely so esbuild emits a real `.mjs` and NodeNext
     // consumers can resolve the subpath. Importing it through the package

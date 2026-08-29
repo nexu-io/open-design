@@ -267,6 +267,18 @@ async function checkResidualJavaScript(): Promise<boolean> {
   return true;
 }
 
+export async function checkRootPackageManagerLockfiles(root: string = repoRoot): Promise<boolean> {
+  const entries = await readdir(root);
+  if (entries.includes("bun.lock")) {
+    console.error("Unexpected root bun.lock found.");
+    console.error("pnpm-lock.yaml is the repository's only dependency lockfile; remove bun.lock.");
+    return false;
+  }
+
+  console.log("Root package-manager lockfile check passed: no bun.lock found.");
+  return true;
+}
+
 const sourcePackageManifestRootPaths = ["package.json", "e2e/package.json"];
 const sourcePackageManifestScopedDirectories = ["apps", "packages", "tools"];
 const packageDependencySections = [
@@ -1147,7 +1159,7 @@ const hardcodedColorAllowlist: StylePolicyAllowlistEntry[] = [
     reason: "global token definitions, shadows, overlays, and retained migration inventory live in the CSS source of truth",
   },
   {
-    pathPattern: /^apps\/web\/src\/components\/(?:AgentIcon|PaletteTweaks|PetSettings|SettingsDialog)\.tsx$/,
+    pathPattern: /^apps\/web\/src\/components\/(?:AgentIcon|PetSettings|SettingsDialog)\.tsx$/,
     valuePattern: /^(?:#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\))$/,
     reason: "brand accents, user accent choices, and legacy token fallbacks are classified as Phase 1 migration inventory",
   },
@@ -1479,6 +1491,7 @@ async function checkRunStartChokePoint(): Promise<boolean> {
 
 const checks: GuardCheck[] = [
   { name: "residual JavaScript", run: checkResidualJavaScript },
+  { name: "root package-manager lockfile", run: ({ repoRoot: root }) => checkRootPackageManagerLockfiles(root) },
   { name: "package dependency specs", run: checkPackageDependencySpecs },
   { name: "product neutrality", run: checkProductNeutrality },
   { name: "cross-app imports", run: checkCrossAppImportsOnce },

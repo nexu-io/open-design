@@ -5,17 +5,9 @@
  * When the canonical example.html changes, mirror the diff here so the
  * template's known-good rendering stays in lockstep with the deployed site.
  *
- * Fonts are self-hosted via `@fontsource-variable/*` packages. The variable
- * font files (one woff2 per family, ~30-50KB each) cover the entire
- * weight axis we use, are served same-origin (no Google Fonts CSS or
- * fonts.gstatic.com TLS handshake), and ship through CF's edge — PageSpeed
- * was attributing ~2.3s of render-blocking + LCP to the old Google Fonts
- * round-trip chain.
- *
- * Subset CSS files only declare @font-face metadata (~1KB each). The
- * browser downloads the woff2 that matches the unicode-range of text it's
- * about to render, so multi-script support stays intact without paying for
- * unused scripts up front.
+ * Fonts are self-hosted from `public/skill-assets`. Albert Sans uses one
+ * variable WOFF2 file per style to cover the full weight axis, served
+ * same-origin through Cloudflare's edge without a Google Fonts round trip.
  */
 @font-face {
   font-family: 'Albert Sans';
