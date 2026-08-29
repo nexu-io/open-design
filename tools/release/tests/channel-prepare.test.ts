@@ -140,6 +140,29 @@ async function writeFakeGhScript(root: string): Promise<string> {
   return scriptPath;
 }
 
+/**
+ * Hermetic stand-in for the repository's `open-design-v*` tags. The prepare
+ * scripts derive the latest-stable floor from `git tag --list`, so without
+ * this the tests depend on whatever tags the local clone happens to have —
+ * green on tagless CI checkouts, permanently red on any developer clone once
+ * real stable tags advance past main's package version. `GIT_DIR` redirects
+ * the spawned scripts' git to a throwaway repo holding exactly the tags the
+ * test declares.
+ */
+async function createHermeticTagRepoEnv(stableTags: string[]): Promise<Record<string, string>> {
+  const gitRoot = await mkdtemp(join(tmpdir(), "od-tools-release-tags-"));
+  await execFileAsync("git", ["init", "--quiet"], { cwd: gitRoot });
+  await execFileAsync(
+    "git",
+    ["-c", "user.email=channel-prepare@test", "-c", "user.name=channel-prepare", "commit", "--allow-empty", "--quiet", "-m", "seed"],
+    { cwd: gitRoot },
+  );
+  for (const tag of stableTags) {
+    await execFileAsync("git", ["tag", tag], { cwd: gitRoot });
+  }
+  return { GIT_DIR: join(gitRoot, ".git") };
+}
+
 async function readPackagedVersion(): Promise<string> {
   const packageJson = JSON.parse(await readFile(packagedPackageJsonPath, "utf8")) as { version?: unknown };
   if (typeof packageJson.version !== "string" || packageJson.version.length === 0) {
@@ -224,9 +247,7 @@ describe("tools-release local channel prepare validation", () => {
     const packagedVersion = await readPackagedVersion();
     const objects: Record<string, unknown> = {
       "beta/latest/metadata.json": countedMetadata("beta", "0.10.0-beta.2", 2),
-      "betas/latest/metadata.json": countedMetadata("betas", "0.10.0-betas.2", 2),
       "prerelease/latest/metadata.json": countedMetadata("prerelease", "0.10.1-prerelease.2", 2, "0.10.1"),
-      "preview/latest/metadata.json": countedMetadata("preview", "0.10.0-preview.2", 2),
       "stable/latest/metadata.json": {
         baseVersion: "0.9.0",
         channel: "stable",
@@ -245,6 +266,9 @@ describe("tools-release local channel prepare validation", () => {
         OPEN_DESIGN_GH_NODE_SCRIPT: fakeGh,
         OPEN_DESIGN_STABLE_METADATA_URL: `${server.origin}/stable/latest/metadata.json`,
         OPEN_DESIGN_STABLE_VERSION: packagedVersion,
+        // Matches the stable fixture metadata above and keeps the tag-derived
+        // latest-stable floor below any real packaged version.
+        ...(await createHermeticTagRepoEnv(["open-design-v0.9.0"])),
       };
 
       const beta = await runPrepare("beta", {
@@ -256,25 +280,6 @@ describe("tools-release local channel prepare validation", () => {
       expect(beta.outputs.release_version).toBe(`${packagedVersion}-beta.1`);
       expect(beta.outputs.release_number).toBe("1");
       expect(beta.outputs.beta_version).toBe(`${packagedVersion}-beta.1`);
-
-      const betas = await runPrepare("betas", {
-        ...commonEnv,
-        GITHUB_REF_NAME: "main",
-        OPEN_DESIGN_BETAS_METADATA_URL: `${server.origin}/betas/latest/metadata.json`,
-      });
-      expect(betas.stdout).toContain("[release-betas] channel: betas");
-      expect(betas.outputs.release_version).toBe(`${packagedVersion}-betas.1`);
-      expect(betas.outputs.release_number).toBe("1");
-
-      const preview = await runPrepare("preview", {
-        ...commonEnv,
-        GITHUB_REF_NAME: "main",
-        OPEN_DESIGN_PREVIEW_METADATA_URL: `${server.origin}/preview/latest/metadata.json`,
-        OPEN_DESIGN_PREVIEW_VERSION: packagedVersion,
-      });
-      expect(preview.stdout).toContain("[release-preview] channel: preview");
-      expect(preview.outputs.release_version).toBe(`${packagedVersion}-preview.1`);
-      expect(preview.outputs.release_number).toBe("1");
 
       const prerelease = await runPrepare("prerelease", {
         ...commonEnv,
@@ -318,59 +323,6 @@ describe("tools-release local channel prepare validation", () => {
       expect(beta.outputs.force).toBe("true");
       expect(beta.outputs.release_version).toBe(`${packagedVersion}-beta.1`);
       expect(beta.outputs.release_number).toBe("1");
-    } finally {
-      await server.close();
-    }
-  });
-
-  it("prepares preview from the packaged version when branch and explicit version are absent", async () => {
-    const packagedVersion = await readPackagedVersion();
-    const objects: Record<string, unknown> = {
-      "preview/latest/metadata.json": countedMetadata("preview", "0.10.0-preview.2", 2),
-    };
-    const server = await startMetadataServer(objects);
-
-    try {
-      const preview = await runPrepare("preview", {
-        GITHUB_REF_NAME: "main",
-        GITHUB_REPOSITORY: "nexu-io/open-design",
-        GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
-        OPEN_DESIGN_PREVIEW_METADATA_URL: `${server.origin}/preview/latest/metadata.json`,
-      });
-
-      expect(preview.stdout).toContain(`[release-preview] base version: ${packagedVersion}`);
-      expect(preview.outputs.release_version).toBe(`${packagedVersion}-preview.1`);
-    } finally {
-      await server.close();
-    }
-  });
-
-  it("treats a 403 betas latest response as a cold-start missing metadata object", async () => {
-    const packagedVersion = await readPackagedVersion();
-    const objects: Record<string, unknown> = {
-      "stable/latest/metadata.json": {
-        baseVersion: "0.10.1",
-        channel: "stable",
-        releaseVersion: "0.10.1",
-        stableVersion: "0.10.1",
-      },
-    };
-    const server = await startMetadataServer(objects, {
-      "betas/latest/metadata.json": 403,
-    });
-
-    try {
-      const betas = await runPrepare("betas", {
-        GITHUB_REF_NAME: "main",
-        GITHUB_REPOSITORY: "nexu-io/open-design",
-        GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
-        OPEN_DESIGN_BETAS_METADATA_URL: `${server.origin}/betas/latest/metadata.json`,
-        OPEN_DESIGN_STABLE_METADATA_URL: `${server.origin}/stable/latest/metadata.json`,
-      });
-
-      expect(betas.stdout).toContain("betas metadata.json: not found; using betas.0 fallback");
-      expect(betas.outputs.release_version).toBe(`${packagedVersion}-betas.1`);
-      expect(betas.outputs.release_number).toBe("1");
     } finally {
       await server.close();
     }

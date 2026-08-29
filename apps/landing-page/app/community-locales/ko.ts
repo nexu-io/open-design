@@ -2,15 +2,15 @@ import type { DeepPartial, CommunityCopy } from '../community-i18n';
 
 const ko: DeepPartial<CommunityCopy> = {
   hub: {
-    title: '커뮤니티 — Open Design',
-    desc: 'Open Design 커뮤니티: 공개적으로 작업물을 내놓는 기여자, 지역 아틀리에를 여는 앰버서더, 그리고 Discord의 온기를 지키는 모더레이터.',
+    title: '커뮤니티 — OpenDesign',
+    desc: 'OpenDesign 커뮤니티: 공개적으로 작업물을 내놓는 기여자, 지역 아틀리에를 여는 앰버서더, 그리고 Discord의 온기를 지키는 모더레이터.',
     heroTitle: '오픈 디자인은 당신이 내놓을 때<br/><em>모양을 갖춥니다</em>.',
     heroLead:
-      'Open Design은 사람들이 공개적으로 만들어 갑니다. Skill, DESIGN.md 시스템, 플러그인, 문서: 모든 커밋이 하나의 붓질입니다. 아래에서 문 하나를 고르고, 당신의 방을 찾으세요.',
+      'OpenDesign은 사람들이 공개적으로 만들어 갑니다. Skill, DESIGN.md 시스템, 플러그인, 문서: 모든 커밋이 하나의 붓질입니다. 아래에서 문 하나를 고르고, 당신의 방을 찾으세요.',
     cardMetaH: '첫 머지 때 자동 발행',
     cardMetaS: 'PNG · X에 공유',
     cardHeroAlt:
-      'Open Design 기여자 명예 카드 — @dev-kp-eloper, 상위 99.9%, Giotto 등급',
+      'OpenDesign 기여자 명예 카드 — @dev-kp-eloper, 상위 99.9%, Giotto 등급',
     cards: [
       {
         ord: 'I',
@@ -21,7 +21,7 @@ const ko: DeepPartial<CommunityCopy> = {
       {
         ord: 'II',
         title: '앰버서더',
-        sub: '당신의 도시에서 Open Design의 <em>목소리</em>.',
+        sub: '당신의 도시에서 OpenDesign의 <em>목소리</em>.',
         body: '지역 아틀리에를 여세요. 밋업, 데모, 밤늦은 크리틱을 소집하세요. 예산, 자료, 그리고 코어 팀으로 이어지는 비공개 채널로 뒷받침합니다.',
       },
       {
@@ -33,14 +33,14 @@ const ko: DeepPartial<CommunityCopy> = {
     ],
   },
   contributors: {
-    title: '기여자 — Open Design',
-    desc: 'Open Design에 기여하세요: 메인테이너, 주간 및 역대 기여자 리더보드, good first issue, 그리고 첫 작품을 내놓을 수 있는 노코드 경로.',
+    title: '기여자 — OpenDesign',
+    desc: 'OpenDesign에 기여하세요: 메인테이너, 주간 및 역대 기여자 리더보드, good first issue, 그리고 첫 작품을 내놓을 수 있는 노코드 경로.',
     heroTitle: '작업물을 <em>내놓는</em> 손들.',
     heroLead:
-      'Open Design은 사람들이 공개적으로 만들어 갑니다. Skill, DESIGN.md 시스템, 플러그인, 문서: 모든 커밋이 하나의 붓질입니다. 이슈를 고르고, PR을 보내고, 머지되는 순간 세상에 단 하나뿐인 명예 카드를 받으세요.',
+      'OpenDesign은 사람들이 공개적으로 만들어 갑니다. Skill, DESIGN.md 시스템, 플러그인, 문서: 모든 커밋이 하나의 붓질입니다. 이슈를 고르고, PR을 보내고, 머지되는 순간 세상에 단 하나뿐인 명예 카드를 받으세요.',
     showcase: {
       kicker: '무엇이든 플러그인',
-      h2: '무대로서의 Open Design. 공연으로서의 <em>당신의 작업</em>.',
+      h2: '무대로서의 OpenDesign. 공연으로서의 <em>당신의 작업</em>.',
       intro:
         '아틀리에는 갤러리이기도 합니다. 작업을 만들도록 돕는 것이 절반이고, 그 방을 사람들이 보러 오게 하는 것이 나머지 절반입니다. 당신이 내놓는 모든 작품은 금고가 아니라 벽에 걸려, 세상이 찾을 수 있는 곳에 놓입니다.',
       tenets: [
@@ -70,7 +70,7 @@ const ko: DeepPartial<CommunityCopy> = {
         steps: [
           {
             h4: '에이전트에게 한 줄을 건네세요',
-            body: '위 명령어를 Open Design 안의 에이전트에, 또는 이미 손에 익은 어느 것에든 붙여 넣으세요: Claude Code, Codex, Cursor. 스스로 설치됩니다.',
+            body: '위 명령어를 OpenDesign 안의 에이전트에, 또는 이미 손에 익은 어느 것에든 붙여 넣으세요: Claude Code, Codex, Cursor. 스스로 설치됩니다.',
           },
           {
             h4: 'skill을 깨우세요',
@@ -87,20 +87,20 @@ const ko: DeepPartial<CommunityCopy> = {
       kicker: '배의 키를 잡다',
       h2: '<em>메인테이너</em>들.',
       intro:
-        '메인테이너는 Open Design의 방향과 품질을 지킵니다: 기여를 검토하고, 표준을 일관되게 유지하며, 더 많은 기여자가 프로젝트에서 자리를 얻을 여지를 만듭니다.',
+        '메인테이너는 OpenDesign의 방향과 품질을 지킵니다: 기여를 검토하고, 표준을 일관되게 유지하며, 더 많은 기여자가 프로젝트에서 자리를 얻을 여지를 만듭니다.',
       role: '메인테이너',
       bios: {
         'Nagendhra-web':
-          '나겐드라는 프로덕션의 진실을 향한 데이터 엔지니어의 본능을 가져옵니다: 실패를 찾아내고, 엣지 케이스를 측정하고, 제대로 고칩니다. Open Design에서는 배포 프리플라이트 작업, 에셋 번들링 강화, 그리고 기여자가 작업을 내놓을 때 프로젝트를 믿음직하게 느끼게 하는 Windows 수정으로 그것이 드러납니다.',
+          '나겐드라는 프로덕션의 진실을 향한 데이터 엔지니어의 본능을 가져옵니다: 실패를 찾아내고, 엣지 케이스를 측정하고, 제대로 고칩니다. OpenDesign에서는 배포 프리플라이트 작업, 에셋 번들링 강화, 그리고 기여자가 작업을 내놓을 때 프로젝트를 믿음직하게 느끼게 하는 Windows 수정으로 그것이 드러납니다.',
         'Sid-Qin':
-          '시드는 디자이너의 디테일 감각을 지닌 제너럴리스트 엔지니어입니다: 망가진 CLI 경로와 삐뚤어진 인터랙션 어포던스를 둘 다 알아채는 부류의 메인테이너죠. Open Design에서 시드는 내보내기 흐름, 플러그인 액션, Windows 심, MIME 처리, 그리고 에이전트 배관을 커뮤니티가 그 위에 쌓아 올릴 수 있을 만큼 날카롭게 유지합니다.',
+          '시드는 디자이너의 디테일 감각을 지닌 제너럴리스트 엔지니어입니다: 망가진 CLI 경로와 삐뚤어진 인터랙션 어포던스를 둘 다 알아채는 부류의 메인테이너죠. OpenDesign에서 시드는 내보내기 흐름, 플러그인 액션, Windows 심, MIME 처리, 그리고 에이전트 배관을 커뮤니티가 그 위에 쌓아 올릴 수 있을 만큼 날카롭게 유지합니다.',
       },
     },
     allTime: {
       kicker: '역대 시그널',
       h2: '<em>깊은 뿌리</em>를 가진 기여자들.',
       intro:
-        '아이디어, 수정, 그리고 장인정신을 공유된 Open Design 표준으로 꾸준히 바꾸어 온 재능 있는 기여자들의 오랜 기록.',
+        '아이디어, 수정, 그리고 장인정신을 공유된 OpenDesign 표준으로 꾸준히 바꾸어 온 재능 있는 기여자들의 오랜 기록.',
       rankLabel: '역대 기여자',
       week: '저장소 히스토리',
       quote:
@@ -116,12 +116,12 @@ const ko: DeepPartial<CommunityCopy> = {
       kicker: '이번 주 시그널',
       h2: '<em>이번 주</em>를 이끄는 열 명의 기여자.',
       intro:
-        'PR을 머지하고, 제품을 개선하며, Open Design을 살아 있게 만드는 날카로운 기여자들의 스냅샷.',
+        'PR을 머지하고, 제품을 개선하며, OpenDesign을 살아 있게 만드는 날카로운 기여자들의 스냅샷.',
       rankLabel: '이번 주 리더',
       week: '최근 7일',
       handleSuffix: '· 이번 주 선두',
       blurbTemplate:
-        '{name} 님은 머지된 PR {prs}개와 Open Design을 계속 나아가게 하는 꾸준한 장인정신으로 이번 주 페이스를 만들고 있습니다.',
+        '{name} 님은 머지된 PR {prs}개와 OpenDesign을 계속 나아가게 하는 꾸준한 장인정신으로 이번 주 페이스를 만들고 있습니다.',
       statRank: '순위',
       statPrs: 'PR · 7일',
       headContributor: '기여자',
@@ -132,7 +132,7 @@ const ko: DeepPartial<CommunityCopy> = {
       kicker: '첫 기여를 고르세요',
       h2: '<em>당신을 위해 태그된</em> 오픈 이슈.',
       intro:
-        'Open Design 저장소의 <span class="num">label:&ldquo;good first issue&rdquo;</span>에서 실시간으로. 이슈에 댓글을 달아 맡으면, 메인테이너가 하루 안에 배정해 드립니다.',
+        'OpenDesign 저장소의 <span class="num">label:&ldquo;good first issue&rdquo;</span>에서 실시간으로. 이슈에 댓글을 달아 맡으면, 메인테이너가 하루 안에 배정해 드립니다.',
       loading: 'good first issue',
       foot: '오픈된 good-first-issue 중 처음 <span class="num" id="issue-count">—</span>개 표시',
       seeAll: 'GitHub에서 전체 보기',
@@ -171,9 +171,9 @@ const ko: DeepPartial<CommunityCopy> = {
     },
   },
   ambassadors: {
-    title: '앰버서더 — Open Design',
-    desc: 'Open Design 앰버서더가 되세요: 지역 아틀리에를 열고, 밋업과 크리틱을 주최하며, 예산, 자료, 그리고 코어 팀으로 이어지는 비공개 채널을 받으세요.',
-    heroTitle: '당신의 도시에서 Open Design의 <em>목소리</em>가 되세요.',
+    title: '앰버서더 — OpenDesign',
+    desc: 'OpenDesign 앰버서더가 되세요: 지역 아틀리에를 열고, 밋업과 크리틱을 주최하며, 예산, 자료, 그리고 코어 팀으로 이어지는 비공개 채널을 받으세요.',
+    heroTitle: '당신의 도시에서 OpenDesign의 <em>목소리</em>가 되세요.',
     heroLead:
       '지역 아틀리에를 여세요. 밋업, 데모, 밤늦은 크리틱을 소집하세요. 우리는 예산, 자료, 그리고 코어 팀으로 이어지는 비공개 채널로 당신을 뒷받침합니다.',
     program: {
@@ -181,7 +181,7 @@ const ko: DeepPartial<CommunityCopy> = {
       h2: '소명, <em>후원</em>, 언약.',
       applyCta: 'Google Form으로 지원',
       applyNote:
-        '앰버서더는 Open Design을 저장소에서, 기여자들이 한 방에서 만날 수 있는 무언가로 바꿉니다. 탁자 위에 잉크가 있고 커피가 식어 가는 그런 방으로.',
+        '앰버서더는 OpenDesign을 저장소에서, 기여자들이 한 방에서 만날 수 있는 무언가로 바꿉니다. 탁자 위에 잉크가 있고 커피가 식어 가는 그런 방으로.',
       cols: [
         {
           n: 'I · 소명',
@@ -224,7 +224,7 @@ const ko: DeepPartial<CommunityCopy> = {
       kicker: '현장에서',
       h2: '<em>앰버서더</em>들을 만나 보세요.',
       intro:
-        'Open Design이 더 많은 디자이너와 팀에게 닿도록 돕는 지역 조직자, 창작자, 그리고 커뮤니티 빌더들.',
+        'OpenDesign이 더 많은 디자이너와 팀에게 닿도록 돕는 지역 조직자, 창작자, 그리고 커뮤니티 빌더들.',
       places: [
         '선샤인 코스트, 호주',
         '쿠알라룸푸르, 말레이시아',
@@ -234,8 +234,8 @@ const ko: DeepPartial<CommunityCopy> = {
     },
   },
   moderators: {
-    title: '모더레이터 — Open Design',
-    desc: 'Open Design Discord 모더레이터들을 만나고, AI 네이티브 디자이너들이 작업을 내놓고, 플러그인을 열고, 베타를 부수고, 서로의 막힘을 풀어 주는 방에 들어오세요.',
+    title: '모더레이터 — OpenDesign',
+    desc: 'OpenDesign Discord 모더레이터들을 만나고, AI 네이티브 디자이너들이 작업을 내놓고, 플러그인을 열고, 베타를 부수고, 서로의 막힘을 풀어 주는 방에 들어오세요.',
     heroTitle: '<em>기여자들</em>이 모이는 방.',
     heroLead:
       '에이전트 디자인 시대의 최전선이 여기서 열립니다. Discord는 세계에서 가장 날카로운 AI 네이티브 디자이너들이 모이는 곳입니다. 그 방의 온기를 지키는 관리자들을 만나 보세요.',
@@ -248,11 +248,11 @@ const ko: DeepPartial<CommunityCopy> = {
       cards: [
         {
           role: '스튜디오에서',
-          bio: 'Open Design 창립 팀에서 왔습니다. Discord가 머물기 좋은 곳으로 남기를 바랍니다. 어떤 질문이든, 언제든 손을 흔들어 주세요.',
+          bio: 'OpenDesign 창립 팀에서 왔습니다. Discord가 머물기 좋은 곳으로 남기를 바랍니다. 어떤 질문이든, 언제든 손을 흔들어 주세요.',
         },
         {
           role: '방의 관리자',
-          bio: 'Discord와 커뮤니티 돌봄에 능숙한 손. 방을 따뜻하게, 문을 열려 있게, 대화가 흐르게 유지합니다. Open Design을 향한 열정이 넘칩니다.',
+          bio: 'Discord와 커뮤니티 돌봄에 능숙한 손. 방을 따뜻하게, 문을 열려 있게, 대화가 흐르게 유지합니다. OpenDesign을 향한 열정이 넘칩니다.',
         },
       ],
       channelNotes: ['내놓은 작업', '빌더들', '초기 피드백', '막힘 해소'],

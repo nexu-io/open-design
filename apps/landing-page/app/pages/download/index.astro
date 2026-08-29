@@ -2,14 +2,15 @@
 /*
  * /download/ — dedicated download center.
  *
- * Auto-reflects the latest GitHub release. The platform matrix is
- * rendered at build time from `getLatestRelease()` (SEO-friendly, works
+ * Auto-reflects the latest stable release. The platform matrix is
+ * rendered at build time from `getLatestStableRelease()` (SEO-friendly, works
  * without JS); an inline enhancer detects the visitor's OS, highlights
- * the matching row, and refetches `releases/latest` to keep hrefs live
- * between rebuilds. Asset-name conventions mirror header-enhancer.astro.
+ * the matching row, and refetches the canonical R2 metadata to keep the
+ * complete visible release snapshot current between rebuilds.
  */
 import Layout from '../../_components/sub-page-layout.astro';
-import { getLatestRelease, type ReleaseAsset } from '../../_lib/github';
+import { getLatestStableRelease, type ReleaseAsset } from '../../_lib/github';
+import { RELEASE_METADATA_URL } from '../../_lib/release-metadata';
 import { getInfoPageCopy } from '../../info-page-i18n';
 import { localeFromPath, localizedHref } from '../../i18n';
 
@@ -19,8 +20,13 @@ const copy = getInfoPageCopy(locale);
 const page = copy.download;
 const common = copy.common;
 
-const release = await getLatestRelease();
+const release = await getLatestStableRelease();
 const m = release.matrix;
+const directAssets = {
+  macArm64: m.macArm64Dmg?.url ?? '',
+  macX64: m.macX64Dmg?.url ?? '',
+  windows: m.winSetup?.url ?? '',
+};
 
 const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
 const REPO = 'https://github.com/nexu-io/open-design';
@@ -50,7 +56,7 @@ interface Row {
 }
 
 interface PlatformCard {
-  os: 'macOS' | 'Windows' | 'Linux';
+  os: 'macOS' | 'Windows';
   osLabel: string;
   arch?: string; // sub-label, e.g. "Apple Silicon"
   matchKey: string; // ties to enhancer detectPlatform (recommend highlight)
@@ -82,15 +88,6 @@ const cards: PlatformCard[] = [
     // Installer only — portable zip stays available via the all-releases link.
     rows: [{ key: 'win-setup', variant: page.windowsInstaller, asset: m.winSetup }],
   },
-  {
-    os: 'Linux',
-    osLabel: page.linux,
-    matchKey: 'linux',
-    rows: m.linux
-      ? [{ key: 'linux-appimage', variant: 'AppImage', asset: m.linux }]
-      : [],
-    note: page.linuxBody,
-  },
 ];
 
 const publishedLabel = fmtDate(release.publishedAt);
@@ -101,12 +98,9 @@ const ICON_APPLE =
   '<svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true"><path d="M16.36 12.78c.02 2.5 2.19 3.33 2.22 3.34-.02.06-.35 1.2-1.15 2.37-.69 1.01-1.41 2.02-2.54 2.04-1.11.02-1.47-.66-2.74-.66s-1.66.64-2.71.68c-1.09.04-1.92-1.09-2.62-2.1-1.42-2.06-2.51-5.83-1.05-8.37.72-1.27 2.01-2.07 3.41-2.09 1.07-.02 2.08.72 2.74.72.65 0 1.88-.89 3.17-.76.54.02 2.06.22 3.03 1.64-.08.05-1.81 1.06-1.79 3.15M14.28 5.6c.58-.7.97-1.68.86-2.65-.83.03-1.84.55-2.44 1.25-.54.62-1.01 1.61-.88 2.56.93.07 1.87-.47 2.46-1.16"/></svg>';
 const ICON_WINDOWS =
   '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="M3 5.1 10.4 4v7.3H3zm0 13.8L10.4 20v-7.2H3zm8.2 1.2L21 21.3V12.8h-9.8zm0-16.2v7.4H21V2.7z"/></svg>';
-const ICON_LINUX =
-  '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="M12 2c-2.2 0-3.3 1.9-3.3 4.1 0 1.4.5 2.3.5 3.4 0 1-.7 1.8-1.4 2.9C6.9 13.9 6 15.6 6 17.3c0 .9.3 1.5.9 1.9-.1.5 0 1 .3 1.3.6.6 1.7.6 2.5.3.5-.2.8-.6.9-1.1.3 0 .6-.1.9-.1s.6 0 .9.1c.1.5.4.9.9 1.1.8.3 1.9.3 2.5-.3.3-.3.4-.8.3-1.3.6-.4.9-1 .9-1.9 0-1.7-.9-3.4-1.8-4.9-.7-1.1-1.4-1.9-1.4-2.9 0-1.1.5-2 .5-3.4C15.3 3.9 14.2 2 12 2m-1.3 4.3c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9m2.6 0c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9"/></svg>';
-const PLATFORM_ICON: Record<'macOS' | 'Windows' | 'Linux', string> = {
+const PLATFORM_ICON: Record<'macOS' | 'Windows', string> = {
   macOS: ICON_APPLE,
   Windows: ICON_WINDOWS,
-  Linux: ICON_LINUX,
 };
 const ICON_DOWNLOAD =
   '↓';
@@ -121,16 +115,16 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Open Design', item: absUrl('/') },
+      { '@type': 'ListItem', position: 1, name: 'OpenDesign', item: absUrl('/') },
       { '@type': 'ListItem', position: 2, name: page.breadcrumb, item: absUrl('/download/') },
     ],
   },
   {
     '@context': 'https://schema.org',
     '@type': 'SoftwareApplication',
-    name: 'Open Design',
+    name: 'OpenDesign',
     applicationCategory: 'DesignApplication',
-    operatingSystem: 'macOS, Windows, Linux',
+    operatingSystem: 'macOS, Windows',
     softwareVersion: release.version,
     softwareHelp: { '@type': 'CreativeWork', url: QUICKSTART_DOC },
     downloadUrl: m.macArm64Dmg?.url ?? release.releaseUrl,
@@ -142,48 +136,70 @@ const jsonLd = [
 
 <Layout title={title} description={description} active="download" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
-    <a href={href('/')}>Open Design</a>
+    <a href={href('/')}>OpenDesign</a>
     <span>/</span>
     <span aria-current="page">{page.breadcrumb}</span>
   </nav>
 
   <article class="info-page dl-page" data-download-root>
     <header class="dl-hero">
-      <div class="dl-hero-mark" aria-hidden="true">
-        <img src="/favicon.svg" alt="" width="48" height="48" />
-      </div>
-      <h1 class="dl-hero-heading">{page.heading}</h1>
-      <p class="dl-hero-lead">{page.lead}</p>
-      <p class="dl-mobile-notice" data-dl-mobile-notice hidden>
-        {page.mobileDesktopNotice}
-      </p>
+      <div class="dl-hero-copy">
+        <h1 class="dl-hero-heading">{page.heading}</h1>
+        <p class="dl-hero-lead">{page.lead}</p>
+        <p class="dl-mobile-notice" data-dl-mobile-notice hidden>
+          {page.mobileDesktopNotice}
+        </p>
 
-      {/*
-       * Static fallback points at the neutral release page, not a specific
-       * asset: with JS disabled/blocked every platform (Windows, Linux, and
-       * Macs whose arch we can't sniff) should reach a usable page rather
-       * than be handed a macOS Apple Silicon DMG. The enhancer below swaps
-       * in the detected platform's direct installer once it runs; platforms
-       * with no single asset (Linux) intentionally keep this release-page href.
-       */}
-      <a
-        class="btn btn-primary dl-hero-cta"
-        href={release.releaseUrl}
-        data-dl-auto
-        target="_blank"
-        rel="noreferrer noopener"
-      >
-        <span data-dl-auto-label>{page.autoCtaFallback}</span>
-        <span class="dl-auto-os" data-dl-auto-os hidden></span>
-      </a>
-      <p class="dl-hero-meta">
-        <a class="inline-link" href={release.releaseUrl} target="_blank" rel="noreferrer noopener">
-          {release.versionLabel}
-        </a>
-        {publishedLabel && <span class="dl-version-date"> · {page.publishedPrefix} {publishedLabel}</span>}
-        <span> · </span>
-        <a class="inline-link" href={release.releaseUrl} target="_blank" rel="noreferrer noopener">{page.releaseNotes}</a>
-      </p>
+        {/*
+         * Static fallback points at the neutral release page, not a specific
+         * asset: with JS disabled/blocked every platform (Windows, and Macs
+         * whose arch we can't sniff) should reach a usable page rather than be
+         * handed a macOS Apple Silicon DMG. The enhancer below swaps in the
+         * detected platform's direct installer once it runs; platforms with no
+         * packaged asset intentionally keep this release-page href.
+         */}
+        <div class="dl-hero-actions">
+          <a
+            class="btn btn-primary dl-hero-cta hero-download-attention"
+            href={release.releaseUrl}
+            data-dl-auto
+            data-direct-download
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            <span class="dl-hero-cta-icon" aria-hidden="true">{ICON_DOWNLOAD}</span>
+            <span data-dl-auto-label>{page.autoCtaFallback}</span>
+            <span class="dl-auto-os" data-dl-auto-os hidden></span>
+          </a>
+          <a class="dl-hero-release-link" href={release.releaseUrl} data-release-notes-link target="_blank" rel="noreferrer noopener">
+            {page.releaseNotes} ↗
+          </a>
+        </div>
+        <p class="dl-hero-meta">
+          <a class="inline-link" href={release.releaseUrl} data-release-notes-link target="_blank" rel="noreferrer noopener">
+            <span data-release-version>{release.versionLabel}</span>
+          </a>
+          {publishedLabel && (
+            <span class="dl-version-date">
+              {' · '}{page.publishedPrefix} <span data-release-date>{publishedLabel}</span>
+            </span>
+          )}
+        </p>
+      </div>
+
+      <figure class="dl-hero-visual">
+        <div class="dl-hero-visual-shell">
+          <img
+            src="/hero-product-1280.webp"
+            alt={page.heroVisualAlt}
+            width="1280"
+            height="741"
+            loading="eager"
+            fetchpriority="high"
+            decoding="async"
+          />
+        </div>
+      </figure>
     </header>
 
     <section class="dl-platforms" id="platforms" aria-label={page.platformsTitle}>
@@ -195,7 +211,7 @@ const jsonLd = [
             <h2 class="dl-os">{card.osLabel}</h2>
             <p class="dl-card-sub">
               {card.arch && <span class="dl-arch">{card.arch}</span>}
-              <span class="dl-card-version">{release.versionLabel}</span>
+              <span class="dl-card-version" data-release-version>{release.versionLabel}</span>
             </p>
 
             {card.rows.length > 0 && (
@@ -207,11 +223,8 @@ const jsonLd = [
                         <a class="dl-link" href={row.asset.url} data-dl-key={row.key}>
                           <span class="dl-dl-icon" aria-hidden="true">{ICON_DOWNLOAD}</span>
                           {page.downloadVerb} <strong>{row.variant}</strong>
-                          {fmtSize(row.asset.size) && <span class="dl-size">{fmtSize(row.asset.size)}</span>}
+                          {fmtSize(row.asset.size) && <span class="dl-size" data-dl-size>{fmtSize(row.asset.size)}</span>}
                         </a>
-                        {row.asset.sha256Url && (
-                          <a class="dl-sha" href={row.asset.sha256Url} target="_blank" rel="noreferrer noopener">{page.checksum}</a>
-                        )}
                       </>
                     ) : (
                       <a class="dl-link dl-link-fallback" href={release.releaseUrl} target="_blank" rel="noreferrer noopener">
@@ -223,14 +236,10 @@ const jsonLd = [
                 ))}
               </ul>
             )}
-            {/*
-             * Keep the platform note visible even when there are rows — e.g.
-             * Linux ships an AppImage row but still needs to surface the
-             * Docker / Podman Compose path the page copy advertises.
-             */}
+            {/* Keep the platform note visible even when there are rows. */}
             {card.note && (
               <p class="dl-note">
-                <a class="inline-link" href={release.releaseUrl} target="_blank" rel="noreferrer noopener">{card.note}</a>
+                <a class="inline-link" href={release.releaseUrl} data-release-notes-link target="_blank" rel="noreferrer noopener">{card.note}</a>
               </p>
             )}
           </div>
@@ -250,7 +259,7 @@ const jsonLd = [
       </ul>
     </section>
 
-    <section class="info-cta" aria-label="Open Design call to action">
+    <section class="info-cta" aria-label="OpenDesign call to action">
       <div>
         <h2>{page.ctaTitle}</h2>
         <p>{page.ctaBody}</p>
@@ -261,13 +270,20 @@ const jsonLd = [
       </div>
       <div class="info-cta-meta">
         <span class="stamp">● {common.live}</span>
-        <span>{release.versionLabel} · Apache-2.0</span>
-        <span>{common.macWinLinux}</span>
+        <span><span data-release-version>{release.versionLabel}</span> · Apache-2.0</span>
+        <span>{common.macWin}</span>
       </div>
     </section>
   </article>
 
-  <script is:inline define:vars={{ autoPrefix: page.autoCtaPrefix }}>
+  <script
+    is:inline
+    define:vars={{
+      autoPrefix: page.autoCtaPrefix,
+      directAssets,
+      releaseMetadataUrl: RELEASE_METADATA_URL,
+    }}
+  >
     (() => {
       // Download-intent analytics: capture clicks on the hero auto-CTA and on
       // every platform card link so the /download/ funnel is measurable. PostHog
@@ -296,8 +312,6 @@ const jsonLd = [
         });
       })();
 
-      const REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
-
       const ua = (navigator.userAgent || '').toLowerCase();
       const devicePlatform = (
         navigator.userAgentData?.platform ||
@@ -325,10 +339,12 @@ const jsonLd = [
           (navigator.userAgentData && navigator.userAgentData.platform) ||
           navigator.platform || ''
         ).toLowerCase();
+        // iPadOS desktop-mode Safari reports a Mac platform. Keep the hero CTA
+        // on the neutral release page instead of rewriting it to a macOS DMG.
+        if (isIpadOS || /iphone|ipad|ipod/.test(ua)) return null;
         const isWin = /win/.test(p) || /windows/.test(ua);
         const isMac = /mac/.test(p) || (/mac os x/.test(ua) && !/iphone|ipad|ipod/.test(ua));
-        const isLinux = /linux/.test(p) || (/linux/.test(ua) && !/android/.test(ua));
-        if (isWin) return { matchKey: 'win', os: 'Windows', match: (n) => /win.*setup\.exe$/.test(n) };
+        if (isWin) return { assetKey: 'windows', matchKey: 'win', os: 'Windows', match: (n) => /win.*setup\.exe$/.test(n) };
         if (isMac) {
           const intel = (() => {
             try {
@@ -339,59 +355,129 @@ const jsonLd = [
             } catch { return false; }
           })();
           return intel
-            ? { matchKey: 'mac-x64', os: 'macOS (Intel)', match: (n) => n.endsWith('mac-x64.dmg') }
-            : { matchKey: 'mac-arm64', os: 'macOS', match: (n) => n.endsWith('mac-arm64.dmg') };
+            ? { assetKey: 'macX64', matchKey: 'mac-x64', os: 'macOS (Intel)', match: (n) => n.endsWith('mac-x64.dmg') }
+            : { assetKey: 'macArm64', matchKey: 'mac-arm64', os: 'macOS (Apple Silicon)', match: (n) => n.endsWith('mac-arm64.dmg') };
         }
-        if (isLinux) return { matchKey: 'linux', os: 'Linux', match: () => false };
+        // No Linux desktop build — Linux visitors keep the neutral
+        // release-page fallback.
         return null;
       };
 
       const platform = detect();
-      if (!platform) return;
 
       // Highlight the recommended card + set the hero CTA OS label.
-      for (const card of document.querySelectorAll('[data-dl-card]')) {
-        if (card.getAttribute('data-dl-match') === platform.matchKey) {
-          card.setAttribute('data-dl-recommended', 'true');
-          const rec = card.querySelector('[data-dl-rec]');
-          if (rec) rec.hidden = false;
+      if (platform) {
+        for (const card of document.querySelectorAll('[data-dl-card]')) {
+          if (card.getAttribute('data-dl-match') === platform.matchKey) {
+            card.setAttribute('data-dl-recommended', 'true');
+            const rec = card.querySelector('[data-dl-rec]');
+            if (rec) rec.hidden = false;
+          }
         }
+        const osSlot = document.querySelector('[data-dl-auto-os]');
+        const labelSlot = document.querySelector('[data-dl-auto-label]');
+        if (osSlot) { osSlot.textContent = ` ${platform.os}`; osSlot.hidden = false; }
+        if (labelSlot) labelSlot.textContent = autoPrefix;
       }
-      const osSlot = document.querySelector('[data-dl-auto-os]');
-      const labelSlot = document.querySelector('[data-dl-auto-label]');
-      if (osSlot) { osSlot.textContent = ` ${platform.os}`; osSlot.hidden = false; }
-      if (labelSlot) labelSlot.textContent = autoPrefix;
 
-      // Live refetch: keep the hero CTA + matrix links current between rebuilds.
-      fetch(`${REPO_API}/releases/latest`, { headers: { Accept: 'application/vnd.github+json' } })
+      // Use the build-time latest asset immediately, closing the short window
+      // where the primary CTA could still route through the download page.
+      const hero = document.querySelector('[data-dl-auto]');
+      const staticAsset = platform ? directAssets[platform.assetKey] : null;
+      if (hero && staticAsset) {
+        hero.href = staticAsset;
+        hero.setAttribute('download', '');
+        hero.removeAttribute('target');
+        hero.removeAttribute('rel');
+      }
+
+      // Live refetch: replace the complete visible release snapshot from the
+      // canonical stable R2 metadata, so labels and links cannot drift apart.
+      fetch(releaseMetadataUrl, { headers: { Accept: 'application/json' } })
         .then((r) => (r.ok ? r.json() : null))
-        .then((release) => {
-          const assets = Array.isArray(release && release.assets) ? release.assets : [];
-          if (assets.length === 0) return;
-          const byName = (re) =>
-            assets.find((a) => a && typeof a.name === 'string' && typeof a.browser_download_url === 'string' && re(a.name));
-          const map = {
-            'mac-arm64-dmg': (n) => n.endsWith('mac-arm64.dmg'),
-            'mac-arm64-zip': (n) => n.endsWith('mac-arm64.zip'),
-            'mac-x64-dmg': (n) => n.endsWith('mac-x64.dmg'),
-            'mac-x64-zip': (n) => n.endsWith('mac-x64.zip'),
-            'win-setup': (n) => /win.*setup\.exe$/.test(n),
-            'win-portable': (n) => /win.*portable\.zip$/.test(n),
-            'linux-appimage': (n) => /\.appimage$/i.test(n),
+        .then((metadata) => {
+          if (!metadata || metadata.channel !== 'stable' || metadata.releaseState !== 'complete') return;
+          const versionMatch = typeof metadata.releaseVersion === 'string'
+            ? metadata.releaseVersion.match(/^v?(\d+\.\d+\.\d+(?:[-+][\w.-]+)?)$/)
+            : null;
+          if (!versionMatch || !metadata.platforms || typeof metadata.platforms !== 'object') return;
+          const releaseVersion = versionMatch[1];
+          const expectedTag = `open-design-v${releaseVersion}`;
+          if (metadata.versionTag !== expectedTag) return;
+          const versionPrefix = `/stable/versions/${releaseVersion}`;
+
+          const artifact = (platformKey, artifactKey) => {
+            const value = metadata.platforms?.[platformKey]?.artifacts?.[artifactKey];
+            if (!value || typeof value.url !== 'string' || !Number.isFinite(value.size) || value.size <= 0) return null;
+            try {
+              const url = new URL(value.url);
+              if (
+                url.origin !== 'https://releases.open-design.ai' ||
+                (url.pathname !== versionPrefix &&
+                  !url.pathname.startsWith(`${versionPrefix}/`) &&
+                  !url.pathname.startsWith(`${versionPrefix}.`))
+              ) return null;
+            } catch {
+              return null;
+            }
+            return { url: value.url, size: value.size };
           };
-          for (const [key, re] of Object.entries(map)) {
-            const asset = byName(re);
-            if (!asset) continue;
-            for (const link of document.querySelectorAll(`[data-dl-key="${key}"]`)) {
-              link.href = asset.browser_download_url;
+          const assets = {
+            'mac-arm64-dmg': artifact('mac', 'dmg'),
+            'mac-x64-dmg': artifact('macIntel', 'dmg'),
+            'win-setup': artifact('win', 'installer'),
+          };
+          const linkUpdates = [];
+          for (const link of document.querySelectorAll('[data-dl-key]')) {
+            const key = link.getAttribute('data-dl-key');
+            const asset = key ? assets[key] : null;
+            if (!key || !asset) return;
+            linkUpdates.push({ link, asset });
+          }
+          const versionLabel = `v${releaseVersion}`;
+          const releaseDate = typeof metadata.generatedAt === 'string'
+            ? metadata.generatedAt.slice(0, 10)
+            : null;
+          const releaseUrl = `https://github.com/nexu-io/open-design/releases/tag/${encodeURIComponent(expectedTag)}`;
+          const formatSize = (bytes) => {
+            const mb = bytes / (1024 * 1024);
+            return mb >= 1 ? `${mb.toFixed(0)} MB` : `${(bytes / 1024).toFixed(0)} KB`;
+          };
+
+          for (const slot of document.querySelectorAll('[data-release-version]')) {
+            slot.textContent = versionLabel;
+          }
+          if (releaseDate) {
+            for (const slot of document.querySelectorAll('[data-release-date]')) {
+              slot.textContent = releaseDate;
             }
           }
-          const heroAsset = byName(platform.match);
-          const hero = document.querySelector('[data-dl-auto]');
+          if (releaseUrl) {
+            for (const link of document.querySelectorAll('[data-release-notes-link]')) {
+              link.href = releaseUrl;
+            }
+          }
+          for (const { link, asset } of linkUpdates) {
+            link.href = asset.url;
+            const size = link.querySelector('[data-dl-size]');
+            if (size) size.textContent = formatSize(asset.size);
+          }
+          const heroAssetKey = platform && {
+            macArm64: 'mac-arm64-dmg',
+            macX64: 'mac-x64-dmg',
+            windows: 'win-setup',
+          }[platform.assetKey];
+          const heroAsset = heroAssetKey ? assets[heroAssetKey] : null;
           if (heroAsset && hero) {
-            hero.href = heroAsset.browser_download_url;
+            hero.href = heroAsset.url;
+            hero.setAttribute('download', '');
             hero.removeAttribute('target');
             hero.removeAttribute('rel');
+          } else if (releaseUrl && hero) {
+            hero.href = releaseUrl;
+            hero.removeAttribute('download');
+            hero.setAttribute('target', '_blank');
+            hero.setAttribute('rel', 'noreferrer noopener');
           }
         })
         .catch(() => {});
@@ -435,38 +521,35 @@ const jsonLd = [
 </style>
 
 <style>
-  /* ---- Centered hero ---- */
+  /* ---- Download-led split hero ---- */
   .dl-hero {
-    display: flex;
-    flex-direction: column;
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: center;
-    text-align: center;
-    padding-top: 24px;
+    gap: clamp(44px, 4vw, 60px);
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: clamp(40px, 5vw, 72px) 0 32px;
   }
-  .dl-hero-mark {
-    width: 76px;
-    height: 76px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 20px;
-    background: var(--surface, rgba(255, 255, 255, 0.6));
-    border: 1px solid var(--border, rgba(0, 0, 0, 0.1));
-    box-shadow: 0 12px 30px -18px rgba(0, 0, 0, 0.4);
+  .dl-hero-copy {
+    min-width: 0;
   }
   .dl-hero-heading {
     font-family: var(--serif, Georgia, serif);
     font-weight: 600;
-    font-size: clamp(28px, 4vw, 42px);
-    letter-spacing: -0.02em;
-    margin: 24px 0 0;
+    font-size: clamp(38px, 3.5vw, 48px);
+    line-height: 1.04;
+    letter-spacing: -0.035em;
+    margin: 22px 0 0;
+    max-width: none;
   }
   .dl-hero-lead {
-    font-size: 16px;
-    line-height: 1.6;
+    font-size: clamp(16px, 1.4vw, 18px);
+    line-height: 1.55;
     color: var(--ink-soft, #555);
-    max-width: 48ch;
-    margin: 12px 0 0;
+    max-width: 52ch;
+    margin: 18px 0 0;
   }
   .dl-mobile-notice {
     max-width: 42ch;
@@ -479,30 +562,182 @@ const jsonLd = [
     font-size: 0.9rem;
     line-height: 1.5;
   }
-  .dl-hero-cta {
+  .dl-hero-actions {
+    display: flex;
+    align-items: center;
+    gap: 20px;
     margin-top: 28px;
-    font-size: 15px;
-    padding: 15px 30px;
+  }
+  .dl-hero-cta {
+    min-height: 60px;
+    padding: 12px 24px 12px 12px;
+    gap: 11px;
+    font-size: 16px;
+    box-shadow:
+      0 0 0 1px var(--ink),
+      5px 5px 0 var(--coral),
+      0 20px 34px -20px rgba(38, 38, 38, 0.52);
+    transition: transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
+  }
+  .dl-hero-cta:hover {
+    transform: translate(-2px, -2px);
+    box-shadow:
+      0 0 0 1px var(--ink),
+      7px 7px 0 var(--coral),
+      0 22px 36px -20px rgba(38, 38, 38, 0.54);
+  }
+  .dl-hero-cta:active {
+    transform: translate(1px, 1px) scale(0.985);
+    box-shadow:
+      0 0 0 1px var(--ink),
+      3px 3px 0 var(--coral),
+      0 14px 24px -18px rgba(38, 38, 38, 0.46);
+  }
+  .dl-hero-cta-icon {
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: var(--coral);
+    color: var(--ink);
+    font-size: 19px;
+    font-weight: 750;
+  }
+  .dl-hero-release-link {
+    color: var(--ink);
+    font-size: 0.88rem;
+    font-weight: 600;
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--coral) 85%, transparent);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 5px;
+  }
+  .dl-hero-release-link:hover {
+    color: var(--olive);
   }
   .dl-auto-os { font-weight: 600; }
   .dl-hero-meta {
-    margin: 16px 0 0;
+    margin: 17px 0 0;
     font-size: 0.85rem;
     color: var(--ink-soft, #666);
   }
   .dl-version-date { opacity: 0.85; }
 
+  .dl-hero-visual {
+    position: relative;
+    isolation: isolate;
+    min-width: 0;
+    margin: 0;
+  }
+  .dl-hero-visual::before {
+    content: '';
+    position: absolute;
+    inset: 12px -12px -12px 12px;
+    z-index: -1;
+    border-radius: 24px;
+    background: color-mix(in srgb, var(--coral) 72%, white);
+    transform: rotate(1.1deg);
+  }
+  .dl-hero-visual-shell {
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--ink) 24%, transparent);
+    border-radius: 22px;
+    background: #fff;
+    box-shadow: 0 28px 70px -38px rgba(38, 38, 38, 0.58);
+    transform: rotate(-0.65deg);
+  }
+  .dl-hero-visual img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .dl-hero-copy {
+      animation: dlHeroCopyIn 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .dl-hero-visual {
+      animation: dlHeroVisualIn 680ms 80ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+  }
+  @keyframes dlHeroCopyIn {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes dlHeroVisualIn {
+    from { opacity: 0; transform: translateY(20px) scale(0.985); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @media (max-width: 980px) {
+    .dl-hero {
+      grid-template-columns: 1fr;
+      gap: 48px;
+      max-width: 760px;
+      padding-top: 40px;
+    }
+    .dl-hero-heading { max-width: 16ch; }
+    .dl-hero-visual { width: calc(100% - 12px); }
+  }
+
+  @media (max-width: 640px) {
+    .dl-hero {
+      gap: 36px;
+      padding: 28px 0 12px;
+      text-align: center;
+    }
+    .dl-hero-actions {
+      justify-content: center;
+    }
+    .dl-hero-heading {
+      max-width: none;
+      font-size: clamp(34px, 10.8vw, 44px);
+    }
+    .dl-hero-lead { margin-left: auto; margin-right: auto; }
+    .dl-mobile-notice { margin-left: auto; margin-right: auto; }
+    .dl-hero-actions { flex-direction: column; gap: 18px; }
+    .dl-hero-cta {
+      width: min(100%, 390px);
+      justify-content: center;
+      padding-right: 18px;
+    }
+    .dl-hero-visual {
+      width: calc(100% - 8px);
+      margin: 0 auto;
+    }
+    .dl-hero-visual::before {
+      inset: 8px -8px -8px 8px;
+      border-radius: 19px;
+      transform: rotate(0.7deg);
+    }
+    .dl-hero-visual-shell {
+      border-radius: 18px;
+      transform: none;
+    }
+  }
+
   /* ---- Platform cards ---- */
-  .dl-platforms { margin-top: 56px; }
+  .dl-platforms { margin-top: 64px; }
   .dl-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    /* Three cards since the Linux card was removed — 3 equal columns
+       keep the row centered under the hero. */
+    grid-template-columns: repeat(3, 1fr);
     gap: 16px;
-    max-width: 920px;
+    max-width: 690px;
     margin: 0 auto;
   }
   @media (max-width: 860px) {
     .dl-grid { grid-template-columns: repeat(2, 1fr); max-width: 480px; }
+    /* Odd card out (Windows) centers under the two macOS cards. */
+    .dl-grid .dl-card:last-child {
+      grid-column: 1 / -1;
+      justify-self: center;
+      width: calc(50% - 8px);
+    }
   }
   @media (max-width: 420px) {
     .dl-grid { grid-template-columns: 1fr; max-width: 320px; }
@@ -606,8 +841,6 @@ const jsonLd = [
   .dl-link:hover .dl-dl-icon { transform: translateY(2px); }
   .dl-size { font-size: 0.74rem; opacity: 0.55; }
   /* Skill link color (颜色.md 链接/信息) instead of the UA default blue. */
-  .dl-sha { font-size: 0.68rem; opacity: 0.5; text-decoration: none; color: #1a74ff; }
-  .dl-sha:hover { opacity: 1; text-decoration: underline; }
   .dl-note {
     font-size: 0.82rem;
     opacity: 0.78;

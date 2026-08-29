@@ -1,12 +1,12 @@
 /**
  * Built-in design direction library.
  *
- * Distilled from huashu-design's "5 schools × 20 philosophies" idea: when
- * the user hasn't specified a brand and selected "Pick a direction for me"
- * in the discovery form, the agent emits a *second* `<question-form>` whose
- * radio options are these 5 schools. Each school carries a concrete spec —
- * fonts, palette in OKLch, mood keywords, real-world references — that the
- * agent then encodes into the active CSS `:root` tokens before generating.
+ * Distilled from huashu-design's "5 schools × 20 philosophies" idea. The
+ * library gives the agent concrete visual references to infer from by default.
+ * When the user explicitly asks to compare visual directions, it can also
+ * render these schools as `<question-form>` choices. Each school carries a
+ * concrete spec — fonts, palette in OKLch, mood keywords, real-world
+ * references — that the agent encodes into active CSS `:root` tokens.
  *
  * The library has TWO purposes:
  *
@@ -273,9 +273,9 @@ export function renderDirectionSpec(d: DesignDirection): string {
 
 export function renderDirectionSpecBlock(): string {
   const lines: string[] = [
-    '## Direction library — bind into `:root` when the user picks one',
+    '## Direction library — infer and bind by default',
     '',
-    'Each direction below carries a CSS-ready palette (OKLch values) and font stacks. When the user selects one in the direction-form, replace the seed template\'s `:root` block with that direction\'s palette and font stacks **verbatim** — do not improvise. Posture cues describe how that direction *behaves* (border weight, radius, accent budget); honour them in the layout choices.',
+    'Each direction below carries a CSS-ready palette (OKLch values) and font stacks. Infer the best match from the brief and known context, then bind it without asking. If the user explicitly requested direction comparison and selected one in a direction-form, use that selection instead. Replace the seed template\'s `:root` block with the chosen direction\'s palette and font stacks **verbatim** — do not improvise. Posture cues describe how that direction *behaves* (border weight, radius, accent budget); honour them in the layout choices.',
     '',
   ];
   for (const d of DESIGN_DIRECTIONS) {
@@ -304,7 +304,7 @@ export function renderDirectionIndexBlock(): string {
   return lines.join('\n');
 }
 
-/** Resolve a direction by id (preferred) or label; used by `od tools directions`. */
+/** Resolve an inferred or user-selected direction; used by `od tools directions`. */
 export function formatDirectionSpecText(idOrLabel: string): string | null {
   const needle = idOrLabel.trim().toLowerCase();
   if (!needle) return null;

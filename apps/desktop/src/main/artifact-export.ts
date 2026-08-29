@@ -9,6 +9,7 @@ import type {
 } from "@open-design/sidecar-proto";
 
 import { DECK_PAGE_SIZE, DECK_PRINT_CSS, inferPageSize, waitForPrintableContent } from "./pdf-export.js";
+import { findRealElementRange, findRealTagEnd, findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
 
 // Headless programmatic exporter for the `od export` CLI (PDF / image).
 // The on-screen web Download menu rasterizes client-side; this is the daemon →
@@ -107,22 +108,35 @@ function buildDocument(input: DesktopExportArtifactInput): string {
 function injectBaseHref(doc: string, baseHref: string | undefined): string {
   if (!baseHref) return doc;
   const tag = `<base href="${escapeAttr(baseHref)}">`;
-  if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${tag}`);
-  if (/<html[^>]*>/i.test(doc)) return doc.replace(/<html[^>]*>/i, (m) => `${m}<head>${tag}</head>`);
+  // Structural lookup: a `<head>` an author wrote into a script string or an
+  // attribute is not this document's head (nexu-io/open-design#7410).
+  const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
+  if (headEnd >= 0) return doc.slice(0, headEnd) + tag + doc.slice(headEnd);
+  const htmlEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.htmlOpen);
+  if (htmlEnd >= 0) return `${doc.slice(0, htmlEnd)}<head>${tag}</head>${doc.slice(htmlEnd)}`;
   return `<!doctype html><html><head>${tag}</head><body>${doc}</body></html>`;
 }
 
 function injectTitle(doc: string, title: string): string {
   const tag = `<title>${escapeText(title)}</title>`;
-  if (/<title[^>]*>.*?<\/title>/is.test(doc)) return doc.replace(/<title[^>]*>.*?<\/title>/is, tag);
-  if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${tag}`);
+  // Function replacement: a string replacement would expand `$$`, `$&`, `$``,
+  // and `$'` inside the (user-derived) title via String.prototype.replace's
+  // GetSubstitution, corrupting titles that contain them (#6795).
+  // The document's own <title>, not one an author stored in a script string:
+  // replacing that would rewrite their content (nexu-io/open-design#7410).
+  const existing = findRealElementRange(doc, HTML_TAG_PATTERNS.titleOpen, 'title');
+  if (existing) return doc.slice(0, existing.start) + tag + doc.slice(existing.end);
+  const headEnd2 = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
+  if (headEnd2 >= 0) return doc.slice(0, headEnd2) + tag + doc.slice(headEnd2);
   return doc;
 }
 
 function injectStyle(doc: string, css: string): string {
   const tag = `<style data-od-artifact-export>${css}</style>`;
-  if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${tag}</head>`);
-  if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${tag}`);
+  const headClose = findRealTagOffset(doc, HTML_TAG_PATTERNS.headClose);
+  if (headClose >= 0) return doc.slice(0, headClose) + tag + doc.slice(headClose);
+  const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
+  if (headEnd >= 0) return doc.slice(0, headEnd) + tag + doc.slice(headEnd);
   return `${tag}${doc}`;
 }
 

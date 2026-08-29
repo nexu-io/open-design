@@ -1,19 +1,19 @@
-<h1 align="center">Open Design: The open-source Claude Design alternative</h1>
+<h1 align="center">OpenDesign: The open-source Claude Design alternative</h1>
 
-> 🔥 **Open Design 0.13.0 — _Stay in Flow_ is here.** Long design sessions used to break on every interruption — a run lost its place, a model picker made you guess, an export needed one more detour. 0.13.0 keeps the session alive: resume Codex / OpenCode / Pi / Open Design Cloud runs across turns, pick the right model faster, and hand off screenshot-backed PPTX / PDF without leaving the app. [Download 0.13.0](https://github.com/nexu-io/open-design/releases) · [Release notes](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0)
+> ⚡ **[OpenDesign Cloud — the official model service.](https://open-design.ai/zh/pricing/)** One recharge to use both agent and image models inside OpenDesign: GPT, Claude, and DeepSeek for agents; GPT Image 2.0, Seedream 5.0 Pro, and Nano Banana 2.0 for images.
 >
-> ⚡ **Open Design Cloud — the official model service.** One recharge to use GPT, Claude, Gemini, and DeepSeek inside Open Design: 20+ flagship models, zero config, billed by real token usage. [Try Open Design Cloud](https://open-design.ai/cloud/?utm_source=github&utm_medium=referral&utm_content=readme_try_cloud)
+> 🚀 **[DeepSeek V4 Flash and V4 Pro are now available.](https://open-design.ai/zh/pricing/)** Put top-tier intelligence to work across prototypes, decks, design systems, and everyday agent tasks. OpenDesign members can use both models without limits for two weeks, directly inside the app.
 >
-> 🏅 **The Open Design Fellow program is now open.** If you also believe design should be open — become an Open Design Fellow, shape the product alongside the core team, and help more people take part in defining the future of design. Details → [`MAINTAINERS.md`](MAINTAINERS.md) and [Discord](https://discord.gg/mHAjSMV6gz).
+> 🧩 **[DeepSeek Harness is now supported.](https://open-design.ai/zh/agents/deepseek-harness-design/)** Connect DeepSeek's official `dsh` agent harness to OpenDesign as a native runtime, with structured thinking, tool calls, model discovery, cancellation, and session resume. Generated files stay in the OpenDesign workflow for live preview and delivery.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design hero banner — the headline &quot;The open-source Claude Design alternative&quot; over a classical scene of columns and robed figures on a digital-code backdrop, with stat cards for design systems, plugins, coding agents, and media providers" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="OpenDesign hero banner — the headline &quot;The open-source Claude Design alternative&quot; over a classical scene of columns and robed figures on a digital-code backdrop, with stat cards for design systems, plugins, coding agents, and media providers" width="100%" />
 </p>
 
 <p align="center">
   <a href="https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_website">Website</a> ·
   <a href="https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_download">Download</a> ·
-  <a href="https://open-design.ai/cloud/?utm_source=github&utm_medium=referral&utm_content=readme_cloud">Open Design Cloud</a> ·
+  <a href="https://open-design.ai/cloud/?utm_source=github&utm_medium=referral&utm_content=readme_cloud">OpenDesign Cloud</a> ·
   <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
   <a href="https://x.com/OpenDesignHQ">Follow @OpenDesignHQ</a>
 </p>
@@ -29,11 +29,11 @@
 
 ---
 
-## What is Open Design
+## What is OpenDesign
 
-🎨 **The open-source Claude Design alternative.** &nbsp;🖥️ **Local-first native desktop app for macOS and Windows.** &nbsp;⚡ **Composable skills, brand-grade `DESIGN.md` design systems, and ready-to-use plugins.** &nbsp;🖼️ Generates **web · desktop · mobile prototypes**, **live dashboards / artifacts**, **decks**, **images**, **video**, plus **HyperFrames** motion graphics. 🔒 Sandboxed iframe preview · HTML / PDF / PPTX / MP4 export. &nbsp;🤖 **Runs on Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Amp · Hermes · Kimi · Antigravity and 22 local CLIs**, or any OpenAI-compatible endpoint via BYOK.
+🎨 **The open-source Claude Design alternative.** &nbsp;🖥️ **Local-first native desktop app for macOS and Windows.** &nbsp;⚡ **Composable skills, brand-grade `DESIGN.md` design systems, and ready-to-use plugins.** &nbsp;🖼️ Generates **web · desktop · mobile prototypes**, **live dashboards / artifacts**, **decks**, **images**, **video**, plus **HyperFrames** motion graphics. 🔒 Sandboxed iframe preview · HTML / PDF / PPTX / MP4 export. &nbsp;🤖 **Runs on DeepSeek Harness (`dsh`) · Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Amp · Hermes · Kimi · Antigravity and 26 distinct local CLI executables**, or any OpenAI-compatible endpoint via BYOK.
 
-Open Design is what you get when the **agent-native** loop Anthropic shipped with Claude Design — discover the brief, lock the direction, stream the artifact, critique, deliver — stops being closed and becomes a **filesystem of skills, design systems, and plugins** that the coding agents already on your laptop can read, write, and remix. Your CLI becomes the design engine, your laptop becomes the studio, and your team's `DESIGN.md` becomes the brand contract.
+OpenDesign is what you get when the **agent-native** loop Anthropic shipped with Claude Design — discover the brief, lock the direction, stream the artifact, critique, deliver — stops being closed and becomes a **filesystem of functional skills, rendering design templates, design systems, and plugins** that the coding agents already on your laptop can read, write, and remix. Your CLI becomes the design engine, your laptop becomes the studio, and your team's `DESIGN.md` becomes the brand contract.
 
 It's also the **Figma alternative for the agent era** — instead of pushing pixels on a canvas, it delivers single-page artifacts in real CSS, real fonts, real components, exported straight to HTML / PDF / PPTX / MP4 — already shaped by your design system, already runnable inside the agent you use every day.
 
@@ -42,15 +42,15 @@ It's also the **Figma alternative for the agent era** — instead of pushing pix
 
 ## Product tour
 
-A quick look at what Open Design is and what it does. Start from **Home**, orchestrate repeat workflows with **Automation**, distill a brand contract in **Design System**, and extend with **Plugins** and **integrations**; inside any project's **Studio**, the same design system streams out prototypes, live artifacts, HyperFrames, decks, and images.
+A quick look at the core OpenDesign workflow. Start from **Home** with a brief, explore reusable skills in **Plugins**, and turn brand references into a **Design System**. Then enter a project's **Studio** to create and refine prototypes, decks, mobile apps, images, documents, and HyperFrames in one place.
 
 ### Core pages
 
 <table>
 <tr>
 <td valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/home.png" alt="Home page" /><br/>
-<sub><b>Home</b> — the overview entry point. Pick a skill and a design system, type the brief, and kick off everything from one place.</sub>
+<img src="docs/screenshots/product-tour/home.png" alt="OpenDesign Home page with artifact types, brief composer, model picker, and examples" /><br/>
+<sub><b>Home</b> — choose an artifact type, enter a brief, and set the design system, working directory, and model before you start.</sub>
 </td>
 </tr>
 </table>
@@ -58,49 +58,49 @@ A quick look at what Open Design is and what it does. Start from **Home**, orche
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/automation.png" alt="Automation page" /><br/>
-<sub><b>Automation</b> — orchestrate repetitive design workflows into reusable, schedulable automations.</sub>
+<img src="docs/screenshots/product-tour/plugins.png" alt="OpenDesign Plugins page showing the official skills catalog" /><br/>
+<sub><b>Plugins</b> — browse official skills by category, search the catalog, and launch a workflow with <code>Try it</code>.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/design-system.png" alt="Design System page" /><br/>
-<sub><b>Design System</b> — distill your team's <code>DESIGN.md</code> into a brand contract that shapes every output.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/plugin.png" alt="Plugin page" /><br/>
-<sub><b>Plugin</b> — browse, install, and distribute workflow plugins to extend generation on demand.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/integrations.png" alt="Integrations page" /><br/>
-<sub><b>Integrations</b> — connect external systems and MCP tools, and use Open Design from any IDE, script, or automation.</sub>
+<img src="docs/screenshots/product-tour/design-system.png" alt="Shopify design system preview inside OpenDesign Studio" /><br/>
+<sub><b>Design System</b> — extract and refine a brand's visual language, preview the result, and create with it in the same workspace.</sub>
 </td>
 </tr>
 </table>
 
 ### Studio — many artifact types in one project
 
-Inside a project's Studio, the same design system streams out multiple artifact types:
+Inside a project's Studio, the conversation, generated files, and live preview stay together across six artifact types:
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-prototype.png" alt="Prototype" /><br/>
-<sub><b>Prototype</b> — single-page HTML artifacts that read your design system and render in a sandboxed iframe, previewable instantly and downloadable as source.</sub>
+<img src="docs/screenshots/product-tour/studio-prototype.png" alt="Web prototype preview in OpenDesign Studio" /><br/>
+<sub><b>Prototype</b> — generate or reconstruct web experiences, inspect the rendered page, and iterate with the agent in place.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-hyperframe.png" alt="HyperFrame" /><br/>
-<sub><b>HyperFrame</b> — programmatic motion and animated graphics, rendered to a real MP4 (e.g. 1920×1080 · 30fps).</sub>
+<img src="docs/screenshots/product-tour/studio-deck.png" alt="Multi-slide deck preview in OpenDesign Studio" /><br/>
+<sub><b>Deck</b> — create multi-slide presentations, review thumbnails and speaker notes, and export when ready.</sub>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-ppt.png" alt="Deck" /><br/>
-<sub><b>Deck</b> — pitch decks you can page through, navigate by keyboard, and export to PPTX / PDF.</sub>
+<img src="docs/screenshots/product-tour/studio-mobile-app.png" alt="Mobile app artifact preview in OpenDesign Studio" /><br/>
+<sub><b>Mobile app</b> — generate and polish mobile interfaces in a device preview, with the conversation, output files, and next-step actions beside it.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-image.png" alt="Image" /><br/>
-<sub><b>Image</b> — brand-grade images and visual assets, with high-resolution generation and download.</sub>
+<img src="docs/screenshots/product-tour/studio-image.png" alt="Generated image preview in OpenDesign Studio" /><br/>
+<sub><b>Image</b> — generate visual assets from the project conversation, preview the result at full size, then download or open it.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/screenshots/product-tour/studio-document.png" alt="Multi-page document preview in OpenDesign Studio" /><br/>
+<sub><b>Document</b> — create polished, multi-page guides and editorial documents, inspect the rendered layout, and export or share when ready.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="docs/screenshots/product-tour/studio-hyperframe.png" alt="HyperFrame motion graphic preview in OpenDesign Studio" /><br/>
+<sub><b>HyperFrame</b> — build code-driven motion graphics, preview the animation inside Studio, and export the finished video.</sub>
 </td>
 </tr>
 </table>
@@ -109,17 +109,19 @@ Inside a project's Studio, the same design system streams out multiple artifact 
 
 ## Platform Compatibility
 
-> Open Design ships as **skills, a CLI, and an MCP server** that mainstream coding agents consume natively. Once OD is installed, a single `od mcp install <agent>` wires the MCP server into that agent's config, and you call the same tools from inside any agent.
+> OpenDesign connects to mainstream coding agents in two ways: **skills, CLI, and MCP** for agents that consume OD, plus **native runtime adapters** for agents that OD launches directly. DeepSeek Harness is a first-class native runtime through the official `dsh` CLI, with structured streaming, model discovery, cancellation, and session resume.
 
-| Coding agent / platform &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Status &nbsp;&nbsp; | One-line MCP server install &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
+| Coding agent / platform &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Status &nbsp;&nbsp; | Quick setup &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ Supported | `od mcp install claude` |
+| [Claude Desktop](https://claude.ai/download) | ✅ Supported¹ | `od mcp install claude-desktop` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ Supported | `od mcp install codex` |
 | [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ Supported | `od mcp install reasonix` |
+| [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | ✅ Native runtime | `od agent setup deepseek-harness` |
+| [Raven](https://github.com/EverMind-AI/Raven) | ✅ Supported | `od mcp install raven` |
 | [Cursor](https://www.cursor.com/cli) | ✅ Supported | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Supported | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Supported | `od mcp install copilot` |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | ✅ Supported | `od mcp install gemini` |
 | [OpenCode](https://opencode.ai/) | ✅ Supported | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ Supported | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ Supported | `od mcp install antigravity` |
@@ -131,15 +133,17 @@ Inside a project's Studio, the same design system streams out multiple artifact 
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ Supported | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ Supported | `od mcp install hermes` |
 
-`od mcp install <agent> --print` for a dry-run preview · `--uninstall` to remove · full list with `od mcp install --help`.
+For DeepSeek Harness, install the official `dsh` CLI first, then select it in OpenDesign or run `od agent setup deepseek-harness` to install/repair OD's connection component. For MCP integrations: `od mcp install <agent> --print` for a dry-run preview · `--uninstall` to remove · full list with `od mcp install --help`.
+
+¹ Automatic MCP configuration for Claude Desktop is currently supported on macOS and Windows only.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 21 coding-agent CLIs Open Design supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Gemini · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 26 coding-agent CLIs OpenDesign supports — DeepSeek Harness · Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
 </p>
 
 **No CLI installed?** The BYOK proxy at `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` gives you the same loop (no process spawn) — paste `baseUrl` + `apiKey` + `model`, with presets for OpenAI, Atlas Cloud, Anthropic, Azure OpenAI, Google Gemini, Ollama, LM Studio, vLLM, or any OpenAI-compatible endpoint. Atlas Cloud uses `https://api.atlascloud.ai/v1` with your own key and OpenAI-compatible model ids such as `qwen/qwen3.5-flash`. Per-target SSRF protection blocks internal IPs / link-local / CGNAT at the daemon edge.
 
-The adapter contract and stream parsers live in [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts). Adding a new CLI is one entry — see [`docs/agent-adapters.md`](docs/agent-adapters.md).
+Runtime definitions live in [`apps/daemon/src/runtimes/defs/`](apps/daemon/src/runtimes/defs/), with registration and shared stream handling under [`apps/daemon/src/runtimes/`](apps/daemon/src/runtimes/). See [`docs/agent-adapters.md`](docs/agent-adapters.md) for the adapter contract.
 
 ---
 
@@ -152,16 +156,6 @@ Four core product categories, all rendered by a coding agent running on your lap
 The default output surface. Single-page HTML artifacts that read your `DESIGN.md` and render in a sandboxed iframe.
 
 <table>
-<tr>
-<td width="50%" valign="top">
-<img src="docs/screenshots/01-entry-view.png" alt="Entry view" /><br/>
-<sub><b>Entry view</b> — pick a skill, pick a design system, type the brief. One surface for prototypes, dashboards, decks, mobile apps, magazine pages.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="docs/screenshots/skills/mobile-onboarding.png" alt="Mobile onboarding" /><br/>
-<sub><b>Mobile prototype</b> — pixel-accurate iPhone 15 Pro chrome, multi-screen flows. The agent never redraws the phone frame; shared device frames live in <code>assets/frames/</code>.</sub>
-</td>
-</tr>
 <tr>
 <td width="50%" valign="top">
 <img src="docs/screenshots/skills/dating-web.png" alt="Web prototype dating-web" /><br/>
@@ -234,7 +228,7 @@ Every deck exports to **HTML** (single file, inlined assets), **PDF** (browser p
 
 ### 5 · Video & HyperFrames — agent-native motion graphics
 
-**[HyperFrames][hyperframes]** is HeyGen's open-source, agent-native video framework, integrated as a first-class citizen in Open Design. The agent writes HTML + CSS + GSAP, and HyperFrames renders it to a deterministic MP4 via headless Chrome + FFmpeg. Pair it with **Seedance 2.0** for cinematic t2v / i2v, **Veo 3 / Sora 2 / Kling 2** for routed model variants, and **Suno v5 / Lyria 2** for the audio layer.
+**[HyperFrames][hyperframes]** is HeyGen's open-source, agent-native video framework, integrated as a first-class citizen in OpenDesign. The agent writes HTML + CSS + GSAP, and HyperFrames renders it to a deterministic MP4 via headless Chrome + FFmpeg. Pair it with **Seedance 2.0** for cinematic t2v / i2v, **Veo 3 / Sora 2 / Kling 2** for routed model variants, and **Suno v5 / Lyria 2** for the audio layer.
 
 <table>
 <tr>
@@ -257,28 +251,28 @@ Every deck exports to **HTML** (single file, inlined assets), **PDF** (browser p
 
 ---
 
-## Why Open Design
+## Why OpenDesign
 
 > **In April 2026, Anthropic released Claude Design — the first time an LLM stopped writing prose and started delivering design artifacts directly.** It went viral. But it stayed closed-source, paid-only, cloud-only, locked to Anthropic's model, Anthropic's skills, Anthropic's surface. No checkout, no self-host, no Vercel deploy, no swap-in-your-own-agent.
 
-Open Design (OD) is the open-source alternative. Same loop, same artifact-first mental model, none of the lock-in:
+OpenDesign (OD) is the open-source alternative. Same loop, same artifact-first mental model, none of the lock-in:
 
 - 🤖 **Agent-native, model-agnostic.** We don't ship an agent. The `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` already on your `PATH` are the design engine. Swap with one click.
-- 🧠 **Brand-grade by default.** Every render reads the active `DESIGN.md` — a 9-section schema covering palette, type, spacing, motion, voice, anti-patterns. 150 systems ship with the repo (Linear, Stripe, Vercel, Airbnb, Apple, Tesla, Notion, Anthropic, Cursor, Supabase, Figma…). Drop a folder in, the picker finds it.
-- 🖥️ **Local-first, BYOK at every layer.** Native desktop apps for macOS (Apple Silicon + Intel) and Windows (x64). Linux AppImage on the optional release lane. No telemetry, no cloud round-trip. Before describing daemon data paths, contributors and operators MUST read `AGENTS.md` → **Daemon data directory contract**. This README MUST NOT restate it.
-- 🌍 **Composable on three planes.** **Plugins** carry runnable workflows · **skills** carry the agent's design taste · **design systems** carry the brand. All three are plain files anyone can author, version, and publish.
+- 🧠 **Brand-grade by default.** Every render reads the active package's `DESIGN.md` as the core brand contract. 151 design-system packages ship with the repo; legacy packages may be `DESIGN.md`-only, while newer packages can add `manifest.json`, `tokens.css`, components, assets, and provenance. Drop a folder in, the picker finds it.
+- 🖥️ **Local-first, BYOK at every layer.** Native desktop apps for macOS (Apple Silicon + Intel) and Windows (x64). Linux AppImage on the optional release lane. Product analytics and session replay are consent-gated; scrubbed safety and reliability telemetry is always on. Before describing daemon data paths, contributors and operators MUST read `AGENTS.md` → **Daemon data directory contract**. This README MUST NOT restate it.
+- 🌍 **Composable on four planes.** **Plugins** carry runnable workflows · functional **skills** carry agent behavior · **design templates** carry rendering blueprints · **design systems** carry the brand. All four use portable, versionable directories that anyone can author and publish.
 - 🔁 **Refresh an existing codebase.** Hand a `git` repo + `DESIGN.md` to the agent and it refactors your real components to the brand spec. Dedicated plugins migrate Figma / Pencil workflows into React / Next.js / Vue code.
 - 🔒 **Privacy by conviction.** Everything runs where your data lives — your laptop, your team's server, your Vercel project. When the network is needed, the BYOK proxy is SSRF-guarded.
 
 ### Comparison
 
-| | Claude Design | Figma | Lovable / v0 / Bolt | **Open Design** |
+| | Claude Design | Figma | Lovable / v0 / Bolt | **OpenDesign** |
 |---|---|---|---|---|
 | Open source | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
-| Self-host / desktop | ❌ | ❌ | ❌ | **✅ macOS + Windows + Vercel** |
-| Agent-native (runs in your CLI) | Anthropic only | ❌ | Cloud agent only | **✅ 22 CLIs + BYOK** |
-| Brand-grade `DESIGN.md` | Proprietary | Theme JSON | Limited tokens | **✅ 150 systems shipped** |
-| Skills / plugins / templates | Closed | Plugin store | Closed | **✅ 100+ skills · 261 plugins** |
+| Self-host / desktop | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker + Vercel web** |
+| Agent-native (runs in your CLI) | Anthropic only | ❌ | Cloud agent only | **✅ 25 CLIs + BYOK** |
+| Brand-grade `DESIGN.md` | Proprietary | Theme JSON | Limited tokens | **✅ 151 systems shipped** |
+| Skills / plugins / templates | Closed | Plugin store | Closed | **✅ 100+ functional skills · rendering templates · 277 plugins** |
 | HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ First-class** |
 | Refresh an existing repo to brand | ❌ | ❌ | ❌ | **✅ via agent + `DESIGN.md`** |
 | Minimum billing | Pro / Max / Team | Pro / Org | Pro / Team | **BYOK · any compatible endpoint** |
@@ -289,17 +283,17 @@ Open Design (OD) is the open-source alternative. Same loop, same artifact-first 
 
 ### 🖥️ Download the desktop app (recommended — zero config)
 
-The fastest way to use Open Design. No Node, no pnpm, no clone.
+The fastest way to use OpenDesign. No Node, no pnpm, no clone.
 
 - **macOS** (Apple Silicon · Intel x64) → [**open-design.ai**](https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_download_macos) or [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Windows** (x64) → [**open-design.ai**](https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_download_windows) or [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Linux** (AppImage, optional lane) → [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 
-After install: the app auto-detects every coding-agent CLI on your `PATH`, loads 100+ skills and 150 design systems, and lets you type a brief in the entry view.
+After install: the app auto-detects every coding-agent CLI on your `PATH`, loads 100+ functional skills, the separate rendering-template catalog, and 151 design systems, and lets you type a brief in the entry view.
 
 ### 🤖 Install into your coding agent (no UI)
 
-You can use Open Design without ever opening the GUI — call it as a skill, plugin, or MCP server inside Claude Code, Codex, Cursor, Copilot, OpenClaw, Antigravity, Hermes, Kimi, and more.
+You can use OpenDesign without ever opening the GUI — call it as a skill, plugin, or MCP server inside Claude Code, Codex, Cursor, Copilot, OpenClaw, Antigravity, Hermes, Kimi, and more.
 
 If you installed the macOS desktop app via the DMG or Homebrew cask, your shell
 may still resolve `od` to Apple's built-in `/usr/bin/od` octal-dump utility. In
@@ -310,8 +304,8 @@ client-specific snippet; it uses absolute paths and does not rely on the bare
 ```bash
 # One-line install into the agent you're using:
 od mcp install <agent>
-# <agent> = claude | codex | reasonix | cursor | copilot | openclaw
-#         | antigravity | gemini | pi | vibe | hermes | cline | kimi
+# <agent> = claude | codex | reasonix | raven | cursor | copilot | openclaw
+#         | antigravity | pi | vibe | hermes | cline | kimi | kiro
 #         | trae | opencode
 
 # Hosted equivalent for curl-based setup:
@@ -323,7 +317,7 @@ hosted URL returns shell instead of the landing-page HTML fallback and fails
 fast if your shell resolves a non-Open-Design `od` binary.
 
 > **macOS / WSL2 users:** `/usr/bin/od` is a system octal-dump command and can
-> shadow Open Design's `od` command. Desktop-app users should prefer the
+> shadow OpenDesign's `od` command. Desktop-app users should prefer the
 > **Settings → MCP server** snippet; WSL2 users should follow the
 > [`WSL2 setup guide`](docs/wsl-setup.md) first.
 
@@ -333,7 +327,7 @@ Then, inside the agent:
 > Use open-design to generate a landing page with the Linear design system
 ```
 
-The agent reads `skills/`, picks the right `SKILL.md`, binds the `DESIGN.md` you named, and emits an `<artifact>` previewable at `http://localhost:7456`.
+In a filesystem-backed local CLI run, the agent composes the selected functional skill or design template with your `DESIGN.md`, writes the canonical project files, and OpenDesign previews those files. A BYOK/plain-API run without filesystem tools instead returns one complete `<artifact>` block.
 
 ### 🐳 Run with Docker
 
@@ -343,16 +337,19 @@ cd open-design/deploy
 cp .env.example .env
 echo "OD_API_TOKEN=$(openssl rand -hex 32)" >> .env
 docker compose up -d
-# open http://localhost:7456
+# open http://127.0.0.1:7456
 ```
 
-> **macOS users:** If the web UI shows `Authorization: Bearer <OD_API_TOKEN> required`, Docker Desktop bridge networking is the cause. See [Docker Desktop on macOS](deploy/README.md#docker-desktop-on-macos) for the fix.
+If the browser asks for credentials, use `open-design` as the username and the
+`OD_API_TOKEN` value from `deploy/.env` as the password. This keeps Docker bridge
+traffic authenticated without requiring host networking. API clients can keep
+using `Authorization: Bearer <OD_API_TOKEN>`.
 
 ### 🚀 Deploy on Sealos
 
 [![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
 
-The Sealos App Store template runs the published Open Design Docker image with persistent workspace storage and Basic Auth on the public proxy. For custom public or shared Docker deployments, follow the reverse-proxy and `OPEN_DESIGN_ALLOWED_ORIGINS` guidance in [`deploy/README.md`](deploy/README.md#local-compose).
+The Sealos App Store template runs the published OpenDesign Docker image with persistent workspace storage and Basic Auth on the public proxy. For custom public or shared Docker deployments, follow the reverse-proxy and `OPEN_DESIGN_ALLOWED_ORIGINS` guidance in [`deploy/README.md`](deploy/README.md#local-compose).
 
 ### 🧑‍💻 Run from source
 
@@ -363,6 +360,8 @@ corepack enable && pnpm install
 pnpm tools-dev run web
 ```
 
+Open the URL printed by `tools-dev`; development ports are allocated dynamically unless you pass explicit port flags.
+
 Node `~24`, pnpm `10.33.x`. WSL2 users, see [`docs/wsl-setup.md`](docs/wsl-setup.md); native Windows users, see [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md). Full quickstart, env vars, Nix flake, and packaged build flow → [`QUICKSTART.md`](QUICKSTART.md).
 
 ### A full workflow — from brief to artifact
@@ -371,26 +370,26 @@ Node `~24`, pnpm `10.33.x`. WSL2 users, see [`docs/wsl-setup.md`](docs/wsl-setup
 
 1. **A PM submits a brief.** The plugin picker offers landing page · pitch deck · dashboard · social post · PM spec · OKR scorecard…
 2. **A designer (or the agent) locks the direction.** No brand? Pick from 5 curated directions. Have a brand? Drop a screenshot / URL → the agent connects GitHub, imports Figma, and codifies a reusable `DESIGN.md`.
-3. **The agent emits the first `<artifact>`.** Plugin + skill + `DESIGN.md` are bound. It streams into a sandboxed iframe, editable in place — not "regenerate from scratch."
+3. **The agent creates the first deliverable.** Plugin + functional skill or design template + `DESIGN.md` are bound. Filesystem-backed CLI runs write canonical project files and the preview follows them; BYOK/plain-API runs without file tools return one complete `<artifact>` block.
 4. **Hand off to engineering.** The artifact is real HTML/CSS — drop it into Cursor, Codex, or Claude Code to keep building as code. Or export PPTX / PDF / MP4 straight to marketing.
-5. **Open Design gets smarter as you use it.** Your screenshots, fonts, palettes, and confirmed artifacts accumulate as defaults for the next session. Less rework, less drift.
+5. **OpenDesign gets smarter as you use it.** Your screenshots, fonts, palettes, and confirmed artifacts accumulate as defaults for the next session. Less rework, less drift.
 
 ---
 
-## Use Open Design from your coding agent
+## Use OpenDesign from your coding agent
 
-Open Design ships a **stdio MCP server** and per-agent **install scripts**. Any MCP-compatible agent in another repo can read files from your local Open Design projects directly — tokens CSS, JSX components, entry HTML — as a structured API queryable by name. The agent always sees the live file, not a stale export.
+OpenDesign ships a **stdio MCP server** and per-agent **install scripts**. Any MCP-compatible agent in another repo can read files from your local OpenDesign projects directly — tokens CSS, JSX components, entry HTML — as a structured API queryable by name. The agent always sees the live file, not a stale export.
 
 ```bash
 # One-line install (16+ CLIs supported):
 od mcp install <agent>
 
 # Then the agent can:
-od search-files "primary button"      # search files across projects
-od get-file design-systems/linear-app/DESIGN.md
-od get-artifact <slug>                # latest rendered artifact
-od plugin run web-prototype --brief "..."
-od skill list --scenario marketing
+od project list --json
+od files list <project-id> --json
+od files read <project-id> <relative-path>
+od plugin list --json
+od skills list --json
 ```
 
 **Why MCP?** Exporting and re-attaching a zip every iteration breaks flow. MCP exposes the design source directly — the agent always sees the live file.
@@ -403,13 +402,13 @@ od skill list --scenario marketing
 
 ---
 
-## Skills
+## Skills and design templates
 
-**100+ skills ship in the box** — each is a folder under [`skills/`](skills/) following the Claude Code [`SKILL.md`][skill] convention, extended with an `od:` frontmatter (`mode`, `platform`, `scenario`, `preview.type`, `design_system.requires`, `default_for`, `fidelity`, `example_prompt`). Drop a folder in, restart the daemon, it appears in the picker.
+**100+ functional skills ship in [`skills/`](skills/)**. Each follows the Agent Skills [`SKILL.md`][skill] convention and supplies reusable agent behavior, references, or utilities. Renderable starters live separately in [`design-templates/`](design-templates/); they may also use `SKILL.md`, but they populate the design-template catalog rather than the functional-skill registry.
 
-Two **modes** anchor the catalog: `prototype` (web/mobile/desktop single-page artifacts) and `deck` (horizontal-swipe presentations). Also `image`, `video`, `audio`, `template`, `design-system`, and `utility` modes. The **`scenario`** field groups them by audience: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`.
+Two **modes** anchor the design-template catalog: `prototype` (web/mobile/desktop single-page artifacts) and `deck` (horizontal-swipe presentations). Other templates cover `image`, `video`, `audio`, and utility surfaces. The **`scenario`** field groups templates by audience: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`.
 
-| Skill | Mode | Scenario | What it produces |
+| Design template | Mode | Scenario | What it produces |
 |---|---|---|---|
 | [`web-prototype`](design-templates/web-prototype/) | prototype | design | Default landing page / hero |
 | [`saas-landing`](design-templates/saas-landing/) | prototype | marketing | Hero / features / pricing / CTA |
@@ -432,13 +431,13 @@ Two **modes** anchor the catalog: `prototype` (web/mobile/desktop single-page ar
 | [`critique`](design-templates/critique/) | utility | design | Five-dimensional self-critique scoresheet |
 | [`tweaks`](design-templates/tweaks/) | utility | design | AI-emitted tweaks-panel manifest |
 
-Full skill protocol → [`docs/skills-protocol.md`](docs/skills-protocol.md). Skill registry endpoint: `GET /api/skills`.
+Full protocol and directory split → [`docs/skills-protocol.md`](docs/skills-protocol.md). Registry endpoints: `GET /api/skills` for functional skills and `GET /api/design-templates` for rendering templates.
 
 ---
 
 ## Design Systems
 
-**150 brand-grade `DESIGN.md` systems** ship with the repo — each a single Markdown file with a 9-section schema (color, typography, spacing, layout, components, motion, voice, brand, anti-patterns), from [`VoltAgent/awesome-design-md`][acd2]. Switch a system → the next render uses the new tokens. No theme JSON.
+**151 brand-grade design-system packages centered on `DESIGN.md`** ship with the repo. Legacy packages may contain only that Markdown contract; newer packages can also carry `manifest.json`, compiled `tokens.css`, component fixtures, assets, and provenance evidence. The catalog mixes upstream-derived systems with project-owned additions; [`design-systems/README.md`](design-systems/README.md) records the package shape and provenance. Switch a system → the next render uses the new tokens.
 
 <details>
 <summary><b>Full catalog (click to expand)</b></summary>
@@ -471,16 +470,16 @@ Re-import the library via [`scripts/sync-design-systems.ts`](scripts/sync-design
 
 ## Plugins
 
-**261 official plugins** live in [`plugins/_official/`](plugins/_official/). Each plugin is a **portable agent-skill folder** — a `SKILL.md` (readable by any agent that supports Agent Skills), plus an optional `open-design.json` manifest that gives Open Design marketplace metadata, inputs, previews, pipelines, and capability declarations. Jump straight to a category:
+**277 official plugins plus 183 remixable reference examples** live in [`plugins/_official/`](plugins/_official/). Each entry is a portable plugin directory anchored by `open-design.json` plus the payload required by its type: for example `SKILL.md` for agent workflows, `template.json` for media templates, or `DESIGN.md` for design-system entries. Jump straight to a category:
 
 | Category | Count | Contents |
 |---|---|---|
-| [`scenarios/`](plugins/_official/scenarios/) | 11 | Complete design scenarios — [`od-default`](plugins/_official/scenarios/od-default/), [`od-design-refine`](plugins/_official/scenarios/od-design-refine/), [`od-figma-migration`](plugins/_official/scenarios/od-figma-migration/), [`od-code-migration`](plugins/_official/scenarios/od-code-migration/), [`od-react-export`](plugins/_official/scenarios/od-react-export/), [`od-nextjs-export`](plugins/_official/scenarios/od-nextjs-export/), [`od-vue-export`](plugins/_official/scenarios/od-vue-export/), [`od-media-generation`](plugins/_official/scenarios/od-media-generation/), [`od-new-generation`](plugins/_official/scenarios/od-new-generation/), [`od-tune-collab`](plugins/_official/scenarios/od-tune-collab/), [`od-plugin-authoring`](plugins/_official/scenarios/od-plugin-authoring/) |
+| [`scenarios/`](plugins/_official/scenarios/) | 13 | Complete design scenarios — [`od-default`](plugins/_official/scenarios/od-default/), [`od-design-refine`](plugins/_official/scenarios/od-design-refine/), [`od-figma-migration`](plugins/_official/scenarios/od-figma-migration/), [`od-code-migration`](plugins/_official/scenarios/od-code-migration/), [`od-react-export`](plugins/_official/scenarios/od-react-export/), [`od-nextjs-export`](plugins/_official/scenarios/od-nextjs-export/), [`od-vue-export`](plugins/_official/scenarios/od-vue-export/), [`od-media-generation`](plugins/_official/scenarios/od-media-generation/), [`od-new-generation`](plugins/_official/scenarios/od-new-generation/), [`od-tune-collab`](plugins/_official/scenarios/od-tune-collab/), [`od-plugin-authoring`](plugins/_official/scenarios/od-plugin-authoring/), [`od-share-to-community`](plugins/_official/scenarios/od-share-to-community/), [`od-web-effect-extractor`](plugins/_official/scenarios/od-web-effect-extractor/) |
 | [`image-templates/`](plugins/_official/image-templates/) | 45 | One-shot image prompts — editorial, cinematic, product, portrait |
-| [`video-templates/`](plugins/_official/video-templates/) | 50 | HyperFrames / Seedance / Veo motion templates |
-| [`design-systems/`](plugins/_official/design-systems/) | 142 | Brand `DESIGN.md` wrapped as plugins |
+| [`video-templates/`](plugins/_official/video-templates/) | 63 | HyperFrames / Seedance / Veo motion templates |
+| [`design-systems/`](plugins/_official/design-systems/) | 143 | Brand `DESIGN.md` wrapped as plugins |
 | [`atoms/`](plugins/_official/atoms/) | 13 | Reusable UI fragments (buttons, heroes, KPI cards) |
-| [`examples/`](plugins/_official/examples/) | 140 | Remixable reference outputs |
+| [`examples/`](plugins/_official/examples/) | 183 | Remixable reference outputs |
 
 Also [`plugins/community/`](plugins/community/) for community plugins and [`plugins/registry/`](plugins/registry/) for the publishing flow.
 
@@ -513,18 +512,18 @@ Every command supports `--json`, so you can pipe it through `jq` / `xargs` into 
 
 ### Building a plugin
 
-A plugin **needs only a `SKILL.md` at minimum**; to list it in the Open Design marketplace, add an `open-design.json`:
+An OpenDesign plugin requires `open-design.json` plus the payload required by its type. A workflow skill or scenario also includes `SKILL.md`; manifest-only template and design-system entries use their own payloads instead:
 
 ```
 my-plugin/
-├── SKILL.md            ← required: YAML frontmatter (name · description) + trigger phrasing + workflow (aim for < 500 lines)
-├── open-design.json    ← needed to list: marketplace metadata + inputs + pipeline + capabilities
+├── open-design.json    ← required: marketplace metadata + inputs + pipeline + capabilities
+├── SKILL.md            ← required for agent-skill/scenario entries; omitted for other plugin types
 ├── README.md           ← optional: usage, install, registry links
 ├── preview/            ← optional: index.html / poster.png (strongly recommended for visual plugins)
 └── examples/           ← optional: concrete use cases
 ```
 
-Core `open-design.json` fields: `specVersion` (currently `1.0.0`), `name` (stable ID), `version` (semver), `compat.agentSkills[].path` (points at `./SKILL.md`), `od.kind` (`skill` / `scenario` / `atom` / `bundle`), `od.taskKind` (`new-generation` / `figma-migration` / `code-migration` / `tune-collab`), `od.mode` (the output surface, e.g. `prototype` / `deck` / `live-artifact` / `image` / `video` / `hyperframes` / `audio` / `design-system` / `scenario`), `od.capabilities[]` (**declare the minimum** — a restricted install grants only `prompt:inject` by default), `od.inputs[]` (apply-time parameters).
+Core `open-design.json` fields: `specVersion` (currently `1.0.0`), `name` (stable ID), `version` (semver), optional `compat.agentSkills[].path` (points at `./SKILL.md` when the entry exposes an Agent Skill), `od.kind` (`skill` / `scenario` / `atom` / `bundle`), `od.taskKind` (`new-generation` / `figma-migration` / `code-migration` / `tune-collab`), `od.mode` (the output surface, e.g. `prototype` / `deck` / `live-artifact` / `image` / `video` / `hyperframes` / `audio` / `design-system` / `scenario`), `od.capabilities[]` (**declare the minimum** — a restricted install grants only `prompt:inject` by default), `od.inputs[]` (apply-time parameters).
 
 Scaffold + validate locally:
 
@@ -538,7 +537,7 @@ Full field set and runtime contract → [`plugins/spec/SPEC.md`](plugins/spec/SP
 
 ### Contributing a plugin
 
-1. Drop the plugin folder into [`plugins/community/`](plugins/community/) (third-party plugins), or — to ship it bundled with Open Design — into the matching tier of [`plugins/_official/`](plugins/_official/).
+1. Drop the plugin folder into [`plugins/community/`](plugins/community/) (third-party plugins), or — to ship it bundled with OpenDesign — into the matching tier of [`plugins/_official/`](plugins/_official/).
 2. Pass validation: `od plugin validate`, `pnpm guard`, `pnpm --filter @open-design/plugin-runtime typecheck`.
 3. Fill the PR using the template in [`plugins/spec/CONTRIBUTING.md`](plugins/spec/CONTRIBUTING.md) (ID, version, lane, mode, capabilities, trigger examples; attach a screenshot / preview for visual plugins).
 4. To publish to an external registry (skills.sh / ClawHub / standalone GitHub) → [`plugins/spec/PUBLISHING-REGISTRIES.md`](plugins/spec/PUBLISHING-REGISTRIES.md).
@@ -558,7 +557,7 @@ Plugin registry endpoint: `GET /api/plugins`. Directory overview → [`plugins/R
    ┌─────────────────────────────────┐   /api/proxy/{provider}/stream (SSE)
    │  local daemon (Express+SQLite)  │   ─→ any OpenAI-compatible BYOK,
    │                                  │       SSRF-guarded at the edge
-   │  /api/skills    /api/plugins    │
+   │  /api/skills    /api/design-templates    /api/plugins    │
    │  /api/design-systems            │
    │  /api/chat (SSE)   /api/proxy/* │
    │  /api/projects/:id/files/...    │
@@ -569,10 +568,11 @@ Plugin registry endpoint: `GET /api/plugins`. Directory overview → [`plugins/R
              │ spawn(cli, [...], { cwd: managed project cwd })
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
-   │  claude · codex · cursor-agent · copilot · openclaw · antigravity ·│
-   │  gemini · opencode · qwen · qoder · hermes (ACP) · kimi (ACP) ·    │
-   │  pi (RPC) · kiro · kilo · vibe (ACP) · cline · trae · deepseek     │
-   │  reads SKILL.md + DESIGN.md, writes artifacts to disk             │
+   │  Local runtime definitions come from runtimes/registry.ts;                 │
+   │  the base registry has 27 definitions (including byok-opencode),           │
+   │  backed by 26 distinct local CLI executables because byok-opencode shares │
+   │  the OpenCode executable. See docs/agent-adapters.md.                     │
+   │  composes a functional skill or design template + DESIGN.md; writes files │
    └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -581,7 +581,7 @@ Plugin registry endpoint: `GET /api/plugins`. Directory overview → [`plugins/R
 | Frontend | Next.js 16 App Router + React 18 + TypeScript |
 | Daemon | Node 24 · Express · SSE streaming · `better-sqlite3` |
 | Storage | Before changing or documenting daemon storage paths, you MUST read `AGENTS.md` → **Daemon data directory contract**. This README MUST NOT restate it. |
-| Preview | Sandboxed `srcdoc` iframe + streaming `<artifact>` parser |
+| Preview | Filesystem runs render canonical project files; BYOK/plain-API runs parse one complete `<artifact>` block into a sandboxed `srcdoc` iframe |
 | Export | HTML (inlined) · PDF (browser print) · PPTX (agent-driven) · ZIP · Markdown · MP4 (HyperFrames) |
 | Desktop | Electron shell + sandboxed renderer + sidecar IPC (STATUS · EVAL · SCREENSHOT · CONSOLE · CLICK · SHUTDOWN) |
 | Lifecycle | One entry point: `pnpm tools-dev` (start / stop / run / status / logs / inspect / check) |
@@ -592,16 +592,16 @@ Full architecture → [`docs/architecture.md`](docs/architecture.md). Skill prot
 
 ## Roadmap
 
-- [x] Daemon + 22 coding-agent CLI adapters + skill registry + design-system catalog
+- [x] Daemon + 27 runtime definitions across 26 distinct coding-agent CLI executables + skill/design-template registries + design-system catalog
 - [x] Web app + chat + question form + 5-direction picker + todo progress + sandboxed preview
-- [x] 100+ skills · 150 design systems · 5 visual directions · 5 device frames
+- [x] 100+ functional skills · separate rendering-template catalog · 151 design-system packages · 5 visual directions · 5 device frames
 - [x] SQLite-backed projects · conversations · messages · tabs · templates
 - [x] Multi-provider BYOK proxy (`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`) with OpenAI-compatible presets including Atlas Cloud + SSRF guard
 - [x] Claude Design ZIP import (`/api/import/claude-design`)
 - [x] Sidecar protocol + Electron desktop + IPC automation
 - [x] Artifact lint API + 5-dim self-critique pre-emit gate
 - [x] **0.8.0** — plugin marketplace infrastructure (261 official plugins, manifest spec, per-agent install scripts)
-- [x] **0.9.0** — Open Design Cloud (official model service built into the app: zero config, one-click sign-in)
+- [x] **0.9.0** — OpenDesign Cloud (official model service built into the app: zero config, one-click sign-in)
 - [x] **0.10.0** — the all-in-one design workspace: the whole craft loop in one window (references → material → interactive editing → motion → handoff)
 - [x] **0.11.0** — _The Bazaar_: built in the open — a community marketplace of plugins and design systems anyone can pick from and contribute to
 - [x] **0.12.0** — _Brand-backed Design System_: turn the brand you already own into a reusable, portable `DESIGN.md` system
@@ -633,16 +633,17 @@ The [`good-first-issue`](https://github.com/nexu-io/open-design/issues?q=is%3Ais
 
 ## Contributing
 
-Open Design keeps moving because contributors — designers, engineers, prompt authors — keep showing up. Many of the most-used skills, design systems, and plugins were written by people outside the core team.
+OpenDesign keeps moving because contributors — designers, engineers, prompt authors — keep showing up. Many of the most-used skills, design systems, and plugins were written by people outside the core team.
 
 ### 🎯 Where to start (max leverage, min change)
 
 | Want to ship… | How | Where |
 |---|---|---|
-| A new **skill** | Drop a folder with `SKILL.md` + `assets/` + `references/` | [`skills/`](skills/) · spec in [`docs/skills-protocol.md`](docs/skills-protocol.md) |
-| A new **design system** | Drop a `DESIGN.md` using the 9-section schema | [`design-systems/<brand>/`](design-systems/) |
-| A new **plugin** | Drop `open-design.json` + manifest under a category folder | [`plugins/community/`](plugins/community/) · spec in [`plugins/spec/SPEC.md`](plugins/spec/SPEC.md) · agent dev guide in [`plugins/spec/AGENT-DEVELOPMENT.md`](plugins/spec/AGENT-DEVELOPMENT.md) |
-| Support a new **coding-agent CLI** | One adapter entry + stream parser | [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) |
+| A new functional **skill** | Drop a folder with `SKILL.md` + optional `assets/` + `references/` | [`skills/`](skills/) · spec in [`docs/skills-protocol.md`](docs/skills-protocol.md) |
+| A new rendering **design template** | Add a renderable `SKILL.md` bundle | [`design-templates/`](design-templates/) |
+| A new **design system** | Drop a package centered on `DESIGN.md`; add `manifest.json`, `tokens.css`, components, assets, or provenance when needed | [`design-systems/<brand>/`](design-systems/) |
+| A new **plugin** | Drop `open-design.json` + the type-specific payload under a category folder | [`plugins/community/`](plugins/community/) · spec in [`plugins/spec/SPEC.md`](plugins/spec/SPEC.md) · agent dev guide in [`plugins/spec/AGENT-DEVELOPMENT.md`](plugins/spec/AGENT-DEVELOPMENT.md) |
+| Support a new **coding-agent CLI** | One runtime definition + registry entry; add a parser only for a new wire format | [`apps/daemon/src/runtimes/defs/`](apps/daemon/src/runtimes/defs/) |
 | Fix a bug or polish UI | Browse the [`good-first-issue`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) label | [Issues →](https://github.com/nexu-io/open-design/issues) |
 | Translate the docs | Update the `README.<lang>.md` files | [`TRANSLATIONS.md`](TRANSLATIONS.md) |
 
@@ -670,9 +671,9 @@ gh pr create --fill
 
 Full agent-friendly contribution flow, code style, and PR bar → [`CONTRIBUTING.md`](CONTRIBUTING.md) ([Deutsch](docs/i18n/CONTRIBUTING.de.md) · [Français](docs/i18n/CONTRIBUTING.fr.md) · [简体中文](docs/i18n/CONTRIBUTING.zh-CN.md) · [日本語](docs/i18n/CONTRIBUTING.ja-JP.md) · [한국어](docs/i18n/CONTRIBUTING.ko.md) · [Português](docs/i18n/CONTRIBUTING.pt-BR.md) · [ภาษาไทย](docs/i18n/CONTRIBUTING.th.md)).
 
-### 🏅 Open Design Fellow program
+### 🏅 OpenDesign Fellow program
 
-We're recruiting **Open Design Fellows** around the world — Fellows shape the product alongside the core team, represent Open Design officially in their region, and grow the community locally, backed by funded support ($1,000 / MR), free LLM credits, and a direct review track. Details → [`MAINTAINERS.md`](MAINTAINERS.md) and the announcement on [Discord](https://discord.gg/mHAjSMV6gz).
+We're recruiting **OpenDesign Fellows** around the world — Fellows shape the product alongside the core team, represent OpenDesign officially in their region, and grow the community locally, backed by funded support ($1,000 / MR), free LLM credits, and a direct review track. Details → [`MAINTAINERS.md`](MAINTAINERS.md) and the announcement on [Discord](https://discord.gg/mHAjSMV6gz).
 
 ---
 
@@ -713,7 +714,7 @@ Maintainer rules, promotion criteria, and the exit protocol → [`MAINTAINERS.md
 Thanks to everyone who has taken part — code, docs, feedback, a sharp issue, a new skill, a new design system.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-07-17" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-08-04" alt="OpenDesign contributors" />
 </a>
 
 ---
@@ -721,7 +722,7 @@ Thanks to everyone who has taken part — code, docs, feedback, a sharp issue, a
 ## Repository activity
 
 <picture>
-  <img alt="Open Design — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
+  <img alt="OpenDesign — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
 </picture>
 
 The SVG above is regenerated daily by [`.github/workflows/metrics.yml`](.github/workflows/metrics.yml) using [`lowlighter/metrics`](https://github.com/lowlighter/metrics).
@@ -731,16 +732,16 @@ The SVG above is regenerated daily by [`.github/workflows/metrics.yml`](.github/
 ## Star us
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star Open Design on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
+  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star OpenDesign on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
 </p>
 
 If this saved you thirty minutes, give it a ★. Stars don't pay rent — but they tell the next designer, agent, and contributor that this experiment is worth their attention. One click, three seconds, a real signal.
 
-<a href="https://star-history.com/#nexu-io/open-design&Date">
+<a href="https://star-history.dera.page/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-07-17" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-07-17" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-07-17" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-08-04" />
+    <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+    <img alt="OpenDesign star history" src="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
   </picture>
 </a>
 
@@ -756,9 +757,9 @@ If this saved you thirty minutes, give it a ★. Stars don't pay rent — but th
 | [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | The HTML PPT Studio family — 15 deck templates, 36 themes, 31 page layouts, animation runtime, magnetic-card presenter mode. |
 | [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | The first open-source Claude Design alternative; UX patterns we borrow (streaming-artifact loop, sandboxed iframe, live agent panel). |
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | The daemon + adapter architecture — PATH-scan agent detection, local daemon as the only privileged process. |
-| [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | Source of the 9-section `DESIGN.md` schema and 70 product systems. |
+| [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | Historical source of the original 9-section `DESIGN.md` schema and 70 upstream-derived systems; current packages may extend that baseline. |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | Source of the 57 design skills added under `design-systems/`. |
-| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | The HTML→MP4 motion-graphics framework, integrated as the first-class `hyperframes-html` in Open Design. |
+| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | The HTML→MP4 motion-graphics framework, integrated as the first-class `hyperframes-html` in OpenDesign. |
 | [Claude Code skills][skill] | The `SKILL.md` convention we adopt verbatim. |
 
 Detailed provenance → [`docs/references.md`](docs/references.md).

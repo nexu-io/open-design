@@ -5,7 +5,7 @@
  * namespace, the project/source runtime roots, the sidecar base, the
  * namespace/runtime roots and their pointer/manifest/log paths, per-app runtime
  * dirs/files, and the app IPC socket/pipe path — all from a host contract so no
- * Open Design-specific strings are hardcoded here. Depends on `node:path` and the
+ * OpenDesign-specific strings are hardcoded here. Depends on `node:path` and the
  * public types.
  */
 
@@ -83,10 +83,17 @@ export function resolveSidecarBase<TStamp extends SidecarStampShape>({
   base,
   contract,
   env = process.env,
-  projectRoot = process.cwd(),
+  projectRoot,
   source,
 }: BaseResolutionOptions<TStamp>): string {
-  return resolve(base ?? env[contract.env.base] ?? resolveSourceRuntimeRoot({ contract, projectRoot, source }));
+  const explicitBase = base ?? env[contract.env.base];
+  if (explicitBase != null && explicitBase.length > 0) return resolve(explicitBase);
+
+  return resolve(resolveSourceRuntimeRoot({
+    contract,
+    projectRoot: projectRoot ?? process.cwd(),
+    source,
+  }));
 }
 
 /**
@@ -123,7 +130,7 @@ export function resolveNamespaceRoot<TStamp extends SidecarStampShape>({
  *
  * Callers pass their contract's runtime-mode constant (e.g.
  * `SIDECAR_MODES.RUNTIME`) so this generic helper does not have to hardcode
- * Open Design's mode strings.
+ * OpenDesign's mode strings.
  */
 export function resolveRuntimeNamespaceRoot<TStamp extends SidecarStampShape>({
   contract,

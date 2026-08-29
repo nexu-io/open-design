@@ -248,7 +248,7 @@ Each `list` row:
 `html_template_v1` forbids `{{data.*}}` interpolation inside URL-bearing
 attributes such as `<use href>`, `<a href>`, `<img src>`,
 `<form action>`, etc. (see
-[`skills/live-artifact/references/artifact-schema.md`](../../../references/artifact-schema.md#html-template-v1-binding-rules)).
+[`design-templates/live-artifact/references/artifact-schema.md`](../../../references/artifact-schema.md#html-template-v1-binding-rules)).
 The renderer's security validator runs *before* `{{data.*}}` substitution, so
 even a well-formed validator pass would not protect a future `data.json`
 that put `javascript:alert(1)` (or any other URL value) into one of these

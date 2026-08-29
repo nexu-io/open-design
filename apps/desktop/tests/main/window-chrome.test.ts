@@ -7,7 +7,7 @@ const runtimeSource = readFileSync(new URL("../../src/main/runtime.ts", import.m
 /**
  * runtime.ts constructs three BrowserWindows — the brand splash
  * (`createSplashWindow`), the desktop pet, and the main app window — and the
- * splash, declared FIRST, shares the `title: "Open Design"` / `width: 1280`
+ * splash, declared FIRST, shares the `title: "OpenDesign"` / `width: 1280`
  * markers with the main window while intentionally omitting
  * `backgroundThrottling: false`. A loose `new BrowserWindow({` anchor therefore
  * locks onto the splash block. Anchor instead on the `const window =`
@@ -30,10 +30,20 @@ describe("desktop BrowserWindow chrome options", () => {
   });
 
   test("keeps macOS traffic-light controls clear of the web tab strip", () => {
-    expect(runtimeSource).toContain("--app-chrome-traffic-space: 96px !important;");
-    expect(runtimeSource).toContain("--app-chrome-traffic-margin: 12px !important;");
-    expect(runtimeSource).toContain("flex: 0 0 96px !important;");
-    expect(runtimeSource).toContain("width: 96px !important;");
+    // Windowed: home pill 4px after the lights (12px inset + 52px span).
+    expect(runtimeSource).toContain("--app-chrome-traffic-space: 64px !important;");
+    expect(runtimeSource).toContain("--app-chrome-traffic-margin: 4px !important;");
+    // Fullscreen: lights hidden; the pill left-aligns with the nav-rail card.
+    expect(runtimeSource).toContain("html.is-window-fullscreen .app-chrome-header");
+    expect(runtimeSource).toContain("--app-chrome-traffic-space: 10px !important;");
+    expect(runtimeSource).toContain("flex: 0 0 var(--app-chrome-traffic-space) !important;");
+    expect(runtimeSource).toContain("width: var(--app-chrome-traffic-space) !important;");
+  });
+
+  test("mirrors macOS fullscreen state onto the renderer for chrome CSS", () => {
+    expect(runtimeSource).toContain('window.on("enter-full-screen", () => void syncWindowFullscreenClass(window));');
+    expect(runtimeSource).toContain('window.on("leave-full-screen", () => void syncWindowFullscreenClass(window));');
+    expect(runtimeSource).toContain("is-window-fullscreen");
   });
 
   test("keeps the visible renderer responsive when Chromium misclassifies visibility", () => {

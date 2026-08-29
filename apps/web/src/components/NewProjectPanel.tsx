@@ -1,4 +1,5 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Dialog, DialogDescription, DialogFooter, DialogTitle } from '@open-design/components';
 import { createTabToTracking } from '@open-design/contracts/analytics';
 import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
@@ -127,6 +128,8 @@ export type MediaSurface = 'image' | 'video' | 'audio';
 export interface CreateInput {
   name: string;
   skillId: string | null;
+  /** UI-only intent marker; the public project contract still receives only the resolved skill id. */
+  skillSelectionProvenance?: 'automatic-default' | 'explicit-user';
   designSystemId: string | null;
   metadata: ProjectMetadata;
   userWorkingDirToken?: string;
@@ -765,6 +768,7 @@ export function NewProjectPanel({
     onCreate({
       name: trimmedName || autoName(tab, mediaSurface, t),
       skillId: startTemplateId ?? skillIdForTab,
+      skillSelectionProvenance: startTemplateId ? 'explicit-user' : 'automatic-default',
       designSystemId: primaryDs,
       metadata: {
         ...metadata,
@@ -790,7 +794,7 @@ export function NewProjectPanel({
         }
         if ('canceled' in result && result.canceled) return;
         setWorkingDirError({
-          message: `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update Open Design and try again.`,
+          message: `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update OpenDesign and try again.`,
         });
         return;
       }
@@ -924,7 +928,7 @@ export function NewProjectPanel({
             title={workingDir ?? t('workingDirPicker.homeTitle')}
             data-tooltip={workingDir ?? t('workingDirPicker.homeTitle')}
           >
-            <Icon name="folder" size={13} />
+            <Icon name="folder" size={14} />
             <span>
               {workingDirPicking
                 ? t('workingDirPicker.processing')
@@ -943,7 +947,7 @@ export function NewProjectPanel({
               }}
               aria-label={t('workingDirPicker.clearAria')}
             >
-              <Icon name="close" size={10} />
+              <Icon name="close" size={14} />
             </button>
           ) : null}
         </div>
@@ -1109,7 +1113,7 @@ export function NewProjectPanel({
               : undefined
           }
         >
-          <Icon name="plus" size={13} />
+          <Icon name="plus" size={14} />
           <span>
             {tab === 'template'
               ? t('newproj.createFromTemplate')
@@ -1134,7 +1138,7 @@ export function NewProjectPanel({
               title={t('newproj.importClaudeZipTitle')}
               onClick={() => importInputRef.current?.click()}
             >
-              <Icon name="import" size={13} />
+              <Icon name="import" size={14} />
               <span>
                 {importing
                   ? t('newproj.importingClaudeZip')
@@ -1151,8 +1155,12 @@ export function NewProjectPanel({
               disabled={folderImport.importing}
               onClick={() => void folderImport.openFolder()}
             >
-              <Icon name="folder" size={13} />
-              <span>{folderImport.importing ? 'Opening...' : 'Open folder'}</span>
+              <Icon name="folder" size={14} />
+              <span>
+                {folderImport.importing
+                  ? t('newproj.openingFolder')
+                  : t('newproj.openFolder')}
+              </span>
             </button>
           </div>
         ) : null}
@@ -1548,12 +1556,12 @@ function HighFidelityArt() {
       <rect x="6" y="8" width="34" height="6" rx="2" fill="#1a1916" />
       <rect x="6" y="20" width="46" height="4" rx="2" fill="#74716b" />
       <rect x="6" y="28" width="42" height="4" rx="2" fill="#b3b0a8" />
-      <rect x="6" y="40" width="22" height="9" rx="2" fill="#c96442" />
+      <rect x="6" y="40" width="22" height="9" rx="2" fill="#87ea5c" />
       <rect x="64" y="8" width="50" height="54" rx="4" fill="#fbeee5" />
-      <rect x="70" y="14" width="38" height="4" rx="2" fill="#c96442" />
+      <rect x="70" y="14" width="38" height="4" rx="2" fill="#87ea5c" />
       <rect x="70" y="22" width="32" height="3" rx="1.5" fill="#74716b" />
       <rect x="70" y="29" width="36" height="3" rx="1.5" fill="#b3b0a8" />
-      <rect x="70" y="36" width="20" height="6" rx="2" fill="#c96442" />
+      <rect x="70" y="36" width="20" height="6" rx="2" fill="#87ea5c" />
     </svg>
   );
 }
@@ -2138,7 +2146,19 @@ function DesignSystemPicker({
   const [query, setQuery] = useState('');
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
+  const [anchor, setAnchor] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+    // Fixed viewport x for the brand preview flyout, placed beside the
+    // portaled popover (right when there is room, else left).
+    flyoutLeft: number;
+  } | null>(null);
 
   // Upgrade the popover's thin list to the rich Brand Kit card whenever the
   // hovered / selected row is a finalized brand (`user:<id>` design system).
@@ -2194,10 +2214,79 @@ function DesignSystemPicker({
     return () => window.clearTimeout(t);
   }, [open]);
 
+  useLayoutEffect(() => {
+    if (!open) {
+      setAnchor(null);
+      return undefined;
+    }
+
+    function updateAnchor() {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const width = Math.max(280, rect.width);
+      const left = Math.max(8, Math.min(window.innerWidth - width - 8, rect.left));
+      const gap = 6;
+      const margin = 12;
+      const preferredMin = 200;
+      const preferredMax = 440;
+      const spaceBelow = window.innerHeight - rect.bottom - gap - margin;
+      const spaceAbove = rect.top - gap - margin;
+      const openUp = spaceBelow < preferredMin + 80 && spaceAbove > spaceBelow;
+      const maxHeight = Math.max(0, Math.min(preferredMax, openUp ? spaceAbove : spaceBelow));
+
+      // Place the brand preview flyout beside the (portaled) popover: to its
+      // right when the 320px card fits, otherwise flipped to its left, then
+      // clamped into the viewport. Without this the flyout kept its old
+      // inline `position: absolute` against the trigger wrapper and was
+      // re-clipped by the modal body once the popover itself moved to a body
+      // portal.
+      const flyoutWidth = 320;
+      const rightLeft = left + width + 8;
+      const leftLeft = left - flyoutWidth - 8;
+      let flyoutLeft: number;
+      if (rightLeft + flyoutWidth <= window.innerWidth - 8) {
+        flyoutLeft = rightLeft;
+      } else if (leftLeft >= 8) {
+        flyoutLeft = leftLeft;
+      } else {
+        flyoutLeft = Math.max(8, window.innerWidth - flyoutWidth - 8);
+      }
+
+      if (openUp) {
+        setAnchor({
+          bottom: window.innerHeight - rect.top + gap,
+          left,
+          width,
+          maxHeight,
+          flyoutLeft,
+        });
+      } else {
+        setAnchor({
+          top: rect.bottom + gap,
+          left,
+          width,
+          maxHeight,
+          flyoutLeft,
+        });
+      }
+    }
+
+    updateAnchor();
+    window.addEventListener('resize', updateAnchor);
+    window.addEventListener('scroll', updateAnchor, true);
+    return () => {
+      window.removeEventListener('resize', updateAnchor);
+      window.removeEventListener('scroll', updateAnchor, true);
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     function onPointer(e: MouseEvent) {
-      if (wrapRef.current?.contains(e.target as Node)) return;
+      const target = e.target as Node;
+      if (wrapRef.current?.contains(target)) return;
+      if (popoverRef.current?.contains(target)) return;
       setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
@@ -2267,6 +2356,7 @@ function DesignSystemPicker({
     >
       <label className="newproj-label">{t('newproj.designSystem')}</label>
       <button
+        ref={triggerRef}
         type="button"
         data-testid="design-system-trigger"
         className={`ds-picker-trigger${open ? ' open' : ''}${primary ? '' : ' empty'}`}
@@ -2297,8 +2387,21 @@ function DesignSystemPicker({
           style={{ transform: open ? 'rotate(180deg)' : undefined }}
         />
       </button>
-      {open ? (
-        <div className="ds-picker-popover" role="listbox">
+      {open && anchor && typeof document !== 'undefined'
+        ? createPortal(
+        <div
+          ref={popoverRef}
+          className="ds-picker-popover ds-picker-popover-portal"
+          role="listbox"
+          data-placement={anchor.bottom !== undefined ? 'up' : 'down'}
+          style={{
+            top: anchor.top ?? 'auto',
+            bottom: anchor.bottom ?? 'auto',
+            left: anchor.left,
+            width: anchor.width,
+            maxHeight: anchor.maxHeight,
+          }}
+        >
           <div className="ds-picker-head">
             <input
               ref={searchRef}
@@ -2392,17 +2495,28 @@ function DesignSystemPicker({
               </button>
             </div>
           ) : null}
-        </div>
-      ) : null}
-      {open && previewBrand ? (
+        </div>,
+          document.body,
+        )
+        : null}
+      {open && previewBrand && anchor && typeof document !== 'undefined'
+        ? createPortal(
         <aside
-          className="ds-picker-brand-flyout"
+          className="ds-picker-brand-flyout ds-picker-brand-flyout-portal"
           data-testid="new-project-ds-brand-flyout"
           aria-label={t('brandDetail.identity')}
+          style={{
+            top: anchor.top ?? 'auto',
+            bottom: anchor.bottom ?? 'auto',
+            left: anchor.flyoutLeft,
+            maxHeight: anchor.maxHeight,
+          }}
         >
           <BrandPreviewCard variant="compact" summary={previewBrand} />
-        </aside>
-      ) : null}
+        </aside>,
+          document.body,
+        )
+        : null}
     </div>
   );
 }
@@ -2648,7 +2762,7 @@ function MediaProjectOptions(props:
 
 export function supportedModels(surface: 'image' | 'video' | 'audio', models: MediaModel[]): MediaModel[] {
   const supportedProviders: Record<'image' | 'video' | 'audio', Set<string>> = {
-    image: new Set(['openai', 'codex', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image', 'aihubmix', 'minimax']),
+    image: new Set(['vela', 'openai', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image', 'aihubmix', 'minimax']),
     video: new Set(['volcengine', 'hyperframes', 'grok', 'openrouter', 'imagerouter', 'aihubmix']),
     audio: new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine', 'aihubmix']),
   };

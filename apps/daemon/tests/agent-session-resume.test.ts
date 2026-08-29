@@ -23,6 +23,8 @@ import {
   isOpencodeResumeFailure,
   persistCapturedAgentSession,
   resolveAgentResumeContext,
+  resolveAgentResumeFailurePolicy,
+  resolveAgentResumePromptPolicy,
 } from '../src/agent-session-resume.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -146,6 +148,64 @@ describe('resolveAgentResumeContext', () => {
     expect(ctx.invalidationReason).toBe('cwd_changed');
   });
 
+  it('resumes the stored session when the same turn is re-run', () => {
+    // A daemon-internal restart can re-enter startChatRun with the SAME
+    // assistant placeholder after that placeholder was already persisted as the
+    // session cursor (post-tool recovery writes it, and
+    // `nativeSessionContinuePending` is consumed once — a later safe-retry
+    // restart arrives without it). The cursor filter already means to admit the
+    // stored cursor itself, but the `id != <current>` clause excludes it first,
+    // so a live session was abandoned and the transcript re-seeded even though
+    // nothing had advanced. For an OD Next continuation this is worse than a
+    // cold turn: the non-request stage refuses to re-seed and blocks the task.
+    const db = seed();
+    seedMessage(db, 'asst-1', 'assistant', 'failed');
+    upsertAgentSession(db, {
+      conversationId: 'conv-1',
+      agentId: 'claude',
+      sessionId: 'sess-A',
+      lastMessageId: 'asst-1',
+      model: null,
+      cwd: null,
+      stablePromptHash: null,
+    });
+    const ctx = resolveAgentResumeContext(db, {
+      conversationId: 'conv-1',
+      agentId: 'claude',
+      currentAssistantMessageId: 'asst-1',
+    });
+    expect(ctx.invalidationReason).toBeNull();
+    expect(ctx.isResuming).toBe(true);
+    expect(ctx.resumeSessionId).toBe('sess-A');
+  });
+
+  it('still reseeds when the same turn is re-run but the conversation advanced', () => {
+    // Guards the fix above against being "simplified" into an unconditional
+    // cursor match: if another agent completed a turn while this run was
+    // suspended, the stored session never saw it and must NOT be reused.
+    const db = seed();
+    seedMessage(db, 'asst-1', 'assistant', 'failed');
+    upsertAgentSession(db, {
+      conversationId: 'conv-1',
+      agentId: 'claude',
+      sessionId: 'sess-A',
+      lastMessageId: 'asst-1',
+      model: null,
+      cwd: null,
+      stablePromptHash: null,
+    });
+    // A different agent finished a later turn in the meantime.
+    seedMessage(db, 'user-2', 'user');
+    seedMessage(db, 'asst-later', 'assistant');
+    const ctx = resolveAgentResumeContext(db, {
+      conversationId: 'conv-1',
+      agentId: 'claude',
+      currentAssistantMessageId: 'asst-1',
+    });
+    expect(ctx.invalidationReason).toBe('conversation_advanced');
+    expect(ctx.isResuming).toBe(false);
+  });
+
   it('reseeds (conversation_advanced) when another agent completed a turn in between', () => {
     const db = seed();
     seedMessage(db, 'asst-1', 'assistant');
@@ -183,6 +243,31 @@ describe('resolveAgentResumeContext', () => {
     const ctx = resolveAgentResumeContext(db, { conversationId: 'conv-1', agentId: 'claude' });
     expect(ctx.isResuming).toBe(true);
     expect(ctx.resumeSessionId).toBe('sess-A');
+    expect(ctx.invalidationReason).toBeNull();
+  });
+
+  it('still resumes when a profile session owns a canceled turn', () => {
+    const db = seed();
+    seedMessage(db, 'asst-canceled', 'assistant', 'canceled');
+    upsertAgentSession(db, {
+      conversationId: 'conv-1',
+      agentId: 'deepseek-harness',
+      sessionId: 'harness-session',
+      lastMessageId: 'asst-canceled',
+      model: null,
+      cwd: '/work/proj',
+      stablePromptHash: 'stable-hash',
+    });
+
+    const ctx = resolveAgentResumeContext(db, {
+      conversationId: 'conv-1',
+      agentId: 'deepseek-harness',
+      currentModel: null,
+      currentCwd: '/work/proj',
+    });
+
+    expect(ctx.isResuming).toBe(true);
+    expect(ctx.resumeSessionId).toBe('harness-session');
     expect(ctx.invalidationReason).toBeNull();
   });
 
@@ -230,6 +315,71 @@ describe('computeIncludeStable', () => {
   });
   it('includes the stable block on a resume turn with no stored hash (legacy session)', () => {
     expect(computeIncludeStable(true, null, 'h-1')).toBe(true);
+  });
+});
+
+describe('resolveAgentResumePromptPolicy', () => {
+  it('allows transcript skipping only when a valid native resume handle is selected', () => {
+    expect(
+      resolveAgentResumePromptPolicy({
+        isResuming: true,
+        resumeSessionId: 'sess-A',
+        invalidationReason: null,
+      }),
+    ).toEqual({
+      mode: 'resume-session',
+      resumeSessionId: 'sess-A',
+      skipTranscript: true,
+      requiresFullTranscript: false,
+      invalidationReason: null,
+    });
+  });
+
+  it('requires the full transcript for a fresh create turn with no stored session', () => {
+    expect(
+      resolveAgentResumePromptPolicy({
+        isResuming: false,
+        resumeSessionId: null,
+        invalidationReason: null,
+      }),
+    ).toMatchObject({
+      mode: 'full-transcript',
+      resumeSessionId: null,
+      skipTranscript: false,
+      requiresFullTranscript: true,
+      invalidationReason: null,
+    });
+  });
+
+  it('requires the full transcript for every guard failure', () => {
+    expect(
+      resolveAgentResumePromptPolicy({
+        isResuming: false,
+        resumeSessionId: null,
+        invalidationReason: 'conversation_advanced',
+      }),
+    ).toMatchObject({
+      mode: 'full-transcript',
+      resumeSessionId: null,
+      skipTranscript: false,
+      requiresFullTranscript: true,
+      invalidationReason: 'conversation_advanced',
+    });
+  });
+
+  it('treats inconsistent resume state as full-transcript reseed instead of skipping history', () => {
+    expect(
+      resolveAgentResumePromptPolicy({
+        isResuming: true,
+        resumeSessionId: null,
+        invalidationReason: null,
+      }),
+    ).toMatchObject({
+      mode: 'full-transcript',
+      resumeSessionId: null,
+      skipTranscript: false,
+      requiresFullTranscript: true,
+    });
   });
 });
 
@@ -550,5 +700,41 @@ describe('isAgentResumeFailure dispatch', () => {
   it('never reports a failure for empty output', () => {
     expect(isAgentResumeFailure('codex', '')).toBe(false);
     expect(isAgentResumeFailure('claude', '')).toBe(false);
+  });
+});
+
+describe('resolveAgentResumeFailurePolicy', () => {
+  it('clears stale state and auto-reseeds only for a failed attempted resume', () => {
+    expect(
+      resolveAgentResumeFailurePolicy({
+        agentId: 'opencode',
+        stderr: 'Error: Session not found',
+        stdout: '',
+        isResuming: true,
+        resumeSessionId: 'ses-old',
+      }),
+    ).toEqual({
+      resumeFailed: true,
+      clearStaleSession: true,
+      autoReseedFullTranscript: true,
+      reason: 'resume_failed',
+    });
+  });
+
+  it('does not clear state on a create turn even if output contains a resume-like phrase', () => {
+    expect(
+      resolveAgentResumeFailurePolicy({
+        agentId: 'opencode',
+        stderr: 'Error: Session not found',
+        stdout: '',
+        isResuming: false,
+        resumeSessionId: null,
+      }),
+    ).toEqual({
+      resumeFailed: false,
+      clearStaleSession: false,
+      autoReseedFullTranscript: false,
+      reason: null,
+    });
   });
 });

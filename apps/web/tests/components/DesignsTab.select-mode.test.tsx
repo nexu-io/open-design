@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DesignsTab } from '../../src/components/DesignsTab';
+import { fetchProjectFiles } from '../../src/providers/registry';
 import type { Project } from '../../src/types';
 
 vi.mock('../../src/providers/registry', () => ({
@@ -129,18 +130,24 @@ describe('DesignsTab select mode', () => {
       name: 'Scanned HTML',
       metadata: { kind: 'prototype' },
     };
-    const { container } = render(
-      <DesignsTab
-        projects={[htmlProject]}
-        skills={[]}
-        designSystems={[]}
-        onOpen={vi.fn()}
-        onOpenLiveArtifact={vi.fn()}
-        onDelete={vi.fn()}
-        onRename={vi.fn()}
-        isActive={false}
-      />,
-    );
+    const props = {
+      projects: [htmlProject],
+      skills: [],
+      designSystems: [],
+      onOpen: vi.fn(),
+      onOpenLiveArtifact: vi.fn(),
+      onDelete: vi.fn(),
+      onRename: vi.fn(),
+    };
+    // The file scan that resolves this cover is foreground-only: a hidden
+    // Projects tab must stay dormant so it cannot compete with a project the
+    // user is actually opening (fda4c27db).
+    vi.mocked(fetchProjectFiles).mockClear();
+    const { container, rerender } = render(<DesignsTab {...props} isActive={false} />);
+    expect(fetchProjectFiles).not.toHaveBeenCalled();
+    expect(container.querySelector('.project-thumb-html iframe')).toBeNull();
+
+    rerender(<DesignsTab {...props} isActive />);
 
     await waitFor(() => {
       const frame = container.querySelector<HTMLIFrameElement>('.project-thumb-html iframe');
@@ -271,6 +278,42 @@ describe('DesignsTab select mode', () => {
     fireEvent.click(screen.getByTestId('designs-view-kanban'));
 
     expect(screen.queryByRole('button', { name: 'Select' })).toBeNull();
+  });
+
+  it('keeps a single-project delete confirmation open after refusal and allows retry', async () => {
+    const onDelete = vi.fn()
+      .mockRejectedValueOnce(new Error('Delete permission denied'))
+      .mockResolvedValueOnce(true);
+    render(
+      <DesignsTab
+        projects={[project]}
+        skills={[]}
+        designSystems={[]}
+        onOpen={vi.fn()}
+        onOpenLiveArtifact={vi.fn()}
+        onDelete={onDelete}
+        onRename={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    const dialog = screen.getByRole('alertdialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(onDelete).toHaveBeenCalledTimes(1);
+      expect(within(dialog).getByRole('alert').textContent).toContain(
+        'Delete permission denied',
+      );
+    });
+    expect(screen.getByRole('alertdialog')).toBe(dialog);
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => {
+      expect(onDelete).toHaveBeenCalledTimes(2);
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+    });
   });
 
   it('exits select mode when switching to kanban view', () => {

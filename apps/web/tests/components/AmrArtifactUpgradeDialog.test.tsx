@@ -48,11 +48,13 @@ describe('AmrArtifactUpgradeDialog', () => {
     expect(plansCta.querySelector('svg')).toBeNull();
     fireEvent.click(plansCta);
 
-    expect(open).toHaveBeenCalledWith(
-      expect.stringContaining('view=plans'),
-      '_blank',
-      'noopener,noreferrer',
+    const [url, target, features] = open.mock.calls[0] ?? [];
+    const pricingUrl = new URL(String(url));
+    expect(`${pricingUrl.origin}${pricingUrl.pathname}`).toBe(
+      'https://open-design.ai/pricing/',
     );
+    expect(target).toBe('_blank');
+    expect(features).toBe('noopener,noreferrer');
   });
 
   it('restarts the seven-day offer countdown at the cycle boundary', () => {

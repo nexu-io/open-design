@@ -1,15 +1,14 @@
-// Shared DTOs for the programmatic export capability (PDF / image / PPTX).
+// Shared DTOs for the programmatic export capability (HTML / PDF / image / PPTX).
 //
 // Both surfaces speak this shape: the web UI's Download menu and the
-// `od export` CLI call the daemon export routes, which delegate rasterization
-// to the desktop Electron renderer (screenshot-based for `image`/`pptx` and the
-// raster `pdf`). Keep this file pure TypeScript — no Node, DOM, or runtime deps
-// — per the contracts boundary.
+// `od export` CLI call the daemon export routes. HTML is bundled headlessly by
+// the daemon; visual formats delegate rasterization to the desktop Electron
+// renderer. Keep this file pure TypeScript — no Node, DOM, or runtime deps.
 
 // `pptx` is a slide-deck-only format (one screenshot slide per deck page); the
 // daemon rejects it for a non-deck artifact. It is served by the dedicated
 // `/export/pptx` route, and the generic `/export` route also accepts it.
-export const EXPORT_FORMATS = ['pdf', 'image', 'pptx'] as const;
+export const EXPORT_FORMATS = ['html', 'pdf', 'image', 'pptx'] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 // Programmatic image export delegates to the desktop Electron renderer, whose
@@ -37,6 +36,16 @@ export interface ExportRequest {
   /** Deck stage size in CSS px. Defaults to {@link EXPORT_DEFAULT_WIDTH}×{@link EXPORT_DEFAULT_HEIGHT}. */
   width?: number;
   height?: number;
+}
+
+/** Request body for the daemon-owned standalone HTML export route. */
+export interface StandaloneHtmlExportRequest {
+  /** Project-relative path of the HTML entry file. */
+  fileName: string;
+  /** Display title used for the downloaded filename. */
+  title?: string;
+  /** Historical snapshots are not supported until their dependency graph is versioned. */
+  versionId?: string;
 }
 
 /** JSON envelope returned by the daemon/CLI export path (binary modes stream bytes instead). */

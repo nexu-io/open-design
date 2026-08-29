@@ -100,10 +100,10 @@ The feature is gated by a four-tier resolver on the daemon side:
    the merged object so other metadata fields (`kind`, `templateId`,
    `linkedDirs`, etc.) survive. If the prefetch GET fails the setter
    skips the PATCH entirely instead of stomping the row. The daemon
-   reads `metadata.critiqueTheaterEnabled` on the next spawn. A
-   dedicated Settings panel control that wires the `projectId`-aware
-   call lands in a follow-up PR; integrators embedding the Theater
-   can already call the setter directly today.
+   reads `metadata.critiqueTheaterEnabled` on the next spawn. The
+   dedicated **Design Jury** section in `SettingsDialog.tsx` calls this
+   project-aware setter for the active project; non-project embeds may
+   still call the setter without a `projectId` for session-local UI state.
 3. **`OD_CRITIQUE_ENABLED` env override.** Power-user lane / CI
    fixtures.
 4. **Rollout phase default** (lowest priority). M0 / M1 = `false`,

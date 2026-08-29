@@ -9,10 +9,10 @@ import { buildBrandSystem } from '../src/brands/engine/index.js';
 // real generated deck must pass; a deck missing any invariant must fail.
 
 const VALID_BRAND = {
-  name: 'Open Design',
+  name: 'OpenDesign',
   tagline: 'The open-source, local-first alternative to Claude Design.',
   description:
-    'Open Design is the official open-source, local-first alternative to Claude Design — an agent-native design platform that turns the coding agent into a full design studio, generating on-brand artifacts from a single source of truth.',
+    'OpenDesign is the official open-source, local-first alternative to Claude Design — an agent-native design platform that turns the coding agent into a full design studio, generating on-brand artifacts from a single source of truth.',
   colors: [
     { role: 'background', hex: '#ffffff', oklch: '', name: 'White', usage: 'page' },
     { role: 'surface', hex: '#f6f6f6', oklch: '', name: 'Surface', usage: 'cards' },

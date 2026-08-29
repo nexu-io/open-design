@@ -198,18 +198,18 @@ If the user just says "make me a deck" without further guidance, default to `sim
 - **Features used**: CSS scroll-snap (horizontal), `color-mix()`, CSS custom properties, `text-wrap: balance`. All ≥ 93% Baseline.
 - **Not supported**: IE 11, Safari < 15, any browser without `color-mix()` (would need a fallback `--accent-soft` if you want to support older Safari; out of scope for this skill).
 - **Mobile**: horizontal scroll-snap works on iOS Safari 16+ and Android Chrome. Keyboard nav is desktop-only by design.
-- **Nav script behavior**: reused verbatim from `skills/simple-deck` — survives iframe embedding (the daemon preview surface), dual listener races, focus loss, and position persistence across reloads. **Do not rewrite it.**
+- **Nav script behavior**: reused verbatim from `design-templates/simple-deck` — survives iframe embedding (the daemon preview surface), dual listener races, focus loss, and position persistence across reloads. **Do not rewrite it.**
 
 ---
 
 ## Verification
 
-The skill auto-registers with the daemon on filesystem scan (no manual wiring). Confirmed against a running daemon on `localhost:7456` after adding this skill:
+The design template auto-registers with the daemon on filesystem scan (no manual wiring). Confirmed against a running daemon on `localhost:7456` after adding this template:
 
 ```bash
-$ curl -s localhost:7456/api/skills \
+$ curl -s localhost:7456/api/design-templates \
     | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf-8')); \
-               console.log(JSON.stringify(d.skills.find(s=>s.id==='replit-deck'), null, 2));"
+               console.log(JSON.stringify(d.designTemplates.find(t=>t.id==='replit-deck'), null, 2));"
 {
   "id": "replit-deck",
   "name": "replit-deck",

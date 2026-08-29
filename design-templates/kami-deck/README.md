@@ -33,7 +33,7 @@ agent reads `SKILL.md`, gathers the brief, then writes
 [`design-systems/kami/DESIGN.md`](../../design-systems/kami/DESIGN.md)
 and the layout primitives in [`example.html`](./example.html).
 
-To preview the canonical Open Design instance:
+To preview the canonical OpenDesign instance:
 
 ```bash
 open example.html
@@ -48,10 +48,10 @@ To start a fresh project:
 ## Files
 
 ```text
-skills/kami-deck/
+design-templates/kami-deck/
 ├── SKILL.md      # ← agent contract (read this first)
 ├── README.md     # ← you are here
-└── example.html  # canonical Open Design rendering (9 slides)
+└── example.html  # canonical OpenDesign rendering (9 slides)
 ```
 
 ## Boundaries

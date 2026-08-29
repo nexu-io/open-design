@@ -54,10 +54,6 @@ const STYLELESS_HOOKS = new Set([
   'db-inspect-padding',
   'db-inspect-radius',
   'db-inspect-weight',
-  'db-viewport-height',
-  'db-viewport-icon',
-  'db-viewport-menu-label',
-  'db-viewport-width',
 ]);
 
 describe('design browser panel styles', () => {
@@ -91,7 +87,7 @@ describe('design browser panel styles', () => {
     // Spot-check a couple of declarations so an empty stub file cannot satisfy
     // the presence check above.
     const chrome = /\.db-chrome\s*\{([^}]*)\}/.exec(designBrowserCss)?.[1] ?? '';
-    expect(chrome).toMatch(/grid-template-columns/);
+    expect(chrome).toMatch(/display:\s*flex/);
     const board = /\.db-reference-board\s*\{([^}]*)\}/.exec(designBrowserCss)?.[1] ?? '';
     expect(board).toMatch(/(grid|flex|padding)/);
   });

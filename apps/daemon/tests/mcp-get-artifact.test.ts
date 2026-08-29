@@ -12,6 +12,7 @@ interface DaemonAppOpts {
   fileContent?: string;
   contentType?: string;
   contentLength?: number | null;
+  failFile?: string;
 }
 
 interface Harness {
@@ -26,6 +27,7 @@ interface TextContent {
 
 interface ArtifactBody {
   truncated: boolean;
+  skippedFileCount?: number;
   files: unknown[];
 }
 
@@ -40,7 +42,13 @@ function parseArtifactBody(text: string): ArtifactBody {
 }
 
 function makeDaemonApp(opts: DaemonAppOpts = {}): Express {
-  const { files = [], fileContent = 'body {}', contentType = 'text/css', contentLength = null } = opts;
+  const {
+    files = [],
+    fileContent = 'body {}',
+    contentType = 'text/css',
+    contentLength = null,
+    failFile,
+  } = opts;
   const app = express();
 
   app.get('/api/projects/:id', (_req, res) =>
@@ -52,6 +60,10 @@ function makeDaemonApp(opts: DaemonAppOpts = {}): Express {
   app.get('/api/projects/:id/files', (_req, res) => res.json({ files }));
 
   app.get('/api/projects/:id/raw/*splat', (_req, res) => {
+    if (_req.params.splat?.join('/') === failFile) {
+      res.status(500).json({ error: 'fixture read failure' });
+      return;
+    }
     const headers: Record<string, string> = { 'content-type': contentType };
     if (contentLength != null) headers['content-length'] = String(contentLength);
     res.set(headers).send(fileContent);
@@ -120,6 +132,53 @@ describe('getArtifact maxBytes cap', () => {
     const body = parseArtifactBody(firstText(result.content));
     expect(body.truncated).toBe(true);
     expect(body.files.length).toBeLessThan(10);
+  });
+});
+
+describe('getArtifact UTF-8 byte accounting and partial reads', () => {
+  it('counts UTF-8 bytes rather than JavaScript string length', async () => {
+    const r = await startServer(makeDaemonApp({
+      files: [{ name: 'first.css' }, { name: 'second.css' }],
+      fileContent: '你好',
+      contentType: 'text/css',
+    }));
+    try {
+      const result = await getArtifact(
+        r.baseUrl,
+        PROJECT_ID,
+        'index.html',
+        'all',
+        6,
+      );
+      const body = parseArtifactBody(firstText(result.content));
+      expect(body.files).toHaveLength(1);
+      expect(body.truncated).toBe(true);
+    } finally {
+      await new Promise<void>((resolve) => r.server.close(() => resolve()));
+    }
+  });
+
+  it('reports skipped dependency reads as a partial bundle fact', async () => {
+    const r = await startServer(makeDaemonApp({
+      files: [{ name: 'ok.css' }, { name: 'broken.css' }],
+      fileContent: 'ok',
+      contentType: 'text/css',
+      failFile: 'broken.css',
+    }));
+    try {
+      const result = await getArtifact(
+        r.baseUrl,
+        PROJECT_ID,
+        'index.html',
+        'all',
+        1_000,
+      );
+      const body = parseArtifactBody(firstText(result.content));
+      expect(body.skippedFileCount).toBe(1);
+      expect(body.truncated).toBe(false);
+    } finally {
+      await new Promise<void>((resolve) => r.server.close(() => resolve()));
+    }
   });
 });
 

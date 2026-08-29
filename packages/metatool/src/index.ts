@@ -125,7 +125,7 @@ async function readToolBuildMetadata(toolRoot: string): Promise<{
 
 function createBuildRequiredError(policy: ToolBuildMetadataPolicy, toolRoot: string, reason: string): Error {
   return new Error(
-    `[${policy.toolName}] ${reason} Run "${policy.buildCommand}" first.\n` +
+    `[${policy.toolName}] ${reason} Run "pnpm bootstrap" (or "${policy.buildCommand}").\n` +
     `tool root: ${toolRoot}\n` +
     `metadata: ${resolveMetadataPath(toolRoot)}`,
   );

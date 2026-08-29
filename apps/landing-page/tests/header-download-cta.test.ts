@@ -47,15 +47,73 @@ function runMobileNoticeGate(
   };
 }
 
+function runDownloadDirectAssetGate(
+  page: string,
+  options: { userAgent: string; platform: string; maxTouchPoints: number },
+) {
+  const start = page.indexOf("      const ua = (navigator.userAgent || '').toLowerCase();");
+  const endMarker = '      // Live refetch: replace the complete visible release snapshot from the';
+  const end = page.indexOf(endMarker, start);
+  assert.ok(start >= 0 && end > start, 'download direct-asset enhancer not found');
+  const script = page.slice(start, end);
+
+  const attributes = new Map<string, string>();
+  const hero = {
+    href: 'https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1',
+    setAttribute(name: string, value: string) { attributes.set(name, value); },
+    removeAttribute(name: string) { attributes.delete(name); },
+  };
+  const notice = { hidden: true };
+  const document = {
+    querySelector(selector: string) {
+      if (selector === '[data-dl-mobile-notice]') return notice;
+      if (selector === '[data-dl-auto]') return hero;
+      return null;
+    },
+    querySelectorAll: () => [],
+    createElement: () => { throw new Error('iPadOS must not probe macOS WebGL'); },
+  };
+  const window = {
+    matchMedia: () => ({ matches: false, addEventListener() {} }),
+  };
+  const navigator = {
+    userAgent: options.userAgent,
+    platform: options.platform,
+    maxTouchPoints: options.maxTouchPoints,
+  };
+
+  // Execute the production download-page detection and immediate rewrite path.
+  // eslint-disable-next-line no-new-func
+  new Function('window', 'navigator', 'document', 'autoPrefix', 'directAssets', script)(
+    window,
+    navigator,
+    document,
+    'Download for',
+    { macArm64: 'https://example.com/open-design-mac-arm64.dmg' },
+  );
+
+  return { hero, attributes, notice };
+}
+
 describe('landing header account and download entry', () => {
-  it('keeps the nav download-page CTA and removes the signed-out login entry', async () => {
+  it('makes the nav CTA a platform-aware direct download and removes the signed-out login entry', async () => {
     const header = await readFile(headerPath, 'utf8');
+    const enhancer = await readFile(enhancerPath, 'utf8');
 
     assert.match(header, /href=\{href\('\/download\/'\)\}/);
+    assert.match(header, /data-direct-download/);
+    assert.doesNotMatch(header, /data-download-page/);
     assert.match(header, /data-download-placement='nav'/);
+    assert.match(enhancer, /getLatestRelease/);
+    assert.match(enhancer, /\[data-direct-download\]\[data-download-placement="nav"\]/);
+    assert.match(enhancer, /applyNavDownloadAsset\(directAssets\[navPlatform\.assetKey\]\)/);
+    assert.match(enhancer, /navPlatform\.match\(entry\.name\)/);
+    assert.match(enhancer, /navNeedsLiveRefresh = navPlatform && !downloadPrompt/);
     assert.doesNotMatch(header, /data-amr-signin|className='nav-signin'/);
-    assert.match(header, /data-amr-menu hidden/);
-    assert.match(header, /data-amr-console-link/);
+    // Account chrome is opt-in so only Pricing can restore it.
+    assert.match(header, /showAccount = false/);
+    assert.match(header, /showAccount \? \(/);
+    assert.match(header, /data-amr-account/);
   });
 
   it('silently reveals the avatar for an existing session without wiring login', async () => {
@@ -81,7 +139,7 @@ describe('mobile download-page guidance', () => {
     assert.match(page, /const narrowViewport = window\.matchMedia\('\(max-width: 767px\)'\)/);
     assert.match(page, /mobileNotice\.hidden = !\(isMobileDevice \|\| narrowViewport\.matches\)/);
     assert.match(page, /narrowViewport\.addEventListener\('change', syncMobileNotice\)/);
-    assert.match(copy, /Open Design 是桌面客户端，请在电脑上下载。/);
+    assert.match(copy, /OpenDesign 是桌面客户端，请在电脑上下载。/);
   });
 
   it('treats iPadOS desktop-mode Safari as a mobile device', async () => {
@@ -94,6 +152,19 @@ describe('mobile download-page guidance', () => {
     });
 
     assert.equal(gate.notice.hidden, false);
+  });
+
+  it('keeps the release-page CTA on wide iPadOS instead of rewriting to a DMG', async () => {
+    const page = await readFile(downloadPagePath, 'utf8');
+    const result = runDownloadDirectAssetGate(page, {
+      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15)',
+      platform: 'MacIntel',
+      maxTouchPoints: 5,
+    });
+
+    assert.match(result.hero.href, /github\.com\/nexu-io\/open-design\/releases\/tag/);
+    assert.equal(result.attributes.has('download'), false);
+    assert.equal(result.notice.hidden, false);
   });
 
   it('keeps the notice synchronized when the viewport crosses the mobile breakpoint', async () => {

@@ -1,7 +1,7 @@
 ---
 title: 'BYE Claude Design! This is the BEST Open Source AI UI Generator'
 youtubeId: GjPYMNsb9mo
-summary: 'Install and run Open Design on Windows 11 — the simple native desktop build, plus the from-source route through WSL with Node 24 and pnpm. Run the open-source AI UI generator locally, no cloud subscription. Based on AI Automation''s walkthrough.'
+summary: 'Install and run OpenDesign on Windows 11 — the simple native desktop build, plus the from-source route through WSL with Node 24 and pnpm. Run the open-source AI UI generator locally, no cloud subscription. Based on AI Automation''s walkthrough.'
 date: 2026-05-05
 category: Getting started
 durationSeconds: 1005
@@ -9,14 +9,14 @@ author: 'AI Automation'
 official: false
 ---
 
-This guide is for Windows users who want to run Open Design on their own machine — no cloud account, no monthly credits to burn through. It follows the path AI Automation takes in [their Windows install walkthrough](https://www.youtube.com/watch?v=GjPYMNsb9mo), rewritten and brought up to date with the current release so you can follow along command by command. Watch the video above for the live run, or read on for the written version.
+This guide is for Windows users who want to run OpenDesign on their own machine — no cloud account, no monthly credits to burn through. It follows the path AI Automation takes in [their Windows install walkthrough](https://www.youtube.com/watch?v=GjPYMNsb9mo), rewritten and brought up to date with the current release so you can follow along command by command. Watch the video above for the live run, or read on for the written version.
 
-![The Open Design workspace running locally.](/tutorials/open-design-windows-wsl-installation-setup-ai-automation/01-workspace.webp)
-*Open Design running locally on Windows: an open-source, agent-native design workspace you fully control.*
+![The OpenDesign workspace running locally.](/tutorials/open-design-windows-wsl-installation-setup-ai-automation/01-workspace.webp)
+*OpenDesign running locally on Windows: an open-source, agent-native design workspace you fully control.*
 
-## What is Open Design?
+## What is OpenDesign?
 
-Open Design is an open-source, local-first design platform — an agent-native alternative to Claude Design and Figma. Instead of locking you into one model provider, it runs **on top of the coding agent you already use**: Claude Code, Codex, Cursor, Gemini, Copilot, OpenCode, and a dozen more. It is "bring your own agent" rather than just bring your own key.
+OpenDesign is an open-source, local-first design platform — an agent-native alternative to Claude Design and Figma. Instead of locking you into one model provider, it runs **on top of the coding agent you already use**: Claude Code, Codex, Cursor, Copilot, OpenCode, Qwen, and a dozen more. It is "bring your own agent" rather than just bring your own key.
 
 A few things that make it worth a look:
 
@@ -26,11 +26,11 @@ A few things that make it worth a look:
 - **More than prototypes** — prototypes, live artifacts, slide decks, magazine layouts, image generation, and even video, all from one workspace.
 - **A built-in library of design systems and templates**, so you are not starting from a blank canvas.
 
-If you have used Claude Design, the feel will be instantly familiar — Open Design keeps the same calm aesthetic, then adds capabilities (and your choice of model) on top.
+If you have used Claude Design, the feel will be instantly familiar — OpenDesign keeps the same calm aesthetic, then adds capabilities (and your choice of model) on top.
 
 ## Before you start
 
-You have three ways to install Open Design on Windows. Pick the one that fits you:
+You have three ways to install OpenDesign on Windows. Pick the one that fits you:
 
 | Path | Best for | Requirements |
 | --- | --- | --- |
@@ -64,9 +64,9 @@ nvm use 24
 node --version              # should print v24.x
 ```
 
-With Ubuntu set up and Node 24 active, you are ready to install Open Design.
+With Ubuntu set up and Node 24 active, you are ready to install OpenDesign.
 
-## Step 2 — Install Open Design
+## Step 2 — Install OpenDesign
 
 ### Option A — Windows desktop app (recommended, zero config)
 
@@ -91,7 +91,7 @@ When it finishes, the command **prints a local URL** — copy it and paste it in
 
 ### Option C — Install into your coding agent (WSL)
 
-Prefer to skip the GUI and call Open Design as an MCP server inside your agent? On WSL there is **one extra step first**. Linux already ships `/usr/bin/od` (the octal-dump tool), which shadows Open Design's own `od` — so `od mcp install …` would otherwise fail with "file not found" for `mcp`/`install`. Add a small wrapper that points `od` at your clone and put it first on `PATH`:
+Prefer to skip the GUI and call OpenDesign as an MCP server inside your agent? On WSL there is **one extra step first**. Linux already ships `/usr/bin/od` (the octal-dump tool), which shadows OpenDesign's own `od` — so `od mcp install …` would otherwise fail with "file not found" for `mcp`/`install`. Add a small wrapper that points `od` at your clone and put it first on `PATH`:
 
 ```bash
 mkdir -p ~/.local/bin
@@ -104,21 +104,21 @@ EOF
 chmod +x ~/.local/bin/od
 export PATH="$HOME/.local/bin:$PATH"
 hash -r
-type -a od                   # Open Design's od should now win
+type -a od                   # OpenDesign's od should now win
 ```
 
 Then wire it into your agent:
 
 ```bash
 od mcp install <agent>
-# <agent> = claude | codex | cursor | copilot | gemini | opencode | …
+# <agent> = claude | codex | cursor | copilot | opencode | kiro | …
 ```
 
 Then, inside the agent, just ask: `Use open-design to generate a landing page with the Airbnb design system`.
 
 ## First run: connect your coding agent
 
-The first time the workspace loads, Open Design scans your environment and shows every CLI it found. Because WSL is a real Linux box, it picks up agents installed **inside Ubuntu** — so a Gemini CLI or other agent living in WSL is detected there. Click **rescan** if something does not show up yet.
+The first time the workspace loads, OpenDesign scans your environment and shows every supported CLI it found. Because WSL is a real Linux box, it picks up agents installed **inside Ubuntu** — for example OpenCode or Qwen. Click **rescan** if something does not show up yet.
 
 - **Pick a default agent and model.** Let the installed CLI drive generation, or point it at a specific provider and model. As the video stresses, a stronger model means noticeably better output, so reach for a capable one when the result matters.
 - **Add media providers (optional).** To generate images, video, or audio, paste your own API keys — bring-your-own-key, only for the providers you actually use.
@@ -127,12 +127,12 @@ The first time the workspace loads, Open Design scans your environment and shows
 
 ## Explore the workspace
 
-Open Design keeps your work **project-scoped**: when you run it against a folder, the designs you create live inside that project directory. Your first project list will be empty — that is normal.
+OpenDesign keeps your work **project-scoped**: when you run it against a folder, the designs you create live inside that project directory. Your first project list will be empty — that is normal.
 
 Inside a project you can build prototypes, slide decks, images, videos, and more. Two starting points make the blank canvas disappear:
 
 ![The built-in design-systems library.](/tutorials/open-design-windows-wsl-installation-setup-ai-automation/02-design-systems.webp)
-*The design-systems library: pick a real brand look — Airbnb, Airtable, and many more — and Open Design carries its tokens, colors, and type into your design.*
+*The design-systems library: pick a real brand look — Airbnb, Airtable, and many more — and OpenDesign carries its tokens, colors, and type into your design.*
 
 - **Design systems** capture a brand's look as a `DESIGN.md` of tokens — primary and secondary colors, type, spacing. Preview one, and you can build straight on top of it instead of defining a palette from scratch.
 - **Templates** cover prototypes, slides, and both image and video generation. Filter by type and fork any one as a head start.
@@ -158,19 +158,19 @@ The output is a real, editable design driven by the model you connected — so a
 
 - **Choose a strong model.** Output quality tracks the agent you connect — a free model works to learn the flow, but a capable one is worth it for real work.
 - **Read the printed URL every time.** The local address is dynamic; copy what `tools-dev` prints rather than reusing an old link.
-- **Install your agents where Open Design will look.** Running from source in WSL? Install your CLIs inside Ubuntu so the workspace detects them; the desktop app reads your Windows `PATH`.
-- **You do not need a design system to start.** Begin from a built-in one, import a ZIP, or let Open Design infer defaults. Your designs stay with the project folder, so organize work by running against the right directory.
+- **Install your agents where OpenDesign will look.** Running from source in WSL? Install your CLIs inside Ubuntu so the workspace detects them; the desktop app reads your Windows `PATH`.
+- **You do not need a design system to start.** Begin from a built-in one, import a ZIP, or let OpenDesign infer defaults. Your designs stay with the project folder, so organize work by running against the right directory.
 
 ## FAQ
 
-**Is Open Design free?**
+**Is OpenDesign free?**
 Yes — it is open source under the Apache-2.0 license. You can run it locally for free; you only pay for the model/API usage of whichever agent and media providers you connect.
 
 **Should I use WSL or the Windows desktop app?**
 For most people, the native Windows (x64) desktop build is simpler — no WSL, no Node, no clone. Use the WSL from-source route when you specifically want to read or modify the code. Note that WSL2 is a primary supported path, while Windows-native is best-effort; if you hit friction with one, try the other.
 
 **Which coding agents does it support?**
-21+ agents, including Claude Code, Codex, Cursor, Gemini, GitHub Copilot, and OpenCode. Open Design detects the CLIs already installed on your machine — inside WSL for the source route, or on your Windows `PATH` for the desktop app.
+21+ agents, including Claude Code, Codex, Cursor, GitHub Copilot, OpenCode, and Qwen. OpenDesign detects the CLIs already installed on your machine — inside WSL for the source route, or on your Windows `PATH` for the desktop app.
 
 **How is it different from Claude Design?**
 Same familiar feel, but open-source, local-first, and agent-pluggable — so you are not locked into one model or burning a fixed credit pool. It also goes beyond prototypes with slide decks, magazine layouts, image generation, and video.

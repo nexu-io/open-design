@@ -17,3 +17,20 @@ export interface ObservabilityEventRequest {
 export interface ObservabilityEventResponse {
   ok: true;
 }
+
+/** Consent-gated identity returned only to the local stdio MCP process. */
+export interface McpAnalyticsContextResponse {
+  enabled: boolean;
+  deviceId: string | null;
+  locale: string;
+}
+
+export interface McpAnalyticsEventRequest {
+  event:
+    | 'mcp_session_initialized'
+    | 'mcp_tool_started'
+    | 'mcp_tool_finished';
+  eventId: string;
+  occurredAt: string;
+  properties?: Record<string, unknown>;
+}

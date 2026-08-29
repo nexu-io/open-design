@@ -13,6 +13,8 @@ export type ChatRunCreateBody = {
   projectId: string;
   reasoning?: string | null;
   skillId?: string | null;
+  /** Client-minted id for this turn's user row; the daemon pins it on create. */
+  userMessageId?: string;
   toolBundle?: {
     mcpServers?: Array<Record<string, unknown>>;
   };
@@ -24,6 +26,7 @@ export type ChatRunStatusBody = {
   conversationId: string | null;
   createdAt: number;
   exitCode?: number | null;
+  failureAction?: string | null;
   id: string;
   projectId: string | null;
   signal?: string | null;
@@ -31,29 +34,58 @@ export type ChatRunStatusBody = {
   updatedAt: number;
 };
 
+type RunRequestOptions = {
+  headers?: Record<string, string>;
+};
+
 export async function startRun(
   baseUrl: string,
   body: ChatRunCreateBody,
+  headers?: Record<string, string>,
 ): Promise<{ runId: string }> {
-  return await requestJson<{ runId: string }>(baseUrl, '/api/runs', { body });
+  return await requestJson<{ runId: string }>(baseUrl, '/api/runs', {
+    body,
+    ...(headers ? { headers } : {}),
+  });
 }
 
 export async function readRun(
   baseUrl: string,
   runId: string,
+  options: RunRequestOptions = {},
 ): Promise<ChatRunStatusBody> {
-  return await requestJson<ChatRunStatusBody>(baseUrl, `/api/runs/${encodeURIComponent(runId)}`);
+  return await requestJson<ChatRunStatusBody>(
+    baseUrl,
+    `/api/runs/${encodeURIComponent(runId)}`,
+    options.headers ? { headers: options.headers } : {},
+  );
 }
 
-export async function readRunEvents(baseUrl: string, runId: string): Promise<string> {
-  return await requestText(baseUrl, `/api/runs/${encodeURIComponent(runId)}/events`);
+export async function readRunEvents(
+  baseUrl: string,
+  runId: string,
+  options: RunRequestOptions = {},
+): Promise<string> {
+  return await requestText(
+    baseUrl,
+    `/api/runs/${encodeURIComponent(runId)}/events`,
+    options.headers ? { headers: options.headers } : {},
+  );
 }
 
-export async function cancelRun(baseUrl: string, runId: string): Promise<{ ok: true }> {
+export async function cancelRun(
+  baseUrl: string,
+  runId: string,
+  options: RunRequestOptions = {},
+): Promise<{ ok: true }> {
   return await requestJson<{ ok: true }>(
     baseUrl,
     `/api/runs/${encodeURIComponent(runId)}/cancel`,
-    { body: {}, method: 'POST' },
+    {
+      body: {},
+      method: 'POST',
+      ...(options.headers ? { headers: options.headers } : {}),
+    },
   );
 }
 
@@ -61,7 +93,7 @@ export async function waitForRunStatus(
   baseUrl: string,
   runId: string,
   expected: ChatRunStatus,
-  options: { intervalMs?: number; timeoutMs?: number } = {},
+  options: { headers?: Record<string, string>; intervalMs?: number; timeoutMs?: number } = {},
 ): Promise<ChatRunStatusBody> {
   const timeoutMs = options.timeoutMs ?? 20_000;
   const intervalMs = options.intervalMs ?? 250;
@@ -69,7 +101,11 @@ export async function waitForRunStatus(
   let last: ChatRunStatusBody | null = null;
 
   while (Date.now() - startedAt < timeoutMs) {
-    last = await readRun(baseUrl, runId);
+    last = await readRun(
+      baseUrl,
+      runId,
+      options.headers ? { headers: options.headers } : {},
+    );
     if (last.status === expected) return last;
     if (last.status === 'failed' || last.status === 'canceled') {
       throw new Error(`run ${runId} reached ${last.status}, expected ${expected}`);
@@ -85,7 +121,7 @@ const TERMINAL_RUN_STATUSES = new Set<ChatRunStatus>(['succeeded', 'failed', 'ca
 export async function waitForRunTerminal(
   baseUrl: string,
   runId: string,
-  options: { intervalMs?: number; timeoutMs?: number } = {},
+  options: { headers?: Record<string, string>; intervalMs?: number; timeoutMs?: number } = {},
 ): Promise<ChatRunStatusBody> {
   const timeoutMs = options.timeoutMs ?? 20_000;
   const intervalMs = options.intervalMs ?? 250;
@@ -93,7 +129,11 @@ export async function waitForRunTerminal(
   let last: ChatRunStatusBody | null = null;
 
   while (Date.now() - startedAt < timeoutMs) {
-    last = await readRun(baseUrl, runId);
+    last = await readRun(
+      baseUrl,
+      runId,
+      options.headers ? { headers: options.headers } : {},
+    );
     if (TERMINAL_RUN_STATUSES.has(last.status)) return last;
     await delay(intervalMs);
   }

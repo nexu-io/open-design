@@ -1,6 +1,9 @@
+import type { OdNextRolloutMode } from './strategy-rollout.js';
+
 export interface AgentModelPrefs {
   model?: string;
   reasoning?: string;
+  serviceTier?: string;
 }
 
 export type AgentCliEnvPrefs = Record<string, Record<string, string>>;
@@ -18,6 +21,16 @@ export interface OrbitConfigPrefs {
   time: string;
   /** Optional skill id from the examples gallery where scenario === "orbit". */
   templateSkillId?: string | null;
+  /**
+   * Workspace selected in the tab that configured Orbit. The daemon verifies
+   * this pair when saving and again before every unattended run.
+   */
+  workspaceScope?: AutomationWorkspaceScope | null;
+}
+
+export interface AutomationWorkspaceScope {
+  workspaceId: string;
+  workspaceMemberId: string;
 }
 
 export interface ProjectLocationPrefs {
@@ -53,6 +66,21 @@ export interface AppConfigPrefs {
   projectLocations?: ProjectLocationPrefs[];
   /** Project location id used for new projects when the create request does not choose one explicitly. */
   defaultProjectLocationId?: string | null;
+  /**
+   * Whether this installation opts into the OD Next design strategy, and in
+   * which mode.
+   *
+   * OD Next is opt-in: an installation that never chose runs the ordinary
+   * strategy route, so absent (and `null`) mean `off`. Setting this to
+   * `'active'` is the whole configuration step — the next run admits through
+   * the strategy without restarting the daemon, because the run route reads
+   * this field per request rather than latching it at boot.
+   *
+   * `OD_NEXT_STRATEGY_ROLLOUT` still outranks this when it is set, so an
+   * operator, a packaged smoke run, or a test can pin a mode for one process
+   * without overwriting what the user saved.
+   */
+  odNextStrategyMode?: OdNextRolloutMode | null;
   /**
    * Most-recently-used local working directories the user granted the agent
    * read access to (via the Home composer's working-directory picker). These

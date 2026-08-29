@@ -1,7 +1,7 @@
 ---
-title: 'The Beginner''s Guide — Install Open Design on Your PC and Build Your First Page'
+title: 'The Beginner''s Guide — Install OpenDesign on Your PC and Build Your First Page'
 youtubeId: lK3oq_Ey0eI
-summary: A no-jargon beginner's guide — download Open Design as an app on Windows or Mac (no terminal needed), connect a model in one click, and build your first real web page with the discovery form and adjustment controls. No subscription, runs entirely on your PC. Based on Where Do I Click's walkthrough.
+summary: A no-jargon beginner's guide — download OpenDesign as an app on Windows or Mac (no terminal needed), connect a model in one click, and build your first real web page with the discovery form and adjustment controls. No subscription, runs entirely on your PC. Based on Where Do I Click's walkthrough.
 date: 2026-05-08
 category: Getting started
 durationSeconds: 606
@@ -9,14 +9,14 @@ author: 'Where Do I Click'
 official: false
 ---
 
-This guide is for absolute beginners: no terminal, no jargon. You'll download Open Design as a normal app, connect a model in one click, and build your first real web page — all running on your own PC, with no subscription. It follows the friendly walkthrough **Where Do I Click** gives in [their video](https://www.youtube.com/watch?v=lK3oq_Ey0eI), rewritten and brought up to date with the current release. Watch the video above for the live run, or read on for the written version.
+This guide is for absolute beginners: no terminal, no jargon. You'll download OpenDesign as a normal app, connect a model in one click, and build your first real web page — all running on your own PC, with no subscription. It follows the friendly walkthrough **Where Do I Click** gives in [their video](https://www.youtube.com/watch?v=lK3oq_Ey0eI), rewritten and brought up to date with the current release. Watch the video above for the live run, or read on for the written version.
 
-![The Open Design workspace — describe what you want and pick a mode.](/tutorials/open-design-open-source-alternative-comparison-where-do-i-click/workspace-home.webp)
-*The Open Design workspace: describe what you want to build, pick a mode, and your agent does the rest.*
+![The OpenDesign workspace — describe what you want and pick a mode.](/tutorials/open-design-open-source-alternative-comparison-where-do-i-click/workspace-home.webp)
+*The OpenDesign workspace: describe what you want to build, pick a mode, and your agent does the rest.*
 
-## What is Open Design (in plain terms)?
+## What is OpenDesign (in plain terms)?
 
-Open Design is a free, open-source design app you run **on your own computer**. You describe what you want — a landing page, an app screen, a deck — and an AI builds a real, editable version for you. The big differences from a paid cloud tool: it's free, it runs locally (your files stay on your machine), and it works with whatever AI model you choose instead of locking you to one. As Where Do I Click puts it, a paid cloud tool is impressive but restrictive — you need a subscription and you burn through credits after a project or two. Open Design removes both walls.
+OpenDesign is a free, open-source design app you run **on your own computer**. You describe what you want — a landing page, an app screen, a deck — and an AI builds a real, editable version for you. The big differences from a paid cloud tool: it's free, it runs locally (your files stay on your machine), and it works with whatever AI model you choose instead of locking you to one. As Where Do I Click puts it, a paid cloud tool is impressive but restrictive — you need a subscription and you burn through credits after a project or two. OpenDesign removes both walls.
 
 ## Step 1 — Install it (the easy way: just download the app)
 
@@ -31,11 +31,11 @@ You don't need to be comfortable with a terminal. The simplest route:
 
 ## Step 2 — Connect a model in one click
 
-The first time it opens, Open Design **automatically detects the AI tools already on your computer** — things like Claude Code, Codex, Gemini, or Qwen — and lists them. Click one and hit **Get started**.
+The first time it opens, OpenDesign **automatically detects the supported AI tools already on your computer** — things like Claude Code, Codex, OpenCode, or Qwen — and lists them. Click one and hit **Get started**.
 
 No coding tools installed? No problem: choose **API provider** instead and paste a key from Anthropic, OpenAI, Azure, or Google Gemini. Either way, you're ready in seconds. You can switch the model later from the same button, and the settings also let you add media providers, change the **language**, pick light/dark mode, and even adopt a little desktop **pet** that hangs out in the corner.
 
-![The Open Design plugin library, with installable skills.](/tutorials/open-design-open-source-alternative-comparison-where-do-i-click/plugin-library.webp)
+![The OpenDesign plugin library, with installable skills.](/tutorials/open-design-open-source-alternative-comparison-where-do-i-click/plugin-library.webp)
 *The plugin library: install skills straight from the registry — including anti-slop design skills.*
 
 ## Step 3 — Look around (examples & templates)
@@ -47,10 +47,10 @@ Before building, click **Examples** to preview real designs made with the tool �
 1. Choose **Prototype**, give it a name (Where Do I Click builds a real-estate agency page).
 2. Pick a **design system** (or leave it on free) and **high fidelity**.
 3. Click **Create**, paste your prompt, and send.
-4. Open Design asks a few **discovery questions** (desktop or mobile? tone? realistic images?) so it builds the right thing the first time — answer them and send.
+4. OpenDesign asks a few **discovery questions** (desktop or mobile? tone? realistic images?) so it builds the right thing the first time — answer them and send.
 5. Pick a **visual direction**, and it builds your page: a clean interface with AI-generated images, real copy, and animations — genuinely close to a paid tool's quality.
 
-![Slide-deck mode in Open Design with example decks.](/tutorials/open-design-open-source-alternative-comparison-where-do-i-click/slide-deck-creator.webp)
+![Slide-deck mode in OpenDesign with example decks.](/tutorials/open-design-open-source-alternative-comparison-where-do-i-click/slide-deck-creator.webp)
 *Slide-deck mode: choose a deck category and fork an example as your starting point.*
 
 ## Step 5 — Make changes without code
@@ -74,7 +74,7 @@ No. Download the app, click your model (or paste an API key), and build with pla
 Yes — it installs locally on Windows or macOS and your projects stay on your machine.
 
 **Do I need a subscription?**
-No. Open Design is free; you only pay for the AI model usage of whichever agent or API key you connect — and there's no separate weekly design cap.
+No. OpenDesign is free; you only pay for the AI model usage of whichever agent or API key you connect — and there's no separate weekly design cap.
 
 **Is it free and open source?**
 Yes — Apache-2.0. Run it locally for free; you only pay for the model/media usage of whatever you connect.

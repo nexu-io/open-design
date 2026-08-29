@@ -38,6 +38,54 @@ function buildTrackerScript(pageName: string, downloadAttributionUrl: string): s
       try { if (window.posthog) window.posthog.capture(name, props || {}); } catch (e) {}
     };
 
+    // Cross-product campaign attribution is minted on the first click that
+    // enters a conversion path. Later Pricing clicks preserve that first-touch
+    // id/source and add a separate conversion source, allowing Vela's final
+    // payment event to report both entry and checkout placement.
+    window.__odRecordCampaignEntry = function (sourceDetail, campaignId) {
+      var inbound = null;
+      try { inbound = new URLSearchParams(window.location.search || ''); } catch (e) {}
+      var inboundEntryId = inbound && inbound.get('od_entry_id');
+      var inboundEntrySource = inbound && inbound.get('od_entry_source');
+      var inboundEntryAt = inbound && inbound.get('od_entry_at');
+      // Consent-gated device id survives desktop → Pricing → Cloud. Only the
+      // inbound query is a source of truth here; callers never mint a device id.
+      var inboundDeviceId = inbound && inbound.get('od_device_id');
+      var random = '';
+      try {
+        random = window.crypto && typeof window.crypto.randomUUID === 'function'
+          ? window.crypto.randomUUID()
+          : Math.random().toString(36).slice(2) + Date.now().toString(36);
+      } catch (e) { random = Math.random().toString(36).slice(2) + Date.now().toString(36); }
+      return {
+        entry_id: inboundEntryId || ('od-campaign-' + random),
+        source_product: 'open_design',
+        source_detail: inboundEntrySource || String(sourceDetail || 'unknown'),
+        entry_occurred_at: inboundEntryAt || new Date().toISOString(),
+        conversion_source: String(sourceDetail || 'unknown'),
+        // Explicit only: do not inherit a stale inbound od_campaign_id. Pricing
+        // passes undefined once the window closes so post-window CTAs stay clean.
+        campaign_id: campaignId || undefined,
+        device_id: inboundDeviceId || undefined,
+      };
+    };
+
+    window.__odAttributedUrl = function (href, attribution) {
+      try {
+        var target = new URL(href, window.location.href);
+        if (attribution) {
+          target.searchParams.set('od_origin', attribution.source_product || 'open_design');
+          target.searchParams.set('od_entry_id', attribution.entry_id || '');
+          target.searchParams.set('od_entry_source', attribution.source_detail || 'unknown');
+          target.searchParams.set('od_entry_at', attribution.entry_occurred_at || new Date().toISOString());
+          target.searchParams.set('od_conversion_source', attribution.conversion_source || attribution.source_detail || 'unknown');
+          if (attribution.campaign_id) target.searchParams.set('od_campaign_id', attribution.campaign_id);
+          if (attribution.device_id) target.searchParams.set('od_device_id', attribution.device_id);
+        }
+        return target.toString();
+      } catch (e) { return href; }
+    };
+
     var REPO = 'github.com/nexu-io/open-design';
     var PAGE = ${JSON.stringify(pageName)};
     var DOWNLOAD_ATTRIBUTION_URL = ${JSON.stringify(downloadAttributionUrl)};
@@ -168,7 +216,12 @@ function buildTrackerScript(pageName: string, downloadAttributionUrl: string): s
       // Language switch (locale option) and the dropdown trigger.
       var localeLink = t.closest('[data-locale-link]');
       if (localeLink) {
-        click(localeLink, 'language_switch', { lang_to: localeLink.getAttribute('data-locale-code') || '' });
+        click(localeLink, 'language_switch', {
+          lang_to: localeLink.getAttribute('data-locale-code') || '',
+          locale_switch_manual: true,
+          locale_from: localeNow(),
+          locale_to: localeLink.getAttribute('data-locale-code') || ''
+        });
         return;
       }
       if (t.closest('[data-locale-switch] summary')) { click(t, 'language_menu'); return; }
@@ -258,14 +311,70 @@ export function posthogHeadHtml(
   return `<!-- PostHog -->
 <script>
   !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug getPageViewId captureTraceFeedback captureTraceMetric".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+  var odLocaleAttribution = null;
+  try {
+    var odLocaleAttributionRaw = window.sessionStorage.getItem('od.localeAttribution');
+    var odLocaleAttributionCandidate = odLocaleAttributionRaw && JSON.parse(odLocaleAttributionRaw);
+    if (
+      odLocaleAttributionCandidate &&
+      odLocaleAttributionCandidate.targetPath === window.location.pathname &&
+      typeof odLocaleAttributionCandidate.createdAt === 'number' &&
+      Date.now() - odLocaleAttributionCandidate.createdAt >= 0 &&
+      Date.now() - odLocaleAttributionCandidate.createdAt < 60000 &&
+      typeof odLocaleAttributionCandidate.referrer === 'string' &&
+      typeof odLocaleAttributionCandidate.referringDomain === 'string'
+    ) {
+      odLocaleAttribution = odLocaleAttributionCandidate;
+    }
+  } catch (e) {}
   posthog.init(${JSON.stringify(key)}, {
     api_host: ${JSON.stringify(apiHost)},
     autocapture: false,
     capture_pageview: true,
     capture_pageleave: true,
     disable_session_recording: true,
-    persistence: 'localStorage+cookie'
+    persistence: 'localStorage+cookie',
+    before_send: function (event) {
+      if (!event || !event.properties || !odLocaleAttribution) return event;
+      event.properties.$referrer = odLocaleAttribution.referrer || '$direct';
+      event.properties.$referring_domain = odLocaleAttribution.referringDomain || '$direct';
+      event.properties.od_locale_redirect = true;
+      event.properties.od_entry_path = odLocaleAttribution.entryPath;
+      event.properties.original_landing_url = odLocaleAttribution.originalLandingUrl;
+      event.properties.original_referrer = odLocaleAttribution.referrer;
+      event.properties.locale_redirect = true;
+      event.properties.locale_redirect_reason = odLocaleAttribution.redirectReason;
+      event.properties.detected_locale = odLocaleAttribution.detectedLocale;
+      event.properties.redirect_from = odLocaleAttribution.redirectFrom;
+      event.properties.redirect_to = odLocaleAttribution.redirectTo;
+      var odOriginalAttribution = odLocaleAttribution.attribution || {};
+      for (var odAttributionKey in odOriginalAttribution) {
+        event.properties['original_' + odAttributionKey] = odOriginalAttribution[odAttributionKey];
+      }
+      return event;
+    }
   });
+  if (odLocaleAttribution) {
+    var odSessionAttribution = {
+      od_acquisition_referrer: odLocaleAttribution.referrer,
+      od_acquisition_referring_domain: odLocaleAttribution.referringDomain,
+      od_locale_redirect: true,
+      od_entry_path: odLocaleAttribution.entryPath,
+      original_landing_url: odLocaleAttribution.originalLandingUrl,
+      original_referrer: odLocaleAttribution.referrer,
+      locale_redirect: true,
+      locale_redirect_reason: odLocaleAttribution.redirectReason,
+      detected_locale: odLocaleAttribution.detectedLocale,
+      redirect_from: odLocaleAttribution.redirectFrom,
+      redirect_to: odLocaleAttribution.redirectTo
+    };
+    var odSessionOriginalAttribution = odLocaleAttribution.attribution || {};
+    for (var odSessionAttributionKey in odSessionOriginalAttribution) {
+      odSessionAttribution['original_' + odSessionAttributionKey] =
+        odSessionOriginalAttribution[odSessionAttributionKey];
+    }
+    posthog.register_for_session(odSessionAttribution);
+  }
 ${buildTrackerScript(pageName, downloadAttributionUrl)}
 </script>`;
 }

@@ -1,15 +1,15 @@
 ---
-title: "Open Design 0.8.0: everything is a plugin"
+title: "OpenDesign 0.8.0: everything is a plugin"
 date: 2026-05-22
 category: "Product"
 readingTime: 7
-summary: "Open Design 0.8.0 isn't a release, it's a rebuild. A small plugin engine, a headless-by-default CLI, packaged auto-update on macOS and Windows, and 149 design systems shipped in seven days."
+summary: "OpenDesign 0.8.0 isn't a release, it's a rebuild. A small plugin engine, a headless-by-default CLI, packaged auto-update on macOS and Windows, and 149 design systems shipped in seven days."
 i18n:
   zh:
-    title: "Open Design 0.8.0：一切皆插件"
-    summary: "Open Design 0.8.0 不是一次发布，而是一次重建。一个小小的插件引擎、一个默认无头的 CLI、macOS 与 Windows 上的打包自动更新，以及七天内交付的 149 套设计系统。"
+    title: "OpenDesign 0.8.0：一切皆插件"
+    summary: "OpenDesign 0.8.0 不是一次发布，而是一次重建。一个小小的插件引擎、一个默认无头的 CLI、macOS 与 Windows 上的打包自动更新，以及七天内交付的 149 套设计系统。"
     bodyHtml: |
-      <p>标签 <code>open-design-v0.8.0</code>（<code>c20d156</code>），于 2026 年 5 月 22 日 12:43 UTC 交付。七天内来自 75 位贡献者的 305 个 PR。这是我们停止试图扩展旧形态、转而重建底下引擎的那一次发布。你今天下载到的桌面应用，是一个薄薄的外壳，包着一个你也能从 Claude Code、Cursor 或一个 Slack 机器人那里指过来的 CLI。设计系统、切片、原型、导出，以及那些老的 Figma 风格工作流，都不再是烤进引擎里的功能——它们是插件，写在一个小而无聊的核心之上。</p>
+      <p><code>open-design-v0.8.0</code>（<code>c20d156</code>），于 2026 年 5 月 22 日 12:43 UTC 交付。七天内来自 75 位贡献者的 305 个 PR。这是我们停止试图扩展旧形态、转而重建底下引擎的那一次发布。你今天下载到的桌面应用，是一个薄薄的外壳，包着一个你也能从 Claude Code、Cursor 或一个 Slack 机器人那里指过来的 CLI。设计系统、切片、原型、导出，以及那些老的 Figma 风格工作流，都不再是烤进引擎里的功能——它们是插件，写在一个小而无聊的核心之上。</p>
       <p>如果你想看长版本，讨论帖里有。这篇文章是短版本：底层改了什么、你今天能拿它做什么，以及从哪里开始。</p>
       <h2>为什么是重建，而不是又一次发布</h2>
       <p>0.7 这条线有个问题。每一套工作流都活在引擎里——设计系统导入、deck 模板、切片渲染、Figma 移植，甚至发布这一步——而要加下一样东西就意味着改核心。正是这种动态，把我们之前的每一个编辑器都变成了插件坟场：一个锁在某个版本背后的 SaaS 插件 API，一个你必须申请才能进的「creator 计划」，一个每两年就坏一次的运行时。</p>
@@ -63,20 +63,20 @@ i18n:
 
 
 
-      <table><thead><tr><th>如果你是……</th><th>从这里开始</th></tr></thead><tbody><tr><td>Open Design 新手</td><td>下载桌面应用，让它针对一套现有设计系统自举出一个项目</td></tr><tr><td>已经在运行 Open Design</td><td>让打包好的自动更新把你带到 0.8.0；应用内的更新器弹窗会引导你走完经过校验的安装</td></tr><tr><td>正在构建一个插件</td><td>用 <code>od plugin scaffold --id &#x3C;name></code> scaffold，用 <code>od plugin validate ./&#x3C;path> --no-daemon</code> 校验，然后经由发布 marketplace 里每一个插件用的同一条 OD 发布路径开一个 PR</td></tr></tbody></table>
+      <table><thead><tr><th>如果你是……</th><th>从这里开始</th></tr></thead><tbody><tr><td>OpenDesign 新手</td><td>下载桌面应用，让它针对一套现有设计系统自举出一个项目</td></tr><tr><td>已经在运行 OpenDesign</td><td>让打包好的自动更新把你带到 0.8.0；应用内的更新器弹窗会引导你走完经过校验的安装</td></tr><tr><td>正在构建一个插件</td><td>用 <code>od plugin scaffold --id &#x3C;name></code> scaffold，用 <code>od plugin validate ./&#x3C;path> --no-daemon</code> 校验，然后经由发布 marketplace 里每一个插件用的同一条 OD 发布路径开一个 PR</td></tr></tbody></table>
       <p>如果你一直在等待 agent 原生的循环感觉起来像那个权威循环、而不是一个 demo，那就是这次发布了。把 Claude Code、Cursor、Codex，或那 16 个被检测到的 CLI agent 中的任意一个，指向桌面应用所交付的同一个 OD CLI，这两条路径在第一个 prompt 之后就汇合了。</p>
       <h2>接下来该做什么</h2>
       <p>感受 0.7 与 0.8 之间差别最快的方式，就是安装桌面应用，让它拾起你已有的 agent，然后跑一遍你上个月跑过的同一份 brief。答案的形状变了。</p>
       <p><a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0">下载桌面应用</a>。</p>
       <h2>延伸阅读</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">我们为什么把 Open Design 构建成一个 skill 层、而不是一款产品</a>——0.8.0 终于兑现的那个「引擎加插件」赌注背后更长的宣言</li>
-      <li><a href="/blog/port-figma-workflow-open-design-plugin/">如何把一套 Figma 工作流移植成一个 Open Design 插件</a>——「插件创造插件」循环的实操版</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">我们为什么把 OpenDesign 构建成一个 skill 层、而不是一款产品</a>——0.8.0 终于兑现的那个「引擎加插件」赌注背后更长的宣言</li>
+      <li><a href="/blog/port-figma-workflow-open-design-plugin/">如何把一套 Figma 工作流移植成一个 OpenDesign 插件</a>——「插件创造插件」循环的实操版</li>
       <li><a href="/blog/open-source-alternative-to-claude-design/">Claude Design 的开源替代品</a>——这次发布在 agent 原生设计版图里落在哪里</li>
       </ul>
   zh-tw:
-    title: "Open Design 0.8.0：一切皆外掛"
-    summary: "Open Design 0.8.0 不是一次發布，而是一次重建。一個小巧的外掛引擎、一個預設無頭的 CLI、macOS 與 Windows 上的封裝版自動更新，以及七天內出貨的 149 個設計系統。"
+    title: "OpenDesign 0.8.0：一切皆外掛"
+    summary: "OpenDesign 0.8.0 不是一次發布，而是一次重建。一個小巧的外掛引擎、一個預設無頭的 CLI、macOS 與 Windows 上的封裝版自動更新，以及七天內出貨的 149 個設計系統。"
     bodyHtml: |
       <p>標籤 <code>open-design-v0.8.0</code>（<code>c20d156</code>），於 2026 年 5 月 22 日 12:43 UTC 出貨。七天內來自 75 位貢獻者的 305 個 PR。這是我們停止試圖延伸舊形態、並重建其底下引擎的那次發布。你今天會下載的桌面 app，是一層包在 CLI 外面的薄殼，而你也可以從 Claude Code、Cursor 或一個 Slack 機器人指向那個 CLI。設計系統、切片、原型、匯出，以及舊的 Figma 風格工作流程，不再是烤進引擎裡的功能——它們是外掛，對著一個小巧、無趣的核心寫成。</p>
       <p>如果你想要長版本，那條討論串裡有。這篇文章是短版本：底層改了什麼、你今天能拿它做什麼，以及從哪裡開始。</p>
@@ -132,22 +132,22 @@ i18n:
 
 
 
-      <table><thead><tr><th>如果你是……</th><th>從這裡開始</th></tr></thead><tbody><tr><td>初次接觸 Open Design</td><td>下載桌面 app，讓它對著一個既有的設計系統引導出一個專案</td></tr><tr><td>已經在執行 Open Design</td><td>讓封裝版自動更新把你帶到 0.8.0；app 內的更新程式彈出視窗會帶你走過經驗證的安裝</td></tr><tr><td>正在打造一個外掛</td><td>用 <code>od plugin scaffold --id &#x3C;name></code> 搭建鷹架，用 <code>od plugin validate ./&#x3C;path> --no-daemon</code> 驗證，並透過跟市集裡每一個其他外掛相同的 OD 發布路徑開一個 PR</td></tr></tbody></table>
+      <table><thead><tr><th>如果你是……</th><th>從這裡開始</th></tr></thead><tbody><tr><td>初次接觸 OpenDesign</td><td>下載桌面 app，讓它對著一個既有的設計系統引導出一個專案</td></tr><tr><td>已經在執行 OpenDesign</td><td>讓封裝版自動更新把你帶到 0.8.0；app 內的更新程式彈出視窗會帶你走過經驗證的安裝</td></tr><tr><td>正在打造一個外掛</td><td>用 <code>od plugin scaffold --id &#x3C;name></code> 搭建鷹架，用 <code>od plugin validate ./&#x3C;path> --no-daemon</code> 驗證，並透過跟市集裡每一個其他外掛相同的 OD 發布路徑開一個 PR</td></tr></tbody></table>
       <p>如果你一直在等那個 agent 原生迴圈感覺像正典迴圈、而不是一個 demo，那麼這就是那次發布。把 Claude Code、Cursor、Codex，或那 16 個偵測到的 CLI agent 裡的任何一個，指向桌面 app 出貨時所附的同一個 OD CLI，這兩條路徑就會在第一個提示之後匯合。</p>
       <h2>接下來該做什麼</h2>
       <p>感受 0.7 和 0.8 之間差別最快的辦法，就是安裝桌面 app、讓它接上你既有的 agent，並跑你上個月跑過的同一份簡報。那個答案的形態變了。</p>
       <p><a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0">下載桌面版</a>。</p>
       <h2>延伸閱讀</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">我們為什麼把 Open Design 打造成一層技能層，而不是一個產品</a>——0.8.0 終於兌現的那個「引擎加外掛」賭注背後更長的宣言</li>
-      <li><a href="/blog/port-figma-workflow-open-design-plugin/">如何把一個 Figma 工作流程移植成一個 Open Design 外掛</a>——「外掛建立外掛」迴圈的實務版本</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">我們為什麼把 OpenDesign 打造成一層技能層，而不是一個產品</a>——0.8.0 終於兌現的那個「引擎加外掛」賭注背後更長的宣言</li>
+      <li><a href="/blog/port-figma-workflow-open-design-plugin/">如何把一個 Figma 工作流程移植成一個 OpenDesign 外掛</a>——「外掛建立外掛」迴圈的實務版本</li>
       <li><a href="/blog/open-source-alternative-to-claude-design/">Claude Design 的開源替代方案</a>——這次發布在 agent 原生設計版圖裡的落點</li>
       </ul>
   ja:
-    title: "Open Design 0.8.0：すべてはプラグイン"
-    summary: "Open Design 0.8.0 はリリースではなく、作り直しです。小さなプラグインエンジン、デフォルトでヘッドレスな CLI、macOS と Windows でのパッケージ化された自動更新、そして 7 日間で出荷された 149 のデザインシステム。"
+    title: "OpenDesign 0.8.0：すべてはプラグイン"
+    summary: "OpenDesign 0.8.0 はリリースではなく、作り直しです。小さなプラグインエンジン、デフォルトでヘッドレスな CLI、macOS と Windows でのパッケージ化された自動更新、そして 7 日間で出荷された 149 のデザインシステム。"
     bodyHtml: |
-      <p>タグ <code>open-design-v0.8.0</code>（<code>c20d156</code>）、2026 年 5 月 22 日 12:43 UTC に出荷。7 日間で 75 人のコントリビューターから 305 件の PR。これは、私たちが古い形を拡張しようとするのをやめ、その下のエンジンを作り直したリリースです。今日あなたがダウンロードするデスクトップアプリは、Claude Code、Cursor、あるいは Slack ボットからも向けられる CLI の薄いラッパーです。デザインシステム、スライス、プロトタイプ、エクスポート、そして古い Figma スタイルのワークフローは、もはやエンジンに焼き込まれた機能ではありません ── それらは、小さくて退屈なコアに対して書かれたプラグインです。</p>
+      <p><code>open-design-v0.8.0</code>（<code>c20d156</code>）、2026 年 5 月 22 日 12:43 UTC に出荷。7 日間で 75 人のコントリビューターから 305 件の PR。これは、私たちが古い形を拡張しようとするのをやめ、その下のエンジンを作り直したリリースです。今日あなたがダウンロードするデスクトップアプリは、Claude Code、Cursor、あるいは Slack ボットからも向けられる CLI の薄いラッパーです。デザインシステム、スライス、プロトタイプ、エクスポート、そして古い Figma スタイルのワークフローは、もはやエンジンに焼き込まれた機能ではありません ── それらは、小さくて退屈なコアに対して書かれたプラグインです。</p>
       <p>長い版が欲しければ、ディスカッションのスレッドにあります。この記事は短い版です：内部で何が変わったか、今日それで何ができるか、そしてどこから始めるか。</p>
       <h2>なぜ別のリリースではなく作り直しなのか</h2>
       <p>0.7 系列には問題がありました。あらゆるワークフローがエンジンの中に宿っていました ── デザインシステムのインポート、デッキテンプレート、スライスのレンダリング、Figma の移植、果ては publish のステップまで ── そして次のものを追加するということは、コアを編集することを意味しました。それが、私たちより前のあらゆるエディタをプラグインの墓場に変えたダイナミクスです：バージョンの裏にロックされた SaaS プラグイン API、申請しなければならない「クリエイタープログラム」、2 年ごとに壊れるランタイム。</p>
@@ -182,22 +182,22 @@ i18n:
       <p>どこから始めるかによって、3 つの経路があります。</p>
 
 
-      <table><thead><tr><th>あなたが…</th><th>ここから始める</th></tr></thead><tbody><tr><td>Open Design が初めてなら</td><td>デスクトップアプリをダウンロードし、既存のデザインシステムに対してプロジェクトをブートストラップさせる</td></tr><tr><td>すでに Open Design を動かしているなら</td><td>パッケージ化された自動更新に 0.8.0 まで連れてきてもらう。アプリ内の updater のポップアップが、検証されたインストールを案内します</td></tr><tr><td>プラグインを作っているなら</td><td><code>od plugin scaffold --id &#x3C;name></code> でスキャフォールドし、<code>od plugin validate ./&#x3C;path> --no-daemon</code> で検証し、マーケットプレイスの他のすべてのプラグインを出荷するのと同じ OD の publish 経路を通して PR を開く</td></tr></tbody></table>
+      <table><thead><tr><th>あなたが…</th><th>ここから始める</th></tr></thead><tbody><tr><td>OpenDesign が初めてなら</td><td>デスクトップアプリをダウンロードし、既存のデザインシステムに対してプロジェクトをブートストラップさせる</td></tr><tr><td>すでに OpenDesign を動かしているなら</td><td>パッケージ化された自動更新に 0.8.0 まで連れてきてもらう。アプリ内の updater のポップアップが、検証されたインストールを案内します</td></tr><tr><td>プラグインを作っているなら</td><td><code>od plugin scaffold --id &#x3C;name></code> でスキャフォールドし、<code>od plugin validate ./&#x3C;path> --no-daemon</code> で検証し、マーケットプレイスの他のすべてのプラグインを出荷するのと同じ OD の publish 経路を通して PR を開く</td></tr></tbody></table>
       <p>エージェントネイティブなループが、デモではなく正規のループのように感じられるのを待っていたなら、これがそのリリースです。Claude Code、Cursor、Codex、あるいは検出された 16 の CLI エージェントのいずれかを、デスクトップアプリが出荷するのと同じ OD CLI に向ければ、2 つの経路は最初のプロンプトの後に収束します。</p>
       <h2>次に何をするか</h2>
       <p>0.7 と 0.8 の違いを感じる最速の方法は、デスクトップアプリをインストールし、既存のエージェントを拾わせ、先月実行したのと同じブリーフを実行することです。答えの形が変わります。</p>
       <p><a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0">デスクトップをダウンロード</a>。</p>
       <h2>関連する読み物</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">なぜ Open Design を製品ではなくスキルレイヤーとして作ったのか</a> — 0.8.0 が報われ終える「エンジンとプラグイン」の賭けの背後にある、より長いマニフェスト</li>
-      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Figma ワークフローを Open Design プラグインに移植する方法</a> — 「プラグインがプラグインを作る」ループの実践版</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">なぜ OpenDesign を製品ではなくスキルレイヤーとして作ったのか</a> — 0.8.0 が報われ終える「エンジンとプラグイン」の賭けの背後にある、より長いマニフェスト</li>
+      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Figma ワークフローを OpenDesign プラグインに移植する方法</a> — 「プラグインがプラグインを作る」ループの実践版</li>
       <li><a href="/blog/open-source-alternative-to-claude-design/">Claude Design のオープンソースの代替</a> — このリリースがエージェントネイティブなデザインの風景のどこに収まるか</li>
       </ul>
   ko:
-    title: "Open Design 0.8.0: 모든 것은 플러그인이다"
-    summary: "Open Design 0.8.0은 릴리스가 아니라 재구축이다. 작은 플러그인 엔진, 기본이 헤드리스인 CLI, macOS와 Windows에서의 패키지 자동 업데이트, 그리고 7일 만에 출시된 149개의 디자인 시스템."
+    title: "OpenDesign 0.8.0: 모든 것은 플러그인이다"
+    summary: "OpenDesign 0.8.0은 릴리스가 아니라 재구축이다. 작은 플러그인 엔진, 기본이 헤드리스인 CLI, macOS와 Windows에서의 패키지 자동 업데이트, 그리고 7일 만에 출시된 149개의 디자인 시스템."
     bodyHtml: |
-      <p>태그 <code>open-design-v0.8.0</code> (<code>c20d156</code>), 2026년 5월 22일 12:43 UTC에 출시. 7일 동안 75명의 기여자가 305개의 PR을 보냈다. 이번 릴리스는 우리가 옛 형태를 확장하려는 시도를 멈추고 그 밑의 엔진을 다시 만든 릴리스다. 오늘 당신이 내려받을 데스크톱 앱은 Claude Code, Cursor, 또는 Slack 봇에서도 가리킬 수 있는 CLI를 감싼 얇은 래퍼다. 디자인 시스템, 슬라이스, 프로토타입, 내보내기, 그리고 옛 Figma 스타일 워크플로는 더 이상 엔진에 박힌 기능이 아니다 — 그것들은 작고 평범한 코어를 대상으로 작성된 플러그인이다.</p>
+      <p><code>open-design-v0.8.0</code> (<code>c20d156</code>), 2026년 5월 22일 12:43 UTC에 출시. 7일 동안 75명의 기여자가 305개의 PR을 보냈다. 이번 릴리스는 우리가 옛 형태를 확장하려는 시도를 멈추고 그 밑의 엔진을 다시 만든 릴리스다. 오늘 당신이 내려받을 데스크톱 앱은 Claude Code, Cursor, 또는 Slack 봇에서도 가리킬 수 있는 CLI를 감싼 얇은 래퍼다. 디자인 시스템, 슬라이스, 프로토타입, 내보내기, 그리고 옛 Figma 스타일 워크플로는 더 이상 엔진에 박힌 기능이 아니다 — 그것들은 작고 평범한 코어를 대상으로 작성된 플러그인이다.</p>
       <p>긴 버전을 원한다면 디스커션 스레드에 있다. 이 글은 짧은 버전이다: 내부에서 무엇이 바뀌었는지, 오늘 그것으로 무엇을 할 수 있는지, 그리고 어디서 시작할지.</p>
       <h2>또 하나의 릴리스가 아니라 재구축을 택한 이유</h2>
       <p>0.7 계열에는 문제가 있었다. 모든 워크플로가 엔진 안에 살았다 — 디자인 시스템 임포트, 덱 템플릿, 슬라이스 렌더링, Figma 포트, 심지어 퍼블리시 단계까지 — 그리고 다음 것을 추가하려면 코어를 편집해야 했다. 그것이 바로 우리 이전의 모든 에디터를 플러그인 무덤으로 바꿔놓은 역학이다: 버전 뒤에 잠긴 SaaS 플러그인 API, 지원해야 통과하는 “크리에이터 프로그램”, 2년마다 깨지는 런타임.</p>
@@ -250,22 +250,22 @@ i18n:
 
 
 
-      <table><thead><tr><th>당신이…</th><th>여기서 시작하라</th></tr></thead><tbody><tr><td>Open Design을 처음 쓴다면</td><td>데스크톱 앱을 내려받아 기존 디자인 시스템을 대상으로 프로젝트를 부트스트랩하게 하라</td></tr><tr><td>이미 Open Design을 돌리고 있다면</td><td>패키지 자동 업데이트가 당신을 0.8.0으로 데려가게 하라. 인앱 업데이터 팝업이 검증된 설치 과정을 안내한다</td></tr><tr><td>플러그인을 만들고 있다면</td><td><code>od plugin scaffold --id &#x3C;name></code>으로 스캐폴드하고, <code>od plugin validate ./&#x3C;path> --no-daemon</code>으로 검증하고, 마켓플레이스의 다른 모든 플러그인을 출시하는 동일한 OD 퍼블리시 경로를 통해 PR을 열어라</td></tr></tbody></table>
+      <table><thead><tr><th>당신이…</th><th>여기서 시작하라</th></tr></thead><tbody><tr><td>OpenDesign을 처음 쓴다면</td><td>데스크톱 앱을 내려받아 기존 디자인 시스템을 대상으로 프로젝트를 부트스트랩하게 하라</td></tr><tr><td>이미 OpenDesign을 돌리고 있다면</td><td>패키지 자동 업데이트가 당신을 0.8.0으로 데려가게 하라. 인앱 업데이터 팝업이 검증된 설치 과정을 안내한다</td></tr><tr><td>플러그인을 만들고 있다면</td><td><code>od plugin scaffold --id &#x3C;name></code>으로 스캐폴드하고, <code>od plugin validate ./&#x3C;path> --no-daemon</code>으로 검증하고, 마켓플레이스의 다른 모든 플러그인을 출시하는 동일한 OD 퍼블리시 경로를 통해 PR을 열어라</td></tr></tbody></table>
       <p>에이전트 네이티브 루프가 데모가 아니라 정식 루프처럼 느껴지기를 기다려왔다면, 이번이 그 릴리스다. Claude Code, Cursor, Codex, 또는 감지된 16개 CLI 에이전트 중 어느 것이든 데스크톱 앱이 함께 제공하는 동일한 OD CLI를 가리키게 하면, 두 경로는 첫 프롬프트 이후 하나로 수렴한다.</p>
       <h2>다음에 할 일</h2>
       <p>0.7과 0.8의 차이를 가장 빠르게 느끼는 방법은 데스크톱 앱을 설치하고, 기존 에이전트를 집어 들게 한 다음, 지난달에 돌렸던 동일한 브리프를 돌려보는 것이다. 답의 형태가 바뀐다.</p>
       <p><a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0">데스크톱 내려받기</a>.</p>
       <h2>관련 읽을거리</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">우리가 Open Design을 제품이 아니라 스킬 레이어로 만든 이유</a> — 0.8.0이 마침내 결실을 보는 “엔진 더하기 플러그인” 베팅 뒤의 더 긴 선언문</li>
-      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Figma 워크플로를 Open Design 플러그인으로 포팅하는 방법</a> — “플러그인이 플러그인을 만든다” 루프의 실용 버전</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">우리가 OpenDesign을 제품이 아니라 스킬 레이어로 만든 이유</a> — 0.8.0이 마침내 결실을 보는 “엔진 더하기 플러그인” 베팅 뒤의 더 긴 선언문</li>
+      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Figma 워크플로를 OpenDesign 플러그인으로 포팅하는 방법</a> — “플러그인이 플러그인을 만든다” 루프의 실용 버전</li>
       <li><a href="/blog/open-source-alternative-to-claude-design/">Claude Design의 오픈소스 대안</a> — 이번 릴리스가 에이전트 네이티브 디자인 지형에서 어디에 들어맞는지</li>
       </ul>
   de:
-    title: "Open Design 0.8.0: Alles ist ein Plugin"
-    summary: "Open Design 0.8.0 ist kein Release, sondern ein Neubau. Eine kleine Plugin-Engine, eine standardmäßig headless laufende CLI, paketiertes Auto-Update auf macOS und Windows und 149 Designsysteme, ausgeliefert in sieben Tagen."
+    title: "OpenDesign 0.8.0: Alles ist ein Plugin"
+    summary: "OpenDesign 0.8.0 ist kein Release, sondern ein Neubau. Eine kleine Plugin-Engine, eine standardmäßig headless laufende CLI, paketiertes Auto-Update auf macOS und Windows und 149 Designsysteme, ausgeliefert in sieben Tagen."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.8.0</code> (<code>c20d156</code>), ausgeliefert am 22. Mai 2026, 12:43 UTC. 305 PRs von 75 Mitwirkenden in sieben Tagen. Dies ist das Release, in dem wir aufgehört haben, die alte Form zu erweitern, und stattdessen die darunterliegende Engine neu gebaut haben. Die Desktop-App, die du heute herunterlädst, ist ein dünner Wrapper um eine CLI, die du auch aus Claude Code, Cursor oder einem Slack-Bot ansteuern kannst. Die Designsysteme, Slices, Prototypen, Exporte und die alten Figma-artigen Workflows sind keine fest in die Engine eingebauten Features mehr — sie sind Plugins, geschrieben gegen einen kleinen, langweiligen Kern.</p>
+      <p><code>open-design-v0.8.0</code> (<code>c20d156</code>), ausgeliefert am 22. Mai 2026, 12:43 UTC. 305 PRs von 75 Mitwirkenden in sieben Tagen. Dies ist das Release, in dem wir aufgehört haben, die alte Form zu erweitern, und stattdessen die darunterliegende Engine neu gebaut haben. Die Desktop-App, die du heute herunterlädst, ist ein dünner Wrapper um eine CLI, die du auch aus Claude Code, Cursor oder einem Slack-Bot ansteuern kannst. Die Designsysteme, Slices, Prototypen, Exporte und die alten Figma-artigen Workflows sind keine fest in die Engine eingebauten Features mehr — sie sind Plugins, geschrieben gegen einen kleinen, langweiligen Kern.</p>
       <p>Wenn du die lange Version willst, findest du sie im Diskussions-Thread. Dieser Beitrag ist die kurze Version: was sich unter der Haube geändert hat, was du heute damit machen kannst und wo du anfängst.</p>
       <h2>Warum ein Neubau und nicht noch ein Release</h2>
       <p>Die 0.7-Linie hatte ein Problem. Jeder Workflow lebte innerhalb der Engine — Designsystem-Importe, Deck-Vorlagen, Slice-Rendering, der Figma-Port, sogar der Publish-Schritt — und das nächste Feature hinzuzufügen bedeutete, am Kern zu schrauben. Genau diese Dynamik hat jeden Editor vor uns in einen Plugin-Friedhof verwandelt: eine SaaS-Plugin-API, die hinter einer Version eingesperrt war, ein „Creator-Programm“, für das man sich bewerben musste, eine Laufzeitumgebung, die alle zwei Jahre kaputtging.</p>
@@ -298,22 +298,22 @@ i18n:
       <p>Die vollständige Liste umfasst 305 PRs. Die <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0">Release-Notes auf GitHub</a> tragen den Rest.</p>
       <h2>Was du heute damit machen kannst</h2>
       <p>Drei Pfade, je nachdem, wo du anfängst.</p>
-      <table><thead><tr><th>Wenn du …</th><th>Hier anfangen</th></tr></thead><tbody><tr><td>Neu bei Open Design</td><td>Lade die Desktop-App herunter und lass sie ein Projekt gegen ein bestehendes Designsystem bootstrappen</td></tr><tr><td>Schon Open Design einsetzt</td><td>Lass das paketierte Auto-Update dich auf 0.8.0 bringen; das In-App-Updater-Popup führt dich durch die validierte Installation</td></tr><tr><td>Ein Plugin baust</td><td>Scaffolde mit <code>od plugin scaffold --id &#x3C;name></code>, validiere mit <code>od plugin validate ./&#x3C;path> --no-daemon</code> und öffne einen PR über denselben OD-Publish-Pfad, der jedes andere Plugin im Marketplace ausliefert</td></tr></tbody></table>
+      <table><thead><tr><th>Wenn du …</th><th>Hier anfangen</th></tr></thead><tbody><tr><td>Neu bei OpenDesign</td><td>Lade die Desktop-App herunter und lass sie ein Projekt gegen ein bestehendes Designsystem bootstrappen</td></tr><tr><td>Schon OpenDesign einsetzt</td><td>Lass das paketierte Auto-Update dich auf 0.8.0 bringen; das In-App-Updater-Popup führt dich durch die validierte Installation</td></tr><tr><td>Ein Plugin baust</td><td>Scaffolde mit <code>od plugin scaffold --id &#x3C;name></code>, validiere mit <code>od plugin validate ./&#x3C;path> --no-daemon</code> und öffne einen PR über denselben OD-Publish-Pfad, der jedes andere Plugin im Marketplace ausliefert</td></tr></tbody></table>
       <p>Wenn du darauf gewartet hast, dass sich der agentennative Loop wie der kanonische Loop anfühlt und nicht wie eine Demo, dann ist dies das Release. Richte Claude Code, Cursor, Codex oder einen der 16 erkannten CLI-Agenten auf dieselbe OD CLI, die die Desktop-App ausliefert, und die beiden Pfade laufen nach dem ersten Prompt zusammen.</p>
       <h2>Was du als Nächstes tun kannst</h2>
       <p>Der schnellste Weg, den Unterschied zwischen 0.7 und 0.8 zu spüren, ist, die Desktop-App zu installieren, sie deinen bestehenden Agenten aufgreifen zu lassen und dasselbe Briefing auszuführen, das du letzten Monat ausgeführt hast. Die Form der Antwort ändert sich.</p>
       <p><a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0">Desktop herunterladen</a>.</p>
       <h2>Weiterführende Lektüre</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Warum wir Open Design als Skill-Layer gebaut haben, nicht als Produkt</a> — das längere Manifest hinter der Wette „Engine plus Plugins“, die 0.8.0 endlich einlöst</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Warum wir OpenDesign als Skill-Layer gebaut haben, nicht als Produkt</a> — das längere Manifest hinter der Wette „Engine plus Plugins“, die 0.8.0 endlich einlöst</li>
       <li><a href="/blog/port-figma-workflow-open-design-plugin/">Wie man einen Figma-Workflow in ein Open-Design-Plugin portiert</a> — die praktische Version des Loops „Plugins erstellen Plugins“</li>
       <li><a href="/blog/open-source-alternative-to-claude-design/">Die Open-Source-Alternative zu Claude Design</a> — wo dieses Release in die agentennative Design-Landschaft passt</li>
       </ul>
   fr:
-    title: "Open Design 0.8.0 : tout est un plugin"
-    summary: "Open Design 0.8.0 n'est pas une release, c'est une refonte. Un petit moteur de plugins, un CLI headless par défaut, des mises à jour automatiques empaquetées sur macOS et Windows, et 149 design systems livrés en sept jours."
+    title: "OpenDesign 0.8.0 : tout est un plugin"
+    summary: "OpenDesign 0.8.0 n'est pas une release, c'est une refonte. Un petit moteur de plugins, un CLI headless par défaut, des mises à jour automatiques empaquetées sur macOS et Windows, et 149 design systems livrés en sept jours."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.8.0</code> (<code>c20d156</code>), livré le 22 mai 2026, 12h43 UTC. 305 PR de 75 contributeurs en sept jours. C'est la release où nous avons cessé d'essayer d'étendre l'ancienne forme et avons reconstruit le moteur en dessous. L'application desktop que vous téléchargerez aujourd'hui est une fine enveloppe autour d'un CLI vers lequel vous pouvez aussi pointer depuis Claude Code, Cursor ou un bot Slack. Les design systems, les slices, les prototypes, les exports et les anciens workflows à la Figma ne sont plus des fonctionnalités intégrées au moteur — ce sont des plugins, écrits contre un noyau petit et ennuyeux.</p>
+      <p><code>open-design-v0.8.0</code> (<code>c20d156</code>), livré le 22 mai 2026, 12h43 UTC. 305 PR de 75 contributeurs en sept jours. C'est la release où nous avons cessé d'essayer d'étendre l'ancienne forme et avons reconstruit le moteur en dessous. L'application desktop que vous téléchargerez aujourd'hui est une fine enveloppe autour d'un CLI vers lequel vous pouvez aussi pointer depuis Claude Code, Cursor ou un bot Slack. Les design systems, les slices, les prototypes, les exports et les anciens workflows à la Figma ne sont plus des fonctionnalités intégrées au moteur — ce sont des plugins, écrits contre un noyau petit et ennuyeux.</p>
       <p>Si vous voulez la version longue, le fil de discussion l'a. Cet article est la version courte : ce qui a changé en coulisses, ce que vous pouvez en faire aujourd'hui, et par où commencer.</p>
       <h2>Pourquoi une refonte, et non une release de plus</h2>
       <p>La ligne 0.7 avait un problème. Chaque workflow vivait à l'intérieur du moteur — imports de design systems, modèles de decks, rendu des slices, le portage Figma, et même l'étape de publication — et ajouter la chose suivante signifiait éditer le noyau. C'est cette dynamique qui a transformé chaque éditeur avant nous en cimetière de plugins : une API de plugins SaaS verrouillée derrière une version, un « creator program » auquel il fallait postuler, un environnement d'exécution qui cassait tous les deux ans.</p>
@@ -367,22 +367,22 @@ i18n:
 
 
 
-      <table><thead><tr><th>Si vous êtes…</th><th>Commencez ici</th></tr></thead><tbody><tr><td>Nouveau venu dans Open Design</td><td>Téléchargez l'application desktop et laissez-la initialiser un projet contre un design system existant</td></tr><tr><td>Déjà sous Open Design</td><td>Laissez la mise à jour automatique empaquetée vous amener à 0.8.0 ; la popup de mise à jour intégrée vous guide à travers l'installation validée</td></tr><tr><td>En train de construire un plugin</td><td>Échafaudez avec <code>od plugin scaffold --id &#x3C;name></code>, validez avec <code>od plugin validate ./&#x3C;path> --no-daemon</code>, et ouvrez une PR via le même chemin de publication OD qui livre tous les autres plugins de la marketplace</td></tr></tbody></table>
+      <table><thead><tr><th>Si vous êtes…</th><th>Commencez ici</th></tr></thead><tbody><tr><td>Nouveau venu dans OpenDesign</td><td>Téléchargez l'application desktop et laissez-la initialiser un projet contre un design system existant</td></tr><tr><td>Déjà sous OpenDesign</td><td>Laissez la mise à jour automatique empaquetée vous amener à 0.8.0 ; la popup de mise à jour intégrée vous guide à travers l'installation validée</td></tr><tr><td>En train de construire un plugin</td><td>Échafaudez avec <code>od plugin scaffold --id &#x3C;name></code>, validez avec <code>od plugin validate ./&#x3C;path> --no-daemon</code>, et ouvrez une PR via le même chemin de publication OD qui livre tous les autres plugins de la marketplace</td></tr></tbody></table>
       <p>Si vous attendiez que la boucle agent-native ressemble à la boucle canonique plutôt qu'à une démo, c'est cette release. Pointez Claude Code, Cursor, Codex, ou l'un des 16 agents CLI détectés vers le même CLI OD que l'application desktop livre, et les deux chemins convergent après le premier prompt.</p>
       <h2>Quoi faire ensuite</h2>
       <p>Le moyen le plus rapide de ressentir la différence entre 0.7 et 0.8 est d'installer l'application desktop, de la laisser prendre en charge votre agent existant, et de lancer le même brief que vous avez lancé le mois dernier. La forme de la réponse change.</p>
       <p><a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0">Télécharger le desktop</a>.</p>
       <h2>Lectures associées</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Pourquoi nous avons conçu Open Design comme une couche de skills, pas un produit</a> — le manifeste plus long derrière le pari « moteur plus plugins » que 0.8.0 achève de concrétiser</li>
-      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Comment porter un workflow Figma vers un plugin Open Design</a> — la version pratique de la boucle « les plugins créent des plugins »</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Pourquoi nous avons conçu OpenDesign comme une couche de skills, pas un produit</a> — le manifeste plus long derrière le pari « moteur plus plugins » que 0.8.0 achève de concrétiser</li>
+      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Comment porter un workflow Figma vers un plugin OpenDesign</a> — la version pratique de la boucle « les plugins créent des plugins »</li>
       <li><a href="/blog/open-source-alternative-to-claude-design/">L'alternative open-source à Claude Design</a> — où se situe cette release dans le paysage du design agent-native</li>
       </ul>
   ru:
-    title: "Open Design 0.8.0: всё является плагином"
-    summary: "Open Design 0.8.0 — это не релиз, это перестройка. Небольшой движок плагинов, CLI с headless-режимом по умолчанию, упакованное автообновление в macOS и Windows и 149 дизайн-систем, выпущенных за семь дней."
+    title: "OpenDesign 0.8.0: всё является плагином"
+    summary: "OpenDesign 0.8.0 — это не релиз, это перестройка. Небольшой движок плагинов, CLI с headless-режимом по умолчанию, упакованное автообновление в macOS и Windows и 149 дизайн-систем, выпущенных за семь дней."
     bodyHtml: |
-      <p>Тег <code>open-design-v0.8.0</code> (<code>c20d156</code>), выпущен 22 мая 2026 года, 12:43 UTC. 305 PR от 75 участников за семь дней. Это релиз, в котором мы перестали пытаться расширять старую форму и перестроили движок под ней. Десктопное приложение, которое вы скачаете сегодня, — это тонкая обёртка вокруг CLI, на который вы также можете указать из Claude Code, Cursor или Slack-бота. Дизайн-системы, слайсы, прототипы, экспорты и старые рабочие процессы в стиле Figma больше не являются функциями, встроенными в движок — это плагины, написанные под небольшое, скучное ядро.</p>
+      <p><code>open-design-v0.8.0</code> (<code>c20d156</code>), выпущен 22 мая 2026 года, 12:43 UTC. 305 PR от 75 участников за семь дней. Это релиз, в котором мы перестали пытаться расширять старую форму и перестроили движок под ней. Десктопное приложение, которое вы скачаете сегодня, — это тонкая обёртка вокруг CLI, на который вы также можете указать из Claude Code, Cursor или Slack-бота. Дизайн-системы, слайсы, прототипы, экспорты и старые рабочие процессы в стиле Figma больше не являются функциями, встроенными в движок — это плагины, написанные под небольшое, скучное ядро.</p>
       <p>Если вам нужна длинная версия, она есть в ветке обсуждения. Этот пост — короткая версия: что изменилось под капотом, что вы можете с этим делать сегодня и с чего начать.</p>
       <h2>Почему перестройка, а не очередной релиз</h2>
       <p>У линейки 0.7 была проблема. Каждый рабочий процесс жил внутри движка — импорты дизайн-систем, шаблоны презентаций, рендеринг слайсов, порт из Figma, даже шаг публикации — и добавление следующей вещи означало правку ядра. Именно эта динамика превратила каждый редактор до нас в кладбище плагинов: SaaS API плагинов, заблокированный за версией, «программа для авторов», в которую нужно было подавать заявку, среда выполнения, которая ломалась каждые два года.</p>
@@ -435,22 +435,22 @@ i18n:
 
 
 
-      <table><thead><tr><th>Если вы…</th><th>Начните здесь</th></tr></thead><tbody><tr><td>Новичок в Open Design</td><td>Скачайте десктопное приложение и позвольте ему загрузить проект на основе существующей дизайн-системы</td></tr><tr><td>Уже используете Open Design</td><td>Позвольте упакованному автообновлению поднять вас до 0.8.0; всплывающее окно апдейтера в приложении проведёт вас через проверенную установку</td></tr><tr><td>Создаёте плагин</td><td>Создайте скелет с помощью <code>od plugin scaffold --id &#x3C;name></code>, проверьте с помощью <code>od plugin validate ./&#x3C;path> --no-daemon</code> и откройте PR через тот же путь публикации OD, который выпускает каждый другой плагин в маркетплейсе</td></tr></tbody></table>
+      <table><thead><tr><th>Если вы…</th><th>Начните здесь</th></tr></thead><tbody><tr><td>Новичок в OpenDesign</td><td>Скачайте десктопное приложение и позвольте ему загрузить проект на основе существующей дизайн-системы</td></tr><tr><td>Уже используете OpenDesign</td><td>Позвольте упакованному автообновлению поднять вас до 0.8.0; всплывающее окно апдейтера в приложении проведёт вас через проверенную установку</td></tr><tr><td>Создаёте плагин</td><td>Создайте скелет с помощью <code>od plugin scaffold --id &#x3C;name></code>, проверьте с помощью <code>od plugin validate ./&#x3C;path> --no-daemon</code> и откройте PR через тот же путь публикации OD, который выпускает каждый другой плагин в маркетплейсе</td></tr></tbody></table>
       <p>Если вы ждали, когда agent-native цикл начнёт ощущаться каноническим циклом, а не демо, — это тот самый релиз. Направьте Claude Code, Cursor, Codex или любой из 16 обнаруженных CLI-агентов на тот же OD CLI, что поставляет десктопное приложение, и оба пути сходятся после первого промпта.</p>
       <h2>Что делать дальше</h2>
       <p>Самый быстрый способ почувствовать разницу между 0.7 и 0.8 — установить десктопное приложение, позволить ему подхватить вашего существующего агента и запустить тот же бриф, который вы запускали в прошлом месяце. Форма ответа меняется.</p>
       <p><a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0">Скачать десктоп</a>.</p>
       <h2>Связанное чтение</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Почему мы построили Open Design как слой навыков, а не как продукт</a> — более длинный манифест, стоящий за ставкой «движок плюс плагины», которую 0.8.0 окончательно окупает</li>
-      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Как перенести рабочий процесс Figma в плагин Open Design</a> — практическая версия цикла «плагины создают плагины»</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Почему мы построили OpenDesign как слой навыков, а не как продукт</a> — более длинный манифест, стоящий за ставкой «движок плюс плагины», которую 0.8.0 окончательно окупает</li>
+      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Как перенести рабочий процесс Figma в плагин OpenDesign</a> — практическая версия цикла «плагины создают плагины»</li>
       <li><a href="/blog/open-source-alternative-to-claude-design/">Альтернатива Claude Design с открытым исходным кодом</a> — где этот релиз вписывается в ландшафт agent-native дизайна</li>
       </ul>
   es:
-    title: "Open Design 0.8.0: todo es un plugin"
-    summary: "Open Design 0.8.0 no es un lanzamiento, es una reconstrucción. Un pequeño motor de plugins, un CLI headless por defecto, auto-actualización empaquetada en macOS y Windows, y 149 sistemas de diseño publicados en siete días."
+    title: "OpenDesign 0.8.0: todo es un plugin"
+    summary: "OpenDesign 0.8.0 no es un lanzamiento, es una reconstrucción. Un pequeño motor de plugins, un CLI headless por defecto, auto-actualización empaquetada en macOS y Windows, y 149 sistemas de diseño publicados en siete días."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.8.0</code> (<code>c20d156</code>), publicado el 22 de mayo de 2026, 12:43 UTC. 305 PRs de 75 colaboradores en siete días. Este es el lanzamiento en el que dejamos de intentar extender la forma antigua y reconstruimos el motor que hay debajo. La aplicación de escritorio que descargarás hoy es un envoltorio fino alrededor de un CLI al que también puedes apuntar desde Claude Code, Cursor o un bot de Slack. Los sistemas de diseño, los slices, los prototipos, las exportaciones y los antiguos flujos de trabajo estilo Figma ya no son funciones incrustadas en el motor: son plugins, escritos contra un núcleo pequeño y aburrido.</p>
+      <p><code>open-design-v0.8.0</code> (<code>c20d156</code>), publicado el 22 de mayo de 2026, 12:43 UTC. 305 PRs de 75 colaboradores en siete días. Este es el lanzamiento en el que dejamos de intentar extender la forma antigua y reconstruimos el motor que hay debajo. La aplicación de escritorio que descargarás hoy es un envoltorio fino alrededor de un CLI al que también puedes apuntar desde Claude Code, Cursor o un bot de Slack. Los sistemas de diseño, los slices, los prototipos, las exportaciones y los antiguos flujos de trabajo estilo Figma ya no son funciones incrustadas en el motor: son plugins, escritos contra un núcleo pequeño y aburrido.</p>
       <p>Si quieres la versión larga, el hilo de la discusión la tiene. Esta publicación es la versión corta: qué cambió por dentro, qué puedes hacer con ello hoy y por dónde empezar.</p>
       <h2>Por qué una reconstrucción y no otro lanzamiento</h2>
       <p>La línea 0.7 tenía un problema. Cada flujo de trabajo vivía dentro del motor —importaciones de sistemas de diseño, plantillas de presentación, renderizado de slices, el port de Figma, incluso el paso de publicación— y añadir la siguiente cosa significaba editar el núcleo. Esa es la dinámica que convirtió a todos los editores anteriores a nosotros en un cementerio de plugins: una API de plugins SaaS bloqueada tras una versión, un «programa de creadores» al que tenías que postularte, un runtime que se rompía cada dos años.</p>
@@ -503,22 +503,22 @@ i18n:
 
 
 
-      <table><thead><tr><th>Si eres…</th><th>Empieza aquí</th></tr></thead><tbody><tr><td>Nuevo en Open Design</td><td>Descarga la aplicación de escritorio y deja que arranque un proyecto contra un sistema de diseño existente</td></tr><tr><td>Ya usas Open Design</td><td>Deja que la auto-actualización empaquetada te lleve a 0.8.0; el popup del actualizador dentro de la app te guía por la instalación validada</td></tr><tr><td>Construyendo un plugin</td><td>Haz el scaffold con <code>od plugin scaffold --id &#x3C;name></code>, valida con <code>od plugin validate ./&#x3C;path> --no-daemon</code>, y abre un PR a través de la misma ruta de publicación de OD que entrega todos los demás plugins del marketplace</td></tr></tbody></table>
+      <table><thead><tr><th>Si eres…</th><th>Empieza aquí</th></tr></thead><tbody><tr><td>Nuevo en OpenDesign</td><td>Descarga la aplicación de escritorio y deja que arranque un proyecto contra un sistema de diseño existente</td></tr><tr><td>Ya usas OpenDesign</td><td>Deja que la auto-actualización empaquetada te lleve a 0.8.0; el popup del actualizador dentro de la app te guía por la instalación validada</td></tr><tr><td>Construyendo un plugin</td><td>Haz el scaffold con <code>od plugin scaffold --id &#x3C;name></code>, valida con <code>od plugin validate ./&#x3C;path> --no-daemon</code>, y abre un PR a través de la misma ruta de publicación de OD que entrega todos los demás plugins del marketplace</td></tr></tbody></table>
       <p>Si has estado esperando a que el bucle agent-native se sienta como el bucle canónico en lugar de una demo, este es el lanzamiento. Apunta Claude Code, Cursor, Codex o cualquiera de los 16 agentes CLI detectados al mismo CLI de OD que trae la aplicación de escritorio, y las dos rutas convergen después del primer prompt.</p>
       <h2>Qué hacer a continuación</h2>
       <p>La forma más rápida de sentir la diferencia entre 0.7 y 0.8 es instalar la aplicación de escritorio, dejar que detecte tu agente existente y ejecutar el mismo brief que ejecutaste el mes pasado. La forma de la respuesta cambia.</p>
       <p><a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0">Descargar escritorio</a>.</p>
       <h2>Lecturas relacionadas</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Por qué construimos Open Design como una capa de skills, no como un producto</a> — el manifiesto más largo detrás de la apuesta «motor más plugins» que 0.8.0 termina de pagar</li>
-      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Cómo portar un flujo de trabajo de Figma a un plugin de Open Design</a> — la versión práctica del bucle «los plugins crean plugins»</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Por qué construimos OpenDesign como una capa de skills, no como un producto</a> — el manifiesto más largo detrás de la apuesta «motor más plugins» que 0.8.0 termina de pagar</li>
+      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Cómo portar un flujo de trabajo de Figma a un plugin de OpenDesign</a> — la versión práctica del bucle «los plugins crean plugins»</li>
       <li><a href="/blog/open-source-alternative-to-claude-design/">La alternativa de código abierto a Claude Design</a> — dónde encaja este lanzamiento en el panorama del diseño agent-native</li>
       </ul>
   pt-br:
-    title: "Open Design 0.8.0: tudo é um plugin"
-    summary: "O Open Design 0.8.0 não é uma release, é uma reconstrução. Um pequeno motor de plugins, um CLI headless-by-default, auto-update empacotado no macOS e Windows, e 149 design systems entregues em sete dias."
+    title: "OpenDesign 0.8.0: tudo é um plugin"
+    summary: "O OpenDesign 0.8.0 não é uma release, é uma reconstrução. Um pequeno motor de plugins, um CLI headless-by-default, auto-update empacotado no macOS e Windows, e 149 design systems entregues em sete dias."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.8.0</code> (<code>c20d156</code>), entregue em 22 de maio de 2026, 12:43 UTC. 305 PRs de 75 contribuidores em sete dias. Esta é a release em que paramos de tentar estender o formato antigo e reconstruímos o motor por baixo. O app desktop que você vai baixar hoje é um wrapper fino em torno de um CLI para o qual você também pode apontar a partir do Claude Code, do Cursor ou de um bot do Slack. Os design systems, slices, protótipos, exportações e os antigos fluxos no estilo Figma deixaram de ser recursos embutidos no motor — agora são plugins, escritos contra um núcleo pequeno e enfadonho.</p>
+      <p><code>open-design-v0.8.0</code> (<code>c20d156</code>), entregue em 22 de maio de 2026, 12:43 UTC. 305 PRs de 75 contribuidores em sete dias. Esta é a release em que paramos de tentar estender o formato antigo e reconstruímos o motor por baixo. O app desktop que você vai baixar hoje é um wrapper fino em torno de um CLI para o qual você também pode apontar a partir do Claude Code, do Cursor ou de um bot do Slack. Os design systems, slices, protótipos, exportações e os antigos fluxos no estilo Figma deixaram de ser recursos embutidos no motor — agora são plugins, escritos contra um núcleo pequeno e enfadonho.</p>
       <p>Se você quer a versão longa, a thread de discussão a tem. Este post é a versão curta: o que mudou por baixo, o que você pode fazer com isso hoje e por onde começar.</p>
       <h2>Por que uma reconstrução, não outra release</h2>
       <p>A linha 0.7 tinha um problema. Todo fluxo vivia dentro do motor — importações de design system, templates de deck, renderização de slices, o port do Figma, até a etapa de publicação — e adicionar a próxima coisa significava editar o núcleo. Essa é a dinâmica que transformou todo editor antes de nós em um cemitério de plugins: uma API de plugins SaaS trancada atrás de uma versão, um “programa de criadores” para o qual você tinha que se candidatar, um runtime que quebrava a cada dois anos.</p>
@@ -572,22 +572,22 @@ i18n:
 
 
 
-      <table><thead><tr><th>Se você é…</th><th>Comece aqui</th></tr></thead><tbody><tr><td>Novo no Open Design</td><td>Baixe o app desktop e deixe-o inicializar um projeto contra um design system existente</td></tr><tr><td>Já rodando o Open Design</td><td>Deixe o auto-update empacotado levá-lo ao 0.8.0; o popup do atualizador no app guia você pela instalação validada</td></tr><tr><td>Construindo um plugin</td><td>Faça scaffold com <code>od plugin scaffold --id &#x3C;name></code>, valide com <code>od plugin validate ./&#x3C;path> --no-daemon</code> e abra um PR pelo mesmo caminho de publicação do OD que entrega todos os outros plugins no marketplace</td></tr></tbody></table>
+      <table><thead><tr><th>Se você é…</th><th>Comece aqui</th></tr></thead><tbody><tr><td>Novo no OpenDesign</td><td>Baixe o app desktop e deixe-o inicializar um projeto contra um design system existente</td></tr><tr><td>Já rodando o OpenDesign</td><td>Deixe o auto-update empacotado levá-lo ao 0.8.0; o popup do atualizador no app guia você pela instalação validada</td></tr><tr><td>Construindo um plugin</td><td>Faça scaffold com <code>od plugin scaffold --id &#x3C;name></code>, valide com <code>od plugin validate ./&#x3C;path> --no-daemon</code> e abra um PR pelo mesmo caminho de publicação do OD que entrega todos os outros plugins no marketplace</td></tr></tbody></table>
       <p>Se você estava esperando o loop agent-native parecer o loop canônico em vez de uma demo, esta é a release. Aponte o Claude Code, Cursor, Codex ou qualquer um dos 16 agentes CLI detectados para o mesmo OD CLI que o app desktop entrega, e os dois caminhos convergem após o primeiro prompt.</p>
       <h2>O que fazer a seguir</h2>
       <p>O jeito mais rápido de sentir a diferença entre o 0.7 e o 0.8 é instalar o app desktop, deixá-lo pegar seu agente existente e rodar o mesmo briefing que você rodou mês passado. O formato da resposta muda.</p>
       <p><a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0">Baixe o desktop</a>.</p>
       <h2>Leitura relacionada</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Por que construímos o Open Design como uma camada de skills, não um produto</a> — o manifesto mais longo por trás da aposta de “motor mais plugins” que o 0.8.0 termina de quitar</li>
-      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Como portar um fluxo do Figma para um plugin do Open Design</a> — a versão prática do loop “plugins criam plugins”</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Por que construímos o OpenDesign como uma camada de skills, não um produto</a> — o manifesto mais longo por trás da aposta de “motor mais plugins” que o 0.8.0 termina de quitar</li>
+      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Como portar um fluxo do Figma para um plugin do OpenDesign</a> — a versão prática do loop “plugins criam plugins”</li>
       <li><a href="/blog/open-source-alternative-to-claude-design/">A alternativa open-source ao Claude Design</a> — onde esta release se encaixa no cenário de design agent-native</li>
       </ul>
   it:
-    title: "Open Design 0.8.0: tutto è un plugin"
-    summary: "Open Design 0.8.0 non è una release, è una ricostruzione. Un piccolo motore di plugin, una CLI headless di default, l'aggiornamento automatico pacchettizzato su macOS e Windows, e 149 design system rilasciati in sette giorni."
+    title: "OpenDesign 0.8.0: tutto è un plugin"
+    summary: "OpenDesign 0.8.0 non è una release, è una ricostruzione. Un piccolo motore di plugin, una CLI headless di default, l'aggiornamento automatico pacchettizzato su macOS e Windows, e 149 design system rilasciati in sette giorni."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.8.0</code> (<code>c20d156</code>), rilasciato il 22 maggio 2026, 12:43 UTC. 305 PR da 75 contributori in sette giorni. Questa è la release in cui abbiamo smesso di provare a estendere la vecchia forma e abbiamo ricostruito il motore sottostante. L'app desktop che scaricherai oggi è un sottile wrapper attorno a una CLI a cui puoi puntare anche da Claude Code, Cursor o un bot Slack. I design system, gli slice, i prototipi, gli export e i vecchi flussi di lavoro in stile Figma non sono più funzionalità incorporate nel motore: sono plugin, scritti contro un core piccolo e noioso.</p>
+      <p><code>open-design-v0.8.0</code> (<code>c20d156</code>), rilasciato il 22 maggio 2026, 12:43 UTC. 305 PR da 75 contributori in sette giorni. Questa è la release in cui abbiamo smesso di provare a estendere la vecchia forma e abbiamo ricostruito il motore sottostante. L'app desktop che scaricherai oggi è un sottile wrapper attorno a una CLI a cui puoi puntare anche da Claude Code, Cursor o un bot Slack. I design system, gli slice, i prototipi, gli export e i vecchi flussi di lavoro in stile Figma non sono più funzionalità incorporate nel motore: sono plugin, scritti contro un core piccolo e noioso.</p>
       <p>Se vuoi la versione lunga, il thread di discussione ce l'ha. Questo articolo è la versione breve: cosa è cambiato sotto il cofano, cosa puoi farci oggi e da dove iniziare.</p>
       <h2>Perché una ricostruzione, non un'altra release</h2>
       <p>La linea 0.7 aveva un problema. Ogni flusso di lavoro viveva dentro il motore — import di design system, template di deck, rendering degli slice, il port di Figma, persino il passo di pubblicazione — e aggiungere la cosa successiva significava modificare il core. Quella è la dinamica che ha trasformato ogni editor prima di noi in un cimitero di plugin: un'API di plugin SaaS bloccata dietro una versione, un "programma per creatori" a cui dovevi candidarti, un runtime che si rompeva ogni due anni.</p>
@@ -624,22 +624,22 @@ i18n:
 
 
 
-      <table><thead><tr><th>Se sei…</th><th>Inizia da qui</th></tr></thead><tbody><tr><td>Nuovo a Open Design</td><td>Scarica l'app desktop e lasciale avviare un progetto su un design system esistente</td></tr><tr><td>Già in esecuzione con Open Design</td><td>Lascia che l'aggiornamento automatico pacchettizzato ti porti a 0.8.0; il popup dell'updater in-app ti guida attraverso l'installazione validata</td></tr><tr><td>Stai costruendo un plugin</td><td>Fai lo scaffold con <code>od plugin scaffold --id &#x3C;name></code>, valida con <code>od plugin validate ./&#x3C;path> --no-daemon</code>, e apri una PR attraverso lo stesso percorso di pubblicazione di OD che rilascia ogni altro plugin nel marketplace</td></tr></tbody></table>
+      <table><thead><tr><th>Se sei…</th><th>Inizia da qui</th></tr></thead><tbody><tr><td>Nuovo a OpenDesign</td><td>Scarica l'app desktop e lasciale avviare un progetto su un design system esistente</td></tr><tr><td>Già in esecuzione con OpenDesign</td><td>Lascia che l'aggiornamento automatico pacchettizzato ti porti a 0.8.0; il popup dell'updater in-app ti guida attraverso l'installazione validata</td></tr><tr><td>Stai costruendo un plugin</td><td>Fai lo scaffold con <code>od plugin scaffold --id &#x3C;name></code>, valida con <code>od plugin validate ./&#x3C;path> --no-daemon</code>, e apri una PR attraverso lo stesso percorso di pubblicazione di OD che rilascia ogni altro plugin nel marketplace</td></tr></tbody></table>
       <p>Se hai aspettato che il ciclo agent-native sembrasse il ciclo canonico anziché una demo, questa è la release. Punta Claude Code, Cursor, Codex o uno qualsiasi dei 16 agenti CLI rilevati alla stessa CLI di OD con cui arriva l'app desktop, e i due percorsi convergono dopo il primo prompt.</p>
       <h2>Cosa fare dopo</h2>
       <p>Il modo più veloce per sentire la differenza tra 0.7 e 0.8 è installare l'app desktop, lasciarle rilevare il tuo agente esistente, ed eseguire lo stesso brief che hai eseguito il mese scorso. La forma della risposta cambia.</p>
       <p><a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0">Scarica desktop</a>.</p>
       <h2>Letture correlate</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Perché abbiamo costruito Open Design come un livello di skill, non come un prodotto</a>: il manifesto più lungo dietro la scommessa "motore più plugin" che 0.8.0 finisce di ripagare</li>
-      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Come portare un flusso di lavoro Figma in un plugin Open Design</a>: la versione pratica del ciclo "i plugin creano plugin"</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Perché abbiamo costruito OpenDesign come un livello di skill, non come un prodotto</a>: il manifesto più lungo dietro la scommessa "motore più plugin" che 0.8.0 finisce di ripagare</li>
+      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Come portare un flusso di lavoro Figma in un plugin OpenDesign</a>: la versione pratica del ciclo "i plugin creano plugin"</li>
       <li><a href="/blog/open-source-alternative-to-claude-design/">L'alternativa open-source a Claude Design</a>: dove si colloca questa release nel panorama del design agent-native</li>
       </ul>
   vi:
-    title: "Open Design 0.8.0: mọi thứ đều là plugin"
-    summary: "Open Design 0.8.0 không phải là một bản phát hành, nó là một cuộc xây lại. Một engine plugin nhỏ, một CLI mặc định headless, tự động cập nhật đóng gói trên macOS và Windows, và 149 design system được ship trong bảy ngày."
+    title: "OpenDesign 0.8.0: mọi thứ đều là plugin"
+    summary: "OpenDesign 0.8.0 không phải là một bản phát hành, nó là một cuộc xây lại. Một engine plugin nhỏ, một CLI mặc định headless, tự động cập nhật đóng gói trên macOS và Windows, và 149 design system được ship trong bảy ngày."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.8.0</code> (<code>c20d156</code>), ship ngày 22 tháng 5 năm 2026, 12:43 UTC. 305 PR từ 75 người đóng góp trong bảy ngày. Đây là bản phát hành mà chúng tôi thôi cố mở rộng hình dạng cũ và xây lại engine bên dưới. Ứng dụng desktop bạn tải hôm nay là một lớp bọc mỏng quanh một CLI mà bạn cũng có thể trỏ tới từ Claude Code, Cursor, hay một Slack bot. Các design system, slice, prototype, export, và các quy trình kiểu Figma cũ không còn là các tính năng nung sẵn vào engine — chúng là các plugin, được viết dựa trên một lõi nhỏ, nhàm chán.</p>
+      <p><code>open-design-v0.8.0</code> (<code>c20d156</code>), ship ngày 22 tháng 5 năm 2026, 12:43 UTC. 305 PR từ 75 người đóng góp trong bảy ngày. Đây là bản phát hành mà chúng tôi thôi cố mở rộng hình dạng cũ và xây lại engine bên dưới. Ứng dụng desktop bạn tải hôm nay là một lớp bọc mỏng quanh một CLI mà bạn cũng có thể trỏ tới từ Claude Code, Cursor, hay một Slack bot. Các design system, slice, prototype, export, và các quy trình kiểu Figma cũ không còn là các tính năng nung sẵn vào engine — chúng là các plugin, được viết dựa trên một lõi nhỏ, nhàm chán.</p>
       <p>Nếu bạn muốn phiên bản dài, luồng thảo luận có nó. Bài viết này là phiên bản ngắn: cái gì đã thay đổi bên dưới, bạn có thể làm gì với nó hôm nay, và bắt đầu từ đâu.</p>
       <h2>Vì sao xây lại, không phải một bản phát hành nữa</h2>
       <p>Dòng 0.7 có một vấn đề. Mọi quy trình đều nằm bên trong engine — nhập design-system, template slide, render slice, port Figma, thậm chí bước xuất bản — và thêm thứ tiếp theo nghĩa là phải sửa lõi. Đó là cái động lực biến mọi trình biên tập trước chúng tôi thành một nghĩa địa plugin: một API plugin SaaS khóa sau một phiên bản, một “chương trình creator” bạn phải xin tham gia, một runtime hỏng cứ hai năm một lần.</p>
@@ -690,22 +690,22 @@ i18n:
 
 
 
-      <table><thead><tr><th>Nếu bạn…</th><th>Bắt đầu ở đây</th></tr></thead><tbody><tr><td>Mới với Open Design</td><td>Tải ứng dụng desktop và để nó khởi tạo một dự án dựa trên một design system có sẵn</td></tr><tr><td>Đã đang chạy Open Design</td><td>Để tự động cập nhật đóng gói đưa bạn lên 0.8.0; popup cập nhật trong ứng dụng dẫn bạn qua bản cài được kiểm định</td></tr><tr><td>Đang xây một plugin</td><td>Scaffold bằng <code>od plugin scaffold --id &#x3C;name></code>, kiểm định bằng <code>od plugin validate ./&#x3C;path> --no-daemon</code>, và mở một PR qua cùng đường xuất bản OD vốn ship mọi plugin khác trong marketplace</td></tr></tbody></table>
+      <table><thead><tr><th>Nếu bạn…</th><th>Bắt đầu ở đây</th></tr></thead><tbody><tr><td>Mới với OpenDesign</td><td>Tải ứng dụng desktop và để nó khởi tạo một dự án dựa trên một design system có sẵn</td></tr><tr><td>Đã đang chạy OpenDesign</td><td>Để tự động cập nhật đóng gói đưa bạn lên 0.8.0; popup cập nhật trong ứng dụng dẫn bạn qua bản cài được kiểm định</td></tr><tr><td>Đang xây một plugin</td><td>Scaffold bằng <code>od plugin scaffold --id &#x3C;name></code>, kiểm định bằng <code>od plugin validate ./&#x3C;path> --no-daemon</code>, và mở một PR qua cùng đường xuất bản OD vốn ship mọi plugin khác trong marketplace</td></tr></tbody></table>
       <p>Nếu bạn đã chờ vòng lặp agent-native cảm giác như vòng lặp chuẩn tắc thay vì một bản demo, thì đây là bản phát hành đó. Trỏ Claude Code, Cursor, Codex, hay bất kỳ agent nào trong 16 agent CLI được phát hiện tới cùng OD CLI mà ứng dụng desktop ship kèm, và hai con đường hội tụ sau prompt đầu tiên.</p>
       <h2>Làm gì tiếp theo</h2>
       <p>Cách nhanh nhất để cảm nhận sự khác biệt giữa 0.7 và 0.8 là cài ứng dụng desktop, để nó nhận agent có sẵn của bạn, và chạy cùng brief bạn đã chạy tháng trước. Hình dạng của câu trả lời thay đổi.</p>
       <p><a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0">Tải desktop</a>.</p>
       <h2>Đọc thêm</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Vì sao chúng tôi xây Open Design như một lớp skill, không phải một sản phẩm</a> — tuyên ngôn dài hơn đằng sau canh bạc “engine cộng plugin” mà 0.8.0 hoàn tất trả về</li>
-      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Cách chuyển một quy trình Figma thành một plugin Open Design</a> — phiên bản thực hành của vòng lặp “plugin tạo ra plugin”</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Vì sao chúng tôi xây OpenDesign như một lớp skill, không phải một sản phẩm</a> — tuyên ngôn dài hơn đằng sau canh bạc “engine cộng plugin” mà 0.8.0 hoàn tất trả về</li>
+      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Cách chuyển một quy trình Figma thành một plugin OpenDesign</a> — phiên bản thực hành của vòng lặp “plugin tạo ra plugin”</li>
       <li><a href="/blog/open-source-alternative-to-claude-design/">Giải pháp thay thế mã nguồn mở cho Claude Design</a> — nơi bản phát hành này khớp vào bối cảnh thiết kế agent-native</li>
       </ul>
   pl:
-    title: "Open Design 0.8.0: wszystko jest wtyczką"
-    summary: "Open Design 0.8.0 to nie wydanie, to przebudowa. Mały silnik wtyczek, CLI domyślnie headless, spakowana automatyczna aktualizacja na macOS i Windows oraz 149 systemów projektowych dostarczonych w siedem dni."
+    title: "OpenDesign 0.8.0: wszystko jest wtyczką"
+    summary: "OpenDesign 0.8.0 to nie wydanie, to przebudowa. Mały silnik wtyczek, CLI domyślnie headless, spakowana automatyczna aktualizacja na macOS i Windows oraz 149 systemów projektowych dostarczonych w siedem dni."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.8.0</code> (<code>c20d156</code>), wydany 22 maja 2026, 12:43 UTC. 305 PR-ów od 75 kontrybutorów w siedem dni. To wydanie, w którym przestaliśmy próbować rozszerzać stary kształt i przebudowaliśmy silnik pod spodem. Aplikacja desktopowa, którą dziś pobierzesz, to cienki wrapper wokół CLI, na które możesz też wskazać z Claude Code, Cursor lub bota Slack. Systemy projektowe, slice'y, prototypy, eksporty i stare workflow w stylu Figma nie są już funkcjami wpieczonymi w silnik — to wtyczki, napisane wobec małego, nudnego rdzenia.</p>
+      <p><code>open-design-v0.8.0</code> (<code>c20d156</code>), wydany 22 maja 2026, 12:43 UTC. 305 PR-ów od 75 kontrybutorów w siedem dni. To wydanie, w którym przestaliśmy próbować rozszerzać stary kształt i przebudowaliśmy silnik pod spodem. Aplikacja desktopowa, którą dziś pobierzesz, to cienki wrapper wokół CLI, na które możesz też wskazać z Claude Code, Cursor lub bota Slack. Systemy projektowe, slice'y, prototypy, eksporty i stare workflow w stylu Figma nie są już funkcjami wpieczonymi w silnik — to wtyczki, napisane wobec małego, nudnego rdzenia.</p>
       <p>Jeśli chcesz długiej wersji, ma ją wątek dyskusji. Ten wpis to wersja krótka: co zmieniło się pod maską, co możesz z tym zrobić dziś i od czego zacząć.</p>
       <h2>Dlaczego przebudowa, a nie kolejne wydanie</h2>
       <p>Linia 0.7 miała problem. Każdy workflow żył wewnątrz silnika — importy systemów projektowych, szablony prezentacji, renderowanie slice'ów, port Figmy, nawet krok publikowania — a dodanie kolejnej rzeczy oznaczało edycję rdzenia. To ta dynamika, która każdy edytor przed nami zamieniła w cmentarzysko wtyczek: API wtyczek SaaS zamknięte za wersją, „program twórcy”, do którego trzeba było aplikować, środowisko uruchomieniowe psujące się co dwa lata.</p>
@@ -759,22 +759,22 @@ i18n:
 
 
 
-      <table><thead><tr><th>Jeśli jesteś…</th><th>Zacznij tutaj</th></tr></thead><tbody><tr><td>Nowy w Open Design</td><td>Pobierz aplikację desktopową i pozwól jej zbootstrapować projekt wobec istniejącego systemu projektowego</td></tr><tr><td>Już używasz Open Design</td><td>Pozwól spakowanej automatycznej aktualizacji doprowadzić Cię do 0.8.0; popup aktualizatora w aplikacji przeprowadzi Cię przez zwalidowaną instalację</td></tr><tr><td>Budujesz wtyczkę</td><td>Wygeneruj szkielet poleceniem <code>od plugin scaffold --id &#x3C;name></code>, zwaliduj poleceniem <code>od plugin validate ./&#x3C;path> --no-daemon</code> i otwórz PR przez tę samą ścieżkę publikowania OD, która dostarcza każdą inną wtyczkę w marketplace</td></tr></tbody></table>
+      <table><thead><tr><th>Jeśli jesteś…</th><th>Zacznij tutaj</th></tr></thead><tbody><tr><td>Nowy w OpenDesign</td><td>Pobierz aplikację desktopową i pozwól jej zbootstrapować projekt wobec istniejącego systemu projektowego</td></tr><tr><td>Już używasz OpenDesign</td><td>Pozwól spakowanej automatycznej aktualizacji doprowadzić Cię do 0.8.0; popup aktualizatora w aplikacji przeprowadzi Cię przez zwalidowaną instalację</td></tr><tr><td>Budujesz wtyczkę</td><td>Wygeneruj szkielet poleceniem <code>od plugin scaffold --id &#x3C;name></code>, zwaliduj poleceniem <code>od plugin validate ./&#x3C;path> --no-daemon</code> i otwórz PR przez tę samą ścieżkę publikowania OD, która dostarcza każdą inną wtyczkę w marketplace</td></tr></tbody></table>
       <p>Jeśli czekałeś, aż pętla agent-native zacznie sprawiać wrażenie pętli kanonicznej zamiast demo, to jest to wydanie. Wskaż Claude Code, Cursor, Codex lub dowolnemu z 16 wykrytych agentów CLI to samo OD CLI, z którym dostarcza się aplikacja desktopowa, a obie ścieżki zbiegają się po pierwszym prompcie.</p>
       <h2>Co robić dalej</h2>
       <p>Najszybszy sposób, by poczuć różnicę między 0.7 a 0.8, to zainstalować aplikację desktopową, pozwolić jej podchwycić Twojego istniejącego agenta i uruchomić ten sam brief, który uruchamiałeś w zeszłym miesiącu. Kształt odpowiedzi się zmienia.</p>
       <p><a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0">Pobierz wersję desktopową</a>.</p>
       <h2>Powiązane lektury</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Dlaczego zbudowaliśmy Open Design jako warstwę umiejętności, a nie produkt</a> — dłuższy manifest stojący za zakładem „silnik plus wtyczki”, który 0.8.0 ostatecznie spłaca</li>
-      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Jak przenieść workflow z Figma do wtyczki Open Design</a> — praktyczna wersja pętli „wtyczki tworzą wtyczki”</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Dlaczego zbudowaliśmy OpenDesign jako warstwę umiejętności, a nie produkt</a> — dłuższy manifest stojący za zakładem „silnik plus wtyczki”, który 0.8.0 ostatecznie spłaca</li>
+      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Jak przenieść workflow z Figma do wtyczki OpenDesign</a> — praktyczna wersja pętli „wtyczki tworzą wtyczki”</li>
       <li><a href="/blog/open-source-alternative-to-claude-design/">Otwartoźródłowa alternatywa dla Claude Design</a> — gdzie to wydanie pasuje w krajobrazie projektowania agent-native</li>
       </ul>
   id:
-    title: "Open Design 0.8.0: semuanya adalah plugin"
-    summary: "Open Design 0.8.0 bukanlah sebuah rilis, melainkan sebuah pembangunan ulang. Sebuah mesin plugin yang kecil, CLI yang headless-by-default, pembaruan otomatis terpaket di macOS dan Windows, dan 149 sistem desain yang dikirim dalam tujuh hari."
+    title: "OpenDesign 0.8.0: semuanya adalah plugin"
+    summary: "OpenDesign 0.8.0 bukanlah sebuah rilis, melainkan sebuah pembangunan ulang. Sebuah mesin plugin yang kecil, CLI yang headless-by-default, pembaruan otomatis terpaket di macOS dan Windows, dan 149 sistem desain yang dikirim dalam tujuh hari."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.8.0</code> (<code>c20d156</code>), dikirim 22 Mei 2026, 12:43 UTC. 305 PR dari 75 kontributor dalam tujuh hari. Ini adalah rilis tempat kami berhenti mencoba memperluas bentuk lama dan membangun ulang mesin di bawahnya. Aplikasi desktop yang akan Anda unduh hari ini adalah pembungkus tipis di sekitar sebuah CLI yang juga dapat Anda arahkan dari Claude Code, Cursor, atau sebuah bot Slack. Sistem desain, slice, prototipe, ekspor, dan alur kerja gaya Figma yang lama bukan lagi fitur yang tertanam di dalam mesin — mereka adalah plugin, ditulis terhadap inti yang kecil dan membosankan.</p>
+      <p><code>open-design-v0.8.0</code> (<code>c20d156</code>), dikirim 22 Mei 2026, 12:43 UTC. 305 PR dari 75 kontributor dalam tujuh hari. Ini adalah rilis tempat kami berhenti mencoba memperluas bentuk lama dan membangun ulang mesin di bawahnya. Aplikasi desktop yang akan Anda unduh hari ini adalah pembungkus tipis di sekitar sebuah CLI yang juga dapat Anda arahkan dari Claude Code, Cursor, atau sebuah bot Slack. Sistem desain, slice, prototipe, ekspor, dan alur kerja gaya Figma yang lama bukan lagi fitur yang tertanam di dalam mesin — mereka adalah plugin, ditulis terhadap inti yang kecil dan membosankan.</p>
       <p>Jika Anda ingin versi panjangnya, thread diskusi memilikinya. Tulisan ini adalah versi pendeknya: apa yang berubah di balik layar, apa yang dapat Anda lakukan dengannya hari ini, dan dari mana memulai.</p>
       <h2>Mengapa pembangunan ulang, bukan rilis lainnya</h2>
       <p>Lini 0.7 punya masalah. Setiap alur kerja hidup di dalam mesin — impor sistem-desain, template deck, rendering slice, port Figma, bahkan langkah publikasi — dan menambahkan hal berikutnya berarti mengedit inti. Itulah dinamika yang mengubah setiap editor sebelum kami menjadi kuburan plugin: sebuah API plugin SaaS yang terkunci di balik sebuah versi, sebuah “program creator” yang harus Anda lamar, sebuah runtime yang rusak setiap dua tahun.</p>
@@ -828,22 +828,22 @@ i18n:
 
 
 
-      <table><thead><tr><th>Jika Anda…</th><th>Mulai di sini</th></tr></thead><tbody><tr><td>Baru mengenal Open Design</td><td>Unduh aplikasi desktop dan biarkan ia mem-bootstrap sebuah proyek terhadap sistem desain yang sudah ada</td></tr><tr><td>Sudah menjalankan Open Design</td><td>Biarkan pembaruan otomatis terpaket membawa Anda ke 0.8.0; popup updater dalam aplikasi memandu Anda melalui instalasi yang tervalidasi</td></tr><tr><td>Membangun sebuah plugin</td><td>Scaffold dengan <code>od plugin scaffold --id &#x3C;name></code>, validasi dengan <code>od plugin validate ./&#x3C;path> --no-daemon</code>, dan buka sebuah PR melalui jalur publikasi OD yang sama yang mengirim setiap plugin lain di marketplace</td></tr></tbody></table>
+      <table><thead><tr><th>Jika Anda…</th><th>Mulai di sini</th></tr></thead><tbody><tr><td>Baru mengenal OpenDesign</td><td>Unduh aplikasi desktop dan biarkan ia mem-bootstrap sebuah proyek terhadap sistem desain yang sudah ada</td></tr><tr><td>Sudah menjalankan OpenDesign</td><td>Biarkan pembaruan otomatis terpaket membawa Anda ke 0.8.0; popup updater dalam aplikasi memandu Anda melalui instalasi yang tervalidasi</td></tr><tr><td>Membangun sebuah plugin</td><td>Scaffold dengan <code>od plugin scaffold --id &#x3C;name></code>, validasi dengan <code>od plugin validate ./&#x3C;path> --no-daemon</code>, dan buka sebuah PR melalui jalur publikasi OD yang sama yang mengirim setiap plugin lain di marketplace</td></tr></tbody></table>
       <p>Jika Anda sudah menunggu loop agent-native terasa seperti loop kanonis alih-alih sebuah demo, inilah rilisnya. Arahkan Claude Code, Cursor, Codex, atau salah satu dari 16 agent CLI yang terdeteksi ke OD CLI yang sama yang dikirim aplikasi desktop, dan kedua jalur menyatu setelah prompt pertama.</p>
       <h2>Apa yang harus dilakukan selanjutnya</h2>
       <p>Cara tercepat untuk merasakan perbedaan antara 0.7 dan 0.8 adalah memasang aplikasi desktop, membiarkannya mengambil agent Anda yang sudah ada, dan menjalankan brief yang sama yang Anda jalankan bulan lalu. Bentuk jawabannya berubah.</p>
       <p><a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0">Unduh desktop</a>.</p>
       <h2>Bacaan terkait</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Mengapa kami membangun Open Design sebagai lapisan skill, bukan sebagai produk</a> — manifesto yang lebih panjang di balik taruhan “mesin plus plugin” yang dilunasi 0.8.0</li>
-      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Cara memindahkan alur kerja Figma ke dalam plugin Open Design</a> — versi praktis dari loop “plugin membuat plugin”</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Mengapa kami membangun OpenDesign sebagai lapisan skill, bukan sebagai produk</a> — manifesto yang lebih panjang di balik taruhan “mesin plus plugin” yang dilunasi 0.8.0</li>
+      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Cara memindahkan alur kerja Figma ke dalam plugin OpenDesign</a> — versi praktis dari loop “plugin membuat plugin”</li>
       <li><a href="/blog/open-source-alternative-to-claude-design/">Alternatif sumber terbuka untuk Claude Design</a> — di mana rilis ini cocok dalam lanskap desain agent-native</li>
       </ul>
   nl:
-    title: "Open Design 0.8.0: alles is een plugin"
-    summary: "Open Design 0.8.0 is geen release, het is een herbouw. Een kleine plugin-engine, een headless-by-default CLI, verpakte auto-update op macOS en Windows, en 149 designsystemen geleverd in zeven dagen."
+    title: "OpenDesign 0.8.0: alles is een plugin"
+    summary: "OpenDesign 0.8.0 is geen release, het is een herbouw. Een kleine plugin-engine, een headless-by-default CLI, verpakte auto-update op macOS en Windows, en 149 designsystemen geleverd in zeven dagen."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.8.0</code> (<code>c20d156</code>), geleverd op 22 mei 2026, 12:43 UTC. 305 PR's van 75 bijdragers in zeven dagen. Dit is de release waarin we stopten met het proberen uit te breiden van de oude vorm en de engine eronder herbouwden. De desktop-app die je vandaag downloadt is een dunne wrapper rond een CLI waar je ook op kunt richten vanuit Claude Code, Cursor of een Slack-bot. De designsystemen, slices, prototypes, exports en de oude Figma-stijlworkflows zijn niet langer functies die in de engine zijn gebakken — het zijn plugins, geschreven tegen een kleine, saaie kern.</p>
+      <p><code>open-design-v0.8.0</code> (<code>c20d156</code>), geleverd op 22 mei 2026, 12:43 UTC. 305 PR's van 75 bijdragers in zeven dagen. Dit is de release waarin we stopten met het proberen uit te breiden van de oude vorm en de engine eronder herbouwden. De desktop-app die je vandaag downloadt is een dunne wrapper rond een CLI waar je ook op kunt richten vanuit Claude Code, Cursor of een Slack-bot. De designsystemen, slices, prototypes, exports en de oude Figma-stijlworkflows zijn niet langer functies die in de engine zijn gebakken — het zijn plugins, geschreven tegen een kleine, saaie kern.</p>
       <p>Als je de lange versie wilt, heeft de discussiethread die. Dit bericht is de korte versie: wat er onder de motorkap veranderde, wat je er vandaag mee kunt doen, en waar je moet beginnen.</p>
       <h2>Waarom een herbouw, geen nieuwe release</h2>
       <p>De 0.7-lijn had een probleem. Elke workflow leefde in de engine — design-system-imports, deck-templates, slice-rendering, de Figma-port, zelfs de publicatiestap — en het toevoegen van het volgende ding betekende het bewerken van de kern. Dat is de dynamiek die elke editor vóór ons veranderde in een pluginkerkhof: een SaaS-plugin-API die achter een versie vergrendelde, een “creator-programma” waarvoor je je moest aanmelden, een runtime die elke twee jaar brak.</p>
@@ -894,20 +894,20 @@ i18n:
 
 
 
-      <table><thead><tr><th>Als je…</th><th>Begin hier</th></tr></thead><tbody><tr><td>Nieuw bent bij Open Design</td><td>Download de desktop-app en laat hem een project bootstrappen tegen een bestaand designsysteem</td></tr><tr><td>Al Open Design draait</td><td>Laat de verpakte auto-update je naar 0.8.0 brengen; de in-app updater-pop-up leidt je door de gevalideerde installatie</td></tr><tr><td>Een plugin bouwt</td><td>Scaffold met <code>od plugin scaffold --id &#x3C;name></code>, valideer met <code>od plugin validate ./&#x3C;path> --no-daemon</code>, en open een PR via hetzelfde OD-publicatiepad dat elke andere plugin in de marketplace levert</td></tr></tbody></table>
+      <table><thead><tr><th>Als je…</th><th>Begin hier</th></tr></thead><tbody><tr><td>Nieuw bent bij OpenDesign</td><td>Download de desktop-app en laat hem een project bootstrappen tegen een bestaand designsysteem</td></tr><tr><td>Al OpenDesign draait</td><td>Laat de verpakte auto-update je naar 0.8.0 brengen; de in-app updater-pop-up leidt je door de gevalideerde installatie</td></tr><tr><td>Een plugin bouwt</td><td>Scaffold met <code>od plugin scaffold --id &#x3C;name></code>, valideer met <code>od plugin validate ./&#x3C;path> --no-daemon</code>, en open een PR via hetzelfde OD-publicatiepad dat elke andere plugin in de marketplace levert</td></tr></tbody></table>
       <p>Als je hebt gewacht tot de agent-native lus aanvoelt als de canonieke lus in plaats van een demo, dan is dit de release. Richt Claude Code, Cursor, Codex of een van de 16 gedetecteerde CLI-agents op dezelfde OD CLI die de desktop-app levert, en de twee paden convergeren na de eerste prompt.</p>
       <h2>Wat je hierna moet doen</h2>
       <p>De snelste manier om het verschil tussen 0.7 en 0.8 te voelen is de desktop-app installeren, hem je bestaande agent laten oppakken, en dezelfde briefing draaien die je vorige maand draaide. De vorm van het antwoord verandert.</p>
       <p><a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0">Download desktop</a>.</p>
       <h2>Gerelateerde lectuur</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Waarom we Open Design als een skill-laag bouwden, niet als een product</a> — het langere manifest achter de “engine plus plugins”-gok die 0.8.0 afmaakt</li>
-      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Hoe je een Figma-workflow naar een Open Design-plugin overzet</a> — de praktische versie van de “plugins maken plugins”-lus</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Waarom we OpenDesign als een skill-laag bouwden, niet als een product</a> — het langere manifest achter de “engine plus plugins”-gok die 0.8.0 afmaakt</li>
+      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Hoe je een Figma-workflow naar een OpenDesign-plugin overzet</a> — de praktische versie van de “plugins maken plugins”-lus</li>
       <li><a href="/blog/open-source-alternative-to-claude-design/">Het open-source alternatief voor Claude Design</a> — waar deze release past in het agent-native ontwerplandschap</li>
       </ul>
   ar:
-    title: "Open Design 0.8.0: كل شيء إضافة (plugin)"
-    summary: "Open Design 0.8.0 ليس إصدارًا، بل إعادة بناء. محرّك إضافات صغير، وواجهة CLI بلا واجهة افتراضيًّا، وتحديث تلقائي مُغلَّف على macOS وWindows، و149 نظام تصميم شُحنت في سبعة أيام."
+    title: "OpenDesign 0.8.0: كل شيء إضافة (plugin)"
+    summary: "OpenDesign 0.8.0 ليس إصدارًا، بل إعادة بناء. محرّك إضافات صغير، وواجهة CLI بلا واجهة افتراضيًّا، وتحديث تلقائي مُغلَّف على macOS وWindows، و149 نظام تصميم شُحنت في سبعة أيام."
     bodyHtml: |
       <p>الوسم <code>open-design-v0.8.0</code> (<code>c20d156</code>)، شُحن في 22 مايو 2026، الساعة 12:43 بالتوقيت العالمي. 305 PR من 75 مساهمًا في سبعة أيام. هذا هو الإصدار الذي توقّفنا فيه عن محاولة تمديد الشكل القديم وأعدنا بناء المحرّك تحته. تطبيق سطح المكتب الذي ستُنزّله اليوم هو غلاف رفيع حول واجهة CLI يمكنك أيضًا توجيهها من Claude Code، أو Cursor، أو روبوت Slack. أنظمة التصميم، والشرائح (slices)، والنماذج الأولية، والتصديرات، وسير عمل Figma القديم بنمطه لم تعد ميزات مُدمجة في المحرّك — بل صارت إضافات، مكتوبة على نواة صغيرة ومملّة.</p>
       <p>إن أردت النسخة الطويلة، فسلسلة النقاش تحويها. هذه المقالة هي النسخة القصيرة: ما الذي تغيّر تحت الغطاء، وما الذي يمكنك فعله به اليوم، ومن أين تبدأ.</p>
@@ -942,20 +942,20 @@ i18n:
       <p>القائمة الكاملة تبلغ 305 PR. <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0">ملاحظات الإصدار على GitHub</a> تحمل الباقي.</p>
       <h2>ما الذي تفعله به اليوم</h2>
       <p>ثلاثة مسارات، حسب نقطة بدئك.</p>
-      <table><thead><tr><th>إن كنت…</th><th>ابدأ هنا</th></tr></thead><tbody><tr><td>جديدًا على Open Design</td><td>نزّل تطبيق سطح المكتب ودعه يُمهّد مشروعًا على نظام تصميم موجود</td></tr><tr><td>تُشغّل Open Design بالفعل</td><td>دع التحديث التلقائي المُغلَّف يأخذك إلى 0.8.0؛ نافذة المُحدِّث داخل التطبيق ترشدك عبر التثبيت المُتحقَّق منه</td></tr><tr><td>تبني إضافة</td><td>سقّل بـ <code>od plugin scaffold --id &#x3C;name></code>، وتحقّق بـ <code>od plugin validate ./&#x3C;path> --no-daemon</code>، وافتح PR عبر مسار نشر OD نفسه الذي يشحن كل إضافة أخرى في السوق</td></tr></tbody></table>
+      <table><thead><tr><th>إن كنت…</th><th>ابدأ هنا</th></tr></thead><tbody><tr><td>جديدًا على OpenDesign</td><td>نزّل تطبيق سطح المكتب ودعه يُمهّد مشروعًا على نظام تصميم موجود</td></tr><tr><td>تُشغّل OpenDesign بالفعل</td><td>دع التحديث التلقائي المُغلَّف يأخذك إلى 0.8.0؛ نافذة المُحدِّث داخل التطبيق ترشدك عبر التثبيت المُتحقَّق منه</td></tr><tr><td>تبني إضافة</td><td>سقّل بـ <code>od plugin scaffold --id &#x3C;name></code>، وتحقّق بـ <code>od plugin validate ./&#x3C;path> --no-daemon</code>، وافتح PR عبر مسار نشر OD نفسه الذي يشحن كل إضافة أخرى في السوق</td></tr></tbody></table>
       <p>إن كنت تنتظر أن تبدو الحلقة المتمحورة حول العميل كالحلقة القانونية بدلًا من عرض توضيحي، فهذا هو الإصدار. وجّه Claude Code، أو Cursor، أو Codex، أو أيًّا من عملاء الـ CLI الـ 16 المكتشَفين إلى OD CLI نفسه الذي يشحن به تطبيق سطح المكتب، فيتقارب المساران بعد المُحثّ الأول.</p>
       <h2>ما الذي تفعله بعد ذلك</h2>
       <p>أسرع طريقة لتشعر بالفرق بين 0.7 و0.8 هي تثبيت تطبيق سطح المكتب، وتركه يلتقط عميلك الموجود، وتشغيل الملخّص نفسه الذي شغّلته الشهر الماضي. شكل الإجابة يتغيّر.</p>
       <p><a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0">نزّل سطح المكتب</a>.</p>
       <h2>قراءات ذات صلة</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">لماذا بنينا Open Design كطبقة مهارات لا كمنتج</a> — البيان الأطول وراء رهان «المحرّك بالإضافة إلى الإضافات» الذي يُتمّ 0.8.0 جني ثماره</li>
-      <li><a href="/blog/port-figma-workflow-open-design-plugin/">كيف تنقل سير عمل Figma إلى إضافة في Open Design</a> — النسخة العملية من حلقة «الإضافات تُنشئ إضافات»</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">لماذا بنينا OpenDesign كطبقة مهارات لا كمنتج</a> — البيان الأطول وراء رهان «المحرّك بالإضافة إلى الإضافات» الذي يُتمّ 0.8.0 جني ثماره</li>
+      <li><a href="/blog/port-figma-workflow-open-design-plugin/">كيف تنقل سير عمل Figma إلى إضافة في OpenDesign</a> — النسخة العملية من حلقة «الإضافات تُنشئ إضافات»</li>
       <li><a href="/blog/open-source-alternative-to-claude-design/">البديل مفتوح المصدر لـ Claude Design</a> — أين يقع هذا الإصدار في مشهد التصميم المتمحور حول العميل</li>
       </ul>
   tr:
-    title: "Open Design 0.8.0: her şey bir eklenti"
-    summary: "Open Design 0.8.0 bir sürüm değil, bir yeniden inşa. Küçük bir eklenti motoru, varsayılan olarak başsız bir CLI, macOS ve Windows'ta paketlenmiş otomatik güncelleme ve yedi günde gönderilen 149 tasarım sistemi."
+    title: "OpenDesign 0.8.0: her şey bir eklenti"
+    summary: "OpenDesign 0.8.0 bir sürüm değil, bir yeniden inşa. Küçük bir eklenti motoru, varsayılan olarak başsız bir CLI, macOS ve Windows'ta paketlenmiş otomatik güncelleme ve yedi günde gönderilen 149 tasarım sistemi."
     bodyHtml: |
       <p><code>open-design-v0.8.0</code> etiketi (<code>c20d156</code>), 22 Mayıs 2026, 12:43 UTC'de gönderildi. Yedi günde 75 katkıda bulunandan 305 PR. Bu, eski biçimi genişletmeye çalışmayı bırakıp altındaki motoru yeniden inşa ettiğimiz sürüm. Bugün indireceğiniz masaüstü uygulaması, Claude Code, Cursor veya bir Slack botundan da yöneltebileceğiniz bir CLI'nin etrafındaki ince bir sarmalayıcıdır. Tasarım sistemleri, dilimler, prototipler, dışa aktarımlar ve eski Figma tarzı iş akışları artık motora gömülü özellikler değil — küçük, sıkıcı bir çekirdeğe karşı yazılmış eklentilerdir.</p>
       <p>Uzun versiyonunu isterseniz, tartışma başlığında var. Bu yazı kısa versiyon: perde arkasında neyin değiştiği, onunla bugün ne yapabileceğiniz ve nereden başlayacağınız.</p>
@@ -1010,22 +1010,22 @@ i18n:
 
 
 
-      <table><thead><tr><th>Eğer…</th><th>Buradan başlayın</th></tr></thead><tbody><tr><td>Open Design'a yeniyseniz</td><td>Masaüstü uygulamasını indirin ve mevcut bir tasarım sistemine karşı bir projeyi önyüklemesine izin verin</td></tr><tr><td>Zaten Open Design çalıştırıyorsanız</td><td>Paketlenmiş otomatik güncellemenin sizi 0.8.0'a getirmesine izin verin; uygulama içi güncelleyici açılır penceresi sizi doğrulanmış kurulumda yönlendirir</td></tr><tr><td>Bir eklenti oluşturuyorsanız</td><td><code>od plugin scaffold --id &#x3C;name></code> ile iskelet oluşturun, <code>od plugin validate ./&#x3C;path> --no-daemon</code> ile doğrulayın ve marketplace'teki diğer her eklentiyi gönderen aynı OD yayımlama yolu üzerinden bir PR açın</td></tr></tbody></table>
+      <table><thead><tr><th>Eğer…</th><th>Buradan başlayın</th></tr></thead><tbody><tr><td>OpenDesign'a yeniyseniz</td><td>Masaüstü uygulamasını indirin ve mevcut bir tasarım sistemine karşı bir projeyi önyüklemesine izin verin</td></tr><tr><td>Zaten OpenDesign çalıştırıyorsanız</td><td>Paketlenmiş otomatik güncellemenin sizi 0.8.0'a getirmesine izin verin; uygulama içi güncelleyici açılır penceresi sizi doğrulanmış kurulumda yönlendirir</td></tr><tr><td>Bir eklenti oluşturuyorsanız</td><td><code>od plugin scaffold --id &#x3C;name></code> ile iskelet oluşturun, <code>od plugin validate ./&#x3C;path> --no-daemon</code> ile doğrulayın ve marketplace'teki diğer her eklentiyi gönderen aynı OD yayımlama yolu üzerinden bir PR açın</td></tr></tbody></table>
       <p>Ajan-yerel döngünün bir demo yerine kanonik döngü gibi hissetmesini bekliyorsanız, sürüm budur. Claude Code, Cursor, Codex veya tespit edilen 16 CLI ajanından herhangi birini, masaüstü uygulamasının birlikte geldiği aynı OD CLI'ye yöneltin ve iki yol ilk istemden sonra birleşir.</p>
       <h2>Sırada ne yapılmalı</h2>
       <p>0.7 ile 0.8 arasındaki farkı hissetmenin en hızlı yolu, masaüstü uygulamasını kurmak, mevcut ajanınızı algılamasına izin vermek ve geçen ay çalıştırdığınız aynı brief'i çalıştırmaktır. Cevabın biçimi değişir.</p>
       <p><a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0">Masaüstünü indirin</a>.</p>
       <h2>İlgili okumalar</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Open Design'ı neden bir ürün değil, bir beceri katmanı olarak inşa ettik</a> — 0.8.0'ın karşılığını vermeyi tamamladığı "motor artı eklentiler" bahsinin arkasındaki daha uzun manifesto</li>
-      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Bir Figma iş akışı Open Design eklentisine nasıl taşınır</a> — "eklentiler eklentiler oluşturur" döngüsünün pratik versiyonu</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">OpenDesign'ı neden bir ürün değil, bir beceri katmanı olarak inşa ettik</a> — 0.8.0'ın karşılığını vermeyi tamamladığı "motor artı eklentiler" bahsinin arkasındaki daha uzun manifesto</li>
+      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Bir Figma iş akışı OpenDesign eklentisine nasıl taşınır</a> — "eklentiler eklentiler oluşturur" döngüsünün pratik versiyonu</li>
       <li><a href="/blog/open-source-alternative-to-claude-design/">Claude Design'a açık kaynaklı alternatif</a> — bu sürümün ajan-yerel tasarım manzarasında nereye uyduğu</li>
       </ul>
   uk:
-    title: "Open Design 0.8.0: усе є плагіном"
-    summary: "Open Design 0.8.0 — це не реліз, це перебудова. Невеликий рушій плагінів, безголовий за замовчуванням CLI, пакетне автооновлення на macOS і Windows та 149 дизайн-систем, випущених за сім днів."
+    title: "OpenDesign 0.8.0: усе є плагіном"
+    summary: "OpenDesign 0.8.0 — це не реліз, це перебудова. Невеликий рушій плагінів, безголовий за замовчуванням CLI, пакетне автооновлення на macOS і Windows та 149 дизайн-систем, випущених за сім днів."
     bodyHtml: |
-      <p>Тег <code>open-design-v0.8.0</code> (<code>c20d156</code>), випущено 22 травня 2026, 12:43 UTC. 305 PR від 75 контриб’юторів за сім днів. Це той реліз, де ми припинили намагатися розширювати стару форму й перебудували рушій під нею. Десктопний застосунок, який ви завантажите сьогодні, — це тонка обгортка навколо CLI, на який ви також можете спрямувати Claude Code, Cursor чи бота Slack. Дизайн-системи, зрізи, прототипи, експорти та старі робочі процеси в стилі Figma більше не є функціями, вшитими в рушій — це плагіни, написані проти невеликого, нудного ядра.</p>
+      <p><code>open-design-v0.8.0</code> (<code>c20d156</code>), випущено 22 травня 2026, 12:43 UTC. 305 PR від 75 контриб’юторів за сім днів. Це той реліз, де ми припинили намагатися розширювати стару форму й перебудували рушій під нею. Десктопний застосунок, який ви завантажите сьогодні, — це тонка обгортка навколо CLI, на який ви також можете спрямувати Claude Code, Cursor чи бота Slack. Дизайн-системи, зрізи, прототипи, експорти та старі робочі процеси в стилі Figma більше не є функціями, вшитими в рушій — це плагіни, написані проти невеликого, нудного ядра.</p>
       <p>Якщо вам потрібна довга версія, вона є в гілці обговорення. Цей допис — коротка версія: що змінилося під капотом, що ви можете з цим робити сьогодні та з чого почати.</p>
       <h2>Чому перебудова, а не черговий реліз</h2>
       <p>Лінійка 0.7 мала проблему. Кожен робочий процес жив усередині рушія — імпорти дизайн-систем, шаблони презентацій, рендеринг зрізів, порт Figma, навіть крок публікації — і додавання наступної речі означало редагування ядра. Саме ця динаміка перетворила кожен редактор до нас на цвинтар плагінів: SaaS-API плагінів, замкнений за версією, «програма для творців», на яку треба було подавати заявку, середовище виконання, що ламалося кожні два роки.</p>
@@ -1079,20 +1079,20 @@ i18n:
 
 
 
-      <table><thead><tr><th>Якщо ви…</th><th>Почніть тут</th></tr></thead><tbody><tr><td>Новачок в Open Design</td><td>Завантажте десктопний застосунок і дозвольте йому завести проєкт проти наявної дизайн-системи</td></tr><tr><td>Уже запускаєте Open Design</td><td>Дозвольте пакетному автооновленню привести вас до 0.8.0; спливаюче вікно апдейтера всередині застосунку проведе вас через перевірене встановлення</td></tr><tr><td>Будуєте плагін</td><td>Скафолдіть за допомогою <code>od plugin scaffold --id &#x3C;name></code>, перевірте за допомогою <code>od plugin validate ./&#x3C;path> --no-daemon</code> і відкрийте PR через той самий шлях публікації OD, що постачає кожен інший плагін у маркетплейсі</td></tr></tbody></table>
+      <table><thead><tr><th>Якщо ви…</th><th>Почніть тут</th></tr></thead><tbody><tr><td>Новачок в OpenDesign</td><td>Завантажте десктопний застосунок і дозвольте йому завести проєкт проти наявної дизайн-системи</td></tr><tr><td>Уже запускаєте OpenDesign</td><td>Дозвольте пакетному автооновленню привести вас до 0.8.0; спливаюче вікно апдейтера всередині застосунку проведе вас через перевірене встановлення</td></tr><tr><td>Будуєте плагін</td><td>Скафолдіть за допомогою <code>od plugin scaffold --id &#x3C;name></code>, перевірте за допомогою <code>od plugin validate ./&#x3C;path> --no-daemon</code> і відкрийте PR через той самий шлях публікації OD, що постачає кожен інший плагін у маркетплейсі</td></tr></tbody></table>
       <p>Якщо ви чекали, поки агентно-орієнтований цикл відчуватиметься як канонічний цикл, а не як демо, це той реліз. Спрямуйте Claude Code, Cursor, Codex чи будь-якого з 16 виявлених CLI-агентів на той самий OD CLI, з яким постачається десктопний застосунок, — і два шляхи сходяться після першого запиту.</p>
       <h2>Що робити далі</h2>
       <p>Найшвидший спосіб відчути різницю між 0.7 і 0.8 — встановити десктопний застосунок, дозволити йому підхопити вашого наявного агента й запустити той самий бриф, що ви запускали минулого місяця. Форма відповіді змінюється.</p>
       <p><a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0">Завантажити для десктопа</a>.</p>
       <h2>Пов’язане для читання</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Чому ми побудували Open Design як рівень навичок, а не продукт</a> — довший маніфест за ставкою «рушій плюс плагіни», яку 0.8.0 остаточно відпрацьовує</li>
-      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Як перенести робочий процес Figma у плагін Open Design</a> — практична версія циклу «плагіни створюють плагіни»</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Чому ми побудували OpenDesign як рівень навичок, а не продукт</a> — довший маніфест за ставкою «рушій плюс плагіни», яку 0.8.0 остаточно відпрацьовує</li>
+      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Як перенести робочий процес Figma у плагін OpenDesign</a> — практична версія циклу «плагіни створюють плагіни»</li>
       <li><a href="/blog/open-source-alternative-to-claude-design/">Опенсорсна альтернатива Claude Design</a> — де цей реліз вписується в ландшафт агентно-орієнтованого дизайну</li>
       </ul>
 ---
 
-Tag `open-design-v0.8.0` (`c20d156`), shipped 22 May 2026, 12:43 UTC. 305 PRs from 75 contributors in seven days. This is the release where we stopped trying to extend the old shape and rebuilt the engine underneath. The desktop app you'll download today is a thin wrapper around a CLI you can also point at from Claude Code, Cursor, or a Slack bot. The design systems, slices, prototypes, exports, and the old Figma-style workflows are no longer features baked into the engine — they're plugins, written against a small, boring core.
+`open-design-v0.8.0` (`c20d156`), shipped 22 May 2026, 12:43 UTC. 305 PRs from 75 contributors in seven days. This is the release where we stopped trying to extend the old shape and rebuilt the engine underneath. The desktop app you'll download today is a thin wrapper around a CLI you can also point at from Claude Code, Cursor, or a Slack bot. The design systems, slices, prototypes, exports, and the old Figma-style workflows are no longer features baked into the engine — they're plugins, written against a small, boring core.
 
 If you want the long version, the discussion thread has it. This post is the short version: what changed under the hood, what you can do with it today, and where to start.
 
@@ -1142,8 +1142,8 @@ Three paths, depending on where you start.
 
 | If you're… | Start here |
 |---|---|
-| New to Open Design | Download the desktop app and let it bootstrap a project against an existing design system |
-| Already running Open Design | Let the packaged auto-update bring you to 0.8.0; the in-app updater popup walks you through the validated install |
+| New to OpenDesign | Download the desktop app and let it bootstrap a project against an existing design system |
+| Already running OpenDesign | Let the packaged auto-update bring you to 0.8.0; the in-app updater popup walks you through the validated install |
 | Building a plugin | Scaffold with `od plugin scaffold --id <name>`, validate with `od plugin validate ./<path> --no-daemon`, and open a PR through the same OD publish path that ships every other plugin in the marketplace |
 
 If you've been waiting for the agent-native loop to feel like the canonical loop instead of a demo, this is the release. Point Claude Code, Cursor, Codex, or any of the 16 detected CLI agents at the same OD CLI the desktop app ships with, and the two paths converge after the first prompt.
@@ -1156,6 +1156,6 @@ The fastest way to feel the difference between 0.7 and 0.8 is to install the des
 
 ## Related reading
 
-- [Why we built Open Design as a skill layer, not a product](/blog/why-we-built-open-design-as-a-skill-layer/) — the longer manifesto behind the "engine plus plugins" bet 0.8.0 finishes paying off
-- [How to port a Figma workflow into an Open Design plugin](/blog/port-figma-workflow-open-design-plugin/) — the practical version of the "plugins create plugins" loop
+- [Why we built OpenDesign as a skill layer, not a product](/blog/why-we-built-open-design-as-a-skill-layer/) — the longer manifesto behind the "engine plus plugins" bet 0.8.0 finishes paying off
+- [How to port a Figma workflow into an OpenDesign plugin](/blog/port-figma-workflow-open-design-plugin/) — the practical version of the "plugins create plugins" loop
 - [The open-source alternative to Claude Design](/blog/open-source-alternative-to-claude-design/) — where this release fits in the agent-native design landscape

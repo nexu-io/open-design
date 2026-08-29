@@ -13,7 +13,7 @@ if (typeof HTMLElement.prototype.scrollTo !== 'function') {
   };
 }
 
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatPane } from '../../src/components/ChatPane';
 import type { ChatMessage } from '../../src/types';
@@ -215,6 +215,18 @@ function messagesWithTodoThenDone(): ChatMessage[] {
       role: 'assistant' as const,
       content: 'done',
       createdAt: Date.now(),
+      events: [
+        {
+          kind: 'tool_use' as const,
+          id: 'tw-2',
+          name: 'TodoWrite',
+          input: {
+            todos: [
+              { content: 'Task 1 updated', status: 'completed' },
+            ],
+          },
+        },
+      ],
     },
   ];
 }
@@ -283,49 +295,36 @@ function chatPaneEl(messages: ChatMessage[]) {
   );
 }
 
-describe('chat-log autoscroll when inline todo card grows', () => {
-  it('renders the todo card inline instead of in the composer-pinned slot', async () => {
+describe('composer-pinned Todo snapshot', () => {
+  it('renders one Todo card above the composer and none in message history', async () => {
     render(chatPaneEl(messagesWithTodo(3)));
     await flushFrames();
 
-    expect(document.querySelector('.chat-pinned-todo')).toBeNull();
-    expect(document.querySelector('.chat-log .op-card.op-todo')).not.toBeNull();
+    const todoCard = document.querySelector('.chat-pinned-todo .op-card.op-todo');
+    expect(todoCard).not.toBeNull();
+    expect(document.querySelector('.chat-log .op-card.op-todo')).toBeNull();
     expect(screen.queryAllByText('Task 1').length).toBeGreaterThan(0);
   });
 
-  it('keeps one todo card in the chat log and updates it from the latest snapshot', async () => {
+  it('keeps one pinned card and updates it from the latest snapshot', async () => {
     render(chatPaneEl(messagesWithTwoTodoSnapshots()));
     await flushFrames();
 
-    expect(document.querySelectorAll('.chat-log .op-card.op-todo')).toHaveLength(1);
+    expect(document.querySelectorAll('.chat-pinned-todo .op-card.op-todo')).toHaveLength(1);
+    expect(document.querySelector('.chat-log .op-card.op-todo')).toBeNull();
     expect(screen.queryAllByText('Task 2 updated').length).toBeGreaterThan(0);
   });
 
-  it('renders the todo card at the first TodoWrite message position', async () => {
+  it('collapses a completed snapshot to one summary row and remains expandable', async () => {
     render(chatPaneEl(messagesWithTodoThenDone()));
     await flushFrames();
 
-    const todoCard = document.querySelector('.chat-log .op-card.op-todo');
-    expect(todoCard).not.toBeNull();
-    const assistantMessages = document.querySelectorAll('.chat-log .msg.assistant');
-    expect(assistantMessages).toHaveLength(2);
-
-    const firstAssistantPosition = assistantMessages[0]!.compareDocumentPosition(todoCard!);
-    expect(firstAssistantPosition & Node.DOCUMENT_POSITION_CONTAINED_BY).toBeTruthy();
-    expect(todoCard!.compareDocumentPosition(assistantMessages[1]!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-  });
-
-  it('renders the todo card between prose around the first TodoWrite event', async () => {
-    render(chatPaneEl(messageWithTodoBetweenProse()));
-    await flushFrames();
-
-    const before = screen.getByText('Before todo.');
-    const after = screen.getByText('After todo.');
-    const todoCard = document.querySelector('.chat-log .op-card.op-todo');
-    expect(todoCard).not.toBeNull();
-
-    expect(before.compareDocumentPosition(todoCard!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(todoCard!.compareDocumentPosition(after)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    const toggle = document.querySelector<HTMLButtonElement>('.chat-pinned-todo .op-todo-toggle');
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(document.querySelector('.chat-pinned-todo .op-todo-done')).toBeNull();
+    fireEvent.click(toggle!);
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.queryAllByText('Task 1 updated').length).toBeGreaterThan(0);
   });
 
   it('keeps the todo card rendered when virtualization omits the original TodoWrite row from the tail window', async () => {
@@ -334,18 +333,19 @@ describe('chat-log autoscroll when inline todo card grows', () => {
     await flushFrames();
 
     expect(document.querySelector('[data-testid="chat-virtual-spacer"]')).not.toBeNull();
-    expect(document.querySelectorAll('.chat-log .op-card.op-todo')).toHaveLength(1);
+    expect(document.querySelectorAll('.chat-pinned-todo .op-card.op-todo')).toHaveLength(1);
+    expect(document.querySelector('.chat-log .op-card.op-todo')).toBeNull();
     expect(screen.queryAllByText('Task 1').length).toBeGreaterThan(0);
   });
 
-  it('scrolls to the bottom when pinned and the inline todo card grows', async () => {
+  it('scrolls to the bottom when pinned and the Todo card grows', async () => {
     // Start pinned: scrollTop == scrollHeight (user is at the very bottom).
     geom = { scrollHeight: 1000, clientHeight: 400, scrollTop: 1000 };
     render(chatPaneEl(messagesWithTodo(2)));
     await flushFrames();
 
     // The initial-bottom-scroll effect fires and confirms pinnedToBottomRef = true.
-    // Now simulate a rendered message growing as the inline todo card changes.
+    // Now simulate the pinned Todo surface growing.
     // The ResizeObserver callback should fire followLatestIfPinned, which snaps
     // scrollTop back to scrollHeight.
     geom = { ...geom, clientHeight: 300, scrollHeight: 1000, scrollTop: 600 };

@@ -1,6 +1,6 @@
 import type http from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -32,6 +32,9 @@ type RunStatus = {
   error: string | null;
   errorCode: string | null;
   eventsLogPath: string;
+  cancelRequested?: boolean;
+  failureCategory?: string | null;
+  failureDetail?: string | null;
 };
 
 type RunListBody = {
@@ -370,6 +373,120 @@ describe('daemon startup route smoke', () => {
       const health = await fetch(`${started.url}/api/health`);
       expect(health.status).toBe(200);
       await expect(health.json()).resolves.toMatchObject({ ok: true });
+    } finally {
+      await clearAgentCliEnv(started.url);
+      await rm(binDir, { recursive: true, force: true });
+    }
+  });
+
+  it('[P0] keeps a user-canceled Claude run canceled when a late error frame arrives', async () => {
+    const binDir = await mkdtemp(join(tmpdir(), 'od-startup-cancel-error-bin-'));
+    try {
+      const readyFile = join(binDir, 'ready');
+      const claudeBin = await writeCancelErrorClaudeBin(
+        binDir,
+        'claude-cancel-error',
+        readyFile,
+      );
+      await putAppConfig(started.url, {
+        agentId: 'claude',
+        agentCliEnv: { claude: { CLAUDE_BIN: claudeBin } },
+      });
+
+      const runId = await createRun(started.url, {
+        caseId: `cancel_error_run_${randomUUID()}`,
+        agentId: 'claude',
+        message: 'cancel a Claude run that emits a late error frame',
+      });
+      await waitForFile(readyFile);
+
+      const cancel = await fetch(`${started.url}/api/runs/${encodeURIComponent(runId)}/cancel`, {
+        method: 'POST',
+      });
+      expect(cancel.status).toBe(200);
+      await expect(cancel.json()).resolves.toMatchObject({
+        ok: true,
+        run: {
+          id: runId,
+          status: 'canceled',
+          cancelRequested: true,
+        },
+      });
+
+      const canceled = await waitForRun(started.url, runId);
+      expect(canceled).toMatchObject({
+        id: runId,
+        status: 'canceled',
+        cancelRequested: true,
+        error: null,
+        errorCode: null,
+        failureCategory: null,
+        failureDetail: null,
+      });
+
+      const events = await readRunSse(started.url, runId);
+      expect(events).not.toContain('event: error');
+      expect(events).not.toContain('event: run_retry_attempted');
+      expect(events.match(/^event: end$/gmu)).toHaveLength(1);
+      expect(events).toContain('"status":"canceled"');
+      expect(events).not.toContain('"failure_detail":"stream_error"');
+    } finally {
+      await clearAgentCliEnv(started.url);
+      await rm(binDir, { recursive: true, force: true });
+    }
+  });
+
+  it('[P0] keeps a Claude stream failure failed when cancellation follows the error', async () => {
+    const binDir = await mkdtemp(join(tmpdir(), 'od-startup-error-cancel-bin-'));
+    try {
+      const readyFile = join(binDir, 'ready');
+      const claudeBin = await writeCancelErrorClaudeBin(
+        binDir,
+        'claude-error-before-cancel',
+        readyFile,
+        'before-cancel',
+      );
+      await putAppConfig(started.url, {
+        agentId: 'claude',
+        agentCliEnv: { claude: { CLAUDE_BIN: claudeBin } },
+      });
+
+      const runId = await createRun(started.url, {
+        caseId: `error_cancel_run_${randomUUID()}`,
+        agentId: 'claude',
+        message: 'fail a Claude run before requesting cancellation',
+      });
+      await waitForFile(readyFile);
+      const errorEvents = await readRunSseUntil(started.url, runId, 'event: error');
+      expect(errorEvents).toContain('provider failed before cancellation');
+
+      const cancel = await fetch(`${started.url}/api/runs/${encodeURIComponent(runId)}/cancel`, {
+        method: 'POST',
+      });
+      expect(cancel.status).toBe(200);
+      await expect(cancel.json()).resolves.toMatchObject({
+        ok: true,
+        run: {
+          id: runId,
+          status: 'failed',
+          cancelRequested: true,
+        },
+      });
+
+      const failed = await waitForRun(started.url, runId);
+      expect(failed).toMatchObject({
+        id: runId,
+        status: 'failed',
+        cancelRequested: true,
+        failureDetail: 'stream_error',
+      });
+
+      const events = await readRunSse(started.url, runId);
+      expect(events).toContain('event: error');
+      expect(events).not.toContain('event: run_retry_attempted');
+      expect(events.match(/^event: end$/gmu)).toHaveLength(1);
+      expect(events).toContain('"status":"failed"');
+      expect(events).toContain('"failure_detail":"stream_error"');
     } finally {
       await clearAgentCliEnv(started.url);
       await rm(binDir, { recursive: true, force: true });
@@ -844,6 +961,61 @@ setInterval(() => {}, 1000);
   return bin;
 }
 
+async function writeCancelErrorClaudeBin(
+  dir: string,
+  name: string,
+  readyFile: string,
+  errorTiming: 'before-cancel' | 'after-cancel' = 'after-cancel',
+): Promise<string> {
+  const bin = join(dir, name);
+  await writeFile(bin, `#!/usr/bin/env node
+const fs = require('node:fs');
+function writeFrame(frame) {
+  fs.writeSync(1, JSON.stringify(frame) + '\\n');
+}
+function writeErrorFrames(message) {
+  writeFrame({
+    type: 'assistant',
+    parent_tool_use_id: null,
+    error: message,
+    message: {
+      id: 'msg-cancel-error',
+      content: [],
+      stop_reason: null,
+    },
+  });
+  writeFrame({
+    type: 'result',
+    subtype: 'error_during_execution',
+    is_error: true,
+    result: message,
+    stop_reason: null,
+  });
+}
+if (process.argv.includes('--version')) {
+  console.log('claude 0.0.0-cancel-error-smoke');
+  process.exit(0);
+}
+if (process.argv.includes('--help')) {
+  console.log('Usage: claude -p [--include-partial-messages] [--add-dir DIR]');
+  process.exit(0);
+}
+process.on('SIGTERM', () => {
+  if (${JSON.stringify(errorTiming)} === 'after-cancel') {
+    writeErrorFrames('Canceled by user');
+  }
+  setTimeout(() => process.exit(1), 20);
+});
+if (${JSON.stringify(errorTiming)} === 'before-cancel') {
+  writeErrorFrames('provider failed before cancellation');
+}
+fs.writeFileSync(${JSON.stringify(readyFile)}, 'ready');
+setInterval(() => {}, 1000);
+`, 'utf8');
+  await chmod(bin, 0o755);
+  return bin;
+}
+
 async function writeSuccessfulClaudeBin(dir: string, name: string): Promise<string> {
   const bin = join(dir, name);
   await writeFile(bin, `#!/usr/bin/env node
@@ -878,6 +1050,31 @@ async function readRunSse(url: string, runId: string, lastEventId?: number): Pro
   return await response.text();
 }
 
+async function readRunSseUntil(url: string, runId: string, marker: string): Promise<string> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  try {
+    const response = await fetch(`${url}/api/runs/${encodeURIComponent(runId)}/events`, {
+      signal: controller.signal,
+    });
+    expect(response.status).toBe(200);
+    reader = response.body?.getReader();
+    if (!reader) throw new Error('run SSE response had no body');
+    const decoder = new TextDecoder();
+    let body = '';
+    while (!body.includes(marker)) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      body += decoder.decode(value, { stream: true });
+    }
+    return body;
+  } finally {
+    clearTimeout(timeout);
+    await reader?.cancel().catch(() => undefined);
+  }
+}
+
 function sseIds(body: string): number[] {
   return body
     .split(/\r?\n/u)
@@ -898,6 +1095,19 @@ function sseEventId(body: string, eventName: string): number {
 
 async function delay(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForFile(filePath: string): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 10_000) {
+    try {
+      await access(filePath);
+      return;
+    } catch {
+      await delay(25);
+    }
+  }
+  throw new Error(`file did not appear: ${filePath}`);
 }
 
 async function rmRecursiveWithRetry(target: string): Promise<void> {

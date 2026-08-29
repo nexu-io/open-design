@@ -25,6 +25,7 @@ The daemon is not a shared library for the web app. Do not import daemon private
 - `src/runtimes/` owns agent runtime definitions, spawning, parser integration, executable discovery, and runtime environment shaping. Agent argument definitions belong in `src/runtimes/defs/`.
 - `src/prompts/` owns daemon-side prompt construction. Keep mirrored BYOK/API wording in `packages/contracts/src/prompts/` when the same text is exposed outside the daemon.
 - `src/plugins/`, `src/connectors/`, `src/registry/`, `src/research/`, `src/media-adapters/`, `src/live-artifacts/`, `src/storage/`, and `src/critique/` own their named domains. Prefer adding code inside the existing domain folder before creating a new top-level folder.
+- Team resource storage is Vela-owned. Daemon adapters under `src/collab/vela-cli-*` must invoke Vela through `src/integrations/vela-command.ts`, which shares the login/agent binary resolver and environment. Do not add Resource Hub tokens, direct HTTP clients, or a second content-addressed drive implementation to OpenDesign. `od resource` is only a thin Vela CLI compatibility entry point.
 - `tests/` contains daemon tests. Keep test paths roughly parallel to `src/` when useful.
 
 Do not edit generated `dist/` output.

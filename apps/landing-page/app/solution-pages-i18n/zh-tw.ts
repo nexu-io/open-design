@@ -2,9 +2,9 @@ import type { SolutionLocaleCopy } from './types';
 
 export const ZH_TW: SolutionLocaleCopy = {
   prototype: {
-    title: '用 Open Design + Claude Code 做可互動原型',
+    title: '用 OpenDesign + Claude Code 做可互動原型',
     description:
-      '一句話描述，就能在終端機裡產生可點擊、多畫面的原型。Open Design 把設計技能、範本和設計系統交給你的編碼 agent，直接產出能在瀏覽器裡開啟的真實原型。',
+      '一句話描述，就能在終端機裡產生可點擊、多畫面的原型。OpenDesign 把設計技能、範本和設計系統交給你的編碼 agent，直接產出能在瀏覽器裡開啟的真實原型。',
     breadcrumb: '原型',
     label: '使用情境 · 原型',
     heading: '以一句話的速度做原型',
@@ -12,17 +12,17 @@ export const ZH_TW: SolutionLocaleCopy = {
     heroImageAlt: '編輯風插畫：一隻手畫出線框，線框變成可點擊的多畫面應用程式原型',
     tldrTitle: '一句話',
     tldrBody:
-      'Open Design 是你正在用的編碼 agent 的設計層。對原型來說，就是在一次對話裡從一段想法走到可導覽、有樣式的原型——不用設計工具、不用匯出、沒有交接斷層。',
-    stepsTitle: '用 Open Design 做原型的流程',
+      'OpenDesign 是你正在用的編碼 agent 的設計層。對原型來說，就是在一次對話裡從一段想法走到可導覽、有樣式的原型——不用設計工具、不用匯出、沒有交接斷層。',
+    stepsTitle: '用 OpenDesign 做原型的流程',
     steps: [
       {
         title: '描述流程',
-        body: '用白話告訴 agent 你要做什麼——「一個導引流程，含歡迎頁、方案選擇頁和確認頁」。Open Design 會載入原型 skill，讓 agent 知道要產出多個畫面，而不是單頁。',
+        body: '用白話告訴 agent 你要做什麼——「一個導引流程，含歡迎頁、方案選擇頁和確認頁」。OpenDesign 會載入原型 skill，讓 agent 知道要產出多個畫面，而不是單頁。',
         imageAlt: '插畫：一個人在終端機裡用自然語言描述應用程式流程',
       },
       {
         title: '產生帶樣式的畫面',
-        body: 'agent 套用 Open Design 的設計系統和原型範本，每個畫面共用字體、間距和元件，而不是看起來像草稿。你得到的是一套連貫的畫面，不是互不相干的 mockup。',
+        body: 'agent 套用 OpenDesign 的設計系統和原型範本，每個畫面共用字體、間距和元件，而不是看起來像草稿。你得到的是一套連貫的畫面，不是互不相干的 mockup。',
         imageAlt: '插畫：多個應用程式畫面依序出現，全部共用同一套視覺風格',
       },
       {
@@ -36,9 +36,9 @@ export const ZH_TW: SolutionLocaleCopy = {
         imageAlt: '插畫：原型被修改後交給工程師，設計與程式碼合併成同一個檔案',
       },
     ],
-    tableTitle: '用 Open Design 做原型 vs. 老方法',
+    tableTitle: '用 OpenDesign 做原型 vs. 老方法',
     tableColCapability: '你需要什麼',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '傳統原型工具',
     tableRows: [
       {
@@ -81,7 +81,7 @@ export const ZH_TW: SolutionLocaleCopy = {
       { title: '候補名單與定價', body: '轉換頁——候補名單、定價表——接好線、貼合品牌。', thumb: 'example-waitlist-page' },
       { title: '遊戲化與趣味', body: '互動密集的概念，動效和狀態本身就是賣點。', thumb: 'example-gamified-app' },
     ],
-    galleryTitle: '別人用 Open Design 做出來的原型',
+    galleryTitle: '別人用 OpenDesign 做出來的原型',
     galleryLead:
       '下面每一個都是從一句 prompt 開始、算繪成可點擊產物的。挑一個跟你想法接近的範本，描述你的改法，agent 幫你改。',
     gallery: [
@@ -95,8 +95,8 @@ export const ZH_TW: SolutionLocaleCopy = {
     faqTitle: '原型常見問題',
     faq: [
       {
-        q: '用 Open Design 做原型需要 Figma 這類設計工具嗎？',
-        a: '不需要。Open Design 在你的編碼 agent 裡執行，把原型算繪成 HTML。你用語言描述流程，agent 產出畫面。沒有額外的畫布工具要學或要付費。',
+        q: '用 OpenDesign 做原型需要 Figma 這類設計工具嗎？',
+        a: '不需要。OpenDesign 在你的編碼 agent 裡執行，把原型算繪成 HTML。你用語言描述流程，agent 產出畫面。沒有額外的畫布工具要學或要付費。',
       },
       {
         q: '產出的是可互動原型還是靜態 mockup？',
@@ -104,7 +104,7 @@ export const ZH_TW: SolutionLocaleCopy = {
       },
       {
         q: '可以用哪些 agent？',
-        a: 'Open Design 支援 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多個第一方轉接器。你自帶 provider 金鑰，沒有任何東西替你代管。',
+        a: 'OpenDesign 支援 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多個第一方轉接器。你自帶 provider 金鑰，沒有任何東西替你代管。',
       },
       {
         q: '原型能變成真正的產品嗎？',
@@ -113,21 +113,21 @@ export const ZH_TW: SolutionLocaleCopy = {
     ],
     ctaTitle: '今晚就把下一個想法做成原型',
     ctaBody:
-      '給儲存庫點個 star、裝上 Open Design，在你本來就用的 agent 裡，把下一個「要是……」變成能點擊的東西。',
+      '給儲存庫點個 star、裝上 OpenDesign，在你本來就用的 agent 裡，把下一個「要是……」變成能點擊的東西。',
   },
   dashboard: {
-    title: '用 Open Design + Claude Code 產生資料儀表板',
+    title: '用 OpenDesign + Claude Code 產生資料儀表板',
     description:
       '描述你要盯的指標，讓編碼 agent 幫你做出有樣式、響應式的儀表板——圖表、KPI 卡片、表格，全部算繪成可隨處代管的 HTML。不用 BI 工具席位，不用拖放搭建。',
     breadcrumb: '儀表板',
     label: '使用情境 · 儀表板',
     heading: '儀表板靠描述產生，不靠拖放搭建',
-    lead: '告訴 agent 要呈現什麼、要什麼感覺。Open Design 提供圖表範式、版面系統和視覺語言，你拿到的是連貫、拿得出手的儀表板，而不是一堆預設樣式的元件。',
+    lead: '告訴 agent 要呈現什麼、要什麼感覺。OpenDesign 提供圖表範式、版面系統和視覺語言，你拿到的是連貫、拿得出手的儀表板，而不是一堆預設樣式的元件。',
     heroImageAlt: '編輯風插畫：左邊的原始數字流向右邊一個乾淨的圖表 + KPI 卡片儀表板',
     tldrTitle: '一句話',
     tldrBody:
-      'Open Design 把你對指標的白話描述變成有樣式的儀表板，由 agent 算繪成 HTML——在你的儲存庫裡做版本控管、隨處可代管、無需按席位訂閱 BI。',
-    stepsTitle: '用 Open Design 做儀表板的流程',
+      'OpenDesign 把你對指標的白話描述變成有樣式的儀表板，由 agent 算繪成 HTML——在你的儲存庫裡做版本控管、隨處可代管、無需按席位訂閱 BI。',
+    stepsTitle: '用 OpenDesign 做儀表板的流程',
     steps: [
       {
         title: '描述指標',
@@ -136,7 +136,7 @@ export const ZH_TW: SolutionLocaleCopy = {
       },
       {
         title: '選擇圖表範式',
-        body: 'Open Design 自帶圖表和版面範本，趨勢變折線、佔比變長條、比例用對的圖——全程字體和間距統一，而不是一堆不搭的預設樣式。',
+        body: 'OpenDesign 自帶圖表和版面範本，趨勢變折線、佔比變長條、比例用對的圖——全程字體和間距統一，而不是一堆不搭的預設樣式。',
         imageAlt: '插畫：多種圖表類型排成一個連貫的格線',
       },
       {
@@ -150,9 +150,9 @@ export const ZH_TW: SolutionLocaleCopy = {
         imageAlt: '插畫：儀表板被打磨後部署上線',
       },
     ],
-    tableTitle: '用 Open Design 做儀表板 vs. 老方法',
+    tableTitle: '用 OpenDesign 做儀表板 vs. 老方法',
     tableColCapability: '你需要什麼',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: 'BI 工具 / 純手寫',
     tableRows: [
       { capability: '從指標清單到版面', withOd: '一句話，agent 排佈卡片、圖表、表格', without: '一個個拖元件，或從零寫圖表程式碼' },
@@ -171,7 +171,7 @@ export const ZH_TW: SolutionLocaleCopy = {
       { title: "社群與行銷", body: "管道表現和投放追蹤匯於一畫面。", thumb: "example-social-media-dashboard" },
       { title: "領域報告", body: "任意領域的結構化報告——從臨床到交易。", thumb: "example-clinical-case-report" },
     ],
-    galleryTitle: '別人用 Open Design 做出來的儀表板',
+    galleryTitle: '別人用 OpenDesign 做出來的儀表板',
     galleryLead: '下面是從 prompt + 資料來源算繪出的真實儀表板。挑一個接近你的，描述你要盯的指標。',
     gallery: [
       { thumb: "example-data-report", caption: "資料報告" },
@@ -183,36 +183,36 @@ export const ZH_TW: SolutionLocaleCopy = {
     exampleLinkLabel: '瀏覽儀表板範本',
     faqTitle: '儀表板常見問題',
     faq: [
-      { q: '需要 Tableau、Looker 這類 BI 工具嗎？', a: '不需要。Open Design 在你的編碼 agent 裡把儀表板算繪成 HTML。你描述指標、指向資料，沒有額外的 BI 平台要授權或學習。' },
+      { q: '需要 Tableau、Looker 這類 BI 工具嗎？', a: '不需要。OpenDesign 在你的編碼 agent 裡把儀表板算繪成 HTML。你描述指標、指向資料，沒有額外的 BI 平台要授權或學習。' },
       { q: '資料從哪來？', a: 'CSV、JSON 端點，或你貼上的列。儀表板是純 HTML + JavaScript，你完全掌控它從哪讀——不經任何代管服務中轉。' },
       { q: '非技術同事能看嗎？', a: '能。產出是自包含網頁，任何人拿到連結或檔案就能在瀏覽器開啟——不要帳號、不要席位。' },
       { q: '可以用哪些 agent？', a: 'Claude Code、Codex、Cursor Agent、Gemini CLI 等十多個第一方轉接器，自帶 provider 金鑰。' },
     ],
     ctaTitle: '今晚就把儀表板做出來',
-    ctaBody: '給儲存庫點個 star、裝上 Open Design，把你的指標變成一個隨處可代管的儀表板——在你本來就用的 agent 裡。',
+    ctaBody: '給儲存庫點個 star、裝上 OpenDesign，把你的指標變成一個隨處可代管的儀表板——在你本來就用的 agent 裡。',
   },
   slides: {
-    title: '用 Open Design + Claude Code 產生簡報',
+    title: '用 OpenDesign + Claude Code 產生簡報',
     description:
-      '把大綱變成有設計感、符合品牌的投影片，不用開啟任何簡報軟體。Open Design 給編碼 agent 提供 deck 範本和視覺系統，把投影片算繪成可簡報、可匯出、可分享的 HTML。',
+      '把大綱變成有設計感、符合品牌的投影片，不用開啟任何簡報軟體。OpenDesign 給編碼 agent 提供 deck 範本和視覺系統，把投影片算繪成可簡報、可匯出、可分享的 HTML。',
     breadcrumb: '投影片',
     label: '使用情境 · 投影片',
     heading: '看起來精心設計的 deck，由一句 prompt 寫出來',
-    lead: '把大綱和語氣交給 agent。Open Design 套用 deck 範本和視覺系統，每一頁都排好版、配好字、貼合品牌——不是空白底上的一串要點。',
+    lead: '把大綱和語氣交給 agent。OpenDesign 套用 deck 範本和視覺系統，每一頁都排好版、配好字、貼合品牌——不是空白底上的一串要點。',
     heroImageAlt: '編輯風插畫：左邊的大綱變成右邊一連串有設計感的簡報投影片',
     tldrTitle: '一句話',
     tldrBody:
-      'Open Design 把大綱變成有設計感的 HTML deck，由 agent 一次產生——瀏覽器裡全螢幕簡報、匯出 PDF 或 PPTX、原始檔留在儲存庫。',
-    stepsTitle: '用 Open Design 做 deck 的流程',
+      'OpenDesign 把大綱變成有設計感的 HTML deck，由 agent 一次產生——瀏覽器裡全螢幕簡報、匯出 PDF 或 PPTX、原始檔留在儲存庫。',
+    stepsTitle: '用 OpenDesign 做 deck 的流程',
     steps: [
       { title: '給它大綱', body: '貼上你的要點或粗略結構。agent 載入 deck skill，產出一連串排好版的投影片，而不是一篇長文件。', imageAlt: '插畫：一份文字大綱被交給 agent' },
-      { title: '選一個 deck 風格', body: 'Open Design 自帶 deck 範本——編輯風、瑞士國際主義、深色技術風等。agent 套用其中一個，字體、格線、強調色在每頁之間保持一致。', imageAlt: '插畫：幾種 deck 風格並排展示' },
+      { title: '選一個 deck 風格', body: 'OpenDesign 自帶 deck 範本——編輯風、瑞士國際主義、深色技術風等。agent 套用其中一個，字體、格線、強調色在每頁之間保持一致。', imageAlt: '插畫：幾種 deck 風格並排展示' },
       { title: '產生投影片', body: '每個要點變成一頁有層次的投影片——標題、輔助視覺、資料重點。算繪成 HTML，任何瀏覽器都能全螢幕簡報。', imageAlt: '插畫：一連串風格一致的成品投影片' },
       { title: '簡報、匯出、迭代', body: '從瀏覽器簡報，或匯出 PDF / PPTX 分享。靠跟 agent 對話來改——「收緊資料頁、加一個結尾行動呼籲」。deck 原始檔留在你的專案裡。', imageAlt: '插畫：一個 deck 被簡報並匯出成多種格式' },
     ],
-    tableTitle: '用 Open Design 做 deck vs. 老方法',
+    tableTitle: '用 OpenDesign 做 deck vs. 老方法',
     tableColCapability: '你需要什麼',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: 'PowerPoint / Keynote / AI 投影片工具',
     tableRows: [
       { capability: '從大綱到投影片', withOd: '一句話，agent 排佈每一頁', without: '一頁頁手搭，或跟範本較勁' },
@@ -231,7 +231,7 @@ export const ZH_TW: SolutionLocaleCopy = {
       { title: "簡報者模式", body: "reveal 風格 deck，專為瀏覽器現場簡報而建。", thumb: "example-html-ppt-presenter-mode-reveal" },
       { title: "技術藍圖", body: "架構和知識 deck，把複雜系統講清楚。", thumb: "example-html-ppt-knowledge-arch-blueprint" },
     ],
-    galleryTitle: '別人用 Open Design 做出來的 deck',
+    galleryTitle: '別人用 OpenDesign 做出來的 deck',
     galleryLead: '下面是從大綱算繪出的真實 deck。挑一個接近你演講風格的，描述內容。',
     gallery: [
       { thumb: "example-deck-guizang-editorial", caption: "編輯雜誌風 deck" },
@@ -243,36 +243,36 @@ export const ZH_TW: SolutionLocaleCopy = {
     exampleLinkLabel: '瀏覽 deck 範本',
     faqTitle: '投影片常見問題',
     faq: [
-      { q: '需要 PowerPoint 或 Keynote 嗎？', a: '不需要。Open Design 在你的編碼 agent 裡把 deck 算繪成 HTML，還能匯出 PDF 或 PPTX。你從瀏覽器簡報或交付檔案——做的時候不需要任何簡報軟體。' },
+      { q: '需要 PowerPoint 或 Keynote 嗎？', a: '不需要。OpenDesign 在你的編碼 agent 裡把 deck 算繪成 HTML，還能匯出 PDF 或 PPTX。你從瀏覽器簡報或交付檔案——做的時候不需要任何簡報軟體。' },
       { q: '這只是 AI 產生的要點嗎？', a: '不是。agent 套用帶格線、字級體系和視覺層次的真實 deck 範本，投影片看起來是設計出來的，而不是自動填的。' },
       { q: '能匯出 PowerPoint 給客戶嗎？', a: '能。deck 除了用來簡報的 HTML，還能匯出 PPTX 和 PDF，貼合觀眾的預期。' },
       { q: '可以用哪些 agent？', a: 'Claude Code、Codex、Cursor Agent、Gemini CLI 等第一方轉接器，自帶 provider 金鑰。' },
     ],
     ctaTitle: '今晚就把下一個 deck 做出來',
-    ctaBody: '給儲存庫點個 star、裝上 Open Design，把你的大綱變成有設計感的 deck——在你本來就用的 agent 裡。',
+    ctaBody: '給儲存庫點個 star、裝上 OpenDesign，把你的大綱變成有設計感的 deck——在你本來就用的 agent 裡。',
   },
   image: {
-    title: '用 Open Design + Claude Code 產生貼合品牌的圖片',
+    title: '用 OpenDesign + Claude Code 產生貼合品牌的圖片',
     description:
       '從一句 prompt 產出社群卡片、文章封面、行銷圖——用真實排版和你的品牌系統排好版，算繪成可匯出 PNG 的清晰 HTML。不用設計軟體，不用訂閱範本。',
     breadcrumb: '圖片',
     label: '使用情境 · 圖片',
     heading: '貼合品牌的圖片，自動產生並排好版',
-    lead: '描述你要的卡片或封面。Open Design 用真實字體、格線和你的品牌色把它組合出來，再算繪成可匯出圖片的 HTML——不用跟設計軟體或通用範本較勁。',
+    lead: '描述你要的卡片或封面。OpenDesign 用真實字體、格線和你的品牌色把它組合出來，再算繪成可匯出圖片的 HTML——不用跟設計軟體或通用範本較勁。',
     heroImageAlt: '編輯風插畫：一句 prompt 變成一組排好版的社群卡片和文章封面',
     tldrTitle: '一句話',
     tldrBody:
-      'Open Design 把 prompt 變成排好版、貼合品牌的圖片，由 agent 算繪成 HTML 並匯出 PNG——可重複使用、可版本控管，沒有按席位的設計工具。',
-    stepsTitle: '用 Open Design 做圖的流程',
+      'OpenDesign 把 prompt 變成排好版、貼合品牌的圖片，由 agent 算繪成 HTML 並匯出 PNG——可重複使用、可版本控管，沒有按席位的設計工具。',
+    stepsTitle: '用 OpenDesign 做圖的流程',
     steps: [
       { title: '描述圖片', body: '說清它是什麼——「一張發布用的 Twitter 卡片，帶標題和一句引用」。agent 載入對應 skill，組合出排好版的圖片，而不是純文字塊。', imageAlt: '插畫：一個人描述自己需要的社群卡片' },
-      { title: '套用品牌系統', body: 'Open Design 從可重複使用設計系統裡取你的顏色、字體和間距，每張卡片都跟品牌其餘部分一致，而不是各做各的。', imageAlt: '插畫：品牌色和字體被套用到卡片版面上' },
+      { title: '套用品牌系統', body: 'OpenDesign 從可重複使用設計系統裡取你的顏色、字體和間距，每張卡片都跟品牌其餘部分一致，而不是各做各的。', imageAlt: '插畫：品牌色和字體被套用到卡片版面上' },
       { title: '算繪並匯出', body: '圖片按你要的精確尺寸算繪成 HTML——社群卡、封面、橫幅——再匯出 PNG。文字清晰、版面真實、不用手動微調。', imageAlt: '插畫：一張圖片算繪並匯出成圖片檔案' },
       { title: '重複使用這套配方', body: '因為它是範本，下一張圖只差一句 prompt——換標題、留版面。成系列的卡片完美一致。', imageAlt: '插畫：一個卡片範本產出一致的系列圖片' },
     ],
-    tableTitle: '用 Open Design 做圖 vs. 老方法',
+    tableTitle: '用 OpenDesign 做圖 vs. 老方法',
     tableColCapability: '你需要什麼',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '設計軟體 / 通用範本',
     tableRows: [
       { capability: '從想法到排好版的圖', withOd: '一句話，agent 組合字體和版面', without: '開啟軟體、手動擺每個元素' },
@@ -291,7 +291,7 @@ export const ZH_TW: SolutionLocaleCopy = {
       { title: "輪播圖", body: "多圖社群輪播，每幀之間保持一致。", thumb: "example-social-carousel" },
       { title: "UI 示意幀", body: "通知和裝置外框，用於產品敘事。", thumb: "example-frame-macos-notification" },
     ],
-    galleryTitle: '別人用 Open Design 做出來的圖',
+    galleryTitle: '別人用 OpenDesign 做出來的圖',
     galleryLead: '下面是從 prompt 算繪出的真實卡片和封面。挑一個接近你需要的，換上你的文案。',
     gallery: [
       { thumb: "example-html-ppt-xhs-pastel-card", caption: "粉彩社群卡片" },
@@ -303,36 +303,36 @@ export const ZH_TW: SolutionLocaleCopy = {
     exampleLinkLabel: '瀏覽圖片範本',
     faqTitle: '圖片常見問題',
     faq: [
-      { q: '這是 Midjourney 那種 AI 生圖嗎？', a: '不是。Open Design 用真實版面和排版組合圖片——你的標題、你的品牌、精確尺寸——算繪成 HTML 再匯出 PNG。是設計排版，不是像素生成。' },
+      { q: '這是 Midjourney 那種 AI 生圖嗎？', a: '不是。OpenDesign 用真實版面和排版組合圖片——你的標題、你的品牌、精確尺寸——算繪成 HTML 再匯出 PNG。是設計排版，不是像素生成。' },
       { q: '能做風格一致的系列卡片嗎？', a: '能。因為每張圖都是範本，保留版面換文案，整個系列就完美對齊、貼合品牌。' },
       { q: '能出哪些尺寸？', a: '任意——圖片按你指定的精確尺寸算繪，從正方形社群卡到寬幅橫幅，再匯出 PNG。' },
       { q: '可以用哪些 agent？', a: 'Claude Code、Codex、Cursor Agent、Gemini CLI 等第一方轉接器，自帶 provider 金鑰。' },
     ],
     ctaTitle: '今晚就把下一張圖做出來',
-    ctaBody: '給儲存庫點個 star、裝上 Open Design，把一句 prompt 變成貼合品牌的圖片——在你本來就用的 agent 裡。',
+    ctaBody: '給儲存庫點個 star、裝上 OpenDesign，把一句 prompt 變成貼合品牌的圖片——在你本來就用的 agent 裡。',
   },
   video: {
-    title: '用 Open Design + Claude Code 產生動態圖形和短影片',
+    title: '用 OpenDesign + Claude Code 產生動態圖形和短影片',
     description:
       '把腳本變成動畫幀和短影片——標題卡、動態背景、片尾，用你的品牌系統組合並從 HTML 算繪。不用動態圖形套件，不用在時間軸上拖拉。',
     breadcrumb: '影片',
     label: '使用情境 · 影片',
     heading: '動態圖形靠腳本產生，不靠時間軸',
-    lead: '描述你想要的那一刻——標題揭示、資料動畫、logo 片尾。Open Design 用你的品牌系統組合動畫幀並算繪成影片，不需要動態圖形套件。',
+    lead: '描述你想要的那一刻——標題揭示、資料動畫、logo 片尾。OpenDesign 用你的品牌系統組合動畫幀並算繪成影片，不需要動態圖形套件。',
     heroImageAlt: '編輯風插畫：一份腳本變成一連串動畫影片幀',
     tldrTitle: '一句話',
     tldrBody:
-      'Open Design 把腳本變成貼合品牌的動畫幀，由 agent 算繪成短影片——從 HTML 組合、在儲存庫裡做版本控管、不用學時間軸編輯器。',
-    stepsTitle: '用 Open Design 做動效的流程',
+      'OpenDesign 把腳本變成貼合品牌的動畫幀，由 agent 算繪成短影片——從 HTML 組合、在儲存庫裡做版本控管、不用學時間軸編輯器。',
+    stepsTitle: '用 OpenDesign 做動效的流程',
     steps: [
       { title: '描述那一刻', body: '說清要發生什麼——「一個故障感標題化解成我們的 logo，然後一張結尾卡」。agent 載入動效 skill，產出動畫幀而不是靜態圖。', imageAlt: '插畫：一個人描述一段動效序列' },
-      { title: '套用品牌與動效風格', body: 'Open Design 提供幀範本——電影感漏光、故障標題、logo 片尾——並套用你的顏色和字體，讓動效看起來是刻意為之、貼合品牌。', imageAlt: '插畫：品牌樣式被套用到動畫幀上' },
+      { title: '套用品牌與動效風格', body: 'OpenDesign 提供幀範本——電影感漏光、故障標題、logo 片尾——並套用你的顏色和字體，讓動效看起來是刻意為之、貼合品牌。', imageAlt: '插畫：品牌樣式被套用到動畫幀上' },
       { title: '把幀算繪成影片', body: '幀在 HTML 裡組合並算繪成影片，時序和版面精確可重現——不用在時間軸上手動打關鍵幀。', imageAlt: '插畫：HTML 幀算繪成一段影片' },
       { title: '迭代並匯出', body: '靠跟 agent 對話來改——「放慢標題揭示、加一行字幕」。匯出短影片用於社群或產品。原始檔留在你的專案裡。', imageAlt: '插畫：一段影片被打磨並匯出用於社群' },
     ],
-    tableTitle: '用 Open Design 做動效 vs. 老方法',
+    tableTitle: '用 OpenDesign 做動效 vs. 老方法',
     tableColCapability: '你需要什麼',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: 'After Effects / 動效套件',
     tableRows: [
       { capability: '從腳本到動畫幀', withOd: '一句話，agent 組合整段序列', without: '在時間軸上一個個手打關鍵幀' },
@@ -351,7 +351,7 @@ export const ZH_TW: SolutionLocaleCopy = {
       { title: "故障標題", body: "帶動效和質感的標題揭示。", thumb: "example-frame-glitch-title" },
       { title: "logo 片尾", body: "任意片子都能用的品牌收尾動畫。", thumb: "example-frame-logo-outro" },
     ],
-    galleryTitle: '別人用 Open Design 做出來的動效',
+    galleryTitle: '別人用 OpenDesign 做出來的動效',
     galleryLead: '下面是從 prompt 算繪出的真實動畫幀和短片。挑一個接近你想法的，描述動效。',
     gallery: [
       { thumb: "example-hyperframes", caption: "Hyperframes 序列" },
@@ -363,36 +363,36 @@ export const ZH_TW: SolutionLocaleCopy = {
     exampleLinkLabel: '瀏覽動效範本',
     faqTitle: '影片常見問題',
     faq: [
-      { q: '需要 After Effects 或動效套件嗎？', a: '不需要。Open Design 在你的編碼 agent 裡用 HTML 組合動畫幀並算繪成影片。沒有時間軸編輯器要學或要授權。' },
+      { q: '需要 After Effects 或動效套件嗎？', a: '不需要。OpenDesign 在你的編碼 agent 裡用 HTML 組合動畫幀並算繪成影片。沒有時間軸編輯器要學或要授權。' },
       { q: '這適合做什麼影片？', a: '短影片動效——標題卡、資料動畫、logo 片尾、社群短片。它為品牌和產品動效而生，不是做長片剪輯。' },
       { q: '時序可重現嗎？', a: '可以。因為幀是用程式碼組合、確定性算繪的，每次結果一致，還能用一句 prompt 精確調整。' },
       { q: '可以用哪些 agent？', a: 'Claude Code、Codex、Cursor Agent、Gemini CLI 等第一方轉接器，自帶 provider 金鑰。' },
     ],
     ctaTitle: '今晚就把下一個想法做成動效',
-    ctaBody: '給儲存庫點個 star、裝上 Open Design，把一份腳本變成動效——在你本來就用的 agent 裡。',
+    ctaBody: '給儲存庫點個 star、裝上 OpenDesign，把一份腳本變成動效——在你本來就用的 agent 裡。',
   },
   designSystem: {
-    title: '用 Open Design + Claude Code 搭建並套用設計系統',
+    title: '用 OpenDesign + Claude Code 搭建並套用設計系統',
     description:
       '把你的品牌沉澱成一套可重複使用的設計系統，讓編碼 agent 套用到每一個產物——顏色、字體、元件、語氣，全在一份 DESIGN.md 裡。定義一次，每個原型、deck、儀表板都貼合品牌。',
     breadcrumb: '設計系統',
     label: '使用情境 · 設計系統',
     heading: '一套設計系統，套用到 agent 做的每一樣東西',
-    lead: '把你的品牌定義一次，Open Design 就把它帶進每個產出——原型、deck、儀表板、圖片。系統作為一份 DESIGN.md 留在你的儲存庫裡供 agent 讀取，一致性是自動的，不靠手動維護。',
+    lead: '把你的品牌定義一次，OpenDesign 就把它帶進每個產出——原型、deck、儀表板、圖片。系統作為一份 DESIGN.md 留在你的儲存庫裡供 agent 讀取，一致性是自動的，不靠手動維護。',
     heroImageAlt: '編輯風插畫：一套設計系統向外輻射成眾多貼合品牌的產物',
     tldrTitle: '一句話',
     tldrBody:
-      'Open Design 把你的品牌沉澱成一套可攜帶的設計系統，agent 套用到每個產物——在儲存庫裡定義一次、處處強制執行，沒有中心化設計工具把關。',
-    stepsTitle: '用 Open Design 做設計系統的流程',
+      'OpenDesign 把你的品牌沉澱成一套可攜帶的設計系統，agent 套用到每個產物——在儲存庫裡定義一次、處處強制執行，沒有中心化設計工具把關。',
+    stepsTitle: '用 OpenDesign 做設計系統的流程',
     steps: [
-      { title: '沉澱系統', body: '描述你的品牌——顏色、字體、間距、語氣——或讓 agent 指向一個現有網站去擷取。Open Design 把它寫進一份留在你專案裡的 DESIGN.md。', imageAlt: '插畫：一個品牌被沉澱進一份設計系統檔案' },
-      { title: '從成熟基底起步', body: 'Open Design 自帶 140+ 套參考設計系統——從 Apple、Linear 到編輯風、粗獷主義。fork 一個接近你品牌的，而不是從白紙開始。', imageAlt: '插畫：瀏覽一排參考設計系統' },
+      { title: '沉澱系統', body: '描述你的品牌——顏色、字體、間距、語氣——或讓 agent 指向一個現有網站去擷取。OpenDesign 把它寫進一份留在你專案裡的 DESIGN.md。', imageAlt: '插畫：一個品牌被沉澱進一份設計系統檔案' },
+      { title: '從成熟基底起步', body: 'OpenDesign 自帶 140+ 套參考設計系統——從 Apple、Linear 到編輯風、粗獷主義。fork 一個接近你品牌的，而不是從白紙開始。', imageAlt: '插畫：瀏覽一排參考設計系統' },
       { title: '處處套用', body: '其他每個 skill 都讀同一套系統，所以原型、deck、儀表板共用一套視覺語言——你不用每次重新指定。', imageAlt: '插畫：一套系統一致地套用到多種產物類型' },
       { title: '在一處演進', body: '改一處系統，下一次算繪處處生效。因為它是儲存庫裡的一個檔案，設計決策像程式碼一樣被審查和版本控管。', imageAlt: '插畫：一套設計系統被更新並傳播到所有產出' },
     ],
-    tableTitle: '用 Open Design 做設計系統 vs. 老方法',
+    tableTitle: '用 OpenDesign 做設計系統 vs. 老方法',
     tableColCapability: '你需要什麼',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '設計工具元件庫 / 風格指南',
     tableRows: [
       { capability: '定義系統', withOd: '一份 agent 讀取的 DESIGN.md，從 140+ 參考 fork', without: '一份靜態風格指南或鎖在工具裡的元件庫' },
@@ -411,7 +411,7 @@ export const ZH_TW: SolutionLocaleCopy = {
       { title: "OpenAI", body: "極簡、中性、研究級。", thumb: "design-system-openai" },
       { title: "GitHub", body: "密集、技術、開發者原生。", thumb: "design-system-github" },
     ],
-    galleryTitle: 'Open Design 裡的設計系統',
+    galleryTitle: 'OpenDesign 裡的設計系統',
     galleryLead: '下面是 140+ 套參考系統裡的幾個，可作為起點 fork。挑一個接近你品牌的去改。',
     gallery: [
       { thumb: "design-system-airbnb", caption: "Airbnb 風格系統" },
@@ -423,18 +423,18 @@ export const ZH_TW: SolutionLocaleCopy = {
     exampleLinkLabel: '瀏覽設計系統',
     faqTitle: '設計系統常見問題',
     faq: [
-      { q: '這裡的設計系統具體是什麼？', a: '儲存庫裡一份 DESIGN.md，沉澱顏色、字體、間距、元件和語氣。每個 Open Design skill 都讀它，所以 agent 產出的任何東西都自動套用你的品牌。' },
-      { q: '必須從零開始嗎？', a: '不必。Open Design 自帶 140+ 套參考設計系統可 fork——從 Apple、Linear 到編輯風、粗獷主義——再貼合你的品牌。' },
+      { q: '這裡的設計系統具體是什麼？', a: '儲存庫裡一份 DESIGN.md，沉澱顏色、字體、間距、元件和語氣。每個 OpenDesign skill 都讀它，所以 agent 產出的任何東西都自動套用你的品牌。' },
+      { q: '必須從零開始嗎？', a: '不必。OpenDesign 自帶 140+ 套參考設計系統可 fork——從 Apple、Linear 到編輯風、粗獷主義——再貼合你的品牌。' },
       { q: '怎麼在 deck、儀表板、原型之間保持一致？', a: '因為這些 skill 都讀同一份 DESIGN.md。定義一次，一致性就是自動的，而不是靠手動盯著。' },
       { q: '可以用哪些 agent？', a: 'Claude Code、Codex、Cursor Agent、Gemini CLI 等第一方轉接器，自帶 provider 金鑰。' },
     ],
     ctaTitle: '今晚就定義你的設計系統',
-    ctaBody: '給儲存庫點個 star、裝上 Open Design，給你的 agent 一套處處套用的品牌——在你本來就用的 agent 裡。',
+    ctaBody: '給儲存庫點個 star、裝上 OpenDesign，給你的 agent 一套處處套用的品牌——在你本來就用的 agent 裡。',
   },
   roleSoloBuilder: {
-    title: 'Open Design 給獨立開發者 / 一人公司',
+    title: 'OpenDesign 給獨立開發者 / 一人公司',
     description:
-      '一個人也能像一支團隊那樣出活。Open Design 把你的編碼 agent 變成創業的設計那一半——原型、到達頁、儀表板、品牌視覺，全從一句 prompt 來、全貼合品牌、全在你的儲存庫裡。',
+      '一個人也能像一支團隊那樣出活。OpenDesign 把你的編碼 agent 變成創業的設計那一半——原型、到達頁、儀表板、品牌視覺，全從一句 prompt 來、全貼合品牌、全在你的儲存庫裡。',
     breadcrumb: '獨立開發者',
     label: '適用於 · 獨立開發者',
     heading: '你的設計團隊，就是你本來就在用的 agent',
@@ -442,16 +442,16 @@ export const ZH_TW: SolutionLocaleCopy = {
     heroImageAlt: '編輯風插畫：一個人在桌前，四周環繞著同一套風格的到達頁、應用程式、儀表板和社群卡',
     tldrTitle: '一句話',
     tldrBody:
-      'Open Design 是獨立創辦人從沒有過的設計部門：跨產品需要的每個介面，prompt 出產物，一套品牌、零交接、不用額外工具。',
-    stepsTitle: '獨立開發者怎麼用 Open Design',
+      'OpenDesign 是獨立創辦人從沒有過的設計部門：跨產品需要的每個介面，prompt 出產物，一套品牌、零交接、不用額外工具。',
+    stepsTitle: '獨立開發者怎麼用 OpenDesign',
     steps: [
       { title: '先定義一次品牌', body: '把顏色、字體、語氣寫進一份 DESIGN.md（或從 140+ 參考系統 fork 一個）。之後你產生的每個產物都自動貼合品牌。', imageAlt: '插畫：單一品牌定義檔案' },
       { title: '接著要什麼產生什麼', body: '原型、到達頁、儀表板、路演 deck、社群卡——同一個 agent、同一套品牌，每個一句 prompt。不用切工具或再買席次。', imageAlt: '插畫：多種產物從一句 prompt 而來' },
       { title: '直接上線——它本就是真的', body: '一切算繪成你儲存庫裡的 HTML / 程式碼，原型變產品、到達頁能上線。沒有用完即棄的 mockup。', imageAlt: '插畫：產物從 prompt 直接上線' },
     ],
-    tableTitle: '用 Open Design 單幹 vs. 硬扛',
+    tableTitle: '用 OpenDesign 單幹 vs. 硬扛',
     tableColCapability: '你需要什麼',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '今天單幹',
     tableRows: [
       { capability: '涵蓋所有設計介面', withOd: '一個 agent 搞定原型、到達頁、儀表板、品牌', without: '拼湊五個 SaaS 工具和教學' },
@@ -469,7 +469,7 @@ export const ZH_TW: SolutionLocaleCopy = {
       { title: '行動流程', body: '走出 Web 時的應用程式畫面。', thumb: 'example-mobile-app' },
       { title: '社群卡', body: '各通路的發布和更新卡片。', thumb: 'example-card-twitter' },
     ],
-    galleryTitle: '別人用 Open Design 單幹做出來的',
+    galleryTitle: '別人用 OpenDesign 單幹做出來的',
     galleryLead: '一人創業需要的每個介面，都從一句 prompt 來。挑一個接近你下一步的，描述它。',
     gallery: [
       { thumb: 'example-saas-landing', caption: 'SaaS 到達頁' },
@@ -487,12 +487,12 @@ export const ZH_TW: SolutionLocaleCopy = {
       { q: '可以用哪些 agent？', a: 'Claude Code、Codex、Cursor Agent、Gemini CLI 等一方轉接，自帶 provider 金鑰。' },
     ],
     ctaTitle: '今晚就把整個東西做出來',
-    ctaBody: '給儲存庫點個 star、裝上 Open Design，讓一個 agent 當你的設計團隊——在你本來就用的 agent 裡。',
+    ctaBody: '給儲存庫點個 star、裝上 OpenDesign，讓一個 agent 當你的設計團隊——在你本來就用的 agent 裡。',
   },
   roleDesigner: {
-    title: 'Open Design 給設計師',
+    title: 'OpenDesign 給設計師',
     description:
-      '把時間花在品味上，不是苦工上。Open Design 讓 agent 處理重複的生產工作——變體、狀態、整套設計系統——你來把控樣子、保留最終決定權。',
+      '把時間花在品味上，不是苦工上。OpenDesign 讓 agent 處理重複的生產工作——變體、狀態、整套設計系統——你來把控樣子、保留最終決定權。',
     breadcrumb: '設計師',
     label: '適用於 · 設計師',
     heading: '你定方向——讓 agent 幹生產',
@@ -500,16 +500,16 @@ export const ZH_TW: SolutionLocaleCopy = {
     heroImageAlt: '編輯風插畫：設計師在指揮，agent 填充畫面、變體和設計系統',
     tldrTitle: '一句話',
     tldrBody:
-      'Open Design 是不會累的生產助手：你定義設計系統、把控品味；agent 產生其餘的，貼合系統、就在你的儲存庫裡。',
-    stepsTitle: '設計師怎麼用 Open Design',
+      'OpenDesign 是不會累的生產助手：你定義設計系統、把控品味；agent 產生其餘的，貼合系統、就在你的儲存庫裡。',
+    stepsTitle: '設計師怎麼用 OpenDesign',
     steps: [
       { title: '把系統編碼', body: '把品牌變成一份 DESIGN.md——字級體系、顏色、間距、元件、語氣。這是 agent 遵守的事實來源。', imageAlt: '插畫：設計系統被沉澱為檔案' },
       { title: '產生長尾', body: '那些你本來要手搭的畫面、狀態、變體——agent 貼合系統算繪，無聊的 80% 幾分鐘搞定。', imageAlt: '插畫：一次產生多個貼合系統的畫面' },
       { title: '指揮並打磨', body: '用語言點評——「收緊間距、空狀態做暖一點」。你保留最終決定權，agent 做迭代。', imageAlt: '插畫：設計師給方向，設計隨之更新' },
     ],
-    tableTitle: '用 Open Design 做設計 vs. 純手工',
+    tableTitle: '用 OpenDesign 做設計 vs. 純手工',
     tableColCapability: '你需要什麼',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '手工設計工具',
     tableRows: [
       { capability: '搭建設計系統', withOd: '一份 agent 處處套用的 DESIGN.md', without: '一個每個工具手維護的元件庫' },
@@ -527,7 +527,7 @@ export const ZH_TW: SolutionLocaleCopy = {
       { title: '應用程式畫面', body: '高保真的行動和 Web 畫面。', thumb: 'example-mobile-app' },
       { title: '儀表板', body: '尊重你系統的資料 UI。', thumb: 'example-dashboard' },
     ],
-    galleryTitle: '別人用 Open Design 指揮出來的',
+    galleryTitle: '別人用 OpenDesign 指揮出來的',
     galleryLead: 'agent 從指揮算繪出的高保真、貼合系統的作品。挑一個接近你風格的，打磨它。',
     gallery: [
       { thumb: 'example-web-prototype-taste-editorial', caption: '編輯風版面' },
@@ -545,12 +545,12 @@ export const ZH_TW: SolutionLocaleCopy = {
       { q: '可以用哪些 agent？', a: 'Claude Code、Codex、Cursor Agent、Gemini CLI 等一方轉接，自帶 provider 金鑰。' },
     ],
     ctaTitle: '今晚就指揮你的下一個設計',
-    ctaBody: '給儲存庫點個 star、裝上 Open Design，讓 agent 幹生產、你來把控品味——在你本來就用的 agent 裡。',
+    ctaBody: '給儲存庫點個 star、裝上 OpenDesign，讓 agent 幹生產、你來把控品味——在你本來就用的 agent 裡。',
   },
   roleEngineering: {
-    title: 'Open Design 給工程師',
+    title: 'OpenDesign 給工程師',
     description:
-      '跳過設計交接。Open Design 把一份 DESIGN.md 變成你的編碼 agent 直接寫的真實前端——貼合系統的 UI、原型、儀表板，就在儲存庫裡，不用 Figma 往返。',
+      '跳過設計交接。OpenDesign 把一份 DESIGN.md 變成你的編碼 agent 直接寫的真實前端——貼合系統的 UI、原型、儀表板，就在儲存庫裡，不用 Figma 往返。',
     breadcrumb: '工程',
     label: '適用於 · 工程',
     heading: '從規格到前端，中間沒有交接',
@@ -558,16 +558,16 @@ export const ZH_TW: SolutionLocaleCopy = {
     heroImageAlt: '編輯風插畫：一份 DESIGN.md 直接流向前端程式碼和算繪好的 UI，跳過了交接環節',
     tldrTitle: '一句話',
     tldrBody:
-      'Open Design 把設計系統變成機器可讀，弭平設計到工程的斷層：寫你程式碼的同一個 agent 套用系統、算繪出真實 UI。',
-    stepsTitle: '工程師怎麼用 Open Design',
+      'OpenDesign 把設計系統變成機器可讀，弭平設計到工程的斷層：寫你程式碼的同一個 agent 套用系統、算繪出真實 UI。',
+    stepsTitle: '工程師怎麼用 OpenDesign',
     steps: [
       { title: '讀系統，不讀標註', body: 'DESIGN.md 就在儲存庫裡。agent 像讀程式碼庫其餘部分一樣讀它——沒有匯出的規格要解讀。', imageAlt: '插畫：agent 在程式碼旁讀一份 DESIGN.md' },
       { title: '產生貼合系統的 UI', body: '描述畫面或元件，agent 寫出已經符合系統的前端。原型、後台儀表板、內部工具——幾分鐘搞定。', imageAlt: '插畫：產生的 UI 程式碼符合設計系統' },
       { title: '它本就是你的程式碼', body: '產出是儲存庫裡的 HTML / 框架程式碼，能在 PR 裡 review。「設計」和「實作」之間沒有翻譯步驟。', imageAlt: '插畫：產生的 UI 作為可 review 的 PR 落地' },
     ],
-    tableTitle: '用 Open Design 做前端 vs. 交接式',
+    tableTitle: '用 OpenDesign 做前端 vs. 交接式',
     tableColCapability: '你需要什麼',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '設計到開發交接',
     tableRows: [
       { capability: '拿到可開工的設計', withOd: '一份 agent 直接讀的 DESIGN.md', without: '一個你手動重新解讀的 Figma 檔案' },
@@ -585,7 +585,7 @@ export const ZH_TW: SolutionLocaleCopy = {
       { title: '到達頁', body: '不等設計的行銷頁。', thumb: 'example-saas-landing' },
       { title: 'Kanban / 看板', body: '內部工作流程 UI。', thumb: 'example-kanban-board' },
     ],
-    galleryTitle: '別人用 Open Design 在工程裡做出來的',
+    galleryTitle: '別人用 OpenDesign 在工程裡做出來的',
     galleryLead: '直接在儲存庫裡產生的、貼合系統的真實前端。挑一個接近你在做的，描述它。',
     gallery: [
       { thumb: 'example-web-prototype', caption: 'Web 應用程式 UI' },
@@ -603,12 +603,12 @@ export const ZH_TW: SolutionLocaleCopy = {
       { q: '可以用哪些 agent？', a: 'Claude Code、Codex、Cursor Agent、Gemini CLI 等一方轉接，自帶 provider 金鑰。' },
     ],
     ctaTitle: '今晚就產生你的下一個 UI',
-    ctaBody: '給儲存庫點個 star、裝上 Open Design，把一份 DESIGN.md 變成前端——在你本來就用的 agent 裡。',
+    ctaBody: '給儲存庫點個 star、裝上 OpenDesign，把一份 DESIGN.md 變成前端——在你本來就用的 agent 裡。',
   },
   roleProductManagers: {
-    title: 'Open Design 給產品經理',
+    title: 'OpenDesign 給產品經理',
     description:
-      '別再為了講清一個想法等設計排期。Open Design 讓 PM 把一句 prompt 變成可點擊的原型或線框——用來對齊利害關係人、給團隊做 brief，不用開設計 ticket。',
+      '別再為了講清一個想法等設計排期。OpenDesign 讓 PM 把一句 prompt 變成可點擊的原型或線框——用來對齊利害關係人、給團隊做 brief，不用開設計 ticket。',
     breadcrumb: '產品經理',
     label: '適用於 · 產品經理',
     heading: '在 kickoff 之前，先讓想法能點擊',
@@ -616,16 +616,16 @@ export const ZH_TW: SolutionLocaleCopy = {
     heroImageAlt: '編輯風插畫：PM 把一段文字想法變成可點擊原型，展示給利害關係人',
     tldrTitle: '一句話',
     tldrBody:
-      'Open Design 給 PM 一個不依賴設計的方式把想法做實：prompt 出原型用於對齊和 brief，不花團隊的設計預算。',
-    stepsTitle: '產品經理怎麼用 Open Design',
+      'OpenDesign 給 PM 一個不依賴設計的方式把想法做實：prompt 出原型用於對齊和 brief，不花團隊的設計預算。',
+    stepsTitle: '產品經理怎麼用 OpenDesign',
     steps: [
       { title: '描述流程', body: '用大白話寫使用者旅程——畫面、狀態、happy path。不用線框工具。', imageAlt: '插畫：PM 在描述一段使用者流程' },
       { title: '拿到可點擊原型', body: 'agent 算繪出能真點擊的可導覽畫面——給利害關係人評審，比一張投影片或一篇文件清楚得多。', imageAlt: '插畫：從描述產出可點擊原型' },
       { title: '對齊並交接', body: '分享連結，對著實物收集回饋，再把原型交給設計/工程，作為精確、共享的起點。', imageAlt: '插畫：原型用於對齊後交給團隊' },
     ],
-    tableTitle: 'PM 用 Open Design vs. 等設計',
+    tableTitle: 'PM 用 OpenDesign vs. 等設計',
     tableColCapability: '你需要什麼',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '今天沒有它',
     tableRows: [
       { capability: '把想法做實', withOd: '自己 prompt → 可點擊原型', without: '開設計 ticket 等排期' },
@@ -643,7 +643,7 @@ export const ZH_TW: SolutionLocaleCopy = {
       { title: 'Web 原型', body: '可評審的多屏 Web 流程。', thumb: 'example-web-prototype' },
       { title: '趨勢檢視', body: '近 30 天和趨勢快照做背景。', thumb: 'example-last30days' },
     ],
-    galleryTitle: '別人用 Open Design 做 PM 原型',
+    galleryTitle: '別人用 OpenDesign 做 PM 原型',
     galleryLead: '從描述算繪出的可點擊流程，可直接用於利害關係人評審。挑一個接近你想法的，描述它。',
     gallery: [
       { thumb: 'example-mobile-app', caption: '行動流程' },
@@ -661,12 +661,12 @@ export const ZH_TW: SolutionLocaleCopy = {
       { q: '可以用哪些 agent？', a: 'Claude Code、Codex、Cursor Agent、Gemini CLI 等一方轉接，自帶 provider 金鑰。' },
     ],
     ctaTitle: '今晚就讓你的想法能點擊',
-    ctaBody: '給儲存庫點個 star、裝上 Open Design，把下一份規格變成人能點擊的東西——在你本來就用的 agent 裡。',
+    ctaBody: '給儲存庫點個 star、裝上 OpenDesign，把下一份規格變成人能點擊的東西——在你本來就用的 agent 裡。',
   },
   roleMarketing: {
-    title: 'Open Design 給行銷團隊',
+    title: 'OpenDesign 給行銷團隊',
     description:
-      '以內容的速度出 campaign。Open Design 讓 agent 從一句 prompt 產出到達頁、社群卡和 campaign 視覺——貼合品牌、隨要隨出，不用排設計隊。',
+      '以內容的速度出 campaign。OpenDesign 讓 agent 從一句 prompt 產出到達頁、社群卡和 campaign 視覺——貼合品牌、隨要隨出，不用排設計隊。',
     breadcrumb: '行銷',
     label: '適用於 · 行銷',
     heading: 'campaign 視覺，一句 prompt 的速度',
@@ -674,16 +674,16 @@ export const ZH_TW: SolutionLocaleCopy = {
     heroImageAlt: '編輯風插畫：行銷人員把一份 brief 變成到達頁和一組貼合品牌的社群卡',
     tldrTitle: '一句話',
     tldrBody:
-      'Open Design 是行銷的常駐設計資源：prompt 出到達頁和社群素材、貼合品牌，讓 campaign 以你寫文案的速度上線。',
-    stepsTitle: '行銷團隊怎麼用 Open Design',
+      'OpenDesign 是行銷的常駐設計資源：prompt 出到達頁和社群素材、貼合品牌，讓 campaign 以你寫文案的速度上線。',
+    stepsTitle: '行銷團隊怎麼用 OpenDesign',
     steps: [
       { title: '鎖定品牌', body: '你的 DESIGN.md 持有顏色、字體和語氣。agent 做的每個素材都自動貼合品牌——不用逐個重新調樣式。', imageAlt: '插畫：品牌系統套用到行銷素材' },
       { title: '產生整個 campaign', body: '到達頁、社群卡、封面、公告圖——每個一句 prompt，跨通路一致的一整套。', imageAlt: '插畫：從 prompt 產生完整 campaign 套圖' },
       { title: '上線並迭代', body: '到達頁算繪成可部署的 HTML，圖匯出 PNG。換標題、重算整套——不用等佇列。', imageAlt: '插畫：campaign 素材快速上線並迭代' },
     ],
-    tableTitle: '行銷用 Open Design vs. 平時的手忙腳亂',
+    tableTitle: '行銷用 OpenDesign vs. 平時的手忙腳亂',
     tableColCapability: '你需要什麼',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '今天沒有它',
     tableRows: [
       { capability: '上一個到達頁', withOd: 'prompt → 貼合品牌、可部署的頁', without: '給設計 brief 或跟架站工具較勁' },
@@ -701,7 +701,7 @@ export const ZH_TW: SolutionLocaleCopy = {
       { title: '文章封面', body: '部落格和 newsletter 封面。', thumb: 'example-article-magazine' },
       { title: 'Web 頁面', body: '微站和 campaign 頁。', thumb: 'example-web-prototype' },
     ],
-    galleryTitle: '別人用 Open Design 做行銷素材',
+    galleryTitle: '別人用 OpenDesign 做行銷素材',
     galleryLead: '從 prompt 算繪出的貼合品牌 campaign 素材。挑一個接近你 campaign 的，換上你的文案。',
     gallery: [
       { thumb: 'example-saas-landing', caption: 'campaign 到達頁' },
@@ -719,6 +719,6 @@ export const ZH_TW: SolutionLocaleCopy = {
       { q: '可以用哪些 agent？', a: 'Claude Code、Codex、Cursor Agent、Gemini CLI 等一方轉接，自帶 provider 金鑰。' },
     ],
     ctaTitle: '今晚就上你的下一個 campaign',
-    ctaBody: '給儲存庫點個 star、裝上 Open Design，把 brief 變成貼合品牌的素材——在你本來就用的 agent 裡。',
+    ctaBody: '給儲存庫點個 star、裝上 OpenDesign，把 brief 變成貼合品牌的素材——在你本來就用的 agent 裡。',
   },
 };

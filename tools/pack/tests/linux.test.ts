@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { access, chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -25,7 +25,7 @@ vi.mock("@open-design/sidecar", async (importOriginal) => {
   };
 });
 
-import type { ToolPackConfig } from "../src/config.js";
+import type { ToolPackConfig } from "@/config/index.js";
 import {
   buildDockerArgs,
   cleanupPackedLinuxNamespace,
@@ -42,7 +42,7 @@ import {
   stopPackedLinuxApp,
   sanitizeNamespace,
   stopPackedLinuxHeadless,
-} from "../src/linux.js";
+} from "@/linux.js";
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -836,9 +836,7 @@ describe("createLinuxDesktopLaunchEnv", () => {
 
     expect(env.ELECTRON_RUN_AS_NODE).toBeUndefined();
     expect(env.KEEP_ME).toBe("yes");
-    expect(env.OD_SIDECAR_BASE).toBe(
-      "/work/.tmp/tools-pack/runtime/linux/namespaces/default/runtime",
-    );
+    expect(env.OD_SIDECAR_BASE).toBe(resolve(config.roots.runtime.namespaceRoot, "runtime"));
   });
 });
 

@@ -2,7 +2,7 @@
 
 **Parent:** [`architecture.md`](architecture.md) · **Related:** [`plugins-spec.md`](plugins-spec.md) · [`agent-adapters.md`](agent-adapters.md)
 
-Open Design supports OD-owned project storage and folder-backed projects. Folder-backed projects need explicit provenance so OD can tell apart user-selected local folders from disposable workspaces prepared by an external orchestrator.
+OpenDesign supports OD-owned project storage and folder-backed projects. Folder-backed projects need explicit provenance so OD can tell apart user-selected local folders from disposable workspaces prepared by an external orchestrator.
 
 The boundary is intentionally narrow: OD may read and write the workspace it is given, produce inspectable design outputs, and report enough provenance for callers to act on the result. Source checkout state, pull-request creation, deployment, publishing, and writeback policy remain outside OD unless a future feature deliberately owns that workflow.
 

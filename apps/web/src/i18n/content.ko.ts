@@ -21,7 +21,7 @@ export const KO_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'agent-browser': {
     description:
-      'AI 에이전트를 위한 브라우저 자동화 CLI. 사용자가 브라우저 동작을\n검사, 테스트 또는 자동화해야 할 때 사용하세요: 페이지 탐색, 양식 작성,\n버튼 클릭, 스크린샷 촬영, 페이지 데이터 추출, 선택된\nOpen Design 브라우저 탭 컨텍스트 읽기, 웹 앱 테스트, Open Design\n미리보기 도그푸딩, QA, 버그 헌트, 또는 앱 품질 검토. 사용자가 명시적으로\n외부 브라우징을 요청하지 않는 한 로컬 Open Design 미리보기 URL을 우선하세요.',
+      'AI 에이전트를 위한 브라우저 자동화 CLI. 사용자가 브라우저 동작을\n검사, 테스트 또는 자동화해야 할 때 사용하세요: 페이지 탐색, 양식 작성,\n버튼 클릭, 스크린샷 촬영, 페이지 데이터 추출, 선택된\nOpenDesign 브라우저 탭 컨텍스트 읽기, 웹 앱 테스트, OpenDesign\n미리보기 도그푸딩, QA, 버그 헌트, 또는 앱 품질 검토. 사용자가 명시적으로\n외부 브라우징을 요청하지 않는 한 로컬 OpenDesign 미리보기 URL을 우선하세요.',
     examplePrompt:
       'AI 에이전트를 위한 브라우저 자동화 CLI.',
   },
@@ -849,7 +849,7 @@ export const KO_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'ui-ux-pro-max': {
     description:
-      '카탈로그 전용 UI/UX Pro Max 항목입니다. 전체 업스트림 템플릿, 데이터, 검색 워크플로는 Open Design에 포함되어 있지 않습니다.',
+      '카탈로그 전용 UI/UX Pro Max 항목입니다. 전체 업스트림 템플릿, 데이터, 검색 워크플로는 OpenDesign에 포함되어 있지 않습니다.',
     examplePrompt:
       '카탈로그 전용 UI/UX Pro Max 항목입니다.',
   },
@@ -959,6 +959,7 @@ export const KO_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'claymorphism': '잘 빚어진 점토를 연상시키는 부드럽고 둥근 3D 형태. 장난스럽고 통통한 요소와 다채로운 표면.',
   'clean': '넉넉한 여백, 가독성 높은 타이포그래피, 제한된 색상 팔레트로 시각적 산만함을 줄인 단순함 중심의 디자인.',
   'clickhouse': '빠른 분석 데이터베이스. 노란색 강조, 기술 문서 스타일.',
+  'cloudflare-kumo': '현대적인 웹 앱을 위한 Cloudflare의 컴포넌트 시스템. 시맨틱 라이트/다크 토큰, 컴팩트한 Inter 타이포그래피, 계층형 중립 표면, 접근성 높은 컨트롤, 차트용 색상 지침을 제공합니다.',
   'cohere': '엔터프라이즈 AI 플랫폼. 생동감 있는 그라데이션, 데이터가 풍부한 대시보드 미학.',
   'coinbase': '암호화폐 거래소. 깔끔한 블루 아이덴티티, 신뢰 중심의 기관적 분위기.',
   'colorful': '몰입감 있고 기억에 남는 현대적 사용자 경험을 위한 생동감 있고 고대비인 팔레트와 그라데이션.',

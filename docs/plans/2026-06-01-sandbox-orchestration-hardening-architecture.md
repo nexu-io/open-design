@@ -3,30 +3,30 @@
 ## Status
 
 Architecture review draft. This document describes the hardening work needed to
-keep Open Design safe to embed under an external orchestrator without adding
+keep OpenDesign safe to embed under an external orchestrator without adding
 consumer-specific infrastructure to this repository.
 
-The plan is intentionally upstream-neutral. Open Design should refer to this
+The plan is intentionally upstream-neutral. OpenDesign should refer to this
 integration shape as an external orchestrator, not by any private deployment or
 infrastructure name.
 
 ## Goal
 
 Future contributors should not be able to accidentally weaken the sandbox
-runtime contract while adding normal Open Design features. The durable defense is
+runtime contract while adding normal OpenDesign features. The durable defense is
 not a large inventory of happy-path tests. The durable defense is to make unsafe
 states hard to construct, then pin the remaining public contracts with focused
 guards and smoke coverage.
 
 The protected use case is:
 
-1. An external orchestrator launches Open Design with `OD_SANDBOX_MODE=1` and
+1. An external orchestrator launches OpenDesign with `OD_SANDBOX_MODE=1` and
    isolated daemon storage. This plan MUST NOT define daemon data paths; read
    root `AGENTS.md` → **Daemon data directory contract** before documenting
    storage isolation.
 2. The orchestrator creates runs over HTTP/SSE and supplies only run-scoped
    policy, tools, and project context.
-3. Open Design contributes design context, skills, previews, artifacts, CLI/UI
+3. OpenDesign contributes design context, skills, previews, artifacts, CLI/UI
    parity, and agent execution.
 4. The orchestrator owns caller auth, provider credentials, budgets, rate
    limits, external media tools, accounting, fanout, retries, and fulfillment.
@@ -43,7 +43,7 @@ important behaviors are deliberately conditional on sandbox mode:
 - imported-folder project access is restricted until files are mirrored into a
   managed project directory.
 
-Without `OD_SANDBOX_MODE=1`, Open Design is the normal local product runtime, not
+Without `OD_SANDBOX_MODE=1`, OpenDesign is the normal local product runtime, not
 the external-orchestrator containment runtime. Tests and docs must say which mode
 they are proving.
 
@@ -114,7 +114,7 @@ daemon data. The useful hardening targets are:
   runtime paths;
 - port changes must not change namespace-scoped paths;
 - stale pointer cleanup must only remove the pointer it owns;
-- process matching must not classify a foreign process tree as an Open Design
+- process matching must not classify a foreign process tree as an OpenDesign
   sidecar just because command text looks similar.
 
 These are primitive tests against `packages/sidecar-proto`,
@@ -193,7 +193,7 @@ opening, so review catches conflicts within the stack instead of at merge time.
 - Add a public guard that fails on named orchestrator examples in public
   contract, prompt, docs, help, and shipped content surfaces; support stricter
   private terms through local configuration.
-- Keep the allowlist narrow so normal references to Open Design, GitHub
+- Keep the allowlist narrow so normal references to OpenDesign, GitHub
   repository names, and public package names do not fail.
 - Delete dead shadow handlers for `POST /api/projects/:id/media/generate` and
   `POST /api/projects/:id/export/pdf`.
@@ -274,8 +274,8 @@ should check one live daemon against the same fixture.
 ## Non-Goals
 
 - Do not add a generic provider router, provider account pool, global media
-  budget system, or external executor API to Open Design.
-- Do not add consumer-specific conformance tests to Open Design CI.
+  budget system, or external executor API to OpenDesign.
+- Do not add consumer-specific conformance tests to OpenDesign CI.
 - Do not claim namespace alone isolates daemon data.
 - Do not use regex-only guards for data-flow properties like "paths are not
   derived from ports"; write primitive tests instead.

@@ -2,15 +2,15 @@ import type { DeepPartial, CommunityCopy } from '../community-i18n';
 
 const ja: DeepPartial<CommunityCopy> = {
   hub: {
-    title: 'コミュニティ — Open Design',
-    desc: 'Open Design のコミュニティ。公開の場で作品を届けるコントリビューター、各地でアトリエを主催するアンバサダー、そして Discord を温かく保つモデレーターたち。',
+    title: 'コミュニティ — OpenDesign',
+    desc: 'OpenDesign のコミュニティ。公開の場で作品を届けるコントリビューター、各地でアトリエを主催するアンバサダー、そして Discord を温かく保つモデレーターたち。',
     heroTitle: 'オープンなデザインは <em>形になる</em><br/>あなたが届けたときに。',
     heroLead:
-      'Open Design は人の手で、公開の場で作られています。Skills、DESIGN.md システム、プラグイン、ドキュメント。すべてのコミットが一筆です。下から扉を選んで、あなたの部屋を見つけてください。',
+      'OpenDesign は人の手で、公開の場で作られています。Skills、DESIGN.md システム、プラグイン、ドキュメント。すべてのコミットが一筆です。下から扉を選んで、あなたの部屋を見つけてください。',
     cardMetaH: '初マージで自動発行',
     cardMetaS: 'PNG · X でシェア',
     cardHeroAlt:
-      'Open Design コントリビューター名誉カード — @dev-kp-eloper、上位 99.9%、Giotto ティア',
+      'OpenDesign コントリビューター名誉カード — @dev-kp-eloper、上位 99.9%、Giotto ティア',
     cards: [
       {
         ord: 'I',
@@ -21,7 +21,7 @@ const ja: DeepPartial<CommunityCopy> = {
       {
         ord: 'II',
         title: 'Ambassadors',
-        sub: 'あなたの街での Open Design の <em>声</em>。',
+        sub: 'あなたの街での OpenDesign の <em>声</em>。',
         body: '地元のアトリエを開きましょう。ミートアップ、デモ、深夜の批評会を招集する。予算、素材、そしてコアチームへの専用チャンネルで支えます。',
       },
       {
@@ -33,14 +33,14 @@ const ja: DeepPartial<CommunityCopy> = {
     ],
   },
   contributors: {
-    title: 'Contributors — Open Design',
-    desc: 'Open Design に貢献しよう。メンテナー、週間・歴代のコントリビューターランキング、good first issue、そして最初の作品を届けるゼロコードの道。',
+    title: 'Contributors — OpenDesign',
+    desc: 'OpenDesign に貢献しよう。メンテナー、週間・歴代のコントリビューターランキング、good first issue、そして最初の作品を届けるゼロコードの道。',
     heroTitle: '作品を <em>届ける</em> 手。',
     heroLead:
-      'Open Design は人の手で、公開の場で作られています。Skills、DESIGN.md システム、プラグイン、ドキュメント。すべてのコミットが一筆です。issue を選び、PR を送り、マージされた瞬間に世界に一つだけの名誉カードを手にしましょう。',
+      'OpenDesign は人の手で、公開の場で作られています。Skills、DESIGN.md システム、プラグイン、ドキュメント。すべてのコミットが一筆です。issue を選び、PR を送り、マージされた瞬間に世界に一つだけの名誉カードを手にしましょう。',
     showcase: {
       kicker: 'すべてをプラグインに',
-      h2: 'Open Design を舞台に。<em>あなたの作品</em> を主役に。',
+      h2: 'OpenDesign を舞台に。<em>あなたの作品</em> を主役に。',
       intro:
         'アトリエは同時にギャラリーでもあります。作品づくりを助けるのは半分の役目。もう半分は、見に来てもらえる場を確かに整えること。あなたが届ける作品はすべて、金庫ではなく壁に掛かり、世界がそれを見つけられます。',
       tenets: [
@@ -70,7 +70,7 @@ const ja: DeepPartial<CommunityCopy> = {
         steps: [
           {
             h4: 'エージェントに一行を渡す',
-            body: '上のコマンドを Open Design 内のエージェントに貼り付けるか、あなたが手元に持っているもの（Claude Code、Codex、Cursor）に貼ってください。自分でインストールされます。',
+            body: '上のコマンドを OpenDesign 内のエージェントに貼り付けるか、あなたが手元に持っているもの（Claude Code、Codex、Cursor）に貼ってください。自分でインストールされます。',
           },
           {
             h4: 'skill を呼び起こす',
@@ -87,20 +87,20 @@ const ja: DeepPartial<CommunityCopy> = {
       kicker: '舵を取る',
       h2: '<em>メンテナー</em> たち。',
       intro:
-        'メンテナーは Open Design の方向性と品質を守ります。貢献をレビューし、基準の一貫性を保ち、より多くのコントリビューターがプロジェクトの中で居場所を得られるよう道を空けます。',
+        'メンテナーは OpenDesign の方向性と品質を守ります。貢献をレビューし、基準の一貫性を保ち、より多くのコントリビューターがプロジェクトの中で居場所を得られるよう道を空けます。',
       role: 'Maintainer',
       bios: {
         'Nagendhra-web':
-          'Nagendhra は本番の真実を見抜くデータエンジニアの勘を持ち込みます。失敗を見つけ、エッジケースを測り、きちんと直す。Open Design では、それがデプロイのプリフライト作業、アセットバンドルの堅牢化、そしてコントリビューターが作品を届けるときにプロジェクトを信頼できるものにする Windows の修正に表れています。',
+          'Nagendhra は本番の真実を見抜くデータエンジニアの勘を持ち込みます。失敗を見つけ、エッジケースを測り、きちんと直す。OpenDesign では、それがデプロイのプリフライト作業、アセットバンドルの堅牢化、そしてコントリビューターが作品を届けるときにプロジェクトを信頼できるものにする Windows の修正に表れています。',
         'Sid-Qin':
-          'Sid はデザイナーの目で細部を見るゼネラリストエンジニア。壊れた CLI のパスも、歪んだインタラクションの手触りも、どちらも見逃さないタイプのメンテナーです。Open Design では、エクスポートのフロー、プラグインのアクション、Windows のシム、MIME の扱い、そしてエージェントの配管を、コミュニティが上に築けるほど鋭く保っています。',
+          'Sid はデザイナーの目で細部を見るゼネラリストエンジニア。壊れた CLI のパスも、歪んだインタラクションの手触りも、どちらも見逃さないタイプのメンテナーです。OpenDesign では、エクスポートのフロー、プラグインのアクション、Windows のシム、MIME の扱い、そしてエージェントの配管を、コミュニティが上に築けるほど鋭く保っています。',
       },
     },
     allTime: {
       kicker: '歴代のシグナル',
       h2: '<em>深く根を張った</em> コントリビューターたち。',
       intro:
-        'アイデア、修正、そして手仕事を、共有される Open Design の基準へと変え続ける才能あるコントリビューターの、長く続く記録。',
+        'アイデア、修正、そして手仕事を、共有される OpenDesign の基準へと変え続ける才能あるコントリビューターの、長く続く記録。',
       rankLabel: '歴代コントリビューター',
       week: 'リポジトリの歴史',
       quote:
@@ -116,12 +116,12 @@ const ja: DeepPartial<CommunityCopy> = {
       kicker: '今週のシグナル',
       h2: '<em>今週</em> を牽引する 10 人のコントリビューター。',
       intro:
-        'PR を届け、プロダクトを良くし、Open Design を生き生きとさせる鋭いコントリビューターのスナップショット。',
+        'PR を届け、プロダクトを良くし、OpenDesign を生き生きとさせる鋭いコントリビューターのスナップショット。',
       rankLabel: '今週のリーダー',
       week: '直近 7 日間',
       handleSuffix: '· 今週の牽引役',
       blurbTemplate:
-        '{name} は今週、{prs} 件のマージ済み PR と、Open Design を動かし続ける着実な手仕事でペースを作っています。',
+        '{name} は今週、{prs} 件のマージ済み PR と、OpenDesign を動かし続ける着実な手仕事でペースを作っています。',
       statRank: 'ランク',
       statPrs: 'PR · 7日',
       headContributor: 'コントリビューター',
@@ -132,7 +132,7 @@ const ja: DeepPartial<CommunityCopy> = {
       kicker: '最初の貢献を選ぶ',
       h2: 'オープンな issue、<em>あなたのために</em> タグ付け済み。',
       intro:
-        'Open Design リポジトリの <span class="num">label:&ldquo;good first issue&rdquo;</span> からリアルタイムで。issue にコメントして引き受ければ、メンテナーが 1 日以内にアサインします。',
+        'OpenDesign リポジトリの <span class="num">label:&ldquo;good first issue&rdquo;</span> からリアルタイムで。issue にコメントして引き受ければ、メンテナーが 1 日以内にアサインします。',
       loading: 'good first issue',
       foot: '最初の <span class="num" id="issue-count">—</span> 件のオープンな good-first-issue を表示中',
       seeAll: 'GitHub ですべて見る',
@@ -171,9 +171,9 @@ const ja: DeepPartial<CommunityCopy> = {
     },
   },
   ambassadors: {
-    title: 'Ambassadors — Open Design',
-    desc: 'Open Design アンバサダーになろう。地元のアトリエを開き、ミートアップや批評会を主催し、予算、素材、そしてコアチームへの専用チャンネルを手に入れましょう。',
-    heroTitle: 'あなたの街での Open Design の <em>声</em> になろう。',
+    title: 'Ambassadors — OpenDesign',
+    desc: 'OpenDesign アンバサダーになろう。地元のアトリエを開き、ミートアップや批評会を主催し、予算、素材、そしてコアチームへの専用チャンネルを手に入れましょう。',
+    heroTitle: 'あなたの街での OpenDesign の <em>声</em> になろう。',
     heroLead:
       '地元のアトリエを開きましょう。ミートアップ、デモ、深夜の批評会を招集する。予算、素材、そしてコアチームへの専用チャンネルであなたを支えます。',
     program: {
@@ -181,7 +181,7 @@ const ja: DeepPartial<CommunityCopy> = {
       h2: '天職、<em>後援</em>、そして誓い。',
       applyCta: 'Google フォームから応募',
       applyNote:
-        'アンバサダーは Open Design を、リポジトリから、コントリビューターが一つの部屋で会えるものへと変えます。テーブルにはインク、コーヒーはもう冷めている。',
+        'アンバサダーは OpenDesign を、リポジトリから、コントリビューターが一つの部屋で会えるものへと変えます。テーブルにはインク、コーヒーはもう冷めている。',
       cols: [
         {
           n: 'I · 天職',
@@ -224,7 +224,7 @@ const ja: DeepPartial<CommunityCopy> = {
       kicker: '現場で',
       h2: '<em>アンバサダー</em> に会おう。',
       intro:
-        '地元のオーガナイザー、クリエイター、コミュニティビルダーが、Open Design をより多くのデザイナーやチームに届ける手助けをしています。',
+        '地元のオーガナイザー、クリエイター、コミュニティビルダーが、OpenDesign をより多くのデザイナーやチームに届ける手助けをしています。',
       places: [
         'サンシャインコースト、オーストラリア',
         'クアラルンプール、マレーシア',
@@ -234,8 +234,8 @@ const ja: DeepPartial<CommunityCopy> = {
     },
   },
   moderators: {
-    title: 'Moderators — Open Design',
-    desc: 'Open Design の Discord モデレーターに会い、AI ネイティブのデザイナーが作品を届け、プラグインを公開し、ベータを壊し、互いの行き詰まりを解く部屋に加わりましょう。',
+    title: 'Moderators — OpenDesign',
+    desc: 'OpenDesign の Discord モデレーターに会い、AI ネイティブのデザイナーが作品を届け、プラグインを公開し、ベータを壊し、互いの行き詰まりを解く部屋に加わりましょう。',
     heroTitle: '<em>コントリビューター</em> が集まる部屋。',
     heroLead:
       'エージェント・デザイン時代の最前線がここに開きます。Discord は世界で最も鋭い AI ネイティブのデザイナーが集う場所です。この部屋を温かく保つ番人たちに会いましょう。',
@@ -248,11 +248,11 @@ const ja: DeepPartial<CommunityCopy> = {
       cards: [
         {
           role: 'スタジオから',
-          bio: 'Open Design の創業チームより。Discord がずっと居心地の良い場所であることを願っています。どんな質問でも、いつでも声をかけてください。',
+          bio: 'OpenDesign の創業チームより。Discord がずっと居心地の良い場所であることを願っています。どんな質問でも、いつでも声をかけてください。',
         },
         {
           role: '部屋の番人',
-          bio: 'Discord とコミュニティの世話に手慣れた人。部屋を温かく、扉を開けたまま、会話が流れ続けるように保ちます。Open Design に情熱を注いでいます。',
+          bio: 'Discord とコミュニティの世話に手慣れた人。部屋を温かく、扉を開けたまま、会話が流れ続けるように保ちます。OpenDesign に情熱を注いでいます。',
         },
       ],
       channelNotes: ['届いた作品', 'ビルダーたち', '早期フィードバック', '行き詰まりを解く'],

@@ -14,7 +14,7 @@
 |---|---|
 | **Contributor**（贡献者） | 任何提过至少 1 个 merged PR 的人，无特殊权限。 |
 | **External Maintainer**（外部 Maintainer） | 按本文档规则晋升的社区贡献者。可 review、approve、关闭/重开 issue、自分配 issue。**不能点 Merge 按钮**——这一权限保留在 Core Team。 |
-| **Core Team**（核心团队） | Open Design 内部团队。拥有完整仓库写权限，是治理决策的最终权威。名册由内部维护。 |
+| **Core Team**（核心团队） | OpenDesign 内部团队。拥有完整仓库写权限，是治理决策的最终权威。名册由内部维护。 |
 
 下文除非特别说明，**讨论的都是 External Maintainer**。
 

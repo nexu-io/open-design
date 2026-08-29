@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { useLayoutEffect, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProjectView } from '../../src/components/ProjectView';
@@ -32,6 +32,8 @@ import type {
 const chatPaneMockState = vi.hoisted(() => ({
   attachments: [] as ChatAttachment[],
   commentAttachments: [] as ChatCommentAttachment[],
+  fireResizeObserverOnFocusedLayout: false,
+  resizeObserverCallbacks: [] as ResizeObserverCallback[],
 }));
 
 vi.mock('../../src/router', () => ({
@@ -121,9 +123,36 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 
 vi.mock('../../src/components/FileWorkspace', () => ({
   DESIGN_SYSTEM_TAB: '__design_system__',
-  FileWorkspace: ({ openRequest }: { openRequest?: { name: string; nonce: number } | null }) => (
-    <div data-testid="file-workspace" data-open-request-name={openRequest?.name ?? ''} />
-  ),
+  FileWorkspace: ({
+    openRequest,
+    focusMode = false,
+    onFocusModeChange,
+  }: {
+    openRequest?: { name: string; nonce: number } | null;
+    focusMode?: boolean;
+    onFocusModeChange?: (focused: boolean) => void;
+  }) => {
+    useLayoutEffect(() => {
+      if (!focusMode || !chatPaneMockState.fireResizeObserverOnFocusedLayout) return;
+      for (const callback of chatPaneMockState.resizeObserverCallbacks) {
+        callback([], {} as ResizeObserver);
+      }
+    }, [focusMode]);
+
+    return (
+      <div data-testid="file-workspace" data-open-request-name={openRequest?.name ?? ''}>
+        {focusMode ? (
+          <button
+            type="button"
+            data-testid="workspace-focus-toggle"
+            onClick={() => onFocusModeChange?.(false)}
+          >
+            show chat
+          </button>
+        ) : null}
+      </div>
+    );
+  },
 }));
 
 vi.mock('../../src/components/Loading', () => ({
@@ -137,6 +166,8 @@ vi.mock('../../src/components/ChatPane', () => ({
     onRetry,
     error,
     projectHeader,
+    onCollapse,
+    collapseControlLifted,
   }: {
     messages: ChatMessage[];
     onSend: (
@@ -147,6 +178,8 @@ vi.mock('../../src/components/ChatPane', () => ({
     onRetry?: (assistantMessage: ChatMessage) => void;
     error?: string | null;
     projectHeader?: ReactNode;
+    onCollapse?: () => void;
+    collapseControlLifted?: boolean;
   }) => {
     const lastMessage = messages[messages.length - 1];
     const retryMessage =
@@ -173,6 +206,14 @@ vi.mock('../../src/components/ChatPane', () => ({
       >
         send
       </button>
+      {/* Mirrors the real ChatPane: when the collapse control is lifted into
+          the tabs dock, the header slot renders nothing — otherwise two
+          controls would share this testid. */}
+      {collapseControlLifted ? null : (
+        <button type="button" data-testid="chat-collapse-toggle" onClick={onCollapse}>
+          collapse chat
+        </button>
+      )}
       {messages.map((message) => (
         <article key={message.id} data-testid={`message-${message.role}`}>
           <span>{message.content}</span>
@@ -203,7 +244,7 @@ const mockedPlaySound = vi.mocked(playSound);
 const config: AppConfig = {
   mode: 'api',
   apiProtocol: 'openai',
-  apiKey: 'sk-test',
+  apiKey: 'byok-test-key',
   baseUrl: 'https://api.deepseek.com',
   model: 'deepseek-chat',
   agentId: null,
@@ -266,6 +307,8 @@ describe('ProjectView API empty response handling', () => {
   beforeEach(() => {
     chatPaneMockState.attachments = [];
     chatPaneMockState.commentAttachments = [];
+    chatPaneMockState.fireResizeObserverOnFocusedLayout = false;
+    chatPaneMockState.resizeObserverCallbacks = [];
     mockedStreamViaDaemon.mockReset();
     mockedFetchProjectFilePreview.mockReset();
     mockedFetchProjectFileText.mockReset();
@@ -363,6 +406,47 @@ describe('ProjectView API empty response handling', () => {
     expect(screen.queryByRole('button', { name: 'Continue in CLI' })).toBeNull();
   });
 
+  it('keeps an empty project workspace visible across repeated chat collapse cycles', async () => {
+    class MockResizeObserver implements ResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        chatPaneMockState.resizeObserverCallbacks.push(callback);
+      }
+
+      disconnect() {}
+      observe() {}
+      unobserve() {}
+    }
+
+    vi.stubGlobal('ResizeObserver', MockResizeObserver);
+    chatPaneMockState.fireResizeObserverOnFocusedLayout = true;
+    renderProjectView();
+
+    await waitFor(() => expect(chatPaneMockState.resizeObserverCallbacks.length).toBeGreaterThan(0));
+
+    for (let round = 0; round < 3; round += 1) {
+      fireEvent.click(screen.getByTestId('chat-collapse-toggle'));
+
+      const split = document.querySelector<HTMLDivElement>('.split');
+      expect(split).not.toBeNull();
+      expect(split?.classList.contains('split-focus')).toBe(true);
+      expect(screen.getByTestId('file-workspace')).toBeTruthy();
+      expect(screen.getByTestId('workspace-focus-toggle')).toBeTruthy();
+      expect(split?.style.getPropertyValue('--project-chat-panel-width')).toBe('');
+      expect(split?.style.getPropertyValue('--project-chat-handle-width')).toBe('');
+      expect(split?.style.getPropertyValue('--project-workspace-panel-track')).toBe('');
+
+      const chatSlot = split?.querySelector<HTMLDivElement>('.split-chat-slot');
+      expect(chatSlot).not.toBeNull();
+      fireEvent.transitionEnd(split!, { propertyName: '--project-chat-panel-width' });
+      await waitFor(() => expect(chatSlot).toHaveAttribute('aria-hidden', 'true'));
+      expect(chatSlot).not.toHaveAttribute('hidden');
+
+      fireEvent.click(screen.getByTestId('workspace-focus-toggle'));
+      expect(split?.classList.contains('split-focus')).toBe(false);
+      expect(chatSlot).not.toHaveAttribute('aria-hidden');
+    }
+  });
+
   it('marks attached saved comments as failed when an API completion has no output', async () => {
     chatPaneMockState.commentAttachments = [
       {
@@ -388,11 +472,17 @@ describe('ProjectView API empty response handling', () => {
     await sendTestPrompt();
 
     await waitFor(() => {
+      // `patchPreviewCommentStatus` takes the acting workspace context as a
+      // fifth argument (1c15574c2), so the daemon can authorize the comment
+      // mutation. This harness has no cloud identity, so it is `null` — but the
+      // argument must still be matched: a four-argument matcher cannot match a
+      // five-argument call at all.
       expect(mockedPatchPreviewCommentStatus).toHaveBeenCalledWith(
         project.id,
         'conv-project-1',
         'comment-1',
         'failed',
+        null,
       );
     });
     await waitFor(() => {
@@ -628,17 +718,150 @@ describe('ProjectView API empty response handling', () => {
       expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
     });
     await waitFor(() => expect(mockedWriteProjectTextFile).toHaveBeenCalled());
+    expect(mockedWriteProjectTextFile.mock.calls[0]?.[1]).toBe('landing-page.html');
+    await waitFor(() => {
+      expect(screen.getByTestId('file-workspace').dataset.openRequestName).toBe(
+        'landing-page.html',
+      );
+    });
     await waitFor(() => expect(mockedPlaySound).toHaveBeenCalledWith('success-sound'));
     expect(mockedPlaySound).not.toHaveBeenCalledWith('failure-sound');
     expect(screen.queryByText(/provider ended the request/i)).toBeNull();
     expect(screen.queryByText('empty_response:deepseek-chat')).toBeNull();
   });
 
-  it('marks a generated artifact as failed when project persistence does not deliver it', async () => {
+  it('updates an existing project file when a chat artifact explicitly identifies it', async () => {
+    const existingIndex = {
+      name: 'index.html',
+      path: 'index.html',
+      kind: 'html',
+      mime: 'text/html',
+      size: 100,
+      mtime: 1,
+    };
+    const updatedHtml =
+      '<!doctype html><html><head><title>Updated</title></head><body><main><h1>Updated home page</h1><p>Complete replacement content for the existing project entry.</p></main></body></html>';
+    mockedFetchProjectFiles.mockResolvedValue([existingIndex] as never);
+    mockedWriteProjectTextFile.mockImplementation(
+      async (_projectId, fileName) =>
+        ({
+          ...existingIndex,
+          name: fileName,
+          path: fileName,
+          mtime: 2,
+        }) as never,
+    );
+    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+      const artifact =
+        '<artifact identifier="index" type="text/html" title="Updated Home">' +
+        updatedHtml +
+        '</artifact>';
+      options.handlers.onDelta(artifact);
+      options.handlers.onDone('');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(1));
+    expect(mockedWriteProjectTextFile.mock.calls[0]?.slice(0, 3)).toEqual([
+      'project-1',
+      'index.html',
+      updatedHtml,
+    ]);
+    await waitFor(() => {
+      expect(screen.getByTestId('file-workspace').dataset.openRequestName).toBe('index.html');
+    });
+  });
+
+  it('suffixes a title-derived artifact that collides with an existing project file', async () => {
+    const existingLandingPage = {
+      name: 'landing-page.html',
+      path: 'landing-page.html',
+      kind: 'html',
+      mime: 'text/html',
+      size: 100,
+      mtime: 1,
+    };
+    const generatedHtml =
+      '<!doctype html><html><head><title>Landing</title></head><body><main><h1>New landing page</h1><p>Complete content for a distinct generated project artifact.</p></main></body></html>';
+    mockedFetchProjectFiles.mockResolvedValue([existingLandingPage] as never);
+    mockedWriteProjectTextFile.mockImplementation(
+      async (_projectId, fileName) =>
+        ({
+          ...existingLandingPage,
+          name: fileName,
+          path: fileName,
+          mtime: 2,
+        }) as never,
+    );
+    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+      const artifact =
+        '<artifact type="text/html" title="Landing Page">' +
+        generatedHtml +
+        '</artifact>';
+      options.handlers.onDelta(artifact);
+      options.handlers.onDone('');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(1));
+    expect(mockedWriteProjectTextFile.mock.calls[0]?.slice(0, 3)).toEqual([
+      'project-1',
+      'landing-page-2.html',
+      generatedHtml,
+    ]);
+    await waitFor(() => {
+      expect(screen.getByTestId('file-workspace').dataset.openRequestName).toBe(
+        'landing-page-2.html',
+      );
+    });
+  });
+
+  it('refuses invalid HTML instead of overwriting an explicitly identified project file', async () => {
+    mockedFetchProjectFiles.mockResolvedValue([
+      {
+        name: 'index.html',
+        path: 'index.html',
+        kind: 'html',
+        mime: 'text/html',
+        size: 100,
+        mtime: 1,
+      },
+    ] as never);
+    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+      options.handlers.onDelta(
+        '<artifact identifier="index" type="text/html" title="Updated Home">Summary only.</artifact>',
+      );
+      options.handlers.onDone('');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/Refused to save artifact "index"/i).length).toBeGreaterThan(0);
+    });
+    expect(mockedWriteProjectTextFile).not.toHaveBeenCalled();
+  });
+
+  it('marks an explicitly identified overwrite as failed when persistence does not deliver it', async () => {
     const artifact =
-      '<artifact identifier="landing-page" type="text/html" title="Landing Page">' +
+      '<artifact identifier="index" type="text/html" title="Updated Home">' +
       '<!doctype html><html><head><title>Landing</title></head><body><main><h1>Landing page</h1><p>Generated design artifact with enough structure to persist.</p></main></body></html>' +
       '</artifact>';
+    mockedFetchProjectFiles.mockResolvedValue([
+      {
+        name: 'index.html',
+        path: 'index.html',
+        kind: 'html',
+        mime: 'text/html',
+        size: 100,
+        mtime: 1,
+      },
+    ] as never);
     mockedWriteProjectTextFile.mockResolvedValueOnce(null);
     mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
       options.handlers.onDelta(artifact);
@@ -663,6 +886,7 @@ describe('ProjectView API empty response handling', () => {
         ),
       ).toBe(true);
     });
+    expect(mockedWriteProjectTextFile.mock.calls[0]?.[1]).toBe('index.html');
     expect(screen.getAllByText(/couldn't save artifact/i).length).toBeGreaterThan(0);
     await waitFor(() => expect(mockedPlaySound).toHaveBeenCalledWith('failure-sound'));
     expect(mockedPlaySound).not.toHaveBeenCalledWith('success-sound');
@@ -748,7 +972,12 @@ describe('ProjectView API empty response handling', () => {
     await waitFor(() => expect(capturedOptions.current).not.toBeNull());
     expect(capturedOptions.current).toEqual(expect.objectContaining({
       agentId: 'byok-opencode',
-      byokProvider: expect.objectContaining({ protocol: 'openai', apiKey: 'sk-test' }),
+      byokProvider: expect.objectContaining({
+        protocol: 'openai',
+        apiKey: 'byok-test-key',
+        baseUrl: 'https://api.deepseek.com',
+        model: 'deepseek-chat',
+      }),
       byokMediaDefaults: {
         imageModel: 'gpt-image-2',
         speechModel: 'gpt-4o-mini-tts',
@@ -824,7 +1053,7 @@ describe('ProjectView API empty response handling', () => {
 
 async function sendTestPrompt() {
   await waitFor(() => {
-    expect(mockedListMessages).toHaveBeenCalledWith(project.id, 'conv-project-1');
+    expect(mockedListMessages).toHaveBeenCalledWith(project.id, 'conv-project-1', null);
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
   await waitFor(() => expect(screen.getByRole('button', { name: 'send' })).toBeTruthy());

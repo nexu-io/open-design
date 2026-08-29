@@ -14,6 +14,10 @@ inputs:
     description: JSON array of labels selected for this job's runs-on value
     required: false
     default: '[]'
+  save-pnpm-cache:
+    description: Save a missing pnpm cache after install; trusted main seed jobs only
+    required: false
+    default: 'false'
 
 runs:
   using: composite
@@ -43,7 +47,17 @@ runs:
           echo "enabled=true" >> "$GITHUB_OUTPUT"
           echo "path=$store_dir" >> "$GITHUB_OUTPUT"
         else
+          # Force a stable home store path so actions/cache version hashes match
+          # across fleets (hosted vs Nexu ARC). ARC may copy instead of hardlink;
+          # that is acceptable for cache hit stability.
+          store_dir="$HOME/.pnpm-store"
+          mkdir -p "$store_dir"
+          {
+            echo "NPM_CONFIG_STORE_DIR=$store_dir"
+            echo "npm_config_store_dir=$store_dir"
+          } >> "$GITHUB_ENV"
           echo "enabled=false" >> "$GITHUB_OUTPUT"
+          echo "path=$store_dir" >> "$GITHUB_OUTPUT"
         fi
 
     - name: Setup pnpm
@@ -62,13 +76,23 @@ runs:
       shell: bash
       run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
 
-    - name: Cache pnpm store
+    - name: Restore pnpm store
+      id: pnpm-cache-restore
       if: ${{ steps.persistent-pnpm-store.outputs.enabled != 'true' }}
-      uses: actions/cache@v5.0.5
+      uses: actions/cache/restore@v5
       with:
         path: ${{ steps.pnpm-store.outputs.path }}
         key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: |
+          pnpm-store-${{ runner.os }}-
 
     - name: Install dependencies
       shell: bash
       run: pnpm install --frozen-lockfile
+
+    - name: Save pnpm store
+      if: ${{ inputs.save-pnpm-cache == 'true' && steps.persistent-pnpm-store.outputs.enabled != 'true' && steps.pnpm-cache-restore.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ steps.pnpm-store.outputs.path }}
+        key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}

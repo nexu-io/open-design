@@ -60,7 +60,7 @@ without code churn.
   `ScoreTicker` and `TheaterCollapsed` read `composite` straight off
   the wire and never recompute it from per-panelist scores. V2
   lands per-skill cast configuration as a Settings surface
-  (`apps/web/src/components/Settings/`) that writes to the project's
+  (`apps/web/src/components/SettingsDialog.tsx`) that writes to the project's
   settings row; the daemon resolver reads that row and feeds the
   per-run weight map into the composite computation, so the web
   layer continues to render whatever number the daemon produces. Do
@@ -73,16 +73,16 @@ without code churn.
 1. Update `packages/contracts/src/critique.ts` first if the wire shape
    changes. The web reducer keys off `PanelEvent`; the SSE manager
    keys off `CRITIQUE_SSE_EVENT_NAMES`. Both live in that one file.
-2. Add an i18n key to `apps/web/src/i18n/types.ts` and seed the en +
-   zh-CN value (the other 16 locales pick up English via `...en`
-   spread). Native translations for de, ja, ko, zh-TW land in the
-   same PR for the six-locale set the spec mandates.
+2. Add an i18n key to `apps/web/src/i18n/types.ts`, then define it in
+   all 19 files under `apps/web/src/i18n/locales/`. The locale files
+   carry complete dictionaries rather than inheriting missing keys from
+   English.
 3. Run `pnpm --filter @open-design/web exec vitest run tests/components/Theater`
    before pushing. The suite has 100+ cases pinning the reducer
    shape, SSE validation, host lifecycle, and component renders.
 4. Visual regression: run `pnpm --filter @open-design/e2e test:ui:extended`
    with `--update-snapshots` after any CSS change in
-   `apps/web/src/index.css`'s `.theater-*` block.
+   `apps/web/src/styles/viewer/theater.css`'s `.theater-*` block.
 
 ## Related
 

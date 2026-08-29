@@ -21,6 +21,8 @@ import { readFileSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
+import type { OdNextRolloutMode } from '@open-design/contracts';
+
 import { expandHomePrefix } from './home-expansion.js';
 
 import {
@@ -77,6 +79,7 @@ export function readPluginEnvKnobs(): PluginEnvKnobs {
 export interface AgentModelPrefs {
   model?: string;
   reasoning?: string;
+  serviceTier?: string;
 }
 
 export type AgentCliEnvPrefs = Record<string, Record<string, string>>;
@@ -92,6 +95,10 @@ export interface OrbitConfigPrefs {
   enabled: boolean;
   time: string;
   templateSkillId?: string | null;
+  workspaceScope?: {
+    workspaceId: string;
+    workspaceMemberId: string;
+  } | null;
 }
 
 export interface ProjectLocationPrefs {
@@ -118,6 +125,10 @@ export interface AppConfigPrefs {
   customInstructions?: string | null;
   projectLocations?: ProjectLocationPrefs[];
   defaultProjectLocationId?: string | null;
+  // Whether this installation opts into the OD Next design strategy. Absent
+  // and null both mean `off` — OD Next is opt-in. `OD_NEXT_STRATEGY_ROLLOUT`
+  // outranks this when set; see readOdNextRolloutPolicy.
+  odNextStrategyMode?: OdNextRolloutMode | null;
   // Most-recently-used local working directories the user granted the agent
   // read access to from the Home composer. Become a project's
   // `metadata.linkedDirs` (read-only `--add-dir` awareness, no Design Files
@@ -147,6 +158,7 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'customInstructions',
   'projectLocations',
   'defaultProjectLocationId',
+  'odNextStrategyMode',
   'recentLinkedDirs',
 ] as const);
 
@@ -163,7 +175,11 @@ export function appConfigDir(projectRoot: string, env: NodeJS.ProcessEnv = proce
   return path.isAbsolute(expanded) ? expanded : path.resolve(projectRoot, expanded);
 }
 
-const AGENT_MODEL_KEYS: ReadonlySet<string> = new Set(['model', 'reasoning']);
+const AGENT_MODEL_KEYS: ReadonlySet<string> = new Set([
+  'model',
+  'reasoning',
+  'serviceTier',
+]);
 const RETIRED_AGENT_IDS: ReadonlySet<string> = new Set(['gemini']);
 
 const TELEMETRY_KEYS: ReadonlySet<string> = new Set([
@@ -314,6 +330,23 @@ function validateOrbit(raw: unknown): OrbitConfigPrefs | undefined {
     orbit.templateSkillId = typeof obj.templateSkillId === 'string' && obj.templateSkillId.trim()
       ? obj.templateSkillId.trim()
       : null;
+  }
+  if (Object.hasOwn(obj, 'workspaceScope')) {
+    const rawScope = obj.workspaceScope;
+    if (rawScope && typeof rawScope === 'object' && !Array.isArray(rawScope)) {
+      const workspaceId =
+        typeof (rawScope as Record<string, unknown>).workspaceId === 'string'
+          ? ((rawScope as Record<string, unknown>).workspaceId as string).trim()
+          : '';
+      const workspaceMemberId =
+        typeof (rawScope as Record<string, unknown>).workspaceMemberId === 'string'
+          ? ((rawScope as Record<string, unknown>).workspaceMemberId as string).trim()
+          : '';
+      orbit.workspaceScope =
+        workspaceId && workspaceMemberId ? { workspaceId, workspaceMemberId } : null;
+    } else {
+      orbit.workspaceScope = null;
+    }
   }
 
   return orbit;
@@ -575,6 +608,19 @@ function applyConfigValue(
   if (key === 'orbit') {
     const validated = validateOrbit(value);
     if (validated !== undefined) {
+      const existingOrbit = target[key] as OrbitConfigPrefs | undefined;
+      if (
+        value
+        && typeof value === 'object'
+        && !Array.isArray(value)
+        && !Object.hasOwn(value, 'workspaceScope')
+        && existingOrbit?.workspaceScope
+      ) {
+        // Older clients do not know this field. Editing Orbit time/enabled
+        // must not silently convert an already-scoped unattended automation
+        // back into an ambient/unbound one. An explicit null still clears it.
+        validated.workspaceScope = existingOrbit.workspaceScope;
+      }
       target[key] = validated;
     } else {
       delete target[key];
@@ -602,6 +648,19 @@ function applyConfigValue(
       target[key] = normalizeLocationId(value, 'default');
     } else if (value === null) {
       target[key] = null;
+    } else {
+      delete target[key];
+    }
+    return;
+  }
+  if (key === 'odNextStrategyMode') {
+    // Reached with a non-mode value only on the READ path, where a corrupted or
+    // hand-edited file must not take the daemon down: drop it and let the
+    // installation read as unconfigured, which is `off`. A WRITE never gets
+    // here with a bad value — `assertWritableControlValues` refuses it first,
+    // so a typo cannot masquerade as an opt-out.
+    if (value === 'off' || value === 'observe' || value === 'active') {
+      target[key] = value;
     } else {
       delete target[key];
     }
@@ -771,10 +830,47 @@ export async function writeAppConfig(
   }
 }
 
+/** Thrown by `writeAppConfig` when a control key is handed a value it cannot mean. */
+export class InvalidAppConfigValueError extends Error {
+  readonly code = 'INVALID_APP_CONFIG_VALUE';
+
+  constructor(public readonly key: string, message: string) {
+    super(message);
+    this.name = 'InvalidAppConfigValueError';
+  }
+}
+
+/**
+ * Refuse a write that names a control key with a value that is not one of its
+ * modes.
+ *
+ * Every other preference here is sanitized by dropping what it cannot store,
+ * and that is the right trade for a preference: the cost of a bad value is one
+ * setting falling back to its default. `odNextStrategyMode` is not a
+ * preference — it decides whether OD Next runs at all, so dropping it is not a
+ * neutral outcome. It reads as an opt-out, which means
+ * `od config set odNextStrategyMode acive` would switch the installation off
+ * while printing success, and the person who typed it would have no way to
+ * tell that from the opt-out they never asked for.
+ *
+ * So a typo fails loudly instead. `null` stays a legitimate value: clearing the
+ * key IS the deliberate way to opt back out.
+ */
+function assertWritableControlValues(partial: Record<string, unknown>): void {
+  if (!Object.prototype.hasOwnProperty.call(partial, 'odNextStrategyMode')) return;
+  const value = partial.odNextStrategyMode;
+  if (value === null || value === 'off' || value === 'observe' || value === 'active') return;
+  throw new InvalidAppConfigValueError(
+    'odNextStrategyMode',
+    'odNextStrategyMode must be one of "off", "observe", "active", or null',
+  );
+}
+
 async function doWrite(
   dataDir: string,
   partial: Record<string, unknown>,
 ): Promise<AppConfigPrefs> {
+  assertWritableControlValues(partial);
   const existing = await readAppConfig(dataDir);
   const next: Record<string, unknown> = { ...existing };
   for (const key of Object.keys(partial)) {

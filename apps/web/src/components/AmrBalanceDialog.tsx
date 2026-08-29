@@ -9,7 +9,8 @@ import {
   attributedAmrUrl,
   recordAmrEntry,
 } from '../analytics/amr-attribution';
-import { amrConsoleUrlForProfile } from '../runtime/amr-guidance';
+import { useWorkspaceBilling, useWorkspaceContext } from '../collab/useWorkspaceContext';
+import { workspaceUpgradeUrl } from './EntryNavRail';
 import {
   AMR_HARD_BLOCK_BALANCE_USD,
   amrWalletBalanceUsd,
@@ -30,7 +31,7 @@ interface Props {
   reason: 'insufficient' | 'signed_out';
   /** Raw wallet balance string from the blocking snapshot; null hides the badge. */
   balanceUsd: string | null;
-  /** Open Design Cloud profile from the blocking snapshot; picks the console origin. */
+  /** OpenDesign Cloud profile from the blocking snapshot; picks the console origin. */
   profile: string | null;
   /** Which surface blocked the send — keys the amr_entry attribution. */
   entrySource: 'home_balance_gate_upgrade' | 'chat_balance_gate_upgrade';
@@ -43,19 +44,20 @@ interface Props {
   onResolved: () => void;
 }
 
-// HARD pre-run blocker for Open Design Cloud tasks: the run cannot possibly
+// HARD pre-run blocker for OpenDesign Cloud tasks: the run cannot possibly
 // succeed, so the send is stopped BEFORE any run spawns — unlike the
 // post-failure AMR_INSUFFICIENT_BALANCE error card which appears after a run
 // already burned its startup. It fires at the moment of PEAK intent — the
 // user just wrote a task and pressed send — so it must read as "one step from
 // starting", never as an error. Two variants with distinct copy AND CTAs:
 //
-//   insufficient — signed in, wallet definitively empty. CTA opens the
-//     console WALLET page (not the plans modal directly: free users landing
-//     on the wallet already get the subscription modal auto-opened, while
-//     paying users see top-up options in place). Balance badge shown.
+//   insufficient — signed in, wallet definitively empty. The CTA reads
+//     「升级套餐」, so it must LAND on the plan picker rather than drop the user
+//     on a page to hunt for it: it opens the team dashboard with B's
+//     `billing=checkout` deep link, which auto-opens the checkout dialog on
+//     arrival. Balance badge shown.
 //
-//   signed_out — Open Design Cloud selected but no account session. The CTA
+//   signed_out — OpenDesign Cloud selected but no account session. The CTA
 //     is the in-app sign-in (AmrLoginPill: spawns vela login, surfaces the
 //     activation link when the browser doesn't auto-open, polls until done);
 //     sending the user to the wallet website would be a dead end.
@@ -93,6 +95,18 @@ export function AmrBalanceDialog({
   // resume the parked task via onResolved. Bounded so an abandoned recharge
   // doesn't poll forever; guarded against double-fires.
   const [watchingWallet, setWatchingWallet] = useState(false);
+  // `workspaceUpgradeUrl` keeps every generic upgrade affordance on the public
+  // Pricing comparison surface. A concrete card there owns the Cloud handoff.
+  const {
+    context: workspaceContext,
+    loading: workspaceContextLoading,
+  } = useWorkspaceContext();
+  const workspaceBilling = useWorkspaceBilling();
+  const upgradeUrl = workspaceContextLoading
+    ? null
+    : workspaceUpgradeUrl(workspaceContext, workspaceBilling, {
+        fallbackProfile: profile,
+      });
   const resolvedRef = useRef(false);
   const resolveOnce = () => {
     if (resolvedRef.current) return;
@@ -124,9 +138,10 @@ export function AmrBalanceDialog({
     // resolveOnce is stable via ref; onResolved changes don't re-arm the watch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchingWallet]);
-  const openWallet = () => {
+  const openUpgrade = () => {
+    if (!upgradeUrl) return;
     setWatchingWallet(true);
-    // Same attribution handshake as the other Open Design Cloud handoffs
+    // Same attribution handshake as the other OpenDesign Cloud handoffs
     // (ChatPane recharge, AvatarMenu upgrade): record the amr_entry, forward
     // the consent-gated device id, and open the console for the profile.
     const attribution = recordAmrEntry(analytics.track, entrySource, new Date(), {
@@ -138,7 +153,7 @@ export function AmrBalanceDialog({
       installationId,
     });
     window.open(
-      attributedAmrUrl(amrConsoleUrlForProfile(profile), attribution, deviceId),
+      attributedAmrUrl(upgradeUrl, attribution, deviceId),
       '_blank',
       'noopener,noreferrer',
     );
@@ -166,8 +181,16 @@ export function AmrBalanceDialog({
       >
         <Icon name="close" size={14} />
       </button>
-      <div className={styles.iconBadge} aria-hidden>
-        <Icon name="sparkles" size={22} />
+      <div className={styles.banner}>
+        <img
+          className={styles.bannerImage}
+          src="/upgrade/cloud-signin-aurora.jpg"
+          alt=""
+          width={1680}
+          height={720}
+          decoding="async"
+          draggable={false}
+        />
       </div>
       <h2 className={styles.title}>
         {signedOut ? t('chat.amrBalanceGate.signedOutTitle') : t('chat.amrBalanceGate.title')}
@@ -195,7 +218,12 @@ export function AmrBalanceDialog({
           ))}
         </ul>
       </div>
+      {/* Dismissal first in DOM so it lands on the left of the row and focus
+          order matches the reading order; the CTA follows on the right. */}
       <div className={styles.actions}>
+        <Button variant="ghost" className={styles.later} onClick={onClose}>
+          {t('chat.amrBalanceGate.laterCta')}
+        </Button>
         {signedOut ? (
           <AmrLoginPill
             className={styles.signInPill}
@@ -211,19 +239,16 @@ export function AmrBalanceDialog({
               if (loginStatus?.loggedIn === true) resolveOnce();
             }}
           />
-        ) : (
+        ) : upgradeUrl ? (
           <Button
             variant="primary"
             className={styles.cta}
-            onClick={openWallet}
+            onClick={openUpgrade}
             data-testid="amr-balance-dialog-plans"
           >
             {t('chat.amrBalanceGate.plansCta')}
           </Button>
-        )}
-        <Button variant="ghost" className={styles.later} onClick={onClose}>
-          {t('chat.amrBalanceGate.laterCta')}
-        </Button>
+        ) : null}
       </div>
       {watchingWallet ? (
         <p className={styles.watchingHint} data-testid="amr-balance-dialog-watching">

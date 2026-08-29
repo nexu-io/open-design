@@ -20,6 +20,12 @@
  */
 
 import { createRoleMarkerGuard, type RoleMarkerGuard } from '../role-marker-guard.js';
+import {
+  createClaudeChildEvidenceCollector,
+  type ClaudeChildRuntimeFact,
+  type ClaudeChildToolRuntimeFact,
+  type ClaudeOpenChildTerminationReason,
+} from './claude-child-evidence.js';
 
 type StreamEvent = Record<string, unknown>;
 type EventSink = (event: StreamEvent) => void;
@@ -41,8 +47,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-interface ClaudeStreamHandlerOptions {
+export interface ClaudeStreamHandlerOptions {
   suppressHtmlArtifactsAfterFileWrite?: boolean;
+  onChildRuntimeFact?: (fact: ClaudeChildRuntimeFact) => void;
+  onChildToolRuntimeFact?: (fact: ClaudeChildToolRuntimeFact) => void;
+  childEvidenceNow?: () => number;
+  nativeBuildPackageBindings?: Readonly<Record<string, string>>;
+  /** Consume forwarded Child frames only as native evidence, never as parent UI output. */
+  suppressForwardedSubagentEvents?: boolean;
 }
 
 export function createClaudeStreamHandler(
@@ -50,6 +62,18 @@ export function createClaudeStreamHandler(
   options: ClaudeStreamHandlerOptions = {},
 ) {
   let buffer = '';
+  const childEvidence = options.onChildRuntimeFact || options.onChildToolRuntimeFact
+    ? createClaudeChildEvidenceCollector({
+        ...(options.onChildRuntimeFact ? { onFact: options.onChildRuntimeFact } : {}),
+        ...(options.onChildToolRuntimeFact
+          ? { onToolFact: options.onChildToolRuntimeFact }
+          : {}),
+        ...(options.childEvidenceNow ? { now: options.childEvidenceNow } : {}),
+        ...(options.nativeBuildPackageBindings
+          ? { nativeBuildPackageBindings: options.nativeBuildPackageBindings }
+          : {}),
+      })
+    : null;
 
   // Per-content-block scratch, keyed by `${messageId}:${blockIndex}`.
   const blocks = new Map<string, BlockState>();
@@ -377,6 +401,15 @@ export function createClaudeStreamHandler(
   function handleObject(obj: unknown) {
     if (!isRecord(obj)) return;
 
+    childEvidence?.observe(obj);
+    if (
+      options.suppressForwardedSubagentEvents === true &&
+      typeof obj.parent_tool_use_id === 'string' &&
+      obj.parent_tool_use_id.trim().length > 0
+    ) {
+      return;
+    }
+
     if (obj.type === 'system' && obj.subtype === 'init') {
       onEvent({
         type: 'status',
@@ -465,7 +498,13 @@ export function createClaudeStreamHandler(
           wroteHtmlFileThisTurn = false;
         }
       }
-      if (typeof obj.error === 'string' && obj.error.trim()) {
+      // A sub-agent (parent_tool_use_id != null) in-stream error must NOT be
+      // emitted as a run-level error: it condemns a main turn that has already
+      // recovered (end_turn + is_error:false result + exit 0) to a false
+      // `failed`. Mirror the parent_tool_use_id guard the turn_end emit above
+      // already carries (#5488). Main-turn errors (connection-drop path) are
+      // unaffected since they carry a null parent_tool_use_id.
+      if (typeof obj.error === 'string' && obj.error.trim() && obj.parent_tool_use_id == null) {
         onEvent({
           type: 'error',
           message: assistantText(obj.message.content) || obj.error,
@@ -514,10 +553,15 @@ export function createClaudeStreamHandler(
         ...(isError ? { isError: true } : {}),
       });
       if (isError) {
+        const message = errorResultMessage(obj);
         onEvent({
           type: 'error',
-          message: errorResultMessage(obj),
-          code: typeof obj.subtype === 'string' && obj.subtype ? obj.subtype : 'result_error',
+          message,
+          code: isPromptTooLongResult(message)
+            ? 'AGENT_PROMPT_TOO_LARGE'
+            : typeof obj.subtype === 'string' && obj.subtype
+              ? obj.subtype
+              : 'result_error',
           // Marks this as the run's terminal error (the CLI is exiting), not an
           // in-stream hiccup. Consumers with their own result-frame
           // classification (connection test #4501) skip terminal errors.
@@ -538,6 +582,10 @@ export function createClaudeStreamHandler(
     if (typeof obj.result === 'string' && obj.result.trim()) return obj.result;
     if (typeof obj.subtype === 'string' && obj.subtype) return `Claude run failed: ${obj.subtype}`;
     return 'Claude run failed';
+  }
+
+  function isPromptTooLongResult(message: string): boolean {
+    return /^(?:API Error:\s*)?Prompt is too long\.?$/i.test(message.trim());
   }
 
   function assistantText(content: unknown[]): string {
@@ -650,7 +698,15 @@ export function createClaudeStreamHandler(
     emitSafeText(currentMessageId, text);
   }
 
-  return { feed, flush };
+  function finishOpenChildEvidence(reason: ClaudeOpenChildTerminationReason): void {
+    childEvidence?.finishOpenChildren(reason);
+  }
+
+  function childEvidenceCoverage() {
+    return childEvidence?.coverage();
+  }
+
+  return { feed, flush, finishOpenChildEvidence, childEvidenceCoverage };
 }
 
 function stringifyToolResult(content: unknown): string {

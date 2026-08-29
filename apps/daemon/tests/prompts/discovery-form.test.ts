@@ -4,127 +4,64 @@ import { renderDiscoveryAndPhilosophy } from '../../src/prompts/discovery.js';
 
 const DISCOVERY_AND_PHILOSOPHY = renderDiscoveryAndPhilosophy('filesystem');
 
-// The default-router exception in `discovery.ts` emits a single `<question-form
-// id="task-type">` on turn 1 that combines the routing question (which Open
-// Design workflow to take) with the core discovery brief (audience / brand /
-// scale / constraints). Before this consolidation, freeform projects (no Home
-// chip pick) saw two clarification cards in a row — task-type, then "Quick
-// brief — 30 seconds" — which felt like the agent was re-asking. These tests
-// lock the single-shot shape so a future prompt edit cannot accidentally split
-// the brief into two turns again.
-
-describe('discovery.ts task-type form (single-shot brief)', () => {
-  it('emits a task-type form that asks the routing question plus the discovery brief', () => {
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('<question-form id="task-type"');
-    // Task-type radio + the four discovery brief fields must all live in this
-    // single form so the user does not see a second clarification card.
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"id": "taskType"');
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"id": "audience"');
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"id": "brand"');
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"id": "scale"');
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"id": "speakerNotes"');
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"type": "switch"');
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"id": "constraints"');
+describe('discovery.ts — on-demand clarification policy', () => {
+  it('skips the form when the brief and known context are sufficient', () => {
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      'If they provide enough information to make a sound design and delivery decision, skip the form',
+    );
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      'Skip the form whenever the brief and known context are sufficient',
+    );
   });
 
-  it('preserves the three branch values RULE 2 dispatches on', () => {
-    // RULE 2 line 130+ keys off these exact `brand` answer values to choose
-    // Branch A (real brand source) vs Branch B (auto-pick). They are part of
-    // the discovery contract — labels can localize but values must not.
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"value": "pick_direction"');
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"value": "brand_spec"');
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"value": "reference_match"');
+  it('asks only for unresolved information that materially changes the result', () => {
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      'only when an unresolved answer would materially change the design direction, content structure, or delivery format',
+    );
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      'A missing field is an unresolved fact, not an instruction to ask',
+    );
   });
 
-  it('keeps the eight canonical task-type options', () => {
-    const options = [
-      'Prototype',
-      'Live artifact',
-      'Slide deck',
-      'Image',
-      'Video',
-      'HyperFrames',
-      'Audio',
-      'Other',
-    ];
-    for (const option of options) {
-      expect(DISCOVERY_AND_PHILOSOPHY).toContain(`"${option}"`);
+  it('does not use turn number, project creation, stage presence, or empty metadata as triggers', () => {
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      'A first turn, a new project, a discovery stage, or an unfilled metadata field does not by itself require a form',
+    );
+    for (const forbidden of [
+      'turn 1 must emit',
+      'very first output',
+      'The form **applies** even when',
+      'ask anyway',
+      '**Only** skip the form',
+    ]) {
+      expect(DISCOVERY_AND_PHILOSOPHY).not.toContain(forbidden);
     }
   });
 
-  it('forbids the agent from emitting a second Quick brief form after task-type answers', () => {
-    // The whole point of the consolidation: once turn 1's task-type form is
-    // answered, turn 2 must go straight to brand handling / planning. A regex
-    // is brittle so check for the explicit no-second-form sentence the prompt
-    // ships with.
-    expect(DISCOVERY_AND_PHILOSOPHY).toMatch(
-      /do NOT emit a second `<question-form id="discovery">` \/ "Quick brief — 30 seconds" form/,
-    );
+  it('keeps the generic question-form protocol and stable brand branches', () => {
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain('<question-form id="discovery"');
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"value": "pick_direction"');
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"value": "brand_spec"');
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"value": "reference_match"');
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain('**Hard cap: 5 questions per form — never more.**');
   });
 
-  it('forbids pairing a tailored discovery form with the default Quick brief in one turn', () => {
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('Emit exactly ONE `<question-form>` in this turn.');
+  it('leaves the task-type form to od-default while accepting historical answers', () => {
+    expect(DISCOVERY_AND_PHILOSOPHY).not.toContain('<question-form id="task-type"');
     expect(DISCOVERY_AND_PHILOSOPHY).toContain(
-      'that tailored form replaces the default "Quick brief — 30 seconds" form; never output both.',
+      'It owns the conditional `task-type` form; do not reproduce or extend that form here',
     );
-  });
-
-  it('requires the discovery question form before any tool use', () => {
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('No native tool calls');
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
-      'Do not call TodoWrite, write files, or invoke any native tool before emitting the complete `<question-form>...</question-form>` block',
-    );
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('the form itself is the next action');
-  });
-
-  it('teaches RULE 2 to accept the task-type answer marker alongside discovery', () => {
-    // RULE 2's first sentence enumerates the answer markers it routes on. The
-    // single-shot brief means `[form answers — task-type]` must be a valid
-    // entry point — equivalent to `[form answers — discovery]` for the brand
-    // branching logic that follows.
     expect(DISCOVERY_AND_PHILOSOPHY).toMatch(
       /\[form answers — discovery\][^.]*\[form answers — task-type\]/,
     );
   });
-});
 
-describe('discovery.ts form prefill contract', () => {
-  // Every emitted <question-form> ships a brief-inferred recommended `default`
-  // per question so the user can submit the form unchanged. The web renderer
-  // already honours `default`/`defaultValue` (question-form.ts parseDefaultValue
-  // + QuestionForm initial state); these markers keep the instruction side and
-  // the example anchors from regressing.
-  it('instructs a recommended default prefill on every question', () => {
+  it('emits a complete form before tools only after clarification is needed', () => {
     expect(DISCOVERY_AND_PHILOSOPHY).toContain(
-      'Prefill every question with a recommended `default`',
+      'When a form is needed, emit the complete block before TodoWrite, file writes, Bash, or other native tools',
     );
     expect(DISCOVERY_AND_PHILOSOPHY).toContain(
-      'a form the user can submit unchanged and still get a sensible build',
+      'After `</question-form>`, **stop your turn**',
     );
-  });
-
-  it('prefills the router form too, without loosening its verbatim guard', () => {
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
-      'Do not rename, tailor, drop, reorder, or rewrite the `taskType` options',
-    );
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
-      "set each question's `default` to your brief-inferred recommendation",
-    );
-  });
-
-  it('exempts the verbatim task-type router form from the 5-question cap', () => {
-    // Reviewer finding on #5603: the hard cap said "never more than 5" while
-    // the locked router form above it carries six fields — two frozen
-    // instructions the model could not satisfy at once. The cap now names the
-    // router form as its one sanctioned exception; both must stay present.
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('**Hard cap: 5 questions per form — never more.**');
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
-      'The one sanctioned exception is the verbatim `<question-form id="task-type">` router form',
-    );
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('never a reason to trim the router form');
-  });
-
-  it('anchors the pattern with a concrete default in the example forms', () => {
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"default": "pick_direction"');
   });
 });

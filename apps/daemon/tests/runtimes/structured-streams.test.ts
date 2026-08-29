@@ -949,6 +949,29 @@ describe('structured agent stream fixtures', () => {
     expect(String(error?.message)).toContain('No conversation found with session ID');
   });
 
+  it('marks a terminal prompt-length result with the stable prompt-too-large code (#6979)', () => {
+    const events: Array<Record<string, unknown>> = [];
+    const handler = createClaudeStreamHandler((event: unknown) => {
+      events.push(event as Record<string, unknown>);
+    });
+
+    handler.feed(`${JSON.stringify({
+      type: 'result',
+      subtype: 'error_during_execution',
+      is_error: true,
+      result: 'Prompt is too long',
+      stop_reason: null,
+    })}\n`);
+    handler.flush();
+
+    expect(events.find((event) => event.type === 'error')).toMatchObject({
+      type: 'error',
+      message: 'Prompt is too long',
+      code: 'AGENT_PROMPT_TOO_LARGE',
+      terminal: true,
+    });
+  });
+
   it('does not flag a successful result as an error', () => {
     const events: Array<Record<string, unknown>> = [];
     const handler = createClaudeStreamHandler((event: unknown) => {

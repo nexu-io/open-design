@@ -10,13 +10,23 @@ export function bearerTokenFromRequest(req: Request): string | undefined {
 }
 
 export function createToolRequestAuth(registry: ToolTokenRegistry): {
-  authorizeToolRequest(req: Request, res: Response, operation: string): ToolTokenGrant | null;
+  authorizeToolRequest(
+    req: Request,
+    res: Response,
+    operation: string,
+    options?: { endpoint?: string },
+  ): ToolTokenGrant | null;
   optionalToolGrantFromRequest(req: Request, options?: Parameters<ToolTokenRegistry['validate']>[1]): ToolTokenGrant | null;
   requestProjectOverride(projectId: string | null | undefined, tokenProjectId: string | null | undefined): boolean;
   requestRunOverride(runId: string | null | undefined, tokenRunId: string | null | undefined): boolean;
 } {
-  function authorizeToolRequest(req: Request, res: Response, operation: string): ToolTokenGrant | null {
-    const endpoint = req.path;
+  function authorizeToolRequest(
+    req: Request,
+    res: Response,
+    operation: string,
+    options: { endpoint?: string } = {},
+  ): ToolTokenGrant | null {
+    const endpoint = options.endpoint ?? req.path;
     const validation = registry.validate(bearerTokenFromRequest(req), { endpoint, operation });
     if (!validation.ok) {
       const status = validation.code === 'TOOL_ENDPOINT_DENIED' || validation.code === 'TOOL_OPERATION_DENIED' ? 403 : 401;

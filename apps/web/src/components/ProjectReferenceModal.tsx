@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { Project } from '../types';
 import { useI18n } from '../i18n';
 import { getProjectDetail, listProjects } from '../state/projects';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { dirExists } from '../providers/registry';
 import { Icon } from './Icon';
 import styles from './ProjectReferenceModal.module.css';
@@ -14,6 +15,7 @@ export interface ProjectReferenceSelection {
 
 interface Props {
   currentProjectId?: string | null;
+  workspaceContext?: WorkspaceCollabContext | null;
   onClose: () => void;
   onSelect: (items: ProjectReferenceSelection[]) => void;
 }
@@ -33,7 +35,12 @@ function projectMeta(project: Project): string {
   return project.metadata?.baseDir || project.metadata?.entryFile || project.metadata?.kind || project.id;
 }
 
-export function ProjectReferenceModal({ currentProjectId, onClose, onSelect }: Props) {
+export function ProjectReferenceModal({
+  currentProjectId,
+  workspaceContext = null,
+  onClose,
+  onSelect,
+}: Props) {
   const { t } = useI18n();
   const loadFailedMessage = t('chat.referenceProject.loadFailed');
   const [projects, setProjects] = useState<Project[] | null>(null);
@@ -108,7 +115,17 @@ export function ProjectReferenceModal({ currentProjectId, onClose, onSelect }: P
         // `ensureDir` materializes a managed project's folder before we read
         // its resolved dir, so an empty (never-generated) project references
         // to a real directory instead of a path that fails existence checks.
-        const detail = await getProjectDetail(project.id, { ensureDir: true });
+        const persistedProjectWorkspaceId = project.workspaceId?.trim() ?? '';
+        const projectWorkspaceContext =
+          persistedProjectWorkspaceId
+          && workspaceContext?.workspaceId === persistedProjectWorkspaceId
+            ? workspaceContext
+            : null;
+        const detail = await getProjectDetail(
+          project.id,
+          { ensureDir: true },
+          projectWorkspaceContext,
+        );
         const resolvedDir =
           detail?.resolvedDir?.trim() || detail?.project.metadata?.baseDir?.trim() || '';
         if (!detail || !resolvedDir) {

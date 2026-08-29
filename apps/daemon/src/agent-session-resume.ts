@@ -9,6 +9,10 @@ import {
   latestCompletedAssistantMessageId,
   upsertAgentSession,
 } from './db.js';
+import {
+  parseStableSections,
+  type StableSectionHashes,
+} from './prompts/stable-sections.js';
 
 type SqliteDb = Database.Database;
 
@@ -25,11 +29,98 @@ export interface AgentResumeContext {
   isResuming: boolean;
   /** Hash of the stable instruction block last sent on this session, or null. */
   storedStablePromptHash: string | null;
+  /**
+   * Per-section digests behind `storedStablePromptHash`, for naming which input
+   * drifted when the hash no longer matches. Diagnostic only — never an input
+   * to the resume decision.
+   */
+  storedStableSections: StableSectionHashes | null;
   /** Set when a stored session existed but was rejected; see the type. */
   invalidationReason: ResumeInvalidationReason | null;
 }
 
 export type CapturedAgentSessionResult = 'stored' | 'cleared' | 'skipped';
+
+export type AgentResumeTranscriptMode = 'resume-session' | 'full-transcript';
+
+export interface AgentResumePromptPolicy {
+  mode: AgentResumeTranscriptMode;
+  /** Stored upstream handle to continue this turn, or null when reseeding. */
+  resumeSessionId: string | null;
+  /** True only when the daemon also asks the agent to resume native state. */
+  skipTranscript: boolean;
+  /** True for every guard miss, missing handle, unsupported adapter, or create turn. */
+  requiresFullTranscript: boolean;
+  invalidationReason: ResumeInvalidationReason | null;
+}
+
+export interface AgentResumeFailurePolicy {
+  resumeFailed: boolean;
+  /** Clear the persisted handle before the next attempt. */
+  clearStaleSession: boolean;
+  /** Re-run this turn fresh so the daemon sends the full transcript. */
+  autoReseedFullTranscript: boolean;
+  reason: 'resume_failed' | null;
+}
+
+/**
+ * Shared transcript policy for resumable adapters. Native continuation and
+ * transcript skipping are coupled: if the daemon cannot prove it is resuming a
+ * valid upstream session this turn, the prompt path must recompose the full
+ * transcript.
+ */
+export function resolveAgentResumePromptPolicy(
+  ctx: Pick<AgentResumeContext, 'isResuming' | 'resumeSessionId' | 'invalidationReason'>,
+): AgentResumePromptPolicy {
+  const canResume =
+    ctx.isResuming === true
+    && typeof ctx.resumeSessionId === 'string'
+    && ctx.resumeSessionId.length > 0
+    && ctx.invalidationReason == null;
+  if (canResume) {
+    return {
+      mode: 'resume-session',
+      resumeSessionId: ctx.resumeSessionId,
+      skipTranscript: true,
+      requiresFullTranscript: false,
+      invalidationReason: null,
+    };
+  }
+  return {
+    mode: 'full-transcript',
+    resumeSessionId: null,
+    skipTranscript: false,
+    requiresFullTranscript: true,
+    invalidationReason: ctx.invalidationReason ?? null,
+  };
+}
+
+/**
+ * Shared fallback policy for a resume target that no longer exists upstream.
+ * Only a run that actually attempted native resume may clear the stored handle
+ * and auto-reseed; fresh/create turns must ignore matching prose in stdout.
+ */
+export function resolveAgentResumeFailurePolicy(input: {
+  agentId: string;
+  stderr: string;
+  stdout?: string;
+  isResuming: boolean;
+  resumeSessionId: string | null | undefined;
+}): AgentResumeFailurePolicy {
+  const attemptedResume =
+    input.isResuming === true
+    && typeof input.resumeSessionId === 'string'
+    && input.resumeSessionId.length > 0;
+  const resumeFailed =
+    attemptedResume &&
+    isAgentResumeFailure(input.agentId, input.stderr, input.stdout ?? '');
+  return {
+    resumeFailed,
+    clearStaleSession: resumeFailed,
+    autoReseedFullTranscript: resumeFailed,
+    reason: resumeFailed ? 'resume_failed' : null,
+  };
+}
 
 /**
  * Resume identity guard. A stored upstream session is only safe to continue
@@ -112,6 +203,7 @@ export function resolveAgentResumeContext(
     newSessionId: randomUUID(),
     isResuming: resumable,
     storedStablePromptHash: resumable ? (record?.stablePromptHash ?? null) : null,
+    storedStableSections: resumable ? parseStableSections(record?.stablePromptSections) : null,
     invalidationReason,
   };
 }
@@ -131,6 +223,7 @@ export function persistCapturedAgentSession(
     agentId: string;
     sessionId: string | null;
     stablePromptHash?: string | null;
+    stablePromptSections?: string | null;
     // Resume identity (see resolveAgentResumeContext). Must be stored alongside
     // the captured session so the next turn can verify the session is still
     // safe to resume; omitting them leaves a null cursor that the guard treats
@@ -147,6 +240,7 @@ export function persistCapturedAgentSession(
       agentId: input.agentId,
       sessionId: input.sessionId,
       stablePromptHash: input.stablePromptHash ?? null,
+      stablePromptSections: input.stablePromptSections ?? null,
       model: input.model ?? null,
       cwd: input.cwd ?? null,
       lastMessageId: input.lastMessageId ?? null,
@@ -279,7 +373,7 @@ export function isOpencodeResumeFailure(text: string): boolean {
 
 /**
  * Per-agent dispatch for "the session/thread I asked to resume is gone".
- * Generalizes the resume-fallback so every `resumesSessionViaCli` adapter
+ * Generalizes resume-fallback classification so every native-resume adapter
  * routes through one decision point in server.ts. Unknown agents return false
  * (no fallback) — a new resume-capable adapter must opt in here explicitly.
  *
@@ -294,6 +388,9 @@ export function isAgentResumeFailure(
   stderr: string,
   stdout = '',
 ): boolean {
+  if (agentId === 'deepseek-harness') {
+    return /DSH_PROFILE_RESUME_(?:REJECTED|MISMATCH)/.test(`${stderr}\n${stdout}`);
+  }
   if (agentId === 'codex') return isCodexResumeFailure(stderr);
   if (agentId === 'opencode') return isOpencodeResumeFailure(stderr);
   if (agentId === 'amr') {
