@@ -494,15 +494,19 @@ beside `repeat`, `scatter`, another `around`, or a `span`. Contacts and repeat
 pitches floor 1 mm from flush. Loud ceilings, never a silent shortfall:
 `repeat` refuses past 100,000 instances, and a scene refuses past 100,000
 parts after expansion — backstops against a runaway count, far above any scene
-you would mean. Below them a large scene is slow rather than refused: 5,000
-instances is a legal scene that takes as long as building 5,000 objects takes.
+you would mean.
 
-Recipe and kernel geometry is guarded separately, by the work meter: a
-resource-denominated ceiling counted in work units, one unit being roughly one
-vertex or face produced, so an accidental `subdivide(1000000)` or a runaway
-loop stops with a diagnostic instead of exhausting the machine. Raise it with
-`workBudget` on the compile request (`--work-budget` on the CLI) when the asset
-and the machine are both bigger.
+Long before those, ONE work meter decides whether the scene is buildable at
+all. It is resource-denominated (counted in work units, roughly one unit per
+vertex or face produced) and it charges BOTH kernel geometry — so an
+accidental `subdivide(1000000)` or a runaway loop stops with a diagnostic
+instead of exhausting the machine — and the parts a solve is about to emit,
+each carrying its Blender build and per-mesh census cost. A `count:` typo
+that expands to thousands of instances therefore refuses at PARSE time in
+milliseconds (S3D-E-107, naming the units, the budget and the lever) rather
+than holding a Blender process for an hour. Raise it with `workBudget` on the
+compile request (`--work-budget` on the CLI) when the asset and the machine
+are both genuinely bigger; the wall is one you can move, not a size cap.
 
 The contact scan (grounding, touching-faces, the rested-pair check) runs at
 any part count: it sweeps and prunes along the scene's longest axis, so it
@@ -780,6 +784,21 @@ unchecked — and a bob crest provably over a claimed `maxHeight` is a
 hard claim failure, measured, because a translation's arithmetic is
 exact.
 
+W-108's pairwise verdict is judged against the swept CYLINDER, not its
+bounding box, on both sides of the pair: a neighbouring revolution solid
+(a column, an orb, a ring) occupies its inscribed circle, so a ring of
+identical spinners around one column gets one consistent answer instead
+of collisions for whichever ones face the box's corners. Expect exact,
+symmetric verdicts — if a ring of identical parts reports mixed results,
+that is a bug worth reporting, not geometry you should work around.
+
+Mixed periods make a longer clip, not a broken loop: the compiler bakes
+at the length where EVERY motion's cycle closes (a 4s spin beside a 3s
+bob is a 12s clip). If that length would exceed
+`conventions.animation.maxFrames`, the clip keeps the longest period and
+W-105 names each cut motion with the measured jump at the seam — raise
+maxFrames, or pick periods that share a cycle.
+
 ### 2D sheets
 
 Declare them on the contract so they get measured. Kind selects the
@@ -850,11 +869,16 @@ being in designed contact get a W-109 pinch warning. Set it when the kit
 must survive printing, kitbashing, or physics — leave it off for scenes
 where near-touching is composition, not error.
 
-`conventions.geometry.zFightingPairBudget` (default 200000) is the
-per-pair triangle-product cap on the coplanar comparison. A dense pair
-over it is skipped LOUDLY (W-323 names the pair and the cost); raise the
-budget when a correct sphere-on-cylinder joint must be verified rather
-than skipped — the quadratic cost is then your declared trade.
+`conventions.geometry.zFightingPairBudget` (default 2000000) is the TOTAL
+triangle-pair comparisons the coplanar search may spend across the whole
+scene. Candidate pairs — the ones whose boxes actually overlap — charge
+their triangle product against it in a deterministic order; a pair the
+remaining budget cannot cover is skipped LOUDLY (W-323 names both meshes,
+the cost it needed, and this knob). There is deliberately no mesh-count or
+per-mesh face ceiling beside it: one resource, one knob, raisable and
+reported. Raise it when a correct sphere-on-cylinder joint must be
+verified rather than skipped — the quadratic cost is then your declared
+trade.
 
 Deliverables ride `export.formats`. Omit it and you get the default set
 — `usda`, `usdz`, `glb`, `obj`, `fbx` — plus `stl` when `target` is
@@ -889,13 +913,23 @@ ask for `--agent-message` when you are the one reading the result.
 | `scene3d compile --json` | Scripting. Pipe `.issues[].code`. |
 | `scene3d compile --frames --agent-message` | You cannot read images: frames arrive as ASCII ramps. |
 | `scene3d compile --no-turntable` | One still instead of an orbit. |
-| `scene3d compile --respect-scene-camera` | One still through the camera the SCENE places. No compass name is claimed for it. |
+| `scene3d compile --respect-scene-camera` | One still through the camera the SCENE places, framed as its author framed it. The runner MEASURES that camera's pose, so the still still gets an honest compass name. |
 | `scene3d compile --look prp_x:left` | Photograph one part from one side. Repeatable. Needs the proof stage. |
 | `scene3d compile --shot '<json>'` | Turn in place, sweep an angle, ride the animation. The general form. |
-| `scene3d manifest --json` | Last compile, no Blender. |
+| `scene3d manifest --json` | Last compile, no Blender. Names the clips and skeletons the build carries, not just its frame range. |
+| `scene3d describe --focus prp_x` | Zoom into one part of a big scene without recompiling. |
+| `scene3d describe --region x0,y0,z0,x1,y1,z1` | Describe one volume — parts AND their issues, scoped. |
 | `scene3d tweaks --json` | Read the user's bench. |
 | `scene3d tweaks --set '<json>' --merge` | Write or compose edits. |
 | `scene3d tweaks --clear` | Bench reset, after you have folded the intent into source. |
+
+`describe` re-runs the scene digest with a QUERY over the last compile's
+census — no Blender, milliseconds. Use it when a scene is too big to read
+whole: `--focus <part>` expands the group containing that part and prints
+the part FIRST (so it survives any budget), `--region` narrows to a volume
+and scopes the issue list to it, and `--budget <tokens>` sets how much you
+are willing to read. An unknown `--focus` name refuses and hands you the
+vocabulary rather than silently describing the whole scene.
 
 `--fast` is `parse,build,lint,manifest` — it carries the manifest stage
 along for free (pure TypeScript, milliseconds) so `scene3d manifest
@@ -908,8 +942,18 @@ Operational facts worth knowing before they surprise you:
 
 - **409 means "already compiling," not "broken."** The daemon refuses a
   second concurrent compile of the same scene rather than racing two
-  Blender processes over the same output files. Wait and retry; do not
-  fork the scene into a second directory to work around it.
+  Blender processes over the same output files. The CLI exits **4** for
+  this, distinct from a real failure, and says how to tell when the run
+  lands. Wait and retry; do not fork the scene into a second directory to
+  work around it. (Different scenes compile concurrently just fine.)
+- **A restricted pass reuses the last compile's pictures and exports.**
+  `--fast` and `--stages` skip proof/export, and the paths they print name
+  files an EARLIER compile produced — so after a structural edit those
+  files show geometry that no longer exists. Every surface says so: the
+  terse stream and the report letter mark them `STALE`, and `--json`
+  carries `proofCarried` / `exportCarried`. A `cached` stage is a
+  different thing and is NOT stale: the cache key covers the whole build
+  input, so a cache hit proves the artifact matches your current source.
 - **A dropped connection (CLI exit code 3) does not mean the compile
   died.** The daemon may finish the run after your request disconnects.
   Check `scene3d manifest --json`'s `generatedAt` before assuming

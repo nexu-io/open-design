@@ -62,11 +62,22 @@ architecture."
 - **Sources are text or real files.** A declarative `scene.json`, a Blender
   Python `build.py`, USDA layers, a `.blend`, a dropped-in `.glb`, or a
   Minecraft `model.json`. One entry point per scene directory.
-- **Compilation is deterministic.** Under the supported toolchain, the same
-  sources and contract produce the same measured census and issue codes, plus
-  a byte-identical `<scene3d-report>` once the cache is warm. Artifact bytes
-  are promised where the relevant exporter and runtime can make that promise;
-  semantic equivalence is the expectation across different toolchains.
+- **Compilation is deterministic, down to the bytes.** Under the supported
+  toolchain, the same sources and contract produce the same measured census
+  and issue codes, a byte-identical `<scene3d-report>`, and byte-identical
+  ARTIFACTS — every proof frame, material ball and contact sheet, and every
+  3D deliverable (`.usda`, `.glb`, `.obj`, `.mtl`, `.fbx`, `.usdz`,
+  `scene.tree.txt`). Three exporter behaviours had to be neutralised to get
+  there and each is worth knowing before touching the export stage:
+  Blender's USD writer emits prims in depsgraph order (canonicalised by
+  name — see *USD master*), the FBX writer derives object ids from Python's
+  seed-randomised `hash()` (`PYTHONHASHSEED` is pinned when the runner is
+  spawned) and stamps a wall clock into its header (normalised), and every
+  PNG carries a `Date` text chunk (stripped). Where a machine cannot make
+  the promise — no `pxr` module for the prim sort, an FBX header this build
+  does not recognise — the compile RECORDS the gap in its lowering report
+  rather than shipping unreproducible bytes silently. Semantic equivalence
+  remains the expectation across *different* toolchains.
 - **Judgement is measured.** Headless Blender records a census of
   world-space facts, and pure TypeScript lint rules compare those facts to
   `scene3d.json`. Every failure is a stable code carrying the measurement
@@ -386,11 +397,21 @@ output.
   kernel dimension: `frames: 2..256` (powers of two) bakes a POT atlas that registers as a
   sheet.
 - **Animation currently includes** per-part `spin` / `bob` / `screw`. The
-  compiler owns those keyframes (24 fps, cycles modifiers), and any motion
-  derives `assetKind: animation`. Spatial claims are then adjudicated over
-  the swept envelope, not one pose. Sequenced keyframes, skeletal/deformation
-  systems, and richer animation intent are future language areas, not
-  architectural exclusions.
+  compiler owns those keyframes (`conventions.animation.fps`, default 24,
+  cycles modifiers), and any motion derives `assetKind: animation`. Spatial
+  claims are then adjudicated over the swept envelope, not one pose.
+  Sequenced keyframes, skeletal/deformation systems, and richer animation
+  intent are future language areas, not architectural exclusions.
+
+  **The clip is baked at the length where every loop closes** — the lcm of
+  the authored periods, not the longest one (`clipPlan` in
+  `solve/emit-bpy.ts`). A 4 s spin beside a 3 s bob is a 12 s clip; baking
+  4 s caught the bob one-third through its cycle and snapped it back at
+  every seam, in the viewer and in every engine that loops the clip. When
+  the lcm exceeds the frame budget (`conventions.animation.maxFrames`, or a
+  raisable default ceiling) the clip keeps the longest period and every cut
+  motion is reported as a seam with its MEASURED jump — the one derivation
+  feeds both the bake and the warning, so they cannot drift.
 - **Claims** (`parts`, `maxTriangles`, `grounded`, `maxHeight`, `minHeight`,
   `footprint`, `minFootprint`, `watertight`, `materialsUsed`, `volume`) are
   adjudicated against the
@@ -500,6 +521,7 @@ Any UI that shows a bare code must show or tooltip its title via
 | `S3D-E-104` | Invalid scene3d.json contract |
 | `S3D-E-105` | scene.json fails validation |
 | `S3D-E-106` | Layout constraints unsolvable |
+| `S3D-E-107` | Scene exceeds the compile work budget |
 | `S3D-W-105` | Valid but suspect authoring |
 | `S3D-W-106` | Authored offset auto-adjusted |
 | `S3D-W-107` | Generated instances intersect |
@@ -556,6 +578,8 @@ Any UI that shows a bare code must show or tooltip its title via
 | `S3D-W-336` | Contact scan skipped |
 | `S3D-W-337` | Rested pair never touches |
 | `S3D-W-338` | File part underfills its declared box |
+| `S3D-W-339` | World larger than declared plausible |
+| `S3D-W-340` | World extent measured incompletely |
 | `S3D-E-341` | Metallic outside convention |
 | `S3D-E-342` | Roughness out of range |
 | `S3D-W-341` | Untouched default material |
@@ -771,6 +795,24 @@ builds no fcurves; `rebuild_object_animation` bakes movers back so
 lowered GLBs keep clips. USDZ is packaged pipeline-side (`src/usd/usdz.ts`,
 stored entries, 64-byte aligned) after authoring, not by the runner.
 
+Two writer behaviours are corrected in place, both load-bearing:
+
+- **Prim order is canonicalised** by `scripts/blender/usd_sort.py`, which
+  sorts every prim's children by name using the real `Sdf` API. It runs as
+  a SUBPROCESS because `pxr` and `bpy` bundle conflicting USD libraries and
+  cannot load in one process. Sdf has no insert-at-index, so the sort is a
+  copy-out / delete / copy-back visited in sorted order; the scratch prim
+  name is chosen to be one no prim in the layer already uses. Because the
+  master is authored before the re-import, sorting it makes every lowered
+  container reproducible too — one fix for all five formats. A USDA-SOURCE
+  scene is deliberately left alone: the compiler does not rewrite an
+  author's own file, and a file on disk already has one stable order.
+- **The proof world does not travel.** `convert_world_material` is enabled
+  only for an authored environment IMAGE. Compiler staging is not asset
+  content, and Blender writes a non-image world's DomeLight texture as a
+  490-byte file named `.png` that is not a PNG — which was being referenced
+  by the master and sealed into every USDZ.
+
 Parity fingerprint (`scene_fingerprint`) compares meshes, materials,
 armatures, and **bound** actions. Orphan clips are not content. Order
 drift of joints/shapekeys is `S3D-W-902`. A material that survives as a
@@ -924,6 +966,19 @@ od scene3d tweaks   --project <id> --scene <path> [--json]
 `--prompt-file` on other `od` commands; scene3d's `--set-file -` is the
 equivalent for piping a tweaks map.
 
+Exit codes: **0** clean at the `--fail-on` threshold · **1** issues at or
+above it · **2** usage · **3** daemon unreachable · **4** the scene is busy
+(another compile holds its gate — nothing ran, so a script can tell "try
+again later" from "compiled clean").
+
+The envelope carries `proofCarried` / `exportCarried`. A restricted pass
+(`--fast`, `--stages`) carries the previous compile's frames and exports
+forward so their paths stay addressable, and the flags say when the paths
+you are reading name files an EARLIER compile produced. Both are always
+present, so a consumer can branch on them; a `cached` stage is NOT carried,
+because the cache key embeds the whole build-input hash and therefore
+proves the artifact matches the current source.
+
 ### The viewport: aiming by naming things
 
 The turntable answers *what did I build*. A **shot** answers *what does that
@@ -1008,6 +1063,31 @@ failed === 0`. Failure shows nothing; the badge cannot be cheapened.
 
 Inline-SVG nature glyphs: the page pins a no-font-glyphs rule. Characters like
 `▸` fail a test.
+
+### Playback
+
+The kit page plays the clips the compiler baked. `kit-runtime.ts` parses
+the GLB's animation channels (`parseAnimations`, node TRS only — there is
+no skinning pipeline here, so a skinned clip plays without deforming
+rather than half-applied) and `clipPoseAt` samples every clip at a time
+the page owns. Two contracts hold it together:
+
+- A posed world becomes the draw's **pristine state** and then flows
+  through `applyEditsToDraws` — the one funnel viewport tweaks already
+  use. Playback and the gizmo therefore cannot fight over a model matrix,
+  and a gizmo drag pauses playback rather than racing it.
+- The Play control (and its `P` shortcut) is gated on
+  `renderer.clips.length > 0`: a static prop never grows a button that
+  could do nothing.
+
+The frame-rate readout borrows the measure box for **self-animated frames
+only**. Orbit, pan, zoom and navigation are input-driven redraws whose
+cadence is the pointer's, not the renderer's; showing a rate there
+presented the reader's hand speed as a fact about the scene.
+
+Clip LENGTH is an emitter concern, not a viewer one — see *The language*:
+a clip is baked at the length where every motion's loop closes, so what
+the viewer loops has no seam.
 
 ### Materials
 

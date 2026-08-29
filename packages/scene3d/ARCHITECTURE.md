@@ -194,10 +194,15 @@ checks its own work.
   (open meshes, fractional metallic, mirrored-shared UVs are real-world
   legitimate).
 - Rigs are census facts: `armatures` (bone counts), `animation.actionNames`
-  (real clips), both action APIs handled. Skins and imported animations
-  survive GLB re-export (dissected and pinned). Declarative rigging, skinning,
-  and authored deformation systems are future authoring capabilities, not
-  excluded domains.
+  (real clips), both action APIs handled — and both travel into the
+  MANIFEST, so an agent reading the last compile learns what a scene can
+  play without spending a Blender run. Skins and imported animations
+  survive GLB re-export (dissected and pinned). A `file:` PART is the
+  exception and says so: fitting an asset inside a declared box is a join,
+  and a join cannot carry an armature, so the drop is measured (armatures,
+  bones, clip names) and reported as W-207 naming the bare-asset path that
+  keeps the rig. Declarative rigging, skinning, and authored deformation
+  systems are future authoring capabilities, not excluded domains.
 - Damage handling is deterministic detect-and-name, never mutation:
   truncated files fail with the importer's own reason (E-202, no traceback
   soup); missing .mtl companions and geometry-free imports surface as W-207
@@ -860,6 +865,41 @@ literally that) is precedence wearing a mode's name. When a flag appears, place
 it in one of the three strata; if it fits none, it is probably duplicating a
 value that already exists.
 
+## Byte determinism of the deliverables
+
+Two `--no-cache` compiles of an unchanged scene produce byte-identical
+artifacts — every PNG and all five 3D containers plus `scene.tree.txt`.
+That is a stronger claim than "the same geometry", and it took closing
+three separate sources of per-run variance, none of which is this
+compiler's own arithmetic:
+
+| Source | Where it leaks | Correction |
+|---|---|---|
+| Prim ORDER in the USD stage | Blender's USD writer walks the depsgraph in scheduler order, so eight compiles authored eight differently-ordered stages | `scripts/blender/usd_sort.py` sorts every prim's children by name with the real `Sdf` API |
+| FBX object ids | The FBX exporter derives them from Python's `hash()`, which is seed-randomised per process | `PYTHONHASHSEED=0` in the runner's spawn env (`src/build/blender.ts`) |
+| Wall clocks | The FBX header stamps date fields; every PNG carries a `Date` text chunk | `strip_fbx_timestamp` (all-or-nothing) and `strip_png_dates`, both atomic temp-and-replace |
+
+Three properties make this hold rather than merely pass once:
+
+- **The master is sorted BEFORE the re-import.** Every container is lowered
+  from the re-imported stage, so canonicalising one file fixes all five
+  formats. Sorting the lowered outputs individually would have been five
+  fixes and five ways to drift.
+- **The sort runs in a subprocess.** `pxr` and `bpy` bundle conflicting USD
+  libraries; once `bpy` is loaded, `from pxr import Sdf` dies with a DLL
+  bind error. The runner probes for a plain interpreter (refusing anything
+  blender-named, since handing the blender binary a `.py` positional runs
+  nothing and exits nothing) and shells out.
+- **Every gap is recorded, never silent.** No `pxr`, no clean interpreter,
+  an FBX header this build does not recognise — each writes a note into the
+  lowering record instead of shipping unreproducible bytes quietly. A
+  determinism promise that fails invisibly is worse than one that admits
+  its reach.
+
+A USDA-SOURCE scene is deliberately exempt from the sort: the compiler does
+not rewrite an author's own file, and a file on disk already has one stable
+order, so every lowering from it is reproducible without touching it.
+
 ## Diagnostics philosophy
 
 The reader is an agent with no viewport. Every issue carries: the stable
@@ -968,6 +1008,20 @@ fed by `solve/sweep.ts` `sweptSceneFacts`):
 
 - **Samples are lower bounds.** A sampled breach is a real visited pose →
   proven failure (frame named).
+- **The pairwise verdict narrows to the swept SOLID.** The envelope above
+  is an axis-aligned box, and a spin's true occupancy in the plane across
+  its axis is a DISC — the box's corner reaches √2 further than the circle
+  ever does. `sweptBox` therefore also reports `spinDisc` (centre, radius,
+  axis), and `motionEnvelopeIssues` judges a pair through it. The
+  refinement is SYMMETRIC, which is the part that had to be learned twice:
+  a neighbouring revolution solid standing on the same axis (a cylinder
+  column, a sphere, a ring) occupies its INSCRIBED circle, so measuring the
+  mover's disc against the neighbour's bounding square gave eight identical
+  fins around one column four collisions and four clears. Every refinement
+  is an upper bound on the true overlap, so the minimum of the applicable
+  bounds is the tightest honest number — and `file`/`script` movers keep
+  the box, because their own clips can deform beyond any solved box and
+  narrowing a heuristic bound would turn it into a confident miss.
 - **Exact swept boxes are attained.** `sweptBox` now carries an exactness
   flag with a theorem behind it: over a full turn the swept region of any
   rigid shape is rotationally symmetric with radius max‖p⊥‖, so a BOX's

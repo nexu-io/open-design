@@ -84,10 +84,22 @@ it again; read this, then act.
   normal map via numpy central differences, `normalStrength` knob, wired
   through a Normal Map node). `material` on a `file` part = deliberate
   wholesale override of the imported asset's materials. Declarative
-  animation: part `spin`/`bob` → compiler-owned keyframes (24fps, cycles
-  modifiers, `_loop_fcurves` handles both action APIs) → assetKind
-  `animation`. Census reports `armatures` (bones) + `animation.actionNames`
-  (real clips — the Fox pins Run/Walk/Survey). glTF imports can ship
+  animation: part `spin`/`bob` → compiler-owned keyframes
+  (`conventions.animation.fps`, default 24, cycles modifiers,
+  `_loop_fcurves` handles both action APIs) → assetKind `animation`. The
+  clip is baked at the LOOP-CLOSING length (lcm of the periods, `clipPlan`
+  in emit-bpy) — the longest period alone caught every shorter one
+  mid-stride and snapped it back at the seam; past the frame budget it
+  falls back to the longest and W-105 names each cut motion with the
+  measured jump. Census reports `armatures` (bones) + `animation.actionNames`
+  (real clips — the Fox pins Run/Walk/Survey), and the MANIFEST carries
+  both, so an agent can learn what a scene can play without a Blender run.
+  A `file:` part's box-fit join cannot keep a rig; what it drops is
+  measured and reported (importNotes → W-207) rather than lost silently.
+  The kit viewer PLAYS the baked clips (parseAnimations/clipPoseAt in
+  kit-runtime; posed worlds land as pristine state and flow through
+  applyEditsToDraws, so playback and the gizmo never fight); the fps
+  readout is gated to self-animated frames only. glTF imports can ship
   non-view-layer scaffolding meshes (bone-shape icospheres): `_import_part`
   sweeps un-joined imported meshes by name after the join. Capstone
   fixture: `tests/atelier-pipeline.test.ts` builds marble(height→normal) +
@@ -116,6 +128,21 @@ it again; read this, then act.
   puts issues before stats. Full breakdown: `packages/scene3d/ARCHITECTURE.md`.
   Corpus grew: CesiumMan (humanoid rig round-trips with skin+clips
   pinned), BrainStem; `tests/formats.test.ts` is the format-breadth suite.
+  **Deliverables are byte-reproducible**: two `--no-cache` compiles of an
+  unchanged scene produce byte-identical PNGs AND all five 3D containers.
+  Three exporter behaviours had to be neutralised — Blender's USD writer
+  emits prims in depsgraph order (`scripts/blender/usd_sort.py` sorts them
+  by name with the real Sdf API, in a SUBPROCESS because pxr and bpy have
+  conflicting USD DLLs; run on the master BEFORE the re-import so all five
+  formats inherit it), the FBX writer derives ids from Python's
+  seed-randomised `hash()` (`PYTHONHASHSEED=0` pinned in the runner spawn)
+  and stamps a wall clock (`strip_fbx_timestamp`, all-or-nothing), and
+  PNGs carry Date chunks (`strip_png_dates`). Every gap records a note in
+  the lowering report — never silently unreproducible. A USDA-SOURCE scene
+  is exempt: the compiler does not rewrite an author's own file.
+  The proof-staging WORLD no longer travels into the stage unless it is an
+  authored environment IMAGE (Blender writes a non-image world's DomeLight
+  texture as a 490-byte non-PNG that was being sealed into every USDZ).
   **USD is the MASTER format** (Kiln Bet 1, enforced structurally):
   `export_scene` authors scene.usda FIRST with the writer's full payload
   (`master_usd_kwargs`: export_animation gated on bound actions,
