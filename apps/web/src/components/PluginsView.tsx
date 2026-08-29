@@ -828,7 +828,10 @@ export function PluginsView({
       ) : null}
       {importOpen ? (
         <PluginImportModal
-          onClose={() => setImportOpen(false)}
+          onClose={(outcome) => {
+            if (outcome && !outcome.ok) setNotice(outcome);
+            setImportOpen(false);
+          }}
           onInstallSource={(source) =>
             finishImport(
               () => installPluginSource(source, pluginsWorkspaceContext),
@@ -3709,7 +3712,7 @@ function PluginImportModal({
   onUploadZip,
   onUploadFolder,
 }: {
-  onClose: () => void;
+  onClose: (outcome?: PluginInstallOutcome) => void;
   onInstallSource: (source: string) => Promise<PluginInstallOutcome>;
   onUploadZip: (file: File) => Promise<PluginInstallOutcome>;
   onUploadFolder: (files: File[]) => Promise<PluginInstallOutcome>;
@@ -3786,7 +3789,7 @@ function PluginImportModal({
 
   function requestClose() {
     if (working) return;
-    onClose();
+    onClose(importError ?? undefined);
   }
 
   return (

@@ -773,8 +773,8 @@ describe('PluginsView', () => {
     expect(await screen.findByText('Installed Folder Plugin.')).toBeTruthy();
   });
 
-  it('shows failed folder imports only inside the import modal', async () => {
-    mockedUploadPluginFolder.mockResolvedValueOnce({
+  it('keeps failed folder imports in the modal until it closes', async () => {
+    mockedUploadPluginFolder.mockResolvedValue({
       ok: false,
       warnings: [],
       log: [],
@@ -805,6 +805,15 @@ describe('PluginsView', () => {
     });
     expect(within(dialog).queryByText('Plugin folder contains no SKILL.md or open-design.json.'))
       .toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+    await waitFor(() => expect(mockedUploadPluginFolder).toHaveBeenCalledWith([replacement]));
+    await within(dialog).findByText('Plugin folder contains no SKILL.md or open-design.json.');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Import a plugin' })).toBeNull();
+    expect(screen.getByText('Plugin folder contains no SKILL.md or open-design.json.'))
+      .toBeTruthy();
   });
 
   it('locks source switching while an import request is pending', async () => {
