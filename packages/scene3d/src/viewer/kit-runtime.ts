@@ -167,6 +167,142 @@ function fromTrs(node) {
   m[12] = t[0]; m[13] = t[1]; m[14] = t[2];
   return m;
 }
+/**
+ * The animation clips a glTF carries, in a sampleable form.
+ *
+ * Only node-TRS channels (translation/rotation/scale) are read — that is
+ * everything the compiler bakes and everything this renderer can pose
+ * (there is no skinning pipeline here, so a skinned clip's joint tracks are
+ * skipped rather than half-applied). CUBICSPLINE samplers keep only their
+ * value column: the compiler bakes per-frame keys, so tangents add nothing
+ * a viewer could show.
+ */
+function parseAnimations(gltf, bin) {
+  const clips = [];
+  for (const anim of gltf.animations || []) {
+    const channels = [];
+    let duration = 0;
+    for (const ch of anim.channels || []) {
+      if (!ch.target || ch.target.node === undefined) continue;
+      const path = ch.target.path;
+      if (path !== "translation" && path !== "rotation" && path !== "scale") continue;
+      const sampler = anim.samplers[ch.sampler];
+      if (!sampler) continue;
+      const times = readAccessor(gltf, bin, sampler.input);
+      const values = readAccessor(gltf, bin, sampler.output);
+      if (!times.length) continue;
+      duration = Math.max(duration, times[times.length - 1]);
+      channels.push({
+        node: ch.target.node,
+        path: path,
+        times: times,
+        values: values,
+        comps: path === "rotation" ? 4 : 3,
+        cubic: sampler.interpolation === "CUBICSPLINE",
+        step: sampler.interpolation === "STEP",
+      });
+    }
+    if (channels.length) {
+      clips.push({ name: anim.name || "clip_" + clips.length, channels: channels, duration: duration });
+    }
+  }
+  return clips;
+}
+
+/** Sample one channel at clip-local time t. Linear between keys (rotations
+ *  by shortest-path normalized lerp — at baked-key density it is
+ *  indistinguishable from slerp); STEP holds; CUBICSPLINE reads its value
+ *  column linearly. */
+function sampleChannel(ch, t) {
+  const times = ch.times;
+  const n = times.length;
+  const comps = ch.comps;
+  const stride = ch.cubic ? comps * 3 : comps;
+  const base = ch.cubic ? comps : 0;
+  const read = (k) => {
+    const out = [];
+    for (let c = 0; c < comps; c++) out.push(ch.values[k * stride + base + c]);
+    return out;
+  };
+  if (t <= times[0]) return read(0);
+  if (t >= times[n - 1]) return read(n - 1);
+  // Binary search: baked tracks run to hundreds of keys, and this runs per
+  // channel per frame.
+  let lo = 0, hi = n - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (times[mid] <= t) lo = mid; else hi = mid;
+  }
+  if (ch.step) return read(lo);
+  const t0 = times[lo], t1 = times[hi];
+  const f = t1 > t0 ? (t - t0) / (t1 - t0) : 0;
+  const a = read(lo), b = read(hi);
+  const out = [];
+  if (comps === 4) {
+    const d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+    const sign = d < 0 ? -1 : 1;
+    let len = 0;
+    for (let c = 0; c < 4; c++) { out[c] = a[c] + (sign * b[c] - a[c]) * f; len += out[c] * out[c]; }
+    len = Math.sqrt(len) || 1;
+    for (let c = 0; c < 4; c++) out[c] /= len;
+  } else {
+    for (let c = 0; c < comps; c++) out[c] = a[c] + (b[c] - a[c]) * f;
+  }
+  return out;
+}
+
+/**
+ * Every clip posed at time tSec, as the draws whose world that pose re-derives.
+ *
+ * All clips play together (the compiler bakes one action per mover, so the
+ * union IS the scene's motion), each looping over its own duration. The
+ * whole node tree is walked with the sampled TRS substituted, and only the
+ * draws under an animated chain are returned — the page owns HOW the new
+ * world lands (it must flow through the same edit funnel user tweaks use,
+ * or playback and the gizmo would fight over the model matrix).
+ *
+ * Returns null when the model carries no clips.
+ */
+function clipPoseAt(renderer, tSec) {
+  const clips = renderer.clips;
+  if (!clips || !clips.length || !renderer.animNodes) return null;
+  const over = new Map();
+  for (const clip of clips) {
+    const tc = clip.duration > 0 ? tSec % clip.duration : 0;
+    for (const ch of clip.channels) {
+      const v = sampleChannel(ch, tc);
+      if (!v) continue;
+      const o = over.get(ch.node) || {};
+      o[ch.path] = v;
+      over.set(ch.node, o);
+    }
+  }
+  const byNode = new Map();
+  for (const d of renderer.draws) {
+    if (d.nodeIndex === undefined) continue;
+    const list = byNode.get(d.nodeIndex);
+    if (list) list.push(d); else byNode.set(d.nodeIndex, [d]);
+  }
+  const out = [];
+  const walk = (idx, parent, animated) => {
+    const n = renderer.animNodes[idx];
+    if (!n) return;
+    const o = over.get(idx);
+    const isAnim = animated || !!o;
+    const local = o
+      ? fromTrs({ translation: o.translation || n.t, rotation: o.rotation || n.r, scale: o.scale || n.s })
+      : (n.matrix ? n.matrix : fromTrs({ translation: n.t, rotation: n.r, scale: n.s }));
+    const world = mul(parent, local);
+    if (isAnim) {
+      const ds = byNode.get(idx);
+      if (ds) for (const d of ds) out.push({ draw: d, world: world });
+    }
+    for (const c of n.children) walk(c, world, isAnim);
+  };
+  for (const r of renderer.animRoots) walk(r, identity(), false);
+  return out;
+}
+
 function perspective(fovy, aspect, near, far) {
   const f = 1 / Math.tan(fovy / 2);
   const o = new Float32Array(16);
@@ -893,6 +1029,9 @@ function loadModel(renderer, buffer) {
           count: count,
           indexType: indexType,
           model: world,
+          // The glTF node that placed this draw — how clip playback finds
+          // the draws whose world a sampled pose re-derives.
+          nodeIndex: nodeIndex,
           name: node.name || (material && material.name) || "part",
           // The material NAME, so the page can answer "which draws share
           // this material" — the question every live material edit asks.
@@ -954,6 +1093,35 @@ function loadModel(renderer, buffer) {
 
   const scene = gltf.scenes[gltf.scene || 0];
   for (const nodeIndex of scene.nodes) visit(nodeIndex, identity());
+
+  /* ---- animation clips ------------------------------------------------
+     The compiler bakes spin/bob/screw (and imported actions) into dense
+     keyframe tracks and the GLB carries them; a viewer that never plays
+     them shows an animation asset as a statue. Parsed once here; the
+     page drives time and asks clipPoseAt for the posed worlds. A GLB with
+     no animations costs nothing. */
+  renderer.clips = [];
+  renderer.animNodes = null;
+  renderer.animRoots = null;
+  try {
+    const clips = parseAnimations(gltf, bin);
+    if (clips.length > 0) {
+      renderer.clips = clips;
+      renderer.animNodes = gltf.nodes.map((n) => ({
+        matrix: n.matrix ? new Float32Array(n.matrix) : null,
+        t: (n.translation || [0, 0, 0]).slice(),
+        r: (n.rotation || [0, 0, 0, 1]).slice(),
+        s: (n.scale || [1, 1, 1]).slice(),
+        children: (n.children || []).slice(),
+      }));
+      renderer.animRoots = (scene.nodes || []).slice();
+    }
+  } catch (e) {
+    // A malformed track must not take the whole model down with it: the
+    // geometry stands, the clips are absent, and the page simply grows no
+    // play control.
+    renderer.clips = [];
+  }
 
   if (!isFinite(lo[0])) { lo[0]=lo[1]=lo[2]=-1; hi[0]=hi[1]=hi[2]=1; }
   renderer.bounds = {

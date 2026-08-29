@@ -70,6 +70,53 @@ def fail(error_code, error, detail=None):
     sys.exit(1)
 
 
+def strip_png_dates(path):
+    """Drop the ancillary text/time chunks Blender stamps into every PNG.
+
+    Blender writes a tEXt "Date" chunk with the wall clock, so two compiles
+    of an unchanged scene produced byte-DIFFERENT artifacts whose every
+    pixel was identical — poison for content hashing and for anyone diffing
+    out/ in git. Pixels are untouched: only tEXt/zTXt/iTXt/tIME chunks go,
+    all of which are ancillary by the PNG spec. A file this cannot parse is
+    left exactly as written — determinism must never cost the artifact.
+    """
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+        if len(data) < 8 or data[:8] != b"\x89PNG\r\n\x1a\n":
+            return
+        out = [data[:8]]
+        at = 8
+        changed = False
+        while at + 8 <= len(data):
+            length = int.from_bytes(data[at:at + 4], "big")
+            ctype = data[at + 4:at + 8]
+            end = at + 12 + length
+            if end > len(data):
+                return  # truncated: leave the file alone
+            if ctype in (b"tEXt", b"zTXt", b"iTXt", b"tIME"):
+                changed = True
+            else:
+                out.append(data[at:end])
+            at = end
+        if changed and at == len(data):
+            # Atomic: build the stripped file beside the original and swap.
+            # Rewriting in place truncates first, so a full disk or an
+            # interrupted write would destroy a valid render to remove a
+            # date — the one trade this helper must never make.
+            tmp = path + ".strip.tmp"
+            with open(tmp, "wb") as f:
+                f.write(b"".join(out))
+            os.replace(tmp, path)
+    except Exception:
+        # A failed strip is a dated PNG, not a failed render; clear any
+        # leftover temp so it cannot be mistaken for an artifact.
+        try:
+            os.remove(path + ".strip.tmp")
+        except OSError:
+            pass
+
+
 def log(msg):
     sys.stdout.write("[scene3d] %s\n" % msg)
     sys.stdout.flush()
@@ -4906,6 +4953,7 @@ def _proof_id_pass(scene, subjects, aim_for_step, steps, filepaths):
         target = filepaths[i][:-4] + ".idx.png" if filepaths[i].lower().endswith(".png") else filepaths[i] + ".idx.png"
         scene.render.filepath = target
         bpy.ops.render.render(write_still=True)
+        strip_png_dates(target)
         written.append(target)
     return written, [o.name for o in ordered]
 
@@ -5003,6 +5051,7 @@ def _proof_frames(job, scene, opts, auto_cam, is_auto, steps, filepaths, turntab
         aim_for_step(i)
         scene.render.filepath = filepaths[i]
         bpy.ops.render.render(write_still=True)
+        strip_png_dates(filepaths[i])
         frames.append(frame_stats(filepaths[i]))
         log("rendered %s" % filepaths[i])
         # One projection pass serves two consumers: the off-camera fact
@@ -5161,6 +5210,7 @@ def _render_look(scene, cam, spec):
         aim_camera(cam, target, offset)
         scene.render.filepath = spec["filepath"]
         bpy.ops.render.render(write_still=True)
+        strip_png_dates(spec["filepath"])
         log("rendered look %s" % spec["filepath"])
         out = {"filepath": spec["filepath"], "ok": True}
         stats = frame_stats(spec["filepath"])
@@ -5410,6 +5460,7 @@ def render_material_balls(scene, engine, out_dir):
                 sphere.data.materials[0] = bound[name]
                 ball_scene.render.filepath = target
                 bpy.ops.render.render(write_still=True, scene=ball_scene.name)
+                strip_png_dates(target)
                 if not os.path.exists(target):
                     raise RuntimeError("renderer wrote no file")
                 # Called for its matte AND its statistics: the matte keeps

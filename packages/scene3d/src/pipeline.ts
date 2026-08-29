@@ -2218,7 +2218,13 @@ export async function compile(
   /** The manifest AS PERSISTED — the result returns this same object so the
    *  compile response and `out/manifest.json` can never disagree. */
   let finalManifest: ReturnType<typeof buildManifest> | undefined;
-  if (wanted.has("manifest")) {
+  /* NO SOURCE, NO OUT/. A directory that is not a scene at all (S3D-E-101)
+     must not grow an out/ tree describing a scene that does not exist:
+     because --scene defaults to the project root, a single mistyped
+     invocation used to drop a phantom manifest.json, digest.md and
+     read-model.json beside the user's own files. The refusal is the whole
+     answer; writing artifacts about nothing is litter, not a deliverable. */
+  if (wanted.has("manifest") && source.files.length > 0) {
     const tm = performance.now();
     // A restricted compile (`--stages parse,build,lint` — the fast loop the
     // skill itself recommends) must not amnesia the manifest: the proof
@@ -2502,6 +2508,10 @@ export async function compile(
       });
     }
     report("manifest", "ran", ms(tm));
+  } else if (wanted.has("manifest")) {
+    // Asked for, but there is nothing to describe: reported as skipped, so
+    // the stage table says why out/ did not appear.
+    report("manifest", "skipped", 0);
   }
 
   /* ---- result ----------------------------------------------------- */

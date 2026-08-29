@@ -477,6 +477,9 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
     }
     lines.push("  out/digest.md — the census in prose, with the per-part dimensions table");
     lines.push("  out/read-model.json — the full census, machine-readable");
+    lines.push(
+      "  out/manifest.json — the persisted manifest (what `od scene3d manifest` reads)",
+    );
     // The USD is the master format and technically text, but every prim is
     // buried under kilobytes of vertex arrays — so name the GRAPH beside it, the
     // one an agent can actually read to reason about the shipped stage.
@@ -493,7 +496,9 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
       lines.push("  out/materials/ — lit-sphere previews, one per material, under the proof's own lighting");
     }
     if (result.proofImages.length > 0) {
-      lines.push("  out/index.html (frame player) · kit.html at the project root (live viewer)");
+      lines.push(
+        "  out/index.html (frame player) · out/kit.html (this scene's live viewer) · kit.html at the project root (the whole project's catalog viewer)",
+      );
     }
   }
 
@@ -593,9 +598,12 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
  * convention that makes those names mean something, and the one artifact that
  * shows all of it at once.
  *
- * Printed only when the poses are actually known. A still through a camera
- * the author placed has no derivable azimuth, and `proofViews` is absent
+ * Printed only when the poses are actually known. An authored MULTI-frame
+ * render has no derivable per-frame azimuth, and `proofViews` is absent
  * there rather than invented — so this block is silent instead of confident.
+ * An authored STILL is different: the runner MEASURED the placed camera's
+ * pose, so its one view is a measurement and says so — the N×360/count
+ * orbit formula would be a lie about a camera nobody orbited.
  */
 function appendOrbit(lines: string[], result: CompileResult): void {
   const views = result.manifest.proofViews;
@@ -605,8 +613,10 @@ function appendOrbit(lines: string[], result: CompileResult): void {
       .join(" · ");
     lines.push(`  orbit: ${orbit}`);
     lines.push(
-      "  frame N looks from azimuth N×360/count. azimuth 0° = front = camera on -Y (Blender numpad-1)," +
-        " increasing toward +X, elevated 30°. world is Z-up.",
+      views.length === 1
+        ? "  one still. azimuth 0° = front = camera on -Y (Blender numpad-1), increasing toward +X. world is Z-up."
+        : "  frame N looks from azimuth N×360/count. azimuth 0° = front = camera on -Y (Blender numpad-1)," +
+            " increasing toward +X, elevated 30°. world is Z-up.",
     );
   }
 

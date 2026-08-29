@@ -341,3 +341,55 @@ describe("motionEnvelopeIssues — the swept solid is a cylinder, not a square",
     expect(sweptBox(rotor)!.spinDisc).toBeDefined();
   });
 });
+
+describe("motionEnvelopeIssues — the refinement is symmetric (sweep-probe)", () => {
+  /*
+   * The second red-team's regression: eight IDENTICAL spinning fins ringed
+   * around a cylinder column, every one clearing the column's true surface
+   * by the same margin. The fin's swept disc was measured against the
+   * column's bounding SQUARE, so the four fins facing the square's corners
+   * reported collisions while the four facing its flats read clear — four
+   * false positives, and worse, an inconsistent verdict over a symmetric
+   * scene. A revolution solid standing on the disc axis occupies its
+   * inscribed circle, not its box.
+   */
+  const column = part({
+    id: "prp_column",
+    shape: "cylinder",
+    size: [0.16, 0.16, 0.3],
+    center: [0, 0, 0.5],
+  });
+  const fin = (i: number): SolvedPart => {
+    const a = (i * Math.PI) / 4;
+    return part({
+      id: i === 0 ? "prp_fin" : "prp_fin_" + (i + 1),
+      size: [0.2, 0.04, 0.1],
+      center: [0.2 * Math.cos(a), 0.2 * Math.sin(a), 0.5],
+      spin: { axis: "z", seconds: 4 },
+    });
+  };
+
+  it("gives all eight fins the same verdict: clear", () => {
+    const parts = [column, ...Array.from({ length: 8 }, (_, i) => fin(i))];
+    const hits = motionEnvelopeIssues({ parts }).filter(
+      (i) => i.target?.includes("prp_column"),
+    );
+    // Fin corner radius ~0.102m, column surface at 0.2 − 0.08 = 0.12m from
+    // each fin's centre: every fin clears by the same ~18mm.
+    expect(hits).toEqual([]);
+  });
+
+  it("still catches a ring genuinely too tight for its column", () => {
+    const tight = Array.from({ length: 8 }, (_, i) => {
+      const f = fin(i);
+      const a = (i * Math.PI) / 4;
+      return { ...f, center: [0.16 * Math.cos(a), 0.16 * Math.sin(a), 0.5] as [number, number, number] };
+    });
+    const hits = motionEnvelopeIssues({ parts: [column, ...tight] }).filter(
+      (i) => i.target?.includes("prp_column"),
+    );
+    // At radius 0.16 the swept circles reach within 0.08 − 0.102 → every fin
+    // presses into the column, and the verdict is symmetric: all eight.
+    expect(hits).toHaveLength(8);
+  });
+});

@@ -900,9 +900,10 @@ Options:
   --turntable-steps <n>    Turntable frame count (1-2048; time governed by the stage timeout)
   --no-turntable           Render one still instead of a turntable
   --respect-scene-camera   One still through the camera the SCENE places, framed as
-                           its author framed it (implies --no-turntable). The compiler
-                           cannot derive that pose, so the report claims no compass
-                           name for it.
+                           its author framed it (implies --no-turntable). The runner
+                           MEASURES the placed camera's pose, so the still gets an
+                           honest compass name (e.g. "~front-right 45°") — measured,
+                           never derived.
   --no-cache               Bypass the per-stage content-hash cache
   --work-budget <n>        Raise the recipe work-meter ceiling (kernel work units) for a
                            genuinely large asset — a wall you can raise, not a size cap
@@ -1502,10 +1503,17 @@ async function runScene3d(args) {
       // A shot that turns in place has no subject: report where it STANDS and
       // what it FACES rather than printing a target it does not have.
       const aimed = look.targetName !== undefined && look.distance !== undefined;
+      // frameSpanM is the one fact the pixels cannot carry (a 2mm screw and
+      // a 2m door are the same picture) — the terse stream used to keep it
+      // to the JSON envelope, which is exactly the reader who needs it least.
+      const span =
+        look.frameSpanM !== undefined
+          ? ` · frame spans ${Math.round(look.frameSpanM * 1000) / 1000}m`
+          : '';
       const geometry = aimed
         ? `at ${look.targetName} · ${look.name} az ${Math.round(look.azimuthDeg ?? 0)}° ` +
           `el ${Math.round(look.elevationDeg ?? 0)}° · ${Math.round(look.distance! * 1000) / 1000}m · ` +
-          `fov ${Math.round(look.fovDeg)}°`
+          `fov ${Math.round(look.fovDeg)}°${span}`
         : `from (${look.eye.map((n: number) => Math.round(n * 1000) / 1000).join(', ')}) · ` +
           `facing ${look.facing} ${Math.round(look.headingDeg)}° pitch ${Math.round(look.pitchDeg)}° · ` +
           `fov ${Math.round(look.fovDeg)}°`;

@@ -527,6 +527,11 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
         return sendApiError(res, 400, 'BAD_REQUEST', err?.message || 'invalid scenePath');
       }
 
+      // Same verdict family as compile/manifest/describe: a scene directory
+      // that does not exist is a typo, not "no edits yet".
+      if (!fs.existsSync(sceneDir)) {
+        return sendApiError(res, 404, 'SCENE_NOT_FOUND', 'scene directory not found');
+      }
       const file = path.join(sceneDir, 'tweaks.json');
       if (!fs.existsSync(file)) return res.json({ tweaks: {} });
       let parsed: unknown;
@@ -566,6 +571,14 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
         return sendApiError(res, 400, 'BAD_REQUEST', err?.message || 'invalid scenePath');
       }
 
+      /* A scene DIRECTORY that does not exist is a different fact from a
+         scene that was never compiled, and answering both with 200
+         {manifest: null} made a typo indistinguishable from "not yet built"
+         — while compile on the same path correctly refused. Same verdict,
+         both verbs. */
+      if (!fs.existsSync(sceneDir)) {
+        return sendApiError(res, 404, 'SCENE_NOT_FOUND', `scene directory not found: ${scenePath}`);
+      }
       const manifestFile = path.join(sceneDir, 'out', 'manifest.json');
       let manifest: Scene3dManifest | null = null;
       try {
@@ -630,6 +643,11 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
       const options = parseDescribeQuery(req.query);
       if (options === null) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid describe query (region/focus/budget)');
+      }
+      // Same verdict as compile and manifest: a typo'd path is not a scene
+      // that "was never compiled".
+      if (!fs.existsSync(sceneDir)) {
+        return sendApiError(res, 404, 'SCENE_NOT_FOUND', `scene directory not found: ${scenePath}`);
       }
 
       // A scene that never compiled has no census to describe — a truthful null,

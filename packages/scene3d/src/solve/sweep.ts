@@ -293,6 +293,57 @@ const overlap1d = (aMin: number, aMax: number, bMin: number, bMax: number): numb
   Math.min(aMax, bMax) - Math.max(aMin, bMin);
 
 /**
+ * A part's cross-plane occupancy about `axis`, when it is provably a disc.
+ *
+ * The same theorem `spinSymmetric` proves for movers, read for a NEIGHBOUR:
+ * a revolution solid standing on the axis (a cylinder column, a sphere, a
+ * torus ring) occupies the inscribed circle of its box in the cross plane —
+ * the language's every-shape-fills-its-box rule makes the diameter exact,
+ * and the box's corners are empty air. Judging such a part by its bounding
+ * rectangle is the same corner lie the swept square told, from the other
+ * side of the pair.
+ *
+ * Undefined whenever doubt exists — a box, a wedge, a file/script part, a
+ * rotate off the axis, or motion that translates the part THROUGH the cross
+ * plane mid-cycle (a bob when the axis is not z, a screw advancing off it,
+ * a spin that grew the envelope). Doubt means the rectangle, which can
+ * over-report but never under.
+ */
+function crossOccupancyDisc(
+  part: SolvedPart,
+  env: ReturnType<typeof sweptBox>,
+  axis: Axis,
+): { axis: Axis; centre: Vec3; radius: number } | undefined {
+  if (env) {
+    if (env.spinGrew) return undefined;
+    if (part.bob && axis !== "z") return undefined;
+    if (part.screw && (part.screw.axis ?? "z") !== axis) return undefined;
+  }
+  if (!spinSymmetric(part, axis)) return undefined;
+  const m = AXES.indexOf(axis);
+  const u = [0, 1, 2].find((i) => i !== m)!;
+  const size = part.localSize ?? part.size;
+  return { axis, centre: [...part.center] as Vec3, radius: size[u]! / 2 };
+}
+
+/** Penetration of two coaxial cross-plane discs, each with its own axis
+ *  interval: circles meet as circles, and the axis overlap is the boxes'. */
+function discDiscPenetration(
+  a: { axis: Axis; centre: Vec3; radius: number },
+  aMin: Vec3,
+  aMax: Vec3,
+  b: { axis: Axis; centre: Vec3; radius: number },
+  bMin: Vec3,
+  bMax: Vec3,
+): number {
+  const m = AXES.indexOf(a.axis);
+  const [u, v] = [0, 1, 2].filter((i) => i !== m) as [number, number];
+  const axisPen = overlap1d(aMin[m]!, aMax[m]!, bMin[m]!, bMax[m]!);
+  const cd = Math.hypot(b.centre[u]! - a.centre[u]!, b.centre[v]! - a.centre[v]!);
+  return Math.min(axisPen, a.radius + b.radius - cd);
+}
+
+/**
  * Penetration of a swept spin cylinder into an axis-aligned box — the disc
  * in the cross plane, the envelope's own interval along the spin axis.
  *
@@ -378,31 +429,41 @@ export function motionEnvelopeIssues(
       const restOther = restBox(other);
       const restPen = Math.max(0, penetration(rest.min, rest.max, restOther.min, restOther.max));
       let cyclePen = penetration(env.min, env.max, oMin, oMax);
-      /* Narrow the AABB verdict through the exact swept solids. Every
-         refinement is an upper bound on the true overlap (the cylinder is a
-         subset of its bounding box), so the minimum of all applicable bounds
-         is the tightest honest number. Two discs on one axis meet as
-         circles; a disc against anything else meets its cross rectangle. */
-      if (env.spinDisc && otherEnv?.spinDisc && env.spinDisc.axis === otherEnv.spinDisc.axis) {
-        const m = AXES.indexOf(env.spinDisc.axis);
-        const [u, v] = [0, 1, 2].filter((i) => i !== m) as [number, number];
-        const axisPen = overlap1d(env.min[m]!, env.max[m]!, oMin[m]!, oMax[m]!);
-        const cd = Math.hypot(
-          otherEnv.spinDisc.centre[u]! - env.spinDisc.centre[u]!,
-          otherEnv.spinDisc.centre[v]! - env.spinDisc.centre[v]!,
-        );
-        cyclePen = Math.min(
-          cyclePen,
-          Math.min(axisPen, env.spinDisc.radius + otherEnv.spinDisc.radius - cd),
-        );
-      } else {
-        if (env.spinDisc) {
-          const refined = spinCylinderPenetration(env.spinDisc, env.min, env.max, oMin, oMax);
-          if (refined !== undefined) cyclePen = Math.min(cyclePen, refined);
-        }
-        if (otherEnv?.spinDisc) {
-          const refined = spinCylinderPenetration(otherEnv.spinDisc, oMin, oMax, env.min, env.max);
-          if (refined !== undefined) cyclePen = Math.min(cyclePen, refined);
+      /* Narrow the AABB verdict through the exact solids. Every refinement
+         is an upper bound on the true overlap (a disc is a subset of its
+         bounding square), so the minimum of all applicable bounds is the
+         tightest honest number — and the refinement must be SYMMETRIC: a
+         spinning fin's disc measured against a cylinder column's bounding
+         SQUARE reported four of eight identical fins as collisions (the
+         four facing the square's corners) while the four facing its flats
+         read clear. One question, one predicate: each side's cross-plane
+         occupancy about the disc axis is either a disc — its own swept
+         circle for an asymmetric spinner, its inscribed circle for a
+         revolution solid standing on that axis — or its rectangle. */
+      {
+        const disc = env.spinDisc;
+        const otherDisc =
+          otherEnv?.spinDisc ??
+          (disc && crossOccupancyDisc(other, otherEnv, disc.axis)) ??
+          undefined;
+        if (disc && otherDisc && disc.axis === otherDisc.axis) {
+          cyclePen = Math.min(
+            cyclePen,
+            discDiscPenetration(disc, env.min, env.max, otherDisc, oMin, oMax),
+          );
+        } else {
+          if (disc) {
+            const refined = spinCylinderPenetration(disc, env.min, env.max, oMin, oMax);
+            if (refined !== undefined) cyclePen = Math.min(cyclePen, refined);
+          }
+          if (otherEnv?.spinDisc) {
+            const stillDisc =
+              crossOccupancyDisc(mover, env, otherEnv.spinDisc.axis) ?? undefined;
+            const refined = stillDisc
+              ? discDiscPenetration(otherEnv.spinDisc, oMin, oMax, stillDisc, env.min, env.max)
+              : spinCylinderPenetration(otherEnv.spinDisc, oMin, oMax, env.min, env.max);
+            if (refined !== undefined) cyclePen = Math.min(cyclePen, refined);
+          }
         }
       }
       if (cyclePen <= restPen + MIN_CONTACT + 1e-9) continue;

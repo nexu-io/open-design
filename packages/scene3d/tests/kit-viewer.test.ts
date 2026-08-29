@@ -396,6 +396,39 @@ describe("renderKitHtml", () => {
     expect(html).toContain("if (!box || gesture) return;");
   });
 
+  it("plays baked clips through the edit funnel, and only offers the control when clips exist", () => {
+    /*
+     * An "animation" asset that stands still in its own viewer is a statue:
+     * the GLB carries the compiler's baked tracks, the runtime samples them
+     * (parseAnimations/clipPoseAt), and the page drives time. Two contracts
+     * pinned: the posed world lands as the draw's PRISTINE state and flows
+     * through applyEditsToDraws — the one funnel user tweaks use, so
+     * playback and the gizmo cannot fight — and playback frames mark
+     * selfAnimated, which is what earns the frame-rate readout its tenant.
+     * The control ships hidden and reveals only for a model with clips;
+     * its icons are inline SVG (the no-font-glyph pin applies).
+     */
+    const html = renderKitHtml({ title: "Kit", entries: [] });
+    expect(html).toContain('id="play"');
+    expect(html).toContain("function parseAnimations(gltf, bin)");
+    expect(html).toContain("function clipPoseAt(renderer, tSec)");
+    expect(html).toMatch(/id="play"[^>]*\bhidden\b/);
+    // Posed worlds become the pristine base, then the one funnel runs.
+    expect(html).toContain("d.baseModel = new Float32Array(world);");
+    const applyIdx = html.indexOf("function applyClipPose");
+    expect(applyIdx).toBeGreaterThan(-1);
+    expect(html.slice(applyIdx, applyIdx + 2000)).toContain("applyEditsToDraws();");
+    // Playback is self-animated motion: it counts toward the fps readout.
+    const advIdx = html.indexOf("function advancePlayback");
+    expect(html.slice(advIdx, advIdx + 400)).toContain("selfAnimated = true;");
+    // A gizmo drag pauses playback rather than fighting it.
+    const dragIdx = html.indexOf("function beginGizmoDrag");
+    expect(html.slice(dragIdx, dragIdx + 600)).toContain("setPlaying(false);");
+    // SVG icons, not font glyphs.
+    expect(html).toContain('class="icon p-play"');
+    expect(html).toContain('class="icon p-pause"');
+  });
+
   it("keeps the idle hint to navigation — edit verbs appear only with a selection", () => {
     const html = renderKitHtml({ title: "Kit", entries: [] });
     const idle = html.match(/id="hint">([^<]*(?:<b>[^<]*<\/b>[^<]*)*)<\/span>/);

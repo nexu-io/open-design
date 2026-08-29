@@ -1025,6 +1025,12 @@ export function renderKitHtml(page: KitPage): string {
      The caret hugs the toggle so they read as one control. */
   .xray-cluster { position: relative; display: inline-flex; align-items: stretch; margin-right: 8px; flex: none; }
   .xray-cluster .xray-btn { margin-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  /* The play control wears the x-ray button's clothes; only its icon swaps.
+     Icons are inline SVG like every glyph on this page — the no-font-glyph
+     pin applies here too. */
+  .play-btn .p-pause { display: none; }
+  .play-btn.on .p-play { display: none; }
+  .play-btn.on .p-pause { display: inline; }
   .xray-caret {
     display: inline-flex; align-items: center; justify-content: center; padding: 0 7px;
     margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0;
@@ -1256,6 +1262,11 @@ export function renderKitHtml(page: KitPage): string {
     <span class="mlabel" id="mlabel">Distance</span>
     <span class="mval" id="mval">0</span>
   </div>
+  <button class="xray-btn play-btn" id="play" type="button" hidden aria-pressed="false" title="Play animation (P)">
+    <svg class="icon p-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3.5l8 4.5-8 4.5z" fill="currentColor" stroke="none"/></svg>
+    <svg class="icon p-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5h2.4v9H5zM8.9 3.5h2.4v9H8.9z" fill="currentColor" stroke="none"/></svg>
+    Play
+  </button>
   <div class="xray-cluster" id="xrayCluster">
     <button class="xray-btn" id="xray" type="button" aria-pressed="false" title="X-ray — see occluded geometry (X)">
       <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8s2.2-4 6-4 6 4 6 4-2.2 4-6 4-6-4-6-4Z"/><circle cx="8" cy="8" r="1.8"/></svg>
@@ -1541,6 +1552,85 @@ function advanceXray(now) {
    motion rather than by input. Read and cleared at the top of draw(). */
 let selfAnimated = false;
 
+/* ---- Clip playback ---------------------------------------------------
+   The GLB carries the compiler's baked motion (spin/bob/screw, imported
+   actions) and an "animation" asset that stands still in its own viewer is
+   a statue. The runtime samples the tracks (clipPoseAt); this page owns
+   time and HOW a posed world lands: it becomes the draw's PRISTINE state
+   (baseModel + baseMin/baseMax) and then flows through applyEditsToDraws —
+   the one funnel user tweaks already use — so playback and the gizmo can
+   never fight over the model matrix. Playback pauses when a gizmo drag
+   begins for the same reason. */
+let playing = false;
+let playStart = 0;
+let playOffset = 0;
+function applyClipPose(tSec) {
+  if (!renderer) return false;
+  const posed = clipPoseAt(renderer, tSec);
+  if (!posed || posed.length === 0) return false;
+  for (const p of posed) {
+    const d = p.draw;
+    const world = p.world;
+    d.baseModel = new Float32Array(world);
+    const lo = [Infinity, Infinity, Infinity];
+    const hi = [-Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < 8; i++) {
+      const px = (i & 1) ? d.localMax[0] : d.localMin[0];
+      const py = (i & 2) ? d.localMax[1] : d.localMin[1];
+      const pz = (i & 4) ? d.localMax[2] : d.localMin[2];
+      const w = [
+        world[0] * px + world[4] * py + world[8] * pz + world[12],
+        world[1] * px + world[5] * py + world[9] * pz + world[13],
+        world[2] * px + world[6] * py + world[10] * pz + world[14],
+      ];
+      for (let a = 0; a < 3; a++) {
+        if (w[a] < lo[a]) lo[a] = w[a];
+        if (w[a] > hi[a]) hi[a] = w[a];
+      }
+    }
+    d.baseMin = lo;
+    d.baseMax = hi;
+  }
+  applyEditsToDraws();
+  return true;
+}
+function advancePlayback(now) {
+  if (!playing) return;
+  applyClipPose(playOffset + (now - playStart) / 1000);
+  selfAnimated = true;
+  invalidate();
+}
+function setPlaying(on) {
+  if (!renderer || !renderer.clips || renderer.clips.length === 0) return;
+  if (playing === !!on) return;
+  const btn = document.getElementById('play');
+  if (on) {
+    playStart = performance.now();
+    playing = true;
+    invalidate();
+  } else {
+    playOffset += (performance.now() - playStart) / 1000;
+    playing = false;
+  }
+  if (btn) {
+    btn.setAttribute('aria-pressed', playing ? 'true' : 'false');
+    btn.classList.toggle('on', playing);
+  }
+}
+/* Shown only when the loaded GLB actually carries clips; a static prop
+   never grows a control that could do nothing. Model reloads reset time —
+   the recompiled asset may have entirely different motion. */
+function refreshPlayButton() {
+  playing = false;
+  playOffset = 0;
+  const btn = document.getElementById('play');
+  if (!btn) return;
+  const has = !!(renderer && renderer.clips && renderer.clips.length > 0);
+  btn.hidden = !has;
+  btn.classList.remove('on');
+  btn.setAttribute('aria-pressed', 'false');
+}
+
 function draw(now) {
   frame = null;
   const animatedFrame = selfAnimated;
@@ -1549,6 +1639,7 @@ function draw(now) {
   // Advance time-based motion once per frame, before anything reads it, so
   // every consumer of the spring sees the same instant.
   advanceXray(now || 0);
+  advancePlayback(now || 0);
   if (renderer) render(renderer, state);
   // Position only. Rebuilding the overlay DOM every frame thrashed layout
   // badly enough to cost the WebGL context under sustained redraw, which
@@ -2057,6 +2148,9 @@ function beginGizmoDrag(e, entry, tool) {
   if (e.button !== 0 || state.selection.size === 0) return;
   e.preventDefault();
   e.stopPropagation();
+  // An edit and a playing clip would both rewrite the part's transform per
+  // frame; the deliberate act wins and playback pauses where it stands.
+  setPlaying(false);
   const names = [...state.selection];
   const before = snapshot(names);
   typed = '';
@@ -6927,6 +7021,10 @@ function gotoFaulted() {
   state.pan = [c[0] - b.center[0], c[1] - b.center[1], c[2] - b.center[2]];
   invalidate();
 }
+{
+  const playBtn = document.getElementById('play');
+  if (playBtn) playBtn.addEventListener('click', () => setPlaying(!playing));
+}
 const jumpBtn = document.getElementById('jump');
 if (jumpBtn) jumpBtn.addEventListener('click', gotoFaulted);
 
@@ -6959,6 +7057,10 @@ window.addEventListener('keydown', (e) => {
   // !e.repeat, same reason as X and A: a held G autorepeats and flickers the
   // handles on and off rather than toggling once.
   if ((e.key === 'g' || e.key === 'G') && !e.repeat) { setGizmoHidden(!gizmoHidden); e.preventDefault(); }
+  /* P plays/pauses the baked clips — the shortcut the button's own title
+     advertises. setPlaying no-ops on a model with no clips, so the key is
+     inert exactly where the button is hidden. */
+  if ((e.key === 'p' || e.key === 'P') && !e.repeat) { setPlaying(!playing); e.preventDefault(); }
 });
 
 /* Release of the chord leader: a clean tap (no digit pressed during the hold)
@@ -7231,6 +7333,7 @@ async function select(entry, button) {
      */
     applyEditsToDraws();
     refreshEditButtons();
+    refreshPlayButton();
     state.distance = renderer.bounds.radius * 3.2;
     state.pan = [0, 0, 0];
     /* One-shot restore of the pre-reload camera and selection, consumed on

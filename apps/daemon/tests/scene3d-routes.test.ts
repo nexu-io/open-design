@@ -698,10 +698,19 @@ describe.skipIf(!hasBlender)('scene3d compile over HTTP (real Blender)', () => {
       '/api/projects/proj1/scene3d/describe?scenePath=scenes/crate&region=1,2,3',
     );
     expect(bad.status).toBe(400);
-    // A never-compiled scene describes as a truthful null, not a 404.
+    // A scene DIRECTORY that does not exist is a typo, not "never
+    // compiled" — the two used to share a 200 {describe: null}, making a
+    // mistyped path indistinguishable from a scene awaiting its first
+    // build, while compile on the same path correctly refused.
     const missing = await api.req('/api/projects/proj1/scene3d/describe?scenePath=scenes/nope');
-    expect(missing.status).toBe(200);
-    expect(missing.body.describe).toBeNull();
+    expect(missing.status).toBe(404);
+    // A directory that EXISTS but was never compiled keeps the truthful null.
+    fs.mkdirSync(path.join(root, 'proj1', 'scenes', 'uncompiled'), { recursive: true });
+    const uncompiled = await api.req(
+      '/api/projects/proj1/scene3d/describe?scenePath=scenes/uncompiled',
+    );
+    expect(uncompiled.status).toBe(200);
+    expect(uncompiled.body.describe).toBeNull();
 
     // The USD scene-graph dump ships beside the exported .usda: a legible prim
     // tree, not the vertex-array black box the raw stage is.
