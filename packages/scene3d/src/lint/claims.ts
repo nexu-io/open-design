@@ -3,6 +3,7 @@ import { ISSUE_CODES } from "../errors.js";
 import { Rational } from "../kernel/rational.js";
 import type { EmbedResult } from "../kernel/embed.js";
 import type { ClaimsSpec, SolvedPart } from "../solve/types.js";
+import { MIN_CONTACT } from "../solve/types.js";
 import { isExempt } from "./exempt.js";
 import { groundVerdict, groundedSupport, nearestSupportBelow } from "../solve/contact.js";
 import { sweptSceneFacts, type SweptSceneFacts } from "../solve/sweep.js";
@@ -368,7 +369,10 @@ export function lintClaims(
            support — is the root, and it carries the failure with its
            riders named. */
         const unsupportedSet = new Set(unsupported.map((m) => m.object));
-        const touch = 0.001 + TOLERANCE;
+        // MIN_CONTACT, the solver's own embed floor — imported, not a literal
+        // 0.001, so this rest-chain attribution never drifts from the depth the
+        // solver actually places at.
+        const touch = MIN_CONTACT + TOLERANCE;
         const restsOnUnsupported = new Map<string, string>();
         for (const mesh of unsupported) {
           const below = nearestSupportBelow(census, mesh.object);

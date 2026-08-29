@@ -2,6 +2,7 @@ import { Census, Issue } from "../types.js";
 import { ISSUE_CODES } from "../errors.js";
 import { NormalizedContract } from "../contract.js";
 import { isExempt } from "./exempt.js";
+import { MIN_CONTACT } from "../solve/types.js";
 import { triangleTotals } from "./triangles.js";
 import { groundVerdict, nearestSupportBelow } from "../solve/contact.js";
 
@@ -46,9 +47,11 @@ export function lintWorld(
     const meshNames = new Set(census.meshes.map((m) => m.object));
     const pairKey = (a: string, b: string) => (a < b ? `${a}\u0000${b}` : `${b}\u0000${a}`);
     const separationOf = new Map(census.contacts.map((c) => [pairKey(c.a, c.b), c.separation]));
-    // Slack above the solver's own 1mm floor, governed by the same grounding
-    // tolerance the rest of the placement rules judge with.
-    const touch = 0.001 + contract.grounding.tolerance;
+    // Slack above the solver's own embed floor (MIN_CONTACT, imported rather
+    // than a literal 0.001), governed by the same grounding tolerance the rest
+    // of the placement rules judge with — so "not touching" is measured against
+    // the depth the solver actually rests parts at, never a stale copy.
+    const touch = MIN_CONTACT + contract.grounding.tolerance;
     for (const part of solved.parts) {
       if (!part.restsOn) continue;
       if (!meshNames.has(part.id) || !meshNames.has(part.restsOn)) continue;
