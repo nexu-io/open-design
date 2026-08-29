@@ -60,10 +60,37 @@ export function importJavaModel(
   const elements = (model as { elements: unknown[] }).elements;
   const textureMap = normaliseTextures((model as { textures?: unknown }).textures);
 
+  // MODEL-LEVEL fields scene.json has no word for. "Faithful, not
+  // lossy-silent" (this module's own doctrine) means naming what a `parent`
+  // chain, a GUI/inventory `display` transform, a disabled `ambientocclusion`
+  // flag, or a flat `gui_light` would have changed about how the block
+  // renders in-game — even though the geometry itself imports exactly.
+  const modelLevelDropped = (
+    ["parent", "display", "ambientocclusion", "gui_light"] as const
+  ).filter((key) => (model as Record<string, unknown>)[key] !== undefined);
+  if (modelLevelDropped.length > 0) {
+    warnings.push(
+      `model declares ${modelLevelDropped.map((k) => `'${k}'`).join(", ")} — scene.json has no word for ` +
+        `parent inheritance, GUI/inventory display transforms, baked ambient occlusion, or flat gui lighting; ` +
+        `the geometry imports exactly, this metadata does not`,
+    );
+  }
+  // FACE- and ELEMENT-level fields the same way, but aggregated across the
+  // whole model rather than named per element: a real block can carry
+  // per-face UV/rotation/cullface/tintindex on every one of its six faces,
+  // and a warning per face would flood the report for the ordinary case
+  // while saying nothing a reader could act on individually.
+  let elementsWithShade = 0;
+  let facesWithUv = 0;
+  let facesWithFaceRotation = 0;
+  let facesWithCullface = 0;
+  let facesWithTintindex = 0;
+
   const parts: RawSpec["parts"] = [];
   const relations: RawSpec["relations"] = [];
   const materialRefs = new Map<string, string>(); // texture ref -> material id
   const usedIds = new Set<string>();
+  const idSuffixByStem = new Map<string, number>(); // O(1) amortised uniqueId
 
   elements.forEach((raw, i) => {
     const label = isObject(raw) && typeof raw.name === "string" ? raw.name : `element ${i}`;
@@ -171,12 +198,57 @@ export function importJavaModel(
           `scene.json binds one material per part, so it imports with '${faceTextures.ref}' and the rest are dropped`,
       );
     }
+    if ((raw as { shade?: unknown }).shade !== undefined) elementsWithShade += 1;
+    if (isObject(raw.faces)) {
+      for (const face of Object.values(raw.faces)) {
+        if (!isObject(face)) continue;
+        if (face.uv !== undefined) facesWithUv += 1;
+        if (face.rotation !== undefined) facesWithFaceRotation += 1;
+        if (face.cullface !== undefined) facesWithCullface += 1;
+        if (face.tintindex !== undefined) facesWithTintindex += 1;
+      }
+    }
     const material = ensureMaterial(faceTextures.ref, materialRefs);
-    const id = uniqueId(sanitizeId(isObject(raw) && typeof raw.name === "string" ? raw.name : `elem_${i}`), usedIds);
+    const id = uniqueId(sanitizeId(isObject(raw) && typeof raw.name === "string" ? raw.name : `elem_${i}`), usedIds, idSuffixByStem);
 
     parts.push({ id, size, shape: "box", material, ...(rotateSpec ? { rotate: rotateSpec } : {}) });
     relations.push({ type: "at", part: id, center });
   });
+
+  // The aggregated counts, one line each — a reader who cares about a
+  // specific channel (UV, cullface) can act on it; a reader who does not can
+  // skip the line. `player sees` fields (uv, per-face rotation) lead;
+  // engine-only fields (cullface, tintindex, shade) follow.
+  if (facesWithUv > 0) {
+    warnings.push(
+      `${facesWithUv} face(s) declare their own 'uv' box — scene.json parts always use the compiler's ` +
+        `box-fit unwrap, so a custom per-face UV (a texture atlas region, a stretched or offset tile) is not carried`,
+    );
+  }
+  if (facesWithFaceRotation > 0) {
+    warnings.push(
+      `${facesWithFaceRotation} face(s) declare a per-face texture 'rotation' — not carried; the imported ` +
+        `face renders with the texture at its default orientation`,
+    );
+  }
+  if (facesWithCullface > 0) {
+    warnings.push(
+      `${facesWithCullface} face(s) declare 'cullface' — not carried; the imported geometry always renders ` +
+        `every face regardless of the neighbouring block, which costs nothing visually but is not what the author declared`,
+    );
+  }
+  if (facesWithTintindex > 0) {
+    warnings.push(
+      `${facesWithTintindex} face(s) declare 'tintindex' — not carried; a biome/foliage tint the game would ` +
+        `apply per-face (grass, leaves, water) is not reproduced, so the import renders the base texture untinted`,
+    );
+  }
+  if (elementsWithShade > 0) {
+    warnings.push(
+      `${elementsWithShade} element(s) declare 'shade' — not carried; a flat-shaded element imports with the ` +
+        `compiler's normal (smooth-by-default box) shading instead`,
+    );
+  }
 
   if (parts.length === 0) {
     return { spec: null, warnings: [...warnings, "no importable (axis-aligned) elements"], skipped };
@@ -395,18 +467,35 @@ const MAX_ID = 63;
  * candidate is a distinct string, so one of `used.size + 1` attempts must be
  * free — termination is structural, not a retry limit.
  */
-function uniqueId(base: string, used: Set<string>): string {
+/**
+ * A name nobody else has, in constant time per call.
+ *
+ * The scan used to restart at `_2` for every collision, so N identically
+ * named elements cost N²/2 probes: a Blockbench file of default-named cubes
+ * (ordinary input — Blockbench names every new cube `cube`) took 4.5 s at
+ * 4,000 elements, 18 s at 8,000, and did not finish 20,000 inside two
+ * minutes. It runs ahead of the work meter and the cancel checkpoints, so
+ * that time was un-metered and un-interruptible.
+ *
+ * Remembering where each stem left off makes it one probe per call in the
+ * common case. `nextSuffix` is only ever advanced, and the `used` set is
+ * still consulted, so a name taken by a DIFFERENT stem (`cube_2` authored
+ * literally, then two `cube`s) cannot be handed out twice.
+ */
+function uniqueId(base: string, used: Set<string>, nextSuffix?: Map<string, number>): string {
   const id = (base.startsWith("prp_") || base.startsWith("mtl_") ? base : `prp_${base}`).slice(0, MAX_ID);
   if (!used.has(id)) {
     used.add(id);
     return id;
   }
   const last = used.size + 2;
-  const stem = id.slice(0, MAX_ID - 1 - String(last).length);
-  for (let n = 2; n <= last; n++) {
+  let n = nextSuffix?.get(id) ?? 2;
+  for (; n <= last; n++) {
+    const stem = id.slice(0, MAX_ID - 1 - String(n).length);
     const k = `${stem}_${n}`;
     if (!used.has(k)) {
       used.add(k);
+      nextSuffix?.set(id, n + 1);
       return k;
     }
   }

@@ -353,4 +353,61 @@ describe("non-finite rotation refusals (bug-shaker round)", () => {
     expect(spec === null || spec.parts.length === 0).toBe(true);
     expect(skipped.some((s) => s.reason.includes("non-finite"))).toBe(true);
   });
+
+  it("names every format field it cannot carry — model-, element- and face-level — instead of dropping them silently", () => {
+    // The importer's own doctrine is "faithful, not lossy-silent"; this pins
+    // the fields scene.json genuinely has no word for, at all three scopes
+    // the Java model format spreads them across.
+    const { spec, warnings } = importJavaModel({
+      parent: "block/cube_all",
+      display: { gui: { rotation: [30, 45, 0] } },
+      ambientocclusion: false,
+      gui_light: "front",
+      textures: { face: "block/face" },
+      elements: [
+        {
+          name: "tinted",
+          shade: false,
+          from: [0, 0, 0],
+          to: [16, 16, 16],
+          faces: {
+            up: {
+              texture: "#face",
+              uv: [0, 0, 8, 8],
+              rotation: 90,
+              cullface: "up",
+              tintindex: 0,
+            },
+          },
+        },
+      ],
+    });
+    expect(spec).not.toBeNull();
+    expect(spec!.parts).toHaveLength(1); // geometry still imports exactly
+    const joined = warnings.join(" | ");
+    expect(joined).toContain("'parent'");
+    expect(joined).toContain("'display'");
+    expect(joined).toContain("'ambientocclusion'");
+    expect(joined).toContain("'gui_light'");
+    expect(joined).toContain("'uv'");
+    expect(joined).toContain("'rotation'");
+    expect(joined).toContain("'cullface'");
+    expect(joined).toContain("'tintindex'");
+    expect(joined).toContain("'shade'");
+  });
+
+  it("stays quiet about format fields the model never used", () => {
+    // A resolvable texture, so the only warning in play is the one under
+    // test — an unresolved texture legitimately warns on its own channel,
+    // which isn't what this test is pinning.
+    const png = solidPng(120, 80, 40);
+    const { warnings } = importJavaModel(
+      {
+        textures: { face: "block/face" },
+        elements: [{ name: "plain", from: [0, 0, 0], to: [16, 16, 16], faces: { up: { texture: "#face" } } }],
+      },
+      { resolveTexture: (ref) => (ref === "block/face" ? png : undefined) },
+    );
+    expect(warnings).toEqual([]);
+  });
 });

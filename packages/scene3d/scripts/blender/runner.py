@@ -5896,6 +5896,58 @@ def rebuild_object_animation(known=None):
     log("rebaked %d animated object(s) across frames %d-%d" % (len(movers), start, end))
 
 
+def referenced_companion_files(paths, out_dir):
+    """Files the shipped TEXT formats point at, so they can travel with them.
+
+    A `.usda` names its images as `@./textures/x.png@` and a `.mtl` as
+    `map_Kd textures/x.png`. Those files are as much a part of the
+    deliverable as the container is — take the OpenUSD or the OBJ without
+    them and the asset arrives untextured — but only the containers were
+    ever listed, so the host Export menu offered a stage whose references
+    all dangled. GLB embeds and USDZ packages, which is exactly why the gap
+    was easy to miss: the two self-contained formats were fine.
+
+    Returns absolute paths that EXIST, de-duplicated, in stable order. A
+    reference to something absent is not invented here — the USDZ packager
+    already reports that case (S3D-W-205).
+    """
+    found = []
+    seen = set()
+    for path in paths:
+        lower = path.lower()
+        if not (lower.endswith(".usda") or lower.endswith(".mtl")):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                text = f.read()
+        except Exception:
+            continue
+        refs = []
+        if lower.endswith(".usda"):
+            refs = re.findall(r"@([^@\n]+)@", text)
+        else:
+            for line in text.splitlines():
+                parts = line.split(None, 1)
+                if len(parts) == 2 and parts[0].lower().startswith("map_"):
+                    refs.append(parts[1].strip())
+        for ref in refs:
+            ref = ref.strip()
+            if not ref or "://" in ref:
+                continue
+            candidate = os.path.normpath(
+                ref if os.path.isabs(ref) else os.path.join(out_dir, ref))
+            # Never leave out/: a stage may legitimately reference a shared
+            # library elsewhere, and that is not this project's to deliver.
+            root = os.path.normpath(out_dir)
+            if os.path.commonpath([root, candidate]) != root:
+                continue
+            if candidate in seen or not os.path.isfile(candidate):
+                continue
+            seen.add(candidate)
+            found.append(candidate)
+    return sorted(found)
+
+
 def transcode_stage_textures(master_path):
     """Rewrite textures the stage references into a format its readers accept.
 
@@ -6380,6 +6432,116 @@ def restore_carry(carry):
     return notes
 
 
+def restore_uv_layer_order(captured):
+    """Put the AUTHORED UV layer order and names back on the re-imported scene.
+
+    Blender's USD exporter renames a mesh's ACTIVE UV layer to USD's
+    convention `st`; every other layer keeps its authored name. Its importer
+    then rebuilds `mesh.uv_layers` in COMPOSED PROPERTY order, which is
+    lexicographic — so a second layer whose name sorts before "st" (a
+    `Lightmap` beside a renamed `UVMap`) lands at index 0 while the true
+    primary lands at index 1. GLB and FBX write `TEXCOORD_0`/`TEXCOORD_1` BY
+    INDEX, so a lightmapped asset ships with every textured material sampling
+    the wrong UV set — silently, because the master `.usda` itself is
+    correct (a USD consumer reading `primvars:st` BY NAME gets the right
+    data; only INDEX-based lowering corrupts it).
+
+    `captured` is `{object_name: {"order": [layer_names_in_authored_order],
+    "active": authored_active_layer_name_or_None}}` from BEFORE the master
+    was exported (see its capture site in `_export_scene`, scoped to meshes
+    with 2+ layers — a single-layer mesh has no order to lose). Matched by
+    object NAME on the re-imported scene, the same lookup `restore_carry`
+    uses for the same reason: the datablocks themselves cannot survive the
+    reset, only their names do.
+
+    No API at any layer moves a UV layer (`Mesh.uv_layers` and bmesh's
+    `loops.layers.uv` both expose only `new`/`remove` — CustomData layer
+    order is insertion order, full stop), so this deletes and re-creates
+    each layer in the authored order, copying its per-loop UV data through
+    untouched via `foreach_get`/`foreach_set`. A prior version of the
+    sibling sphere/capsule determinism fix in this same file rebuilt a mesh
+    from raw positions and silently dropped every UV layer; this preserves
+    the actual per-loop data for that exact reason.
+
+    Returns a list of human-readable notes for any object it could not fully
+    restore — never silent about a partial fix, matching every other
+    measured-loss channel in this file.
+    """
+    import bpy
+    notes = []
+    for obj_name, captured_entry in captured.items():
+        want_names = captured_entry["order"]
+        want_active = captured_entry.get("active")
+        obj = bpy.data.objects.get(obj_name)
+        if obj is None or obj.type != "MESH" or not obj.data:
+            notes.append("'%s': not found on the re-imported scene" % obj_name)
+            continue
+        me = obj.data
+        have_names = [l.name for l in me.uv_layers]
+        if have_names == want_names:
+            continue  # nothing renamed or reordered — the common case
+        if len(have_names) != len(want_names):
+            notes.append(
+                "'%s': had %d UV layer(s) before export, %d after — left as the exporter produced them"
+                % (obj_name, len(want_names), len(have_names)))
+            continue
+        try:
+            # Match every authored name that survived VERBATIM; only the
+            # active layer is ever renamed, so at most one name on each side
+            # goes unmatched — and if exactly one does on each side, they
+            # are each other, by elimination. No literal "st" check: this
+            # stays correct however the exporter's rename convention reads.
+            name_map = {}
+            have_left = list(have_names)
+            want_left = []
+            for nm in want_names:
+                if nm in have_left:
+                    name_map[nm] = nm
+                    have_left.remove(nm)
+                else:
+                    want_left.append(nm)
+            if len(want_left) == 1 and len(have_left) == 1:
+                name_map[want_left[0]] = have_left[0]
+            elif want_left or have_left:
+                notes.append(
+                    "'%s': UV layers %s could not be matched to the authored order %s "
+                    "— left as the exporter produced them" % (obj_name, have_names, want_names))
+                continue
+            order = [name_map[nm] for nm in want_names]
+            if order == have_names:
+                continue
+            n = len(me.loops) * 2
+            saved = {}
+            for l in me.uv_layers:
+                buf = [0.0] * n
+                l.uv.foreach_get("vector", buf)
+                saved[l.name] = buf
+            active_render_name = next(
+                (l.name for l in me.uv_layers if l.active_render), have_names[0])
+            while me.uv_layers:
+                me.uv_layers.remove(me.uv_layers[0])
+            for nm in order:
+                lay = me.uv_layers.new(name=nm, do_init=False)
+                lay.uv.foreach_set("vector", saved[nm])
+            render_at = order.index(active_render_name) if active_render_name in order else 0
+            me.uv_layers[render_at].active_render = True
+            # The authored ACTIVE-FOR-EDITING layer, same name_map lookup as
+            # active_render above — want_active is an authored name, order[]
+            # holds have-names in authored position, so map through name_map
+            # first. Falls back to 0 exactly when nothing was captured (an
+            # object added after the capture, or an older captured shape).
+            active_want = name_map.get(want_active) if want_active else None
+            active_at = order.index(active_want) if active_want in order else 0
+            me.uv_layers.active_index = active_at
+            me.update()
+        except Exception as exc:
+            # A failed restore is the pre-fix (wrong-index) state, not a
+            # crashed export — the object simply keeps whatever order the
+            # exporter produced, same as an unmatched-names object above.
+            notes.append("'%s': UV layer restore failed: %s" % (obj_name, exc))
+    return notes
+
+
 # STL is unitless by format and millimetres by universal convention.
 MM_PER_METRE = 1000.0
 # How far the written STL may differ from the scene's own bounds before the
@@ -6508,12 +6670,21 @@ def _export_scene(job, carry_dir_ref):
     # directly. A capability our writer failed to author into the master
     # therefore cannot silently survive into a deliverable: the parity
     # fingerprint reports it and the lint fails the compile.
+    # WHOSE camera and light these are, recorded while the build scene still
+    # carries the marker. The master keeps them (a stage may legitimately
+    # describe its own shot, and `purpose = "guide"` marks them there), but a
+    # delivery container must not: an integrator opening the FBX in Maya
+    # found a stray camera and a 469W area light inside the asset. Provenance,
+    # not type — an author who placed a camera gets to keep it.
+    staged_rig = sorted(
+        o.name for o in bpy.context.scene.objects
+        if o.type in ("CAMERA", "LIGHT") and o.get("s3d_staging"))
     build_print = scene_fingerprint()
     animated = len(build_print["actions"]) > 0
     # WHICH objects animate, not just whether any do — the re-import cannot
     # rediscover this reliably (see rebuild_object_animation).
     animated_names = animated_object_names()
-    lowering = {"buildFingerprint": build_print, "master": None,
+    lowering = {"buildFingerprint": build_print, "stagedRig": staged_rig, "master": None,
                 "masterFingerprint": None, "droppedExportOptions": []}
     # Save what the round trip is KNOWN to drop, before authoring the master.
     # Measured losses only — see capture_carry.
@@ -6530,6 +6701,32 @@ def _export_scene(job, carry_dir_ref):
         # less informative one, since a restore given nothing to
         # restore fails for a reason that is really the first failure.
         lowering["captureError"] = str(exc)
+
+    # Which UV layer each mesh had ACTIVE, by name, before the export
+    # renames it. Blender's USD exporter renames the active UV layer to
+    # USD's convention `st`; on re-import the layers rebuild in composed
+    # PROPERTY order, which is lexicographic — so a second layer whose name
+    # sorts before "st" (a "Lightmap" alongside the renamed "UVMap") becomes
+    # index 0 after re-import while the true primary becomes index 1. GLB
+    # and FBX write TEXCOORD_0/1 BY INDEX, so both ship with every textured
+    # material sampling the wrong UV set — silently, since the master .usda
+    # itself is correct (any USD consumer reading `primvars:st` BY NAME gets
+    # the right data; only the index-based lowering corrupts it). Captured
+    # here, restored on the re-imported scene below, same shape as carry.
+    uv_layer_order = {
+        o.name: {
+            "order": [l.name for l in o.data.uv_layers],
+            # The authored ACTIVE-FOR-EDITING layer, by name — distinct from
+            # active_render (which the restore already tracked): order and
+            # render survive the round trip regardless, but without this the
+            # rebuilt mesh always came back with layer 0 active-for-editing,
+            # silently changing which layer a later edit or a UV-editor
+            # session would touch first.
+            "active": (o.data.uv_layers.active.name if o.data.uv_layers.active else None),
+        }
+        for o in bpy.context.scene.objects
+        if o.type == "MESH" and o.data and len(o.data.uv_layers) > 1
+    }
 
     source_usda = job.get("usdaFiles") or []
     if source_usda and "usda" not in formats:
@@ -6610,6 +6807,36 @@ def _export_scene(job, carry_dir_ref):
             "assets": [r for r in (rel_to_project(a, job) for a in assets) if r is not None],
             "skipped": skipped, "lowering": lowering}})
         return
+    # The compiler's own staging rig does not travel into a delivery
+    # container. It is dropped from the RE-IMPORTED scene, which is the one
+    # every lowering reads, so the master keeps its guide-marked prims while
+    # GLB/OBJ/FBX carry only the asset. (glTF drops cameras and lights by
+    # default and OBJ cannot carry them, so before this only the FBX shipped
+    # them — one format silently unlike the other two.)
+    for name in lowering.get("stagedRig") or []:
+        stray = bpy.data.objects.get(name)
+        if stray is not None and stray.type in ("CAMERA", "LIGHT"):
+            bpy.data.objects.remove(stray, do_unlink=True)
+
+    # Put the AUTHORED UV layer order and names back, before any lowering
+    # reads them by index. See `uv_layer_order`'s capture above for why this
+    # is needed at all; matched by object NAME, the same lookup every other
+    # carried-forward fact in this function uses, because USD prim paths can
+    # rename an object but this compiler's own naming discipline keeps names
+    # stable across the round trip in the overwhelmingly common case.
+    uv_order_notes = restore_uv_layer_order(uv_layer_order)
+    if uv_order_notes:
+        lowering["uvLayerOrderNotes"] = uv_order_notes
+    # view_layer.update() AGAIN, this file's own standing gotcha (census()
+    # carries the same call for the same reason): background bpy does not
+    # reliably refresh derived state for edits made outside operators, and
+    # `uv_layers.remove()`/`.new()` are exactly that. Verified end to end —
+    # re-importing the shipped GLB shows both layers' data intact and each
+    # material's UV Map node still bound to the right one after the reorder —
+    # so this is cheap insurance in the same spirit as every other
+    # post-mutation refresh in this file, not a fix for an observed failure.
+    bpy.context.view_layer.update()
+
     # Blender's USD importer applies timeSampled transforms per frame but
     # does NOT reconstruct actions/fcurves (probed: animation_data stays
     # None) — so a lowered GLB would silently lose the object animation
@@ -6811,6 +7038,11 @@ def _export_scene(job, carry_dir_ref):
                             "reason": "%s: %s" % (type(exc).__name__, exc)})
             log("LOD export failed: %s" % exc)
 
+    # The images the text formats point at travel WITH them: a .usda or an
+    # .obj taken without its textures arrives untextured, and the host Export
+    # menu offers exactly this list. Appended last so the containers keep
+    # leading the list a reader scans.
+    assets.extend(referenced_companion_files(assets, out_dir))
     rel_assets = [r for r in (rel_to_project(a, job) for a in assets) if r is not None]
     cleanup_carry(carry_dir)
     emit({"ok": True, "data": {"assets": rel_assets, "skipped": skipped,
@@ -6882,12 +7114,50 @@ def _exit_now(code):
     runs those hooks, which is the part that hangs. Nothing is lost: stdout is
     already flushed, and every artifact this runner produces is written and
     closed before the payload announcing it goes out.
+
+    On Windows, os._exit still isn't the end of it: CPython's os._exit calls
+    the C runtime's _exit(), which — unlike POSIX _exit() — still goes
+    through Win32 ExitProcess(), and ExitProcess() notifies every loaded DLL
+    with DLL_PROCESS_DETACH before the process actually dies. A driver DLL
+    that mishandles that notification after this process touched bpy at all
+    (measured directly on this codebase's dev machine: even a bare `import
+    bpy` immediately followed by `os._exit(0)`, no scene work at all,
+    access-violates on the way out) turns an already-finished,
+    already-successful export job into a reported S3D-E-202 hard failure
+    purely on the way out the door — the caller's child.kill() right after
+    parsing the sentinel almost always wins the race and hides this, but a
+    slow pipe drain or a busy scheduler is enough to lose it.
+
+    TerminateProcess, called on this process by itself, is the one Win32
+    exit path that skips DLL_PROCESS_DETACH entirely — the documented fix
+    for exactly this "a loaded DLL crashes on the way out" class of
+    problem. It must be called through ctypes with explicit restype/
+    argtypes: left to ctypes' default `int` marshaling, the pseudo-handle
+    GetCurrentProcess() returns (all 64 bits set) truncates, TerminateProcess
+    is handed a corrupt handle, the call fails silently, and execution falls
+    through to the exact os._exit crash this exists to avoid — confirmed by
+    reproducing both the untyped call's silent failure and the typed call's
+    clean, crash-free exit on this machine before landing this fix. ctypes
+    is stdlib, so this costs nothing to try; if it's ever unavailable (or
+    this isn't Windows), os._exit(code) below still runs.
     """
     try:
         sys.stdout.flush()
         sys.stderr.flush()
     except Exception:
         pass
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            import ctypes.wintypes as wintypes
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+            kernel32.GetCurrentProcess.argtypes = []
+            kernel32.TerminateProcess.restype = wintypes.BOOL
+            kernel32.TerminateProcess.argtypes = [wintypes.HANDLE, ctypes.c_uint]
+            kernel32.TerminateProcess(kernel32.GetCurrentProcess(), code)
+        except Exception:
+            pass  # fall through to os._exit below
     os._exit(code)
 
 

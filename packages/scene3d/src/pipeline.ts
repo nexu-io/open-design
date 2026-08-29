@@ -44,6 +44,7 @@ type KernelShape = { name: string; verts: Array<[number, number, number]> };
 import { validateCensus } from "./build/census.js";
 import { runLint } from "./lint/rules.js";
 import { validateGltf } from "./lint/gltf-oracle.js";
+import { lintCoordinatePrecision } from "./lint/coordinate-precision.js";
 import { validateUsd } from "./lint/usd-oracle.js";
 import { collectSheets } from "./sheet/collect.js";
 import type { SheetSpec } from "./lint/sheet.js";
@@ -1787,6 +1788,10 @@ export async function compile(
                 usda: fs.readFileSync(abs, "utf8"),
                 assetName: path.basename(request.projectDir),
                 file: asset,
+                // Whose rig it is, measured by the runner. Without this the
+                // marking is a type test, and an author who ships a camera
+                // has it declared scaffolding.
+                ...(lowering?.stagedRig ? { stagedRig: lowering.stagedRig } : {}),
               });
               fs.writeFileSync(abs, authored.usda);
               /* A legible scene-GRAPH beside the .usda. The exported USD is
@@ -1971,6 +1976,26 @@ export async function compile(
                   rel.push(d);
                   exportedAssets.push(d);
                 }
+              }
+              /* Every part the Minecraft lowering could not express, said out
+                 loud. `emitMinecraftModel` measures the reason per object
+                 ("wears 3 materials — a Java element carries one texture
+                 key", "textured material flattened to a solid colour tile")
+                 and the return value was dropped on the floor: the model
+                 shipped missing parts and nothing named them. Same code the
+                 empty-model case uses, because it is the same fact at a
+                 different extent. */
+              for (const miss of mc.skipped ?? []) {
+                issues.push({
+                  code: ISSUE_CODES.VOXEL_NOT_CUBOID,
+                  severity: "warning",
+                  message: `'${miss.object}' is not in the Minecraft model — ${miss.reason}`,
+                  hint:
+                    "author it from box shapes on the voxel grid, or accept that this part ships " +
+                    "in the USD/glTF containers only",
+                  target: miss.object,
+                  detail: { object: miss.object, reason: miss.reason },
+                });
               }
               if (mc.elements === 0) {
                 issues.push({
@@ -2245,6 +2270,11 @@ export async function compile(
     for (const glb of exportedAssets.filter((a) => a.toLowerCase().endsWith(".glb"))) {
       lintIssues.push(...(await validateGltf(request.projectDir, glb)));
     }
+    /* Why a distant part arrives broken. The world rules report the
+       symptoms (zero-area faces, merged vertex pairs); this names the cause,
+       measured in float32 quanta at the part's own distance, so the author
+       reaches the one edit that fixes it. */
+    lintCoordinatePrecision(census, lintIssues);
     // And the exported USD stage to OpenUSD's own runtime. The UNCHECKED
     // warning IS dropped here: unlike the bundled glTF validator, the USD
     // oracle is host-optional (needs pxr), so a machine without it should get
@@ -3421,6 +3451,17 @@ interface LoweringRecord {
   /** Set when the FBX header's timestamp fields were not the shape the pin
    *  knows, so the file keeps a wall clock. */
   fbxTimestampNote?: string;
+  /** Objects the COMPILER staged (its framing camera, its key light), by
+   *  name. `purpose = "guide"` is authored from this rather than from prim
+   *  TYPE, so an author's own camera stays asset content; the same list is
+   *  what the lowering drops before writing a delivery container. */
+  stagedRig?: string[];
+  /** Objects whose UV layer order the runner could NOT restore after the
+   *  master round trip (see `restore_uv_layer_order` in runner.py) — one
+   *  human-readable note per object. Present only when at least one mesh's
+   *  restore failed; the common case (single UV layer, or a successful
+   *  restore) leaves this absent. */
+  uvLayerOrderNotes?: string[];
 }
 
 /**
@@ -3496,6 +3537,23 @@ function emitMasterParity(lowering: LoweringRecord | null | undefined, issues: I
         "the exported content is correct; only the byte-for-byte reproducibility " +
         "guarantee is narrowed on this machine. Install the missing runtime (the USD " +
         "prim sort needs a python with pxr) to restore it",
+      file: lowering.master ?? "scene.usda",
+    });
+  }
+  /* Unlike the reproducibility notes above, a lost UV layer order is a
+     CORRECTNESS defect, not a byte-stability one: the shipped GLB/FBX
+     sample the wrong texture through a mislabelled TEXCOORD index. The
+     runner already restores the authored order by name in the overwhelming
+     common case (this fires only when that restore could not match every
+     layer on a specific mesh), so this is the residual, not the norm. */
+  for (const note of lowering.uvLayerOrderNotes ?? []) {
+    issues.push({
+      code: ISSUE_CODES.MASTER_UV_ORDER_LOST,
+      severity: "warning",
+      message: `UV layer order not restored: ${note}`,
+      hint:
+        "a textured material may be sampling the wrong UV set in the shipped GLB/FBX — verify the " +
+        "material's UV assignment in the exported file, or reduce the mesh to one UV layer",
       file: lowering.master ?? "scene.usda",
     });
   }
@@ -3640,15 +3698,26 @@ export function orderDrifts(build: Fingerprint, master: Fingerprint): string[] {
  *
  * Meshes, armatures, bones, actions and morphs are compared by COUNT, not by
  * name set: the importer round-trip can legally rename or suffix an entity
- * (`gold` → `gold.001`, a sanitised prim path), so a name-set difference would
- * cry a false loss on every legal rename. A net count DROP is an unambiguous
- * loss; a one-for-one substitution that preserves the count is a blindspot a
- * count cannot see, closed only by the identity-matching ladder these entity
- * types do not yet run (materials do — see `materialCapabilityLosses`).
+ * (`gold` → `gold.001`, a USD identifier sanitising a hyphen a real imported
+ * asset's own name carries — measured on the Cesium/Khronos corpus), so a
+ * name-set difference would cry a false loss on every legal rename. A net
+ * count DROP is an unambiguous loss; a one-for-one substitution that
+ * preserves the count is a blindspot a count cannot see, closed only by the
+ * identity-matching ladder these entity types do not yet run (materials do —
+ * see `materialCapabilityLosses`).
  *
  * Material CAPABILITIES are matched by name, then by unique content signature,
  * and what resolves to neither is reported UNCHECKED rather than skipped, so a
  * renamed-and-degraded material cannot pass wearing the count's green badge.
+ *
+ * One count WAS measured and silently unused: `scene_fingerprint` pays for
+ * each mesh's evaluated triangle count, keyed by name, and nothing compared
+ * it — a hull thinned to 4% of its triangles under its OWN unchanged name
+ * passed as clean. That is the one entity a NAME-MATCHED comparison can add
+ * safely here without reopening the rename trap above: it only fires when
+ * the name survived intact, so a legitimate rename stays invisible to it
+ * exactly like every other entity here, and a real collapse under a stable
+ * name is unambiguous.
  */
 export function fingerprintLosses(build: Fingerprint, master: Fingerprint): string[] {
   const losses: string[] = [];
@@ -3659,11 +3728,46 @@ export function fingerprintLosses(build: Fingerprint, master: Fingerprint): stri
       `${buildMeshes.length - masterMeshes.length} of ${buildMeshes.length} mesh part(s)`,
     );
   }
+  /* Counting parts cannot see a part EMPTIED, and the runner already pays
+     for the fact: `scene_fingerprint` measures each mesh's evaluated
+     triangle count (with a comment explaining why the frame must be pinned
+     first) and keys them by name. Reading only `.length` threw that away —
+     a hull losing 96% of its triangles or every mesh emptied to zero both
+     passed as clean master parity.
+     A RENAME alone is deliberately NOT flagged as loss: a real imported
+     asset's mesh name routinely contains characters USD identifiers cannot
+     (a hyphen — `Cesium_Man-effect` measured on the real corpus), and the
+     writer's own sanitisation renames it faithfully. Materials already have
+     a principled way to tell a sanitised rename from an actual loss —
+     `materialCapabilityLosses`, matched by name THEN by content signature —
+     and meshes have no such signature to match by yet; a name-only check
+     with no fallback would flag every sanitised import as a false loss. */
+  const thinned: string[] = [];
+  for (const [name, tris] of Object.entries(build.meshes ?? {})) {
+    const after = (master.meshes ?? {})[name];
+    if (after === undefined || typeof tris !== "number" || typeof after !== "number") continue;
+    // A tolerance, not equality: the master round-trip legitimately
+    // re-triangulates, so a few triangles either way is the format working
+    // as designed. An order-of-magnitude drop is content leaving.
+    if (tris > 0 && after < tris * 0.9) {
+      thinned.push(`${name} ${tris}→${after}`);
+    }
+  }
+  if (thinned.length > 0) {
+    losses.push(`triangles in ${thinned.length} mesh part(s) (${thinned.slice(0, 4).join(", ")}${thinned.length > 4 ? ", …" : ""})`);
+  }
   const buildMats = build.materials ?? [];
   const masterMats = master.materials ?? [];
   if (masterMats.length < buildMats.length) {
     losses.push(`${buildMats.length - masterMats.length} of ${buildMats.length} material(s)`);
   }
+  // A material renamed under equal count (`[mtl_a, mtl_b] → [mtl_a,
+  // mtl_a_001]`) is exactly what `materialCapabilityLosses` exists to
+  // adjudicate — it matches by name, then by content signature, and reports
+  // UNCHECKED rather than assuming loss, because USD identifier sanitisation
+  // (no hyphens, no leading digits) legitimately renames real imported
+  // materials. A second, cruder name-only check here would re-flag that same
+  // sanitisation as an ERROR-severity loss it is not; see its call site below.
   const buildArms = Object.keys(build.armatures ?? {}).length;
   const masterArms = Object.keys(master.armatures ?? {}).length;
   if (masterArms < buildArms) {

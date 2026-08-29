@@ -52,8 +52,26 @@ function isStagingType(typeName: string | null): boolean {
  * A prim is staging when it IS a rig prim or when it is the transform that
  * carries one. Blender exports every object as an Xform wrapping the typed
  * data prim, so the camera the user sees in the tree is the Xform.
+ *
+ * PROVENANCE WHEN WE HAVE IT, the type heuristic when we do not. Every
+ * source kind that creates the compiler's own camera or light marks it with
+ * `s3d_staging` (`ensure_staging` for a bare asset, the declarative
+ * emitter's `cam_hero`/`lgt_key` for a spec scene) and the runner reports
+ * those names — so a non-empty `stagedRig` is a COMPLETE account for that
+ * compile, and only it decides: an author who deliberately ships a camera
+ * or a practical light stays visible to every USD consumer. A raw build.py
+ * scene marks nothing (the escape hatch owns its own objects), so
+ * `stagedRig` is empty there and the type test is what it has always been:
+ * an imperfect but working heuristic, not a regression.
+ *
+ * A non-empty set overriding the type test entirely — rather than only
+ * adding to it — matters: OR-ing the two back in would let the type test's
+ * false positive survive even where real provenance says otherwise (the
+ * one case this was built to fix, an author's own camera/light prop wrongly
+ * marked guide).
  */
-function isStagingPrim(prim: UsdaPrim): boolean {
+function isStagingPrim(prim: UsdaPrim, stagedRig?: ReadonlySet<string>): boolean {
+  if (stagedRig && stagedRig.size > 0) return stagedRig.has(prim.name);
   if (isStagingType(prim.typeName)) return true;
   return prim.children.some((child) => isStagingType(child.typeName));
 }
@@ -349,6 +367,12 @@ export interface StageModelInput {
   assetName: string;
   /** Source path, for parse-error attribution only. */
   file?: string;
+  /**
+   * Names of the objects the COMPILER staged (its framing camera, its key
+   * light), from the runner's own marker. Given, only these are marked
+   * `purpose = "guide"`; absent, the type test decides. See isStagingPrim.
+   */
+  stagedRig?: readonly string[];
 }
 
 /**
@@ -380,11 +404,12 @@ export function authorStageModel(input: StageModelInput): StageModelResult {
   if (!root) return { usda: input.usda, authored: none };
 
   const children = root.children.filter((p) => p.kind === "def");
-  const guides = children.filter(isStagingPrim);
+  const stagedRig = input.stagedRig ? new Set(input.stagedRig) : undefined;
+  const guides = children.filter((child) => isStagingPrim(child, stagedRig));
   /* Scopes are namespace containers, not geometry — Blender parks materials
      under `_materials`. Counting one as a geometry root would turn every
      single-part prop into an assembly. */
-  const geometry = children.filter((p) => !isStagingPrim(p) && p.typeName !== "Scope");
+  const geometry = children.filter((p) => !isStagingPrim(p, stagedRig) && p.typeName !== "Scope");
 
   /*
    * One geometry root is a component: a single referenceable asset, which is

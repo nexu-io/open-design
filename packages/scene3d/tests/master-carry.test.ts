@@ -45,6 +45,51 @@ function glbJson(file: string): {
   throw new Error(`${file} has no JSON chunk`);
 }
 
+/** Both chunks of a .glb — the JSON *and* the BIN buffer — for reading
+ *  accessor data directly off the bytes rather than through a glTF reader's
+ *  interpretation of them. */
+function glbFull(file: string): { json: Record<string, any>; bin: Buffer } {
+  const buf = fs.readFileSync(file);
+  expect(buf.subarray(0, 4).toString("ascii"), `${file} is not a GLB`).toBe("glTF");
+  let at = 12;
+  let json: Record<string, any> | undefined;
+  let bin: Buffer | undefined;
+  while (at + 8 <= buf.length) {
+    const length = buf.readUInt32LE(at);
+    const type = buf.readUInt32LE(at + 4);
+    const chunk = buf.subarray(at + 8, at + 8 + length);
+    if (type === 0x4e4f534a) json = JSON.parse(chunk.toString("utf8"));
+    else if (type === 0x004e4942) bin = Buffer.from(chunk);
+    at += 8 + length;
+  }
+  if (!json || !bin) throw new Error(`${file} is missing a JSON or BIN chunk`);
+  return { json, bin };
+}
+
+/** A FLOAT VEC2 accessor's values, walked accessor -> bufferView -> buffer
+ *  with byteStride honoured, so an unrelated accessor sharing the buffer
+ *  cannot silently misalign a fixed-offset read the way a hand-computed
+ *  offset can (this is the exact class of bug that produced a false "UV
+ *  corruption" reading during this fix's own development). */
+function readVec2Accessor(
+  json: Record<string, any>,
+  bin: Buffer,
+  accessorIndex: number,
+): Array<[number, number]> {
+  const accessor = json.accessors[accessorIndex];
+  expect(accessor.componentType, "TEXCOORD accessors are always FLOAT").toBe(5126);
+  expect(accessor.type).toBe("VEC2");
+  const view = json.bufferViews[accessor.bufferView];
+  const stride = view.byteStride ?? 8; // tightly packed: 2 floats * 4 bytes
+  const start = (view.byteOffset ?? 0) + (accessor.byteOffset ?? 0);
+  const out: Array<[number, number]> = [];
+  for (let i = 0; i < accessor.count; i++) {
+    const at = start + i * stride;
+    out.push([bin.readFloatLE(at), bin.readFloatLE(at + 4)]);
+  }
+  return out;
+}
+
 describe.skipIf(!hasBlender)("what the master round trip must not lose", () => {
   const fixture = (name: string) => path.join(__dirname, "fixtures", name);
   const workDir = (name: string) => {
@@ -86,6 +131,58 @@ describe.skipIf(!hasBlender)("what the master round trip must not lose", () => {
     // exporter wrote both.
     expect(shipped.length).toBe(new Set(shipped).size);
     expect(result.summary.errors).toBe(0);
+  }, LONG);
+
+  it("keeps a second UV layer at its own TEXCOORD index through the master round trip", async () => {
+    // The USD exporter renames a mesh's ACTIVE UV layer to the USD convention
+    // `st`, and OpenUSD's GetPropertyNames() -- which Blender's USD importer
+    // walks to rebuild layers on re-import -- returns properties
+    // LEXICOGRAPHICALLY, not in authored order. Left unrestored, a two-UV
+    // mesh could come back from the master with its layers renamed and
+    // reordered, which a downstream material's UV-Map-node binding would
+    // then sample from the wrong TEXCOORD index.
+    //
+    // `runner.py`'s `restore_uv_layer_order` puts the authored order back by
+    // object name before any lowering reads it. This reads the SHIPPED GLB's
+    // accessor bytes, not a render or the census, so it fails the way an
+    // agent consuming the deliverable would actually see it fail.
+    //
+    // U is the discriminant, not V: Blender's glTF exporter flips V to match
+    // glTF's top-left origin but leaves U untouched, so pinning U's authored
+    // value sidesteps that convention entirely while still catching a swap,
+    // a drop, or a per-loop scramble between the two layers.
+    const dir = workDir("carry-uv-order");
+    fs.cpSync(fixture("good/multi_uv_cube"), dir, { recursive: true });
+    const result = await compile({
+      projectDir: dir,
+      proof: { turntable: false },
+      timeoutMs: LONG,
+      noCache: true,
+    });
+    expect(result.summary.errors).toBe(0);
+
+    const { json, bin } = glbFull(path.join(dir, "out", "scene.glb"));
+    const prim = json.meshes[0].primitives[0];
+    expect(prim.attributes.TEXCOORD_1, "both UV layers must reach the GLB").not.toBeUndefined();
+    const uv0 = readVec2Accessor(json, bin, prim.attributes.TEXCOORD_0);
+    const uv1 = readVec2Accessor(json, bin, prim.attributes.TEXCOORD_1);
+    expect(uv0.length).toBeGreaterThan(0);
+    expect(uv1.length).toBeGreaterThan(0);
+
+    // UVMap (authored active/render, U=0.1) must land at TEXCOORD_0; Lightmap
+    // (U=0.9) at TEXCOORD_1 -- and every loop of each accessor must agree,
+    // not just some of them.
+    for (const [u] of uv0) expect(u).toBeCloseTo(0.1, 3);
+    for (const [u] of uv1) expect(u).toBeCloseTo(0.9, 3);
+
+    // Each layer's V must be internally uniform (no per-loop scramble) and
+    // the two layers' V must differ from each other (no accidental collapse
+    // to one layer's data written twice).
+    const v0 = uv0[0]![1];
+    const v1 = uv1[0]![1];
+    for (const [, v] of uv0) expect(v).toBeCloseTo(v0, 3);
+    for (const [, v] of uv1) expect(v).toBeCloseTo(v1, 3);
+    expect(Math.abs(v0 - v1)).toBeGreaterThan(0.3);
   }, LONG);
 
   it("keeps a material single-sided through the round trip", async () => {

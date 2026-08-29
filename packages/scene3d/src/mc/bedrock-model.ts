@@ -156,11 +156,21 @@ export function buildBedrockModel(census: Census, _contract: NormalizedContract)
     // than skip. Needs the box's OWN extent (census localSize) + centre, not the
     // rotated world AABB. Multi-axis (no single recovered axis) is still skipped.
     if (!v.axisAligned) {
-      if (v.rotationAxis === null || v.rotationDeg === null || !v.center || !v.localSize) {
+      /* `== null` catches undefined too, and the angle must be a real
+         number: `=== null` alone let an ABSENT rotationDeg through to
+         `deg.toFixed()`, which threw a raw TypeError and took the whole
+         Minecraft deliverable with it. Java's equivalent guard already
+         defended; this is the same predicate on the Bedrock side. */
+      if (
+        v.rotationAxis == null ||
+        !Number.isFinite(v.rotationDeg as number) ||
+        !v.center ||
+        !v.localSize
+      ) {
         skipped.push({ object: mesh.object, reason: "rotated about multiple axes" });
         continue;
       }
-      cubes.push({ ...rotatedCube(v.center, v.localSize, v.rotationAxis, v.rotationDeg), uv });
+      cubes.push({ ...rotatedCube(v.center, v.localSize, v.rotationAxis, v.rotationDeg as number), uv });
       continue;
     }
 

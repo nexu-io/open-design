@@ -201,6 +201,8 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-W-903': 'Material capability lost in lowering',
   'S3D-W-904': 'USDZ is not Y-up for AR',
   'S3D-W-906': 'Export not byte-reproducible here',
+  'S3D-W-907': 'Part beyond float precision',
+  'S3D-W-908': 'UV layer order lost in lowering',
 
   /* intent budgets */
   'S3D-W-951': 'Part over its role triangle share',

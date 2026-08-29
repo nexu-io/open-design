@@ -411,6 +411,26 @@ export const ISSUE_CODES = {
      what is lost is the promise that recompiling produces identical bytes.
      A guarantee that varies by machine is reported, never assumed. */
   EXPORT_NOT_REPRODUCIBLE: "S3D-W-906",
+  /* A part sits so far from the origin that float32 cannot resolve its own
+     dimensions — the CAUSE behind zero-area faces and merge-distance vertex
+     pairs on a distant part, which the world rules report as symptoms with
+     no way to reach the one edit that fixes them. Measured in float32 quanta
+     at the part's own distance; unfixable by any export setting, because the
+     loss is in the build. */
+  COORDINATE_PRECISION_LOST: "S3D-W-907",
+  /* A mesh's UV LAYER ORDER could not be restored after the master
+     round-trip. Blender's USD exporter renames a mesh's active UV layer to
+     `st`; on re-import the layers rebuild in lexicographic property order,
+     so a second layer sorting before "st" (a Lightmap beside a renamed
+     UVMap) silently becomes index 0 while the true primary becomes index 1
+     — and GLB/FBX write TEXCOORD_0/1 BY INDEX, so a lightmapped asset ships
+     with every textured material sampling the WRONG UV set. The master
+     .usda is unaffected (its primvars are read by name); only the
+     index-based lowering corrupts it. The runner restores the authored
+     order by name on the re-imported scene; this fires only when that
+     restore could not match every layer — the correct order is unrecoverable
+     without owning what actually shipped. */
+  MASTER_UV_ORDER_LOST: "S3D-W-908",
   USDZ_UP_AXIS: "S3D-W-904",
 
   /* lint: intent budgets (950-969) — judgment gated on a part's authored

@@ -85,6 +85,15 @@ export function textureDirective(
  * That is W-970's job, and the author's.
  */
 export function px(metres: number): number {
+  /* A non-finite input would serialise as JSON `null` — a model file the
+     game rejects with no clue why, written by a compiler that reported a
+     clean export. The import side already refuses non-finite numbers; this
+     is the same guarantee on the way out. Throwing is right: the caller
+     (`emitMinecraftModel`) already catches and reports per-format failure,
+     so a broken part costs a named diagnostic rather than a corrupt file. */
+  if (!Number.isFinite(metres)) {
+    throw new RangeError(`non-finite coordinate (${metres}) cannot be expressed in a Minecraft model`);
+  }
   return Number((metres * PX).toFixed(4));
 }
 

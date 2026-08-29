@@ -81,7 +81,14 @@ export function buildJavaModel(census: Census, _contract: NormalizedContract): J
 
   // One texture variable per material, names made MC-safe and unique.
   const keyOfMaterial = new Map<string, string>();
-  const used = new Set<string>();
+  /* `particle` is Minecraft's own reserved key (break and landing particles),
+     written below as an alias to the first real texture. Reserving it here is
+     what keeps it from ALSO being handed to a material actually named
+     "particle": the alias would then overwrite that material's own entry, and
+     the cube wearing it would render with a different material's texture — or,
+     for a lone material of that name, with the self-referential
+     {"particle": "#particle"} that shows as the missing-texture checker. */
+  const used = new Set<string>(["particle"]);
   const directives: TextureDirective[] = [];
   const textures: Record<string, string> = {};
 
@@ -181,6 +188,8 @@ export function buildJavaModel(census: Census, _contract: NormalizedContract): J
   }
 
   // `particle` (break/landing particles) points at the first real texture.
+  // The key is reserved above, so this can never collide with a material's
+  // own entry and can never alias itself.
   const firstKey = Object.keys(textures)[0];
   if (firstKey) textures["particle"] = `#${firstKey}`;
 
