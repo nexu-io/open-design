@@ -303,6 +303,25 @@ function setPurpose(lines: string[], prim: UsdaPrim, purpose: string, out: Splic
 }
 
 /** Add the stage-level assetInfo block when the stage carries none. */
+/**
+ * The content of a USD double-quoted string, made safe.
+ *
+ * Control characters are removed (a raw newline would splice an uncontrolled
+ * line into the metadata block); then backslash and the quote delimiter are
+ * escaped — backslash FIRST, so the escapes added for quotes are not
+ * double-escaped. Stripping only the quote (the previous behaviour) left the
+ * ESCAPE character free: a project directory whose basename ends in a
+ * backslash (legal on POSIX) emitted `"name\"`, where `\"` is an escaped
+ * quote, not a terminator, so the string never closed and the master USDA — the
+ * format everything else is lowered from and re-parsed — was corrupt.
+ */
+function usdStringContent(s: string): string {
+  return s
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+}
+
 function addAssetInfo(lines: string[], assetName: string, out: Splice[]): boolean {
   const state: ScanState = { inString: false, triple: false };
   const masked = lines.map((line) => maskStrings(line, state));
@@ -315,7 +334,7 @@ function addAssetInfo(lines: string[], assetName: string, out: Splice[]): boolea
     at: header + 1,
     text: [
       "    assetInfo = {",
-      `        string name = "${assetName.replace(/"/g, "")}"`,
+      `        string name = "${usdStringContent(assetName)}"`,
       '        string version = "1"',
       "    }",
     ],

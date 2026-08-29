@@ -1,3 +1,4 @@
+import { flipbookGrid } from "./types.js";
 import {
   PUSH_CONSTANT_BUDGET,
   RESERVED_UNIFORMS,
@@ -176,13 +177,10 @@ export function validateShaderSpec(
   // would hide it. This is the SOLE upper bound on the frame count: a resource
   // fact (the encodable atlas edge), not an arbitrary number.
   if (frames > 1) {
-    // The smallest power-of-two grid width whose square covers the frames,
-    // by exact integer doubling rather than 2 ** ceil(log2(sqrt(frames))): this
-    // feeds the 16384px accept/reject verdict, and Math.log2/Math.sqrt of an
-    // even power of two can land a last ULP either side of the boundary and
-    // flip `cols` — the atlas edge — between machines.
-    let cols = 1;
-    while (cols * cols < frames) cols *= 2;
+    // The atlas grid comes from `flipbookGrid`, the ONE definition the runner
+    // also lays the atlas by — so the accept/reject bound here and the baked
+    // layout there cannot disagree about how many columns a frame count makes.
+    const [cols] = flipbookGrid(frames);
     const atlasEdge = cols * size;
     if (atlasEdge > 16384) {
       errors.push(

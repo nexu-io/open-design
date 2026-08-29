@@ -131,12 +131,27 @@ export function buildJavaModel(census: Census, _contract: NormalizedContract): J
         });
         continue;
       }
+      // A rotated element MUST have its own local box: the rotation is applied
+      // on top of the box below, so the box has to be the shape's UN-rotated
+      // extent. The world AABB fallback is the box a NON-rotated element's
+      // world extent already is — combining it with a rotation double-applies
+      // the turn and ships a cuboid of the wrong size and place. Bedrock
+      // refuses this exact case; Java must too, rather than emit corrupt
+      // geometry from a legacy census that lacks centre/size.
+      if (!v.center || !v.localSize) {
+        skipped.push({
+          object: mesh.object,
+          reason: "rotated element has no measured local box (centre/size) to place the rotation on",
+        });
+        continue;
+      }
       const mapped = rotationToMc(v.rotationAxis, legal);
-      rotation = { origin: pointToMc(v.center ?? [0, 0, 0]), axis: mapped.axis, angle: mapped.angle };
+      rotation = { origin: pointToMc(v.center), axis: mapped.axis, angle: mapped.angle };
     }
 
-    // Prefer the recovered element box; fall back to the world AABB only for a
-    // box the census measured before centre/size existed.
+    // Prefer the recovered element box; fall back to the world AABB only for an
+    // AXIS-ALIGNED box the census measured before centre/size existed (a rotated
+    // one was already refused above, so the AABB here is the true extent).
     const world = worldByName.get(mesh.object);
     let min: [number, number, number];
     let max: [number, number, number];

@@ -362,6 +362,17 @@ def apply_material_tweak(obj, mt):
                     elif hasattr(target, "blend_method"):
                         target.blend_method = "BLEND"
 
+        else:
+            # A property override was requested but the material exposes no
+            # Principled BSDF to write it to (a re-imported real asset with an
+            # unusual node graph, an emission-only surface). Every other tweak
+            # path names its failure in TWEAK_NOTES; a silently-skipped override
+            # would replay clean on every tweaks.json pass, indistinguishable
+            # from one that applied.
+            TWEAK_NOTES.append(
+                "'%s' material override (%s) could not be applied: '%s' has no Principled BSDF node"
+                % (obj.name, ", ".join(sorted(props)), target.name))
+
     if target is None:
         return
     if obj.material_slots:
@@ -5995,8 +6006,16 @@ def restore_carry(carry):
         try:
             with bpy.data.libraries.load(blend, link=False) as (src, dst):
                 dst.actions = [n for n in src.actions if n in wanted]
-        except Exception:
-            return notes
+        except Exception as exc:
+            # The master's baked actions were already removed above to free their
+            # names for the full-fidelity reload. Swallowing this into an empty
+            # `notes` reported "nothing was carried" — a clean success — while
+            # the multi-clip animation those names held was permanently gone.
+            # Raise instead: the caller records `lowering["carryError"]`, so the
+            # loss is a stated fact, and rebuild_object_animation still covers
+            # the objects the (now-empty) carry did not.
+            raise RuntimeError(
+                "carry library load failed for %s: %s" % (blend, exc))
         for obj_name, spec in plan.items():
             obj = bpy.context.scene.objects.get(obj_name)
             if obj is None:

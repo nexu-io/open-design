@@ -97,7 +97,15 @@ export const RESERVED_UNIFORMS = ["uS3dOutput", "uS3dTime"] as const;
 
 /** Derived atlas grid for a frame count: power-of-two columns and rows. */
 export function flipbookGrid(frames: number): [number, number] {
-  const cols = 2 ** Math.ceil(Math.log2(Math.sqrt(frames)));
+  // THE atlas grid definition: the smallest power-of-two width whose square
+  // covers the frames. Exact integer doubling, never 2 ** ceil(log2(sqrt)) —
+  // Math.log2's last ULP is not bit-identical across libm builds and this
+  // gates the atlas edge the runner bakes to pixels, so a boundary flip would
+  // ship different bytes on two machines. `validate.ts` reads this rather than
+  // re-deriving it, so the accept/reject bound and the baked layout cannot
+  // disagree.
+  let cols = 1;
+  while (cols * cols < frames) cols *= 2;
   return [cols, frames / cols];
 }
 

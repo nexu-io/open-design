@@ -1107,7 +1107,12 @@ function findCompiledScenes(projectRoot: string, depth = 4): string[] {
     }
   };
   walk(projectRoot, "", depth);
-  return found;
+  // Sorted at the source, so everything built from this list — the kit page's
+  // rows AND the sidecar's scene array and its truncation — is deterministic
+  // and consistent. `fs.readdirSync` order is filesystem-dependent, so an
+  // unsorted list made the sidecar's kept-48 both machine-varying and a
+  // different 48 than the sorted page shows first.
+  return found.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 function renderViewerHtml(payload: string): string {

@@ -2203,6 +2203,16 @@ export async function compile(
     }
     if (!wanted.has("export") && exportedAssets.length === 0) {
       exportedAssets.push(...previousManifestArtifacts(request.projectDir, "exportedAssets"));
+      // The deliverables are carried forward, so the repair record that
+      // explains them must be too: `carried` names which shipped capabilities
+      // the master did not account for, and a restricted recompile (the fast
+      // loop the skill recommends) that carried the files but dropped `carried`
+      // would report a false "nothing carried" against the very assets it just
+      // re-listed. The proof block already carries its whole record forward for
+      // the same reason; export owed the same.
+      if (carriedRecord === undefined) {
+        carriedRecord = previousManifestCarried(request.projectDir);
+      }
     }
 
     /* Where each frame was photographed from.
@@ -2939,6 +2949,20 @@ function writeReadModel(projectDir: string, model: ReadModel): void {
       `Orthographic plan/front/side drawing: \`ortho.svg\`\n`,
     "utf8",
   );
+}
+
+/** The `carried` repair record from the previous manifest, so a recompile that
+ *  does not re-run export still reports which shipped capabilities the master
+ *  did not account for. Absent (not empty) when there was none to read. */
+function previousManifestCarried(projectDir: string): LoweringRecord["carried"] {
+  try {
+    const previous = JSON.parse(
+      fs.readFileSync(path.join(projectDir, OUT_DIR, "manifest.json"), "utf8"),
+    ) as { carried?: LoweringRecord["carried"] };
+    return previous.carried;
+  } catch {
+    return undefined;
+  }
 }
 
 function previousManifestArtifacts(

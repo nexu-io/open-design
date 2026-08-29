@@ -984,7 +984,7 @@ function compactDetail(detail: Record<string, unknown> | undefined): string | nu
   // lists and E-802 driver logs — exactly the payloads that overflow — the
   // reader must know it is looking at a prefix.
   return line.length > 400
-    ? `${line.slice(0, 320)}… (truncated, ${line.length - 320} more chars in the manifest's issue detail)`
+    ? `${line.slice(0, 320)}… (truncated, ${line.length - 320} more chars in out/read-model.json)`
     : line;
 }
 

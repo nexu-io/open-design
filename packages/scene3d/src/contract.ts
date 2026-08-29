@@ -587,7 +587,13 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
  *  bake resolution to a legal power-of-two without inventing a constant. */
 function pow2Floor(n: number): number {
   if (!Number.isFinite(n) || n < 1) return 1;
-  return 2 ** Math.floor(Math.log2(n));
+  // Exact integer doubling, not 2 ** floor(log2(n)): this floors a bake
+  // resolution that reaches the baked pixels, and Math.log2's last ULP is not
+  // bit-identical across libm builds — a boundary flip would ship a different
+  // resolution on two machines, the determinism guarantee this package holds.
+  let p = 1;
+  while (p * 2 <= n) p *= 2;
+  return p;
 }
 
 /** A finite positive number, or the fallback — defensive against a bad
