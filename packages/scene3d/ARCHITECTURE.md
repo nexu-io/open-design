@@ -149,9 +149,16 @@ checks its own work.
   `subdivide` (Catmull-Clark), `crease` (boundary and crease unified as one
   "sharp" predicate; dart/crease/corner rules; propagated through subdivision
   and mirror), `move`/`scale` (region deformation), `extrude`/`inset` (add
-  topology), `mirror` (exact-coordinate weld, an integer permutation), and
-  `shape`/`endShape` (morph targets). One coordinate-region selector drives
-  the region ops. Subdivision is topology-REFINING: it assigns indices
+  topology), `mirror` (exact-coordinate weld, an integer permutation),
+  `clip` (`ctx.clip(normal, d)`: exact half-space cut, capped so the result
+  stays a closed solid — the first constructive-solid operator; a vertex's
+  side is the sign of `normal·v − d`, a straddling edge splits at the exact
+  rational crossing fraction, so two faces sharing that edge compute the
+  same crossing point and the cap welds with no tolerance. This is the atom
+  richer booleans compose from: a box hole or wedge notch is a sequence of
+  clips, a bevel is a clip across a corner), and `shape`/`endShape` (morph
+  targets). One coordinate-region selector drives the region ops.
+  Subdivision is topology-REFINING: it assigns indices
   directly (`V'=V+E+F` always) rather than welding, so a prior deformation
   that coincided two vertices cannot make it tear the surface (the property
   fuzz found that; the fix is the principle).

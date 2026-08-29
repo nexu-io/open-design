@@ -533,12 +533,14 @@ Any UI that shows a bare code must show or tooltip its title via
 | Code | Title |
 |---|---|
 | `S3D-E-201` | Blender not found |
+| `S3D-I-201` | Blender absent, not needed |
 | `S3D-E-202` | Blender build failed |
 | `S3D-E-203` | Build stage timed out |
 | `S3D-E-204` | Scene census invalid |
 | `S3D-E-205` | Export failed |
 | `S3D-W-205` | Export format unavailable |
 | `S3D-E-206` | Proof render failed |
+| `S3D-W-201` | Some looks did not render |
 | `S3D-E-207` | Blender version unsupported |
 | `S3D-W-207` | Imported file degraded |
 | `S3D-W-208` | Viewer edits ignored |
@@ -562,6 +564,7 @@ Any UI that shows a bare code must show or tooltip its title via
 | `S3D-E-324` | Z-fighting between faces |
 | `S3D-W-323` | Z-fighting check incomplete |
 | `S3D-W-325` | Part floats above support |
+| `S3D-I-300` | Grounding unchecked |
 | `S3D-E-325` | Part sunk below ground |
 | `S3D-E-326` | Mesh over triangle budget |
 | `S3D-W-326` | Scene over triangle budget |
@@ -594,7 +597,9 @@ Any UI that shows a bare code must show or tooltip its title via
 | `S3D-W-349` | Faces without material |
 | `S3D-W-350` | Unrealistic dark metal |
 | `S3D-E-361` | Scene units mismatch |
+| `S3D-W-202` | Stage declares no units |
 | `S3D-E-362` | Up-axis mismatch |
+| `S3D-W-203` | Stage declares no up axis |
 | `S3D-W-361` | Non-uniform scale |
 | `S3D-E-381` | No camera |
 | `S3D-W-381` | No lights |
@@ -606,12 +611,19 @@ Any UI that shows a bare code must show or tooltip its title via
 | `S3D-W-385` | Proof overexposed |
 | `S3D-W-386` | Some proof angles empty |
 | `S3D-W-387` | Proof frames unmeasured |
+| `S3D-W-388` | Animation over budget |
+| `S3D-E-389` | Proof is unlit |
+| `S3D-W-389` | Proof angle unlit |
+| `S3D-W-390` | Proof not colour-managed |
+| `S3D-W-391` | Wall thickness unchecked |
+| `S3D-W-392` | Coincident faces |
 
 ### Exported stage, UVs, oracles
 
 | Code | Title |
 |---|---|
 | `S3D-E-401` | Stage prim missing kind |
+| `S3D-W-406` | Stage kind authoring failed |
 | `S3D-E-402` | Stage up-axis mismatch |
 | `S3D-E-403` | Stage units mismatch |
 | `S3D-E-404` | Stage prim default name |
@@ -665,8 +677,10 @@ Any UI that shows a bare code must show or tooltip its title via
 | `S3D-W-605` | Additive sheet has a bright border |
 | `S3D-E-701` | Authored claim failed |
 | `S3D-W-701` | Claim could not be checked |
+| `S3D-I-701` | Claim held, with a measurement caveat |
 | `S3D-E-702` | Kernel prediction did not match build |
 | `S3D-W-702` | Kernel prediction could not be checked |
+| `S3D-E-703` | Kernel volume diverged from the build |
 | `S3D-E-801` | Shader source invalid |
 | `S3D-E-802` | Driver rejected shader |
 | `S3D-E-803` | Shader bake failed |
@@ -679,6 +693,8 @@ Any UI that shows a bare code must show or tooltip its title via
 | `S3D-W-903` | Material capability lost in lowering |
 | `S3D-W-904` | USDZ is not Y-up for AR |
 | `S3D-W-906` | Export not byte-reproducible here |
+| `S3D-W-907` | Part beyond float precision |
+| `S3D-W-908` | UV layer order lost in lowering |
 | `S3D-W-951` | Part over its role triangle share |
 | `S3D-W-952` | Hero less detailed than background |
 | `S3D-W-953` | Part over its role texture budget |
@@ -746,7 +762,10 @@ It is a **language-neutral operator IR with one evaluator**: a front-end
 serialized *trace* of exact operators — `cage`, `subdivide` (Catmull-Clark),
 `mirror`, `move` (translate a coordinate region), `scale` (taper a region
 about a pivot), `crease` (keep chosen edges sharp under subdivision), `extrude`
-(grow a boss from a face region), `inset` (shrink a face region to a panel) —
+(grow a boss from a face region), `inset` (shrink a face region to a panel),
+`clip` (exact half-space cut, capped so the result stays a closed solid — the
+first constructive-solid operator; a box hole or a wedge notch is a sequence
+of clips, a bevel is a clip across a corner) —
 and the compiler alone evaluates it. Everything is exact
 rational arithmetic on BigInt (no float, no trig), so a mesh is exact
 through any number of subdivision levels and identical on every machine;
@@ -785,6 +804,24 @@ normal map.
 Structural checks run on comment-stripped text (`un/**/iform` is closed).
 Reserved uniforms: `uS3dOutput`, `uS3dTime`. Flipbook shaders are sheet
 products; materials may not bind them.
+
+### Material channels
+
+`src/solve/channels.ts` (`MATERIAL_CHANNELS`) is the one vocabulary for
+binding a material: `baseColor`, `roughness`, `metallic`, `alpha`, `normal`,
+`emission`, plus `coat`, `sheen`, `transmission`, `subsurface`,
+`anisotropy`, `thin-film`, and `direct-normal`. Every channel takes either a
+constant or `{shader, output?}`, so the table drives the type, the
+validator, the emitter, and the runner from one place — no per-channel
+one-off fields. Socket names are Blender's own and were renamed across
+versions (`Coat Weight` was `Clearcoat`); each channel carries a candidate
+list, the runner binds the first that exists, and a miss is reported.
+`shader:` on a material stays the whole-surface shorthand; a per-channel
+binding wins over it. Deliverable parity is measured, not assumed: every
+channel reaches the built surface and the proof, but USD is the master and
+each container is lowered from it, so `S3D-W-903` names exactly which
+channel a lowering dropped — coat survives; sheen, anisotropy, and
+thin-film do not.
 
 ### USD master
 
@@ -839,6 +876,16 @@ set. Dedupe is by `code|target|message`.
 Caps live in the caller, which has somebody to tell. A cap applied inside
 a search that then returns "no overlaps" is how coincident 590-triangle
 meshes shipped a textbook z-fight with an empty pairs list.
+
+`lint/coordinate-precision.ts` catches a different failure class: vertex
+coordinates are float32 everywhere downstream (Blender, every exchange
+format, every engine), and a float32 near magnitude `d` resolves steps of
+about `d · 2⁻²³` — so a part far enough from the origin has dimensions too
+small to survive that quantisation AT THE DISTANCE IT SITS, and collapses
+to a sliver on export with no amount of re-exporting able to recover it.
+`S3D-W-907` fires on the part's own smallest dimension against the
+float32 step at its own distance, and names the one fix that works: move
+the scene near the origin.
 
 ### Read model
 
