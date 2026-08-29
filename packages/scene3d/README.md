@@ -1236,9 +1236,20 @@ layer.
 1. Add it to `ISSUE_CODES` in `src/errors.ts` in the family range, with a
    comment that states the invariant.
 2. Add the human title to `SCENE3D_ISSUE_TITLES` in
-   `packages/contracts/src/api/scene3d-codes.ts` in the same change.
+   `packages/contracts/src/api/scene3d-codes.ts` in the same change. It
+   must be **40 characters or fewer** — the title renders as a chip beside
+   the code, and `apps/daemon/tests/scene3d-issue-titles.test.ts` pins
+   both directions (a code with no title, and a title with no code).
+   That test reads the BUILT `@open-design/scene3d`, so rebuild the
+   package before running it or a brand-new code reads as orphaned.
 3. Emit it from the lint module (or parse/build) with `detail` carrying
-   the measured facts.
+   the measured facts. **One code names one situation at one severity**,
+   and the prefix IS the severity (`E`/`W`/`I`) —
+   `tests/code-severity.test.ts` scans every push site and fails a code
+   emitted two ways. If you need both a hard and a soft form, that is two
+   codes; the only sanctioned exception is one situation reported at two
+   CONFIDENCES (ran partially vs did not run), which the test's own table
+   documents entry by entry.
 4. Pin a good fixture and a poisoned fixture.
 5. If the generating agent needs a remedy line, add it to
    `design-templates/scene3d/SKILL.md`.
@@ -1263,8 +1274,17 @@ layer.
 3. Solver / emitter as needed. Keep solving pure.
 4. Claims in `lint/claims.ts` if the new fact is assertable.
 5. A showcase in `good/` and a red path in `poisoned/`.
-6. Update the skill. The generating agent cannot use a feature the skill
-   does not teach.
+6. **If the feature implies a DERIVED quantity, derive it once.** A
+   language addition usually brings a number the emitter needs and a
+   diagnostic wants to talk about — a clip's length, a pitch, an envelope.
+   Export one function that computes it and have both read that
+   (`clipPlan` is the worked example: the emitter takes its `clipFrames`
+   and the pipeline reports its `seams`, so the bake and the warning
+   cannot describe different clips). Two derivations that must agree are a
+   defect the day they are written, not the day they drift.
+7. Update the skill. The generating agent cannot use a feature the skill
+   does not teach — and check whether the fact also belongs in the
+   manifest (what an agent reads without a Blender run) and the report.
 
 ### Add a host surface
 
@@ -1283,6 +1303,13 @@ Exact-match edits. The generated HTML is a `String.raw` template; a
 backtick in a comment breaks it. After compiler/viewer/sidecar edits,
 recompile a real scene before judging the UI; sidecars on disk do not
 hot-reload from source.
+
+**Anything that moves a part must go through `applyEditsToDraws`.** That
+is the one funnel — user tweaks, undo/redo, and clip playback all write a
+draw's pristine state and let it re-apply the edit layer. A second writer
+of `draw.model` is two systems fighting over one matrix every frame; the
+reason a gizmo drag pauses playback rather than racing it is that the two
+share this funnel instead of taking turns at it.
 
 CSS traps already paid for:
 
@@ -1343,6 +1370,19 @@ important the first time it broke.
 - **Boxness is measured on positions, not topology.** A triangulated
   MagicaVoxel export is still a cuboid.
 - **Oracles that cannot run emit `*_UNCHECKED`**, additive, never fatal.
+- **The master is canonicalised before the re-import.** Every container is
+  lowered from it, so sorting prim order once fixes all five formats;
+  sorting the outputs separately is five fixes and five ways to drift.
+- **`pxr` and `bpy` cannot share a process.** Their USD libraries
+  conflict; anything needing the real USD API shells out to a plain
+  interpreter (and must refuse a blender-named one, which runs no script
+  and never exits).
+- **A recorded note nobody reads is silence.** `primOrderNote` and
+  `fbxTimestampNote` sat in the lowering record before anything reported
+  them (S3D-W-906). If you write a field to explain a degraded guarantee,
+  wire its reader in the same change.
+- **The kit page has ONE writer of `draw.model`** —
+  `applyEditsToDraws`. Playback, tweaks, and undo all feed it.
 
 ---
 

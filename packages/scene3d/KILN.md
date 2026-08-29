@@ -51,7 +51,14 @@ belong behind the same compiler boundary.
   authority.** `claims` in `scene.json`, adjudicated against the census by
   `src/lint/claims.ts` (`S3D-E-701`), with skips reported as skips (`S3D-W-701`).
 - **Determinism as a substrate.** Sorted, fixed-precision output; unchanged
-  spec compiles byte-identical; content-hash cache.
+  spec compiles byte-identical; content-hash cache. This now reaches the
+  DELIVERABLES, not only the census and the report: two --no-cache compiles
+  of an unchanged scene produce byte-identical PNGs and byte-identical
+  .usda/.glb/.obj/.fbx/.usdz. Getting there meant correcting three
+  exporter behaviours that are nobody's arithmetic — depsgraph prim order,
+  hash-seeded FBX ids, embedded wall clocks — and reporting the cases where
+  a machine cannot make the promise (S3D-W-906). See ARCHITECTURE.md,
+  "Byte determinism of the deliverables".
 - **Structure over coordinates.** Relations, not numbers; the contact floor
   makes z-fighting structurally impossible.
 - **The check owns the explanation.** Failures carry the measured truth and
