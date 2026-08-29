@@ -790,14 +790,24 @@
   position: absolute;
   top: 0;
   left: 0;
-  width: 1280px;
-  height: 720px;
-  transform: scale(calc(100cqw / 1280px));
+  width: 250%;
+  height: 250%;
+  /* --thumb-zoom multiplies the fixed fit scale so an optional zoom composes
+     with (never replaces) it. Nothing sets it today — the hover cover zoom
+     was removed (see recent-projects.css) — but the seam stays cheap. */
+  --thumb-zoom: 1;
+  transform: scale(calc(0.4 * var(--thumb-zoom)));
   transform-origin: top left;
   border: 0;
   background: var(--bg-panel);
   pointer-events: none;
   transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.project-thumb .thumb-iframe {
+  width: 1280px;
+  height: 720px;
+  transform: scale(calc(100cqw / 1280px));
+  transform-origin: top left;
 }
 .project-thumb-image,
 .project-thumb-video,

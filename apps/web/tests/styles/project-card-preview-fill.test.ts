@@ -29,16 +29,24 @@ function ruleValue(block: string, property: string): string {
 describe('Projects card preview fill', () => {
   it('uses the Home card 16:9 desktop preview treatment', () => {
     const projectThumb = cssDeclarations(drawerCss, '.project-thumb');
-    const iframe = cssDeclarations(drawerCss, '.design-card-thumb .thumb-iframe');
+    const projectIframe = cssDeclarations(drawerCss, '.project-thumb .thumb-iframe');
     const media = cssDeclarations(drawerCss, '.design-card-thumb .thumb-media');
 
     expect(ruleValue(projectThumb, 'aspect-ratio')).toBe('16 / 9');
     expect(ruleValue(projectThumb, 'container-type')).toBe('inline-size');
     expect(ruleValue(projectThumb, 'overflow')).toBe('hidden');
-    expect(ruleValue(iframe, 'width')).toBe('1280px');
-    expect(ruleValue(iframe, 'height')).toBe('720px');
-    expect(ruleValue(iframe, 'transform')).toBe('scale(calc(100cqw / 1280px))');
-    expect(ruleValue(iframe, 'transform-origin')).toBe('top left');
+    expect(ruleValue(projectIframe, 'width')).toBe('1280px');
+    expect(ruleValue(projectIframe, 'height')).toBe('720px');
+    expect(ruleValue(projectIframe, 'transform')).toBe('scale(calc(100cqw / 1280px))');
+    expect(ruleValue(projectIframe, 'transform-origin')).toBe('top left');
     expect(ruleValue(media, 'object-fit')).toBe('cover');
+  });
+
+  it('keeps the shared iframe treatment for non-project cards', () => {
+    const sharedIframe = cssDeclarations(drawerCss, '.design-card-thumb .thumb-iframe');
+
+    expect(ruleValue(sharedIframe, 'width')).toBe('250%');
+    expect(ruleValue(sharedIframe, 'height')).toBe('250%');
+    expect(ruleValue(sharedIframe, 'transform')).toBe('scale(calc(0.4 * var(--thumb-zoom)))');
   });
 });
