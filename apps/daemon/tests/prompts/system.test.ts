@@ -354,6 +354,16 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('no dark-on-dark labels');
   });
 
+  it('ships new Agent decks with OD Deck Protocol v1', () => {
+    const prompt = composeSystemPrompt({ skillMode: 'deck' });
+
+    expect(prompt).toContain('data-od-deck-protocol="1"');
+    expect(prompt).toContain("type: 'od:deck-ready'");
+    expect(prompt).toContain("data.type !== 'od:slide'");
+    expect(prompt).toContain('go(target);');
+    expect(prompt).toContain("type: 'od:slide-state'");
+  });
+
   it('injects nested-diagram discipline only through deck surfaces', () => {
     const heading = '## Nested / concentric diagram discipline';
 
