@@ -5,6 +5,7 @@ import {
   CompileRequest,
   CompileResult,
   Issue,
+  Severity,
   SceneSource,
   IssueSummary,
   ProofFrameStats,
@@ -53,7 +54,7 @@ import { renderOrthoSvg, orthoDimensions } from "./read/ortho.js";
 import { renderOrthoAscii } from "./read/ortho-ascii.js";
 import { renderContactSheet } from "./read/contact.js";
 import { isChannelBinding } from "./solve/emit-bpy.js";
-import { MATERIAL_CHANNELS } from "./solve/channels.js";
+import { MATERIAL_CHANNELS, type BindableField } from "./solve/channels.js";
 import type { ShaderOutput } from "./shade/types.js";
 import { resolveLook } from "./read/look.js";
 import { resolveSweep, type ResolvedPose } from "./read/shot.js";
@@ -152,21 +153,46 @@ const CHANNEL_SOCKETS: Record<string, { sockets: string[]; nonColor: boolean }> 
   );
 
 /**
- * Solver diagnostics that describe a scene which BUILT.
+ * What each solver diagnostic becomes: its issue code and its severity.
  *
- * They are warnings about geometry the author should look at, not a failure to
- * solve the graph — so they must not block the build, and they must not be
- * reported as errors. Both of those are decisions made from this one set:
- * keeping the severity mapping and the build gate as separate literals let
- * them drift, and they had — a diagnostic could be a warning in the report and
- * a hard stop in the pipeline at the same time.
+ * ONE table, because "what does this diagnostic become" is one fact with three
+ * users that had drifted apart — the code the issue carries, the severity it
+ * carries, and whether it blocks the build. They were a ternary chain, a Set,
+ * and a fallthrough default, and a new diagnostic code silently mapped to an
+ * unresolved error unless all three were updated together.
+ *
+ * A `warning` here is a scene that BUILT — geometry the author should look at,
+ * not a failure to solve the graph — so `warning` is exactly the set that does
+ * not block the build. The two facts are one: buildability, expressed as
+ * severity. Every issue code sits beside its literal severity, so the drift is
+ * visible at a glance and `tests/code-severity.test.ts` reads it directly.
  */
-const BUILDABLE_DIAGNOSTICS: ReadonlySet<string> = new Set([
-  "SOLVE-EPSILON-FLOOR",
-  "SOLVE-INTERSECTION",
-  "SOLVE-SUSPECT",
-  "SOLVE-COINCIDENT",
-]);
+const SOLVE_DIAGNOSTIC_MAP: Record<string, { code: string; severity: Severity }> = {
+  "SOLVE-EPSILON-FLOOR": { code: ISSUE_CODES.SPEC_ADJUSTED, severity: "warning" },
+  "SOLVE-INTERSECTION": { code: ISSUE_CODES.SPEC_INSTANCES_INTERSECT, severity: "warning" },
+  "SOLVE-SUSPECT": { code: ISSUE_CODES.SPEC_SUSPECT, severity: "warning" },
+  "SOLVE-COINCIDENT": { code: ISSUE_CODES.SPEC_COINCIDENT, severity: "warning" },
+  "SOLVE-CONFLICT": { code: ISSUE_CODES.SPEC_UNRESOLVED, severity: "error" },
+  "SOLVE-LIMIT": { code: ISSUE_CODES.SPEC_UNRESOLVED, severity: "error" },
+  "SOLVE-SHAPE": { code: ISSUE_CODES.SPEC_UNRESOLVED, severity: "error" },
+  "SOLVE-UNKNOWN-PART": { code: ISSUE_CODES.SPEC_UNRESOLVED, severity: "error" },
+  "SOLVE-UNRESOLVED": { code: ISSUE_CODES.SPEC_UNRESOLVED, severity: "error" },
+};
+
+/**
+ * The mapping for a diagnostic, defaulting an unknown code to an unresolved
+ * error. An unmapped solver code is a real error — the graph produced
+ * something the pipeline has no reading for — so the default fails loud rather
+ * than passing it through as buildable.
+ */
+function solveOutcome(code: string): { code: string; severity: Severity } {
+  return SOLVE_DIAGNOSTIC_MAP[code] ?? { code: ISSUE_CODES.SPEC_UNRESOLVED, severity: "error" };
+}
+
+/** A diagnostic whose scene BUILT — the warnings, i.e. what does not block. */
+function diagnosticIsBuildable(code: string): boolean {
+  return solveOutcome(code).severity === "warning";
+}
 
 export async function compile(
   request: CompileRequest,
@@ -499,23 +525,12 @@ export async function compile(
         maxRepeatCount: normalized.geometry.maxRepeatCount,
       });
       for (const diagnostic of solved.diagnostics) {
-        // Two diagnostics describe a scene that BUILT: one where the solver
-        // adjusted an offset, one where it placed instances inside each other.
-        // Both are warnings about geometry the author should look at; the rest
-        // mean the graph could not be solved at all.
-        const buildable = BUILDABLE_DIAGNOSTICS.has(diagnostic.code);
+        // What this diagnostic becomes — code and severity — is the one
+        // table's call, so the report and the build gate below cannot disagree.
+        const outcome = solveOutcome(diagnostic.code);
         issues.push({
-          code:
-            diagnostic.code === "SOLVE-EPSILON-FLOOR"
-              ? ISSUE_CODES.SPEC_ADJUSTED
-              : diagnostic.code === "SOLVE-INTERSECTION"
-                ? ISSUE_CODES.SPEC_INSTANCES_INTERSECT
-                : diagnostic.code === "SOLVE-SUSPECT"
-                  ? ISSUE_CODES.SPEC_SUSPECT
-                  : diagnostic.code === "SOLVE-COINCIDENT"
-                    ? ISSUE_CODES.SPEC_COINCIDENT
-                    : ISSUE_CODES.SPEC_UNRESOLVED,
-          severity: buildable ? "warning" : "error",
+          code: outcome.code,
+          severity: outcome.severity,
           message: diagnostic.message,
           file: "scene.json",
           ...(diagnostic.part ? { target: diagnostic.part } : {}),
@@ -542,12 +557,8 @@ export async function compile(
         normalized.voxel.enabled ? { grid: normalized.voxel.gridSize } : {},
         hashJson,
       );
-      /* The SAME set that decided severity above. Two hand-kept lists of the
-         same fact disagreed: SOLVE-SUSPECT was classed buildable and reported
-         as a warning, while this gate still counted it unresolved and skipped
-         the build — so a compile could say "warning" and quietly produce no
-         asset. One list, read twice. */
-      const unresolved = solved.diagnostics.some((d) => !BUILDABLE_DIAGNOSTICS.has(d.code));
+      // Reads SOLVE_DIAGNOSTIC_MAP, the same table the severity came from.
+      const unresolved = solved.diagnostics.some((d) => !diagnosticIsBuildable(d.code));
       // Recipe parts run BEFORE emit: each is ordinary Python executed in
       // plain CPython (no bpy) that authors an operator trace, which the one
       // kernel evaluator turns into exact geometry and an exact predicted
@@ -725,22 +736,32 @@ export async function compile(
       const record = mat as unknown as Record<string, unknown>;
       // Per-channel bindings first, so the channels they claim are known
       // before the whole-material shorthand fills in the rest.
-      const perChannel = new Map<string, { shader: string; output: string }>();
-      for (const key of Object.keys(record)) {
-        const v = record[key];
+      const perChannel = new Map<BindableField, { shader: string; output: string }>();
+      /* The material is ALREADY NORMALIZED: `validateMaterial` resolved every
+         binding to `{ shader, output }` — the output defaulted (displacement
+         to its height field), unknown fields rejected, occlusion refused — so
+         a `{shader}` value on a normalized key is a real, validated binding and
+         its output is always set. Re-deriving that here would be a second copy
+         of the validator's resolution, drifting from the one that ran; reading
+         it is the whole job. */
+      for (const [channel, v] of Object.entries(record)) {
         if (!isChannelBinding(v)) continue;
         const job = shaderJobs.find((j) => j.name === v.shader);
         if (!job) continue;
         referenced.add(v.shader);
         if (flipbookRefused(matName, job)) continue;
-        perChannel.set(key, { shader: v.shader, output: v.output ?? key });
+        perChannel.set(channel as BindableField, { shader: v.shader, output: v.output! });
       }
       for (const [channel, b] of perChannel) {
         shaderBindings.push({
           material: matName,
           shader: b.shader,
           outputs: [b.output as ShaderOutput],
-          ...(b.output !== channel ? { channel } : { channel }),
+          // Which channel this binding drives. The runner reads it to route a
+          // per-channel binding (`normal: { shader, output: "height" }`, or
+          // `displacement`, which routes to the material output) from the
+          // whole-material shorthand, where the output name IS the channel.
+          channel,
         });
       }
       if (typeof mat.shader === "string") {
@@ -754,7 +775,10 @@ export async function compile(
            model, `height` reaches it as a derived normal — so binding every
            output by name would report a channel as unbound for the crime of
            having been baked. */
-        const claimed = new Set(perChannel.keys());
+        // Widened to strings: `height` is a shader OUTPUT, not a channel, and
+        // it joins this set below because a per-channel normal binding claims
+        // it. Outputs and channels are different vocabularies that overlap.
+        const claimed = new Set<string>(perChannel.keys());
         // `height` is not bound as itself — it reaches the surface as the
         // DERIVED normal map. So a per-channel `normal` binding claims the
         // shorthand's `height` too; without this the material would carry two
@@ -1430,7 +1454,7 @@ export async function compile(
           const lostLooks = lookPaths.filter((p) => p === undefined).length;
           if (lostLooks > 0) {
             issues.push({
-              code: ISSUE_CODES.PROOF_FAILED,
+              code: ISSUE_CODES.LOOK_RENDER_FAILED,
               severity: "warning",
               message: `${lostLooks} of ${lookNames.length} requested look(s) did not render — the pose resolved but the frame is not on disk`,
               detail: { requested: lookNames.length, missing: lostLooks },
@@ -1781,7 +1805,7 @@ export async function compile(
                  without the semantics, and the linter then says so. Silence
                  would be worse than either. */
               issues.push({
-                code: ISSUE_CODES.STAGE_NO_KIND,
+                code: ISSUE_CODES.STAGE_KIND_AUTHORING_FAILED,
                 severity: "warning",
                 message: `could not author the model hierarchy onto ${asset}: ${String(err?.message ?? err)}`,
                 file: asset,
@@ -1897,7 +1921,7 @@ export async function compile(
       // the scene is fine; this machine is what is missing.
       if (!probe) {
         issues.push({
-          code: ISSUE_CODES.BLENDER_NOT_FOUND,
+          code: ISSUE_CODES.BLENDER_ABSENT_NOTE,
           severity: "info",
           message:
             "export skipped — no Blender runtime on this machine, so the requested deliverables (GLB/USD/OBJ/FBX) were not produced",

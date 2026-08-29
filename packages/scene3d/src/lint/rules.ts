@@ -87,8 +87,12 @@ export interface LintInput {
 
 /**
  * Run every deterministic rule over the census + USDA parse tree.
- * Order is fixed; dedupe is by code+target+message so overlapping sources
- * (a Blender object and the same-named USD prim) cannot double-report.
+ *
+ * Order is fixed. Dedupe is by code + target + measured detail — never by the
+ * MESSAGE, which is presentation — so overlapping sources (a Blender object
+ * and the same-named USD prim) cannot double-report, while two genuinely
+ * different findings that happen to read alike both survive. The reasoning is
+ * with the code, at the dedup itself.
  */
 /**
  * Largest world dimension of the scene, metres, or undefined when nothing

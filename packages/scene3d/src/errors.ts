@@ -63,6 +63,11 @@ export const ISSUE_CODES = {
 
   /* build */
   BLENDER_NOT_FOUND: "S3D-E-201",
+  /* Blender is absent, and this compile did not need it. A code names one
+     situation at one severity: E-201 means "the compile cannot proceed",
+     and reusing it for a note about the machine made a blocking failure
+     and an observation the same symbol to anything reading the code. */
+  BLENDER_ABSENT_NOTE: "S3D-I-201",
   BLENDER_FAILED: "S3D-E-202",
   /* A Blender was found but its major version is below what the runner is
      written against. Gated up front with the measured version, because the
@@ -76,6 +81,11 @@ export const ISSUE_CODES = {
      export as a whole succeeded — this names what is missing from it. */
   EXPORT_FORMAT_UNAVAILABLE: "S3D-W-205",
   PROOF_FAILED: "S3D-E-206",
+  /* Some requested aimed shots did not render, while the proof itself did.
+     A partial loss of supplemental looks is not the total proof failure
+     E-206 names, and an agent must act differently: re-aim or drop a look
+     rather than investigate a dead render path. */
+  LOOK_RENDER_FAILED: "S3D-W-201",
   /* A real asset file imported, but degraded: a missing .mtl companion, a
      file with no geometry. Detect-and-name, never mutate-and-guess. */
   IMPORT_DEGRADED: "S3D-W-207",
@@ -208,7 +218,15 @@ export const ISSUE_CODES = {
 
   /* lint: units */
   UNITS_MISMATCH: "S3D-E-361",
+  /* The stage authors NO metersPerUnit, so consumers assume USD's 0.01 and
+     that assumption disagrees with the contract. A different repair from
+     E-361 (a wrong number is edited; a missing one is written), and the
+     stage is legal USD either way. */
+  UNITS_UNDECLARED: "S3D-W-202",
   UP_AXIS_MISMATCH: "S3D-E-362",
+  /* The stage authors no upAxis. Same split as UNITS_UNDECLARED, for the
+     same reason: absent and wrong are two facts. */
+  UP_AXIS_UNDECLARED: "S3D-W-203",
   NON_UNIFORM_SCALE: "S3D-W-361",
 
   /* lint: integrity */
@@ -256,6 +274,12 @@ export const ISSUE_CODES = {
 
   /* lint: world placement + budgets (325-339) */
   NOT_GROUNDED: "S3D-W-325",
+  /* Grounding could not be JUDGED — this census carries no vertex-exact
+     spatial measurement, and a box bound alone cannot separate sunk from
+     floating for a rotated part. Emitting W-325 for it said the part is
+     not grounded, which is a verdict the compiler did not reach; the
+     doctrine is that unmeasured never wears a measured finding's code. */
+  GROUNDING_UNCHECKED: "S3D-I-300",
   SUNK_BELOW_GROUND: "S3D-E-325",
   MESH_BUDGET: "S3D-E-326",
   SCENE_BUDGET: "S3D-W-326",
@@ -269,6 +293,11 @@ export const ISSUE_CODES = {
      scene we built. Everything above validates the Blender scene; these
      validate the USD that actually leaves the building. */
   STAGE_NO_KIND: "S3D-E-401",
+  /* The compiler could not author the model hierarchy onto an exported
+     asset. E-401 says the shipped stage declares no kind — a fact about
+     the artifact. This says the authoring step itself failed, which is a
+     fact about the compiler, and sends its reader somewhere else. */
+  STAGE_KIND_AUTHORING_FAILED: "S3D-W-406",
   STAGE_UPAXIS_MISMATCH: "S3D-E-402",
   STAGE_UNITS_MISMATCH: "S3D-E-403",
   STAGE_PRIM_DEFAULT_NAME: "S3D-E-404",

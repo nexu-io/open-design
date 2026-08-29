@@ -728,3 +728,57 @@ describe("coincident faces are reported, whoever produced them", () => {
     expect(solved.diagnostics.filter((d) => d.code === "SOLVE-COINCIDENT")).toEqual([]);
   });
 });
+
+describe("the buildability recheck reads the box the emitter builds from", () => {
+  it("does not fire on a valid rotated tube", () => {
+    /*
+     * A rotated part carries TWO boxes: `localSize`, the authored rectangle
+     * the shape is actually built from, and `size`, the world AABB that
+     * rectangle projects onto once turned. The emitter reads
+     * `localSize ?? size`; the post-solve buildability check read `size`.
+     *
+     * They are different rectangles, and `axis` names a LOCAL axis — so
+     * indexing it into a world vector after a quarter turn compares two
+     * unrelated physical dimensions. A valid tube could be called unbuildable,
+     * and an invalid one could pass because the projection inflates the
+     * extent the wall is measured against.
+     */
+    const solved = solveScene({
+      schemaVersion: 1,
+      parts: [
+        {
+          id: "prp_pipe",
+          shape: "tube",
+          axis: "z",
+          size: [0.4, 0.4, 1],
+          thickness: 0.05,
+          rotate: [0, 90, 0],
+        },
+      ],
+      relations: [{ type: "at", part: "prp_pipe", center: [0, 0, 0.5] }],
+    } as never);
+    expect(solved.diagnostics.filter((d) => d.code === "SOLVE-SHAPE")).toEqual([]);
+  });
+
+  it("still catches a rotated shape that is genuinely unbuildable", () => {
+    // Same turn, but the wall now consumes the whole bore. Reading the world
+    // AABB could hide this; reading the built box cannot.
+    const solved = solveScene({
+      schemaVersion: 1,
+      parts: [
+        {
+          id: "prp_pipe",
+          shape: "tube",
+          axis: "z",
+          size: [0.4, 0.4, 1],
+          thickness: 0.3,
+          rotate: [0, 90, 0],
+        },
+      ],
+      relations: [{ type: "at", part: "prp_pipe", center: [0, 0, 0.5] }],
+    } as never);
+    const bad = solved.diagnostics.filter((d) => d.code === "SOLVE-SHAPE");
+    expect(bad.length).toBeGreaterThan(0);
+    expect(bad[0]!.message).toContain("no bore");
+  });
+});

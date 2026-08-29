@@ -143,11 +143,15 @@ describe("grounding", () => {
     c.meshes[0]!.spatial = null;
     const issues: Issue[] = [];
     lintWorld(normalizeContract(grounded), c, issues);
+    // GROUNDING_UNCHECKED, not NOT_GROUNDED: grounding could not be JUDGED
+    // here, and a measured finding's code (W-325) at info severity was the
+    // code/severity mismatch the one-code-one-severity split removed. The
+    // unmeasured case now wears its own info code (I-300).
     const grounding = issues.filter(
-      (i) => i.code === "S3D-W-325" || i.code === "S3D-E-325",
+      (i) => i.code === "S3D-I-300" || i.code === "S3D-W-325",
     );
     expect(grounding).toHaveLength(1);
-    expect(grounding[0]!.code).toBe("S3D-W-325");
+    expect(grounding[0]!.code).toBe("S3D-I-300");
     expect(grounding[0]!.severity).toBe("info");
     expect(grounding[0]!.message).toContain("not judged");
     expect(grounding[0]!.detail).toMatchObject({ unmeasured: true });

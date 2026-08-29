@@ -131,6 +131,22 @@ export interface ShaderBinding {
   material: string;
   shader: string;
   outputs: ShaderOutput[];
+  /**
+   * The material channel this binding drives.
+   *
+   * The runner reads it to tell a PER-CHANNEL binding from the whole-material
+   * shorthand: `normal: { shader, output: "height" }` bakes the height output
+   * and wires it into the normal channel, so the output name and the channel
+   * name are different words for different things. Under the shorthand they
+   * coincide, which is why the runner falls back to the output when it is
+   * absent.
+   *
+   * It was already on the wire and missing from this type: the pipeline built
+   * the object with a spread, and a spread bypasses the excess-property check
+   * that would have caught it. So the one place a reader looks to learn this
+   * contract did not mention the field the contract turns on.
+   */
+  channel?: import("../solve/channels.js").BindableField;
 }
 
 /**

@@ -28,12 +28,14 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
 
   /* build */
   'S3D-E-201': 'Blender not found',
+  'S3D-I-201': 'Blender absent, not needed',
   'S3D-E-202': 'Blender build failed',
   'S3D-E-203': 'Build stage timed out',
   'S3D-E-204': 'Scene census invalid',
   'S3D-E-205': 'Export failed',
   'S3D-W-205': 'Export format unavailable',
   'S3D-E-206': 'Proof render failed',
+  'S3D-W-201': 'Some looks did not render',
   'S3D-E-207': 'Blender version unsupported',
   'S3D-W-207': 'Imported file degraded',
   'S3D-W-208': 'Viewer edits ignored',
@@ -72,6 +74,7 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
 
   /* lint: world placement + budgets */
   'S3D-W-325': 'Part floats above support',
+  'S3D-I-300': 'Grounding unchecked',
   'S3D-E-325': 'Part sunk below ground',
   'S3D-E-326': 'Mesh over triangle budget',
   'S3D-W-326': 'Scene over triangle budget',
@@ -93,7 +96,9 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
 
   /* lint: units */
   'S3D-E-361': 'Scene units mismatch',
+  'S3D-W-202': 'Stage declares no units',
   'S3D-E-362': 'Up-axis mismatch',
+  'S3D-W-203': 'Stage declares no up axis',
   'S3D-W-361': 'Non-uniform scale',
 
   /* lint: integrity + proof */
@@ -126,6 +131,7 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
 
   /* lint: exported stage */
   'S3D-E-401': 'Stage prim missing kind',
+  'S3D-W-406': 'Stage kind authoring failed',
   'S3D-E-402': 'Stage up-axis mismatch',
   'S3D-E-403': 'Stage units mismatch',
   'S3D-E-404': 'Stage prim default name',

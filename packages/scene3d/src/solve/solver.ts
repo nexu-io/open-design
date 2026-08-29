@@ -725,7 +725,17 @@ export function solveScene(
      particular relation covers every relation, including ones not yet
      written. */
   for (const part of solved) {
-    for (const violation of shapeViolations(part.shape, part.size, part.axis, part.thickness)) {
+    /* The box the EMITTER builds from, which for a rotated part is its LOCAL
+       box — `part.size` is the world AABB the rotation projects onto, and it
+       is a different rectangle. Checking the AABB let a genuinely unbuildable
+       rotated shape pass (the projection inflates `across`, so a too-thick
+       wall looks like it fits) and could fire on a valid one. Worse, `axis` is
+       a LOCAL label: indexed into a world vector, a quarter turn compares two
+       unrelated physical dimensions. The emitter reads `localSize ?? size`, so
+       this reads the same thing — the check and the thing checked cannot be
+       looking at different geometry. */
+    const built = part.localSize ?? part.size;
+    for (const violation of shapeViolations(part.shape, built, part.axis, part.thickness)) {
       diagnostics.push({
         code: "SOLVE-SHAPE",
         message: `the solve made '${part.id}' unbuildable: ${violation}`,

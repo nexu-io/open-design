@@ -142,33 +142,25 @@ export function assetKindLabelKey(kind: Scene3dAssetKind): keyof Dict {
 }
 
 /**
- * The asset kind for a manifest that predates the field.
+ * The asset kind the COMPILER recorded, or the neutral default.
  *
- * Mirrors `deriveAssetKind` in `packages/scene3d/src/manifest.ts` for the
- * facts a wire manifest still carries. Sheets are a contract concern and are
- * not on the wire, so sheet-derived kinds cannot be recovered here — those
- * manifests read as `texture` when they have no geometry, which is the
- * honest answer rather than a guessed one.
+ * This used to re-derive the kind for manifests written before the field
+ * existed — walking the part tree, excluding staging object types, checking
+ * keyframes and textures. That made it a second implementation of a question
+ * `deriveAssetKind` already answers, and the two were kept in step by a
+ * comment saying they must match. A constant is the least of what can drift
+ * between two copies of a derivation: the branch order, the staging list and
+ * the single-root rule could each diverge silently, and only for the legacy
+ * manifests nobody looks at.
+ *
+ * `assetKind` is DERIVED, never authored — and derived ONCE, by the compiler
+ * that has the census in front of it. A manifest without the field is a stale
+ * compile-time artifact, which this fork already treats as something a
+ * recompile fixes rather than something the reader guesses around. So the
+ * honest answer here is the neutral kind, and the remedy is to recompile.
  */
 export function resolveAssetKind(manifest: Scene3dManifest | null): Scene3dAssetKind {
-  if (!manifest) return 'scene';
-  if (manifest.assetKind) return manifest.assetKind;
-  const meshes = manifest.partTree.filter((part) => part.mesh !== null);
-  if (meshes.length === 0) return manifest.textures.length > 0 ? 'texture' : 'scene';
-  if (manifest.animation.keyframedObjects.length > 0) return 'animation';
-  // Staging exclusions MUST match STAGING_TYPES in
-  // packages/scene3d/src/manifest.ts (deriveAssetKind) exactly — this
-  // fallback only runs for manifests written before `assetKind` existed,
-  // and a divergent copy mislabels exactly those.
-  const geometryRoots = manifest.partTree.filter(
-    (part) =>
-      part.parent === null &&
-      part.type !== 'CAMERA' &&
-      part.type !== 'LIGHT' &&
-      part.type !== 'SPEAKER',
-  );
-  if (geometryRoots.length === 1 && !manifest.camera.present) return 'prop';
-  return 'scene';
+  return manifest?.assetKind ?? 'scene';
 }
 
 /**

@@ -81,6 +81,11 @@ export const CHANNEL_NAMES = [
 
 export type ChannelName = (typeof CHANNEL_NAMES)[number];
 
+/** A field a shader may be bound to — a channel, or a non-channel routing
+ *  target (`displacement`, `occlusion`). This is what `channel` on a
+ *  ShaderBinding carries, and what the runner routes on. */
+export type BindableField = ChannelName | "displacement" | "occlusion";
+
 export const MATERIAL_CHANNELS: readonly ChannelDef[] = [
   { name: "baseColor", sockets: ["Base Color"], kind: "color", note: "the surface's albedo" },
   { name: "roughness", sockets: ["Roughness"], kind: "scalar", min: 0, max: 1, nonColor: true, note: "0 mirror, 1 fully diffuse" },

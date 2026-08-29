@@ -810,8 +810,9 @@ export function nudgePose(
     const f = pose.forward;
     // Screen-right is forward × world-up, degenerating to world +X when the
     // camera looks straight up or down — the same fallback `screenBasis` takes.
-    let right: Vec3 = [f[1] * 1 - f[2] * 0, f[2] * 0 - f[0] * 1, 0];
-    right = [f[1], -f[0], 0];
+    // forward × world-up, simplified: the z terms of the cross product drop
+    // out against (0,0,1), leaving (f.y, -f.x, 0).
+    let right: Vec3 = [f[1], -f[0], 0];
     const rl = len(right);
     right = rl < 1e-9 ? [1, 0, 0] : [right[0] / rl, right[1] / rl, 0];
     const up: Vec3 = [

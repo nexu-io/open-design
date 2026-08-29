@@ -531,7 +531,7 @@ trick:
 | `thinFilmThickness`, `thinFilmIor` | iridescence — soap, oil on water, a beetle shell |
 | `specular`, `specularTint`, `diffuseRoughness` | dielectric reflectance and the diffuse lobe |
 | `normal` | a tangent-space normal map, bound directly (a `height` output still derives one) |
-| `displacement`, `occlusion` | bound like channels; carried on export rather than into the surface |
+| `displacement` | a shader-bound height field that moves geometry on export, not a surface input (see below) |
 
 How the surface is READ is a separate question from what it is:
 `alphaMode` (`opaque` | `mask` | `blend`), `alphaCutoff`, `doubleSided`.

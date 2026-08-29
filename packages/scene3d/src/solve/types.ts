@@ -301,10 +301,6 @@ export interface MaterialSpec {
    * it move geometry rather than only shade it.
    */
   displacement?: ChannelBinding;
-  /** Ambient occlusion, bound like any other channel. Carried on export
-   *  rather than into the surface model, which has no AO input. */
-  occlusion?: ChannelBinding;
-
   /* Every remaining channel in MATERIAL_CHANNELS — coat, sheen,
      transmission, subsurface, anisotropic, thin-film, specular, ior,
      normal, and their sub-channels. Declared open rather than listed twice:

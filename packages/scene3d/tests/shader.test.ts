@@ -351,3 +351,34 @@ describe("margin notes in the uniforms map", () => {
     expect(result?.uniforms.map((u) => u.name)).toEqual(["uScale"]);
   });
 });
+
+describe("material shader bindings resolve at validation, not in the pipeline", () => {
+  const scene = (material: Record<string, unknown>) => ({
+    schemaVersion: 1,
+    shaders: { shd_x: { kernel: "x.glsl", size: 64, outputs: ["height"] } },
+    materials: { mtl_a: { baseColor: [0.5, 0.5, 0.5], ...material } },
+    parts: [{ id: "prp_a", size: [1, 1, 1], material: "mtl_a" }],
+    relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+  });
+
+  it("resolves a displacement binding to the height output it is actually driven by", () => {
+    /*
+     * `displacement` has no bakeable output of its own — it is driven by a
+     * height field. The validator resolves the binding's output to `height`
+     * ONCE, into the normalized spec, so nothing downstream re-derives it and
+     * emits an unproducible `displacement` output.
+     */
+    const r = validateSceneSpec(scene({ displacement: { shader: "shd_x" } }));
+    expect(r.errors).toEqual([]);
+    const disp = (r.spec!.materials!.mtl_a as Record<string, unknown>).displacement;
+    expect(disp).toMatchObject({ shader: "shd_x", output: "height" });
+  });
+
+  it("refuses an occlusion binding rather than shipping it to nothing", () => {
+    // The surface model has no AO input and the glTF-only route does not survive
+    // the USD master, so a bound occlusion would be lost silently. Refused with
+    // the way that does work (bake it and multiply into baseColor), not dropped.
+    const r = validateSceneSpec(scene({ occlusion: { shader: "shd_x" } }));
+    expect(r.errors.some((e) => e.includes("occlusion cannot be bound"))).toBe(true);
+  });
+})

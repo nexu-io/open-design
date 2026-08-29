@@ -102,14 +102,18 @@ export function lintNaming(ctx: LintContext, issues: Issue[]): void {
         stack.push({ prim: child, depth: depth + 1, path: `${path}/${child.name}` });
       }
     }
-    for (const [, { name, depth }] of depthMap) {
+    for (const [path, { name, depth }] of depthMap) {
       if (depth > contract.maxDepth) {
         issues.push({
           code: ISSUE_CODES.DEPTH_LIMIT,
           severity: "error",
-          message: `'${name}' exceeds max hierarchy depth ${contract.maxDepth}`,
+          message: `'${path}' exceeds max hierarchy depth ${contract.maxDepth}`,
           target: name,
-          detail: { depth },
+          // The full PATH is the identity, not the leaf name: two prims sharing
+          // a leaf name at the same depth under different parents are two real
+          // violations, and a dedup keyed on name + depth would collapse them
+          // into one — dropping a violation the path traversal just found.
+          detail: { path, depth, maxDepth: contract.maxDepth },
         });
       }
     }
@@ -155,7 +159,7 @@ export function lintNaming(ctx: LintContext, issues: Issue[]): void {
           severity: "error",
           message: `'${obj.name}' exceeds max hierarchy depth ${contract.maxDepth}`,
           target: obj.name,
-          detail: { depth },
+          detail: { depth, maxDepth: contract.maxDepth },
         });
       }
     }

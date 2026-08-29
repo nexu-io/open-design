@@ -906,6 +906,21 @@ function appendVerdict(lines: string[], verdict: Verdict, options: ReportOptions
  * filtering on the prefix got the wrong answer. The prose already explained
  * the posture; only the code letter lied.
  */
+/**
+ * A code, marked when the severity it was pushed at differs from the one its
+ * own prefix declares — `S3D-W-336→info`.
+ *
+ * This used to cover a drift: codes were pushed at whatever severity a call
+ * site felt like, and the prefix quietly stopped meaning anything. That is
+ * fixed at the source now — one code names one situation at one severity, and
+ * `tests/code-severity.test.ts` holds the line, having split six codes that
+ * were two situations wearing one symbol.
+ *
+ * What is left is a small, named set where the same situation is reported at
+ * two CONFIDENCES: a check that did not run at all versus one that ran
+ * partially. Those genuinely share a code, so the mark is how a reader sees
+ * which one they got. It is not a fallback for drift any more; the test is.
+ */
 function displayCode(code: string, severity: Severity): string {
   const letter = /^S3D-([EWI])-/.exec(code)?.[1];
   const letterSeverity =

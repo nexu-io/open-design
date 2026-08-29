@@ -40,7 +40,7 @@ export function lintPbr(ctx: LintContext, issues: Issue[]): void {
         message: `material '${mat.name}' metallic ${p.metallic} is not in ${ctx.contract.metallicValues.join(", ")}`,
         hint: "use a metalness map or a metallic value of 0/1",
         target: mat.name,
-        detail: { metallic: p.metallic },
+        detail: { metallic: p.metallic, allowed: [...ctx.contract.metallicValues] },
       });
     }
 
@@ -52,7 +52,7 @@ export function lintPbr(ctx: LintContext, issues: Issue[]): void {
           severity: "error",
           message: `material '${mat.name}' roughness ${p.roughness} outside [${lo}, ${hi}]`,
           target: mat.name,
-          detail: { roughness: p.roughness },
+          detail: { roughness: p.roughness, min: lo, max: hi },
         });
       }
     }
@@ -65,7 +65,7 @@ export function lintPbr(ctx: LintContext, issues: Issue[]): void {
           severity: "warning",
           message: `material '${mat.name}' IOR ${p.ior} outside [${lo}, ${hi}]`,
           target: mat.name,
-          detail: { ior: p.ior },
+          detail: { ior: p.ior, min: lo, max: hi },
         });
       }
     }

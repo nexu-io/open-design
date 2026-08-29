@@ -52,7 +52,7 @@ export function lintUnits(ctx: LintContext, issues: Issue[]): void {
        error: the stage is legal USD; the landing is what differs. */
     if (stage.metersPerUnit === undefined && !unitsClose(0.01, ctx.contract.metersPerUnit)) {
       issues.push({
-        code: ISSUE_CODES.UNITS_MISMATCH,
+        code: ISSUE_CODES.UNITS_UNDECLARED,
         severity: "warning",
         message: `the stage does not author metersPerUnit — USD consumers will assume 0.01 (centimetres), but the contract says ${ctx.contract.metersPerUnit}`,
         hint: "author metersPerUnit in the stage header so consumers agree with the contract",
@@ -61,7 +61,7 @@ export function lintUnits(ctx: LintContext, issues: Issue[]): void {
     }
     if (stage.upAxis === undefined && ctx.contract.upAxis !== "Y") {
       issues.push({
-        code: ISSUE_CODES.UP_AXIS_MISMATCH,
+        code: ISSUE_CODES.UP_AXIS_UNDECLARED,
         severity: "warning",
         message: `the stage does not author upAxis — USD consumers will assume Y, but the contract says ${ctx.contract.upAxis}`,
         hint: "author upAxis in the stage header so consumers agree with the contract",

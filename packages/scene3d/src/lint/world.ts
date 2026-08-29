@@ -109,7 +109,7 @@ export function lintWorld(
       if (measured === undefined) {
         if (object.worldMin) {
           issues.push({
-            code: ISSUE_CODES.NOT_GROUNDED,
+            code: ISSUE_CODES.GROUNDING_UNCHECKED,
             severity: "info",
             message: `grounding for '${object.name}' was not judged — no vertex-exact spatial measurement in this census (its box bound alone cannot say sunk or floating for a rotated part)`,
             target: object.name,

@@ -98,11 +98,19 @@ describe('resolveAssetKind', () => {
     expect(resolveAssetKind(manifest({ assetKind: 'flipbook' }))).toBe('flipbook');
   });
 
-  it('derives a prop for a manifest written before the field existed', () => {
-    expect(resolveAssetKind(manifest({ partTree: [part('crate')] }))).toBe('prop');
-  });
-
-  it('derives an animation from recorded keyframes', () => {
+  it('does not re-derive a kind the compiler did not record', () => {
+    /*
+     * This used to walk the part tree and infer `prop`/`animation`/`texture`
+     * for manifests predating the field — a second implementation of
+     * `deriveAssetKind`, kept in step by a comment asserting the two must
+     * match. The staging-type list, the branch order and the single-root rule
+     * could each drift silently, and only for the legacy manifests nobody
+     * looks at.
+     *
+     * A manifest without `assetKind` is a stale compile-time artifact. The
+     * honest answer is the neutral kind; recompiling is what fixes it.
+     */
+    expect(resolveAssetKind(manifest({ partTree: [part('crate')] }))).toBe('scene');
     expect(
       resolveAssetKind(
         manifest({
@@ -110,31 +118,10 @@ describe('resolveAssetKind', () => {
           animation: { fps: 24, frameStart: 1, frameEnd: 48, keyframedObjects: ['rig'] },
         }),
       ),
-    ).toBe('animation');
+    ).toBe('scene');
   });
 
-  it('derives a texture for image maps with no geometry', () => {
-    expect(
-      resolveAssetKind(
-        manifest({ textures: [{ name: 'bark', filepath: 'bark.png', resolution: [1024, 1024] }] }),
-      ),
-    ).toBe('texture');
-  });
-
-  it('excludes speakers from geometry roots, matching the compiler', () => {
-    expect(
-      resolveAssetKind(
-        manifest({
-          partTree: [
-            part('crate'),
-            part('spk_amb', { type: 'SPEAKER', mesh: null }),
-          ],
-        }),
-      ),
-    ).toBe('prop');
-  });
-
-  it('defaults to scene with no manifest at all', () => {
+  it('answers for a missing manifest without throwing', () => {
     expect(resolveAssetKind(null)).toBe('scene');
   });
 });
