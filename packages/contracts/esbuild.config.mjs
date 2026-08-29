@@ -15,6 +15,7 @@ await build({
     "./src/api/reasoningExecution.ts",
     "./src/api/research.ts",
     "./src/runtime/deck-stage-fallback.ts",
+    "./src/runtime/deck-protocol.ts",
     "./src/runtime/preview-observability.ts",
     "./src/runtime/preview-guards.ts",
     "./src/runtime/html-injection-points.ts",

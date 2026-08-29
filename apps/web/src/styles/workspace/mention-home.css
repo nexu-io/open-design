@@ -361,8 +361,7 @@
      This base rule serves the signed-out fallback home, where the host
      (`.entry-updater-menu`) sits in the rail footer at the bottom of the nav
      rail — a top-anchored panel grew down past the window edge and the
-     「更新已就绪」 copy was clipped mid-sentence. `.entry-help-popover` already
-     anchors this way for exactly the same reason. The signed-in home (the
+     「更新已就绪」 copy was clipped mid-sentence. The signed-in home (the
      floating account row, top-right) opens downward via the override below. */
   bottom: 0;
   left: calc(100% + 12px);

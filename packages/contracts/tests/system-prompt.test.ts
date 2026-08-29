@@ -147,6 +147,16 @@ describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — prompt routing parity', 
     expect(prompt).toContain('no dark-on-dark labels');
   });
 
+  it('ships API/BYOK decks with the same OD Deck Protocol v1', () => {
+    const prompt = composeSystemPrompt({ skillMode: 'deck' });
+
+    expect(prompt).toContain('data-od-deck-protocol="1"');
+    expect(prompt).toContain("type: 'od:deck-ready'");
+    expect(prompt).toContain("data.type !== 'od:slide'");
+    expect(prompt).toContain('go(target);');
+    expect(prompt).toContain("type: 'od:slide-state'");
+  });
+
   it('injects nested-diagram discipline through every contracts deck path only', () => {
     const heading = '## Nested / concentric diagram discipline';
 

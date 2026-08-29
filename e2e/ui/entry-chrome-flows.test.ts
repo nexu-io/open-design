@@ -826,10 +826,9 @@ test('[P1] Settings About reads desktop updater status and runs a manual update 
     .toEqual(['check']);
 });
 
-// The entry help launcher (`entry-help-trigger` / `.entry-help-popover`, the X
-// + Discord community links) went away with the entry topbar in #5517 —
-// `EntryHelpMenu` is no longer rendered anywhere — and so did the topbar's
-// "Use everywhere" button. Its spec is gone; the Use-everywhere guide itself
+// The entry help launcher (the X + Discord community links) went away with the
+// entry topbar in #5517, as did the topbar's "Use everywhere" button. Its spec
+// is gone; the Use-everywhere guide itself
 // still lives on the Integrations view and is covered below.
 test('[P1] Settings About surfaces prerelease updater check failures with retry affordance', async ({ page }) => {
   await page.addInitScript(() => {
