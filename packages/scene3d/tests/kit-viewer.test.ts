@@ -373,16 +373,22 @@ describe("renderKitHtml", () => {
     expect(html).toContain(".hosted .rail { top: 12px;");
   });
 
-  it("reports the frame rate through the measure box, and only while frames stream", () => {
+  it("reports the frame rate through the measure box, and only for the page's own animation", () => {
     // The renderer is on-demand: idle means zero frames by design, so a
     // frame counter has nothing to say until frames actually stream — and
     // the stream with nothing else to report is exactly when the measure
     // box sits empty, so the rate borrows THAT box instead of adding
     // chrome. No dedicated element may exist, the run-length gate must
     // drive it, and a live gesture readout must always outrank it.
+    //
+    // ONLY self-animated frames count. Orbit, pan, zoom and navigation are
+    // input-driven redraws whose cadence is the pointer's, not the
+    // renderer's — the meter used to appear for all of them, presenting
+    // the user's hand speed as a scene fact.
     const html = renderKitHtml({ title: "Kit", entries: [] });
     expect(html).not.toContain('id="perf"');
-    expect(html).toContain("notePerfFrame(perfT0)");
+    expect(html).toContain("notePerfFrame(perfT0, animatedFrame)");
+    expect(html).toContain("if (!animatedFrame) { perfRun = 0; return; }");
     expect(html).toContain("if (perfRun < 10) return;");
     expect(html).toContain(".measure.perf .mval { color: var(--muted); }");
     // Eviction both ways: showMeasure strips the perf costume for a real

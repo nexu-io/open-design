@@ -1528,11 +1528,23 @@ function advanceXray(now) {
   const e = 1 - Math.pow(1 - p, 3);
   state.xrayMix = xrayFrom + (xrayTo - xrayFrom) * e;
   if (p >= 1) xrayFrom = xrayTo;
-  else invalidate();
+  else {
+    // Time-based motion scheduling its own next frame: that frame belongs
+    // to the ANIMATION, and the perf meter may count it. Any clip-playback
+    // loop this viewer grows must set the same flag.
+    selfAnimated = true;
+    invalidate();
+  }
 }
+
+/* True when the NEXT frame was scheduled by the page's own time-based
+   motion rather than by input. Read and cleared at the top of draw(). */
+let selfAnimated = false;
 
 function draw(now) {
   frame = null;
+  const animatedFrame = selfAnimated;
+  selfAnimated = false;
   const perfT0 = performance.now();
   // Advance time-based motion once per frame, before anything reads it, so
   // every consumer of the spring sees the same instant.
@@ -1544,22 +1556,24 @@ function draw(now) {
   // selection changes; frames just move it.
   positionGizmo();
   positionTip();
-  notePerfFrame(perfT0);
+  notePerfFrame(perfT0, animatedFrame);
 }
 
 /* ---- Frame-rate tenancy of the measure box -------------------------- */
 /* The renderer is on-demand: invalidate() schedules one frame per state
-   change, and idle means zero redraws by design. A frame rate therefore
-   only EXISTS during a sustained stretch (orbit, drag, x-ray fade) — and
-   the stretch with nothing else to report is exactly when the measure box
-   sits empty, so the rate borrows THAT box rather than adding chrome. A
-   gesture readout always evicts it (showMeasure owns the box whenever the
-   gesture variable is set); it moves back in the frame after the gesture ends if
-   frames are still streaming. It engages after ~10 consecutive frames,
-   repaints a few times a second (writing DOM every frame is the
-   layout-thrash mistake the comment in draw() records), and hands the box
-   back shortly after the stream stops. The value is the frame-to-frame
-   rate; the title carries this page's own draw cost. */
+   change, and idle means zero redraws by design. The rate is shown ONLY
+   while the page's own time-based motion sustains the stream (the x-ray
+   fade today; clip playback whenever this viewer grows one): that is the
+   stretch where a frame rate is a fact about the ANIMATION. Input-driven
+   redraws — orbit, pan, zoom, navigation — never engage it: their cadence
+   is the pointer's, not the renderer's, and the readout there measured the
+   user's hand while presenting itself as a scene fact. The rate borrows
+   the measure box (a gesture readout always evicts it; showMeasure owns
+   the box whenever the gesture variable is set), engages after ~10
+   consecutive animated frames, repaints a few times a second (writing DOM
+   every frame is the layout-thrash mistake the comment in draw() records),
+   and hands the box back shortly after the stream stops. The value is the
+   frame-to-frame rate; the title carries this page's own draw cost. */
 let perfLastAt = 0;
 let perfRun = 0;
 let perfDelta = 16.7;
@@ -1584,10 +1598,15 @@ function endPerfMeasure() {
   box.title = '';
   if (!gesture) box.classList.add('off');
 }
-function notePerfFrame(t0) {
+function notePerfFrame(t0, animatedFrame) {
   const nowMs = performance.now();
   const delta = nowMs - perfLastAt;
   perfLastAt = nowMs;
+  // An input-driven frame is not part of an animation stream: it must
+  // never build toward showing the meter, and it retires one already
+  // showing (the hide timer is running; letting it fire keeps the exit
+  // on the same path as the stream simply stopping).
+  if (!animatedFrame) { perfRun = 0; return; }
   if (delta > 250) { perfRun = 1; return; }
   perfRun += 1;
   // EMAs, so one janky frame reads as a dip rather than a flicker.
