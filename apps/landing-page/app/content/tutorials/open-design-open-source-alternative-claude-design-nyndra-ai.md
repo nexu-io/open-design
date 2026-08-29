@@ -1,7 +1,7 @@
 ---
-title: 'Why Open Design''s Output Looks Designed — A Developer''s Look Under the Hood'
+title: 'Why OpenDesign''s Output Looks Designed — A Developer''s Look Under the Hood'
 youtubeId: qXElL9HeNMM
-summary: A developer's read of Open Design — why its output looks designed rather than improvised. Covers the deterministic loop (discovery form → direction picker → checklist → self-critique), the clean local architecture, how skill.md front-matter drives the agent, and BYOK through an OpenAI-compatible proxy. Based on Nyndra AI's source-level review.
+summary: A developer's read of OpenDesign — why its output looks designed rather than improvised. Covers the deterministic loop (discovery form → direction picker → checklist → self-critique), the clean local architecture, how skill.md front-matter drives the agent, and BYOK through an OpenAI-compatible proxy. Based on Nyndra AI's source-level review.
 date: 2026-05-02
 category: Review
 durationSeconds: 495
@@ -9,14 +9,14 @@ author: 'Nyndra AI'
 official: false
 ---
 
-Most AI design tools improvise from a blank prompt and it shows. This guide is a developer's read of *why* Open Design's output looks designed instead — the deterministic parts of its loop, the clean local architecture, and how the whole thing is wired. It follows the source-level review **Nyndra AI** gives in [their video](https://www.youtube.com/watch?v=qXElL9HeNMM), rewritten and brought up to date with the current release. Watch the video above, or read on for the written version.
+Most AI design tools improvise from a blank prompt and it shows. This guide is a developer's read of *why* OpenDesign's output looks designed instead — the deterministic parts of its loop, the clean local architecture, and how the whole thing is wired. It follows the source-level review **Nyndra AI** gives in [their video](https://www.youtube.com/watch?v=qXElL9HeNMM), rewritten and brought up to date with the current release. Watch the video above, or read on for the written version.
 
-![The Open Design plugins hub.](/tutorials/open-design-open-source-alternative-claude-design-nyndra-ai/plugins-hub.webp)
+![The OpenDesign plugins hub.](/tutorials/open-design-open-source-alternative-claude-design-nyndra-ai/plugins-hub.webp)
 *The plugins hub: browse the registry, import plugins, and prepare them for your team.*
 
 ## The idea: you don't ship an agent
 
-Open Design's premise is that the strongest coding agents already live on your laptop, so it doesn't ship one — it **wires the agent you have into a skill-driven design workflow**. A local daemon gives that agent a real project folder with real read/write/bash/web-fetch tools — not a sandboxed toy. It auto-detects your CLIs (Claude Code, Codex, Cursor, Gemini, Qwen, Copilot — many total), and if you have more than one, you swap the active one with a single click, no config edits.
+OpenDesign's premise is that the strongest coding agents already live on your laptop, so it doesn't ship one — it **wires the agent you have into a skill-driven design workflow**. A local daemon gives that agent a real project folder with real read/write/bash/web-fetch tools — not a sandboxed toy. It auto-detects your CLIs (Claude Code, Codex, Cursor, OpenCode, Qwen, Copilot — many total), and if you have more than one, you swap the active one with a single click, no config edits.
 
 ## Why the output looks designed: the deterministic loop
 
@@ -29,7 +29,7 @@ Nyndra's core observation, after reading the source: **the parts that matter are
 
 The result "looks designed because the agent was told to behave like a senior designer who checks their work."
 
-![The Open Design plugin library, with installable skills.](/tutorials/open-design-open-source-alternative-claude-design-nyndra-ai/plugin-library.webp)
+![The OpenDesign plugin library, with installable skills.](/tutorials/open-design-open-source-alternative-claude-design-nyndra-ai/plugin-library.webp)
 *The plugin library: install skills straight from the registry — including anti-slop design skills.*
 
 ## How skills drive the agent
@@ -42,7 +42,7 @@ Each skill is a folder under the skills directory. The daemon parses the **`skil
 - **Local-first** — your data lives in SQLite on your machine.
 - **Apache-2.0** — fork it, deploy it to Vercel, modify it, ship it under your own name, no permission needed.
 
-![A real prototype generated in Open Design.](/tutorials/open-design-open-source-alternative-claude-design-nyndra-ai/generated-prototype.webp)
+![A real prototype generated in OpenDesign.](/tutorials/open-design-open-source-alternative-claude-design-nyndra-ai/generated-prototype.webp)
 *A real generated prototype rendered in the preview — a dark, cinematic agency landing page.*
 
 ## Run it (three commands)

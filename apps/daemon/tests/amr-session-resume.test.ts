@@ -201,6 +201,50 @@ describe('AMR (vela) ACP session resume — full server cycle', () => {
     expect(await readInvocations(logPath)).toEqual(['new', 'new']);
   });
 
+  it('clears a resumed AMR session after request_too_large so the next turn starts fresh', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-amr-largecontext-bin-'));
+    const logPath = path.join(binDir, 'invocations.jsonl');
+    const bin = await writeVelaWrapper(binDir, 'vela-largecontext', {
+      logPath,
+      promptErrorOnLoad: '[code=request_too_large] request body exceeds configured limit',
+    });
+
+    clearTelemetryEnv();
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'amr',
+      agentCliEnv: { amr: { VELA_BIN: bin } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const conversationId = await createConversation(started.url);
+
+    // Turn 1 captures the durable upstream OpenCode handle.
+    expect((await sendRunAndWait(started.url, conversationId, 'first request')).status)
+      .toBe('succeeded');
+
+    // Turn 2 resumes that handle, but the upstream request is now too large.
+    // The run should fail honestly, but the daemon must clear the handle so
+    // the next user retry does not load the same overgrown native session.
+    const turn2 = await sendRunAndWait(started.url, conversationId, 'second request');
+    expect(turn2.status).toBe('failed');
+    expect(turn2.error ?? '').toMatch(/request body exceeds configured limit/i);
+
+    const turn2Events = await readRunEvents(turn2.eventsLogPath);
+    expect(hasDiagnostic(turn2Events, {
+      type: 'agent_session_cleared_after_prompt_too_large',
+      reason: 'prompt_too_large',
+      stale_session_cleared: true,
+    })).toBe(true);
+
+    // Turn 3 proves the stale handle was discarded: it opens session/new and
+    // succeeds instead of session/load-ing the same oversized upstream session.
+    expect((await sendRunAndWait(started.url, conversationId, 'third request')).status)
+      .toBe('succeeded');
+    expect(await readInvocations(logPath)).toEqual(['new', 'load', 'new']);
+  });
+
   it('persists the concrete resolved model for a default turn (equivalent explicit follow-up resumes)', async () => {
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-amr-defaultmodel-bin-'));
     const logPath = path.join(binDir, 'invocations.jsonl');
@@ -392,6 +436,7 @@ async function writeVelaWrapper(
     logPath: string;
     resumeFailed?: boolean;
     omitHandle?: boolean;
+    promptErrorOnLoad?: string;
     logSetModel?: boolean;
     requireSetModel?: boolean;
     modelPresetJson?: string;
@@ -410,6 +455,9 @@ async function writeVelaWrapper(
   }
   if (opts.resumeFailed) lines.push('export FAKE_VELA_RESUME_FAILED=1');
   if (opts.omitHandle) lines.push('export FAKE_VELA_OMIT_OPENCODE_SESSION_ID=1');
+  if (opts.promptErrorOnLoad) {
+    lines.push(`export FAKE_VELA_PROMPT_ERROR_ON_LOAD=${JSON.stringify(opts.promptErrorOnLoad)}`);
+  }
   if (opts.logSetModel) lines.push('export FAKE_VELA_LOG_SET_MODEL=1');
   if (opts.modelPresetJson) {
     lines.push(`export FAKE_VELA_MODEL_PRESET_JSON=${JSON.stringify(opts.modelPresetJson)}`);
@@ -492,19 +540,48 @@ function clearTelemetryEnv(): void {
 }
 
 async function putConfig(url: string, patch: Record<string, unknown>): Promise<void> {
+  const agentCliEnv =
+    patch.agentCliEnv && typeof patch.agentCliEnv === 'object'
+      ? patch.agentCliEnv as Record<string, unknown>
+      : {};
+  const amr =
+    agentCliEnv.amr && typeof agentCliEnv.amr === 'object'
+      ? agentCliEnv.amr as Record<string, unknown>
+      : {};
   const response = await fetch(`${url}/api/app-config`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(patch),
+    body: JSON.stringify({
+      ...patch,
+      agentCliEnv: {
+        ...agentCliEnv,
+        amr: {
+          ...amr,
+          VELA_RUNTIME_KEY: 'rt-amr-session-resume-test',
+          VELA_LINK_URL: 'https://amr-link.example.test/v1',
+        },
+      },
+    }),
   });
   expect(response.status).toBe(200);
 }
 
 async function createConversation(url: string): Promise<string> {
   const projectId = `amr_resume_${randomUUID()}`;
+  const workspaceId = `amr_resume_personal_${projectId}`;
+  const workspaceMemberId = `amr_resume_owner_${projectId}`;
+  const workspaceHeaders = {
+    'x-od-workspace-id': workspaceId,
+    'x-od-workspace-type': 'personal',
+    'x-od-workspace-member-id': workspaceMemberId,
+    'x-od-workspace-role': 'owner',
+  };
   const projectResponse = await fetch(`${url}/api/projects`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      ...workspaceHeaders,
+    },
     body: JSON.stringify({
       id: projectId,
       name: 'AMR resume smoke',
@@ -514,7 +591,12 @@ async function createConversation(url: string): Promise<string> {
   });
   expect(projectResponse.status).toBe(200);
   const projectBody = (await projectResponse.json()) as { conversationId: string; id: string };
-  return `${projectId}::${projectBody.conversationId}`;
+  return [
+    projectId,
+    projectBody.conversationId,
+    workspaceId,
+    workspaceMemberId,
+  ].join('::');
 }
 
 async function sendRunAndWait(
@@ -523,7 +605,11 @@ async function sendRunAndWait(
   message: string,
   model?: string,
 ): Promise<RunStatus> {
-  const [projectId, conversationId] = encoded.split('::');
+  const [projectId, conversationId, workspaceId, workspaceMemberId] =
+    encoded.split('::');
+  if (!projectId || !conversationId || !workspaceId || !workspaceMemberId) {
+    throw new Error(`invalid AMR resume fixture identity: ${encoded}`);
+  }
   const assistantMessageId = `assistant_amr_${randomUUID()}`;
   const runResponse = await fetch(`${url}/api/runs`, {
     method: 'POST',
@@ -532,6 +618,10 @@ async function sendRunAndWait(
       'x-od-analytics-device-id': 'amr-resume-test',
       'x-od-analytics-session-id': 'amr-resume-session',
       'x-od-analytics-client-type': 'web',
+      'x-od-workspace-id': workspaceId,
+      'x-od-workspace-type': 'personal',
+      'x-od-workspace-member-id': workspaceMemberId,
+      'x-od-workspace-role': 'owner',
     },
     body: JSON.stringify({
       projectId,
@@ -544,15 +634,31 @@ async function sendRunAndWait(
       ...(model ? { model } : {}),
     }),
   });
-  expect(runResponse.status).toBe(202);
-  const body = (await runResponse.json()) as { runId: string };
-  return await waitForRun(url, body.runId);
+  const body = (await runResponse.json()) as {
+    runId?: string;
+    error?: { code?: string; message?: string };
+  };
+  expect(runResponse.status, JSON.stringify(body)).toBe(202);
+  expect(body.runId).toBeTypeOf('string');
+  return await waitForRun(url, body.runId!, {
+    'x-od-workspace-id': workspaceId,
+    'x-od-workspace-type': 'personal',
+    'x-od-workspace-member-id': workspaceMemberId,
+    'x-od-workspace-role': 'owner',
+  });
 }
 
-async function waitForRun(url: string, runId: string): Promise<RunStatus> {
+async function waitForRun(
+  url: string,
+  runId: string,
+  headers: Record<string, string>,
+): Promise<RunStatus> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < 15_000) {
-    const response = await fetch(`${url}/api/runs/${encodeURIComponent(runId)}`);
+    const response = await fetch(
+      `${url}/api/runs/${encodeURIComponent(runId)}`,
+      { headers },
+    );
     expect(response.status).toBe(200);
     const run = (await response.json()) as RunStatus;
     if (run.status === 'failed' || run.status === 'succeeded' || run.status === 'canceled') {

@@ -5,7 +5,7 @@
 # (Composio key save, GitHub OAuth, etc.) that bridge networking breaks.
 #
 # Also mounts host-installed agent CLIs (Claude Code, opencode, …) into the
-# container so Open Design can spawn them as agent runtimes. Requires the
+# container so OpenDesign can spawn them as agent runtimes. Requires the
 # local image built from Dockerfile.local (adds glibc compat for Alpine).
 # See README.md "Linux: mounting host agent CLIs" for setup instructions.
 #
@@ -30,7 +30,7 @@ services:
       OD_WEB_PORT: ${OPEN_DESIGN_PORT:-7456}
       # With host networking the daemon binds directly on the host's interfaces.
       # Lock it to loopback so the base file's 0.0.0.0 default does not expose
-      # Open Design on the LAN or public IP.
+      # OpenDesign on the LAN or public IP.
       OD_BIND_HOST: 127.0.0.1
       # Prepend host-bin mounts so the daemon finds agent CLIs before
       # any container-local stubs.

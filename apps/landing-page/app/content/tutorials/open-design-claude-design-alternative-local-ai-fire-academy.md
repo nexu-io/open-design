@@ -1,7 +1,7 @@
 ---
-title: 'Restyle Without Rebuilding — Explore Visual Identities in Open Design'
+title: 'Restyle Without Rebuilding — Explore Visual Identities in OpenDesign'
 youtubeId: 9_WHRcf4ZRY
-summary: A design-exploration workflow for Open Design — build a page or dashboard once, then transform its entire visual identity (dark neon → luxury editorial) while keeping the same content and structure. Try radically different looks in seconds instead of rebuilding. Based on AI Fire Academy's demo.
+summary: A design-exploration workflow for OpenDesign — build a page or dashboard once, then transform its entire visual identity (dark neon → luxury editorial) while keeping the same content and structure. Try radically different looks in seconds instead of rebuilding. Based on AI Fire Academy's demo.
 date: 2026-05-18
 category: Demo
 durationSeconds: 638
@@ -9,14 +9,14 @@ author: 'AI Fire Academy'
 official: false
 ---
 
-Picking a visual direction usually means rebuilding when you change your mind. This guide shows Open Design's best trick for exploration: **build once, then restyle the whole thing** — same content and structure, a completely different look — in seconds. It follows the demo **AI Fire Academy** runs in [their video](https://www.youtube.com/watch?v=9_WHRcf4ZRY), rewritten and brought up to date with the current release. Watch the video above, or read on for the written version.
+Picking a visual direction usually means rebuilding when you change your mind. This guide shows OpenDesign's best trick for exploration: **build once, then restyle the whole thing** — same content and structure, a completely different look — in seconds. It follows the demo **AI Fire Academy** runs in [their video](https://www.youtube.com/watch?v=9_WHRcf4ZRY), rewritten and brought up to date with the current release. Watch the video above, or read on for the written version.
 
-![A real prototype generated in Open Design.](/tutorials/open-design-claude-design-alternative-local-ai-fire-academy/generated-prototype.webp)
+![A real prototype generated in OpenDesign.](/tutorials/open-design-claude-design-alternative-local-ai-fire-academy/generated-prototype.webp)
 *A real generated prototype rendered in the preview — a dark, cinematic agency landing page.*
 
-## What is Open Design?
+## What is OpenDesign?
 
-Open Design is an open-source, local-first alternative to closed cloud design tools. The core idea is *bring your own agent*: it's not the AI brain, it's the conductor. It **auto-detects the coding agents already on your machine** (Claude Code, Codex, Gemini, DeepSeek, and more) and turns them into UI/UX designers — no ecosystem lock-in, no weekly cap, and everything runs locally (your files, your SQLite, your projects stay on your device).
+OpenDesign is an open-source, local-first alternative to closed cloud design tools. The core idea is *bring your own agent*: it's not the AI brain, it's the conductor. It **auto-detects the coding agents already on your machine** (Claude Code, Codex, OpenCode, DeepSeek, and more) and turns them into UI/UX designers — no ecosystem lock-in, no weekly cap, and everything runs locally (your files, your SQLite, your projects stay on your device).
 
 - **Open source, Apache-2.0** — clone it, self-host it, or just download the app.
 - **Any model** — pick whatever fits your budget and workflow.
@@ -28,10 +28,10 @@ The simplest path is the **desktop app**: download from [open-design.ai/download
 
 ## Step 2 — Build the first version
 
-Create a prototype (a newsletter landing page in the demo), keep **high fidelity**, and prompt. Open Design **asks clarifying questions first** (who subscribes, cadence, CTA, visual direction) rather than guessing, then builds. The first pass already looks like a real startup page — and you can push it further conversationally ("make the hero more dramatic and premium, add a glowing orb, strengthen the CTA").
+Create a prototype (a newsletter landing page in the demo), keep **high fidelity**, and prompt. OpenDesign **asks clarifying questions first** (who subscribes, cadence, CTA, visual direction) rather than guessing, then builds. The first pass already looks like a real startup page — and you can push it further conversationally ("make the hero more dramatic and premium, add a glowing orb, strengthen the CTA").
 
-![The Open Design workspace — describe what you want and pick a mode.](/tutorials/open-design-claude-design-alternative-local-ai-fire-academy/workspace-home.webp)
-*The Open Design workspace: describe what you want to build, pick a mode, and your agent does the rest.*
+![The OpenDesign workspace — describe what you want and pick a mode.](/tutorials/open-design-claude-design-alternative-local-ai-fire-academy/workspace-home.webp)
+*The OpenDesign workspace: describe what you want to build, pick a mode, and your agent does the rest.*
 
 ## Step 3 — The restyle move (the real unlock)
 
@@ -39,9 +39,9 @@ Here's the technique. Once you have something you like, **change the entire visu
 
 > "Change the whole design direction into a luxury editorial style while keeping the same content and structure."
 
-Same copy, same layout, a completely different design language — in one prompt. AI Fire Academy does it on both a landing page and a full finance dashboard: dark-neon → luxury-editorial, instantly. This is what makes Open Design feel like a *designer* rather than a mock-up generator — it iterates on the look while preserving the substance, so you can audition several directions before committing instead of rebuilding each time.
+Same copy, same layout, a completely different design language — in one prompt. AI Fire Academy does it on both a landing page and a full finance dashboard: dark-neon → luxury-editorial, instantly. This is what makes OpenDesign feel like a *designer* rather than a mock-up generator — it iterates on the look while preserving the substance, so you can audition several directions before committing instead of rebuilding each time.
 
-![Slide-deck mode in Open Design with example decks.](/tutorials/open-design-claude-design-alternative-local-ai-fire-academy/slide-deck-creator.webp)
+![Slide-deck mode in OpenDesign with example decks.](/tutorials/open-design-claude-design-alternative-local-ai-fire-academy/slide-deck-creator.webp)
 *Slide-deck mode: choose a deck category and fork an example as your starting point.*
 
 ## Step 4 — Where it fits

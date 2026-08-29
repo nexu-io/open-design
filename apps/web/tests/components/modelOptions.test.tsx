@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   CUSTOM_MODEL_SENTINEL,
@@ -100,6 +100,75 @@ describe('orderModelOptionsByAvailability', () => {
 });
 
 describe('SearchableModelSelect', () => {
+  beforeEach(() => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 120,
+      y: 200,
+      top: 200,
+      right: 360,
+      bottom: 236,
+      left: 120,
+      width: 240,
+      height: 36,
+      toJSON: () => ({}),
+    });
+  });
+
+  it('clamps an upward popover and keeps that placement while it still fits', async () => {
+    let triggerRect = {
+      x: 120,
+      y: 300,
+      top: 300,
+      right: 360,
+      bottom: 336,
+      left: 120,
+      width: 240,
+      height: 36,
+      toJSON: () => ({}),
+    };
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      () => triggerRect,
+    );
+
+    render(
+      <SearchableModelSelect
+        models={Array.from({ length: 9 }, (_, index) => ({
+          id: `model-${index}`,
+          label: `Model ${index}`,
+        }))}
+        value="model-0"
+        onChange={vi.fn()}
+        searchPlaceholder="Search models"
+        popoverTestId="model-popover"
+        getPopoverBoundary={() => ({
+          top: 80,
+          right: 500,
+          bottom: 400,
+          left: 8,
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    const popover = await screen.findByTestId('model-popover');
+    expect(popover.style.bottom).toBe(`${window.innerHeight - 300 + 6}px`);
+    expect(popover.style.maxHeight).toBe('214px');
+
+    triggerRect = {
+      ...triggerRect,
+      y: 200,
+      top: 200,
+      bottom: 236,
+    };
+    fireEvent.scroll(window);
+
+    await waitFor(() => {
+      expect(popover.style.bottom).toBe(`${window.innerHeight - 200 + 6}px`);
+      expect(popover.style.maxHeight).toBe('114px');
+    });
+  });
+
   it('renders capability tag and cost metadata as option text', async () => {
     render(
       <SearchableModelSelect
@@ -196,5 +265,48 @@ describe('SearchableModelSelect', () => {
       expect.objectContaining({ id: 'deepseek-v4-pro' }),
     );
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps upgrade affordances outside the truncating model label', async () => {
+    const longModelLabel = 'gemini-3-flash-preview-with-an-extra-long-provider-suffix';
+
+    render(
+      <SearchableModelSelect
+        models={[
+          { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash', default: true },
+          {
+            id: 'google/gemini-3-flash-preview',
+            label: longModelLabel,
+            enabled: false,
+            metadata: { capability: 'standard' },
+          },
+        ]}
+        value="deepseek-v4-flash"
+        onChange={vi.fn()}
+        searchPlaceholder="Search models"
+        disabledOptionHint={(option) =>
+          option.enabled === false ? 'Upgrade to use' : null
+        }
+        onDisabledOptionUpgrade={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    const disabledOption = await screen.findByRole('option', {
+      name: longModelLabel,
+    });
+    const label = disabledOption.querySelector('.model-select-searchable__option-label');
+    const affordances = disabledOption.querySelector(
+      '.model-select-searchable__option-affordances',
+    );
+    const lock = screen.getByTestId('model-option-upgrade-lock');
+    const badge = disabledOption.querySelector('.model-select-searchable__option-badge');
+
+    expect(label?.textContent).toBe(longModelLabel);
+    expect(label?.contains(lock)).toBe(false);
+    expect(affordances?.contains(lock)).toBe(true);
+    expect(affordances?.contains(badge)).toBe(true);
+    expect(disabledOption).toHaveAccessibleName(longModelLabel);
   });
 });

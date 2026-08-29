@@ -1,0 +1,187 @@
+{
+  "schema": { "version": 1 },
+  "suites": {
+    "convergence-control": [
+      ".github/config/convergence.json",
+      ".github/config/scopes.json",
+      ".github/config/runners.json",
+      ".github/scripts/convergence.py",
+      ".github/scripts/scopes.py",
+      ".github/scripts/runners.py",
+      ".github/scripts/handoff.py",
+      ".github/scripts/lib/config.py",
+      ".github/scripts/lib/github.py",
+      ".github/scripts/lib/r2.py",
+      ".github/actions/configure-ci-parallelism/",
+      ".github/actions/setup-playwright/",
+      ".github/actions/setup-workspace/",
+      ".github/workflows/ci.yml",
+      ".github/workflows/convergence.atom.yml"
+    ],
+    "workspace-install": [
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "scripts/postinstall.mjs",
+      ".github/actions/configure-ci-parallelism/",
+      ".github/actions/setup-workspace/"
+    ],
+    "workspace-core": [
+      "suite://workspace-install",
+      "packages/contracts/",
+      "packages/host/",
+      "packages/platform/",
+      "packages/release/",
+      "packages/sidecar/",
+      "packages/sidecar-proto/"
+    ],
+    "terminal-scene": [
+      "suite://workspace-install",
+      "apps/closure/",
+      "packages/standalone/",
+      "shells/terminal/"
+    ],
+    "daemon": [
+      "suite://workspace-install",
+      "apps/daemon/",
+      "packages/agui-adapter/",
+      "packages/contracts/",
+      "packages/diagnostics/",
+      "packages/launcher-proto/",
+      "packages/platform/",
+      "packages/plugin-runtime/",
+      "packages/registry-protocol/",
+      "packages/release/",
+      "packages/sidecar/",
+      "packages/sidecar-proto/"
+    ],
+    "web": [
+      "suite://workspace-install",
+      "apps/web/",
+      "packages/components/",
+      "packages/contracts/",
+      "packages/host/",
+      "packages/platform/",
+      "packages/release/",
+      "packages/sidecar/",
+      "packages/sidecar-proto/"
+    ],
+    "windows-launcher-payload": [
+      "suite://workspace-install",
+      "tools/pack/package.json",
+      "tools/pack/tsconfig.json",
+      "tools/pack/tsconfig.tests.json",
+      "tools/pack/vitest.config.ts",
+      "tools/pack/src/cache/",
+      "tools/pack/src/config/",
+      "tools/pack/src/launcher/",
+      "tools/pack/src/resources/",
+      "tools/pack/src/updates/",
+      "tools/pack/src/versioning/",
+      "tools/pack/src/win/",
+      "tools/pack/tests/launcher/windows/",
+      "tools/pack/resources/win/",
+      "packages/launcher-proto/",
+      "packages/platform/",
+      "packages/release/",
+      "packages/sidecar/",
+      "packages/sidecar-proto/"
+    ],
+    "e2e-runtime": [
+      "suite://workspace-install",
+      "apps/daemon/",
+      "apps/desktop/",
+      "apps/packaged/",
+      "apps/web/",
+      "packages/",
+      "tools/dev/",
+      "tools/pack/",
+      "e2e/",
+      ".github/actions/setup-playwright/"
+    ],
+    "ui-runtime": [
+      "suite://e2e-runtime",
+      "scripts/",
+      "assets/",
+      "skills/",
+      "prompt-templates/",
+      "design-systems/",
+      "design-templates/",
+      "craft/",
+      "mocks/"
+    ]
+  },
+  "workflows": {
+    "ci": {
+      "policy": "ci-v1",
+      "workloads": {
+        "static_gate": {
+          "inputs": ["*"],
+          "runnerClass": "control",
+          "products": "none",
+          "reusable": false
+        },
+        "preflight": {
+          "inputs": ["*"],
+          "runnerClass": "general_medium",
+          "products": "none",
+          "reusable": false
+        },
+        "workspace_unit_tests": {
+          "inputs": ["*"],
+          "runnerClass": "workspace_unit",
+          "products": "none",
+          "reusable": false
+        },
+        "daemon_unit_tests": {
+          "inputs": ["*"],
+          "runnerClass": "workspace_unit",
+          "products": "none",
+          "reusable": true
+        },
+        "windows_tools_pack_payload_tests": {
+          "inputs": ["suite://windows-launcher-payload"],
+          "runnerClass": "windows_tools",
+          "products": "none",
+          "reusable": true
+        },
+        "web_workspace_tests": {
+          "inputs": ["suite://web"],
+          "runnerClass": "js_hot",
+          "products": "none",
+          "reusable": true
+        },
+        "e2e_vitest": {
+          "inputs": ["*"],
+          "runnerClass": "js_hot",
+          "products": "none",
+          "reusable": true
+        },
+        "playwright_critical": {
+          "inputs": ["suite://ui-runtime"],
+          "runnerClass": "ui_hot",
+          "products": "none",
+          "reusable": true
+        },
+        "ui_p0": {
+          "inputs": ["suite://ui-runtime"],
+          "runnerClass": "ui_p0",
+          "products": "manifest",
+          "reusable": false
+        },
+        "playwright_visual": {
+          "inputs": ["suite://ui-runtime"],
+          "runnerClass": "visual_hot",
+          "products": "manifest",
+          "reusable": false
+        },
+        "terminal_scene": {
+          "inputs": ["suite://terminal-scene"],
+          "runnerClass": "workspace_unit",
+          "products": "manifest",
+          "reusable": true
+        }
+      }
+    }
+  }
+}

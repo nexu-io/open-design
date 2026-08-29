@@ -1,9 +1,9 @@
 {
   "name": "@open-design/contracts",
-  "version": "0.14.2",
+  "version": "0.21.1",
   "private": true,
   "type": "module",
-  "description": "Shared pure TypeScript contracts for the Open Design web/daemon boundary.",
+  "description": "Shared pure TypeScript contracts for the OpenDesign web/daemon boundary.",
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "files": [
@@ -50,6 +50,14 @@
       "types": "./dist/runtime/deck-stage-fallback.d.ts",
       "default": "./dist/runtime/deck-stage-fallback.mjs"
     },
+    "./runtime/preview-observability": {
+      "types": "./dist/runtime/preview-observability.d.ts",
+      "default": "./dist/runtime/preview-observability.mjs"
+    },
+    "./runtime/preview-guards": {
+      "types": "./dist/runtime/preview-guards.d.ts",
+      "default": "./dist/runtime/preview-guards.mjs"
+    },
     "./design-systems/components-manifest": {
       "types": "./dist/design-systems/components-manifest.d.ts",
       "default": "./dist/design-systems/components-manifest.mjs"
@@ -69,6 +77,10 @@
     "./analytics": {
       "types": "./dist/analytics/index.d.ts",
       "default": "./dist/analytics/index.mjs"
+    },
+    "./runtime/html-injection-points": {
+      "types": "./dist/runtime/html-injection-points.d.ts",
+      "default": "./dist/runtime/html-injection-points.mjs"
     }
   },
   "scripts": {

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "version": "24.18.0",
+  "targets": {
+    "darwin-arm64": {
+      "archive": "node-v24.18.0-darwin-arm64.tar.gz",
+      "mediaType": "application/gzip",
+      "sha256": "e1a97e14c99c803e96c7339403282ea05a499c32f8d83defe9ef5ec66f979ed1",
+      "url": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-darwin-arm64.tar.gz"
+    },
+    "win32-x64": {
+      "archive": "node-v24.18.0-win-x64.zip",
+      "mediaType": "application/zip",
+      "sha256": "0ae68406b42d7725661da979b1403ec9926da205c6770827f33aac9d8f26e821",
+      "url": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-win-x64.zip"
+    }
+  }
+}

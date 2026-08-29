@@ -10,9 +10,9 @@
   },
   "version": "1.0.0",
   "publishedAt": "2026-06-16T09:32:15Z",
-  "description": "Open Design's all-hands: the year in review, the three priorities, and what every team owns next quarter. Built as a decision-grade corporate strategy deck for whole company.",
+  "description": "OpenDesign's all-hands: the year in review, the three priorities, and what every team owns next quarter. Built as a decision-grade corporate strategy deck for whole company.",
   "description_i18n": {
-    "en": "Open Design's all-hands: the year in review, the three priorities, and what every team owns next quarter. Built as a decision-grade corporate strategy deck for whole company.",
+    "en": "OpenDesign's all-hands: the year in review, the three priorities, and what every team owns next quarter. Built as a decision-grade corporate strategy deck for whole company.",
     "zh-CN": "像世界级创始人 CEO 一样开全员大会——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。",
     "zh-TW": "像世界级创始人 CEO 一样开全员大会——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。"
   },
@@ -64,8 +64,8 @@
     },
     "useCase": {
       "query": {
-        "en": "Create \"Run an All-Hands Town Hall like a World-Class Founder-CEO\" as a decision-grade Corporate strategy deck in this template's own visual system. Subject: Open Design's all-hands: the year in review, the three priorities, and what every team owns next quarter. Audience: whole company. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a board member know what to approve and why before page five.",
-        "zh-CN": "像世界级创始人 CEO 一样开全员大会。像世界级创始人 CEO 一样开全员大会——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's all-hands: the year in review, the three priorities, and what every team owns next quarter. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+        "en": "Create \"Run an All-Hands Town Hall like a World-Class Founder-CEO\" as a decision-grade Corporate strategy deck in this template's own visual system. Subject: OpenDesign's all-hands: the year in review, the three priorities, and what every team owns next quarter. Audience: whole company. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a board member know what to approve and why before page five.",
+        "zh-CN": "像世界级创始人 CEO 一样开全员大会。像世界级创始人 CEO 一样开全员大会——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。 主题：OpenDesign's all-hands: the year in review, the three priorities, and what every team owns next quarter. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {

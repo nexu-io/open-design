@@ -79,9 +79,17 @@ const AGENT_INSTALL_LINKS: Record<
     installUrl: 'https://github.com/Hmbown/CodeWhale',
     docsUrl: 'https://github.com/Hmbown/CodeWhale/blob/main/README.md',
   },
+  'deepseek-harness': {
+    installUrl: 'https://www.deepseek.com/harness/en/',
+    docsUrl: 'https://github.com/deepseek-ai/deepseek-harness',
+  },
   codebuddy: {
     installUrl: 'https://www.codebuddy.cn',
     docsUrl: 'https://www.codebuddy.cn/docs/workbuddy/Overview',
+  },
+  atomcode: {
+    installUrl: 'https://atomcode.atomgit.com/docs/en/quickstart.html',
+    docsUrl: 'https://atomcode.atomgit.com/docs/en/index.html',
   },
 };
 

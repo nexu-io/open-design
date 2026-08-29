@@ -57,3 +57,54 @@ describe('parseFrontmatter scalar coercion', () => {
     expect(data("a: '").a).toBe("'");
   });
 });
+
+describe('parseFrontmatter block sequences and arrays', () => {
+  // A block sequence may sit at the same indentation as its mapping key (the
+  // common flush-left `tags:` / `- item` YAML style). These items must attach
+  // to the key rather than being dropped.
+  it('parses a flush-left (zero-indent) block sequence', () => {
+    expect(data('tags:\n- a\n- b').tags).toEqual(['a', 'b']);
+  });
+
+  it('parses a nested flush-left sequence without dropping enclosing keys', () => {
+    expect(data('od:\n  craft:\n    requires:\n    - alpha\n    - beta').od).toEqual({
+      craft: { requires: ['alpha', 'beta'] },
+    });
+  });
+
+  it('parses a flush-left sequence of single-line objects', () => {
+    expect(data('items:\n- k: 1\n  v: 2\n- k: 3').items).toEqual([{ k: 1, v: 2 }, { k: 3 }]);
+  });
+
+  it('returns to the parent level for a key following a flush-left sequence', () => {
+    expect(data('tags:\n- a\n- b\nname: foo')).toEqual({ tags: ['a', 'b'], name: 'foo' });
+  });
+
+  it('still parses an indented block sequence', () => {
+    expect(data('tags:\n  - a\n  - b').tags).toEqual(['a', 'b']);
+  });
+
+  it('does not split inline-array elements on commas inside quotes', () => {
+    expect(data('a: ["a,b", "c"]').a).toEqual(['a,b', 'c']);
+    expect(data("a: ['x, y', z]").a).toEqual(['x, y', 'z']);
+  });
+
+  it('treats an apostrophe inside an unquoted inline-array element as literal', () => {
+    expect(data("tags: [don't, stop]").tags).toEqual(["don't", 'stop']);
+  });
+
+  it('still splits plain inline arrays on commas', () => {
+    expect(data('a: [x, y, z]').a).toEqual(['x', 'y', 'z']);
+  });
+
+  // A block scalar's indentation is derived from its first content line, not a
+  // fixed key+2, so content indented deeper is not left with leading spaces
+  // while relative indentation deeper than that base is preserved.
+  it('strips a block scalar to its own base indentation', () => {
+    expect(data('text: |\n    line one\n    line two').text).toBe('line one\nline two');
+  });
+
+  it('preserves relative indentation inside a block scalar', () => {
+    expect(data('text: |\n  a\n    b').text).toBe('a\n  b');
+  });
+});

@@ -426,6 +426,25 @@ Rules — same weight as the density rules above:
 - ❌ Don't nest value labels inside a clipping fixed-height bar.
 - ❌ Don't omit any data point's label, however short its bar.
 
+## Nested / concentric diagram discipline
+
+Nested shapes may share a center; their text blocks may not. Treat geometry and labels as separate layout responsibilities.
+
+- Put at most one short KPI in the shared center. Never center a label/value/description stack inside two or more concentric layers.
+- Put every other label in a separate legend, external callout, or visibly reserved non-overlapping region. If those regions do not fit, use a stacked comparison, flow, or table instead.
+- When rendering cannot confirm the layout and static review leaves any collision risk, choose the separate-legend structure below.
+
+\`\`\`html
+<div class="nested-market">
+  <div class="nested-market__rings" aria-hidden="true"><!-- shapes only; no text --></div>
+  <dl class="nested-market__legend">
+    <div><dt>Outer layer</dt><dd>Value — explanation</dd></div>
+    <div><dt>Middle layer</dt><dd>Value — explanation</dd></div>
+    <div><dt>Inner layer</dt><dd>Value — explanation</dd></div>
+  </dl>
+</div>
+\`\`\`
+
 ## Mermaid diagram theme discipline (dark decks)
 
 Mermaid's default theme is built for white pages: near-black labels (\`#333\`), pale node fills, black strokes, and a TRANSPARENT svg background. Embedded in a dark-themed deck it produces the failure users report as "the diagram text is unreadable in dark mode": dark labels sitting directly on the dark slide background. Prefer a hand-written HTML/CSS/SVG diagram styled with the deck's own tokens (\`--bg\`, \`--fg\`, \`--accent\`) — it never drifts from the theme and needs no external JS. When you do embed Mermaid, pick the theme from the slide background at initialize time — never leave the default (light) theme on a dark deck:

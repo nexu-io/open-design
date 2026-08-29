@@ -63,6 +63,17 @@ vi.mock('../../src/components/ManualEditPanel', async (importOriginal) => {
   };
 });
 
+// These tests exercise FileViewer's local-project preview path. Keep the
+// authorization scope resolved from the first render so cache assertions do
+// not depend on the asynchronous workspace-context probe.
+vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/collab/useWorkspaceContext')>();
+  return {
+    ...actual,
+    useWorkspaceContext: () => ({ context: null, loading: false }),
+  };
+});
+
 import { FileViewer } from '../../src/components/FileViewer';
 
 afterEach(() => {
@@ -209,7 +220,7 @@ function deferredFetch(): { handle: FetchHandle; stub: typeof fetch } {
 
 // Fetches that resolve immediately with a fixed response.
 function fetchReturning(html: string) {
-  return vi.fn(async (input: string | URL | Request) => {
+  return vi.fn(async (input: string | URL | Request, _init?: RequestInit) => {
     const url =
       typeof input === 'string'
         ? input
@@ -224,6 +235,166 @@ function fetchReturning(html: string) {
 }
 
 describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions', () => {
+  it('seeds a same-version remount from the settled source without a redundant background read', async () => {
+    const v1 = deckHtml('REVISIT-CACHED-V1');
+    vi.stubGlobal('fetch', fetchReturning(v1));
+
+    const first = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={deckFile({ name: 'revisit.html', path: 'revisit.html' })}
+        isDeck
+      />,
+    );
+
+    await waitFor(() => {
+      expect(srcDocFrame().getAttribute('srcDoc')).toContain('REVISIT-CACHED-V1');
+    });
+    first.unmount();
+
+    const remountFetch = fetchReturning(deckHtml('UNEXPECTED-REMOTE-V2'));
+    vi.stubGlobal('fetch', remountFetch);
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={deckFile({ name: 'revisit.html', path: 'revisit.html' })}
+        isDeck
+      />,
+    );
+
+    expect(srcDocFrame().getAttribute('srcDoc')).toContain('REVISIT-CACHED-V1');
+    // This source-cache regression deliberately does not forge the iframe's
+    // exact paint-probe acknowledgement. The first-load cover and its
+    // paint-verified remount behavior are exercised in FileViewer.test.tsx.
+    expect(
+      remountFetch.mock.calls.some(([input]) => String(input).startsWith(RAW_URL_PREFIX)),
+    ).toBe(false);
+  });
+
+  it('invalidates a cached v1 after a file event and loads v2 even when metadata is unchanged', async () => {
+    const file = deckFile({ name: 'remote-update.html', path: 'remote-update.html' });
+    vi.stubGlobal('fetch', fetchReturning(deckHtml('REMOTE-CACHED-V1')));
+
+    const first = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        isDeck
+      />,
+    );
+    await waitFor(() => {
+      expect(srcDocFrame().getAttribute('srcDoc')).toContain('REMOTE-CACHED-V1');
+    });
+    first.unmount();
+
+    const { handle: v2Handle, stub: v2Fetch } = deferredFetch();
+    const v2FetchMock = vi.mocked(v2Fetch);
+    vi.stubGlobal('fetch', v2Fetch);
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        filesRefreshKey={1}
+        isDeck
+      />,
+    );
+
+    expect(screen.queryByTestId('artifact-preview-frame')).not.toBeInTheDocument();
+    expect(screen.getByRole('status', { name: /loading/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        v2FetchMock.mock.calls.some(([input]) => String(input).startsWith(RAW_URL_PREFIX)),
+      ).toBe(true);
+    });
+
+    await act(async () => {
+      v2Handle.resolve(deckHtml('REMOTE-ORIGIN-V2'));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(srcDocFrame().getAttribute('srcDoc')).toContain('REMOTE-ORIGIN-V2');
+    });
+    expect(srcDocFrame().getAttribute('srcDoc')).not.toContain('REMOTE-CACHED-V1');
+
+    const rawCall = v2FetchMock.mock.calls.find(([input]) =>
+      String(input).startsWith(RAW_URL_PREFIX),
+    );
+    expect(rawCall?.[1]).toMatchObject({ cache: 'no-store' });
+  });
+
+  it('does not seed a changed-version remount with the previous HTML', async () => {
+    const v1 = deckHtml('VERSION-BEFORE-MTIME-CHANGE');
+    vi.stubGlobal('fetch', fetchReturning(v1));
+
+    const first = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={deckFile({ name: 'versioned.html', path: 'versioned.html', mtime: 1 })}
+        isDeck
+      />,
+    );
+    await waitFor(() => {
+      expect(srcDocFrame().getAttribute('srcDoc')).toContain('VERSION-BEFORE-MTIME-CHANGE');
+    });
+    first.unmount();
+
+    const { stub: heldChangedVersion } = deferredFetch();
+    vi.stubGlobal('fetch', heldChangedVersion);
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={deckFile({ name: 'versioned.html', path: 'versioned.html', mtime: 2 })}
+        isDeck
+      />,
+    );
+
+    expect(screen.queryByTestId('artifact-preview-frame')).not.toBeInTheDocument();
+    expect(screen.getByRole('status', { name: /loading/i })).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('VERSION-BEFORE-MTIME-CHANGE');
+  });
+
+  it('invalidates the settled snapshot when Reload is requested', async () => {
+    const v1 = deckHtml('BEFORE-EXPLICIT-RELOAD');
+    vi.stubGlobal('fetch', fetchReturning(v1));
+
+    const first = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={deckFile({ name: 'reload-invalidates.html', path: 'reload-invalidates.html' })}
+        isDeck
+      />,
+    );
+    await waitFor(() => {
+      expect(srcDocFrame().getAttribute('srcDoc')).toContain('BEFORE-EXPLICIT-RELOAD');
+    });
+
+    const { stub: heldReload } = deferredFetch();
+    vi.stubGlobal('fetch', heldReload);
+    fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
+    first.unmount();
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={deckFile({ name: 'reload-invalidates.html', path: 'reload-invalidates.html' })}
+        isDeck
+      />,
+    );
+
+    expect(screen.queryByTestId('artifact-preview-frame')).not.toBeInTheDocument();
+    expect(screen.getByRole('status', { name: /loading/i })).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('BEFORE-EXPLICIT-RELOAD');
+  });
+
   // ---------------------------------------------------------------------------
   // Race 1: double-click wipes the fallback ref before the first fetch fails
   // ---------------------------------------------------------------------------
@@ -424,15 +595,12 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
   });
 
   // ---------------------------------------------------------------------------
-  // Race 4 (P2): routing decision must not flip to URL-load during the
-  // source=null window opened by a Reload click on an artifact whose srcDoc
-  // path is driven by a source-derived predicate (htmlNeedsSandboxShim).
+  // Settled sandbox-shim artifacts now use the daemon-guarded URL path. A
+  // reload must keep that transport stable while the source probe is pending.
   // ---------------------------------------------------------------------------
-  it('keeps the srcDoc iframe active (does not flip to URL-load) while source is null after a Reload click on an htmlNeedsSandboxShim artifact', async () => {
-    // An HTML file that uses localStorage — triggers htmlNeedsSandboxShim and
-    // therefore forces the srcDoc path (forceInline=true).  No .slide class so
-    // looksLikeDeck stays false and isDeck is passed as false; the ONLY reason
-    // this file takes the srcDoc path is the sandbox-shim predicate.
+  it('keeps the guarded URL iframe active while source is null after Reload', async () => {
+    // localStorage requires the sandbox shim, but settled on-disk HTML can now
+    // receive that shim from the daemon without taking the srcDoc transport.
     const shimFile: ProjectFile = {
       name: 'app.html',
       path: 'app.html',
@@ -445,8 +613,7 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
     const shimHtml =
       '<html><body><script>localStorage.setItem("key","val");</script><p>loaded</p></body></html>';
 
-    // Step 1: mount with shimHtml — source is non-null, needsSandboxShim=true,
-    // forceInline=true, useUrlLoadPreview=false → srcDoc iframe is active.
+    // Step 1: mount with shimHtml and wait for the guarded URL lane.
     vi.stubGlobal('fetch', fetchReturning(shimHtml));
 
     render(
@@ -460,17 +627,14 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
 
     // Wait for the source fetch to resolve so the component has non-null source.
     await waitFor(() => {
-      // The srcDoc iframe is active: its testid is 'artifact-preview-frame'
-      // (not 'artifact-preview-frame-srcdoc') when useUrlLoadPreview=false.
       const frame = screen.queryByTestId('artifact-preview-frame');
       expect(frame).not.toBeNull();
-      expect((frame as HTMLIFrameElement).getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect((frame as HTMLIFrameElement).getAttribute('data-od-render-mode')).toBe('url-load');
+      expect((frame as HTMLIFrameElement).getAttribute('src')).toContain('odPreviewBridge=sandbox');
     });
 
-    // Step 2: click Reload — source goes null synchronously.  Without the fix,
-    // needsSandboxShim(null)=false → forceInline flips → useUrlLoadPreview
-    // becomes true → the URL-load iframe hijacks testid 'artifact-preview-frame'
-    // and the srcDoc iframe is renamed to 'artifact-preview-frame-srcdoc'.
+    // Step 2: click Reload. The source probe is deferred so we observe the
+    // intermediate source=null window.
     const { handle: reloadHandle, stub: reloadStub } = deferredFetch();
     vi.stubGlobal('fetch', reloadStub);
 
@@ -478,29 +642,75 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
       fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
     });
 
-    // Step 3: assert BEFORE the fetch resolves — this is the reload window
-    // where the source=null race can expose the bug.
-    //
-    // The srcDoc iframe must remain the active iframe: its testid stays
-    // 'artifact-preview-frame' and its data-od-render-mode is 'srcdoc'.
-    // If the routing flipped, a URL-load iframe would have taken the
-    // 'artifact-preview-frame' testid and data-od-active='true' instead.
+    // Step 3: the same URL transport remains active; it must not fall through
+    // to the dormant srcDoc/bootstrap iframe while the probe is pending.
     const activeFrame = screen.getByTestId('artifact-preview-frame');
-    expect(activeFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+    expect(activeFrame.getAttribute('data-od-render-mode')).toBe('url-load');
     expect(activeFrame.getAttribute('data-od-active')).toBe('true');
+    expect(activeFrame.getAttribute('src')).toContain('odPreviewBridge=sandbox');
 
-    // Confirm the URL-load iframe is NOT the active one (it would carry
-    // data-od-render-mode='url-load' and data-od-active='true' on a buggy build).
-    const urlLoadFrame = screen.queryByTestId('artifact-preview-frame-url-load');
-    if (urlLoadFrame) {
-      expect(urlLoadFrame.getAttribute('data-od-active')).toBe('false');
-    }
+    const srcDocFrame = screen.queryByTestId('artifact-preview-frame-srcdoc');
+    expect(srcDocFrame?.getAttribute('data-od-active')).toBe('false');
 
     // Drain the deferred fetch so it doesn't leak into subsequent tests.
     await act(async () => {
       reloadHandle.resolve(shimHtml);
       await Promise.resolve();
     });
+  });
+
+  it('keeps a 43-file Babel prototype on the guarded real-URL transport', async () => {
+    const externalScripts = Array.from(
+      { length: 43 },
+      (_, index) => `<script type="text/babel" src="./components/screen-${index + 1}.jsx"></script>`,
+    ).join('');
+    const html = [
+      '<!doctype html><html><head>',
+      '<link rel="stylesheet" href="./styles/app.css">',
+      '<script src="./scripts/support.js"></script>',
+      externalScripts,
+      '<script type="module" src="./scripts/module.js"></script>',
+      '</head><body>',
+      '<img src="./assets/card.svg" srcset="./assets/card.svg 1x, ./assets/card@2x.svg 2x">',
+      '<main id="root"></main>',
+      '</body></html>',
+    ].join('');
+    vi.stubGlobal('fetch', fetchReturning(html));
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={{
+          name: 'prototypes/booking/index.html',
+          path: 'prototypes/booking/index.html',
+          type: 'file',
+          size: 64 * 1024,
+          mtime: 1710000002,
+          kind: 'html',
+          mime: 'text/html',
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('url-load');
+      expect(frame.getAttribute('data-od-active')).toBe('true');
+      const src = new URL(frame.getAttribute('src') ?? '', 'http://localhost');
+      expect(src.pathname).toBe('/api/projects/project-1/raw/prototypes/booking/index.html');
+      expect(src.searchParams.getAll('odPreviewBridge')).toEqual([
+        'scroll',
+        'selection',
+        'snapshot',
+        'observability',
+        'sandbox',
+        'focus',
+      ]);
+      expect(src.searchParams.getAll('odPreviewBridge')).not.toContain('redirect');
+    });
+
+    expect(screen.getByTestId('artifact-preview-frame-srcdoc').getAttribute('data-od-active')).toBe('false');
   });
 
   // ---------------------------------------------------------------------------
@@ -630,13 +840,13 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
     });
 
     // --- KEY ASSERTION ---
-    // The stale snapshot must NOT be restored.  A normal failed load with no
-    // active Reload click must show the loading indicator, not old content.
+    // The stale snapshot must NOT be restored. Revisiting a file that loaded
+    // earlier deliberately skips the loading skeleton, but its old iframe must
+    // still stay empty after the new read fails.
     // On the buggy branch the leaked ref satisfies the identity check and
     // setSource(snap.source) is called, surfacing "V1-CONTENT" instead of the
-    // skeleton.
-    expect(screen.getByRole('status', { name: 'Loading…' })).toBeInTheDocument();
-    expect(screen.queryByTestId('artifact-preview-frame')).toBeNull();
+    // empty preview.
+    expect(screen.getByTestId('artifact-preview-frame')).toHaveAttribute('srcdoc', '');
 
     // Also confirm the stale HTML is not present anywhere in the rendered DOM.
     expect(screen.queryByText(/V1-CONTENT/)).toBeNull();
@@ -880,8 +1090,9 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
     // On the buggy build: the ref was left armed by the canceled-fetch path
     // (B's .then() never ran), the identity check passes (A===A), and
     // setSource(snap.source) wrongly surfaces "A-V1-CONTENT" in the srcdoc.
-    expect(screen.getByRole('status', { name: 'Loading…' })).toBeInTheDocument();
-    expect(screen.queryByTestId('artifact-preview-frame')).toBeNull();
+    // Revisiting A does not flash the loading skeleton, so the invariant here
+    // is that the iframe stays empty and its stale content does not return.
+    expect(screen.getByTestId('artifact-preview-frame')).toHaveAttribute('srcdoc', '');
     expect(screen.queryByText(/A-V1-CONTENT/)).toBeNull();
 
     // Drain deferred fetches so they don't leak into subsequent tests.
@@ -1006,7 +1217,7 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
 
     vi.stubGlobal('fetch', fetchMock);
 
-    // Step 1: mount and wait for source V1 to land in the preview.
+    // Step 1: settled source starts on the daemon-guarded URL lane.
     render(
       <FileViewer
         projectId="project-1"
@@ -1017,12 +1228,19 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
 
     await waitFor(() => {
       const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-      expect(frame.srcdoc).toContain('Hello');
+      expect(frame.getAttribute('data-od-render-mode')).toBe('url-load');
+      expect(frame.getAttribute('src')).toContain('odPreviewBridge=sandbox');
     });
 
     // Step 2: enter Manual Edit mode — manualEditFrozenSource captures V1.
     act(() => {
       fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    });
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(frame.srcdoc).toContain('Hello');
     });
 
     // Step 3: select a target so the panel (and onApplyPatch) is available.

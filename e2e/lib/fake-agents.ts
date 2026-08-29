@@ -1,6 +1,7 @@
-import { chmod, mkdir, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export type FakeAgentId =
   | 'claude'
@@ -24,6 +25,59 @@ export type FakeAgentRuntimeOptions = {
   root?: string;
   runtimeIds?: FakeAgentId[];
 };
+
+export type FakeAcpHandshakeRuntime = {
+  bin: string;
+  env: Record<string, string>;
+  invocationLog: string;
+};
+
+export type FakeAcpHandshakeRuntimeOptions = {
+  root?: string;
+};
+
+/** Install the intentionally failing ACP fixture owned by the E2E harness. */
+export async function createFakeAcpHandshakeRuntime(
+  options: FakeAcpHandshakeRuntimeOptions = {},
+): Promise<FakeAcpHandshakeRuntime> {
+  const root = options.root ?? path.join(
+    tmpdir(),
+    `open-design-fake-acp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  );
+  await mkdir(root, { recursive: true });
+  const script = path.join(root, 'fake-acp-handshake-cli.mjs');
+  await copyFile(
+    fileURLToPath(new URL('../resources/fake-acp-handshake-cli.ts', import.meta.url)),
+    script,
+  );
+
+  const invocationLog = path.join(root, 'invocations.jsonl');
+  const bin = process.platform === 'win32'
+    ? path.join(root, 'fake-acp-handshake-cli.cmd')
+    : path.join(root, 'fake-acp-handshake-cli');
+  if (process.platform === 'win32') {
+    await writeFile(
+      bin,
+      `@echo off\r\nset "FAKE_ACP_INVOCATION_LOG=${invocationLog}"\r\n"${process.execPath}" "${script}" %*\r\n`,
+      'utf8',
+    );
+  } else {
+    await writeFile(
+      bin,
+      `#!/bin/sh\nFAKE_ACP_INVOCATION_LOG=${JSON.stringify(invocationLog)} exec ${JSON.stringify(process.execPath)} ${JSON.stringify(script)} "$@"\n`,
+      'utf8',
+    );
+    await chmod(bin, 0o755);
+  }
+
+  return {
+    bin,
+    invocationLog,
+    env: {
+      KIMI_BIN: bin,
+    },
+  };
+}
 
 const AGENT_BIN_NAMES: Record<FakeAgentId, string> = {
   claude: 'claude-e2e.cjs',
@@ -99,6 +153,7 @@ function renderFakeAgentScript(agentId: FakeAgentId): string {
 const agentId = ${JSON.stringify(agentId)};
 const args = process.argv.slice(2);
 const { mkdir, writeFile: writeFileFs } = require('node:fs/promises');
+const { readFileSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 
 if (args.includes('--version')) {
@@ -156,12 +211,48 @@ async function emitRun(promptText) {
     emitServiceFailure(503);
     return;
   }
+  if (promptText.includes('Return a daemon model-not-found failure')) {
+    emitModelUnavailableFailure();
+    return;
+  }
+  if (promptText.includes('Return a daemon timeout failure')) {
+    emitTimeoutFailure();
+    return;
+  }
   if (promptText.includes('Return a daemon socket-drop failure')) {
     emitSocketDropFailure();
     return;
   }
+  if (promptText.includes('Return a Claude prompt-too-long failure')) {
+    emitClaudePromptTooLongFailure();
+    return;
+  }
+  if (promptText.includes('Return repeated OpenCode tool failures')) {
+    emitOpenCodeRepeatedToolFailures();
+    return;
+  }
   if (promptText.includes('Return an empty daemon smoke response')) {
     emitEmptySuccess();
+    return;
+  }
+  if (promptText.includes('# OD Next native continuation — production')) {
+    await emitOdNextProductionRun();
+    return;
+  }
+  if (promptText.includes('# OD Next native continuation — clarification')) {
+    emitOdNextClarificationRun(promptText);
+    return;
+  }
+  if (promptText.includes('Create an OD Next clarification canary artifact')) {
+    emitOdNextClarificationRequest(promptText);
+    return;
+  }
+  if (promptText.includes('Create an OD Next blocked canary')) {
+    emitOdNextBlockedRun();
+    return;
+  }
+  if (promptText.includes('Create an OD Next active canary artifact')) {
+    emitOdNextPlanningRun(promptText);
     return;
   }
   if (promptText.includes('Return a stderr-only daemon smoke failure')) {
@@ -171,10 +262,21 @@ async function emitRun(promptText) {
     return;
   }
   if (
-    promptText.includes('Create an Open Design plugin for:') &&
+    promptText.includes('Create an OpenDesign plugin for:') &&
     promptText.includes('produce a folder named generated-plugin')
   ) {
     await emitPluginAuthoringRun();
+    return;
+  }
+  // Checked before the plan-document fixture: a follow-up generation turn's
+  // stdin can carry the first turn's "Create a deterministic plan document"
+  // text as conversation history.
+  if (promptText.includes('Generate the deterministic artifact from the plan document')) {
+    await emitPlanArtifactGenerateRun();
+    return;
+  }
+  if (promptText.includes('Create a deterministic media-only artifact')) {
+    await emitMediaOnlyRun();
     return;
   }
   if (promptText.includes('Create a deterministic plan document')) {
@@ -207,6 +309,10 @@ async function emitRun(promptText) {
       { content: 'Draft layout', status: 'completed' },
       { content: 'Build components', status: 'completed' },
     ], 'end_turn');
+    return;
+  }
+  if (promptText.includes('Edit the existing deterministic smoke artifact through the managed project alias')) {
+    await emitManagedAliasArtifactEditRun(promptText);
     return;
   }
   if (promptText.includes('Edit the existing deterministic smoke artifact')) {
@@ -242,6 +348,139 @@ async function emitRun(promptText) {
     await new Promise((resolve) => setTimeout(resolve, 1200));
   }
   emitSuccess(assistantText, isChunked, isDelayed || isSlowReload);
+  process.exitCode = 0;
+  exitSoon(0);
+}
+
+function promptIdentity(promptText, label) {
+  const prefix = '- ' + label + ': ';
+  const line = promptText.split('\\n').find((candidate) => candidate.startsWith(prefix));
+  if (!line) throw new Error('OD Next fake could not read ' + label);
+  return line.slice(prefix.length).split(String.fromCharCode(96)).join('');
+}
+
+const odNextIdentityPath = join(__dirname, 'od-next-' + agentId + '-identity.json');
+
+function odNextPromptIdentity(promptText) {
+  if (promptText.includes('- strategy: ')) {
+    const strategy = promptIdentity(promptText, 'strategy').split('@');
+    const identity = {
+      version: strategy[1],
+      snapshotId: promptIdentity(promptText, 'applied snapshot'),
+      packageHash: promptIdentity(promptText, 'strategy package'),
+    };
+    writeFileSync(odNextIdentityPath, JSON.stringify(identity), 'utf8');
+    return identity;
+  }
+  return JSON.parse(readFileSync(odNextIdentityPath, 'utf8'));
+}
+
+function emitOdNextPlanningRun(promptText, inputStage = 'request') {
+  const identity = odNextPromptIdentity(promptText);
+  const plan = {
+    schema: 'open-design.plan-contract/v2',
+    strategy: {
+      id: 'od-next-strategy', version: identity.version,
+      packageHash: identity.packageHash, snapshotId: identity.snapshotId,
+    },
+    taskProfile: {
+      schemaVersion: '2', taskType: 'prototype', taskProfileVersion: '2.0.0',
+      goal: 'Create an OD Next active canary artifact', contextAndAudience: 'Local rollout operators',
+      inputsAndReferences: ['user-request'], constraints: [],
+      canonicalDeliverable: { id: 'canary', kind: 'prototype', format: 'html' },
+      requiredDeliverables: [{ id: 'canary', kind: 'prototype' }],
+      designSpec: { source: 'resolved-baseline', version: '1', decisions: { palette: 'neutral' } },
+      buildRequirements: [{ id: 'build', text: 'Build the local canary artifact.' }],
+      assumptions: [], risks: [], taskSpecific: {},
+    },
+    fullPlan: {
+      executionMode: 'simple',
+      steps: [{ id: 'build', objective: 'Build the canary.', outputs: ['canary'] }],
+      readinessArtifacts: [], buildPackages: [],
+    },
+    runManifest: {
+      selectedAgentId: agentId, capabilitySnapshotHash: '0'.repeat(64),
+      inputRefs: ['user-request'], productionRoutes: ['html'],
+      preflight: { intake: 'passed', execution: 'passed' },
+    },
+    decisionSummary: {
+      goal: 'Create an OD Next active canary artifact', deliverables: ['canary'],
+      keyConstraints: ['local synthetic canary'], assumptions: [], risks: [], openDecisions: [],
+    },
+  };
+  const state = {
+    schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage,
+    outcome: 'plan_ready', executionMode: 'simple', reasonCodes: [],
+  };
+  emitSuccess(
+    'The local canary plan is ready.\\n<open-design-plan-contract>\\n'
+      + JSON.stringify(plan) + '\\n</open-design-plan-contract>\\n'
+      + '<open-design-runtime-state>\\n' + JSON.stringify(state)
+      + '\\n</open-design-runtime-state>',
+    false,
+    false,
+  );
+  process.exitCode = 0;
+  exitSoon(0);
+}
+
+function emitOdNextClarificationRequest(promptText) {
+  odNextPromptIdentity(promptText);
+  const state = {
+    schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: 'request',
+    outcome: 'clarification_required', executionMode: null,
+    reasonCodes: ['od_next_clarification_required'],
+  };
+  const form = '<question-form id="od-next-canary-platform" title="Choose platform">'
+    + '{"questions":[{"id":"platform","label":"Target platform","type":"radio",'
+    + '"options":[{"label":"Desktop web","value":"desktop"}],"required":true}]}'
+    + '</question-form>';
+  emitSuccess(
+    'One platform choice is required.\\n' + form
+      + '\\n<open-design-runtime-state>\\n' + JSON.stringify(state)
+      + '\\n</open-design-runtime-state>',
+    false,
+    false,
+  );
+  process.exitCode = 0;
+  exitSoon(0);
+}
+
+function emitOdNextClarificationRun(promptText) {
+  emitOdNextPlanningRun(promptText, 'clarification');
+}
+
+function emitOdNextBlockedRun() {
+  const state = {
+    schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: 'request',
+    outcome: 'blocked', executionMode: null,
+    reasonCodes: ['od_next_canary_fixture_blocked'],
+  };
+  emitSuccess(
+    'The local canary was blocked by its fixture guard.\\n'
+      + '<open-design-runtime-state>\\n' + JSON.stringify(state)
+      + '\\n</open-design-runtime-state>',
+    false,
+    false,
+  );
+  process.exitCode = 0;
+  exitSoon(0);
+}
+
+async function emitOdNextProductionRun() {
+  const html = '<!doctype html><html><body><main><h1>OD Next Active Canary</h1><p>Two physical runs reached one terminal task.</p></main></body></html>';
+  await writeFileFs(join(projectDir(), 'od-next-active-canary.html'), html, 'utf8');
+  const state = {
+    schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: 'production',
+    outcome: 'completed', executionMode: 'simple', reasonCodes: [],
+  };
+  emitSuccess(
+    'Created od-next-active-canary.html through the continued native session.\\n'
+      + '<open-design-runtime-state>\\n' + JSON.stringify(state)
+      + '\\n</open-design-runtime-state>',
+    false,
+    false,
+  );
   process.exitCode = 0;
   exitSoon(0);
 }
@@ -304,6 +543,73 @@ async function emitPlanDocumentRun() {
   exitSoon(0);
 }
 
+async function emitMediaOnlyRun() {
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=',
+    'base64',
+  );
+  await writeFileFs(join(projectDir(), 'media-only.png'), png);
+  emitSuccess('Created media-only.png as the only file produced by this turn.', false, false);
+  process.exitCode = 0;
+  exitSoon(0);
+}
+
+// Plan-mode generation turn (issue: Plan 模式生成 HTML 后没有自动打开): the
+// agent reads the reviewed plan document, writes the final HTML deliverable
+// as a project FILE (not an inline <artifact> echo), then touches the plan
+// document again (e.g. updating its "Next step" section). Mirrors the real
+// event order captured in the bug report: index.html first, plan.md second.
+async function emitPlanArtifactGenerateRun() {
+  const dir = projectDir();
+  const html = '<!doctype html><html><body><main><h1>Plan Generated Deck</h1><p>Generated from the reviewed plan document.</p></main></body></html>';
+  const planUpdate = [
+    '# Deterministic Plan',
+    '',
+    '## Scope',
+    '- Confirm the target workflow.',
+    '- Draft the project milestones.',
+    '',
+    '## Next step',
+    '- Review the generated index.html.',
+    '',
+  ].join('\\n');
+  await writeFileFs(join(dir, 'index.html'), html, 'utf8');
+  await writeFileFs(join(dir, 'plan.md'), planUpdate, 'utf8');
+  if (agentId === 'claude') {
+    // Emit the real Claude stream-json shape (tool_use + tool_result pairs)
+    // so the web per-write auto-open path sees the same events a live
+    // filesystem run produces.
+    writeJson({ type: 'system', subtype: 'init', model: 'fake-claude', session_id: 'fake-session' });
+    writeJson({
+      type: 'assistant',
+      message: {
+        id: 'msg-1',
+        content: [{ type: 'tool_use', id: 'toolu-plan-html', name: 'Write', input: { file_path: join(dir, 'index.html'), content: html } }],
+      },
+    });
+    writeJson({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu-plan-html', content: 'ok' }] } });
+    writeJson({
+      type: 'assistant',
+      message: {
+        id: 'msg-2',
+        content: [{ type: 'tool_use', id: 'toolu-plan-md', name: 'Write', input: { file_path: join(dir, 'plan.md'), content: planUpdate } }],
+      },
+    });
+    writeJson({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu-plan-md', content: 'ok' }] } });
+    writeJson({
+      type: 'assistant',
+      message: { id: 'msg-3', content: [{ type: 'text', text: 'Generated index.html from plan.md and refreshed the plan next steps.' }] },
+    });
+    writeJson({ type: 'result', usage: { input_tokens: 1, output_tokens: 1 }, total_cost_usd: 0, duration_ms: 1, stop_reason: 'end_turn' });
+    process.exitCode = 0;
+    exitSoon(0);
+    return;
+  }
+  emitSuccess('Generated index.html from plan.md and refreshed the plan next steps.', false, false);
+  process.exitCode = 0;
+  exitSoon(0);
+}
+
 async function emitExistingArtifactEditRun(promptText) {
   const projectId = process.env.OD_PROJECT_ID || projectIdFromPrompt(promptText);
   const daemonUrl = process.env.OD_DAEMON_URL;
@@ -322,6 +628,62 @@ async function emitExistingArtifactEditRun(promptText) {
     throw new Error('fake artifact edit write failed: HTTP ' + response.status + ' ' + (await response.text()).slice(0, 500));
   }
   emitSuccess('Updated real-daemon-smoke.html in place with a deterministic follow-up edit.', false, false);
+  process.exitCode = 0;
+  exitSoon(0);
+}
+
+async function emitManagedAliasArtifactEditRun(promptText) {
+  if (agentId !== 'claude') {
+    throw new Error('managed-project alias edit fixture requires the Claude fake runtime');
+  }
+  const projectId = process.env.OD_PROJECT_ID || projectIdFromPrompt(promptText);
+  if (!projectId) {
+    throw new Error('managed-project alias edit fixture requires OD_PROJECT_ID');
+  }
+  const fileName = 'real-daemon-smoke.html';
+  const content = '<!doctype html><html><body><main><h1 data-od-id="smoke-title">Real Daemon Smoke Edited</h1><p>Edited in place through a managed-project alias.</p></main></body></html>';
+  await writeFileFs(join(projectDir(promptText), fileName), content, 'utf8');
+
+  writeJson({ type: 'system', subtype: 'init', model: 'fake-claude', session_id: 'fake-session' });
+  writeJson({
+    type: 'assistant',
+    message: {
+      id: 'msg-managed-alias-write',
+      content: [{
+        type: 'tool_use',
+        id: 'toolu-managed-alias-write',
+        name: 'Write',
+        input: {
+          file_path: '.od/projects/' + projectId + '/' + fileName,
+          content,
+        },
+      }],
+    },
+  });
+  writeJson({
+    type: 'user',
+    message: {
+      content: [{
+        type: 'tool_result',
+        tool_use_id: 'toolu-managed-alias-write',
+        content: 'Updated ' + fileName,
+      }],
+    },
+  });
+  writeJson({
+    type: 'assistant',
+    message: {
+      id: 'msg-managed-alias-summary',
+      content: [{ type: 'text', text: 'Updated ' + fileName + ' in place.' }],
+    },
+  });
+  writeJson({
+    type: 'result',
+    usage: { input_tokens: 1, output_tokens: 1 },
+    total_cost_usd: 0,
+    duration_ms: 1,
+    stop_reason: 'end_turn',
+  });
   process.exitCode = 0;
   exitSoon(0);
 }
@@ -391,7 +753,7 @@ function emitSuccess(artifact, isChunked, includeThinking) {
   const second = artifact.slice(Math.ceil(artifact.length / 2));
   switch (agentId) {
     case 'codex':
-      writeJson({ type: 'thread.started' });
+      writeJson({ type: 'thread.started', thread_id: 'fake-codex-session' });
       writeJson({ type: 'turn.started' });
       if (isChunked) {
         writeJson({ type: 'item.completed', item: { type: 'agent_message', text: first } });
@@ -569,6 +931,24 @@ function emitServiceFailure(statusCode) {
   }
 }
 
+function emitModelUnavailableFailure() {
+  const message = 'The selected model is not available for this account: model not found.';
+  writeJson({ type: 'thread.started' });
+  writeJson({ type: 'turn.started' });
+  writeJson({ type: 'turn.failed', error: { message } });
+  process.exitCode = 0;
+  exitSoon(0);
+}
+
+function emitTimeoutFailure() {
+  const message = 'The upstream model request timed out while waiting for a response.';
+  writeJson({ type: 'thread.started' });
+  writeJson({ type: 'turn.started' });
+  writeJson({ type: 'turn.failed', error: { message } });
+  process.exitCode = 0;
+  exitSoon(0);
+}
+
 // Reproduces a connection that dropped mid-response. This shape is NOT guessed:
 // it was captured by pointing the real Claude Code CLI (2.1.168) at a fake
 // Anthropic endpoint that accepts the request, starts streaming, then destroys
@@ -618,6 +998,72 @@ function emitSocketDropFailure() {
   process.stderr.write(sdkError + '\\n');
   process.exitCode = 1;
   exitSoon(1);
+}
+
+// Mirrors the terminal result frame emitted by Claude Code when its composed
+// prompt exceeds the model context window. This deliberately goes through the
+// stream parser and run-failure classifier instead of pre-seeding a normalized
+// AGENT_PROMPT_TOO_LARGE event in the project message store.
+function emitClaudePromptTooLongFailure() {
+  if (agentId !== 'claude') {
+    process.stderr.write('prompt-too-long fixture requires the claude fake runtime\\n');
+    process.exitCode = 1;
+    exitSoon(1);
+    return;
+  }
+  writeJson({ type: 'system', subtype: 'init', model: 'fake-claude', session_id: 'fake-session' });
+  writeJson({
+    type: 'result',
+    subtype: 'error_during_execution',
+    is_error: true,
+    result: 'Prompt is too long',
+    stop_reason: null,
+  });
+  process.exitCode = 1;
+  exitSoon(1);
+}
+
+// Exercise the real OpenCode JSON event parser with the structured shape fixed
+// in #6933. A completed tool part with exitCode != 0 must become an errored
+// tool_result; four identical failures cross the daemon guard's default WARN
+// threshold while still allowing the run to finish (HALT is opt-in).
+function emitOpenCodeRepeatedToolFailures() {
+  if (agentId !== 'opencode') {
+    process.stderr.write('repeated tool-failure fixture requires the opencode fake runtime\\n');
+    process.exitCode = 1;
+    exitSoon(1);
+    return;
+  }
+  writeJson({ type: 'step_start', sessionID: 'fake-opencode-loop', part: { type: 'step-start' } });
+  for (let index = 0; index < 4; index += 1) {
+    writeJson({
+      type: 'tool_use',
+      sessionID: 'fake-opencode-loop',
+      part: {
+        type: 'tool',
+        tool: 'bash',
+        callID: 'fake-opencode-failure-' + index,
+        state: {
+          status: 'completed',
+          input: { command: 'cat missing-open-design-file.txt' },
+          output: 'cat: missing-open-design-file.txt: No such file or directory',
+          exitCode: 1,
+        },
+      },
+    });
+  }
+  writeJson({
+    type: 'text',
+    sessionID: 'fake-opencode-loop',
+    part: { type: 'text', text: 'Stopped retrying after repeated tool failures.' },
+  });
+  writeJson({
+    type: 'step_finish',
+    sessionID: 'fake-opencode-loop',
+    part: { type: 'step-finish', tokens: { input: 1, output: 1 }, cost: 0 },
+  });
+  process.exitCode = 0;
+  exitSoon(0);
 }
 
 function emitEmptySuccess() {

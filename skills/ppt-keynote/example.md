@@ -22,4 +22,4 @@
 Claude 团队不再用 markdown, 全换成 HTML 了。HTML 是面向读者的最终形态, AI 让"啰嗦"不再是问题。
 
 ## 立即开始
-`pnpm dev` → 打开浏览器 → ⌘+Enter
+`pnpm tools-dev run web` → 打开终端输出的网址 → ⌘+Enter

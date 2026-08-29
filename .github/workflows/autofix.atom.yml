@@ -100,7 +100,7 @@ jobs:
             echo "present=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Generate Open Design bot token
+      - name: Generate OpenDesign bot token
         if: ${{ steps.handoffs.outputs.present == 'true' && steps.bot-secrets.outputs.present == 'true' }}
         id: bot-token
         continue-on-error: true

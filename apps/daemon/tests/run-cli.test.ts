@@ -1,6 +1,8 @@
 import { execFile } from 'node:child_process';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
-import { dirname, resolve as pathResolve } from 'node:path';
+import { dirname, join, resolve as pathResolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -16,6 +18,7 @@ interface CapturedRequest {
   method: string;
   url: string;
   body: string;
+  headers: http.IncomingHttpHeaders;
 }
 
 interface StubServer {
@@ -25,14 +28,18 @@ interface StubServer {
 }
 
 let stub: StubServer | null = null;
+let tempDir: string | null = null;
 
 afterEach(async () => {
   if (stub) await stub.close();
   stub = null;
+  if (tempDir) await rm(tempDir, { recursive: true, force: true });
+  tempDir = null;
 });
 
 async function startRunStubServer(resumable: boolean): Promise<StubServer> {
   const requests: CapturedRequest[] = [];
+  let taskFollowEnabled = false;
   const server = http.createServer((req, res) => {
     let raw = '';
     req.on('data', (chunk) => {
@@ -43,6 +50,7 @@ async function startRunStubServer(resumable: boolean): Promise<StubServer> {
         method: req.method ?? '',
         url: req.url ?? '',
         body: raw,
+        headers: req.headers,
       };
       requests.push(captured);
       res.setHeader('content-type', 'application/json');
@@ -60,9 +68,83 @@ async function startRunStubServer(resumable: boolean): Promise<StubServer> {
         return;
       }
 
-      if (captured.method === 'POST' && captured.url === '/api/runs') {
+      if (
+        captured.method === 'GET'
+        && (captured.url === '/api/runs' || captured.url === '/api/runs?projectId=project-1')
+      ) {
         res.statusCode = 200;
-        res.end(JSON.stringify({ runId: 'run-2' }));
+        res.end(JSON.stringify({ runs: [] }));
+        return;
+      }
+
+      if (
+        captured.method === 'GET'
+        && captured.url === '/api/runs/run-1/result-package'
+      ) {
+        res.statusCode = 200;
+        res.end(JSON.stringify({ run: { id: 'run-1', status: 'completed' } }));
+        return;
+      }
+
+      if (
+        captured.method === 'POST'
+        && captured.url === '/api/runs/run-1/cancel'
+      ) {
+        res.statusCode = 200;
+        res.end(JSON.stringify({
+          ok: true,
+          run: {
+            id: taskFollowEnabled ? 'run-2' : 'run-1',
+            ...(taskFollowEnabled
+              ? {
+                  strategyTask: {
+                    taskExecutionId: 'task-1',
+                    activeRunId: 'run-2',
+                    outcome: 'canceled',
+                    terminal: true,
+                  },
+                }
+              : {}),
+          },
+        }));
+        return;
+      }
+
+      if (captured.method === 'POST' && captured.url === '/api/runs') {
+        const body = JSON.parse(captured.body || '{}') as { taskExecutionId?: string };
+        taskFollowEnabled = body.taskExecutionId === 'task-1';
+        res.statusCode = 200;
+        res.end(JSON.stringify({
+          runId: taskFollowEnabled ? 'run-1' : 'run-2',
+          ...(taskFollowEnabled ? { taskExecutionId: 'task-1' } : {}),
+        }));
+        return;
+      }
+
+      if (captured.method === 'POST' && captured.url === '/api/import/folder') {
+        res.statusCode = 200;
+        res.end(JSON.stringify({
+          project: { id: 'imported-project' },
+          conversationId: 'imported-conversation',
+        }));
+        return;
+      }
+
+      if (
+        captured.method === 'GET'
+        && (captured.url === '/api/runs/run-1/events' || captured.url === '/api/runs/run-2/events')
+      ) {
+        res.writeHead(200, {
+          'content-type': 'text/event-stream',
+          'cache-control': 'no-cache',
+        });
+        if (taskFollowEnabled && captured.url === '/api/runs/run-1/events') {
+          res.end('event: end\ndata: {"status":"succeeded","strategyTask":{"taskExecutionId":"task-1","activeRunId":"run-2","nextRunId":"run-2","outcome":"running","terminal":false}}\n\n');
+        } else if (taskFollowEnabled && captured.url === '/api/runs/run-2/events') {
+          res.end('event: end\ndata: {"status":"succeeded","strategyTask":{"taskExecutionId":"task-1","activeRunId":"run-2","outcome":"completed","terminal":true}}\n\n');
+        } else {
+          res.end('event: end\ndata: {"status":"completed"}\n\n');
+        }
         return;
       }
 
@@ -106,6 +188,30 @@ async function runCli(args: string[]): Promise<{ stdout: string; stderr: string;
 }
 
 describe('od run CLI', () => {
+  it('keeps one --skill backward compatible and sends multiple ids canonically', async () => {
+    stub = await startRunStubServer(true);
+    const single = await runCli([
+      'run', 'start', '--project', 'project-1', '--skill', 'frontend-design',
+      '--daemon-url', stub.baseUrl,
+    ]);
+    expect(single.code, single.stderr).toBe(0);
+    expect(JSON.parse(stub.requests[0]!.body)).toMatchObject({
+      skillId: 'frontend-design',
+    });
+    expect(JSON.parse(stub.requests[0]!.body).skillIds).toBeUndefined();
+
+    const multiple = await runCli([
+      'run', 'start', '--project', 'project-1',
+      '--skill', 'frontend-design, imagegen,frontend-design',
+      '--daemon-url', stub.baseUrl,
+    ]);
+    expect(multiple.code, multiple.stderr).toBe(0);
+    expect(JSON.parse(stub.requests[1]!.body)).toMatchObject({
+      skillId: 'frontend-design',
+      skillIds: ['frontend-design', 'imagegen'],
+    });
+  });
+
   it('continues a resumable run through the normal run creation API', async () => {
     stub = await startRunStubServer(true);
 
@@ -133,6 +239,10 @@ describe('od run CLI', () => {
     expect(JSON.parse(stub.requests[1]!.body).message).toContain(
       'The previous turn was interrupted by a transient failure.',
     );
+    for (const request of stub.requests) {
+      expect(request.headers['x-od-workspace-id']).toBeUndefined();
+      expect(request.headers['x-od-workspace-member-id']).toBeUndefined();
+    }
   });
 
   it('refuses to continue a run without a safe recoverable native session', async () => {
@@ -152,5 +262,178 @@ describe('od run CLI', () => {
     expect(stub.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       'GET /api/runs/run-1',
     ]);
+  });
+
+  it('forwards explicit Workspace scope through continue status and creation requests', async () => {
+    stub = await startRunStubServer(true);
+
+    const result = await runCli([
+      'run',
+      'continue',
+      'run-1',
+      '--workspace',
+      'team-workspace',
+      '--workspace-member',
+      'creator-member',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(stub.requests).toHaveLength(2);
+    for (const request of stub.requests) {
+      expect(request.headers['x-od-workspace-id']).toBe('team-workspace');
+      expect(request.headers['x-od-workspace-member-id']).toBe('creator-member');
+    }
+  });
+
+  it.each([
+    {
+      label: 'list',
+      args: ['run', 'list', '--json'],
+      requests: ['GET /api/runs'],
+    },
+    {
+      label: 'project list',
+      args: ['run', 'list', '--project', 'project-1', '--json'],
+      requests: ['GET /api/runs?projectId=project-1'],
+    },
+    {
+      label: 'info',
+      args: ['run', 'info', 'run-1'],
+      requests: ['GET /api/runs/run-1'],
+    },
+    {
+      label: 'result package',
+      args: ['run', 'result-package', 'run-1', '--json'],
+      requests: ['GET /api/runs/run-1/result-package'],
+    },
+    {
+      label: 'cancel',
+      args: ['run', 'cancel', 'run-1'],
+      requests: ['POST /api/runs/run-1/cancel'],
+    },
+    {
+      label: 'redesign',
+      args: ['run', 'redesign', '--project', 'project-1', '--json'],
+      requests: ['POST /api/runs'],
+    },
+    {
+      label: 'redesign import and start',
+      args: ['run', 'redesign', '--path', DAEMON_ROOT, '--json'],
+      requests: ['POST /api/import/folder', 'POST /api/runs'],
+    },
+    {
+      label: 'start and follow',
+      args: ['run', 'start', '--project', 'project-1', '--follow'],
+      requests: ['POST /api/runs', 'GET /api/runs/run-2/events'],
+    },
+    {
+      label: 'watch',
+      args: ['run', 'watch', 'run-1'],
+      requests: ['GET /api/runs/run-1/events'],
+    },
+  ])('forwards explicit Workspace scope for $label requests', async ({ args, requests }) => {
+    stub = await startRunStubServer(true);
+
+    const result = await runCli([
+      ...args,
+      '--workspace',
+      'team-workspace',
+      '--workspace-member',
+      'creator-member',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(stub.requests.map((request) => `${request.method} ${request.url}`)).toEqual(requests);
+    for (const request of stub.requests) {
+      expect(request.headers['x-od-workspace-id']).toBe('team-workspace');
+      expect(request.headers['x-od-workspace-member-id']).toBe('creator-member');
+    }
+  });
+
+  it('keeps no-scope run creation and streaming requests headerless', async () => {
+    stub = await startRunStubServer(true);
+
+    const result = await runCli([
+      'run',
+      'start',
+      '--project',
+      'project-1',
+      '--follow',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(stub.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      'POST /api/runs',
+      'GET /api/runs/run-2/events',
+    ]);
+    for (const request of stub.requests) {
+      expect(request.headers['x-od-workspace-id']).toBeUndefined();
+      expect(request.headers['x-od-workspace-member-id']).toBeUndefined();
+    }
+  });
+
+  it('uses an explicit task continuation handle and follows every projected active Run', async () => {
+    stub = await startRunStubServer(true);
+    tempDir = await mkdtemp(join(tmpdir(), 'od-run-task-chain-'));
+    const promptFile = join(tempDir, 'answer.txt');
+    await writeFile(promptFile, 'Desktop first', 'utf8');
+
+    const result = await runCli([
+      'run',
+      'start',
+      '--project',
+      'project-1',
+      '--task-execution',
+      'task-1',
+      '--prompt-file',
+      promptFile,
+      '--follow',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(stub.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      'POST /api/runs',
+      'GET /api/runs/run-1/events',
+      'GET /api/runs/run-2/events',
+    ]);
+    expect(JSON.parse(stub.requests[0]!.body)).toMatchObject({
+      projectId: 'project-1',
+      taskExecutionId: 'task-1',
+      message: 'Desktop first',
+    });
+    const events = result.stdout
+      .trim()
+      .split('\n')
+      .slice(1)
+      .map((line) => JSON.parse(line));
+    expect(events).toHaveLength(2);
+    expect(events[0].data.strategyTask).toMatchObject({
+      activeRunId: 'run-2',
+      terminal: false,
+    });
+    expect(events[1].data.strategyTask).toMatchObject({
+      outcome: 'completed',
+      terminal: true,
+    });
+
+    const canceled = await runCli([
+      'run',
+      'cancel',
+      'run-1',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+    expect(canceled.code, canceled.stderr).toBe(0);
+    expect(canceled.stdout).toContain('[run] cancelled run-2');
+    expect(canceled.stdout).toContain('task\ttask-1\tactive=run-2\toutcome=canceled');
   });
 });

@@ -21,7 +21,7 @@ const INSTALLER_OBSERVATION_SCHEMA_VERSION = 1;
 const INSTALLER_OBSERVATION_KIND = 'installer_apply_observation';
 const INSTALLER_OBSERVATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-type InstallerObservationArtifactType = 'dmg' | 'installer';
+type InstallerObservationArtifactType = 'dmg' | 'installer' | 'payload';
 type InstallerObservationChannel = ReleaseChannel;
 type InstallerObservationDeliveryStatus =
   | 'submitted'
@@ -104,7 +104,7 @@ function isInstallerObservationSummary(value: unknown): value is InstallerObserv
     isReleaseChannel(channel) &&
     typeof value.platform === 'string' &&
     typeof value.arch === 'string' &&
-    (artifactType === 'dmg' || artifactType === 'installer') &&
+    (artifactType === 'dmg' || artifactType === 'installer' || artifactType === 'payload') &&
     typeof value.fromVersion === 'string' &&
     typeof value.toVersion === 'string' &&
     typeof value.attemptedAt === 'string' &&
@@ -139,10 +139,10 @@ async function writeSummary(filePath: string, summary: InstallerObservationSumma
 }
 
 export function normalizeUpdateObservationChannel(version: string, explicit?: string | null): InstallerObservationChannel {
-  if (isReleaseChannel(explicit)) return explicit;
   if (explicit != null && explicit.startsWith('beta')) return 'beta';
   if (explicit != null && explicit.startsWith('preview')) return 'preview';
   if (explicit != null && explicit.startsWith('prerelease')) return 'prerelease';
+  if (isReleaseChannel(explicit)) return explicit;
   const cleaned = version.trim().replace(/^v/i, '');
   const prerelease = cleaned.split('-', 2)[1] ?? '';
   const channel = releaseChannelFromVersion(version);

@@ -21,6 +21,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
+  appendMessageAgentEvents,
   closeDatabase,
   insertConversation,
   insertProject,
@@ -214,6 +215,32 @@ describe('exportProjectTranscript', () => {
     const lines = readLines(exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW }).path);
     const msg = line(lines, 2);
     expect(msg.blocks).toEqual([{ type: 'text', text: 'hello world' }]);
+  });
+
+  it('includes append-only events from an active assistant run', () => {
+    const { db, projectsRoot } = setup();
+    seedConversation(db, { id: 'c1', createdAt: 100 });
+    upsertMessage(db, 'c1', {
+      id: 'm1',
+      role: 'assistant',
+      content: '',
+      events: [],
+      runId: 'run-1',
+      runStatus: 'running',
+    });
+    appendMessageAgentEvents(db, 'm1', [
+      { kind: 'thinking', text: 'working' },
+      { kind: 'text', text: 'answer' },
+    ]);
+
+    const lines = readLines(
+      exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW }).path,
+    );
+
+    expect(line(lines, 2).blocks).toEqual([
+      { type: 'thinking', thinking: 'working' },
+      { type: 'text', text: 'answer' },
+    ]);
   });
 
   it('preserves tool_use and tool_result ordering interleaved with text', () => {

@@ -29,7 +29,7 @@ import type { AudioKind, MediaAspect } from '../types';
  */
 export type MediaProviderId =
   | 'openai'
-  | 'codex'
+  | 'vela'
   | 'volcengine'
   | 'grok'
   | 'hyperframes'
@@ -93,12 +93,12 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     docsUrl: 'https://platform.openai.com/api-keys',
   },
   {
-    id: 'codex',
-    label: 'Codex Subscription',
-    hint: 'gpt-image-2 via local Codex CLI login',
+    id: 'vela',
+    label: 'OpenDesign Cloud',
+    hint: 'Managed image and video generation through Vela',
     integrated: true,
     credentialsRequired: false,
-    docsUrl: 'https://developers.openai.com/codex',
+    settingsVisible: false,
   },
   {
     id: 'volcengine',
@@ -128,7 +128,7 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   {
     id: 'nanobanana',
     label: 'Nano Banana',
-    hint: 'Google official by default; custom gateway configurable',
+    hint: 'Uses Google’s official API by default. You can also configure a custom gateway.',
     integrated: true,
     defaultBaseUrl: 'https://generativelanguage.googleapis.com',
     docsUrl: 'https://ai.google.dev/gemini-api/docs/api-key',
@@ -326,6 +326,11 @@ export interface MediaModel {
  * `packages/model-bank/src/aiModels/openai.ts` and friends in lobehub.
  */
 export const IMAGE_MODELS: MediaModel[] = [
+  { id: 'vela/gpt-image-2', label: 'gpt-image-2 (Cloud)', hint: 'OpenDesign Cloud · managed image generation and editing', provider: 'vela', caps: ['t2i', 'i2i'], default: true },
+  { id: 'vela/nano-banana-2', label: 'nano-banana-2 (Cloud)', hint: 'OpenDesign Cloud · managed image generation and editing', provider: 'vela', caps: ['t2i', 'i2i'] },
+  { id: 'vela/nano-banana-2-lite', label: 'nano-banana-2-lite (Cloud)', hint: 'OpenDesign Cloud · fast managed image generation and editing', provider: 'vela', caps: ['t2i', 'i2i'] },
+  { id: 'vela/seedream-5.0', label: 'seedream-5.0 (Cloud)', hint: 'OpenDesign Cloud · managed image generation and editing', provider: 'vela', caps: ['t2i', 'i2i'] },
+  { id: 'vela/seedream-5.0-pro', label: 'seedream-5.0-pro (Cloud)', hint: 'OpenDesign Cloud · high-quality managed image generation and editing', provider: 'vela', caps: ['t2i', 'i2i'] },
   // OpenAI — fully integrated path.
   {
     id: 'gpt-image-2',
@@ -333,7 +338,6 @@ export const IMAGE_MODELS: MediaModel[] = [
     hint: 'OpenAI · 4K, native multimodal',
     provider: 'openai',
     caps: ['t2i', 'i2i', 'inpaint'],
-    default: true,
   },
   {
     id: 'gpt-image-1.5',
@@ -370,14 +374,6 @@ export const IMAGE_MODELS: MediaModel[] = [
     provider: 'openai',
     caps: ['t2i'],
   },
-  {
-    id: 'codex-gpt-image-2',
-    label: 'gpt-image-2 (Codex)',
-    hint: 'Codex Subscription · local CLI imagegen',
-    provider: 'codex',
-    caps: ['t2i', 'i2i'],
-  },
-
   // Volcengine — Doubao Seedream image generation.
   {
     id: 'doubao-seedream-3-0-t2i-250415',
@@ -541,6 +537,7 @@ export const IMAGE_MODELS: MediaModel[] = [
  * Seedance Lite), kling.ts and friends.
  */
 export const VIDEO_MODELS: MediaModel[] = [
+  { id: 'vela/doubao-seedance-2-0-260128', label: 'seedance-2.0 (Cloud)', hint: 'OpenDesign Cloud · managed text/image-to-video · 720p default', provider: 'vela', caps: ['t2v', 'i2v'] },
   // Volcengine — Seedance 2.0 (integrated).
   {
     id: 'doubao-seedance-2-0-260128',
@@ -691,6 +688,18 @@ export const DEFAULT_AUDIO_MODEL: Record<AudioKind, string> = {
  * agent passes an unknown model — the dispatcher rejects with a clear
  * error so the agent re-plans instead of silently falling back.
  */
+const MEDIA_MODEL_ALIASES: Readonly<Record<string, string>> = {
+  'nano-banana': 'vela/nano-banana-2',
+  'nano-banana-2': 'vela/nano-banana-2',
+  'nano-banana-2-lite': 'vela/nano-banana-2-lite',
+  // Preserve existing project metadata while removing the Codex renderer.
+  'codex-gpt-image-2': 'vela/gpt-image-2',
+};
+
+export function canonicalMediaModelId(id: string): string {
+  return MEDIA_MODEL_ALIASES[id] ?? id;
+}
+
 export function findMediaModel(id: string): MediaModel | null {
   const all: MediaModel[] = [
     ...IMAGE_MODELS,
@@ -699,7 +708,8 @@ export function findMediaModel(id: string): MediaModel | null {
     ...AUDIO_MODELS_BY_KIND.speech,
     ...AUDIO_MODELS_BY_KIND.sfx,
   ];
-  return all.find((m) => m.id === id) ?? null;
+  const canonicalId = canonicalMediaModelId(id);
+  return all.find((m) => m.id === canonicalId) ?? null;
 }
 
 export function findProvider(id: MediaProviderId): MediaProvider | null {

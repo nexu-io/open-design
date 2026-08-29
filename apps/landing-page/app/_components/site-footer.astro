@@ -3,20 +3,30 @@ import type { HeaderProps } from './header';
 import {
   DEFAULT_LOCALE,
   getCommonCopy,
+  getHeaderLocaleSwitcher,
   getHeaderProductMenuCopy,
+  getLocaleDefinition,
   getLandingUiCopy,
   isLandingLocale,
   localizedHref,
 } from '../i18n';
 import { getFooterLegalCopy } from '../footer-legal-i18n';
+import { getSolutionPageCopy, type SolutionPageKey } from '../solution-pages-i18n';
+import DownloadEngagementPrompt from './download-engagement-prompt.astro';
 
 interface Props {
   counts: HeaderProps['counts'];
   locale?: string;
+  /** Pages with no per-locale variant: every language option keeps the canonical URL. */
+  localeCanonicalOnly?: boolean;
 }
 
-const { locale: rawLocale = DEFAULT_LOCALE } = Astro.props as Props;
+const { locale: rawLocale = DEFAULT_LOCALE, localeCanonicalOnly = false } = Astro.props as Props;
 const locale = isLandingLocale(rawLocale) ? rawLocale : DEFAULT_LOCALE;
+const localeSwitcher = getHeaderLocaleSwitcher(locale, Astro.url.pathname, {
+  canonicalOnly: localeCanonicalOnly,
+});
+const localeLabel = getLocaleDefinition(locale).label;
 const copy = getCommonCopy(locale).header;
 const ui = getLandingUiCopy(locale);
 const menu = getHeaderProductMenuCopy(locale);
@@ -37,6 +47,21 @@ const USE_CASE_HREFS = [
   '/solutions/image/',
   '/solutions/video/',
   '/solutions/design-system/',
+] as const;
+
+// Solution → Tools. Kept in lockstep with header.tsx's TOOL_ENTRIES; labels
+// reuse each tool page's own breadcrumb so footer, nav, and hub cards share a
+// single translation source. Rendered at the bottom of the Solution column,
+// mirroring the nav dropdown order (use cases → tools).
+const TOOL_ENTRIES: ReadonlyArray<{ href: string; key: SolutionPageKey }> = [
+  { href: '/solutions/ai-wireframe-generator/', key: 'aiWireframeGenerator' },
+  { href: '/solutions/ai-ui-generator/', key: 'aiUiGenerator' },
+  { href: '/solutions/ai-prototype-generator/', key: 'aiPrototypeGenerator' },
+  { href: '/solutions/ai-landing-page-generator/', key: 'aiLandingPageGenerator' },
+  { href: '/solutions/design-to-code/', key: 'designToCode' },
+  { href: '/solutions/figma-to-code/', key: 'figmaToCode' },
+  { href: '/solutions/screenshot-to-code/', key: 'screenshotToCode' },
+  { href: '/solutions/html-to-ppt/', key: 'htmlToPpt' },
 ] as const;
 
 // A short, recognisable subset of the agent roster for the footer; the
@@ -60,9 +85,11 @@ const l = getFooterLegalCopy(locale);
       <div class='sub-footer-col'>
         <h5>{menu.product}</h5>
         <ul>
-          <li><a href={href('/')}>Open Design</a></li>
+          <li><a href={href('/')}>OpenDesign</a></li>
           <li><a href={href('/html-anything/')}>{ui.footer.htmlAnything}</a></li>
           <li><a href={href('/html-video/')}>{ui.footer.htmlVideo}</a></li>
+          <li><a href={href('/codex-slides/')}>Codex Slides</a></li>
+          <li><a href={href('/codex-plugin/')}>Codex Plugin</a></li>
         </ul>
       </div>
 
@@ -71,6 +98,12 @@ const l = getFooterLegalCopy(locale);
         <ul>
           {menu.useCaseItems.map((name, i) => (
             <li><a href={href(USE_CASE_HREFS[i]!)}>{name}</a></li>
+          ))}
+        </ul>
+        <h6 class='sub-footer-subhead'>{menu.tools}</h6>
+        <ul>
+          {TOOL_ENTRIES.map(({ href: toolHref, key }) => (
+            <li><a href={href(toolHref)}>{getSolutionPageCopy(locale, key).breadcrumb}</a></li>
           ))}
         </ul>
       </div>
@@ -159,6 +192,34 @@ const l = getFooterLegalCopy(locale);
         <span class='foot-dot' aria-hidden='true'>·</span>
         <a href={href('/terms/')}>{l.terms}</a>
       </div>
+      {/* Language switcher — footer-only (see page.tsx for the homepage twin). */}
+      <details class='locale-switch foot-locale' data-locale-switch>
+        <summary
+          class='locale-trigger locale-trigger-iconic foot-locale-trigger'
+          aria-label={localeSwitcher.label}
+          title={localeSwitcher.label}
+        >
+          <span class='locale-trigger-icon' aria-hidden='true' />
+          <span class='foot-locale-label'>{localeLabel}</span>
+          <span class='locale-trigger-caret ri-glyph' aria-hidden='true'>&#xEA4E;</span>
+        </summary>
+        <div class='locale-menu' role='menu'>
+          {localeSwitcher.options.map((entry) => (
+            <a
+              class:list={['locale-menu-item', { 'is-active': entry.code === locale }]}
+              role='menuitem'
+              data-locale-link
+              data-locale-code={entry.code}
+              href={entry.href}
+              lang={entry.htmlLang}
+              aria-current={entry.code === locale ? 'true' : undefined}
+            >
+              <span class='locale-menu-code'>{entry.code.toUpperCase()}</span>
+              <span class='locale-menu-label'>{entry.label}</span>
+            </a>
+          ))}
+        </div>
+      </details>
       <div class='foot-social'>
         <a href={X_TWITTER} target='_blank' rel='noopener' aria-label='X'>
           <svg viewBox='0 0 24 24' width='18' height='18' fill='currentColor' aria-hidden='true'><path d='M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.65l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25h6.815l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z'/></svg>
@@ -178,7 +239,7 @@ const l = getFooterLegalCopy(locale);
     {/* Masthead sign-off — the giant two-tone wordmark. */}
     <div class='foot-masthead' data-od-id='footer-masthead'>
       <p class='foot-masthead-wordmark'>
-        Open <span class='foot-masthead-accent'>Design</span><span class='foot-masthead-period'>.</span>
+        Open<span class='foot-masthead-accent'>Design</span><span class='foot-masthead-period'>.</span>
       </p>
     </div>
   </div>
@@ -224,5 +285,18 @@ const l = getFooterLegalCopy(locale);
     .foot-social a:hover {
       color: var(--ink, #262626);
     }
+    /* Secondary "Tools" heading inside the Solution column — reuses the h5
+       eyebrow look but sits below the use-case list, so it needs top spacing. */
+    .sub-footer-subhead {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--ink-mute);
+      font-weight: 500;
+      margin: 20px 0 14px;
+    }
   </style>
 </footer>
+
+<DownloadEngagementPrompt locale={locale} />

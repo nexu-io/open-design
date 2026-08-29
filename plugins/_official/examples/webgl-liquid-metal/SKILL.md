@@ -6,7 +6,7 @@ description: |
   thin-film (cosine-palette) sheen. No textures. Rendered as a single
   self-contained `index.html`. Use when the brief asks for "liquid metal",
   "molten chrome", "iridescent", "holographic", "metallic", "thin-film", or a
-  reflective flowing surface. Open Design serves this in powered-preview mode
+  reflective flowing surface. OpenDesign serves this in powered-preview mode
   so the GPU stack actually runs.
 triggers:
   - "liquid metal"
@@ -39,7 +39,7 @@ Produce a single self-contained `index.html` that renders a real-time metallic s
 
 ## Why this is a powered artifact
 
-Open Design detects `getContext('webgl2')` and renders this file in **powered preview** — a cross-origin-isolated iframe with `allow-same-origin`. The full GPU pipeline is available; you do not need to work around the opaque sandbox.
+OpenDesign detects `getContext('webgl2')` and renders this file in **powered preview** — a cross-origin-isolated iframe with `allow-same-origin`. The full GPU pipeline is available; you do not need to work around the opaque sandbox.
 
 ## Resource map
 

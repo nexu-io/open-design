@@ -30,7 +30,7 @@ function stubEditors(editors: HostEditor[], platform: HostEditorsResponse['platf
 function renderLocalized(locale: Locale) {
   render(
     <I18nProvider initial={locale}>
-      <HandoffButton projectId="project-1" />
+      <HandoffButton projectId="project-1" projectKind="prototype" />
     </I18nProvider>,
   );
 }

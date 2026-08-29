@@ -3,6 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { API_ERROR_CODES, type ApiErrorCode } from '../src/errors';
 
 describe('shared API error codes', () => {
+  it('exposes every public workspace project-creation failure code', () => {
+    expect(API_ERROR_CODES).toEqual(expect.arrayContaining([
+      'WORKSPACE_CONTEXT_INCOMPLETE',
+      'WORKSPACE_PROJECT_PERMISSION_DENIED',
+      'WORKSPACE_AUTHORITY_UNAVAILABLE',
+    ]));
+  });
+
   it('exposes AGENT_RUNTIME_DEF_INVALID for runtime-def validation failures', () => {
     // Chat-run startup emits this code through the shared SSE/status error
     // envelopes when a checked-in runtime def is invalid. Keeping the

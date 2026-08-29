@@ -12,14 +12,22 @@ import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 
-import { modelIdForTracking } from '@open-design/contracts/analytics';
+import {
+  modelIdForTracking,
+  type TrackingRunCancelOrigin,
+  type TrackingRunTerminalTrigger,
+} from '@open-design/contracts/analytics';
+import type { OdNextRolloutDecision, SafeRunQualityV1 } from '@open-design/contracts';
 
-import { readAppConfig } from './app-config.js';
+import { agentCliEnvForAgent, readAppConfig, type TelemetryPrefs } from './app-config.js';
 import type { AppVersionInfo } from './app-version.js';
 import { listMessages } from './db.js';
+import { normalizeOpenDesignTelemetryRelayUrl } from './integrations/telemetry-relay.js';
 import {
   deriveLangfuseDeliveryState,
-  readTelemetrySinkConfig,
+  buildSafeRunQualityProjectionV1,
+  readFeedbackTelemetrySinkConfig,
+  readRunTelemetrySinkConfig,
   reportRunCompleted,
   reportRunFeedback,
   type AgentEventSummary,
@@ -38,6 +46,8 @@ import {
   type TraceObjectSummary,
   type ToolCallSummary,
   type TurnInfo,
+  shouldFullyRedactToolPayload,
+  toolPayloadRedactionPlaceholder,
 } from './langfuse-trace.js';
 import type { PromptStackTelemetry } from './prompt-telemetry.js';
 import { redactSecrets } from './redact.js';
@@ -53,12 +63,17 @@ import {
   collectStdoutTailSummary,
   summarizeRunDiagnosticsForAnalytics,
 } from './run-diagnostics.js';
-import { classifyRunFailure } from './run-failure-classification.js';
+import {
+  classifyRunFailure,
+  type RunFailureClassification,
+} from './run-failure-classification.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { buildTraceObjectManifests } from './trace-object-manifest.js';
 import type { TraceArtifactObjectSource, TraceObjectUploadManifests } from './trace-object-manifest.js';
+import { getDetectedRuntimeVersions } from './runtimes/detection.js';
+import { runTelemetryDeliveryIdempotencyKey } from './observability/delivery-state.js';
 
-interface DaemonRunRecord {
+export interface DaemonRunRecord {
   id: string;
   projectId: string | null;
   conversationId: string | null;
@@ -69,6 +84,8 @@ interface DaemonRunRecord {
   signal?: string | null;
   error?: string | null;
   errorCode?: string | null;
+  cancelOrigin?: TrackingRunCancelOrigin | null;
+  terminalTrigger?: TrackingRunTerminalTrigger | null;
   analyticsTelemetry?: RunTelemetryTimestamps | null;
   createdAt: number;
   updatedAt: number;
@@ -83,6 +100,8 @@ interface DaemonRunRecord {
   // into chatBody / req across the createChatRunService boundary.
   userPrompt?: string;
   model?: string;
+  resolvedModelId?: string | null;
+  preflightAgentCliVersion?: string | null;
   reasoning?: string;
   skillId?: string;
   designSystemId?: string;
@@ -92,11 +111,50 @@ interface DaemonRunRecord {
     stablePromptHash: string;
     hit: boolean;
     missReason: string | null;
+    changedSections?: string[] | null;
   };
   clientType?: 'desktop' | 'web' | 'unknown';
   promptTelemetry?: PromptStackTelemetry;
   projectAttachmentPaths?: string[];
   projectMetadata?: Record<string, unknown> | null;
+  retryAttemptCount?: number;
+  retryFinalResult?: string;
+  retrySuppressedReason?: string;
+  retryOriginalFailure?: RunFailureClassification;
+  strategyRolloutDecision?: OdNextRolloutDecision | null;
+}
+
+export interface BuildSafeRunQualityProjectionFromDaemonOpts {
+  db: unknown;
+  dataDir: string;
+  run: SafeRunQualityDaemonRunRecord;
+  prefs: TelemetryPrefs;
+  installationId?: string | null;
+  env?: NodeJS.ProcessEnv;
+  fetchImpl?: typeof fetch;
+}
+
+/** Minimal durable Run surface required to rebuild the Task-safe projection. */
+export interface SafeRunQualityDaemonRunRecord {
+  id: string;
+  projectId: string | null;
+  conversationId: string | null;
+  assistantMessageId: string | null;
+  agentId: string | null;
+  status: string;
+  createdAt: number;
+  updatedAt: number;
+  events: DaemonRunRecord['events'];
+  exitCode?: number | null | undefined;
+  signal?: string | null | undefined;
+  error?: string | null | undefined;
+  errorCode?: string | null | undefined;
+  cancelOrigin?: TrackingRunCancelOrigin | null | undefined;
+  terminalTrigger?: TrackingRunTerminalTrigger | null | undefined;
+  analyticsTelemetry?: RunTelemetryTimestamps | null | undefined;
+  userPrompt?: string | undefined;
+  projectAttachmentPaths?: string[] | undefined;
+  projectMetadata?: Record<string, unknown> | null | undefined;
 }
 
 interface TraceSafeManifestResult {
@@ -120,6 +178,10 @@ export interface ReportRunCompletedFromDaemonOpts {
   persistedEndedAt?: number;
   /** App version info — collected once at daemon startup and reused. */
   appVersion?: AppVersionInfo | null;
+  /** Exact identity persisted by the caller before crossing the network. */
+  deliveryIdempotencyKey?: string;
+  /** Persists each concrete transport attempt before fetch. */
+  onDeliveryAttempt?: () => void;
   fetchImpl?: typeof fetch;
 }
 
@@ -187,14 +249,21 @@ function inferObjectRegistrationRelayUrl(env: NodeJS.ProcessEnv = process.env): 
   const objectRelayUrl = env.OPEN_DESIGN_OBJECT_RELAY_URL?.trim();
   if (!objectRelayUrl) {
     const telemetryRelayUrl = env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim();
-    return telemetryRelayUrl ? telemetryRelayUrl.replace(/\/+$/, '') : null;
+    return telemetryRelayUrl
+      ? normalizeOpenDesignTelemetryRelayUrl(telemetryRelayUrl)
+      : null;
   }
+  const normalizedObjectRelayUrl = normalizeOpenDesignTelemetryRelayUrl(
+    objectRelayUrl,
+  );
   try {
-    const url = new URL(objectRelayUrl);
+    const url = new URL(normalizedObjectRelayUrl);
     url.pathname = url.pathname.replace(/\/api\/objects\/batch\/?$/, '/api/langfuse');
     return url.toString().replace(/\/+$/, '');
   } catch {
-    return objectRelayUrl.replace(/\/api\/objects\/batch\/?$/, '/api/langfuse').replace(/\/+$/, '');
+    return normalizedObjectRelayUrl
+      .replace(/\/api\/objects\/batch\/?$/, '/api/langfuse')
+      .replace(/\/+$/, '');
   }
 }
 
@@ -240,6 +309,8 @@ function turnInfoFromRun(
     turn.model = run.model;
   } else if (agentReportedModel && agentReportedModel.trim().length > 0) {
     turn.model = agentReportedModel.trim();
+  } else if (run.resolvedModelId && run.resolvedModelId.trim().length > 0) {
+    turn.model = run.resolvedModelId.trim();
   } else {
     // Keep Langfuse aligned with PostHog's model bucket when the user selected
     // "Default (CLI config)" and the runtime did not emit a resolved model.
@@ -297,6 +368,7 @@ function messageUsageFromAnalytics(
     usage.input_tokens_effective !== undefined ||
     usage.output_tokens !== undefined ||
     usage.total_tokens !== undefined ||
+    usage.thought_tokens !== undefined ||
     usage.cache_read_input_tokens !== undefined ||
     usage.cache_creation_input_tokens !== undefined ||
     usage.uncached_input_tokens !== undefined ||
@@ -314,6 +386,7 @@ function messageUsageFromAnalytics(
   }
   if (usage.output_tokens !== undefined) out.outputTokens = usage.output_tokens;
   if (usage.total_tokens !== undefined) out.totalTokens = usage.total_tokens;
+  if (usage.thought_tokens !== undefined) out.thoughtTokens = usage.thought_tokens;
   if (usage.cache_read_input_tokens !== undefined) {
     out.cacheReadInputTokens = usage.cache_read_input_tokens;
   }
@@ -342,18 +415,19 @@ function eventTimestamp(
     : fallback;
 }
 
-const CONTENT_TOOL_NAMES = new Set([
-  'Read',
-  'Write',
-  'Edit',
-  'MultiEdit',
-  'NotebookEdit',
-]);
-
 function redactLocalPaths(value: string): string {
+  // macOS /Users, Linux /home + /root, Windows C:\Users — Linux is a primary
+  // supported environment, so Bash inputs like `cat /home/alice/.env` must not
+  // leak home directories into Langfuse tool spans.
   return value
-    .replace(/\/Users\/[^/\s"']+(?:\/[^ \n\r\t"'`<>)]*)?/g, '[REDACTED:local_path]')
-    .replace(/[A-Za-z]:\\Users\\[^\\\s"']+(?:\\[^ \n\r\t"'`<>)]*)?/g, '[REDACTED:local_path]');
+    .replace(
+      /\/(?:Users|home|root)\/[^/\s"']+(?:\/[^ \n\r\t"'`<>)]*)?/g,
+      '[REDACTED:local_path]',
+    )
+    .replace(
+      /[A-Za-z]:\\Users\\[^\\\s"']+(?:\\[^ \n\r\t"'`<>)]*)?/g,
+      '[REDACTED:local_path]',
+    );
 }
 
 function serializeToolPayload(
@@ -361,8 +435,11 @@ function serializeToolPayload(
   opts: { toolName: string; direction: 'input' | 'output' },
 ): string | undefined {
   if (value === undefined || value === null) return undefined;
-  if (CONTENT_TOOL_NAMES.has(opts.toolName)) {
-    return `[REDACTED:tool_${opts.direction}:content_tool:${opts.toolName}]`;
+  // Fail-closed: known content tools AND unknown/custom ACP tool names
+  // (kind:other MCP readers, etc.) fully redact. Only bash-like execute
+  // tools keep secret+path lexical masking.
+  if (shouldFullyRedactToolPayload(opts.toolName)) {
+    return toolPayloadRedactionPlaceholder(opts.toolName, opts.direction);
   }
   if (typeof value === 'string') return redactLocalPaths(redactSecrets(value));
   try {
@@ -393,19 +470,43 @@ function collectToolCalls(
       | null
       | undefined;
     if (data?.type === 'tool_use' && typeof data.id === 'string') {
-      const timestamp = eventTimestamp(rec, runStartedAt + rec.id);
-      const summary: ToolCallSummary = {
-        id: data.id,
-        name: typeof data.name === 'string' && data.name ? data.name : 'unknown',
-        startedAt: timestamp,
-        endedAt: timestamp,
-      };
-      const input = serializeToolPayload(data.input, {
-        toolName: summary.name,
-        direction: 'input',
-      });
-      if (input !== undefined) summary.input = input;
-      tools.set(data.id, summary);
+      const eventTs = eventTimestamp(rec, runStartedAt + rec.id);
+      // Prefer producer-supplied start time (ACP firstSeenAt) over event log ts.
+      const payloadStartedAt =
+        typeof (data as { startedAt?: unknown }).startedAt === 'number' &&
+        Number.isFinite((data as { startedAt: number }).startedAt)
+          ? (data as { startedAt: number }).startedAt
+          : undefined;
+      const timestamp = payloadStartedAt ?? eventTs;
+      const name = typeof data.name === 'string' && data.name ? data.name : 'unknown';
+      const existing = tools.get(data.id);
+      if (existing) {
+        // Second tool_use for the same id: refresh name/input, keep original startedAt.
+        existing.name = name;
+        const input = serializeToolPayload(data.input, {
+          toolName: name,
+          direction: 'input',
+        });
+        if (input !== undefined) existing.input = input;
+        else delete existing.input;
+        // If a later frame carries an earlier startedAt, prefer the earlier one.
+        if (payloadStartedAt !== undefined && payloadStartedAt < existing.startedAt) {
+          existing.startedAt = payloadStartedAt;
+        }
+      } else {
+        const summary: ToolCallSummary = {
+          id: data.id,
+          name,
+          startedAt: timestamp,
+          endedAt: eventTs,
+        };
+        const input = serializeToolPayload(data.input, {
+          toolName: name,
+          direction: 'input',
+        });
+        if (input !== undefined) summary.input = input;
+        tools.set(data.id, summary);
+      }
     } else if (
       data?.type === 'tool_result' &&
       typeof data.toolUseId === 'string'
@@ -499,6 +600,7 @@ function collectAgentEvents(
         typeof data.label === 'string' && data.label.length > 0
           ? data.label
           : 'working';
+      if (label === 'tool_call' || label === 'tool_call_update') continue;
       const index = statusCounts.get(label) ?? 0;
       statusCounts.set(label, index + 1);
       out.push({
@@ -903,7 +1005,7 @@ function buildTraceObjectSummary(args: {
 }
 
 function pickRunError(
-  run: DaemonRunRecord,
+  run: Pick<DaemonRunRecord, 'events'>,
   status: ReportContext['run']['status'],
 ): string | undefined {
   if (status === 'succeeded') return undefined;
@@ -930,6 +1032,130 @@ function normalizeStatus(s: string): ReportContext['run']['status'] {
   return 'failed';
 }
 
+/**
+ * Rebuild the quality facts used by Task hierarchy from the same durable
+ * message/Run/manifest sources as ordinary single-Run reporting. The object
+ * manifest pass is registration-only: it may inspect local metadata but never
+ * uploads an object or emits a second trace.
+ */
+export async function buildSafeRunQualityProjectionFromDaemon(
+  opts: BuildSafeRunQualityProjectionFromDaemonOpts,
+): Promise<SafeRunQualityV1 | undefined> {
+  if (opts.prefs.metrics !== true || opts.prefs.content !== true) return undefined;
+  const { db, dataDir, run } = opts;
+  let messageContent = '';
+  let producedFilesRaw: unknown;
+  let traceObjectFilesRaw: unknown;
+  let attachmentsRaw: unknown;
+  if (run.conversationId && run.assistantMessageId) {
+    try {
+      const messages = (
+        listMessages as (database: unknown, conversationId: string) => unknown[]
+      )(db, run.conversationId) as Array<Record<string, unknown>>;
+      const assistantIndex = messages.findIndex((message) => (
+        message.id === run.assistantMessageId
+      ));
+      const message = assistantIndex >= 0 ? messages[assistantIndex] : undefined;
+      if (message) {
+        messageContent = typeof message.content === 'string' ? message.content : '';
+        producedFilesRaw = message.producedFiles;
+        traceObjectFilesRaw = traceObjectFilesForTelemetry(
+          message.traceObjectFiles,
+          producedFilesRaw,
+        );
+        attachmentsRaw = collectPriorUserAttachments(messages, assistantIndex);
+      }
+    } catch (error) {
+      console.warn('[langfuse-bridge] Task quality message read failed:', String(error));
+    }
+  }
+
+  const fallbackManifests = buildTraceSafeManifests({
+    projectId: run.projectId,
+    runId: run.id,
+    attachmentsRaw,
+    traceObjectFilesRaw,
+  });
+  const registrationManifests = await buildTraceObjectManifests({
+    installationId: opts.installationId ?? null,
+    projectId: run.projectId ?? '',
+    runId: run.id,
+    projectsRoot: path.join(dataDir, 'projects'),
+    ...(run.projectMetadata ? { projectMetadata: run.projectMetadata } : {}),
+    ...(run.projectAttachmentPaths
+      ? { attachmentPaths: run.projectAttachmentPaths }
+      : {}),
+    artifacts: buildTraceObjectArtifactSources(traceObjectFilesRaw),
+    prompt: run.userPrompt ?? '',
+    prefs: opts.prefs,
+    ...(opts.env ? { env: opts.env } : {}),
+    ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
+    uploadMode: 'manifest-only',
+  });
+  const manifests = mergeTraceSafeManifests(fallbackManifests, registrationManifests);
+  const status = normalizeStatus(run.status);
+  const error = run.error ?? pickRunError(run, status);
+  const errorCode = deriveRunErrorCode({
+    status,
+    errorCode: run.errorCode ?? null,
+    exitCode: run.exitCode ?? null,
+    signal: run.signal ?? null,
+  });
+  const result = runResultFromStatus(status);
+  const failure = classifyRunFailure({
+    result,
+    status: {
+      status,
+      error: error ?? null,
+      errorCode: run.errorCode ?? null,
+      exitCode: run.exitCode ?? null,
+      signal: run.signal ?? null,
+    },
+    ...(errorCode ? { errorCode } : {}),
+    agentId: run.agentId,
+    cancelOrigin: run.cancelOrigin ?? null,
+    terminalTrigger: run.terminalTrigger ?? null,
+    events: run.events,
+  });
+  // Terminal process evidence. The single-Run trace reported the stderr and
+  // stdout tails only for a non-succeeded Run, and always reported the derived
+  // close diagnostics; the Task hierarchy must report at least the same.
+  const stderr = status === 'succeeded'
+    ? undefined
+    : collectStderrTailSummary(run.events);
+  const stdout = status === 'succeeded'
+    ? undefined
+    : collectStdoutTailSummary(run.events);
+  const diagnostics = summarizeRunDiagnosticsForAnalytics({
+    events: run.events,
+    exitCode: run.exitCode ?? null,
+    signal: run.signal ?? null,
+    cancelRequested: status === 'canceled',
+    firstTokenSeen: Boolean(run.analyticsTelemetry?.firstTokenAt),
+  });
+  return buildSafeRunQualityProjectionV1({
+    prefs: opts.prefs,
+    messageOutput: messageContent,
+    ...(error ? { errorMessage: error } : {}),
+    ...(errorCode ? { errorCode } : {}),
+    ...(failure ? { failure } : {}),
+    ...(run.exitCode !== undefined && run.exitCode !== null
+      ? { exitCode: run.exitCode }
+      : {}),
+    ...(run.signal ? { signal: run.signal } : {}),
+    ...(stderr ? { stderr } : {}),
+    ...(stdout ? { stdout } : {}),
+    diagnostics,
+    tools: collectToolCalls(run.events, run.createdAt, run.updatedAt),
+    attachmentManifest: manifests.attachmentManifest,
+    artifactManifest: manifests.artifactManifest,
+    ...(manifests.inputTextSnapshotManifest
+      ? { inputTextSnapshotManifest: manifests.inputTextSnapshotManifest }
+      : {}),
+    manifestCompleteness: manifests.completeness,
+  });
+}
+
 export async function reportRunCompletedFromDaemon(
   opts: ReportRunCompletedFromDaemonOpts,
 ): Promise<LangfuseDeliveryState> {
@@ -941,6 +1167,7 @@ export async function reportRunCompletedFromDaemon(
       return deriveLangfuseDeliveryState(prefs, null);
     }
     const installationId = cfg.installationId ?? null;
+    const configuredAmrEnv = agentCliEnvForAgent(cfg.agentCliEnv, 'amr');
 
     let messageContent = '';
     let producedFilesRaw: unknown = undefined;
@@ -1006,6 +1233,8 @@ export async function reportRunCompletedFromDaemon(
       },
       ...(errorCode ? { errorCode } : {}),
       agentId: run.agentId,
+      cancelOrigin: run.cancelOrigin ?? null,
+      terminalTrigger: run.terminalTrigger ?? null,
       events: run.events,
     });
     const timings = summarizeRunTimingAnalytics({
@@ -1025,6 +1254,10 @@ export async function reportRunCompletedFromDaemon(
     const runtime: RuntimeInfo = {
       ...getRuntimeInfo(opts.appVersion ?? null),
       ...(run.clientType ? { clientType: run.clientType } : {}),
+      ...(getDetectedRuntimeVersions(run.agentId) ?? {}),
+      ...(run.preflightAgentCliVersion
+        ? { agentCliVersion: run.preflightAgentCliVersion }
+        : {}),
     };
     const artifacts = summarizeProducedFiles(traceObjectFilesRaw);
     const diagnostics = summarizeRunDiagnosticsForAnalytics({
@@ -1064,6 +1297,9 @@ export async function reportRunCompletedFromDaemon(
       projectId: run.projectId ?? '',
       conversationId: run.conversationId ?? '',
       ...(run.agentId ? { agentId: run.agentId } : {}),
+      ...(run.strategyRolloutDecision
+        ? { strategyRolloutDecision: run.strategyRolloutDecision }
+        : {}),
       run: {
         runId: run.id,
         status,
@@ -1077,6 +1313,16 @@ export async function reportRunCompletedFromDaemon(
         ...(stderr ? { stderr } : {}),
         ...(stdout ? { stdout } : {}),
         diagnostics,
+        retryAttemptCount: run.retryAttemptCount ?? 0,
+        ...(run.retryFinalResult
+          ? { retryFinalResult: run.retryFinalResult }
+          : {}),
+        ...(run.retrySuppressedReason
+          ? { retrySuppressedReason: run.retrySuppressedReason }
+          : {}),
+        ...(run.retryOriginalFailure
+          ? { retryOriginalFailure: run.retryOriginalFailure }
+          : {}),
       },
       message: {
         messageId: run.assistantMessageId ?? '',
@@ -1109,24 +1355,51 @@ export async function reportRunCompletedFromDaemon(
       ...objectManifestOptions,
       uploadMode: 'manifest-only',
     });
+    const finalTelemetryConfig = readRunTelemetrySinkConfig(
+      process.env,
+      configuredAmrEnv,
+    );
+    let uploadedManifests: TraceObjectUploadManifests | undefined;
+    let finalObjectManifests = registrationManifests;
+
     if (registrationManifests) {
-      await reportRunCompleted(
-        buildContext(mergeTraceSafeManifests(manifests, registrationManifests)),
-        {
-          config: objectRegistrationTelemetryConfig(),
-          ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
-        },
-      );
+      // Authenticated runs register object authority through Vela's signed
+      // service path. Anonymous/direct runs retain the legacy relay boundary.
+      // The authority worker handles registration_only without writing a
+      // content-free Langfuse trace.
+      const registrationTelemetryConfig = finalTelemetryConfig?.kind === 'vela'
+        ? finalTelemetryConfig
+        : objectRegistrationTelemetryConfig();
+      if (registrationTelemetryConfig) {
+        await reportRunCompleted(
+          buildContext(mergeTraceSafeManifests(manifests, registrationManifests)),
+          {
+            config: registrationTelemetryConfig,
+            deliveryPurpose: 'object-registration',
+            ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
+          },
+        );
+        uploadedManifests = await buildTraceObjectManifests(objectManifestOptions);
+        finalObjectManifests = uploadedManifests ?? registrationManifests;
+      }
     }
 
-    const uploadedManifests = await buildTraceObjectManifests(objectManifestOptions);
-    const finalManifests = mergeTraceSafeManifests(manifests, uploadedManifests);
+    const finalManifests = mergeTraceSafeManifests(manifests, finalObjectManifests);
     return await reportRunCompleted(
       buildContext(finalManifests, buildTraceObjectSummary({
         traceObjectFilesRaw,
         ...(uploadedManifests ? { uploaded: uploadedManifests } : {}),
       })),
-      opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {},
+      {
+        config: finalTelemetryConfig,
+        deliveryIdempotencyKey:
+          opts.deliveryIdempotencyKey
+          ?? runTelemetryDeliveryIdempotencyKey(run.id),
+        ...(opts.onDeliveryAttempt
+          ? { onDeliveryAttempt: opts.onDeliveryAttempt }
+          : {}),
+        ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
+      },
     );
   } catch (err) {
     console.warn('[langfuse-bridge] report failed:', String(err));
@@ -1179,7 +1452,8 @@ export async function reportRunFeedbackFromDaemon(
   // Pre-resolve the sink before claiming `accepted`. Avoids advertising a
   // successful enqueue to callers when there's no Langfuse endpoint
   // configured to ship the score to.
-  const sink = readTelemetrySinkConfig();
+  const configuredAmrEnv = agentCliEnvForAgent(cfg.agentCliEnv, 'amr');
+  const sink = readFeedbackTelemetrySinkConfig(process.env, configuredAmrEnv);
   if (!sink) {
     return { status: 'skipped_no_sink' };
   }
@@ -1199,7 +1473,10 @@ export async function reportRunFeedbackFromDaemon(
   // telemetry, not a client-facing signal.
   void reportRunFeedback(
     ctx,
-    opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {},
+    {
+      configuredEnv: configuredAmrEnv,
+      ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
+    },
   ).catch((err) => {
     console.warn('[langfuse-bridge] feedback report failed:', String(err));
   });

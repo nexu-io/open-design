@@ -187,7 +187,7 @@ describe('public MCP get_file active context fallbacks', () => {
   it('requires a path when active context is inactive and project/path are omitted', async () => {
     const result = await handleMcpToolCall(baseUrl, 'get_file', {});
     expect('isError' in result && result.isError).toBe(true);
-    expect(contentTexts(result.content).join('\n')).toContain('Open Design has no active project');
+    expect(contentTexts(result.content).join('\n')).toContain('OpenDesign has no active project');
   });
 
   it('does not stamp active context when project and path are explicit', async () => {

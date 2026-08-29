@@ -35,11 +35,11 @@ export type BadgeKind = LibraryAssetKind | 'element';
 
 /** Human label + accent tint for each badge kind, used by the kind badge. */
 export const KIND_META: Record<BadgeKind, { label: string; tint: string }> = {
-  image: { label: 'Image', tint: '#2563eb' },
+  image: { label: 'Image', tint: '#1A74FF' },
   video: { label: 'Video', tint: '#db2777' },
   'design-system': { label: 'Design system', tint: '#16a34a' },
   html: { label: 'HTML', tint: '#d97706' },
-  font: { label: 'Font', tint: '#7c3aed' },
+  font: { label: 'Font', tint: '#353535' },
   color: { label: 'Color', tint: '#0d9488' },
   text: { label: 'Text', tint: '#475569' },
   url: { label: 'Link', tint: '#0ea5e9' },

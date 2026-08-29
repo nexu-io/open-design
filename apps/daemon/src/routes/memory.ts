@@ -588,6 +588,10 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
           };
         }
       }
+      const chatModel =
+        typeof body.chatModel === 'string' && body.chatModel.trim()
+          ? body.chatModel.trim()
+          : '';
       let attemptedLLM = false;
       if (userMessage.trim().length > 0 && hasAssistant) {
         attemptedLLM = true;
@@ -600,6 +604,7 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
                 projectRoot: PROJECT_ROOT,
                 chatAgentId: null,
                 chatProvider,
+                ...(chatModel ? { chatModel } : {}),
               },
             ),
           )

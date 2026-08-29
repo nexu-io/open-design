@@ -1,0 +1,398 @@
+/*
+ * Band layout primitives for full-bleed editorial detail pages.
+ *
+ * Lifted from the user-story pages (`_partials/seungki-kim.css`, the `.v4*`
+ * system) so the Codex plugin pages read as the same family: full-bleed
+ * alternating bands, a centered measure, mono eyebrows, one inverted band, and
+ * a horizontal provenance bar.
+ *
+ * Namespaced `.db*` rather than reusing `.v4*` directly: the story partial also
+ * carries story-specific accents, and those pages are live. Once a third page
+ * type wants bands, promote this file to the shared stylesheet and migrate the
+ * stories onto it.
+ */
+
+.db {
+  /* Mounted inside `.sub-main` without `.container`, so the bands already span
+     the viewport; no 100vw breakout (which would overflow the scrollbar). */
+  width: 100%;
+  background: var(--paper);
+  color: var(--ink);
+  /* Cancel `.sub-main`'s top padding so the hero art runs to the very top of
+     the page, behind the transparent sticky nav (same as the story pages). */
+  margin-top: -140px;
+}
+@media (max-width: 720px) { .db { margin-top: -120px; } }
+
+.dbband { padding: 68px 0; }
+.dbband.alt { background: var(--bone); }
+.dbband.ink { background: var(--ink); color: #fff; }
+.dbin { max-width: 1080px; margin: 0 auto; padding: 0 40px; }
+.dbin.narrow { max-width: 740px; }
+
+.dbeye {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--olive);
+  font-weight: 600;
+  margin: 0 0 22px;
+}
+.dbband.ink .dbeye { color: var(--coral); }
+
+/* ---------- hero ---------- */
+
+.dbhero { padding: 96px 0 56px; position: relative; overflow: hidden; }
+.dbhero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(180deg, rgba(250, 250, 250, 0.62), rgba(250, 250, 250, 0.92) 66%, var(--paper)),
+    url(/lab-stage-art.webp);
+  background-size: cover;
+  background-position: center 16%;
+  z-index: 0;
+  pointer-events: none;
+}
+.dbhero > .dbin { position: relative; z-index: 1; }
+
+.dbherotop {
+  display: grid;
+  grid-template-columns: 1.45fr 1fr;
+  gap: 56px;
+  align-items: start;
+}
+.dbh1 {
+  font-size: clamp(32px, 4.4vw, 52px);
+  line-height: 1.06;
+  letter-spacing: -0.03em;
+  font-weight: 780;
+  margin: 0 0 16px;
+}
+.dbdek {
+  font-size: 18px;
+  line-height: 1.65;
+  color: var(--ink-soft);
+  max-width: 520px;
+  margin: 0 0 30px;
+}
+.dbdek-wide { max-width: 660px; }
+
+.dbcta-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+.dbbtn-p {
+  background: var(--ink);
+  color: #fff;
+  font-weight: 600;
+  font-size: 15px;
+  padding: 15px 28px;
+  border-radius: var(--spacing-8);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+.dbbtn-g {
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 15px;
+  padding: 15px 24px;
+  border-radius: var(--spacing-8);
+  border: 1px solid var(--line);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+.dbband.ink .dbbtn-p { background: var(--coral); color: #0a0a0a; font-weight: 700; }
+.dbband.ink .dbbtn-g { color: #fff; border-color: rgba(255, 255, 255, 0.35); }
+
+.dbheroart { margin: 0; }
+.dbheroart img {
+  width: 100%;
+  display: block;
+  border-radius: var(--spacing-8);
+  box-shadow: 0 34px 70px -34px rgba(20, 20, 30, 0.5);
+}
+
+/* ---------- provenance card ---------- */
+
+/* Two columns in the body band: prose left at a comfortable measure, the
+   provenance card right. Replaces the full-width bar, which left the prose
+   stranded in a narrow strip. */
+.dbbody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: clamp(32px, 5vw, 72px);
+  align-items: start;
+}
+.dbbody-main { max-width: 680px; }
+
+.dbcard {
+  display: grid;
+  gap: 18px;
+  padding: 22px 24px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--bone);
+}
+.dbcard > div { display: grid; gap: 5px; }
+.dbcard .k {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.dbcard .v { font-size: 15px; font-weight: 700; color: var(--ink); line-height: 1.3; overflow-wrap: anywhere; }
+.dbcard .v a { color: inherit; text-decoration: none; }
+.dbcard .v a:hover { text-decoration: underline; }
+.dbcard .n {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+/* Column flow rather than a fixed track count: the card carries whatever
+   stats the catalogue entry has, today just the star count. */
+.dbcard-stats {
+  display: grid !important;
+  grid-auto-flow: column;
+  justify-content: start;
+  gap: 28px;
+  padding: 16px 0;
+  border-block: 1px solid var(--line);
+}
+.dbcard-stats > div { display: grid; gap: 5px; }
+
+.dbsnapbar-tags { display: flex; flex-wrap: wrap; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.dbsnapbar-tags li {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  background: var(--paper-warm);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 11px;
+}
+
+/* ---------- metadata band (collection page) ---------- */
+
+.dbmetaband { padding: 34px 0; border-block: 1px solid var(--line); }
+
+/* The jobs row on the collection page: one equal column per category, so
+   the band stays full whatever `CODEX_COLLECTION.categories` holds. Lives
+   here rather than in a page
+   <style> block: Astro's scoped styles are unreliable for these grid rules in
+   this app (the same thing bit `.codex-skill-grid`). */
+.dbjobs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 40px;
+}
+.dbjobs .k {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 8px;
+}
+.dbjobs .v { font-size: 15px; line-height: 1.55; color: var(--ink-soft); }
+
+/* ---------- body ---------- */
+
+.dbh2 {
+  font-size: clamp(26px, 3.2vw, 36px);
+  line-height: 1.12;
+  letter-spacing: -0.025em;
+  font-weight: 760;
+  margin: 0 0 22px;
+}
+.dbin p, .dblede { font-size: 18px; line-height: 1.72; color: var(--ink-soft); margin: 0 0 22px; }
+.dbband.ink .dbin p { color: rgba(255, 255, 255, 0.74); }
+
+/* Verbatim upstream description, presented as a quote so it reads as sourced
+   rather than as our own marketing copy. */
+.dbbundle{margin:6px 0 0;font-size:13px;line-height:1.5;color:var(--ink-faint);font-family:var(--mono)}
+.vsoft{font-weight:500 !important;font-size:13px !important;color:var(--ink-soft) !important}
+.dbquote { margin: 34px 0 0; padding-left: 22px; border-left: 2px solid var(--coral); }
+.dbquote blockquote { margin: 0; font-size: 17px; line-height: 1.6; color: var(--ink-soft); }
+.dbquote figcaption {
+  margin-top: 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* Bulleted points with the site's square accent marker. */
+.dbpoints { margin: 0; padding: 0; list-style: none; display: grid; gap: 16px; }
+.dbpoints li {
+  position: relative;
+  padding-left: 26px;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+.dbpoints li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 9px;
+  height: 9px;
+  background: var(--coral);
+}
+
+/* "What it covers": the upstream file's own section headings. */
+.dbcovers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 24px;
+}
+.dbcovers li {
+  position: relative;
+  padding-left: 20px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+.dbcovers li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.62em;
+  width: 6px;
+  height: 6px;
+  border: 1.5px solid var(--ink-faint);
+}
+
+/* ---------- three-up step module ---------- */
+
+.dbfeats3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; margin: 0; padding: 0; }
+.dbfeats3 > li { list-style: none; }
+.dbfeats3 .num {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+.dbband.ink .dbfeats3 .num { background: var(--coral); color: #0a0a0a; }
+.dbfeats3 p { font-size: 15px; line-height: 1.6; margin: 0; }
+.dbfeats3 code {
+  display: block;
+  margin-top: 12px;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 11px 13px;
+  border-radius: var(--spacing-8);
+  background: var(--paper-warm);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.dbband.ink .dbfeats3 code {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+/* Sub-heading inside a merged band. */
+.dbsub {
+  margin: 52px 0 24px;
+  padding-top: 40px;
+  border-top: 1px solid var(--line);
+  font-size: clamp(20px, 2.4vw, 26px);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-weight: 760;
+}
+.dbband.ink .dbsub { border-top-color: rgba(255, 255, 255, 0.18); }
+
+.dbnote {
+  margin-top: 30px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.dbband.ink .dbnote { border-top-color: rgba(255, 255, 255, 0.18); }
+.dbnote p { font-size: 14px; color: var(--ink-faint); margin: 0; max-width: 62ch; }
+.dbband.ink .dbnote p { color: rgba(255, 255, 255, 0.6); }
+.dbnote a { font-size: 14px; font-weight: 600; color: inherit; white-space: nowrap; }
+
+/* ---------- closing CTA ---------- */
+
+/* Painted plate, same treatment as the story pages' final band, so the page
+   ends on the client download rather than a plain link. */
+.dbfinal { padding: 88px 0; position: relative; overflow: hidden; }
+.dbfinal::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(14, 14, 16, 0.9), rgba(14, 14, 16, 0.94)),
+    url(/cta-bg.webp);
+  background-size: cover;
+  background-position: center;
+  z-index: 0;
+}
+.dbfinal > .dbin { position: relative; z-index: 1; }
+.dbfinal .dbeye { color: var(--coral); }
+.dbfinal-h {
+  font-size: clamp(30px, 4vw, 46px);
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  font-weight: 780;
+  color: #fff;
+  margin: 0 0 16px;
+  max-width: 760px;
+}
+/* `.dbin p` is more specific than a bare `.dbfinal-p`, so the body copy was
+   inheriting the light-band ink colour and going dark-on-dark here. Match its
+   specificity rather than reaching for !important. */
+.dbfinal .dbin p.dbfinal-p {
+  font-size: 18px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.88);
+  margin: 0 0 30px;
+  max-width: 560px;
+}
+.dbfinal .dbbtn-p { background: var(--coral); color: #0a0a0a; font-weight: 700; }
+.dbfinal .dbbtn-g { color: #fff; border-color: rgba(255, 255, 255, 0.35); }
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 900px) {
+  .dbherotop { grid-template-columns: 1fr; gap: 32px; }
+  .dbheroart { order: -1; }
+  .dbbody { grid-template-columns: 1fr; }
+  .dbjobs { grid-auto-flow: row; grid-auto-columns: auto; gap: 22px; }
+  .dbfeats3 { grid-template-columns: 1fr; gap: 28px; }
+  .dbin { padding: 0 24px; }
+}
+@media (max-width: 700px) {
+  .dbcovers { grid-template-columns: 1fr; }
+}

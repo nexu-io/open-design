@@ -11,7 +11,7 @@ od:
 # Sample Plugin
 
 This is the SKILL.md half of the Phase 1 e2e fixture. The companion
-`open-design.json` sidecar carries the canonical Open Design plugin
+`open-design.json` sidecar carries the canonical OpenDesign plugin
 manifest fields; this file proves the SKILL-only adapter path stays
 honest when an install lacks an explicit sidecar (just delete
 `open-design.json` to test the legacy compat tier).

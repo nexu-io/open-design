@@ -119,6 +119,17 @@ export interface StartBrandExtractionOptions {
    *  brand stays `extracting` for the agent to drive (the legacy behavior tests
    *  use). */
   userDesignSystemsRoot?: string;
+  /** Workspace-aware creator supplied by the HTTP composition root. */
+  createUserDesignSystem?: typeof createUserDesignSystem;
+  /** Matching rollback for a workspace-aware draft creator. */
+  deleteUserDesignSystem?: typeof deleteUserDesignSystem;
+  /** Final synchronous creation fence; throws to roll back the whole startup. */
+  bindCreatedProject?: (projectId: string) => void;
+  /** Workspace to claim the extracted design system for (#145). Design systems
+   *  share one directory, so the claim is what keeps a brand extracted in one
+   *  workspace out of the next workspace's library. Omitted (signed out /
+   *  single-player) leaves it unclaimed and visible everywhere. */
+  designSystemWorkspaceId?: string | null;
   /** Runtime data dir so the programmatically-built design system is sedimented
    *  into memory. Optional. */
   dataDir?: string;
@@ -224,6 +235,7 @@ async function rollbackBrandExtractionStartup(input: {
   metadata: ProjectMetadata;
   userDesignSystemsRoot?: string | undefined;
   draftDesignSystemId?: string | null;
+  deleteDraftDesignSystem?: typeof deleteUserDesignSystem;
 }): Promise<void> {
   try {
     deleteDbProject(input.db, input.projectId);
@@ -240,7 +252,10 @@ async function rollbackBrandExtractionStartup(input: {
   }
   if (input.draftDesignSystemId && input.userDesignSystemsRoot) {
     try {
-      await deleteUserDesignSystem(input.userDesignSystemsRoot, input.draftDesignSystemId);
+      await (input.deleteDraftDesignSystem ?? deleteUserDesignSystem)(
+        input.userDesignSystemsRoot,
+        input.draftDesignSystemId,
+      );
     } catch (rollbackErr) {
       console.warn(`[brand] failed to roll back draft design system for ${input.brandId}`, rollbackErr);
     }
@@ -341,7 +356,7 @@ export async function startBrandExtraction(
     if (designMd) writeDesignMdInput(brandsRoot, id, designMd);
 
     if (runProgrammatic && opts.userDesignSystemsRoot) {
-      const draft = await createUserDesignSystem(opts.userDesignSystemsRoot, {
+      const draft = await (opts.createUserDesignSystem ?? createUserDesignSystem)(opts.userDesignSystemsRoot, {
         title: host,
         category: 'Brands',
         surface: 'web',
@@ -351,6 +366,9 @@ export async function startBrandExtraction(
           sourceUrls: [url],
           sourceNotes: `Extracting from ${url}`,
         },
+        ...(opts.designSystemWorkspaceId?.trim()
+          ? { workspaceId: opts.designSystemWorkspaceId.trim() }
+          : {}),
       });
       draftDesignSystemId = draft.id;
       meta.designSystemId = draft.id;
@@ -443,6 +461,12 @@ export async function startBrandExtraction(
         : {}),
     });
 
+    // Keep the project row and its Workspace envelope in the same startup
+    // rollback boundary as the draft design system. A route-level bind after
+    // this function returns cannot compensate the already-created brand,
+    // project directory, transcript, and design-system envelope on failure.
+    opts.bindCreatedProject?.(projectId);
+
     // Programmatic-first runs immediately, but never blocks the start response.
     // The caller should land in the project with a real user/assistant transcript
     // and the extracting skeleton already persisted while the deterministic
@@ -523,6 +547,9 @@ export async function startBrandExtraction(
       metadata,
       userDesignSystemsRoot: opts.userDesignSystemsRoot,
       draftDesignSystemId,
+      ...(opts.deleteUserDesignSystem
+        ? { deleteDraftDesignSystem: opts.deleteUserDesignSystem }
+        : {}),
     });
     throw err;
   }
@@ -1264,6 +1291,10 @@ export interface FinalizeBrandOptions {
   id: string;
   brandsRoot: string;
   userDesignSystemsRoot: string;
+  /** Workspace to claim a newly registered design system for (#145). A
+   *  re-finalize reuses the draft, whose claim is already preserved, so this
+   *  only matters on the agent-driven path that registers without a draft. */
+  designSystemWorkspaceId?: string | null;
   projectsRoot: string;
   /** Skills root so the final `brand.html` re-render can read the template. */
   skillsRoot: string;
@@ -1443,6 +1474,9 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
       ...(brand.description ? { companyBlurb: brand.description } : {}),
       sourceNotes: `Extracted from ${meta.sourceUrl}`,
     },
+    ...(opts.designSystemWorkspaceId?.trim()
+      ? { workspaceId: opts.designSystemWorkspaceId.trim() }
+      : {}),
   });
   throwIfProgrammaticExtractionNotCurrent(opts);
   const designSystemId = summary.id;
@@ -1877,6 +1911,9 @@ export async function renderBrandPreviewIntoProject(
  *  tool call that has no registry to resolve against and ALWAYS fails (it burns
  *  a turn and confuses the run). Keep this prompt describing the methodology
  *  inline and steer the agent away from invoking any skill / slash command. */
+const SEED_AUTHORING_GUIDANCE =
+  'Persist engine-level overrides such as control height in `brand.json.seed` (for example, `{ "controlHeight": 44 }`). Do not edit `system/seed.json` or other generated `system/` files directly; `od brand finalize` replaces them.';
+
 function brandExtractionPrompt(input: {
   url: string;
   brandId: string;
@@ -1893,6 +1930,7 @@ function brandExtractionPrompt(input: {
       'A usable design system has ALREADY been parsed from `context/input-DESIGN.md`, finalized programmatically, and registered. The design-system page (`brand.html`) is open as the active tab, already in the `ready` state and applyable everywhere RIGHT NOW. Your job is to ENRICH that provisional system in place: inspect `context/input-DESIGN.md`, `DESIGN.md`, `brand.json`, `system/variables.css`, `system/theme.json`, and the component kit pages; then replace weak guesses with clearer token roles, component guidance, voice, and implementation notes.',
       '',
       'Do not create a duplicate design system. Keep the same registered user design-system id. Update `brand.json` and `BRAND.md` incrementally, run `od brand preview ' + input.brandId + '` after field groups, then run `od brand finalize ' + input.brandId + '` when ready.',
+      SEED_AUTHORING_GUIDANCE,
       '',
       'Focus areas:',
       '- Normalize color roles from the pasted DESIGN.md into background, surface, foreground, muted, border, accent, and accent-secondary.',
@@ -1923,6 +1961,7 @@ function brandExtractionPrompt(input: {
     '',
     '2. SYNTHESIZE INCREMENTALLY — write `brand.json` AS SOON AS you have the name, a couple of colors, and a logo candidate (do not wait for everything), then run `od brand preview ' + input.brandId + '` and tell the user it is filling in. It must parse as JSON and use exactly the seven color roles (background, surface, foreground, muted, border, accent, accent-secondary), each with `hex` (#rrggbb), `oklch`, `name`, `usage`; plus `name`, `tagline`, `description`, `sourceUrl`, `logo` ({ primary, alternates, notes } with `logos/<file>` paths), `typography` ({ display, body, mono? } each { family, fallbacks[], weights[], googleFontsUrl? }), `voice`, `imagery` (incl. `samples` — the `imagery/<file>` images you saved), and `layout`. Never invent colors from memory — pick them from what you measured.',
     '   - PREVIEW AFTER EACH FIELD GROUP, do not batch to the end. The kit fills in live, so after you measure and add each group — (a) colors, (b) typography/fonts, (c) logo candidates, (d) cover/hero imagery samples, (e) voice & tone, (f) imagery/layout posture — update `brand.json` and re-run `od brand preview ' + input.brandId + '`. Partial data renders the filled modules and keeps skeletons for the rest, which is exactly the progressive "filling in" the user should watch. Also write `BRAND.md`, a prose brand guide an autonomous design agent can follow.',
+    SEED_AUTHORING_GUIDANCE,
     '',
     '3. REBUILD & RE-REGISTER — when `brand.json` is enriched, run `od brand finalize ' + input.brandId + '` (add `--json` for machine output). That re-validates it, re-derives the light/dark/compact design tokens and the six design-system artifacts (landing, deck, poster, email, newsletter, form), and UPDATES the already-registered design system in place (same id — never a duplicate), so every template that already uses it picks up the sharper result. Fix `brand.json` and re-run if it reports a validation error.',
     '',
@@ -1949,6 +1988,7 @@ function brandExtractionFallbackPrompt(input: {
       'The daemon created a live design-system scaffold and saved the pasted source at `context/input-DESIGN.md`. A ready design system may already be registered from the programmatic parser; if not, use the pasted file as the canonical source and complete it.',
       '',
       'Read `context/input-DESIGN.md`, then update `brand.json`, `BRAND.md`, and `DESIGN.md` progressively. Run `od brand preview ' + input.brandId + '` after meaningful field groups, then `od brand finalize ' + input.brandId + '` to register or update the same design system in place.',
+      SEED_AUTHORING_GUIDANCE,
       '',
       'Finish by pointing the user at the completed brand.html and reusable design-system assets.',
     ].join('\n');
@@ -1967,6 +2007,7 @@ function brandExtractionFallbackPrompt(input: {
     'This task already contains the full brand-extract workflow inline — follow it directly. Do NOT try to load or invoke a `brand-extract` skill, `Skill`, or any slash command: none is registered here and the call will fail. Drive and observe the target site with the `agent-browser` tool. Measure before you synthesize: capture the real colors, fonts, logo candidates, representative imagery, voice, and layout posture. If the page is an anti-bot verification interstitial, emit a `<question-form>` asking the user to complete verification in the browser, then continue after they respond.',
     '',
     'Write `brand.json` as soon as you have the name, a couple of measured colors, and a logo candidate, then run `od brand preview ' + input.brandId + '` so the scaffold fills in progressively. Keep updating `brand.json`, `BRAND.md`, saved `logos/`, fonts, and `imagery/` samples as you measure each field group.',
+    SEED_AUTHORING_GUIDANCE,
     '',
     'When the kit is complete and validates, run `od brand finalize ' + input.brandId + '` (add `--json` for machine output). Fix validation errors and re-run finalize until the brand is registered and the design-system assets are ready.',
     '',
@@ -2220,11 +2261,12 @@ export async function removeBrand(
   brandsRoot: string,
   userDesignSystemsRoot: string,
   id: string,
+  removeDesignSystem: typeof deleteUserDesignSystem = deleteUserDesignSystem,
 ): Promise<boolean> {
   const meta = readMeta(brandsRoot, id);
   if (meta?.designSystemId) {
     try {
-      await deleteUserDesignSystem(userDesignSystemsRoot, meta.designSystemId);
+      await removeDesignSystem(userDesignSystemsRoot, meta.designSystemId);
     } catch {
       // Best-effort — still remove the brand dir below.
     }

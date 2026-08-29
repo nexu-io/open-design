@@ -46,14 +46,16 @@ jobs:
             exit 0
           fi
           echo "Blocking direct release PR #$PR into $BASE by $AUTHOR"
+          # Markdown code spans are intentional literal text.
+          # shellcheck disable=SC2016
           body="$(printf '%s\n' \
             '🚫 Direct PRs into release branches are not accepted.' \
             '' \
-            'Changes reach a release branch through the **backport flow**, not by targeting `release/*` directly:' \
+            "Changes reach a release branch through the **backport flow**, not by targeting \`release/*\` directly:" \
             '' \
-            '1. Open your PR against **`main`** and get it merged there.' \
-            '2. Add the **`backport release/vX.Y.Z`** label to that main PR — the release bot cherry-picks it onto the release branch automatically (resolving conflicts in a draft if needed).' \
+            "1. Open your PR against **\`main\`** and get it merged there." \
+            "2. Add the **\`backport release/vX.Y.Z\`** label to that main PR — the release bot cherry-picks it onto the release branch automatically (resolving conflicts in a draft if needed)." \
             '' \
-            'Closing this PR. If this is a genuine release-only fix that cannot go through `main`, ask a maintainer to handle it directly.')"
+            "Closing this PR. If this is a genuine release-only fix that cannot go through \`main\`, ask a maintainer to handle it directly.")"
           gh pr comment "$PR" --repo "$REPO" --body "$body"
           gh pr close "$PR" --repo "$REPO"

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Humanize PPT Run Manifest",
+  "type": "object",
+  "required": ["version", "generated_at", "title", "source", "primary_renderer", "routes", "qa_status", "files"],
+  "properties": {
+    "version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "title": {"type": "string"},
+    "source": {"type": "string"},
+    "primary_renderer": {"type": "string"},
+    "routes": {"type": "array"},
+    "qa_status": {"type": "string", "enum": ["pass", "needs-fix"]},
+    "files": {"type": "array", "items": {"type": "string"}}
+  }
+}

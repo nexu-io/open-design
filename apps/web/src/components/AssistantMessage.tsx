@@ -1,12 +1,19 @@
 import { Fragment, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ToolCard } from "./ToolCard";
+import { TodoCard, ToolCard } from "./ToolCard";
 import { FileOpsSummary } from "./FileOpsSummary";
 import {
   renderMarkdown,
   type MarkdownLinkClickHandler,
 } from "../runtime/markdown";
-import { asInProjectFilePath } from "../runtime/in-project-link";
-import { projectFileUrl } from "../providers/registry";
+import {
+  asInProjectFilePath,
+  isPathLikeChatHref,
+  resolveChatFileLink,
+} from "../runtime/in-project-link";
+import { navigate } from "../router";
+import { deleteProjectFile, projectFileUrl, uploadProjectFiles } from "../providers/registry";
+import { useProjectCollabContext } from "../collab/collab-context";
+import { workspaceProjectHeaders } from "../collab/workspace-identity";
 import { useAnalytics } from "../analytics/provider";
 import {
   trackAssistantFeedbackButtonClick,
@@ -17,6 +24,8 @@ import {
   trackAssistantFeedbackReasonSubmitClick,
   trackAssistantFeedbackReasonView,
   trackFeedbackSubmitResult,
+  trackQuestionsFormClick,
+  trackQuestionsFormSurfaceView,
 } from "../analytics/events";
 import {
   feedbackAgentProviderIdToTracking,
@@ -27,7 +36,9 @@ import {
   type TrackingFeedbackRatingWithNone,
   type TrackingProjectKind,
 } from "@open-design/contracts/analytics";
+import { questionsFormTrackingId } from "@open-design/contracts/analytics";
 import {
+  formOptionLabelForValue,
   hasUnterminatedQuestionForm,
   splitOnQuestionForms,
   stripTrailingOpenQuestionForm,
@@ -40,17 +51,31 @@ import {
   type ChatSessionMode,
   type OdCard,
   type OdCardBrandBrowserAssist,
+  type RunContextSelection,
+  type WorkspaceContextItem,
 } from "@open-design/contracts";
 import { OdCardView, type BrandBrowserAssistConfirm } from "./OdCard";
-import { parseSubmittedAnswers } from "./QuestionForm";
+import {
+  normalizeVisualStyleQuestionValue,
+  parseSubmittedAnswers,
+  QuestionFormView,
+  type QuestionFormFileSubmission,
+  type QuestionFormInteraction,
+} from "./QuestionForm";
+import {
+  visualStyleCardsForContext,
+  type VisualStyleContext,
+} from "../runtime/visual-style-catalog";
 import { splitStreamingArtifact, stripArtifact, stripRecoveredHtmlFallbackForDisplay } from "../artifacts/strip";
+import { stripInternalControlMarkers } from "../artifacts/internal-markers";
 import { BRAND_BROWSER_TAB_ID } from "../runtime/brand-browser-bridge";
 import {
   getPluginFolderCandidates,
   type PluginFolderCandidate,
 } from "./design-files/pluginFolders";
 import type { PluginFolderAgentAction } from "./design-files/pluginFolderActions";
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
+import { UserActionCard } from "./UserActionCard";
 import { NextStepActions, type NextStepActionsVariant } from "./NextStepActions";
 import type { DesignToolboxActionId } from "../runtime/design-toolbox";
 import { copyToClipboard } from "../lib/copy-to-clipboard";
@@ -58,8 +83,8 @@ import { useT } from "../i18n";
 import { deriveFileOps, type FileOpEntry } from "../runtime/file-ops";
 import { dedupeToolUsesById } from "../runtime/tool-events";
 import {
+  continuableUnfinishedTodos,
   isTodoWriteToolName,
-  unfinishedTodosFromEvents,
   type TodoItem,
 } from "../runtime/todos";
 import type { Dict } from "../i18n/types";
@@ -68,6 +93,7 @@ import { AgentIcon } from "./AgentIcon";
 import { filterImplicitProducedFiles } from "../produced-files";
 import type {
   AgentEvent,
+  ChatAttachment,
   ChatMessage,
   ChatMessageFeedbackChange,
   ChatMessageFeedbackRating,
@@ -82,13 +108,22 @@ type TranslateFn = (
   vars?: Record<string, string | number>
 ) => string;
 
-export type QuestionFormOpenRequest = {
-  form: QuestionForm;
-  messageId: string;
-  submittedAnswers?: Record<string, string | string[]>;
-};
+// The host reports whether it accepted the answer into a real chat turn. A
+// `false` result means a pre-run guard (for example the AMR balance gate)
+// prevented the send, so the inline form must remain editable.
+export type QuestionFormSubmitHandler = (
+  text: string,
+  attachments?: ChatAttachment[],
+  context?: RunContextSelection,
+  sourceAssistantMessageId?: string,
+  formId?: string,
+) => boolean | void | Promise<boolean | void>;
 
 const DISCORD_INVITE_URL = "https://discord.gg/mHAjSMV6gz";
+const viewedInlineQuestionForms = new Set<string>();
+const QUESTION_FORM_DRAFT_STORAGE_PREFIX = "open-design:question-form-draft:";
+const QUESTION_FORM_SUBMITTED_STORAGE_PREFIX =
+  "open-design:question-form-submitted:";
 
 interface ActionNotice {
   message: string;
@@ -180,6 +215,7 @@ function SkillPluginCandidateCard({
   onRequestOpenFile?: (name: string) => void;
 }) {
   const t = useT();
+  const { workspaceContext } = useProjectCollabContext();
   const [busy, setBusy] = useState<null | "draft" | "contribute">(null);
   const [notice, setNotice] = useState<ActionNotice | null>(null);
   const disabled = !projectId || busy !== null;
@@ -192,7 +228,10 @@ function SkillPluginCandidateCard({
   async function post(path: string, body: Record<string, unknown> = {}) {
     const resp = await fetch(path, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+      },
       body: JSON.stringify(body),
     });
     const data = await resp.json().catch(() => null);
@@ -251,7 +290,7 @@ function SkillPluginCandidateCard({
         { action },
       );
       setNotice({
-        message: `Open Design contribution task started for ${data?.path ?? "the draft"}.`,
+        message: `OpenDesign contribution task started for ${data?.path ?? "the draft"}.`,
       });
     } catch (err) {
       setNotice({ message: err instanceof Error ? err.message : String(err) });
@@ -261,26 +300,26 @@ function SkillPluginCandidateCard({
   }
 
   return (
-    <div className="plugin-action-panel" data-testid={`skill-plugin-candidate-${block.candidateId}`}>
-      <div className="plugin-action-card">
-        <div className="plugin-action-card__body">
-          <div className="plugin-action-card__title">
-            <Icon name="sparkles" size={14} />
-            <span>{block.title}</span>
-          </div>
-          <p className="plugin-action-card__description">
-            {description}
-          </p>
-          <div className="plugin-action-card__actions">
-            <button
-              type="button"
-              className="plugin-action-button plugin-action-button--primary"
-              disabled={disabled}
-              onClick={() => void share("contribute-open-design")}
-            >
-              <Icon name={busy === "contribute" ? "spinner" : "share"} size={13} />
-              <span>{busy === "contribute" ? "Starting..." : t("skillPluginCandidate.contributeToMain")}</span>
-            </button>
+    <div className="plugin-action-candidate" data-testid={`skill-plugin-candidate-${block.candidateId}`}>
+      <UserActionCard
+        dataKind="plugin-suggestion"
+        icon="puzzle"
+        title={block.title}
+        detailsLabel={t("brand.viewDetails")}
+        actions={
+          <button
+            type="button"
+            className="plugin-action-button"
+            disabled={disabled}
+            onClick={() => void share("contribute-open-design")}
+          >
+            <Icon name={busy === "contribute" ? "spinner" : "share"} size={13} />
+            <span>{busy === "contribute" ? "Starting..." : t("skillPluginCandidate.contributeToMain")}</span>
+          </button>
+        }
+        details={
+          <div className="plugin-action-candidate__details">
+            <p className="plugin-action-card__description">{description}</p>
             <button
               type="button"
               className="plugin-action-button"
@@ -291,13 +330,13 @@ function SkillPluginCandidateCard({
               <span>{busy === "draft" ? "Creating..." : t("skillPluginCandidate.createForMe")}</span>
             </button>
           </div>
-          {notice ? (
-            <div className="plugin-action-card__notice" role="status">
-              <ActionNoticeView notice={notice} />
-            </div>
-          ) : null}
-        </div>
-      </div>
+        }
+        status={notice ? (
+          <span role="status">
+            <ActionNoticeView notice={notice} />
+          </span>
+        ) : null}
+      />
     </div>
   );
 }
@@ -310,11 +349,6 @@ interface Props {
   // in-flight Write/Edit's code in real time before the full `tool_use`
   // arrives. Never persisted.
   liveToolInput?: Record<string, { name: string; text: string; seq?: number }>;
-  // ChatPane renders the canonical conversation-level TodoWrite card as its
-  // own row, while this message strips TodoWrite tool groups to avoid a
-  // duplicate per-message card.
-  showConversationTodoCard?: boolean;
-  conversationTodoInput?: unknown | null;
   projectId?: string | null;
   // Analytics context for the assistant_feedback_* events. Defaults
   // applied at the call site keep AssistantMessage usable in tests
@@ -324,6 +358,11 @@ interface Props {
   projectFiles?: ProjectFile[];
   projectMetadata?: ProjectMetadata;
   projectFileNames?: Set<string>;
+  // Daemon-resolved on-disk working directory of the current project
+  // (`GET /api/projects/:id` → `resolvedDir`). Positive-proof anchor for
+  // classifying absolute disk hrefs in chat file links — see
+  // `resolveChatFileLink`.
+  projectResolvedDir?: string | null;
   onRequestOpenFile?: (name: string) => void;
   // Client-side action for a <od-card type="brand-browser-assist"> button: open
   // or focus the Browser tab so the user can clear verification. Excluded from
@@ -335,11 +374,14 @@ interface Props {
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
-  // Click handler for the post-completion "Share to Open Design" submission
+  // Click handler for the post-completion "Share to OpenDesign" submission
   // action. ProjectView wires this to handleSend with the bundled
   // `od-share-to-community` trigger prompt.
   onShareToOpenDesign?: () => void;
   shareToOpenDesignBusy?: boolean;
+  // Consecutive messages from the same assistant share one identity header.
+  // ChatPane sets this false after the first item in a contiguous run.
+  showRole?: boolean;
   // True only for the most recent assistant message.
   isLast?: boolean;
   // Assistant message id whose run-failure error is rendered as ChatPane's
@@ -347,13 +389,10 @@ interface Props {
   // to avoid duplication. Other messages keep their error pill.
   errorCardOwnerId?: string | null;
   // The user message that immediately follows this assistant turn, if any.
-  // Kept for ChatPane compatibility; chat-side question forms now always
-  // render as a compact Questions banner.
+  // Structured form replies are parsed back into the inline answered summary.
   nextUserContent?: string;
-  // Open the right-hand Questions tab. The active discovery form renders
-  // there (Claude-Design style) instead of inline; this assistant message
-  // shows a banner that focuses the tab on click.
-  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
+  onSubmitQuestionForm?: QuestionFormSubmitHandler;
+  questionFormSubmitDisabled?: boolean;
   onContinueRemainingTasks?: (todos: TodoItem[]) => void;
   onForkFromMessage?: () => void;
   forking?: boolean;
@@ -390,8 +429,8 @@ interface Props {
 }
 
 // Props compared by reference to decide whether a memoized AssistantMessage can
-// skip re-rendering. The interaction callbacks (onContinueRemainingTasks,
-// onForkFromMessage, onFeedback, and next-step actions) are DELIBERATELY
+// skip re-rendering. The interaction callbacks (onForkFromMessage, onFeedback,
+// and next-step actions) are DELIBERATELY
 // excluded: ChatPane re-creates them per render, but routes them through a ref
 // so their behavior is reference-stable — comparing them would defeat the memo
 // on every streamed frame. `isLast` is compared, which captures the only state
@@ -402,21 +441,22 @@ interface Props {
 const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   'message',
   'streaming',
-  'showConversationTodoCard',
-  'conversationTodoInput',
   'projectId',
   'projectKind',
   'conversationId',
   'projectFiles',
   'projectMetadata',
   'projectFileNames',
+  'projectResolvedDir',
   'onRequestOpenFile',
   'onRequestPluginFolderAgentAction',
   'activePluginActionPaths',
   'hiddenPluginActionPaths',
+  'showRole',
   'isLast',
   'errorCardOwnerId',
   'nextUserContent',
+  'questionFormSubmitDisabled',
   'forking',
   'shareToOpenDesignBusy',
   'suppressDirectionForms',
@@ -466,14 +506,13 @@ function AssistantMessageImpl({
   message,
   streaming,
   liveToolInput,
-  showConversationTodoCard = false,
-  conversationTodoInput = null,
   projectId = null,
   projectKind = null,
   conversationId = null,
   projectFiles = [],
   projectMetadata,
   projectFileNames,
+  projectResolvedDir,
   onRequestOpenFile,
   onBrandBrowserAssistConfirm,
   onRequestPluginFolderAgentAction,
@@ -481,10 +520,12 @@ function AssistantMessageImpl({
   hiddenPluginActionPaths = new Set(),
   onShareToOpenDesign,
   shareToOpenDesignBusy = false,
+  showRole = true,
   isLast,
   errorCardOwnerId = null,
   nextUserContent,
-  onOpenQuestions,
+  onSubmitQuestionForm,
+  questionFormSubmitDisabled = false,
   onContinueRemainingTasks,
   onForkFromMessage,
   forking = false,
@@ -511,6 +552,21 @@ function AssistantMessageImpl({
   nextStepVariant = 'default',
 }: Props) {
   const t = useT();
+  // A blocked strategy task is a sticky terminal verdict: the daemon rejects
+  // every further continuation with 409 STRATEGY_TASK_STATE_MISMATCH, so the
+  // turn's question forms must stop accepting submissions and explain why.
+  // Prefer the gate's persisted agent-visible text; fall back to the generic
+  // localized notice.
+  const strategyBlockedNotice =
+    message.strategyTaskBlocked === true
+      ? message.strategyTaskBlockedText?.trim() || t("questions.strategyBlockedNotice")
+      : null;
+  // Thinking text renders markdown too — its file links must route in-app
+  // exactly like prose links (ProseBlock builds the same handler itself).
+  const thinkingLinkClick = useMemo(
+    () => chatFileLinkClickHandler(onRequestOpenFile, projectFileNames, projectId, projectResolvedDir),
+    [onRequestOpenFile, projectFileNames, projectId, projectResolvedDir],
+  );
   const events =
     (message.events?.length ?? 0) > 0
       ? message.events!
@@ -518,9 +574,8 @@ function AssistantMessageImpl({
         ? ([{ kind: "text", text: message.content }] satisfies AgentEvent[])
         : [];
   const displayEvents = useMemo(() => dedupeToolUsesById(events), [events]);
-  // ChatPane renders the canonical TodoWrite card as a standalone chat row, so
-  // we strip TodoWrite tool-groups out of the per-message flow to avoid the
-  // same task list rendering twice.
+  // ChatPane renders the canonical TodoWrite card above the composer, so the
+  // per-message flow must not render the same task list again.
   const settledUseIds = useMemo(
     () => new Set(displayEvents.filter((e) => e.kind === "tool_use").map((e) => e.id)),
     [displayEvents],
@@ -536,17 +591,27 @@ function AssistantMessageImpl({
     }
     return out;
   }, [streaming, liveToolInput, settledUseIds]);
-  // Compose the block list, then run the strip/suppress pipeline once.
+  // ChatPane owns one canonical conversation-level Todo card above the
+  // composer. Strip TodoWrite snapshots from individual messages so plans do
+  // not appear twice or jump around as history is virtualized.
   const blocks = useMemo(() => {
     const rawBlocks = [...buildBlocks(displayEvents), ...liveCodeBlocks];
-    return placeConversationTodoCard(
+    return stripTodoToolGroups(
       stripEmptyThinkingBlocks(suppressDuplicateQuestionForms(rawBlocks)),
-      {
-        show: showConversationTodoCard,
-        input: conversationTodoInput,
-      },
     );
-  }, [displayEvents, liveCodeBlocks, showConversationTodoCard, conversationTodoInput]);
+  }, [displayEvents, liveCodeBlocks]);
+  // A task gets one execution-record disclosure. This keeps answer prose
+  // readable when an agent has alternated between many tools, while retaining
+  // every command, file operation, and streaming code preview for review.
+  // TodoWrite has already been removed because ChatPane owns the single
+  // conversation-level progress card outside message history.
+  const { contentBlocks, taskActivity } = useMemo(
+    () => splitTaskActivity(blocks),
+    [blocks],
+  );
+  const hasConclusion = contentBlocks.some(
+    (block) => block.kind === "text" && block.text.trim().length > 0,
+  );
   const fileOps = useMemo(() => deriveFileOps(displayEvents), [displayEvents]);
   const produced = message.producedFiles ?? [];
   const displayedProduced = useMemo(
@@ -574,6 +639,20 @@ function AssistantMessageImpl({
   const turnFileOps = useMemo(
     () => mergeProducedFilesIntoFileOps(fileOps, displayedProduced),
     [displayedProduced, fileOps],
+  );
+  // The result section must contain artifacts, not inputs the agent merely
+  // inspected. Read/delete history remains available in the execution record.
+  const turnArtifactOps = useMemo(
+    () => turnFileOps.filter((entry) => entry.ops.includes('write') || entry.ops.includes('edit')),
+    [turnFileOps],
+  );
+  // Same artifacts-not-inputs rule, applied to the #5517 summary source. Once
+  // the daemon has attached an authoritative produced-file list, the result
+  // card must describe that delivered set rather than every attempted tool
+  // path. Failed attempts remain visible in the execution disclosure.
+  const summaryArtifactOps = useMemo(
+    () => summaryArtifactOpsForProducedFiles(fileOps, produced),
+    [fileOps, produced],
   );
   // The single artifact the "next step" affordance anchors to: prefer the HTML
   // produced by THIS turn; if the final turn emitted none (a summary / continue
@@ -683,7 +762,15 @@ function AssistantMessageImpl({
           }),
     [message.content, nextStepVariant, projectMetadata, streaming],
   );
-  const unfinishedTodos = streaming ? [] : unfinishedTodosFromEvents(events);
+  // A settled `completed` strategy verdict outranks a stale TodoWrite snapshot:
+  // the deliverable was verified on disk, so the footer must not report the
+  // turn as stopped with unfinished work (and must not withhold next steps).
+  const unfinishedTodos = streaming
+    ? []
+    : continuableUnfinishedTodos({ events, strategyTaskDelivered: message.strategyTaskDelivered });
+  const hasTodoSnapshot = events.some(
+    (event) => event.kind === "tool_use" && isTodoWriteToolName(event.name),
+  );
   const runSucceeded =
     !streaming &&
     !hasResultDeliveryFailure &&
@@ -692,18 +779,6 @@ function AssistantMessageImpl({
       (!message.runStatus && !!message.endedAt) ||
       isBrandBrowserAssistMessage
     );
-  const runTerminal =
-    !streaming &&
-    (
-      (message.runStatus ? isTerminalRunStatus(message.runStatus) : false) ||
-      (!message.runStatus && !!message.endedAt) ||
-      isBrandBrowserAssistMessage
-    );
-  const canContinueTodos =
-    !streaming &&
-    !!isLast &&
-    unfinishedTodos.length > 0 &&
-    !!onContinueRemainingTasks;
   const canFork = !streaming && !!onForkFromMessage;
   const copyMarkdown = message.content.trim().length > 0 ? message.content : undefined;
   const showFeedback =
@@ -754,7 +829,7 @@ function AssistantMessageImpl({
               !!onNextStepCreateDesignSystem ||
               (!!nextStepArtifactName && (!!onArtifactShare || !!onArtifactDownload));
   // A clarification turn terminates its run while the emitted <question-form>
-  // is still waiting for the user in the Questions tab. Until the immediate
+  // is still waiting for the user inline. Until the immediate
   // user reply submits that form's answers (skip-all submits through the same
   // path), the turn is mid-handshake, not settled. Suppressed direction forms
   // render as a locked pill the user cannot answer, so they don't hold the
@@ -768,21 +843,36 @@ function AssistantMessageImpl({
         (!nextUserContent || !parseSubmittedAnswers(seg.form, nextUserContent)),
     );
   }, [message.content, nextUserContent, suppressDirectionForms]);
-  // Terminal turns should leave the user with an actionable path, including
-  // canceled/failed/no-artifact turns. Artifact-backed cards still wire Share
-  // and Download to the chosen file; incomplete cards fall back to composer
-  // prompts or toolbox actions. A turn still waiting on question-form answers
-  // is the exception: the next step IS answering the form.
+  // "Next step" is a delivery affordance, not a generic terminal-state card.
+  // Keep it out of pure Q&A, failures/cancellations and incomplete Todo turns;
+  // only a successful turn that actually produced something may surface it.
+  const hasTurnDeliverable =
+    turnArtifactOps.length > 0 ||
+    displayedProduced.length > 0 ||
+    pluginActionFolders.length > 0;
+  // Incomplete brand extraction is an explicit recovery workflow, not a
+  // generic failed turn: its Continue action is the only way to resume the
+  // saved extraction state, even when no artifact was produced yet.
+  const isBrandExtractionRecovery =
+    message.runStatus !== 'canceled' &&
+    (effectiveNextStepVariant === 'brand-extraction-incomplete' ||
+      effectiveNextStepVariant === 'brand-programmatic-incomplete' ||
+      effectiveNextStepVariant === 'brand-ai-incomplete');
   const showNextStepActions =
     !streaming &&
-    runTerminal &&
+    unfinishedTodos.length === 0 &&
     !hasPendingQuestionForm &&
-    ((!!isLast && hasNextStepPrimary) || showOpenDesignSubmission);
+    ((!!isLast && hasNextStepPrimary &&
+      ((runSucceeded && hasTurnDeliverable) || isBrandExtractionRecovery)) ||
+      showOpenDesignSubmission);
   // Pre-output vs working: before any real content (text / thinking / tools /
   // files) the footer shimmers "Preparing…"; the moment content lands it
   // flips to "Working". The elapsed clock stays anchored to the persisted run
   // start so switching project tabs or remounting the message cannot restart it.
-  const hasContent = blocks.some((b) => b.kind !== "status") || turnFileOps.length > 0;
+  const hasContent =
+    contentBlocks.some((b) => b.kind !== "status") ||
+    taskActivity !== null ||
+    turnFileOps.length > 0;
   const preparing = streaming && !hasContent;
   const preparingStatus = preparing && events.some((e) => e.kind === "status" && e.label === "thinking")
     ? "thinking"
@@ -791,21 +881,51 @@ function AssistantMessageImpl({
   // Index of the trailing text block — the streaming caret rides the end of
   // the last prose block so it tracks the final character as tokens arrive.
   let lastTextBlockIndex = -1;
-  for (let i = blocks.length - 1; i >= 0; i--) {
-    if (blocks[i]?.kind === "text") {
+  for (let i = contentBlocks.length - 1; i >= 0; i--) {
+    if (contentBlocks[i]?.kind === "text") {
       lastTextBlockIndex = i;
       break;
     }
   }
 
   return (
-    <div className="msg assistant">
-      <div className="role">
-        <AgentIcon id={roleIconId} size={20} className="role-agent-icon" />
-        <span className="role-name">{roleName}</span>
-      </div>
+    <div
+      id={`assistant-message-${message.id}`}
+      className={`msg assistant${showRole ? '' : ' assistant-continuation'}`}
+      data-assistant-message-id={message.id}
+      tabIndex={-1}
+    >
+      {showRole ? (
+        <div className="role">
+          <AgentIcon id={roleIconId} size={20} className="role-agent-icon" />
+          <span className="role-name">{roleName}</span>
+        </div>
+      ) : null}
       <div className="assistant-flow">
-        {blocks.map((b, i) => {
+        {taskActivity ? (
+          <TaskActivityCard
+            entries={taskActivity.entries}
+            trailingThinking={taskActivity.trailingThinking}
+            hasConclusion={hasConclusion}
+            runStreaming={streaming}
+            runSucceeded={runSucceeded}
+            terminalRunSucceeded={message.runStatus === "succeeded"}
+            runCanceled={message.runStatus === "canceled"}
+            runFailed={
+              !streaming &&
+              (message.runStatus === "failed" ||
+                message.runStatus === "canceled" ||
+                hasResultDeliveryFailure)
+            }
+            startedAt={message.startedAt}
+            endedAt={message.endedAt}
+            durationMs={usage?.durationMs}
+            projectFileNames={projectFileNames}
+            onRequestOpenFile={onRequestOpenFile}
+            onThinkingLinkClick={thinkingLinkClick}
+          />
+        ) : null}
+        {contentBlocks.map((b, i) => {
           if (b.kind === "text")
             return (
               <ProseBlock
@@ -818,11 +938,17 @@ function AssistantMessageImpl({
                 showStreamCursor={streaming && i === lastTextBlockIndex}
                 nextUserContent={nextUserContent}
                 suppressDirectionForms={suppressDirectionForms}
-                onOpenQuestions={onOpenQuestions}
+                onSubmitQuestionForm={onSubmitQuestionForm}
+                questionFormSubmitDisabled={
+                  questionFormSubmitDisabled || strategyBlockedNotice !== null
+                }
+                strategyBlockedNotice={strategyBlockedNotice}
+                visualStyleContext={visualStyleContextForProjectKind(projectKind)}
                 projectId={projectId}
                 conversationId={conversationId}
                 runId={message.runId ?? null}
                 projectFileNames={projectFileNames}
+                projectResolvedDir={projectResolvedDir}
                 onRequestOpenFile={onRequestOpenFile}
                 onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm}
               />
@@ -835,7 +961,8 @@ function AssistantMessageImpl({
               <ThinkingBlock
                 key={i}
                 text={b.text}
-                streaming={streaming && i === blocks.length - 1}
+                streaming={streaming && i === contentBlocks.length - 1}
+                onLinkClick={thinkingLinkClick}
               />
             );
           if (b.kind === "tool-group") {
@@ -851,7 +978,10 @@ function AssistantMessageImpl({
             );
           }
           if (b.kind === "live-tool") {
-            return <LiveCodeBox key={b.id} name={b.name} raw={b.raw} />;
+            // splitTaskActivity moves live code into the same execution
+            // disclosure as settled tools. Keep this branch defensive in
+            // case a future block type opts out of that collection.
+            return null;
           }
           if (b.kind === "plugin-candidate") {
             return (
@@ -890,15 +1020,31 @@ function AssistantMessageImpl({
             ].join(":")}
           />
         ) : null}
-        {turnFileOps.length > 0 ? (
+        {/* #5517 shape: the collapsible tool-op summary lists only the ops the
+            turn actually emitted, and the produced-files list stays its own
+            flat block below it (name / size / Open / Download). Folding the
+            produced files into the summary would hide Download behind a
+            disclosure, so `fileOps` — not `turnFileOps` — feeds this row.
+            Read-only entries are filtered out (they stay in the execution
+            record); the summary lists artifacts, not inspected inputs. */}
+        {summaryArtifactOps.length > 0 ? (
           <FileOpsSummary
-            entries={turnFileOps}
-            streaming={streaming}
+            entries={summaryArtifactOps}
             projectFileNames={projectFileNames}
             onRequestOpenFile={onRequestOpenFile}
           />
         ) : null}
-        {!streaming && turnFileOps.length === 0 && displayedProduced.length > 0 && projectId ? (
+        {/* Exactly one "files from this turn" panel per message. When the
+            turn tracked explicit write/edit tool calls, FileOpsSummary above
+            already covers it; ProducedFiles is the fallback surface (with
+            Download) for turns that produced/recovered files without any
+            tracked tool call. Rendering both at once — which happened when a
+            message had real tool ops AND additional recovered files from its
+            prose — showed two panels with the identical "Files from this
+            turn" header and different file counts, reported as a P0 (Feishu
+            recvqaerXd82bE). See AssistantMessage.test.tsx "never shows the
+            tool-op summary and the produced-files block at once". */}
+        {summaryArtifactOps.length === 0 && !streaming && displayedProduced.length > 0 && projectId ? (
           <ProducedFiles
             files={displayedProduced}
             projectId={projectId}
@@ -938,13 +1084,6 @@ function AssistantMessageImpl({
                 </div>
               ))
           : null}
-        {!streaming && unfinishedTodos.length > 0 ? (
-          <UnfinishedTodosPanel
-            todos={unfinishedTodos}
-            canContinue={canContinueTodos}
-            onContinue={() => onContinueRemainingTasks?.(unfinishedTodos)}
-          />
-        ) : null}
         {showCompletionRow ? (
           <div className="assistant-completion-row">
             {showFeedback ? (
@@ -962,11 +1101,9 @@ function AssistantMessageImpl({
                 hasDesignSystemContext={hasDesignSystemContext}
                 footerProps={{
                   streaming,
-                  startedAt: message.startedAt,
-                  endedAt: message.endedAt,
-                  usage,
                   hasUnfinishedTodos: unfinishedTodos.length > 0,
                   hasEmptyResponse,
+                  canceled: message.runStatus === "canceled",
                   preparing,
                   preparingStatus,
                   copyMarkdown,
@@ -974,22 +1111,29 @@ function AssistantMessageImpl({
                   forking,
                   forceVisible: true,
                   isLast: !!isLast,
+                  hideRunStatus:
+                    taskActivity !== null ||
+                    hasTodoSnapshot ||
+                    message.id === errorCardOwnerId,
                 }}
               />
             ) : (
               <AssistantFooter
                 streaming={streaming}
-                startedAt={message.startedAt}
-                endedAt={message.endedAt}
-                usage={usage}
                 hasUnfinishedTodos={unfinishedTodos.length > 0}
                 hasEmptyResponse={hasEmptyResponse}
+                canceled={message.runStatus === "canceled"}
                 preparing={preparing}
                 preparingStatus={preparingStatus}
                 copyMarkdown={copyMarkdown}
                 onFork={canFork ? onForkFromMessage : undefined}
                 forking={forking}
                 isLast={!!isLast}
+                hideRunStatus={
+                  taskActivity !== null ||
+                  hasTodoSnapshot ||
+                  message.id === errorCardOwnerId
+                }
               />
             )}
           </div>
@@ -1135,6 +1279,60 @@ function mergeProducedFilesIntoFileOps(
     });
   }
   return merged;
+}
+
+function summaryArtifactOpsForProducedFiles(
+  fileOps: FileOpEntry[],
+  produced: ProjectFile[],
+): FileOpEntry[] {
+  const artifactOps = fileOps.filter(
+    (entry) => entry.ops.includes('write') || entry.ops.includes('edit'),
+  );
+  if (artifactOps.length === 0 || produced.length === 0) return artifactOps;
+
+  const unused = new Set(artifactOps);
+  return produced.map((file) => {
+    const candidates = [...unused]
+      .map((entry) => ({ entry, score: producedFileOpMatchScore(entry, file) }))
+      .filter(({ score }) => score > 0)
+      .sort((left, right) => {
+        const statusDelta =
+          Number(right.entry.status === 'done') - Number(left.entry.status === 'done');
+        return statusDelta || right.score - left.score;
+      });
+    const matched = candidates[0]?.entry;
+    if (matched) {
+      unused.delete(matched);
+      return {
+        ...matched,
+        path: file.name,
+        status: 'done' as const,
+      };
+    }
+
+    const fullPath = file.path || file.localPath || file.name;
+    return {
+      path: file.name,
+      fullPath,
+      ops: ['write'],
+      opCounts: { read: 0, write: 1, edit: 0, delete: 0 },
+      total: 1,
+      status: 'done',
+    };
+  });
+}
+
+function producedFileOpMatchScore(entry: FileOpEntry, file: ProjectFile): number {
+  const entryFullPath = normalizeTouchedPath(entry.fullPath);
+  const entryPath = normalizeTouchedPath(entry.path);
+  const filePaths = [file.path, file.localPath, file.name]
+    .filter((path): path is string => Boolean(path))
+    .map(normalizeTouchedPath);
+
+  if (filePaths.includes(entryFullPath)) return 3;
+  if (filePaths.some((path) => entryFullPath.endsWith(`/${path}`))) return 2;
+  if (filePaths.includes(entryPath)) return 1;
+  return 0;
 }
 
 function normalizeTouchedPath(path: string): string {
@@ -1417,11 +1615,9 @@ function appendRoleModel(label: string, model: string | null): string {
 
 interface AssistantFooterProps {
   streaming: boolean;
-  startedAt: number | undefined;
-  endedAt: number | undefined;
-  usage: Extract<AgentEvent, { kind: "usage" }> | undefined;
   hasUnfinishedTodos: boolean;
   hasEmptyResponse: boolean;
+  canceled?: boolean;
   // Pre-output phase: streaming but nothing rendered yet. The label shimmers
   // "Preparing…"; once content lands it flips to "Working".
   preparing?: boolean;
@@ -1431,18 +1627,19 @@ interface AssistantFooterProps {
   forking?: boolean;
   feedbackControls?: ReactNode;
   forceVisible?: boolean;
-  // The most recent assistant reply keeps its footer permanently visible
-  // (not hover-gated), matching Lobe Chat's persistent last-message footer.
+  // Identifies the latest reply for UI/analytics hooks. Completed controls are
+  // hover/focus-gated on pointer devices and remain visible without hover.
   isLast?: boolean;
+  // When the turn has an execution disclosure, its run state lives at the top
+  // of the answer. The footer keeps only actions so run state is not repeated.
+  hideRunStatus?: boolean;
 }
 
 function AssistantFooter({
   streaming,
-  startedAt,
-  endedAt,
-  usage,
   hasUnfinishedTodos,
   hasEmptyResponse,
+  canceled = false,
   preparing = false,
   preparingStatus = "preparing",
   copyMarkdown,
@@ -1451,23 +1648,15 @@ function AssistantFooter({
   feedbackControls,
   forceVisible = false,
   isLast = false,
+  hideRunStatus = false,
 }: AssistantFooterProps) {
   const t = useT();
-  const elapsed = useLiveElapsed(streaming, startedAt, endedAt, usage?.durationMs);
-  const formattedCost =
-    typeof usage?.costUsd === "number" &&
-    Number.isFinite(usage.costUsd) &&
-    usage.costUsd > 0
-      ? usage.costUsd.toFixed(4)
-      : "";
-  const costLabel = formattedCost && formattedCost !== "0.0000" ? ` · $${formattedCost}` : "";
   if (
     !forceVisible &&
     !streaming &&
-    !elapsed &&
-    !usage &&
     !hasUnfinishedTodos &&
     !hasEmptyResponse &&
+    !canceled &&
     !copyMarkdown &&
     !onFork
   )
@@ -1479,27 +1668,26 @@ function AssistantFooter({
       data-streaming={streaming ? "true" : "false"}
       data-last={isLast ? "true" : "false"}
     >
-      <span className="dot" data-active={streaming ? "true" : "false"} />
-      <span className={`assistant-label${streaming && preparing ? " shimmer-text shimmer-prepare" : ""}`}>
-        {streaming
-          ? preparing
-            ? preparingStatus === "thinking"
-              ? t("assistant.statusThinking")
-              : t("assistant.statusPreparing")
-            : t("assistant.workingLabel")
-          : hasEmptyResponse
-          ? t("assistant.emptyResponseLabel")
-          : hasUnfinishedTodos
-          ? t("assistant.unfinishedLabel")
-          : t("assistant.doneLabel")}
-      </span>
-      <span className="assistant-stats">
-        {elapsed}
-        {usage?.outputTokens != null
-          ? ` · ${t("assistant.outTokens", { n: usage.outputTokens })}`
-          : ""}
-        {costLabel}
-      </span>
+      {!hideRunStatus ? (
+        <>
+          <span className="dot" data-active={streaming ? "true" : "false"} />
+          <span className={`assistant-label${streaming && preparing ? " shimmer-text shimmer-prepare" : ""}`}>
+            {streaming
+              ? preparing
+                ? preparingStatus === "thinking"
+                  ? t("assistant.statusThinking")
+                  : t("assistant.statusPreparing")
+                : t("assistant.workingLabel")
+              : hasEmptyResponse
+              ? t("assistant.emptyResponseLabel")
+              : canceled
+              ? t("assistant.canceledLabel")
+              : hasUnfinishedTodos
+              ? t("assistant.unfinishedLabel")
+              : t("assistant.doneLabel")}
+          </span>
+        </>
+      ) : null}
       {copyMarkdown || onFork || feedbackControls ? (
         <span className="assistant-footer-controls">
           {copyMarkdown ? <AssistantMarkdownCopyButton markdown={copyMarkdown} /> : null}
@@ -2045,52 +2233,6 @@ function feedbackReasonLabel(
   return code;
 }
 
-function UnfinishedTodosPanel({
-  todos,
-  canContinue,
-  onContinue,
-}: {
-  todos: TodoItem[];
-  canContinue: boolean;
-  onContinue: () => void;
-}) {
-  const t = useT();
-  const visible = todos.slice(0, 3);
-  const hiddenCount = todos.length - visible.length;
-  return (
-    <div className="unfinished-todos">
-      <div className="unfinished-todos-head">
-        <span className="unfinished-todos-title">
-          {t("assistant.unfinishedSummary", { n: todos.length })}
-        </span>
-        {canContinue ? (
-          <button
-            type="button"
-            className="unfinished-todos-continue"
-            onClick={onContinue}
-          >
-            {t("assistant.continueRemaining")}
-          </button>
-        ) : null}
-      </div>
-      <ul className="unfinished-todos-list">
-        {visible.map((todo, i) => (
-          <li key={`${todo.status}-${todo.content}-${i}`}>
-            {todo.status === "in_progress" && todo.activeForm
-              ? todo.activeForm
-              : todo.content}
-          </li>
-        ))}
-      </ul>
-      {hiddenCount > 0 ? (
-        <div className="unfinished-todos-more">
-          {t("assistant.unfinishedMore", { n: hiddenCount })}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function ProducedFiles({
   files,
   projectId,
@@ -2101,12 +2243,26 @@ function ProducedFiles({
   onRequestOpenFile?: (name: string) => void;
 }) {
   const t = useT();
+  const { workspaceContext } = useProjectCollabContext();
   return (
     <div className="produced-files">
       <div className="produced-files-label">{t("assistant.producedFiles")}</div>
       <div className="produced-files-list">
         {files.map((f) => (
-          <div key={f.name} className="produced-file">
+          <div
+            key={f.name}
+            className={`produced-file${onRequestOpenFile ? " produced-file-openable" : ""}`}
+            role={onRequestOpenFile ? "button" : undefined}
+            tabIndex={onRequestOpenFile ? 0 : undefined}
+            aria-label={onRequestOpenFile ? `${t("assistant.openFile")}: ${f.name}` : undefined}
+            onClick={onRequestOpenFile ? () => onRequestOpenFile(f.name) : undefined}
+            onKeyDown={onRequestOpenFile ? (event) => {
+              if (event.target !== event.currentTarget) return;
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              onRequestOpenFile(f.name);
+            } : undefined}
+          >
             <span className="produced-file-icon" aria-hidden>
               <Icon name={kindIconName(f.kind)} size={14} />
             </span>
@@ -2119,15 +2275,19 @@ function ProducedFiles({
                 <button
                   type="button"
                   className="ghost"
-                  onClick={() => onRequestOpenFile(f.name)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRequestOpenFile(f.name);
+                  }}
                 >
                   {t("assistant.openFile")}
                 </button>
               ) : null}
               <a
                 className="ghost-link"
-                href={projectFileUrl(projectId, f.name)}
+                href={projectFileUrl(projectId, f.name, workspaceContext)}
                 download={f.name}
+                onClick={(event) => event.stopPropagation()}
               >
                 {t("assistant.downloadFile")}
               </a>
@@ -2244,7 +2404,7 @@ function PluginActionPanel({
                   <span>
                     {actionBusy && busyKey === `contribute:${folder.path}`
                       ? "Sending..."
-                      : "Open Design PR"}
+                      : "OpenDesign PR"}
                   </span>
                 </button>
                 {onRequestOpenFile ? (
@@ -2340,11 +2500,50 @@ function pathMatchesFolderFileBasename(
 }
 
 function hasPluginFinalActionHint(content: string): boolean {
-  return /\b(Add to My plugins|Open Design PR|Publish repo|plugin publish|ready to publish|ready to add)\b/i.test(
+  return /\b(Add to My plugins|OpenDesign PR|Publish repo|plugin publish|ready to publish|ready to add)\b/i.test(
     content,
   );
 }
 
+/**
+ * Build the markdown link-click handler that keeps chat file links inside
+ * the app. Current-project files open through the workspace tab opener;
+ * files of another project (e.g. an @-referenced project linked by absolute
+ * disk path or app route) navigate to that project's file route in the same
+ * window; any remaining path-like href is swallowed, because its only
+ * default outcome is a detached Electron window rendering the home screen
+ * (0.14.1 acceptance bug: chatpane file links opened a home-page window). External URLs keep their default behavior.
+ *
+ * The handler is ALWAYS installed: only the workspace-file open action needs
+ * `onRequestOpenFile`. Surfaces that mount the chat without a workspace
+ * opener (e.g. the design-system chat in `DesignSystemFlow`) still must
+ * navigate cross-project targets and swallow unresolvable path-like hrefs —
+ * returning no handler there would reintroduce the detached home window for
+ * every file link.
+ */
+function chatFileLinkClickHandler(
+  onRequestOpenFile: ((name: string) => void) | undefined,
+  projectFileNames: ReadonlySet<string> | undefined,
+  projectId: string | null | undefined,
+  projectResolvedDir?: string | null,
+): MarkdownLinkClickHandler {
+  return (href, event) => {
+    const target = resolveChatFileLink(href, projectFileNames, projectId, projectResolvedDir);
+    if (target) {
+      event.preventDefault();
+      if (target.kind === "workspace-file") {
+        // Without a workspace opener the click stays swallowed: there is no
+        // pane that can preview the current project's file on this surface,
+        // and the default fallback would only open the home-page window.
+        onRequestOpenFile?.(target.filePath);
+      } else {
+        navigate({ kind: "project", projectId: target.projectId, fileName: target.filePath });
+      }
+      return;
+    }
+    if (isPathLikeChatHref(href)) event.preventDefault();
+  };
+}
 
 function ProseBlock({
   text,
@@ -2355,11 +2554,15 @@ function ProseBlock({
   showStreamCursor,
   nextUserContent,
   suppressDirectionForms,
-  onOpenQuestions,
+  onSubmitQuestionForm,
+  questionFormSubmitDisabled,
+  strategyBlockedNotice = null,
+  visualStyleContext,
   projectId,
   conversationId,
   runId,
   projectFileNames,
+  projectResolvedDir,
   onRequestOpenFile,
   onBrandBrowserAssistConfirm,
 }: {
@@ -2375,19 +2578,28 @@ function ProseBlock({
   conversationId?: string | null;
   runId?: string | null;
   projectFileNames?: Set<string>;
-  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
+  projectResolvedDir?: string | null;
+  onSubmitQuestionForm?: QuestionFormSubmitHandler;
+  questionFormSubmitDisabled: boolean;
+  /** Localized blocked-task notice; non-null terminates form interaction. */
+  strategyBlockedNotice?: string | null;
+  visualStyleContext?: VisualStyleContext;
   onRequestOpenFile?: (name: string) => void;
   onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
 }) {
   const t = useT();
   const cleaned = useMemo(() => {
-    const stripped = stripArtifact(text);
-    return hideRecoveredHtmlFallback ? stripRecoveredHtmlFallbackForDisplay(stripped, text) : stripped;
-  }, [hideRecoveredHtmlFallback, text]);
+    // Internal control markers come off first: they are daemon plumbing that
+    // never belongs in prose, and a leaked one would otherwise reach Markdown.
+    const withoutMarkers = stripInternalControlMarkers(text, { streaming });
+    const stripped = stripArtifact(withoutMarkers);
+    return hideRecoveredHtmlFallback
+      ? stripRecoveredHtmlFallbackForDisplay(stripped, withoutMarkers)
+      : stripped;
+  }, [hideRecoveredHtmlFallback, streaming, text]);
   // While the latest turn is still streaming a not-yet-closed question-form,
   // drop the partial `<question-form>{…` markup from the prose so the chat
-  // doesn't flash raw JSON; we surface a banner for it instead. The actual
-  // form streams into the right-hand Questions tab. A not-yet-closed
+  // doesn't flash raw JSON; an inline loading frame takes its place. A not-yet-closed
   // `<od-card>{…` block is stripped the same way so its raw JSON doesn't flash
   // before the close tag arrives (the card renders inline once complete).
   const { text: visibleText, hadOpenForm } = useMemo(() => {
@@ -2406,19 +2618,14 @@ function ProseBlock({
     [visibleText, streaming]
   );
   const segments = useMemo(() => splitOnQuestionForms(head), [head]);
-  // Route relative file-link clicks (`template.html`, `subdir/hero.html`)
-  // through the workspace tab opener. Without this, Electron's window-open
-  // handler creates a new app window whose relative href can't resolve, and
-  // the user lands on the home screen — the file is never previewed.
-  const onLinkClick = useMemo<MarkdownLinkClickHandler | undefined>(() => {
-    if (!onRequestOpenFile) return undefined;
-    return (href, event) => {
-      const path = asInProjectFilePath(href, projectFileNames, projectId);
-      if (!path) return;
-      event.preventDefault();
-      onRequestOpenFile(path);
-    };
-  }, [onRequestOpenFile, projectFileNames, projectId]);
+  // Route file-link clicks away from the default target="_blank" behavior.
+  // Without this, Electron's window-open handler creates a new app window
+  // whose href can't resolve, and the user lands on the home screen — the
+  // file is never previewed (issue #1239 and the 0.14.1 chatpane file-link acceptance bug).
+  const onLinkClick = useMemo<MarkdownLinkClickHandler>(
+    () => chatFileLinkClickHandler(onRequestOpenFile, projectFileNames, projectId, projectResolvedDir),
+    [onRequestOpenFile, projectFileNames, projectId, projectResolvedDir],
+  );
   // Each text segment is further split on `<od-card>` blocks (so memory cards
   // render inline, composing with the surrounding question-form handling) and
   // then on `<system-reminder>` blocks (so those render as their own
@@ -2494,58 +2701,27 @@ function ProseBlock({
             key={seg.key}
             form={seg.form}
             assistantMessageId={assistantMessageId}
+            projectId={projectId}
+            conversationId={conversationId}
             nextUserContent={nextUserContent}
-            onOpenQuestions={onOpenQuestions}
+            interactive={isLastAssistant}
+            onSubmit={onSubmitQuestionForm}
+            submitDisabled={questionFormSubmitDisabled}
+            strategyBlockedNotice={strategyBlockedNotice}
+            visualStyleContext={visualStyleContext}
           />
         );
       })}
       {live ? (
         <StreamingCodeCard
+          icon="file-code"
           titleLabel={t("tool.write")}
           metaLabel={live.title || live.identifier || undefined}
           code={live.content}
         />
       ) : null}
-      {hadOpenForm ? <QuestionsBanner onOpen={onOpenQuestions} /> : null}
+      {hadOpenForm ? <QuestionFormLoading /> : null}
     </div>
-  );
-}
-
-// Chat-side banner that points to the right-hand Questions tab where discovery
-// forms live. The chat column always stays compact: no inline form preview,
-// answered or not.
-function QuestionsBanner({
-  onOpen,
-  answered = false,
-}: {
-  onOpen?: () => void;
-  answered?: boolean;
-}) {
-  const t = useT();
-  // Once the form has been answered there is nothing left to open, so the
-  // banner becomes a non-interactive "done" marker: no chevron affordance, no
-  // click target, muted styling.
-  return (
-    <button
-      type="button"
-      className={`questions-banner${answered ? " questions-banner-answered" : ""}`}
-      data-testid="questions-banner"
-      data-answered={answered ? "true" : undefined}
-      disabled={answered}
-      onClick={answered ? undefined : () => onOpen?.()}
-    >
-      <span className="questions-banner-icon" aria-hidden>
-        <Icon name={answered ? "check" : "help-circle"} size={15} />
-      </span>
-      <span className="questions-banner-label">
-        {answered ? t("questions.bannerAnswered") : t("questions.banner")}
-      </span>
-      {answered ? null : (
-        <span className="questions-banner-cta" aria-hidden>
-          <Icon name="chevron-right" size={14} />
-        </span>
-      )}
-    </button>
   );
 }
 
@@ -2558,32 +2734,674 @@ function isDirectionForm(form: QuestionForm): boolean {
 function FormBlock({
   form,
   assistantMessageId,
+  projectId,
+  conversationId,
   nextUserContent,
-  onOpenQuestions,
+  interactive,
+  onSubmit,
+  submitDisabled,
+  strategyBlockedNotice = null,
+  visualStyleContext,
 }: {
   form: QuestionForm;
   assistantMessageId: string;
+  projectId?: string | null;
+  conversationId?: string | null;
   nextUserContent?: string;
-  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
+  interactive: boolean;
+  onSubmit?: QuestionFormSubmitHandler;
+  submitDisabled: boolean;
+  /** Localized blocked-task notice rendered under the disabled form. */
+  strategyBlockedNotice?: string | null;
+  visualStyleContext?: VisualStyleContext;
 }) {
-  // A "[form answers …]" reply parked right after this message means the form
-  // was already submitted; the banner then renders as an answered/done state.
+  const t = useT();
+  const analytics = useAnalytics();
+  const { workspaceContext } = useProjectCollabContext();
+  const formKey =
+    projectId && conversationId
+      ? `${projectId}:${conversationId}:${assistantMessageId}:${form.id}`
+      : null;
+  const [draftAnswers, setDraftAnswers] = useState<
+    Record<string, string | string[]> | undefined
+  >(() => readInlineQuestionFormDraft(formKey));
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(() =>
+    readInlineQuestionFormSubmitted(formKey),
+  );
+  const submittingRef = useRef(submitting);
+  const pendingUploadCleanupRef = useRef<ChatAttachment[]>([]);
   const submittedFromHistory = useMemo(
     () => (nextUserContent ? parseSubmittedAnswers(form, nextUserContent) : null),
     [form, nextUserContent],
   );
-  return (
-    <QuestionsBanner
-      answered={submittedFromHistory != null}
-      onOpen={() => {
-        onOpenQuestions?.({
-          form,
-          messageId: assistantMessageId,
-          submittedAnswers: submittedFromHistory ?? undefined,
-        });
-      }}
-    />
+  const submittedSummary = useMemo(() => {
+    const items: Array<{ label: string; value: string }> = [];
+    const visualItems: Array<{
+      label: string;
+      cards: Array<{ title: string; src: string }>;
+    }> = [];
+    if (!submittedFromHistory) return { items, visualItems };
+    for (const question of form.questions) {
+      const raw = submittedFromHistory[question.id];
+      const values = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
+      const labels = values
+        .filter((value) => value.trim().length > 0)
+        .map((value) => formOptionLabelForValue(question, value));
+      if (labels.length === 0) continue;
+
+      const visualStyleCards =
+        visualStyleContext &&
+        question.id === "tone" &&
+        (question.type === "checkbox" || question.type === "radio") &&
+        question.options
+          ? visualStyleCardsForContext(visualStyleContext)
+          : [];
+      const normalizedVisualValues =
+        visualStyleCards.length > 0 && visualStyleContext
+          ? values.map((value) =>
+              normalizeVisualStyleQuestionValue(question, value, visualStyleContext),
+            )
+          : values;
+      const visualCards = visualStyleCards.flatMap((card) =>
+        normalizedVisualValues.includes(card.value) && card.preview
+          ? [{ title: card.title, src: card.preview.src }]
+          : [],
+      );
+      if (visualCards.length > 0) {
+        visualItems.push({ label: question.label, cards: visualCards });
+        const selectedLabelsWithoutPreview = normalizedVisualValues
+          .filter(
+            (value) =>
+              !visualStyleCards.some((card) => card.value === value && card.preview),
+          )
+          .map((value) => {
+            const card = visualStyleCards.find((candidate) => candidate.value === value);
+            return card?.title ?? formOptionLabelForValue(question, value);
+          });
+        if (selectedLabelsWithoutPreview.length > 0) {
+          items.push({
+            label: question.label,
+            value: selectedLabelsWithoutPreview.join(", "),
+          });
+        }
+        continue;
+      }
+      items.push({ label: question.label, value: labels.join(", ") });
+    }
+    return { items, visualItems };
+  }, [form, submittedFromHistory, visualStyleContext]);
+  useEffect(() => {
+    const syncSubmitLock = () => {
+      const outstanding = readInlineQuestionFormSubmitted(formKey);
+      submittingRef.current = outstanding;
+      setSubmitting(outstanding);
+    };
+    setDraftAnswers(readInlineQuestionFormDraft(formKey));
+    setUploadError(null);
+    syncSubmitLock();
+    pendingUploadCleanupRef.current = [];
+    // A submit started before this mount can still be refused after it, and
+    // that refusal is the user's only way back into the form.
+    return subscribeInlineQuestionFormSubmitted(formKey, syncSubmitLock);
+  }, [formKey]);
+  useEffect(() => {
+    if (!submittedFromHistory) return;
+    clearInlineQuestionFormDraft(formKey);
+    clearInlineQuestionFormSubmitted(formKey);
+    setDraftAnswers(undefined);
+  }, [formKey, submittedFromHistory]);
+  // The answer landing in history is what ends the submission; a busy
+  // conversation only hides the form for as long as it stays busy, so it must
+  // not be mistaken for the send having been consumed.
+  useEffect(() => {
+    if (!submitting || !submittedFromHistory) return;
+    submittingRef.current = false;
+    setSubmitting(false);
+  }, [submittedFromHistory, submitting]);
+  const updateDraftAnswers = useCallback(
+    (answers: Record<string, string | string[]>) => {
+      setUploadError(null);
+      setDraftAnswers(answers);
+      writeInlineQuestionFormDraft(formKey, answers);
+    },
+    [formKey],
   );
+  useEffect(() => {
+    if (submittedFromHistory || !projectId) return;
+    const occurrenceKey = `${projectId}:${assistantMessageId}:${form.id}`;
+    if (viewedInlineQuestionForms.has(occurrenceKey)) return;
+    viewedInlineQuestionForms.add(occurrenceKey);
+    trackQuestionsFormSurfaceView(analytics.track, {
+      page_name: "chat_panel",
+      area: "questions_form",
+      project_id: projectId,
+      form_id: questionsFormTrackingId(form.id),
+    });
+  }, [analytics.track, assistantMessageId, form.id, projectId, submittedFromHistory]);
+
+  const handleAnswerChange = useCallback(
+    (questionId: string, value: string | string[]) => {
+      if (!projectId || typeof value !== "string" || value.length === 0) return;
+      const element =
+        questionId === "taskType"
+          ? ("task_type_chip" as const)
+          : questionId === "brand"
+            ? ("brand_bg_chip" as const)
+            : null;
+      if (!element) return;
+      trackQuestionsFormClick(analytics.track, {
+        page_name: "chat_panel",
+        area: "questions_form",
+        element,
+        chip_id: questionsFormTrackingId(value),
+        form_id: questionsFormTrackingId(form.id),
+        project_id: projectId,
+      });
+    },
+    [analytics.track, form.id, projectId],
+  );
+
+  const handleInteraction = useCallback(
+    (interaction: QuestionFormInteraction) => {
+      if (!projectId) return;
+      trackQuestionsFormClick(analytics.track, {
+        page_name: "chat_panel",
+        area: "questions_form",
+        element: interaction.element,
+        form_id: questionsFormTrackingId(form.id),
+        question_id: questionsFormTrackingId(interaction.questionId),
+        project_id: projectId,
+        ...("styleId" in interaction
+          ? { style_id: questionsFormTrackingId(interaction.styleId) }
+          : {}),
+        ...("styleContext" in interaction
+          ? { style_context: interaction.styleContext }
+          : {}),
+        ...("source" in interaction
+          ? { interaction_source: interaction.source }
+          : {}),
+        ...("categoryId" in interaction
+          ? { category_id: interaction.categoryId }
+          : {}),
+        ...("stepIndex" in interaction
+          ? {
+              step_index: interaction.stepIndex,
+              step_count: interaction.stepCount,
+            }
+          : {}),
+      });
+    },
+    [analytics.track, form.id, projectId],
+  );
+
+  const rollbackPendingUploads = useCallback(async () => {
+    const pending = pendingUploadCleanupRef.current;
+    if (pending.length === 0) return true;
+    if (!projectId) return false;
+    const deleted = await Promise.all(
+      pending.map((attachment) =>
+        deleteProjectFile(projectId, attachment.path, workspaceContext),
+      ),
+    );
+    pendingUploadCleanupRef.current = pending.filter((_, index) => !deleted[index]);
+    return pendingUploadCleanupRef.current.length === 0;
+  }, [projectId, workspaceContext]);
+
+  const handleSubmit = useCallback(
+    async (
+      text: string,
+      answers: Record<string, string | string[]>,
+      source: "submit" | "skip" | "auto",
+      fileSubmissions: QuestionFormFileSubmission[] = [],
+    ) => {
+      if (submittingRef.current) return;
+      // The occurrence is locked the moment the answer leaves the form, not
+      // when the host finally settles it. Every await below — rolling back a
+      // previous upload, uploading this answer's files, and above all the
+      // host's own send (which may sit in a pre-run gate or park in a busy
+      // conversation's queue) — is a window the user can leave the project
+      // through. A lock written only after those awaits is precisely the lock
+      // the remount rebuilds as "never submitted".
+      const beginSubmission = () => {
+        markInlineQuestionFormSubmitted(formKey);
+        submittingRef.current = true;
+        setSubmitting(true);
+      };
+      const releaseSubmitLock = () => {
+        clearInlineQuestionFormSubmitted(formKey);
+        submittingRef.current = false;
+        setSubmitting(false);
+      };
+      beginSubmission();
+      if (
+        pendingUploadCleanupRef.current.length > 0 &&
+        !(await rollbackPendingUploads())
+      ) {
+        setUploadError(
+          t("questions.uploadFailed", { failed: Math.max(1, pendingUploadCleanupRef.current.length) }),
+        );
+        releaseSubmitLock();
+        return;
+      }
+      let attachments: ChatAttachment[] = [];
+      let context: RunContextSelection | undefined;
+      let submittedText = text;
+      if (fileSubmissions.length > 0) {
+        if (!projectId) {
+          setUploadError(t("questions.uploadNeedsProject"));
+          releaseSubmitLock();
+          return;
+        }
+        const flatFiles = fileSubmissions.flatMap((submission) =>
+          submission.files.map((file) => ({
+            file,
+            questionLabel: submission.questionLabel,
+          })),
+        );
+        setUploadError(null);
+        const result = await uploadProjectFiles(
+          projectId,
+          flatFiles.map((entry) => entry.file),
+          undefined,
+          workspaceContext,
+        ).catch((error) => ({
+          uploaded: [],
+          failed: flatFiles.map((entry) => ({
+            name: entry.file.name,
+            error: error instanceof Error ? error.message : String(error),
+          })),
+          error: error instanceof Error ? error.message : String(error),
+        }));
+        if (result.failed.length > 0 || result.uploaded.length !== flatFiles.length) {
+          pendingUploadCleanupRef.current = result.uploaded;
+          await rollbackPendingUploads();
+          const detail = result.error ? ` (${result.error})` : "";
+          setUploadError(t("questions.uploadFailed", { failed: flatFiles.length }) + detail);
+          releaseSubmitLock();
+          return;
+        }
+        attachments = result.uploaded.map((attachment, index) => ({
+          ...attachment,
+          order: index,
+        }));
+        context = {
+          workspaceItems: workspaceItemsForInlineQuestionUploads(attachments),
+        };
+        submittedText = appendInlineQuestionUploadSummary(
+          submittedText,
+          fileSubmissions,
+          attachments,
+        );
+      }
+      if (projectId) {
+        const answeredCount = form.questions.filter((question) => {
+          const value = answers[question.id];
+          return Array.isArray(value)
+            ? value.length > 0
+            : typeof value === "string" && value.trim().length > 0;
+        }).length;
+        trackQuestionsFormClick(analytics.track, {
+          page_name: "chat_panel",
+          area: "questions_form",
+          element: source === "submit" ? "submit" : "skip",
+          ...(source === "skip"
+            ? { skip_source: "button" as const }
+            : source === "auto"
+              ? { skip_source: "countdown" as const }
+              : {}),
+          answered_count: answeredCount,
+          skipped_count: form.questions.length - answeredCount,
+          form_id: questionsFormTrackingId(form.id),
+          project_id: projectId,
+        });
+      }
+      const rejectSubmission = async () => {
+        if (attachments.length > 0) {
+          pendingUploadCleanupRef.current = attachments;
+          if (!(await rollbackPendingUploads())) {
+            setUploadError(
+              t("questions.uploadFailed", {
+                failed: Math.max(1, pendingUploadCleanupRef.current.length),
+              }),
+            );
+          }
+        }
+        releaseSubmitLock();
+      };
+      const acceptSubmission = () => {
+        clearInlineQuestionFormDraft(formKey);
+        setDraftAnswers(undefined);
+      };
+      let submitOutcome: boolean | void | Promise<boolean | void>;
+      try {
+        submitOutcome =
+          attachments.length > 0 || context
+            ? onSubmit?.(submittedText, attachments, context, undefined, form.id)
+            : onSubmit?.(submittedText, undefined, undefined, undefined, form.id);
+      } catch {
+        void rejectSubmission();
+        return;
+      }
+      void Promise.resolve(submitOutcome).then(
+        (started) => {
+          if (started === false) {
+            void rejectSubmission();
+            return;
+          }
+          acceptSubmission();
+        },
+        () => void rejectSubmission(),
+      );
+    },
+    [analytics.track, form, formKey, onSubmit, projectId, rollbackPendingUploads, t],
+  );
+
+  if (submittedFromHistory) {
+    return (
+      <div
+        className="question-form-summary"
+        data-testid="question-form-summary"
+        data-form-id={form.id}
+        data-message-id={assistantMessageId}
+      >
+        <span className="question-form-summary-icon" aria-hidden>
+          <Icon name="check" size={14} />
+        </span>
+        <div className="question-form-summary-body">
+          <div className="question-form-summary-title">{t("questions.bannerAnswered")}</div>
+          {submittedSummary.items.length > 0 || submittedSummary.visualItems.length > 0 ? (
+            <>
+              {submittedSummary.visualItems.map((item) => (
+                <div key={item.label} className="question-form-summary-visuals">
+                  <span className="question-form-summary-visual-label">{item.label}</span>
+                  <div className="question-form-summary-visual-cards">
+                    {item.cards.map((card) => (
+                      <figure key={card.src} className="question-form-summary-visual-card">
+                        <img src={card.src} alt={`${item.label}: ${card.title}`} />
+                        <figcaption>{card.title}</figcaption>
+                      </figure>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {submittedSummary.items.length > 0 ? (
+                <div className="question-form-summary-items">
+                  {submittedSummary.items.map((item) => (
+                    <span key={item.label} className="question-form-summary-item">
+                      <span>{item.label}</span>
+                      <strong>{item.value}</strong>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <div className="question-form-summary-empty">{t("qf.lockedSubmitted")}</div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <QuestionFormView
+        form={form}
+        interactive={interactive}
+        draftAnswers={draftAnswers}
+        onDraftChange={updateDraftAnswers}
+        onAnswerChange={handleAnswerChange}
+        onInteraction={handleInteraction}
+        onSubmit={onSubmit ? (...args) => void handleSubmit(...args) : undefined}
+        submitDisabled={submitDisabled || submitting}
+        visualStyleContext={visualStyleContext}
+        autoContinueAfterTimeout
+      />
+      {strategyBlockedNotice ? (
+        <div
+          className="qf-blocked-notice"
+          role="status"
+          data-testid="question-form-blocked-notice"
+        >
+          {strategyBlockedNotice}
+        </div>
+      ) : null}
+      {uploadError ? (
+        <div className="qf-upload-error" role="alert">
+          {uploadError}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function workspaceItemsForInlineQuestionUploads(
+  attachments: ChatAttachment[],
+): WorkspaceContextItem[] {
+  return attachments.map((attachment) => ({
+    id: `file:${attachment.path}`,
+    kind: "file",
+    label:
+      attachment.path.split("/").filter(Boolean).pop() || attachment.name,
+    path: attachment.path,
+  }));
+}
+
+function appendInlineQuestionUploadSummary(
+  text: string,
+  fileSubmissions: QuestionFormFileSubmission[],
+  attachments: ChatAttachment[],
+): string {
+  if (attachments.length === 0) return text;
+  const labelsByFileName = new Map<string, string[]>();
+  for (const submission of fileSubmissions) {
+    for (const file of submission.files) {
+      const labels = labelsByFileName.get(file.name) ?? [];
+      labels.push(submission.questionLabel);
+      labelsByFileName.set(file.name, labels);
+    }
+  }
+  const lines = ["[uploaded design files]"];
+  attachments.forEach((attachment, index) => {
+    const labels = labelsByFileName.get(attachment.name) ?? [];
+    const labelSuffix = labels.length > 0 ? ` (for: ${labels.join(", ")})` : "";
+    lines.push(`- Uploaded file ${index + 1}: ${attachment.name} -> ${attachment.path}${labelSuffix}`);
+  });
+  return `${text}\n\n${lines.join("\n")}`;
+}
+
+function inlineQuestionFormDraftStorageKey(
+  formKey: string | null,
+): string | null {
+  return formKey ? `${QUESTION_FORM_DRAFT_STORAGE_PREFIX}${formKey}` : null;
+}
+
+function readInlineQuestionFormDraft(
+  formKey: string | null,
+): Record<string, string | string[]> | undefined {
+  const key = inlineQuestionFormDraftStorageKey(formKey);
+  if (!key || typeof window === "undefined") return undefined;
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    if (!raw) return undefined;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return undefined;
+    }
+    const answers: Record<string, string | string[]> = {};
+    for (const [id, value] of Object.entries(parsed)) {
+      if (typeof value === "string") {
+        answers[id] = value;
+      } else if (
+        Array.isArray(value) &&
+        value.every((item) => typeof item === "string")
+      ) {
+        answers[id] = value;
+      }
+    }
+    return Object.keys(answers).length > 0 ? answers : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeInlineQuestionFormDraft(
+  formKey: string | null,
+  answers: Record<string, string | string[]>,
+): void {
+  const key = inlineQuestionFormDraftStorageKey(formKey);
+  if (!key || typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify(answers));
+  } catch {
+    // Form input remains usable when browser storage is unavailable.
+  }
+}
+
+function clearInlineQuestionFormDraft(formKey: string | null): void {
+  const key = inlineQuestionFormDraftStorageKey(formKey);
+  if (!key || typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(key);
+  } catch {
+    // The submitted answer message remains authoritative.
+  }
+}
+
+function inlineQuestionFormSubmittedStorageKey(
+  formKey: string | null,
+): string | null {
+  return formKey ? `${QUESTION_FORM_SUBMITTED_STORAGE_PREFIX}${formKey}` : null;
+}
+
+/**
+ * One form occurrence answers exactly once.
+ *
+ * A submit lock that lives only in the mounted component is not a lock: every
+ * remount — leaving and re-entering the project, a reload, a conversation
+ * switch, a virtualized row recycling — rebuilds it as "never submitted" while
+ * the first answer is still being persisted or is still parked in the busy
+ * conversation's queue. The occurrence key (project + conversation + assistant
+ * message + form id) is the identity the lock belongs to, so it is held here
+ * instead of in the component, taken the moment the answer leaves the form,
+ * and released only by an explicit submit failure or by the answer surfacing
+ * in history.
+ *
+ * Because the submit that takes the lock can outlive the component that
+ * started it, a release has to reach whichever form is mounted by the time it
+ * lands — hence the listeners, without which an answer refused after the user
+ * navigated away would leave the form locked with no way back.
+ *
+ * Session storage is what carries the lock, so it also survives a reload. When
+ * a context denies storage (a private window, an embedded frame) the write
+ * throws and the lock falls back to a page-lived set: without it every remount
+ * there would read "never submitted" and hand those users the duplicate submit
+ * back, which is the whole defect.
+ */
+const deniedStorageInlineQuestionFormSubmissions = new Set<string>();
+const inlineQuestionFormSubmissionListeners = new Map<string, Set<() => void>>();
+
+function readInlineQuestionFormSubmitted(formKey: string | null): boolean {
+  const key = inlineQuestionFormSubmittedStorageKey(formKey);
+  if (!key) return false;
+  if (deniedStorageInlineQuestionFormSubmissions.has(key)) return true;
+  if (typeof window === "undefined") return false;
+  try {
+    return window.sessionStorage.getItem(key) !== null;
+  } catch {
+    return false;
+  }
+}
+
+function subscribeInlineQuestionFormSubmitted(
+  formKey: string | null,
+  listener: () => void,
+): () => void {
+  const key = inlineQuestionFormSubmittedStorageKey(formKey);
+  if (!key) return () => {};
+  const listeners = inlineQuestionFormSubmissionListeners.get(key) ?? new Set();
+  listeners.add(listener);
+  inlineQuestionFormSubmissionListeners.set(key, listeners);
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0) {
+      inlineQuestionFormSubmissionListeners.delete(key);
+    }
+  };
+}
+
+function notifyInlineQuestionFormSubmitted(key: string): void {
+  const listeners = inlineQuestionFormSubmissionListeners.get(key);
+  if (!listeners) return;
+  for (const listener of [...listeners]) listener();
+}
+
+function markInlineQuestionFormSubmitted(formKey: string | null): void {
+  const key = inlineQuestionFormSubmittedStorageKey(formKey);
+  if (!key) return;
+  if (typeof window !== "undefined") {
+    try {
+      window.sessionStorage.setItem(key, "1");
+    } catch {
+      // Denied storage costs the lock its reload survival, not the lock.
+      deniedStorageInlineQuestionFormSubmissions.add(key);
+    }
+  }
+  notifyInlineQuestionFormSubmitted(key);
+}
+
+function clearInlineQuestionFormSubmitted(formKey: string | null): void {
+  const key = inlineQuestionFormSubmittedStorageKey(formKey);
+  if (!key) return;
+  deniedStorageInlineQuestionFormSubmissions.delete(key);
+  if (typeof window !== "undefined") {
+    try {
+      window.sessionStorage.removeItem(key);
+    } catch {
+      // A stale stored lock only blocks re-answering one already-sent form,
+      // and the denied-storage fallback has already released it.
+    }
+  }
+  notifyInlineQuestionFormSubmitted(key);
+}
+
+function QuestionFormLoading() {
+  return (
+    <div className="question-form question-form-loading" aria-hidden data-testid="question-form-loading">
+      <div className="question-form-head">
+        <span className="question-form-icon">?</span>
+        <div className="question-form-loading-lines">
+          <span />
+          <span />
+        </div>
+      </div>
+      <div className="question-form-loading-body">
+        <span />
+        <span />
+        <span />
+      </div>
+    </div>
+  );
+}
+
+function visualStyleContextForProjectKind(
+  projectKind: TrackingProjectKind | null,
+): VisualStyleContext | undefined {
+  if (projectKind === "slide_deck") return "deck";
+  if (
+    projectKind === "prototype" ||
+    projectKind === "web_clone" ||
+    projectKind === "wireframe" ||
+    projectKind === "mobile" ||
+    projectKind === "live_artifact"
+  ) {
+    return "prototype";
+  }
+  if (projectKind === "document") return "document";
+  if (projectKind === "image") return "image";
+  if (projectKind === "video" || projectKind === "hyperframes") return "video";
+  return undefined;
 }
 
 function SystemReminderBlock({
@@ -2628,7 +3446,15 @@ function SystemReminderBlock({
   );
 }
 
-function ThinkingBlock({ text, streaming }: { text: string; streaming?: boolean }) {
+function ThinkingBlock({
+  text,
+  streaming,
+  onLinkClick,
+}: {
+  text: string;
+  streaming?: boolean;
+  onLinkClick?: MarkdownLinkClickHandler;
+}) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const isThinking = streaming === true;
@@ -2670,7 +3496,7 @@ function ThinkingBlock({ text, streaming }: { text: string; streaming?: boolean 
       </button>
       <div className={`accordion-collapsible${open ? ' open' : ''}`}>
         <div className="accordion-collapsible-inner">
-          <div className="thinking-body">{renderMarkdown(text)}</div>
+          <div className="thinking-body">{renderMarkdown(text, { onLinkClick })}</div>
         </div>
       </div>
     </div>
@@ -2686,12 +3512,13 @@ function StatusPill({
 }) {
   const variant =
     label === "error" ? "error" : label === "warning" ? "warning" : undefined;
+  const displayLabel = label === "context_compaction" ? "compacting context" : label;
   return (
     <div
       className={`status-pill${variant ? ` is-${variant}` : ""}`}
       data-status={label}
     >
-      <span className="status-label">{label}</span>
+      <span className="status-label">{displayLabel}</span>
       {detail ? <span className="status-detail">{renderStatusDetail(detail)}</span> : null}
     </div>
   );
@@ -2861,10 +3688,12 @@ function extractStreamingJsonString(raw: string, field: string): string | null {
 // normal card once the write/artifact completes. Shared by the tool-call
 // path (LiveCodeBox) and the streaming-artifact path (ProseBlock).
 function StreamingCodeCard({
+  icon,
   titleLabel,
   metaLabel,
   code,
 }: {
+  icon: IconName;
   titleLabel: string;
   metaLabel?: string;
   code: string;
@@ -2878,8 +3707,8 @@ function StreamingCodeCard({
   return (
     <div className="op-card op-file live-code-box">
       <div className="op-card-head live-code-head">
-        <span className="action-card-status op-status-running" aria-hidden>
-          <Icon name="spinner" size={14} />
+        <span className="op-status op-status-category op-status-running" aria-hidden>
+          <Icon name={icon} size={14} />
         </span>
         <span className="op-title shimmer-text">{titleLabel}</span>
         {metaLabel ? <span className="op-meta">{metaLabel}</span> : null}
@@ -2914,6 +3743,7 @@ function LiveCodeBox({ name, raw }: { name: string; raw: string }) {
   const isEdit = /edit/i.test(name);
   return (
     <StreamingCodeCard
+      icon={isEdit ? "pencil" : "file-code"}
       titleLabel={isEdit ? t("tool.edit") : t("tool.write")}
       metaLabel={baseName || undefined}
       code={code}
@@ -2935,7 +3765,16 @@ function ToolGroupCard({
   onRequestOpenFile?: (name: string) => void;
 }) {
   const t = useT();
-  const [open, setOpen] = useState(false);
+  // While a task is running, expose the current execution detail. Once it
+  // settles, retain just the activity summary and let the user expand it for
+  // command-level evidence. This gives a task one readable progress line
+  // instead of a stack of finished tool cards.
+  const [open, setOpen] = useState(runStreaming);
+  const [userToggled, setUserToggled] = useState(false);
+
+  useEffect(() => {
+    if (!userToggled) setOpen(runStreaming);
+  }, [runStreaming, userToggled]);
 
   // Snapshot-style tools (TodoWrite and friends) replace their whole state on
   // each call, so a turn that wrote the list several times would otherwise
@@ -2943,30 +3782,32 @@ function ToolGroupCard({
   // snapshot; every other tool passes through untouched.
   items = dedupeSnapshotToolRetries(items);
 
-  // A run of one tool collapses to that tool's card directly so we don't
-  // wrap a single child in a redundant disclosure.
-  if (items.length === 1) {
+  // Fallback for direct ActionGroup use: keep a Todo summary as the first
+  // disclosure level instead of nesting it under the generic tool accordion.
+  if (items.length > 0 && items.every((item) => isTodoWriteToolName(item.use.name))) {
+    const latestTodo = items[items.length - 1]!;
     return (
-      <ToolCard
-        use={items[0]!.use}
-        result={items[0]!.result}
+      <TodoCard
+        input={latestTodo.use.input}
         runStreaming={runStreaming}
         runSucceeded={runSucceeded}
-        projectFileNames={projectFileNames}
-        onRequestOpenFile={onRequestOpenFile}
       />
     );
   }
 
   const summary = summarizeGroup(items, t, runStreaming, runSucceeded);
   const running = runStreaming && items.some((it) => !it.result);
-  const hasError = items.some((it) => it.result?.isError);
+  const hasError =
+    items.some((it) => it.result?.isError) || (!runStreaming && !runSucceeded);
   return (
     <div className="action-card">
       <button
         type="button"
         className={`action-card-toggle ${running ? "running" : ""}`}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          setUserToggled(true);
+          setOpen((value) => !value);
+        }}
         aria-expanded={open}
       >
         <span className={`action-card-status ${running ? 'op-status-running' : hasError ? 'op-status-error' : 'op-status-ok'}`} aria-hidden>
@@ -3002,6 +3843,208 @@ function ToolGroupCard({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * One compact, per-turn audit trail for thinking and every non-progress tool.
+ * The default view keeps the overall run state above the answer; opening it
+ * restores the chronological evidence with a semantic icon for each activity.
+ */
+function TaskActivityCard({
+  entries,
+  trailingThinking,
+  hasConclusion,
+  runStreaming,
+  runSucceeded,
+  terminalRunSucceeded,
+  runCanceled,
+  runFailed,
+  startedAt,
+  endedAt,
+  durationMs,
+  projectFileNames,
+  onRequestOpenFile,
+  onThinkingLinkClick,
+}: {
+  entries: TaskActivityEntry[];
+  trailingThinking: boolean;
+  hasConclusion: boolean;
+  runStreaming: boolean;
+  runSucceeded: boolean;
+  terminalRunSucceeded: boolean;
+  runCanceled: boolean;
+  runFailed: boolean;
+  startedAt: number | undefined;
+  endedAt: number | undefined;
+  durationMs: number | undefined;
+  projectFileNames?: Set<string>;
+  onRequestOpenFile?: (name: string) => void;
+  onThinkingLinkClick?: MarkdownLinkClickHandler;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(runStreaming);
+  const [userToggled, setUserToggled] = useState(false);
+  useEffect(() => {
+    if (!userToggled) setOpen(runStreaming);
+  }, [runStreaming, userToggled]);
+  const toolItems = entries
+    .filter((entry): entry is Extract<TaskActivityEntry, { kind: "tool" }> => entry.kind === "tool")
+    .map((entry) => entry.item);
+  const settledItems = dedupeSnapshotToolRetries(toolItems);
+  const visibleTools = new Set(settledItems);
+  const visibleEntries = entries.filter(
+    (entry) => entry.kind !== "tool" || visibleTools.has(entry.item),
+  );
+  const currentIndex = visibleEntries.length - 1;
+  const currentEntry = currentIndex >= 0 ? visibleEntries[currentIndex] : undefined;
+  const running = runStreaming;
+  const hasError =
+    !runStreaming &&
+    (runFailed ||
+      (!terminalRunSucceeded &&
+        settledItems.some(
+          (item) => item.result?.isError || (!item.result && !runSucceeded),
+        )));
+  const stateLabel = running
+    ? t("assistant.workingLabel")
+    : runCanceled
+      ? t("assistant.canceledLabel")
+      : hasError
+        ? t("critiqueTheater.failedHeading")
+        : t("assistant.doneLabel");
+  const runState = running
+    ? "running"
+    : runCanceled
+      ? "canceled"
+      : hasError
+        ? "error"
+        : "completed";
+  const elapsed = useLiveElapsed(runStreaming, startedAt, endedAt, durationMs);
+
+  if (running && !hasConclusion && currentEntry) {
+    return (
+      <div
+        className="action-card task-activity task-activity-current"
+        data-run-state="running"
+        data-testid="task-activity-current"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        <div
+          key={taskActivityEntryKey(currentEntry, currentIndex)}
+          className="task-activity-current-row"
+        >
+          <CurrentTaskActivityRow
+            entry={currentEntry}
+            projectFileNames={projectFileNames}
+            onRequestOpenFile={onRequestOpenFile}
+            onThinkingLinkClick={onThinkingLinkClick}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`action-card task-activity${open ? " is-open" : ""}`}>
+      <button
+        type="button"
+        className={`action-card-toggle task-state-${runState}${running ? " running" : ""}`}
+        onClick={() => {
+          setUserToggled(true);
+          setOpen((value) => !value);
+        }}
+        aria-expanded={open}
+        data-run-state={runState}
+        data-testid="task-activity-toggle"
+      >
+        <span className={`summary${running ? " shimmer-text" : ""}`}>{stateLabel}</span>
+        {elapsed ? <span className="task-activity-elapsed">{elapsed}</span> : null}
+        <span className="chev" aria-hidden>
+          <Icon name="chevron-down" size={13} />
+        </span>
+      </button>
+      <div className={`accordion-collapsible${open ? " open" : ""}`}>
+        <div className="accordion-collapsible-inner">
+          <div className="action-card-body">
+            {visibleEntries.map((entry, index) => {
+              if (entry.kind === "thinking") {
+                return (
+                  <ThinkingBlock
+                    key={`thinking-${index}`}
+                    text={entry.text}
+                    streaming={runStreaming && trailingThinking && index === visibleEntries.length - 1}
+                    onLinkClick={onThinkingLinkClick}
+                  />
+                );
+              }
+              if (entry.kind === "live-tool") {
+                return <LiveCodeBox key={entry.id} name={entry.name} raw={entry.raw} />;
+              }
+              return (
+                <ToolCard
+                  key={entry.item.use.id || index}
+                  use={entry.item.use}
+                  result={entry.item.result}
+                  runStreaming={runStreaming}
+                  runSucceeded={runSucceeded}
+                  projectFileNames={projectFileNames}
+                  onRequestOpenFile={onRequestOpenFile}
+                />
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function taskActivityEntryKey(entry: TaskActivityEntry, index: number): string {
+  if (entry.kind === "thinking") return `thinking-${index}`;
+  if (entry.kind === "live-tool") return `live-${entry.id}`;
+  return `tool-${entry.item.use.id || index}`;
+}
+
+function CurrentTaskActivityRow({
+  entry,
+  projectFileNames,
+  onRequestOpenFile,
+  onThinkingLinkClick,
+}: {
+  entry: TaskActivityEntry;
+  projectFileNames?: Set<string>;
+  onRequestOpenFile?: (name: string) => void;
+  onThinkingLinkClick?: MarkdownLinkClickHandler;
+}) {
+  if (entry.kind === "thinking") {
+    // The compact running view keeps one current row (#5667), but thinking
+    // must stay expandable mid-run: a user parked on a long "Thinking…" (or a
+    // hung provider, incident recvqgLmAkUM6G) needs to open the streamed
+    // reasoning to judge progress. ThinkingBlock is the same disclosure the
+    // settled card uses, so the affordance matches before and after the run
+    // completes.
+    return (
+      <ThinkingBlock
+        text={entry.text}
+        streaming
+        onLinkClick={onThinkingLinkClick}
+      />
+    );
+  }
+  if (entry.kind === "live-tool") {
+    return <LiveCodeBox name={entry.name} raw={entry.raw} />;
+  }
+  return (
+    <ToolCard
+      use={entry.item.use}
+      result={entry.item.result}
+      runStreaming
+      runSucceeded={false}
+      projectFileNames={projectFileNames}
+      onRequestOpenFile={onRequestOpenFile}
+    />
   );
 }
 
@@ -3110,35 +4153,66 @@ type Block =
     }
   | { kind: "status"; label: string; detail?: string | undefined };
 
+type TaskActivityEntry =
+  | Extract<Block, { kind: "thinking" }>
+  | Extract<Block, { kind: "live-tool" }>
+  | { kind: "tool"; item: ToolItem };
+
+type TaskActivity = {
+  entries: TaskActivityEntry[];
+  trailingThinking: boolean;
+};
+
+function splitTaskActivity(blocks: Block[]): {
+  contentBlocks: Block[];
+  taskActivity: TaskActivity | null;
+} {
+  const contentBlocks: Block[] = [];
+  const entries: TaskActivityEntry[] = [];
+
+  for (const block of blocks) {
+    if (block.kind === "thinking") {
+      entries.push(block);
+      continue;
+    }
+    if (block.kind === "live-tool") {
+      entries.push(block);
+      continue;
+    }
+    if (block.kind === "tool-group") {
+      // The canonical TodoWrite display is kept above the composer. It
+      // remains the one task-progress surface, rather than becoming another
+      // item inside the execution audit trail.
+      if (block.items.every((item) => isTodoWriteToolName(item.use.name))) {
+        contentBlocks.push(block);
+      } else {
+        entries.push(...block.items.map((item) => ({ kind: "tool" as const, item })));
+      }
+      continue;
+    }
+    contentBlocks.push(block);
+  }
+
+  return {
+    contentBlocks,
+    taskActivity: entries.length > 0
+      ? { entries, trailingThinking: blocks.at(-1)?.kind === "thinking" }
+      : null,
+  };
+}
+
 /**
  * Walk the event stream and build the rendering layout list. We additionally
  * collapse runs of consecutive tool_uses sharing the same tool family into a
  * single tool-group block so the chat surface stays compact during chains
  * of edits / reads.
  */
-function placeConversationTodoCard(
-  blocks: Block[],
-  options: { show: boolean; input: unknown | null },
-): Block[] {
-  let placed = false;
-  return blocks.flatMap((block): Block[] => {
-    if (block.kind !== "tool-group") return [block];
-    if (!block.items.every((it) => isTodoWriteToolName(it.use.name))) return [block];
-    if (!options.show || placed) return [];
-    placed = true;
-    const item = block.items[0];
-    if (!item || options.input == null) return [block];
-    return [{
-      ...block,
-      items: [{
-        ...item,
-        use: {
-          ...item.use,
-          input: options.input,
-        },
-      }],
-    }];
-  });
+function stripTodoToolGroups(blocks: Block[]): Block[] {
+  return blocks.filter(
+    (block) =>
+      block.kind !== "tool-group" ||
+      !block.items.every((item) => isTodoWriteToolName(item.use.name)),
+  );
 }
 
 function stripEmptyThinkingBlocks(blocks: Block[]): Block[] {
@@ -3228,9 +4302,24 @@ function buildBlocks(events: AgentEvent[]): Block[] {
         ev.label === "streaming" ||
         ev.label === "starting" ||
         ev.label === "running" ||
+        // Bare runtime lifecycle markers are transport telemetry, not
+        // assistant content. Detail-bearing rows are product workflow badges
+        // and must remain visible (for example plugin share/contribute).
+        ((ev.label === "working" ||
+          ev.label === "done" ||
+          ev.label === "completed") &&
+          !ev.detail?.trim()) ||
         ev.label === "requesting" ||
         ev.label === "thinking" ||
-        ev.label === "empty_response"
+        ev.label === "empty_response" ||
+        // Transient ACP tool-call markers (#4618). On the live SSE path the
+        // daemon normalizes these to `running` (TRANSIENT_ACP_STATUS_LABELS in
+        // providers/daemon.ts), which is already skipped above; the persisted-
+        // events path does not normalize, so they arrive here as bare labels
+        // with no tool name/input/output/detail and would otherwise render as
+        // empty, expandable "tool ran but produced no output" status pills.
+        ev.label === "tool_call" ||
+        ev.label === "tool_call_update"
       )
         continue;
       const last = out[out.length - 1];

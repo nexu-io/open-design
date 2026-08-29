@@ -7,9 +7,15 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  buildWorkspacePermissions,
+  buildWorkspaceSeatSummary,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
 
 import {
   createCritiqueEventsConnection,
+  critiqueArtifactUrl,
   critiqueEventsUrl,
   sseToPanelEvent,
 } from '../../../../src/components/Theater/state/sse';
@@ -74,6 +80,29 @@ class StubEventSource implements EventTarget {
 
 const RUN_ID = 'run_sse';
 
+function teamContext(
+  workspaceId: string,
+  workspaceMemberId: string,
+): WorkspaceCollabContext {
+  return {
+    workspaceId,
+    workspaceType: 'team',
+    workspaceMemberId,
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: 'team_plus',
+    providerMode: 'platform_credits',
+    teamId: `team-${workspaceId}`,
+    seatSummary: buildWorkspaceSeatSummary({ seatLimit: 3, usedSeats: 2 }),
+    permissions: buildWorkspacePermissions({
+      role: 'member',
+      lifecycleState: 'active',
+    }),
+  };
+}
+
 beforeEach(() => {
   StubEventSource.instances = [];
 });
@@ -90,6 +119,36 @@ describe('critique SSE connection manager (Phase 7.2)', () => {
     expect(StubEventSource.instances).toHaveLength(1);
     expect(StubEventSource.instances[0]!.url).toBe(critiqueEventsUrl('proj-1'));
     conn.close();
+  });
+
+  it('puts the exact Workspace identity in the EventSource URL and preserves unbound compatibility', () => {
+    const workspaceA = teamContext('workspace-a', 'member-a');
+    const scoped = critiqueEventsUrl('same-project', workspaceA);
+    const parsed = new URL(scoped, 'https://od.local');
+    expect(parsed.searchParams.get('workspaceId')).toBe('workspace-a');
+    expect(parsed.searchParams.get('workspaceMemberId')).toBe('member-a');
+    expect(critiqueEventsUrl('same-project', null)).toBe(
+      '/api/projects/same-project/events',
+    );
+
+    createCritiqueEventsConnection('same-project', () => undefined, {
+      EventSourceCtor: StubEventSource as unknown as typeof EventSource,
+      workspaceContext: workspaceA,
+    });
+    expect(StubEventSource.instances[0]!.url).toBe(scoped);
+  });
+
+  it('puts the exact Workspace identity in artifact navigation URLs', () => {
+    const workspaceA = teamContext('workspace-a', 'member-a');
+    const parsed = new URL(
+      critiqueArtifactUrl('project-a', 'run-a', workspaceA),
+      'https://od.local',
+    );
+    expect(parsed.pathname).toBe(
+      '/api/projects/project-a/critique/run-a/artifact',
+    );
+    expect(parsed.searchParams.get('workspaceId')).toBe('workspace-a');
+    expect(parsed.searchParams.get('workspaceMemberId')).toBe('member-a');
   });
 
   it('subscribes to every CRITIQUE_SSE_EVENT_NAMES channel', () => {
@@ -182,6 +241,8 @@ describe('critique SSE connection manager (Phase 7.2)', () => {
       EventSourceCtor: StubEventSource as unknown as typeof EventSource,
       initialBackoffMs: 1000,
       maxBackoffMs: 30_000,
+      // Pin jitter to its high edge (multiplier 1.0) so the base sequence shows.
+      randomFn: () => 1,
       setTimeoutFn,
     });
     expect(StubEventSource.instances).toHaveLength(1);
@@ -203,6 +264,28 @@ describe('critique SSE connection manager (Phase 7.2)', () => {
     StubEventSource.instances[1]!.fireError();
     expect(queue).toHaveLength(1);
     expect(queue[0]!.at - now).toBe(1000);
+  });
+
+  it('jitters each reconnect delay within [0.5, 1.0) of the base', () => {
+    const delays: number[] = [];
+    const setTimeoutFn = ((_fn: () => void, delay: number) => {
+      delays.push(delay);
+      // Do not fire: observe the scheduled delay per error only.
+      return delays.length as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout;
+
+    createCritiqueEventsConnection('proj-1', () => undefined, {
+      EventSourceCtor: StubEventSource as unknown as typeof EventSource,
+      initialBackoffMs: 1000,
+      maxBackoffMs: 30_000,
+      // random() = 0 → multiplier 0.5 (the low edge of the jitter window).
+      randomFn: () => 0,
+      setTimeoutFn,
+    });
+    const es = StubEventSource.instances[0]!;
+    for (let i = 0; i < 4; i += 1) es.fireError();
+    // Base 1000, 2000, 4000, 8000 → all halved by the low-edge jitter.
+    expect(delays).toEqual([500, 1000, 2000, 4000]);
   });
 
   it('close() cancels pending reconnects and stops the live source', () => {

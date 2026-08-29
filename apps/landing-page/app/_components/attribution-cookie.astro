@@ -31,10 +31,27 @@
     var utmSource = get('utm_source');
 
     var ref = '';
+    var entryPath = location.pathname || '/';
     try {
       if (document.referrer) {
         var rh = new URL(document.referrer).hostname;
         if (rh && rh.indexOf('open-design') === -1) ref = rh.slice(0, 120);
+      }
+    } catch (e) {}
+
+    // Automatic locale redirects turn the browser referrer into our own root
+    // page. Recover the external source captured immediately before redirect.
+    try {
+      var handoffRaw = window.sessionStorage.getItem('od.localeAttribution');
+      var handoff = handoffRaw && JSON.parse(handoffRaw);
+      if (
+        !ref && handoff && handoff.targetPath === window.location.pathname &&
+        typeof handoff.createdAt === 'number' &&
+        Date.now() - handoff.createdAt >= 0 && Date.now() - handoff.createdAt < 60000 &&
+        typeof handoff.referringDomain === 'string'
+      ) {
+        ref = handoff.referringDomain.slice(0, 120);
+        if (typeof handoff.entryPath === 'string') entryPath = handoff.entryPath;
       }
     } catch (e) {}
 
@@ -44,7 +61,7 @@
     var data = {
       s: utmSource, m: get('utm_medium'), c: get('utm_campaign'),
       ct: get('utm_content'), tm: get('utm_term'),
-      ref: ref, lp: (location.pathname || '/').slice(0, 80), t: Date.now()
+      ref: ref, lp: entryPath.slice(0, 80), t: Date.now()
     };
 
     // 30-day first-touch window. Use the apex domain in production so the

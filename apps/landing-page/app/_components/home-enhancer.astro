@@ -35,13 +35,13 @@
     };
 
     // Pull a clean 'v0.3.0'-style label from a GitHub release record.
-    // We prefer release.name (e.g. 'Open Design 0.3.0') because that's
+    // We prefer release.name (e.g. 'OpenDesign 0.3.0') because that's
     // what we hand-author; fall back to tag_name (e.g.
     // 'open-design-v0.3.0') with the project prefix stripped.
     //
     // Expected input shapes (release.name / release.tag_name):
-    //   { name: 'Open Design 0.3.0',  tag_name: 'v0.3.0' }            → 'v0.3.0'
-    //   { name: 'Open Design v0.3.0', tag_name: 'open-design-v0.3.0' } → 'v0.3.0'
+    //   { name: 'OpenDesign 0.3.0',  tag_name: 'v0.3.0' }            → 'v0.3.0'
+    //   { name: 'OpenDesign v0.3.0', tag_name: 'open-design-v0.3.0' } → 'v0.3.0'
     //   { name: '0.3.0-beta.1',       tag_name: 'open-design_0.3.0' }  → 'v0.3.0-beta.1' (name wins)
     //   { name: null,                 tag_name: 'open-design-v0.3.0' } → 'v0.3.0' (tag fallback)
     //   { name: null,                 tag_name: null }                  → null (caller skips)
@@ -194,32 +194,44 @@
         .catch(() => {});
     };
 
-    // Platform-aware hero download button. Detects OS and — on macOS — the chip
+    // Platform-aware download buttons. Detects OS and — on macOS — the chip
     // family (Apple Silicon vs Intel), resolves the matching asset from the
-    // latest GitHub release, and rewrites the [data-download-cta] button's href
-    // to a direct download, appending the detected chip label. Falls back to
-    // the server-rendered releases-page href when detection or the API fails.
+    // latest GitHub release, and rewrites every participating CTA. Only marked
+    // chip targets display the detected platform label. Falls back to each
+    // server-rendered /download/ href when detection or the API fails.
     const enhanceDownloadCta = () => {
-      // Skip `[data-download-page]` CTAs (e.g. the nav "Download" button) — they
-      // must keep their /download/ page href; only direct-download CTAs rewrite.
-      const btn = document.querySelector('[data-download-cta]:not([data-download-page])');
-      if (!btn) return;
+      // Page-only CTAs can opt out with `[data-download-page]`; the shared nav
+      // CTA is now a direct download and intentionally participates here.
+      const buttons = Array.from(
+        document.querySelectorAll('[data-download-cta]:not([data-download-page])'),
+      );
+      if (buttons.length === 0) return;
       const ua = navigator.userAgent || '';
+      const platform = (
+        navigator.userAgentData?.platform ||
+        navigator.platform ||
+        ''
+      ).toLowerCase();
+      const isIpadOS = navigator.maxTouchPoints > 1 && /mac/.test(platform);
+      if (isIpadOS || /iPhone|iPad|iPod/i.test(ua)) return;
       const isWin = /Windows|Win32|Win64|WOW64/i.test(ua);
       const isMac = /Macintosh|Mac OS X/i.test(ua) && !/iPhone|iPad|iPod/i.test(ua);
 
       const labelChip = (text) => {
-        let chip = btn.querySelector('[data-download-chip]');
-        if (!chip) {
-          chip = document.createElement('span');
-          chip.setAttribute('data-download-chip', '');
-          chip.style.opacity = '0.7';
-          chip.style.fontWeight = '400';
-          const arrow = btn.querySelector('.arrow');
-          if (arrow) btn.insertBefore(chip, arrow);
-          else btn.appendChild(chip);
+        for (const btn of buttons) {
+          if (!btn.hasAttribute('data-download-chip-target')) continue;
+          let chip = btn.querySelector('[data-download-chip]');
+          if (!chip) {
+            chip = document.createElement('span');
+            chip.setAttribute('data-download-chip', '');
+            chip.style.opacity = '0.7';
+            chip.style.fontWeight = '400';
+            const arrow = btn.querySelector('.arrow');
+            if (arrow) btn.insertBefore(chip, arrow);
+            else btn.appendChild(chip);
+          }
+          chip.textContent = ' · ' + text;
         }
-        chip.textContent = ' · ' + text;
       };
 
       const resolveAsset = (chipLabel, matcher) => {
@@ -231,8 +243,10 @@
             if (!rel || !Array.isArray(rel.assets)) return;
             const asset = rel.assets.find((a) => matcher(a.name || ''));
             if (asset && asset.browser_download_url) {
-              btn.href = asset.browser_download_url;
-              btn.setAttribute('download', '');
+              for (const btn of buttons) {
+                btn.href = asset.browser_download_url;
+                btn.setAttribute('download', '');
+              }
               labelChip(chipLabel);
             }
           })

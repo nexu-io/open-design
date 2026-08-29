@@ -224,7 +224,7 @@ const en: HomeCopy = {
   aboutSideNote:
     'From model behavior to visual taste, we prototype the full stack of creative systems.',
   aboutCaption: 'Studies in form · perception · machine imagination.',
-  aboutCaptionCredit: '(Open Design, MMXXVI)',
+  aboutCaptionCredit: '(OpenDesign, MMXXVI)',
 
   capLabel: 'Capabilities · Nº 03',
   capTitleA: 'Skills, systems, and surfaces',
@@ -268,7 +268,7 @@ const en: HomeCopy = {
     'Gpt-image-2 + Seedance + HyperFrames. Image, video, audio — same chat surface as code.',
   lab3Title: 'Prompt Choreography',
   lab3Body:
-    'The interactive question form pops before a single pixel is improvised. 30s of radios beats 30min of redirects.',
+    'When unresolved choices would materially change the result, a focused question form keeps the next iteration on track.',
   lab4Title: 'Visual Reasoning',
   lab4Body:
     '5-dim self-critique gates every artifact: philosophy · hierarchy · execution · specificity · restraint.',
@@ -288,7 +288,7 @@ const en: HomeCopy = {
     'The daemon scans your $PATH for 12 coding agents and auto-loads {skills} skills + {systems} systems on boot.',
   method2Title: 'Discover',
   method2Body:
-    'Turn 1 is a question form — surface, audience, tone, scale, brand context. Locked in 30 seconds.',
+    'Clarify only when it matters — focused questions for unresolved surface, audience, tone, scale, or brand context.',
   method3Title: 'Direct',
   method3Body:
     'Pick one of 5 deterministic visual directions. Palette in OKLch, font stack, layout posture cues.',
@@ -311,7 +311,7 @@ const en: HomeCopy = {
     'An editorial paper system. Warm parchment canvas, ink-blue accent, serif-led hierarchy — multilingual by design (EN · zh-CN · ja).',
 
   testimonialLabel: 'Collaborators · Nº 06',
-  testimonialQuotePre: '“Open Design helped us turn vague',
+  testimonialQuotePre: '“OpenDesign helped us turn vague',
   testimonialQuoteEm1: 'AI ideas',
   testimonialQuoteMid: 'into a visual system that felt',
   testimonialQuoteEm2: 'sharp, believable,',
@@ -390,7 +390,7 @@ const zhCN: Partial<HomeCopy> = {
   aboutFooterRow: '调研 · 设计 · 工程 · 循环',
   aboutSideNote: '从模型行为到视觉品味，我们把整个创意系统当作原型来打磨。',
   aboutCaption: '关于形态 · 感知 · 机器想象的研究。',
-  aboutCaptionCredit: '(Open Design, MMXXVI)',
+  aboutCaptionCredit: '(OpenDesign, MMXXVI)',
 
   capLabel: '能力 · Nº 03',
   capTitleA: '为创意智能打造的',
@@ -433,7 +433,7 @@ const zhCN: Partial<HomeCopy> = {
     'Gpt-image-2 + Seedance + HyperFrames。图像、视频、音频——和代码同一个聊天界面。',
   lab3Title: '提示编排',
   lab3Body:
-    '在生成第一像素之前，先弹出一个交互问题表单。30 秒的选择，胜过 30 分钟的反复改稿。',
+    '只有未决选择会实质影响结果时，才用精简问题表单确保下一轮方向准确。',
   lab4Title: '视觉推理',
   lab4Body:
     '5 个维度的自我批评把关每一件作品：哲学 · 层级 · 执行 · 具体 · 克制。',
@@ -451,7 +451,7 @@ const zhCN: Partial<HomeCopy> = {
   method1Body:
     'Daemon 扫描你的 $PATH，识别 12 个编码 Agent，启动时自动加载 {skills} 个技能 + {systems} 套系统。',
   method2Title: '发现',
-  method2Body: '第 1 轮是一个问题表单——表层、受众、调性、规模、品牌语境。30 秒内锁定。',
+  method2Body: '只在确有必要时澄清——聚焦尚未解决的产物表面、受众、调性、规模或品牌语境。',
   method3Title: '指引',
   method3Body:
     '从 5 个确定性的视觉方向里挑一个。OKLch 色板、字体栈、版式姿态全都给好。',
@@ -474,7 +474,7 @@ const zhCN: Partial<HomeCopy> = {
     '一套编辑级的纸面系统。暖羊皮纸底色、墨蓝点缀、衬线主导的层级——天生支持多语言（EN · zh-CN · ja）。',
 
   testimonialLabel: '合作者 · Nº 06',
-  testimonialQuotePre: '“Open Design 帮我们把模糊的',
+  testimonialQuotePre: '“OpenDesign 帮我们把模糊的',
   testimonialQuoteEm1: 'AI 想法',
   testimonialQuoteMid: '变成了一个视觉系统——',
   testimonialQuoteEm2: '锐利、可信、',
@@ -561,7 +561,7 @@ const ja: Partial<HomeCopy> = {
   aboutSideNote:
     'モデルの振る舞いからビジュアルの審美まで、創造的システムのフルスタックをプロトタイプします。',
   aboutCaption: '形態 · 知覚 · 機械的想像力をめぐる研究。',
-  aboutCaptionCredit: '(Open Design, MMXXVI)',
+  aboutCaptionCredit: '(OpenDesign, MMXXVI)',
 
   capLabel: '能力 · Nº 03',
   capTitleA: '創造的知性のための',
@@ -605,7 +605,7 @@ const ja: Partial<HomeCopy> = {
     'Gpt-image-2 + Seedance + HyperFrames。画像、動画、音声 — コードと同じチャット面で。',
   lab3Title: 'プロンプトの振付',
   lab3Body:
-    '最初の 1 ピクセルを描く前に、対話的な質問フォームが現れる。30 秒の選択肢は、30 分の手戻りに勝る。',
+    '未確定の選択が結果を大きく変える場合だけ、焦点を絞った質問フォームで次の反復を正しい方向へ導きます。',
   lab4Title: 'ビジュアル推論',
   lab4Body:
     '5 次元のセルフ批評がすべての成果物を通過させる:哲学 · 階層 · 実行 · 具体性 · 抑制。',
@@ -625,7 +625,7 @@ const ja: Partial<HomeCopy> = {
     'daemon があなたの $PATH をスキャンし、12 個のコーディング Agent を識別。起動時に {skills} 個のスキル + {systems} 個のシステムを自動ロードします。',
   method2Title: '発見',
   method2Body:
-    '最初のターンは質問フォーム — サーフェス、オーディエンス、トーン、スケール、ブランド文脈。30 秒で確定。',
+    '必要なときだけ明確化 — 未確定のサーフェス、オーディエンス、トーン、スケール、ブランド文脈に絞って質問します。',
   method3Title: '方向付け',
   method3Body:
     '5 つの決定論的なビジュアル方向から 1 つを選ぶ。OKLch のカラーパレット、フォントスタック、レイアウトの姿勢。',
@@ -648,7 +648,7 @@ const ja: Partial<HomeCopy> = {
     'エディトリアルな紙のシステム。暖かい羊皮紙のキャンバス、墨青のアクセント、セリフ主導の階層 — 多言語で生まれた(EN · zh-CN · ja)。',
 
   testimonialLabel: 'コラボレーター · Nº 06',
-  testimonialQuotePre: '「Open Design は私たちの曖昧な',
+  testimonialQuotePre: '「OpenDesign は私たちの曖昧な',
   testimonialQuoteEm1: 'AI のアイデア',
   testimonialQuoteMid: 'を、',
   testimonialQuoteEm2: '鋭く、信じられて、',
@@ -732,7 +732,7 @@ const ko: Partial<HomeCopy> = {
   aboutSideNote:
     '모델의 행동에서 시각적 취향까지, 창의적 시스템의 풀스택을 프로토타입합니다.',
   aboutCaption: '형태 · 지각 · 기계의 상상에 관한 연구.',
-  aboutCaptionCredit: '(Open Design, MMXXVI)',
+  aboutCaptionCredit: '(OpenDesign, MMXXVI)',
 
   capLabel: '능력 · Nº 03',
   capTitleA: '창의적 지능을 위한',
@@ -776,7 +776,7 @@ const ko: Partial<HomeCopy> = {
     'Gpt-image-2 + Seedance + HyperFrames. 이미지, 비디오, 오디오 — 코드와 같은 채팅 표면에서.',
   lab3Title: '프롬프트 안무',
   lab3Body:
-    '첫 픽셀을 그리기 전에 인터랙티브 질문 폼이 먼저 뜹니다. 30 초의 라디오 버튼이 30 분의 리다이렉트보다 낫습니다.',
+    '미해결 선택이 결과를 크게 바꿀 때만 집중된 질문 폼으로 다음 반복의 방향을 맞춥니다.',
   lab4Title: '시각적 추론',
   lab4Body:
     '5 차원의 셀프 비평이 모든 결과물을 통과시킵니다: 철학 · 위계 · 실행 · 구체성 · 절제.',
@@ -796,7 +796,7 @@ const ko: Partial<HomeCopy> = {
     'daemon 이 $PATH 를 스캔해 12 개의 코딩 Agent 를 인식하고, 부팅 시 {skills} 개의 스킬 + {systems} 개의 시스템을 자동 로드합니다.',
   method2Title: '발견',
   method2Body:
-    '첫 턴은 질문 폼 — 표면, 청중, 톤, 스케일, 브랜드 컨텍스트. 30 초 안에 확정.',
+    '필요할 때만 명확히 합니다 — 미해결 표면, 청중, 톤, 스케일 또는 브랜드 맥락에 집중해 질문합니다.',
   method3Title: '방향 제시',
   method3Body:
     '5 개의 결정론적 비주얼 방향 중 하나를 선택. OKLch 팔레트, 폰트 스택, 레이아웃 자세.',
@@ -819,7 +819,7 @@ const ko: Partial<HomeCopy> = {
     '에디토리얼한 종이 시스템. 따뜻한 양피지 캔버스, 잉크 블루 악센트, 세리프 중심 위계 — 다국어 설계(EN · zh-CN · ja).',
 
   testimonialLabel: '협력자 · Nº 06',
-  testimonialQuotePre: '"Open Design 은 우리의 모호한',
+  testimonialQuotePre: '"OpenDesign 은 우리의 모호한',
   testimonialQuoteEm1: 'AI 아이디어',
   testimonialQuoteMid: '를',
   testimonialQuoteEm2: '날카롭고, 신뢰할 수 있으며,',
@@ -903,7 +903,7 @@ const zhTW: Partial<HomeCopy> = {
   aboutFooterRow: '研究 · 設計 · 工程 · 循環',
   aboutSideNote: '從模型行為到視覺品味，我們把整個創意系統當作原型來打磨。',
   aboutCaption: '關於形態 · 感知 · 機器想像的研究。',
-  aboutCaptionCredit: '(Open Design, MMXXVI)',
+  aboutCaptionCredit: '(OpenDesign, MMXXVI)',
 
   capLabel: '能力 · Nº 03',
   capTitleA: '為創意智慧打造的',
@@ -946,7 +946,7 @@ const zhTW: Partial<HomeCopy> = {
     'Gpt-image-2 + Seedance + HyperFrames。圖像、影片、音訊——和程式碼同一個聊天介面。',
   lab3Title: '提示編排',
   lab3Body:
-    '在生成第一像素之前，先彈出一個互動問題表單。30 秒的選擇，勝過 30 分鐘的反覆改稿。',
+    '只有未決選擇會實質影響結果時，才用精簡問題表單確保下一輪方向準確。',
   lab4Title: '視覺推理',
   lab4Body:
     '5 個維度的自我批評把關每一件作品：哲學 · 層級 · 執行 · 具體 · 克制。',
@@ -966,7 +966,7 @@ const zhTW: Partial<HomeCopy> = {
     'Daemon 掃描你的 $PATH，識別 12 個編碼 Agent，啟動時自動載入 {skills} 個技能 + {systems} 套系統。',
   method2Title: '探索',
   method2Body:
-    '第 1 輪是一個問題表單——表層、受眾、調性、規模、品牌語境。30 秒內鎖定。',
+    '只在確有必要時釐清——聚焦尚未解決的產物表面、受眾、調性、規模或品牌語境。',
   method3Title: '導向',
   method3Body:
     '從 5 個確定性的視覺方向裡挑一個。OKLch 色板、字體堆疊、版式姿態全都給好。',
@@ -989,7 +989,7 @@ const zhTW: Partial<HomeCopy> = {
     '一套編輯級的紙面系統。暖羊皮紙底色、墨藍點綴、襯線主導的層級——天生支援多語言（EN · zh-CN · ja）。',
 
   testimonialLabel: '合作者 · Nº 06',
-  testimonialQuotePre: '「Open Design 幫我們把模糊的',
+  testimonialQuotePre: '「OpenDesign 幫我們把模糊的',
   testimonialQuoteEm1: 'AI 想法',
   testimonialQuoteMid: '變成了一個視覺系統——',
   testimonialQuoteEm2: '銳利、可信、',
@@ -1072,7 +1072,7 @@ const de: Partial<HomeCopy> = {
   aboutSideNote:
     'Vom Modellverhalten bis zum visuellen Geschmack — wir prototypisieren den gesamten Stack kreativer Systeme.',
   aboutCaption: 'Studien über Form · Wahrnehmung · maschinelle Vorstellung.',
-  aboutCaptionCredit: '(Open Design, MMXXVI)',
+  aboutCaptionCredit: '(OpenDesign, MMXXVI)',
 
   capLabel: 'Fähigkeiten · Nº 03',
   capTitleA: 'Skills, Systeme und Oberflächen',
@@ -1117,7 +1117,7 @@ const de: Partial<HomeCopy> = {
     'Gpt-image-2 + Seedance + HyperFrames. Bild, Video, Audio — auf derselben Chat-Oberfläche wie Code.',
   lab3Title: 'Prompt-Choreografie',
   lab3Body:
-    'Das interaktive Frageformular erscheint, bevor ein einziges Pixel improvisiert wird. 30 Sekunden Radio Buttons schlagen 30 Minuten Umwege.',
+    'Nur wenn offene Entscheidungen das Ergebnis wesentlich verändern, hält ein fokussiertes Frageformular die nächste Iteration auf Kurs.',
   lab4Title: 'Visuelles Räsonnement',
   lab4Body:
     '5-dimensionale Selbstkritik prüft jedes Artefakt: Philosophie · Hierarchie · Ausführung · Spezifität · Zurückhaltung.',
@@ -1137,7 +1137,7 @@ const de: Partial<HomeCopy> = {
     'Der Daemon scannt deinen $PATH nach 12 Coding-Agents und lädt beim Start automatisch {skills} Skills + {systems} Systeme.',
   method2Title: 'Entdecken',
   method2Body:
-    'Runde 1 ist ein Frageformular — Oberfläche, Publikum, Tonalität, Skala, Markenkontext. In 30 Sekunden fest.',
+    'Nur bei Bedarf klären — mit fokussierten Fragen zu offenen Punkten bei Oberfläche, Publikum, Tonalität, Maßstab oder Markenkontext.',
   method3Title: 'Richtung geben',
   method3Body:
     'Wähle eine von 5 deterministischen visuellen Richtungen. Palette in OKLch, Font-Stack, Layout-Haltung.',
@@ -1160,7 +1160,7 @@ const de: Partial<HomeCopy> = {
     'Ein redaktionelles Papier-System. Warmes Pergament als Canvas, tintenblauer Akzent, serifenbetonte Hierarchie — mehrsprachig von Anfang an (EN · zh-CN · ja).',
 
   testimonialLabel: 'Kollaborateure · Nº 06',
-  testimonialQuotePre: '„Open Design hat uns geholfen, vage',
+  testimonialQuotePre: '„OpenDesign hat uns geholfen, vage',
   testimonialQuoteEm1: 'KI-Ideen',
   testimonialQuoteMid: 'in ein visuelles System zu verwandeln, das',
   testimonialQuoteEm2: 'scharf, glaubhaft',
@@ -1244,7 +1244,7 @@ const fr: Partial<HomeCopy> = {
   aboutSideNote:
     'Du comportement des modèles au goût visuel, nous prototypons toute la stack des systèmes créatifs.',
   aboutCaption: 'Études sur la forme · la perception · l\u2019imagination machine.',
-  aboutCaptionCredit: '(Open Design, MMXXVI)',
+  aboutCaptionCredit: '(OpenDesign, MMXXVI)',
 
   capLabel: 'Capacités · Nº 03',
   capTitleA: 'Des compétences, systèmes et surfaces',
@@ -1289,7 +1289,7 @@ const fr: Partial<HomeCopy> = {
     'Gpt-image-2 + Seedance + HyperFrames. Image, vidéo, audio — sur la même surface chat que le code.',
   lab3Title: 'Chorégraphie de prompts',
   lab3Body:
-    'Le formulaire interactif apparaît avant qu\u2019un seul pixel ne soit improvisé. 30 s de boutons radio valent mieux que 30 min de redirections.',
+    'Un formulaire ciblé n’apparaît que lorsque des choix non résolus changeraient sensiblement le résultat.',
   lab4Title: 'Raisonnement visuel',
   lab4Body:
     'Une auto-critique en 5 dimensions filtre chaque artefact : philosophie · hiérarchie · exécution · spécificité · retenue.',
@@ -1309,7 +1309,7 @@ const fr: Partial<HomeCopy> = {
     'Le daemon scanne ton $PATH pour 12 agents de coding et auto-charge {skills} compétences + {systems} systèmes au démarrage.',
   method2Title: 'Découvrir',
   method2Body:
-    'Le tour 1 est un formulaire — surface, audience, ton, échelle, contexte de marque. Verrouillé en 30 secondes.',
+    'Clarifier seulement si nécessaire — des questions ciblées sur la surface, l’audience, le ton, l’échelle ou le contexte de marque non résolus.',
   method3Title: 'Diriger',
   method3Body:
     'Choisis l\u2019une des 5 directions visuelles déterministes. Palette en OKLch, stack de fontes, posture de mise en page.',
@@ -1332,7 +1332,7 @@ const fr: Partial<HomeCopy> = {
     'Un système papier éditorial. Toile parchemin chaude, accent bleu encre, hiérarchie portée par les serifs — multilingue par conception (EN · zh-CN · ja).',
 
   testimonialLabel: 'Collaborateurs · Nº 06',
-  testimonialQuotePre: '« Open Design nous a aidés à transformer de vagues',
+  testimonialQuotePre: '« OpenDesign nous a aidés à transformer de vagues',
   testimonialQuoteEm1: 'idées IA',
   testimonialQuoteMid: 'en un système visuel qui semblait',
   testimonialQuoteEm2: 'aiguisé, crédible',
@@ -1416,7 +1416,7 @@ const esES: Partial<HomeCopy> = {
   aboutSideNote:
     'Del comportamiento del modelo al gusto visual, prototipamos la stack completa de sistemas creativos.',
   aboutCaption: 'Estudios sobre forma · percepción · imaginación máquina.',
-  aboutCaptionCredit: '(Open Design, MMXXVI)',
+  aboutCaptionCredit: '(OpenDesign, MMXXVI)',
 
   capLabel: 'Capacidades · Nº 03',
   capTitleA: 'Habilidades, sistemas y superficies',
@@ -1461,7 +1461,7 @@ const esES: Partial<HomeCopy> = {
     'Gpt-image-2 + Seedance + HyperFrames. Imagen, vídeo, audio — en la misma superficie de chat que el código.',
   lab3Title: 'Coreografía de prompts',
   lab3Body:
-    'El formulario interactivo aparece antes de que se improvise un solo píxel. 30 s de radios vencen a 30 min de redirecciones.',
+    'Solo cuando las decisiones pendientes cambiarían sustancialmente el resultado aparece un formulario de preguntas enfocado.',
   lab4Title: 'Razonamiento visual',
   lab4Body:
     'Una autocrítica de 5 dimensiones filtra cada pieza: filosofía · jerarquía · ejecución · especificidad · contención.',
@@ -1481,7 +1481,7 @@ const esES: Partial<HomeCopy> = {
     'El daemon escanea tu $PATH en busca de 12 agentes de coding y carga al arranque {skills} habilidades + {systems} sistemas.',
   method2Title: 'Descubrir',
   method2Body:
-    'El turno 1 es un formulario — superficie, audiencia, tono, escala, contexto de marca. Cerrado en 30 segundos.',
+    'Aclara solo cuando haga falta: preguntas enfocadas sobre superficie, audiencia, tono, escala o contexto de marca aún sin resolver.',
   method3Title: 'Dirigir',
   method3Body:
     'Elige una de 5 direcciones visuales deterministas. Paleta en OKLch, stack de fuentes, postura de layout.',
@@ -1504,7 +1504,7 @@ const esES: Partial<HomeCopy> = {
     'Un sistema papel editorial. Lienzo pergamino cálido, acento azul tinta, jerarquía con serif — multilingüe por diseño (EN · zh-CN · ja).',
 
   testimonialLabel: 'Colaboradores · Nº 06',
-  testimonialQuotePre: '«Open Design nos ayudó a convertir',
+  testimonialQuotePre: '«OpenDesign nos ayudó a convertir',
   testimonialQuoteEm1: 'ideas vagas de IA',
   testimonialQuoteMid: 'en un sistema visual que se sentía',
   testimonialQuoteEm2: 'agudo, creíble',
@@ -1588,7 +1588,7 @@ const ptBR: Partial<HomeCopy> = {
   aboutSideNote:
     'Do comportamento dos modelos ao gosto visual, prototipamos a stack inteira de sistemas criativos.',
   aboutCaption: 'Estudos em forma · percepção · imaginação de máquina.',
-  aboutCaptionCredit: '(Open Design, MMXXVI)',
+  aboutCaptionCredit: '(OpenDesign, MMXXVI)',
 
   capLabel: 'Capacidades · Nº 03',
   capTitleA: 'Skills, sistemas e superfícies',
@@ -1632,7 +1632,7 @@ const ptBR: Partial<HomeCopy> = {
     'Gpt-image-2 + Seedance + HyperFrames. Imagem, vídeo, áudio — na mesma superfície de chat do código.',
   lab3Title: 'Coreografia de prompts',
   lab3Body:
-    'O formulário interativo aparece antes que um único pixel seja improvisado. 30 s de radios batem 30 min de redirects.',
+    'Só quando decisões em aberto mudariam materialmente o resultado, um formulário focado mantém a próxima iteração no rumo.',
   lab4Title: 'Raciocínio visual',
   lab4Body:
     'Uma autocrítica em 5 dimensões filtra cada artefato: filosofia · hierarquia · execução · especificidade · contenção.',
@@ -1652,7 +1652,7 @@ const ptBR: Partial<HomeCopy> = {
     'O daemon varre seu $PATH em busca de 12 agentes de coding e carrega no boot {skills} skills + {systems} sistemas.',
   method2Title: 'Descobrir',
   method2Body:
-    'O turno 1 é um formulário — superfície, audiência, tom, escala, contexto de marca. Travado em 30 segundos.',
+    'Esclareça apenas quando necessário — perguntas focadas sobre superfície, audiência, tom, escala ou contexto de marca ainda não resolvidos.',
   method3Title: 'Direcionar',
   method3Body:
     'Escolha uma de 5 direções visuais determinísticas. Paleta em OKLch, font stack, postura de layout.',
@@ -1675,7 +1675,7 @@ const ptBR: Partial<HomeCopy> = {
     'Um sistema-papel editorial. Tela pergaminho quente, acento azul tinta, hierarquia liderada por serifa — multilíngue por design (EN · zh-CN · ja).',
 
   testimonialLabel: 'Colaboradores · Nº 06',
-  testimonialQuotePre: '"O Open Design nos ajudou a transformar',
+  testimonialQuotePre: '"O OpenDesign nos ajudou a transformar',
   testimonialQuoteEm1: 'ideias vagas de IA',
   testimonialQuoteMid: 'em um sistema visual que parecia',
   testimonialQuoteEm2: 'afiado, crível',

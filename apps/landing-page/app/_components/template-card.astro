@@ -105,10 +105,10 @@ const accent = (record.mode && ACCENT_BY_MODE[record.mode]) ?? PALETTE[index % P
  * read as `@open-design`. Date is intentionally absent — bundled
  * manifests don't carry a `published_at` and inferring it from git
  * mtime adds build-time complexity for a soft signal. We render
- * a paper-toned `Open Design` attribution badge in the date slot
+ * a paper-toned `OpenDesign` attribution badge in the date slot
  * instead so the row still balances visually.
  */
-const authorRaw = record.authorName ?? 'Open Design';
+const authorRaw = record.authorName ?? 'OpenDesign';
 const authorHandle = `@${authorRaw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
 
 /*
@@ -156,7 +156,7 @@ const isVideoPreview = record.previewType === 'video' && record.previewVideo;
 
   <div class="tpl-meta">
     <span class="tpl-author">{authorHandle}</span>
-    <span class="tpl-meta-date">Open Design</span>
+    <span class="tpl-meta-date">OpenDesign</span>
   </div>
 
   <a class="tpl-excerpt" href={detailHref}>

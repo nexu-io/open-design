@@ -20,8 +20,15 @@ export async function requestJson<T>(baseUrl: string, path: string, options: Jso
   return (text ? JSON.parse(text) : null) as T;
 }
 
-export async function requestText(baseUrl: string, path: string): Promise<string> {
-  const response = await fetch(new URL(path, ensureTrailingSlash(baseUrl)));
+export async function requestText(
+  baseUrl: string,
+  path: string,
+  options: Pick<JsonRequestOptions, 'headers'> = {},
+): Promise<string> {
+  const response = await fetch(
+    new URL(path, ensureTrailingSlash(baseUrl)),
+    options.headers ? { headers: options.headers } : {},
+  );
   const text = await response.text();
   if (!response.ok) {
     throw new Error(`HTTP ${response.status} ${path}: ${text.slice(0, 500)}`);

@@ -74,7 +74,7 @@ describe('project design-system copy route', () => {
     expect(copied.project.designSystemId).toMatch(/^user:/);
     expect(copied.designSystemId).toBe(copied.project.designSystemId);
     expect(copied.conversationId).toBeTruthy();
-    expect(copied.project.pendingPrompt).toContain('complete Open Design design system');
+    expect(copied.project.pendingPrompt).toContain('complete OpenDesign design system');
     expect(copied.project.pendingPrompt).toContain('context/source-context.md');
     expect(copied.project.pendingPrompt).toContain('refs/brand.md');
     expect(copied.project.metadata).toMatchObject({

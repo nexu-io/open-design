@@ -9,7 +9,7 @@ A 16:9 deck for the briefs that hate neon: investor updates, design reviews, int
 
 ## Source
 
-Distilled from [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) — `skills/minimalist-skill/SKILL.md`. The deck system follows the existing project convention from `skills/html-ppt-pitch-deck/example.html` (each `.slide` is a `100vw × 100vh` section; opened directly, slides stack vertically). See `example.html` in this directory.
+Distilled from [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) — `skills/minimalist-skill/SKILL.md`. The deck system follows the existing project convention from `design-templates/html-ppt-pitch-deck/example.html` (each `.slide` is a `100vw × 100vh` section; opened directly, slides stack vertically). See `example.html` in this directory.
 
 ## Hard rules
 

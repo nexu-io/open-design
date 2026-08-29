@@ -36,7 +36,7 @@ devloop's `until` evaluator reads.
 project-cwd/
 └── critique/
     ├── build-test.json   # { build: 'passing' | 'failing', tests: 'passing' | 'failing' | 'skipped', durationMs, commandsRun: [...], failures: [...] }
-    └── build-test.log    # raw stdout / stderr (truncated to OD_BUILD_TEST_LOG_BUDGET_BYTES, default 1 MiB)
+    └── build-test.log    # raw stdout / stderr (truncated to the runner's logBudgetBytes limit, default 1 MiB)
 ```
 
 The atom emits **two** signals the devloop reads:
@@ -72,5 +72,7 @@ Pipelines wire the atom into a devloop:
 
 ## Status
 
-Reserved id, prompt-only fragment in v1. The shell-out wrapper +
-log-truncation worker land in spec §16 Phase 7.
+Implemented by the daemon runner in
+`apps/daemon/src/plugins/atoms/build-test.ts`. It executes the configured
+build and test commands, bounds runtime and captured logs, and persists the
+report and log outputs above.

@@ -1,7 +1,7 @@
 ---
-title: 'Open Design — Skills, Design Systems, and Anti-Slop Guardrails Explained'
+title: 'OpenDesign — Skills, Design Systems, and Anti-Slop Guardrails Explained'
 youtubeId: XD86FRkGfsI
-summary: A deep dive into what actually ships inside Open Design — composable skills, brand-grade design systems, the discovery form, the self-critique gate, and the anti-slop guardrails — and why an Apache-2.0, local-first, model-agnostic stack is more than a Claude Design re-skin. Based on Popular AI Tools' breakdown.
+summary: A deep dive into what actually ships inside OpenDesign — composable skills, brand-grade design systems, the discovery form, the self-critique gate, and the anti-slop guardrails — and why an Apache-2.0, local-first, model-agnostic stack is more than a Claude Design re-skin. Based on Popular AI Tools' breakdown.
 date: 2026-05-02
 category: Demo
 durationSeconds: 628
@@ -9,20 +9,20 @@ author: Popular Ai Tools
 official: false
 ---
 
-This guide is a deep dive into what actually ships inside Open Design — the skills, the design systems, and the quality machinery that most "Claude Design clone" videos skip past. It follows the breakdown **Popular AI Tools** gives in [their walkthrough](https://www.youtube.com/watch?v=XD86FRkGfsI), rewritten and brought up to date with the current release. Watch the video above for the full tour, or read on for the written version.
+This guide is a deep dive into what actually ships inside OpenDesign — the skills, the design systems, and the quality machinery that most "Claude Design clone" videos skip past. It follows the breakdown **Popular AI Tools** gives in [their walkthrough](https://www.youtube.com/watch?v=XD86FRkGfsI), rewritten and brought up to date with the current release. Watch the video above for the full tour, or read on for the written version.
 
-![The Open Design workspace — what you land on after install.](/tutorials/open-design-31-skills-72-systems-popular-ai/01-workspace.webp)
-*The Open Design workspace — prototypes, slide decks, images, and video in one calm, familiar canvas.*
+![The OpenDesign workspace — what you land on after install.](/tutorials/open-design-31-skills-72-systems-popular-ai/01-workspace.webp)
+*The OpenDesign workspace — prototypes, slide decks, images, and video in one calm, familiar canvas.*
 
 ## The core insight: the design loop is a pattern, not a moat
 
-Popular AI Tools opens with the framing that explains why Open Design exists. Claude Design's artifact-first loop — detect intent, pick a skill, generate, preview, export — isn't magic. It's a pattern. **Open Design wraps that same pattern around whatever coding agent you already have installed**, so the loop becomes portable: bring your own model, your own agent, your own data, zero vendor lock-in.
+Popular AI Tools opens with the framing that explains why OpenDesign exists. Claude Design's artifact-first loop — detect intent, pick a skill, generate, preview, export — isn't magic. It's a pattern. **OpenDesign wraps that same pattern around whatever coding agent you already have installed**, so the loop becomes portable: bring your own model, your own agent, your own data, zero vendor lock-in.
 
 That single move fixes the things people pushed back on with a single-provider tool: model lock-in, cloud-only generation, a subscription on top of what you already pay for coding, and a limited set of design systems and exports.
 
 ## Skills: composable, and yours to extend
 
-The heart of Open Design is its **skills** — composable building blocks for different kinds of work. There are approach-type skills for web apps, SaaS landing pages, dashboards, mobile apps, email marketing, and social carousels, plus deck skills including a striking magazine-format presentation template.
+The heart of OpenDesign is its **skills** — composable building blocks for different kinds of work. There are approach-type skills for web apps, SaaS landing pages, dashboards, mobile apps, email marketing, and social carousels, plus deck skills including a striking magazine-format presentation template.
 
 The important part is the shape, not the count: **each skill is just a `SKILL.md` folder you can drop in.** That means you can extend the library with your own — load your copywriting guidelines, your section structures, your house UX rules — and you can also extract a skill and use it directly inside your own Codex or Claude Code session. You're not locked to the built-ins.
 
@@ -37,15 +37,15 @@ You can browse the full plugin library on the web at [open-design.ai/plugins](ht
 
 ## The quality machinery most clones don't have
 
-This is what Popular AI Tools argues really separates Open Design from copycats — and it's worth understanding because it's why the output doesn't look generated:
+This is what Popular AI Tools argues really separates OpenDesign from copycats — and it's worth understanding because it's why the output doesn't look generated:
 
-- **A discovery form.** Before it writes a line of code, Open Design asks about your surface, audience, tone, and brand context. That's how you avoid the "container soup" problem of generic output.
+- **A discovery form.** Before it writes a line of code, OpenDesign asks about your surface, audience, tone, and brand context. That's how you avoid the "container soup" problem of generic output.
 - **A self-critique gate.** Artifacts get scored across dimensions like philosophy, hierarchy, detail, function, and innovation before you ever see them, with checklist enforcement that catches lazy output early.
-- **Anti-slop guardrails.** Open Design explicitly avoids the tells of AI-generated work — purple gradients, generic icons, fake metrics. When it lacks real data, it uses honest placeholders instead of fabricating numbers, and it works from curated visual directions with locked palettes.
+- **Anti-slop guardrails.** OpenDesign explicitly avoids the tells of AI-generated work — purple gradients, generic icons, fake metrics. When it lacks real data, it uses honest placeholders instead of fabricating numbers, and it works from curated visual directions with locked palettes.
 
 ## More than HTML: media and motion
 
-It's not only static pages. Open Design integrates media generation — GPT Image for posters and avatars, motion graphics through hyperframes, and video — so a design can include real generated assets. And export is broad: HTML with inline assets, PDF, PowerPoint, ZIP archives, markdown, and MP4. That's a lot more flexibility for production work than a PDF-and-URL export.
+It's not only static pages. OpenDesign integrates media generation — GPT Image for posters and avatars, motion graphics through hyperframes, and video — so a design can include real generated assets. And export is broad: HTML with inline assets, PDF, PowerPoint, ZIP archives, markdown, and MP4. That's a lot more flexibility for production work than a PDF-and-URL export.
 
 ![The templates library — prototype, slide, image and video starting points.](/tutorials/open-design-31-skills-72-systems-popular-ai/03-templates.webp)
 *The templates library: prototype, slide, image, and video starting points you can filter by type and fork to begin.*
@@ -76,7 +76,7 @@ Handy lifecycle commands: `pnpm tools-dev status` to see what's running, and `pn
 
 ## Who is it for?
 
-Popular AI Tools lands on an honest answer. If you're a developer or technical founder **already paying for a coding CLI**, Open Design adds a full design surface for zero extra cost — your design prompts route through the same token pool. It's also the obvious pick for **client work**: everything runs locally, so nothing goes through a third party's servers, which matters for compliance-sensitive agencies.
+Popular AI Tools lands on an honest answer. If you're a developer or technical founder **already paying for a coding CLI**, OpenDesign adds a full design surface for zero extra cost — your design prompts route through the same token pool. It's also the obvious pick for **client work**: everything runs locally, so nothing goes through a third party's servers, which matters for compliance-sensitive agencies.
 
 The fair caveat: you need to be comfortable in a terminal (or use the desktop app), and it's an early release, so expect some rough edges.
 
@@ -90,14 +90,14 @@ The fair caveat: you need to be comfortable in a terminal (or use the desktop ap
 
 ## FAQ
 
-**Are skills locked to Open Design?**
+**Are skills locked to OpenDesign?**
 No. Each skill is a `SKILL.md` folder. You can add your own, and you can extract a built-in skill to use directly inside your own Codex or Claude Code.
 
 **How many design systems are there?**
 A large, brand-grade set that keeps growing. Rather than rely on a fixed number, check the live library at [open-design.ai/plugins](https://open-design.ai/plugins/) for the current count.
 
 **What makes the output not look AI-generated?**
-The discovery form, the self-critique gate, and the anti-slop guardrails — Open Design asks for context up front, scores artifacts before showing them, and avoids the visual tells of generated work.
+The discovery form, the self-critique gate, and the anti-slop guardrails — OpenDesign asks for context up front, scores artifacts before showing them, and avoids the visual tells of generated work.
 
 **Is it free?**
 The app is open source under Apache-2.0 and free to run locally. You only pay for the model and media usage of whichever agent and providers you connect.

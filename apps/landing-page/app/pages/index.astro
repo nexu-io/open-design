@@ -9,6 +9,7 @@ import SiteAnalytics from '../_components/site-analytics.astro';
 import ResourceHints from '../_components/resource-hints.astro';
 import LocaleSwitcherScript from '../_components/locale-switcher-script.astro';
 import PreciseLazyload from '../_components/precise-lazyload.astro';
+import DownloadEngagementPrompt from '../_components/download-engagement-prompt.astro';
 import {
   heroBgImage,
   heroBgSrcset,
@@ -29,6 +30,9 @@ import {
 import { getCatalogCounts } from '../_lib/catalog';
 import { getGithubRepoMeta } from '../_lib/github';
 import { clampDescription } from '../_lib/clamp-description';
+import { DEEPSEEK_V4_PRO_CAMPAIGN } from '../_lib/deepseek-v4-pro-campaign';
+import { getPricingCampaignContent } from '../_lib/pricing-campaign-content';
+import { getHomeCampaignContent } from '../_lib/home-campaign-content';
 
 const locale: LandingLocaleCode = localeFromPath(Astro.url.pathname);
 const localeDef = getLocaleDefinition(locale);
@@ -56,8 +60,8 @@ const OFFICIAL_URL = `${origin}official/`;
 const websiteSchema = {
   '@type': 'WebSite',
   '@id': `${origin}#website`,
-  name: 'Open Design',
-  alternateName: ['OpenDesign', 'open-design', 'opendesign', 'Open Design AI', 'OD'],
+  name: 'OpenDesign',
+  alternateName: ['Open Design', 'open-design', 'opendesign', 'Open Design AI', 'OpenDesign AI', 'OD'],
   url: origin,
   inLanguage: localeDef.htmlLang,
   availableLanguage: LANDING_LOCALES.map((entry) => entry.htmlLang),
@@ -67,8 +71,8 @@ const websiteSchema = {
 const organizationSchema = {
   '@type': 'Organization',
   '@id': `${origin}#organization`,
-  name: 'Open Design',
-  alternateName: ['OpenDesign', 'open-design', 'opendesign', 'Open Design AI', 'OD', 'nexu-io/open-design'],
+  name: 'OpenDesign',
+  alternateName: ['Open Design', 'open-design', 'opendesign', 'Open Design AI', 'OpenDesign AI', 'OD', 'nexu-io/open-design'],
   url: origin,
   logo: {
     '@type': 'ImageObject',
@@ -86,13 +90,13 @@ const organizationSchema = {
 const softwareSchema = {
   '@type': 'SoftwareApplication',
   '@id': `${origin}#software`,
-  name: 'Open Design',
-  alternateName: ['OpenDesign', 'open-design', 'opendesign', 'Open Design AI', 'OD'],
+  name: 'OpenDesign',
+  alternateName: ['Open Design', 'open-design', 'opendesign', 'Open Design AI', 'OpenDesign AI', 'OD'],
   description,
   url: origin,
   inLanguage: localeDef.htmlLang,
   applicationCategory: 'DesignApplication',
-  operatingSystem: 'macOS, Windows, Linux',
+  operatingSystem: 'macOS, Windows',
   license: 'https://www.apache.org/licenses/LICENSE-2.0',
   softwareVersion: github.versionLabel,
   downloadUrl: RELEASES_URL,
@@ -116,6 +120,18 @@ const homepageGraph = {
   '@graph': [websiteSchema, organizationSchema, softwareSchema],
 };
 const faq = getHomeFaq(locale, { origin, repo: REPO_URL });
+const campaignPricingHref = localePath(locale, '/pricing/');
+const campaignContent = getPricingCampaignContent(locale);
+const homeCampaignContent = getHomeCampaignContent(locale);
+const campaignCopy = {
+  badge: campaignContent.windowLabel,
+  title: homeCampaignContent.title,
+  detail: homeCampaignContent.detail,
+  windowLabel: campaignContent.windowLabel,
+  dayUnit: campaignContent.dayUnit,
+  linkLabel: campaignContent.linkLabel,
+  closeLabel: campaignContent.closeLabel,
+};
 const pageHtml = renderToStaticMarkup(
   Page({ counts, github, locale, faq }) as ReturnType<typeof createElement>,
 );
@@ -188,7 +204,7 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
     />
 
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Open Design" />
+    <meta property="og:site_name" content="OpenDesign" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={metaDescription} />
     <meta property="og:url" content={canonical} />
@@ -213,7 +229,200 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
     <script is:inline type="application/ld+json" set:html={JSON.stringify(homepageGraph)} />
   </head>
   <body>
+    <div class="home-campaign-banner" data-home-campaign-banner data-campaign-window-label={campaignCopy.windowLabel} data-campaign-day-unit={campaignCopy.dayUnit} data-campaign-start-at={DEEPSEEK_V4_PRO_CAMPAIGN.startAt} data-campaign-end-at={DEEPSEEK_V4_PRO_CAMPAIGN.endAtExclusive} hidden>
+      <a class="home-campaign-banner__link" href={campaignPricingHref} aria-label={`${campaignCopy.title} · ${campaignCopy.linkLabel}`}>
+        <span class="home-campaign-banner__badge" data-home-campaign-countdown>{campaignCopy.badge}</span>
+        <span class="home-campaign-banner__divider" aria-hidden="true">|</span>
+        <strong>{campaignCopy.title}</strong>
+        <span class="home-campaign-banner__divider" aria-hidden="true">|</span>
+        <span class="home-campaign-banner__detail">{campaignCopy.detail}</span>
+        <span class="home-campaign-banner__cta" aria-hidden="true">→</span>
+      </a>
+      <button class="home-campaign-banner__close" type="button" aria-label={campaignCopy.closeLabel} data-home-campaign-close>×</button>
+    </div>
     <Fragment set:html={pageHtml} />
+    <DownloadEngagementPrompt locale={locale} />
+    <style is:global>
+      :root { --home-campaign-banner-height: 0px; }
+      html.home-campaign-banner-active { --home-campaign-banner-height: 44px; }
+      .home-campaign-banner {
+        position: fixed;
+        z-index: 70;
+        top: 0;
+        left: 0;
+        right: 0;
+        min-height: var(--home-campaign-banner-height);
+        border-bottom: 1px solid color-mix(in srgb, #78ea57 36%, var(--line));
+        color: var(--ink);
+        background: #d8ffb5;
+        font-family: var(--sans);
+        font-size: 13px;
+        line-height: 1.25;
+        text-decoration: none;
+        box-shadow: 0 6px 24px rgb(38 38 38 / 6%);
+      }
+      .home-campaign-banner__link {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        min-height: var(--home-campaign-banner-height);
+        padding: 8px 64px 8px 24px;
+        color: inherit;
+        text-decoration: none;
+      }
+      .home-campaign-banner__badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 9px;
+        border-radius: 999px;
+        color: #102b05;
+        background: #68f22e;
+        font-size: 11px;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .home-campaign-banner__divider { color: color-mix(in srgb, var(--ink) 26%, transparent); }
+      .home-campaign-banner__detail { color: var(--ink-mute); }
+      .home-campaign-banner__cta {
+        flex: 0 0 auto;
+        padding: 5px 10px;
+        border-radius: 999px;
+        color: #f7f7f3;
+        background: var(--ink);
+        font-weight: 750;
+        white-space: nowrap;
+      }
+      .home-campaign-banner__link:hover .home-campaign-banner__cta { transform: translateX(1px); }
+      .home-campaign-banner__close {
+        position: absolute;
+        top: 50%;
+        right: 14px;
+        z-index: 1;
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: 0;
+        border-radius: 50%;
+        color: var(--ink);
+        background: transparent;
+        font: 19px/1 var(--sans);
+        opacity: .72;
+        cursor: pointer;
+        transform: translateY(-50%);
+      }
+      .home-campaign-banner__close:hover { background: rgb(38 38 38 / 7%); opacity: 1; }
+      .home-campaign-banner__close:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; opacity: 1; }
+      html.home-campaign-banner-dismissed { --home-campaign-banner-height: 0px; }
+      html.home-campaign-banner-dismissed .home-campaign-banner { display: none; }
+      .site-chrome { top: var(--home-campaign-banner-height); }
+      @media (max-width: 680px) {
+        html.home-campaign-banner-active { --home-campaign-banner-height: 52px; }
+        .home-campaign-banner__link {
+          justify-content: flex-start;
+          gap: 8px;
+          padding: 8px 48px 8px 14px;
+          font-size: 12px;
+        }
+        .home-campaign-banner__divider,
+        .home-campaign-banner__detail { display: none; }
+        .home-campaign-banner__cta { margin-left: auto; }
+        .home-campaign-banner__close { right: 10px; }
+        .hero { padding-top: calc(92px + var(--home-campaign-banner-height)); }
+      }
+    </style>
+    <script is:inline>
+      (() => {
+        const dismissKey = 'open-design:home-campaign-banner-dismissed:deepseek-v4-pro-fixed-window-countdown-v1';
+        const banner = document.querySelector('[data-home-campaign-banner]');
+        const campaignLink = banner?.querySelector('.home-campaign-banner__link');
+        const countdown = document.querySelector('[data-home-campaign-countdown]');
+        const close = document.querySelector('[data-home-campaign-close]');
+        const windowLabel = banner?.getAttribute('data-campaign-window-label') || 'Ends in';
+        const dayUnit = banner?.getAttribute('data-campaign-day-unit') || 'd';
+        const startAt = Date.parse(banner?.getAttribute('data-campaign-start-at') || '');
+        const endAt = Date.parse(banner?.getAttribute('data-campaign-end-at') || '');
+
+        const formatRemaining = (remainingMs) => {
+          const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+          const days = Math.floor(totalSeconds / 86400);
+          const hours = Math.floor((totalSeconds % 86400) / 3600);
+          const minutes = Math.floor((totalSeconds % 3600) / 60);
+          const seconds = totalSeconds % 60;
+          const time = `${days}${dayUnit} ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+          return time;
+        };
+
+        let dismissed = false;
+        try {
+          if (window.localStorage.getItem(dismissKey) === '1') {
+            dismissed = true;
+            document.documentElement.classList.add('home-campaign-banner-dismissed');
+          }
+        } catch {}
+        let impressionTracked = false;
+        const updateCampaignVisibility = () => {
+          const now = Date.now();
+          const active = now >= startAt && now < endAt;
+          const visible = active && !dismissed;
+          if (banner) banner.hidden = !visible;
+          document.documentElement.classList.toggle('home-campaign-banner-active', visible);
+          if (!active || !countdown) return active;
+          const remainingMs = endAt - now;
+          countdown.textContent = `${windowLabel} ${formatRemaining(remainingMs)}`;
+          if (visible && !impressionTracked && typeof window.__odTrack === 'function') {
+            impressionTracked = true;
+            window.__odTrack('surface_view', {
+              page_name: 'landing_home', area: 'campaign_banner',
+              element: 'deepseek_v4_pro', campaign_id: 'deepseek_v4_pro',
+              user_state: 'unknown',
+            });
+          }
+          return active;
+        };
+        updateCampaignVisibility();
+        const campaignTimer = window.setInterval(updateCampaignVisibility, 1000);
+        window.addEventListener('pagehide', () => {
+          window.clearInterval(campaignTimer);
+        }, { once: true });
+        campaignLink?.addEventListener('click', (event) => {
+          const eligible = Date.now() >= startAt && Date.now() < endAt;
+          const attribution = eligible
+            ? window.__odRecordCampaignEntry?.('landing_home_banner', 'deepseek_v4_pro')
+            : undefined;
+          window.__odTrack?.('ui_click', {
+            page_name: 'landing_home',
+            area: 'campaign_banner',
+            element: 'open_pricing',
+            ...(eligible ? { campaign_id: 'deepseek_v4_pro' } : {}),
+            user_state: 'unknown',
+            ...(attribution || {}),
+          });
+          if (attribution && window.__odAttributedUrl) {
+            event.preventDefault();
+            window.location.href = window.__odAttributedUrl(campaignLink.href, attribution);
+          }
+        });
+        close?.addEventListener('click', () => {
+          const eligible = Date.now() >= startAt && Date.now() < endAt;
+          window.__odTrack?.('ui_click', {
+            page_name: 'landing_home',
+            area: 'campaign_banner',
+            element: 'close',
+            ...(eligible ? { campaign_id: 'deepseek_v4_pro' } : {}),
+            user_state: 'unknown',
+          });
+          document.documentElement.classList.add('home-campaign-banner-dismissed');
+          document.documentElement.classList.remove('home-campaign-banner-active');
+          if (banner) banner.hidden = true;
+          dismissed = true;
+          try { window.localStorage.setItem(dismissKey, '1'); } catch {}
+        });
+      })();
+    </script>
     {/*
      * Tighter than the catalog default (1500px): the homepage's heavy
      * below-the-fold art — full-bleed section backdrops, product shots — must
@@ -277,17 +486,17 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
         const formatStars = (count) => {
           if (!Number.isFinite(count) || count <= 0) return '0';
           if (count < 1000) return String(count);
-          return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+          return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K+`;
         };
 
         // Pull a clean 'v0.3.0'-style label from a GitHub release record.
-        // We prefer release.name (e.g. 'Open Design 0.3.0') because that's
+        // We prefer release.name (e.g. 'OpenDesign 0.3.0') because that's
         // what we hand-author; fall back to tag_name (e.g.
         // 'open-design-v0.3.0') with the project prefix stripped.
         //
         // Expected input shapes (release.name / release.tag_name):
-        //   { name: 'Open Design 0.3.0',  tag_name: 'v0.3.0' }            → 'v0.3.0'
-        //   { name: 'Open Design v0.3.0', tag_name: 'open-design-v0.3.0' } → 'v0.3.0'
+        //   { name: 'OpenDesign 0.3.0',  tag_name: 'v0.3.0' }            → 'v0.3.0'
+        //   { name: 'OpenDesign v0.3.0', tag_name: 'open-design-v0.3.0' } → 'v0.3.0'
         //   { name: '0.3.0-beta.1',       tag_name: 'open-design_0.3.0' }  → 'v0.3.0-beta.1' (name wins)
         //   { name: null,                 tag_name: 'open-design-v0.3.0' } → 'v0.3.0' (tag fallback)
         //   { name: null,                 tag_name: null }                  → null (caller skips)
@@ -974,14 +1183,23 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
         // Falls back to the server-rendered releases-page href when detection or
         // the API fails.
         const enhanceDownloadCta = () => {
-          // `[data-download-page]` CTAs (e.g. the nav "Download" button) must
-          // keep their server-rendered href to the /download/ page — only the
-          // direct-download CTAs (hero) are rewritten to the release asset.
+          // Page-only CTAs can opt out with `[data-download-page]`; the shared
+          // nav CTA is now a direct download and intentionally participates.
           const buttons = Array.from(
             document.querySelectorAll('[data-download-cta]:not([data-download-page])'),
           );
           if (buttons.length === 0) return;
           const ua = navigator.userAgent || '';
+          const platform = (
+            navigator.userAgentData?.platform ||
+            navigator.platform ||
+            ''
+          ).toLowerCase();
+          // The engagement prompt runs before this legacy homepage enhancer.
+          // Desktop-mode iPadOS reports a Macintosh UA/platform, so stop here
+          // before a later pass can undo the prompt's neutral download fallback.
+          const isIpadOS = navigator.maxTouchPoints > 1 && /mac/.test(platform);
+          if (isIpadOS || /iPhone|iPad|iPod/i.test(ua)) return;
           const isWin = /Windows|Win32|Win64|WOW64/i.test(ua);
           const isMac = /Macintosh|Mac OS X/i.test(ua) && !/iPhone|iPad|iPod/i.test(ua);
 
@@ -1489,20 +1707,15 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
             if (ev.key === 'Escape') setNavOpen(false);
           });
         })();
-        // Open Design Cloud header account. Same as `enhanceMobileNav`
+        // OpenDesign Cloud header account. Same as `enhanceMobileNav`
         // above, this mirrors `header-enhancer.astro` because the homepage does
-        // not include that enhancer. Detect a live cloud session, swap the
-        // "Sign in" link for the avatar menu, drive popup login + polling, and
-        // sign out. Everything fails closed to signed-out (non-apex origin or
-        // blocked third-party cookies just keep "Sign in" showing).
+        // not include that enhancer. Detect a live cloud session and reveal the
+        // avatar menu for signed-in visitors; signed-out visitors keep the
+        // download CTA as the sole account-side action.
         (function enhanceAmrAccount() {
           const account = document.querySelector('[data-amr-account]');
           if (!account) return;
           const api = (account.getAttribute('data-amr-api') || '').replace(/\/$/, '');
-          const loginUrl = account.getAttribute('data-amr-login') || '';
-          // Localized OD homepage — post-login destination ("回到官网首页").
-          const homeUrl = account.getAttribute('data-amr-home') || '';
-          const signinEl = account.querySelector('[data-amr-signin]');
           const menuEl = account.querySelector('[data-amr-menu]');
           const avatarImg = account.querySelector('[data-amr-avatar]');
           const avatarFallback = account.querySelector('[data-amr-avatar-fallback]');
@@ -1541,7 +1754,6 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
                 avatarFallback.removeAttribute('hidden');
               }
             }
-            if (signinEl) signinEl.setAttribute('hidden', '');
             if (menuEl) menuEl.removeAttribute('hidden');
           };
 
@@ -1550,107 +1762,13 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
               menuEl.setAttribute('hidden', '');
               menuEl.removeAttribute('open');
             }
-            if (signinEl) signinEl.removeAttribute('hidden');
-          };
-
-          // Focus scrim shown while the vela login popup is open (popup is the
-          // chosen modal mechanism; iframe is ruled out by X-Frame-Options +
-          // cross-site cookies + OAuth-in-iframe). Faded via `.is-active`.
-          let overlayEl = null;
-          const showOverlay = () => {
-            if (overlayEl) return;
-            overlayEl = document.createElement('div');
-            overlayEl.className = 'nav-login-overlay';
-            overlayEl.setAttribute('aria-hidden', 'true');
-            document.body.appendChild(overlayEl);
-            requestAnimationFrame(() => {
-              if (overlayEl) overlayEl.classList.add('is-active');
-            });
-          };
-          const hideOverlay = () => {
-            if (!overlayEl) return;
-            const el = overlayEl;
-            overlayEl = null;
-            el.classList.remove('is-active');
-            const drop = () => el.remove();
-            el.addEventListener('transitionend', drop, { once: true });
-            setTimeout(drop, 400);
-          };
-
-          // Return the main window to the localized OD homepage after login;
-          // a homepage sign-in just swaps in place (already on it).
-          const goHome = () => {
-            if (!homeUrl) return;
-            const targetUrl = new URL(homeUrl, window.location.href);
-            const here = window.location.pathname.replace(/\/+$/, '');
-            const target = targetUrl.pathname.replace(/\/+$/, '');
-            if (here !== target) window.location.assign(homeUrl);
-          };
-
-          // Single terminal success path for every login completion route.
-          const completeSignIn = (user) => {
-            hideOverlay();
-            showSignedIn(user);
-            goHome();
           };
 
           // Initial silent probe for an existing session.
           fetchSession().then((user) => {
             if (user) showSignedIn(user);
+            else showSignedOut();
           });
-
-          if (signinEl && loginUrl) {
-            signinEl.addEventListener('click', (ev) => {
-              ev.preventDefault();
-              // Center the popup over the current browser window (multi-monitor
-              // aware via screenLeft/screenTop).
-              const W = 480;
-              const H = 720;
-              const dx = window.screenLeft ?? window.screenX ?? 0;
-              const dy = window.screenTop ?? window.screenY ?? 0;
-              const vw = window.innerWidth || document.documentElement.clientWidth || screen.width;
-              const vh = window.innerHeight || document.documentElement.clientHeight || screen.height;
-              const left = Math.round(dx + (vw - W) / 2);
-              const top = Math.round(dy + (vh - H) / 2);
-              const popup = window.open(
-                loginUrl,
-                'od-cloud-login',
-                `width=${W},height=${H},left=${left},top=${top},menubar=no,toolbar=no,location=yes`,
-              );
-              // Popup blocked: fall back to a same-tab navigation.
-              if (!popup) {
-                window.location.assign(loginUrl);
-                return;
-              }
-              showOverlay();
-              const started = Date.now();
-              const POLL_MS = 2000;
-              const MAX_MS = 5 * 60 * 1000;
-              const timer = setInterval(() => {
-                if (Date.now() - started > MAX_MS) {
-                  clearInterval(timer);
-                  hideOverlay();
-                  return;
-                }
-                if (popup.closed) {
-                  clearInterval(timer);
-                  fetchSession().then((user) => {
-                    if (user) completeSignIn(user);
-                    else hideOverlay();
-                  });
-                  return;
-                }
-                fetchSession().then((user) => {
-                  if (!user) return;
-                  clearInterval(timer);
-                  try {
-                    if (!popup.closed) popup.close();
-                  } catch {}
-                  completeSignIn(user);
-                });
-              }, POLL_MS);
-            });
-          }
 
           if (signoutBtn) {
             signoutBtn.addEventListener('click', () => {
@@ -2156,6 +2274,34 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
           { rootMargin: '0px 0px 150% 0px' },
         );
         containers.forEach((container) => io.observe(container));
+      })();
+    </script>
+    <script is:inline>
+      // Hero video facade: swap the poster for the YouTube iframe on demand so
+      // the first screen ships no third-party script until the visitor asks.
+      (() => {
+        const frame = document.querySelector('[data-hero-video]');
+        if (!frame) return;
+        const id = frame.getAttribute('data-video-id');
+        if (!id) return;
+        const play = () => {
+          if (frame.classList.contains('is-playing')) return;
+          const iframe = document.createElement('iframe');
+          iframe.src =
+            'https://www.youtube-nocookie.com/embed/' +
+            encodeURIComponent(id) +
+            '?autoplay=1&rel=0&playsinline=1&modestbranding=1';
+          iframe.title = 'OpenDesign product walkthrough';
+          iframe.allow =
+            'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+          iframe.setAttribute('allowfullscreen', '');
+          iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+          frame.classList.add('is-playing');
+          frame.appendChild(iframe);
+        };
+        // Pointer: anywhere on the poster. Keyboard: the labelled <button> is
+        // the only focusable control and its native activation fires `click`.
+        frame.addEventListener('click', play);
       })();
     </script>
   </body>

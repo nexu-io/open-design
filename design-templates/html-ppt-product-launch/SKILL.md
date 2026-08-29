@@ -3,9 +3,9 @@ name: html-ppt-product-launch
 en_name: "Pitch a Team Rollout like a Strategic Account Executive"
 zh_name: "像战略客户 AE 一样推动团队落地"
 description: |
-  Open Design Teams: a launch-and-adoption proposal for a mid-market design team weighing a switch from closed cloud tools. Built as a decision-grade B2B sales deck for design team lead, IT.
+  OpenDesign Teams: a launch-and-adoption proposal for a mid-market design team weighing a switch from closed cloud tools. Built as a decision-grade B2B sales deck for design team lead, IT.
 en_description: |
-  Open Design Teams: a launch-and-adoption proposal for a mid-market design team weighing a switch from closed cloud tools. Built as a decision-grade B2B sales deck for design team lead, IT.
+  OpenDesign Teams: a launch-and-adoption proposal for a mid-market design team weighing a switch from closed cloud tools. Built as a decision-grade B2B sales deck for design team lead, IT.
 zh_description: |
   像战略客户 AE 一样推动团队落地——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -39,7 +39,7 @@ od:
   animations: true
   category: "b2b-sales"
   scenario: "sales"
-  example_prompt: "Create \"Pitch a Team Rollout like a Strategic Account Executive\" as a decision-grade B2B sales deck in this template's own visual system. Subject: Open Design Teams: a launch-and-adoption proposal for a mid-market design team weighing a switch from closed cloud tools. Audience: design team lead, IT. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the champion forward this internally without rewriting it."
+  example_prompt: "Create \"Pitch a Team Rollout like a Strategic Account Executive\" as a decision-grade B2B sales deck in this template's own visual system. Subject: OpenDesign Teams: a launch-and-adoption proposal for a mid-market design team weighing a switch from closed cloud tools. Audience: design team lead, IT. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the champion forward this internally without rewriting it."
 ---
 # HTML PPT · Product Launch
 
@@ -52,23 +52,23 @@ The Examples gallery wires "Use this prompt" to the example_prompt above. When y
 ## How to author the deck
 
 1. **Read the master skill first.** All authoring rules live in
-   [`skills/html-ppt/SKILL.md`](../html-ppt/SKILL.md) — content/audience checklist,
+   [`design-templates/html-ppt/SKILL.md`](../html-ppt/SKILL.md) — content/audience checklist,
    token rules, layout reuse, presenter mode, the keyboard runtime, and the
    "never put presenter-only text on the slide" rule.
 2. **Start from the matching template folder:**
-   `skills/html-ppt/templates/full-decks/product-launch/` — copy `index.html` and
+   `design-templates/html-ppt/templates/full-decks/product-launch/` — copy `index.html` and
    `style.css` into the project, keep the `.tpl-product-launch` body class.
 3. **Bring the shared runtime with the template.** The upstream
    `index.html` links the shared CSS/JS via `../../../assets/...` because it
-   sits three folders deep inside `skills/html-ppt/templates/full-decks/`.
+   sits three folders deep inside `design-templates/html-ppt/templates/full-decks/`.
    Once you copy `index.html` into the project, those parent-relative URLs
    no longer resolve and `base.css`, `animations.css`, and `runtime.js`
    will 404 — meaning the deck never activates and slide navigation is
    dead. Pick one of these two recipes per project:
    - **Recipe A — copy + rewrite (preferred):** copy
-     `skills/html-ppt/assets/fonts.css`, `skills/html-ppt/assets/base.css`,
-     `skills/html-ppt/assets/animations/animations.css`, and
-     `skills/html-ppt/assets/runtime.js` into a project-local
+     `design-templates/html-ppt/assets/fonts.css`, `design-templates/html-ppt/assets/base.css`,
+     `design-templates/html-ppt/assets/animations/animations.css`, and
+     `design-templates/html-ppt/assets/runtime.js` into a project-local
      `assets/` (with `assets/animations/animations.css`), then rewrite the
      four `<link>`/`<script>` tags in `index.html` from
      `../../../assets/...` to the matching project-local paths
@@ -83,7 +83,7 @@ The Examples gallery wires "Use this prompt" to the example_prompt above. When y
    Either way, do not ship the upstream `../../../assets/...` URLs
    verbatim into a project artifact — they only work in-tree.
 4. **Pick a theme.** Default tokens look fine; if the user wants a different
-   feel, swap in any of the 36 themes from `skills/html-ppt/assets/themes/*.css`
+   feel, swap in any of the 36 themes from `design-templates/html-ppt/assets/themes/*.css`
    via `<link id="theme-link">` and let `T` cycle.
 5. **Replace demo content, not classes.** The `.tpl-product-launch` scoped CSS only
    recognises the structural classes shipped in the template — keep them.
@@ -93,5 +93,5 @@ The Examples gallery wires "Use this prompt" to the example_prompt above. When y
 
 Visual system, layouts, themes and the runtime keyboard model come from
 the upstream MIT-licensed [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill). The
-LICENSE file ships at `skills/html-ppt/LICENSE`; please keep it in place when
+LICENSE file ships at `design-templates/html-ppt/LICENSE`; please keep it in place when
 redistributing.

@@ -9,6 +9,8 @@ import type { InstalledPluginRecord, PluginManifest } from '@open-design/contrac
 
 import {
   closeDatabase,
+  ensureWorkspaceProject,
+  ensureWorkspaceResource,
   getProject,
   insertRoutine,
   insertRoutineRun,
@@ -17,8 +19,9 @@ import {
   openDatabase,
 } from '../src/db.js';
 import { startServer } from '../src/server.js';
+import { writeAppConfig } from '../src/app-config.js';
 import { upsertInstalledPlugin } from '../src/plugins/registry.js';
-import { createSnapshot, linkSnapshotToProject } from '../src/plugins/snapshots.js';
+import { createSnapshot, getSnapshot, linkSnapshotToProject } from '../src/plugins/snapshots.js';
 
 let tmp: string;
 let dbFile: string;
@@ -891,7 +894,142 @@ describe('routine prepare failure cleanup', () => {
   });
 });
 
-function pluginRecord(id: string): InstalledPluginRecord {
+describe('routine resource scope', () => {
+  it('rejects another member Personal plugin before creating a routine snapshot', async () => {
+    const started = await startServer({ port: 0, returnServer: true }) as {
+      url: string;
+      server: http.Server;
+      shutdown?: () => Promise<void> | void;
+    };
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const db = openDatabase(tmp, { dataDir });
+    const projectId = 'routine-exact-plugin-project';
+    const plugin = pluginRecord('routine-other-member-plugin');
+    const now = Date.now();
+    upsertInstalledPlugin(db, plugin);
+    insertProject(db, {
+      id: projectId,
+      name: 'Exact plugin target',
+      createdAt: now,
+      updatedAt: now,
+    });
+    ensureWorkspaceProject(db, {
+      projectId,
+      workspaceId: 'routine-workspace',
+      visibility: 'personal',
+      resourceState: 'active',
+      createdByWorkspaceMemberId: 'routine-member-a',
+      updatedByWorkspaceMemberId: 'routine-member-a',
+    });
+    ensureWorkspaceResource(db, 'plugin', 'routine-workspace', plugin.id, {
+      visibility: 'personal',
+      resourceState: 'active',
+      createdByWorkspaceMemberId: 'routine-member-b',
+      updatedByWorkspaceMemberId: 'routine-member-b',
+    });
+    insertRoutine(db, {
+      id: 'routine-exact-plugin',
+      name: 'Exact plugin routine',
+      prompt: 'must not read another member plugin',
+      scheduleKind: 'hourly',
+      scheduleValue: '1',
+      scheduleJson: JSON.stringify({ kind: 'hourly', minute: 1 }),
+      projectMode: 'reuse',
+      projectId,
+      skillId: null,
+      agentId: 'missing-agent',
+      contextJson: JSON.stringify({
+        pluginIds: [plugin.id],
+        workspaceScope: {
+          workspaceId: 'routine-workspace',
+          workspaceMemberId: 'routine-member-a',
+        },
+      }),
+      enabled: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    try {
+      const response = await fetch(`${started.url}/api/routines/routine-exact-plugin/run`, {
+        method: 'POST',
+      });
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toMatchObject({
+        error: expect.stringContaining('not visible to the persisted project owner'),
+      });
+      expect(getProject(db, projectId)?.appliedPluginSnapshotId ?? null).toBeNull();
+      expect(db.prepare(
+        'SELECT COUNT(*) AS count FROM applied_plugin_snapshots WHERE project_id = ?',
+      ).get(projectId)).toEqual({ count: 0 });
+    } finally {
+      await Promise.resolve(started.shutdown?.());
+      await new Promise<void>((resolve) => started.server.close(() => resolve()));
+    }
+  });
+
+  it('resolves a plugin against the persisted project design system, never the ambient app default', async () => {
+    const started = await startServer({ port: 0, returnServer: true }) as {
+      url: string;
+      server: http.Server;
+      shutdown?: () => Promise<void> | void;
+    };
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const db = openDatabase(tmp, { dataDir });
+    const projectId = 'routine-persisted-design-system-project';
+    const routinePlugin = pluginRecord('routine-persisted-design-system-plugin', true);
+    upsertInstalledPlugin(db, routinePlugin);
+    insertProject(db, {
+      id: projectId,
+      name: 'Persisted brand target',
+      designSystemId: 'default',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    await writeAppConfig(dataDir, { designSystemId: 'kami' });
+
+    try {
+      const create = await fetch(`${started.url}/api/routines`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Persisted brand routine',
+          prompt: 'use the project brand',
+          schedule: { kind: 'hourly', minute: 1 },
+          target: { mode: 'reuse', projectId },
+          context: { pluginIds: [routinePlugin.id] },
+          agentId: 'missing-agent',
+          enabled: false,
+        }),
+      });
+      expect(create.status).toBe(201);
+      const routineId = ((await create.json()) as { routine: { id: string } }).routine.id;
+
+      const run = await fetch(`${started.url}/api/routines/${routineId}/run`, {
+        method: 'POST',
+      });
+      expect(run.status).toBe(202);
+      const snapshotId = getProject(db, projectId)?.appliedPluginSnapshotId;
+      expect(snapshotId).toBeTruthy();
+      const snapshot = getSnapshot(db, snapshotId!);
+      expect(snapshot?.resolvedContext.items).toContainEqual(expect.objectContaining({
+        kind: 'design-system',
+        id: 'default',
+      }));
+      expect(snapshot?.resolvedContext.items).not.toContainEqual(expect.objectContaining({
+        kind: 'design-system',
+        id: 'kami',
+      }));
+    } finally {
+      await Promise.resolve(started.shutdown?.());
+      await new Promise<void>((resolve) => started.server.close(() => resolve()));
+    }
+  });
+});
+
+function pluginRecord(id: string, usesProjectDesignSystem = false): InstalledPluginRecord {
   const manifest: PluginManifest = {
     name: id,
     title: 'Routine Plugin',
@@ -903,6 +1041,7 @@ function pluginRecord(id: string): InstalledPluginRecord {
       useCase: { query: 'Handle {{prompt}}' },
       inputs: [{ name: 'prompt', type: 'string', required: true }],
       capabilities: ['prompt:inject'],
+      ...(usesProjectDesignSystem ? { context: { designSystem: {} } } : {}),
     },
   } as PluginManifest;
   return {

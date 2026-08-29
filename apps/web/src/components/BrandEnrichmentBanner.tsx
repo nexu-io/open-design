@@ -37,7 +37,7 @@ export function BrandEnrichmentBanner({ onContinue, busy = false }: Props) {
         onClick={onContinue}
         data-testid="brand-enrichment-continue"
       >
-        <Icon name="sparkles" size={13} />
+        <Icon name="sparkles" size={14} />
         {busy ? t('brandEnrichment.busy') : t('brandEnrichment.cta')}
       </button>
     </div>

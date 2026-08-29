@@ -1,16 +1,66 @@
 import { describe, expect, it } from 'vitest';
 import {
+  designDeliveryReconciliationStale,
   designDeliveryVerificationPending,
   resolveDesignDeliveryOutcome,
 } from '../../src/runtime/design-delivery';
 
 describe('resolveDesignDeliveryOutcome', () => {
-  it('requires file delivery for a successfully completed Design-mode turn', () => {
+  it('treats a text answer without any file-write attempt as a report-only result', () => {
+    // Image analysis / report-only audits legitimately end with prose and no
+    // new project file (#5714, #5718). Only fail delivery when the agent
+    // actually attempted to write files and nothing landed.
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content: 'The hero image uses low contrast; increase it for readability.',
+        events: [
+          { kind: 'tool_use', id: 'read-1', name: 'Read', input: { file_path: 'hero.png' } },
+        ],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+      }),
+    ).toBe('report_only');
+    // BYOK API runs have no tool events at all; a substantive text answer is
+    // still a report-only result, not a missing artifact.
     expect(
       resolveDesignDeliveryOutcome({
         sessionMode: 'design',
         runStatus: 'succeeded',
         content: 'I finished the design.',
+        events: [],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+      }),
+    ).toBe('report_only');
+  });
+
+  it('requires file delivery once the turn attempted to write project files', () => {
+    for (const attempt of [
+      { kind: 'tool_use' as const, id: 'w-1', name: 'Write', input: { file_path: 'index.html' } },
+      { kind: 'tool_use' as const, id: 'e-1', name: 'Edit', input: { file_path: 'index.html' } },
+      { kind: 'tool_use' as const, id: 'b-1', name: 'Bash', input: { command: 'rm stale.html' } },
+    ]) {
+      expect(
+        resolveDesignDeliveryOutcome({
+          sessionMode: 'design',
+          runStatus: 'succeeded',
+          content: 'I finished the design.',
+          events: [attempt],
+          producedFileCount: 0,
+          traceObjectFileCount: 0,
+        }),
+      ).toBe('no_result');
+    }
+  });
+
+  it('does not accept an empty answer as a report-only result', () => {
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content: '   ',
         events: [],
         producedFileCount: 0,
         traceObjectFileCount: 0,
@@ -37,6 +87,17 @@ describe('resolveDesignDeliveryOutcome', () => {
         events: [],
         producedFileCount: 0,
         traceObjectFileCount: 1,
+      }),
+    ).toBe('delivered');
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content: '',
+        events: [],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+        artifactCount: 1,
       }),
     ).toBe('delivered');
     expect(
@@ -84,6 +145,22 @@ describe('resolveDesignDeliveryOutcome', () => {
     ).toBe('delivery_failed');
   });
 
+  it('keeps a failed artifact save a failure even without file-write tool calls', () => {
+    // A BYOK <artifact> block that failed to persist is a delivery failure;
+    // the report-only escape must never mask it.
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content: 'Here is the landing page you asked for.',
+        events: [],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+        persistenceFailed: true,
+      }),
+    ).toBe('delivery_failed');
+  });
+
   it('does not fail clarification turns or turns with explicitly unfinished work', () => {
     expect(
       resolveDesignDeliveryOutcome({
@@ -113,6 +190,63 @@ describe('resolveDesignDeliveryOutcome', () => {
             },
           },
         ],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+      }),
+    ).toBe('awaiting_input');
+  });
+
+  it('does not latch a no-clarification turn to awaiting_input on a stray open tag', () => {
+    // Production repro: an OD Next strategy turn that needed no clarification
+    // narrated its decision into an open <question-form> tag. The tail is
+    // prose, so no form was ever asked — the turn must be judged on its
+    // deliverables, not parked as awaiting input.
+    const content =
+      '策略判断信息充足，将直接进入生产。\n\n<question-form> 无需提出';
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content,
+        events: [],
+        producedFileCount: 2,
+        traceObjectFileCount: 0,
+      }),
+    ).toBe('delivered');
+    // Same tag, same absence of a real ask: a zero-file report turn is
+    // report_only, not awaiting_input.
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content,
+        events: [],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+      }),
+    ).toBe('report_only');
+    expect(
+      designDeliveryVerificationPending({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        resultDeliveryState: undefined,
+        content,
+        events: [],
+        producedFiles: undefined,
+        traceObjectFiles: undefined,
+      }),
+    ).toBe(true);
+  });
+
+  it('still treats a mid-stream question-form body as awaiting input', () => {
+    // A truncated but still-plausible JSON body is a real ask that simply has
+    // not finished streaming — it must keep its awaiting_input classification.
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content: 'Quick brief first.\n<question-form id="brief">{"questions":[',
+        events: [],
         producedFileCount: 0,
         traceObjectFileCount: 0,
       }),
@@ -170,6 +304,77 @@ describe('resolveDesignDeliveryOutcome', () => {
         content: '<question-form id="brief">{"questions":[]}</question-form>',
         events: [],
       }),
+    ).toBe(false);
+  });
+});
+
+describe('designDeliveryReconciliationStale', () => {
+  const now = 1_000_000;
+
+  it('treats a run that finished long ago as stale (no more auto-replay)', () => {
+    expect(
+      designDeliveryReconciliationStale(
+        {
+          sessionMode: 'design',
+          runStatus: 'succeeded',
+          endedAt: now - 24 * 60 * 60 * 1000,
+        },
+        now,
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps a freshly completed run reconcilable', () => {
+    expect(
+      designDeliveryReconciliationStale(
+        {
+          sessionMode: 'design',
+          runStatus: 'succeeded',
+          endedAt: now - 30_000,
+        },
+        now,
+      ),
+    ).toBe(false);
+  });
+
+  it('does not mark a row with no timestamp at all as stale', () => {
+    expect(
+      designDeliveryReconciliationStale(
+        { sessionMode: 'design', runStatus: 'succeeded' },
+        now,
+      ),
+    ).toBe(false);
+  });
+
+  it('treats a legacy row without endedAt as stale when its start time is old', () => {
+    // #6505 rows persisted before `endedAt` existed carry only `startedAt`;
+    // the age bound falls back to it so reloads stop auto-replaying.
+    expect(
+      designDeliveryReconciliationStale(
+        { sessionMode: 'design', runStatus: 'succeeded', startedAt: now - 24 * 60 * 60 * 1000 },
+        now,
+      ),
+    ).toBe(true);
+  });
+
+  it('ignores already-resolved deliveries and non-design/non-succeeded rows', () => {
+    expect(
+      designDeliveryReconciliationStale(
+        { sessionMode: 'design', runStatus: 'succeeded', resultDeliveryState: 'delivered', endedAt: 1 },
+        now,
+      ),
+    ).toBe(false);
+    expect(
+      designDeliveryReconciliationStale(
+        { sessionMode: 'chat', runStatus: 'succeeded', endedAt: 1 },
+        now,
+      ),
+    ).toBe(false);
+    expect(
+      designDeliveryReconciliationStale(
+        { sessionMode: 'design', runStatus: 'failed', endedAt: 1 },
+        now,
+      ),
     ).toBe(false);
   });
 });

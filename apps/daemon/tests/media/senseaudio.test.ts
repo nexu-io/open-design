@@ -229,15 +229,17 @@ describe('senseaudio media generation', () => {
       if (String(input) === `${TEST_SENSEAUDIO_BASE_URL}/v1/image/sync`) {
         expect(init?.dispatcher).toBe(dispatcher);
         return new Response(JSON.stringify({
-          url: 'https://cdn.example.test/senseaudio-image.png',
+          url: 'https://93.184.216.34/senseaudio-image.png',
           base_resp: { status_code: 0, status_msg: 'success' },
         }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
       }
-      expect(String(input)).toBe('https://cdn.example.test/senseaudio-image.png');
-      expect(init?.dispatcher).toBe(dispatcher);
+      expect(String(input)).toBe('https://93.184.216.34/senseaudio-image.png');
+      // Asset download goes through assertAndFetchExternalAsset which replaces
+      // the caller's dispatcher with a validating one (issue #5478).
+      expect(init?.dispatcher).toBeDefined();
       expect(init?.redirect).toBe('error');
       return new Response(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
     });
