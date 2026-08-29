@@ -3414,6 +3414,13 @@ interface LoweringRecord {
     emission?: string[];
   };
   droppedExportOptions?: string[];
+  /** Set when the USD prim sort could not run on this machine (no pxr, no
+   *  clean interpreter, or Sdf refused the layer) — the stage ships as the
+   *  exporter wrote it, in depsgraph order. */
+  primOrderNote?: string;
+  /** Set when the FBX header's timestamp fields were not the shape the pin
+   *  knows, so the file keeps a wall clock. */
+  fbxTimestampNote?: string;
 }
 
 /**
@@ -3472,6 +3479,23 @@ function emitMasterParity(lowering: LoweringRecord | null | undefined, issues: I
       severity: "warning",
       message:
         "material capabilities could not be compared across lowering — the master fingerprint predates the measurement; recompile with --no-cache to check texture bindings and sidedness",
+      file: lowering.master ?? "scene.usda",
+    });
+  }
+  /* Byte-reproducibility is a promise this compiler makes, and it depends on
+     runtime capabilities that vary by machine. Where one was missing the
+     runner recorded WHY; saying so is the difference between a guarantee and
+     a guess. Content is unaffected — hence a warning, not an error. */
+  for (const note of [lowering.primOrderNote, lowering.fbxTimestampNote]) {
+    if (!note) continue;
+    issues.push({
+      code: ISSUE_CODES.EXPORT_NOT_REPRODUCIBLE,
+      severity: "warning",
+      message: note,
+      hint:
+        "the exported content is correct; only the byte-for-byte reproducibility " +
+        "guarantee is narrowed on this machine. Install the missing runtime (the USD " +
+        "prim sort needs a python with pxr) to restore it",
       file: lowering.master ?? "scene.usda",
     });
   }

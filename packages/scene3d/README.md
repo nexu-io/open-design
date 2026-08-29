@@ -678,6 +678,7 @@ Any UI that shows a bare code must show or tooltip its title via
 | `S3D-W-902` | Joint/morph order drifted in lowering |
 | `S3D-W-903` | Material capability lost in lowering |
 | `S3D-W-904` | USDZ is not Y-up for AR |
+| `S3D-W-906` | Export not byte-reproducible here |
 | `S3D-W-951` | Part over its role triangle share |
 | `S3D-W-952` | Hero less detailed than background |
 | `S3D-W-953` | Part over its role texture budget |
@@ -723,6 +724,7 @@ packages/scene3d/src/
 └── viewer/              kit HTML + WebGL runtime + camera/gizmo math
 packages/scene3d/scripts/blender/
 ├── runner.py            build / proof / export / bake_shaders / census
+├── usd_sort.py          canonical prim order (subprocess: pxr cannot share bpy)
 └── usd_oracle.py        OpenUSD pxr composition/binding check
 packages/scene3d/scripts/kernel/
 └── recipe_runner.py     runs a `recipe:` in plain CPython → operator trace

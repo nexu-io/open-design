@@ -405,6 +405,12 @@ export const ISSUE_CODES = {
      Z-up package arrives rotated onto its back in every one of them. The
      package is not wrong as USD — the stage says what it is — so this is a
      warning about the DESTINATION, not a defect in the file. */
+  /* A deliverable could not be made byte-reproducible on THIS machine: the
+     prim sort found no clean interpreter or no pxr, or the FBX header was
+     not the shape the timestamp pin knows. The artifact is correct content;
+     what is lost is the promise that recompiling produces identical bytes.
+     A guarantee that varies by machine is reported, never assumed. */
+  EXPORT_NOT_REPRODUCIBLE: "S3D-W-906",
   USDZ_UP_AXIS: "S3D-W-904",
 
   /* lint: intent budgets (950-969) — judgment gated on a part's authored

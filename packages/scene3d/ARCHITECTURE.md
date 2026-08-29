@@ -890,11 +890,12 @@ Three properties make this hold rather than merely pass once:
   bind error. The runner probes for a plain interpreter (refusing anything
   blender-named, since handing the blender binary a `.py` positional runs
   nothing and exits nothing) and shells out.
-- **Every gap is recorded, never silent.** No `pxr`, no clean interpreter,
+- **Every gap is reported, never silent.** No `pxr`, no clean interpreter,
   an FBX header this build does not recognise — each writes a note into the
-  lowering record instead of shipping unreproducible bytes quietly. A
+  lowering record, and `emitMasterParity` turns it into **S3D-W-906**. A
   determinism promise that fails invisibly is worse than one that admits
-  its reach.
+  its reach, and a note nothing reads is the same silence wearing a
+  struct field.
 
 A USDA-SOURCE scene is deliberately exempt from the sort: the compiler does
 not rewrite an author's own file, and a file on disk already has one stable
@@ -1213,10 +1214,14 @@ section above.)
   declarations. All four live in `src/usd/stage-model.ts`, whose splice
   tests pin current behaviour — repairs need those pins moved with them.
 - **Compiler-owned motion quantizes periods to whole frames** (`seconds ×
-  24` rounded, quarter-frames floored at 1), so a 0.125s bob plays as a
+  fps` rounded, quarter-frames floored at 1), so a 0.125s bob plays as a
   4-frame ≈0.167s cycle with no notice. Sub-frame periods are near the
   validator's 0.1s floor and rarely visible, but the quantization is
-  unstated anywhere the author can read.
+  unstated anywhere the author can read. Note the interaction with clip
+  length: `clipPlan` takes the lcm of the QUANTIZED frame counts, which is
+  the right basis (those are the periods the keyframes actually have), so
+  a rounded period shifts which lcm you get without ever desyncing the
+  bake from the warning.
 - **The pxr oracle inspects less than its name implies** (whole-tree
   audit): material-binding conformance checks a subset of binding shapes,
   and stages with unresolved sublayers/references can come back "ok" —
