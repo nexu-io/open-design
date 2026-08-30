@@ -1,0 +1,68 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "parallel-design-exploration",
+  "title": "Parallel Design Exploration",
+  "version": "0.10.1",
+  "description": "Standalone Open Design scenario for persistent parallel design exploration: compare rendered sibling options in one visible design space, preserve reliable current-state evidence when available, keep stable state identities across turns, and extend the same exploration artifact without rewriting delivered history.",
+  "license": "MIT",
+  "author": {
+    "name": "tungloong",
+    "url": "https://github.com/tungloong"
+  },
+  "homepage": "https://github.com/tungloong/parallel-design-exploration",
+  "plugin": {
+    "repo": "https://github.com/tungloong/parallel-design-exploration"
+  },
+  "tags": [
+    "community",
+    "scenario",
+    "design-exploration",
+    "parallel-prototyping",
+    "variants",
+    "prototype",
+    "ideation"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "surface": "web",
+    "platform": "desktop",
+    "scenario": "design-exploration",
+    "preview": {
+      "type": "html",
+      "entry": "./examples/single-document-exploration.html",
+      "motion": "static"
+    },
+    "useCase": {
+      "query": {
+        "en": "Explore this design brief through several materially different rendered options in one persistent comparison canvas. Use reliable existing design context as baseline evidence when available. On follow-up turns, extend the same primary artifact with new states while keeping previously delivered states intact, and let me decide when to converge.",
+        "zh-CN": "针对这个设计需求，在同一个持续存在的比较画布中生成多个实质不同、可直接判断的设计方案。如果存在可靠的现有设计上下文，将其作为基线证据保留。后续轮次继续扩展同一个主产物，以新状态推进探索，同时保持已经交付的历史状态完整，并由我决定何时收敛。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./examples/single-document-exploration.html",
+          "title": "Persistent options canvas"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
