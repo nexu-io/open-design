@@ -184,6 +184,7 @@ function commandFailureDetail(error: unknown): string | null {
 }
 
 const activeSetups = new Map<string, Promise<AgentCompanionSetupResponse>>();
+let setupQueue: Promise<void> = Promise.resolve();
 
 export function installDshProfileCompanion(agentId: string, options: {
   projectRoot: string;
@@ -192,9 +193,10 @@ export function installDshProfileCompanion(agentId: string, options: {
 }): Promise<AgentCompanionSetupResponse> {
   const active = activeSetups.get(agentId);
   if (active) return active;
-  const setup = installDshProfileCompanionOnce(agentId, options).finally(() => {
+  const setup = setupQueue.then(() => installDshProfileCompanionOnce(agentId, options)).finally(() => {
     if (activeSetups.get(agentId) === setup) activeSetups.delete(agentId);
   });
+  setupQueue = setup.then(() => undefined, () => undefined);
   activeSetups.set(agentId, setup);
   return setup;
 }
