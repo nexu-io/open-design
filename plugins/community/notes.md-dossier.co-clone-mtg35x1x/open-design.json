@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "notes.md-dossier.co-clone-mtg35x1x",
+  "title": "NOTES.md — dossier.co clone",
+  "version": "0.1.0",
+  "description": "- **Site:** https://dossier.co/ — Shopify DTC perfumery (\"Made in France perfumes, fair-prices\") - **Recon date:** 2026-08-30 · Evidence: `RECON/live-extract.md` (SOURCE/GUESS graded) - **License:** commercial site, no s",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

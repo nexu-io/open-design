@@ -1,0 +1,19 @@
+{
+  "candidateId": "5cc57df6-886e-4b22-b1e2-2f25aaf19817",
+  "projectId": "82c5568c-080e-44a9-9d63-f5c9c60bd4f9",
+  "runId": "e94999b1-62a2-4fb2-b3a8-efa39ef8a54b",
+  "conversationId": "fdb46aab-facb-4210-8252-6166b116ae9b",
+  "provenance": {
+    "summary": "Detected from NOTES.md after a successful run.",
+    "detectedAt": 1788105691755
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "NOTES.md",
+      "label": "NOTES.md",
+      "size": 7957,
+      "copied": true
+    }
+  ]
+}
