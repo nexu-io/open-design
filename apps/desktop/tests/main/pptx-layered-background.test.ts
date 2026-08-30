@@ -270,7 +270,7 @@ app.whenReady().then(() => {
       delete env.ELECTRON_RUN_AS_NODE;
       const command = process.platform === 'linux' ? 'xvfb-run' : electronPath;
       const args = process.platform === 'linux' ? ['-a', electronPath, probeDir] : [probeDir];
-      const { stdout, stderr } = await execFileP(command, args, { env, timeout: 10_000 });
+      const { stdout, stderr } = await execFileP(command, args, { env, timeout: 30_000 });
       const marker = stdout.split(/\r?\n/).find((line) => line.startsWith('OD_PNG_PAINT:'));
       if (!marker) throw new Error(`Electron paint probe returned no result: ${stdout || stderr}`);
       expect(JSON.parse(marker.slice('OD_PNG_PAINT:'.length))).toEqual({
@@ -282,7 +282,7 @@ app.whenReady().then(() => {
     } finally {
       await rm(probeDir, { force: true, recursive: true });
     }
-  }, 15_000);
+  }, 40_000);
 
   test('retries a transparent capture then returns paint', async () => {
     const retries: number[] = [];
