@@ -157,11 +157,40 @@ export function isAllowedRootEntry(layout: DesktopUpdaterStoreLayout, name: stri
  * be treated as store corruption: Finder writes .DS_Store the moment the
  * update root is viewed even once, and Explorer does the same with
  * Thumbs.db/desktop.ini.
+ *
+ * Matched by name only — callers MUST additionally confirm the entry is a
+ * plain file via {@link verifiedOsManagedRootArtifacts} before trusting a
+ * match. A directory or symlink squatting on one of these names must still
+ * be treated as real content, not waved through as harmless OS litter.
  */
 const OS_MANAGED_ROOT_ARTIFACTS = new Set([".DS_Store", "Thumbs.db", "desktop.ini", ".localized"]);
 
 export function isOsManagedRootArtifact(name: string): boolean {
   return OS_MANAGED_ROOT_ARTIFACTS.has(name);
+}
+
+/**
+ * Resolves which of `entries` (direct children of `realRoot`) are genuine
+ * OS-managed artifacts: name-matched AND a plain file, not a directory or
+ * symlink. A name match alone is not enough — see {@link isOsManagedRootArtifact}.
+ * An entry that disappears or fails to stat between `readdir` and this check
+ * is treated as unverified (excluded), which fails closed into the existing
+ * corruption/rejection path rather than silently trusting it.
+ */
+export async function verifiedOsManagedRootArtifacts(realRoot: string, entries: string[]): Promise<Set<string>> {
+  const candidates = entries.filter((entry) => isOsManagedRootArtifact(entry));
+  if (candidates.length === 0) return new Set();
+  const verified = await Promise.all(
+    candidates.map(async (entry) => {
+      try {
+        const entryStat = await lstat(join(realRoot, entry));
+        return entryStat.isFile() && !entryStat.isSymbolicLink() ? entry : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return new Set(verified.filter((entry): entry is string => entry != null));
 }
 
 export function isUpdateStoreMetadata(value: unknown): value is UpdateStoreMetadata {
@@ -263,7 +292,8 @@ export async function ensureOwnedUpdateRoot(
       }
     } else {
       const preClaimEntries = await readdir(realRoot);
-      const preClaimContent = preClaimEntries.filter((entry) => !isOsManagedRootArtifact(entry));
+      const preClaimOsArtifacts = await verifiedOsManagedRootArtifacts(realRoot, preClaimEntries);
+      const preClaimContent = preClaimEntries.filter((entry) => !preClaimOsArtifacts.has(entry));
       if (preClaimContent.length > 0) {
         return {
           ok: false,
@@ -282,8 +312,9 @@ export async function ensureOwnedUpdateRoot(
     }
 
     const entries = await readdir(realRoot);
+    const osArtifacts = await verifiedOsManagedRootArtifacts(realRoot, entries);
     const unexpected = entries.filter(
-      (entry) => !isAllowedRootEntry(layout, entry) && !isOsManagedRootArtifact(entry),
+      (entry) => !isAllowedRootEntry(layout, entry) && !osArtifacts.has(entry),
     );
     if (unexpected.length > 0) {
       const error = storeShapeError(realRoot, "update store contains unexpected root entries", { unexpected });
@@ -316,7 +347,7 @@ export async function ensureOwnedUpdateRoot(
       await access(layout.metadataPath);
     } catch {
       const nonSentinelEntries = entries.filter(
-        (entry) => entry !== OWNERSHIP_SENTINEL && !isOsManagedRootArtifact(entry),
+        (entry) => entry !== OWNERSHIP_SENTINEL && !osArtifacts.has(entry),
       );
       if (nonSentinelEntries.length > 0) {
         const error = storeShapeError(realRoot, "update store metadata.json is missing for a non-empty store", {
