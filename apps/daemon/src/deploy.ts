@@ -5,6 +5,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { hash as blake3Hash } from 'blake3-wasm';
 import { listFiles, readProjectFile, validateProjectPath } from './projects.js';
+import { findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
 
 export const VERCEL_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
@@ -1497,9 +1498,11 @@ export function injectDeployHookScript(html: string, scriptUrl: unknown) {
   const tag =
     `<script src="${escapeHtmlAttribute(normalized)}" defer ` +
     'data-open-design-deploy-hook="true" data-closeable="true"></script>';
-  if (/<\/body\s*>/i.test(html)) {
-    return html.replace(/<\/body\s*>/i, `${tag}</body>`);
-  }
+  // The document's own `</body>`, not one an author wrote into a script string:
+  // splicing there would end their script with this tag's `</script>` and leak
+  // the rest of it onto the deployed page (nexu-io/open-design#7410).
+  const bodyClose = findRealTagOffset(html, HTML_TAG_PATTERNS.bodyClose);
+  if (bodyClose >= 0) return `${html.slice(0, bodyClose)}${tag}${html.slice(bodyClose)}`;
   return `${html}${tag}`;
 }
 

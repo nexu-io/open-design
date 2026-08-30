@@ -1,3 +1,5 @@
+import { DECK_PROTOCOL_V1_INLINE_RUNTIME } from '@open-design/contracts/runtime/deck-protocol';
+
 /**
  * Stable deck framework injected into the system prompt when the active skill
  * mode is `deck`. The whole point: stop regenerating the scale-to-fit JS, the
@@ -43,7 +45,7 @@
  */
 
 export const DECK_SKELETON_HTML = `<!doctype html>
-<html lang="en">
+<html lang="en" data-od-deck-protocol="1">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -59,6 +61,7 @@ export const DECK_SKELETON_HTML = `<!doctype html>
          - Only .slide.active is visible at a time
          - Programmatic prev/next + counter elements kept outside the scaled
            stage but hidden by default so the host can render the UI chrome
+         - OD Deck Protocol v1 absolute navigation + slide-state events
          - Keyboard (← → space PgUp PgDn Home End R), half-slide click, and stored
            position survive iframe focus quirks
          - "Save as PDF" produces a multi-page vertical PDF, one slide
@@ -283,12 +286,14 @@ export const DECK_SKELETON_HTML = `<!doctype html>
         if (total) total.textContent = pad2(slides.length);
         if (prev) prev.toggleAttribute('disabled', idx <= 0);
         if (next) next.toggleAttribute('disabled', idx >= slides.length - 1);
+        postDeckState();
       }
       function go(i) {
         idx = Math.max(0, Math.min(slides.length - 1, i));
         paint();
         try { localStorage.setItem(STORE, String(idx)); } catch (_) {}
       }
+${DECK_PROTOCOL_V1_INLINE_RUNTIME}
       function onKey(e) {
         if (e.__odDeckKeyHandled) return;
         var t = e.target;
@@ -344,6 +349,7 @@ export const DECK_SKELETON_HTML = `<!doctype html>
       } catch (_) {}
 
       window.addEventListener('resize', fit);
+      announceDeckProtocol();
       fit();
       paint();
       focusDeck();
@@ -354,7 +360,7 @@ export const DECK_SKELETON_HTML = `<!doctype html>
 
 export const DECK_FRAMEWORK_DIRECTIVE = `# Slide deck — fixed framework (this is non-negotiable for deck mode)
 
-Decks regress when each turn re-authors the scale-to-fit logic, the keyboard handler, the slide visibility toggle, the counter, and the print rules. The user has hit this enough times that we now ship a **fixed framework**: 1920×1080 canvas, scale-to-fit, hidden programmatic prev/next + counter, capture-phase keyboard with R reset-to-first-slide, half-slide click navigation, localStorage position restore, and a print stylesheet that emits a multi-page vertical PDF on Save-as-PDF — all baked in.
+Decks regress when each turn re-authors the scale-to-fit logic, the keyboard handler, the slide visibility toggle, the counter, and the print rules. The user has hit this enough times that we now ship a **fixed framework**: 1920×1080 canvas, scale-to-fit, OD Deck Protocol v1 absolute navigation + state events, hidden programmatic prev/next + counter, capture-phase keyboard with R reset-to-first-slide, half-slide click navigation, localStorage position restore, and a print stylesheet that emits a multi-page vertical PDF on Save-as-PDF — all baked in.
 
 **You do not write any of that. You do not modify any of that.** Your job is to fill content slots only.
 

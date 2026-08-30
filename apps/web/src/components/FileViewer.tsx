@@ -26,6 +26,7 @@ import {
   type WorkspaceCollabContext,
 } from '@open-design/contracts';
 import { PREVIEW_OBSERVABILITY_HOST_STATE_MESSAGE_TYPE } from '@open-design/contracts/runtime/preview-observability';
+import { PREVIEW_URL_GUARD_MAX_HTML_BYTES } from '@open-design/contracts/runtime/preview-guards';
 import {
   appendResourceQuery,
   workspaceIdentityCacheKey,
@@ -35,6 +36,8 @@ import {
   anonymizeArtifactId,
   artifactKindToTracking,
   type ArtifactPublishResultProps,
+  type ArtifactEditResultProps,
+  type TrackingArtifactEditKind,
   type TrackingFileVersionSource,
   type TrackingArtifactKind,
   type TrackingProjectKind,
@@ -54,6 +57,7 @@ import {
 } from '../observability/iframe-error';
 import {
   trackArtifactExportResult,
+  trackArtifactEditResult,
   trackArtifactDeployResult,
   trackArtifactPublishResult,
   trackArtifactHeaderClick,
@@ -170,6 +174,7 @@ import {
   type ExportProgress,
   type ImageExportFormat,
 } from '../runtime/exports';
+import { fetchAppVersionInfo } from '../providers/registry';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { shouldConsumeSlideNav } from '../runtime/slide-nav';
@@ -378,16 +383,7 @@ const POWERED_PREVIEW_SANDBOX =
   'allow-scripts allow-same-origin allow-downloads allow-popups allow-forms allow-modals allow-pointer-lock';
 const POWERED_PREVIEW_ALLOW =
   'accelerometer; autoplay; camera; cross-origin-isolated; fullscreen; gamepad; gyroscope; microphone; xr-spatial-tracking';
-const PREVIEW_BRIDGE_QUERY = 'odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewBridge=observability';
-// Electron can finish navigating an iframe under a fully transparent retained
-// file viewer without committing its latest compositor surface when the viewer
-// becomes visible again. Adding this layer only while the file is active makes
-// activation itself invalidate that surface. It does not reload the document,
-// so runtime state and warm-tab switching remain intact.
-const ACTIVE_PREVIEW_REPAINT_STYLE = {
-  transform: 'translateZ(0)',
-  willChange: 'transform',
-} satisfies CSSProperties;
+const BASE_PREVIEW_BRIDGE_QUERY = 'odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewBridge=observability';
 // Generic runtime UI state carried across the URL-load -> srcDoc transport
 // switch. This preserves the current page of multi-page prototypes while
 // leaving artifact scripts and business state inside their sandboxed frames.
@@ -649,7 +645,6 @@ const PREVIEW_SCOPE_RETRY_MS = 15 * 1000;
 const SRC_DOC_PREVIEW_FRAME_NAME_PREFIX = 'od-artifact-preview-srcdoc-';
 const SRC_DOC_PREVIEW_FAILURE_FRESHNESS_MS = 10_000;
 const MAX_CACHED_SRC_DOC_TRANSPORTS = 128;
-const MAX_CACHED_PREVIEW_DOCUMENT_URLS = 16;
 let previewContentMeasurementDocumentEpochSequence = 0;
 let previewContentMeasurementHostInstanceSequence = 0;
 let previewTransportGenerationSequence = 0;
@@ -659,7 +654,12 @@ type SrcDocTransportCacheEntry = {
   srcDoc: string;
 };
 const htmlPreviewSrcDocTransportState = new Map<string, SrcDocTransportCacheEntry>();
-const htmlPreviewDocumentUrlState = new Map<string, string>();
+type SharedPreviewBootstrapUrl = {
+  createObjectURL: typeof URL.createObjectURL;
+  html: string;
+  url: string;
+};
+let sharedPreviewBootstrapUrl: SharedPreviewBootstrapUrl | null = null;
 function nextPreviewContentMeasurementDocumentEpoch(): string {
   previewContentMeasurementDocumentEpochSequence += 1;
   return `preview-document-${previewContentMeasurementDocumentEpochSequence}`;
@@ -687,7 +687,7 @@ function cacheSrcDocTransport(key: string, entry: SrcDocTransportCacheEntry) {
     if (oldest != null) htmlPreviewSrcDocTransportState.delete(oldest);
   }
 }
-function previewDocumentUrl(key: string, html: string): string | null {
+function persistentPreviewBootstrapUrl(html: string): string | null {
   if (
     !html
     || typeof navigator === 'undefined'
@@ -696,24 +696,39 @@ function previewDocumentUrl(key: string, html: string): string | null {
     || typeof URL.createObjectURL !== 'function'
     || typeof Blob === 'undefined'
   ) return null;
-  const cacheKey = `${key}\0${previewSourceFingerprint(html)}`;
-  const cached = htmlPreviewDocumentUrlState.get(cacheKey);
-  if (cached) {
-    htmlPreviewDocumentUrlState.delete(cacheKey);
-    htmlPreviewDocumentUrlState.set(cacheKey, cached);
-    return cached;
-  }
-  const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
-  htmlPreviewDocumentUrlState.set(cacheKey, url);
-  if (htmlPreviewDocumentUrlState.size > MAX_CACHED_PREVIEW_DOCUMENT_URLS) {
-    const oldest = htmlPreviewDocumentUrlState.keys().next().value;
-    if (oldest != null) {
-      const staleUrl = htmlPreviewDocumentUrlState.get(oldest);
-      htmlPreviewDocumentUrlState.delete(oldest);
-      if (staleUrl && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(staleUrl);
-    }
-  }
+  const createObjectURL = URL.createObjectURL;
+  if (
+    sharedPreviewBootstrapUrl?.createObjectURL === createObjectURL
+    && sharedPreviewBootstrapUrl.html === html
+  ) return sharedPreviewBootstrapUrl.url;
+
+  // The bootstrap is intentionally tiny and immutable. Electron reliably
+  // paints a Blob-backed document after the activation bridge replaces its
+  // contents; the equivalent data: document can remain visually stale until
+  // the user interacts even though its DOM is already complete. This URL is
+  // shared for the app lifetime and never revoked because retained viewers can
+  // keep referencing it while they are parked behind another file/project.
+  // The full artifact never appears in the Blob; it arrives only through the
+  // generation-checked activation bridge after this listener is ready.
+  const url = createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+  sharedPreviewBootstrapUrl = { createObjectURL, html, url };
   return url;
+}
+
+/**
+ * Resolve a daemon resource against the actual app runtime origin.
+ *
+ * `projectRawUrl` intentionally returns a root-relative path for normal host
+ * fetches. Injected documents are different: Electron loads them through an
+ * origin-less bootstrap document, where `/api/...` has no useful project
+ * origin. Pinning an absolute runtime URL keeps relative CSS, scripts, images,
+ * and recovery navigation on the same daemon-backed origin as the app shell.
+ */
+function previewRuntimeUrl(href: string): string {
+  const runtimeHref = typeof globalThis.location?.href === 'string'
+    ? globalThis.location.href
+    : 'http://open-design.local/';
+  return new URL(href, runtimeHref).href;
 }
 type PreviewContentWidthCacheEntry = {
   version: typeof PREVIEW_CONTENT_WIDTH_CACHE_VERSION;
@@ -1107,11 +1122,26 @@ function PreviewViewportControls({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setOpen(false);
     };
+    // The click-outside above can only see pointer events that reach THIS
+    // document, and the preview is a sandboxed opaque-origin iframe: a click
+    // landing on it dispatches inside the frame and never reaches the host.
+    // Since the preview is the largest surface on screen, that left the menu
+    // stuck open exactly where users reach to dismiss it (OPEND-2035).
+    //
+    // Focus moving into a frame is the one signal the host does get for that
+    // click. Requiring the frame to actually hold focus keeps an ordinary
+    // app switch — which blurs the window without handing focus to a frame —
+    // from closing a menu the user never dismissed.
+    const onWindowBlur = () => {
+      if (document.activeElement instanceof HTMLIFrameElement) setOpen(false);
+    };
     document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
+    window.addEventListener('blur', onWindowBlur);
     return () => {
       document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('blur', onWindowBlur);
     };
   }, [open]);
 
@@ -3332,6 +3362,20 @@ function fileVersionSourceToTracking(version: ProjectFileVersion): TrackingFileV
   return 'ai';
 }
 
+function manualEditPatchKindToTracking(patch: ManualEditPatch): TrackingArtifactEditKind {
+  switch (patch.kind) {
+    case 'set-text': return 'text';
+    case 'set-link': return 'link';
+    case 'set-image': return 'image';
+    case 'remove-element': return 'element_remove';
+    case 'set-token': return 'token';
+    case 'set-style': return 'style';
+    case 'set-attributes': return 'attributes';
+    case 'set-outer-html': return 'html';
+    case 'set-full-source': return 'source';
+  }
+}
+
 function sourceLooksLikeDeckPreview(source: string | null | undefined): boolean {
   if (!source) return false;
   return (
@@ -3427,7 +3471,7 @@ function FileVersionManagerModal({
   viewerOnly = false,
 }: {
   projectId: string;
-  projectKind: TrackingProjectKind | null;
+  projectKind: TrackingProjectKind;
   file: ProjectFile;
   currentSource: string | null;
   entryFrom: 'toolbar' | 'more_menu';
@@ -3498,6 +3542,8 @@ function FileVersionManagerModal({
       element,
       artifact_id: trackingArtifactId,
       artifact_kind: trackingArtifactKind,
+      project_id: projectId,
+      project_kind: projectKind,
       version_count: versions.length,
       ...extra,
     });
@@ -3514,8 +3560,10 @@ function FileVersionManagerModal({
       entry_from: entryFrom,
       artifact_id: trackingArtifactId,
       artifact_kind: trackingArtifactKind,
+      project_id: projectId,
+      project_kind: projectKind,
     });
-  }, [analytics.track, entryFrom, trackingArtifactId, trackingArtifactKind]);
+  }, [analytics.track, entryFrom, projectId, projectKind, trackingArtifactId, trackingArtifactKind]);
   const versionById = useMemo(() => {
     const map = new Map<string, ProjectFileVersion>();
     for (const version of versions) map.set(version.id, version);
@@ -4009,7 +4057,7 @@ function FileVersionManagerModal({
           <div className="artifact-version-panel__head-actions">
             <button
               type="button"
-              className="artifact-version-panel__close"
+              className="artifact-version-panel__open"
               aria-label={t('fileViewer.versions.open')}
               title={t('fileViewer.versions.open')}
               disabled={!selectedContentMatchesVersion || loadingContent}
@@ -7182,6 +7230,7 @@ function ReactComponentViewer({
               {viewerOnly ? null : (
                 <HandoffButton
                   projectId={projectId}
+                  projectKind={projectKind}
                   projectName={projectName}
                   projectDir={projectDir}
                   agents={agents}
@@ -7691,6 +7740,8 @@ function HtmlViewer({
       element,
       artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
       artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+      project_id: projectId,
+      project_kind: projectKind,
       ...(entryFrom ? { entry_from: entryFrom } : {}),
     });
   };
@@ -7706,6 +7757,8 @@ function HtmlViewer({
       ...(submitAction ? { submit_action: submitAction } : {}),
       artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
       artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+      project_id: projectId,
+      project_kind: projectKind,
     });
   };
   const fireArtifactHeaderClick = (
@@ -7724,6 +7777,8 @@ function HtmlViewer({
       element,
       artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
       artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+      project_id: projectId,
+      project_kind: projectKind,
     });
   };
   const firePresentPopoverClick = (
@@ -7759,6 +7814,8 @@ function HtmlViewer({
       element,
       artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
       artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+      project_id: projectId,
+      project_kind: projectKind,
       ...(extra?.action ? { action: extra.action } : {}),
       ...(typeof extra?.slide_index === 'number'
         ? { slide_index: extra.slide_index }
@@ -7778,6 +7835,33 @@ function HtmlViewer({
       element,
       artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
       artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+      project_id: projectId,
+      project_kind: projectKind,
+    });
+  };
+  const fireArtifactEditResult = (
+    action: ArtifactEditResultProps['action'],
+    patch: ManualEditPatch,
+    startedAt: number,
+    result: ArtifactEditResultProps['result'],
+    errorCode?: ArtifactEditResultProps['error_code'],
+  ) => {
+    // A retained viewer can become inactive while an edit write is in flight.
+    // Read the live ref so the async continuation does not emit from the
+    // background tab after it settles.
+    if (!workspaceActiveRef.current) return;
+    trackArtifactEditResult(analytics.track, {
+      page_name: 'artifact',
+      area: 'manual_edit',
+      action,
+      edit_kind: manualEditPatchKindToTracking(patch),
+      artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+      artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+      project_id: projectId,
+      project_kind: projectKind,
+      result,
+      ...(errorCode ? { error_code: errorCode } : {}),
+      duration_ms: Math.max(0, Math.round(performance.now() - startedAt)),
     });
   };
   const [mode, setMode] = useState<'preview' | 'source'>('preview');
@@ -9072,6 +9156,63 @@ function HtmlViewer({
   const [imageExportFormat, setImageExportFormat] = useState<ImageExportFormat>('png');
   const [imageExportError, setImageExportError] = useState<string | null>(null);
   const [pptxExportModalOpen, setPptxExportModalOpen] = useState(false);
+  // Ask the daemon whether it can render slides each time an export surface
+  // opens, and let the answer live no longer than that surface. This is the
+  // whole capability contract, stated once:
+  //
+  //   1. An answer never outlives the surface opening that fetched it. The
+  //      export surface is the popover's Export tab or the PPTX modal — not
+  //      the popover shell, which can open on Share and sit there across a
+  //      daemon swap before the tab is switched. Every way the surface can
+  //      become visible (opening onto the Export tab, switching Share to
+  //      Export, the menu-to-modal handoff) starts from unknown and asks
+  //      again. Transitions arrive as batched updates whose OR can stay
+  //      unchanged, so the effect depends on the raw inputs, not a derived
+  //      boolean.
+  //   2. Unknown fails open. A pending probe and a daemon predating the
+  //      capability field both show the entry; only a resolved `false` — from
+  //      this daemon, during this opening — hides it.
+  //   3. The daemon stays the authority of last resort. A swap after the
+  //      probe resolves is unclosable client-side (time-of-check vs
+  //      time-of-use); it is caught by the export POST itself, whose 501
+  //      surfaces the no-renderer message rather than a generic failure.
+  //
+  // Anything beyond this — background caches, retries, cross-surface
+  // carryover — reintroduces the replica-of-remote-state problem this shape
+  // exists to avoid.
+  const [slideRendererAvailable, setSlideRendererAvailable] = useState<boolean | null>(null);
+  useEffect(() => {
+    const exportSurfaceVisible =
+      (deployMenuOpen && unifiedActionTab === 'export') || pptxExportModalOpen;
+    if (!exportSurfaceVisible) return;
+    let cancelled = false;
+    setSlideRendererAvailable(null);
+    void (async () => {
+      // A probe that FAILS (daemon starting up, transient network) is retried
+      // briefly, because leaving the whole opening at unknown would fail open
+      // for its entire lifetime. A probe that SUCCEEDS without the capability
+      // field is an old daemon: asking again cannot teach us more, so it
+      // stops at unknown immediately. The retry lives and dies with this
+      // opening — cancelled on any surface transition — so nothing here
+      // crosses surfaces either.
+      const retryDelaysMs = [1_000, 3_000];
+      for (let attempt = 0; !cancelled; attempt += 1) {
+        const info = await fetchAppVersionInfo();
+        if (cancelled) return;
+        if (info) {
+          const next = info.capabilities?.slideRenderer;
+          setSlideRendererAvailable(typeof next === 'boolean' ? next : null);
+          return;
+        }
+        const delay = retryDelaysMs[attempt];
+        if (delay === undefined) return;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [deployMenuOpen, unifiedActionTab, pptxExportModalOpen]);
   const [pptxExportMode, setPptxExportMode] = useState<'editable' | 'screenshot'>('editable');
   const imageExportSnapshotDataUrlRef = useRef<string | null>(null);
   // Threads the share-popover click → artifact_export_result(image) pair, the
@@ -9753,12 +9894,14 @@ function HtmlViewer({
       area: 'deck_viewer',
       artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
       artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+      project_id: projectId,
+      project_kind: projectKind,
       slide_count: deckSlideTotal,
     });
     // deckSlideTotal intentionally omitted from deps: we snapshot it at first
     // recognition and don't want later count updates to refire the view.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveDeck, source, projectId, file.name, file.kind]);
+  }, [analytics.track, effectiveDeck, source, projectId, projectKind, file.name, file.kind]);
   useEffect(() => {
     setSpeakerNotesDraft(activeSpeakerNote);
     setSpeakerNotesEditMode(false);
@@ -9875,12 +10018,9 @@ function HtmlViewer({
   const manualEditRequiresSrcDoc = manualEditMode || manualEditSrcDocActive;
   // When we URL-load the iframe directly, skip every in-host inlining /
   // srcDoc-rebuilding step. The browser does the asset resolution itself,
-  // which is the whole point of the URL-load path.
-  // Auto-fall back to the srcDoc path when the artifact will crash under
-  // the URL-load iframe's bare `sandbox="allow-scripts"` — Babel-standalone
-  // React prototypes and any HTML that reads Web Storage at mount throw
-  // SecurityError without `allow-same-origin`. The srcDoc path runs
-  // `injectSandboxShim` before any user script, so those artifacts render.
+  // while the daemon injects passive document guards before authored scripts.
+  // Fall back to srcDoc whenever the URL response cannot carry those guards
+  // (streaming/in-memory HTML or an intentionally unbuffered large document).
   // Memoized on `source` so HtmlViewer's frequent re-renders (board/inspect/
   // edit mode toggles, slide nav) don't re-scan the HTML each time.
   const needsSandboxShim = useMemo(() => {
@@ -9893,14 +10033,15 @@ function HtmlViewer({
     const s = routingHtmlSource;
     return s != null && htmlNeedsFocusGuard(s);
   }, [passiveLargeHtmlPreview, routingHtmlSource]);
-  // A self-redirecting artifact must render through srcDoc so buildSrcdoc's
-  // redirect-loop guard is present; on the raw URL-load path the iframe reloads
-  // itself forever and freezes the workspace (nexu-io/open-design#710).
+  // A self-redirecting artifact needs the redirect-loop guard on whichever
+  // transport owns the document (nexu-io/open-design#710).
   const needsRedirectGuard = useMemo(() => {
     if (passiveLargeHtmlPreview) return false;
     const s = routingHtmlSource;
     return s != null && htmlNeedsRedirectGuard(s);
   }, [passiveLargeHtmlPreview, routingHtmlSource]);
+  const urlDocumentGuardsAvailable =
+    liveHtml === undefined && file.size <= PREVIEW_URL_GUARD_MAX_HTML_BYTES;
   // Set by the injected guard's `od:redirect-loop-blocked` postMessage. The
   // browser makes `window.location` unforgeable, so a runaway reload can only be
   // stopped host-side — parking the srcDoc iframe on static content below. File-
@@ -10030,6 +10171,16 @@ function HtmlViewer({
     const s = routingHtmlSource;
     return s != null && htmlNeedsPoweredPreview(s);
   }, [routingHtmlSource, serverPoweredPreviewRequired]);
+  const previewBridgeQuery = useMemo(() => {
+    const query = [BASE_PREVIEW_BRIDGE_QUERY];
+    // Preserve the old URL-load behavior for ordinary passive documents. Only
+    // request a guard when the source heuristic says this artifact needs it;
+    // this avoids suppressing authored focus/navigation in unrelated pages.
+    if (needsSandboxShim && !needsPowered) query.push('odPreviewBridge=sandbox');
+    if (needsFocusGuard && !needsPowered) query.push('odPreviewBridge=focus');
+    if (needsRedirectGuard && !needsPowered) query.push('odPreviewBridge=redirect');
+    return query.join('&');
+  }, [needsFocusGuard, needsPowered, needsRedirectGuard, needsSandboxShim]);
   const [urlSelectionBridgeReady, setUrlSelectionBridgeReady] = useState(false);
   const urlLoadDecision: UrlLoadDecision = {
     mode,
@@ -10041,12 +10192,23 @@ function HtmlViewer({
     urlModeBridge,
     inspectMode,
     drawMode: drawOverlayOpen,
-    forceInline: (forceInline || needsSandboxShim) && !needsPowered,
+    forceInline: forceInline && !needsPowered,
+    needsSandboxShim: needsSandboxShim && !needsPowered,
+    // Daemon guards wrap the settled on-disk response. Streaming/in-memory
+    // HTML has no matching URL representation, so keep it on srcDoc until it
+    // lands on disk instead of showing stale bytes from the raw route.
+    urlSandboxGuard: urlDocumentGuardsAvailable,
     needsFocusGuard: needsFocusGuard && !needsPowered,
+    urlFocusGuard: urlDocumentGuardsAvailable,
     needsRedirectGuard: needsRedirectGuard && !needsPowered,
+    urlRedirectGuard: urlDocumentGuardsAvailable,
     projectRootAssetRefs: projectRootAssetRefs || scopedRelativeAssetRefs,
   };
-  const useUrlLoadPreview = shouldUrlLoadHtmlPreview(urlLoadDecision) && !manualEditRequiresSrcDoc;
+  const urlLoadPreviewSupported = shouldUrlLoadHtmlPreview({
+    ...urlLoadDecision,
+    mode: 'preview',
+  }) && !manualEditRequiresSrcDoc;
+  const useUrlLoadPreview = mode === 'preview' && urlLoadPreviewSupported;
   const setSrcDocPreviewIframe = useCallback((frame: HTMLIFrameElement | null) => {
     if (srcDocPreviewIframeRef.current !== frame) {
       srcDocNavigationCommittedRef.current = null;
@@ -10240,9 +10402,9 @@ function HtmlViewer({
   const basePreviewSrcUrl = useMemo(
     () => appendResourceQuery(
       projectRawUrl(projectId, file.name, workspaceContext),
-      `v=${Math.round(file.mtime)}&r=${reloadKey}&${PREVIEW_BRIDGE_QUERY}`,
+      `v=${Math.round(file.mtime)}&r=${reloadKey}&${previewBridgeQuery}`,
     ),
-    [projectId, file.name, file.mtime, reloadKey, workspaceContext],
+    [projectId, file.name, file.mtime, previewBridgeQuery, reloadKey, workspaceContext],
   );
   const [previewSrcUrl, setPreviewSrcUrl] = useState(basePreviewSrcUrl);
   // Hold the iframe URL still (it carries file.mtime) while the user is mid
@@ -10441,7 +10603,7 @@ function HtmlViewer({
       if (cancelled) return;
       setPowered({
         resolved: true,
-        url: base ? `${base}?v=${Math.round(file.mtime)}&r=${reloadKey}&${PREVIEW_BRIDGE_QUERY}` : null,
+        url: base ? `${base}?v=${Math.round(file.mtime)}&r=${reloadKey}&${previewBridgeQuery}` : null,
       });
     });
     return () => {
@@ -10453,6 +10615,7 @@ function HtmlViewer({
     projectId,
     file.name,
     file.mtime,
+    previewBridgeQuery,
     reloadKey,
   ]);
   const usePoweredPreview = needsPowered && useUrlLoadPreview && powered.url != null;
@@ -10571,7 +10734,7 @@ function HtmlViewer({
   ]);
 
   const srcDocBaseSeedHref = effectiveScopedSrcDocPreviewBase?.href
-    ?? projectRawUrl(projectId, baseDirFor(file.name), workspaceContext);
+    ?? previewRuntimeUrl(projectRawUrl(projectId, baseDirFor(file.name), workspaceContext));
   const srcDocBaseSelectionIdentity = [
     srcDocPreviewBaseIdentity,
     sourceSnapshotRefreshKey,
@@ -10888,6 +11051,17 @@ function HtmlViewer({
     goToSlideRef.current(index);
   }, []);
   const lazySrcDocTransport = useMemo(() => buildLazySrcdocTransport(), []);
+  // Electron keeps one stable, tiny bootstrap document for the lifetime of
+  // this retained file viewer. The fully enhanced artifact (deck/edit/comment
+  // bridges included) is written into that browsing context after the shell's
+  // ready handshake. Content generations therefore do not mutate the parent
+  // iframe's `src` or React key, which removes Chromium's competing Blob
+  // navigations instead of recovering after ERR_ABORTED.
+  const persistentSrcDocTransportUrl = useMemo(
+    () => persistentPreviewBootstrapUrl(lazySrcDocTransport),
+    [lazySrcDocTransport],
+  );
+  const usesPersistentSrcDocTransport = persistentSrcDocTransportUrl !== null;
   const [srcDocTransportResetKey, setSrcDocTransportResetKey] = useState(0);
   const [srcDocShellReady, setSrcDocShellReady] = useState(false);
   const [srcDocRecoveryGeneration, setSrcDocRecoveryGeneration] = useState<string | null>(null);
@@ -10933,10 +11107,24 @@ function HtmlViewer({
     verifiedSrcDocTransportRef.current = null;
     readySrcDocTransportRef.current = null;
     activatedSrcDocTransportHtmlRef.current = null;
-    setSrcDocShellReady(false);
-    setSrcDocRecoveryGeneration(generation);
+    if (!usesPersistentSrcDocTransport) {
+      setSrcDocShellReady(false);
+      setSrcDocRecoveryGeneration(generation);
+    }
+    // The enhanced Electron document installs the same activation listener as
+    // the bootstrap shell. Re-send the exact generation in place; the stable
+    // iframe key below deliberately ignores this nonce so recovery never
+    // replaces its browsing context. Non-Electron transports still use the
+    // nonce as their existing remount key.
     setSrcDocTransportResetKey((key) => key + 1);
-  }, [cancelPendingSrcDocTransport, file.kind, file.name, handoffArtifactKind, projectId]);
+  }, [
+    cancelPendingSrcDocTransport,
+    file.kind,
+    file.name,
+    handoffArtifactKind,
+    projectId,
+    usesPersistentSrcDocTransport,
+  ]);
   useEffect(() => {
     if (!workspaceActive || mode !== 'preview' || useUrlLoadPreview || !srcDoc) return;
     const generation = srcDocTransportGeneration;
@@ -11114,8 +11302,16 @@ function HtmlViewer({
   // next shell will post `od:srcdoc-transport-ready` (or fire onLoad) and
   // flip this back to true. See #2253.
   useEffect(() => {
+    if (!usesPersistentSrcDocTransport) setSrcDocShellReady(false);
+  }, [srcDocTransportResetKey, usesPersistentSrcDocTransport]);
+  // The workspace keeps FileViewer mounted when a user switches between
+  // projects that expose the same file tab. The frame name still changes with
+  // the project identity, so React replaces the actual iframe. Never let that
+  // new shell inherit the previous frame's ready latch: its first activation
+  // would otherwise race ahead of the bootstrap listener and be dropped.
+  useLayoutEffect(() => {
     setSrcDocShellReady(false);
-  }, [srcDocTransportResetKey]);
+  }, [srcDocPreviewFrameName]);
   // Listen for the shell's ready handshake. Gating activation on this is
   // what fixes the #2253 race: opening Tweaks right after a key-driven
   // re-mount used to post `activate` before the shell's listener was
@@ -11309,42 +11505,35 @@ function HtmlViewer({
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, [workspaceActive]);
-  // Lazy transport preloads an empty shell only while URL-load is the active
-  // transport. Once srcdoc becomes active (sandbox shim, Draw, Screenshot,
-  // Tweaks, etc.), mount the real artifact HTML directly so we do not depend on
-  // a postMessage activation that can race (#2253) and strand the iframe blank
-  // (#2361, #2791).
+  // Non-Electron runtimes retain the historical lazy-shell/direct-srcDoc
+  // split. Electron always keeps the stable bootstrap shell and activates the
+  // enhanced document in place through the handshake above.
   const captureModeActive = drawOverlayOpen;
   // Once `srcDocMaterialized` is set (after the first mode entry), keep the
-  // srcDoc iframe on the real artifact even when hidden behind URL-load, so
-  // re-entering a mode is an instant visibility swap rather than a re-mount +
-  // re-load. Direct-mount path (no #2361/#2791 postMessage race).
+  // srcDoc iframe warm behind URL-load so re-entering a mode is an instant
+  // visibility swap rather than a remount and reload.
   const useLazySrcDocTransport =
-    srcDocRecoveryGeneration === srcDocTransportGeneration
+    usesPersistentSrcDocTransport
+    || srcDocRecoveryGeneration === srcDocTransportGeneration
     || (!manualEditRequiresSrcDoc && !captureModeActive && useUrlLoadPreview && !srcDocMaterialized);
   // Park on a static "loop detected" document once the guard reports a runaway
   // redirect. A self-redirecting artifact is forced onto the srcDoc iframe by
   // `needsRedirectGuard`, so swapping this content is the reliable stop — the
   // placeholder carries no redirect, so the frame settles the moment it loads.
   const redirectLoopBlockedDoc = useMemo(() => buildRedirectLoopBlockedDoc(), []);
-  const srcDocTransportContent = redirectLoopBlocked
+  const srcDocActivationContent = redirectLoopBlocked
     ? redirectLoopBlockedDoc
+    : srcDoc;
+  const srcDocTransportContent = usesPersistentSrcDocTransport
+    ? lazySrcDocTransport
     : useLazySrcDocTransport
       ? lazySrcDocTransport
       : srcDoc;
-  // Chromium can abort an `about:srcdoc` navigation while a retained iframe
-  // is being attached, moved between file tabs, or replaced after an
-  // authorization/base-resolution pass. Load the exact same injected document
-  // through a stable local blob URL instead. This preserves the opaque sandbox
-  // and every injected bridge, but turns the preview into one ordinary URL
-  // navigation and removes the fragile srcdoc commit race entirely.
-  const srcDocTransportUrl = useMemo(
-    () => previewDocumentUrl(
-      `${srcDocTransportGeneration}:${srcDocTransportResetKey}`,
-      srcDocTransportContent,
-    ),
-    [srcDocTransportContent, srcDocTransportGeneration, srcDocTransportResetKey],
-  );
+  // Electron loads only the immutable bootstrap URL here. Full enhanced
+  // documents move through the activation bridge, so a content generation,
+  // project activation, or file-tab switch cannot supersede an in-flight
+  // parent-frame navigation.
+  const srcDocTransportUrl = persistentSrcDocTransportUrl;
   // Materialize the srcDoc iframe the first time it actually becomes the active
   // (visible) transport — i.e. the first Mark/Edit/Comment/Inspect entry. We do
   // NOT pre-render it while hidden/idle: that ran a second live copy during
@@ -11367,9 +11556,17 @@ function HtmlViewer({
     drawOverlayOpen &&
     !manualEditRequiresSrcDoc &&
     shouldUrlLoadHtmlPreview({ ...urlLoadDecision, drawMode: false });
+  // Source mode visually hides the artifact, but it must not destroy a URL
+  // document that is otherwise eligible for passive preview. Replacing the
+  // URL with about:blank on every Preview -> Code transition creates a fresh
+  // navigation on the way back; rapid toggles can abort that navigation in
+  // Electron and leave a structurally active iframe with no painted content.
+  // Keep that one browsing context warm so Code -> Preview is a visibility
+  // swap, just like returning to an already-open file tab.
+  const keepUrlTransportWarmInSourceMode = mode === 'source' && urlLoadPreviewSupported;
   const urlTransportSrc = projectResourceReadBlocked
     ? 'about:blank'
-    : useUrlLoadPreview || srcDocForcedOnlyByDraw
+    : useUrlLoadPreview || srcDocForcedOnlyByDraw || keepUrlTransportWarmInSourceMode
       ? activePreviewSrcUrl
       : 'about:blank';
   const activePoweredPreviewSrcOverride = poweredPreviewSrcOverride
@@ -11416,13 +11613,33 @@ function HtmlViewer({
     setUrlPreviewFirstLoadPending(!urlPreviewLoadedKeysRef.current.has(urlPreviewKeepAliveKey));
   }, [useUrlLoadPreview, urlFrameSrc, urlPreviewKeepAliveKey]);
   const activateSrcDocTransport = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
-    if (!canActivateSrcDocTransport({
-      srcDoc,
-      useUrlLoadPreview,
+    const activationInputs = {
+      srcDoc: srcDocActivationContent,
+      useUrlLoadPreview: useUrlLoadPreview && !srcDocMaterialized,
       useLazySrcDocTransport,
       shellReady: srcDocShellReady,
       activatedHtml: activatedSrcDocTransportHtmlRef.current,
-    })) return false;
+    };
+    if (!canActivateSrcDocTransport(activationInputs)) {
+      // A shared Electron Blob can finish its cached bootstrap navigation
+      // before React attaches either the iframe onLoad callback or the parent
+      // message listener. If real content is otherwise ready to activate,
+      // challenge the shell explicitly. A live shell echoes `ready` and this
+      // callback reruns with shellReady=true; a shell that has not installed
+      // its listener yet still has its normal load/ready paths. This closes
+      // the missed-one-shot handshake without a timer or iframe navigation.
+      if (
+        activationInputs.srcDoc
+        && !activationInputs.useUrlLoadPreview
+        && activationInputs.useLazySrcDocTransport
+        && !activationInputs.shellReady
+      ) {
+        target?.contentWindow?.postMessage({
+          type: 'od:srcdoc-transport-shell-probe',
+        }, '*');
+      }
+      return false;
+    }
     // A SECOND activation while Comment mode is on would document.open +
     // write over the iframe's existing document. The window-level message
     // listener survives, but iframe.onLoad does NOT refire for
@@ -11436,7 +11653,11 @@ function HtmlViewer({
     // Skip the remount path in Manual Edit, where the postMessage
     // activate carries the patched HTML and host-side scroll/slide
     // state intentionally stays put across the patch.
-    if (boardMode && activatedSrcDocTransportHtmlRef.current !== null) {
+    if (
+      !usesPersistentSrcDocTransport
+      && boardMode
+      && activatedSrcDocTransportHtmlRef.current !== null
+    ) {
       activatedSrcDocTransportHtmlRef.current = null;
       setSrcDocTransportResetKey((key) => key + 1);
       return true;
@@ -11445,16 +11666,25 @@ function HtmlViewer({
     if (!win) return false;
     win.postMessage({
       type: 'od:srcdoc-transport-activate',
-      html: srcDoc,
+      html: srcDocActivationContent,
       generation: srcDocTransportGeneration,
     }, '*');
-    activatedSrcDocTransportHtmlRef.current = srcDoc;
+    activatedSrcDocTransportHtmlRef.current = srcDocActivationContent;
     return true;
-  }, [srcDoc, srcDocTransportGeneration, useLazySrcDocTransport, useUrlLoadPreview, srcDocShellReady, boardMode]);
+  }, [
+    boardMode,
+    srcDocActivationContent,
+    srcDocMaterialized,
+    srcDocShellReady,
+    srcDocTransportGeneration,
+    useLazySrcDocTransport,
+    useUrlLoadPreview,
+    usesPersistentSrcDocTransport,
+  ]);
   const activateLoadedSrcDocTransport = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
     if (!canActivateSrcDocTransport({
-      srcDoc,
-      useUrlLoadPreview,
+      srcDoc: srcDocActivationContent,
+      useUrlLoadPreview: useUrlLoadPreview && !srcDocMaterialized,
       useLazySrcDocTransport,
       shellReady: true,
       activatedHtml: activatedSrcDocTransportHtmlRef.current,
@@ -11463,23 +11693,29 @@ function HtmlViewer({
     if (!win) return false;
     win.postMessage({
       type: 'od:srcdoc-transport-activate',
-      html: srcDoc,
+      html: srcDocActivationContent,
       generation: srcDocTransportGeneration,
     }, '*');
-    activatedSrcDocTransportHtmlRef.current = srcDoc;
+    activatedSrcDocTransportHtmlRef.current = srcDocActivationContent;
     return true;
-  }, [srcDoc, srcDocTransportGeneration, useLazySrcDocTransport, useUrlLoadPreview]);
+  }, [
+    srcDocActivationContent,
+    srcDocMaterialized,
+    srcDocTransportGeneration,
+    useLazySrcDocTransport,
+    useUrlLoadPreview,
+  ]);
   const activateSrcDocSnapshotTransport = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
-    if (!srcDoc) return false;
+    if (!srcDocActivationContent) return false;
     const win = target?.contentWindow;
     if (!win) return false;
     win.postMessage({
       type: 'od:srcdoc-transport-activate',
-      html: srcDoc,
+      html: srcDocActivationContent,
       generation: srcDocTransportGeneration,
     }, '*');
     return true;
-  }, [srcDoc, srcDocTransportGeneration]);
+  }, [srcDocActivationContent, srcDocTransportGeneration]);
   function verifyLoadedSrcDocTransport(target: HTMLIFrameElement | null) {
     if (!target || target !== srcDocPreviewIframeRef.current) return;
     const generation = srcDocTransportGeneration;
@@ -11487,7 +11723,9 @@ function HtmlViewer({
   }
   useEffect(() => {
     if (useUrlLoadPreview) {
-      activatedSrcDocTransportHtmlRef.current = null;
+      if (!usesPersistentSrcDocTransport) {
+        activatedSrcDocTransportHtmlRef.current = null;
+      }
       // Remounting the srcDoc iframe on a render-mode flip resets it to a fresh
       // lazy shell — needed ONLY for the lazy postMessage-activation path
       // (#2253 shell-ready handshake). When the srcDoc iframe is direct-mounted
@@ -11497,19 +11735,33 @@ function HtmlViewer({
       // (URL-load) ↔ Mark (srcDoc): each flip remounted and reloaded. Keep the
       // iframe alive in the direct-mount case so the toggle is a pure
       // visibility swap.
-      if (!wasUrlLoadPreviewRef.current && useLazySrcDocTransport) {
+      if (
+        !usesPersistentSrcDocTransport
+        && !wasUrlLoadPreviewRef.current
+        && useLazySrcDocTransport
+      ) {
         setSrcDocTransportResetKey((key) => key + 1);
       }
       wasUrlLoadPreviewRef.current = true;
       return;
     }
-    if (wasUrlLoadPreviewRef.current && useLazySrcDocTransport) {
+    if (
+      !usesPersistentSrcDocTransport
+      && wasUrlLoadPreviewRef.current
+      && useLazySrcDocTransport
+    ) {
       setSrcDocTransportResetKey((key) => key + 1);
       activatedSrcDocTransportHtmlRef.current = null;
     }
     wasUrlLoadPreviewRef.current = false;
     activateSrcDocTransport();
-  }, [activateSrcDocTransport, useUrlLoadPreview, useLazySrcDocTransport]);
+  }, [
+    activateSrcDocTransport,
+    srcDocTransportResetKey,
+    useLazySrcDocTransport,
+    useUrlLoadPreview,
+    usesPersistentSrcDocTransport,
+  ]);
   // Recovery for a deck that parsed into the srcdoc iframe while the browser
   // tab was hidden: on the first return to a visible document, remount the
   // iframe for a fresh srcdoc parse (the mechanism Comment re-activation
@@ -12813,8 +13065,24 @@ function HtmlViewer({
   }
 
   async function applyManualEdit(patch: ManualEditPatch, label: string): Promise<boolean> {
-    if (manualEditSavingRef.current) return false;
-    if (sourceRef.current == null) return false;
+    const startedAt = performance.now();
+    let resultTracked = false;
+    const finish = (
+      result: ArtifactEditResultProps['result'],
+      errorCode?: ArtifactEditResultProps['error_code'],
+    ) => {
+      if (resultTracked) return;
+      resultTracked = true;
+      fireArtifactEditResult('apply', patch, startedAt, result, errorCode);
+    };
+    if (manualEditSavingRef.current) {
+      finish('failed', 'edit_busy');
+      return false;
+    }
+    if (sourceRef.current == null) {
+      finish('failed', 'source_unavailable');
+      return false;
+    }
     manualEditSavingRef.current = true;
     setManualEditSaving(true);
     setManualEditError(null);
@@ -12823,12 +13091,16 @@ function HtmlViewer({
       const result = applyManualEditPatch(baseSource, patch);
       if (!result.ok) {
         setManualEditError(result.error ?? 'Could not apply edit.');
+        finish('failed', 'patch_invalid');
         return false;
       }
       if (!(await confirmManualEditHistorySource(
         baseSource,
         'The file changed outside manual edit mode. Refreshing before applying manual edits.',
-      ))) return false;
+      ))) {
+        finish('failed', 'source_conflict');
+        return false;
+      }
       const parentVersionId = await resolveManualEditParentVersionId(baseSource);
       // A committed content patch can notify the file watcher as soon as the
       // write lands. Capture the opaque iframe's exact scroll position before
@@ -12851,6 +13123,7 @@ function HtmlViewer({
         setManualEditError(
           `Could not save the edited file${status ? ` (${status}${code ? ` ${code}` : ''})` : ''}: ${message}`,
         );
+        finish('failed', 'save_failed');
         return false;
       }
       const entry: ManualEditHistoryEntry = {
@@ -12918,8 +13191,12 @@ function HtmlViewer({
       // they do not yet have a live bridge equivalent.
       syncRetainedManualEditDocument(result.source, patch);
       setManualEditError(null);
+      finish('success');
       await onFileSaved?.();
       return true;
+    } catch (error) {
+      finish('failed', 'unknown');
+      throw error;
     } finally {
       manualEditSavingRef.current = false;
       setManualEditSaving(false);
@@ -12954,16 +13231,32 @@ function HtmlViewer({
   }
 
   async function undoManualEdit() {
-    if (manualEditSavingRef.current) return;
     const [latest, ...rest] = manualEditHistory;
     if (!latest) return;
+    const startedAt = performance.now();
+    let resultTracked = false;
+    const finish = (
+      result: ArtifactEditResultProps['result'],
+      errorCode?: ArtifactEditResultProps['error_code'],
+    ) => {
+      if (resultTracked) return;
+      resultTracked = true;
+      fireArtifactEditResult('undo', latest.patch, startedAt, result, errorCode);
+    };
+    if (manualEditSavingRef.current) {
+      finish('failed', 'edit_busy');
+      return;
+    }
     manualEditSavingRef.current = true;
     setManualEditSaving(true);
     try {
       if (!(await confirmManualEditHistorySource(
         latest.afterSource,
         'The file changed outside manual edit mode. History was cleared to avoid overwriting newer content.',
-      ))) return;
+      ))) {
+        finish('failed', 'source_conflict');
+        return;
+      }
       const parentVersionId = await resolveManualEditParentVersionId(latest.afterSource);
       const saved = await writeProjectTextFileDetailed(projectId, file.name, latest.beforeSource, {
         artifactManifest: file.artifactManifest,
@@ -12973,6 +13266,7 @@ function HtmlViewer({
       }, workspaceContext);
       if (!saved.ok) {
         setManualEditError(describeManualEditSaveFailure('Could not save the undo result', saved));
+        finish('failed', 'save_failed');
         return;
       }
       // Same srcDoc rebuild as a committed patch — keep the scroll position
@@ -12989,7 +13283,11 @@ function HtmlViewer({
       setManualEditHistory(rest);
       setManualEditUndone((current) => [latest, ...current]);
       setManualEditDraft((current) => ({ ...current, fullSource: latest.beforeSource }));
+      finish('success');
       await onFileSaved?.();
+    } catch (error) {
+      finish('failed', 'unknown');
+      throw error;
     } finally {
       manualEditSavingRef.current = false;
       setManualEditSaving(false);
@@ -12997,16 +13295,32 @@ function HtmlViewer({
   }
 
   async function redoManualEdit() {
-    if (manualEditSavingRef.current) return;
     const [latest, ...rest] = manualEditUndone;
     if (!latest) return;
+    const startedAt = performance.now();
+    let resultTracked = false;
+    const finish = (
+      result: ArtifactEditResultProps['result'],
+      errorCode?: ArtifactEditResultProps['error_code'],
+    ) => {
+      if (resultTracked) return;
+      resultTracked = true;
+      fireArtifactEditResult('redo', latest.patch, startedAt, result, errorCode);
+    };
+    if (manualEditSavingRef.current) {
+      finish('failed', 'edit_busy');
+      return;
+    }
     manualEditSavingRef.current = true;
     setManualEditSaving(true);
     try {
       if (!(await confirmManualEditHistorySource(
         latest.beforeSource,
         'The file changed outside manual edit mode. History was cleared to avoid overwriting newer content.',
-      ))) return;
+      ))) {
+        finish('failed', 'source_conflict');
+        return;
+      }
       const parentVersionId = await resolveManualEditParentVersionId(latest.beforeSource);
       const saved = await writeProjectTextFileDetailed(projectId, file.name, latest.afterSource, {
         artifactManifest: file.artifactManifest,
@@ -13016,6 +13330,7 @@ function HtmlViewer({
       }, workspaceContext);
       if (!saved.ok) {
         setManualEditError(describeManualEditSaveFailure('Could not save the redo result', saved));
+        finish('failed', 'save_failed');
         return;
       }
       // Same srcDoc rebuild as a committed patch — keep the scroll position
@@ -13032,7 +13347,11 @@ function HtmlViewer({
       setManualEditUndone(rest);
       setManualEditHistory((current) => [latest, ...current]);
       setManualEditDraft((current) => ({ ...current, fullSource: latest.afterSource }));
+      finish('success');
       await onFileSaved?.();
+    } catch (error) {
+      finish('failed', 'unknown');
+      throw error;
     } finally {
       manualEditSavingRef.current = false;
       setManualEditSaving(false);
@@ -13116,6 +13435,17 @@ function HtmlViewer({
     win.postMessage({ type: 'od:slide', action: 'go', index: active }, '*');
   }
 
+  useEffect(() => {
+    if (!workspaceActive || mode !== 'preview' || useUrlLoadPreview || !effectiveDeck) return;
+    // Retained project/file viewers keep their iframe browsing context while
+    // hidden. Chromium can repaint that context before the deck bridge has
+    // restored which authored slide is visible, leaving the rail and counter
+    // correct while the main canvas is blank until the user clicks a slide.
+    // Replay the already-cached index when the viewer becomes active; this is
+    // an idempotent bridge message and does not navigate or replace the frame.
+    syncCachedSlideStateToIframe(srcDocPreviewIframeRef.current);
+  }, [effectiveDeck, mode, previewStateKey, useUrlLoadPreview, workspaceActive]);
+
   function fireSpeakerNotesSaveResult(
     editSurface: 'preview' | 'presenter',
     result: 'success' | 'failed',
@@ -13128,6 +13458,8 @@ function HtmlViewer({
       edit_surface: editSurface,
       artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
       artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+      project_id: projectId,
+      project_kind: projectKind,
       slide_count: deckSlideTotal,
       has_content: hasContent,
       result,
@@ -14068,8 +14400,10 @@ function HtmlViewer({
       // (PR #4652 / issue #4650 mrcfps review).
       setAnnotationFrozenSource(null);
       activatedSrcDocTransportHtmlRef.current = null;
-      setSrcDocShellReady(false);
-      setSrcDocTransportResetKey((key) => key + 1);
+      if (!usesPersistentSrcDocTransport) {
+        setSrcDocShellReady(false);
+        setSrcDocTransportResetKey((key) => key + 1);
+      }
     }
   }
 
@@ -14461,7 +14795,15 @@ function HtmlViewer({
   // PPTX export is slide-based, so show it only for explicit decks plus
   // structured deck runtimes. Do not key this off plain `.slide`: ordinary
   // parallax/long pages may use that class but must remain page-mode exports.
-  const showPptxExport = canShare && deckExportSignal;
+  // ...and only when the daemon on the other end can actually render slides.
+  // The route this button calls hard-fails with 501 when `desktopSlideRenderer`
+  // is absent (headless / container deployments), and both modes in the export
+  // modal reach that same 501, so without this the user is offered an action —
+  // and a mode choice — that cannot succeed. `null` means the daemon has not
+  // answered or predates the flag: keep showing the entry, since hiding on
+  // absence would take a working export away from every deployment that has
+  // not upgraded. Only an explicit `false` hides it.
+  const showPptxExport = canShare && deckExportSignal && slideRendererAvailable !== false;
   const canPptx = showPptxExport && !streaming;
   const showMarkdownExport = source !== null && isMarkdownArtifact && !viewerOnly;
   const showImageExport = canShare;
@@ -16707,6 +17049,7 @@ function HtmlViewer({
               {viewerOnly ? null : (
                 <HandoffButton
                   projectId={projectId}
+                  projectKind={projectKind}
                   projectName={projectName}
                   projectDir={projectDir}
                   agents={agents}
@@ -16795,7 +17138,6 @@ function HtmlViewer({
                             : `artifact-preview-frame-retained-${file.name}`}
                           data-od-render-mode="url-load"
                           data-od-active={mode === 'preview' && useUrlLoadPreview ? 'true' : 'false'}
-                          style={workspaceActive ? ACTIVE_PREVIEW_REPAINT_STYLE : undefined}
                           aria-hidden={workspaceActive && mode === 'preview' && useUrlLoadPreview ? undefined : true}
                           tabIndex={workspaceActive && mode === 'preview' && useUrlLoadPreview ? 0 : -1}
                           title={file.name}
@@ -16839,7 +17181,6 @@ function HtmlViewer({
                             : `artifact-preview-frame-retained-${file.name}`}
                           data-od-render-mode="url-load"
                           data-od-active={mode === 'preview' && useUrlLoadPreview ? 'true' : 'false'}
-                          style={workspaceActive ? ACTIVE_PREVIEW_REPAINT_STYLE : undefined}
                           aria-hidden={workspaceActive && mode === 'preview' && useUrlLoadPreview ? undefined : true}
                           tabIndex={workspaceActive && mode === 'preview' && useUrlLoadPreview ? 0 : -1}
                           title={file.name}
@@ -16877,7 +17218,9 @@ function HtmlViewer({
                         />
                       )}
                       <iframe
-                        key={srcDocTransportResetKey}
+                        key={usesPersistentSrcDocTransport
+                          ? `${srcDocPreviewFrameName}:persistent`
+                          : srcDocTransportResetKey}
                         ref={setSrcDocPreviewIframe}
                         name={srcDocPreviewFrameName}
                         data-testid={workspaceActive
@@ -16885,7 +17228,6 @@ function HtmlViewer({
                           : `artifact-preview-frame-srcdoc-retained-${file.name}`}
                         data-od-render-mode="srcdoc"
                         data-od-active={mode === 'preview' && !useUrlLoadPreview ? 'true' : 'false'}
-                        style={workspaceActive ? ACTIVE_PREVIEW_REPAINT_STYLE : undefined}
                         aria-hidden={workspaceActive && mode === 'preview' && !useUrlLoadPreview ? undefined : true}
                         tabIndex={workspaceActive && mode === 'preview' && !useUrlLoadPreview ? 0 : -1}
                         title={file.name}
@@ -16994,7 +17336,7 @@ function HtmlViewer({
                           <CenteredLoader label={t('fileViewer.loading')} />
                         </div>
                       ) : null}
-                      {!useUrlLoadPreview && !srcDocTransportContent && previewSource === null ? (
+                      {!useUrlLoadPreview && previewSource === null ? (
                         // srcDoc-path twin of the cover above: while the
                         // preview content is still PENDING — the scoped-asset
                         // rewrite waiting on the project file list (deck on a
@@ -17295,6 +17637,22 @@ function HtmlViewer({
               src={activePreviewSrcUrl}
             />
           )}
+          {/* The overlay covers the whole window, so this is the only exit the
+              user can still reach. Esc is not a substitute: the moment they
+              click a slide to advance, focus moves into the sandboxed preview
+              frame and keyboard events stop reaching the host — leaving the OS
+              window button as the only thing left that looks like "close",
+              which quits the app (OPEND-2156). This control lives in the host
+              document, so it keeps working wherever focus went. */}
+          <button
+            type="button"
+            className="present-exit-btn"
+            onClick={() => closeInTabPresentation()}
+            title={t('fileViewer.exitPresentation')}
+            aria-label={t('fileViewer.exitPresentation')}
+          >
+            <Icon name="close" size={14} />
+          </button>
           {/* Lives INSIDE the overlay (not a body-portaled toast) so it stays
               visible when the overlay is the fullscreen element — a sibling
               toast would be clipped out of the fullscreen render. */}
@@ -17406,7 +17764,21 @@ function HtmlViewer({
                       editable,
                       workspaceContext,
                     });
-                    if (!res.ok) throw new Error('error' in res ? res.error : t('fileViewer.exportPptxNa'));
+                    if (!res.ok) {
+                      // `unavailable` covers two very different situations and
+                      // used to share one message: a runtime with no off-screen
+                      // renderer (permanent, 501) and a daemon we could not
+                      // reach at all (transient, says nothing about support).
+                      // Telling a user with a dead daemon that the feature is
+                      // "not available here" sends them to the wrong problem.
+                      throw new Error(
+                        'error' in res
+                          ? res.error
+                          : res.reason === 'unreachable'
+                            ? t('fileViewer.exportDaemonUnreachable')
+                            : t('fileViewer.exportPptxNa'),
+                      );
+                    }
                   });
                 }}
               >

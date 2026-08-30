@@ -91,6 +91,22 @@ function renderHome(onSubmit: (payload: unknown) => Promise<boolean> | void) {
 }
 
 describe('home composer sending state', () => {
+  it('stamps free-form Design submits as automatic default routing', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(true);
+    renderHome(onSubmit);
+
+    await screen.findByTestId('home-hero-input');
+    setHomeHeroPrompt('Build a launch dashboard');
+    fireEvent.click(await screen.findByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'od-default',
+      pluginSelectionProvenance: 'automatic-default',
+      conversationMode: 'design',
+    }));
+  });
+
   it('shows Sending… and swallows repeat clicks while creation is in flight', async () => {
     let resolveSubmit: (accepted: boolean) => void = () => undefined;
     const onSubmit = vi.fn(

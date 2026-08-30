@@ -71,6 +71,18 @@ export type RuntimeContext = {
   // same Codex Plugin and route itself into another OpenDesign workflow.
   // Operator-wide overrides remain owned by each runtime definition.
   disablePlugins?: boolean;
+  /** Daemon-issued opaque native Child handles for one locked complex Run. */
+  nativeBuildPackageBindings?: readonly {
+    nativeAgentHandle: string;
+    buildPackageId: string;
+  }[];
+  /**
+   * Enables provider-owned native Child behavior frames for an OD Next mapped
+   * Run. Runtime definitions must keep this off for ordinary Runs, and stream
+   * handlers must consume the frames as an evidence-only side channel rather
+   * than forwarding Child text into the parent UI stream.
+   */
+  observeNativeChildBehavior?: boolean;
 };
 
 // Marker on a RuntimeAgentDef declaring that the adapter's CLI maintains
@@ -99,6 +111,18 @@ export type RuntimeListModels = {
 export type RuntimeVersionPolicy = {
   /** Exact version strings exercised by this OpenDesign build. */
   supportedVersions: string[];
+  /**
+   * Optional shape of versions this build accepts without having exercised
+   * each one. Some agent CLIs ship as a stream of release candidates that
+   * moves faster than our releases do, so naming individual ones warns every
+   * user who followed our own install instructions the week after we bump
+   * them. Matching the line keeps the check meaningful instead of removing
+   * it — a version off that line still warns.
+   *
+   * Must not carry the `g` flag: `RegExp.test` is stateful with it, so the
+   * same version would alternate between supported and untested.
+   */
+  supportedVersionPattern?: RegExp;
   /** Fail closed when the version probe fails or returns no usable version. */
   requireVersion: true;
   /** Normalize and validate the first output line; null means unusable. */
@@ -291,6 +315,13 @@ export type RuntimeAgentDef = {
   // MCP `map[string]string` shape. Leave `undefined` (defaults to 'array')
   // for all other agents — the existing behavior is unchanged.
   acpMcpEnvFormat?: 'array' | 'map';
+  // First version of this agent whose ACP `session/new` handler rejects stdio
+  // MCP servers, e.g. `'0.37.0'` for Kimi Code CLI. When set, the ACP session
+  // withholds stdio entries from any build at or above it and sends only the
+  // transports that build still accepts. Leave `undefined` for every agent that
+  // still ingests stdio MCP servers at all versions — the existing behavior is
+  // unchanged. See `agent-protocol/acp/stdio-mcp.ts` for the mechanism.
+  acpStdioMcpRemovedInVersion?: string;
 };
 
 export type DetectedAgent = Omit<

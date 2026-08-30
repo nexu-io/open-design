@@ -1,6 +1,6 @@
 {
   "name": "@open-design/e2e",
-  "version": "0.20.3",
+  "version": "0.21.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -20,6 +20,8 @@
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "3.1050.0",
+    "@ffmpeg-installer/ffmpeg": "1.1.0",
+    "@ffprobe-installer/ffprobe": "2.1.2",
     "@open-design/contracts": "workspace:*",
     "@open-design/release": "workspace:*",
     "@playwright/test": "1.60.0",

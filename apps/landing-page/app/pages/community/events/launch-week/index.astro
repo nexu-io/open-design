@@ -164,28 +164,6 @@ const jsonLd = {
       });
   })();
 
-  // Count the Feishu joins. The site-wide tracker recognises `discord.gg/`
-  // and nothing else, so without this the page's only conversion is half
-  // measured — and Feishu is where the campaign's China-side community lives.
-  // Discord is deliberately left to the shared tracker rather than counted
-  // again here, which would double every click.
-  (() => {
-    // Listen on the document and resolve the tracker at click time. The shared
-    // `__odTrack` is defined by the analytics snippet in <head>, which is absent
-    // whenever PostHog has no key (CI and PR previews build without one) — a
-    // check at attach time would silently drop the listener for good.
-    document.addEventListener('click', (event) => {
-      const link = event.target.closest?.('a[href*="applink.feishu.cn"]');
-      if (!link || !link.closest('main.lw')) return;
-      if (typeof window.__odTrack !== 'function') return;
-      window.__odTrack('ui_click', {
-        element: 'join_feishu',
-        link_url: link.href,
-        link_text: (link.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 120),
-      });
-    });
-  })();
-
   // Scroll reveal. Lives here rather than in the partial so the markup stays
   // pure content; no-ops entirely when the visitor asks for reduced motion.
   (() => {

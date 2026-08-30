@@ -8,6 +8,7 @@ import { BrowserWindow, nativeImage } from "electron";
 import type { DesktopRenderSlidesInput, DesktopRenderSlidesResult } from "@open-design/sidecar-proto";
 
 import { waitForPrintableContent } from "./pdf-export.js";
+import { findRealTagEnd, findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
 
 // Vendored dom-to-pptx browser UMD (apps/desktop/vendor/dom-to-pptx). Loaded
 // once and injected into the render window for editable PPTX export. The packaged
@@ -1360,21 +1361,28 @@ export async function captureEditablePptxLayeredBackgrounds(
       )) as LayeredPptxBackgroundGeometry | null;
       if (!geometry) throw new Error(`could not isolate layered PPTX background ${target.id}`);
       await nextFrames(window);
-      const screenshot = (await dbg.sendCommand("Page.captureScreenshot", {
-        captureBeyondViewport: true,
-        clip: {
-          height: geometry.height,
-          scale: captureScale,
-          width: geometry.width,
-          x: geometry.pageX,
-          y: geometry.pageY,
+      const screenshotData = await captureUntilPainted(
+        async () => {
+          const screenshot = (await dbg.sendCommand("Page.captureScreenshot", {
+            captureBeyondViewport: true,
+            clip: {
+              height: geometry.height,
+              scale: captureScale,
+              width: geometry.width,
+              x: geometry.pageX,
+              y: geometry.pageY,
+            },
+            format: "png",
+            fromSurface: true,
+          })) as { data?: string };
+          if (!screenshot.data) throw new Error(`Chromium returned no layered PPTX capture for ${target.id}`);
+          return screenshot.data;
         },
-        format: "png",
-        fromSurface: true,
-      })) as { data?: string };
-      if (!screenshot.data) throw new Error(`Chromium returned no layered PPTX capture for ${target.id}`);
+        (data) => pngBufferHasPaint(Buffer.from(data, "base64")),
+        { label: target.id, onRetry: () => nextFrames(window) },
+      );
       captures[target.id] = {
-        dataUrl: `data:image/png;base64,${screenshot.data}`,
+        dataUrl: `data:image/png;base64,${screenshotData}`,
         height: geometry.height,
         left: geometry.left,
         slideIndex: geometry.slideIndex,
@@ -1878,11 +1886,48 @@ async function nextFrames(window: BrowserWindow): Promise<void> {
   );
 }
 
+export function pngInspectionHasPaint(png: {
+  maxAlpha: number;
+}): boolean {
+  return png.maxAlpha > 0;
+}
+
+export async function captureUntilPainted<T>(
+  capture: () => Promise<T>,
+  isPainted: (value: T) => boolean,
+  options: { attempts?: number; label: string; onRetry?: () => Promise<void> },
+): Promise<T> {
+  const attempts = options.attempts ?? 3;
+  let last: T | undefined;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    last = await capture();
+    if (isPainted(last)) return last;
+    if (attempt < attempts - 1 && options.onRetry) await options.onRetry();
+  }
+  throw new Error(`transparent chromium capture: ${options.label}`);
+}
+
+export function bgraBitmapHasPaint(bitmap: Buffer): boolean {
+  if (bitmap.length < 4) return false;
+  for (let offset = 3; offset < bitmap.length; offset += 4) {
+    if (bitmap[offset] > 0) return true;
+  }
+  return false;
+}
+
+export function pngBufferHasPaint(data: Buffer): boolean {
+  return bgraBitmapHasPaint(nativeImage.createFromBuffer(data).toBitmap());
+}
+
 function injectBaseHref(doc: string, baseHref: string | undefined): string {
   if (!baseHref) return doc;
   const tag = `<base href="${escapeHtmlAttribute(baseHref)}">`;
-  if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (match) => `${match}${tag}`);
-  if (/<html[^>]*>/i.test(doc)) return doc.replace(/<html[^>]*>/i, (match) => `${match}<head>${tag}</head>`);
+  // Structural lookup: a `<head>` an author wrote into a script string or an
+  // attribute is not this document's head (nexu-io/open-design#7410).
+  const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
+  if (headEnd >= 0) return doc.slice(0, headEnd) + tag + doc.slice(headEnd);
+  const htmlEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.htmlOpen);
+  if (htmlEnd >= 0) return `${doc.slice(0, htmlEnd)}<head>${tag}</head>${doc.slice(htmlEnd)}`;
   return `<!doctype html><html><head>${tag}</head><body>${doc}</body></html>`;
 }
 

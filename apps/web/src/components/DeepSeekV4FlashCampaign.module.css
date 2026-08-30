@@ -179,6 +179,19 @@
   filter: brightness(0) saturate(100%);
 }
 
+.goWelcomeProviderFallback {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  color: #fff;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  background: #20231f;
+  border-radius: 6px;
+}
+
 .goWelcomeMimoLogo {
   width: 32px !important;
 }
@@ -237,7 +250,7 @@
   min-width: 0;
 }
 
-.goWelcomeBenefitModel i {
+.goWelcomeBenefitIcon {
   display: grid;
   flex: 0 0 20px;
   place-items: center;
@@ -245,6 +258,14 @@
   height: 20px;
   background: #20231f;
   border-radius: 5px;
+}
+
+.goWelcomeBenefitFallback {
+  color: #fff;
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: -.03em;
 }
 
 .goWelcomeBenefitModel img {
@@ -401,11 +422,28 @@
   place-items: center;
   width: 42px;
   height: 42px;
+  overflow: hidden;
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--brand-text);
-  background: var(--brand);
+  background: var(--bg-panel);
   font-size: 12px;
   font-weight: 900;
+}
+
+.modelMark img {
+  display: block;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.modelMarkFallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  background: var(--brand);
 }
 
 .modelCopy {

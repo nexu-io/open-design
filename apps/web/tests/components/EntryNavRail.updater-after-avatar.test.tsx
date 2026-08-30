@@ -144,8 +144,8 @@ async function renderWithDownloadedUpdate(context: WorkspaceCollabContext | null
   return view;
 }
 
-describe('standalone updater rocket placement after the account capsule', () => {
-  it('shows the shared Go campaign badge on an unpaid project detail route', () => {
+describe('standalone updater rocket placement in the top-right cluster', () => {
+  it('shows the shared DeepSeek campaign badge on an unpaid project detail route', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-20T10:00:00.000Z'));
 
@@ -161,7 +161,7 @@ describe('standalone updater rocket placement after the account capsule', () => 
     );
 
     expect(screen.getByTestId('deepseek-campaign-pricing-badge').textContent).toContain(
-      '全新 Go 套餐 · 首月 ¥5 · 模型无限用',
+      'DeepSeek V4 Pro + V4 Flash 无限免费用',
     );
   });
 
@@ -250,13 +250,28 @@ describe('standalone updater rocket placement after the account capsule', () => 
     expect(slot.children.length).toBe(0);
   });
 
-  it('falls back to the rail footer when there is no account row to ride', async () => {
-    // Local (no cloud identity) shell: the account row is not rendered at all,
-    // so the rocket must keep its footer home instead of disappearing.
+  it('keeps the signed-out rocket in the top-right cluster without an account capsule', async () => {
     await renderWithDownloadedUpdate(null);
 
     const rocket = screen.getByTestId('entry-nav-updater');
     expect(screen.queryByTestId('entry-nav-account')).toBeNull();
-    expect(rocket.closest('.entry-nav-rail__footer')).not.toBeNull();
+    await waitFor(() => expect(rocket.closest('.entry-top-right-cluster')).not.toBeNull());
+    expect(rocket.closest('.entry-nav-rail__footer')).toBeNull();
+  });
+
+  it('keeps the signed-out top-right cluster absent while the updater is idle', async () => {
+    restoreHost = installMockOpenDesignHost({
+      host: { updater: { status: vi.fn(async () => idleStatus()) } },
+    });
+
+    renderRail(null);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByTestId('entry-nav-updater')).toBeNull();
+    expect(screen.queryByTestId('entry-nav-account-updater')).toBeNull();
+    expect(screen.queryByTestId('entry-top-right-github')).toBeNull();
+    expect(document.querySelector('.entry-top-right-cluster')).toBeNull();
   });
 });

@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
 import { createFakeAgentRuntimes } from '@/fake-agents';
+import { T } from '@/timeouts';
 import {
   assertPackagedHomeFirstRunResult,
   PACKAGED_HOME_FIRST_RUN_OUTPUT,
@@ -65,6 +66,55 @@ const healthExpression = `
     };
   })()
 `;
+const pptxArchiveInspectionSource = `
+  async function inspectPptxArchive(bytes, expectedText) {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let eocd = -1;
+    for (let offset = bytes.length - 22; offset >= Math.max(0, bytes.length - 65557); offset -= 1) {
+      if (view.getUint32(offset, true) === 0x06054b50) { eocd = offset; break; }
+    }
+    if (eocd < 0) throw new Error('PPTX end-of-central-directory record not found');
+    const entries = new Map();
+    const entryCount = view.getUint16(eocd + 10, true);
+    let offset = view.getUint32(eocd + 16, true);
+    const decoder = new TextDecoder();
+    for (let index = 0; index < entryCount; index += 1) {
+      if (view.getUint32(offset, true) !== 0x02014b50) throw new Error('invalid PPTX central-directory entry');
+      const nameLength = view.getUint16(offset + 28, true);
+      const extraLength = view.getUint16(offset + 30, true);
+      const commentLength = view.getUint16(offset + 32, true);
+      const name = decoder.decode(bytes.slice(offset + 46, offset + 46 + nameLength));
+      entries.set(name, {
+        compressedSize: view.getUint32(offset + 20, true),
+        localOffset: view.getUint32(offset + 42, true),
+        method: view.getUint16(offset + 10, true),
+      });
+      offset += 46 + nameLength + extraLength + commentLength;
+    }
+    async function readText(name) {
+      const entry = entries.get(name);
+      if (!entry) throw new Error('missing PPTX entry: ' + name);
+      const nameLength = view.getUint16(entry.localOffset + 26, true);
+      const extraLength = view.getUint16(entry.localOffset + 28, true);
+      const start = entry.localOffset + 30 + nameLength + extraLength;
+      const compressed = bytes.slice(start, start + entry.compressedSize);
+      if (entry.method === 0) return decoder.decode(compressed);
+      if (entry.method !== 8) throw new Error('unsupported PPTX compression method: ' + entry.method);
+      const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      return decoder.decode(await new Response(stream).arrayBuffer());
+    }
+    const slideNames = Array.from(entries.keys())
+      .filter((name) => /^ppt\\/slides\\/slide\\d+\\.xml$/.test(name))
+      .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+    const slides = await Promise.all(slideNames.map(readText));
+    return {
+      hasContentTypes: entries.has('[Content_Types].xml'),
+      hasPresentation: entries.has('ppt/presentation.xml'),
+      slideCount: slideNames.length,
+      textMatches: expectedText.map((text, index) => slides[index]?.includes(text) === true),
+    };
+  }
+`;
 const upgradePersistenceProjectId = `packaged-upgrade-persistence-${Date.now().toString(36)}`;
 const upgradePersistenceSeedExpression = `
   (async () => {
@@ -98,14 +148,17 @@ const upgradePersistenceSeedExpression = `
 function existingProjectPptxExportExpression(projectId: string): string {
   return `
   (async () => {
+    ${pptxArchiveInspectionSource}
     const projectId = ${JSON.stringify(projectId)};
     const exported = await fetch('/api/projects/' + encodeURIComponent(projectId) + '/export/pptx', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileName: 'deck.html' }),
+      body: JSON.stringify({ fileName: 'deck.html', editable: true }),
     });
     const bytes = new Uint8Array(await exported.arrayBuffer());
+    const archive = await inspectPptxArchive(bytes, ['Upgrade From Outer', 'Persistence Check']);
     return {
+      archive,
       byteLength: bytes.length,
       contentType: exported.headers.get('content-type'),
       magic: String.fromCharCode(...bytes.slice(0, 2)),
@@ -266,6 +319,13 @@ type LauncherSnapshot = {
   versionsRoot: string;
 };
 
+type NativeChromeActionProbe = {
+  clickCount: number;
+  targetMatches: boolean;
+  x: number;
+  y: number;
+};
+
 type LauncherPointer = {
   generation: number;
   version: string;
@@ -288,6 +348,12 @@ type HealthEvalValue = {
 };
 
 type PptxExportEvalValue = {
+  archive: {
+    hasContentTypes: boolean;
+    hasPresentation: boolean;
+    slideCount: number;
+    textMatches: boolean[];
+  };
   byteLength: number;
   contentType: string | null;
   magic: string;
@@ -381,6 +447,7 @@ macDescribe('packaged mac runtime smoke', () => {
       firstRunStarted = true;
       expect(start.source).toBe('installed');
       await waitForHealthyDesktop();
+      await assertFirstNativeChromeActionClick();
 
       const setup = await runToolsPackJson<MacInspectResult>('inspect', [
         '--expr',
@@ -1170,7 +1237,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
 
   beforeAll(async () => {
     await desktop.start();
-  }, 75_000);
+  }, T.xlong + T.long + T.medium);
 
   afterAll(async () => {
     await desktop.stop();
@@ -1477,7 +1544,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
     });
   }, 45_000);
 
-  test('keeps the desktop workspace stable when the artifact Open link is clicked', async () => {
+  test('[P0] keeps the desktop artifact preview loaded and stable after its file route opens', async () => {
     await seedDesktopConfig(desktop, {
       mode: 'api',
       apiKey: 'sk-test',
@@ -1494,7 +1561,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       theme: 'system',
     }, 'model');
 
-    const seeded = await desktop.eval<{ projectId: string }>(`
+    await desktop.eval<{ projectId: string }>(`
       (async () => {
         const projectId = 'desktop-open-smoke-' + Date.now().toString(36);
         const projectResp = await fetch('/api/projects', {
@@ -1529,63 +1596,31 @@ desktopMacDescribe('mac desktop settings smoke', () => {
           throw new Error('failed to seed project file: ' + fileResp.status);
         }
 
-        window.__odDesktopOpenHref = null;
-        window.__odDesktopOpenClickCount = 0;
-        if (!window.__odDesktopOpenCaptureInstalled) {
-          document.addEventListener('click', (event) => {
-            const target = event.target instanceof Element ? event.target.closest('a') : null;
-            if (!(target instanceof HTMLAnchorElement)) return;
-            if (target.textContent?.trim() !== 'Open') return;
-            window.__odDesktopOpenHref = target.getAttribute('href');
-            window.__odDesktopOpenClickCount += 1;
-            event.preventDefault();
-          }, true);
-          window.__odDesktopOpenCaptureInstalled = true;
-        }
-
         window.location.assign('/projects/' + encodeURIComponent(projectId) + '/files/desktop-open.html');
         return { projectId };
       })()
     `);
 
     await waitFor(async () => {
-      const snapshot = await readDesktopArtifactOpenSnapshot(desktop);
+      const snapshot = await readDesktopArtifactPreviewSnapshot(desktop);
       expect(snapshot.fileWorkspaceVisible).toBe(true);
       expect(snapshot.selectedTab).toBe('desktop-open.html');
       expect(snapshot.artifactPreviewVisible).toBe(true);
-      expect(snapshot.openHref).toBe('/api/projects/' + seeded.projectId + '/raw/desktop-open.html?v=0&r=0');
-      expect(snapshot.openTarget).toBe('_blank');
-      expect(snapshot.openRel).toContain('noreferrer');
+      expect(snapshot.artifactPreviewActive).toBe(true);
+      expect(snapshot.artifactPreviewLoadedEpoch).toBeTruthy();
+      expect(snapshot.artifactPreviewLoadingVisible).toBe(false);
     });
 
-    const clicked = await desktop.eval<boolean>(`
-      (() => {
-        const link = Array.from(document.querySelectorAll('a'))
-          .find((node) => node.textContent?.trim() === 'Open');
-        if (!(link instanceof HTMLAnchorElement)) return false;
-        link.click();
-        return true;
-      })()
-    `);
-    expect(clicked).toBe(true);
-
-    await waitFor(async () => {
-      const snapshot = await readDesktopArtifactOpenSnapshot(desktop);
-      expect(snapshot.fileWorkspaceVisible).toBe(true);
-      expect(snapshot.selectedTab).toBe('desktop-open.html');
-      expect(snapshot.artifactPreviewVisible).toBe(true);
-      expect(snapshot.openHref).toBe('/api/projects/' + seeded.projectId + '/raw/desktop-open.html?v=0&r=0');
+    const stablePreview = await observeDesktopArtifactPreviewStability(desktop);
+    expect(stablePreview).toEqual({
+      activeThroughout: true,
+      loadedThroughout: true,
+      loadingSurfaceSeen: false,
+      sameFrameThroughout: true,
+      visibleThroughout: true,
     });
 
-    const clickCapture = await desktop.eval<{ count: number; href: string | null }>(`
-      (() => ({
-        count: typeof window.__odDesktopOpenClickCount === 'number' ? window.__odDesktopOpenClickCount : 0,
-        href: typeof window.__odDesktopOpenHref === 'string' ? window.__odDesktopOpenHref : null,
-      }))()
-    `);
-    expect(clickCapture.count).toBeGreaterThan(0);
-    expect(clickCapture.href).toBe('/api/projects/' + seeded.projectId + '/raw/desktop-open.html?v=0&r=0');
-  }, 45_000);
+  }, T.xlong);
 
   test('opens the Media providers section from the desktop shell and shows provider controls', async () => {
     await seedDesktopConfig(desktop, {
@@ -1868,12 +1903,12 @@ type DesktopAppearanceSectionSnapshot = {
   themeSegControlVisible: boolean;
 };
 
-type DesktopArtifactOpenSnapshot = {
+type DesktopArtifactPreviewSnapshot = {
+  artifactPreviewActive: boolean;
+  artifactPreviewLoadedEpoch: string | null;
+  artifactPreviewLoadingVisible: boolean;
   artifactPreviewVisible: boolean;
   fileWorkspaceVisible: boolean;
-  openHref: string | null;
-  openRel: string | null;
-  openTarget: string | null;
   selectedTab: string | null;
 };
 
@@ -2132,23 +2167,91 @@ async function readDesktopAppearanceSectionSnapshot(
   `);
 }
 
-async function readDesktopArtifactOpenSnapshot(
+async function readDesktopArtifactPreviewSnapshot(
   desktop: DesktopHarness,
-): Promise<DesktopArtifactOpenSnapshot> {
-  return await desktop.eval<DesktopArtifactOpenSnapshot>(`
+): Promise<DesktopArtifactPreviewSnapshot> {
+  return await desktop.eval<DesktopArtifactPreviewSnapshot>(`
     (() => {
-      const openLink = Array.from(document.querySelectorAll('a'))
-        .find((node) => node.textContent?.trim() === 'Open');
-      const activeTab = Array.from(document.querySelectorAll('[role="tab"][aria-selected="true"]'))
-        .map((node) => node.textContent?.trim())
-        .find((value) => typeof value === 'string') ?? null;
+      const preview = document.querySelector('[data-testid="artifact-preview-frame"]');
+      const loadingSurface = document.querySelector('[data-testid="artifact-preview-first-load"]');
+      const elementIsVisible = (element) => {
+        if (!(element instanceof HTMLElement)) return false;
+        const style = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.display !== 'none'
+          && style.visibility !== 'hidden'
+          && Number(style.opacity) !== 0
+          && rect.width > 0
+          && rect.height > 0;
+      };
+      const fileWorkspace = document.querySelector('[data-testid="file-workspace"]');
+      const activeTab = fileWorkspace?.querySelector('[role="tab"][aria-selected="true"]');
+      const activeTabLabel = activeTab?.querySelector('.ws-tab-label')?.textContent?.trim()
+        ?? activeTab?.textContent?.trim()
+        ?? null;
       return {
-        artifactPreviewVisible: Boolean(document.querySelector('[data-testid="artifact-preview-frame"]')),
-        fileWorkspaceVisible: Boolean(document.querySelector('[data-testid="file-workspace"]')),
-        openHref: openLink?.getAttribute('href') ?? null,
-        openRel: openLink?.getAttribute('rel') ?? null,
-        openTarget: openLink?.getAttribute('target') ?? null,
-        selectedTab: activeTab,
+        artifactPreviewActive: preview?.getAttribute('data-od-active') === 'true',
+        artifactPreviewLoadedEpoch: preview instanceof HTMLIFrameElement
+          ? preview.dataset.odLoadedPreviewEpoch ?? null
+          : null,
+        artifactPreviewLoadingVisible: elementIsVisible(loadingSurface),
+        artifactPreviewVisible: elementIsVisible(preview),
+        fileWorkspaceVisible: Boolean(fileWorkspace),
+        selectedTab: activeTabLabel,
+      };
+    })()
+  `);
+}
+
+async function observeDesktopArtifactPreviewStability(
+  desktop: DesktopHarness,
+): Promise<{
+  activeThroughout: boolean;
+  loadedThroughout: boolean;
+  loadingSurfaceSeen: boolean;
+  sameFrameThroughout: boolean;
+  visibleThroughout: boolean;
+}> {
+  return await desktop.eval(`
+    (async () => {
+      const selector = '[data-testid="artifact-preview-frame"]';
+      const firstFrame = document.querySelector(selector);
+      const visible = (element) => {
+        if (!(element instanceof HTMLElement)) return false;
+        const style = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return element.isConnected
+          && style.display !== 'none'
+          && style.visibility !== 'hidden'
+          && Number(style.opacity) !== 0
+          && rect.width > 0
+          && rect.height > 0;
+      };
+      let activeThroughout = true;
+      let loadedThroughout = true;
+      let loadingSurfaceSeen = false;
+      let sameFrameThroughout = firstFrame instanceof HTMLIFrameElement;
+      let visibleThroughout = visible(firstFrame);
+
+      for (let sample = 0; sample < 16; sample += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 100));
+        const current = document.querySelector(selector);
+        sameFrameThroughout &&= current === firstFrame;
+        visibleThroughout &&= visible(current);
+        activeThroughout &&= current?.getAttribute('data-od-active') === 'true';
+        loadedThroughout &&= current instanceof HTMLIFrameElement
+          && Boolean(current.dataset.odLoadedPreviewEpoch);
+        loadingSurfaceSeen ||= Array.from(
+          document.querySelectorAll('[data-testid="artifact-preview-first-load"]'),
+        ).some(visible);
+      }
+
+      return {
+        activeThroughout,
+        loadedThroughout,
+        loadingSurfaceSeen,
+        sameFrameThroughout,
+        visibleThroughout,
       };
     })()
   `);
@@ -2208,6 +2311,81 @@ async function waitForHealthyDesktop(): Promise<MacInspectResult> {
   }
 
   throw new Error(`packaged mac runtime did not become healthy: ${formatUnknown(lastResult)}`);
+}
+
+async function assertFirstNativeChromeActionClick(): Promise<void> {
+  const probeKey = '__odPackagedNativeChromeActionProbe';
+  const setup = await runToolsPackJson<MacInspectResult>('inspect', [
+    '--expr',
+    `(() => {
+      const target = document.querySelector('[data-testid="entry-top-right-github"]');
+      if (!(target instanceof HTMLElement)) {
+        throw new Error('first-render GitHub chrome action is missing');
+      }
+      window[${JSON.stringify(probeKey)}]?.cleanup?.();
+      const probe = { clickCount: 0 };
+      const onClick = (event) => {
+        probe.clickCount += 1;
+        event.preventDefault();
+      };
+      target.addEventListener('click', onClick, true);
+      window[${JSON.stringify(probeKey)}] = {
+        cleanup: () => target.removeEventListener('click', onClick, true),
+        probe,
+      };
+      const rect = target.getBoundingClientRect();
+      const clientX = rect.left + rect.width / 2;
+      const clientY = rect.top + rect.height / 2;
+      const hitTarget = document.elementFromPoint(clientX, clientY);
+      return {
+        clickCount: 0,
+        targetMatches: hitTarget != null && target.contains(hitTarget),
+        x: window.screenX + clientX,
+        y: window.screenY + clientY,
+      };
+    })()`,
+  ]);
+  if (setup.eval?.ok !== true) {
+    throw new Error(`native chrome action setup failed: ${formatUnknown(setup.eval)}`);
+  }
+  const probe = setup.eval.value as NativeChromeActionProbe;
+  expect(probe.targetMatches).toBe(true);
+  expect(Number.isFinite(probe.x)).toBe(true);
+  expect(Number.isFinite(probe.y)).toBe(true);
+
+  try {
+    const swiftSource = `
+      import CoreGraphics
+      import Darwin
+      let point = CGPoint(x: ${probe.x}, y: ${probe.y})
+      let source = CGEventSource(stateID: .hidSystemState)
+      CGEvent(mouseEventSource: source, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+      CGEvent(mouseEventSource: source, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+      usleep(50_000)
+      CGEvent(mouseEventSource: source, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+    `;
+    await execFileAsync('/usr/bin/xcrun', ['swift', '-e', swiftSource], { timeout: 30_000 });
+    await waitFor(async () => {
+      const snapshot = await runToolsPackJson<MacInspectResult>('inspect', [
+        '--expr',
+        `(() => {
+          const state = window[${JSON.stringify(probeKey)}];
+          return { clickCount: Number(state?.probe?.clickCount || '0') };
+        })()`,
+      ]);
+      expect((snapshot.eval?.value as { clickCount?: number } | undefined)?.clickCount).toBe(1);
+    }, 5_000);
+  } finally {
+    await runToolsPackJson<MacInspectResult>('inspect', [
+      '--expr',
+      `(() => {
+        const state = window[${JSON.stringify(probeKey)}];
+        state?.cleanup?.();
+        delete window[${JSON.stringify(probeKey)}];
+        return true;
+      })()`,
+    ]).catch(() => undefined);
+  }
 }
 
 async function waitForPackagedHomeFirstRunOutput(): Promise<PackagedHomeFirstRunResult> {
@@ -2535,6 +2713,11 @@ function assertPayloadDesktopIdentity(
 function assertPptxExportEvalValue(value: unknown): PptxExportEvalValue {
   if (
     !isRecord(value) ||
+    !isRecord(value.archive) ||
+    typeof value.archive.hasContentTypes !== 'boolean' ||
+    typeof value.archive.hasPresentation !== 'boolean' ||
+    typeof value.archive.slideCount !== 'number' ||
+    !Array.isArray(value.archive.textMatches) ||
     typeof value.byteLength !== 'number' ||
     (value.contentType != null && typeof value.contentType !== 'string') ||
     typeof value.magic !== 'string' ||
@@ -2549,6 +2732,12 @@ function assertPptxExportEvalValue(value: unknown): PptxExportEvalValue {
   );
   expect(value.byteLength).toBeGreaterThan(0);
   expect(value.magic).toBe('PK');
+  expect(value.archive).toEqual({
+    hasContentTypes: true,
+    hasPresentation: true,
+    slideCount: 2,
+    textMatches: [true, true],
+  });
   return value as PptxExportEvalValue;
 }
 

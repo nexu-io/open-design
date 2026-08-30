@@ -72,10 +72,10 @@ describe('TemplatePicker', () => {
   });
 
   it('shows the selected template on the trigger and offers no clear affordance', () => {
-    const view = renderPicker('wireframe');
+    const view = renderPicker('document');
 
     expect(screen.getByTestId('home-hero-template-picker').className).toContain('has-selection');
-    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Wireframe');
+    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Document');
     // Clearing the creation type was removed (per product): neither the pill's
     // inline × nor the menu's leading Clear row exists any more.
     expect(screen.queryByTestId('home-hero-template-reset')).toBeNull();

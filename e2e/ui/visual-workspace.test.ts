@@ -34,6 +34,22 @@ test('[P2] captures the project workspace surface', async ({ page }) => {
   await captureVisual(page, 'visual-project-workspace');
 });
 
+test('[P1] keeps the project account action host anchored to the right edge', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await configureVisualPage(page);
+  await gotoVisualHome(page);
+  await gotoVisualWorkspace(page);
+
+  const accountActionsRect = await page
+    .getByTestId('workspace-chrome-account-actions')
+    .evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { left: rect.left, right: rect.right };
+    });
+  expect(accountActionsRect.left).toBeGreaterThan(1000);
+  expect(1280 - accountActionsRect.right).toBeLessThanOrEqual(24);
+});
+
 test('[P2] captures the workspace staged contexts surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);

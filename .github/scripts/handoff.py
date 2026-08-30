@@ -3,14 +3,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any
 
+from lib.github import GitHubError, append_outputs, event_payload, unique_run_artifact
+
 SCHEMA_VERSION = 1
-KINDS = {"comment", "autofix", "report"}
+KINDS = {"comment", "autofix", "report", "convergence"}
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,79}$")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
@@ -49,7 +52,15 @@ def metadata_path(root: Path, kind: str, handoff_id: str) -> Path:
 
 def payload_path(root: Path, kind: str, handoff_id: str) -> Path:
     kind = require_kind(kind)
-    filename = "body.md" if kind == "comment" else "patch.diff" if kind == "autofix" else "request.json"
+    filename = (
+        "body.md"
+        if kind == "comment"
+        else "patch.diff"
+        if kind == "autofix"
+        else "candidate.json"
+        if kind == "convergence"
+        else "request.json"
+    )
     return handoff_dir(root, kind, handoff_id) / filename
 
 
@@ -174,13 +185,128 @@ def validate_report(entry_dir: Path) -> dict[str, Any]:
     return normalized
 
 
+def validate_convergence(entry_dir: Path) -> dict[str, Any]:
+    metadata = load_metadata(entry_dir / "metadata.json")
+    expected = {
+        "schema_version",
+        "kind",
+        "id",
+        "repository_id",
+        "repository",
+        "workflow",
+        "policy",
+        "event",
+        "run_id",
+        "run_attempt",
+        "head_sha",
+        "base_sha",
+        "tree_sha",
+    }
+    if set(metadata) != expected:
+        fail("Convergence metadata fields differ")
+    if metadata.get("schema_version") != SCHEMA_VERSION or metadata.get("kind") != "convergence":
+        fail(f"Invalid convergence metadata contract: {entry_dir}")
+    handoff_id = require_slug(require_text(metadata.get("id"), "id"), "id")
+    if entry_dir.name not in {handoff_id, artifact_name("convergence", handoff_id)}:
+        fail(f"Metadata id {handoff_id!r} does not match directory {entry_dir.name!r}")
+    event = require_text(metadata.get("event"), "event")
+    if event not in {"pull_request", "merge_group"}:
+        fail(f"Unsupported convergence event: {event!r}")
+    candidate_path = entry_dir / "candidate.json"
+    if not candidate_path.is_file():
+        fail(f"Missing convergence candidate: {candidate_path}")
+    candidate = load_metadata(candidate_path)
+    links = {
+        "repositoryId": require_int(metadata.get("repository_id"), "repository_id"),
+        "repository": require_text(metadata.get("repository"), "repository"),
+        "workflow": require_slug(require_text(metadata.get("workflow"), "workflow"), "workflow"),
+        "policy": require_slug(require_text(metadata.get("policy"), "policy"), "policy"),
+    }
+    for field, value in links.items():
+        if candidate.get(field) != value:
+            fail(f"Convergence candidate {field} does not match metadata")
+    provenance = candidate.get("provenance")
+    if not isinstance(provenance, dict):
+        fail("Convergence candidate provenance must be an object")
+    normalized = {
+        "schema_version": SCHEMA_VERSION,
+        "kind": "convergence",
+        "id": handoff_id,
+        "repository_id": links["repositoryId"],
+        "repository": links["repository"],
+        "workflow": links["workflow"],
+        "policy": links["policy"],
+        "event": event,
+        "run_id": require_int(metadata.get("run_id"), "run_id"),
+        "run_attempt": require_int(metadata.get("run_attempt"), "run_attempt"),
+        "head_sha": require_sha(metadata.get("head_sha"), "head_sha"),
+        "base_sha": require_sha(metadata.get("base_sha"), "base_sha"),
+        "tree_sha": require_sha(metadata.get("tree_sha"), "tree_sha"),
+        "candidate_path": str(candidate_path),
+        "path": str(entry_dir),
+    }
+    provenance_links = {
+        "event": normalized["event"],
+        "runId": normalized["run_id"],
+        "runAttempt": normalized["run_attempt"],
+        "headSha": normalized["head_sha"],
+        "baseSha": normalized["base_sha"],
+        "treeSha": normalized["tree_sha"],
+    }
+    for field, value in provenance_links.items():
+        if provenance.get(field) != value:
+            fail(f"Convergence candidate provenance {field} does not match metadata")
+    return normalized
+
+
 def validate_entry(kind: str, entry_dir: Path) -> dict[str, Any]:
     kind = require_kind(kind)
     if kind == "comment":
         return validate_comment(entry_dir)
     if kind == "autofix":
         return validate_autofix(entry_dir)
+    if kind == "convergence":
+        return validate_convergence(entry_dir)
     return validate_report(entry_dir)
+
+
+def write_convergence(root: Path, handoff_id: str, candidate: dict[str, Any]) -> Path:
+    provenance = candidate.get("provenance")
+    if not isinstance(provenance, dict):
+        fail("Convergence candidate provenance must be an object")
+    entry = handoff_dir(root, "convergence", handoff_id)
+    entry.mkdir(parents=True, exist_ok=False)
+    metadata = {
+        "schema_version": SCHEMA_VERSION,
+        "kind": "convergence",
+        "id": require_slug(handoff_id, "handoff id"),
+        "repository_id": candidate.get("repositoryId"),
+        "repository": candidate.get("repository"),
+        "workflow": candidate.get("workflow"),
+        "policy": candidate.get("policy"),
+        "event": provenance.get("event"),
+        "run_id": provenance.get("runId"),
+        "run_attempt": provenance.get("runAttempt"),
+        "head_sha": provenance.get("headSha"),
+        "base_sha": provenance.get("baseSha"),
+        "tree_sha": provenance.get("treeSha"),
+    }
+    (entry / "candidate.json").write_text(
+        json.dumps(candidate, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    (entry / "metadata.json").write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    validate_convergence(entry)
+    return entry
+
+
+def resolve_run_artifact(kind: str, handoff_id: str, run_id: int, repository: str) -> None:
+    name = artifact_name(kind, handoff_id)
+    artifact = unique_run_artifact(repository, run_id, name)
+    append_outputs({"found": str(artifact is not None).lower(), "name": name if artifact else ""})
 
 
 
@@ -276,15 +402,33 @@ def self_check() -> None:
             ),
             encoding="utf-8",
         )
+        candidate = {
+            "repositoryId": 56,
+            "repository": "nexu-io/open-design",
+            "workflow": "ci",
+            "policy": "ci-v1",
+            "provenance": {
+                "event": "pull_request",
+                "runId": 34,
+                "runAttempt": 1,
+                "headSha": "a" * 40,
+                "baseSha": "b" * 40,
+                "treeSha": "c" * 40,
+            },
+        }
+        convergence = write_convergence(root, "ci-results", candidate)
         assert artifact_name("comment", "visual-pr-app") == "handoff-comment-visual-pr-app"
         assert artifact_pattern("autofix") == "handoff-autofix-*"
         assert artifact_name("report", "visual-pr") == "handoff-report-visual-pr"
+        assert artifact_name("convergence", "ci-results") == "handoff-convergence-ci-results"
         assert validate_entry("comment", comment)["marker"] == marker
         assert validate_entry("autofix", autofix)["allowed_paths"] == ["nix/pnpm-deps.nix"]
         assert validate_entry("report", report)["artifact_pattern"] == "visual-pr-capture-12-34-*"
+        assert validate_entry("convergence", convergence)["policy"] == "ci-v1"
         assert len(candidate_entry_dirs(root, "comment")) == 1
         assert len(candidate_entry_dirs(root, "autofix")) == 1
         assert len(candidate_entry_dirs(root, "report")) == 1
+        assert len(candidate_entry_dirs(root, "convergence")) == 1
     print("handoff self-check passed")
 
 
@@ -309,6 +453,12 @@ def main() -> None:
     list_parser.add_argument("kind", choices=sorted(KINDS))
     list_parser.add_argument("root")
 
+    resolve = subparsers.add_parser("resolve-run-artifact")
+    resolve.add_argument("kind", choices=sorted(KINDS))
+    resolve.add_argument("id")
+    resolve.add_argument("--run-id", type=int)
+    resolve.add_argument("--repository")
+
     subparsers.add_parser("self-check")
 
     args = parser.parse_args()
@@ -327,6 +477,18 @@ def main() -> None:
     elif args.command == "list":
         for entry in candidate_entry_dirs(Path(args.root), args.kind):
             emit_json(validate_entry(args.kind, entry))
+    elif args.command == "resolve-run-artifact":
+        run_id = args.run_id
+        if run_id is None:
+            workflow_run = event_payload().get("workflow_run")
+            if isinstance(workflow_run, dict) and isinstance(workflow_run.get("id"), int):
+                run_id = workflow_run["id"]
+            else:
+                run_id = int(os.environ.get("GITHUB_RUN_ID", "0"))
+        repository = args.repository or os.environ.get("GITHUB_REPOSITORY", "")
+        if run_id is None or run_id <= 0 or not repository:
+            fail("run id and repository are required to resolve a handoff artifact")
+        resolve_run_artifact(args.kind, args.id, run_id, repository)
     elif args.command == "self-check":
         self_check()
 
@@ -334,5 +496,7 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except BrokenPipeError:
+    except (BrokenPipeError, GitHubError) as error:
+        if isinstance(error, GitHubError):
+            print(f"handoff error: {error}", file=sys.stderr)
         sys.exit(1)

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { PassThrough } from 'node:stream';
 import path from 'node:path';
-import { test, vi } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { attachAcpSession, buildAcpSessionNewParams, createJsonLineStream, normalizeModels } from '../src/agent-protocol/index.js';
 import {
   acpTelemetryToolCallId,
@@ -12,6 +12,7 @@ import {
   isAcpPartialRedactToolName,
 } from '../src/agent-protocol/acp/updates.js';
 import { countNewArtifacts } from '../src/runtimes/run-artifacts.js';
+import { excludeAcpImagePathsAlreadyDeliveredAsResources } from '../src/runtimes/chat-prompt-inputs.js';
 
 const DEFAULT_MODEL_OPTION = { id: 'default', label: 'Default (CLI config)' };
 
@@ -210,20 +211,121 @@ test('attachAcpSession keeps legacy session/set_model when no model config optio
   assert.equal(requests.some((entry) => entry.method === 'session/set_config_option'), false);
 });
 
-test('attachAcpSession includes image attachments as ACP resource links', () => {
+test('attachAcpSession stops an AMR turn when session/set_model rejects the selected model', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  const events: Array<{ event: string; payload: unknown }> = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: 'claude-opus-5',
+    mcpServers: [],
+    modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  try {
+    writeAcpResult(child, 1, {});
+    writeAcpResult(child, 2, {
+      sessionId: 'session-1',
+      models: { currentModelId: null },
+    });
+    writeAcpError(child, 3, {
+      code: -32602,
+      message: 'session/set_model modelId is not available',
+    });
+
+    const requests = parseRpcWrites(writes);
+    assert.equal(requests.some((entry) => entry.method === 'session/set_model'), true);
+    assert.equal(requests.some((entry) => entry.method === 'session/prompt'), false);
+    assert.deepEqual(agentModelStatuses(events), []);
+    assert.equal(session.hasFatalError(), true);
+    assert.equal(session.completedSuccessfully(), false);
+    assert.deepEqual(events.filter((entry) => entry.event === 'error'), [
+      {
+        event: 'error',
+        payload: {
+          message: 'json-rpc id 3: session/set_model modelId is not available',
+          error: {
+            code: 'AMR_MODEL_UNAVAILABLE',
+            message: 'json-rpc id 3: session/set_model modelId is not available',
+            retryable: false,
+            details: { kind: 'amr_model', action: 'choose_model' },
+          },
+        },
+      },
+    ]);
+  } finally {
+    session.abort();
+  }
+});
+
+test('attachAcpSession preserves default-model recovery for other ACP agents', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  const events: Array<{ event: string; payload: unknown }> = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: 'optional-model',
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  try {
+    writeAcpResult(child, 1, {});
+    writeAcpResult(child, 2, {
+      sessionId: 'session-1',
+      models: { currentModelId: null },
+    });
+    writeAcpError(child, 3, {
+      code: -32602,
+      message: 'optional model selection is unavailable',
+    });
+
+    assert.equal(
+      parseRpcWrites(writes).some((entry) => entry.method === 'session/prompt'),
+      true,
+    );
+    assert.deepEqual(agentModelStatuses(events), ['default']);
+
+    writeAcpResult(child, 4, {});
+    assert.equal(session.hasFatalError(), false);
+    assert.equal(session.completedSuccessfully(), true);
+    assert.deepEqual(events.filter((entry) => entry.event === 'error'), []);
+  } finally {
+    session.abort();
+  }
+});
+
+test('attachAcpSession includes frozen PDF, text, and image attachments as ACP resource links', () => {
   const child = new FakeAcpChild();
   const writes: string[] = [];
   child.stdin.on('data', (chunk) => writes.push(String(chunk)));
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-acp-image-'));
   const imagePath = path.join(tmpDir, 'screenshot.png');
+  const pdfPath = path.join(tmpDir, 'brief.pdf');
+  const textPath = path.join(tmpDir, 'notes.txt');
   fs.writeFileSync(imagePath, 'png');
+  fs.writeFileSync(pdfPath, '%PDF-1.7\nbrief');
+  fs.writeFileSync(textPath, 'notes');
 
   attachAcpSession({
     child: child as never,
     prompt: 'describe this image',
     cwd: '/tmp/od-project',
     model: null,
-    imagePaths: [imagePath],
+    imagePaths: excludeAcpImagePathsAlreadyDeliveredAsResources(
+      [imagePath],
+      [pdfPath, textPath, imagePath],
+    ),
+    resourcePaths: [pdfPath, textPath, imagePath],
     mcpServers: [],
     send: () => {},
   });
@@ -238,6 +340,39 @@ test('attachAcpSession includes image attachments as ACP resource links', () => 
     sessionId: 'session-1',
     prompt: [
       { type: 'text', text: 'describe this image' },
+      { type: 'resource_link', uri: pdfPath },
+      { type: 'resource_link', uri: textPath },
+      { type: 'resource_link', uri: imagePath },
+    ],
+  });
+});
+
+test('attachAcpSession preserves duplicate ordinary image resource links', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+  const imagePath = '/tmp/ordinary-duplicate.png';
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'describe both image occurrences',
+    cwd: '/tmp/od-project',
+    model: null,
+    imagePaths: [imagePath, imagePath],
+    mcpServers: [],
+    send: () => {},
+  });
+  child.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, result: { protocolVersion: 1 } })}\n`);
+  child.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id: 2, result: { sessionId: 'session-1' } })}\n`);
+
+  const promptRequest = writes
+    .map((line) => JSON.parse(line) as { method?: string; params?: unknown })
+    .find((entry) => entry.method === 'session/prompt');
+  expect(promptRequest?.params).toEqual({
+    sessionId: 'session-1',
+    prompt: [
+      { type: 'text', text: 'describe both image occurrences' },
+      { type: 'resource_link', uri: imagePath },
       { type: 'resource_link', uri: imagePath },
     ],
   });
@@ -647,6 +782,216 @@ test('attachAcpSession preserves AMR assistant and model-step lifecycle diagnost
     assistantMessageIndex: 1,
     startedAtMs: 1_700_000_000_000,
   });
+});
+
+test('attachAcpSession consumes negotiated Vela child evidence only on the AMR path', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'delegate research',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {
+    protocolVersion: 1,
+    agentInfo: { name: 'Vela OpenCode', version: '0.0.0' },
+    agentCapabilities: {
+      extensions: {
+        'vela.opencode.child_agent_lifecycle': { schemaVersion: 1 },
+      },
+    },
+  });
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeVelaAcpUpdate(child, {
+    sessionUpdate: 'child_agent_lifecycle',
+    extension: 'vela.opencode.child_agent_lifecycle',
+    schemaVersion: 1,
+    evidenceId: 'evidence-start',
+    phase: 'start',
+    status: 'running',
+    childSessionId: 'child-1',
+    parentSessionId: 'root-1',
+    toolCallId: 'task-1',
+    startedAtMs: 100,
+    timingEvidence: 'source_timestamp',
+    lifecycleCompleteness: 'complete',
+    sourceEvidence: ['root_task_metadata', 'session.created'],
+    prompt: {
+      availability: 'hash_only',
+      sha256: 'a'.repeat(64),
+      bytes: 4,
+    },
+    usage: {
+      availability: 'unavailable',
+      completeness: 'unavailable',
+    },
+  });
+  writeVelaAcpUpdate(child, {
+    sessionUpdate: 'child_agent_lifecycle',
+    extension: 'vela.opencode.child_agent_lifecycle',
+    schemaVersion: 1,
+    evidenceId: 'evidence-1',
+    phase: 'end',
+    status: 'completed',
+    childSessionId: 'child-1',
+    parentSessionId: 'root-1',
+    toolCallId: 'task-1',
+    startedAtMs: 100,
+    endedAtMs: 200,
+    timingEvidence: 'source_timestamp',
+    lifecycleCompleteness: 'complete',
+    sourceEvidence: [
+      'root_task_metadata',
+      'session.created',
+      'child_session_status',
+      'unknown-secret-source',
+    ],
+    prompt: {
+      availability: 'hash_only',
+      sha256: 'a'.repeat(64),
+      bytes: 4,
+      text: 'Summarize the public fixture.',
+    },
+    usage: {
+      availability: 'available',
+      completeness: 'complete',
+      source: 'child_step_finish',
+      inputTokens: 2,
+      outputTokens: 1,
+      totalTokens: 3,
+      authorization: 'Bearer do-not-forward',
+    },
+    privateLog: '/Users/alice/private.log',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Research complete.' },
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 5, outputTokens: 2 } });
+
+  const diagnostics = events
+    .filter((entry) => entry.event === 'agent')
+    .map((entry) => entry.payload as Record<string, unknown>)
+    .filter((payload) => payload.type === 'diagnostic');
+  expect(diagnostics.find((payload) => payload.name === 'vela_opencode_child_evidence_capability'))
+    .toMatchObject({
+      supported: true,
+      schemaVersion: 1,
+      candidatePublished: false,
+      candidateCommit: 'c833b74e82e31c89414b7eaf01edabab1e2d0b06',
+    });
+  expect(diagnostics.find((payload) => (
+    payload.name === 'vela_opencode_child_agent_lifecycle' && payload.state === 'completed'
+  )))
+    .toMatchObject({
+      state: 'completed',
+      rootSessionId: 'root-1',
+      childSessionId: 'child-1',
+      toolCallId: 'task-1',
+      evidenceLevel: 'L2',
+      l3Eligible: false,
+      usage: { inputTokens: 2, outputTokens: 1, totalTokens: 3 },
+    });
+  const serialized = JSON.stringify(events);
+  expect(serialized).toContain('Summarize the public fixture.');
+  expect(serialized).not.toContain('Bearer do-not-forward');
+  expect(serialized).not.toContain('/Users/alice/private.log');
+  expect(events).toContainEqual(expect.objectContaining({
+    event: 'agent',
+    payload: expect.objectContaining({
+      type: 'usage',
+      usage: { input_tokens: 5, output_tokens: 2 },
+    }),
+  }));
+});
+
+test('attachAcpSession keeps old AMR child evidence unknown without changing root usage', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'ordinary turn',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+    send: (event, payload) => events.push({ event, payload }),
+  });
+  writeAcpResult(child, 1, { protocolVersion: 1 });
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeVelaAcpUpdate(child, {
+    sessionUpdate: 'child_agent_lifecycle',
+    extension: 'vela.opencode.child_agent_lifecycle',
+    schemaVersion: 1,
+    malicious: 'must-not-fall-through',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Ordinary answer.' },
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 8, outputTokens: 3 } });
+
+  const diagnostics = events
+    .filter((entry) => entry.event === 'agent')
+    .map((entry) => entry.payload as Record<string, unknown>)
+    .filter((payload) => payload.type === 'diagnostic');
+  expect(diagnostics).toContainEqual(expect.objectContaining({
+    name: 'vela_opencode_child_evidence_rejected',
+    reason: 'capability_not_negotiated',
+  }));
+  expect(diagnostics.some((payload) => payload.name === 'vela_opencode_child_agent_lifecycle'))
+    .toBe(false);
+  expect(JSON.stringify(events)).not.toContain('must-not-fall-through');
+  expect(events).toContainEqual(expect.objectContaining({
+    event: 'agent',
+    payload: expect.objectContaining({
+      type: 'usage',
+      usage: { input_tokens: 8, output_tokens: 3 },
+    }),
+  }));
+});
+
+test('attachAcpSession does not enable the Vela extension for generic ACP agents', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'generic ACP turn',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+  writeAcpResult(child, 1, {
+    agentCapabilities: {
+      extensions: {
+        'vela.opencode.child_agent_lifecycle': { schemaVersion: 1 },
+      },
+    },
+  });
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeVelaAcpUpdate(child, {
+    sessionUpdate: 'child_agent_lifecycle',
+    extension: 'vela.opencode.child_agent_lifecycle',
+    schemaVersion: 1,
+  });
+  writeAcpResult(child, 3, {});
+
+  const diagnostics = events
+    .filter((entry) => entry.event === 'agent')
+    .map((entry) => entry.payload as Record<string, unknown>)
+    .filter((payload) => payload.type === 'diagnostic');
+  expect(diagnostics.some((payload) => String(payload.name).startsWith('vela_opencode_child')))
+    .toBe(false);
+  expect(hasAgentStatus(events, 'child_agent_lifecycle')).toBe(true);
 });
 
 test('a truly PATHLESS ACP write is NOT coerced into an artifact (no false positive)', () => {
@@ -2082,6 +2427,63 @@ test('attachAcpSession surfaces non-text ACP updates as status progress', () => 
   );
 });
 
+test('attachAcpSession does not surface stabilized ACP metadata updates as status', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'make a simple deck',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  for (const sessionUpdate of ['usage_update', 'session_info_update', 'available_commands_update']) {
+    writeAcpUpdate(child, { sessionUpdate });
+  }
+  writeAcpUpdate(child, {
+    sessionUpdate: 'context_compaction',
+    status: 'in_progress',
+    message: 'Compacting conversation history',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Visible answer' },
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_thought_chunk',
+    content: { text: 'Private reasoning' },
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const statuses = events
+    .filter((entry) => entry.event === 'agent')
+    .map((entry) => entry.payload as { type?: string; label?: string; detail?: string })
+    .filter((payload) => payload.type === 'status');
+  assert.deepEqual(
+    statuses.filter((payload) =>
+      ['usage_update', 'session_info_update', 'available_commands_update'].includes(payload.label ?? ''),
+    ),
+    [],
+  );
+  assert.equal(
+    statuses.find((payload) => payload.label === 'context_compaction')?.detail,
+    'Compacting conversation history',
+  );
+  assert.deepEqual(
+    events
+      .filter((entry) => entry.event === 'agent')
+      .map((entry) => entry.payload as { type?: string; delta?: string })
+      .filter((payload) => payload.type === 'text_delta' || payload.type === 'thinking_delta')
+      .map((payload) => payload.delta),
+    ['Visible answer', 'Private reasoning'],
+  );
+});
+
 function parseRpcWrites(writes: string[]): Array<Record<string, unknown>> {
   return writes
     .join('')
@@ -2101,6 +2503,13 @@ function writeAcpError(child: FakeAcpChild, id: number, error: unknown): void {
 
 function writeAcpUpdate(child: FakeAcpChild, update: unknown): void {
   child.stdout.write(`${JSON.stringify({ method: 'session/update', params: { update } })}\n`);
+}
+
+function writeVelaAcpUpdate(child: FakeAcpChild, update: unknown): void {
+  child.stdout.write(`${JSON.stringify({
+    method: 'session/update',
+    params: { sessionId: 'session-1', update },
+  })}\n`);
 }
 
 function agentModelStatuses(events: Array<{ event: string; payload: unknown }>): unknown[] {
@@ -2186,6 +2595,85 @@ test('attachAcpSession does not double-kill a child that exits cleanly on stdin.
   } finally {
     vi.useRealTimers();
   }
+});
+
+test('attachAcpSession preserves redacted stderr diagnostics for startup exits', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+  const apiKey = `sk-test-${'a'.repeat(24)}`;
+
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  child.stderr.write(`\u001b[31mHermes startup failed\u001b[0m\nAPI key: ${apiKey}\n`);
+  child.emit('close', 1, null);
+
+  assert.equal(session.hasFatalError(), true);
+  const error = events.find((entry) => entry.event === 'error')?.payload as {
+    error?: { details?: Record<string, unknown> };
+  };
+  assert.deepEqual(error.error?.details, {
+    kind: 'acp_child_exit',
+    phase: 'initialize',
+    exit_code: 1,
+    signal: null,
+    stderr_tail: 'Hermes startup failed\nAPI key: [REDACTED:sk_key]',
+  });
+  assert.equal(JSON.stringify(error).includes(apiKey), false);
+});
+
+test('attachAcpSession redacts stderr credentials split by ANSI sequences', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+  const apiKey = `sk-test-${'a'.repeat(12)}${'b'.repeat(12)}`;
+  const ansiSplitApiKey = `sk-test-${'a'.repeat(12)}\u001b[31m${'b'.repeat(12)}\u001b[0m`;
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  child.stderr.write(`API key: ${ansiSplitApiKey}\n`);
+  child.emit('close', 1, null);
+
+  const error = events.find((entry) => entry.event === 'error')?.payload as {
+    error?: { details?: Record<string, unknown> };
+  };
+  assert.equal(error.error?.details?.stderr_tail, 'API key: [REDACTED:sk_key]');
+  assert.equal(JSON.stringify(error).includes(apiKey), false);
+});
+
+test('attachAcpSession classifies exits after initialize as session setup failures', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  child.stderr.write('Kimi could not create a session\n');
+  child.emit('close', 1, null);
+
+  const error = events.find((entry) => entry.event === 'error')?.payload as {
+    error?: { details?: Record<string, unknown> };
+  };
+  assert.equal(error.error?.details?.phase, 'session/new');
 });
 
 test('attachAcpSession accepts an opted-in ACP turn_end update as prompt completion', () => {

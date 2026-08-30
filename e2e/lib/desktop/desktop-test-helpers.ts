@@ -6,6 +6,8 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
+import { T } from '../timeouts.ts';
+
 const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolveRepoRoot(__dirname);
@@ -54,7 +56,7 @@ export function createDesktopHarness(name: string) {
         assert.equal(status.state, 'running');
         assert.equal(status.windowVisible, true);
         assert.ok(status.url);
-      }, 60_000);
+      }, T.xlong + T.long);
     },
     async stop() {
       await runToolsDev(['stop', '--namespace', namespace]).catch(() => undefined);

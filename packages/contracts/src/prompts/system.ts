@@ -35,6 +35,10 @@ import { OFFICIAL_DESIGNER_PROMPT, renderOfficialDesignerPrompt } from './offici
 import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { MEDIA_GENERATION_CONTRACT } from './media-contract.js';
+import {
+  composeOdNextStrategyRequestPromptV2,
+  type OdNextStrategyRequestRecipeV2,
+} from './od-next-strategy.js';
 import { SETTINGS_MEDIA_PROVIDERS_PATH } from '../settings-nav.js';
 
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
@@ -176,6 +180,10 @@ Active design system exception: the active design system is the visual direction
 `;
 
 export interface ComposeInput {
+  // Mirrored internal request-recipe slot. Generic/BYOK callers do not infer
+  // this from plugin ids; the daemon must supply a verified recipe payload.
+  odNextStrategyRecipe?: OdNextStrategyRequestRecipeV2 | undefined;
+  agentId?: string | null | undefined;
   skillBody?: string | undefined;
   skillName?: string | undefined;
   skillMode?:
@@ -189,6 +197,14 @@ export interface ComposeInput {
     | undefined;
   designSystemBody?: string | undefined;
   designSystemTitle?: string | undefined;
+  designSystemUsageMd?: string | undefined;
+  designSystemTokensCss?: string | undefined;
+  designSystemComponentsManifest?: string | undefined;
+  designSystemFixtureHtml?: string | undefined;
+  designSystemPullIndex?: string | undefined;
+  designSystemImportMode?: 'normalized' | 'hybrid' | 'verbatim' | undefined;
+  craftBody?: string | undefined;
+  craftSections?: string[] | undefined;
   // Personal-memory block (auto-extracted facts + the hand-edited
   // MEMORY.md index). The daemon side composes this on disk and the
   // BYOK side fetches it from `GET /api/memory/system-prompt`; either
@@ -254,11 +270,21 @@ export interface ComposeInput {
 }
 
 export function composeSystemPrompt({
+  odNextStrategyRecipe,
+  agentId,
   skillBody,
   skillName,
   skillMode,
   designSystemBody,
   designSystemTitle,
+  designSystemUsageMd,
+  designSystemTokensCss,
+  designSystemComponentsManifest,
+  designSystemFixtureHtml,
+  designSystemPullIndex,
+  designSystemImportMode,
+  craftBody,
+  craftSections,
   memoryBody,
   memoryHooks,
   metadata,
@@ -273,6 +299,28 @@ export function composeSystemPrompt({
   userInstructions,
   projectInstructions,
 }: ComposeInput): string {
+  if (odNextStrategyRecipe) {
+    return composeOdNextStrategyRequestPromptV2(odNextStrategyRecipe, {
+      agentId,
+      sessionMode,
+      locale,
+      metadata,
+      template,
+      designSystemBody,
+      designSystemTitle,
+      designSystemUsageMd,
+      designSystemTokensCss,
+      designSystemComponentsManifest,
+      designSystemFixtureHtml,
+      designSystemPullIndex,
+      designSystemImportMode,
+      craftBody,
+      craftSections,
+      memoryBody,
+      userInstructions,
+      projectInstructions,
+    });
+  }
   // Discovery + philosophy goes FIRST so its hard rules ("emit a form on
   // requirements decision, brand resolution, and TodoWrite workflow, run
   // checklist + critique before <artifact>) win precedence over softer

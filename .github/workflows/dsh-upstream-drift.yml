@@ -1,0 +1,54 @@
+name: dsh-upstream-drift
+
+# Watch upstream DeepSeek Harness releases and say something when we fall behind.
+#
+# `@deepseek-ai/dsh` has twice published a new release line while this repo kept
+# pinning the old one, and both times a person reporting a broken install was the
+# detection mechanism. The in-repo check compares our installers against our
+# agent def — both halves of our own config — so it stays green while both are
+# equally stale. This compares them against the registry instead.
+#
+# Standalone and outside the merge gate, like nix.yml and docker-image.yml: an
+# upstream release is not a reason to fail a PR.
+
+on:
+  schedule:
+    # 01:30 UTC = 09:30 Asia/Shanghai, after the landing summary so the two
+    # morning cards do not arrive at the same minute.
+    - cron: "30 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dsh-upstream-drift
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Compare pinned DeepSeek Harness against the registry
+    if: github.repository == 'nexu-io/open-design' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # Fails on a logic regression before anything reaches the registry or a
+      # webhook, so a broken checker is loud rather than silently in-sync.
+      - name: Check drift script
+        run: node --experimental-strip-types .github/scripts/dsh-upstream-drift.ts self-check
+
+      - name: Compare against the npm registry
+        env:
+          FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_LANDING_SIGN_SECRET || secrets.FEISHU_RELEASE_SIGN_SECRET }}
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_LANDING_WEBHOOK || secrets.FEISHU_RELEASE_WEBHOOK }}
+        run: node --experimental-strip-types .github/scripts/dsh-upstream-drift.ts run

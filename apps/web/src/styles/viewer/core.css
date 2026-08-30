@@ -412,9 +412,6 @@
   background: var(--bg-muted);
   color: var(--text);
 }
-.artifact-tool-menu-item .palette-tweaks-badge {
-  margin-left: auto;
-}
 /* Preview-only controls: keep layout stable across modes.
    When inactive, reserve the same horizontal slot but fully disable interaction. */
 .viewer-preview-controls {

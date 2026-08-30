@@ -110,6 +110,10 @@ export interface RunTelemetryTimestamps {
   firstModelResponseAt?: number;
   firstModelEventType?: TrackingFirstModelEventType;
   firstTokenAt?: number;
+  // When user-visible model output actually LEFT the daemon, which is later
+  // than `firstTokenAt` by however long the title-marker stripper, the
+  // fabricated-role-marker guard, or close-time stdout buffering held the bytes
+  // back. Equal to `firstTokenAt` on the common straight-through path.
   firstVisibleOutputAt?: number;
   firstArtifactWriteAt?: number;
   finalizeStartAt?: number;
@@ -1203,6 +1207,13 @@ export function summarizeRunTimingAnalytics(args: {
     telemetry.firstModelEventType ??
     firstObservedModelEventType ??
     (telemetry.firstTokenAt !== undefined ? 'text_delta' : undefined);
+  // `firstVisibleOutputAt` is stamped at the daemon's emission choke point, so
+  // it exists whenever the run put anything on screen and is >= the first token
+  // by construction. It is absent only when a run produced a token that the
+  // title-marker stripper or the role-marker guard withheld forever — no
+  // measurement to report, so fall back to the first token rather than dropping
+  // the field. The fallback cannot flatten a real gap: any run with visible
+  // output carries its own stamp and never reaches it.
   const firstVisibleOutputAt = telemetry.firstVisibleOutputAt ?? telemetry.firstTokenAt;
   const firstArtifactWriteAt =
     telemetry.firstArtifactWriteAt ??

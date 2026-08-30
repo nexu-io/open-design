@@ -67,6 +67,7 @@ import {
   type VisualStyleContext,
 } from "../runtime/visual-style-catalog";
 import { splitStreamingArtifact, stripArtifact, stripRecoveredHtmlFallbackForDisplay } from "../artifacts/strip";
+import { stripInternalControlMarkers } from "../artifacts/internal-markers";
 import { BRAND_BROWSER_TAB_ID } from "../runtime/brand-browser-bridge";
 import {
   getPluginFolderCandidates,
@@ -82,8 +83,8 @@ import { useT } from "../i18n";
 import { deriveFileOps, type FileOpEntry } from "../runtime/file-ops";
 import { dedupeToolUsesById } from "../runtime/tool-events";
 import {
+  continuableUnfinishedTodos,
   isTodoWriteToolName,
-  unfinishedTodosFromEvents,
   type TodoItem,
 } from "../runtime/todos";
 import type { Dict } from "../i18n/types";
@@ -115,11 +116,14 @@ export type QuestionFormSubmitHandler = (
   attachments?: ChatAttachment[],
   context?: RunContextSelection,
   sourceAssistantMessageId?: string,
+  formId?: string,
 ) => boolean | void | Promise<boolean | void>;
 
 const DISCORD_INVITE_URL = "https://discord.gg/mHAjSMV6gz";
 const viewedInlineQuestionForms = new Set<string>();
 const QUESTION_FORM_DRAFT_STORAGE_PREFIX = "open-design:question-form-draft:";
+const QUESTION_FORM_SUBMITTED_STORAGE_PREFIX =
+  "open-design:question-form-submitted:";
 
 interface ActionNotice {
   message: string;
@@ -548,6 +552,15 @@ function AssistantMessageImpl({
   nextStepVariant = 'default',
 }: Props) {
   const t = useT();
+  // A blocked strategy task is a sticky terminal verdict: the daemon rejects
+  // every further continuation with 409 STRATEGY_TASK_STATE_MISMATCH, so the
+  // turn's question forms must stop accepting submissions and explain why.
+  // Prefer the gate's persisted agent-visible text; fall back to the generic
+  // localized notice.
+  const strategyBlockedNotice =
+    message.strategyTaskBlocked === true
+      ? message.strategyTaskBlockedText?.trim() || t("questions.strategyBlockedNotice")
+      : null;
   // Thinking text renders markdown too — its file links must route in-app
   // exactly like prose links (ProseBlock builds the same handler itself).
   const thinkingLinkClick = useMemo(
@@ -749,7 +762,12 @@ function AssistantMessageImpl({
           }),
     [message.content, nextStepVariant, projectMetadata, streaming],
   );
-  const unfinishedTodos = streaming ? [] : unfinishedTodosFromEvents(events);
+  // A settled `completed` strategy verdict outranks a stale TodoWrite snapshot:
+  // the deliverable was verified on disk, so the footer must not report the
+  // turn as stopped with unfinished work (and must not withhold next steps).
+  const unfinishedTodos = streaming
+    ? []
+    : continuableUnfinishedTodos({ events, strategyTaskDelivered: message.strategyTaskDelivered });
   const hasTodoSnapshot = events.some(
     (event) => event.kind === "tool_use" && isTodoWriteToolName(event.name),
   );
@@ -921,7 +939,10 @@ function AssistantMessageImpl({
                 nextUserContent={nextUserContent}
                 suppressDirectionForms={suppressDirectionForms}
                 onSubmitQuestionForm={onSubmitQuestionForm}
-                questionFormSubmitDisabled={questionFormSubmitDisabled}
+                questionFormSubmitDisabled={
+                  questionFormSubmitDisabled || strategyBlockedNotice !== null
+                }
+                strategyBlockedNotice={strategyBlockedNotice}
                 visualStyleContext={visualStyleContextForProjectKind(projectKind)}
                 projectId={projectId}
                 conversationId={conversationId}
@@ -2535,6 +2556,7 @@ function ProseBlock({
   suppressDirectionForms,
   onSubmitQuestionForm,
   questionFormSubmitDisabled,
+  strategyBlockedNotice = null,
   visualStyleContext,
   projectId,
   conversationId,
@@ -2559,15 +2581,22 @@ function ProseBlock({
   projectResolvedDir?: string | null;
   onSubmitQuestionForm?: QuestionFormSubmitHandler;
   questionFormSubmitDisabled: boolean;
+  /** Localized blocked-task notice; non-null terminates form interaction. */
+  strategyBlockedNotice?: string | null;
   visualStyleContext?: VisualStyleContext;
   onRequestOpenFile?: (name: string) => void;
   onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
 }) {
   const t = useT();
   const cleaned = useMemo(() => {
-    const stripped = stripArtifact(text);
-    return hideRecoveredHtmlFallback ? stripRecoveredHtmlFallbackForDisplay(stripped, text) : stripped;
-  }, [hideRecoveredHtmlFallback, text]);
+    // Internal control markers come off first: they are daemon plumbing that
+    // never belongs in prose, and a leaked one would otherwise reach Markdown.
+    const withoutMarkers = stripInternalControlMarkers(text, { streaming });
+    const stripped = stripArtifact(withoutMarkers);
+    return hideRecoveredHtmlFallback
+      ? stripRecoveredHtmlFallbackForDisplay(stripped, withoutMarkers)
+      : stripped;
+  }, [hideRecoveredHtmlFallback, streaming, text]);
   // While the latest turn is still streaming a not-yet-closed question-form,
   // drop the partial `<question-form>{…` markup from the prose so the chat
   // doesn't flash raw JSON; an inline loading frame takes its place. A not-yet-closed
@@ -2678,6 +2707,7 @@ function ProseBlock({
             interactive={isLastAssistant}
             onSubmit={onSubmitQuestionForm}
             submitDisabled={questionFormSubmitDisabled}
+            strategyBlockedNotice={strategyBlockedNotice}
             visualStyleContext={visualStyleContext}
           />
         );
@@ -2710,6 +2740,7 @@ function FormBlock({
   interactive,
   onSubmit,
   submitDisabled,
+  strategyBlockedNotice = null,
   visualStyleContext,
 }: {
   form: QuestionForm;
@@ -2720,6 +2751,8 @@ function FormBlock({
   interactive: boolean;
   onSubmit?: QuestionFormSubmitHandler;
   submitDisabled: boolean;
+  /** Localized blocked-task notice rendered under the disabled form. */
+  strategyBlockedNotice?: string | null;
   visualStyleContext?: VisualStyleContext;
 }) {
   const t = useT();
@@ -2733,8 +2766,10 @@ function FormBlock({
     Record<string, string | string[]> | undefined
   >(() => readInlineQuestionFormDraft(formKey));
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const submittingRef = useRef(false);
+  const [submitting, setSubmitting] = useState(() =>
+    readInlineQuestionFormSubmitted(formKey),
+  );
+  const submittingRef = useRef(submitting);
   const pendingUploadCleanupRef = useRef<ChatAttachment[]>([]);
   const submittedFromHistory = useMemo(
     () => (nextUserContent ? parseSubmittedAnswers(form, nextUserContent) : null),
@@ -2797,22 +2832,33 @@ function FormBlock({
     return { items, visualItems };
   }, [form, submittedFromHistory, visualStyleContext]);
   useEffect(() => {
+    const syncSubmitLock = () => {
+      const outstanding = readInlineQuestionFormSubmitted(formKey);
+      submittingRef.current = outstanding;
+      setSubmitting(outstanding);
+    };
     setDraftAnswers(readInlineQuestionFormDraft(formKey));
     setUploadError(null);
-    submittingRef.current = false;
-    setSubmitting(false);
+    syncSubmitLock();
     pendingUploadCleanupRef.current = [];
+    // A submit started before this mount can still be refused after it, and
+    // that refusal is the user's only way back into the form.
+    return subscribeInlineQuestionFormSubmitted(formKey, syncSubmitLock);
   }, [formKey]);
   useEffect(() => {
     if (!submittedFromHistory) return;
     clearInlineQuestionFormDraft(formKey);
+    clearInlineQuestionFormSubmitted(formKey);
     setDraftAnswers(undefined);
   }, [formKey, submittedFromHistory]);
+  // The answer landing in history is what ends the submission; a busy
+  // conversation only hides the form for as long as it stays busy, so it must
+  // not be mistaken for the send having been consumed.
   useEffect(() => {
-    if (!submitting || (!submitDisabled && !submittedFromHistory)) return;
+    if (!submitting || !submittedFromHistory) return;
     submittingRef.current = false;
     setSubmitting(false);
-  }, [submitDisabled, submittedFromHistory, submitting]);
+  }, [submittedFromHistory, submitting]);
   const updateDraftAnswers = useCallback(
     (answers: Record<string, string | string[]>) => {
       setUploadError(null);
@@ -2910,8 +2956,24 @@ function FormBlock({
       fileSubmissions: QuestionFormFileSubmission[] = [],
     ) => {
       if (submittingRef.current) return;
-      submittingRef.current = true;
-      setSubmitting(true);
+      // The occurrence is locked the moment the answer leaves the form, not
+      // when the host finally settles it. Every await below — rolling back a
+      // previous upload, uploading this answer's files, and above all the
+      // host's own send (which may sit in a pre-run gate or park in a busy
+      // conversation's queue) — is a window the user can leave the project
+      // through. A lock written only after those awaits is precisely the lock
+      // the remount rebuilds as "never submitted".
+      const beginSubmission = () => {
+        markInlineQuestionFormSubmitted(formKey);
+        submittingRef.current = true;
+        setSubmitting(true);
+      };
+      const releaseSubmitLock = () => {
+        clearInlineQuestionFormSubmitted(formKey);
+        submittingRef.current = false;
+        setSubmitting(false);
+      };
+      beginSubmission();
       if (
         pendingUploadCleanupRef.current.length > 0 &&
         !(await rollbackPendingUploads())
@@ -2919,8 +2981,7 @@ function FormBlock({
         setUploadError(
           t("questions.uploadFailed", { failed: Math.max(1, pendingUploadCleanupRef.current.length) }),
         );
-        submittingRef.current = false;
-        setSubmitting(false);
+        releaseSubmitLock();
         return;
       }
       let attachments: ChatAttachment[] = [];
@@ -2929,8 +2990,7 @@ function FormBlock({
       if (fileSubmissions.length > 0) {
         if (!projectId) {
           setUploadError(t("questions.uploadNeedsProject"));
-          submittingRef.current = false;
-          setSubmitting(false);
+          releaseSubmitLock();
           return;
         }
         const flatFiles = fileSubmissions.flatMap((submission) =>
@@ -2958,8 +3018,7 @@ function FormBlock({
           await rollbackPendingUploads();
           const detail = result.error ? ` (${result.error})` : "";
           setUploadError(t("questions.uploadFailed", { failed: flatFiles.length }) + detail);
-          submittingRef.current = false;
-          setSubmitting(false);
+          releaseSubmitLock();
           return;
         }
         attachments = result.uploaded.map((attachment, index) => ({
@@ -2997,10 +3056,6 @@ function FormBlock({
           project_id: projectId,
         });
       }
-      const releaseSubmitLock = () => {
-        submittingRef.current = false;
-        setSubmitting(false);
-      };
       const rejectSubmission = async () => {
         if (attachments.length > 0) {
           pendingUploadCleanupRef.current = attachments;
@@ -3022,8 +3077,8 @@ function FormBlock({
       try {
         submitOutcome =
           attachments.length > 0 || context
-            ? onSubmit?.(submittedText, attachments, context)
-            : onSubmit?.(submittedText);
+            ? onSubmit?.(submittedText, attachments, context, undefined, form.id)
+            : onSubmit?.(submittedText, undefined, undefined, undefined, form.id);
       } catch {
         void rejectSubmission();
         return;
@@ -3103,6 +3158,15 @@ function FormBlock({
         visualStyleContext={visualStyleContext}
         autoContinueAfterTimeout
       />
+      {strategyBlockedNotice ? (
+        <div
+          className="qf-blocked-notice"
+          role="status"
+          data-testid="question-form-blocked-notice"
+        >
+          {strategyBlockedNotice}
+        </div>
+      ) : null}
       {uploadError ? (
         <div className="qf-upload-error" role="alert">
           {uploadError}
@@ -3203,6 +3267,103 @@ function clearInlineQuestionFormDraft(formKey: string | null): void {
   } catch {
     // The submitted answer message remains authoritative.
   }
+}
+
+function inlineQuestionFormSubmittedStorageKey(
+  formKey: string | null,
+): string | null {
+  return formKey ? `${QUESTION_FORM_SUBMITTED_STORAGE_PREFIX}${formKey}` : null;
+}
+
+/**
+ * One form occurrence answers exactly once.
+ *
+ * A submit lock that lives only in the mounted component is not a lock: every
+ * remount — leaving and re-entering the project, a reload, a conversation
+ * switch, a virtualized row recycling — rebuilds it as "never submitted" while
+ * the first answer is still being persisted or is still parked in the busy
+ * conversation's queue. The occurrence key (project + conversation + assistant
+ * message + form id) is the identity the lock belongs to, so it is held here
+ * instead of in the component, taken the moment the answer leaves the form,
+ * and released only by an explicit submit failure or by the answer surfacing
+ * in history.
+ *
+ * Because the submit that takes the lock can outlive the component that
+ * started it, a release has to reach whichever form is mounted by the time it
+ * lands — hence the listeners, without which an answer refused after the user
+ * navigated away would leave the form locked with no way back.
+ *
+ * Session storage is what carries the lock, so it also survives a reload. When
+ * a context denies storage (a private window, an embedded frame) the write
+ * throws and the lock falls back to a page-lived set: without it every remount
+ * there would read "never submitted" and hand those users the duplicate submit
+ * back, which is the whole defect.
+ */
+const deniedStorageInlineQuestionFormSubmissions = new Set<string>();
+const inlineQuestionFormSubmissionListeners = new Map<string, Set<() => void>>();
+
+function readInlineQuestionFormSubmitted(formKey: string | null): boolean {
+  const key = inlineQuestionFormSubmittedStorageKey(formKey);
+  if (!key) return false;
+  if (deniedStorageInlineQuestionFormSubmissions.has(key)) return true;
+  if (typeof window === "undefined") return false;
+  try {
+    return window.sessionStorage.getItem(key) !== null;
+  } catch {
+    return false;
+  }
+}
+
+function subscribeInlineQuestionFormSubmitted(
+  formKey: string | null,
+  listener: () => void,
+): () => void {
+  const key = inlineQuestionFormSubmittedStorageKey(formKey);
+  if (!key) return () => {};
+  const listeners = inlineQuestionFormSubmissionListeners.get(key) ?? new Set();
+  listeners.add(listener);
+  inlineQuestionFormSubmissionListeners.set(key, listeners);
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0) {
+      inlineQuestionFormSubmissionListeners.delete(key);
+    }
+  };
+}
+
+function notifyInlineQuestionFormSubmitted(key: string): void {
+  const listeners = inlineQuestionFormSubmissionListeners.get(key);
+  if (!listeners) return;
+  for (const listener of [...listeners]) listener();
+}
+
+function markInlineQuestionFormSubmitted(formKey: string | null): void {
+  const key = inlineQuestionFormSubmittedStorageKey(formKey);
+  if (!key) return;
+  if (typeof window !== "undefined") {
+    try {
+      window.sessionStorage.setItem(key, "1");
+    } catch {
+      // Denied storage costs the lock its reload survival, not the lock.
+      deniedStorageInlineQuestionFormSubmissions.add(key);
+    }
+  }
+  notifyInlineQuestionFormSubmitted(key);
+}
+
+function clearInlineQuestionFormSubmitted(formKey: string | null): void {
+  const key = inlineQuestionFormSubmittedStorageKey(formKey);
+  if (!key) return;
+  deniedStorageInlineQuestionFormSubmissions.delete(key);
+  if (typeof window !== "undefined") {
+    try {
+      window.sessionStorage.removeItem(key);
+    } catch {
+      // A stale stored lock only blocks re-answering one already-sent form,
+      // and the denied-storage fallback has already released it.
+    }
+  }
+  notifyInlineQuestionFormSubmitted(key);
 }
 
 function QuestionFormLoading() {

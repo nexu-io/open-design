@@ -769,6 +769,33 @@ test('[P0] manual edit mode keeps deck navigation available for deck-shaped HTML
   await expect(frame.getByText('Slide Two')).toBeVisible();
 });
 
+test('[P0] deck presentation host exit remains usable after the sandboxed slide takes focus', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Deck presentation exit smoke');
+  await seedDeckArtifact(page, projectId, 'present-exit.html', 'Present Exit', ['Slide One', 'Slide Two']);
+  await page.goto(`/projects/${projectId}/files/present-exit.html`);
+  await openDesignFile(page, 'present-exit.html');
+
+  await page.getByRole('button', { name: 'Present', exact: true }).click();
+  const popupPromise = page.waitForEvent('popup');
+  await page.getByRole('menuitem', { name: /^In this tab/i }).click();
+  const presenter = await popupPromise;
+
+  const overlay = page.locator('.present-overlay');
+  await expect(overlay).toBeVisible();
+  const presentedSlide = overlay.frameLocator('iframe[title="present"]');
+  const slideHeading = presentedSlide.getByRole('heading', { name: 'Slide One' });
+  await expect(slideHeading).toBeVisible();
+  await slideHeading.click();
+  await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe('IFRAME');
+
+  const presenterClosed = presenter.waitForEvent('close');
+  await overlay.getByRole('button', { name: 'Exit presentation' }).click();
+  await expect(overlay).toHaveCount(0);
+  await presenterClosed;
+  expect(presenter.isClosed()).toBe(true);
+});
+
 test('[P1] deck thumbnail rail keeps complete 16:9 slides separated and aligned', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Deck thumbnail rail layout');

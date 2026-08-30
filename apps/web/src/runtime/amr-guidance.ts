@@ -5,6 +5,7 @@
 // without a circular dependency.
 import {
   isModelWindowLimitFailure,
+  readMembershipConcurrencyResetAt,
   readModelWindowResetAt,
 } from '@open-design/contracts';
 
@@ -187,6 +188,8 @@ export type RunFailureMessageKey =
   | 'chat.runError.rateLimitedMessage'
   | 'chat.runError.modelWindowLimitMessage'
   | 'chat.runError.modelWindowLimitMessageNoTime'
+  | 'chat.runError.membershipConcurrencyLimitMessage'
+  | 'chat.runError.membershipConcurrencyLimitMessageNoTime'
   | 'chat.runError.upstreamUnavailableMessage'
   | 'chat.runError.toolLoopMessage'
   | 'chat.runError.outputInvalidMessage'
@@ -199,6 +202,8 @@ export type RunFailureMessageKey =
   | 'chat.runError.sessionExpiredMessage'
   | 'chat.runError.gitBashMissingMessage'
   | 'chat.runError.cpuUnsupportedMessage'
+  | 'chat.runError.cliSessionRefusedMessage'
+  | 'chat.runError.strategyTaskStateMismatchMessage'
   | null;
 
 // i18n keys for the unified error card's TITLE (the "error type" line above the
@@ -212,6 +217,7 @@ export type RunFailureTitleKey =
   | 'chat.runError.title.signInRequired'
   | 'chat.runError.title.rateLimited'
   | 'chat.runError.title.modelWindowLimit'
+  | 'chat.runError.title.membershipConcurrencyLimit'
   | 'chat.amrBalanceGate.title'
   | 'chat.runError.title.cliMissing'
   | 'chat.runError.title.promptTooLarge'
@@ -227,6 +233,8 @@ export type RunFailureTitleKey =
   | 'chat.runError.title.gitBashMissing'
   | 'chat.runError.title.artifactMissing'
   | 'chat.runError.title.cpuUnsupported'
+  | 'chat.runError.title.cliSessionRefused'
+  | 'chat.runError.title.strategyTaskHalted'
   | 'chat.runError.title.generic';
 
 export interface RunFailureUi {
@@ -368,6 +376,15 @@ const AGENT_AGNOSTIC_FAILURE_UI: Record<string, RunFailureUi> = {
     'chat.runError.title.runtimeConfig',
     'chat.runError.runtimeConfigMessage',
   ),
+  // A strategy-task continuation (clarification answer) arrived after the
+  // daemon's OD Next protocol gate already settled the task — typically a
+  // sticky `blocked` verdict. This is a task-lifecycle rejection, not an
+  // engine failure: name the halted task and point at retrying the request
+  // or starting a new one instead of showing the generic "task failed" card.
+  STRATEGY_TASK_STATE_MISMATCH: retryWithGuidance(
+    'chat.runError.title.strategyTaskHalted',
+    'chat.runError.strategyTaskStateMismatchMessage',
+  ),
 };
 
 // Same "switch to the hosted alternative" shape for causes where retrying with
@@ -465,6 +482,7 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
 };
 
 // Resolve the failure UI for a failed run:
+//   - ACP CLI refused the session → named type + change-the-CLI guidance
 //   - agent-agnostic root cause (cli missing, prompt too large, model
 //     unavailable, tool loop, bad output, bad runtime def) → named type + fix
 //   - agent-agnostic failure_detail (timeout, empty output, stale resumed
@@ -483,6 +501,27 @@ export function resolveRunFailureUi(
   agentId: string | null | undefined,
   rawMessage?: string | null,
 ): RunFailureUi {
+  // An ACP agent CLI that answered `initialize` and then refused to open a
+  // session. Resolved before every other branch, and before the static
+  // agent-agnostic table, because this code carries a prescription of its own
+  // (change the CLI build, then retry) that the generic mappings would erase.
+  // The daemon deliberately sends only the code plus the runtime identity as
+  // data — a sentence composed there could never be translated (see
+  // runtimes/acp-handshake-failure.ts).
+  //
+  // The copy names the installed build without quoting a version number. The
+  // daemon does have a detected version, but reading the one THIS run started
+  // with costs a pre-spawn probe on every launch, so naming it is deliberately
+  // left to a follow-up rather than paid for on the failure path here.
+  if (code === 'AGENT_CLI_SESSION_REFUSED') {
+    return {
+      primaryAction: 'retry',
+      titleKey: 'chat.runError.title.cliSessionRefused',
+      messageKey: 'chat.runError.cliSessionRefusedMessage',
+      secondaryRetry: false,
+      showSwitchCard: false,
+    };
+  }
   // Agent-agnostic codes resolve first so an AMR/Antigravity run that hits one
   // of them still gets the specific guidance instead of the generic fallback.
   const agnostic = typeof code === 'string' ? AGENT_AGNOSTIC_FAILURE_UI[code] : undefined;
@@ -505,6 +544,23 @@ export function resolveRunFailureUi(
       messageKey: retryAt
         ? 'chat.runError.modelWindowLimitMessage'
         : 'chat.runError.modelWindowLimitMessageNoTime',
+      ...(retryAt ? { messageVars: { retryAt } } : {}),
+      secondaryRetry: false,
+      showSwitchCard: false,
+    };
+  }
+  // Membership concurrency is a temporary policy gate carried inside an ACP
+  // fatal envelope. Keep the Retry button manual, name the wait explicitly,
+  // and preserve the upstream reset instant when one is present.
+  if (detail === 'membership_concurrency_limit') {
+    const parsed = readMembershipConcurrencyResetAt(rawMessage);
+    const retryAt = parsed && Number.isFinite(Date.parse(parsed)) ? parsed : null;
+    return {
+      primaryAction: 'retry',
+      titleKey: 'chat.runError.title.membershipConcurrencyLimit',
+      messageKey: retryAt
+        ? 'chat.runError.membershipConcurrencyLimitMessage'
+        : 'chat.runError.membershipConcurrencyLimitMessageNoTime',
       ...(retryAt ? { messageVars: { retryAt } } : {}),
       secondaryRetry: false,
       showSwitchCard: false,

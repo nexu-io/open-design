@@ -10,9 +10,16 @@
 //            file content is the same source the Source view shows. See
 //            issue #279.
 
+import {
+  findRealTagEnd,
+  findRealTagOffset,
+  HTML_TAG_PATTERNS,
+} from '@open-design/contracts/runtime/html-injection-points';
+
 import { buildSrcdoc, type SrcdocOptions } from './srcdoc';
 import { buildReactComponentSrcdoc } from './react-component';
 import { buildZip } from './zip';
+import { isDaemonProxyConnectionFailure } from './daemon-proxy-failure';
 import { randomUUID } from '../utils/uuid';
 import {
   captureHostPage,
@@ -921,9 +928,27 @@ export async function exportProjectAsZip(opts: {
 // renderer-side 502, "page too tall", …), which must be surfaced rather than
 // silently masked by the old vector path (which can reintroduce the CJK-glyph /
 // fidelity bugs this screenshot path exists to avoid).
+/**
+ * Why the off-screen renderer could not be used. Both values keep
+ * `unavailable: true` so the existing fallback checks (`'unavailable' in res`)
+ * still classify them as "renderer not usable, you may fall back", but callers
+ * that surface a message can now tell the two apart:
+ *
+ * - `no-renderer` — the daemon answered 501: this runtime has no off-screen
+ *   renderer at all. Permanent until the deployment changes.
+ * - `unreachable` — the request never got an answer (daemon down, connection
+ *   dropped). Says nothing about whether the feature exists, and is very likely
+ *   transient.
+ *
+ * They were previously collapsed into one flag, so a dead daemon was reported
+ * to the user as "this export is not available here" — a claim about the
+ * product when the real problem was the connection.
+ */
+export type ExportUnavailableReason = 'no-renderer' | 'unreachable';
+
 export type ProjectScreenshotExportResult =
   | { ok: true }
-  | { ok: false; unavailable: true }
+  | { ok: false; unavailable: true; reason: ExportUnavailableReason }
   | { ok: false; error: string };
 
 // Programmatic screenshot-based PPTX export. POSTs to the daemon, which renders
@@ -970,13 +995,20 @@ export async function exportProjectAsPptx(opts: {
   } catch {
     // Transport-level failure (offline, daemon down) — genuinely unavailable, so
     // the caller may fall back to the vector/browser PDF.
-    return { ok: false, unavailable: true };
+    return { ok: false, unavailable: true, reason: 'unreachable' };
   }
   if (!resp.ok) {
     // 501 = this runtime has no off-screen renderer → caller may fall back to
     // the vector/browser PDF. Everything else is a real (semantic) failure that
     // must surface, not be masked by the vector path.
-    if (resp.status === 501) return { ok: false, unavailable: true };
+    if (resp.status === 501) return { ok: false, unavailable: true, reason: 'no-renderer' };
+    // The proxy in front of the daemon answers instead of failing the fetch
+    // when the daemon is down, so an outage arrives as a plain-text 5xx rather
+    // than a rejection. Classify it before the generic branch below, otherwise
+    // the daemon-down diagnostic never fires on the packaged / sidecar path.
+    if (await isDaemonProxyConnectionFailure(resp)) {
+      return { ok: false, unavailable: true, reason: 'unreachable' };
+    }
     let message = `export request failed (${resp.status})`;
     try {
       const err = await resp.json();
@@ -1012,15 +1044,23 @@ export async function exportProjectAsPptx(opts: {
 // a plain `.slide` class as proof of a deck: ordinary pages often use that token
 // for carousels/testimonials and still need full-page/scroll-stitch capture.
 function sourceLooksLikeStructuredDeck(source: string): boolean {
+  // Inspect markup, not examples or compatibility notes embedded in the
+  // document. Print bridges commonly mention `<deck-stage>` in comments or
+  // script strings while guarding optional deck behavior; treating those
+  // literals as real elements turns ordinary reports into a one-slide deck and
+  // incorrectly mounts navigation and speaker notes.
+  const markup = source
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '');
   return (
     /<deck-stage[\s/>]|class\s*=\s*['"](?:[^'"]*\s)?(?:deck-slide|ppt-slide)(?:\s|['"])/i.test(
-      source,
+      markup,
     ) ||
     /<[^>]*\bclass\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])[^>]*\bdata-title\s*=|<[^>]*\bdata-title\s*=[^>]*\bclass\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])/i.test(
-      source,
+      markup,
     ) ||
     /<[^>]*\bclass\s*=\s*['"](?:[^'"]*\s)?deck(?:\s|['"])[^>]*>\s*<[^>]*\bclass\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])/i.test(
-      source,
+      markup,
     )
   );
 }
@@ -1085,7 +1125,7 @@ export function planDeckImageCapture(opts: {
 // must be surfaced rather than silently downgraded to a partial viewport shot.
 export type ProjectImageExportResult =
   | { ok: true; snapshot: PreviewSnapshot }
-  | { ok: false; unavailable: true }
+  | { ok: false; unavailable: true; reason: ExportUnavailableReason }
   // `code` / `status` carry the daemon's own classification through to the
   // caller. Dropping them (as this used to) forced `exportErrorCode` to
   // re-derive a code by regex-matching the message, and anything it could not
@@ -1127,11 +1167,18 @@ export async function exportProjectImageDataUrl(opts: {
   } catch {
     // Transport-level failure (offline, daemon down) — genuinely unavailable, so
     // the caller may fall back to a visible-preview capture.
-    return { ok: false, unavailable: true };
+    return { ok: false, unavailable: true, reason: 'unreachable' };
   }
   if (!resp.ok) {
     // 501 = this runtime has no off-screen renderer → caller may fall back.
-    if (resp.status === 501) return { ok: false, unavailable: true };
+    if (resp.status === 501) return { ok: false, unavailable: true, reason: 'no-renderer' };
+    // The proxy in front of the daemon answers instead of failing the fetch
+    // when the daemon is down, so an outage arrives as a plain-text 5xx rather
+    // than a rejection. Classify it before the generic branch below, otherwise
+    // the daemon-down diagnostic never fires on the packaged / sidecar path.
+    if (await isDaemonProxyConnectionFailure(resp)) {
+      return { ok: false, unavailable: true, reason: 'unreachable' };
+    }
     let message = `image export failed (${resp.status})`;
     let code: string | undefined;
     try {
@@ -1504,7 +1551,27 @@ export function reportPrintSizeWhenStable(
   step(maxFrames);
 }
 
-function injectPrintScript(doc: string, title: string): string {
+/**
+ * Place an export bridge as late as the document allows: before the real
+ * `</head>`, otherwise before the real `</body>`, otherwise appended.
+ *
+ * The boundaries are located structurally, so a `</head>` or `</body>` an
+ * author wrote into a script string or an attribute is not mistaken for this
+ * document's own (nexu-io/open-design#7410). Exports splice into the artifact's
+ * own bytes just like the preview transports do, and a print/PDF export of a
+ * prototype that builds an HTML document string is exactly the shape that broke
+ * there.
+ */
+function injectBeforeDocumentEnd(doc: string, payload: string): string {
+  const headClose = findRealTagOffset(doc, HTML_TAG_PATTERNS.headClose);
+  if (headClose >= 0) return doc.slice(0, headClose) + payload + doc.slice(headClose);
+  const bodyClose = findRealTagOffset(doc, HTML_TAG_PATTERNS.bodyClose);
+  if (bodyClose >= 0) return doc.slice(0, bodyClose) + payload + doc.slice(bodyClose);
+  return doc + payload;
+}
+
+/** @internal Exported for unit testing; not part of the public API surface. */
+export function injectPrintScript(doc: string, title: string): string {
   const safeTitle = JSON.stringify(title || 'artifact');
   // Browser fallback PDF export shares the same print-readiness signal as the
   // desktop native path. When the cache is present, wait for it so the popup
@@ -1513,12 +1580,11 @@ function injectPrintScript(doc: string, title: string): string {
   // CSP that forbids inline scripts), fall back to the historical load+delay
   // behavior instead of waiting for the full ready deadline.
   const script = `<script>(function(){try{document.title=${safeTitle}}catch(e){}function doPrint(){try{window.focus();window.print()}catch(e){}}function afterStableFrames(fn){requestAnimationFrame(function(){requestAnimationFrame(fn)})}window.addEventListener('load',function(){if(typeof window.__odPrintReady!=='boolean'){setTimeout(doPrint,300);return}var deadline=Date.now()+30000;var handshakeStartDeadline=Date.now()+1000;(function waitForReady(){if(window.__odPrintReady===true){afterStableFrames(doPrint);return}if(window.__odPrintReadyStarted===false&&Date.now()>=handshakeStartDeadline){setTimeout(doPrint,300);return}if(Date.now()>=deadline){afterStableFrames(doPrint);return}setTimeout(waitForReady,50)})()})})();</script>`;
-  if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${script}</head>`);
-  if (/<\/body>/i.test(doc)) return doc.replace(/<\/body>/i, `${script}</body>`);
-  return doc + script;
+  return injectBeforeDocumentEnd(doc, script);
 }
 
-function injectPrintReadyHandshake(doc: string, nonce: string): string {
+/** @internal Exported for unit testing; not part of the public API surface. */
+export function injectPrintReadyHandshake(doc: string, nonce: string): string {
   // Wait for fonts, the window load event (which covers initial images), and
   // any images that are still loading after load fires (dynamically added or
   // slow images that weren't complete by the time this script ran). Also wait
@@ -1541,9 +1607,7 @@ function injectPrintReadyHandshake(doc: string, nonce: string): string {
   // came from our injected handshake, not a spoofed message from untrusted
   // artifact code.
   const script = `<script data-od-print-ready>(function(){window.parent.postMessage({type:'OD_PRINT_READY_STARTED',nonce:'${nonce}'},'*');function waitForImages(){var imgs=Array.from(document.images).filter(function(img){if(img.loading==='lazy')img.loading='eager';return !img.complete});return Promise.all(imgs.map(function(img){return new Promise(function(r){img.addEventListener('load',r,{once:true});img.addEventListener('error',r,{once:true});if(img.complete)r()})}))}function cssUrlValues(value){var urls=[];if(!value||value==='none')return urls;value.replace(/url\\((['"]?)(.*?)\\1\\)/g,function(_,q,rawUrl){if(rawUrl&&!/^data:/i.test(rawUrl))urls.push(rawUrl);return''});return urls}function waitForCssBackgroundImages(){var urls=new Set();Array.from(document.querySelectorAll('*')).forEach(function(el){var style=window.getComputedStyle(el);cssUrlValues(style.backgroundImage).forEach(function(url){urls.add(url)});cssUrlValues(style.borderImageSource).forEach(function(url){urls.add(url)});cssUrlValues(style.listStyleImage).forEach(function(url){urls.add(url)})});return Promise.all(Array.from(urls).map(function(url){return new Promise(function(r){var img=new Image();img.onload=r;img.onerror=r;img.src=url})}))}function nextFrame(){return new Promise(function(r){requestAnimationFrame(function(){r(true)})})}Promise.all([document.fonts&&document.fonts.ready?document.fonts.ready.catch(function(){}):Promise.resolve(),new Promise(function(r){if(document.readyState==='complete')r();else window.addEventListener('load',r,{once:true})})]).then(function(){return Promise.all([waitForImages(),waitForCssBackgroundImages()])}).then(nextFrame).then(nextFrame).then(function(){var __odReport=${reportPrintSizeWhenStable.toString()};function measure(){var de=document.documentElement;var b=document.body||de;return {width:Math.max(de.scrollWidth,b.scrollWidth,de.offsetWidth,b.offsetWidth),height:Math.max(de.scrollHeight,b.scrollHeight,de.offsetHeight,b.offsetHeight)}}__odReport(measure,function(size){window.parent.postMessage({type:'OD_PRINT_READY',nonce:'${nonce}',width:size.width,height:size.height},'*')},30)})})();<\/script>`;
-  if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${script}</head>`);
-  if (/<\/body>/i.test(doc)) return doc.replace(/<\/body>/i, `${script}</body>`);
-  return doc + script;
+  return injectBeforeDocumentEnd(doc, script);
 }
 
 function injectParentPrintReadyCache(doc: string, nonce: string): string {
@@ -1557,7 +1621,8 @@ function injectParentPrintReadyCache(doc: string, nonce: string): string {
   // from a CSP-blocked one so the browser fallback can preserve the historical
   // quick print path when the inner script never runs.
   const script = `<script>window.__odPrintReady=false;window.__odPrintReadyStarted=false;window.__odPrintSize=null;var __odUsable=${isUsablePrintSize.toString()};window.addEventListener('message',function(e){if(e.data&&e.data.nonce==='${nonce}'&&(e.source===window||(window.frames&&e.source===window.frames[0]))){if(e.data.type==='OD_PRINT_READY_STARTED'){window.__odPrintReadyStarted=true;return}if(e.data.type==='OD_PRINT_READY'){window.__odPrintReady=true;if(__odUsable(e.data.width,e.data.height))window.__odPrintSize={width:e.data.width,height:e.data.height}}}});<\/script>`;
-  if (/<head>/i.test(doc)) return doc.replace(/<head>/i, `<head>${script}`);
+  const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
+  if (headEnd >= 0) return doc.slice(0, headEnd) + script + doc.slice(headEnd);
   return script + doc;
 }
 
@@ -1607,10 +1672,13 @@ const DECK_PRINT_CSS = `
 }
 `;
 
-function injectDeckPrintStylesheet(doc: string): string {
+/** @internal Exported for unit testing; not part of the public API surface. */
+export function injectDeckPrintStylesheet(doc: string): string {
   const tag = `<style data-deck-print="injected">${DECK_PRINT_CSS}</style>`;
-  if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${tag}</head>`);
-  if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${tag}`);
+  const headClose = findRealTagOffset(doc, HTML_TAG_PATTERNS.headClose);
+  if (headClose >= 0) return doc.slice(0, headClose) + tag + doc.slice(headClose);
+  const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
+  if (headEnd >= 0) return doc.slice(0, headEnd) + tag + doc.slice(headEnd);
   return tag + doc;
 }
 

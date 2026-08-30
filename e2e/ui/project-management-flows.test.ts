@@ -618,6 +618,27 @@ test('[P1] project detail composer design system picker switches the active proj
   await expect(trigger).toHaveAccessibleName(/Editorial Noir/i);
 });
 
+test('[P1] design system create Back restores the originating project conversation', async ({ page }) => {
+  await page.route('**/api/design-systems', async (route) => {
+    await route.fulfill({ json: { designSystems: DESIGN_SYSTEMS } });
+  });
+
+  await page.goto('/');
+  await createProject(page, 'Design system create return target');
+  await expectWorkspaceReady(page);
+
+  const origin = new URL(page.url());
+  expect(origin.pathname).toMatch(/^\/projects\/[^/]+\/conversations\/[^/]+$/);
+
+  await projectDesignSystemTrigger(page).click();
+  await page.getByTestId('project-ds-picker-create').click();
+  await expect(page).toHaveURL(/\/design-systems\/create$/);
+
+  await page.getByRole('button', { name: /^(Back|返回)$/ }).first().click();
+  await expect(page).toHaveURL(origin.toString());
+  await expectWorkspaceReady(page);
+});
+
 test('[P0] @critical project detail composer design system switch carries into the next run request', async ({ page }) => {
   const runRequestBodies: Array<Record<string, unknown>> = [];
   await routeSuccessfulRuns(page, { bodies: runRequestBodies, runId: 'mock-run' });

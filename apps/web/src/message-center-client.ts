@@ -2,6 +2,9 @@ export type MessageCenterFilter = 'all' | 'unread' | 'read';
 
 export interface MessageCenterMessage {
   id: string;
+  /** Optional stable selector for client-owned special behavior. Ordinary
+   *  messages do not need one and continue through the inbox unchanged. */
+  messageKey?: string | null;
   audienceType: 'global' | 'targeted';
   typeName: string;
   title: string;
@@ -10,6 +13,20 @@ export interface MessageCenterMessage {
   ctaUrl: string | null;
   publishedAt: string;
   readAt: string | null;
+}
+
+/** One-off, client-owned announcement selector. The message center remains a
+ * generic inbox: only slugs with this prefix opt into the preset strong dialog. */
+export const GO_PLAN_SUNSET_MESSAGE_KEY_PREFIX = 'go-plan-sunset-2026-08';
+
+export function findGoPlanSunsetMessage(
+  messages: readonly MessageCenterMessage[],
+): MessageCenterMessage | null {
+  return messages.find((message) => (
+    message.audienceType === 'targeted'
+    && message.readAt == null
+    && message.messageKey?.startsWith(GO_PLAN_SUNSET_MESSAGE_KEY_PREFIX)
+  )) ?? null;
 }
 
 interface MessageCenterPage {

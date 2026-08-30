@@ -6,7 +6,38 @@ import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const platformMocks = vi.hoisted(() => ({
+  listProcessSnapshots: vi.fn(),
+  stopProcesses: vi.fn(),
+  actualListProcessSnapshots: null as null | typeof import('@open-design/platform').listProcessSnapshots,
+  actualStopProcesses: null as null | typeof import('@open-design/platform').stopProcesses,
+}));
+
+vi.mock('@open-design/platform', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@open-design/platform')>();
+  platformMocks.actualListProcessSnapshots = actual.listProcessSnapshots;
+  platformMocks.actualStopProcesses = actual.stopProcesses;
+  platformMocks.listProcessSnapshots.mockImplementation(actual.listProcessSnapshots);
+  platformMocks.stopProcesses.mockImplementation(actual.stopProcesses);
+  return {
+    ...actual,
+    listProcessSnapshots: platformMocks.listProcessSnapshots,
+    stopProcesses: platformMocks.stopProcesses,
+  };
+});
+
 import { createChatRunService } from '../../src/runtimes/runs.js';
+
+afterEach(() => {
+  platformMocks.listProcessSnapshots.mockReset();
+  platformMocks.stopProcesses.mockReset();
+  platformMocks.listProcessSnapshots.mockImplementation(
+    platformMocks.actualListProcessSnapshots as typeof import('@open-design/platform').listProcessSnapshots,
+  );
+  platformMocks.stopProcesses.mockImplementation(
+    platformMocks.actualStopProcesses as typeof import('@open-design/platform').stopProcesses,
+  );
+});
 
 describe('chat run service shutdown', () => {
   it('exports terminal diagnostics without confusing a measured zero with missing data', () => {
@@ -664,6 +695,75 @@ describe('chat run service shutdown', () => {
       expect(run.signal).toBe('SIGKILL');
     });
 
+    it('includes descendants created during ACP abort grace in no-pgid teardown', async () => {
+      vi.useFakeTimers();
+      vi.stubEnv('PI_ABORT_GRACE_MS', '30');
+      const childPid = 41_000;
+      const descendantPid = 41_001;
+      const child = new FakeChildProcess({ closeOn: 'SIGKILL', pid: childPid });
+      platformMocks.listProcessSnapshots
+        .mockResolvedValueOnce([{ pid: childPid, ppid: 1, command: 'wrapper' }])
+        .mockResolvedValueOnce([
+          { pid: childPid, ppid: 1, command: 'wrapper' },
+          { pid: descendantPid, ppid: childPid, command: 'late descendant' },
+        ])
+        .mockResolvedValueOnce([{ pid: process.pid, ppid: 1, command: 'vitest' }]);
+      platformMocks.stopProcesses.mockResolvedValue({
+        alreadyStopped: false,
+        forcedPids: [childPid, descendantPid],
+        matchedPids: [childPid, descendantPid],
+        remainingPids: [],
+        stoppedPids: [childPid, descendantPid],
+      });
+      const runs = createRuns();
+      const run = runs.create() as any;
+      run.status = 'running';
+      run.child = child;
+      run.acpSession = { abort: vi.fn() };
+
+      const cancelPromise = runs.cancel(run);
+      await vi.advanceTimersByTimeAsync(30);
+      await cancelPromise;
+
+      expect(platformMocks.stopProcesses).toHaveBeenCalledWith(
+        [descendantPid, childPid],
+        { termGraceMs: 30, killGraceMs: 500 },
+      );
+      expect(run.events).not.toContainEqual(expect.objectContaining({
+        event: 'diagnostic',
+        data: expect.objectContaining({ type: 'termination_failed' }),
+      }));
+    });
+
+    it('records termination_failed when no-pgid process enumeration is unverifiable', async () => {
+      const childPid = 42_000;
+      const child = new FakeChildProcess({ closeOn: 'SIGTERM', pid: childPid });
+      platformMocks.listProcessSnapshots.mockResolvedValue([]);
+      platformMocks.stopProcesses.mockResolvedValue({
+        alreadyStopped: false,
+        forcedPids: [],
+        matchedPids: [childPid],
+        remainingPids: [],
+        stoppedPids: [childPid],
+      });
+      const runs = createRuns();
+      const run = runs.create() as any;
+      run.status = 'running';
+      run.child = child;
+
+      await runs.cancel(run);
+
+      expect(run.events).toContainEqual(expect.objectContaining({
+        event: 'diagnostic',
+        data: expect.objectContaining({
+          type: 'termination_failed',
+          reason: 'run_cancel',
+          child_pid: childPid,
+        }),
+      }));
+      expect(run.events.at(-1)).toMatchObject({ event: 'end', data: { status: 'canceled' } });
+    });
+
     it('waits for a real process group to exit before returning canceled status', async () => {
       if (process.platform === 'win32') return;
       vi.stubEnv('OD_CHAT_RUN_CANCEL_GRACE_MS', '25');
@@ -957,6 +1057,33 @@ describe('chat run service shutdown', () => {
     });
   });
 
+  it('runs durable terminal convergence before shutdown publishes the physical end event', async () => {
+    const observed: string[] = [];
+    const runs = createChatRunService({
+      createSseResponse: () => ({ send: vi.fn(() => true), end: vi.fn(), cleanup: vi.fn() }),
+      createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
+      shutdownGraceMs: 10,
+      ttlMs: 60_000,
+      beforeFinish: ((run: any, status: string) => {
+        observed.push(`before:${status}:${run.status}`);
+        run.strategyTask = { outcome: 'canceled', terminal: true };
+      }) as unknown as null,
+    });
+    const run = runs.create() as any;
+    run.status = 'running';
+
+    await runs.shutdownActive({ graceMs: 10 });
+
+    expect(observed).toEqual(['before:canceled:running']);
+    expect(run.events.at(-1)).toMatchObject({
+      event: 'end',
+      data: {
+        status: 'canceled',
+        strategyTask: { outcome: 'canceled', terminal: true },
+      },
+    });
+  });
+
   it('escalates to SIGKILL when a child ignores the shutdown SIGTERM grace window', async () => {
     const runs = createRuns();
     const child = new FakeChildProcess({ closeOn: 'SIGKILL' });
@@ -1124,6 +1251,7 @@ async function expectPidGone(pid: number): Promise<void> {
 }
 
 class FakeChildProcess extends EventEmitter {
+  pid: number | undefined;
   exitCode: number | null = null;
   signalCode: string | null = null;
   killed = false;
@@ -1137,8 +1265,9 @@ class FakeChildProcess extends EventEmitter {
     }),
   };
 
-  constructor(private readonly options: { closeOn: 'SIGTERM' | 'SIGKILL' }) {
+  constructor(private readonly options: { closeOn: 'SIGTERM' | 'SIGKILL'; pid?: number }) {
     super();
+    this.pid = options.pid;
   }
 
   kill(signal: string): boolean {
@@ -1265,17 +1394,35 @@ describe('run event log persistence', () => {
     runs.emit(run, 'start', { status: 'running' });
     runs.finish(run, 'failed', 1, null);
     runs.markAnalyticsCompleted(run);
-    runs.markLangfuseCompleted(run);
+    runs.beginTelemetryDelivery(run);
+    runs.recordTelemetryDeliveryAttempt(run);
+    runs.recordTelemetryDeliveryAttempt(run);
+    runs.finalizeTelemetryDelivery(run, {
+      langfuse_expected: true,
+      langfuse_delivery_status: 'failed',
+      langfuse_drop_reason: 'network_error',
+      langfuse_attempt_count: 2,
+    });
 
-    expect(JSON.parse(fs.readFileSync(statePath, 'utf8'))).toMatchObject({
+    const failedDeliveryState = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    expect(failedDeliveryState).toMatchObject({
       status: 'failed',
       exitCode: 1,
       analyticsRecovery: {
         insertId: 'run-created-1',
         completedAt: expect.any(Number),
       },
-      langfuseCompletedAt: expect.any(Number),
+      telemetryDelivery: {
+        version: 1,
+        idempotencyKey: expect.stringMatching(/^od-run-telemetry-v1-[a-f0-9]{64}$/u),
+        status: 'failed',
+        attemptCount: 2,
+        crashWindow: false,
+        dropReason: 'network_error',
+      },
     });
+    expect(failedDeliveryState).not.toHaveProperty('langfuseCompletedAt');
+    expect(failedDeliveryState.telemetryDelivery).not.toHaveProperty('finalizedAt');
   });
 
   it('restores the accepted plugin workflow binding from durable run state', () => {
@@ -1535,5 +1682,89 @@ describe('run event log persistence', () => {
     // ~ITER (each late emit re-opened a never-closed stream).
     expect(after - before).toBeLessThan(15);
     expect(kept.length).toBe(ITER);
+  });
+});
+
+describe('work completeness vs a settled OD Next verdict', () => {
+  function createRuns() {
+    return createChatRunService({
+      createSseResponse: () => ({ send: vi.fn(() => true), end: vi.fn(), cleanup: vi.fn() }),
+      createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
+      shutdownGraceMs: 10,
+      ttlMs: 60_000,
+    });
+  }
+
+  /** A settled OD Next task projection. `completed` is only reachable once the
+   *  coordinator saw BOTH a succeeded process AND a resolvable canonical
+   *  deliverable, so it is the strongest completion evidence the daemon holds. */
+  function completedStrategyTask() {
+    return {
+      taskExecutionId: 'odnext_8979d0a7452e4e65a51c666ad89f864d',
+      strategy: {
+        id: 'od-next-strategy',
+        version: '2.0.0',
+        packageHash: 'a'.repeat(64),
+        snapshotId: 'snapshot-1',
+      },
+      inputStage: 'production',
+      outcome: 'completed',
+      route: 'full_plan',
+      executionMode: 'simple',
+      activeRunId: 'run-1',
+      terminal: true,
+    };
+  }
+
+  it('does not report unfinished work when OD Next settled the task as completed', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    // The agent delivered index.html plus six images and declared the task
+    // complete, but its LAST TodoWrite snapshot still carried two pending
+    // items — the exact shape QA captured on project 3ffc55f1.
+    run.lastTodoSnapshot = [
+      { content: '生成品牌视觉资产', status: 'completed' },
+      { content: '写入响应式交互原型', status: 'pending' },
+      { content: '交付根目录运行入口', status: 'pending' },
+    ];
+    run.strategyTask = completedStrategyTask();
+    run.deliverableValid = true;
+
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(run.endedWithUnfinishedWork).toBe(false);
+  });
+
+  it('still reports unfinished work when the OD Next task did not complete', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.lastTodoSnapshot = [{ content: '写入响应式交互原型', status: 'pending' }];
+    run.strategyTask = { ...completedStrategyTask(), outcome: 'blocked' };
+
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(run.endedWithUnfinishedWork).toBe(true);
+  });
+
+  it('still reports unfinished work for a non-strategy run', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.lastTodoSnapshot = [{ content: 'ship it', status: 'in_progress' }];
+
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(run.endedWithUnfinishedWork).toBe(true);
+  });
+
+  it('keeps a max_tokens truncation unfinished even under a completed verdict', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.truncatedMidTurn = true;
+    run.strategyTask = completedStrategyTask();
+    run.deliverableValid = true;
+
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(run.endedWithUnfinishedWork).toBe(true);
   });
 });

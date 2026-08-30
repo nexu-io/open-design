@@ -6,8 +6,22 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
 $NodeVersion = '24.19.0'
-$DshVersion = '0.1.0-rc.6'
+$DshVersion = '0.1.1-rc.2'
 $PnpmVersion = '11.7.0'
+# Freeze npm's view of the registry to just after $DshVersion was published.
+#
+# Every @deepseek-ai/dsh-* package declares its ~190 siblings with a caret
+# range (^0.1.0-rc.N). npm reads a caret whose floor carries a prerelease tag
+# as "this prerelease or any newer version", so pinning the top-level package
+# alone lets the entire tree float onto whichever release candidate is newest.
+# The generations are mutually exclusive — an rc.8 package peer-requires
+# rc.8 siblings — so a mixed tree sends npm into an ERESOLVE backtrack across
+# a combinatorial search space that never converges: the install appears to
+# hang while scrolling warnings forever.
+#
+# The cutoff must stay LATER than $DshVersion's publish time and EARLIER than
+# the next release candidate's. Update both values together.
+$DshResolutionCutoff = '2026-08-21T13:00:00Z'
 
 function Fail([string]$Message) {
   throw "DeepSeek Harness installer: $Message"
@@ -151,7 +165,7 @@ try {
   $runtimeStaging = Join-Path $InstallRoot ".runtime-dsh-$DshVersion.$PID"
   New-Item -ItemType Directory -Force -Path $runtimeStaging | Out-Null
   Write-Host "Installing dsh $DshVersion and pnpm $PnpmVersion in OpenDesign's user toolchain..."
-  & (Join-Path $NodeTarget 'npm.cmd') install --prefix $runtimeStaging --no-save --no-package-lock --omit=dev "@deepseek-ai/dsh@$DshVersion" "pnpm@$PnpmVersion"
+  & (Join-Path $NodeTarget 'npm.cmd') install --prefix $runtimeStaging --no-save --no-package-lock --omit=dev --before $DshResolutionCutoff "@deepseek-ai/dsh@$DshVersion" "pnpm@$PnpmVersion"
   if ($LASTEXITCODE -ne 0) { Fail "npm install exited with code $LASTEXITCODE." }
 
   $stagingBin = Join-Path $runtimeStaging 'node_modules\.bin'

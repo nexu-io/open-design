@@ -10,7 +10,7 @@
  * static landing-page contract.
  */
 
-export type PlanTier = 'plus' | 'pro' | 'max';
+export type PlanTier = 'go' | 'plus' | 'pro' | 'max';
 export type TeamPlanTier =
   | 'team_basic'
   | 'team_plus'
@@ -153,6 +153,9 @@ export const GO_PLAN = {
   monthly: { priceUsd: 10, introPriceUsd: 5 },
   yearly: { priceUsd: 60 },
 } as const;
+
+/** New Go checkouts are closed; existing Go subscribers keep current-plan actions. */
+export const GO_PLAN_SOLD_OUT = true;
 
 /**
  * Stable Vela contract for opening the generic billing entry. Specific plan

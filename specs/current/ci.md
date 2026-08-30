@@ -118,18 +118,22 @@ Unknown, unresolved, mixed, or below-threshold inputs move toward broader
 coverage. They never gain trust from the absence of a matching rule. This
 directionality is the central fail-closed property of active omission.
 
-### Relevance and freshness are orthogonal
+### Relevance and reusable-result convergence are orthogonal
 
-Scope answers whether a workload is relevant to the changed-file context. Hash
-state answers whether that workload's declared Git inputs differ from the last
-successful invocation on the branch. The execution predicate is:
+Scope answers whether a workload is relevant to the changed-file context.
+Convergence answers whether the same workload identity already has a validated,
+reusable successful result. A workload identity includes its declared Git
+inputs, execution class, product mode, workflow policy, and convergence control
+contract. Once enforcement is enabled, the execution predicate is:
 
 ```text
-scope_enabled && !hash_equal
+scope_enabled && !reusable_result_hit
 ```
 
-Neither mechanism may infer the other's semantics. Fine-grained commands inside
-a workload remain a separate business-layer concern.
+Shadow mode deliberately uses `scope_enabled` while recording the second term,
+so rollout can measure omissions without changing coverage. Neither mechanism
+may infer the other's semantics. Fine-grained commands inside a workload remain
+a separate business-layer concern.
 
 ### Fan-out, convergence, and policy
 
@@ -178,7 +182,7 @@ arguments fail before workload dispatch.
 `.github/scripts/scopes.py` is the install-independent Linux control-plane
 entrypoint. Rule and matrix data lives in `.github/config/scopes.json`; the
 planner never imports workspace code. `.github/scripts/runners.py` and
-`.github/scripts/hash.py` share the same stdlib-only cold-start boundary. The
+`.github/scripts/convergence.py` share the same stdlib-only cold-start boundary. The
 planner validates configuration and routing before emitting a workload
 decision.
 
@@ -188,9 +192,9 @@ authority.
 
 ### Policy floor and broad validation
 
-`preflight` is enabled in every scope plan. Its current `"*"` hash declaration
-makes workspace setup, `pnpm guard`, and i18n structure checks execute for every
-new tracked tree, while an identical cached invocation may skip the whole job.
+`preflight` is enabled in every scope plan and is not reusable. Its current
+`"*"` input declaration therefore keeps workspace setup, `pnpm guard`, and i18n
+structure checks in every applicable run.
 
 Broad app declaration builds, workspace typecheck, and
 `run_workspace_unit_tests` may skip only for a merge-queue plan whose
@@ -231,21 +235,31 @@ Independent semantic-closure checks may be evaluated later. They must remain
 outside the planner's scheduling authority before their evidence can strengthen
 a `certain` decision.
 
-### Hash composition and publication
+### Workload identity, products, and publication
 
-Hash declarations live in `.github/config/hash.json`. A declaration may contain
-Git paths/globs, `suite://<name>` reusable path groups,
-`key://<workflow>/<identity>` dependencies, or `"*"` for the tracked tree.
-Cycles, dangling references, unsafe paths, empty matches, schema drift, and
-scope/hash identity drift fail at the plan entrypoint. The current contract
-uses `"*"` for every identity; narrower closures require separate evidence and
-may be introduced independently.
+Convergence declarations live in `.github/config/convergence.json`. A workload
+composes Git paths or globs, `suite://<name>` reusable path groups, or `"*"` for
+the tracked tree, and declares an execution class, product mode, and explicit
+reuse opt-in. Cycles, dangling suites, unsafe paths, empty matches, schema
+drift, and scope/convergence identity drift fail at the plan entrypoint.
 
-Actions cache stores only the previous identity-to-hash map. `hash.py` computes
-and compares the current map, and the plan transfers the pending map to
-`validate`. Only successful convergence publishes it. The map carries no job
-success, retry, or reliability meaning. Restore, transfer, and save failures
-start cold without failing CI; invalid configuration remains fatal.
+Reuse is valid only for a workload with no products or a complete typed product
+manifest. A manifest is one JSON value even when the job has several products;
+partial product reuse is invalid. Entries use `{type: "url" | "job", source:
+...}` plus optional typed data. A current-run `job` source names one GitHub
+artifact produced by the workload. The trusted atom promotes its archive to an
+immutable, normalized, credential-free `url` source, records its SHA-256 in the
+manifest, and verifies that digest on reuse before the result becomes a hit. If
+that production cannot be modeled cleanly, the workload remains non-reusable.
+
+CI reads immutable result receipts through the public base URL. A missing
+secret, 404, timeout, malformed receipt, product mismatch, or unavailable
+service is a miss and therefore executes the workload. A successful merge gate
+produces a typed convergence handoff; it does not write storage. The trusted
+`convergence.atom.yml` consumer checks the producing run and that its control
+plane matches the default branch before publishing to R2. `convergence.py`
+owns protocol validation and publication orchestration; `lib/r2.py` owns only
+signed R2 transport. Write credentials never enter the low-privilege CI run.
 
 ### Job graph and convergence
 
@@ -254,14 +268,17 @@ The current control flow is:
 ```text
 runners -> plan -> workloads ---------> validate -> runtime summary
                 -> merge policy ------/
+
+successful validate -> typed handoff -> convergence.atom -> R2
 ```
 
 `merge_policy` is merge-group-only and runs in parallel with workloads. It does
 not cancel or suppress validation for a blocked group. `Validate workspace` is
 the sole required convergence check: it consumes the plan-derived required-job
-set, enforces merge policy at convergence, and is the only successful publisher
-of pending hash state. Runner allocation failure and external cancellation are
-operational failures rather than alternate coverage policy.
+set, enforces merge policy at convergence, and is the only producer of a
+reusable-result candidate. The asynchronous trusted atom is the sole publisher.
+Runner allocation failure and external cancellation are operational failures
+rather than alternate coverage policy.
 
 A merge-group failure at `Validate workspace` ejects the queued PR without any
 trace on the PR itself: the run executes on the queue's transient ref and the

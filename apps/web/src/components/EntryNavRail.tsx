@@ -26,6 +26,7 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -77,8 +78,6 @@ import { amrPlansUrlForProfile } from '../runtime/amr-guidance';
 import { useWorkspaceInvalidation } from '../collab/workspace-events';
 import { resolveDeepSeekV4FlashCampaignAudience } from '../campaigns/deepseek-v4-flash';
 import { useDeepSeekV4FlashCampaignVisibility } from '../campaigns/use-deepseek-v4-flash-campaign';
-import { resolveSubscriptionAudience } from '../campaigns/go-plan';
-import { useGoPlanCampaignVisibility } from '../campaigns/use-go-plan-campaign';
 import type { EntryHomeView } from '../router';
 import type {
   AccountMenuClickProps,
@@ -98,15 +97,12 @@ import {
   workspaceAnalyticsDimensions,
 } from '../analytics/workspace';
 import { WorkbenchCampaignBadge } from './WorkbenchCampaignBadge';
+import { workspaceChromeAccountActionsHost } from './workspaceChromeActions';
 
 const REPO_URL = 'https://github.com/nexu-io/open-design';
 const GITHUB_HELP_URL = `${REPO_URL}/issues/new`;
 const GITHUB_FEATURE_URL = `${REPO_URL}/pulls`;
 const DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
-// Chinese-locale community entry. Discord is unreachable for most of that
-// audience, so the same social slot points at the Feishu (飞书) group invite.
-const FEISHU_URL =
-  'https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=866kece3-58ba-40fe-9fd4-6dc6a049f69b';
 const X_URL = 'https://x.com/OpenDesignHQ';
 const CONTACT_EMAIL_URL = 'mailto:support@open-design.ai';
 const externalLinkProps = { target: '_blank', rel: 'noreferrer noopener' } as const;
@@ -215,7 +211,7 @@ interface Props {
   newProjectDisabled?: boolean;
   /** When false the rail is collapsed (hidden off-canvas) on the entry view. */
   open: boolean;
-  /** Extra content for the floating top-right cluster, rendered LEFT of the
+  /** Extra content for the top-right chrome cluster, rendered LEFT of the
    *  account module (e.g. the DeepSeek campaign badge). */
   topRightSlot?: ReactNode;
   /** The one shared workspace context; null → local (no cloud identity) state. */
@@ -238,13 +234,18 @@ interface Props {
    * The update-ready host (`UpdaterPopup`), which renders nothing until the
    * updater reports a downloaded, unopened installer.
    *
-   * It is an independent control immediately after the floating credits/avatar
-   * capsule (`.entry-nav-rail__account-updater`). The footer stays as the
-   * fallback home for the signed-out shell, which has no account capsule.
+   * It is an independent control in the top-right chrome cluster
+   * (`.entry-nav-rail__account-updater`), immediately after the account capsule
+   * when one is present.
    */
   updaterSlot?: ReactNode;
   /** Optional notice shown above the footer controls. */
   footerNotice?: ReactNode;
+  /** One-off targeted announcement coordination owned by the Home shell. */
+  priorityAnnouncementActive?: boolean;
+  onPriorityAnnouncementPendingChange?: (pending: boolean) => void;
+  priorityAnnouncementCurrentPlanId?: string | null;
+  priorityAnnouncementMetricsConsent?: boolean;
 }
 
 interface NavButtonProps {
@@ -539,10 +540,14 @@ interface EntryTopRightClusterProps {
   updaterSlot?: ReactNode;
   onOpenSettings?: (section?: EntrySettingsSection) => void;
   onSignedOut?: () => void | Promise<void>;
+  priorityAnnouncementActive?: boolean;
+  onPriorityAnnouncementPendingChange?: (pending: boolean) => void;
+  priorityAnnouncementCurrentPlanId?: string | null;
+  priorityAnnouncementMetricsConsent?: boolean;
 }
 
 /**
- * Top-right floating cluster (portaled to document.body): an optional leading
+ * Top-right chrome cluster: an optional leading
  * slot, the standalone credits pill, and the avatar account module with its
  * hover menu — one flex row riding the workbench top-right corner.
  *
@@ -563,10 +568,29 @@ export function EntryTopRightCluster({
   updaterSlot,
   onOpenSettings,
   onSignedOut,
+  priorityAnnouncementActive,
+  onPriorityAnnouncementPendingChange,
+  priorityAnnouncementCurrentPlanId,
+  priorityAnnouncementMetricsConsent,
 }: EntryTopRightClusterProps) {
   const { t } = useI18n();
   const analytics = useAnalytics();
   const workspaceDimensions = workspaceAnalyticsDimensions(context);
+  const [chromeActionsHost, setChromeActionsHost] = useState<HTMLElement | null>(
+    workspaceChromeAccountActionsHost,
+  );
+
+  // On the initial App render the tabs chrome and this cluster are committed
+  // in the same pass, so the host does not exist while this component renders.
+  // A layout effect finds it after the DOM commit and moves the controls before
+  // paint. Electron can then build its first draggable-region hit map with the
+  // no-drag controls as real descendants of the drag header.
+  useLayoutEffect(() => {
+    // Isolated component harnesses do not mount the application chrome. Keep
+    // those public component tests usable without re-creating the whole App;
+    // the real shell always supplies the dedicated host above.
+    setChromeActionsHost(workspaceChromeAccountActionsHost() ?? document.body);
+  }, []);
 
   const isTeam = Boolean(context) && context!.workspaceType === 'team';
   const permissions = context?.permissions;
@@ -616,7 +640,27 @@ export function EntryTopRightCluster({
     workspaceType: context?.workspaceType,
   });
 
-  const [accountOpen, setAccountOpen] = useState(false);
+  const [accountMenuMode, setAccountMenuMode] = useState<'closed' | 'hover' | 'pinned'>(
+    'closed',
+  );
+  const updaterSlotHostRef = useRef<HTMLDivElement | null>(null);
+  const [updaterControlVisible, setUpdaterControlVisible] = useState(false);
+  // ReactNode truthiness cannot tell whether UpdaterPopup rendered its control;
+  // observe the stable host so signed-out chrome follows actual rendered content.
+  useLayoutEffect(() => {
+    const host = updaterSlotHostRef.current;
+    if (!host) {
+      setUpdaterControlVisible(false);
+      return;
+    }
+    const syncVisibility = () => setUpdaterControlVisible(host.hasChildNodes());
+    syncVisibility();
+    const observer = new MutationObserver(syncVisibility);
+    observer.observe(host, { childList: true });
+    return () => observer.disconnect();
+  }, [chromeActionsHost, updaterSlot]);
+  const accountOpen = accountMenuMode !== 'closed';
+  const closeAccountMenu = () => setAccountMenuMode('closed');
   useEffect(() => {
     if (!accountOpen) return;
     trackWorkspaceSurfaceView(analytics.track, {
@@ -669,11 +713,13 @@ export function EntryTopRightCluster({
   };
   const openAccountMenu = () => {
     cancelAccountClose();
-    setAccountOpen(true);
+    setAccountMenuMode((mode) => (mode === 'closed' ? 'hover' : mode));
   };
   const scheduleAccountClose = () => {
     cancelAccountClose();
-    accountCloseTimer.current = window.setTimeout(() => setAccountOpen(false), 220);
+    accountCloseTimer.current = window.setTimeout(() => {
+      setAccountMenuMode((mode) => (mode === 'hover' ? 'closed' : mode));
+    }, 220);
   };
   useEffect(() => cancelAccountClose, []);
   // While open, track the pointer at the document level: anywhere outside the
@@ -693,14 +739,14 @@ export function EntryTopRightCluster({
     return () => document.removeEventListener('pointerover', onDocPointerOver, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountOpen]);
-  // Hover-out alone leaves the menu open for anyone who never hovers: a touch
-  // user, or a click that lands somewhere else without the pointer crossing
-  // this container. Press-outside closes it now rather than 220ms later, and
+  // Hover-out does not cover anyone who never hovers: a touch user, or a click
+  // that lands somewhere else without the pointer crossing this container.
+  // Press-outside closes it immediately, and
   // Escape gives the keyboard the same exit. Still a listener, not a backdrop,
   // so the pointerover tracking above keeps receiving its events.
   useDismissOnOutsideInteraction(accountOpen, accountContainerRef, () => {
     cancelAccountClose();
-    setAccountOpen(false);
+    closeAccountMenu();
   });
 
   // One public comparison destination shared with the rail's invite dialog.
@@ -754,28 +800,34 @@ export function EntryTopRightCluster({
     });
   }
 
-  if ((!leadingSlot && !context) || typeof document === 'undefined') return null;
+  if (typeof document === 'undefined' || !chromeActionsHost) return null;
+  if (!leadingSlot && !context && !updaterSlot) return null;
+
+  const clusterVisible = Boolean(leadingSlot || context || updaterControlVisible);
+  const updaterHostVisible = Boolean(context || updaterControlVisible);
 
   return (
     <>
       {createPortal(
-        <div className="entry-top-right-cluster">
+        <div className={clusterVisible ? 'entry-top-right-cluster' : undefined}>
           {leadingSlot}
           {/* GitHub star chip: its own option in the cluster, right after the
               campaign badge (per product) — it used to live in the account
               menu's social row. */}
-          <a
-            className="entry-top-right-github"
-            href={REPO_URL}
-            {...externalLinkProps}
-            aria-label={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
-            title={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
-            data-testid="entry-top-right-github"
-            onClick={() => trackAccountAction('github')}
-          >
-            <Icon name="github-filled" size={14} />
-            <span>{githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)}</span>
-          </a>
+          {clusterVisible ? (
+            <a
+              className="entry-top-right-github"
+              href={REPO_URL}
+              {...externalLinkProps}
+              aria-label={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
+              title={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
+              data-testid="entry-top-right-github"
+              onClick={() => trackAccountAction('github')}
+            >
+              <Icon name="github-filled" size={14} />
+              <span>{githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)}</span>
+            </a>
+          ) : null}
           {/* One shared capsule for the account module (per product: 头像和积分
               合并成一个胶囊): credits segment on the left (same availability
               rule as the menu's billing card; clicking jumps to B's billing
@@ -820,9 +872,11 @@ export function EntryTopRightCluster({
                     entry_from: 'sidebar',
                     ...workspaceDimensions,
                   });
-                  setAccountOpen((v) => !v);
+                  cancelAccountClose();
+                  setAccountMenuMode((mode) => (mode === 'pinned' ? 'closed' : 'pinned'));
                 }}
                 onMouseEnter={openAccountMenu}
+                aria-haspopup="menu"
                 aria-expanded={accountOpen}
                 aria-label={accountName}
                 data-testid="entry-nav-account"
@@ -864,7 +918,7 @@ export function EntryTopRightCluster({
                               className="entry-nav-rail__menu-credits-upgrade"
                               onClick={() => {
                                 trackAccountAction('upgrade');
-                                setAccountOpen(false);
+                                closeAccountMenu();
                                 openBillingUpgrade();
                               }}
                             >
@@ -881,7 +935,7 @@ export function EntryTopRightCluster({
                           data-testid="entry-nav-credits-row"
                           onClick={() => {
                             trackAccountAction('credits');
-                            setAccountOpen(false);
+                            closeAccountMenu();
                             if (billingConsoleUrl) {
                               window.open(billingConsoleUrl, '_blank', 'noopener,noreferrer');
                             }
@@ -903,7 +957,7 @@ export function EntryTopRightCluster({
                       role="menuitem"
                       onClick={() => {
                         trackAccountAction('settings');
-                        setAccountOpen(false);
+                        closeAccountMenu();
                         onOpenSettings?.();
                       }}
                     >
@@ -918,7 +972,7 @@ export function EntryTopRightCluster({
                       data-testid="account-menu-message-center"
                       onClick={() => {
                         trackAccountAction('message_center');
-                        setAccountOpen(false);
+                        closeAccountMenu();
                         setMessageCenterOpen(true);
                       }}
                     >
@@ -939,7 +993,7 @@ export function EntryTopRightCluster({
                       {...externalLinkProps}
                       onClick={() => {
                         trackAccountAction('github_help');
-                        setAccountOpen(false);
+                        closeAccountMenu();
                       }}
                     >
                       <Icon name="comment" size={15} /> {t('entry.accountGithubHelp')}
@@ -951,7 +1005,7 @@ export function EntryTopRightCluster({
                       {...externalLinkProps}
                       onClick={() => {
                         trackAccountAction('feature_request');
-                        setAccountOpen(false);
+                        closeAccountMenu();
                       }}
                     >
                       <Icon name="sparkles" size={15} /> {t('entry.accountFeatureRequest')}
@@ -967,7 +1021,7 @@ export function EntryTopRightCluster({
                       role="menuitem"
                       onClick={() => {
                         trackAccountAction('logout');
-                        setAccountOpen(false);
+                        closeAccountMenu();
                         // recvqgMWpJZqhL: never sign out on this click alone —
                         // arm the confirmation dialog and let it run the logout.
                         setConfirmSignOut(true);
@@ -1005,17 +1059,22 @@ export function EntryTopRightCluster({
               ) : null}
               </div>
               </div>
-              {/* Update-ready rocket: an independent control immediately after
-                  the credits/avatar capsule. The slot stays mounted so
-                  `:empty { display: none }` can remove it from cluster layout
-                  until an installer has downloaded. */}
-              <div className="entry-nav-rail__account-updater" data-testid="entry-nav-account-updater">
-                {updaterSlot}
-              </div>
             </>
           ) : null}
+          {/* Update-ready rocket: an independent top-right control. With an
+              account it follows the credits/avatar capsule; signed-out keeps
+              the same position without inventing an empty account shell. The
+              slot stays mounted so `:empty { display: none }` can remove it
+              until an installer has downloaded. */}
+          <div
+            ref={updaterSlotHostRef}
+            className={updaterHostVisible ? 'entry-nav-rail__account-updater' : undefined}
+            data-testid={updaterHostVisible ? 'entry-nav-account-updater' : undefined}
+          >
+            {updaterSlot}
+          </div>
         </div>,
-        document.body,
+        chromeActionsHost,
       )}
       {/* Panel + unread polling live here (outside the hover menu, which
           unmounts when closed); the 消息中心 menu row above just opens it.
@@ -1030,6 +1089,10 @@ export function EntryTopRightCluster({
           onOpenChange={setMessageCenterOpen}
           onUnreadCountChange={setMessageUnreadCount}
           onOpenNotificationSettings={onOpenSettings ? () => onOpenSettings('notifications') : undefined}
+          priorityAnnouncementActive={priorityAnnouncementActive}
+          onPriorityAnnouncementPendingChange={onPriorityAnnouncementPendingChange}
+          priorityAnnouncementCurrentPlanId={priorityAnnouncementCurrentPlanId}
+          priorityAnnouncementMetricsConsent={priorityAnnouncementMetricsConsent}
         />
       ) : null}
     </>
@@ -1079,7 +1142,6 @@ export function WorkspaceTopRightAccountCluster({
   const billing = workspaceBillingSummaryForContext(billingResponse, context);
   const balanceUsd = workspaceBillingBalanceUsd(billingResponse, context);
   const deepSeekCampaignVisibility = useDeepSeekV4FlashCampaignVisibility();
-  const goPlanCampaignVisibility = useGoPlanCampaignVisibility();
   const campaignPlan = resolvePlanLabelTier({
     billing,
     context,
@@ -1093,30 +1155,23 @@ export function WorkspaceTopRightAccountCluster({
     loggedIn: amrLoggedIn,
     now: deepSeekCampaignVisibility.now,
   });
-  const subscriptionAudience = resolveSubscriptionAudience({
-    plan: campaignPlan,
-    loggedIn: amrLoggedIn,
-  });
-  const campaignKind =
-    subscriptionAudience === 'unpaid'
-      ? goPlanCampaignVisibility.visible
-        ? 'go'
-        : null
-      : deepSeekCampaignAudience === 'paid'
-        ? 'deepseek'
-        : null;
+  const campaignAudience =
+    deepSeekCampaignAudience === 'unknown'
+      ? null
+      : deepSeekCampaignAudience;
   return (
     <EntryTopRightCluster
       page="project"
       context={context}
       billing={billing}
       balanceUsd={balanceUsd}
-      leadingSlot={campaignKind ? (
+      leadingSlot={campaignAudience ? (
         <WorkbenchCampaignBadge
-          kind={campaignKind}
+          audience={campaignAudience}
           page="project"
           metricsConsent={metricsConsent}
           installationId={installationId}
+          loggedIn={amrLoggedIn}
         />
       ) : null}
       updaterSlot={updaterSlot}
@@ -1129,9 +1184,9 @@ export function WorkspaceTopRightAccountCluster({
 /**
  * Community/contact links pinned to the bottom of the nav rail.
  *
- * The row's first slot is locale-switched: Chinese UIs get the Feishu group
- * invite (Discord is effectively unreachable there), every other locale keeps
- * Discord. X and mail are locale-independent. Analytics keeps reporting these
+ * The row's first slot is the Discord invite for every locale (the Chinese
+ * Feishu group entry was retired so there is one community to point at). X
+ * and mail are locale-independent. Analytics keeps reporting these
  * under `area: 'account_menu'` so the existing funnel stays comparable across
  * the move out of that menu.
  */
@@ -1142,11 +1197,9 @@ function RailSocialRow({
   page: TrackingWorkspacePage;
   dimensions: ReturnType<typeof workspaceAnalyticsDimensions>;
 }) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const analytics = useAnalytics();
-  const isChinese = locale === 'zh-CN' || locale === 'zh-TW';
-  const communityUrl = isChinese ? FEISHU_URL : DISCORD_URL;
-  const communityLabel = isChinese ? t('entry.feishuAria') : t('entry.discordAria');
+  const communityLabel = t('entry.discordAria');
 
   function track(element: AccountMenuClickProps['element']) {
     trackAccountMenuClick(analytics.track, {
@@ -1161,14 +1214,14 @@ function RailSocialRow({
     <div className="entry-nav-rail__social" data-testid="entry-nav-rail-social">
       <a
         className="entry-nav-rail__social-btn"
-        href={communityUrl}
+        href={DISCORD_URL}
         {...externalLinkProps}
         aria-label={communityLabel}
         title={communityLabel}
-        data-testid={isChinese ? 'entry-nav-rail-feishu' : 'entry-nav-rail-discord'}
-        onClick={() => track(isChinese ? 'feishu' : 'discord')}
+        data-testid="entry-nav-rail-discord"
+        onClick={() => track('discord')}
       >
-        <Icon name={isChinese ? 'feishu' : 'discord'} size={15} />
+        <Icon name="discord" size={15} />
       </a>
       <a
         className="entry-nav-rail__social-btn"
@@ -1208,6 +1261,10 @@ export function EntryNavRail({
   onSignedOut,
   updaterSlot,
   footerNotice,
+  priorityAnnouncementActive,
+  onPriorityAnnouncementPendingChange,
+  priorityAnnouncementCurrentPlanId,
+  priorityAnnouncementMetricsConsent,
 }: Props) {
   const { t } = useI18n();
   const analytics = useAnalytics();
@@ -1228,13 +1285,6 @@ export function EntryNavRail({
   const canInviteMembers = Boolean(permissions?.canInviteMembers);
   const canAccessInviteFlow = canAccessWorkspaceInviteFlow(context);
   const workspaceSettingsUrl = context?.workspaceSettingsUrl?.trim() || null;
-
-  // The updater host has exactly one home on screen at a time. The floating
-  // account row is the preferred one; the footer only takes it when there is
-  // no cloud identity, because the whole account module is absent then.
-  // Deriving both from one expression is what keeps "exactly one" true — two
-  // independent renders would double the rocket.
-  const footerUpdaterSlot = context ? null : updaterSlot;
 
   // Message-center panel for the SIGNED-OUT shell only (its rail item under
   // 设置 is the one opener there). The signed-in panel — plus the unread badge
@@ -1834,15 +1884,10 @@ export function EntryNavRail({
         )}
       </div>
       {/* The footer always has the social row to show now, so it no longer
-          collapses to nothing. `footerUpdaterSlot` is only ever set in the
-          signed-out shell: with a cloud identity the updater host rides the
-          account row instead (see `updaterSlot`), so the footer must not
-          render a second host. */}
+          collapses to nothing. The updater has one shared home in the
+          top-right cluster for both signed-in and signed-out shells. */}
       <div className="entry-nav-rail__footer">
         {footerNotice}
-        {footerUpdaterSlot ? (
-          <div className="entry-rail-actions">{footerUpdaterSlot}</div>
-        ) : null}
         <RailSocialRow page={analyticsPage} dimensions={workspaceDimensions} />
       </div>
       </div>
@@ -1859,6 +1904,10 @@ export function EntryNavRail({
           onOpenChange={setMessageCenterOpen}
           onUnreadCountChange={setMessageUnreadCount}
           onOpenNotificationSettings={onOpenSettings ? () => onOpenSettings('notifications') : undefined}
+          priorityAnnouncementActive={priorityAnnouncementActive}
+          onPriorityAnnouncementPendingChange={onPriorityAnnouncementPendingChange}
+          priorityAnnouncementCurrentPlanId={priorityAnnouncementCurrentPlanId}
+          priorityAnnouncementMetricsConsent={priorityAnnouncementMetricsConsent}
         />
       )}
 
@@ -1877,9 +1926,9 @@ export function EntryNavRail({
             : undefined
         }
       />
-      {/* Top-right floating cluster: campaign badge (slot) + credits pill +
-          the account module, portaled to document.body so all ride the
-          workbench top-right corner in one flex row. Extracted so the project
+      {/* Top-right chrome cluster: campaign badge (slot) + credits pill +
+          the account module, mounted into the tabs chrome's no-drag actions
+          host so Electron includes it in the first native hit map. Extracted so the project
           route can mount the same cluster without the rail (see
           `EntryTopRightCluster`). */}
       <EntryTopRightCluster
@@ -1891,6 +1940,10 @@ export function EntryNavRail({
         updaterSlot={updaterSlot}
         onOpenSettings={onOpenSettings}
         onSignedOut={onSignedOut}
+        priorityAnnouncementActive={priorityAnnouncementActive}
+        onPriorityAnnouncementPendingChange={onPriorityAnnouncementPendingChange}
+        priorityAnnouncementCurrentPlanId={priorityAnnouncementCurrentPlanId}
+        priorityAnnouncementMetricsConsent={priorityAnnouncementMetricsConsent}
       />
     </nav>
   );

@@ -361,8 +361,7 @@
      This base rule serves the signed-out fallback home, where the host
      (`.entry-updater-menu`) sits in the rail footer at the bottom of the nav
      rail — a top-anchored panel grew down past the window edge and the
-     「更新已就绪」 copy was clipped mid-sentence. `.entry-help-popover` already
-     anchors this way for exactly the same reason. The signed-in home (the
+     「更新已就绪」 copy was clipped mid-sentence. The signed-in home (the
      floating account row, top-right) opens downward via the override below. */
   bottom: 0;
   left: calc(100% + 12px);
@@ -722,9 +721,9 @@
   padding: 0;
   gap: 0;
   overflow: hidden;
-  /* Anchor for the absolutely-positioned `.settings-chrome` strip
-     (close button + autosave indicator). Without this the chrome
-     would escape to the viewport on long-scrolling sections. */
+  /* Anchor for the absolutely-positioned `.settings-chrome` strip. Without
+     this the close/fullscreen controls would escape to the viewport on
+     long-scrolling sections. */
   position: relative;
 }
 .modal-settings.settings-fullscreen {
@@ -757,15 +756,10 @@
   box-shadow: none;
   background: transparent;
 }
-/* recvq4iEq1Esno: this used to hide `.settings-chrome` itself — the whole
-   corner strip, autosave "Saved" pill included — because the close/fullscreen
-   buttons inside it don't belong on a full page (there's a "返回首页" link
-   instead). That blanket rule took the save confirmation down with them: a
-   media-provider edit (or any settings change) on the full-page presentation
-   saved silently, with nothing telling the user it had. Target the buttons
-   specifically (`.settings-chrome-btn` covers both `.settings-close` and
-   `.settings-fullscreen-toggle`) and leave the sibling `.settings-autosave`
-   pill visible in both presentations. */
+/* recvq4iEq1Esno: full-page Settings has its own back navigation, so hide only
+   the close/fullscreen buttons. Autosave feedback now lives outside this
+   strip in `.settings-autosave-layer` and remains visible in both
+   presentations. */
 .settings-page-shell .settings-chrome-btn,
 .settings-page-shell .settings-sidebar-toggle {
   display: none;
@@ -865,13 +859,9 @@
   flex-shrink: 0;
 }
 
-/* Top-right chrome strip for the Settings dialog. Floats above the
-   sidebar/content rhythm so the close affordance and the autosave
-   indicator never compete with the title or sidebar nav. The strip
-   is a flex row right-anchored to the modal corner; the autosave
-   pill comes first so the close button keeps a stable optical
-   position and the user's eye returns to the same place after a
-   save settles. */
+/* Top-right chrome strip for the Settings dialog. Autosave feedback has its
+   own viewport-level layer below, leaving this strip to the close/fullscreen
+   controls so status changes cannot expand across active Settings content. */
 .settings-chrome {
   position: absolute;
   top: 24px;
@@ -880,20 +870,6 @@
   display: flex;
   align-items: center;
   gap: 6px;
-}
-/* Full-page presentation: the chrome strip holds only the autosave pill
-   (the close/fullscreen buttons are hidden above), so it reads as a page
-   toast rather than corner chrome — center it under the top nav instead
-   of leaving it stranded in the panel's top-right corner. 32px keeps a
-   clear band of air below the workspace tabs bar hairline; at 12px the
-   pill visually collided with it (dogfood 2026-07-24). As a transient
-   blurred toast it may briefly float over section content — that is
-   normal toast behavior and reads better than hugging the nav line. */
-.settings-page-shell .settings-chrome {
-  top: 32px;
-  right: auto;
-  left: 50%;
-  transform: translateX(-50%);
 }
 .settings-chrome > * {
   pointer-events: auto;
@@ -947,13 +923,34 @@
   .settings-chrome-btn { transition: color 80ms linear, border-color 80ms linear; transform: none !important; }
 }
 
-/* Autosave status pill. Lives in the chrome strip now (next to the
-   close button) instead of a footer. Renders nothing while idle so
-   the chrome reads as a single close button until something is
-   actually saving; settles to a green check on success and red on
-   failure. The pill never takes focus and never blocks input — it
-   is a passive system message announced to assistive tech via
-   aria-live on the wrapper. */
+/* Keep passive save feedback out of dialog/page layout and below the
+   body-portaled model picker (z-index 10500). This leaves Local CLI controls
+   unobscured in dialog, page, and narrow presentations while the full status
+   copy remains readable.
+
+   It rides the app's TOP chrome row (52px — `.workspace-tabs-chrome`,
+   viewer/routines.css), centred on that row's line. OPEND-2148 originally
+   parked it at the bottom of the viewport to get it off the Local CLI
+   pickers; the chrome row clears them just as well and is the better home for
+   it — on the full page that band is empty, and in the dialog it sits above
+   the panel rather than over any of its content. What that ticket actually
+   guarantees is unchanged: a viewport-level layer, out of the controls' band,
+   and under the body-portaled model picker. */
+.settings-autosave-layer {
+  position: fixed;
+  left: 50%;
+  top: 0;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  z-index: 9000;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 32px);
+  pointer-events: none;
+}
+
+/* Autosave status pill. Renders nothing while idle, settles to a green check
+   on success and red on failure, and is announced via aria-live. */
 .settings-autosave {
   display: inline-flex;
   align-items: center;
@@ -977,8 +974,7 @@
 .settings-autosave.is-idle {
   opacity: 0;
   transform: translateY(-2px);
-  /* Collapse the visual weight so the chrome strip is just the
-     close button when nothing is happening. */
+  /* Collapse the detached feedback layer when nothing is happening. */
   padding: 0;
   border-color: transparent;
   background: transparent;
@@ -1010,19 +1006,6 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .settings-autosave { transition: opacity 80ms linear; animation: none !important; }
-}
-
-/* Hide the verbose error copy on narrow viewports so the chrome
-   strip doesn't crowd the close button. The icon + tooltip carry
-   the meaning, and the screen-reader announcement still fires. */
-@media (max-width: 720px) {
-  .settings-autosave.is-error span,
-  .settings-autosave.is-saved span,
-  .settings-autosave.is-pending span,
-  .settings-autosave.is-saving span {
-    display: none;
-  }
-  .settings-autosave.is-idle { padding: 0; }
 }
 
 /* Make sure header copy doesn't crash into the close button on
@@ -1579,10 +1562,14 @@
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
-  /* The whole content block rides one white card (spec: white surface +
-     #dbdbdb hairline + large radius) floating on the shell ground. */
+  /* The whole content block rides one white card (white surface + hairline +
+     large radius) floating on the shell ground. */
   background: var(--bg);
-  border: 1px solid var(--border);
+  /* One step lighter than the app's default `--border`: at this size the card
+     is a large, quiet plane, and the standard #dbdbdb rule read as a hard box
+     drawn around it. `--border-soft` also moves the right way in dark mode
+     (#494949, i.e. softer than --border's #5c5c5c). */
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
 }
 /* Stretching the window widens only the card — the content column stays a

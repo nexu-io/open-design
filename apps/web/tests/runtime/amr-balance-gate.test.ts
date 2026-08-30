@@ -186,6 +186,21 @@ describe('checkAmrBalanceGate', () => {
     await expect(checkAmrBalanceGate()).resolves.toEqual({ kind: 'allow' });
   });
 
+  it('allows a newly configured Coding Plan model from Vela without a client release', async () => {
+    const empty = snapshot({
+      balanceUsd: '0',
+      codingPlanModels: ['new-coding-plan-model'],
+      user: { id: 'u1', email: 'user@example.com', plan: 'go' },
+    });
+    mockedFetch
+      .mockResolvedValueOnce({ ...empty, source: 'daemon_cache' })
+      .mockResolvedValueOnce(empty);
+
+    await expect(
+      checkAmrBalanceGate(undefined, 'new-coding-plan-model'),
+    ).resolves.toEqual({ kind: 'allow' });
+  });
+
   it.each([
     ['plus', 'kimi-k2.7-code'],
     ['pro', 'glm-5.2'],
@@ -193,6 +208,7 @@ describe('checkAmrBalanceGate', () => {
   ])('does not soft-warn a %s unlimited model at low balance', async (plan, modelId) => {
     const low = snapshot({
       balanceUsd: '1.20',
+      codingPlanModels: [modelId],
       user: { id: 'u1', email: 'user@example.com', plan },
     });
     mockedFetch.mockResolvedValueOnce(low);
@@ -206,6 +222,7 @@ describe('checkAmrBalanceGate', () => {
   it('still soft-warns when a low-balance Pro account selects MiniMax M2.7', async () => {
     const low = snapshot({
       balanceUsd: '1.20',
+      codingPlanModels: ['deepseek-v4-flash', 'glm-5.2'],
       user: { id: 'u1', email: 'user@example.com', plan: 'pro' },
     });
     mockedFetch.mockResolvedValueOnce(low);
@@ -252,6 +269,7 @@ describe('checkAmrBalanceGate', () => {
   ])('allows a %s unlimited model with a fresh zero-dollar wallet', async (plan, modelId) => {
     const planAccount = snapshot({
       balanceUsd: '0',
+      codingPlanModels: [modelId],
       user: { id: 'u1', email: 'user@example.com', plan },
     });
     mockedFetch
@@ -265,7 +283,10 @@ describe('checkAmrBalanceGate', () => {
   });
 
   it('uses the live billing account when the fresh wallet omits the Go plan', async () => {
-    const emptyWallet = snapshot({ balanceUsd: '0' });
+    const emptyWallet = snapshot({
+      balanceUsd: '0',
+      codingPlanModels: ['glm-5.2'],
+    });
     mockedFetch
       .mockResolvedValueOnce({ ...emptyWallet, source: 'daemon_cache' })
       .mockResolvedValueOnce(emptyWallet);
@@ -285,6 +306,7 @@ describe('checkAmrBalanceGate', () => {
   it('keeps the zero-dollar block for a model outside the current plan allowance', async () => {
     const plusAccount = snapshot({
       balanceUsd: '0',
+      codingPlanModels: ['deepseek-v4-flash', 'kimi-k2.7-code'],
       user: { id: 'u1', email: 'user@example.com', plan: 'plus' },
     });
     mockedFetch
@@ -461,6 +483,7 @@ describe('checkAmrBalanceGate', () => {
   it('allows a personal Go workspace with a zero-dollar wallet', async () => {
     mockedFetch.mockResolvedValue(snapshot({
       balanceUsd: '0',
+      codingPlanModels: ['deepseek-v4-pro'],
       user: { id: 'u1', email: 'user@example.com', plan: 'go' },
     }));
     vi.stubGlobal(
@@ -487,6 +510,7 @@ describe('checkAmrBalanceGate', () => {
   it('does not soft-warn an unlimited model in a low-balance personal workspace', async () => {
     mockedFetch.mockResolvedValue(snapshot({
       balanceUsd: '1.50',
+      codingPlanModels: ['glm-5.2'],
       user: { id: 'u1', email: 'user@example.com', plan: 'pro' },
     }));
     vi.stubGlobal(

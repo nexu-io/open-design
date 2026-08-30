@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildFeedbackPayload,
   buildTracePayload,
+  describeRunTelemetrySink,
   deriveLangfuseDeliveryState,
   isContentToolName,
   isPartialRedactToolName,
@@ -252,6 +253,65 @@ describe('readRunTelemetrySinkConfig', () => {
       relayUrl: 'https://telemetry.open-design.ai/api/langfuse',
     });
   });
+
+  it('describes the effective priority winner without paths, queries, or credentials', () => {
+    const vela = readRunTelemetrySinkConfig(
+      {
+        OPEN_DESIGN_TELEMETRY_RELAY_URL:
+          'https://relay-user:relay-password@relay.example.test/private?token=relay-secret',
+        LANGFUSE_PUBLIC_KEY: 'pk-secret',
+        LANGFUSE_SECRET_KEY: 'sk-secret',
+      },
+      {
+        VELA_CONTROL_KEY: 'control-secret',
+        VELA_API_URL:
+          'https://vela-user:vela-password@vela.example.test/private?token=vela-secret',
+      },
+    );
+    const diagnostic = describeRunTelemetrySink(vela);
+
+    expect(diagnostic).toEqual({
+      kind: 'vela',
+      host: 'vela.example.test',
+      protocol: 'https',
+    });
+    const serialized = JSON.stringify(diagnostic);
+    expect(serialized).not.toContain('private');
+    expect(serialized).not.toContain('secret');
+    expect(serialized).not.toContain('user');
+    expect(serialized).not.toContain('password');
+  });
+
+  it('describes relay, direct, and disabled sinks through the same allowlist', () => {
+    expect(describeRunTelemetrySink(readRunTelemetrySinkConfig({
+      OPEN_DESIGN_VELA_TELEMETRY: 'off',
+      OPEN_DESIGN_TELEMETRY_RELAY_URL:
+        'http://relay.example.test:8080/path?key=secret',
+    }))).toEqual({
+      kind: 'relay',
+      host: 'relay.example.test',
+      protocol: 'http',
+    });
+    expect(describeRunTelemetrySink(readRunTelemetrySinkConfig({
+      // Same opt-out the relay case above passes. Without it the vela branch is
+      // enabled by default and `readVelaControlApiContext` falls through to the
+      // developer's real `~/.amr/config.json`, so this asserted 'vela' on any
+      // machine with an AMR login and only passed on a CI runner without one.
+      OPEN_DESIGN_VELA_TELEMETRY: 'off',
+      LANGFUSE_PUBLIC_KEY: 'pk',
+      LANGFUSE_SECRET_KEY: 'sk',
+      LANGFUSE_BASE_URL: 'https://langfuse.example.test/private?key=secret',
+    }))).toEqual({
+      kind: 'langfuse',
+      host: 'langfuse.example.test',
+      protocol: 'https',
+    });
+    expect(describeRunTelemetrySink(null)).toEqual({
+      kind: 'none',
+      host: null,
+      protocol: null,
+    });
+  });
 });
 
 describe('deriveLangfuseDeliveryState', () => {
@@ -304,6 +364,33 @@ describe('deriveLangfuseDeliveryState', () => {
       langfuse_expected: true,
       langfuse_delivery_status: 'queued',
     });
+  });
+});
+
+describe('run delivery identity', () => {
+  it('keeps ids stable within a purpose and distinct across registration and final delivery', () => {
+    const context = makeCtx({
+      prefs: { metrics: true, content: true, artifactManifest: false },
+    });
+    const firstFinal = buildTracePayload(context, 'final') as Array<{ id: string }>;
+    const secondFinal = buildTracePayload(context, 'final') as Array<{ id: string }>;
+    const firstRegistration = buildTracePayload(
+      context,
+      'object-registration',
+    ) as Array<{ id: string }>;
+    const secondRegistration = buildTracePayload(
+      context,
+      'object-registration',
+    ) as Array<{ id: string }>;
+
+    const finalIds = firstFinal.map((event) => event.id);
+    const registrationIds = firstRegistration.map((event) => event.id);
+    expect(finalIds).toEqual(secondFinal.map((event) => event.id));
+    expect(registrationIds).toEqual(secondRegistration.map((event) => event.id));
+    expect(registrationIds).not.toEqual(finalIds);
+    expect(registrationIds.every((id, index) => id !== finalIds[index])).toBe(true);
+    expect(finalIds.every((id) => /^od-[a-f0-9]{64}$/u.test(id))).toBe(true);
+    expect(registrationIds.every((id) => /^od-[a-f0-9]{64}$/u.test(id))).toBe(true);
   });
 });
 
@@ -395,6 +482,38 @@ describe('buildTracePayload', () => {
     expect(bash.output).toBeUndefined();
     expect(bash.metadata.toolName).toBe('Bash');
     expect(write.parentObservationId).toBe('run-1-agent');
+  });
+
+  it('records adapter-based admission and silent pre-start fallback metadata', () => {
+    const activeTrace = (buildTracePayload(makeCtx({
+      strategyRolloutDecision: {
+        requestedMode: 'active',
+        effectiveMode: 'active',
+        primaryReasonCode: 'od_next_rollout_eligible',
+        reasonCodes: [],
+      },
+    }))[0] as any).body;
+    expect(activeTrace.metadata).toMatchObject({
+      strategy_rollout_requested_mode: 'active',
+      strategy_rollout_effective_mode: 'active',
+      strategy_rollout_compatibility_basis: 'runtime_adapter_family_fixture_evidence',
+      strategy_rollout_admission_stage: 'activation_admission',
+    });
+
+    const fallbackTrace = (buildTracePayload(makeCtx({
+      strategyRolloutDecision: {
+        requestedMode: 'active',
+        effectiveMode: 'observe',
+        primaryReasonCode: 'od_next_rollout_prestart_preparation_failed',
+        reasonCodes: ['od_next_rollout_prestart_preparation_failed'],
+      },
+    }))[0] as any).body;
+    expect(fallbackTrace.metadata).toMatchObject({
+      strategy_rollout_effective_mode: 'observe',
+      strategy_rollout_primary_reason_code: 'od_next_rollout_prestart_preparation_failed',
+      strategy_rollout_compatibility_basis: 'not_evaluated',
+      strategy_rollout_fallback_stage: 'activation_preparation',
+    });
   });
 
   it('omits prompt + output when content gate is off', () => {
@@ -2580,6 +2699,7 @@ describe('reportRunCompleted', () => {
       }),
       {
         config: { ...TEST_CONFIG, retries: 1 },
+        deliveryIdempotencyKey: 'od-run-telemetry-v1-fixture',
         fetchImpl: fetchSpy as any,
       },
     );
@@ -2588,6 +2708,8 @@ describe('reportRunCompleted', () => {
     expect(result).toEqual({
       langfuse_expected: true,
       langfuse_delivery_status: 'accepted',
+      langfuse_attempt_count: 2,
+      langfuse_idempotency_key: 'od-run-telemetry-v1-fixture',
     });
   });
 

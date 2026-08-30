@@ -10,9 +10,10 @@
  * lets the host advance / rewind slides without relying on the iframe
  * having keyboard focus. The host posts:
  *   { type: 'od:slide', action: 'next' | 'prev' | 'first' | 'last' | 'go', index?: number }
- * and the iframe responds with:
- *   { type: 'od:slide-state', active: number, count: number }
- * after every navigation so the host can render its own counter / dots.
+ * A v1-native artifact first announces `od:deck-ready`, then responds after
+ * every navigation with versioned `od:slide-state` events so the host can
+ * render its own counter / dots. Persisted legacy decks remain supported by
+ * the injected keyboard/hash/DOM adapters below.
  */
 import {
   DECK_EXPLICIT_SLIDE_SELECTOR,
@@ -23,9 +24,34 @@ import {
   injectDeckStageFallback,
 } from '@open-design/contracts/runtime/deck-stage-fallback';
 import {
+  DECK_PROTOCOL_VERSION,
+  DECK_READY_MESSAGE_TYPE,
+} from '@open-design/contracts/runtime/deck-protocol';
+import {
   buildPreviewBaseHrefBridge,
   buildPreviewObservabilityBridge,
 } from '@open-design/contracts/runtime/preview-observability';
+import {
+  PREVIEW_REDIRECT_GUARD_MAX_HOPS,
+  PREVIEW_REDIRECT_GUARD_SELF_REFRESH_MIN_DELAY_MS,
+  PREVIEW_REDIRECT_GUARD_WINDOW_MS,
+  PREVIEW_REDIRECT_LOOP_MESSAGE,
+} from '@open-design/contracts/runtime/preview-guards';
+
+import {
+  endOfTag,
+  findRealElementRange,
+  findRealTagEnd,
+  findRealTagOffset,
+  HTML_TAG_PATTERNS,
+} from '@open-design/contracts/runtime/html-injection-points';
+
+export {
+  PREVIEW_REDIRECT_GUARD_MAX_HOPS,
+  PREVIEW_REDIRECT_GUARD_SELF_REFRESH_MIN_DELAY_MS,
+  PREVIEW_REDIRECT_GUARD_WINDOW_MS,
+  PREVIEW_REDIRECT_LOOP_MESSAGE,
+} from '@open-design/contracts/runtime/preview-guards';
 
 import {
   buildManualEditBridge,
@@ -101,18 +127,6 @@ export type SrcdocOptions = {
 // unforgeable, so a JS `location.reload()` storm can only be halted host-side
 // by swapping the iframe to static content (see FileViewer). The in-iframe half
 // still fully covers the canonical meta-refresh redirect loop on its own.
-
-/** Meta-refresh hops allowed inside one window before the loop is broken. */
-export const PREVIEW_REDIRECT_GUARD_MAX_HOPS = 15;
-/** Sliding window (ms). A refresh landing after this many ms with no prior
- *  refresh restarts the count from zero, so a slow auto-refresh never trips. */
-export const PREVIEW_REDIRECT_GUARD_WINDOW_MS = 4000;
-/** A self-refresh (reload the same document) whose delay is at or under this
- *  threshold is a guaranteed freeze in a static preview and is killed on the
- *  first hop, without waiting for the hop budget. */
-export const PREVIEW_REDIRECT_GUARD_SELF_REFRESH_MIN_DELAY_MS = 2000;
-/** postMessage type the injected guard sends the host when it trips. */
-export const PREVIEW_REDIRECT_LOOP_MESSAGE = 'od:redirect-loop-blocked';
 
 export interface RedirectGuardState {
   /** Meta-refresh navigations counted in the current window. */
@@ -277,48 +291,6 @@ function decodeHtmlEntitiesForTitle(encoded: string): string {
     .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => safeFromCodePoint(parseInt(h, 16)));
 }
 
-/**
- * Find the character offset of the first real `<title>` tag in an HTML string
- * that is not inside an HTML comment (`<!-- … -->`), a `<script>` block, or a
- * `<style>` block. Returns -1 when no real title is found.
- *
- * The scan is O(n) over the head region. It keeps track of whether the current
- * cursor is inside a comment / script / style and skips any `<title>` found
- * within those contexts.
- */
-function findRealTitleOffset(html: string, searchLimit: number): number {
-  let i = 0;
-  const limit = Math.min(html.length, searchLimit);
-  while (i < limit) {
-    // Check for HTML comment start
-    if (html.charCodeAt(i) === 60 /* < */ && html.slice(i, i + 4) === '<!--') {
-      const end = html.indexOf('-->', i + 4);
-      if (end < 0) return -1; // unclosed comment — no title after this
-      i = end + 3;
-      continue;
-    }
-    // Check for <script or <style (case-insensitive)
-    if (html.charCodeAt(i) === 60 /* < */) {
-      const tagMatch = /^<(script|style)\b/i.exec(html.slice(i, i + 20));
-      if (tagMatch) {
-        const closingTag = `</${tagMatch[1]}`;
-        const end = html.toLowerCase().indexOf(closingTag.toLowerCase(), i + tagMatch[0].length);
-        if (end < 0) return -1; // unclosed script/style — no title after this
-        const closeEnd = html.indexOf('>', end);
-        i = closeEnd >= 0 ? closeEnd + 1 : end + closingTag.length;
-        continue;
-      }
-    }
-    // Check for <title (case-insensitive)
-    if (html.charCodeAt(i) === 60 /* < */) {
-      if (/^<title[\s>]/i.test(html.slice(i, i + 8))) {
-        return i;
-      }
-    }
-    i++;
-  }
-  return -1;
-}
 
 /**
  * Rewrite the <title> element in an HTML string so its text content is
@@ -338,39 +310,27 @@ function findRealTitleOffset(html: string, searchLimit: number): number {
  * @public — exported for daemon-side URL-load title sanitization.
  */
 export function sanitizeTitleInDoc(html: string): string {
-  const lower = html.toLowerCase();
+  // Only the head's own <title> names the document; an <svg><title> in the body
+  // is an accessible label for that graphic. Bound the search to the head
+  // region, located structurally so a </head> or <body> an author wrote into a
+  // script string cannot move the boundary.
+  const headClose = findRealTagOffset(html, HTML_TAG_PATTERNS.headClose);
+  const bodyOpen = findRealTagOffset(html, HTML_TAG_PATTERNS.bodyOpen);
+  const searchLimit = headClose >= 0 ? headClose : bodyOpen >= 0 ? bodyOpen : html.length;
 
-  // Find the end of the <head> region. Use the last </head> before <body>
-  // (mirrors injectBeforeHeadEnd logic) so we don't pick up </head> literals
-  // inside <script>/<style>.
-  const bodyStart = lower.indexOf('<body');
-  const headEnd = lower.lastIndexOf('</head>', bodyStart >= 0 ? bodyStart - 1 : lower.length - 1);
+  // Both ends by the parser's rules: the open tag through `endOfTag`, so a `>`
+  // inside a quoted attribute cannot cut it short, and the close by the
+  // raw-text rule, so `</title >` and `</title\n>` close it while
+  // `</title-page>` does not. `indexOf('</title>')` accepted one spelling, and
+  // the next `</title>` in a later script string became the rewrite range.
+  const range = findRealElementRange(html, HTML_TAG_PATTERNS.titleOpen, 'title');
+  if (!range || range.start >= searchLimit) return html;
 
-  // The region to search: up to (and including) </head> if found, otherwise
-  // up to <body> if found, otherwise the entire document.
-  const searchLimit = headEnd >= 0
-    ? headEnd + 7 // include the </head> tag itself
-    : bodyStart >= 0
-      ? bodyStart
-      : html.length;
-
-  // Find the real <title> start offset, skipping comments and script/style.
-  const titleStart = findRealTitleOffset(html, searchLimit);
-  if (titleStart < 0) return html;
-
-  // Locate the end of the <title> open tag.
-  const openTagEnd = html.indexOf('>', titleStart);
-  if (openTagEnd < 0) return html;
-
-  // Locate the matching </title>.
-  const closingTagStart = html.toLowerCase().indexOf('</title>', openTagEnd + 1);
-  if (closingTagStart < 0) return html;
-  const closingTagEnd = html.indexOf('>', closingTagStart);
-  if (closingTagEnd < 0) return html;
-
-  const openTag = html.slice(titleStart, openTagEnd + 1);
-  const rawContent = html.slice(openTagEnd + 1, closingTagStart);
-  const closeTag = html.slice(closingTagStart, closingTagEnd + 1);
+  const titleStart = range.start;
+  const closingTagEnd = range.end - 1;
+  const openTag = html.slice(range.start, range.contentStart);
+  const rawContent = html.slice(range.contentStart, range.contentEnd);
+  const closeTag = html.slice(range.contentEnd, range.end);
 
   const decoded = decodeHtmlEntitiesForTitle(rawContent);
   const safe = sanitizePreviewTitle(decoded);
@@ -496,18 +456,46 @@ export function buildLazySrcdocTransport(): string {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <script data-od-lazy-srcdoc-transport>(function(){
+      var readyInterval = null;
+      var readyAttempts = 0;
+      function stopReadyAnnouncements(){
+        if (readyInterval !== null && typeof clearInterval === 'function') {
+          clearInterval(readyInterval);
+        }
+        readyInterval = null;
+      }
+      function announceReady(){
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'od:srcdoc-transport-ready' }, '*');
+          }
+        } catch (_) { /* sandboxed parent — host falls back to onLoad */ }
+      }
       window.addEventListener('message', function(ev){
         var data = ev && ev.data;
+        if (data && data.type === 'od:srcdoc-transport-shell-probe') {
+          announceReady();
+          return;
+        }
         if (!data || data.type !== 'od:srcdoc-transport-activate' || typeof data.html !== 'string' || typeof data.generation !== 'string' || !data.generation) return;
+        stopReadyAnnouncements();
         document.open();
         document.write(data.html);
         document.close();
       });
-      try {
-        if (window.parent && window.parent !== window) {
-          window.parent.postMessage({ type: 'od:srcdoc-transport-ready' }, '*');
-        }
-      } catch (_) { /* sandboxed parent — host falls back to onLoad */ }
+      announceReady();
+      // A cached app-lifetime Blob can finish long before React attaches the
+      // parent's listener. Keep announcing until activation instead of
+      // guessing a host-mount delay; cap the retries so a broken host cannot
+      // leave a background timer running forever. The host's probe remains a
+      // recovery path after this ten-second window.
+      if (window.parent && window.parent !== window && typeof setInterval === 'function') {
+        readyInterval = setInterval(function(){
+          announceReady();
+          readyAttempts += 1;
+          if (readyAttempts >= 100) stopReadyAnnouncements();
+        }, 100);
+      }
     })();</script>
   </head>
   <body></body>
@@ -1370,8 +1358,27 @@ function deferTrustedFontStylesheets(doc: string): string {
   return injectAfterHeadOpen(serializeHtmlDocument(parsed), script);
 }
 
+/**
+ * Install a bridge as early as the document allows: inside `<head>` when there
+ * is one, otherwise at the top of `<body>`, otherwise ahead of the whole
+ * document. Guards that must beat every authored script share this — it is the
+ * one place that decides "as early as possible".
+ *
+ * The boundaries are located structurally (see `findRealTagEnd`), so a `<head>`
+ * or `<body>` an author wrote into a script string or an attribute is not
+ * mistaken for this document's own (nexu-io/open-design#7410).
+ */
+function injectAtDocumentStart(doc: string, payload: string): string {
+  const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
+  if (headEnd >= 0) return doc.slice(0, headEnd) + payload + doc.slice(headEnd);
+  const bodyEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.bodyOpen);
+  if (bodyEnd >= 0) return doc.slice(0, bodyEnd) + payload + doc.slice(bodyEnd);
+  return payload + doc;
+}
+
 function injectAfterHeadOpen(doc: string, payload: string): string {
-  if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${payload}`);
+  const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
+  if (headEnd >= 0) return doc.slice(0, headEnd) + payload + doc.slice(headEnd);
   return payload + doc;
 }
 
@@ -1382,12 +1389,10 @@ function injectBeforeHeadEnd(doc: string, payload: string): string {
   // srcdoc-build cost; DOMParser is now only the fallback for head-less
   // fragments where we can't locate an insertion point textually. Find the real
   // </head> (last one before <body>) to skip </head> literals in <script>/<style>.
-  const lower = doc.toLowerCase();
-  const bodyStart = lower.indexOf('<body');
-  const limit = bodyStart >= 0 ? bodyStart : lower.length;
-  const idx = lower.lastIndexOf('</head>', limit - 1);
+  const idx = findRealTagOffset(doc, HTML_TAG_PATTERNS.headClose);
   if (idx >= 0) return doc.slice(0, idx) + payload + doc.slice(idx);
-  if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${payload}`);
+  const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
+  if (headEnd >= 0) return doc.slice(0, headEnd) + payload + doc.slice(headEnd);
   // No recognizable <head>: let DOMParser normalize (it synthesizes a head).
   if (typeof DOMParser !== 'undefined') {
     try {
@@ -1402,10 +1407,7 @@ function injectBeforeHeadEnd(doc: string, payload: string): string {
 function injectBeforeBodyEnd(doc: string, payload: string): string {
   // String-first (see injectBeforeHeadEnd). Find the real </body> (last one
   // before </html>) to skip </body> literals inside <script>/<style>.
-  const lower = doc.toLowerCase();
-  const htmlEnd = lower.lastIndexOf('</html>');
-  const limit = htmlEnd >= 0 ? htmlEnd : lower.length;
-  const idx = lower.lastIndexOf('</body>', limit - 1);
+  const idx = findRealTagOffset(doc, HTML_TAG_PATTERNS.bodyClose);
   if (idx >= 0) return doc.slice(0, idx) + payload + doc.slice(idx);
   // No recognizable </body>: let DOMParser normalize (it synthesizes a body).
   if (typeof DOMParser !== 'undefined') {
@@ -1419,19 +1421,17 @@ function injectBeforeBodyEnd(doc: string, payload: string): string {
 }
 
 export function htmlHasAuthoredBase(doc: string): boolean {
-  return /<base\b/i.test(doc);
+  return findRealTagOffset(doc, HTML_TAG_PATTERNS.baseOpen) >= 0;
 }
 
 function injectBaseHref(doc: string, baseHref: string): string {
   if (htmlHasAuthoredBase(doc)) return doc;
   const safeHref = escapeAttr(baseHref);
   const tag = `<base href="${safeHref}" data-od-project-preview-base>`;
-  if (/<head[^>]*>/i.test(doc)) {
-    return doc.replace(/<head[^>]*>/i, (m) => `${m}${tag}`);
-  }
-  if (/<html[^>]*>/i.test(doc)) {
-    return doc.replace(/<html[^>]*>/i, (m) => `${m}<head>${tag}</head>`);
-  }
+  const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
+  if (headEnd >= 0) return doc.slice(0, headEnd) + tag + doc.slice(headEnd);
+  const htmlEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.htmlOpen);
+  if (htmlEnd >= 0) return `${doc.slice(0, htmlEnd)}<head>${tag}</head>${doc.slice(htmlEnd)}`;
   return tag + doc;
 }
 
@@ -1550,11 +1550,7 @@ function injectSandboxShim(doc: string): string {
     }
   });
 })();</script>`;
-  if (/<head[^>]*>/i.test(doc))
-    return doc.replace(/<head[^>]*>/i, (m) => `${m}${shim}`);
-  if (/<body[^>]*>/i.test(doc))
-    return doc.replace(/<body[^>]*>/i, (m) => `${m}${shim}`);
-  return shim + doc;
+  return injectAtDocumentStart(doc, shim);
 }
 
 function injectPreviewFocusGuard(doc: string): string {
@@ -1593,11 +1589,7 @@ function injectPreviewFocusGuard(doc: string): string {
     });
   } catch (_) {}
 })();</script>`;
-  if (/<head[^>]*>/i.test(doc))
-    return doc.replace(/<head[^>]*>/i, (m) => `${m}${script}`);
-  if (/<body[^>]*>/i.test(doc))
-    return doc.replace(/<body[^>]*>/i, (m) => `${m}${script}`);
-  return script + doc;
+  return injectAtDocumentStart(doc, script);
 }
 
 // In-iframe redirect-loop circuit breaker. See the "Redirect-loop guard"
@@ -1753,11 +1745,7 @@ function injectPreviewRedirectGuard(
     evaluate();
   }
 })();</script>`;
-  if (/<head[^>]*>/i.test(doc))
-    return doc.replace(/<head[^>]*>/i, (m) => `${m}${script}`);
-  if (/<body[^>]*>/i.test(doc))
-    return doc.replace(/<body[^>]*>/i, (m) => `${m}${script}`);
-  return script + doc;
+  return injectAtDocumentStart(doc, script);
 }
 
 // Selection bridge: shared substrate for Comment mode and Inspect mode.
@@ -2912,9 +2900,7 @@ function injectDeckKeydownRegistryHook(doc: string): string {
   wrap(window);
   wrap(document);
 })();</script>`;
-  if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${hook}`);
-  if (/<body[^>]*>/i.test(doc)) return doc.replace(/<body[^>]*>/i, (m) => `${m}${hook}`);
-  return hook + doc;
+  return injectAtDocumentStart(doc, hook);
 }
 
 // Whether the artifact ships its own keyboard slide navigation, judged from
@@ -2948,6 +2934,12 @@ function injectDeckBridge(
     : 0;
   const hasInlineSlideMessageListener =
     /addEventListener\s*\(\s*['"]message['"]/i.test(doc) && /\bod:slide\b/.test(doc);
+  const artifactDeckProtocolVersion = new RegExp(
+    `\\bdata-od-deck-protocol\\s*=\\s*['"]${DECK_PROTOCOL_VERSION}['"]`,
+    'i',
+  ).test(doc)
+    ? DECK_PROTOCOL_VERSION
+    : 0;
   const hasInlineKeydownListener = !!options.artifactHasKeydownNavigation;
   const hasInlineHashNavigation =
     /(?:hashchange|onhashchange)/i.test(doc) && /location\.hash/i.test(doc);
@@ -3598,6 +3590,8 @@ function injectDeckBridge(
   // deferred artifact handler still runs afterwards, advancing a second time
   // and desyncing the artifact's internal index from the visible slide.
   var KEY_PROBE_WINDOW_MS = 48;
+  var KEYBOARD_UNLOCK_TIMEOUT_MS = 600;
+  var KEYBOARD_UNLOCK_RETRY_MS = 40;
   var DIRECT_INDEX_UNLOCK_TIMEOUT_MS = 1500;
   var preferredKeyTarget = null;
   var odNavigationSequence = 0;
@@ -3681,16 +3675,33 @@ function injectDeckBridge(
   }
   function stepToIndexViaKeys(target, navigationSequence, onDone){
     var guard = slides().length + 4;
+    var unlockDeadline = 0;
     function isCurrent(){ return navigationSequence === odNavigationSequence; }
     function step(){
       if (!isCurrent()) return;
       var current = activeIndex(slides());
       if (current === target) { onDone(true); return; }
       if (guard <= 0) { onDone(false); return; }
-      guard -= 1;
       goViaArtifactKeys(target > current ? 'ArrowRight' : 'ArrowLeft', function(moved){
         if (!isCurrent()) return;
-        if (!moved) { onDone(false); return; }
+        if (!moved) {
+          // A target that moved the deck on an earlier step is available but
+          // may be temporarily rejecting keys during an authored transition.
+          // Retry that same remaining step briefly before falling through to
+          // direct-index/DOM navigation, which would desynchronize private
+          // artifact state from the visible canvas.
+          if (preferredKeyTarget) {
+            if (!unlockDeadline) unlockDeadline = Date.now() + KEYBOARD_UNLOCK_TIMEOUT_MS;
+            if (Date.now() < unlockDeadline) {
+              setTimeout(function(){ if (isCurrent()) step(); }, KEYBOARD_UNLOCK_RETRY_MS);
+              return;
+            }
+          }
+          onDone(false);
+          return;
+        }
+        unlockDeadline = 0;
+        guard -= 1;
         step();
       }, isCurrent);
     }
@@ -3796,12 +3807,18 @@ function injectDeckBridge(
     if (navigateViaDeckStage(list, 'go', target)) return;
     if (isScrollDeck(list)) { scrollGo(target); return; }
     if (activeIndex(list) === target) { report(); return; }
-    goViaArtifactIndex(target, navigationSequence, function(moved){
+    // A thumbnail selection and the footer prev/next controls must enter the
+    // artifact through the same navigation path. Trying nav dots/hash routes
+    // first makes an otherwise keyboard-responsive deck wait out the direct
+    // index retry deadline before the bridge finally dispatches the keys that
+    // the footer uses immediately. Keep direct-index navigation as a fallback
+    // for dot/hash-only decks, but prefer the proven keyboard path.
+    stepToIndexViaKeys(target, navigationSequence, function(stepped){
       if (navigationSequence !== odNavigationSequence) return;
-      if (moved) { report(); return; }
-      stepToIndexViaKeys(target, navigationSequence, function(stepped){
+      if (stepped) { report(); return; }
+      goViaArtifactIndex(target, navigationSequence, function(moved){
         if (navigationSequence !== odNavigationSequence) return;
-        if (stepped) { report(); return; }
+        if (moved) { report(); return; }
         var now = slides();
         if (canSetActive(now) && setActive(target)) return;
         if (transformGo(target)) return;
@@ -3903,7 +3920,8 @@ function injectDeckBridge(
   }
   var odSlideMessageBeforeIndex = -1;
   var odDeckBridgeInstallingMessageListener = false;
-  var odHasExternalSlideMessageListener = ${JSON.stringify(hasInlineSlideMessageListener)};
+  var odDeckProtocolVersion = ${artifactDeckProtocolVersion};
+  var odHasExternalSlideMessageListener = ${JSON.stringify(hasInlineSlideMessageListener)} || odDeckProtocolVersion === ${DECK_PROTOCOL_VERSION};
   function odMaybeHandlesSlideMessages(listener) {
     try {
       var source = '';
@@ -3948,7 +3966,19 @@ function injectDeckBridge(
   }
   addOdSlideMessageListener(function(ev){
     var data = ev && ev.data;
-    if (!data || data.type !== 'od:slide') return;
+    if (!data || data.type !== ${JSON.stringify(DECK_READY_MESSAGE_TYPE)}) return;
+    if (data.protocolVersion !== ${DECK_PROTOCOL_VERSION}) return;
+    odDeckProtocolVersion = ${DECK_PROTOCOL_VERSION};
+    odHasExternalSlideMessageListener = true;
+  });
+  function odIsSupportedSlideMessage(data) {
+    return !!data &&
+      data.type === 'od:slide' &&
+      (data.protocolVersion == null || data.protocolVersion === ${DECK_PROTOCOL_VERSION});
+  }
+  addOdSlideMessageListener(function(ev){
+    var data = ev && ev.data;
+    if (!odIsSupportedSlideMessage(data)) return;
     var before = activeIndex(slides());
     odSlideMessageBeforeIndex = before;
     setTimeout(function(){
@@ -3957,7 +3987,7 @@ function injectDeckBridge(
   }, true);
   addOdSlideMessageListener(function(ev){
     var data = ev && ev.data;
-    if (!data || data.type !== 'od:slide') return;
+    if (!odIsSupportedSlideMessage(data)) return;
     // Every newer host intent cancels an older multi-step jump, including a
     // request for the slide that is CURRENTLY visible. The older jump may not
     // have dispatched its first accepted key yet (the artifact can register on
@@ -4183,14 +4213,8 @@ function injectTweaksBridge(doc: string): string {
     setPanelVisible(!!ev.data.visible);
   });
 })();</script>`;
-  const withStyle = /<\/head>/i.test(doc)
-    ? doc.replace(/<\/head>/i, style + '</head>')
-    : /<head[^>]*>/i.test(doc)
-      ? doc.replace(/<head[^>]*>/i, (m) => m + style)
-      : style + doc;
+  const withStyle = injectBeforeHeadEnd(doc, style);
   // Inject the bridge as early as possible (inside <head>) so the synchronous
   // attribute set runs before the artifact body parses.
-  if (/<\/head>/i.test(withStyle)) return withStyle.replace(/<\/head>/i, script + '</head>');
-  if (/<head[^>]*>/i.test(withStyle)) return withStyle.replace(/<head[^>]*>/i, (m) => m + script);
-  return script + withStyle;
+  return injectBeforeHeadEnd(withStyle, script);
 }

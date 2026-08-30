@@ -46,6 +46,7 @@ import {
 import { renderPanelPrompt } from './panel.js';
 import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
 import {
+  composeOdNextStrategyRequestPromptV2,
   executionProfileFromStreamFormat,
   INTEGRATIONS_MCP_PATH,
   SETTINGS_MEDIA_PROVIDERS_PATH,
@@ -54,6 +55,7 @@ import {
   type ExecutionProfile,
   type MediaExecutionPolicy,
   type MediaSurface,
+  type OdNextStrategyRequestRecipeV2,
 } from '@open-design/contracts';
 
 // Prepended first in every composed prompt so it wins precedence over all
@@ -685,6 +687,11 @@ function renderDesignSystemImportModeGuidance(
 }
 
 export interface ComposeInput {
+  // Internal OD Next request-stage recipe. The daemon only constructs this
+  // after verifying bundled provenance and the Applied Strategy Binding.
+  // When present it is the whole stable system prompt; ordinary composition
+  // remains byte-identical and ignores no default quality section.
+  odNextStrategyRecipe?: OdNextStrategyRequestRecipeV2 | undefined;
   agentId?: string | null | undefined;
   streamFormat?: string | undefined;
   skillBody?: string | undefined;
@@ -841,6 +848,7 @@ export interface ComposeInput {
 }
 
 export function composeSystemPrompt({
+  odNextStrategyRecipe,
   agentId,
   skillBody,
   skillName,
@@ -880,6 +888,28 @@ export function composeSystemPrompt({
   mediaHintSignal,
   platformHintSignal,
 }: ComposeInput): string {
+  if (odNextStrategyRecipe) {
+    return composeOdNextStrategyRequestPromptV2(odNextStrategyRecipe, {
+      agentId,
+      sessionMode,
+      locale,
+      metadata,
+      template,
+      designSystemBody,
+      designSystemTitle,
+      designSystemUsageMd,
+      designSystemTokensCss,
+      designSystemComponentsManifest,
+      designSystemFixtureHtml,
+      designSystemPullIndex,
+      designSystemImportMode,
+      craftBody,
+      craftSections,
+      memoryBody,
+      userInstructions,
+      projectInstructions,
+    });
+  }
   // Slim core collapses the discovery layer + designer charter + their tail
   // overrides into one charter document; the classic stack keeps the legacy
   // layered composition until the A/B comparison signs off.
