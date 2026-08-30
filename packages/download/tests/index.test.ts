@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -480,5 +480,28 @@ describe("managed download package", () => {
       code: MANAGED_DOWNLOAD_ERROR_CODES.STORE_NOT_OWNED,
     });
     expect(existsSync(join(basePath, ".open-design-download-root.json"))).toBe(false);
+  });
+
+  it("does not ignore an OS-artifact directory in a fresh managed base", async () => {
+    const root = tmpRoot("os-artifact-directory");
+    const basePath = join(root, "downloads");
+    mkdirSync(join(basePath, ".DS_Store"), { recursive: true });
+
+    await expect(pruneManagedDownloads({ basePath })).rejects.toMatchObject({
+      code: MANAGED_DOWNLOAD_ERROR_CODES.STORE_NOT_OWNED,
+    });
+    expect(existsSync(join(basePath, ".open-design-download-root.json"))).toBe(false);
+  });
+
+  it.skipIf(process.platform === "win32")("does not ignore an OS-artifact symlink in a fresh managed base", async () => {
+    const root = tmpRoot("os-artifact-symlink");
+    const basePath = join(root, "downloads");
+    mkdirSync(basePath, { recursive: true });
+    writeFileSync(join(root, "target"), "target");
+    symlinkSync(join(root, "target"), join(basePath, ".DS_Store"));
+
+    await expect(pruneManagedDownloads({ basePath })).rejects.toMatchObject({
+      code: MANAGED_DOWNLOAD_ERROR_CODES.STORE_NOT_OWNED,
+    });
   });
 });

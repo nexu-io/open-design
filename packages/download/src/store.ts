@@ -30,8 +30,14 @@ const OS_MANAGED_ROOT_ARTIFACTS = new Set([".DS_Store", "Thumbs.db", "desktop.in
  * @internal Whether `name` is a benign, OS-managed root artifact that should
  * never count as real content when deciding whether a directory is claimable.
  */
-function isOsManagedRootArtifact(name: string): boolean {
-  return OS_MANAGED_ROOT_ARTIFACTS.has(name);
+async function isOsManagedRootArtifact(basePath: string, name: string): Promise<boolean> {
+  if (!OS_MANAGED_ROOT_ARTIFACTS.has(name)) return false;
+  try {
+    const entry = await lstat(join(basePath, name));
+    return entry.isFile() && !entry.isSymbolicLink();
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -104,7 +110,8 @@ export async function ensureManagedBase(basePath: string): Promise<void> {
   const sentinel = await readJson<unknown>(sentinelPath);
   if (sentinel == null) {
     const entries = await readdir(basePath);
-    const content = entries.filter((name) => !isOsManagedRootArtifact(name));
+    const managedArtifacts = await Promise.all(entries.map((name) => isOsManagedRootArtifact(basePath, name)));
+    const content = entries.filter((_, index) => !managedArtifacts[index]);
     if (content.length > 0) {
       throw new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.STORE_NOT_OWNED, `download base is not empty and has no ownership marker: ${basePath}`);
     }
