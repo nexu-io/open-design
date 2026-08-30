@@ -11174,7 +11174,16 @@ function splitCommaSeparatedIds(value) {
   return out;
 }
 
-const splitAutomationIds = splitCommaSeparatedIds;
+// `function` declarations are hoisted to the top of the module, so the
+// CLI subcommand entrypoint (which can dispatch `automationContextFromFlags`
+// before the surrounding module body finishes evaluating) can safely reach
+// the alias. A `const` here is in the temporal dead zone until the
+// assignment runs, which crashes with `ReferenceError: Cannot access
+// 'splitAutomationIds' before initialization` on every
+// `od automation create` / `od automation update` invocation. See #7611.
+function splitAutomationIds(value) {
+  return splitCommaSeparatedIds(value);
+}
 
 function automationContextFromFlags(flags) {
   const skillIds = splitAutomationIds(flags.skill);
