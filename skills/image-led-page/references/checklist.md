@@ -26,6 +26,13 @@ pixels, not cascade outcomes.
 
 - [ ] Rendered at mobile and desktop widths, and the produced screenshots are
       the widths that were requested.
+- [ ] Hero rendered at a realistic window height (around 1440x900), not just a
+      tall full-page capture. A `100vh` hero stretches to whatever height the
+      window has, so a 3000px-tall capture hides two failures at once: an
+      overlay container left `relative` in the flow instead of positioned over
+      the image, and the doubled section height that pushes the headline into
+      the next section. Both look fine in the long screenshot and are obvious
+      at 900px.
 - [ ] No `ad`, `ads`, `banner`, or `sponsor` token in any filename, class, or
       id.
 - [ ] If the page travels as a single file: opened from an empty directory
