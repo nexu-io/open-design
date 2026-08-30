@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Focus Session Exploration</title>
+  <style>
+    *{box-sizing:border-box}
+    html,body{margin:0;background:#f1efe9;color:#1c1c1a;font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    a{color:inherit;text-decoration:none}
+    .pde-turn,.pde-baseline{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}
+    .pde-turn-head,.pde-baseline-head,.pde-option-head{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+    .pde-turn-head,.pde-baseline-head{margin-bottom:20px}
+    .pde-turn-id,.pde-option-id,.pde-baseline-id{display:inline-flex;border-radius:5px;font:650 10.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace}
+    .pde-turn-id{padding:4px 8px;background:#1c1c1a;color:#fff}
+    .pde-option-id,.pde-baseline-id{padding:4px 7px;background:rgba(0,0,0,.075)}
+    .pde-turn-title,.pde-baseline-title{font:650 13px/1.2 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    .pde-options{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start;overflow-x:auto;padding-bottom:4px}
+    .pde-option{flex:none;width:max-content;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}
+    .pde-option-head{color:rgba(0,0,0,.58);font:400 11px/1.3 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    .pde-option-name{font-weight:600}
+    .pde-parent{color:rgba(0,0,0,.62)}
+    .pde-ref,.pde-parent{text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px}
+    .pde-design{overflow:hidden;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+    .pde-turn:target .pde-turn-id,.pde-option:target .pde-option-id,.pde-baseline:target .pde-baseline-id{background:#2f6fd1;color:#fff}
+    .pde-next{margin:22px 0 0;color:rgba(0,0,0,.60);font:12px/1.5 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    .note{width:300px;color:rgba(0,0,0,.60);font-size:11.5px;line-height:1.5}
+
+    .frame{width:300px;min-height:420px;padding:18px}
+    .frame small,.baseline small{font:600 10px ui-monospace,SFMono-Regular,Menlo,monospace}
+    .single{background:#17181b;color:#f7f7f3}.single small{color:#9ea1a8}.single .time{margin:102px auto 0;text-align:center;font:700 58px/1 ui-monospace,SFMono-Regular,Menlo,monospace}.single .label{margin-top:10px;text-align:center;color:#aeb1b8;font-size:11px}.single .button{width:170px;margin:66px auto 0;padding:12px;border-radius:999px;background:#e9ff72;color:#161713;text-align:center;font-weight:700;font-size:11px}
+    .queue{background:#fbfaf6;color:#1b211c}.queue h3{margin:16px 0 6px;font:700 28px/1.05 Georgia,serif}.queue .muted{color:#77746c;font-size:11px}.queue .choice{margin-top:24px;padding:13px 0;border-top:1px solid #d8d5cc}.queue .choice strong{display:block;font-size:13px}.queue .choice span{display:block;margin-top:4px;color:#77746c;font-size:10.5px}.queue .choice.active{padding:13px;border:1px solid #1b211c;background:#eef2df}
+    .timeline{background:#eaf0f7;color:#15243a}.timeline h3{margin:16px 0 8px;font:700 25px/1.1 system-ui,sans-serif}.timeline .lane{display:grid;grid-template-columns:48px 1fr;gap:10px;margin-top:22px}.timeline .tick{padding-top:10px;color:#637187;font:600 9px ui-monospace,SFMono-Regular,Menlo,monospace}.timeline .block{margin-bottom:8px;padding:12px;border-radius:8px;background:#fff;border:1px solid #cad4e2;font-size:11px}
+    .calm{background:#f6f3ec;color:#2d2a24}.calm h3{margin:62px 0 12px;font:600 34px/1.1 Georgia,serif}.calm p{max-width:220px;color:#7a746a;font-size:12px;line-height:1.6}.calm .rule{width:54px;height:3px;margin-top:50px;background:#2d2a24}
+    .sentence{background:#f8f7f3}.sentence h3,.interview h3,.weights h3{margin:16px 0 8px;font-size:23px;letter-spacing:-.03em}.sentence .copy{margin:38px 0 0;font:650 24px/1.55 Georgia,serif}.pill{display:inline-block;padding:3px 8px;border:1px solid #a9a69e;border-radius:999px;font:650 10px system-ui,sans-serif}
+    .interview{background:#ffe786;color:#2d2512}.progress{display:flex;gap:5px;margin-top:22px}.progress i{height:4px;flex:1;background:rgba(45,37,18,.22)}.progress i:first-child{background:#2d2512}.question{margin-top:82px;font:700 34px/1.05 Georgia,serif;letter-spacing:-.05em}.binary{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:58px}.binary span{padding:13px;border:1px solid #2d2512;text-align:center;font-weight:700;font-size:11px}
+    .weights{background:#182432;color:#edf4f8}.weights .muted{color:#9fb0bd;font-size:10.5px}.slider{margin-top:24px}.slider-head{display:flex;justify-content:space-between;font-size:10.5px}.track{height:5px;margin-top:8px;background:#435462}.fill{height:100%;background:#83d8cf}
+    .baseline{width:300px;min-height:260px;padding:18px;background:#f5f5f2;color:#252522}.baseline h3{margin:24px 0 18px;font-size:22px}.baseline .field{height:42px;margin-top:8px;padding:11px 12px;background:#fff;border:1px solid #deddd8;border-radius:9px;color:#8a8880;font-size:11px}.baseline .button{margin-top:10px;padding:11px;text-align:center;border-radius:9px;background:#e5e4df;color:#8a8880;font-size:11px}
+  </style>
+</head>
+<body>
+  <main class="pde-canvas">
+    <section class="pde-turn" id="t2" data-turn="2">
+      <header class="pde-turn-head">
+        <a class="pde-turn-id" href="#t2">2</a>
+        <span class="pde-turn-title">Riffs on <a class="pde-ref" href="#o-1b">1b</a></span>
+      </header>
+
+      <div class="pde-options">
+        <article class="pde-option" id="o-2a" data-option="2a" data-parent="1b">
+          <header class="pde-option-head"><a class="pde-option-id" href="#o-2a">2a</a><span class="pde-option-name">Sentence builder</span><a class="pde-parent" href="#o-1b">← 1b</a></header>
+          <div class="pde-design frame sentence"><small>GUIDED CHOICE</small><h3>Say the constraint naturally</h3><div class="copy">I want something <span class="pill">quiet</span>, for <span class="pill">25 min</span>, with <span class="pill">one task</span>.</div></div>
+          <div class="note">Filters become a readable sentence; the pattern stays friendly until the number of constraints grows.</div>
+        </article>
+
+        <article class="pde-option" id="o-2b" data-option="2b" data-parent="1b">
+          <header class="pde-option-head"><a class="pde-option-id" href="#o-2b">2b</a><span class="pde-option-name">Rapid interview</span><a class="pde-parent" href="#o-1b">← 1b</a></header>
+          <div class="pde-design frame interview"><small>QUESTION 1 / 3</small><div class="progress"><i></i><i></i><i></i></div><div class="question">Do you want to see what comes next?</div><div class="binary"><span>Yes</span><span>No</span></div></div>
+        </article>
+
+        <article class="pde-option" id="o-2c" data-option="2c" data-parent="1b">
+          <header class="pde-option-head"><a class="pde-option-id" href="#o-2c">2c</a><span class="pde-option-name">Weighted priorities</span><a class="pde-parent" href="#o-1b">← 1b</a></header>
+          <div class="pde-design frame weights"><small>PRIORITY MIX</small><h3>Not every constraint matters equally</h3><p class="muted">Shape the session by weighting what matters now.</p><div class="slider"><div class="slider-head"><span>Speed</span><span>82%</span></div><div class="track"><div class="fill" style="width:82%"></div></div></div><div class="slider"><div class="slider-head"><span>Clarity</span><span>68%</span></div><div class="track"><div class="fill" style="width:68%"></div></div></div></div>
+          <div class="note">More control, but also more deliberate input.</div>
+        </article>
+      </div>
+
+      <p class="pde-next">Try next: “make <a class="pde-ref" href="#o-2a">2a</a> more visual” · “mix <a class="pde-ref" href="#o-2b">2b</a> with <a class="pde-ref" href="#o-2c">2c</a>” · “new directions”</p>
+    </section>
+
+    <section class="pde-turn" id="t1" data-turn="1">
+      <header class="pde-turn-head">
+        <a class="pde-turn-id" href="#t1">1</a>
+        <span class="pde-turn-title">Four ways to structure a focus session</span>
+      </header>
+
+      <div class="pde-options">
+        <article class="pde-option" id="o-1a" data-option="1a">
+          <header class="pde-option-head"><a class="pde-option-id" href="#o-1a">1a</a><span class="pde-option-name">Single focus</span></header>
+          <div class="pde-design frame single"><small>FOCUS / 25 MIN</small><div class="time">25:00</div><div class="label">One thing, fully visible.</div><div class="button">Start one task</div></div>
+        </article>
+
+        <article class="pde-option" id="o-1b" data-option="1b">
+          <header class="pde-option-head"><a class="pde-option-id" href="#o-1b">1b</a><span class="pde-option-name">Guided queue</span></header>
+          <div class="pde-design frame queue"><small>TODAY</small><h3>Move through a short queue</h3><p class="muted">Keep the next step visible without showing the whole backlog.</p><div class="choice active"><strong>Ship design review</strong><span>Running · 18 min left</span></div><div class="choice"><strong>Answer feedback</strong><span>Next</span></div><div class="choice"><strong>Write notes</strong><span>Later</span></div></div>
+          <div class="note">Visible sequencing creates momentum with slightly more context than <a class="pde-ref" href="#o-1a">1a</a>.</div>
+        </article>
+
+        <article class="pde-option" id="o-1c" data-option="1c">
+          <header class="pde-option-head"><a class="pde-option-id" href="#o-1c">1c</a><span class="pde-option-name">Time canvas</span></header>
+          <div class="pde-design frame timeline"><small>AFTERNOON</small><h3>Shape time directly</h3><div class="lane"><div class="tick">13:00</div><div><div class="block">Deep work · 45m</div><div class="block">Review · 30m</div></div><div class="tick">15:00</div><div><div class="block">Open slot · drag a task here</div></div></div></div>
+        </article>
+
+        <article class="pde-option" id="o-1d" data-option="1d">
+          <header class="pde-option-head"><a class="pde-option-id" href="#o-1d">1d</a><span class="pde-option-name">Calm brief</span></header>
+          <div class="pde-design frame calm"><small>SESSION</small><h3>One sentence before work.</h3><p>Name the outcome, start the clock, and let the rest of the interface disappear.</p><div class="rule"></div></div>
+        </article>
+      </div>
+
+      <p class="pde-next">Try next: “riff on <a class="pde-ref" href="#o-1b">1b</a>” · “combine <a class="pde-ref" href="#o-1a">1a</a> and <a class="pde-ref" href="#o-1d">1d</a>” · “explore another axis”</p>
+    </section>
+
+    <section class="pde-baseline" id="baseline" data-baseline="0">
+      <header class="pde-baseline-head"><a class="pde-baseline-id" href="#baseline">0</a><span class="pde-baseline-title">Baseline</span></header>
+      <div class="pde-design baseline"><small>CURRENT</small><h3>Focus Session</h3><div class="field">Task</div><div class="field">Duration · 25 min</div><div class="button">Start</div></div>
+    </section>
+  </main>
+</body>
+</html>
