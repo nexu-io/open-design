@@ -3230,12 +3230,27 @@ function injectDeckBridge(
     }
     return -1;
   }
+  // display and opacity do not inherit through the CSS cascade, so a
+  // getComputedStyle() call on a candidate slide never reflects an
+  // ancestor's own display:none/opacity:0 (e.g. reveal.js hides
+  // non-present slides via display:none on the PARENT <section>, one
+  // level above the slide element itself). Walk up to document.body /
+  // document.documentElement, bounded the same way transformTrack() is,
+  // so any ancestor's own hidden state is caught.
+  function isRenderedHidden(el){
+    var node = el;
+    while (node && node !== document.body && node !== document.documentElement) {
+      try {
+        var cs = window.getComputedStyle(node);
+        if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return true;
+      } catch (_) {}
+      node = node.parentElement;
+    }
+    return false;
+  }
   function findActiveByVisibility(list){
     for (var i=0; i<list.length; i++) {
-      try {
-        var cs = window.getComputedStyle(list[i]);
-        if (cs.display !== 'none' && cs.visibility !== 'hidden' && cs.opacity !== '0') return i;
-      } catch (_) {}
+      if (!isRenderedHidden(list[i])) return i;
     }
     return -1;
   }
@@ -4081,6 +4096,28 @@ function injectDeckBridge(
   // For class-toggle decks the deck's own keyboard handler updates classes
   // on the slide elements; an attribute observer translates that into the
   // host counter without depending on scroll events.
+  // Deduplicated union of every slide's ancestor chain up to (not
+  // including) document.body/document.documentElement, matching
+  // isRenderedHidden()'s reach exactly. Reveal.js-style decks toggle
+  // their visibility class on that ancestor (one level above the slide
+  // element), not on the slide element itself, so the plain per-slide
+  // observation below would never fire for them.
+  function visibilityAncestors(list){
+    var result = [];
+    function add(node){
+      if (!node) return;
+      for (var i=0; i<result.length; i++) if (result[i] === node) return;
+      result.push(node);
+    }
+    for (var i=0; i<list.length; i++) {
+      var node = list[i] && list[i].parentElement;
+      while (node && node !== document.body && node !== document.documentElement) {
+        add(node);
+        node = node.parentElement;
+      }
+    }
+    return result;
+  }
   function observeSlides(){
     var list = slides();
     if (!list.length) { setTimeout(observeSlides, 150); return; }
@@ -4098,6 +4135,10 @@ function injectDeckBridge(
       // track's style too.
       var track = transformTrack(list);
       if (track) mo.observe(track, { attributes: true, attributeFilter: ['style'] });
+      var visAncestors = visibilityAncestors(list);
+      for (var v = 0; v < visAncestors.length; v++) {
+        mo.observe(visAncestors[v], { attributes: true, attributeFilter: ['class', 'style', 'hidden', 'aria-hidden'] });
+      }
     } catch (e) {}
     setTimeout(restoreInitialSlide, 100);
   }
