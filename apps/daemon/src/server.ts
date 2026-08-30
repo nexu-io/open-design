@@ -12753,9 +12753,17 @@ export async function startServer({
       // that has never served `GET /api/agents` has the same provenance and
       // argv behavior as one whose detection cache is already warm.
       const [runtimeVersions] = await Promise.all([
-        ensureDetectedRuntimeVersions(def.id, configuredAgentEnv),
-        ensureDetectedRuntimeCapabilities(def.id, configuredAgentEnv),
+        ensureDetectedRuntimeVersions(def.id, configuredAgentEnv, agentLaunch),
+        ensureDetectedRuntimeCapabilities(def.id, configuredAgentEnv, agentLaunch),
       ]);
+      if (run.cancelRequested || design.runs.isTerminal(run.status)) {
+        lifecycle.mark('launch_preflight_end');
+        antigravityModelLockRelease?.();
+        antigravityModelLockRelease = null;
+        cleanupPromptFile();
+        cleanupOdNextRunInputProjection();
+        return;
+      }
       if (!run.preflightAgentCliVersion && runtimeVersions?.agentCliVersion) {
         run.preflightAgentCliVersion = runtimeVersions.agentCliVersion;
         design.runs.persistState(run);
