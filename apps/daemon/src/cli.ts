@@ -11174,13 +11174,11 @@ function splitCommaSeparatedIds(value) {
   return out;
 }
 
-const splitAutomationIds = splitCommaSeparatedIds;
-
 function automationContextFromFlags(flags) {
-  const skillIds = splitAutomationIds(flags.skill);
-  const pluginIds = splitAutomationIds(flags.plugin);
-  const mcpServerIds = splitAutomationIds(flags.mcp);
-  const connectorIds = splitAutomationIds(flags.connector);
+  const skillIds = splitCommaSeparatedIds(flags.skill);
+  const pluginIds = splitCommaSeparatedIds(flags.plugin);
+  const mcpServerIds = splitCommaSeparatedIds(flags.mcp);
+  const connectorIds = splitCommaSeparatedIds(flags.connector);
   const context = {
     ...(skillIds.length > 0 ? { skillIds } : {}),
     ...(pluginIds.length > 0 ? { pluginIds } : {}),
@@ -11716,7 +11714,7 @@ async function runAutomation(args) {
         enabled: !flags.disabled,
       };
       const context = automationContextFromFlags(flags);
-      const skillIds = splitAutomationIds(flags.skill);
+      const skillIds = splitCommaSeparatedIds(flags.skill);
       if (skillIds.length > 0) body.skillId = skillIds[0];
       if (context) body.context = context;
       if (flags.agent) body.agentId = String(flags.agent);
@@ -11767,7 +11765,7 @@ async function runAutomation(args) {
       if (flags.enabled) patch.enabled = true;
       const context = automationContextFromFlags(flags);
       if (context) {
-        const skillIds = splitAutomationIds(flags.skill);
+        const skillIds = splitCommaSeparatedIds(flags.skill);
         if (skillIds.length > 0) patch.skillId = skillIds[0];
         patch.context = context;
       }
