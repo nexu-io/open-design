@@ -9,6 +9,7 @@
   --social-share-brand: var(--text-muted);
   appearance: none;
   min-width: 0;
+  height: auto;
   min-height: 34px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
@@ -16,8 +17,10 @@
   color: var(--text);
   display: inline-flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
   padding: 0 9px;
+  font: inherit;
   font-size: 13px;
   text-align: left;
   text-decoration: none;
