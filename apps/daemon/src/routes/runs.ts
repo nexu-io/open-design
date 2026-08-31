@@ -13,6 +13,8 @@ import {
   type ByokChatProviderConfig,
   type ChatRunStatus,
   type ChatRunStatusResponse,
+  type CompactConversationRequest,
+  type CompactConversationResponse,
   type InstalledPluginRecord,
   type StrategyTaskProjectionV2,
   type ProjectMetadata as ContractProjectMetadata,
@@ -49,6 +51,7 @@ import {
 import type { ConnectorService } from '../connectors/service.js';
 import {
   conversationTurnIndexForRun,
+  getAgentSession,
   getFirstProjectConversation,
   getConversation,
   getProject,
@@ -1530,6 +1533,134 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       return 'none';
     }
   }
+
+  // ---- Manual context compaction -------------------------------------------
+  // Starts a short agent run that delivers the runtime's own context-compaction
+  // command (`RuntimeAgentDef.manualCompact.prompt`, e.g. claude `/compact`)
+  // into the conversation's stored CLI session, riding the normal run pipeline
+  // so status/events/streaming/reattach behave like any other turn. Fast-fails
+  // when the runtime cannot compact or the conversation has no stored session
+  // yet; the race-safe resumability authority stays in startChatRun
+  // (COMPACT_NO_SESSION covers a session invalidated between check and spawn).
+  // No user message row is persisted: the command must never enter the
+  // rendered transcript, or a later session reseed would replay it as text.
+  app.post(
+    '/api/projects/:id/conversations/:cid/compact',
+    async (req: ApiRequest, res: ApiResponse) => {
+      if (ctx.lifecycle.isDaemonShuttingDown()) {
+        return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
+      }
+      const projectId = routeParamId(req);
+      const conversationId =
+        typeof req.params.cid === 'string' && req.params.cid.length > 0
+          ? req.params.cid
+          : null;
+      if (!projectId || !conversationId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId and conversationId required');
+      }
+      const project = toProjectRecord(getProject(db, projectId));
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      // Mirror the ownership guard POST /api/runs enforces: a compact run
+      // keyed to a conversation owned by another project would resume and
+      // rewrite that project's session state.
+      const conversation = getConversation(db, conversationId);
+      if (!conversation || conversation.projectId !== projectId) {
+        return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
+      }
+      const authorization = await authorizeRunProjectBeforePluginResolution(
+        req,
+        res,
+        projectId,
+      );
+      if (!authorization.ok) return;
+      const body = toJsonRecord(req.body) as CompactConversationRequest;
+      let agentId = typeof body.agentId === 'string' && body.agentId ? body.agentId : null;
+      if (!agentId) {
+        const appCfg = await readAppConfig(RUNTIME_DATA_DIR).catch(
+          () => ({} as Record<string, unknown>),
+        );
+        agentId = typeof appCfg.agentId === 'string' && appCfg.agentId ? appCfg.agentId : null;
+      }
+      if (!agentId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'agentId required');
+      }
+      const preparedWorkspaceScope = await prepareRunWorkspaceScope(
+        req,
+        res,
+        projectId,
+        agentId,
+        authorization.authorizedBoundMutation,
+      );
+      if (!preparedWorkspaceScope.ok) return;
+      const def = getAgentDef(agentId);
+      if (!def) {
+        return sendApiError(res, 400, 'AGENT_UNAVAILABLE', `unknown agent: ${agentId}`);
+      }
+      if (typeof def.manualCompact?.prompt !== 'string') {
+        return sendApiError(
+          res,
+          409,
+          'COMPACT_UNSUPPORTED',
+          `agent ${def.id} does not support manual context compaction`,
+        );
+      }
+      if (!getAgentSession(db, conversationId, agentId)) {
+        return sendApiError(
+          res,
+          409,
+          'COMPACT_NO_SESSION',
+          'no stored agent session for this conversation - send a message first',
+        );
+      }
+      const meta: RunCreateMeta = {
+        projectId,
+        conversationId,
+        agentId,
+        assistantMessageId: randomUUID(),
+        message: def.manualCompact.prompt,
+        currentPrompt: def.manualCompact.prompt,
+        model: typeof body.model === 'string' && body.model ? body.model : null,
+        sessionMode: normalizeConversationSessionMode(conversation.sessionMode),
+        manualCompact: true,
+        workspaceScope: preparedWorkspaceScope.workspaceScope,
+      };
+      if (project.metadata) {
+        meta.projectMetadata = project.metadata;
+      }
+      const run = design.runs.create(meta);
+      try {
+        pinAssistantMessageOnRunCreate(db, run);
+      } catch (err) {
+        console.warn('[runs] compact message pin failed', err);
+      }
+      const declaredClient = String(req.get('x-od-client') ?? '').toLowerCase();
+      if (declaredClient === 'desktop' || declaredClient === 'web') {
+        run.clientType = declaredClient;
+      } else {
+        const ua = String(req.get('user-agent') ?? '');
+        run.clientType = ua.includes('Electron/') ? 'desktop' : 'web';
+      }
+      const response: CompactConversationResponse = {
+        runId: run.id,
+        conversationId,
+        assistantMessageId: run.assistantMessageId ?? null,
+      };
+      res.status(202).json(response);
+      reconcileAssistantMessageOnRunEnd(db, design.runs, run);
+      internalRuns.start(
+        run,
+        {
+          body: toJsonRecord(req.body),
+          requestAnalyticsContext: readAnalyticsContext(req),
+          creationKind: 'created',
+          resumed: false,
+        },
+        () => startChatRun(meta, run),
+      );
+    },
+  );
 
   const handleRunCreate = async (req: ApiRequest, res: ApiResponse) => {
     if (ctx.lifecycle.isDaemonShuttingDown()) {

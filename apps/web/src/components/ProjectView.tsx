@@ -190,6 +190,7 @@ import {
   isDesignSystemWorkspacePrompt,
 } from '../design-system-auto-prompt';
 import {
+  compactConversationContext,
   createConversation,
   deleteConversation as deleteConversationApi,
   duplicatePluginAsProject,
@@ -9724,6 +9725,100 @@ export function ProjectView({
     [project.id, projectRunWorkspaceContext, projectMutationReadOnly],
   );
 
+  // ---- Manual context compaction -------------------------------------------
+  // The two-click menu entry and the `/compact` slash command both land here.
+  // The web gates only on what it can know locally (runtime support via
+  // AgentInfo.manualCompact, a completed agent turn in this conversation, no
+  // run in flight); the daemon stays the authority and its typed refusals
+  // (COMPACT_UNSUPPORTED / COMPACT_NO_SESSION) surface as a toast.
+  const compactContextSupported =
+    config.mode === 'daemon' &&
+    Boolean(config.agentId && agentsById.get(config.agentId)?.manualCompact);
+  // Local proxy for "a resumable CLI session probably exists": the daemon
+  // stores the session when a turn completes. Per-agent precision (the user
+  // switched runtimes mid-conversation) is left to the daemon's 409.
+  const compactContextHasSession = useMemo(
+    () => messages.some((m) => m.role === 'assistant' && m.runStatus === 'succeeded'),
+    [messages],
+  );
+  const [compactRunId, setCompactRunId] = useState<string | null>(null);
+  const compactContextBusy = useMemo(
+    () =>
+      compactRunId !== null &&
+      messages.some((m) => m.runId === compactRunId && isActiveRunStatus(m.runStatus)),
+    [compactRunId, messages],
+  );
+  const handleCompactContext = useCallback(async () => {
+    if (!compactContextSupported || !config.agentId || !activeConversationId) return;
+    if (currentConversationHasActiveRun) return;
+    const choice = effectiveAgentModelChoice(
+      agentsById.get(config.agentId),
+      config.agentModels?.[config.agentId],
+    );
+    const result = await compactConversationContext(
+      project.id,
+      activeConversationId,
+      {
+        agentId: config.agentId,
+        // Send the SAME model the composer would use for a normal turn: the
+        // daemon's resume identity guard refuses a session built under a
+        // different model, which is the correct outcome (that session would
+        // be reseeded on the next turn anyway, so compacting it is wasted).
+        model: choice?.model ?? null,
+      },
+      projectRunWorkspaceContext,
+    );
+    if (!result.ok) {
+      setProjectActionsToast({
+        message:
+          result.code === 'COMPACT_NO_SESSION'
+            ? t('chat.compactContextNoSession')
+            : result.code === 'COMPACT_UNSUPPORTED'
+              ? t('chat.compactContextUnsupported')
+              : t('chat.compactContextFailed'),
+        details: null,
+      });
+      return;
+    }
+    setCompactRunId(result.runId);
+    // Pin a local assistant row for the daemon-created run. The reattach
+    // effect picks it up by its active runStatus and streams the run's
+    // status/events into it, so the compact turn surfaces like any short
+    // agent turn (including the runtime's own 'compacting' status frame).
+    const assistantMessageId = result.assistantMessageId;
+    if (assistantMessageId) {
+      const startedAt = Date.now();
+      setMessages((prev) =>
+        prev.some((m) => m.id === assistantMessageId)
+          ? prev
+          : [
+              ...prev,
+              {
+                id: assistantMessageId,
+                role: 'assistant',
+                content: '',
+                agentId: config.agentId ?? undefined,
+                events: [],
+                createdAt: startedAt,
+                runId: result.runId,
+                runStatus: 'running',
+                startedAt,
+              },
+            ],
+      );
+    }
+  }, [
+    compactContextSupported,
+    config.agentId,
+    config.agentModels,
+    agentsById,
+    activeConversationId,
+    currentConversationHasActiveRun,
+    project.id,
+    projectRunWorkspaceContext,
+    t,
+  ]);
+
   const handleConversationSessionModeChange = useCallback(
     async (id: string, sessionMode: ChatSessionMode) => {
       if (projectMutationReadOnly) return;
@@ -11650,6 +11745,10 @@ export function ProjectView({
               messagesConversationId={messagesConversationId}
               onSelectConversation={handleSelectConversation}
               onDeleteConversation={handleDeleteConversation}
+              onCompactContext={handleCompactContext}
+              compactContextSupported={compactContextSupported}
+              compactContextHasSession={compactContextHasSession}
+              compactContextBusy={compactContextBusy}
               config={config}
               onOpenSettings={onOpenSettings}
               showByokRecoveryAction={

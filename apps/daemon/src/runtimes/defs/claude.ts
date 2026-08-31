@@ -130,4 +130,11 @@ export const claudeAgentDef = {
     // launching (server.ts handles the cwd guard).
     externalMcpInjection: 'claude-mcp-json',
     resumesSessionViaCli: true,
+    // `/compact` executes as a real command when it is the sole user message
+    // of a resumed `-p` session (verified against Claude Code 2.1.217 over
+    // the same stream-json stdin path this adapter uses — see the field's
+    // doc comment in ../types.ts). Codex is deliberately NOT declared:
+    // `codex exec resume` exists, but whether exec-mode executes `/compact`
+    // or treats it as literal text is unverified.
+    manualCompact: { prompt: '/compact' },
 } satisfies RuntimeAgentDef;

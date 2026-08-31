@@ -269,6 +269,14 @@ interface Props {
   // Opens settings on the External MCP tab. Wired from ChatPane → App.
   // The composer's `/mcp` slash command and the MCP picker button route here.
   onOpenMcpSettings?: () => void;
+  // Manual context compaction for the active conversation. `/compact` is a
+  // local UX hook like `/mcp` — intercepted at submit, never sent to the
+  // agent as a chat turn; the handler POSTs the daemon's compact endpoint.
+  // The palette entry only shows when the current runtime supports it
+  // (`compactContextAvailable`); typing the command is the deliberate,
+  // misclick-proof entry the conversations-menu item pairs with.
+  onCompactContext?: () => void;
+  compactContextAvailable?: boolean;
   // The "+" menu's "add plugin" / "add connector" rows route to the home
   // surfaces (plugin registry / connector integrations). Wired from
   // ChatPane → ProjectView → App. Omitted → the add rows are hidden.
@@ -460,6 +468,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       onSend,
       onStop,
       onOpenMcpSettings,
+      onCompactContext,
+      compactContextAvailable = false,
       onBrowsePlugins,
       onStandalonePanelChange,
       onOpenConnectors,
@@ -1023,8 +1033,21 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           argHint: t('pet.slashSearchArg'),
         });
       }
+      // Manual context compaction — local UX hook (intercepted at submit,
+      // never sent as a chat turn). Only listed when the current runtime
+      // declares a verified compact command; no trailing space, the command
+      // takes no argument.
+      if (onCompactContext && compactContextAvailable) {
+        list.push({
+          id: 'compact',
+          label: '/compact',
+          insert: '/compact',
+          descKey: 'chat.compactSlashDesc',
+          icon: 'sliders',
+        });
+      }
       return list;
-    }, [researchAvailable, t, enabledMcpServers, onOpenMcpSettings]);
+    }, [researchAvailable, t, enabledMcpServers, onOpenMcpSettings, onCompactContext, compactContextAvailable]);
 
     const filteredSlash = useMemo(() => {
       if (!slash) return [] as SlashCommand[];
@@ -1077,6 +1100,21 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       const trimmed = draft.trim();
       if (!/^\/mcp\s*$/i.test(trimmed)) return false;
       onOpenMcpSettings();
+      setDraft('');
+      editorRef.current?.clear();
+      return true;
+    }
+
+    // `/compact` starts a manual context-compaction run for the active
+    // conversation — a local UX hook like `/mcp`, never sent to the agent as
+    // a chat turn (the daemon dispatches the runtime's own compact command
+    // into the resumed CLI session). Takes no argument; `/compact anything`
+    // falls through to a normal send so prose starting with the word is
+    // never swallowed.
+    function tryHandleCompactSlash(): boolean {
+      if (!onCompactContext || !compactContextAvailable) return false;
+      if (!/^\/compact$/i.test(draft.trim())) return false;
+      onCompactContext();
       setDraft('');
       editorRef.current?.clear();
       return true;
@@ -2639,10 +2677,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     async function submit() {
       const prompt = draft.trim();
       if (sendDisabled) return;
-      // Intercept `/pet …` and `/mcp` before sending so the slash command
-      // never hits the agent — these are local UX hooks, not model prompts.
+      // Intercept `/pet …`, `/mcp`, and `/compact` before sending so the
+      // slash command never hits the agent — these are local UX hooks, not
+      // model prompts.
       if (tryHandlePetSlash()) return;
       if (tryHandleMcpSlash()) return;
+      if (tryHandleCompactSlash()) return;
       // `/hatch <concept>` expands into the canonical hatch-pet skill
       // prompt and *is* sent to the agent — the agent runs the skill,
       // packages a Codex pet under `~/.codex/pets/`, and the user

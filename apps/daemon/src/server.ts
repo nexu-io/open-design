@@ -10510,6 +10510,24 @@ export async function startServer({
       }
       throw err;
     }
+    // Manual context compaction (POST .../conversations/:cid/compact). The
+    // run must deliver the runtime's own compact command as the SOLE user
+    // message of a RESUMED session — any composed wrapper (`# Instructions`,
+    // `# User request`) demotes it to literal user text — so the flag
+    // short-circuits prompt composition below and the resume guard after
+    // `agentResumeCtx` refuses when there is no session to compact.
+    const manualCompactRun = chatBody.manualCompact === true;
+    const manualCompactPrompt =
+      manualCompactRun && typeof def.manualCompact?.prompt === 'string'
+        ? def.manualCompact.prompt
+        : null;
+    if (manualCompactRun && manualCompactPrompt === null) {
+      return design.runs.fail(
+        run,
+        'COMPACT_UNSUPPORTED',
+        `agent ${def.id} does not support manual context compaction`,
+      );
+    }
     const safeCommentAttachments =
       normalizeCommentAttachments(commentAttachments);
     if (
@@ -11349,6 +11367,19 @@ export async function startServer({
       invalidationReason: agentResumeCtx.invalidationReason,
     });
     publishNativeSessionRecoveryMetadata();
+    // A compact run only makes sense against an existing resumable session:
+    // without one the adapter would mint a NEW session and the compact
+    // command would run against empty history (or, worse, the invalidated
+    // session would be reseeded and the compaction wasted). The route
+    // pre-checks the stored session for fast UX; this guard is the
+    // race-safe authority (covers invalidation between check and spawn).
+    if (manualCompactRun && !agentResumeCtx.isResuming) {
+      return design.runs.fail(
+        run,
+        'COMPACT_NO_SESSION',
+        'no resumable agent session for this conversation - send a message first',
+      );
+    }
     const agentResumePromptPolicy = resolveAgentResumePromptPolicy(agentResumeCtx);
     const userRequestPrompt = isOdNextRequestStage
       ? resolveOdNextRequestUserPrompt({
@@ -11480,31 +11511,41 @@ export async function startServer({
           odNextTaskInputSnapshot?.requestInputText ?? '',
         ].filter(Boolean).join('\n\n---\n\n')
       : '';
-    const composedResult = strategyTaskAtStart
-      ? {
-          composedPrompt: persistedStrategyFinalText!,
-          clientInstructionPrompt: '',
-          instructionPrompt: '',
-        }
-      : composeChatAgentTextPayload({
-      formOverride: agentFormOverride,
-      daemonSystemPrompt: includeStableForPayload ? daemonSystemPrompt : '',
-      runtimeToolPrompt: includeStableForPayload ? runtimeToolPrompt : '',
-      researchCommandContract,
-      runContextPrompt,
-      connectedExternalMcpReference: mcpConnectedDirective,
-      browserUnavailableGuard: browserUsePromptGuard,
-      titleGenerationDirective: titleGenerationPrompt,
-      clientSystemPrompt: includeStableForPayload ? systemPrompt : '',
-      cwdReference: cwdHint,
-      linkedDirectoryReferences: linkedDirsHint,
-      echoGuard: agentEchoGuard,
-      requestOrStageText: userRequestPrompt,
-      projectAttachmentReferences: attachmentHint,
-      commentAttachmentReferences: commentHint,
-      imageReferences: promptImagePaths.map((p) => `@${p}`).join(' '),
-      strategyInputStage: strategyTaskAtStart?.inputStage ?? null,
-        });
+    // Manual compact runs bypass every normal/OD Next composition layer. The
+    // resumed runtime must receive its compact command as the exact user
+    // message; adding a wrapper turns `/compact` into ordinary chat text.
+    const composedResult =
+      manualCompactPrompt !== null
+        ? {
+            composedPrompt: manualCompactPrompt,
+            clientInstructionPrompt: '',
+            instructionPrompt: '',
+          }
+        : strategyTaskAtStart
+          ? {
+              composedPrompt: persistedStrategyFinalText!,
+              clientInstructionPrompt: '',
+              instructionPrompt: '',
+            }
+          : composeChatAgentTextPayload({
+              formOverride: agentFormOverride,
+              daemonSystemPrompt: includeStableForPayload ? daemonSystemPrompt : '',
+              runtimeToolPrompt: includeStableForPayload ? runtimeToolPrompt : '',
+              researchCommandContract,
+              runContextPrompt,
+              connectedExternalMcpReference: mcpConnectedDirective,
+              browserUnavailableGuard: browserUsePromptGuard,
+              titleGenerationDirective: titleGenerationPrompt,
+              clientSystemPrompt: includeStableForPayload ? systemPrompt : '',
+              cwdReference: cwdHint,
+              linkedDirectoryReferences: linkedDirsHint,
+              echoGuard: agentEchoGuard,
+              requestOrStageText: userRequestPrompt,
+              projectAttachmentReferences: attachmentHint,
+              commentAttachmentReferences: commentHint,
+              imageReferences: promptImagePaths.map((p) => `@${p}`).join(' '),
+              strategyInputStage: strategyTaskAtStart?.inputStage ?? null,
+            });
     const {
       composedPrompt: composed,
       clientInstructionPrompt,
@@ -11538,6 +11579,8 @@ export async function startServer({
       composedPrompt: composed,
       sections: strategyRunMapping
         ? [{ kind: 'odNextExactFinalText', content: composed }]
+        : manualCompactRun
+          ? [{ kind: 'userRequest', content: composed }]
         : [
             { kind: 'formOverride', content: agentFormOverride },
             // Phase 1 explicitly needs redactedContent for these aggregate prompts:
@@ -12886,12 +12929,24 @@ export async function startServer({
           // new max position (otherwise the next turn sees `cursor + 4` and
           // falsely reseeds). model/cwd are unchanged (they matched on resume);
           // refresh the stable hash to what the session now holds.
+          //
+          // Manual compact turns bypass composition, so they deliver NO stable
+          // instruction block: keep the STORED hash/sections instead of
+          // claiming the session now holds `currentStableHash` — otherwise a
+          // pending stable-instructions change would be silently skipped on
+          // the next normal turn.
           upsertAgentSession(db, {
             conversationId: run.conversationId,
             agentId: def.id,
             sessionId: agentResumeCtx.resumeSessionId,
-            stablePromptHash: currentStableHash,
-            stablePromptSections: currentStableSectionsJson,
+            stablePromptHash: manualCompactRun
+              ? agentResumeCtx.storedStablePromptHash
+              : currentStableHash,
+            stablePromptSections: manualCompactRun
+              ? (agentResumeCtx.storedStableSections
+                  ? serializeStableSections(agentResumeCtx.storedStableSections)
+                  : null)
+              : currentStableSectionsJson,
             model: safeModel ?? null,
             cwd: effectiveCwd,
             lastMessageId: run.assistantMessageId ?? null,
@@ -15061,9 +15116,14 @@ export async function startServer({
       // Empty-output guard: a clean `code === 0` exit with no visible
       // output means the run silently finished without producing anything.
       // Surface an explicit failure so the chat shows a clear reason.
+      //
+      // Manual compact runs are exempt: a successful compaction legitimately
+      // produces NO assistant text — the CLI emits only status frames
+      // (`compacting`, `compact_boundary`) and a clean result frame.
       if (
         code === 0 &&
         !run.cancelRequested &&
+        !manualCompactRun &&
         trackingSubstantiveOutput &&
         !agentProducedOutput
       ) {

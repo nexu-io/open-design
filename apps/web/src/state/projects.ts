@@ -16,6 +16,8 @@ import type {
   ApplyResult,
   ChatSessionMode,
   CollabProjectBootstrapResponse,
+  CompactConversationRequest,
+  CompactConversationResponse,
   CreateConversationRequest,
   CreateDesignSystemProjectFromProjectResponse,
   CreateProjectExampleReference,
@@ -1372,6 +1374,54 @@ export async function deleteConversation(
     return resp.ok;
   } catch {
     return false;
+  }
+}
+
+export type CompactConversationResult =
+  | ({ ok: true } & CompactConversationResponse)
+  | { ok: false; code: string };
+
+/**
+ * Manual context compaction: asks the daemon to dispatch the runtime's own
+ * compact command (e.g. claude `/compact`) into the conversation's stored CLI
+ * session as a short agent run. Resolves to the created run so the caller can
+ * pin a local assistant row and let the reattach machinery stream it. Typed
+ * refusals surface the daemon's error code (COMPACT_UNSUPPORTED /
+ * COMPACT_NO_SESSION) so the UI can phrase the failure precisely.
+ */
+export async function compactConversationContext(
+  projectId: string,
+  conversationId: string,
+  input: CompactConversationRequest,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<CompactConversationResult> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/compact`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+        },
+        body: JSON.stringify(input),
+      },
+    );
+    if (!resp.ok) {
+      const body = (await resp.json().catch(() => null)) as
+        | { error?: { code?: string } }
+        | null;
+      return { ok: false, code: body?.error?.code ?? `HTTP_${resp.status}` };
+    }
+    const json = (await resp.json()) as CompactConversationResponse;
+    return {
+      ok: true,
+      runId: json.runId,
+      conversationId: json.conversationId,
+      assistantMessageId: json.assistantMessageId ?? null,
+    };
+  } catch {
+    return { ok: false, code: 'NETWORK_ERROR' };
   }
 }
 

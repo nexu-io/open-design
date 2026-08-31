@@ -254,6 +254,24 @@ export type RuntimeAgentDef = {
   // path and `agent-cli-session-resume.md`. Profile-stdio transports can also
   // capture the id from a validated protocol status frame.
   capturesSessionIdFromStream?: boolean;
+  // Manual context compaction. Declares that this runtime's CLI executes a
+  // context-compaction command when it is delivered as the SOLE user message
+  // of a resumed session (`--resume <id>`), and names the exact prompt to
+  // send. Only meaningful together with `resumesSessionViaCli` — the daemon
+  // dispatches the prompt into the stored session, so a runtime without CLI
+  // session resume has nothing to compact.
+  //
+  // Declare it only for runtimes where this is empirically verified, not
+  // assumed. Claude Code 2.1.217 verified 2026-07-23: a stream-json stdin
+  // user message whose text is exactly `/compact` on `claude -p --resume`
+  // executes the command (stream shows `system/status status:"compacting"`,
+  // then `compact_boundary` with `compact_metadata.trigger:"manual"`, then a
+  // clean `result` frame with no assistant text), while any surrounding prose
+  // demotes it to literal user text. That is why the chat-run pipeline must
+  // bypass prompt composition for these runs (see server.ts manualCompactRun).
+  manualCompact?: {
+    prompt: string;
+  };
   // ACP-runtime analogue of capture-style resume: the agent talks `acp-json-rpc`
   // (today only AMR/vela) and supports resuming via `session/load`. The daemon
   // captures the durable upstream session handle from the ACP session

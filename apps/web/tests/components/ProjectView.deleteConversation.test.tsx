@@ -436,7 +436,10 @@ describe('ProjectView conversation delete', () => {
     streamViaDaemon.mockResolvedValue(undefined);
 
     renderProjectView(vi.fn());
-    await waitFor(() => expect(chatPaneProps.onSubmitQuestionForm).toBeDefined());
+    await waitFor(() => {
+      expect(chatPaneProps.onSubmitQuestionForm).toBeDefined();
+      expect(chatPaneProps.questionFormSubmitDisabled).toBe(false);
+    });
 
     await act(async () => {
       await expect(chatPaneProps.onSubmitQuestionForm!(

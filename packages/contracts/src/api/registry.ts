@@ -154,6 +154,17 @@ export interface AgentInfo {
    * live Vela catalog). Undefined === allow, matching the historical UX.
    */
   supportsCustomModel?: boolean;
+  /**
+   * Manual context compaction. Present when the runtime's CLI executes a
+   * context-compaction command delivered as the sole user message of a
+   * resumed session (claude `/compact`), which the daemon exposes as
+   * `POST /api/projects/:id/conversations/:cid/compact`. Mirrors
+   * `RuntimeAgentDef.manualCompact`; the web reads only its presence to
+   * enable the "Compact context" affordances. Undefined means the runtime
+   * has no verified compact command and the daemon refuses with
+   * COMPACT_UNSUPPORTED.
+   */
+  manualCompact?: { prompt: string };
 }
 
 export interface AgentsResponse {

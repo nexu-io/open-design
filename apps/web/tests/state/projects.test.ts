@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   applyPlugin,
   cacheTabsLocally,
+  compactConversationContext,
   contributeGeneratedPluginToOpenDesign,
   createConversation,
   createDesignSystemProjectFromProject,
@@ -322,6 +323,49 @@ describe('createConversation', () => {
     })).rejects.toMatchObject({
       message: 'workspace project mutation is not allowed',
       status: 403,
+    });
+  });
+});
+
+describe('compactConversationContext', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('sends the exact Workspace identity and preserves the compact response DTO', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => Response.json({
+      runId: 'run-compact-1',
+      conversationId: 'conversation-1',
+      assistantMessageId: 'assistant-compact-1',
+    }, { status: 202 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await compactConversationContext(
+      'project-1',
+      'conversation-1',
+      { agentId: 'claude', model: 'claude-opus-4-1' },
+      teamWorkspaceContext({ workspaceMemberId: 'member-compact-owner' }),
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      runId: 'run-compact-1',
+      conversationId: 'conversation-1',
+      assistantMessageId: 'assistant-compact-1',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/projects/project-1/conversations/conversation-1/compact',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'x-od-workspace-id': 'ws-team',
+          'x-od-workspace-member-id': 'member-compact-owner',
+        }),
+      }),
+    );
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      agentId: 'claude',
+      model: 'claude-opus-4-1',
     });
   });
 });
