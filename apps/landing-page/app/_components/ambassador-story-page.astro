@@ -1,0 +1,123 @@
+---
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import SiteAnalytics from './site-analytics.astro';
+import HeaderEnhancer from './header-enhancer.astro';
+import { Header, type HeaderProps } from './header';
+import LocaleSwitcherScript from './locale-switcher-script.astro';
+import SeoHead from './seo-head.astro';
+import SiteFooter from './site-footer.astro';
+import { getCatalogCounts } from '../_lib/catalog';
+import { getGithubRepoMeta } from '../_lib/github';
+import {
+  getHeaderLocaleSwitcher,
+  getLocaleDefinition,
+  localeFromPath,
+  localizedHref,
+} from '../i18n';
+import '../globals.css';
+import '../sub-pages.css';
+import '../_partials/ikigai-one.css';
+import '../_partials/ambassador-story.css';
+
+interface StoryMeta {
+  title: string;
+  description: string;
+}
+
+interface Props {
+  ambassadorName: string;
+  datePublished: string;
+  ogImagePath: string;
+  storyBody: Record<string, string>;
+  storyMeta: Record<string, StoryMeta>;
+}
+
+const { ambassadorName, datePublished, ogImagePath, storyBody, storyMeta } = Astro.props;
+const locale = localeFromPath(Astro.url.pathname);
+const localeDef = getLocaleDefinition(locale);
+const counts = await getCatalogCounts();
+const github = await getGithubRepoMeta();
+const copy = storyMeta[locale] ?? storyMeta.en!;
+const fallbackSite = 'https://open-design.ai/';
+const origin = Astro.site?.toString() ?? fallbackSite;
+const pageUrl = new URL(Astro.url.pathname, Astro.site ?? fallbackSite).toString();
+const ogImage = new URL(ogImagePath, Astro.site ?? fallbackSite).toString();
+
+const storyMain = (storyBody[locale] ?? storyBody.en!).replace(
+  /href="(\/[^\"]+)"/g,
+  (_match, pathname: string) => `href="${localizedHref(pathname, locale)}"`,
+);
+
+const breadcrumbJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'OpenDesign', item: origin },
+    { '@type': 'ListItem', position: 2, name: 'Ambassadors', item: new URL(localizedHref('/community/ambassadors/', locale), Astro.site ?? fallbackSite).toString() },
+    { '@type': 'ListItem', position: 3, name: ambassadorName, item: pageUrl },
+  ],
+};
+
+const headerHtml = renderToStaticMarkup(
+  createElement<HeaderProps>(Header, {
+    counts,
+    github,
+    brandHref: localizedHref('/', locale),
+    active: 'community',
+    locale,
+    localeSwitcher: getHeaderLocaleSwitcher(locale, Astro.url.pathname),
+  }),
+);
+---
+
+<!doctype html>
+<html lang={localeDef.htmlLang} dir={localeDef.dir}>
+  <head>
+    <meta charset='utf-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1' />
+    <SeoHead
+      kind='article'
+      title={copy.title}
+      description={copy.description}
+      pathname={Astro.url.pathname}
+      datePublished={new Date(datePublished)}
+      category='Ambassador stories'
+      image={ogImage}
+    />
+    <script is:inline type='application/ld+json' set:html={JSON.stringify(breadcrumbJsonLd)} />
+    <SiteAnalytics />
+  </head>
+  <body>
+    <div class='shell'>
+      <div class='site-chrome' data-chrome-headroom>
+        <Fragment set:html={headerHtml} />
+      </div>
+      <Fragment set:html={storyMain} />
+      <SiteFooter counts={counts} locale={locale} />
+    </div>
+    <HeaderEnhancer />
+    <LocaleSwitcherScript />
+    <script is:inline>
+      (function () {
+        var root = document.querySelector('.ambassador-v4');
+        if (!root || !('IntersectionObserver' in window)) return;
+        root.classList.add('anim');
+        var observer = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (entry) {
+              if (entry.isIntersecting) {
+                entry.target.classList.add('inview');
+                observer.unobserve(entry.target);
+              }
+            });
+          },
+          { threshold: 0.12, rootMargin: '0px 0px -7% 0px' },
+        );
+        document.querySelectorAll('.ambassador-v4 .v4band').forEach(function (band) {
+          observer.observe(band);
+        });
+      })();
+    </script>
+  </body>
+</html>

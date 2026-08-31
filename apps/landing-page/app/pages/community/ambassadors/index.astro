@@ -5,16 +5,66 @@
  */
 import Layout from '../../../_components/sub-page-layout.astro';
 import '../../../community.css';
-import { localeFromPath } from '../../../i18n';
+import { localeFromPath, localizedHref } from '../../../i18n';
 import {
   getCommunityCopy,
   COMMUNITY_LINKS,
   AMBASSADORS,
   GLYPH,
 } from '../../../community-i18n';
+import { STORY_CARD as CATMAN_CARD } from '../../../_partials/ambassador-catman-i18n';
+import { STORY_CARD as JOSH_CARD } from '../../../_partials/ambassador-josh-i18n';
+import { STORY_CARD as HEATHERM_CARD } from '../../../_partials/ambassador-heatherm-i18n';
 
 const locale = localeFromPath(Astro.url.pathname);
 const copy = getCommunityCopy(locale).ambassadors;
+const href = (path: string) => localizedHref(path, locale);
+const catmanCard = CATMAN_CARD[locale] ?? CATMAN_CARD.en!;
+const joshCard = JOSH_CARD[locale] ?? JOSH_CARD.en!;
+const heathermCard = HEATHERM_CARD[locale] ?? HEATHERM_CARD.en!;
+const storyUi = locale === 'zh'
+  ? {
+      kicker: '大使故事',
+      h2: '他们如何与 OpenDesign <em>结缘并付诸行动</em>。',
+      intro: '认识每位大使的背景、与 OpenDesign 的连接，以及他们已经为本地社区做过的事情。',
+    }
+  : {
+      kicker: 'Ambassador stories',
+      h2: 'How they found OpenDesign&mdash;and <em>what they did next</em>.',
+      intro: 'Meet the people behind the title: their background, their connection to OpenDesign, and the contribution they have already made.',
+    };
+const ambassadorStories = [
+  {
+    slug: 'catman',
+    name: 'CATMAN',
+    place: locale === 'zh' ? '日本' : 'Japan',
+    avatar: '/stories/osaka-kyoto-catman-from-group.jpg',
+    title: catmanCard.title,
+    blurb: catmanCard.blurb,
+  },
+  {
+    slug: 'josh',
+    name: 'Josh',
+    place: locale === 'zh' ? '澳大利亚' : 'Australia',
+    avatar: '/community/ambassadors/assets/josh.jpg',
+    title: joshCard.title,
+    blurb: joshCard.blurb,
+  },
+  {
+    slug: 'heatherm-huang',
+    name: 'Heatherm Huang',
+    place: locale === 'zh' ? '香港' : 'Hong Kong',
+    avatar: '/community/ambassadors/assets/heatherm-huang.jpg',
+    title: heathermCard.title,
+    blurb: heathermCard.blurb,
+  },
+];
+const roster = AMBASSADORS.map((amb, i) => ({
+  ...amb,
+  name: locale === 'zh' ? (amb.nameZh ?? amb.name) : amb.name,
+  place: copy.roster.places[i] ?? (locale === 'zh' ? amb.placeZh : amb.place),
+  storyHref: amb.storySlug ? href('/community/ambassadors/' + amb.storySlug + '/') : undefined,
+}));
 
 const jsonLd = {
   '@context': 'https://schema.org',
@@ -74,6 +124,35 @@ const jsonLd = {
       </div>
     </section>
 
+    <section class="section ambassador-stories" id="stories">
+      <div class="wrap">
+        <div class="section-head">
+          <div>
+            <span class="kicker"><span class="dot"></span>{storyUi.kicker}</span>
+            <h2 class="h-display" set:html={storyUi.h2} />
+          </div>
+          <p class="right">{storyUi.intro}</p>
+        </div>
+
+        <div class="ambassador-story-cards">
+          {ambassadorStories.map((story) => (
+            <a class="ambassador-story-card" href={href('/community/ambassadors/' + story.slug + '/')}>
+              <div class="ambassador-story-portrait">
+                <img src={story.avatar} alt={story.name} loading="lazy" />
+                <span>{story.place}</span>
+              </div>
+              <div class="ambassador-story-copy">
+                <p class="ambassador-story-name">{story.name}</p>
+                <h3>{story.title}</h3>
+                <p>{story.blurb}</p>
+                <span class="ambassador-story-read">{copy.roster.storyCta}<span class="ri" aria-hidden="true">{GLYPH.arrow}</span></span>
+              </div>
+            </a>
+          ))}
+        </div>
+      </div>
+    </section>
+
     <section class="section ambassador-roster" id="roster">
       <div class="wrap">
         <div class="section-head">
@@ -85,16 +164,32 @@ const jsonLd = {
         </div>
 
         <div class="ambassador-cards">
-          {AMBASSADORS.map((amb, i) => (
+          {roster.map((amb) => (
             <article class="ambassador-card">
-              <div class="ambassador-avatar">
-                <img src={amb.avatar} alt={amb.name} loading="lazy" />
-              </div>
+              {amb.storyHref ? (
+                <a class:list={['ambassador-avatar', 'ambassador-avatar-link', { 'ambassador-avatar-placeholder': !amb.avatar }]} href={amb.storyHref} aria-label={copy.roster.storyCta + ': ' + amb.name}>
+                  {amb.avatar
+                    ? <img src={amb.avatar} alt={amb.avatarAlt ?? amb.name} loading="lazy" />
+                    : <span class="ambassador-initials" aria-hidden="true">{amb.initials ?? amb.name.slice(0, 2)}</span>}
+                </a>
+              ) : (
+                <div class:list={['ambassador-avatar', { 'ambassador-avatar-placeholder': !amb.avatar }]}>
+                  {amb.avatar
+                    ? <img src={amb.avatar} alt={amb.avatarAlt ?? amb.name} loading="lazy" />
+                    : <span class="ambassador-initials" aria-hidden="true">{amb.initials ?? amb.name.slice(0, 2)}</span>}
+                </div>
+              )}
               <div class="ambassador-identity">
-                <h3>{amb.name}</h3>
-                <p class="ambassador-place">{copy.roster.places[i]}</p>
+                <h3>{amb.storyHref ? <a href={amb.storyHref}>{amb.name}</a> : amb.name}</h3>
+                <p class="ambassador-place">{amb.place}</p>
               </div>
-              <div class={amb.socials.length ? 'ambassador-links' : 'ambassador-links ambassador-links-empty'}>
+              <div class={amb.socials.length || amb.storyHref ? 'ambassador-links' : 'ambassador-links ambassador-links-empty'}>
+                {amb.storyHref && (
+                  <a class="ambassador-story-cta" href={amb.storyHref}>
+                    {copy.roster.storyCta}
+                    <span class="ri" aria-hidden="true">{GLYPH.arrow}</span>
+                  </a>
+                )}
                 {amb.socials.map((s) => (
                   <a href={s.href} target="_blank" rel="noopener" aria-label={s.label} title={s.type}>
                     <span class="ri" aria-hidden="true">{s.glyph}</span>

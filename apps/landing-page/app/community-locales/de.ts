@@ -230,6 +230,7 @@ const de: DeepPartial<CommunityCopy> = {
         'Kuala Lumpur, Malaysia',
         'Japan',
         'China',
+        'Hongkong',
       ],
     },
   },
