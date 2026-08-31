@@ -94,7 +94,7 @@ export async function resolveMcpWorkspaceContext(
       return null;
     }
     const data = (await resp.json()) as WorkspaceDirectoryResponse;
-    const selected = selectDefaultMcpCandidate(data.items, data.activeWorkspaceId);
+    const selected = selectDefaultMcpCandidate(data.items, data.activeWorkspaceId ?? undefined);
     if (!selected) {
       // 200 with empty items — non-vela (dev provider) or no live membership.
       recordFailure(baseUrl);
