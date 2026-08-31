@@ -1,20 +1,28 @@
 import { agentCapabilities } from './capabilities.js';
 import type { RuntimeAgentDef } from './types.js';
 
+export const OPENCODE_AUTO_PERMISSION_FLAG = '--auto';
 export const OPENCODE_SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
 export const OPENCODE_WORKSPACE_DIR_FLAG = '--dir';
 
 export const OPENCODE_PERMISSION_CAPABILITY = {
   helpArgs: ['run', '--help'],
   capabilityFlags: {
+    [OPENCODE_AUTO_PERMISSION_FLAG]: 'autoPermissionBypass',
     [OPENCODE_SKIP_PERMISSIONS_FLAG]: 'skipPermissions',
   },
 } satisfies Pick<RuntimeAgentDef, 'helpArgs' | 'capabilityFlags'>;
 
 export function appendOpenCodePermissionBypass(args: string[], agentId: string): void {
-  if (agentCapabilities.get(agentId)?.skipPermissions) {
-    args.push(OPENCODE_SKIP_PERMISSIONS_FLAG);
-  }
+  const capabilities = agentCapabilities.get(agentId);
+  // OpenCode replaced the legacy flag with --auto. Prefer the current flag if
+  // a build advertises both, while retaining the old flag for older installs.
+  const bypassFlag = capabilities?.autoPermissionBypass
+    ? OPENCODE_AUTO_PERMISSION_FLAG
+    : capabilities?.skipPermissions
+      ? OPENCODE_SKIP_PERMISSIONS_FLAG
+      : null;
+  if (bypassFlag) args.push(bypassFlag);
 }
 
 /**
