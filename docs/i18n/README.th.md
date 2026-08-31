@@ -329,7 +329,7 @@ pnpm tools-dev run web
 
 เปิด URL ที่ `tools-dev` พิมพ์ออกมา; development ports จะถูกจัดสรรแบบ dynamic เว้นแต่ส่ง port flags ชัดเจน.
 
-Node `~24`, pnpm `10.33.x`. ผู้ใช้ Windows ดู [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). Quickstart เต็ม, env vars, Nix flake และ packaged build flow → [`QUICKSTART.th.md`](QUICKSTART.th.md).
+Node `~24`, pnpm `10.33.x`. ผู้ใช้ Windows ดู [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). Quickstart เต็ม, env vars และ packaged build flow → [`QUICKSTART.th.md`](QUICKSTART.th.md).
 
 ### Workflow เต็ม — จาก brief ถึง artifact
 
