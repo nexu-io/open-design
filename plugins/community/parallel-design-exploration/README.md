@@ -243,29 +243,14 @@ The executable contract lives in [`SKILL.md`](SKILL.md); Open Design-specific pa
 
 ## Validation
 
-The repository includes a lightweight standard-library validator and GitHub Actions workflow.
-
-Run locally:
-
-```bash
-python scripts/validate.py
-```
-
-It checks the pieces most likely to fail silently:
-
-- portable Agent Skills frontmatter keys;
-- `SKILL.md` / `open-design.json` version alignment;
-- preview and template anchor integrity;
-- logical `data-option` ↔ selector-safe `o-*` DOM ids;
-- turn ids and `data-turn` alignment;
-- preview entry existence;
-- canonical canvas-substrate drift.
-
-For Open Design itself, also run:
+From the plugin directory, validate the manifest and distributable package with the Open Design CLI:
 
 ```bash
 od plugin validate .
+od plugin pack .
 ```
+
+The canonical source repository additionally maintains a lightweight contributor-only [protocol validator](https://github.com/tungloong/parallel-design-exploration/blob/main/scripts/validate.py) and [GitHub Actions workflow](https://github.com/tungloong/parallel-design-exploration/blob/main/.github/workflows/validate.yml). Those maintenance files are not part of the Open Design Community package and are not runtime requirements.
 
 ## Project structure
 
@@ -279,14 +264,10 @@ od plugin validate .
 │   └── mobile-ui-exploration.md
 ├── templates/
 │   └── exploration-board.html
-├── references/                      # method and maintainer rationale
-├── scripts/
-│   └── validate.py
-└── .github/workflows/
-    └── validate.yml
+└── references/                      # method and maintainer rationale
 ```
 
-The skill is self-contained for runtime use. The supporting files document the rationale, demonstrate the protocol, and help maintainers verify the package; they are not prerequisites that an agent must load before every run.
+This tree describes the Community package. The skill is self-contained for runtime use; its supporting files document the rationale and demonstrate the protocol, but they are not prerequisites that an agent must load before every run. Contributor-only source-repository automation is linked in the Validation section above.
 
 ## Method references
 
@@ -303,9 +284,9 @@ The protocol is grounded in established design practice rather than a single pro
 
 **v0.10.1 — public-beta hardening.**
 
-The core interaction protocol has been exercised across multiple model/agent combinations and multi-turn explorations. v0.10.1 focuses on portability and silent-failure prevention: selector-safe anchors, wide-artboard overflow behavior, targeted follow-up mutation, accessible reference affordances, portable Agent Skills frontmatter, and automated repository validation.
+The core interaction protocol has been exercised across multiple model/agent combinations and multi-turn explorations. v0.10.1 focuses on portability and silent-failure prevention: selector-safe anchors, wide-artboard overflow behavior, targeted follow-up mutation, accessible reference affordances, and portable Agent Skills frontmatter.
 
-The next public-facing work is a tagged beta release and an Open Design community submission. A real runtime screen recording can be added later without changing the canonical demo assets above.
+The Open Design community submission is under review. A tagged beta release and a real runtime screen recording can follow without changing the canonical demo assets above.
 
 ## License
 
