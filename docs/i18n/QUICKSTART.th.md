@@ -79,7 +79,7 @@ docker compose up -d
 เปิดแอปใน browser:
 
 ```text
-http://localhost:7456
+http://127.0.0.1:7456
 ```
 
 การ start ครั้งแรกอาจใช้เวลาสักครู่ขณะ Docker pull image ล่าสุด.
@@ -255,7 +255,7 @@ ls -la "$OD_BIN"
 
 `OD_DAEMON_URL` ต้องเป็น daemon port จริง เช่น `http://127.0.0.1:7457`, ไม่ใช่ `http://127.0.0.1:0`. ค่า `:0` เป็นเพียง launch hint ภายในสำหรับ "เลือก free port" และไม่ควรรั่วเข้า agent sessions.
 
-สำหรับ daemon-only production mode, daemon จะ serve static Next.js export เองที่ `http://localhost:7456` จึงไม่ต้องมี reverse proxy.
+สำหรับ daemon-only production mode, daemon จะ serve static Next.js export เองที่ `http://127.0.0.1:7456` จึงไม่ต้องมี reverse proxy.
 
 ถ้าวาง nginx ไว้หน้า daemon ให้ SSE routes เป็น unbuffered และ uncompressed. Failure ที่พบบ่อยคือ browser console แสดง `net::ERR_INCOMPLETE_CHUNKED_ENCODING 200 (OK)` หลัง 80-90 วินาที เพราะ nginx `gzip on` buffer chunked SSE responses แม้ daemon จะส่ง `X-Accel-Buffering: no`.
 
