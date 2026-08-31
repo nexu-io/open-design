@@ -429,6 +429,63 @@ test('[P0] @critical preview toolbar keeps share, download, comment, and zoom ac
   await expect(zoomButton).toHaveText('150%');
 });
 
+test('[P0] focused HTML preview forwards Alt+C to Comment Mode', async ({ page }) => {
+  test.setTimeout(T.xlong * 2);
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Focused preview comment shortcut');
+  const shortcutHtml = manualEditHtml().replace('</main>', `
+      <section aria-label="Shortcut guard fixtures">
+        <input aria-label="Shortcut input">
+        <textarea aria-label="Shortcut textarea"></textarea>
+        <div aria-label="Shortcut editor" contenteditable="true" tabindex="0">Editable copy</div>
+      </section>
+    </main>`);
+  await seedHtmlArtifact(page, projectId, 'comment-shortcut.html', shortcutHtml);
+  await page.goto(`/projects/${projectId}/files/comment-shortcut.html`);
+  await openDesignFile(page, 'comment-shortcut.html');
+
+  const preview = page.getByTestId('artifact-preview-frame');
+  const comment = page.getByTestId('board-mode-toggle');
+  await expect(preview).toBeVisible();
+  await expect(preview).toHaveAttribute('data-od-render-mode', 'url-load');
+  await expect(comment).toHaveAttribute('aria-pressed', 'false');
+
+  const frame = artifactPreviewFrame(page);
+  for (const editable of [
+    frame.getByRole('textbox', { name: 'Shortcut input' }),
+    frame.getByRole('textbox', { name: 'Shortcut textarea' }),
+    frame.locator('[contenteditable="true"][aria-label="Shortcut editor"]'),
+  ]) {
+    await editable.click();
+    await page.keyboard.press('Alt+c');
+    await expect(comment).toHaveAttribute('aria-pressed', 'false');
+  }
+
+  await frame.getByRole('heading', { name: 'Original Hero' }).click();
+  await expect.poll(() => page.evaluate(() => (
+    document.activeElement === document.querySelector('iframe[data-testid="artifact-preview-frame"]')
+  ))).toBe(true);
+
+  await page.keyboard.press('Alt+c');
+  await expect(comment).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('Alt+c');
+  await expect(comment).toHaveAttribute('aria-pressed', 'false');
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(preview).toHaveAttribute('data-od-render-mode', 'srcdoc');
+  await expect(frame.locator('html[data-od-edit-mode]')).toHaveCount(1);
+  // Use a non-text Manual Edit target so the artifact does not intentionally
+  // retain Alt+C for its inline contenteditable editor.
+  await frame.getByRole('img', { name: 'Hero' }).click();
+  await expect.poll(() => page.evaluate(() => (
+    document.activeElement === document.querySelector('iframe[data-testid="artifact-preview-frame"]')
+  ))).toBe(true);
+
+  await page.keyboard.press('Alt+c');
+  await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await expect(comment).toHaveAttribute('aria-pressed', 'true');
+});
+
 test('[P1] preview toolbar exports PDF and PPTX through the daemon contracts', async ({ page }) => {
   test.setTimeout(60_000);
 

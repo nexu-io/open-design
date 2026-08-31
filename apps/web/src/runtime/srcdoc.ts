@@ -1795,6 +1795,7 @@ function injectSelectionBridge(
   const script = `<script data-od-selection-bridge>(function(){
   var commentEnabled = ${initialComment};
   var inspectEnabled = ${initialInspect};
+  var commentShortcutEnabled = false;
   // Comment mode has two sub-tools (kept on the host side as boardTool):
   //   'picker' — click-to-select an element for annotation.
   //   'pod'    — pointer-drag a freeform stroke that the host turns into a
@@ -2491,6 +2492,10 @@ function meaningfulDomFallbackTarget(el) {
       }
       return;
     }
+    if (data.type === 'od:comment-shortcut-state') {
+      commentShortcutEnabled = !!data.enabled;
+      return;
+    }
     if (data.type === 'od:preview-scroll-restore') {
       var frame = document.scrollingElement || document.documentElement;
       var el = previewScrollElement();
@@ -2564,6 +2569,38 @@ function meaningfulDomFallbackTarget(el) {
       postOverrides();
       return;
     }
+  });
+  function commentShortcutOwnedTarget(target){
+    if (!target || target.nodeType !== 1) return false;
+    var tag = String(target.tagName || '').toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return true;
+    return !!(target.closest && target.closest(
+      '[contenteditable]:not([contenteditable="false"]), [role="textbox"], .composer, .comment-popover-composer, .monaco-editor'
+    ));
+  }
+  function modalOwnsCommentShortcut(){
+    return !!document.querySelector(
+      '[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]'
+    );
+  }
+  window.addEventListener('keydown', function(ev){
+    if (
+      !commentShortcutEnabled
+      || ev.defaultPrevented
+      || ev.isComposing
+      || ev.repeat
+      || ev.code !== 'KeyC'
+      || !ev.altKey
+      || ev.ctrlKey
+      || ev.metaKey
+      || ev.shiftKey
+      || commentShortcutOwnedTarget(ev.target)
+      || commentShortcutOwnedTarget(document.activeElement)
+      || modalOwnsCommentShortcut()
+    ) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    try { window.parent.postMessage({ type: 'od:comment-shortcut' }, '*'); } catch (_) {}
   });
   function pickerActive(){ return inspectEnabled || (commentEnabled && mode === 'picker'); }
   document.addEventListener('mouseover', function(ev){

@@ -743,6 +743,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   if (window.__odUrlSelectionBridge) return;
   window.__odUrlSelectionBridge = true;
   var commentEnabled = false;
+  var commentShortcutEnabled = false;
   var mode = 'picker';
   var hoveredId = null;
   var drawing = false;
@@ -1130,11 +1131,47 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
       }
       return;
     }
+    if (data.type === 'od:comment-shortcut-state') {
+      commentShortcutEnabled = !!data.enabled;
+      return;
+    }
     if (data.type === 'od:comment-active-target') {
       activeCommentElementId = data.elementId ? String(data.elementId) : null;
       activeCommentSelector = data.selector ? String(data.selector) : null;
       schedulePostActiveCommentTarget();
     }
+  });
+  function commentShortcutOwnedTarget(target){
+    if (!target || target.nodeType !== 1) return false;
+    var tag = String(target.tagName || '').toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return true;
+    return !!(target.closest && target.closest(
+      '[contenteditable]:not([contenteditable="false"]), [role="textbox"], .composer, .comment-popover-composer, .monaco-editor'
+    ));
+  }
+  function modalOwnsCommentShortcut(){
+    return !!document.querySelector(
+      '[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]'
+    );
+  }
+  window.addEventListener('keydown', function(ev){
+    if (
+      !commentShortcutEnabled
+      || ev.defaultPrevented
+      || ev.isComposing
+      || ev.repeat
+      || ev.code !== 'KeyC'
+      || !ev.altKey
+      || ev.ctrlKey
+      || ev.metaKey
+      || ev.shiftKey
+      || commentShortcutOwnedTarget(ev.target)
+      || commentShortcutOwnedTarget(document.activeElement)
+      || modalOwnsCommentShortcut()
+    ) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    try { window.parent.postMessage({ type: 'od:comment-shortcut' }, '*'); } catch (_) {}
   });
   document.addEventListener('mouseover', function(ev){
     if (!commentEnabled || mode !== 'picker') return;

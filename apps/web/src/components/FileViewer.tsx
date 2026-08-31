@@ -3448,6 +3448,20 @@ function isEditableKeyboardTarget(target: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
 }
 
+function isCommentShortcutOwnedTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  if (isEditableKeyboardTarget(target)) return true;
+  return target.closest(
+    '[contenteditable]:not([contenteditable="false"]), [role="textbox"], .composer, .comment-popover-composer, .monaco-editor',
+  ) !== null;
+}
+
+function modalOwnsKeyboardInput(): boolean {
+  return document.querySelector(
+    '[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]',
+  ) !== null;
+}
+
 function normalizeDeckVisualSource(source: string): string {
   return source
     .replace(/\s+(?=<\/body\s*>)/gi, '')
@@ -10851,6 +10865,21 @@ function HtmlViewer({
     frame: HTMLIFrameElement;
     generation: string;
   } | null>(null);
+  const commentShortcutEnabled = (
+    workspaceActive
+    && mode === 'preview'
+    && !inTabPresent
+    && !presentFullscreenPending
+  );
+  const postCommentShortcutState = useCallback((
+    target: HTMLIFrameElement | null,
+    enabled = commentShortcutEnabled,
+  ) => {
+    target?.contentWindow?.postMessage({
+      type: 'od:comment-shortcut-state',
+      enabled,
+    }, '*');
+  }, [commentShortcutEnabled]);
   // Eager readiness keeps the existing bridge features responsive. Navigation
   // recovery uses the separately challenged witness below because Chromium can
   // abort about:srcdoc after the head bridge has already announced itself.
@@ -10938,6 +10967,7 @@ function HtmlViewer({
     }, '*');
   }, [mode, workspaceActive]);
   const replayPreviewBridgeModes = useCallback((target: HTMLIFrameElement | null) => {
+    postCommentShortcutState(target);
     postPreviewObservabilityHostState(target);
     if (!workspaceActive) return;
     const win = target?.contentWindow;
@@ -10976,6 +11006,7 @@ function HtmlViewer({
     boardTool,
     inspectMode,
     manualEditMode,
+    postCommentShortcutState,
     postAndConsumePreviewRuntimeState,
     postPreviewObservabilityHostState,
     selectedManualEditTarget?.id,
@@ -10986,7 +11017,12 @@ function HtmlViewer({
     const srcDocFrame = srcDocPreviewIframeRef.current;
     postPreviewObservabilityHostState(urlFrame);
     if (srcDocFrame !== urlFrame) postPreviewObservabilityHostState(srcDocFrame);
-  }, [postPreviewObservabilityHostState]);
+    const frames = [urlFrame, srcDocFrame];
+    for (const frame of frames) postCommentShortcutState(frame);
+    return () => {
+      for (const frame of frames) postCommentShortcutState(frame, false);
+    };
+  }, [postCommentShortcutState, postPreviewObservabilityHostState, srcDoc, useUrlLoadPreview]);
   // Only materialized while the in-tab presentation overlay is up — building
   // it eagerly would re-run buildSrcdoc on every source edit for a document
   // nobody is presenting.
@@ -14526,6 +14562,46 @@ function HtmlViewer({
     activateComment();
   }
 
+  const activateCommentToolRef = useRef(activateCommentTool);
+  activateCommentToolRef.current = activateCommentTool;
+  useEffect(() => {
+    if (!commentShortcutEnabled) return;
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: unknown } | null;
+      if (
+        data?.type !== 'od:comment-shortcut'
+        || !isActivePreviewIframeSource(event.source)
+        || modalOwnsKeyboardInput()
+      ) return;
+      activateCommentToolRef.current();
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [commentShortcutEnabled, isActivePreviewIframeSource]);
+  useEffect(() => {
+    if (!commentShortcutEnabled) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented
+        || event.isComposing
+        || event.repeat
+        || event.code !== 'KeyC'
+        || !event.altKey
+        || event.ctrlKey
+        || event.metaKey
+        || event.shiftKey
+        || isCommentShortcutOwnedTarget(event.target)
+        || isCommentShortcutOwnedTarget(document.activeElement)
+        || modalOwnsKeyboardInput()
+      ) return;
+      event.preventDefault();
+      event.stopPropagation();
+      activateCommentToolRef.current();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [commentShortcutEnabled]);
+
   function activateCommentCreateTool(returnFocusTarget?: HTMLElement | null) {
     if (returnFocusTarget) commentPanelReturnFocusRef.current = returnFocusTarget;
     fireArtifactToolbarClick('comment');
@@ -16207,10 +16283,11 @@ function HtmlViewer({
                   type="button"
                   className={`viewer-action viewer-action-icon viewer-comment-toggle od-tooltip${boardMode && !commentCreateMode && boardTool === 'inspect' ? ' active' : ''}`}
                   data-testid="board-mode-toggle"
-                  data-tooltip={t('fileViewer.comment')}
+                  data-tooltip={`${t('fileViewer.comment')} (Alt+C)`}
                   data-tooltip-placement="bottom"
-                  title={t('fileViewer.comment')}
+                  title={`${t('fileViewer.comment')} (Alt+C)`}
                   aria-label={t('fileViewer.comment')}
+                  aria-keyshortcuts="Alt+C"
                   aria-pressed={boardMode && !commentCreateMode && boardTool === 'inspect'}
                   onClick={activateCommentTool}
                 >
