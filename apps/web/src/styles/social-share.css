@@ -38,10 +38,23 @@
 .social-share-button__icon {
   flex: 0 0 auto;
   width: 18px;
+  height: 18px;
   color: var(--social-share-brand);
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  /* Lock the icon container so icons with different intrinsic glyph widths
+   * (e.g. `instagram-line` vs the wider `book-open-line` used for
+   * xiaohongshu) sit inside the same box. Without this the label and the
+   * brand stripe inherit the icon's horizontal offset and the buttons in
+   * the same grid row visually drift (nexu-io/open-design#7660). */
+  aspect-ratio: 1 / 1;
+}
+
+.social-share-button__icon > svg,
+.social-share-button__icon > i {
+  width: 15px;
+  height: 15px;
 }
 
 .social-share-button span:last-child {
