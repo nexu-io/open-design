@@ -17,11 +17,13 @@ triggers:
   - "page with real product shots"
   - "hero photography for my site"
 od:
-  mode: prototype
-  surface: web
-  platform: desktop
+  mode: image
+  surface: image
   scenario: marketing
-  category: web-artifacts
+  category: image-generation
+  preview:
+    type: html
+    entry: example.html
   craft:
     requires:
       - typography
@@ -102,30 +104,52 @@ credentials, and file handling.
 
 ```bash
 # POSIX bash. One slot per invocation; wait for each before starting the next.
+
+# Read one field out of a dispatcher JSON line. Parser failures propagate:
+# a malformed line, a missing python3, or a non-object payload must stop the
+# run. Defaulting a missing field to "" or 0 here is what silently produces a
+# page referencing an image nobody generated.
+od_json_field() {
+  python3 -c '
+import json, sys
+obj = json.load(sys.stdin)
+if not isinstance(obj, dict):
+    sys.exit("dispatcher output is not a JSON object")
+sys.stdout.write(str(obj.get(sys.argv[1], "")))
+' "$1"
+}
+
+# Write the prompt as literal text. The quoted heredoc delimiter turns off
+# expansion and command substitution, so quotes, backticks and $(...) inside a
+# brand prompt stay data instead of becoming shell syntax. Never paste prompt
+# text into a double-quoted --prompt argument.
+cat > .od-prompt.txt <<'PROMPT'
+<subject sentence for this slot>
+
+<style block, verbatim, identical for every slot>
+PROMPT
+
 out=$("$OD_NODE_BIN" "$OD_BIN" media generate \
   --project "$OD_PROJECT_ID" \
   --surface image \
   --model "<imageModel from metadata>" \
   --aspect "<slot aspect>" \
   --output "assets/<slot-id>.png" \
-  --prompt "<subject + verbatim style block>")
+  --prompt-file .od-prompt.txt)
 ec=$?
 if [ "$ec" -ne 0 ]; then echo "$out" >&2; exit "$ec"; fi
 
 last=$(printf '%s\n' "$out" | tail -1)
-task_id=$(printf '%s\n' "$last" |
-  python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('taskId',''))" 2>/dev/null)
-since=$(printf '%s\n' "$last" |
-  python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince',0))" 2>/dev/null)
-since="${since:-0}"
+task_id=$(printf '%s\n' "$last" | od_json_field taskId) || exit 1
+since=$(printf '%s\n' "$last" | od_json_field nextSince) || exit 1
+[ -n "$since" ] || since=0
 
 while [ -n "$task_id" ]; do
   out=$("$OD_NODE_BIN" "$OD_BIN" media wait "$task_id" --since "$since")
   ec=$?
   last=$(printf '%s\n' "$out" | tail -1)
-  since=$(printf '%s\n' "$last" |
-    python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince',0))" 2>/dev/null)
-  since="${since:-0}"
+  since=$(printf '%s\n' "$last" | od_json_field nextSince) || exit 1
+  [ -n "$since" ] || since=0
   if [ "$ec" -eq 0 ]; then
     task_id=""
   elif [ "$ec" -ne 2 ]; then
@@ -134,12 +158,24 @@ while [ -n "$task_id" ]; do
   fi
 done
 
-printf '%s\n' "$last"
+# The slot only succeeded if the dispatcher actually named a file. An exit
+# code of 0 with no file field is a failure, not a quiet success.
+file_name=$(printf '%s\n' "$last" | python3 -c '
+import json, sys
+obj = json.load(sys.stdin)
+f = obj.get("file") if isinstance(obj, dict) else None
+if not isinstance(f, dict) or not f.get("name"):
+    sys.exit("dispatcher returned no file: " + json.dumps(obj)[:400])
+print(f["name"])
+') || exit 1
+
+rm -f .od-prompt.txt
+printf '%s\n' "$file_name"
 ```
 
-The final line is JSON containing `{"file": {"name": "...", ...}}`. Record the
-returned filename against its slot — the name you asked for is not guaranteed
-to be the name you get.
+`$file_name` is the name the dispatcher actually wrote. Record it against its
+slot and reference that name in the markup — the name you asked for via
+`--output` is not guaranteed to be the name you get.
 
 If a slot fails, regenerate that slot alone. Do not restart the set.
 
@@ -176,10 +212,13 @@ Requirements at placement time:
 
 ## Step 6 — Verify
 
-Run the linter first; it costs seconds and needs no model call:
+Run the linter first; it costs seconds and needs no model call. Point it at
+the file this run actually wrote — this workflow names pages for what they
+are, so there is usually no `index.html`:
 
 ```bash
-"$OD_NODE_BIN" "$OD_BIN" lint index.html --fail-on p0
+page="landing.html"   # the page file this run created
+"$OD_NODE_BIN" "$OD_BIN" lint "$page" --fail-on p0
 ```
 
 Exit `1` means findings at or above the threshold; `--json` gives a

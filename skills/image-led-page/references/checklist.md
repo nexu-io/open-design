@@ -37,4 +37,5 @@ pixels, not cascade outcomes.
       id.
 - [ ] If the page travels as a single file: opened from an empty directory
       with every image still rendering.
-- [ ] `od lint index.html --fail-on p0` exits 0.
+- [ ] `od lint "$page" --fail-on p0` exits 0, where `$page` is the file this
+      run wrote — not a fixed `index.html`.
