@@ -965,6 +965,20 @@ export function createLocalMcpBriefStore() {
   return createBriefStore();
 }
 
+/** Handler body for MCP `resources/templates/list`. Returns an empty
+ * template list for now; in future this would enumerate project-level
+ * resource templates. Exported so tests can call it directly without a
+ * real server, which is the pattern used throughout this module. */
+export async function _listMcpResourceTemplates(): Promise<{
+  resourceTemplates: Array<{
+    uriPattern: string;
+    name: string;
+    description?: string;
+  }>;
+}> {
+  return { resourceTemplates: [] };
+}
+
 /** Handler body for MCP `resources/list`. Exported so tests can call it
  * directly without a real server. Mirrors the inline logic in
  * `runMcpStdio` to keep the test harness cheap. */
@@ -1931,9 +1945,10 @@ export async function runMcpStdio(options: RunMcpOptions): Promise<void> {
     return await _readMcpResource(daemonTarget, uri);
   }));
 
-  server.setRequestHandler(ListResourceTemplatesRequestSchema, withMcpActivity(async () => ({
-    resourceTemplates: [],
-  })));
+  server.setRequestHandler(
+    ListResourceTemplatesRequestSchema,
+    withMcpActivity(_listMcpResourceTemplates),
+  );
 
   server.setRequestHandler(CallToolRequestSchema, withMcpActivity(async (req) => {
     const name = req.params?.name;
