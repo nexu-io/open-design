@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { lstat, mkdir, open, readdir, rm, symlink, writeFile, type FileHandle } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { cac } from "cac";
@@ -429,6 +430,15 @@ async function spawnDaemonRuntime(
   const webPort = parsePortOption(options.webPort, "--web-port");
   const logHandle = await openAppLog(config, APP_KEYS.DAEMON);
 
+  // Point VELA_BIN to the mock vela wrapper for local development.
+  // On Windows the daemon's executable resolver rejects extensionless files,
+  // so use the `.cmd` shim (which spawns `node` on the mock agent) instead of
+  // the shebang-style extensionless `vela` used on POSIX.
+  const mockVelaBin = path.join(config.workspaceRoot, "mocks", "bin", "vela.cmd");
+  const existingVelaBin = process.env.VELA_BIN;
+  const useMock = process.platform === "win32" && !existingVelaBin && existsSync(mockVelaBin);
+  const velaBin = useMock ? mockVelaBin : existingVelaBin;
+  const fakeVelaDelay = useMock && !process.env.FAKE_VELA_LOGIN_DELAY_MS ? "2000" : undefined;
   try {
     await ensureDaemonCliBuild(config, logHandle);
     await logHandle.write(`\n[tools-dev] launching daemon at ${new Date().toISOString()}\n`);
@@ -451,6 +461,8 @@ async function spawnDaemonRuntime(
         ...(webPort == null ? {} : { [SIDECAR_ENV.WEB_PORT]: String(webPort) }),
         ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
         ...(spawnOptions.requireDesktopAuth ? { OD_REQUIRE_DESKTOP_AUTH: "1" } : {}),
+        ...(velaBin !== undefined ? { VELA_BIN: velaBin } : {}),
+        ...(fakeVelaDelay !== undefined ? { FAKE_VELA_LOGIN_DELAY_MS: fakeVelaDelay } : {}),
       },
       logHandle,
     });

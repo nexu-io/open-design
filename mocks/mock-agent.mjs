@@ -25,7 +25,7 @@ import { renderAsKimi }        from './lib/format-kimi.mjs';
 import { renderAsPlain }       from './lib/format-plain.mjs';
 import { runAcpServer }        from './lib/format-acp.mjs';
 import { runVelaAcpServer }    from './lib/format-vela.mjs';
-import { runVelaLogin, runVelaModels } from './lib/vela-subcommands.mjs';
+import { runVelaLogin, runVelaModels, runVelaBilling } from './lib/vela-subcommands.mjs';
 
 function parseArgs(argv) {
   const opts = { as: null, noDelay: false, reportFile: null, positionals: [] };
@@ -72,6 +72,12 @@ async function readStdinIfPiped() {
 }
 
 async function main() {
+  // Handle --version for vela (used by daemon's executable-resolution probe) BEFORE arg parsing
+  if (process.argv.includes('--version') && process.argv.includes('--as') && process.argv[process.argv.indexOf('--as') + 1] === 'vela') {
+    process.stdout.write('vela 0.0.0-fake\n');
+    process.exit(0);
+  }
+
   const opts = parseArgs(process.argv.slice(2));
   if (!opts.as) {
     failUsage(
@@ -91,6 +97,7 @@ async function main() {
     const cmd = (opts.positionals[0] || '').trim();
     if (cmd === 'login')  return runVelaLogin();
     if (cmd === 'models') return runVelaModels();
+    if (cmd === 'billing' && opts.positionals[1] === 'summary') return runVelaBilling();
     // Default: `agent run --runtime opencode` — fall through to the ACP
     // server below with the vela-flavored protocol.
   }

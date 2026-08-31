@@ -72,6 +72,9 @@ specs/change/active
 .ralph/
 docs/superpowers/
 
+# PowerShell service management scripts (local only)
+manage-opendesign.ps1
+
 # Nix and direnv
 .direnv/
 .envrc
