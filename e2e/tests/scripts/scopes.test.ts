@@ -91,6 +91,24 @@ describe("workflow scope planner", () => {
       scopes: { windows_tools_pack_payload_tests_required: true },
       enabled: { windows_tools_pack_payload_tests: true },
     });
+    expect(plan("pr", ["plugins/_official/scenarios/od-next-strategy/assets/core-system-prompt.md"]))
+      .toMatchObject({
+        scopes: {
+          daemon_tests_required: true,
+          tools_pack_tests_required: true,
+          ui_p0_validation_required: true,
+          web_tests_required: true,
+          windows_tools_pack_payload_tests_required: true,
+          workspace_validation_required: true,
+        },
+        enabled: {
+          daemon_unit_tests: true,
+          ui_p0: true,
+          web_workspace_tests: true,
+          windows_tools_pack_payload_tests: true,
+        },
+        trace: { ruleHits: { "od-next-strategy-content": 1 } },
+      });
     expect(plan("pr", ["docs/spec.md"])).toMatchObject({
       scopes: { workspace_validation_required: false },
       enabled: { preflight: true, workspace_unit_tests: true, ui_p0: false },

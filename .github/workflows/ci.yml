@@ -319,6 +319,7 @@ jobs:
           pnpm --filter @open-design/contracts test
           pnpm --filter @open-design/host test
           pnpm --filter @open-design/platform test
+          pnpm --filter @open-design/plugin-runtime test
           pnpm --filter @open-design/sidecar test
           pnpm --filter @open-design/sidecar-proto test
           if [ "${{ fromJSON(needs.plan.outputs.scopes).terminal_scene_required }}" = "true" ]; then
@@ -386,6 +387,9 @@ jobs:
 
       - name: Windows launcher payload archive tests
         run: pnpm --filter @open-design/tools-pack exec vitest run tests/launcher/windows/payload.test.ts
+
+      - name: Windows OD Next resource payload test
+        run: pnpm --filter @open-design/tools-pack exec vitest run tests/win-resources.test.ts -t "bundles the OD Next strategy package"
 
   web_workspace_tests:
     name: Web workspace tests (${{ matrix.shard }}/2)

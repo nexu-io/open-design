@@ -31,12 +31,24 @@ async function createWorkspaceFixture(workspaceRoot: string): Promise<void> {
     recursive: true,
   });
   await mkdir(join(workspaceRoot, "craft", "sample"), { recursive: true });
-  await mkdir(join(workspaceRoot, "plugins", "_official", "sample"), {
+  const odNextRoot = join(
+    workspaceRoot,
+    "plugins",
+    "_official",
+    "scenarios",
+    "od-next-strategy",
+  );
+  await mkdir(join(odNextRoot, "assets"), {
     recursive: true,
   });
   await writeFile(
-    join(workspaceRoot, "plugins", "_official", "sample", "open-design.json"),
-    "{\"id\":\"sample\"}\n",
+    join(odNextRoot, "open-design.json"),
+    "{\"name\":\"od-next-strategy\",\"version\":\"2.0.0\"}\n",
+    "utf8",
+  );
+  await writeFile(
+    join(odNextRoot, "assets", "core-system-prompt.md"),
+    "# OD Next Strategy V2\n\nPackaged strategy fixture.\n",
     "utf8",
   );
   await mkdir(join(workspaceRoot, "plugins", "registry", "community"), {
@@ -88,6 +100,34 @@ async function createDshRuntimeFixture(workspaceRoot: string): Promise<void> {
 }
 
 describe("prepareResourceTree", () => {
+  it("bundles the OD Next strategy package into the Windows resource payload", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-od-next-resources-"));
+    const workspaceRoot = join(root, "workspace");
+    const resourceRoot = join(root, "materialized", "open-design");
+    const cache = new ToolPackCache(join(root, "cache"));
+    const config = { workspaceRoot } as ToolPackConfig;
+    const paths = { resourceRoot } as WinPaths;
+
+    try {
+      await createWorkspaceFixture(workspaceRoot);
+      await prepareResourceTree(config, paths, cache, { materialize: true });
+
+      const packagedRoot = join(
+        resourceRoot,
+        "plugins",
+        "_official",
+        "scenarios",
+        "od-next-strategy",
+      );
+      await expect(readFile(join(packagedRoot, "open-design.json"), "utf8"))
+        .resolves.toContain('"name":"od-next-strategy"');
+      await expect(readFile(join(packagedRoot, "assets", "core-system-prompt.md"), "utf8"))
+        .resolves.toContain("OD Next Strategy V2");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  }, RESOURCE_TREE_CACHE_TEST_TIMEOUT_MS);
+
   it("bundles the DeepSeek Harness runtime into the Windows resource tree", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-dsh-runtime-"));
     const workspaceRoot = join(root, "workspace");

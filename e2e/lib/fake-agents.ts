@@ -177,6 +177,10 @@ process.stdin.on('data', (chunk) => {
   if (emitted) return;
   if (emitTimer) clearTimeout(emitTimer);
   emitTimer = setTimeout(() => {
+    if (
+      prompt.includes('<open_design_prompt_bundle')
+      && !prompt.includes('</open_design_prompt_bundle>')
+    ) return;
     void emitRun(prompt).catch(failUnhandled);
   }, 25);
 });
@@ -191,6 +195,7 @@ if (process.stdin.isTTY || agentId === 'deepseek') {
 async function emitRun(promptText) {
   if (emitted) return;
   emitted = true;
+  const odNextRequestText = odNextUserFirstPrompt(promptText);
   if (promptText.includes('Hold the daemon run open until canceled')) {
     // Stay running (busy) without ever emitting a terminal result, so a test
     // can queue a follow-up turn and interrupt it via send-now. Keep the event
@@ -243,15 +248,15 @@ async function emitRun(promptText) {
     emitOdNextClarificationRun(promptText);
     return;
   }
-  if (promptText.includes('Create an OD Next clarification canary artifact')) {
+  if (odNextRequestText.includes('Create an OD Next clarification canary artifact')) {
     emitOdNextClarificationRequest(promptText);
     return;
   }
-  if (promptText.includes('Create an OD Next blocked canary')) {
+  if (odNextRequestText.includes('Create an OD Next blocked canary')) {
     emitOdNextBlockedRun();
     return;
   }
-  if (promptText.includes('Create an OD Next active canary artifact')) {
+  if (odNextRequestText.includes('Create an OD Next active canary artifact')) {
     emitOdNextPlanningRun(promptText);
     return;
   }
@@ -361,14 +366,57 @@ function promptIdentity(promptText, label) {
 
 const odNextIdentityPath = join(__dirname, 'od-next-' + agentId + '-identity.json');
 
+function odNextUserFirstPrompt(promptText) {
+  const open = '<user_first_prompt>';
+  const start = promptText.indexOf(open);
+  if (start < 0) return promptText;
+  const end = promptText.indexOf('</user_first_prompt>', start + open.length);
+  return end < 0 ? promptText.slice(start + open.length) : promptText.slice(start + open.length, end);
+}
+
+function odNextRecipeAttribute(promptText, name) {
+  const recipeStart = promptText.indexOf('<recipe_identity ');
+  const recipeEnd = promptText.indexOf('>', recipeStart);
+  const prefix = name + '="';
+  const start = promptText.indexOf(prefix, recipeStart);
+  if (recipeStart < 0 || recipeEnd < 0 || start < recipeStart || start >= recipeEnd) {
+    throw new Error('OD Next fake could not read recipe attribute ' + name);
+  }
+  const valueStart = start + prefix.length;
+  const valueEnd = promptText.indexOf('"', valueStart);
+  if (valueEnd < 0 || valueEnd > recipeEnd) {
+    throw new Error('OD Next fake could not finish recipe attribute ' + name);
+  }
+  return promptText.slice(valueStart, valueEnd);
+}
+
+function odNextPlanStrategyField(promptText, name) {
+  const prefix = '"' + name + '": "';
+  const start = promptText.indexOf(prefix);
+  if (start < 0) throw new Error('OD Next fake could not read plan strategy field ' + name);
+  const valueStart = start + prefix.length;
+  const valueEnd = promptText.indexOf('"', valueStart);
+  if (valueEnd < 0) throw new Error('OD Next fake could not finish plan strategy field ' + name);
+  return promptText.slice(valueStart, valueEnd);
+}
+
 function odNextPromptIdentity(promptText) {
-  if (promptText.includes('- strategy: ')) {
+  let identity = null;
+  if (promptText.includes('<recipe_identity ')) {
+    identity = {
+      version: odNextRecipeAttribute(promptText, 'strategy_version'),
+      snapshotId: odNextRecipeAttribute(promptText, 'applied_snapshot'),
+      packageHash: odNextPlanStrategyField(promptText, 'packageHash'),
+    };
+  } else if (promptText.includes('- strategy: ')) {
     const strategy = promptIdentity(promptText, 'strategy').split('@');
-    const identity = {
+    identity = {
       version: strategy[1],
       snapshotId: promptIdentity(promptText, 'applied snapshot'),
       packageHash: promptIdentity(promptText, 'strategy package'),
     };
+  }
+  if (identity) {
     writeFileSync(odNextIdentityPath, JSON.stringify(identity), 'utf8');
     return identity;
   }
@@ -384,7 +432,7 @@ function emitOdNextPlanningRun(promptText, inputStage = 'request') {
       packageHash: identity.packageHash, snapshotId: identity.snapshotId,
     },
     taskProfile: {
-      schemaVersion: '2', taskType: 'prototype', taskProfileVersion: '2.0.0',
+      schemaVersion: '2', taskType: 'prototype', taskProfileVersion: '2.2.0',
       goal: 'Create an OD Next active canary artifact', contextAndAudience: 'Local rollout operators',
       inputsAndReferences: ['user-request'], constraints: [],
       canonicalDeliverable: { id: 'canary', kind: 'prototype', format: 'html' },

@@ -19,6 +19,14 @@ import {
   packagedHomeFirstRunSubmitExpression,
   type PackagedHomeFirstRunResult,
 } from '@/vitest/packaged-home-first-run';
+import {
+  assertPackagedOdNextResult,
+  assertPackagedOdNextStartResult,
+  packagedOdNextSnapshotExpression,
+  packagedOdNextStartExpression,
+  type PackagedOdNextResult,
+  type PackagedOdNextStartResult,
+} from '@/vitest/packaged-od-next-smoke';
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
 import {
   assertPackagedPtySmokeResult,
@@ -422,11 +430,13 @@ macDescribe('packaged mac runtime smoke', () => {
   let installedAppPath: string | null = null;
   let started = false;
 
-  test('[P0] @electron-smoke cold first Home run renders assistant output without refresh or workspace-tab switching', async () => {
+  test('[P0] @electron-smoke cold first Home run and packaged OD Next task complete without renderer recovery', async () => {
     const fakeAgentRoot = join(toolsPackDir, 'fixtures', `home-first-run-${namespace}`);
+    const previousLocalSyntheticCanary = process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY;
     let firstRunInstalledAppPath: string | null = null;
     let firstRunStarted = false;
     try {
+      process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
       await resetPackagedRuntimeState();
       const fakeAgents = await createFakeAgentRuntimes({
         root: fakeAgentRoot,
@@ -472,7 +482,46 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(firstRun.workspaceTabClicksBeforeOutput).toBe(0);
       expect(firstRun.navigationEntryCountAfter).toBe(firstRun.navigationEntryCountBefore);
       expect(firstRun.performanceTimeOriginAfter).toBe(firstRun.performanceTimeOriginBefore);
+
+      const odNextStartInspect = await runToolsPackJson<MacInspectResult>('inspect', [
+        '--expr',
+        packagedOdNextStartExpression(),
+      ]);
+      expect(odNextStartInspect.eval?.ok).toBe(true);
+      const odNextStart = assertPackagedOdNextStartResult(odNextStartInspect.eval?.value);
+      expect(odNextStart).toMatchObject({
+        configStatus: 200,
+        effectiveMode: 'active',
+        initialInputStage: 'request',
+        initialTerminal: false,
+        projectStatus: 200,
+        requestedMode: 'active',
+        runStatus: 200,
+      });
+      expect(odNextStart.conversationId).not.toBe('');
+      expect(odNextStart.appliedPluginSnapshotId).not.toBe('');
+      expect(odNextStart.runId).not.toBe('');
+      expect(odNextStart.strategyTaskProfile).toBe('prototype');
+      expect(odNextStart.taskExecutionId).not.toBe('');
+
+      const odNext = await waitForPackagedOdNextResult(odNextStart);
+      expect(odNext).toMatchObject({
+        assistantContainsExpectedOutput: true,
+        fileContainsExpectedHeading: true,
+        fileStatus: 200,
+        outcome: 'completed',
+        physicalRunCount: 2,
+        status: 'succeeded',
+        taskExecutionId: odNextStart.taskExecutionId,
+        terminal: true,
+      });
+      expect(odNext.activeRunId).not.toBe(odNextStart.runId);
     } finally {
+      if (previousLocalSyntheticCanary == null) {
+        delete process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY;
+      } else {
+        process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = previousLocalSyntheticCanary;
+      }
       if (firstRunStarted || firstRunInstalledAppPath != null) {
         await runToolsPackJson<MacUninstallResult>('uninstall').catch((error: unknown) => {
           console.error('failed to uninstall packaged first-Home-run app during cleanup', error);
@@ -480,7 +529,7 @@ macDescribe('packaged mac runtime smoke', () => {
       }
       await rm(fakeAgentRoot, { force: true, recursive: true }).catch(() => undefined);
     }
-  }, 180_000);
+  }, 240_000);
 
   test('installs, starts, inspects, stops, and uninstalls the built mac artifact', async () => {
     const report = await createPackagedSmokeReport('mac');
@@ -2335,6 +2384,38 @@ async function waitForPackagedHomeFirstRunOutput(): Promise<PackagedHomeFirstRun
   );
 }
 
+async function waitForPackagedOdNextResult(
+  start: PackagedOdNextStartResult,
+): Promise<PackagedOdNextResult> {
+  const timeoutMs = 60_000;
+  const startedAt = Date.now();
+  let lastResult: unknown = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const inspect = await runToolsPackJson<MacInspectResult>('inspect', [
+      '--expr',
+      packagedOdNextSnapshotExpression(start),
+    ]);
+    lastResult = inspect;
+    if (inspect.eval?.ok === true) {
+      const snapshot = assertPackagedOdNextResult(inspect.eval.value);
+      lastResult = snapshot;
+      if (
+        snapshot.outcome === 'completed'
+        && snapshot.terminal === true
+        && snapshot.physicalRunCount === 2
+        && snapshot.fileContainsExpectedHeading
+        && snapshot.assistantContainsExpectedOutput
+      ) {
+        return snapshot;
+      }
+    }
+    await delay(750);
+  }
+
+  throw new Error(`packaged mac OD Next task did not complete: ${formatUnknown(lastResult)}`);
+}
+
 async function waitForPackagedHomeFirstRunSubmit(): Promise<void> {
   const timeoutMs = 15_000;
   const startedAt = Date.now();
@@ -2863,6 +2944,7 @@ async function seedPackagedHomeFirstRunConfig(
     mediaProviders: {},
     agentModels: { codex: { model: 'default', reasoning: 'default' } },
     agentCliEnv: { codex: codexEnv },
+    odNextStrategyMode: 'off',
   });
 }
 

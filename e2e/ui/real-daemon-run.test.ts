@@ -2,7 +2,8 @@ import { expect, test } from '@/playwright/suite';
 import { ACTIVE_ARTIFACT_PREVIEW_SELECTOR } from '@/playwright/artifact-preview';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
+import { ensureRailOpen, openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
+import { settingsSurface } from '@/playwright/amr';
 import { runErrorCard } from '@/playwright/chat';
 import { openAllProjectFiles } from '@/playwright/workspace';
 import type { Locator, Page, Request, Response } from '@playwright/test';
@@ -11,7 +12,7 @@ import {
   createFakeAgentRuntimes,
   FAKE_AGENT_RUNTIME_IDS,
 } from '@/playwright/fake-agents';
-import { trackRunRequests } from '@/playwright/mock-factory';
+import { suppressWhatsNew, trackRunRequests } from '@/playwright/mock-factory';
 import type { FakeAcpHandshakeRuntime, FakeAgentId } from '@/playwright/fake-agents';
 import { T } from '@/timeouts';
 
@@ -73,6 +74,13 @@ test.beforeAll(async ({ toolsDev }) => {
 test.beforeEach(async ({ page }) => {
   test.setTimeout(T.xlong);
 
+  // The What's New highlight dialog resolves on the Home surface from
+  // /api/whats-new and, when the daemon has real content, renders a modal
+  // backdrop that intercepts pointer events on the entry rail. Keep this
+  // file's Settings flow deterministic by suppressing it, matching the other
+  // settings specs (e.g. settings-api-protocol.test.ts).
+  await suppressWhatsNew(page);
+
   await resetDaemonAppConfig(page);
 
   await page.addInitScript(({ key, codexEnv }) => {
@@ -132,11 +140,7 @@ test('[P0] real daemon run streams, persists, and previews an artifact', async (
 });
 
 test('[P0] local OD Next active canary follows one public task across physical runs', async ({ page }) => {
-  test.skip(
-    process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
-      || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
-    'requires the explicit local synthetic rollout canary flags',
-  );
+  test.setTimeout(T.xlong * 2);
   await prepareLocalOdNextCanary(page, 'OD Next local active canary');
 
   const createResponsePromise = page.waitForResponse(isCreateRunResponse);
@@ -184,11 +188,7 @@ test('[P0] local OD Next active canary follows one public task across physical r
 });
 
 test('[P0] local OD Next clarification canary preserves one taskExecutionId through the public form', async ({ page }) => {
-  test.skip(
-    process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
-      || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
-    'requires the explicit local synthetic rollout canary flags',
-  );
+  test.setTimeout(T.xlong * 2);
   await prepareLocalOdNextCanary(page, 'OD Next local clarification canary');
 
   const createResponsePromise = page.waitForResponse(isCreateRunResponse);
@@ -235,11 +235,7 @@ test('[P0] local OD Next clarification canary preserves one taskExecutionId thro
 });
 
 test('[P0] local OD Next public canaries project blocked and canceled terminal mappings', async ({ page }) => {
-  test.skip(
-    process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
-      || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
-    'requires the explicit local synthetic rollout canary flags',
-  );
+  test.setTimeout(T.xlong * 2);
   await prepareLocalOdNextCanary(page, 'OD Next local blocked canary');
   const blockedResponsePromise = page.waitForResponse(isCreateRunResponse);
   await sendPrompt(page, 'Create an OD Next blocked canary');
@@ -279,7 +275,25 @@ test('[P0] local OD Next public canaries project blocked and canceled terminal m
   });
 });
 
-test('[P0] OD Next app-config switch takes effect immediately and rejects invalid modes atomically', async ({ page }) => {
+test('[P0] local OD Next off keeps automatic design generation on the ordinary route', async ({ page }) => {
+  await prepareLocalOdNextCanary(page, 'OD Next local off fallback', 'off');
+
+  const response = await sendPrompt(page, 'Create a deterministic smoke artifact');
+  const created = await response.json() as {
+    pluginId?: string;
+    strategyTask?: unknown;
+    taskExecutionId?: string;
+  };
+  expect(created.strategyTask).toBeUndefined();
+  expect(created.taskExecutionId).toBeUndefined();
+  expect(created.pluginId).toBe('example-web-prototype');
+
+  const { projectId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, [GENERATED_FILE]);
+  await expect(artifactPreviewFrame(page).getByRole('heading', { name: GENERATED_HEADING })).toBeVisible();
+});
+
+test('[P0] OD Next Settings switch takes effect immediately and rejects invalid modes atomically', async ({ page }) => {
   const readRollout = async () => {
     const response = await page.request.get('/api/strategies/od-next/rollout');
     expect(response.ok(), await response.text()).toBeTruthy();
@@ -292,10 +306,22 @@ test('[P0] OD Next app-config switch takes effect immediately and rejects invali
     }).status;
   };
 
-  const activeWrite = await page.request.put('/api/app-config', {
-    data: { odNextStrategyMode: 'active' },
-  });
-  expect(activeWrite.ok(), await activeWrite.text()).toBeTruthy();
+  await gotoEntryHome(page);
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-settings-button').click();
+  const settings = settingsSurface(page);
+  await expect(settings).toBeVisible();
+  await settings.getByRole('button', { name: /Open Design Labs/ }).click();
+  const harnessSwitch = settings.getByTestId('labs-harness-switch');
+  await expect(harnessSwitch).toHaveAttribute('aria-checked', 'false');
+  await expect(harnessSwitch).toHaveAttribute('aria-disabled', 'false');
+  const activeWrite = page.waitForResponse((response) => (
+    new URL(response.url()).pathname === '/api/app-config'
+      && response.request().method() === 'PUT'
+  ));
+  await harnessSwitch.click();
+  expect((await activeWrite).ok()).toBeTruthy();
+  await expect(harnessSwitch).toHaveAttribute('aria-checked', 'true');
   await expect.poll(readRollout).toMatchObject({
     requestedMode: 'active',
     requestedModeSource: 'app_config',
@@ -1192,7 +1218,16 @@ async function createHandshakeRefusingKimiProject(page: Page, name: string) {
   await dismissPrivacyDialog(page);
 }
 
-async function prepareLocalOdNextCanary(page: Page, name: string): Promise<void> {
+async function prepareLocalOdNextCanary(
+  page: Page,
+  name: string,
+  rolloutMode: 'active' | 'off' = 'active',
+): Promise<void> {
+  const rolloutResponse = await page.request.put('/api/app-config', {
+    data: { odNextStrategyMode: rolloutMode },
+  });
+  expect(rolloutResponse.ok(), await rolloutResponse.text()).toBeTruthy();
+
   // Exercise the shipped Design-mode New Project flow, rather than hand-
   // constructing the create payload. EntryShell leaves the silently selected
   // default out of explicit plugin authority; the daemon derives and stamps

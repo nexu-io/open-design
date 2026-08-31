@@ -10,6 +10,7 @@ import { promisify } from 'node:util';
 
 import { describe, expect, test } from 'vitest';
 
+import { createFakeAgentRuntimes } from '@/fake-agents';
 import {
   packagedAppShellExpression,
   packagedAppRouteUrl,
@@ -19,6 +20,14 @@ import {
   runPackagedAppShellPhase,
   type PackagedAppShellState,
 } from '@/vitest/packaged-app-shell';
+import {
+  assertPackagedOdNextResult,
+  assertPackagedOdNextStartResult,
+  readPackagedOdNextViaHttp,
+  startPackagedOdNextViaHttp,
+  type PackagedOdNextResult,
+  type PackagedOdNextStartResult,
+} from '@/vitest/packaged-od-next-smoke';
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
 import { resolvePackagedSmokeProfile } from '@/vitest/packaged-smoke-profile';
 import {
@@ -571,8 +580,10 @@ winDescribe('packaged windows runtime smoke', () => {
   let installed = false;
   let started = false;
 
-  test('[P2] installs, starts, inspects with eval and screenshot, stops, and uninstalls the built windows artifact', async () => {
+  test('[P0] installs, runs packaged OD Next, inspects, stops, and uninstalls the built windows artifact', async () => {
     const report = await createPackagedSmokeReport('win');
+    const fakeAgentRoot = join(toolsPackDir, 'fixtures', `od-next-${namespace}`);
+    const previousLocalSyntheticCanary = process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY;
     let passed = false;
     const timings: SmokeTiming[] = [];
     let appShell: PackagedAppShellState | 'skipped' = 'skipped';
@@ -586,12 +597,22 @@ winDescribe('packaged windows runtime smoke', () => {
     let logs: LogsResult | { skipped: true } = { skipped: true };
     let stop: WinStopResult | { skipped: true } = { skipped: true };
     let postUpdateHealth: HealthEvalValue | { skipped: true } = { skipped: true };
+    let odNext: PackagedOdNextResult | { skipped: true } = { skipped: true };
     let upgradePersistence: UpgradePersistenceSeed | { skipped: true } = { skipped: true };
     let payloadFixture: ToolsServeUpdaterFixture | null = null;
     let intermediateUpdateFixture: Awaited<ReturnType<typeof resolveLocalUpdateFixture>> | null = null;
     let localUpdateFixture: Awaited<ReturnType<typeof resolveLocalUpdateFixture>> | null = null;
+    let codexEnv: Record<string, string> | null = null;
     const updateEnv = captureUpdateEnv();
     try {
+      if (verifyCoreOnly) {
+        process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+        const fakeAgents = await createFakeAgentRuntimes({
+          root: fakeAgentRoot,
+          runtimeIds: ['codex'],
+        });
+        codexEnv = fakeAgents.codex.env;
+      }
       if (!verifyCoreOnly && updateScenario.channel === 'beta') {
         expect(namespace).toBe('release-beta-win');
       }
@@ -677,7 +698,12 @@ winDescribe('packaged windows runtime smoke', () => {
         await resetPackagedRuntimeDataRoot();
       }
 
-      await seedPackagedOnboardingComplete();
+      if (verifyCoreOnly) {
+        if (codexEnv == null) throw new Error('packaged Windows OD Next smoke did not create its fake Codex runtime');
+        await seedPackagedOdNextConfig(codexEnv);
+      } else {
+        await seedPackagedOnboardingComplete();
+      }
 
       const startDesktop = async (step: string): Promise<WinStartResult> => {
         const nextStart = await measureSmokeStep(timings, step, async () => runToolsPackJson<WinStartResult>('start'));
@@ -746,6 +772,46 @@ winDescribe('packaged windows runtime smoke', () => {
           seededOnboardingCompleted,
           'daemon did not read the seeded onboardingCompleted config; check that the packaged data root still resolves to the tools-pack runtime namespace root',
         ).toBe(true);
+      }
+
+      if (verifyCoreOnly) {
+        const packagedDaemonUrl = inspect.daemonStatus?.url;
+        if (packagedDaemonUrl == null) {
+          throw new Error('packaged Windows OD Next smoke could not resolve the installed daemon URL');
+        }
+        const odNextStart = await measureSmokeStep(timings, 'packaged OD Next start', async () =>
+          startPackagedOdNextViaHttp(packagedDaemonUrl),
+        );
+        assertPackagedOdNextStartResult(odNextStart);
+        expect(odNextStart).toMatchObject({
+          configStatus: 200,
+          effectiveMode: 'active',
+          initialInputStage: 'request',
+          initialTerminal: false,
+          projectStatus: 200,
+          requestedMode: 'active',
+          runStatus: 200,
+        });
+        expect(odNextStart.conversationId).not.toBe('');
+        expect(odNextStart.appliedPluginSnapshotId).not.toBe('');
+        expect(odNextStart.runId).not.toBe('');
+        expect(odNextStart.strategyTaskProfile).toBe('prototype');
+        expect(odNextStart.taskExecutionId).not.toBe('');
+
+        odNext = await measureSmokeStep(timings, 'packaged OD Next completed artifact', async () =>
+          waitForPackagedOdNextResult(packagedDaemonUrl, odNextStart),
+        );
+        expect(odNext).toMatchObject({
+          assistantContainsExpectedOutput: true,
+          fileContainsExpectedHeading: true,
+          fileStatus: 200,
+          outcome: 'completed',
+          physicalRunCount: 2,
+          status: 'succeeded',
+          taskExecutionId: odNextStart.taskExecutionId,
+          terminal: true,
+        });
+        expect(odNext.activeRunId).not.toBe(odNextStart.runId);
       }
 
       const ptyInspect = await measureSmokeStep(timings, 'packaged PTY capability', async () =>
@@ -1036,6 +1102,7 @@ winDescribe('packaged windows runtime smoke', () => {
         intermediatePayloadUpdate,
         logs: 'skipped' in logs ? logs : summarizeLogs(logs),
         namespace,
+        odNext,
         payloadUpdate,
         pty,
         updaterRecovery,
@@ -1067,6 +1134,11 @@ winDescribe('packaged windows runtime smoke', () => {
       printLifecycleTimings('uninstall lifecycle timings', uninstall.lifecycleTimings);
       passed = true;
     } finally {
+      if (previousLocalSyntheticCanary == null) {
+        delete process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY;
+      } else {
+        process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = previousLocalSyntheticCanary;
+      }
       restoreUpdateEnv(updateEnv);
       await payloadFixture?.close().catch((error: unknown) => {
         console.error('failed to close payload update fixture', error);
@@ -1090,6 +1162,8 @@ winDescribe('packaged windows runtime smoke', () => {
         });
         installed = false;
       }
+
+      await rm(fakeAgentRoot, { force: true, recursive: true }).catch(() => undefined);
 
       printSmokeTimings(timings);
     }
@@ -2091,6 +2165,38 @@ async function waitForHealthyDesktop(): Promise<WinInspectResult> {
   throw new Error(`packaged windows runtime did not become healthy: ${formatUnknown(lastResult)}`);
 }
 
+async function waitForPackagedOdNextResult(
+  daemonUrl: string,
+  start: PackagedOdNextStartResult,
+): Promise<PackagedOdNextResult> {
+  const timeoutMs = 60_000;
+  const startedAt = Date.now();
+  let lastResult: unknown = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const snapshot = assertPackagedOdNextResult(
+        await readPackagedOdNextViaHttp(daemonUrl, start),
+      );
+      lastResult = snapshot;
+      if (
+        snapshot.outcome === 'completed'
+        && snapshot.terminal === true
+        && snapshot.physicalRunCount === 2
+        && snapshot.fileContainsExpectedHeading
+        && snapshot.assistantContainsExpectedOutput
+      ) {
+        return snapshot;
+      }
+    } catch (error) {
+      lastResult = error;
+    }
+    await delay(750);
+  }
+
+  throw new Error(`packaged Windows OD Next task did not complete: ${formatUnknown(lastResult)}`);
+}
+
 async function maybeCoreHealthFallback(inspect: WinInspectResult): Promise<WinInspectResult | null> {
   if (!verifyCoreOnly) return null;
   if (inspect.status != null) return null;
@@ -2756,9 +2862,30 @@ async function seedPackagedOnboardingComplete(): Promise<void> {
   // the seed elsewhere (the AppData fallback), so the daemon never saw it and
   // the app stuck on onboarding once the Skip button was removed. This mirrors
   // the macOS smoke's seed, which already writes under runtimeNamespaceRoot.
+  await seedPackagedAppConfig({ onboardingCompleted: true });
+}
+
+async function seedPackagedOdNextConfig(codexEnv: Record<string, string>): Promise<void> {
+  await seedPackagedAppConfig({
+    mode: 'daemon',
+    apiKey: '',
+    baseUrl: 'https://api.anthropic.com',
+    model: 'claude-sonnet-4-5',
+    agentId: 'codex',
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    mediaProviders: {},
+    agentModels: { codex: { model: 'default', reasoning: 'default' } },
+    agentCliEnv: { codex: codexEnv },
+    odNextStrategyMode: 'active',
+  });
+}
+
+async function seedPackagedAppConfig(config: Record<string, unknown>): Promise<void> {
   const configPath = join(runtimeNamespaceRoot, 'data', 'app-config.json');
   await mkdir(dirname(configPath), { recursive: true });
-  await writeFile(configPath, `${JSON.stringify({ onboardingCompleted: true }, null, 2)}\n`, 'utf8');
+  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
 }
 
 function isPathInside(filePath: string, expectedRoot: string): boolean {

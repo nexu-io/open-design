@@ -414,7 +414,64 @@ describe("packaged smoke workflow", () => {
     expect(job).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).windows_tools)");
     expect(job).toContain("fromJSON(needs.plan.outputs.run).windows_tools_pack_payload_tests");
     expect(job).toContain("pnpm --filter @open-design/tools-pack exec vitest run tests/launcher/windows/payload.test.ts");
+    expect(job).toContain(
+      'pnpm --filter @open-design/tools-pack exec vitest run tests/win-resources.test.ts -t "bundles the OD Next strategy package"',
+    );
     expect(validate).toContain("windows_tools_pack_payload_tests");
+  });
+
+  it("[P0] keeps every launched OD Next public canary mandatory in the merge-gated UI lane", async () => {
+    const source = await readFile(join(e2eRoot, "ui", "real-daemon-run.test.ts"), "utf8");
+    const fixture = await readFile(join(e2eRoot, "lib", "playwright", "suite.ts"), "utf8");
+    const requiredCases = [
+      "local OD Next active canary follows one public task across physical runs",
+      "local OD Next clarification canary preserves one taskExecutionId through the public form",
+      "local OD Next public canaries project blocked and canceled terminal mappings",
+      "local OD Next off keeps automatic design generation on the ordinary route",
+      "OD Next Settings switch takes effect immediately and rejects invalid modes atomically",
+    ];
+
+    for (const title of requiredCases) {
+      const start = source.indexOf(`test('[P0] ${title}'`);
+      expect(start, title).toBeGreaterThanOrEqual(0);
+      const next = source.indexOf("\ntest(", start + 1);
+      const body = source.slice(start, next < 0 ? source.length : next);
+      expect(body, `${title} must not be conditionally skipped`).not.toContain("test.skip");
+    }
+    expect(uiP0Groups["project-runtime"].files).toContain("ui/real-daemon-run.test.ts");
+    expect(fixture).toContain("OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY: '1'");
+  });
+
+  it("[P0] runs the OD Next active artifact chain inside macOS and Windows packaged smokes", async () => {
+    const [macSpec, winSpec, fixture, prereleaseWorkflow, winCanaryWorkflow] = await Promise.all([
+      readFile(join(e2eRoot, "specs", "mac.spec.ts"), "utf8"),
+      readFile(join(e2eRoot, "specs", "win.spec.ts"), "utf8"),
+      readFile(join(e2eRoot, "lib", "vitest", "packaged-od-next-smoke.ts"), "utf8"),
+      readFile(releasePrereleaseWorkflowPath, "utf8"),
+      readFile(join(workspaceRoot, ".github", "workflows", "main-prerelease-win-smoke.yml"), "utf8"),
+    ]);
+
+    expect(macSpec).toContain("[P0] @electron-smoke cold first Home run and packaged OD Next task complete");
+    expect(macSpec).toContain("packagedOdNextStartExpression()");
+    expect(macSpec).toContain("waitForPackagedOdNextResult(odNextStart)");
+    expect(winSpec).toContain("[P0] installs, runs packaged OD Next, inspects, stops, and uninstalls");
+    expect(winSpec).toContain("startPackagedOdNextViaHttp(packagedDaemonUrl)");
+    expect(winSpec).toContain("waitForPackagedOdNextResult(packagedDaemonUrl, odNextStart)");
+    expect(fixture).toContain("odNextStrategyMode: 'active'");
+    expect(fixture).toContain("physicalRunCount");
+    expect(fixture).toContain("od-next-active-canary.html");
+
+    const macArmBuild = sectionBetween(prereleaseWorkflow, "  build_mac:", "  build_mac_intel:");
+    const macIntelBuild = sectionBetween(prereleaseWorkflow, "  build_mac_intel:", "  build_win:");
+    const winBuild = sectionBetween(prereleaseWorkflow, "  build_win:", "  build_linux:");
+    expect(macArmBuild).toContain("runs-on: macos-14");
+    expect(macArmBuild).toContain("pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts");
+    expect(macIntelBuild).toContain("runs-on: macos-15-intel");
+    expect(macIntelBuild).toContain("pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts");
+    expect(winBuild).toContain("runs-on: windows-latest");
+    expect(winBuild).toContain("pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts");
+    expect(winCanaryWorkflow).toContain("runs-on: windows-latest");
+    expect(winCanaryWorkflow).toContain("pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts");
   });
 
   it("[P2] limits manual blob guard checks to changed files against main", async () => {
@@ -1408,6 +1465,7 @@ process.stdin.on("end", () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     const workspaceUnit = sectionBetween(workflow, "  workspace_unit_tests:", "  daemon_unit_tests:");
 
+    expect(workspaceUnit).toContain("pnpm --filter @open-design/plugin-runtime test");
     expect(workspaceUnit).toContain(`if [ "\${{ fromJSON(needs.plan.outputs.scopes).tools_pack_tests_required }}" = "true" ]; then
             pnpm --filter @open-design/desktop build
             pnpm --filter @open-design/desktop test

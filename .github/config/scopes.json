@@ -53,6 +53,7 @@
         "tools/pack/src/cache/", "tools/pack/src/config/", "tools/pack/src/launcher/",
         "tools/pack/src/resources/", "tools/pack/src/updates/", "tools/pack/src/versioning/",
         "tools/pack/src/win/", "tools/pack/tests/launcher/windows/", "tools/pack/resources/win/",
+        "plugins/_official/scenarios/od-next-strategy/",
         "packages/launcher-proto/src/", "packages/sidecar-proto/src/"
       ],
       "exact": [
@@ -121,6 +122,12 @@
       "id": "runtime-content",
       "match": { "prefixes": ["scripts/", "assets/", "skills/", "prompt-templates/", "design-systems/", "design-templates/", "craft/"] },
       "effects": ["daemon_tests_required", "web_tests_required"], "confidence": "medium"
+    },
+    {
+      "id": "od-next-strategy-content",
+      "match": { "prefixes": ["plugins/_official/scenarios/od-next-strategy/"] },
+      "effects": ["daemon_tests_required", "web_tests_required", "tools_pack_tests_required", "windows_tools_pack_payload_tests_required", "ui_p0_validation_required", "workspace_validation_required"],
+      "confidence": "medium"
     },
     {
       "id": "script-contract-tests", "match": { "prefixes": ["e2e/tests/scripts/"] },

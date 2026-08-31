@@ -55,6 +55,10 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         // fake runtime configuration and request headers.
         await toolsDev.startWeb({
           AMR_HOME: join(toolsDev.root, 'scratch', 'amr-home'),
+          // OD Next UI canaries opt in per test through app-config. Supplying
+          // only this hermetic fixture gate leaves ordinary tests off while
+          // ensuring the launched strategy path is executable in CI.
+          OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY: '1',
         });
         await warmPlaywrightWebRuntime(toolsDev.url.web('/'));
         await warmPlaywrightDaemonRuntime(toolsDev.url.daemon('/api/health'));
