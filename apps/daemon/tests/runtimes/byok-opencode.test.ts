@@ -305,6 +305,32 @@ describe('byok-opencode runtime config', () => {
     )?.modelId).toBe(`${BYOK_OPENCODE_PROVIDER_ID}/models/google/gemini-3.7-flash`);
   });
 
+  it('collapses explicit version suffixes to /v1beta the same way the connection test does', () => {
+    for (const suffix of ['/v1', '/v1beta', '/v1alpha']) {
+      expect(buildOpenCodeByokProviderConfig(
+        { protocol: 'google', apiKey: 'gw-key', baseUrl: `https://gateway.example/gemini${suffix}` },
+        'google/gemini-3.7-flash',
+      )?.config).toMatchObject({
+        provider: {
+          [BYOK_OPENCODE_PROVIDER_ID]: {
+            options: { baseURL: 'https://gateway.example/gemini/v1beta' },
+          },
+        },
+      });
+    }
+  });
+
+  it('keeps an unparseable Google base URL for the downstream provider-config guard', () => {
+    expect(buildOpenCodeByokProviderConfig(
+      { protocol: 'google', apiKey: 'gw-key', baseUrl: 'not a url' },
+      'gemini-3.5-flash',
+    )?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: { options: { baseURL: 'not a url' } },
+      },
+    });
+  });
+
   it('preserves Azure deployment-based URL mode for classic Azure OpenAI resources', () => {
     expect(buildOpenCodeByokProviderConfig(
       { protocol: 'azure', apiKey: 'azure-key', baseUrl: 'https://example.openai.azure.com', apiVersion: '2024-10-21' },
