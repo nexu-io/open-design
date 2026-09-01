@@ -479,7 +479,8 @@ export function attachAcpSession({
     if (
       name !== 'assistant_message_lifecycle' &&
       name !== 'model_step_lifecycle' &&
-      name !== 'model_retry'
+      name !== 'model_retry' &&
+      name !== 'opencode_compaction'
     ) {
       return false;
     }

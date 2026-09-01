@@ -545,6 +545,27 @@ describe('AssistantMessage status badge updates (Bug A)', () => {
     expect(screen.getByText('compacting context')).toBeTruthy();
     expect(screen.getByText('Compacting conversation history after a context-length error')).toBeTruthy();
   });
+
+  it('suppresses legacy persisted OpenCode compaction lifecycle statuses', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          events: [
+            { kind: 'text', text: 'Visible answer' } as ChatMessage['events'][number],
+            {
+              kind: 'status',
+              label: 'opencode_compaction',
+            } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+      />,
+    );
+
+    expect(screen.getByText('Visible answer')).toBeTruthy();
+    expect(screen.queryByText('opencode_compaction')).toBeNull();
+  });
 });
 
 describe('AssistantMessage thinking blocks', () => {

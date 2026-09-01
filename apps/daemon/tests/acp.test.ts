@@ -476,6 +476,88 @@ test('attachAcpSession forwards ACP status message details', () => {
   assert.equal(status?.detail, 'Compacting conversation history after a context-length error');
 });
 
+test('attachAcpSession records OpenCode compaction lifecycle as diagnostic observability', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'describe the project',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'opencode_compaction',
+    phase: 'requested',
+    status: 'running',
+    reason: 'automatic',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Answer after compaction' },
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'tool_call',
+    toolCallId: 'post-compaction-tool',
+    kind: 'read',
+    title: 'Read after compaction',
+    status: 'pending',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'tool_call_update',
+    toolCallId: 'post-compaction-tool',
+    status: 'completed',
+    rawOutput: 'continuation output',
+  });
+  assert.equal(child.stdin.writableEnded, false);
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const agentPayloads = events
+    .filter((entry) => entry.event === 'agent')
+    .map((entry) => entry.payload as Record<string, unknown>);
+  assert.equal(
+    agentPayloads.some(
+      (payload) => payload.type === 'status' && payload.label === 'opencode_compaction',
+    ),
+    false,
+  );
+  const diagnostic = agentPayloads.find(
+    (payload) => payload.type === 'diagnostic' && payload.name === 'opencode_compaction',
+  );
+  assert.ok(diagnostic);
+  assert.equal(diagnostic.source, 'amr-opencode');
+  assert.equal(diagnostic.phase, 'requested');
+  assert.equal(diagnostic.status, 'running');
+  assert.equal(diagnostic.reason, 'automatic');
+  assert.equal(typeof diagnostic.elapsedMs, 'number');
+
+  assert.deepEqual(
+    agentPayloads
+      .filter((payload) => payload.type === 'text_delta')
+      .map((payload) => payload.delta),
+    ['Answer after compaction'],
+  );
+  assert.ok(
+    agentPayloads.some(
+      (payload) =>
+        payload.type === 'tool_use' &&
+        payload.id === acpTelemetryToolCallId('post-compaction-tool'),
+    ),
+  );
+  assert.ok(
+    agentPayloads.some(
+      (payload) =>
+        payload.type === 'tool_result' &&
+        payload.toolUseId === acpTelemetryToolCallId('post-compaction-tool'),
+    ),
+  );
+});
+
 test('attachAcpSession suppresses split duplicate DSML artifact text and preserves trailing prose', () => {
   const child = new FakeAcpChild();
   const events: Array<{ event: string; payload: unknown }> = [];
