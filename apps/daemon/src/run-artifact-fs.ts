@@ -27,7 +27,12 @@ import {
 // (`DESIGN.md`). Preview modules (`preview/*.html`) are already covered by the
 // artifact-extension check; they are classified at diff time.
 function isTrackedRunFile(name: string): boolean {
-  return isArtifactPath(name) || isDesignSystemFile(name) || isRenderDependencyPath(name);
+  return (
+    isArtifactPath(name) ||
+    isDesignSystemFile(name) ||
+    isRenderDependencyPath(name) ||
+    name.endsWith('.artifact.json')
+  );
 }
 
 const RENDER_DEPENDENCY_EXTENSIONS = new Set([
@@ -341,14 +346,21 @@ export function diffRunArtifacts(
     // only. Normalize separators so the design-system / preview signals work on
     // Windows project runs, not just POSIX.
     const classifyPath = filePath.replace(/\\/g, '/');
-    if (isArtifactPath(classifyPath)) {
+    const isManifest = classifyPath.endsWith('.artifact.json');
+    const hasCompanionManifest = after.has(`${filePath}.artifact.json`) || after.has(`${filePath.replace(/\//g, '\\')}.artifact.json`);
+    if (isArtifactPath(classifyPath) || isManifest || hasCompanionManifest) {
       if (isNew) created += 1;
       else modified += 1;
-      touchedPaths.push(filePath);
+      const targetPath = isManifest ? filePath.slice(0, -'.artifact.json'.length) : filePath;
+      if (!touchedPaths.includes(targetPath)) {
+        touchedPaths.push(targetPath);
+      }
       if (contentChanged) {
         if (isNew) contentCreated += 1;
         else contentModified += 1;
-        contentTouchedPaths.push(filePath);
+        if (!contentTouchedPaths.includes(targetPath)) {
+          contentTouchedPaths.push(targetPath);
+        }
         if (isSupportingMediaPath(classifyPath)) supportingMediaTouched += 1;
       }
     }

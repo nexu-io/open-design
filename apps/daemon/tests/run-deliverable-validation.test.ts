@@ -5,6 +5,10 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { validateRunDeliverable } from '../src/run-deliverable-validation.js';
+import {
+  diffRunArtifacts,
+  snapshotProjectArtifacts,
+} from '../src/run-artifact-fs.js';
 
 const temporaryRoots: string[] = [];
 
@@ -339,6 +343,61 @@ describe('run deliverable validation', () => {
         valid: false,
         validation: 'entry_not_touched',
         entryFile: 'index.html',
+      });
+    });
+
+    it('integrates with diffRunArtifacts for export-only manifest creation', async () => {
+      const fixture = await projectFixture({
+        'index.html': '<!doctype html><title>Old prototype</title>',
+      });
+      const projectRoot = path.join(fixture.projectsRoot, fixture.projectId);
+      const before = snapshotProjectArtifacts(projectRoot);
+
+      // Simulate writing a markdown export deliverable with companion manifest
+      await fs.writeFile(
+        path.join(projectRoot, 'design-export.md'),
+        '# Design Export',
+        'utf8',
+      );
+      await fs.writeFile(
+        path.join(projectRoot, 'design-export.md.artifact.json'),
+        JSON.stringify({
+          version: 1,
+          kind: 'markdown-document',
+          title: 'design-export.md',
+          entry: 'design-export.md',
+          renderer: 'markdown',
+          status: 'complete',
+          exports: ['md'],
+          metadata: {
+            task: 'export',
+          },
+        }),
+        'utf8',
+      );
+
+      const after = snapshotProjectArtifacts(projectRoot);
+      const diff = diffRunArtifacts(before, after);
+
+      expect(diff.touched).toBeGreaterThanOrEqual(1);
+      expect(diff.touchedPaths).toContain(path.join(projectRoot, 'design-export.md'));
+
+      await expect(
+        validateRunDeliverable({
+          ...fixture,
+          runStatus: 'succeeded',
+          artifactCount: diff.touched,
+          touchedPaths: diff.touchedPaths,
+          projectMetadata: {
+            kind: 'other',
+            entryFile: 'index.html',
+          },
+        }),
+      ).resolves.toMatchObject({
+        valid: true,
+        validation: 'valid',
+        entryFile: 'design-export.md',
+        artifactKind: 'text',
       });
     });
   });

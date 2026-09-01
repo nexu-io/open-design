@@ -214,7 +214,10 @@ export function foldEventIntoRunSideEffectLedger(
     ledger.pendingWritePathById.delete(id);
     if (readToolResultIsError(data)) return; // a failed write does not count
     ledger.writtenFilePaths.add(path);
-    if (isArtifactPath(path)) ledger.artifactPaths.add(path);
+    if (isArtifactPath(path) || path.endsWith('.artifact.json')) {
+      const target = path.endsWith('.artifact.json') ? path.slice(0, -'.artifact.json'.length) : path;
+      ledger.artifactPaths.add(target);
+    }
     if (isDesignSystemFile(path)) ledger.designSystemFileWritten = true;
     if (isPreviewModulePath(path)) ledger.previewModulePaths.add(path);
   }

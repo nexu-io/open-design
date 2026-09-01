@@ -48,14 +48,24 @@ export const WRITE_OR_EDIT_TOOL_NAMES: ReadonlySet<string> = new Set([
   'str_replace_edit',
   'MultiEdit',
   'multi_edit',
+  'create_artifact',
 ]);
 
 // Exported so the incremental ledger extracts the written path identically.
 export function extractToolFilePath(input: unknown): string | null {
   if (!input || typeof input !== 'object') return null;
-  const obj = input as { file_path?: unknown; path?: unknown };
+  const obj = input as {
+    file_path?: unknown;
+    path?: unknown;
+    filename?: unknown;
+    filePath?: unknown;
+    TargetFile?: unknown;
+  };
   if (typeof obj.file_path === 'string' && obj.file_path) return obj.file_path;
   if (typeof obj.path === 'string' && obj.path) return obj.path;
+  if (typeof obj.filename === 'string' && obj.filename) return obj.filename;
+  if (typeof obj.filePath === 'string' && obj.filePath) return obj.filePath;
+  if (typeof obj.TargetFile === 'string' && obj.TargetFile) return obj.TargetFile;
   return null;
 }
 
