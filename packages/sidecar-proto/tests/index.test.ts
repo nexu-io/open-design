@@ -338,6 +338,47 @@ describe("open-design sidecar contract", () => {
     ).toThrow();
   });
 
+  it("validates deterministic desktop frame-render IPC inputs", () => {
+    expect(
+      normalizeDesktopSidecarMessage({
+        input: {
+          baseHref: "file:///project/composition/",
+          fps: 30,
+          height: 720,
+          html: "<!doctype html><main data-composition-id=\"main\"></main>",
+          outputDir: "/tmp/open-design-frames",
+          width: 1280,
+        },
+        type: SIDECAR_MESSAGES.RENDER_FRAMES,
+      }),
+    ).toEqual({
+      input: {
+        baseHref: "file:///project/composition/",
+        fps: 30,
+        height: 720,
+        html: "<!doctype html><main data-composition-id=\"main\"></main>",
+        outputDir: "/tmp/open-design-frames",
+        width: 1280,
+      },
+      type: "render-frames",
+    });
+
+    for (const input of [
+      { fps: 0, height: 720, html: "<p>x</p>", outputDir: "/tmp/x", width: 1280 },
+      { fps: 241, height: 720, html: "<p>x</p>", outputDir: "/tmp/x", width: 1280 },
+      { height: 0, html: "<p>x</p>", outputDir: "/tmp/x", width: 1280 },
+      { height: 720, html: "", outputDir: "/tmp/x", width: 1280 },
+      { height: 720, html: "<p>x</p>", outputDir: "relative", width: 1280 },
+      { height: 720, html: "<p>x</p>", outputDir: "/tmp/x", width: 8193 },
+      { bogus: true, height: 720, html: "<p>x</p>", outputDir: "/tmp/x", width: 1280 },
+    ]) {
+      expect(() => normalizeDesktopSidecarMessage({
+        input,
+        type: SIDECAR_MESSAGES.RENDER_FRAMES,
+      })).toThrow();
+    }
+  });
+
   it("accepts PNG/JPEG artifact image export and rejects WebP up front", () => {
     // The off-screen Electron renderer (nativeImage) can only encode PNG/JPEG.
     for (const imageFormat of ["png", "jpeg"] as const) {

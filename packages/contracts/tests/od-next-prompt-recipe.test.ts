@@ -7,6 +7,7 @@ import {
   renderOdNextRuntimeFactsV2,
   composeOdNextStrategyStableRequestContextV2,
   odNextPromptCacheIdentityV2,
+  resolveOdNextDeckFrameworkMode,
   type OdNextStrategyRequestRecipeV2,
 } from '../src/prompts/od-next-strategy.js';
 import {
@@ -48,6 +49,109 @@ const recipe: OdNextStrategyRequestRecipeV2 = {
 };
 
 describe('OD Next V2 prompt recipe', () => {
+  it('pins the canonical Deck Protocol v1 framework into PPT requests only', () => {
+    const pptRecipe: OdNextStrategyRequestRecipeV2 = {
+      ...recipe,
+      taskType: 'ppt',
+      taskSkill: '# Presentation\n\nProduce the declared editable HTML deck.',
+    };
+
+    const prompt = composeOdNextStrategyRequestPromptV2(pptRecipe);
+    const bundledTaskSkill = composeOdNextStrategyBundleHeadV2(pptRecipe)
+      .sessionSkills.taskTypeSkill.body;
+
+    expect(prompt).toContain('OD Deck Protocol v1');
+    expect(prompt).toContain('data-od-deck-protocol="1"');
+    expect(prompt).toContain("type: 'od:deck-ready'");
+    expect(prompt).toContain("type: 'od:slide-state'");
+    expect(prompt).toContain('## Final handoff — filesystem');
+    expect(bundledTaskSkill).toBe(pptRecipe.taskSkill);
+    expect(bundledTaskSkill).not.toContain('OD Deck Protocol v1');
+    expect(prompt.match(/^## Task Skill —/gm)).toHaveLength(1);
+
+    const prototypePrompt = composeOdNextStrategyRequestPromptV2(recipe);
+    expect(prototypePrompt).not.toContain('data-od-deck-protocol="1"');
+    expect(prototypePrompt).not.toContain("type: 'od:deck-ready'");
+
+    const prototypeDeckPrompt = composeOdNextStrategyRequestPromptV2(recipe, {
+      deckIntent: true,
+    });
+    expect(prototypeDeckPrompt).toContain('name="deck-framework"');
+    expect(prototypeDeckPrompt).toContain('data-od-deck-protocol="1"');
+    expect(prototypeDeckPrompt).toContain("type: 'od:deck-ready'");
+
+    const stableDeckContext = composeOdNextStrategyStableRequestContextV2({
+      deckIntent: true,
+    });
+    expect(stableDeckContext).toContain('name="deck-framework"');
+    expect(stableDeckContext).toContain('data-od-deck-protocol="1"');
+
+    const textArtifactRecipe: OdNextStrategyRequestRecipeV2 = {
+      ...pptRecipe,
+      executionProfile: 'text_artifact',
+    };
+    const textArtifactPrompt = composeOdNextStrategyRequestPromptV2(textArtifactRecipe);
+    const textArtifactBundleSkill = composeOdNextStrategyBundleHeadV2(textArtifactRecipe)
+      .sessionSkills.taskTypeSkill.body;
+    const textArtifactStableContext = composeOdNextStrategyStableRequestContextV2(
+      { deckIntent: true },
+      'text_artifact',
+    );
+    for (const text of [textArtifactPrompt, textArtifactStableContext]) {
+      expect(text).toContain('## Final handoff — text artifact');
+      expect(text).toContain('MUST contain exactly one `<artifact type="text/html">...</artifact>` block');
+      expect(text).not.toContain('## Final handoff — filesystem');
+      expect(text).not.toContain('summarize the written or changed deck file');
+      expect(text).not.toMatch(/TodoWrite[^\n]{0,80}(?:must|required)/i);
+    }
+    expect(textArtifactBundleSkill).toBe(textArtifactRecipe.taskSkill);
+    expect(textArtifactBundleSkill).not.toContain('## Final handoff');
+
+    const pptPromptWithMatchingSignal = composeOdNextStrategyRequestPromptV2(pptRecipe, {
+      deckIntent: true,
+    });
+    expect(pptPromptWithMatchingSignal.match(/data-od-deck-protocol="1"/g)).toHaveLength(1);
+  });
+
+  it('preserves selected and existing deck scaffolds instead of injecting a second runtime', () => {
+    const pptRecipe: OdNextStrategyRequestRecipeV2 = {
+      ...recipe,
+      taskType: 'ppt',
+      taskSkill: '# Presentation\n\nCopy `assets/template.html` and fill its declared slots.',
+    };
+    const prompt = composeOdNextStrategyRequestPromptV2(pptRecipe, {
+      deckFrameworkMode: 'legacy_compatible',
+    });
+    const stableContext = composeOdNextStrategyStableRequestContextV2({
+      deckFrameworkMode: 'legacy_compatible',
+    });
+
+    for (const text of [prompt, stableContext]) {
+      expect(text).toContain('selected or existing scaffold compatibility');
+      expect(text).toContain('assets/template.html');
+      expect(text).toContain("host viewer's compatibility bridge owns navigation");
+      expect(text).not.toContain('data-od-deck-protocol="1"');
+      expect(text).not.toContain("type: 'od:deck-ready'");
+      expect(text).not.toContain("type: 'od:slide-state'");
+    }
+
+    expect(resolveOdNextDeckFrameworkMode({ taskType: 'ppt' })).toBe('canonical');
+    expect(resolveOdNextDeckFrameworkMode({
+      taskType: 'ppt',
+      hasSelectedDeckSeed: true,
+    })).toBe('legacy_compatible');
+    expect(resolveOdNextDeckFrameworkMode({
+      taskType: 'ppt',
+      hasExistingDeckArtifact: true,
+    })).toBe('legacy_compatible');
+    expect(resolveOdNextDeckFrameworkMode({
+      taskType: 'prototype',
+      deckIntent: true,
+      hasExistingDeckArtifact: true,
+    })).toBe('canonical');
+    expect(resolveOdNextDeckFrameworkMode({ taskType: 'prototype' })).toBeUndefined();
+  });
+
   it('states the deliverable rules that only bite once a plan declares more than one', () => {
     // The canonical Plan Contract example carries a single deliverable whose id
     // equals `canonicalDeliverable.id`, so the membership rule reads as a

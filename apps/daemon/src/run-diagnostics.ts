@@ -5,6 +5,7 @@ import type {
   TrackingAmrOpenCodeLastToolStatus,
 } from '@open-design/contracts/analytics';
 import { redactSecrets } from './redact.js';
+import { isHostSynthesizedAcpEmission } from './agent-protocol/acp/emission-provenance.js';
 
 export interface RunEventForDiagnostics {
   event: string;
@@ -45,11 +46,10 @@ export interface RunDiagnosticsAnalytics {
   first_token_seen: boolean;
   user_visible_output_seen: boolean;
   tool_call_seen: boolean;
-  // True when every committed tool_use received a matching tool_result — paired
-  // by id where the runtime supplies one, by count for degraded events that emit
-  // a null id on both sides. A stall with `tool_call_seen && !tool_result_sent`
-  // is the tool-result-not-delivered root cause (a tool_use whose result never
-  // came back — including a still-outstanding tool in a parallel turn).
+  // Legacy name: every tool_use in the terminal attempt has a matching observed
+  // tool_result (by id, or count for idless streams). Known host-synthesized
+  // results are display cleanup, not agent-confirmed completion. Even a real
+  // result only proves observation, not delivery back to the model or run success.
   tool_result_sent: boolean;
   // True when an approval/permission gate fired. Only ACP runtimes surface this
   // (via an `acp_approval_request` diagnostic); stream/CLI runtimes bypass gates.
@@ -182,6 +182,13 @@ export function summarizeRunToolProgress(
   let toolCallSeen = false;
 
   for (const event of events) {
+    if (event.event === 'start') {
+      outstandingToolUseIds.clear();
+      idlessToolUses = 0;
+      idlessToolResults = 0;
+      toolCallSeen = false;
+      continue;
+    }
     const data = event.data && typeof event.data === 'object'
       ? event.data as Record<string, unknown>
       : {};
@@ -190,7 +197,9 @@ export function summarizeRunToolProgress(
       if (typeof data.id === 'string') outstandingToolUseIds.add(data.id);
       else idlessToolUses += 1;
     }
-    if (data.type === 'tool_result') {
+    // A host-flushed tool_use still witnesses an actual open ACP tool; only
+    // its manufactured result must be excluded from completion evidence.
+    if (data.type === 'tool_result' && !isHostSynthesizedAcpEmission(data)) {
       if (typeof data.toolUseId === 'string') {
         outstandingToolUseIds.delete(data.toolUseId);
       } else {

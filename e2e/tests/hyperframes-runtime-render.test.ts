@@ -7,6 +7,18 @@ import { fileURLToPath } from 'node:url';
 
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import ffprobeInstaller from '@ffprobe-installer/ffprobe';
+import { PNG } from 'pngjs';
+import {
+  createJsonIpcServer,
+  resolveAppIpcPath,
+} from '@open-design/sidecar';
+import {
+  APP_KEYS,
+  OPEN_DESIGN_SIDECAR_CONTRACT,
+  SIDECAR_MESSAGES,
+  normalizeDesktopSidecarMessage,
+  type DesktopRenderFramesInput,
+} from '@open-design/sidecar-proto';
 import { describe, expect, test } from 'vitest';
 
 import { createSmokeSuite } from '@/vitest/suite';
@@ -16,41 +28,86 @@ const odBin = fileURLToPath(new URL('../../apps/daemon/bin/od.mjs', import.meta.
 describe('HyperFrames bundled runtime end-to-end', () => {
   test('[P0] real od media generate renders MP4 through the daemon-owned HyperFrames runtime', async () => {
     const suite = await createSmokeSuite('hyperframes-runtime-render');
-
-    await suite.with.env(
-      {
-        HYPERFRAMES_FFMPEG_PATH: ffmpegInstaller.path,
-        HYPERFRAMES_FFPROBE_PATH: ffprobeInstaller.path,
+    const desktopIpc = resolveAppIpcPath({
+      app: APP_KEYS.DESKTOP,
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      namespace: suite.namespace,
+    });
+    let receivedFrameDocument = '';
+    const framePng = solidPng(320, 180);
+    const desktop = await createJsonIpcServer({
+      socketPath: desktopIpc,
+      handler: async (message) => {
+        const request = normalizeDesktopSidecarMessage(message);
+        if (request.type === SIDECAR_MESSAGES.STATUS) {
+          return {
+            capabilities: { frameRenderer: true },
+            pid: process.pid,
+            state: 'running',
+            updatedAt: new Date().toISOString(),
+            url: null,
+            windowVisible: false,
+          };
+        }
+        if (request.type === SIDECAR_MESSAGES.RENDER_FRAMES) {
+          const input = request.input as DesktopRenderFramesInput;
+          receivedFrameDocument = input.html;
+          await mkdir(input.outputDir, { recursive: true });
+          for (let frame = 0; frame < 3; frame += 1) {
+            await writeFile(
+              join(input.outputDir, `frame-${String(frame).padStart(8, '0')}.png`),
+              framePng,
+            );
+          }
+          return {
+            duration: 0.1,
+            fps: 30,
+            frameCount: 3,
+            framePattern: join(input.outputDir, 'frame-%08d.png'),
+            height: 180,
+            ok: true,
+            width: 320,
+          };
+        }
+        throw new Error(`unexpected desktop request: ${request.type}`);
       },
-      async () => {
-        await suite.with.toolsDev(async ({ runtime }) => {
-          const daemonUrl = `http://127.0.0.1:${runtime.daemonPort}`;
-          const projectId = `hyperframes-render-${Date.now()}`;
-          const create = await fetch(`${daemonUrl}/api/projects`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              id: projectId,
-              name: 'HyperFrames real runtime render',
-              skillId: null,
-              designSystemId: null,
-              metadata: { kind: 'video' },
-            }),
-          });
-          expect(create.ok, await create.text()).toBe(true);
+    });
 
-          const compositionRel = '.hyperframes-cache/e2e-real-render';
-          const compositionDir = join(suite.dataDir, 'projects', projectId, compositionRel);
-          await mkdir(compositionDir, { recursive: true });
-          await writeFile(join(compositionDir, 'hyperframes.json'), JSON.stringify({
-            paths: { blocks: 'compositions', components: 'compositions/components', assets: 'assets' },
-            media: { autoProxy: false },
-          }), 'utf8');
-          await writeFile(join(compositionDir, 'meta.json'), JSON.stringify({
-            id: 'e2e-real-render',
-            name: 'E2E real render',
-          }), 'utf8');
-          await writeFile(join(compositionDir, 'index.html'), `<!doctype html>
+    try {
+      await suite.with.env(
+        {
+          HYPERFRAMES_FFMPEG_PATH: ffmpegInstaller.path,
+          HYPERFRAMES_FFPROBE_PATH: ffprobeInstaller.path,
+        },
+        async () => {
+          await suite.with.toolsDev(async ({ runtime }) => {
+            const daemonUrl = `http://127.0.0.1:${runtime.daemonPort}`;
+            const projectId = `hyperframes-render-${Date.now()}`;
+            const create = await fetch(`${daemonUrl}/api/projects`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                id: projectId,
+                name: 'HyperFrames real runtime render',
+                skillId: null,
+                designSystemId: null,
+                metadata: { kind: 'video' },
+              }),
+            });
+            expect(create.ok, await create.text()).toBe(true);
+
+            const compositionRel = '.hyperframes-cache/e2e-real-render';
+            const compositionDir = join(suite.dataDir, 'projects', projectId, compositionRel);
+            await mkdir(compositionDir, { recursive: true });
+            await writeFile(join(compositionDir, 'hyperframes.json'), JSON.stringify({
+              paths: { blocks: 'compositions', components: 'compositions/components', assets: 'assets' },
+              media: { autoProxy: false },
+            }), 'utf8');
+            await writeFile(join(compositionDir, 'meta.json'), JSON.stringify({
+              id: 'e2e-real-render',
+              name: 'E2E real render',
+            }), 'utf8');
+            await writeFile(join(compositionDir, 'index.html'), `<!doctype html>
 <html><head><meta charset="utf-8"><style>
 html,body{margin:0;width:320px;height:180px;overflow:hidden;background:#10253f}
 .clip{display:grid;place-items:center;width:320px;height:180px;color:white;font:700 28px sans-serif}
@@ -63,39 +120,54 @@ window.__timelines=window.__timelines||{};
 window.__timelines.main={duration:function(){return .1},seek:function(){}};
 </script></body></html>`, 'utf8');
 
-          const rendered = await runOd(daemonUrl, [
-            'media',
-            'generate',
-            '--project', projectId,
-            '--surface', 'video',
-            '--model', 'hyperframes-html',
-            '--composition-dir', compositionRel,
-            '--output', 'hyperframes-e2e.mp4',
-          ]);
-          expect(rendered.code, rendered.stderr || rendered.stdout).toBe(0);
-          const payload = JSON.parse(rendered.stdout.trim().split('\n').at(-1) ?? '{}') as {
-            file?: { kind?: string; mime?: string; name?: string; size?: number };
-          };
-          expect(payload.file).toMatchObject({
-            kind: 'video',
-            mime: 'video/mp4',
-            name: 'hyperframes-e2e.mp4',
-            size: expect.any(Number),
-          });
-          expect(payload.file?.size ?? 0).toBeGreaterThan(1_000);
+            const rendered = await runOd(daemonUrl, [
+              'media',
+              'generate',
+              '--project', projectId,
+              '--surface', 'video',
+              '--model', 'hyperframes-html',
+              '--composition-dir', compositionRel,
+              '--output', 'hyperframes-e2e.mp4',
+            ]);
+            expect(rendered.code, rendered.stderr || rendered.stdout).toBe(0);
+            const payload = JSON.parse(rendered.stdout.trim().split('\n').at(-1) ?? '{}') as {
+              file?: { kind?: string; mime?: string; name?: string; size?: number };
+            };
+            expect(payload.file).toMatchObject({
+              kind: 'video',
+              mime: 'video/mp4',
+              name: 'hyperframes-e2e.mp4',
+              size: expect.any(Number),
+            });
+            expect(payload.file?.size ?? 0).toBeGreaterThan(1_000);
 
-          const outputPath = join(suite.dataDir, 'projects', projectId, 'hyperframes-e2e.mp4');
-          const [outputStat, bytes] = await Promise.all([
-            stat(outputPath),
-            readFile(outputPath),
-          ]);
-          expect(outputStat.size).toBe(payload.file?.size);
-          expect(bytes.subarray(4, 8).toString('ascii')).toBe('ftyp');
-        });
-      },
-    );
+            const outputPath = join(suite.dataDir, 'projects', projectId, 'hyperframes-e2e.mp4');
+            const [outputStat, bytes] = await Promise.all([
+              stat(outputPath),
+              readFile(outputPath),
+            ]);
+            expect(outputStat.size).toBe(payload.file?.size);
+            expect(bytes.subarray(4, 8).toString('ascii')).toBe('ftyp');
+            expect(receivedFrameDocument).toContain('window.__odFrameRenderer');
+          });
+        },
+      );
+    } finally {
+      await desktop.close();
+    }
   }, 180_000);
 });
+
+function solidPng(width: number, height: number): Buffer {
+  const image = new PNG({ width, height });
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    image.data[offset] = 16;
+    image.data[offset + 1] = 37;
+    image.data[offset + 2] = 63;
+    image.data[offset + 3] = 255;
+  }
+  return PNG.sync.write(image);
+}
 
 async function runOd(
   daemonUrl: string,

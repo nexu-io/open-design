@@ -11,7 +11,8 @@ import {
   type OdNextRequestInputFactsV1,
   type OdNextTaskConfigurationV1,
 } from '@open-design/contracts';
-import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { redactSecrets } from '../../redact.js';
@@ -93,6 +94,12 @@ export interface SnapshotReadHooks {
   beforeOpenFile?: (filePath: string) => void;
 }
 
+export interface SnapshotCleanupHooks {
+  beforeLookupSnapshot?: (snapshotsRoot: string) => void;
+  beforeClaimSnapshot?: (snapshotDir: string) => void;
+  beforeRemoveClaimedSnapshot?: (claimedSnapshotDir: string) => void;
+}
+
 function sha256(bytes: Buffer | string): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
@@ -109,6 +116,174 @@ function safeTaskId(value: string): string {
     throw new OdNextTaskInputSnapshotError('OD Next task execution id is not a safe path segment.');
   }
   return value;
+}
+
+function cleanupErrorCode(error: unknown): string {
+  if (error instanceof OdNextTaskInputSnapshotError) return error.code;
+  const code = (error as NodeJS.ErrnoException)?.code;
+  return typeof code === 'string' && /^[A-Z0-9_]+$/.test(code) ? code : 'UNKNOWN';
+}
+
+function warnSnapshotCleanupFailure(
+  phase: OdNextTaskInputCleanupPhase,
+  taskExecutionId: string,
+  error: unknown,
+): void {
+  console.warn(
+    `[od-next-task-input] cleanup failed phase=${phase} task=${taskExecutionId} code=${cleanupErrorCode(error)}`,
+  );
+}
+
+export type OdNextTaskInputCleanupPhase =
+  | 'create'
+  | 'replace-partial'
+  | 'initial-bundle'
+  | 'run-claim'
+  | 'non-ready';
+
+/** Remove a claimed tree with the host's reparse-aware removal primitive. */
+function removeSnapshotTreeWithPlatformPrimitive(target: string): void {
+  if (process.platform !== 'win32') {
+    fs.rmSync(target, { recursive: true, force: true, maxRetries: 3 });
+    return;
+  }
+
+  // Node 24's Windows recursive remover can enumerate through a junction that
+  // replaces a descendant mid-walk. The Windows `rmdir` primitive detects
+  // reparse entries during its own traversal and removes the entry rather than
+  // enumerating its target. Pass the attacker-influenced path through an
+  // environment value so cmd never parses it as command syntax.
+  const result = spawnSync(
+    process.env.ComSpec ?? process.env.COMSPEC ?? 'cmd.exe',
+    ['/d', '/v:off', '/s', '/c', 'rmdir /s /q "%OD_SNAPSHOT_DELETE_TARGET%"'],
+    {
+      env: { ...process.env, OD_SNAPSHOT_DELETE_TARGET: target },
+      stdio: 'ignore',
+      windowsVerbatimArguments: true,
+    },
+  );
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new OdNextTaskInputSnapshotError(
+      'OD Next task input cleanup failed in the Windows directory remover.',
+      'OD_NEXT_INPUT_SNAPSHOT_CLEANUP_FAILED',
+    );
+  }
+}
+
+function removeManagedSnapshotDir(input: {
+  snapshotsRoot: string;
+  taskExecutionId: string;
+  snapshotDir: string;
+  hooks?: SnapshotCleanupHooks;
+}): void {
+  const snapshotsRoot = path.resolve(input.snapshotsRoot);
+  const taskExecutionId = safeTaskId(input.taskExecutionId);
+  const expectedSnapshotDir = path.join(snapshotsRoot, taskExecutionId);
+  const snapshotDir = path.resolve(input.snapshotDir);
+  if (path.relative(expectedSnapshotDir, snapshotDir) !== '') {
+    throw new OdNextTaskInputSnapshotError(
+      'OD Next task input snapshot is outside its managed root.',
+    );
+  }
+
+  let rootStat: fs.BigIntStats;
+  try {
+    rootStat = fs.lstatSync(snapshotsRoot, { bigint: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return;
+    throw error;
+  }
+  if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
+    throw new OdNextTaskInputSnapshotError(
+      'OD Next snapshot root must be a managed non-symlink directory.',
+    );
+  }
+
+  input.hooks?.beforeLookupSnapshot?.(snapshotsRoot);
+  let snapshotStat: fs.BigIntStats;
+  try {
+    snapshotStat = fs.lstatSync(snapshotDir, { bigint: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return;
+    throw error;
+  }
+  if (snapshotStat.isSymbolicLink() || !snapshotStat.isDirectory()) {
+    throw new OdNextTaskInputSnapshotError(
+      'OD Next task input snapshot must be a managed non-symlink directory.',
+    );
+  }
+
+  const rootAfterLookup = fs.lstatSync(snapshotsRoot, { bigint: true });
+  if (
+    rootAfterLookup.isSymbolicLink()
+    || !rootAfterLookup.isDirectory()
+    || !sameIdentity(rootStat, rootAfterLookup)
+  ) {
+    throw new OdNextTaskInputSnapshotError(
+      'OD Next snapshot root changed before cleanup could claim its child.',
+      'OD_NEXT_INPUT_SNAPSHOT_TOCTOU',
+    );
+  }
+
+  // Claim the checked entry with one atomic rename before resolving any path
+  // for mutation. The random name prevents ordinary producers from finding or
+  // reusing the private deletion path while cleanup walks it. Rechecking the
+  // identity after rename makes a swap between lstat and rename fail closed:
+  // traversal never runs against the replacement (including a junction).
+  const claimedSnapshotDir = path.join(
+    snapshotsRoot,
+    `.deleting-${taskExecutionId}-${randomBytes(16).toString('hex')}`,
+  );
+  // Linux exposes an opened directory as a traversable procfs path. Darwin's
+  // /dev/fd entry is only a synthetic descriptor node: its device identity
+  // differs from the directory and child paths cannot be resolved through it.
+  // Keep the documented pathname claim on platforms without Linux procfs.
+  const rootFd = process.platform === 'linux'
+    ? fs.openSync(
+        snapshotsRoot,
+        fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW,
+      )
+    : undefined;
+  try {
+    const boundRoot = rootFd === undefined
+      ? snapshotsRoot
+      : `/proc/self/fd/${rootFd}`;
+    if (rootFd !== undefined) {
+      const openedRootStat = fs.fstatSync(rootFd, { bigint: true });
+      const boundRootStat = fs.statSync(boundRoot, { bigint: true });
+      if (!sameIdentity(rootStat, openedRootStat) || !sameIdentity(rootStat, boundRootStat)) {
+        throw new OdNextTaskInputSnapshotError(
+          'OD Next snapshot root changed before cleanup could open it.',
+          'OD_NEXT_INPUT_SNAPSHOT_TOCTOU',
+        );
+      }
+    }
+
+    input.hooks?.beforeClaimSnapshot?.(snapshotDir);
+    const boundSnapshotDir = path.join(boundRoot, taskExecutionId);
+    const boundClaimedSnapshotDir = path.join(boundRoot, path.basename(claimedSnapshotDir));
+    fs.renameSync(boundSnapshotDir, boundClaimedSnapshotDir);
+    const rootAfterClaim = fs.lstatSync(snapshotsRoot, { bigint: true });
+    const claimedStat = fs.lstatSync(boundClaimedSnapshotDir, { bigint: true });
+    if (
+      rootAfterClaim.isSymbolicLink()
+      || !rootAfterClaim.isDirectory()
+      || !sameIdentity(rootStat, rootAfterClaim)
+      || claimedStat.isSymbolicLink()
+      || !claimedStat.isDirectory()
+      || !sameIdentity(snapshotStat, claimedStat)
+    ) {
+      throw new OdNextTaskInputSnapshotError(
+        'OD Next task input snapshot changed before cleanup could claim it.',
+        'OD_NEXT_INPUT_SNAPSHOT_TOCTOU',
+      );
+    }
+    input.hooks?.beforeRemoveClaimedSnapshot?.(claimedSnapshotDir);
+    removeSnapshotTreeWithPlatformPrimitive(boundClaimedSnapshotDir);
+  } finally {
+    if (rootFd !== undefined) fs.closeSync(rootFd);
+  }
 }
 
 function sameIdentity(
@@ -148,13 +323,44 @@ function readFdBounded(
 }
 
 function readOnlyNoFollowFlags(): number {
-  if (typeof fs.constants.O_NOFOLLOW !== 'number') {
-    throw new OdNextTaskInputSnapshotError(
-      'OD Next cannot safely open managed input files on this platform.',
-      'OD_NEXT_INPUT_SNAPSHOT_UNSUPPORTED',
-    );
+  if (typeof fs.constants.O_NOFOLLOW === 'number') {
+    return fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW;
   }
-  return fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW;
+  if (process.platform === 'win32') return fs.constants.O_RDONLY;
+  throw new OdNextTaskInputSnapshotError(
+    'OD Next cannot safely open managed input files on this platform.',
+    'OD_NEXT_INPUT_SNAPSHOT_UNSUPPORTED',
+  );
+}
+
+/**
+ * Open a previously lstat-verified regular file without reading from a raced
+ * replacement. POSIX rejects a final symlink in the kernel with O_NOFOLLOW.
+ * Node does not expose that flag on Windows, so the read-only handle is
+ * accepted only when fstat proves it still has the exact lstat identity. The
+ * caller verifies path components before opening and file metadata after the
+ * bounded read, closing the remaining Windows TOCTOU windows without a native
+ * dependency.
+ */
+function openVerifiedReadOnly(
+  filePath: string,
+  pathStat: fs.BigIntStats,
+  changedMessage: string,
+): { fd: number; stat: fs.BigIntStats } {
+  const fd = fs.openSync(filePath, readOnlyNoFollowFlags());
+  try {
+    const stat = fs.fstatSync(fd, { bigint: true });
+    if (!stat.isFile() || !sameIdentity(pathStat, stat)) {
+      throw new OdNextTaskInputSnapshotError(
+        changedMessage,
+        'OD_NEXT_INPUT_SNAPSHOT_TOCTOU',
+      );
+    }
+    return { fd, stat };
+  } catch (error) {
+    fs.closeSync(fd);
+    throw error;
+  }
 }
 
 function assertManagedPathHasNoSymlinkComponents(
@@ -242,6 +448,7 @@ function readSourceWithoutFollowingSymlinks(
   if (!within(declaredRoot, resolved)) {
     throw new OdNextTaskInputSnapshotError('OD Next attachment escapes its allowed root.');
   }
+  assertManagedPathHasNoSymlinkComponents(declaredRoot, resolved);
   const linkStat = fs.lstatSync(resolved, { bigint: true });
   if (linkStat.isSymbolicLink() || !linkStat.isFile()) {
     throw new OdNextTaskInputSnapshotError('OD Next attachments must be regular non-symlink files.');
@@ -252,15 +459,13 @@ function readSourceWithoutFollowingSymlinks(
     throw new OdNextTaskInputSnapshotError('OD Next attachment realpath escapes its allowed root.');
   }
   beforeOpenSource?.(resolved);
-  const fd = fs.openSync(resolved, readOnlyNoFollowFlags());
+  const opened = openVerifiedReadOnly(
+    resolved,
+    linkStat,
+    'OD Next attachment changed between path validation and open.',
+  );
+  const { fd, stat: before } = opened;
   try {
-    const before = fs.fstatSync(fd, { bigint: true });
-    if (!before.isFile() || !sameIdentity(linkStat, before)) {
-      throw new OdNextTaskInputSnapshotError(
-        'OD Next attachment changed between path validation and open.',
-        'OD_NEXT_INPUT_SNAPSHOT_TOCTOU',
-      );
-    }
     if (before.size > BigInt(maxBytes)) {
       throw new OdNextTaskInputSnapshotError('OD Next attachment exceeds the per-file byte cap.', 'OD_NEXT_INPUT_SNAPSHOT_OVERSIZE');
     }
@@ -433,7 +638,12 @@ export function createOdNextTaskInputSnapshot(input: {
       // A task id is single-writer under the assistant/task claim. An entry
       // here is therefore a partial initialization left before that claim
       // committed, not a reusable canonical snapshot.
-      fs.rmSync(snapshotDir, { recursive: true, force: true });
+      try {
+        removeManagedSnapshotDir({ snapshotsRoot, taskExecutionId, snapshotDir });
+      } catch (cleanupError) {
+        warnSnapshotCleanupFailure('replace-partial', taskExecutionId, cleanupError);
+        throw cleanupError;
+      }
       fs.mkdirSync(snapshotDir, { recursive: false, mode: 0o700 });
       snapshotCleanupAllowed = true;
     }
@@ -529,7 +739,11 @@ export function createOdNextTaskInputSnapshot(input: {
     return { taskExecutionId, snapshotDir, manifestSha256: sha256(manifestBytes) };
   } catch (error) {
     if (snapshotCleanupAllowed) {
-      fs.rmSync(snapshotDir, { recursive: true, force: true });
+      try {
+        removeManagedSnapshotDir({ snapshotsRoot, taskExecutionId, snapshotDir });
+      } catch (cleanupError) {
+        warnSnapshotCleanupFailure('create', taskExecutionId, cleanupError);
+      }
     }
     throw error;
   }
@@ -572,15 +786,13 @@ function readManagedSnapshotFile(
     );
   }
   beforeOpen?.(filePath);
-  const fd = fs.openSync(filePath, readOnlyNoFollowFlags());
+  const opened = openVerifiedReadOnly(
+    filePath,
+    pathStat,
+    'OD Next managed input changed between path validation and open.',
+  );
+  const { fd, stat: before } = opened;
   try {
-    const before = fs.fstatSync(fd, { bigint: true });
-    if (!before.isFile() || !sameIdentity(pathStat, before)) {
-      throw new OdNextTaskInputSnapshotError(
-        'OD Next managed input changed between path validation and open.',
-        'OD_NEXT_INPUT_SNAPSHOT_TOCTOU',
-      );
-    }
     const bytes = readFdBounded(
       fd,
       before.size,
@@ -893,7 +1105,29 @@ export function removeOdNextRunInputProjection(
 
 export function removeOdNextTaskInputSnapshot(
   descriptor: OdNextTaskInputSnapshotDescriptor | null | undefined,
+  snapshotsRoot: string,
+  hooks?: SnapshotCleanupHooks,
 ): void {
   if (!descriptor) return;
-  fs.rmSync(descriptor.snapshotDir, { recursive: true, force: true });
+  removeManagedSnapshotDir({
+    snapshotsRoot,
+    taskExecutionId: descriptor.taskExecutionId,
+    snapshotDir: descriptor.snapshotDir,
+    ...(hooks ? { hooks } : {}),
+  });
+}
+
+export function removeOdNextTaskInputSnapshotBestEffort(
+  descriptor: OdNextTaskInputSnapshotDescriptor | null | undefined,
+  snapshotsRoot: string,
+  phase: OdNextTaskInputCleanupPhase,
+): void {
+  if (!descriptor) return;
+  let taskExecutionId = 'invalid';
+  try {
+    taskExecutionId = safeTaskId(descriptor.taskExecutionId);
+    removeOdNextTaskInputSnapshot(descriptor, snapshotsRoot);
+  } catch (error) {
+    warnSnapshotCleanupFailure(phase, taskExecutionId, error);
+  }
 }

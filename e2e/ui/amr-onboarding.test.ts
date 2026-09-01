@@ -138,8 +138,7 @@ test('[P0] Cloud status loading does not block signed-out Local CLI or BYOK setu
   });
 
   await seedOnboardingConfig(page, config);
-  await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
-  await expect(connectLandingHeading(page)).toBeVisible();
+  await gotoOnboarding(page);
 
   await expect(cloudPrimaryButton(page)).toBeDisabled();
   await expect(page.getByRole('button', { name: /Local (coding )?agent/i })).toBeEnabled();
@@ -163,8 +162,7 @@ test('[P0] delayed active Cloud login stays out of Local setup and resumes after
   });
 
   await seedOnboardingConfig(page, config);
-  await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
-  await expect(connectLandingHeading(page)).toBeVisible();
+  await gotoOnboarding(page);
 
   await page.getByRole('button', { name: /Local (coding )?agent/i }).click();
   const localPanel = page.locator('.onboarding-view__setup-panel');

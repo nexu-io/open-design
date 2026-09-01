@@ -255,7 +255,7 @@ describe('standalone updater rocket placement in the top-right cluster', () => {
 
     const rocket = screen.getByTestId('entry-nav-updater');
     expect(screen.queryByTestId('entry-nav-account')).toBeNull();
-    expect(rocket.closest('.entry-top-right-cluster')).not.toBeNull();
+    await waitFor(() => expect(rocket.closest('.entry-top-right-cluster')).not.toBeNull());
     expect(rocket.closest('.entry-nav-rail__footer')).toBeNull();
   });
 

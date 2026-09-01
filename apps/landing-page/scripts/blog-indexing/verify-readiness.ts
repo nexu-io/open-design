@@ -20,7 +20,9 @@ import { writeFileSync } from 'node:fs';
 import {
   type ReadinessResult,
   SITE,
-  SITEMAP_CHILD_URL,
+  SITEMAP_BLOG_CHILD_PREFIX,
+  SITEMAP_URL,
+  extractSitemapLocations,
   fetchWithRetry,
   isNoindexPost,
   readJsonFile,
@@ -55,16 +57,27 @@ async function fetchOnce(url: string): Promise<{ status: number; body: string }>
 }
 
 async function fetchSitemapUrls(): Promise<Set<string>> {
-  const res = await fetchWithRetry(SITEMAP_CHILD_URL);
-  if (!res.ok) {
-    throw new Error(`Sitemap fetch failed (${res.status}) at ${SITEMAP_CHILD_URL}`);
+  const indexRes = await fetchWithRetry(SITEMAP_URL);
+  if (!indexRes.ok) {
+    throw new Error(`Sitemap fetch failed (${indexRes.status}) at ${SITEMAP_URL}`);
   }
-  const xml = await res.text();
-  // Sitemap entries are emitted as <url><loc>https://...</loc></url>.
-  // A regex is safer than a full XML parser for this CI surface.
-  return new Set(
-    Array.from(xml.matchAll(/<loc>([^<]+)<\/loc>/g)).map((m) => m[1].trim()),
+  const childUrls = extractSitemapLocations(await indexRes.text()).filter((url) =>
+    url.startsWith(SITEMAP_BLOG_CHILD_PREFIX),
   );
+  if (childUrls.length === 0) {
+    throw new Error(`No blog child sitemaps found in ${SITEMAP_URL}`);
+  }
+
+  const childResponses = await Promise.all(
+    childUrls.map(async (childUrl) => {
+      const res = await fetchWithRetry(childUrl);
+      if (!res.ok) {
+        throw new Error(`Sitemap fetch failed (${res.status}) at ${childUrl}`);
+      }
+      return res.text();
+    }),
+  );
+  return new Set(childResponses.flatMap(extractSitemapLocations));
 }
 
 async function waitForSitemapUrls(urls: string[], timeoutMs: number): Promise<Set<string>> {
@@ -129,7 +142,7 @@ async function checkUrl(
   else if (canonical !== url) {
     failures.push(`canonical "${canonical}" != expected "${url}"`);
   }
-  if (!sitemap.has(url)) failures.push(`url not in ${SITEMAP_CHILD_URL}`);
+  if (!sitemap.has(url)) failures.push(`url not in ${SITEMAP_BLOG_CHILD_PREFIX}*.xml`);
 
   return { url, ok: failures.length === 0, failures, status, canonical };
 }

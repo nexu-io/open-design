@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test';
 import type { Locator, Page, Route } from '@playwright/test';
+import type { Project } from '@open-design/contracts';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fulfillAgentsRoute } from './mock-factory.js';
@@ -120,7 +121,7 @@ const VISUAL_PROJECTS = [
     createdAt: 1_700_000_000_000,
     updatedAt: 1_700_000_050_000,
     metadata: { kind: 'prototype' },
-    status: { label: 'Ready', tone: 'success' },
+    status: { value: 'succeeded' },
   },
   {
     id: 'visual-project-brand-kit',
@@ -130,11 +131,11 @@ const VISUAL_PROJECTS = [
     createdAt: 1_700_000_100_000,
     updatedAt: 1_700_000_150_000,
     metadata: { kind: 'image' },
-    status: { label: 'Needs input', tone: 'warning' },
+    status: { value: 'awaiting_input' },
   },
 ] as const;
 
-type VisualProject = (typeof VISUAL_PROJECTS)[number];
+export type VisualProject = Project;
 
 /** The single conversation every workspace capture opens into. */
 const VISUAL_CONVERSATION = {

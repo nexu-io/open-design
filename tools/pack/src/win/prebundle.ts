@@ -23,6 +23,7 @@ export const WIN_PREBUNDLE_ENTRYPOINTS_DIR_NAME = "prebundle-entrypoints";
 // (issue #4638). A stale `12.9.0` pin here vs `12.10.0` on disk did exactly
 // that. Keep every entry equal to the daemon's corresponding exact pin.
 export const WIN_PREBUNDLE_RUNTIME_DEPENDENCIES = {
+  "@ffmpeg-installer/ffmpeg": "1.1.0",
   "better-sqlite3": "12.10.0",
   "blake3-wasm": "2.1.5",
   "hyperframes": "0.8.1",
@@ -54,9 +55,10 @@ export const WIN_PREBUNDLE_POLICIES = {
     label: "packaged main",
   },
   daemonCli: {
-    externals: ["better-sqlite3", "blake3-wasm", "hyperframes", "node-pty"],
+    externals: ["@ffmpeg-installer/ffmpeg", "better-sqlite3", "blake3-wasm", "hyperframes", "node-pty"],
     forbiddenInputs: [
       "/node_modules/@open-design/daemon/",
+      "/node_modules/@ffmpeg-installer/ffmpeg/",
       "/node_modules/better-sqlite3/",
       "/node_modules/blake3-wasm/",
       "/node_modules/electron/",
@@ -70,9 +72,10 @@ export const WIN_PREBUNDLE_POLICIES = {
     label: "daemon cli",
   },
   daemonSidecar: {
-    externals: ["better-sqlite3", "blake3-wasm", "hyperframes", "node-pty"],
+    externals: ["@ffmpeg-installer/ffmpeg", "better-sqlite3", "blake3-wasm", "hyperframes", "node-pty"],
     forbiddenInputs: [
       "/node_modules/@open-design/daemon/",
+      "/node_modules/@ffmpeg-installer/ffmpeg/",
       "/node_modules/better-sqlite3/",
       "/node_modules/blake3-wasm/",
       "/node_modules/electron/",

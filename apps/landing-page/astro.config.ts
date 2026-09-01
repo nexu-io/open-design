@@ -8,6 +8,11 @@ import {
   LANDING_LOCALES,
   stripLocaleFromPath,
 } from './app/i18n';
+import {
+  SITEMAP_CHUNK_NAMES,
+  SITEMAP_ENTRY_LIMIT,
+  sitemapChunkNameForPath,
+} from './app/_lib/sitemap-routing';
 
 // Pull the Shiki theme shape off Astro's own config typing rather than
 // importing from `shiki` directly — Shiki is a transitive dependency of
@@ -154,6 +159,7 @@ const blogDates = new Map<string, string>();
 // sitemap must not advertise noindexed URLs, so their English entries are
 // dropped from the sitemap filter below.
 const noindexBlogPaths = new Set<string>();
+const noindexLocaleVariantBlogPaths = new Set<string>();
 for (const file of readdirSync(blogDir)) {
   if (!file.endsWith('.md') || file.startsWith('_')) continue;
   const raw = readFileSync(join(blogDir, file), 'utf-8');
@@ -165,7 +171,20 @@ for (const file of readdirSync(blogDir)) {
   if (/^noindex:\s*true\b/m.test(raw)) {
     noindexBlogPaths.add(`/blog/${slug}/`);
   }
+  if (/^noindexLocaleVariants:\s*true\b/m.test(raw)) {
+    noindexLocaleVariantBlogPaths.add(`/blog/${slug}/`);
+  }
 }
+
+const sitemapChunks = Object.fromEntries(
+  SITEMAP_CHUNK_NAMES.map((chunkName) => [
+    chunkName,
+    (item: SitemapItem) => {
+      const logicalPath = stripLocaleFromPath(new URL(item.url).pathname).pathname;
+      if (sitemapChunkNameForPath(logicalPath) === chunkName) return item;
+    },
+  ]),
+);
 
 export default defineConfig({
   output: 'static',
@@ -235,6 +254,10 @@ export default defineConfig({
   integrations: [
     noindexHeaders,
     sitemap({
+      // Current route groups remain comfortably below Cloudflare Pages' 25 MiB
+      // per-file upload ceiling. A generous limit keeps each route group in one
+      // file and avoids a `@astrojs/sitemap@3.7.2` one-item tail-page edge case.
+      entryLimit: SITEMAP_ENTRY_LIMIT,
       i18n: {
         defaultLocale: DEFAULT_LOCALE,
         locales: sitemapLocales,
@@ -242,25 +265,22 @@ export default defineConfig({
       namespaces: {
         xhtml: true,
       },
+      // Group English and every active locale together by the locale-free
+      // top-level route. Standalone pages fall through to the integration's
+      // built-in `sitemap-pages-0.xml` chunk.
+      chunks: sitemapChunks,
       // `/og/` is a screenshot surface for the 1200x630 Open Graph
       // image — it already carries `<meta name="robots" content="noindex">`
       // and is `Disallow`-ed from `public/robots.txt`. Filtering it
       // out of the sitemap keeps the index strictly canonical pages.
       //
-      // We ALSO filter out every `/{locale}/...` route so the sitemap
-      // only carries canonical English URLs. Locale variants are
-      // expressed via the `<xhtml:link rel="alternate" hreflang="...">`
-      // annotations the `namespaces.xhtml: true` option emits inside
-      // each canonical entry, which is Google's recommended pattern
-      // for a multi-language site. Without this filter, ~500 routes ×
-      // 14 locales generates an XML payload that breaches the
-      // Cloudflare Pages 25 MiB single-file upload limit and fails
-      // deploy at the wrangler step (see PR #2603 — that was the
-      // exact failure mode that forced the revert of the previous
-      // attempt to land this work).
+      // Every active locale is intentionally retained. Logical `chunks` prevent
+      // the multilingual output from recreating the oversized single-file
+      // deploy failure seen in PR #2603.
       filter: (page) => {
         if (page.includes('/og/')) return false;
         const path = new URL(page).pathname;
+        const { locale, pathname: logicalPath } = stripLocaleFromPath(path);
         // Legacy catalog routes (/skills, /systems, /templates) now live
         // under /plugins/* and are 301-redirected by `public/_redirects`,
         // and legacy region-cased locale codes (zh-CN, zh-TW, es-ES, pt-BR)
@@ -268,17 +288,15 @@ export default defineConfig({
         // page routes still build, so without this guard `@astrojs/sitemap`
         // lists ~460 redirecting URLs. A sitemap must carry only final 200
         // canonical URLs — never redirects — so drop these legacy prefixes.
-        if (/^\/(skills|systems|templates)\//.test(path)) return false;
+        if (/^\/(skills|systems|templates)\//.test(logicalPath)) return false;
         if (/^\/(zh-CN|zh-TW|es-ES|pt-BR)\//.test(path)) return false;
         // Blog posts flagged `noindex: true` — the sitemap must not carry
         // URLs whose pages emit a robots noindex.
-        if (noindexBlogPaths.has(path)) return false;
-        const localeMatch = path.match(/^\/([a-z]{2}(?:-[a-z]{2})?)\//);
-        if (localeMatch) {
-          const code = localeMatch[1];
-          const isLanding = LANDING_LOCALES.some((l) => l.code === code);
-          if (isLanding && code !== DEFAULT_LOCALE) return false;
-        }
+        if (noindexBlogPaths.has(logicalPath)) return false;
+        if (
+          locale !== DEFAULT_LOCALE &&
+          noindexLocaleVariantBlogPaths.has(logicalPath)
+        ) return false;
         return true;
       },
       serialize(item: SitemapItem) {

@@ -926,54 +926,6 @@
   border-bottom: 1px solid var(--border);
 }
 
-.palette-tweaks-anchor { position: relative; display: inline-flex; }
-.palette-tweaks-badge {
-  width: 8px; height: 8px; border-radius: var(--radius-pill); margin-left: 4px;
-  box-shadow: 0 0 0 1px var(--bg-panel);
-}
-.palette-tweaks {
-  position: absolute; top: calc(100% + 6px); right: 0; z-index: 60;
-  min-width: 240px; background: var(--bg-panel); border: 1px solid var(--border);
-  border-radius: var(--radius-md, 10px);
-  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
-  padding: 8px; display: flex; flex-direction: column; gap: 6px; user-select: none;
-}
-.palette-tweaks-header {
-  display: flex; flex-direction: column; gap: 1px;
-  padding: 4px 6px 6px;
-  border-bottom: 1px solid var(--border-subtle, var(--border));
-}
-.palette-tweaks-title { font-size: 12px; font-weight: 600; color: var(--text); }
-.palette-tweaks-sub { font-size: 12px; color: var(--text-muted); }
-.palette-tweaks-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.palette-tweaks-item {
-  display: flex; align-items: center; gap: 10px;
-  padding: 6px 8px; border-radius: var(--radius-sm, 6px);
-  cursor: pointer; font-size: 13px; color: var(--text);
-  transition: background 100ms var(--ease-out);
-}
-.palette-tweaks-item:hover, .palette-tweaks-item.hovered { background: var(--bg-subtle); }
-.palette-tweaks-item.selected { background: var(--bg-muted); }
-.palette-tweaks-stripe {
-  display: inline-flex; border-radius: var(--radius-xs); overflow: hidden;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06); flex-shrink: 0;
-}
-.palette-tweaks-chip { width: 14px; height: 18px; display: inline-block; }
-.palette-tweaks-stripe-original { box-shadow: none; background: transparent; }
-.palette-tweaks-chip-original {
-  width: 56px; height: 18px;
-  background: linear-gradient(
-    to top right,
-    transparent calc(50% - 1px),
-    var(--text-muted) calc(50% - 1px),
-    var(--text-muted) calc(50% + 1px),
-    transparent calc(50% + 1px)
-  );
-  border: 1px dashed var(--border-strong, var(--border)); border-radius: var(--radius-xs);
-}
-.palette-tweaks-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.palette-tweaks-check { display: inline-flex; align-items: center; color: var(--text-muted); }
-
 /* Project page audit pass: one final rule set for the active project shell.
    Keep the outer panes flat; only controls and repeated items get radius. */
 .workspace-shell {

@@ -36,7 +36,11 @@ vi.mock('../src/runtimes/auth.js', () => ({
     if (value.includes('http 429') || value.includes('too many requests') || value.includes('session limit')) {
       return 'RATE_LIMITED' as const;
     }
-    if (value.includes('503 upstream unavailable') || value.includes('upstream unavailable')) {
+    if (
+      value.includes('503 upstream unavailable') ||
+      value.includes('upstream unavailable') ||
+      value.includes('503 service unavailable')
+    ) {
       return 'UPSTREAM_UNAVAILABLE' as const;
     }
     return null;
@@ -224,6 +228,7 @@ describe('classifyRunFailure', () => {
       failure_category: 'auth',
       failure_detail: 'auth_required',
       failure_stage: 'session_init',
+      evidence_level: 'structured_code',
       retryable: false,
       user_action: 'login',
     });
@@ -551,6 +556,14 @@ describe('classifyRunFailure', () => {
     });
   });
 
+  it('records a direct AMR insufficient-balance code as structured evidence', () => {
+    expect(classify('AMR_INSUFFICIENT_BALANCE')).toMatchObject({
+      failure_category: 'insufficient_balance',
+      failure_detail: 'amr_insufficient_balance',
+      evidence_level: 'structured_code',
+    });
+  });
+
   it('maps prompt-size failures to reduce-context guidance', () => {
     expect(classify('AGENT_PROMPT_TOO_LARGE', 'context window exceeded')).toMatchObject({
       failure_category: 'prompt_too_large',
@@ -558,6 +571,14 @@ describe('classifyRunFailure', () => {
       failure_stage: 'prompt_send',
       retryable: false,
       user_action: 'reduce_context',
+    });
+  });
+
+  it('records a direct prompt-too-large code as structured evidence', () => {
+    expect(classify('AGENT_PROMPT_TOO_LARGE')).toMatchObject({
+      failure_category: 'prompt_too_large',
+      failure_detail: 'prompt_too_large',
+      evidence_level: 'structured_code',
     });
   });
 
@@ -619,7 +640,33 @@ describe('classifyRunFailure', () => {
     ).toMatchObject({
       failure_category: 'timeout',
       failure_detail: 'inactivity_timeout',
+      failure_mechanism: 'first_output_deadline',
+      failure_domain: 'cross_boundary',
       terminal_trigger: 'first_output_deadline',
+    });
+  });
+
+  it('does not treat a positive readiness signal as a readiness timeout', () => {
+    const timeoutMessage = 'Agent stalled after the runtime became ready without emitting any new output.';
+
+    expect(
+      classifyRunFailure({
+        result: 'failed',
+        status: {
+          status: 'failed',
+          error: timeoutMessage,
+          signal: 'SIGTERM',
+          exitCode: null,
+          errorCode: 'AGENT_SIGNAL_SIGTERM',
+        },
+        errorCode: 'AGENT_SIGNAL_SIGTERM',
+        terminalTrigger: 'inactivity_watchdog',
+        events: [errorEvent('AGENT_SIGNAL_SIGTERM', timeoutMessage, true)],
+      }),
+    ).toMatchObject({
+      failure_category: 'timeout',
+      failure_mechanism: 'stream_idle_timeout',
+      terminal_trigger: 'inactivity_watchdog',
     });
   });
 
@@ -644,6 +691,40 @@ describe('classifyRunFailure', () => {
     });
   });
 
+  it('keeps explicit service codes ahead of client-environment text heuristics', () => {
+    expect(
+      classify('UPSTREAM_UNAVAILABLE', 'ECONNREFUSED provider endpoint'),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_mechanism: 'provider_rejection',
+      failure_domain: 'provider_control_plane',
+      evidence_level: 'structured_code',
+      repair_owner: 'provider_owner',
+    });
+
+    expect(
+      classify('RATE_LIMITED', 'Request blocked by account policy'),
+    ).toMatchObject({
+      failure_category: 'rate_limit',
+      failure_mechanism: 'provider_rejection',
+      failure_domain: 'provider_control_plane',
+      evidence_level: 'structured_code',
+      repair_owner: 'provider_owner',
+    });
+  });
+
+  it('keeps text-only provider failures at legacy-text evidence', () => {
+    expect(
+      classify('AGENT_EXECUTION_FAILED', 'HTTP 503 service unavailable'),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_mechanism: 'provider_rejection',
+      failure_domain: 'provider_control_plane',
+      evidence_level: 'legacy_text',
+      repair_owner: 'provider_owner',
+    });
+  });
+
   it('classifies only the terminal attempt after an automatic retry', () => {
     const timeoutMessage = 'Agent stalled without emitting any new output for 120s.';
 
@@ -661,6 +742,7 @@ describe('classifyRunFailure', () => {
         agentId: 'claude',
         events: [
           { event: 'start', data: { attempt: 1 } },
+          errorEvent('TIMEOUT', 'Runtime readiness deadline timed out.', true),
           { event: 'agent', data: { type: 'text_delta', delta: 'Working.' } },
           { event: 'agent', data: { type: 'tool_use', id: 'tool-1', name: 'Read' } },
           errorEvent('UPSTREAM_UNAVAILABLE', '503 upstream unavailable', true),
@@ -673,6 +755,7 @@ describe('classifyRunFailure', () => {
       failure_category: 'timeout',
       failure_detail: 'inactivity_timeout',
       failure_stage: 'first_token_wait',
+      failure_mechanism: 'stream_idle_timeout',
       retryable: true,
       user_action: 'retry',
     });
@@ -1588,8 +1671,25 @@ describe('execution_failed close-reason refinement', () => {
       failure_category: 'rate_limit',
       failure_detail: 'membership_concurrency_limit',
       failure_stage: 'session_init',
+      failure_mechanism: 'policy_rejection',
+      failure_domain: 'policy_admission',
+      evidence_level: 'structured_code',
+      repair_owner: 'policy_owner',
+      admission_status: 'unknown',
+      classifier_version: 'run-failure-v3',
       retryable: false,
       user_action: 'none',
+    });
+  });
+
+  it('does not exclude an ordinary provider 429 as a pre-run policy rejection', () => {
+    expect(classifyForAgent('amr', 'RATE_LIMITED', 'HTTP 429: too many requests')).toMatchObject({
+      failure_category: 'rate_limit',
+      failure_detail: 'rate_limit_429',
+      failure_domain: 'provider_control_plane',
+      failure_mechanism: 'provider_rejection',
+      admission_status: 'unknown',
+      repair_owner: 'provider_owner',
     });
   });
 
@@ -1606,6 +1706,121 @@ describe('execution_failed close-reason refinement', () => {
       failure_detail: 'fatal_rpc_error',
       retryable: true,
       user_action: 'retry',
+    });
+  });
+
+  it('classifies an oversized ACP input frame as a local product protocol failure', () => {
+    const message = 'ACP input line exceeds maximum size (1048576 bytes)';
+    expect(
+      classifyForAgent('amr', 'AGENT_EXECUTION_FAILED', message, [
+        errorEvent('AGENT_EXECUTION_FAILED', message, false),
+        runtimeCloseEvent('fatal_rpc_error'),
+      ]),
+    ).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'acp_frame_too_large',
+      failure_mechanism: 'frame_too_large',
+      failure_domain: 'client_product',
+      evidence_level: 'protocol_error',
+      repair_owner: 'open_design',
+      admission_status: 'unknown',
+      classifier_version: 'run-failure-v3',
+    });
+  });
+
+  it('keeps a wrapped oversized ACP input frame non-retryable without a retry hint', () => {
+    const message =
+      'json-rpc id 4: failed to parse request: ACP input line exceeds maximum size (1048576 bytes)';
+    expect(classifyForAgent('amr', 'AGENT_EXECUTION_FAILED', message, [])).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'acp_frame_too_large',
+      failure_mechanism: 'frame_too_large',
+      evidence_level: 'protocol_error',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
+  it('classifies a missing bundled OpenCode binary as a local product packaging failure', () => {
+    const message = 'bundled OpenCode binary is missing';
+    expect(classifyForAgent('amr', 'AGENT_EXECUTION_FAILED', message)).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'bundled_binary_missing',
+      failure_mechanism: 'child_exit',
+      failure_domain: 'client_product',
+      evidence_level: 'stderr_fallback',
+      repair_owner: 'open_design',
+    });
+  });
+
+  it('keeps host policy blocks separate from client product failures', () => {
+    const message = 'OpenCode launch was blocked by Windows Application Control policy';
+    expect(classifyForAgent('amr', 'AGENT_EXECUTION_FAILED', message)).toMatchObject({
+      failure_detail: 'host_policy_block',
+      failure_domain: 'client_environment',
+      failure_mechanism: 'child_exit',
+      evidence_level: 'stderr_fallback',
+      repair_owner: 'client_environment',
+    });
+  });
+
+  it('does not treat a text-only account policy rejection as a host policy block', () => {
+    expect(classify('AGENT_EXECUTION_FAILED', 'Request blocked by account policy')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'execution_failed',
+      failure_domain: 'cross_boundary',
+      repair_owner: 'shared_boundary',
+    });
+  });
+
+  it('keeps CLI version incompatibility client-owned', () => {
+    expect(classify(null, "error: unknown option '--trust'")).toMatchObject({
+      failure_category: 'model_unavailable',
+      failure_detail: 'cli_version_incompatible',
+      failure_mechanism: 'unknown',
+      failure_domain: 'client_environment',
+      evidence_level: 'stderr_fallback',
+      repair_owner: 'client_environment',
+    });
+  });
+
+  it('keeps an unloaded local model client-owned', () => {
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        "No models loaded. Please use the 'lms load' command.",
+      ),
+    ).toMatchObject({
+      failure_category: 'model_unavailable',
+      failure_detail: 'local_model_not_loaded',
+      failure_mechanism: 'unknown',
+      failure_domain: 'client_environment',
+      evidence_level: 'stderr_fallback',
+      repair_owner: 'client_environment',
+    });
+  });
+
+  it('keeps text-only network errors at the shared transport boundary', () => {
+    expect(
+      classify('AGENT_EXECUTION_FAILED', 'Transport error: network error'),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'network_error',
+      failure_mechanism: 'transport_failure',
+      failure_domain: 'cross_boundary',
+      evidence_level: 'legacy_text',
+      repair_owner: 'shared_boundary',
+    });
+  });
+
+  it('keeps a structured upstream code provider-owned', () => {
+    expect(classify('AGENT_CONNECTION_DROPPED')).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'network_error',
+      failure_mechanism: 'provider_rejection',
+      failure_domain: 'provider_control_plane',
+      evidence_level: 'structured_code',
+      repair_owner: 'provider_owner',
     });
   });
 
@@ -1669,6 +1884,7 @@ describe('classifyRunFailure — AMR/vela reclassification out of execution_fail
       failure_category: 'entitlement_required',
       failure_detail: 'amr_tier_upgrade_required',
       failure_stage: 'session_init',
+      evidence_level: 'structured_code',
       retryable: false,
       user_action: 'upgrade',
     });
@@ -2279,6 +2495,10 @@ describe('classifyRunFailure — sampled 0.15.1 provider request failures', () =
         failure_category: 'upstream_unavailable',
         failure_detail: 'attachment_media_type_unsupported',
         failure_stage: 'prompt_send',
+        failure_mechanism: 'unknown',
+        failure_domain: 'client_product',
+        evidence_level: 'legacy_text',
+        repair_owner: 'open_design',
         retryable: false,
         user_action: 'none',
       },
@@ -2292,6 +2512,10 @@ describe('classifyRunFailure — sampled 0.15.1 provider request failures', () =
         failure_category: 'upstream_unavailable',
         failure_detail: 'tool_schema_invalid',
         failure_stage: 'prompt_send',
+        failure_mechanism: 'unknown',
+        failure_domain: 'client_product',
+        evidence_level: 'legacy_text',
+        repair_owner: 'open_design',
         retryable: false,
         user_action: 'none',
       },
@@ -2305,6 +2529,10 @@ describe('classifyRunFailure — sampled 0.15.1 provider request failures', () =
         failure_category: 'upstream_unavailable',
         failure_detail: 'prompt_tokenization_failed',
         failure_stage: 'prompt_send',
+        failure_mechanism: 'unknown',
+        failure_domain: 'client_product',
+        evidence_level: 'legacy_text',
+        repair_owner: 'open_design',
         retryable: false,
         user_action: 'none',
       },
@@ -2344,6 +2572,10 @@ describe('classifyRunFailure — sampled 0.15.1 provider request failures', () =
         failure_category: 'upstream_unavailable',
         failure_detail: 'provider_resource_not_found',
         failure_stage: 'prompt_send',
+        failure_mechanism: 'unknown',
+        failure_domain: 'client_product',
+        evidence_level: 'legacy_text',
+        repair_owner: 'open_design',
         retryable: false,
         user_action: 'none',
       },
@@ -2357,6 +2589,10 @@ describe('classifyRunFailure — sampled 0.15.1 provider request failures', () =
         failure_category: 'upstream_unavailable',
         failure_detail: 'stream_disconnected',
         failure_stage: 'first_token_wait',
+        failure_mechanism: 'transport_failure',
+        failure_domain: 'cross_boundary',
+        evidence_level: 'legacy_text',
+        repair_owner: 'shared_boundary',
         retryable: true,
         user_action: 'retry',
       },
