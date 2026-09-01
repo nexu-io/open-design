@@ -211,16 +211,18 @@ describe('run deliverable validation', () => {
   });
 
   describe('export-only artifact validation', () => {
-    it('accepts a touched export artifact with a complete manifest when the prototype entry is stale', async () => {
+    it('accepts a touched export artifact with a complete manifest when the declared entry is stale', async () => {
       // Regression: nexu-io/open-design#7580. With the manifest's
       // `kind` honored (markdown-document → document), a Markdown
-      // export is accepted as the deliverable even when the project's
-      // primary kind is `prototype` (which accepts only `html` for
-      // the declared entry). Without the manifest-kind mapping the
-      // candidate fails `type_mismatch` and the run is reported
-      // incomplete despite a valid, complete export manifest.
+      // export is accepted as the deliverable for a `brand` project
+      // (which accepts `document` alongside `html` and `pdf`).
+      // Without the manifest-kind mapping the candidate falls back to
+      // its file-extension kind (`text` for .md), which `brand` does
+      // not accept, so the run reports `validation: type_mismatch`
+      // and `entry_not_touched` despite a valid, complete export
+      // manifest.
       const fixture = await projectFixture({
-        'fitcv-settings-ui-prototype.html': '<!doctype html><title>Stale prototype</title>',
+        'fitcv-brand-style-guide.html': '<!doctype html><title>Stale brand</title>',
         'fitcv-design-system-export.md': '# Design System Export',
         'fitcv-design-system-export.md.artifact.json': JSON.stringify({
           version: 1,
@@ -232,7 +234,7 @@ describe('run deliverable validation', () => {
           exports: ['md', 'html', 'pdf', 'zip'],
           metadata: {
             task: 'final-design-export-curation',
-            source: 'fitcv-settings-ui-prototype.html',
+            source: 'fitcv-brand-style-guide.html',
           },
         }),
       });
@@ -244,17 +246,56 @@ describe('run deliverable validation', () => {
           artifactCount: 1,
           touchedPaths: ['fitcv-design-system-export.md'],
           projectMetadata: {
-            // prototype is the original repro project's kind; with the
-            // manifest-kind mapping the Markdown export satisfies the
-            // document kind the candidate advertises via its manifest.
-            kind: 'prototype',
-            entryFile: 'fitcv-settings-ui-prototype.html',
+            // brand is the only project kind that accepts `document`
+            // alongside `html` and `pdf`, so a markdown export carrying
+            // a markdown-document manifest passes the type check.
+            kind: 'brand',
+            entryFile: 'fitcv-brand-style-guide.html',
           },
         }),
       ).resolves.toMatchObject({
         valid: true,
         validation: 'valid',
         entryFile: 'fitcv-design-system-export.md',
+        artifactKind: 'document',
+      });
+    });
+
+    it('rejects a markdown export on a prototype project (kind: prototype)', async () => {
+      // Companion to the brand test above: prototype projects accept
+      // only `html`. A markdown export is not a valid deliverable for
+      // them regardless of manifest kind, so the run correctly fails
+      // with type_mismatch.
+      const fixture = await projectFixture({
+        'index.html': '<!doctype html><title>Stale prototype</title>',
+        'export.md': '# Export',
+        'export.md.artifact.json': JSON.stringify({
+          version: 1,
+          kind: 'markdown-document',
+          title: 'export.md',
+          entry: 'export.md',
+          renderer: 'markdown',
+          status: 'complete',
+          exports: ['md', 'html', 'pdf', 'zip'],
+          metadata: {},
+        }),
+      });
+
+      await expect(
+        validateRunDeliverable({
+          ...fixture,
+          runStatus: 'succeeded',
+          artifactCount: 1,
+          touchedPaths: ['export.md'],
+          projectMetadata: {
+            kind: 'prototype',
+            entryFile: 'index.html',
+          },
+        }),
+      ).resolves.toMatchObject({
+        valid: false,
+        validation: 'type_mismatch',
+        entryFile: 'export.md',
         artifactKind: 'document',
       });
     });
@@ -388,19 +429,21 @@ describe('run deliverable validation', () => {
     });
 
     it('rejects when the manifest kind does not map to the project-accepted kinds', async () => {
-      // A markdown export against a `prototype` project whose accepted
-      // kinds exclude `document` would still fail. The fix only widens
-      // the type_mismatch to honor the manifest's `kind`; it does not
-      // grant every manifest kind a free pass on every project.
+      // The mapping only handles the common export kinds (markdown-document,
+      // pptx-presentation, xlsx-document). For every other manifest kind we
+      // fall back to the file-extension heuristic, which still gates on
+      // `acceptedKinds` — a `code-snippet` manifest on a `.md` file is
+      // `text` (file-extension) which `prototype` does not accept, so the
+      // export still fails with `type_mismatch`.
       const fixture = await projectFixture({
         'index.html': '<!doctype html><title>Stale</title>',
         'export.md': '#',
         'export.md.artifact.json': JSON.stringify({
           version: 1,
-          // An unknown manifest kind has no mapping; falls back to the
-          // file-extension kind (`text` for .md), which prototype does
-          // not accept → type_mismatch.
-          kind: 'unknown-artifact-type',
+          // code-snippet IS in the manifest ALLOWED_KINDS so it parses, but
+          // it is not a recognized export kind → falls back to file kind
+          // (`text` for .md), which prototype does not accept.
+          kind: 'code-snippet',
           title: 'export.md',
           entry: 'export.md',
           renderer: 'markdown',
