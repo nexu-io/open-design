@@ -440,9 +440,9 @@ describe("managed download package", () => {
     }
   });
 
-  it.each([".DS_Store", "Thumbs.db", "desktop.ini", ".localized"])(
+  it.each<[".DS_Store", "Thumbs.db", "desktop.ini", ".localized"]>(
     "claims a fresh managed base that contains only the OS-managed artifact %s",
-    async (artifactName) => {
+    async (artifactName: string) => {
       const root = tmpRoot("os-artifact-fresh-claim");
       const basePath = join(root, "downloads");
       mkdirSync(basePath, { recursive: true });
@@ -475,6 +475,20 @@ describe("managed download package", () => {
     mkdirSync(basePath, { recursive: true });
     writeFileSync(join(basePath, ".DS_Store"), "binary-finder-junk");
     mkdirSync(join(basePath, ".git"));
+
+    await expect(pruneManagedDownloads({ basePath })).rejects.toMatchObject({
+      code: MANAGED_DOWNLOAD_ERROR_CODES.STORE_NOT_OWNED,
+    });
+    expect(existsSync(join(basePath, ".open-design-download-root.json"))).toBe(false);
+  });
+
+  it("does not treat a directory squatting on an OS-artifact name as harmless", async () => {
+    // The name-only check (without lstat) lets a directory named .DS_Store
+    // bypass the empty-base claim. After the lstat guard, a directory
+    // squatting on the OS-artifact name is treated as real content.
+    const root = tmpRoot("os-artifact-squatting-dir");
+    const basePath = join(root, "downloads");
+    mkdirSync(join(basePath, ".DS_Store"), { recursive: true });
 
     await expect(pruneManagedDownloads({ basePath })).rejects.toMatchObject({
       code: MANAGED_DOWNLOAD_ERROR_CODES.STORE_NOT_OWNED,

@@ -29,9 +29,37 @@ const OS_MANAGED_ROOT_ARTIFACTS = new Set([".DS_Store", "Thumbs.db", "desktop.in
 /**
  * @internal Whether `name` is a benign, OS-managed root artifact that should
  * never count as real content when deciding whether a directory is claimable.
+ * Matched by name only — callers MUST additionally confirm the entry is a
+ * plain file via {@link verifiedOsManagedRootArtifacts} before trusting a
+ * match. A directory or symlink squatting on one of these names must still
+ * be treated as real content.
  */
 function isOsManagedRootArtifact(name: string): boolean {
   return OS_MANAGED_ROOT_ARTIFACTS.has(name);
+}
+
+/**
+ * Resolves which of `entries` (direct children of `rootDir`) are genuine
+ * OS-managed artifacts: name-matched AND a plain file, not a directory or
+ * symlink. A name match alone is not enough — see {@link isOsManagedRootArtifact}.
+ * An entry that disappears or fails to stat between `readdir` and this check
+ * is treated as unverified (excluded), which fails closed into the existing
+ * rejection path rather than silently trusting it.
+ */
+async function verifiedOsManagedRootArtifacts(rootDir: string, entries: string[]): Promise<Set<string>> {
+  const candidates = entries.filter((entry) => isOsManagedRootArtifact(entry));
+  if (candidates.length === 0) return new Set();
+  const verified = await Promise.all(
+    candidates.map(async (entry) => {
+      try {
+        const entryStat = await lstat(join(rootDir, entry));
+        return entryStat.isFile() && !entryStat.isSymbolicLink() ? entry : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return new Set(verified.filter((entry): entry is string => entry != null));
 }
 
 /**
@@ -104,7 +132,8 @@ export async function ensureManagedBase(basePath: string): Promise<void> {
   const sentinel = await readJson<unknown>(sentinelPath);
   if (sentinel == null) {
     const entries = await readdir(basePath);
-    const content = entries.filter((name) => !isOsManagedRootArtifact(name));
+    const osArtifacts = await verifiedOsManagedRootArtifacts(basePath, entries);
+    const content = entries.filter((name: string) => !osArtifacts.has(name));
     if (content.length > 0) {
       throw new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.STORE_NOT_OWNED, `download base is not empty and has no ownership marker: ${basePath}`);
     }
