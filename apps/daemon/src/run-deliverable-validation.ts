@@ -216,6 +216,69 @@ export async function validateRunDeliverable(
       }),
     );
     if (!touched.has(entryFile)) {
+      // Export-only tasks: the prototype entry is intentionally untouched, but
+      // a touched artifact with a complete explicit manifest should be accepted
+      // as the deliverable entry instead of rejecting the run. The candidate
+      // must be touched in this run, carry a persisted (non-inferred) manifest
+      // bound to the file's own path, and have a status of `complete`.
+      const exportCandidate = files.find((file) => {
+        const candidatePath = filePath(file);
+        const manifest = file.artifactManifest;
+        if (!manifest || manifest.status !== 'complete') return false;
+        if (typeof manifest.entry !== 'string' || manifest.entry !== candidatePath) return false;
+        // Only consider artifacts with an explicit persisted manifest, not
+        // inferred legacy manifests that every .html/.md file receives.
+        if (manifest.metadata?.inferred === true) return false;
+        return touched.has(candidatePath);
+      });
+      if (exportCandidate) {
+        const exportEntryFile = filePath(exportCandidate);
+        // Resolve the artifact's kind for the type check. Use the manifest's
+        // `kind` when it maps to a valid ProjectFileKind; fall back to the
+        // file's `kind` (e.g. 'text' for .md, 'presentation' for .pptx) when
+        // the manifest kind has no mapping or is absent. The fallback ensures
+        // the type_mismatch guard is preserved for unrecognised artifact kinds.
+        const exportArtifactKind: ProjectFileKind = (() => {
+          const mk = exportCandidate.artifactKind;
+          if (mk === 'markdown-document') return 'document';
+          // 'pptx-presentation' is not in the manifest ALLOWED_KINDS but is
+          // documented in some project exports; map it conservatively.
+          if (mk === 'pptx-presentation') return 'presentation';
+          if (mk === 'xlsx-document') return 'spreadsheet';
+          return exportCandidate.kind;
+        })();
+        const exportFacts = {
+          entryFile: exportEntryFile,
+          artifactKind: exportArtifactKind,
+        };
+        if (!matchesAcceptedKinds(acceptedKinds, exportArtifactKind)) {
+          return {
+            valid: false,
+            validation: 'type_mismatch',
+            ...exportFacts,
+          };
+        }
+        try {
+          const target = path.resolve(projectRoot, exportEntryFile);
+          const relative = path.relative(projectRoot, target);
+          if (relative.startsWith('..') || path.isAbsolute(relative)) {
+            return { valid: false, validation: 'entry_unreadable', ...exportFacts };
+          }
+          const stat = await fs.stat(target);
+          if (!stat.isFile()) {
+            return { valid: false, validation: 'entry_unreadable', ...exportFacts };
+          }
+          const handle = await fs.open(target, 'r');
+          await handle.close();
+        } catch {
+          return { valid: false, validation: 'entry_unreadable', ...exportFacts };
+        }
+        return {
+          valid: true,
+          validation: 'valid',
+          ...exportFacts,
+        };
+      }
       return {
         valid: false,
         validation: 'entry_not_touched',
