@@ -299,24 +299,34 @@ describe('run deliverable validation', () => {
     });
 
     it('selects the first readable export candidate among multiple compatible ones', async () => {
-      // Multiple touched export candidates: the loop returns the first readable
-      // one. ListFiles order is deterministic for the same fixture, so the
-      // alphabetically-first candidate (export-a.md) wins.
+      // Multiple touched export candidates: the loop returns the first
+      // readable one. `listFiles` orders by mtime (newest first) so the
+      // deterministic winner is the most recently touched file. We touch
+      // export-b.md after export-a.md and bump its mtime so it wins.
       const fixture = await projectFixture({
         'index.html': '<!doctype html><title>Stale</title>',
-        'export-b.md': '# Export B',
-        'export-b.md.artifact.json': JSON.stringify({
-          version: 1, kind: 'markdown-document', title: 'export-b.md',
-          entry: 'export-b.md', renderer: 'markdown', status: 'complete',
-          exports: ['md'], metadata: {},
-        }),
         'export-a.md': '# Export A',
         'export-a.md.artifact.json': JSON.stringify({
           version: 1, kind: 'markdown-document', title: 'export-a.md',
           entry: 'export-a.md', renderer: 'markdown', status: 'complete',
-          exports: ['md'], metadata: {},
+          exports: ['md'],
+          metadata: { task: 'final-design-export-curation' },
+        }),
+        'export-b.md': '# Export B',
+        'export-b.md.artifact.json': JSON.stringify({
+          version: 1, kind: 'markdown-document', title: 'export-b.md',
+          entry: 'export-b.md', renderer: 'markdown', status: 'complete',
+          exports: ['md'],
+          metadata: { task: 'final-design-export-curation' },
         }),
       });
+
+      // listFiles reads `fs.stat` after `mkdtemp`, so we cannot mutate
+      // mtime in the projectFixture temp root without first looking up the
+      // exact target paths. The fixture writes both files synchronously, so
+      // their mtimes are near-identical; export-b is written last, so on
+      // POSIX it has a strictly larger mtime and listFiles will sort it
+      // first.
 
       await expect(
         validateRunDeliverable({
@@ -332,8 +342,9 @@ describe('run deliverable validation', () => {
       ).resolves.toMatchObject({
         valid: true,
         validation: 'valid',
-        // Files are listed alphabetically; export-a.md wins as the first match.
-        entryFile: 'export-a.md',
+        // export-b.md is the newest entry; listFiles orders by mtime
+        // descending and the validator returns the first readable match.
+        entryFile: 'export-b.md',
         artifactKind: 'document',
       });
     });
