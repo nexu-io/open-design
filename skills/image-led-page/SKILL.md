@@ -17,10 +17,11 @@ triggers:
   - "page with real product shots"
   - "hero photography for my site"
 od:
-  mode: image
-  surface: image
+  mode: prototype
+  surface: web
+  platform: desktop
   scenario: marketing
-  category: image-generation
+  category: web-artifacts
   preview:
     type: html
     entry: example.html
@@ -119,15 +120,19 @@ sys.stdout.write(str(obj.get(sys.argv[1], "")))
 ' "$1"
 }
 
-# Write the prompt as literal text. The quoted heredoc delimiter turns off
-# expansion and command substitution, so quotes, backticks and $(...) inside a
-# brand prompt stay data instead of becoming shell syntax. Never paste prompt
-# text into a double-quoted --prompt argument.
-cat > .od-prompt.txt <<'PROMPT'
-<subject sentence for this slot>
+# Stage the prompt in a private temp file OUTSIDE the project. Prompt text is
+# brand material and must never be routed through the shell: a double-quoted
+# --prompt argument executes backticks and $(...), and a heredoc ends at any
+# line equal to its delimiter, so a prompt containing that word truncates the
+# file and the shell runs the remainder. A fixed name inside the project would
+# also clobber a real project file and outlive a failed run.
+prompt_file=$(mktemp "${TMPDIR:-/tmp}/od-prompt.XXXXXXXX") || exit 1
+trap 'rm -f "$prompt_file"' EXIT INT TERM
 
-<style block, verbatim, identical for every slot>
-PROMPT
+# Write the subject sentence and the verbatim style block into "$prompt_file"
+# with your file-writing tool — not with a shell heredoc, cat, or echo.
+# Then confirm it arrived before spending a generation on an empty prompt:
+[ -s "$prompt_file" ] || { echo "prompt file is empty: $prompt_file" >&2; exit 1; }
 
 out=$("$OD_NODE_BIN" "$OD_BIN" media generate \
   --project "$OD_PROJECT_ID" \
@@ -135,7 +140,7 @@ out=$("$OD_NODE_BIN" "$OD_BIN" media generate \
   --model "<imageModel from metadata>" \
   --aspect "<slot aspect>" \
   --output "assets/<slot-id>.png" \
-  --prompt-file .od-prompt.txt)
+  --prompt-file "$prompt_file")
 ec=$?
 if [ "$ec" -ne 0 ]; then echo "$out" >&2; exit "$ec"; fi
 
@@ -169,7 +174,6 @@ if not isinstance(f, dict) or not f.get("name"):
 print(f["name"])
 ') || exit 1
 
-rm -f .od-prompt.txt
 printf '%s\n' "$file_name"
 ```
 
