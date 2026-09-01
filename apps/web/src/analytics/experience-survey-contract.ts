@@ -37,7 +37,7 @@ export const EXPERIENCE_SURVEY_QUESTION_IDS = {
  * should not have to join against the survey definition to know what was asked.
  */
 export const EXPERIENCE_SURVEY_QUESTION_TEXT = {
-  recommendation: 'How likely are you to recommend OpenDesign to a colleague or friend?',
+  recommendation: 'How likely are you to recommend LeastGen Studio to a colleague or friend?',
   improvement: 'Which one should we improve first?',
 } as const;
 

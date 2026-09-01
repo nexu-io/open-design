@@ -37,10 +37,10 @@ describe('applyAppearanceToDocument', () => {
     document.documentElement.style.removeProperty('--accent-hover');
   });
 
-  it('applies the forced light theme and accent variables to the root element', () => {
+  it('applies the forced dark theme and accent variables to the root element', () => {
     applyAppearanceToDocument({ accentColor: '#4F46E5' });
 
-    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
     expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#4f46e5');
     expect(document.documentElement.style.getPropertyValue('--accent-hover')).toContain('#4f46e5');
   });
@@ -58,12 +58,12 @@ describe('applyAppearanceToDocument', () => {
     document.documentElement.style.removeProperty('--bg-app');
   });
 
-  it('applies accent variables while forcing a stale dark theme back to light', () => {
-    document.documentElement.setAttribute('data-theme', 'dark');
+  it('applies accent variables while forcing a stale light theme back to dark', () => {
+    document.documentElement.setAttribute('data-theme', 'light');
 
     applyAppearanceToDocument({ accentColor: '#10B981' });
 
-    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
     expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#10b981');
     expect(document.documentElement.style.getPropertyValue('--accent-strong')).toContain('#10b981');
     expect(document.documentElement.style.getPropertyValue('--accent-soft')).toContain('#10b981');
@@ -89,7 +89,7 @@ describe('applyAppearanceToDocument', () => {
 
     applyAppearanceToDocument({ accentColor: 'not-a-color' });
 
-    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
     expect(document.documentElement.style.getPropertyValue('--accent')).toBe(DEFAULT_ACCENT_COLOR);
   });
 });

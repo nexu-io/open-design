@@ -57,7 +57,7 @@
 }
 
 .mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--mono);
   font-size: 12px;
   padding: 2px 6px;
   border-radius: 6px;
@@ -139,8 +139,8 @@
 }
 
 .badge[data-anchor-state='anchored'] {
-  color: #047857;
-  background: color-mix(in srgb, #10b981 16%, transparent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .badge[data-anchor-state='reanchored'] {

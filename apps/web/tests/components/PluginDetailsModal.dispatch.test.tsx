@@ -430,7 +430,7 @@ describe('PluginDetailsModal common metadata coverage', () => {
     expect(html).not.toContain('plugin-meta-sections__heading');
   });
 
-  it('routes official plugin author and source links to the OpenDesign repo', () => {
+  it('routes official plugin author and source links to the LeastGen Studio repo', () => {
     const html = render(
       pluginWithMeta({
         id: 'official-link-meta',

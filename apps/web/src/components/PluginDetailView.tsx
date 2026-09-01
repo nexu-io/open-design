@@ -283,7 +283,7 @@ export function PluginDetailView(props: Props) {
   const sourceLinks = derivePluginSourceLinks(plugin);
   const official = isOfficialPlugin(plugin);
   const author = official
-    ? '@OpenDesign'
+    ? '@LeastGen'
     : (sourceLinks.authorName || sourceLinks.sourceLabel);
   const badge = official
     ? t('pluginDetail.officialBadge')

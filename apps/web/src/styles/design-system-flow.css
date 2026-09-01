@@ -166,7 +166,7 @@
 .ds-setup-form > h1,
 .ds-setup-center-card h1,
 .ds-review-column > h1 {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--serif);
   font-size: 32px;
   line-height: 1.08;
   margin: 0 0 10px;
@@ -1279,7 +1279,7 @@ a.ds-source-link-open:focus-visible {
   text-align: center;
 }
 .ds-generation-stage h1 {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--serif);
   font-size: 32px;
   margin: 0 0 10px;
 }

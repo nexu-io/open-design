@@ -15157,7 +15157,7 @@ function HtmlViewer({
     await waitForAnimationFrame();
     // Prefer the daemon's off-screen render (desktop only): isolated from the
     // preview pane and, rendering the artifact alone in a hidden window, it can
-    // never capture OpenDesign's own UI. Page exports use the selected preview
+    // never capture LeastGen Studio's own UI. Page exports use the selected preview
     // preset; desktop pages and decks retain the renderer defaults. `wholeDeck`
     // (Export as image) stitches every slide
     // top-to-bottom into one long image — matching the slide count the viewer

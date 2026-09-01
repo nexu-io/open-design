@@ -60,7 +60,7 @@ const MARKETPLACES = [
     url: 'https://open-design.ai/marketplace/open-design-marketplace.json',
     trust: 'official',
     manifest: {
-      name: 'OpenDesign Official',
+      name: 'LeastGen Studio Official',
       version: '1.0.0',
       plugins: [
         {

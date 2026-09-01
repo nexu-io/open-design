@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// Acceptance: the plan pill on Settings → 本机 CLI → OpenDesign must name the
+// Acceptance: the plan pill on Settings → 本机 CLI → LeastGen Studio must name the
 // same plan FAMILY as the rail's account-row wordmark.
 //
 // Product ruling (owner): 「团队版的订阅，这里应该都显示 team 的标识」 …… 「产品

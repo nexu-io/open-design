@@ -1205,8 +1205,9 @@
   font-size: 13px;
   line-height: 1.45;
 }
-/* Solid pill mirroring the community selected-tab treatment: black fill,
-   green ink (icon + label share currentColor). */
+/* Solid pill mirroring the community selected-tab treatment: brand accent
+   fill, contrast ink (icon + label share currentColor). Theme-aware via the
+   accent tokens — teal fill on the dark shell. */
 .settings-cloud-signin-callout__button {
   display: inline-flex;
   align-items: center;
@@ -1216,15 +1217,15 @@
   padding: 0 14px;
   border: 1px solid transparent;
   border-radius: var(--radius-large, 8px);
-  background: var(--text-strong);
-  color: var(--brand, #87ea5c);
+  background: var(--accent);
+  color: var(--accent-contrast);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
 }
 .settings-cloud-signin-callout__button:hover {
-  background: color-mix(in srgb, var(--text-strong) 88%, var(--brand, #87ea5c));
+  background: var(--accent-hover);
 }
 /* The pill wrapper (AmrLoginPill's .amr-account-control root) carries the
    callout button's border + fill; the inner action <button> would otherwise
@@ -1633,21 +1634,11 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 }
 
 /* Failed-run AMR nudge: when the chat error card's "Try OpenDesign AMR" link
-   opens Settings, the AMR card scrolls into view and pulses a couple of times.
-   The card's own box-shadow is not clipped by `overflow: hidden`, so the glow
-   reads fully even though inner content is clipped. */
+   opens Settings, the AMR card scrolls into view. The one-shot pulse was
+   retired with the Orbit · Morph motion rules — the accent border alone is
+   the static attention marker. */
 .agent-card--amr-highlight {
   border-color: var(--accent);
-  animation: amr-card-pulse 1s cubic-bezier(0.23, 1, 0.32, 1) 2;
-}
-@keyframes amr-card-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent);
-  }
-  35% {
-    box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 34%, transparent);
-  }
 }
 
 /* Authorize-button coachmark: a fake cursor that fades + slides in from the
@@ -1698,22 +1689,9 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   inset: -3px;
   border-radius: 50%;
   border: 2px solid var(--accent);
-  opacity: 0;
-  /* Start pulsing only after the cursor has settled in. */
-  animation: amr-coachmark-ring 1.5s cubic-bezier(0.23, 1, 0.32, 1) 460ms infinite;
-}
-@keyframes amr-coachmark-ring {
-  0% {
-    transform: scale(0.55);
-    opacity: 0;
-  }
-  30% {
-    opacity: 0.65;
-  }
-  100% {
-    transform: scale(1.25);
-    opacity: 0;
-  }
+  /* The pulsing ring animation was retired with the Orbit · Morph motion
+     rules — a static faded ring keeps the coachmark anchored. */
+  opacity: 0.35;
 }
 .amr-coachmark__cursor {
   position: absolute;
@@ -3277,7 +3255,6 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 }
 .activity-header .dot[data-active="true"] {
   background: var(--accent);
-  animation: pulse 1.2s ease-in-out infinite;
 }
 .activity-title { font-weight: 500; }
 .activity-stats {

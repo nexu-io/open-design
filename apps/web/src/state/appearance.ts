@@ -9,17 +9,19 @@ const ACCENT_VARS = [
   '--accent-hover',
 ] as const;
 
-export const DEFAULT_ACCENT_COLOR = '#353535';
+export const DEFAULT_ACCENT_COLOR = '#22d3ee';
+// Orbit · Morph accent family only — the retired bridge hues (amber #ffb36b,
+// #00f3ff, dark teal #0f6b5b) were dropped entirely. Keep in lockstep with
+// the pre-hydration allowlist in `app/layout.tsx`.
 export const ACCENT_SWATCHES = [
   DEFAULT_ACCENT_COLOR,
-  '#202020',
-  '#848484',
-  '#87ea5c',
-  '#0d5400',
-  '#1A74FF',
-  '#FFBA12',
-  '#FF7528',
-  '#F04142',
+  '#67e8f9',
+  '#1f9cb0',
+  '#d8ffff',
+  '#8b5cf6',
+  '#a3b5c0',
+  '#f4fafc',
+  '#04211b',
 ] as const;
 
 export function normalizeAccentColor(value: unknown): string | null {
@@ -37,34 +39,37 @@ function accentVars(accentColor: string): Record<(typeof ACCENT_VARS)[number], s
     '--accent': accentColor,
     // Keep these mix ratios in sync with the pre-hydration script in app/layout.tsx.
     '--accent-strong': `color-mix(in srgb, ${accentColor} 82%, var(--text-strong))`,
-    '--accent-soft': `color-mix(in srgb, ${accentColor} 12%, var(--bg-subtle))`,
-    '--accent-tint': `color-mix(in srgb, ${accentColor} 6%, var(--bg-panel))`,
+    // Soft/tint ratios match the Orbit · Morph token layer in `tokens.css`
+    // (14% soft / 7% tint). Keep in sync with the pre-hydration script in
+    // `app/layout.tsx`.
+    '--accent-soft': `color-mix(in srgb, ${accentColor} 14%, var(--bg-subtle))`,
+    '--accent-tint': `color-mix(in srgb, ${accentColor} 7%, var(--bg-panel))`,
     '--accent-hover': `color-mix(in srgb, ${accentColor} 86%, var(--text-strong))`,
   };
 }
 
 /**
- * The one appearance OpenDesign ships.
+ * The one appearance LeastGen Studio ships.
  *
- * Product removed the theme setting: the workspace surfaces have no dark
- * tokens, so a dark app is a broken app. `data-theme` is therefore a constant
- * rather than a preference — and it must always be PRESENT, not merely
- * non-dark. Every dark rule in the app is gated on the attribute being absent
- * (`html:not([data-theme])` in CSS) or falls back to `prefers-color-scheme`
- * when the attribute is missing (`shiki`, `ConnectorLogo`, `SketchEditor`,
- * `TerminalViewer`, `connectorBrandColor`, `MentionNode`). Stamping it
- * unconditionally is what keeps a dark OS from leaking through.
+ * Product removed the theme setting: the workspace is themed dark-first
+ * (LeastGen dark shell + bridge-gradient brand accents in `tokens.css`).
+ * `data-theme` is therefore a constant rather than a preference — and it must
+ * always be PRESENT, not merely non-light. Stamping it unconditionally keeps a
+ * light OS from leaking through: every stray `html:not([data-theme])` fallback
+ * (`shiki`, `ConnectorLogo`, `SketchEditor`, `TerminalViewer`,
+ * `connectorBrandColor`, `MentionNode`) resolves dark on a dark OS anyway, and
+ * the light `:root` token block is legacy fallback only.
  */
-export const FORCED_APP_THEME = 'light' as const;
+export const FORCED_APP_THEME = 'dark' as const;
 
 /**
  * Coerce any persisted theme to the only one that still exists.
  *
  * Changing the default alone cannot fix an existing install: every user who
- * ever opened the old picker has `'dark'` — or `'system'`, which resolves dark
- * on a dark OS — written to localStorage, and a stored value does not move
- * when the default does. Config reads funnel through here so those installs
- * come back light.
+ * ever opened the old picker has `'light'` — or `'system'`, which resolves
+ * light on a light OS — written to localStorage, and a stored value does not
+ * move when the default does. Config reads funnel through here so those
+ * installs come back dark.
  */
 export function resolveAppTheme(persisted?: AppTheme | null): AppTheme {
   return persisted === FORCED_APP_THEME ? persisted : FORCED_APP_THEME;

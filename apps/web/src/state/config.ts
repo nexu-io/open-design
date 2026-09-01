@@ -29,10 +29,12 @@ const CONFIG_MIGRATION_VERSION = 3;
 // persisted verbatim into every install's config. None of them is offered in
 // ACCENT_SWATCHES anymore, so a config still carrying one is a leftover
 // default rather than a deliberate choice — the migration resets it to the
-// current default. (v2 covered the green era; v3 adds the older brick one,
-// which kept long-lived installs off the #5517 accent.) Keep this list in
-// sync with the pre-hydration script in app/layout.tsx.
-const LEGACY_DEFAULT_ACCENT_COLORS = ['#87ea5c', '#c96442'];
+// current default. (v2 covered the green era; v3 adds the older brick one and
+// the light-era neutral defaults, which kept long-lived installs off the
+// #5517 accent and now off the neutral era entirely — the LeastGen rebrand
+// ships the teal accent.) Keep this list in sync with the pre-hydration
+// script in app/layout.tsx.
+const LEGACY_DEFAULT_ACCENT_COLORS = ['#87ea5c', '#c96442', '#353535', '#202020', '#848484'];
 const RETIRED_SECURE_BYOK_KEYS = [
   'byokProfileId',
   'byokCredentialConfigured',
@@ -122,7 +124,7 @@ export interface KnownProvider {
   baseUrl: string;
   /** Ranked provider-owned preferences, matched against the live account catalogue. */
   preferredModels: string[];
-  /** Model ids that OpenDesign previously preselected but the provider retired. */
+  /** Model ids that LeastGen Studio previously preselected but the provider retired. */
   retiredModels?: string[];
   /** Optional provider-specific key console link shown in Settings. */
   apiKeyConsoleLink?: { host: string; url: string };
@@ -735,11 +737,6 @@ export function loadConfig(): AppConfig {
         );
         merged.apiProviderBaseUrl = knownProvider?.baseUrl ?? null;
       }
-
-      const persistedAccent = normalizeAccentColor(parsed.accentColor);
-      if (persistedAccent != null && LEGACY_DEFAULT_ACCENT_COLORS.includes(persistedAccent)) {
-        merged.accentColor = DEFAULT_CONFIG.accentColor;
-      }
       merged.configMigrationVersion = CONFIG_MIGRATION_VERSION;
     }
 
@@ -771,6 +768,21 @@ export function loadConfig(): AppConfig {
         draftKey.slice(0, separator) as ApiProtocol,
         draft.apiConfig,
       ) || migratedConfig;
+    }
+
+    // Legacy shipped-default accents are reset on EVERY load, not only during a
+    // migration-version transition: installs whose configMigrationVersion was
+    // already stamped by an earlier build keep the old neutral accent on disk
+    // forever otherwise, and appearance.ts would re-apply it after hydration,
+    // overriding the teal the pre-hydration script in app/layout.tsx painted.
+    const persistedAccent = normalizeAccentColor(parsed.accentColor);
+    if (
+      persistedAccent != null &&
+      LEGACY_DEFAULT_ACCENT_COLORS.includes(persistedAccent) &&
+      merged.accentColor === persistedAccent
+    ) {
+      merged.accentColor = DEFAULT_CONFIG.accentColor;
+      migratedConfig = true;
     }
 
     const downgradedUnsupportedChatProtocol =

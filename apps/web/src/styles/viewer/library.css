@@ -615,7 +615,7 @@
   border-radius: 3px;
   padding: 0 4px;
   margin-right: 2px;
-  font-family: ui-monospace, monospace;
+  font-family: var(--mono);
   font-size: 12px;
   color: var(--text-muted);
 }
@@ -949,7 +949,7 @@
 }
 .library-import-block textarea {
   min-height: 60px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--mono);
   font-size: 12px;
 }
 .library-import-error {
@@ -1691,7 +1691,7 @@
   overflow-x: auto;
   margin: 0;
   color: var(--text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 12px;
   line-height: 1.45;
   white-space: pre;

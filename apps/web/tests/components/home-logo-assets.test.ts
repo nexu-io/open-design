@@ -8,7 +8,7 @@ const homeHeroSource = read('../../src/components/HomeHero.tsx');
 const entryNavRailSource = read('../../src/components/EntryNavRail.tsx');
 const logoSvg = read('../../public/logo.svg');
 const brandIconSvg = read('../../public/brand-icon.svg');
-// #5517: the home hero header shows the full OpenDesign logotype instead of
+// #5517: the home hero header shows the full LeastGen Studio logotype instead of
 // the small glyph + name pair; the asset must ship with the app.
 const heroLogotypeSvg = read('../../public/logo-03.svg');
 // Round 7: the static logotype is now driven by the WebGL pixel-scan wordmark
@@ -16,18 +16,20 @@ const heroLogotypeSvg = read('../../public/logo-03.svg');
 // channel as the glyph mask it assembles out of coloured blocks.
 const heroPixelScanSvg = read('../../public/logo-scan.svg');
 
-// The current OpenDesign brand glyph is the ink superellipse tile introduced
-// with the landing-page rebrand (landing PR #3444): its outline starts with
-// this path command in every export of the mark.
-const CURRENT_GLYPH_PATH_PREFIX = 'M41 0.726562';
-// The retired glyph was a 444x444 dark tile (#202020) whose cursor arrow was
-// drawn as a separate path starting at this command.
-const RETIRED_GLYPH_MARKERS = ['#202020', 'M212.059', 'width="444"'];
+// The current LeastGen Studio brand glyph is the three-bridge-node mark
+// (physical → digital) introduced with the LeastGen rebrand: both exports
+// carry this identifying comment and the top-node circle.
+const CURRENT_GLYPH_MARKERS = ['LeastGen mark: three bridge nodes', 'cx="41" cy="21"'];
+// The retired glyphs: the octopus-cursor superellipse path and the 444x444
+// dark tile whose cursor arrow was drawn as a separate path.
+const RETIRED_GLYPH_MARKERS = ['M41 0.726562', 'M212.059', 'width="444"'];
 
 describe('Home logo assets', () => {
   it('ships the current brand glyph in the public logo assets', () => {
-    expect(logoSvg).toContain(CURRENT_GLYPH_PATH_PREFIX);
-    expect(brandIconSvg).toContain(CURRENT_GLYPH_PATH_PREFIX);
+    for (const marker of CURRENT_GLYPH_MARKERS) {
+      expect(logoSvg).toContain(marker);
+      expect(brandIconSvg).toContain(marker);
+    }
     for (const marker of RETIRED_GLYPH_MARKERS) {
       expect(logoSvg).not.toContain(marker);
       expect(brandIconSvg).not.toContain(marker);

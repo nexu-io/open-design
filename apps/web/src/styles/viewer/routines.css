@@ -382,7 +382,7 @@
   padding: 8px 10px;
   border-radius: var(--radius-sm, 4px);
   background: rgba(255, 255, 255, 0.08);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 12px;
   line-height: 1.45;
   white-space: pre-wrap;
@@ -982,8 +982,8 @@
   padding: 0;
   border: 0;
   border-radius: 10px;
-  /* White seat matching the dropdown beside it. */
-  background: #fff;
+  /* Dark seat matching the dropdown beside it. */
+  background: var(--bg-panel);
   box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
   color: var(--text);
   -webkit-app-region: no-drag;
@@ -1032,7 +1032,7 @@
   padding: 0 10px 0 12px;
   border: 0;
   border-radius: 12px;
-  background: #fff;
+  background: var(--bg-panel);
   color: var(--text);
   font-family: inherit;
   font-size: 13px;
@@ -1263,7 +1263,7 @@
 }
 .workspace-shell .workspace-tab.is-active {
   border-radius: 12px;
-  background: #ffffff;
+  background: var(--bg-panel);
   border-color: var(--workspace-active-tab-border);
   box-shadow:
     0 1px 2px color-mix(in srgb, var(--text) 6%, transparent),
@@ -1656,7 +1656,7 @@
   padding: 8px 12px;
   border: 0;
   border-radius: var(--radius-lg) var(--radius-none) var(--radius-lg) var(--radius-lg);
-  background: #ededed;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-panel));
   color: var(--text);
   line-height: 1.45;
   font-size: 13px;
@@ -2285,7 +2285,7 @@
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
 }
 .chat-composer-fixed-layer .composer-input-wrap {
-  background: #fff;
+  background: color-mix(in srgb, var(--bg-panel) 94%, var(--bg-subtle));
   /* No inner frame — the input sits directly on the shell surface. The shell
      keeps its own outer border (see .composer-shell above). */
   border-color: transparent;
@@ -2498,12 +2498,12 @@
   display: none;
 }
 /* Keep the project composer send action visually aligned with the Home
-   composer: deep neutral surface, brand-green foreground, and the same
+   composer: tinted surface, brand-teal foreground, and the same
    theme-aware disabled treatment. */
 .app .composer-send:not(.stop),
 .chat-composer-fixed-layer .composer-send:not(.stop) {
-  --composer-send-bg: var(--text-strong);
-  --composer-send-fg: #87ea5c;
+  --composer-send-bg: var(--accent-tint);
+  --composer-send-fg: var(--brand-text);
 
   position: relative;
   overflow: hidden;
@@ -2527,19 +2527,19 @@
 .chat-composer-fixed-layer .composer-send:not(.stop):hover:not(:disabled),
 .chat-composer-fixed-layer .composer-send:not(.stop):active:not(:disabled) {
   border-color: transparent;
-  background: color-mix(in srgb, var(--composer-send-bg) 86%, #fff);
+  background: color-mix(in srgb, var(--composer-send-bg) 86%, var(--accent));
   color: var(--composer-send-fg);
   box-shadow: none;
   transform: none;
 }
 .app .composer-send:disabled,
 .chat-composer-fixed-layer .composer-send:disabled {
-  /* Idle (nothing typed): gray ground with the deep-green arrow; typing
-     flips to the ink-black ground with the bright #87ea5c arrow. */
+  /* Idle (nothing typed): muted ground with a dimmed arrow; typing
+     flips to the tinted ground with the bright teal arrow. */
   opacity: 1;
   background: var(--bg-muted);
   border-color: transparent;
-  color: #2f781d;
+  color: var(--text-soft);
   box-shadow: none;
 }
 .composer-send:not(.stop) .od-icon {

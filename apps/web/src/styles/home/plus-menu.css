@@ -458,10 +458,10 @@
 .composer-mode {
   position: relative;
   display: inline-flex;
-  /* Match the selected-state green to the "原型" template chip
-     (deep brand green #2f781d on the #f9fff4 tint). */
-  --green: #2f781d;
-  --green-bg: #f9fff4;
+  /* Match the selected-state teal to the "原型" template chip
+     (--brand-text on the --selected-soft tint). */
+  --green: var(--brand-text);
+  --green-bg: var(--selected-soft);
 }
 .composer-mode__trigger {
   box-sizing: border-box;

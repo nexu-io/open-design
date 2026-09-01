@@ -62,7 +62,7 @@ describe('HomeView missing bundled scenario error', () => {
   it('explains the missing scenario and recovery step in Chinese while retaining its id', async () => {
     const alert = await renderMissingImageScenario('zh-CN');
     expect(alert.textContent).toBe(
-      '内置场景“od-media-generation”未安装。请重新安装 OpenDesign，以恢复默认插件。',
+      '内置场景“od-media-generation”未安装。请重新安装 LeastGen Studio，以恢复默认插件。',
     );
     expect(alert.textContent).not.toContain('Bundled scenario');
   });

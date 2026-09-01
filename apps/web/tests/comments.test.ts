@@ -180,7 +180,7 @@ describe('preview comment attachment helpers', () => {
         elementId: 'hero-title',
         selector: '[data-od-id="hero-title"]',
         label: 'Hero title',
-        text: 'OpenDesign',
+        text: 'LeastGen Studio',
         position: { x: 10, y: 20, width: 300, height: 80 },
         htmlHint: '<h1 data-od-id="hero-title">',
         selectionKind: 'element',

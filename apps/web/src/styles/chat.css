@@ -524,7 +524,7 @@
 .msg.user .user-text {
   white-space: pre-wrap;
   color: var(--text);
-  background: #ededed;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-panel));
   border: none;
   border-radius: var(--radius-lg) var(--radius-none) var(--radius-lg) var(--radius-lg);
   padding: 8px 12px;
@@ -2189,9 +2189,7 @@
   width: 18px;
   height: 18px;
   pointer-events: none;
-  /* Self-animating matrix-loader SVG: show the whole square grid (no circular
-     crop) so the corner cells and their bloom aren't clipped. */
-  object-fit: contain;
+  /* Anton Indicator host: fixed 18px box so the pill keeps its geometry. */
 }
 .composer-hint {
   font-size: 12px;

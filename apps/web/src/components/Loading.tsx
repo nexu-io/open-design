@@ -1,14 +1,20 @@
-import { Icon } from './Icon';
+import { AntonIndicator } from '@open-design/components';
 
 interface SpinnerProps {
   size?: number;
   label?: string;
 }
 
-export function Spinner({ size = 14, label }: SpinnerProps) {
+/**
+ * Shared pending glyph. The Orbit · Morph status affordance is the Anton
+ * Indicator — the component only mounts while its caller is actually
+ * pending, so `thinking` is wired to that same boolean by construction.
+ * Default sits in the spec's 16–18px inline band.
+ */
+export function Spinner({ size = 16, label }: SpinnerProps) {
   return (
     <span className="loading-spinner" role="status" aria-live="polite">
-      <Icon name="spinner" size={size} />
+      <AntonIndicator state="thinking" size={`${size}px`} />
       {label ? <span className="loading-spinner-label">{label}</span> : null}
     </span>
   );

@@ -348,7 +348,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     label: 'Create plugin',
     icon: 'edit',
     group: 'migrate',
-    hint: 'Author a reusable OpenDesign plugin and add it to My plugins.',
+    hint: 'Author a reusable LeastGen Studio plugin and add it to My plugins.',
     action: { kind: 'create-plugin' },
   },
   {

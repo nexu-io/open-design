@@ -2,8 +2,9 @@
 
 import dynamic from 'next/dynamic';
 
+import { AntonIndicator } from '@open-design/components';
+
 import { installErrorHandlers } from '../../src/analytics/error-tracking';
-import { MatrixLoader } from '../../src/components/MatrixLoader';
 import { installWebObservability } from '../../src/observability/install';
 
 // Install browser exception handlers at module-load time, before any other
@@ -30,7 +31,7 @@ const App = dynamic(() => import('../../src/App').then((m) => m.App), {
   // whether the app really mounted (`src/observability/white-screen.ts`).
   loading: () => (
     <div className="od-loading-shell">
-      <MatrixLoader />
+      <AntonIndicator state="thinking" size="72px" />
       <span>Loading OpenDesign…</span>
     </div>
   ),

@@ -51,10 +51,10 @@ describe('UserActionCard', () => {
         footerActions={
           <>
             <button type="button" onClick={onRecharge}>
-              为 OpenDesign Cloud 充值
+              为 LeastGen Cloud 充值
             </button>
             <button type="button" onClick={onRetry}>
-              Retry the OpenDesign Cloud request
+              Retry the LeastGen Cloud request
             </button>
           </>
         }
@@ -62,9 +62,9 @@ describe('UserActionCard', () => {
     );
 
     const footer = container.querySelector('[data-user-action-footer="true"]');
-    const recharge = screen.getByRole('button', { name: '为 OpenDesign Cloud 充值' });
+    const recharge = screen.getByRole('button', { name: '为 LeastGen Cloud 充值' });
     const retry = screen.getByRole('button', {
-      name: 'Retry the OpenDesign Cloud request',
+      name: 'Retry the LeastGen Cloud request',
     });
     expect(footer?.contains(recharge)).toBe(true);
     expect(footer?.contains(retry)).toBe(true);

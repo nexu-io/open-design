@@ -14,7 +14,7 @@ import { isFreePlanTier } from '../collab/team-plan';
 import { AmrArtifactUpgradeDialog } from './AmrArtifactUpgradeDialog';
 
 interface Props {
-  /** Whether the currently selected chat model runs on OpenDesign Cloud. */
+  /** Whether the currently selected chat model runs on LeastGen Studio Cloud. */
   cloudModelSelected: boolean;
   /**
    * The resolved raw plan id (see `resolvePlanTier`), NOT vela's account-scoped

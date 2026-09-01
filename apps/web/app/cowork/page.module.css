@@ -1,0 +1,151 @@
+/* LeastGen Cowork embed — one LeastGen web app, two products.
+   The chrome below deliberately mirrors the Coworker app's own Titlebar
+   (38px, slate-950, slate-800 hairline, badge pills); accent pills carry the
+   orbit-morph cyan #22D3EE so the product bar matches the Studio shell. */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  background: #020617; /* slate-950 — matches the Coworker shell */
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-10);
+  height: 38px; /* Coworker Titlebar height */
+  flex: none;
+  padding: 0 12px;
+  background: #020617;
+  border-bottom: 1px solid #1e293b; /* slate-800 */
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  user-select: none;
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mark {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #22d3ee 0%, #67e8f9 100%);
+}
+
+.mark svg {
+  display: block;
+}
+
+.name {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #f1f5f9; /* slate-100 */
+  white-space: nowrap;
+}
+
+.dash {
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b; /* slate-500 */
+}
+
+.sub {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: #94a3b8; /* slate-400 */
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #0f172a; /* slate-900 */
+  border: 1px solid #1e293b; /* slate-800 */
+  font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: #cbd5e1; /* slate-300 */
+  text-decoration: none;
+  white-space: nowrap;
+  transition: border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.pill:hover {
+  color: #f1f5f9;
+  border-color: #334155; /* slate-700 */
+}
+
+.pillAccent {
+  color: #22D3EE; /* cyan — orbit-morph accent */
+  border-color: rgba(34, 211, 238, 0.25);
+}
+
+.pillAccent:hover {
+  color: #67E8F9; /* cyan-300 */
+  border-color: rgba(34, 211, 238, 0.45);
+  background: rgba(34, 211, 238, 0.08);
+}
+
+.liveDot {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  flex: none;
+}
+
+.liveDot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: #22D3EE;
+  opacity: 0.4;
+  animation: cowork-live-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.liveDot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: #22D3EE;
+}
+
+@keyframes cowork-live-ping {
+  75%,
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.frame {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  background: #020617;
+  display: block;
+}

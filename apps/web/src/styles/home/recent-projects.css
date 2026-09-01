@@ -446,9 +446,6 @@
   background: currentColor;
   flex-shrink: 0;
 }
-.recent-projects__card-status-running .recent-projects__card-status-dot {
-  animation: recent-projects-pulse 1.4s ease-in-out infinite;
-}
 .recent-projects__card-menu-anchor {
   position: absolute;
   top: 8px;
@@ -593,10 +590,6 @@
     opacity: 1;
     pointer-events: none;
   }
-}
-@keyframes recent-projects-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
 }
 @keyframes recent-projects-shimmer {
   to {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { VisuallyHidden } from '@open-design/components';
+import { AntonIndicator, VisuallyHidden } from '@open-design/components';
 import { Icon } from './Icon';
 import { useI18n } from '../i18n';
 import {
@@ -95,7 +95,7 @@ export function RailAccountRecoveryTip() {
       aria-live="polite"
       data-testid="entry-rail-account-recovery-tip"
     >
-      <span className="entry-rail-account-recovery__spinner" aria-hidden />
+      <AntonIndicator state="thinking" size="16px" />
       <span className="entry-rail-account-recovery__text">
         {t('entry.cloudRecovering')}
       </span>
@@ -104,7 +104,7 @@ export function RailAccountRecoveryTip() {
 }
 
 /**
- * The signed-out rail's bottom callout (#5517 "OpenDesign Cloud 版" card).
+ * The signed-out rail's bottom callout (#5517 "LeastGen Studio Cloud 版" card).
  * The demo's card jumps to a mock sign-in; the product card IS the sign-in:
  * clicking it kicks off the same vela device-auth flow the onboarding/AMR
  * pill uses — pending state with a spinner + cancel + the manual activation

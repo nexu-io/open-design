@@ -104,12 +104,10 @@
      matches its 16px left/right inset. */
   padding: 10px 0 5px;
   position: relative;
-  /* Craft-style milky frost (material.css thin tier): soft white surface over
-     the wash/wallpaper with a saturated blur, instead of fully clear glass. */
-  /* White frost: pure-white base at 65% alpha, so the card reads white but
-     keeps the frosted-glass translucency (the panel's material-thin backdrop
-     blur below does the frosting). */
-  --rail-surface: rgba(255, 255, 255, 0.65);
+  /* Frosted dark glass (material.css thin tier): the --glass-regular panel
+     material, so the rail reads as one surface with the dark shell while
+     keeping the frosted-glass translucency. */
+  --rail-surface: var(--glass-regular);
   background: var(--rail-surface);
   -webkit-backdrop-filter: var(--material-thin-backdrop);
   backdrop-filter: var(--material-thin-backdrop);
@@ -468,7 +466,7 @@
   padding: 0 16px;
   border-radius: var(--radius-pill, 999px);
   background: var(--accent);
-  color: #00ff08;
+  color: var(--accent-contrast);
   font-size: 12px;
   font-weight: 700;
   line-height: 1.4;
@@ -562,19 +560,8 @@
   line-height: 1.35;
 }
 
-.entry-rail-account-recovery__spinner {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 14px;
-  border: 1.5px solid color-mix(in srgb, var(--text-muted) 30%, transparent);
-  border-top-color: var(--text-muted);
-  border-radius: 50%;
-  animation: entry-rail-account-recovery-spin 900ms linear infinite;
-}
-
-@keyframes entry-rail-account-recovery-spin {
-  to { transform: rotate(360deg); }
-}
+/* The recovery tip's border-spinner became the Anton Indicator
+   (see RailAccountRecoveryTip); no dedicated glyph CSS remains. */
 
 .entry-rail-account-recovery__text {
   min-width: 0;
@@ -1987,14 +1974,8 @@
 
 .inline-switcher__chip[data-campaign-highlight='true'] {
   border-color: var(--accent);
-  animation: deepseek-campaign-chip-pulse 760ms cubic-bezier(0.23, 1, 0.32, 1) 2;
-}
-@keyframes deepseek-campaign-chip-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
-  50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 22%, transparent); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .inline-switcher__chip[data-campaign-highlight='true'] { animation: none; }
+  /* One-shot pulse retired with the Orbit · Morph motion rules — the accent
+     border is the static highlight. */
 }
 .inline-switcher__agent-status {
   display: inline-flex;
@@ -2471,8 +2452,8 @@
   padding: 10px 22px;
   border: 0;
   border-radius: var(--radius-pill);
-  background: var(--text-strong);
-  color: var(--brand, #87ea5c);
+  background: var(--accent);
+  color: var(--accent-contrast);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -2480,12 +2461,11 @@
     background-color 140ms var(--ease-out),
     transform 140ms var(--ease-out);
 }
-/* brightness(1.05) on a near-black fill was imperceptible — and the doubled
-   selector also outranks the global button:hover primitive so the ink fill
-   can't get swapped to gray. Same ink-toward-green hover as the community
-   pills, plus a 1px lift. */
+/* The doubled selector also outranks the global button:hover primitive so
+   the teal fill can't get swapped to gray. Hover lifts the accent one tier,
+   plus a 1px lift. */
 .entry-blank__cta:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text-strong) 84%, var(--brand, #87ea5c));
+  background: var(--accent-hover);
   transform: translateY(-1px);
 }
 .entry-section__head {
@@ -2681,8 +2661,8 @@
   padding: 0 20px;
   border: 0;
   border-radius: 14px;
-  background: var(--text-strong);
-  color: var(--bg);
+  background: var(--accent);
+  color: var(--accent-contrast);
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
@@ -2692,12 +2672,12 @@
 }
 
 .onboarding-cloud__primary:hover:not(:disabled) {
-  /* Keep the dark fill on hover — the global `button:hover` rule in
+  /* Keep the teal fill on hover — the global `button:hover` rule in
      primitives.css would otherwise repaint the background to --bg-subtle and
-     wash the white label away. Opacity alone carries the hover feedback. */
-  background: var(--text-strong);
+     wash the label away. Opacity alone carries the hover feedback. */
+  background: var(--accent-hover);
   border-color: transparent;
-  opacity: 0.88;
+  opacity: 0.92;
 }
 
 .onboarding-cloud__primary:active:not(:disabled) {
@@ -4817,7 +4797,7 @@
 }
 
 .onboarding-view__build-preview-type strong {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--serif);
   font-size: 48px;
   line-height: 1;
 }
@@ -5646,8 +5626,8 @@
   /* Rounded square (8px), replacing the squircle clip-path — a clip-path
      would also swallow the unread dot that overflows the top-right corner. */
   border-radius: 8px;
-  background: linear-gradient(135deg, #87ea5c, #0d5400);
-  color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--brand-weak));
+  color: var(--accent-contrast);
   display: grid;
   place-items: center;
   font-size: 12px;
@@ -5740,10 +5720,10 @@
 }
 .credits-panel__upgrade {
   padding: var(--spacing-6) var(--spacing-18);
-  border: var(--stroke-thin) solid var(--text-strong);
+  border: var(--stroke-thin) solid var(--accent);
   border-radius: var(--radius-large);
-  background: var(--text-strong);
-  color: var(--bg);
+  background: var(--accent);
+  color: var(--accent-contrast);
   font-size: var(--font-size-13);
   line-height: 125%;
   font-weight: 500;
@@ -5753,8 +5733,8 @@
     border-color var(--duration-faster) var(--curve-easy-ease);
 }
 .credits-panel__upgrade:hover {
-  background: var(--text);
-  border-color: var(--text);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 .credits-panel__divider {
   height: 0;
@@ -6151,8 +6131,8 @@
   width: 34px;
   height: 34px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #87ea5c, #0d5400);
-  color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--brand-weak));
+  color: var(--accent-contrast);
   display: grid;
   place-items: center;
   font-size: 14px;
@@ -7622,11 +7602,11 @@ button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
   z-index: 9999;
   padding: 11px 20px;
   border-radius: var(--radius-pill);
-  background: #10b981;
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-contrast);
   font-size: 14px;
   font-weight: 600;
-  box-shadow: 0 8px 28px rgba(16, 185, 129, 0.4);
+  box-shadow: 0 8px 28px rgba(34, 211, 238, 0.4);
   animation: members-toast-in 220ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 

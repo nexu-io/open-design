@@ -159,7 +159,7 @@
 }
 .deploy-result-block.protected,
 .deploy-result-block.failed {
-  border-color: color-mix(in srgb, #87ea5c 38%, var(--border));
+  border-color: color-mix(in srgb, var(--green) 38%, var(--border));
 }
 .deploy-result-summary {
   display: flex;
@@ -209,9 +209,9 @@
 .deploy-result-badge.failed,
 .deploy-result-link-state.protected,
 .deploy-result-link-state.failed {
-  color: #a34828;
-  background: color-mix(in srgb, #87ea5c 14%, transparent);
-  border: 1px solid color-mix(in srgb, #87ea5c 30%, var(--border));
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--green) 30%, var(--border));
 }
 .deploy-result-label {
   font-size: 12px;
@@ -1148,7 +1148,7 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
   line-height: 1.3;
 }
 .qf-card-pill {
-  font-family: ui-monospace, 'JetBrains Mono', monospace;
+  font-family: var(--mono);
   font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1206,7 +1206,7 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
   line-height: 1.4;
 }
 .qf-card-refs-label {
-  font-family: ui-monospace, 'JetBrains Mono', monospace;
+  font-family: var(--mono);
   font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1986,7 +1986,7 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
   color: var(--text);
 }
 .questions-skip-timer {
-  font-family: ui-monospace, 'JetBrains Mono', monospace;
+  font-family: var(--mono);
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -2689,7 +2689,7 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
 .design-spec-pre {
   margin: 0;
   padding: 16px 18px;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-family: var(--mono);
   font-size: 12px;
   line-height: 1.6;
   /* Wrap long lines instead of forcing the side pane to scroll horizontally —
@@ -2951,7 +2951,9 @@ button.filter-pill:hover:not(:disabled) .filter-pill-count,
   0% { background-position: -400px 0; }
   100% { background-position: 400px 0; }
 }
-.icon-spin { animation: icon-spin 0.9s linear infinite; transform-origin: center; }
+/* `.icon-spin` used to spin the stroke loader glyph. The in-flight glyph is
+   now the Anton Indicator (which animates itself), so the class survives
+   only as the canonical in-flight marker for tests and call-site styling. */
 
 .loading-spinner {
   display: inline-flex;
@@ -3503,7 +3505,6 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 }
 .assistant-footer .dot[data-active="true"] {
   background: var(--green);
-  animation: pulse 1.2s ease-in-out infinite;
 }
 .assistant-footer .assistant-label {
   font-weight: 500;

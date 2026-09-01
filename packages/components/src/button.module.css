@@ -40,20 +40,20 @@
 }
 
 .primary {
-  background: var(--text-strong);
-  border-color: var(--text-strong);
+  background: var(--accent);
+  border-color: var(--accent);
   border-radius: var(--radius-pill);
-  color: var(--bg);
+  color: var(--accent-contrast);
 }
 
 .primary:hover:not(:disabled) {
-  background: #353535;
-  border-color: #353535;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .primary:active:not(:disabled) {
-  background: var(--text);
-  border-color: var(--text);
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
 }
 
 .primaryGhost {

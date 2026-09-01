@@ -592,7 +592,6 @@ function PageInspector({
 
 const FONT_OPTS = [
   { label: 'inherit', value: '' },
-  { label: 'Space Grotesk', value: '"Space Grotesk", Inter, system-ui, sans-serif' },
   { label: 'Inter', value: 'Inter, system-ui, sans-serif' },
   { label: 'Times', value: '"Times New Roman", Times, serif' },
   { label: 'Arial', value: 'Arial, Helvetica, sans-serif' },

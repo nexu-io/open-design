@@ -24,6 +24,49 @@
   font-weight: 400;
 }
 
+/* LeastGen Studio brand fonts. Inter is the Orbit · Morph UI face (--sans);
+   the variable latin subset covers the full 100–900 weight range. Albert Sans
+   stays registered for the library/memory content surfaces that still ask
+   for it, JiduMono Pro as a mono fallback in viewer content. */
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/inter-latin-var.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 100 900;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 500;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/jetbrains-mono-latin-700-normal.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 700;
+}
+
+/* Orbit · Morph brand-gradient text (cyan → light-cyan sweep). Apply to short
+   brand moments — wordmarks, hero headings, key numbers — not body copy. */
+.brand-gradient-text {
+  background: var(--brand-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
 html, body, #root { height: 100%; margin: 0; }
 
 body {
@@ -82,19 +125,28 @@ pre,
   font-variant-numeric: tabular-nums;
 }
 
-/* Centered row: the dot-matrix loader leads, the label follows. Was a grid
+/* Centered row: the Anton Indicator leads, the label follows. Was a grid
    with `place-items: center`, which would stack the two children instead. */
 .od-loading-shell {
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 14px;
   color: var(--text-muted);
   /* Opaque base (not the see-through veil) so the pastel app-wash corner
      blobs don't bleed through the loading screen. */
   background: var(--bg-app);
   font: 500 var(--font-size-13)/125% var(--sans);
+}
+
+/* The shell's text label reads as a mono micro-label per the Orbit · Morph
+   vocabulary (JetBrains Mono · uppercase · 0.08em tracking · muted). */
+.od-loading-shell > span {
+  font: 500 10.5px/1.4 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 @media (prefers-reduced-motion: reduce) {

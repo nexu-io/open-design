@@ -1,6 +1,6 @@
 // External MCP servers panel.
 //
-// OpenDesign connects to the configured servers as a CLIENT and surfaces
+// LeastGen Studio connects to the configured servers as a CLIENT and surfaces
 // their tools to the underlying agent (Claude Code, Hermes, Kimi for v1).
 // This panel is the user-facing form; persistence flows through
 // `state/mcp.ts` -> daemon `/api/mcp/servers`.
@@ -223,7 +223,7 @@ const ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
 
 // Picker grouping. Mirrors `McpTemplateCategory` in `packages/contracts`.
 // The order here is the *display* order in the picker — keep it intentional
-// so the most useful categories for OpenDesign (visual generation, then
+// so the most useful categories for LeastGen Studio (visual generation, then
 // editing, then publishing surfaces) sit at the top.
 function categoryOrder(t: Translate): ReadonlyArray<{
   id: NonNullable<McpTemplate['category']>;

@@ -93,7 +93,7 @@ describe('i18n locales', () => {
     const zh = await loadDict('zh-CN');
     expect(zh['chat.runError.title.cliSessionRefused']).toBe('智能体版本不兼容');
     expect(zh['chat.runError.cliSessionRefusedMessage']).toBe(
-      '{agent} 拒绝开始会话。通常是当前版本与 Open Design 不兼容，换一个版本后重试。',
+      '{agent} 拒绝开始会话。通常是当前版本与 LeastGen Studio 不兼容，换一个版本后重试。',
     );
 
     // `{agent}` is the ONLY slot the card fills. A locale that carries a

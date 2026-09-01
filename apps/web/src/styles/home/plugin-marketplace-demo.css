@@ -154,19 +154,19 @@
 
 .plugin-marketplace__switch button.is-active {
   border-color: transparent;
-  background: #fff;
+  background: var(--bg-elevated);
   color: var(--text-strong);
-  box-shadow: 0 1px 2px color-mix(in srgb, #000 7%, transparent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
-/* Selected scope tab / category chip: white fill matching the segmented
-   switch's active thumb — the pastel app wash behind the page gives the
-   white enough contrast to read as a fill, with a whisper shadow to lift it. */
+/* Selected scope tab / category chip: elevated fill matching the segmented
+   switch's active thumb — the dark shell gives the elevated panel enough
+   contrast to read as a fill, with a whisper shadow to lift it. */
 .plugin-marketplace__filters button.is-active,
 .plugin-marketplace__category-tags button.is-active {
   border-color: transparent;
-  background: #fff;
+  background: var(--bg-elevated);
   color: var(--text-strong);
-  box-shadow: 0 1px 2px color-mix(in srgb, #000 7%, transparent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .plugin-marketplace__search,

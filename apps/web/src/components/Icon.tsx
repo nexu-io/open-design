@@ -1,5 +1,7 @@
 import type { SVGProps } from 'react';
 
+import { AntonIndicator } from '@open-design/components';
+
 import { REMIX_ICON_PATHS } from './remix-icon-paths';
 
 export type IconName =
@@ -887,10 +889,17 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
         </svg>
       );
     case 'spinner':
+      // Orbit · Morph: the only animated status affordance is the Anton
+      // Indicator. Callers swap `name={busy ? 'spinner' : icon}`, so the
+      // glyph is wired to that same busy boolean and unmounts on settle.
+      // `.icon-spin` stays as the canonical in-flight marker (tests and
+      // call-site styling key on it).
       return (
-        <svg {...common} className={`od-icon icon-spin${strokeClassName ? ` ${strokeClassName}` : ''}`}>
-          <path d="M21 12a9 9 0 1 1-6.22-8.56" />
-        </svg>
+        <AntonIndicator
+          state="thinking"
+          size={`${size}px`}
+          className={`icon-spin${strokeClassName ? ` ${strokeClassName}` : ''}`}
+        />
       );
     case 'sparkles':
       return (

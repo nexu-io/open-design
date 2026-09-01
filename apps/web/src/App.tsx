@@ -5488,12 +5488,17 @@ function AppInner() {
       {/* Mounted at shell level, outside the route views, so a survey armed by
           an export inside a project stays on screen when the user navigates
           back to home. */}
+      {/* DEMO-PROOF (2026-08-31): NPS survey disabled for client demos — it
+          popped over a live artifact mid-demo. Revert by restoring the element
+          below (see git history for the original JSX).
       <ExperienceSurvey
         metricsConsent={config.telemetry?.metrics === true}
         onExposure={() => trackExperienceSurveyShown(analytics.track)}
         onDismiss={() => trackExperienceSurveyDismissed(analytics.track)}
         onSubmit={(answers) => trackExperienceSurveySent(analytics.track, answers)}
       />
+      */}
+      {null}
       <AmrArtifactUpgradeGate
         cloudModelSelected={config.mode === 'daemon' && config.agentId === 'amr'}
         homeVisible={route.kind === 'home' && route.view === 'home'}

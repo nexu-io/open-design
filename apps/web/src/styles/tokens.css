@@ -1,65 +1,81 @@
 /* ============================================================
-   OpenDesign — neutral product workspace
+   LeastGen Studio — Orbit · Morph token layer
+   Dark is the shipped default (data-theme pinned "dark" pre-
+   hydration): bg #0B0E14, hairline #1A1F2E, ink #F2F6FF,
+   accent cyan #22D3EE. UI face Inter, code/micro face JetBrains
+   Mono. The light block at the top is a legacy fallback only.
+   Token NAMES are a frozen contract — only values live here.
    ============================================================ */
 :root {
-  /* OpenDesign system palette. Neutrals carry the interface; brand green is
-     reserved for sparse feedback, selected assists, and brand emphasis. */
-  --bg: #fff;
-  --bg-app: #fff;
-  --bg-panel: #fafafa;
-  --bg-subtle: #ededed;
-  --bg-muted: #dbdbdb;
+  /* Light-theme tokens below are legacy fallback values only — the app
+     ships dark-first (data-theme is pinned to "dark" pre-hydration). */
+  --bg: #ECECEA;
+  --bg-app: #ECECEA;
+  --bg-panel: #F4F4F2;
+  --bg-subtle: #E4E4E0;
+  --bg-muted: #D8D8D4;
   --bg-fill-tertiary: rgba(0, 0, 0, 0.03);
   --bg-fill-secondary: rgba(0, 0, 0, 0.06);
   --bg-fill: rgba(0, 0, 0, 0.12);
-  --bg-elevated: #fafafa;
+  --bg-elevated: #FAFAF8;
   /* Liquid Glass — frosted "regular" material for floating functional layers
      (nav rail, toolbars, popovers) per the material spec. Translucent surface
      + backdrop blur; falls back to a solid --bg-panel where unsupported. */
-  --glass-regular: rgba(250, 250, 250, 0.66);
+  --glass-regular: rgba(244, 244, 242, 0.66);
   --glass-regular-blur: 28px;
   /* Bright top-edge sheen that reads as glass thickness on a frosted pane. */
   --glass-edge-highlight: color-mix(in srgb, #fff 65%, transparent);
   /* Entry ground shares the app surface — the nav rail is a solid panel now,
      so the page behind it no longer needs a tinted ground to float on. */
   --entry-ground: var(--bg);
-  --border: #dbdbdb;
-  --border-strong: #bdbdbd;
-  --border-selected: #a3a3a3;
-  --border-soft: #ededed;
+  --border: #D8D8D4;
+  --border-strong: #C4C4BE;
+  --border-selected: #A3A3A3;
+  --border-soft: #E0E0DC;
 
-  --text: #494949;
-  --text-strong: #202020;
-  --text-muted: #5c5c5c;
-  --text-soft: #848484;
-  --text-faint: #bdbdbd;
+  --text: #0E0F10;
+  --text-strong: #0E0F10;
+  --text-muted: #6B6F73;
+  --text-soft: #5A5E62;
+  --text-faint: #9B9FA3;
 
-  --accent: #353535;
-  --accent-contrast: #fafafa;
-  --accent-strong: #202020;
-  --accent-soft: #ededed;
-  --accent-tint: #f7f7f7;
-  --accent-hover: #202020;
-  --brand: #87ea5c;
-  --brand-weak: #d0ffb5;
-  --brand-soft: #ebffde;
-  --brand-text: #0d5400;
+  --accent: #1F9CB0;
+  --accent-contrast: #FFFFFF;
+  --accent-strong: #2FB3C9;
+  --accent-soft: color-mix(in srgb, #1F9CB0 14%, #E4E4E0);
+  --accent-tint: color-mix(in srgb, #1F9CB0 7%, #F4F4F2);
+  --accent-hover: #2FB3C9;
+  --brand: #1F9CB0;
+  --brand-weak: rgba(31, 156, 176, 0.45);
+  --brand-soft: rgba(31, 156, 176, 0.12);
+  --brand-text: #2FB3C9;
+
+  /* Orbit · Morph brand gradient — the accent family sweep used for brand
+     text, wordmark accents, and emphasis moments via the
+     .brand-gradient-text utility. */
+  --brand-grad: linear-gradient(92deg, #1F9CB0, #2FB3C9);
+  --brand-grad-soft: linear-gradient(92deg, rgba(31, 156, 176, 0.14), rgba(47, 179, 201, 0.14));
+
+  /* Orbit-morph active glow — the shared "this is alive" affordance from the
+     orbit-morph design language. Consumers opt in with `filter: var(--om-glow)`
+     and scale it per element via --om-size (defaults to 18px). */
+  --om-glow: drop-shadow(0 0 calc(var(--om-size, 18px) * 0.18) rgba(34, 211, 238, 0.55));
 
   /* Semantic accent tints used by tool / status pills. */
   --green: #00AA54;
   --green-bg: #f5ffee;
   --green-border: #adf788;
   --blue: #1A74FF;
-  --blue-bg: color-mix(in srgb, #1A74FF 10%, #fafafa);
-  --blue-border: color-mix(in srgb, #1A74FF 24%, #dbdbdb);
+  --blue-bg: color-mix(in srgb, #1A74FF 10%, #FAFAF8);
+  --blue-border: color-mix(in srgb, #1A74FF 24%, #D8D8D4);
   --purple: #353535;
-  --purple-bg: #ededed;
-  --purple-border: #dbdbdb;
+  --purple-bg: #E4E4E0;
+  --purple-border: #D8D8D4;
   --red: #F04142;
-  --red-bg: color-mix(in srgb, #F04142 10%, #fafafa);
-  --red-border: color-mix(in srgb, #F04142 24%, #dbdbdb);
-  --amber: #FF7528;
-  --amber-bg: color-mix(in srgb, #FFBA12 18%, #fafafa);
+  --red-bg: color-mix(in srgb, #F04142 10%, #FAFAF8);
+  --red-border: color-mix(in srgb, #F04142 24%, #D8D8D4);
+  --amber: #FFB86B;
+  --amber-bg: color-mix(in srgb, #FFB86B 18%, #FAFAF8);
 
   --shadow-xs: 0 1px 0 rgba(28, 27, 26, 0.04);
   --shadow-sm: 0 1px 2px rgba(28, 27, 26, 0.05), 0 1px 3px rgba(28, 27, 26, 0.04);
@@ -106,147 +122,163 @@
   --dur-exit: var(--duration-fast);
 
   /* "Active option" indicator color, intentionally separate from --accent
-     (brand orange used by primary CTAs like Create / Save). Use --selected
-     for "this option is the one currently picked" affordances — selected
-     fidelity card, focused input ring, active filter pill — so a primary
-     CTA and a selected state can coexist on the same screen without
-     competing. --selected-soft is the 16% tint for outer rings / fills. */
-  --selected: #353535;
-  --selected-soft: color-mix(in srgb, #353535 12%, transparent);
+     (the Orbit · Morph cyan is used by primary CTAs like Create / Save). Use
+     --selected for "this option is the one currently picked" affordances —
+     selected fidelity card, focused input ring, active filter pill — so a
+     primary CTA and a selected state can coexist on the same screen without
+     competing. --selected-soft is the 18% tint for outer rings / fills. */
+  --selected: #1F9CB0;
+  --selected-soft: color-mix(in srgb, #1F9CB0 18%, transparent);
 
-  --serif: "Albert Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
-  --sans: "Albert Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
-  --mono: "JiduMono Pro", ui-monospace, "SFMono-Regular", monospace;
+  --serif: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --sans: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-mono: var(--mono);
 
   /* Chat prose scale: body 13, headings 14, top-level emphasis 16 — the
      whole message module stays inside the 12–16px band. */
   --prose-font-size: 13px;
   --prose-line-height: 1.7;
-  --code-header-bg: #ededed;
-  --code-body-bg: #fafafa;
+  --code-header-bg: #E8E8E4;
+  --code-body-bg: #F6F6F4;
   --code-font-size: 13px;
   --code-line-height: 1.65;
 }
 
 /* Dark theme variables — shared between explicit [data-theme="dark"] and the
-   OS-level prefers-color-scheme media query (system mode = no data-theme attr). */
+   OS-level prefers-color-scheme media query (system mode = no data-theme attr).
+   Orbit · Morph palette: near-black blue shell, hairline steps of the bg,
+   cyan #22D3EE accent, Inter ink #F2F6FF. */
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #202020;
-  --bg-app: #202020;
-  --bg-panel: #353535;
-  --bg-subtle: #494949;
-  --bg-muted: #5c5c5c;
-  --bg-fill-tertiary: rgba(255, 255, 255, 0.06);
-  --bg-fill-secondary: rgba(255, 255, 255, 0.10);
-  --bg-fill: rgba(255, 255, 255, 0.16);
-  --bg-elevated: #353535;
-  --glass-regular: rgba(53, 53, 53, 0.66);
-  --glass-edge-highlight: color-mix(in srgb, #fff 14%, transparent);
-  --border: #5c5c5c;
-  --border-strong: #848484;
-  --border-selected: #a3a3a3;
-  --border-soft: #494949;
+  --bg: #0B0E14;
+  --bg-app: #0B0E14;
+  --bg-panel: #0E1220;
+  --bg-subtle: #12172A;
+  --bg-muted: #1A1F2E;
+  --bg-fill-tertiary: rgba(242, 246, 255, 0.04);
+  --bg-fill-secondary: rgba(242, 246, 255, 0.07);
+  --bg-fill: rgba(242, 246, 255, 0.12);
+  --bg-elevated: #10141F;
+  --glass-regular: rgba(14, 18, 32, 0.66);
+  --glass-edge-highlight: color-mix(in srgb, #F2F6FF 8%, transparent);
+  --border: #1A1F2E;
+  --border-strong: #2A3145;
+  --border-selected: #3A4560;
+  --border-soft: #141926;
 
-  --text: #ededed;
-  --text-strong: #fafafa;
-  --text-muted: #bdbdbd;
-  --text-soft: #848484;
-  --text-faint: #5c5c5c;
+  --text: #F2F6FF;
+  --text-strong: #F2F6FF;
+  --text-muted: #8A97AE;
+  --text-soft: #6B7689;
+  --text-faint: #4A5468;
 
-  --accent: #ededed;
-  --accent-contrast: #202020;
-  --accent-strong: #fafafa;
-  --accent-soft: #494949;
-  --accent-tint: #353535;
-  --accent-hover: #fafafa;
-  --brand: #87ea5c;
-  --brand-weak: #2f781d;
-  --brand-soft: #164111;
-  --brand-text: #adf788;
+  --accent: #22D3EE;
+  --accent-contrast: #0B0E14;
+  --accent-strong: #67E8F9;
+  --accent-soft: color-mix(in srgb, #22D3EE 14%, #12172A);
+  --accent-tint: color-mix(in srgb, #22D3EE 7%, #0E1220);
+  --accent-hover: #67E8F9;
+  --brand: #22D3EE;
+  --brand-weak: rgba(34, 211, 238, 0.45);
+  --brand-soft: rgba(34, 211, 238, 0.12);
+  --brand-text: #67E8F9;
 
-  --green: #3BBF7D;
-  --green-bg: #164111;
-  --green-border: #2f781d;
+  --brand-grad: linear-gradient(92deg, #22D3EE 0%, #67E8F9 100%);
+  --brand-grad-soft: linear-gradient(92deg, rgba(34, 211, 238, 0.14), rgba(103, 232, 249, 0.14));
+
+  --green: #00d68f;
+  --green-bg: color-mix(in srgb, #00d68f 12%, #0B0E14);
+  --green-border: color-mix(in srgb, #00d68f 32%, #2A3145);
   --blue: #3AA5F0;
-  --blue-bg: color-mix(in srgb, #1A74FF 22%, #202020);
-  --blue-border: color-mix(in srgb, #3AA5F0 34%, #5c5c5c);
-  --purple: #ededed;
-  --purple-bg: #494949;
-  --purple-border: #5c5c5c;
+  --blue-bg: color-mix(in srgb, #1A74FF 22%, #0B0E14);
+  --blue-border: color-mix(in srgb, #3AA5F0 34%, #2A3145);
+  --purple: #a78bfa;
+  --purple-bg: #231d3d;
+  --purple-border: #4c3d8f;
   --red: #FF5E5E;
-  --red-bg: color-mix(in srgb, #F04142 24%, #202020);
-  --red-border: color-mix(in srgb, #FF5E5E 34%, #5c5c5c);
-  --amber: #FFC740;
-  --amber-bg: color-mix(in srgb, #FFBA12 22%, #202020);
+  --red-bg: color-mix(in srgb, #F04142 24%, #0B0E14);
+  --red-border: color-mix(in srgb, #FF5E5E 34%, #2A3145);
+  --amber: #FFB86B;
+  --amber-bg: color-mix(in srgb, #FFB86B 20%, #0B0E14);
+
+  --selected: #22D3EE;
+  --selected-soft: color-mix(in srgb, #22D3EE 18%, transparent);
 
   --shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.2);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
   --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6), 0 8px 16px rgba(0, 0, 0, 0.3);
 
-  --code-header-bg: #1e1e20;
-  --code-body-bg: #18181b;
+  --code-header-bg: #10141F;
+  --code-body-bg: #0D1119;
 }
 
-/* System mode: follow OS preference when no explicit data-theme is set. */
+/* System mode: follow OS preference when no explicit data-theme is set.
+   Mirrors the dark block — dark is the shipped theme. */
 @media (prefers-color-scheme: dark) {
   html:not([data-theme]) {
     color-scheme: dark;
-    --bg: #202020;
-    --bg-app: #202020;
-    --bg-panel: #353535;
-    --bg-subtle: #494949;
-    --bg-muted: #5c5c5c;
-    --bg-fill-tertiary: rgba(255, 255, 255, 0.06);
-    --bg-fill-secondary: rgba(255, 255, 255, 0.10);
-    --bg-fill: rgba(255, 255, 255, 0.16);
-    --bg-elevated: #353535;
-    --glass-regular: rgba(53, 53, 53, 0.66);
-    --glass-edge-highlight: color-mix(in srgb, #fff 14%, transparent);
-    --border: #5c5c5c;
-    --border-strong: #848484;
-    --border-selected: #a3a3a3;
-    --border-soft: #494949;
+    --bg: #0B0E14;
+    --bg-app: #0B0E14;
+    --bg-panel: #0E1220;
+    --bg-subtle: #12172A;
+    --bg-muted: #1A1F2E;
+    --bg-fill-tertiary: rgba(242, 246, 255, 0.04);
+    --bg-fill-secondary: rgba(242, 246, 255, 0.07);
+    --bg-fill: rgba(242, 246, 255, 0.12);
+    --bg-elevated: #10141F;
+    --glass-regular: rgba(14, 18, 32, 0.66);
+    --glass-edge-highlight: color-mix(in srgb, #F2F6FF 8%, transparent);
+    --border: #1A1F2E;
+    --border-strong: #2A3145;
+    --border-selected: #3A4560;
+    --border-soft: #141926;
 
-    --text: #ededed;
-    --text-strong: #fafafa;
-    --text-muted: #bdbdbd;
-    --text-soft: #848484;
-    --text-faint: #5c5c5c;
+    --text: #F2F6FF;
+    --text-strong: #F2F6FF;
+    --text-muted: #8A97AE;
+    --text-soft: #6B7689;
+    --text-faint: #4A5468;
 
-    --accent: #ededed;
-    --accent-contrast: #202020;
-    --accent-strong: #fafafa;
-    --accent-soft: #494949;
-    --accent-tint: #353535;
-    --accent-hover: #fafafa;
-    --brand: #87ea5c;
-    --brand-weak: #2f781d;
-    --brand-soft: #164111;
-    --brand-text: #adf788;
+    --accent: #22D3EE;
+    --accent-contrast: #0B0E14;
+    --accent-strong: #67E8F9;
+    --accent-soft: color-mix(in srgb, #22D3EE 14%, #12172A);
+    --accent-tint: color-mix(in srgb, #22D3EE 7%, #0E1220);
+    --accent-hover: #67E8F9;
+    --brand: #22D3EE;
+    --brand-weak: rgba(34, 211, 238, 0.45);
+    --brand-soft: rgba(34, 211, 238, 0.12);
+    --brand-text: #67E8F9;
 
-    --green: #3BBF7D;
-    --green-bg: #164111;
-    --green-border: #2f781d;
+    --brand-grad: linear-gradient(92deg, #22D3EE 0%, #67E8F9 100%);
+    --brand-grad-soft: linear-gradient(92deg, rgba(34, 211, 238, 0.14), rgba(103, 232, 249, 0.14));
+
+    --green: #00d68f;
+    --green-bg: color-mix(in srgb, #00d68f 12%, #0B0E14);
+    --green-border: color-mix(in srgb, #00d68f 32%, #2A3145);
     --blue: #3AA5F0;
-    --blue-bg: color-mix(in srgb, #1A74FF 22%, #202020);
-    --blue-border: color-mix(in srgb, #3AA5F0 34%, #5c5c5c);
-    --purple: #ededed;
-    --purple-bg: #494949;
-    --purple-border: #5c5c5c;
+    --blue-bg: color-mix(in srgb, #1A74FF 22%, #0B0E14);
+    --blue-border: color-mix(in srgb, #3AA5F0 34%, #2A3145);
+    --purple: #a78bfa;
+    --purple-bg: #231d3d;
+    --purple-border: #4c3d8f;
     --red: #FF5E5E;
-    --red-bg: color-mix(in srgb, #F04142 24%, #202020);
-    --red-border: color-mix(in srgb, #FF5E5E 34%, #5c5c5c);
-    --amber: #FFC740;
-    --amber-bg: color-mix(in srgb, #FFBA12 22%, #202020);
+    --red-bg: color-mix(in srgb, #F04142 24%, #0B0E14);
+    --red-border: color-mix(in srgb, #FF5E5E 34%, #2A3145);
+    --amber: #FFB86B;
+    --amber-bg: color-mix(in srgb, #FFB86B 20%, #0B0E14);
+
+    --selected: #22D3EE;
+    --selected-soft: color-mix(in srgb, #22D3EE 18%, transparent);
 
     --shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.2);
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
     --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
     --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6), 0 8px 16px rgba(0, 0, 0, 0.3);
 
-    --code-header-bg: #1e1e20;
-    --code-body-bg: #18181b;
+    --code-header-bg: #10141F;
+    --code-body-bg: #0D1119;
   }
 }

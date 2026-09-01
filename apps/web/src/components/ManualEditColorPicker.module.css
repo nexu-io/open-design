@@ -112,7 +112,7 @@
   background: transparent;
   color: var(--text);
   font-size: 12px;
-  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-family: var(--mono);
 }
 
 .alphaInput {

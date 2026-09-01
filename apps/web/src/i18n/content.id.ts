@@ -21,7 +21,7 @@ export const ID_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'agent-browser': {
     description:
-      'CLI otomasi browser untuk AI agent. Gunakan saat pengguna perlu memeriksa,\nmenguji, atau mengotomatiskan perilaku browser: menavigasi halaman, mengisi formulir,\nmengeklik tombol, mengambil tangkapan layar, mengekstrak data halaman, membaca konteks tab browser\nOpenDesign yang dipilih, menguji aplikasi web, dogfooding pratinjau\nOpenDesign, QA, perburuan bug, atau meninjau kualitas aplikasi. Utamakan URL pratinjau\nOpenDesign lokal kecuali pengguna secara eksplisit meminta penjelajahan eksternal.',
+      'CLI otomasi browser untuk AI agent. Gunakan saat pengguna perlu memeriksa,\nmenguji, atau mengotomatiskan perilaku browser: menavigasi halaman, mengisi formulir,\nmengeklik tombol, mengambil tangkapan layar, mengekstrak data halaman, membaca konteks tab browser\nLeastGen Studio yang dipilih, menguji aplikasi web, dogfooding pratinjau\nLeastGen Studio, QA, perburuan bug, atau meninjau kualitas aplikasi. Utamakan URL pratinjau\nLeastGen Studio lokal kecuali pengguna secara eksplisit meminta penjelajahan eksternal.',
     examplePrompt:
       'CLI otomasi browser untuk AI agent.',
   },
@@ -849,7 +849,7 @@ export const ID_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'ui-ux-pro-max': {
     description:
-      'Entri UI/UX Pro Max khusus katalog. Template, data, dan alur kerja pencarian upstream lengkap tidak disertakan dalam OpenDesign.',
+      'Entri UI/UX Pro Max khusus katalog. Template, data, dan alur kerja pencarian upstream lengkap tidak disertakan dalam LeastGen Studio.',
     examplePrompt:
       'Entri UI/UX Pro Max khusus katalog.',
   },

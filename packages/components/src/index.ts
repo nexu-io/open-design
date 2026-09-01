@@ -1,3 +1,6 @@
+export { AntonIndicator } from './anton-indicator';
+export type { AntonIndicatorProps, AntonState, AntonTheme } from './anton-indicator';
+export { default } from './anton-indicator';
 export { Button } from './button';
 export type { ButtonProps, ButtonSize, ButtonVariant } from './button';
 export {

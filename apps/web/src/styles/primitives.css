@@ -1,4 +1,6 @@
 /* -------- Buttons --------------------------------------------------- */
+/* Orbit · Morph controls: hairline border, 10px-class radius (--radius-large
+   is the controls rung of the existing scale), Inter 500, accent focus ring. */
 button {
   display: inline-flex;
   align-items: center;
@@ -14,7 +16,7 @@ button {
   color: var(--text);
   background: transparent;
   border: var(--stroke-thin, 1px) solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-large);
   cursor: pointer;
   transition:
     background-color var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease),
@@ -23,23 +25,27 @@ button {
     transform var(--duration-faster, 100ms) var(--curve-easy-ease, ease),
     box-shadow var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease);
 }
-button:hover:not(:disabled) { background: var(--bg-subtle); border-color: var(--border-strong); }
+button:hover:not(:disabled) { background: var(--bg-fill-tertiary); border-color: var(--border-strong); }
 button:active:not(:disabled) { transform: translateY(1px); }
-button:focus-visible { outline: var(--stroke-thin, 1px) solid var(--blue); outline-offset: 2px; }
+button:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+}
 
 button.primary {
-  background: var(--text-strong);
-  border-color: var(--text-strong);
-  border-radius: var(--radius-pill);
-  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+  border-radius: var(--radius-large);
+  color: var(--accent-contrast);
 }
 button.primary:hover:not(:disabled) {
-  background: #353535;
-  border-color: #353535;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 button.primary:active:not(:disabled) {
-  background: var(--text);
-  border-color: var(--text);
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
 }
 button.primary-ghost {
   background: var(--bg-subtle);
@@ -154,9 +160,9 @@ button:disabled {
 input, textarea, select {
   font: inherit;
   color: var(--text);
-  background: var(--bg-panel);
+  background: var(--bg-elevated);
   border: var(--stroke-thin, 1px) solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-large);
   padding: var(--spacing-8, 8px) var(--spacing-10, 10px);
   width: 100%;
   transition:
@@ -166,7 +172,8 @@ input, textarea, select {
 input::placeholder, textarea::placeholder { color: var(--text-faint); }
 input:focus, textarea:focus, select:focus {
   outline: none;
-  border-color: var(--selected);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 /* Entry sidebar form fields keep a quieter, neutral focus (just a darker
    border, no outer halo) so the orange "Create" CTA stays the loudest thing
@@ -175,6 +182,8 @@ input:focus, textarea:focus, select:focus {
 .entry-side textarea:focus,
 .entry-side select:focus {
   border-color: var(--text);
+  /* Keep the quieter, halo-free focus: cancel the shared accent ring. */
+  box-shadow: none;
 }
 /* Native <select> on macOS uses its own intrinsic min-height that ends up
    shorter than <input> at the same `padding: 7px 10px` rule above, so any
@@ -227,21 +236,22 @@ textarea { resize: vertical; font-family: inherit; }
   font: inherit;
   color: var(--text);
   text-align: left;
-  background: var(--bg-panel);
+  background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-large);
   cursor: pointer;
   transition: border-color var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out), background var(--dur-quick) var(--ease-out);
 }
 .od-select-trigger:hover:not(:disabled),
 .od-select-trigger[aria-expanded='true'] {
   border-color: var(--border-strong);
-  background: var(--bg-subtle);
+  background: var(--bg-fill-tertiary);
 }
 .od-select-trigger:focus-visible,
 .od-select-trigger[aria-expanded='true'] {
   outline: none;
-  border-color: var(--selected);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 .od-select-trigger:disabled {
   opacity: 0.55;
@@ -345,9 +355,21 @@ code {
   font-family: var(--mono);
   background: var(--bg-subtle);
   padding: 1px 5px;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-medium);
   font-size: 0.92em;
   color: var(--text);
+}
+
+/* -------- Micro-labels ---------------------------------------------- */
+/* Orbit · Morph overline: JetBrains Mono, uppercase, wide tracking, muted.
+   Use for section eyebrows, status captions, and loading labels. */
+.om-label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 /* -------- Brand glyph ------------------------------------------------ */
@@ -359,4 +381,15 @@ code {
   background-color: var(--text-strong);
   -webkit-mask: url(/brand-icon.svg) center / contain no-repeat;
   mask: url(/brand-icon.svg) center / contain no-repeat;
+}
+
+/* DEMO-PROOF (2026-08-31): file-workspace toolbar buttons must stay on the
+   dark theme. The Export button computed a light rgb(244,250,252) surface via
+   a state-dependent cascade winner; pin the whole secondary family dark. */
+[data-testid='file-workspace'] .chrome-action-secondary,
+[data-testid='file-workspace'] .chrome-action-secondary:hover:not(:disabled) {
+  background: var(--bg-panel) !important;
+  background-image: none !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
 }

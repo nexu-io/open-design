@@ -104,7 +104,7 @@
 .goWelcomeLockup > strong,
 .goWelcomeLockup > b {
   color: #15220f;
-  font-family: Inter, Arial, sans-serif;
+  font-family: var(--sans);
   font-size: 78px;
   font-weight: 650;
   line-height: .82;

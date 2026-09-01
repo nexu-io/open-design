@@ -1758,6 +1758,20 @@ export function EntryNavRail({
           <Icon name="globe" size={16} />
         </NavButton>
 
+        {/* Product switcher: this single LeastGen web app hosts both products.
+            Cowork runs as its own web runtime, embedded at /cowork. */}
+        <NavButton
+          active={false}
+          ariaLabel="Open LeastGen Cowork"
+          label="Cowork"
+          onClick={() => {
+            window.location.assign('/cowork');
+          }}
+          testId="entry-nav-cowork"
+        >
+          <Icon name="blocks" size={16} />
+        </NavButton>
+
         {context ? (
           <div className="entry-nav-rail__team-section">
             <NavButton

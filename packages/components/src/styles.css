@@ -23,23 +23,27 @@ button {
     transform var(--duration-faster, 100ms) var(--curve-easy-ease, ease),
     box-shadow var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease);
 }
-button:hover:not(:disabled) { background: var(--bg-subtle); border-color: var(--border-strong); }
+button:hover:not(:disabled) { background: var(--bg-fill-tertiary); border-color: var(--border-strong); }
 button:active:not(:disabled) { transform: translateY(1px); }
-button:focus-visible { outline: var(--stroke-thin, 1px) solid var(--blue); outline-offset: 2px; }
+button:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+}
 
 button.primary {
-  background: var(--text-strong);
-  border-color: var(--text-strong);
-  border-radius: var(--radius-pill);
-  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+  border-radius: var(--radius-large);
+  color: var(--accent-contrast);
 }
 button.primary:hover:not(:disabled) {
-  background: #353535;
-  border-color: #353535;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 button.primary:active:not(:disabled) {
-  background: var(--text);
-  border-color: var(--text);
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
 }
 button.primary-ghost {
   background: var(--bg-subtle);
@@ -125,9 +129,9 @@ button:disabled {
 input, textarea, select {
   font: inherit;
   color: var(--text);
-  background: var(--bg-panel);
+  background: var(--bg-elevated);
   border: var(--stroke-thin, 1px) solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-large);
   padding: var(--spacing-8, 8px) var(--spacing-10, 10px);
   width: 100%;
   transition:
@@ -137,8 +141,8 @@ input, textarea, select {
 input::placeholder, textarea::placeholder { color: var(--text-faint); }
 input:focus, textarea:focus, select:focus {
   outline: none;
-  border-color: var(--selected);
-  box-shadow: none;
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 /* Entry sidebar form fields keep a quieter, neutral focus so the orange
    "Create" CTA stays the loudest thing in the panel. A low-opacity black
@@ -203,9 +207,9 @@ textarea { resize: vertical; font-family: inherit; }
   font: inherit;
   color: var(--text);
   text-align: left;
-  background: var(--bg-panel);
+  background: var(--bg-elevated);
   border: var(--stroke-thin, 1px) solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-large);
   cursor: pointer;
   transition:
     border-color var(--duration-faster, 100ms) var(--curve-easy-ease, ease),
@@ -215,13 +219,13 @@ textarea { resize: vertical; font-family: inherit; }
 .od-select-trigger:hover:not(:disabled),
 .od-select-trigger[aria-expanded='true'] {
   border-color: var(--border-strong);
-  background: var(--bg-subtle);
+  background: var(--bg-fill-tertiary);
 }
 .od-select-trigger:focus-visible,
 .od-select-trigger[aria-expanded='true'] {
   outline: none;
-  border-color: var(--selected);
-  box-shadow: 0 0 0 3px var(--selected-soft);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 .od-select-trigger:disabled {
   opacity: 0.55;
@@ -317,4 +321,24 @@ textarea { resize: vertical; font-family: inherit; }
   color: var(--text-faint);
   font-size: 12px;
   font-weight: 600;
+}
+
+/* ── Anton Indicator — the three CSS rules from the Orbit · Morph spec
+   (verbatim). Global (unscoped) on purpose: the SVG is built imperatively
+   each frame. ── */
+.orbit-morph {
+  display: inline-block;
+  line-height: 0;
+  flex: none;
+}
+.orbit-morph[data-theme="dark"][data-state="thinking"],
+.orbit-morph[data-theme="dark"][data-state="done"] {
+  filter: drop-shadow(0 0 calc(var(--om-size, 18px) * 0.18) rgba(34, 211, 238, 0.55));
+}
+.orbit-morph[data-theme="light"][data-state="thinking"],
+.orbit-morph[data-theme="light"][data-state="done"] {
+  filter: drop-shadow(0 0 calc(var(--om-size, 18px) * 0.12) rgba(31, 156, 176, 0.35));
+}
+.orbit-morph[data-state="idle"] svg {
+  opacity: 0.7;
 }

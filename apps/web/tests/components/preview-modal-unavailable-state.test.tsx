@@ -142,16 +142,16 @@ describe('PreviewModal unavailable state', () => {
       'url=https%3A%2F%2Fexample.test%2Fmarketplace%2Flanding',
     );
     expect(new URL(xShare.getAttribute('href') ?? '').searchParams.get('text')).toBe(
-      'OpenDesign template: Landing Template',
+      'LeastGen Studio template: Landing Template',
     );
     expect(new URL(redditShare.getAttribute('href') ?? '').searchParams.get('title')).toBe(
-      'OpenDesign template: Landing Template',
+      'LeastGen Studio template: Landing Template',
     );
     expect(
       new URL(
         screen.getByRole('menuitem', { name: /Facebook/i }).getAttribute('href') ?? '',
       ).searchParams.get('quote'),
-    ).toBe('OpenDesign template: Landing Template');
+    ).toBe('LeastGen Studio template: Landing Template');
     expect(screen.getByRole('menuitem', { name: /Instagram/i }).getAttribute('href')).toBe(
       'https://www.instagram.com/',
     );
@@ -202,7 +202,7 @@ describe('PreviewModal unavailable state', () => {
 
       await waitFor(() => {
         expect(writeText).toHaveBeenCalledWith(
-          'OpenDesign template: Landing Template\nhttps://example.test/marketplace/landing',
+          'LeastGen Studio template: Landing Template\nhttps://example.test/marketplace/landing',
         );
         expect(openedWindow.location.href).toBe('https://www.instagram.com/');
       });
@@ -293,7 +293,7 @@ describe('PreviewModal unavailable state', () => {
 
       await waitFor(() => {
         expect(writeText).toHaveBeenCalledWith(
-          'OpenDesign template: Landing Template\nhttps://example.test/marketplace/landing',
+          'LeastGen Studio template: Landing Template\nhttps://example.test/marketplace/landing',
         );
       });
     } finally {

@@ -752,11 +752,11 @@
 
 /* Featured (tutorial) card variant */
 .design-card.featured .design-card-thumb {
-  background: linear-gradient(180deg, #e8efff 0%, #d8e3ff 100%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--blue) 16%, var(--bg-panel)) 0%, var(--bg-panel) 100%);
 }
 .design-card.featured .design-card-thumb::before {
   background: var(--bg-panel);
-  border-color: rgba(35, 72, 184, 0.18);
+  border-color: var(--blue-border);
 }
 .design-card.featured .design-card-thumb::after { display: none; }
 

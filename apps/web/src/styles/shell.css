@@ -173,7 +173,7 @@ html.od-radial-open .workspace-shell {
 .workspace-radial-sector-path:hover,
 .workspace-radial-sector-path.is-hover {
   /* Whisper brand tint — same as the composer picker's hovered wedge. */
-  fill: #f9fff4;
+  fill: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 /* Template icons ride each wedge's mid-radius/mid-angle as HTML spans (the Icon
    component renders a Remix font glyph, which SVG <text> can't host). Inert, so

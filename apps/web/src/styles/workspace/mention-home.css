@@ -187,7 +187,7 @@
   display: block;
 }
 .mention-meta--path {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family: var(--mono);
   font-size: 12px;
   color: color-mix(in srgb, var(--text-muted) 84%, var(--text-soft));
 }
@@ -665,9 +665,9 @@
   min-width: 0;
 }
 .design-card-tag.tag-prototype {
-  color: #2348b8;
-  background: #e8efff;
-  border-color: rgba(35, 72, 184, 0.18);
+  color: var(--blue);
+  background: var(--blue-bg);
+  border-color: var(--blue-border);
 }
 .design-card-tag.tag-live-artifact {
   color: #6d4ff5;
@@ -1823,25 +1823,10 @@
 }
 .protocol-chip.active .media-provider-chip-status {
   background: var(--green);
-  box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 34%, transparent);
-  animation: settings-provider-status-pulse 2.4s var(--curve-easy-ease) infinite;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 22%, transparent);
 }
-@keyframes settings-provider-status-pulse {
-  0%,
-  100% {
-    opacity: 1;
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 34%, transparent);
-  }
-  50% {
-    opacity: 0.72;
-    box-shadow: 0 0 0 5px color-mix(in srgb, var(--green) 0%, transparent);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .protocol-chip.active .media-provider-chip-status {
-    animation: none;
-  }
-}
+/* The status pulse was retired with the Orbit · Morph motion rules — the
+   lit dot is a static state marker now. */
 
 .settings-section { display: flex; flex-direction: column; gap: 12px; }
 /* Hide the scroll bar on settings panels while keeping them scrollable. */
@@ -2159,7 +2144,6 @@
 .orbit-state-pill.orbit-state-active .orbit-state-dot {
   background: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
-  animation: pulse 2.4s ease-in-out infinite;
 }
 
 .orbit-run-cta {

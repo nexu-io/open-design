@@ -977,7 +977,6 @@
 }
 .assistant-header .dot[data-active="true"] {
   background: var(--green);
-  animation: pulse 1.2s ease-in-out infinite;
 }
 .assistant-label { font-weight: 500; color: var(--text-muted); font-size: 11px; }
 

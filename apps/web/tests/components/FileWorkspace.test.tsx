@@ -676,9 +676,11 @@ describe('FileWorkspace quick switcher visual isolation', () => {
     expect(getComputedStyle(composerLayer).opacity).not.toBe('0.58');
     // Once the quick switcher closes, the composer input returns to its resting
     // background (no longer the dimmed --bg-fill-tertiary isolation wash). The
-    // #5517 restyle makes that resting fill a subtle color-mix tint of
-    // --bg-panel/--bg-subtle, which resolves to white in the test theme.
-    expect(getComputedStyle(composerInputWrap).background).toBe('rgb(255, 255, 255)');
+    // resting fill is the subtle color-mix tint of --bg-panel/--bg-subtle from
+    // chat.css; jsdom surfaces the declaration unresolved (no color-mix math).
+    expect(getComputedStyle(composerInputWrap).background).toBe(
+      'color-mix(in srgb, var(--bg-panel) 94%, var(--bg-subtle))',
+    );
   });
 });
 

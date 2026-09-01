@@ -1,4 +1,4 @@
-// Use OpenDesign Everywhere — modal entry that documents OpenDesign's
+// Use LeastGen Studio Everywhere — modal entry that documents LeastGen Studio's
 // non-UI surfaces (CLI, MCP, HTTP, Skills) and ships a one-click "copy
 // guide for an agent" payload. Reachable from the entry top-bar and
 // from Settings → Integrations as a sibling of the existing MCP install
@@ -49,7 +49,7 @@ interface Props {
   onOpenSettings?: () => void;
   /** Live daemon URL when known (e.g. http://127.0.0.1:7456). */
   daemonUrl?: string;
-  /** Optional OpenDesign version string surfaced in the agent guide header. */
+  /** Optional LeastGen Studio version string surfaced in the agent guide header. */
   versionHint?: string;
 }
 

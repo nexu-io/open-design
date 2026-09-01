@@ -1,5 +1,5 @@
 // Wordmark rendered by a WebGL fragment shader: a diagonal band sweeps across
-// and assembles the OpenDesign logo (mark + wordmark, sampled from an SVG)
+// and assembles the LeastGen Studio logo (mark + wordmark, sampled from an SVG)
 // out of a dense spray of tiny coloured blocks, then rests as the solid logo
 // while the cursor lights a pool of blocks with a lasting wake.
 // Framework-agnostic core logic; mount it on a sized, position:relative host
@@ -7,8 +7,8 @@
 //
 // Adapted for this repo from the reference implementation: the sound hooks
 // (glitchScan/glitchTick) are stripped, `three` is injected by the caller so
-// the component can lazy-import it, defaults carry the OpenDesign wordmark and
-// the three-green brand palette, and plain-array reads carry `!` where the
+// the component can lazy-import it, defaults carry the LeastGen Studio wordmark and
+// the three-color bridge brand palette, and plain-array reads carry `!` where the
 // index is provably in range (strict noUncheckedIndexedAccess).
 
 const SHADER = `
@@ -174,11 +174,12 @@ const TRAIL = 24;
 const TRAIL_LIFE = 1.1;
 const TRAIL_MIN_PX = 3;
 
-// Brand greens: #87EA5C leads the wave, #D0FFB5 is the shimmer partner, and
-// the deep #2F781D tints the rising edge of each block.
-const ACCENT: [number, number, number] = [0.529, 0.918, 0.361]; // #87EA5C
-const ACCENT2: [number, number, number] = [0.816, 1.0, 0.71]; // #D0FFB5
-const BASE: [number, number, number] = [0.184, 0.471, 0.114]; // #2F781D
+// LeastGen bridge colors: #22D3EE leads the wave, #D8FFFF is the shimmer
+// partner, and the deep amber #B36B2E tints the rising edge of each block
+// (amber = the physical side of the bridge, cyan = the digital side).
+const ACCENT: [number, number, number] = [0.133, 0.827, 0.933]; // #22D3EE
+const ACCENT2: [number, number, number] = [0.847, 1, 1]; // #D8FFFF
+const BASE: [number, number, number] = [0.702, 0.42, 0.18]; // #B36B2E
 // The resting artwork: the real logo SVG (paths filled #202020, matching the
 // app's near-black text tone); its alpha channel is the glyph mask the shader
 // samples. Same 1705:291 aspect as the host box.
@@ -535,6 +536,15 @@ function rasteriseLogo(
     const dw = img.naturalWidth * s;
     const dh = img.naturalHeight * s;
     ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    // The artwork ships as near-black glyph paths (a light-theme leftover):
+    // the shader's wave recolors the ALPHA mask itself, but the resting layer
+    // composites the raw texture color, so the mask must be re-toned to the
+    // dark-theme text tone here or the resting wordmark disappears on the
+    // dark shell.
+    ctx.globalCompositeOperation = 'source-in';
+    ctx.fillStyle = '#d8ffff';
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.globalCompositeOperation = 'source-over';
   }
   return c;
 }

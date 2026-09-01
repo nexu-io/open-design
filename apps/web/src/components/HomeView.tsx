@@ -261,9 +261,9 @@ interface PendingPluginUseHandoff {
 }
 
 const AUTHORING_DEFAULT_SCENARIO_INPUTS = {
-  artifactKind: 'OpenDesign plugin',
-  audience: 'OpenDesign plugin authors',
-  topic: 'packaging a reusable workflow as an OpenDesign plugin',
+  artifactKind: 'LeastGen Studio plugin',
+  audience: 'LeastGen Studio plugin authors',
+  topic: 'packaging a reusable workflow as an LeastGen Studio plugin',
 };
 
 
@@ -2161,7 +2161,7 @@ export function HomeView({
       // auth gate and surface as a confusing late create-time failure.
       // Surface the host error instead and keep the existing working dir.
       setError(
-        `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update OpenDesign and try again.`,
+        `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update LeastGen Studio and try again.`,
       );
       return null;
     }
@@ -2186,7 +2186,7 @@ export function HomeView({
       }
       if ('canceled' in result && result.canceled) return null;
       setError(
-        `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update OpenDesign and try again.`,
+        `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update LeastGen Studio and try again.`,
       );
       return null;
     }

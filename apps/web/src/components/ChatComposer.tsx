@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from 'react-dom';
-import { Button } from '@open-design/components';
+import { AntonIndicator, Button } from '@open-design/components';
 import { useI18n } from '../i18n';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import type { Dict, Locale } from '../i18n/types';
@@ -3693,15 +3693,11 @@ function sortChatCommentAttachmentsByOrder(attachments: ChatCommentAttachment[])
     .map((entry) => entry.attachment);
 }
 
-/* 5×5 dot-matrix "cross expand" glyph shown inside the black send button while
-   a run is executing: a plus shape blooms outward from the center in Manhattan
-   steps (delay = 220ms × Manhattan distance from the middle dot); the faint
-   base grid stays static. Dots use currentColor so the glyph adapts to the
-   button's light-on-dark (and dark-mode inverted) fill. */
+/* Anton Indicator shown inside the black send button while a run is
+   executing — the Orbit · Morph "thinking" affordance wired to the same
+   executing state that mounts the stop pill (it unmounts on settle). */
 function ComposerRunIcon({ className }: { className?: string }) {
-  // Self-animating matrix loader (SMIL inside the SVG); runs on its own as an
-  // <img>, so it needs none of the <video> autoplay/loop plumbing.
-  return <img className={className} src="/composer-matrix-loader.svg" alt="" aria-hidden />;
+  return <AntonIndicator state="thinking" size="18px" className={className} />;
 }
 
 function workspaceContextIcon(item: WorkspaceContextItem): IconName {

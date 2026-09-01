@@ -948,7 +948,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 12px;
 }
 .plugin-loop-home__card-byline-source:hover {
@@ -1313,7 +1313,7 @@
   border-radius: var(--radius-pill);
   color: var(--text-muted);
   font-size: 12px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   min-width: 0;
 }
 .plugin-details-modal__hero-url > span {
@@ -1425,7 +1425,7 @@
   border-radius: var(--radius-sm, 6px);
   background: var(--bg-subtle);
   color: var(--text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 12px;
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -1453,7 +1453,7 @@
   background: var(--bg-subtle);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm, 6px);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 13px;
   line-height: 1.55;
   color: var(--text);
@@ -1558,7 +1558,7 @@
   border: 1px solid var(--border);
 }
 .plugin-details-modal__chip--mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 12px;
 }
 .plugin-details-modal__context {
@@ -1820,7 +1820,7 @@
   gap: 4px;
 }
 .plugin-details-modal__atom {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 12px;
   padding: 2px 7px;
   background: var(--bg-subtle);
@@ -1992,7 +1992,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 12px;
 }
 .plugin-details-modal__ext-link:hover {
@@ -2377,7 +2377,7 @@
   white-space: nowrap;
   font-size: 12px;
   color: var(--text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
 }
 .plugin-design-sidebar__spec > .design-spec-pre,
 .plugin-design-sidebar__spec > .design-spec-empty {

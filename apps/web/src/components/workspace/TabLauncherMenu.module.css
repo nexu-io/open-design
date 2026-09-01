@@ -92,13 +92,12 @@
 }
 
 /* Ink pill with a bright-green label. Fixed values, not theme tokens: the
-   chip stays ink-dark in BOTH themes (that is the look, not a light-mode
-   accident), and the theme greens (--green) are tuned for light panels —
-   too dark to read on this ground. */
+   chip uses the selected-chip idiom in BOTH themes: accent-tint fill with
+   the brand-teal label, matching the home hero subtype chips. */
 .chip.chipActive {
-  background: #111;
-  border-color: #111;
-  color: #87ea5c;
+  background: var(--accent-tint);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  color: var(--brand-text);
 }
 
 /* Hover must not restyle the active chip: the global `button:hover` primitive
@@ -106,9 +105,9 @@
    light gray under the green label. Pin the same values at higher
    specificity so the selected pill reads identically at rest and on hover. */
 .chip.chipActive:hover {
-  background: #111;
-  border-color: #111;
-  color: #87ea5c;
+  background: var(--accent-tint);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  color: var(--brand-text);
 }
 
 .sectionHeader {

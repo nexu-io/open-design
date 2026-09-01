@@ -565,7 +565,7 @@ describe('streamViaDaemon', () => {
     ]);
 
     expect(transcript).toContain('## user');
-    expect(transcript).toContain('[OpenDesign truncated 1000 chars from this prior message');
+    expect(transcript).toContain('[LeastGen Studio truncated 1000 chars from this prior message');
     expect(transcript).not.toContain('x'.repeat(13_000));
     expect(transcript).toContain('small answer');
   });
@@ -1193,7 +1193,7 @@ describe('streamViaDaemon', () => {
       }),
     );
     const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
-    expect(message).toContain('OpenDesign link URL or model route');
+    expect(message).toContain('LeastGen Studio link URL or model route');
     expect(message).not.toContain('json-rpc id 4');
     expect(message).not.toContain('https://example.invalid');
     expect(handlers.onDone).not.toHaveBeenCalled();
@@ -1551,7 +1551,7 @@ describe('streamViaDaemon', () => {
 
     expect(handlers.onError).toHaveBeenCalledWith(expect.any(Error));
     const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
-    expect(message).toContain('OpenDesign started, but the run did not complete');
+    expect(message).toContain('LeastGen Studio started, but the run did not complete');
     expect(message).not.toContain('sqlite-migration');
     expect(message).not.toContain('OPENCODE_SERVER_PASSWORD');
     expect(message).not.toContain('opencode server listening');

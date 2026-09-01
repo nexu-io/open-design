@@ -1430,19 +1430,19 @@ describe('loadConfig', () => {
     expect(config.apiProtocol).toBe('anthropic');
   });
 
-  it('preserves a valid saved accent color while forcing the theme back to light', () => {
+  it('preserves a valid saved accent color while forcing the theme back to dark', () => {
     const savedConfig: Partial<AppConfig> = {
-      theme: 'dark',
+      theme: 'light',
       accentColor: '#4F46E5',
     };
     store.set('open-design:config', JSON.stringify(savedConfig));
 
     const config = loadConfig();
 
-    // The theme setting was removed and the app ships light-only, so a stored
-    // dark preference is coerced on read (see tests/state/force-light-theme).
+    // The theme setting was removed and the app ships dark-only, so a stored
+    // light preference is coerced on read (see tests/state/force-dark-theme).
     // The accent, which has no such rule, must still survive.
-    expect(config.theme).toBe('light');
+    expect(config.theme).toBe('dark');
     expect(config.accentColor).toBe('#4f46e5');
   });
 
@@ -1477,14 +1477,14 @@ describe('loadConfig', () => {
   it('sets an explicit apiProtocol for new default configs', () => {
     expect(DEFAULT_CONFIG.apiProtocol).toBe('anthropic');
     expect(DEFAULT_CONFIG.configMigrationVersion).toBe(3);
-    expect(DEFAULT_CONFIG.accentColor).toBe('#353535');
+    expect(DEFAULT_CONFIG.accentColor).toBe('#22d3ee');
   });
 
   // Long-lived installs carry whatever accent shipped as the default when they
   // were first run. Those values are no longer offered in the swatches, so a
   // config still holding one is a stale default, not a user choice — it kept
   // old installs off the current accent everywhere it is used.
-  it.each(['#87ea5c', '#c96442'])(
+  it.each(['#87ea5c', '#c96442', '#353535'])(
     'resets the legacy default accent %s to the current default',
     (legacy) => {
       store.set(
@@ -1507,8 +1507,9 @@ describe('loadConfig', () => {
 
     expect(loadConfig().accentColor).toBe('#1a74ff');
     expect(DEFAULT_CONFIG.configMigrationVersion).toBe(3);
-    // #5517 把默认强调色改成中性灰,#c96442 随之进了 LEGACY_DEFAULT_ACCENT_COLORS。
-    expect(DEFAULT_CONFIG.accentColor).toBe('#353535');
+    // #5517 把默认强调色改成中性灰,#c96442 随之进了 LEGACY_DEFAULT_ACCENT_COLORS;
+    // LeastGen 再版把默认强调色定为品牌青 #00ffd5,中性灰时代一并退役。
+    expect(DEFAULT_CONFIG.accentColor).toBe('#22d3ee');
   });
 });
 

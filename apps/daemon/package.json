@@ -48,7 +48,7 @@
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
     "@opentelemetry/api": "1.9.1",
-    "better-sqlite3": "12.10.0",
+    "better-sqlite3": "13.0.3",
     "blake3-wasm": "2.1.5",
     "cheerio": "1.2.0",
     "chokidar": "3.6.0",

@@ -1195,7 +1195,8 @@
   height: 20px;
 }
 /* Connection-status dot: green = agent reachable, gray = unreachable/failed.
-   A same-color halo pulses outward for the "breathing" live indicator. */
+   A static same-color halo keeps the connected dot a quiet state marker — the
+   breathing animation was retired with the Orbit · Morph motion rules. */
 .inline-switcher__chip-conn {
   position: relative;
   flex: 0 0 auto;
@@ -1210,26 +1211,10 @@
 .inline-switcher__chip-conn::after {
   content: '';
   position: absolute;
-  inset: 0;
+  inset: -2px;
   border-radius: inherit;
   background: inherit;
-  animation: inline-switcher-chip-breathe 2s var(--ease-out, ease-out) infinite;
-}
-@keyframes inline-switcher-chip-breathe {
-  0% {
-    transform: scale(1);
-    opacity: 0.55;
-  }
-  70%,
-  100% {
-    transform: scale(2.4);
-    opacity: 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .inline-switcher__chip-conn::after {
-    animation: none;
-  }
+  opacity: 0.3;
 }
 .inline-switcher__chip-model-name {
   flex: 0 1 auto;
@@ -1909,7 +1894,7 @@
   max-width: 92px;
   overflow: hidden;
   color: var(--text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-family: var(--mono);
   font-size: 12px;
   font-weight: 600;
   text-overflow: ellipsis;
@@ -2243,12 +2228,11 @@
   }
 }
 .home-hero__submit {
-  /* Black send pill with brand-green arrow + label. One tier deeper than
-     --accent (#353535) per design: ink-black ground so the green pops. In
-     dark the blocks below pin the surface to the lifted dark tint instead —
-     brand green stays legible on both. */
-  --home-hero-submit-bg: var(--text-strong);
-  --home-hero-submit-fg: #87ea5c;
+  /* Tinted send pill with the brand-teal arrow. One tier deeper than
+     --accent per design: the dark tint ground so the teal pops. In dark the
+     blocks below pin the surface to the lifted dark tint. */
+  --home-hero-submit-bg: var(--accent-tint);
+  --home-hero-submit-fg: var(--brand-text);
 
   appearance: none;
   display: inline-flex;
@@ -2285,7 +2269,7 @@
 .home-hero__submit:hover:not(:disabled),
 .home-hero__submit:active:not(:disabled) {
   border-color: transparent;
-  background: color-mix(in srgb, var(--home-hero-submit-bg) 86%, #fff);
+  background: color-mix(in srgb, var(--home-hero-submit-bg) 86%, var(--accent));
   color: var(--home-hero-submit-fg);
   box-shadow: none;
   transform: none;
@@ -2298,7 +2282,7 @@
 
 .home-hero__submit:disabled {
   /* Idle (nothing typed) reads identical to the active state — always the
-     black ground + brand-green arrow, so the button never shifts color when
+     tinted ground + brand-teal arrow, so the button never shifts color when
      the user starts typing. */
   opacity: 1;
   cursor: default;
@@ -3156,16 +3140,16 @@
   background-image: none;
 }
 /* Selected template: same selected pair as the nav rail's active item
-   (极浅品牌背景 #f9fff4 under deep brand green #2f781d). */
+   (teal --selected-soft fill under --brand-text). */
 .home-hero__footer-option--select[data-field-name='template'].has-selection {
   max-width: 250px;
   border-color: transparent;
-  background-color: #f9fff4;
+  background-color: var(--selected-soft);
   background-image: none;
-  color: #2f781d;
+  color: var(--brand-text);
   /* Same selected stroke as the composer-mode (设计) pill: an inset 1px ring
      at 22% of the deep brand green. */
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #2f781d 22%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-text) 22%, transparent);
 }
 .home-hero__footer-option--select[data-field-name='template']:hover,
 .home-hero__footer-option--select[data-field-name='template'].is-open,
@@ -3180,11 +3164,11 @@
 .home-hero__footer-option--select[data-field-name='template'].has-selection.is-open,
 .home-hero__footer-option--select[data-field-name='template'].has-selection:focus-within {
   border-color: transparent;
-  background-color: #f9fff4;
-  color: #2f781d;
+  background-color: var(--selected-soft);
+  color: var(--brand-text);
   /* Keep the selected ring through hover/open/focus — the generic template
      hover rule above would otherwise swap it back to shadow-xs. */
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #2f781d 22%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-text) 22%, transparent);
 }
 .home-hero__footer-option.home-hero__template-option:hover,
 .home-hero__footer-option.home-hero__template-option.is-open,
@@ -3228,10 +3212,10 @@
 }
 /* Icon + label in the nav rail's deep brand green on the pale wash. */
 .home-hero__template-option.has-selection .home-hero__footer-option-icon {
-  color: #2f781d;
+  color: var(--brand-text);
 }
 .home-hero__template-option.has-selection .home-hero__footer-select-label {
-  color: #2f781d;
+  color: var(--brand-text);
   font-weight: 600;
 }
 /* The template pill breathes wider than its 8px siblings: 16px on both
@@ -3418,19 +3402,19 @@
   transform: translateY(-0.5px);
 }
 /* Selected pill mirrors the composer's selected template chip exactly (the
-   `.has-selection` pair above: 极浅品牌背景 #f9fff4, deep brand green
-   #2f781d, inset 1px ring at 22%), so the picked type reads as the same
-   object in both places. */
+   `.has-selection` pair above: teal --selected-soft fill, --brand-text,
+   inset 1px ring at 22%), so the picked type reads as the same object in
+   both places. */
 .home-hero__type-pill.is-active {
-  background: #f9fff4;
+  background: var(--selected-soft);
   border-color: transparent;
-  color: #2f781d;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #2f781d 22%, transparent);
+  color: var(--brand-text);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-text) 22%, transparent);
 }
 .home-hero__type-pill.is-active:hover:not(:disabled) {
-  background: #f9fff4;
+  background: var(--selected-soft);
   border-color: transparent;
-  color: #2f781d;
+  color: var(--brand-text);
   transform: none;
 }
 .home-hero__type-pill:disabled {

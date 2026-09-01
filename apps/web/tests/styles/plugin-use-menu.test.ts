@@ -93,7 +93,8 @@ describe('plugin use menu contrast', () => {
     const hover = cssDeclarations(pluginsHomeCss, hoverSelector);
     const focus = cssDeclarations(pluginsHomeCss, focusSelector);
 
-    expect(ruleValue(globalHover, 'background')).toBe('var(--bg-subtle)');
+    // Orbit · Morph secondary hover fill (bg-fill-tertiary), per primitives.css.
+    expect(ruleValue(globalHover, 'background')).toBe('var(--bg-fill-tertiary)');
     expect(compareSpecificity(specificity(hoverSelector), specificity(globalHoverSelector))).toBeGreaterThan(0);
 
     for (const block of [hover, focus]) {

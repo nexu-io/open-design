@@ -312,7 +312,8 @@ describe('workspace tabs chrome styles', () => {
     // fit) down to --workspace-tab-min-width before the strip scrolls.
     expect(ruleValue(projectTab, 'flex')).toBe('0 1 156px');
     expect(ruleValue(projectTab, 'min-width')).toBe('var(--workspace-tab-min-width, 56px)');
-    expect(ruleValue(activeProjectTab, 'background')).toBe('#ffffff');
+    // The active tab reads on --bg-panel (token-driven), not a literal white.
+    expect(ruleValue(activeProjectTab, 'background')).toBe('var(--bg-panel)');
     expect(ruleValue(activeProjectTab, 'border-color')).toBe('var(--workspace-active-tab-border)');
     expect(ruleValue(activeProjectTab, 'box-shadow')).toContain('0 1px 2px');
     expect(ruleValue(activeProjectTab, 'box-shadow')).toContain('inset');

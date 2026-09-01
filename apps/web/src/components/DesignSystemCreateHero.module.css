@@ -53,7 +53,7 @@
 
 .title {
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--serif);
   font-size: clamp(36px, 4.4vw, 48px);
   line-height: 1.04;
   letter-spacing: -0.015em;
@@ -222,7 +222,7 @@
   align-items: baseline;
   gap: 14px;
   color: var(--text-strong);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--serif);
 }
 .typeLg {
   font-size: 36px;

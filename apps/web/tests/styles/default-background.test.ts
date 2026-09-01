@@ -11,27 +11,27 @@ function cssBlock(selector: string): string {
 }
 
 describe('default app background colors', () => {
-  it('uses the release light background color by default', () => {
+  it('uses the orbit-morph light fallback background by default', () => {
     const root = cssBlock(':root');
 
-    expect(root).toContain('--bg: #fff;');
-    expect(root).toContain('--bg-app: #fff;');
+    expect(root).toContain('--bg: #ECECEA;');
+    expect(root).toContain('--bg-app: #ECECEA;');
   });
 
-  it('keeps the dark theme background unchanged', () => {
+  it('keeps the orbit-morph dark theme background', () => {
     const dark = cssBlock('[data-theme="dark"]');
 
-    expect(dark).toContain('--bg: #202020;');
-    expect(dark).toContain('--bg-app: #202020;');
+    expect(dark).toContain('--bg: #0B0E14;');
+    expect(dark).toContain('--bg-app: #0B0E14;');
   });
 
-  it('prefers platform UI fonts over optional local app fonts', () => {
+  it('uses the orbit-morph UI font for --sans over the retired rebrand faces', () => {
     const root = cssBlock(':root');
     const sans = /--sans:\s*([^;]+);/.exec(root)?.[1];
 
     expect(sans).toBeDefined();
-    expect(sans).toContain('"Albert Sans"');
-    expect(sans).not.toContain("'Inter'");
-    expect(sans).toMatch(/"Albert Sans", "PingFang SC", "Microsoft YaHei"/);
+    expect(sans).toContain('"Inter"');
+    expect(sans).not.toContain('"Space Grotesk"');
+    expect(sans).toMatch(/"Inter", "PingFang SC", "Microsoft YaHei", sans-serif/);
   });
 });

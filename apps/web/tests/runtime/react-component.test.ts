@@ -12,7 +12,7 @@ export default function Card() {
 `);
     expect(out).not.toContain('import React');
     expect(out).toContain('function Card()');
-    expect(out).toContain('window.__OpenDesignComponent');
+    expect(out).toContain('window.__LeastGenComponent');
     expect(out).toContain("typeof Card !== 'undefined' ? Card : null");
   });
 

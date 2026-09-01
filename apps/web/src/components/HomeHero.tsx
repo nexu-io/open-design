@@ -1289,7 +1289,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
 
   return (
     <section ref={homeHeroRef} className="home-hero" data-testid="home-hero">
-      {/* #5517 hero header: the OpenDesign logotype replaces the small
+      {/* #5517 hero header: the LeastGen Studio logotype replaces the small
           brand-mark + name pair, and the tagline subtitle is dropped. The
           static wordmark is now a WebGL pixel-scan effect (round 7) — the
           title heading below it is dropped too, since the animated wordmark
