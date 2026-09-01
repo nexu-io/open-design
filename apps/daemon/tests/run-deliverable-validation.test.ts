@@ -273,7 +273,9 @@ describe('run deliverable validation', () => {
           renderer: 'markdown',
           status: 'complete',
           exports: ['md', 'html', 'pdf', 'zip'],
-          metadata: {},
+          metadata: {
+          task: 'final-design-export-curation',
+        },
         }),
       });
 
@@ -348,7 +350,9 @@ describe('run deliverable validation', () => {
           renderer: 'markdown',
           status: 'complete',
           exports: ['md', 'html', 'pdf', 'zip'],
-          metadata: {},
+          metadata: {
+          task: 'final-design-export-curation',
+        },
         }),
       });
 
@@ -383,7 +387,9 @@ describe('run deliverable validation', () => {
           renderer: 'markdown',
           status: 'complete',
           exports: ['md'],
-          metadata: {},
+          metadata: {
+          task: 'final-design-export-curation',
+        },
         }),
       });
 
@@ -442,7 +448,9 @@ describe('run deliverable validation', () => {
           renderer: 'markdown',
           status: 'streaming',
           exports: ['md'],
-          metadata: {},
+          metadata: {
+          task: 'final-design-export-curation',
+        },
         }),
       });
 
@@ -454,6 +462,42 @@ describe('run deliverable validation', () => {
           touchedPaths: ['export.md'],
           projectMetadata: {
             kind: 'other',
+            entryFile: 'index.html',
+          },
+        }),
+      ).resolves.toMatchObject({
+        valid: false,
+        validation: 'entry_not_touched',
+        entryFile: 'index.html',
+      });
+    });
+
+    it('keeps the entry_not_touched contract for a prototype run with a touched secondary complete manifest', async () => {
+      // Regression: a normal prototype run that happens to write a complete
+      // secondary manifest (e.g. an intermediate artifact) must still fail
+      // `entry_not_touched` if the prototype entry is untouched. The
+      // export-only fallback is gated on `manifest.metadata.task` so a
+      // manifest without a task marker is NOT promoted to the deliverable.
+      const fixture = await projectFixture({
+        'index.html': '<!doctype html><title>Stale prototype</title>',
+        'side-effect.md': '# An intermediate artifact',
+        // No `task` field in metadata: this is NOT an export task.
+        'side-effect.md.artifact.json': JSON.stringify({
+          version: 1, kind: 'markdown-document',
+          title: 'side-effect.md', entry: 'side-effect.md',
+          renderer: 'markdown', status: 'complete',
+          exports: ['md'], metadata: {},
+        }),
+      });
+
+      await expect(
+        validateRunDeliverable({
+          ...fixture,
+          runStatus: 'succeeded',
+          artifactCount: 1,
+          touchedPaths: ['side-effect.md'],
+          projectMetadata: {
+            kind: 'prototype',
             entryFile: 'index.html',
           },
         }),
@@ -484,7 +528,9 @@ describe('run deliverable validation', () => {
           renderer: 'markdown',
           status: 'complete',
           exports: ['md'],
-          metadata: {},
+          metadata: {
+          task: 'final-design-export-curation',
+        },
         }),
       });
 

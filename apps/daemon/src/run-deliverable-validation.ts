@@ -220,12 +220,12 @@ export async function validateRunDeliverable(
       // touched artifact with a complete explicit manifest is a valid deliverable
       // regardless of the project's declared kind. The candidate must (a) be
       // touched in this run, (b) carry a persisted (non-inferred) manifest, (c)
-      // have status `complete`, and (d) its manifest must be bound to the file's
-      // own path. Unlike the declared-entry path, no project-kind compatibility
-      // check is applied — a complete manifest is the deliverable's own contract.
-      // When multiple candidates qualify the first readable one wins; this
-      // matches the declared-entry strategy of always taking the single
-      // compatible file rather than presenting a disambiguation UI.
+      // have status `complete`, (d) its manifest must be bound to the file's
+      // own path, and (e) the manifest must declare an export task (i.e. carry
+      // a `metadata.task` string). The task marker is what distinguishes a true
+      // export run from a normal prototype run that happens to have a stale
+      // entry and a touched secondary artifact — without it, an ordinary
+      // prototype run would bypass the `entry_not_touched` contract.
       const exportCandidates = files.filter((file) => {
         const candidatePath = filePath(file);
         const manifest = file.artifactManifest;
@@ -234,6 +234,12 @@ export async function validateRunDeliverable(
         // Only consider artifacts with an explicit persisted manifest, not
         // inferred legacy manifests that every .html/.md file receives.
         if (manifest.metadata?.inferred === true) return false;
+        // Require an export task marker so a normal prototype run (whose
+        // touched secondary artifact might still have a complete manifest)
+        // does not bypass the `entry_not_touched` contract.
+        if (typeof manifest.metadata?.task !== 'string' || manifest.metadata.task.length === 0) {
+          return false;
+        }
         return touched.has(candidatePath);
       });
 
