@@ -211,9 +211,16 @@ export function snapshotProjectArtifacts(rootDir: string): ArtifactSnapshot {
         if (IGNORED_DIR_NAMES.has(entry.name) || entry.name.startsWith('.')) continue;
         walk(path.join(dir, entry.name));
       } else if (entry.isFile()) {
-        const tracked = isTrackedRunFile(entry.name);
-        if (tracked ? trackedCount >= MAX_FILES : otherCount >= MAX_OTHER_FILES) continue;
         const full = path.join(dir, entry.name);
+        // Pass the full native path so the manifest-backed check can resolve
+        // nested `<dir>/<file>.artifact.json` sidecars. Passing only
+        // `entry.name` would force `isTrackedRunFile` to probe the project
+        // root for every sidecar lookup, missing the sidecar in any nested
+        // directory. Walking the full path also makes the per-file cap
+        // decision the same for HTML / image / video / audio as for
+        // manifest-backed Markdown / DOCX.
+        const tracked = isTrackedRunFile(full, rootDir);
+        if (tracked ? trackedCount >= MAX_FILES : otherCount >= MAX_OTHER_FILES) continue;
         try {
           const stat = fs.statSync(full);
           snapshot.set(
@@ -258,9 +265,12 @@ export async function snapshotProjectArtifactsAsync(rootDir: string): Promise<Ar
         if (IGNORED_DIR_NAMES.has(entry.name) || entry.name.startsWith('.')) continue;
         await walk(path.join(dir, entry.name));
       } else if (entry.isFile()) {
-        const tracked = isTrackedRunFile(entry.name);
+        const full = path.join(dir, entry.name);
+        // See the matching comment in `snapshotProjectArtifacts`: pass the
+        // full native path so nested manifest sidecars resolve correctly.
+        const tracked = isTrackedRunFile(full, rootDir);
         if (tracked ? trackedCount >= MAX_FILES : otherCount >= MAX_OTHER_FILES) continue;
-        files.push({ full: path.join(dir, entry.name), tracked });
+        files.push({ full, tracked });
         if (tracked) trackedCount += 1;
         else otherCount += 1;
       }
@@ -395,16 +405,18 @@ export function diffRunArtifacts(
     ));
     // Snapshot keys are native paths (`path.join` → backslashes on Windows),
     // but `isPreviewModulePath` / `isDesignSystemFile` match forward slashes
-    // only. Normalize separators so the design-system / preview signals work on
-    // Windows project runs, not just POSIX.
+    // only. Normalize separators so the design-system / preview signals work
+    // on Windows project runs, not just POSIX.
     const classifyPath = filePath.replace(/\\/g, '/');
-    // Manifest sidecar lives next to the file. Look up by basename inside
-    // the project root, so deeply nested Markdown / DOCX files are still
-    // recognized. The check is only run for non-artifact-extension files to
-    // avoid wasted I/O for HTML / image / video / audio artifacts that
-    // `isArtifactPath` already accepted.
+    // Manifest sidecar lives next to the file on disk. The sidecar predicate
+    // and its containment guard are native-path-only, so we must pass the
+    // native `filePath` (NOT the slash-normalized `classifyPath`) — on
+    // Windows the two diverge (`C:\proj\export.md` vs
+    // `C:/proj/export.md`) and the `startsWith` check would otherwise
+    // reject every valid sidecar under the project root. Slash-only
+    // classifiers (`isArtifactPath`, etc.) continue to use `classifyPath`.
     const isManifestBacked =
-      rootDir !== null && isManifestBackedArtifactPath(classifyPath, rootDir);
+      rootDir !== null && isManifestBackedArtifactPath(filePath, rootDir);
     if (isArtifactPath(classifyPath) || isManifestBacked) {
       if (isNew) created += 1;
       else modified += 1;

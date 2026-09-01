@@ -413,6 +413,24 @@ test('Windows-style backslash paths still classify preview modules and DESIGN.md
   assert.equal(diff.created, 2);
 });
 
+test('Windows-style backslash paths still resolve a nested manifest sidecar', () => {
+  // First-pass review caught `classifyPath` (forward slashes) being passed
+  // to the manifest predicate, whose containment guard uses native separators
+  // from `rootDir`. On Windows the sidecar would be probed with forward
+  // slashes but the prefix would be backslashes, so every nested
+  // manifest-backed .md silently failed containment. This test pins the
+  // native-path resolution: built by hand because the test host is POSIX.
+  const fp = { size: 10, mtimeMs: 1, hash: 'h' };
+  const before = new Map();
+  const after = new Map([
+    ['C:\\proj\\reports\\export.md', { ...fp }],
+    ['C:\\proj\\reports\\export.md.artifact.json', { ...fp }],
+  ]);
+  const diff = diffRunArtifacts(before, after, 'C:\\proj');
+  assert.equal(diff.created, 1, 'Windows-path manifest-backed md must count as created');
+  assert.equal(diff.touched, 1);
+});
+
 test('contended same-cwd runs are flagged so the caller skips the whole-tree diff', () => {
   // The daemon allows overlapping runs; a whole-tree snapshot diff cannot tell
   // which concurrent run wrote a file. The registry must mark BOTH overlapping
