@@ -233,20 +233,16 @@ export async function validateRunDeliverable(
       });
       if (exportCandidate) {
         const exportEntryFile = filePath(exportCandidate);
-        // Resolve the artifact's kind for the type check. Use the manifest's
-        // `kind` when it maps to a valid ProjectFileKind; fall back to the
-        // file's `kind` (e.g. 'text' for .md, 'presentation' for .pptx) when
-        // the manifest kind has no mapping or is absent. The fallback ensures
-        // the type_mismatch guard is preserved for unrecognised artifact kinds.
-        const exportArtifactKind: ProjectFileKind = (() => {
-          const mk = exportCandidate.artifactKind;
-          if (mk === 'markdown-document') return 'document';
-          // 'pptx-presentation' is not in the manifest ALLOWED_KINDS but is
-          // documented in some project exports; map it conservatively.
-          if (mk === 'pptx-presentation') return 'presentation';
-          if (mk === 'xlsx-document') return 'spreadsheet';
-          return exportCandidate.kind;
-        })();
+        // Resolve the artifact's kind for the type check. The manifest's
+        // ArtifactKind (e.g. 'markdown-document') maps to a different namespace
+        // than ProjectFileKind (e.g. 'document'); cast to string to handle the
+        // cross-namespace comparison and map to the right bucket.
+        const mk = exportCandidate.artifactKind as string | undefined;
+        const exportArtifactKind: ProjectFileKind =
+          mk === 'markdown-document' ? 'document'
+          : mk === 'pptx-presentation' ? 'presentation'
+          : mk === 'xlsx-document' ? 'spreadsheet'
+          : exportCandidate.kind;
         const exportFacts = {
           entryFile: exportEntryFile,
           artifactKind: exportArtifactKind,
