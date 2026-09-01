@@ -29,9 +29,12 @@ export function ProjectCreationPendingView({
   const agentName = agentDisplayName(agentId) ?? t('assistant.role');
   const iconId = agentIconId(agentId);
 
+  // The `.app` shell belongs to App.tsx, which wraps this view and ProjectView
+  // in the same element so React reconciles one `div.app` across the hand-off
+  // instead of mounting a second one and replaying its entrance animation.
   return (
-    <div className="app" data-testid="project-creation-pending-view">
-      <div className={`split ${styles.split}`}>
+    <>
+      <div className={`split ${styles.split}`} data-testid="project-creation-pending-view">
         <div className="split-chat-slot">
           <div className={`pane ${styles.chatPane}`}>
             <div className="chat-project-header">
@@ -108,6 +111,6 @@ export function ProjectCreationPendingView({
           </div>
         </section>
       </div>
-    </div>
+    </>
   );
 }

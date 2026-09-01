@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 import { access, cp, lstat, mkdir, readdir, readFile, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 
-import { hashJson, hashPath, ToolPackCache } from "./cache.js";
-import type { ToolPackConfig } from "./config.js";
+import { hashJson, hashPath, ToolPackCache } from "./cache/index.js";
+import type { ToolPackConfig } from "./config/index.js";
 import { hashPackageSourcePath } from "./package-source-hash.js";
-import { readRuntimeAppVersion, versionFamilyForAppVersion } from "./versions.js";
+import { readRuntimeAppVersion, versionFamilyForAppVersion } from "./versioning/index.js";
 
 const WORKSPACE_BUILD_PACKAGES = [
   { directory: "packages/release", name: "@open-design/release" },

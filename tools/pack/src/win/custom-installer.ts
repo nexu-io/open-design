@@ -4,9 +4,9 @@ import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promi
 import { dirname, join, relative } from "node:path";
 import { promisify } from "node:util";
 
-import type { ToolPackConfig } from "../config.js";
-import { resolveToolPackLauncherLayout } from "../launcher-layout.js";
-import { winResources } from "../resources.js";
+import type { ToolPackConfig } from "../config/index.js";
+import { resolveToolPackLauncherLayout } from "../launcher/layout.js";
+import { winResources } from "../resources/index.js";
 import { PRODUCT_NAME } from "./constants.js";
 import { pathExists } from "./fs.js";
 import { resolveWinInstallIdentity } from "./identity.js";

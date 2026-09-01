@@ -2,16 +2,29 @@ import type {
   TrackingRunCancelOrigin,
   TrackingRunFailureCategory,
   TrackingRunFailureDetail,
+  TrackingRunFailureDomain,
+  TrackingRunFailureMechanism,
   TrackingRunFailureStage,
   TrackingRunFailureUserAction,
+  TrackingRunEvidenceLevel,
+  TrackingRunAdmissionStatus,
+  TrackingRunAdmissionPhase,
+  TrackingRunPolicyReason,
+  TrackingRunRepairOwner,
   TrackingRunTerminalTrigger,
 } from '@open-design/contracts/analytics';
-import { isModelWindowLimitFailure } from '@open-design/contracts';
+import {
+  isMembershipConcurrencyLimitFailure,
+  isModelWindowLimitFailure,
+} from '@open-design/contracts';
 
 import { classifyAmrAccountFailure } from './integrations/vela-errors.js';
+import { runFailureEvidence } from './services/run-failure-evidence.js';
 import { summarizeRunToolProgress } from './run-diagnostics.js';
+import { isAcpHandshakeRpcErrorText } from './runtimes/acp-handshake-id.js';
 import { classifyAgentServiceFailure } from './runtimes/auth.js';
 import type { RunResult, RunStatusForAnalytics } from './run-result.js';
+import type { RunAdmissionEvidence } from './runtimes/run-lifecycle-analytics.js';
 
 export interface RunEventForFailureClassification {
   event: string;
@@ -28,12 +41,21 @@ export interface RunFailureClassificationInput {
   cancelOrigin?: TrackingRunCancelOrigin | null;
   terminalTrigger?: TrackingRunTerminalTrigger | null;
   events?: RunEventForFailureClassification[];
+  admissionEvidence?: RunAdmissionEvidence | undefined;
 }
 
 export interface RunFailureClassification {
   failure_category: TrackingRunFailureCategory;
   failure_detail: TrackingRunFailureDetail;
   failure_stage: TrackingRunFailureStage;
+  failure_mechanism?: TrackingRunFailureMechanism;
+  failure_domain?: TrackingRunFailureDomain;
+  evidence_level?: TrackingRunEvidenceLevel;
+  repair_owner?: TrackingRunRepairOwner;
+  admission_status?: TrackingRunAdmissionStatus;
+  admission_phase?: TrackingRunAdmissionPhase;
+  policy_reason?: TrackingRunPolicyReason;
+  classifier_version?: 'run-failure-v2' | 'run-failure-v3';
   retryable: boolean;
   user_action: TrackingRunFailureUserAction;
   /** Distinguishes an explicit user stop from lifecycle-driven cancellation. */
@@ -171,7 +193,18 @@ function collectFailureText(input: RunFailureClassificationInput): string {
 }
 
 function isHardQuotaText(text: string): boolean {
-  return /\b(session limit|usage limit|limit reached|quota|billing (?:hard )?limit|insufficient[ _-]?(?:quota|credit|credits|funds)|exceeded your current quota|out of credits|no payment method|requires more credits|can only afford)\b|DAILY_LIMIT_EXCEEDED|用户额度不足|额度不足|预扣费额度失败/i
+  // Standalone `\bquota\b` is intentionally absent: advisory phrases such as
+  // "checking quota" in the daemon's own empty-output fallback message would
+  // otherwise match, misclassifying a retryable empty_output run as a
+  // non-retryable hard quota exhaustion.  Specific exhaustion phrases are
+  // listed below instead.
+  //
+  // `quota reached` covers Antigravity's upstream log line:
+  //   RESOURCE_EXHAUSTED (code 429): Individual quota reached.
+  // `RESOURCE_EXHAUSTED` catches the same log when the phrase portion is
+  // truncated or arrives separately — it is the gRPC status code that
+  // Antigravity uses exclusively for per-model quota exhaustion.
+  return /\b(session limit|usage limit|limit reached|quota exceeded|quota reached|exceeded your current quota|billing (?:hard )?limit|insufficient[ _-]?(?:quota|credit|credits|funds)|out of credits|no payment method|requires more credits|can only afford)\b|DAILY_LIMIT_EXCEEDED|RESOURCE_EXHAUSTED|用户额度不足|额度不足|预扣费额度失败/i
     .test(text);
 }
 
@@ -230,6 +263,19 @@ function isCliNotInstalledText(text: string): boolean {
     .test(text);
 }
 
+function isBundledBinaryMissingText(text: string): boolean {
+  return /\bbundled (?:OpenCode|agent) binary (?:is )?missing\b/i.test(text);
+}
+
+function clientEnvironmentFailureDetail(text: string): TrackingRunFailureDetail | null {
+  if (/\b(Windows Application Control|AppLocker)\b/i.test(text)) return 'host_policy_block';
+  if (/\b(SQLite|WAL).*(?:I\/O|readonly|locked|corrupt|failed)\b/i.test(text)) return 'local_storage_failure';
+  if (/\b(certificate|CERT_|self[- ]signed|unable to verify)\b/i.test(text)) return 'certificate_failure';
+  if (/\b(unsupported proxy protocol|proxy configuration)\b/i.test(text)) return 'proxy_configuration';
+  if (/\b(ECONNREFUSED|ENETUNREACH|network unreachable|local connection failed)\b/i.test(text)) return 'network_configuration';
+  return null;
+}
+
 function isGitBashMissingText(text: string): boolean {
   return /\bClaude Code on Windows requires git-bash\b|\bCLAUDE_CODE_GIT_BASH_PATH\b|\bgit-bash\b/i
     .test(text);
@@ -245,6 +291,10 @@ function isAgentProtocolErrorText(text: string): boolean {
     /\bQoder run failed: (?:stop_sequence|end_turn)\b/i.test(text) ||
     /\bthread\/start failed\b/i.test(text) ||
     /\bfailed to parse request\b/i.test(text);
+}
+
+function isAcpFrameTooLargeText(text: string): boolean {
+  return /\bACP input line exceeds maximum size\b/i.test(text);
 }
 
 function isFabricatedRoleMarkerText(text: string): boolean {
@@ -529,6 +579,32 @@ function isProcessCrashText(text: string): boolean {
     .test(text);
 }
 
+/**
+ * True when the failure text is an agent CLI reporting that a runtime IT
+ * manages failed to start — not a statement about the CLI's own build.
+ *
+ * vela wraps every bundled-OpenCode startup failure this way before answering
+ * `session/new` / `session/load` (`acp_runtime.go`: `start opencode server:
+ * %v`, over `opencode_process.go`'s `opencode exited before readiness`), so the
+ * text arrives inside a handshake-numbered JSON-RPC frame while describing a
+ * CHILD OF THE CLI that never came up: a port collision, an OOM kill, a
+ * half-written config, a binary the release package is missing.
+ *
+ * The distinction the classifier needs from this is which variable the user can
+ * move. An agent CLI that answered `initialize` and then refused to open a
+ * session with no reason has only its own build left to blame; a CLI that
+ * reports its managed runtime never became ready has named the moving part
+ * itself, and pointing that user at the CLI version sends them after a fix that
+ * cannot apply. These startups are also the transient half of the pair — a port
+ * race clears on the next attempt — which is the retry the refusal reading
+ * withdraws.
+ *
+ * @param text - Failure text as surfaced by the ACP session (`rpcErrorMessage`).
+ */
+function isManagedRuntimeStartupFailureText(text: string): boolean {
+  return /\bstart opencode server\b|\bopencode exited before readiness\b/i.test(text);
+}
+
 // The child binary executed an instruction this CPU does not implement — in
 // practice a Bun-compiled agent (bundled opencode) built for AVX2 running on a
 // CPU without it (Intel Atom/Celeron/Pentium N-series through 2021, and
@@ -538,10 +614,10 @@ function isProcessCrashText(text: string): boolean {
 //   machines. Unconditional — the feature line itself is the proof.
 // - Windows STATUS_ILLEGAL_INSTRUCTION (hex 0xC000001D or Go/Node's decimal
 //   exit-status rendering 3221225501), but ONLY inside vela's bundled-opencode
-//   startup wrapper text ("start opencode server" / "opencode exited before
-//   readiness"). The raw status code is a generic Windows SIGILL that any
-//   agent binary could die with for unrelated reasons; every bannerless
-//   production trace carries the vela wrapper, so the gate costs no recall.
+//   startup wrapper text (`isManagedRuntimeStartupFailureText`). The raw status
+//   code is a generic Windows SIGILL that any agent binary could die with for
+//   unrelated reasons; every bannerless production trace carries the vela
+//   wrapper, so the gate costs no recall.
 // A bare "Illegal instruction" line is deliberately NOT matched: any
 // unrelated SIGILL (a runtime bug on an AVX2-capable machine) would then be
 // mislabeled as a processor limitation and lose its retry. The same binary on
@@ -551,7 +627,7 @@ function isCpuUnsupportedCrashText(text: string): boolean {
   if (/\bno_avx2\b/i.test(text)) return true;
   return (
     /0xc000001d|\b3221225501\b/i.test(text) &&
-    /\bstart opencode server\b|\bopencode exited before readiness\b/i.test(text)
+    isManagedRuntimeStartupFailureText(text)
   );
 }
 
@@ -638,11 +714,126 @@ function classification(
   failure_stage: TrackingRunFailureStage,
   retryable: boolean,
   user_action: TrackingRunFailureUserAction,
+  options: {
+    structuredProviderEvidence?: boolean;
+    evidenceLevel?: TrackingRunEvidenceLevel;
+  } = {},
 ): RunFailureClassification {
+  const policy = [
+    'hard_quota',
+    'model_window_limit',
+    'membership_concurrency_limit',
+    'workspace_credits_exhausted',
+    'amr_insufficient_balance',
+    'amr_tier_upgrade_required',
+  ].includes(failure_detail) || failure_category === 'entitlement_required';
+  const localModel = [
+    'cli_version_incompatible',
+    'local_model_not_loaded',
+  ].includes(failure_detail);
+  const clientRequest = [
+    'attachment_media_type_unsupported',
+    'tool_schema_invalid',
+    'prompt_tokenization_failed',
+    'provider_resource_not_found',
+  ].includes(failure_detail);
+  const transport = !options.structuredProviderEvidence && [
+    'stream_disconnected',
+    'network_error',
+  ].includes(failure_detail);
+  const provider = (failure_category === 'model_unavailable' && !localModel)
+    || (failure_category === 'upstream_unavailable' && !transport && !clientRequest)
+    || (failure_category === 'rate_limit' && !policy);
+  const environment = [
+    'auth_required', 'stale_profile', 'refresh_token_reused', 'missing_api_key',
+    'invalid_api_key', 'cli_not_installed', 'git_bash_missing',
+    'agent_config_invalid', 'cpu_unsupported', 'host_policy_block',
+    'local_storage_failure', 'certificate_failure', 'proxy_configuration',
+    'network_configuration',
+  ].includes(failure_detail) || localModel;
+  const product = [
+    'agent_protocol_error', 'acp_frame_too_large', 'bundled_binary_missing', 'empty_output', 'fabricated_role_marker',
+    'permission_request_not_found', 'plugin_artifact_missing',
+  ].includes(failure_detail) || clientRequest || failure_category === 'prompt_too_large';
+  const failure_mechanism: TrackingRunFailureMechanism = policy
+    ? 'policy_rejection'
+    : provider
+      ? 'provider_rejection'
+      : transport
+        ? 'transport_failure'
+      : failure_detail === 'acp_frame_too_large'
+        ? 'frame_too_large'
+        : failure_detail === 'agent_protocol_error'
+          ? 'protocol_violation'
+        : failure_category === 'empty_output'
+          ? 'empty_completion'
+          : failure_category === 'timeout'
+            ? failure_detail === 'inactivity_timeout'
+              ? 'stream_idle_timeout'
+              : failure_stage === 'post_tool_resume'
+                ? 'post_tool_resume_timeout'
+                : 'acp_response_deadline'
+          : failure_category === 'tool_error'
+              ? 'tool_execution_failure'
+              : failure_detail === 'interrupted'
+                ? 'unknown'
+              : failure_category === 'process_exit'
+                ? 'child_exit'
+                : 'unknown';
+  const failure_domain: TrackingRunFailureDomain = policy
+    ? 'policy_admission'
+    : provider
+      ? 'provider_control_plane'
+      : transport
+        ? 'cross_boundary'
+      : environment
+        ? 'client_environment'
+        : product
+          ? 'client_product'
+          : failure_category === 'timeout' || failure_category === 'process_exit'
+            ? 'cross_boundary'
+            : 'unknown';
+  const inferredEvidenceLevel: TrackingRunEvidenceLevel = failure_detail === 'membership_concurrency_limit'
+    ? 'structured_code'
+    : failure_detail === 'interrupted'
+      ? 'lifecycle_signal'
+    : transport
+      ? 'legacy_text'
+    : provider
+      ? options.structuredProviderEvidence ? 'structured_code' : 'legacy_text'
+      : failure_detail === 'agent_protocol_error' || failure_detail === 'acp_frame_too_large'
+        ? 'protocol_error'
+        : failure_category === 'timeout'
+          ? 'lifecycle_signal'
+            : failure_detail === 'bundled_binary_missing' || environment
+              ? 'stderr_fallback'
+              : ['fatal_rpc_error', 'stream_error', 'exit_nonzero'].includes(failure_detail)
+            ? 'close_reason'
+            : failure_detail === 'unknown'
+              ? 'unknown'
+              : 'legacy_text';
+  const evidence_level = options.evidenceLevel ?? inferredEvidenceLevel;
+  const repair_owner: TrackingRunRepairOwner = failure_domain === 'policy_admission'
+    ? 'policy_owner'
+    : failure_domain === 'provider_control_plane'
+      ? 'provider_owner'
+      : failure_domain === 'client_environment'
+        ? 'client_environment'
+        : failure_domain === 'client_product'
+          ? 'open_design'
+          : failure_domain === 'cross_boundary'
+            ? 'shared_boundary'
+            : 'unknown';
   return {
     failure_category,
     failure_detail,
     failure_stage,
+    failure_mechanism,
+    failure_domain,
+    evidence_level,
+    repair_owner,
+    admission_status: 'unknown',
+    classifier_version: 'run-failure-v3',
     retryable,
     user_action,
   };
@@ -658,13 +849,11 @@ function classifyRunFailureBase(
     return {
       // Preserve the legacy category/detail for dashboard compatibility.
       // `cancel_origin` is the authoritative SLO eligibility signal.
-      ...classification(
-        'user_cancel',
-        'user_cancelled',
-        inferFailureStageFromEvents(events, 'first_token_wait'),
-        false,
-        'none',
-      ),
+      failure_category: 'user_cancel',
+      failure_detail: 'user_cancelled',
+      failure_stage: inferFailureStageFromEvents(events, 'first_token_wait'),
+      retryable: false,
+      user_action: 'none',
       cancel_origin: cancelOrigin,
       terminal_trigger: cancelOrigin,
     };
@@ -673,11 +862,24 @@ function classifyRunFailureBase(
   const errorCode = normalizeCode(input.errorCode ?? input.status.errorCode);
   const text = collectFailureText({ ...input, events });
   const retryableHint = latestRetryable(events);
+  // Compute once; used both for the early empty_output guard below and for the
+  // fatal_rpc_error promotion later in this function.
+  const runtimeCloseReason = readRuntimeCloseReason(events);
   const amrFailure = classifyAmrAccountFailure(text);
   const byokOpenCodeProviderNotFound = isByokOpenCodeProviderNotFoundText(
     input.agentId,
     text,
   );
+
+  if (errorCode === 'DAEMON_RESTARTED') {
+    return classification(
+      'process_exit',
+      'interrupted',
+      'finalize',
+      true,
+      'retry',
+    );
+  }
 
   if (
     errorCode === 'AMR_INSUFFICIENT_BALANCE' ||
@@ -689,6 +891,9 @@ function classifyRunFailureBase(
       'session_init',
       false,
       'recharge',
+      errorCode === 'AMR_INSUFFICIENT_BALANCE'
+        ? { evidenceLevel: 'structured_code' }
+        : {},
     );
   }
 
@@ -702,6 +907,9 @@ function classifyRunFailureBase(
       'session_init',
       false,
       'upgrade',
+      errorCode === 'AMR_TIER_UPGRADE_REQUIRED'
+        ? { evidenceLevel: 'structured_code' }
+        : {},
     );
   }
 
@@ -717,6 +925,13 @@ function classifyRunFailureBase(
       'session_init',
       false,
       'login',
+      [
+        'AMR_AUTH_REQUIRED',
+        'AGENT_AUTH_REQUIRED',
+        'UNAUTHORIZED',
+      ].includes(errorCode ?? '')
+        ? { evidenceLevel: 'structured_code' }
+        : {},
     );
   }
 
@@ -728,6 +943,9 @@ function classifyRunFailureBase(
       'prompt_send',
       false,
       'reduce_context',
+      errorCode === 'AGENT_PROMPT_TOO_LARGE'
+        ? { evidenceLevel: 'structured_code' }
+        : {},
     );
   }
 
@@ -744,6 +962,7 @@ function classifyRunFailureBase(
         : 'model_select',
       false,
       'switch_model',
+      { structuredProviderEvidence: errorCode === 'AMR_MODEL_UNAVAILABLE' },
     );
   }
 
@@ -781,6 +1000,33 @@ function classifyRunFailureBase(
       'spawn',
       false,
       'install_cli',
+    );
+  }
+
+  if (isBundledBinaryMissingText(text)) {
+    return classification(
+      'process_exit',
+      'bundled_binary_missing',
+      'spawn',
+      false,
+      'none',
+    );
+  }
+
+  const serviceFailure = classifyAgentServiceFailure(text);
+  const environmentDetail = clientEnvironmentFailureDetail(text);
+  const hasStructuredServiceCode = [
+    'RATE_LIMITED',
+    'UPSTREAM_UNAVAILABLE',
+    'AGENT_CONNECTION_DROPPED',
+  ].includes(errorCode ?? '');
+  if (environmentDetail && !hasStructuredServiceCode) {
+    return classification(
+      'process_exit',
+      environmentDetail,
+      'spawn',
+      false,
+      'none',
     );
   }
 
@@ -824,7 +1070,25 @@ function classifyRunFailureBase(
     );
   }
 
-  if (isAgentProtocolErrorText(text)) {
+  if (isAcpFrameTooLargeText(text)) {
+    return classification(
+      'process_exit',
+      'acp_frame_too_large',
+      inferFailureStageFromEvents(events, 'child_close'),
+      false,
+      'none',
+    );
+  }
+
+  // A protocol failure from AFTER the handshake: a session existed, so the run
+  // may simply have hit a bad moment and the old transient treatment stands.
+  // Handshake-numbered frames (ids 1 and 2) are deliberately NOT claimed here
+  // — the wording an agent chooses for its rejection (`Internal error`,
+  // `Method not found`, `Invalid params`) is not a signal, and matching on it
+  // made the verdict depend on which layer of the CLI happened to refuse.
+  // Those fall through every cause branch below and are answered once, at
+  // `isAcpHandshakeRpcErrorText` further down.
+  if (isAgentProtocolErrorText(text) && !isAcpHandshakeRpcErrorText(text)) {
     return classification(
       'process_exit',
       processExitDetail(errorCode, text),
@@ -834,7 +1098,6 @@ function classifyRunFailureBase(
     );
   }
 
-  const serviceFailure = classifyAgentServiceFailure(text);
   if (serviceFailure === 'AGENT_AUTH_REQUIRED' || isAuthDetailText(text)) {
     return classification(
       'auth',
@@ -842,6 +1105,20 @@ function classifyRunFailureBase(
       'session_init',
       false,
       'login',
+    );
+  }
+
+  // Vela reports a full membership concurrency policy through an ACP fatal
+  // envelope. Claim the named policy limit before fatal close promotion. Even
+  // when the envelope says retryable, an immediate automatic replay only hits
+  // the same occupied slots, so leave retry to the user after the reset time.
+  if (input.agentId === 'amr' && isMembershipConcurrencyLimitFailure(text)) {
+    return classification(
+      'rate_limit',
+      'membership_concurrency_limit',
+      'session_init',
+      false,
+      'none',
     );
   }
 
@@ -872,6 +1149,7 @@ function classifyRunFailureBase(
       'session_init',
       retryable,
       retryable ? 'retry' : workspaceCredits ? 'recharge' : 'none',
+      { structuredProviderEvidence: errorCode === 'RATE_LIMITED' },
     );
   }
 
@@ -882,6 +1160,9 @@ function classifyRunFailureBase(
     isUpstreamDetailText(text) ||
     byokOpenCodeProviderNotFound
   ) {
+    const structuredProviderEvidence =
+      errorCode === 'UPSTREAM_UNAVAILABLE' ||
+      errorCode === 'AGENT_CONNECTION_DROPPED';
     const upstreamClientError =
       byokOpenCodeProviderNotFound || isUpstreamClientErrorText(text);
     // A provider/SDK 4xx or request-shape rejection will deterministically fail
@@ -894,6 +1175,23 @@ function classifyRunFailureBase(
       inferFailureStageFromEvents(events, 'first_token_wait'),
       retryable,
       retryable ? 'retry' : 'none',
+      { structuredProviderEvidence },
+    );
+  }
+
+  // Prefer the structured rpc_close_reason=empty_output signal over text
+  // heuristics — but only after RATE_LIMITED, UPSTREAM_UNAVAILABLE, and other
+  // structured-code branches above have had a chance to claim the run. A child
+  // that exits cleanly after a provider rate-limit rejection may still carry
+  // rpc_close_reason=empty_output; the structured error code is the authoritative
+  // signal in that case, not the close reason.
+  if (runtimeCloseReason === 'empty_output') {
+    return classification(
+      'empty_output',
+      'empty_output',
+      inferFailureStageFromEvents(events, 'first_token_wait'),
+      retryableHint ?? true,
+      'retry',
     );
   }
 
@@ -910,12 +1208,21 @@ function classifyRunFailureBase(
   if (isTimeoutText(text) || errorCode === 'TIMEOUT') {
     const retryable = retryableHint ?? true;
     const inactivityTimeout = /inactivity|stalled|hung|no new output|without emitting any new output/i.test(text);
+    // `attachAcpSession`'s stage watchdog fails the turn with
+    // `ACP <stage> timed out after <n>ms` and then kills the child, so the run
+    // surfaces the child's exit code instead of a stall code. Without this
+    // trigger the terminal reads as a bare AGENT_EXIT_130 — indistinguishable
+    // from a user interrupt, which is how the 2026-07-28 AMR stall got
+    // attributed to the wrong watchdog and the wrong 15-minute window.
+    const acpStageTimeout = /\bACP\b[^\n]*timed out after \d+\s*ms/i.test(text);
     const terminalTrigger: TrackingRunTerminalTrigger | undefined =
       /without emitting a first output/i.test(text)
         ? 'first_output_deadline'
         : inactivityTimeout
           ? 'inactivity_watchdog'
-          : undefined;
+          : acpStageTimeout
+            ? 'acp_stage_timeout'
+            : undefined;
     return {
       ...classification(
         'timeout',
@@ -976,13 +1283,55 @@ function classifyRunFailureBase(
     );
   }
 
+  // Last word on an ACP handshake rejection, and deliberately the last: every
+  // branch above has already had its chance to name a cause, so reaching here
+  // means the agent CLI answered `initialize`, refused `session/new` /
+  // `session/load`, and gave no reason the daemon recognises. Its build is then
+  // the only variable left — file it at `session_init`, which is the stage the
+  // retry policy refuses to re-run, and point the user at the CLI rather than
+  // at the model or the stream.
+  //
+  // Placing this AFTER the cause branches is what makes the precedence a fact
+  // rather than a promise: a signed-out CLI is filed under auth, a throttled
+  // one under rate_limit, an over-long prompt under prompt_too_large, and only
+  // an unexplained refusal reaches this line. `isAcpCliSessionRefusalText` is
+  // this same reading, exposed so the ACP payload rewrite prescribes exactly
+  // what the telemetry records.
+  //
+  // The deferrals are not about wording. Both are texts where the handshake
+  // frame is the ENVELOPE rather than the evidence — something other than the
+  // agent CLI's own build failed, and the CLI merely carried the report:
+  //
+  // - An OS-level crash banner (a Bun panic, a Windows
+  //   STATUS_ILLEGAL_INSTRUCTION from the bundled opencode) describes a child
+  //   that DIED; `signalInterruptClassification` below owns that reading, the
+  //   same reason `isCpuUnsupportedCrashText` is checked above.
+  // - A managed runtime that never became ready describes a child that never
+  //   STARTED. AMR is the population this reaches — vela reports its bundled
+  //   OpenCode's startup failures from inside `session/new` — and a startup
+  //   race is exactly the shape the fatal_rpc_error path below recovers by
+  //   retrying. Filing it here would tell that user to replace a healthy CLI
+  //   and take the recovery away at the same time.
+  if (
+    isAcpHandshakeRpcErrorText(text)
+    && !isProcessCrashText(text)
+    && !isManagedRuntimeStartupFailureText(text)
+  ) {
+    return classification(
+      'process_exit',
+      'agent_protocol_error',
+      'session_init',
+      false,
+      'install_cli',
+    );
+  }
+
   // ACP fatal paths ask the host to terminate the child after the protocol
   // failure. The resulting exit/signal is therefore cleanup, not the cause.
   // Prefer the runtime_close reason once specific text classifiers above have
   // had a chance to claim auth, quota, upstream, prompt-size, and other known
   // failures. Unlike stream_error, fatal_rpc_error may have no structured SSE
   // error code at all, so it must also refine signal/unknown/exit fallbacks.
-  const runtimeCloseReason = readRuntimeCloseReason(events);
   if (
     runtimeCloseReason === 'fatal_rpc_error' &&
     (
@@ -1035,13 +1384,93 @@ function classifyRunFailureBase(
   );
 }
 
+/**
+ * The error code the text-only probe below classifies under: the generic
+ * "the agent failed and said this" code, so the verdict is decided by the text
+ * and nothing else.
+ */
+const TEXT_ONLY_PROBE_ERROR_CODE = 'AGENT_EXECUTION_FAILED';
+
+/**
+ * True when this failure text reads as an ACP handshake rejection the agent CLI
+ * gave no reason for — the one shape "this CLI build cannot start a session;
+ * change it, then retry" actually answers, because the build is the only
+ * variable left.
+ *
+ * Answered by running the classifier itself rather than by a second signature
+ * list, so the prescription the user reads and the bucket the run is filed
+ * under are the same decision. A handshake failure that names a cause the
+ * classifier recognises — signed out, throttled, out of balance, upstream down,
+ * prompt too long — is claimed by that cause's branch and reported false here,
+ * so the user is sent after the fix that actually applies.
+ *
+ * @param text - Failure text as surfaced by the ACP session (`rpcErrorMessage`).
+ */
+export function isAcpCliSessionRefusalText(text: string | null | undefined): boolean {
+  if (typeof text !== 'string' || !isAcpHandshakeRpcErrorText(text)) return false;
+  const failure = classifyRunFailureBase({
+    result: 'failed',
+    status: { status: 'failed', error: text },
+    errorCode: TEXT_ONLY_PROBE_ERROR_CODE,
+  });
+  return failure?.failure_detail === 'agent_protocol_error'
+    && failure.failure_stage === 'session_init';
+}
+
 export function classifyRunFailure(
   input: RunFailureClassificationInput,
 ): RunFailureClassification | undefined {
   const failure = classifyRunFailureBase(input);
-  if (!failure || !input.terminalTrigger) return failure;
+  if (!failure) return failure;
+  if (input.result === 'cancelled') {
+    return { ...failure, ...(input.terminalTrigger ? { terminal_trigger: input.terminalTrigger } : {}) };
+  }
+  const terminalTrigger = input.terminalTrigger ?? failure.terminal_trigger;
+  const failureText = collectFailureText({
+    ...input,
+    events: terminalAttemptEvents(input.events),
+  });
+  const failureMechanism = failure.failure_category === 'timeout'
+    ? /(?:readiness|ready) deadline[^\n]*(?:timed out|timeout|expired|failed)|(?:readiness failed|failed to become ready|did not become ready|never became ready)/i.test(failureText)
+      ? 'startup_readiness_timeout'
+      : terminalTrigger === 'first_output_deadline'
+        ? 'first_output_deadline'
+        : terminalTrigger === 'acp_stage_timeout'
+          ? failure.failure_stage === 'post_tool_resume'
+            ? 'post_tool_resume_timeout'
+            : failure.failure_stage === 'tool_execution' || failure.failure_stage === 'tool_outstanding'
+              ? 'tool_execution_failure'
+              : 'acp_response_deadline'
+          : terminalTrigger === 'inactivity_watchdog'
+            ? 'stream_idle_timeout'
+            : failure.failure_mechanism
+    : failure.failure_mechanism;
+  // A retry or manual resume can fail in preflight before appending its next start. The new
+  // causal fields must not reuse the preceding attempt in that interval;
+  // legacy classification/retry behavior intentionally remains unchanged.
+  let evidenceEvents = terminalAttemptEvents(input.events);
+  let pendingRetry = -1;
+  for (let index = evidenceEvents.length - 1; index >= 0; index -= 1) {
+    if (evidenceEvents[index]?.event === 'run_retry_attempted'
+      || evidenceEvents[index]?.event === 'run_resume_attempted') {
+      pendingRetry = index;
+      break;
+    }
+  }
+  if (pendingRetry >= 0) evidenceEvents = evidenceEvents.slice(pendingRetry + 1);
+  const evidenceFailure = pendingRetry >= 0
+    ? classifyRunFailureBase({ ...input, events: evidenceEvents }) ?? failure
+    : failure;
   return {
     ...failure,
-    terminal_trigger: input.terminalTrigger,
+    ...(failureMechanism ? { failure_mechanism: failureMechanism } : {}),
+    ...(pendingRetry >= 0 ? {
+      failure_mechanism: evidenceFailure.failure_mechanism,
+      failure_domain: evidenceFailure.failure_domain,
+      evidence_level: evidenceFailure.evidence_level,
+      repair_owner: evidenceFailure.repair_owner,
+    } : {}),
+    ...runFailureEvidence(input, evidenceFailure, evidenceEvents),
+    ...(terminalTrigger ? { terminal_trigger: terminalTrigger } : {}),
   };
 }

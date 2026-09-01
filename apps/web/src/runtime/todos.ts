@@ -76,6 +76,25 @@ export function unfinishedTodosFromEvents(events: AgentEvent[] | undefined): Tod
   return latestTodosFromEvents(events).filter((todo) => todoStatusIsUnfinished(todo.status));
 }
 
+/**
+ * Unfinished todos the user can still usefully be offered to continue.
+ *
+ * A stale TodoWrite snapshot is not sufficient grounds for the offer. When the
+ * turn belongs to a strategy task that already settled `completed` — a verdict
+ * the daemon only reaches after verifying the canonical deliverable on disk —
+ * the declared work IS done, and "continue" would open a fresh task with
+ * nothing left to write, which can only end blocked on `no_artifact`.
+ *
+ * Mirrors the daemon's `endedWithUnfinishedWork` derivation, where the same
+ * verdict outranks the same snapshot.
+ */
+export function continuableUnfinishedTodos(
+  message: { events?: AgentEvent[]; strategyTaskDelivered?: boolean } | undefined,
+): TodoItem[] {
+  if (!message || message.strategyTaskDelivered) return [];
+  return unfinishedTodosFromEvents(message.events);
+}
+
 // Walk the conversation in reverse to find the most recent TodoWrite
 // tool_use, return its raw input so callers can hand it to a `TodoCard`
 // without re-implementing the discovery logic. Returns `null` when no

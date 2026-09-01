@@ -4,9 +4,9 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { ToolPackCache } from "../src/cache.js";
-import type { ToolPackConfig } from "../src/config.js";
-import { ensureWorkspaceBuildArtifacts } from "../src/workspace-build.js";
+import { ToolPackCache } from "@/cache/index.js";
+import type { ToolPackConfig } from "@/config/index.js";
+import { ensureWorkspaceBuildArtifacts } from "@/workspace-build.js";
 
 const PACKAGE_DIRS = [
   "packages/release",

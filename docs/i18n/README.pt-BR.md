@@ -333,7 +333,7 @@ pnpm tools-dev run web
 
 Abra a URL impressa por `tools-dev`; as portas de desenvolvimento são alocadas dinamicamente sem flags explícitos.
 
-Node `~24`, pnpm `10.33.x`. Usuários de Windows, veja [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). Início rápido completo, variáveis de ambiente, Nix flake e fluxo de build empacotado → [`QUICKSTART.pt-BR.md`](QUICKSTART.pt-BR.md).
+Node `~24`, pnpm `10.33.x`. Usuários de Windows, veja [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). Início rápido completo, variáveis de ambiente e fluxo de build empacotado → [`QUICKSTART.pt-BR.md`](QUICKSTART.pt-BR.md).
 
 ### Um fluxo de trabalho completo — do briefing ao artefato
 
@@ -693,11 +693,11 @@ O SVG acima é regenerado diariamente por [`.github/workflows/metrics.yml`](../.
 
 Se isto te poupou trinta minutos, dê um ★. Estrelas não pagam o aluguel — mas dizem ao próximo designer, agente e contribuidor que este experimento vale a atenção deles. Um clique, três segundos, um sinal de verdade.
 
-<a href="https://star-history.com/#nexu-io/open-design&Date">
+<a href="https://star-history.dera.page/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-08-04" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
-    <img alt="OpenDesign star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-08-04" />
+    <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+    <img alt="OpenDesign star history" src="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
   </picture>
 </a>
 

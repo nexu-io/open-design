@@ -7112,6 +7112,12 @@ export function pageNameFromPath(pathname = '/'): string {
   return segments.join('_').toLowerCase().replace(/[^a-z0-9_]+/g, '_');
 }
 
+// These pages intentionally ship only at their canonical English URL. Internal
+// links must not acquire a locale prefix that points at an ungenerated route.
+const LOCALE_CANONICAL_ONLY_PATHS = new Set([
+  '/tutorials/open-design-ai-ppt-tutorial/',
+]);
+
 export function localizedHref(
   href: string,
   locale: LandingLocaleCode,
@@ -7132,7 +7138,11 @@ export function localizedHref(
   if (pathAndQuery === '') return hashSuffix || href;
   const [path, query = ''] = pathAndQuery.split('?');
   const querySuffix = query ? `?${query}` : '';
-  const localized = localePath(locale, path || '/');
+  const pathname = path || '/';
+  if (LOCALE_CANONICAL_ONLY_PATHS.has(pathname)) {
+    return `${pathname}${querySuffix}${hashSuffix}`;
+  }
+  const localized = localePath(locale, pathname);
   return `${localized}${querySuffix}${hashSuffix}`;
 }
 

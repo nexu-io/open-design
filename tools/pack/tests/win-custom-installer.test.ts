@@ -4,9 +4,9 @@ import { dirname, join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import type { ToolPackConfig } from "../src/config.js";
-import { buildCustomWinNsisInstaller } from "../src/win/custom-installer.js";
-import { resolveWinPaths } from "../src/win/paths.js";
+import type { ToolPackConfig } from "@/config/index.js";
+import { buildCustomWinNsisInstaller } from "@/win/custom-installer.js";
+import { resolveWinPaths } from "@/win/paths.js";
 
 const BUILD_HOST_NSIS_LOG_PATH = "D:\\a\\_temp\\tools-pack\\logs\\nsis.log";
 const PORTABLE_NSIS_LOG_DIR = "$TEMP\\Open Design\\test-namespace";

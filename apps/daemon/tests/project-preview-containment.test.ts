@@ -112,6 +112,7 @@ describe('project preview containment routes', () => {
       csp: string;
       iframeSandbox: string;
       opaqueOrigin: true;
+      expiresAt: number;
     };
 
     expect(body.file).toBe('pages/index.html');
@@ -123,6 +124,25 @@ describe('project preview containment routes', () => {
     expect(body.csp).toContain("connect-src 'none'");
     expect(body.csp).not.toContain('allow-same-origin');
     expect(body.opaqueOrigin).toBe(true);
+    expect(body.expiresAt).toBeGreaterThan(Date.now());
+
+    const renewalScope = /\/preview\/([^/]+)\//u.exec(body.url)?.[1];
+    expect(renewalScope).toBeTruthy();
+    const rejectedRenewal = await fetch(
+      `${baseUrl}/api/projects/${projectId}/preview/${renewalScope}/renew`,
+      { method: 'POST' },
+    );
+    expect(rejectedRenewal.status).toBe(403);
+    const renewal = await fetch(
+      `${baseUrl}/api/projects/${projectId}/preview/${renewalScope}/renew`,
+      {
+        method: 'POST',
+        headers: { 'x-od-preview-scope-renewal': '1' },
+      },
+    );
+    expect(renewal.status).toBe(200);
+    const renewed = await renewal.json() as { expiresAt: number };
+    expect(renewed.expiresAt).toBeGreaterThanOrEqual(body.expiresAt);
 
     const previewResponse = await fetch(`${baseUrl}${body.url}`, {
       headers: { Origin: 'null' },
@@ -327,6 +347,19 @@ describe('project preview containment routes', () => {
     expect(baseHref).toMatch(
       new RegExp(`^/api/projects/${projectId}/preview/[A-Za-z0-9_-]{8,128}/$`, 'u'),
     );
+    expect(html).toContain('data-od-project-preview-base');
+    expect(html).toContain('data-od-preview-base-bridge');
+    expect(html).toContain("type: 'od:preview-base-scope'");
+
+    const workspaceScope = /\/preview\/([^/]+)\//u.exec(baseHref!)?.[1];
+    const workspaceRenewal = await fetch(
+      `${baseUrl}/api/projects/${projectId}/preview/${workspaceScope}/renew`,
+      {
+        method: 'POST',
+        headers: { 'x-od-preview-scope-renewal': '1' },
+      },
+    );
+    expect(workspaceRenewal.status).toBe(200);
 
     // The browser resolves runtime-created `img.src = "logos/mark.png"`
     // against <base>. A query-scoped raw document cannot do this because URL

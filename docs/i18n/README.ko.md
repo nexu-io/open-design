@@ -333,7 +333,7 @@ pnpm tools-dev run web
 
 `tools-dev`가 출력한 URL을 여세요. 명시적인 포트 플래그가 없으면 개발 포트는 동적으로 배정됩니다.
 
-Node `~24`, pnpm `10.33.x`. Windows 사용자는 [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md)를 참고하세요. 전체 빠른 시작, 환경 변수, Nix flake, 패키징 빌드 흐름 → [`QUICKSTART.ko.md`](QUICKSTART.ko.md).
+Node `~24`, pnpm `10.33.x`. Windows 사용자는 [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md)를 참고하세요. 전체 빠른 시작, 환경 변수, 패키징 빌드 흐름 → [`QUICKSTART.ko.md`](QUICKSTART.ko.md).
 
 ### 전체 워크플로 — 브리프에서 아티팩트까지
 
@@ -693,11 +693,11 @@ gh pr create --fill
 
 이것이 당신의 30분을 아껴줬다면 ★를 눌러주세요. 스타가 집세를 내주지는 않지만 — 다음 디자이너, 에이전트, 기여자에게 이 실험이 관심을 쏟을 가치가 있다고 알려줍니다. 한 번의 클릭, 3초, 진짜 신호입니다.
 
-<a href="https://star-history.com/#nexu-io/open-design&Date">
+<a href="https://star-history.dera.page/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-08-04" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
-    <img alt="OpenDesign star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-08-04" />
+    <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+    <img alt="OpenDesign star history" src="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
   </picture>
 </a>
 

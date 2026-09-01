@@ -42,6 +42,7 @@ export type AnalyticsEventName =
   | 'context_link_result'
   | 'speaker_notes_save_result'
   // Artifact
+  | 'artifact_edit_result'
   | 'artifact_export_result'
   | 'artifact_deploy_result'
   | 'artifact_publish_result'
@@ -65,11 +66,17 @@ export type AnalyticsEventName =
   | 'assistant_feedback_reason_submit'
   // Settings
   | 'settings_view'
+  // Labs experiment opt-in / opt-out (generic across experiments).
+  | 'labs_item_toggled'
   | 'settings_cli_test_result'
   | 'settings_byok_test_result'
   | 'settings_byok_models_fetch_result'
   | 'byok_preflight_blocked'
   | 'settings_connector_auth_result'
+  // Fleet health for locally installed agent CLIs. Detection is the only stage
+  // that learns an installed CLI cannot actually be used; without this, the
+  // only way we hear about it is a user filing a report with a diagnostics zip.
+  | 'agent_detect_diagnostic'
   // AMR (hosted model) account auth result.
   | 'amr_auth_stage'
   | 'amr_auth_result'

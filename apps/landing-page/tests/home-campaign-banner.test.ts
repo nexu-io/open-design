@@ -27,6 +27,7 @@ test('home campaign banner keeps only the arrow visible while preserving an acce
   assert.match(source, /data-home-campaign-countdown/);
   assert.match(source, /data-campaign-window-label/);
   assert.doesNotMatch(source, /距开始/);
+  assert.match(source, /\.home-campaign-banner\s*\{[^}]*background:\s*#d8ffb5;/s);
   assert.match(source, /background:\s*#68f22e/);
   assert.match(source, /home-campaign-banner__cta/);
   assert.match(source, /<span class="home-campaign-banner__cta" aria-hidden="true">→<\/span>/);

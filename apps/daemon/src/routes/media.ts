@@ -136,7 +136,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       : null;
   const { orbitService } = ctx.orbit;
   const { openBrowser, openNativeFolderDialog } = ctx.nativeDialogs;
-  const { findTeamWorkspaceIdForProject, getProject } = ctx.projectStore;
+  const { getWorkspaceProjectByProjectId, getProject } = ctx.projectStore;
   const { resolveProjectDir } = ctx.projectFiles;
   const { insertConversation, upsertMessage } = ctx.conversations;
   const { searchResearch, ResearchError } = ctx.research;
@@ -256,7 +256,12 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       });
       task.status = 'running';
       persistMediaTask(task);
-      const workspaceId = findTeamWorkspaceIdForProject(db, projectId) ?? undefined;
+      // Media billing follows the project's Workspace binding, not its sharing
+      // visibility. A private project inside a team Workspace must still spend
+      // that Workspace's balance; `findTeamWorkspaceIdForProject` deliberately
+      // answers the narrower collaboration question and excludes it.
+      const workspaceId =
+        getWorkspaceProjectByProjectId(db, projectId)?.workspaceId?.trim() || undefined;
       generateMedia({
         projectRoot: PROJECT_ROOT,
         projectsRoot: PROJECTS_DIR,
@@ -630,6 +635,15 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       onAppConfigWritten?.(config);
       res.json({ config });
     } catch (err: any) {
+      if (err?.code === 'INVALID_APP_CONFIG_VALUE') {
+        // Nested envelope on purpose. `od`'s error reader only finds a code in
+        // this shape; from a flat body it falls back to `daemon-not-running`
+        // and exits 64, which tells a caller to go start a daemon that just
+        // answered. Rejected input should read as a plain failure.
+        return res.status(400).json({
+          error: { code: err.code, message: String(err.message) },
+        });
+      }
       const status = err?.code === 'WORKSPACE_ACCESS_DENIED'
           ? 403
           : 500;

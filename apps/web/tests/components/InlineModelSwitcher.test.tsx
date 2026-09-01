@@ -661,11 +661,9 @@ describe('InlineModelSwitcher AMR row', () => {
 
     const [url, target, features] = openSpy.mock.calls[0] ?? [];
     const parsed = new URL(String(url));
-    expect(parsed.origin).toBe('https://vela.powerformer.net');
-    expect(parsed.pathname).toBe('/dashboard');
-    // `billing=plan` is B's state-aware upgrade intent, replacing the wallet
-    // page's fixed `view=plans` pricing modal.
-    expect(parsed.searchParams.get('billing')).toBe('plan');
+    expect(parsed.origin).toBe('https://open-design.ai');
+    expect(parsed.pathname).toBe('/pricing/');
+    expect(parsed.searchParams.get('billing')).toBeNull();
     expect(parsed.searchParams.get('od_entry_source')).toBe('inline_amr_upgrade');
     expect(parsed.searchParams.get('od_device_id')).toBe('od-install-abc');
     expect(target).toBe('_blank');

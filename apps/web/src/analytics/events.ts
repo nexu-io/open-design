@@ -19,6 +19,7 @@ import type {
   AssistantFeedbackReasonPanelSurfaceViewProps,
   QuestionsFormSurfaceViewProps,
   DeepSeekCampaignModalSurfaceViewProps,
+  GoPlanSunsetModalSurfaceViewProps,
   DeepSeekCampaignBadgeSurfaceViewProps,
   DeepSeekCampaignModelBenefitSurfaceViewProps,
   // ui_click
@@ -79,6 +80,7 @@ import type {
   AmrEntryClickProps,
   PreviewRunStatusSurfaceViewProps,
   DeepSeekCampaignModalClickProps,
+  GoPlanSunsetModalClickProps,
   DeepSeekCampaignBadgeClickProps,
   RunFailedToastSurfaceViewProps,
   RunRecoveryActionSurfaceViewProps,
@@ -135,6 +137,7 @@ import type {
   FileUploadResultProps,
   ContextLinkResultProps,
   SpeakerNotesSaveResultProps,
+  ArtifactEditResultProps,
   ArtifactExportResultProps,
   ArtifactDeployResultProps,
   ArtifactPublishResultProps,
@@ -143,12 +146,14 @@ import type {
   FeedbackSubmitResultProps,
   ConversationForkResultProps,
   SettingsViewProps,
+  LabsItemToggledProps,
   SettingsCliTestResultProps,
   SettingsByokModelsFetchResultProps,
   SettingsByokTestResultProps,
   SettingsConnectorAuthResultProps,
   ByokPreflightBlockedProps,
   OnboardingClickProps,
+  AgentDetectDiagnosticProps,
   OnboardingRuntimeScanResultProps,
   OnboardingCompleteResultProps,
   OnboardingPromptPrefilledProps,
@@ -182,7 +187,7 @@ import type {
 } from '@open-design/contracts/analytics';
 
 type TrackOptions = { requestId?: string; insertId?: string };
-type Track = (
+export type Track = (
   event: string,
   properties: Record<string, unknown>,
   options?: TrackOptions,
@@ -437,6 +442,13 @@ export function trackDeepSeekCampaignModalSurfaceView(
   send(track, 'surface_view', props);
 }
 
+export function trackGoPlanSunsetModalSurfaceView(
+  track: Track,
+  props: GoPlanSunsetModalSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
 export function trackDeepSeekCampaignBadgeSurfaceView(
   track: Track,
   props: DeepSeekCampaignBadgeSurfaceViewProps,
@@ -454,6 +466,13 @@ export function trackDeepSeekCampaignModelBenefitSurfaceView(
 export function trackDeepSeekCampaignModalClick(
   track: Track,
   props: DeepSeekCampaignModalClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackGoPlanSunsetModalClick(
+  track: Track,
+  props: GoPlanSunsetModalClickProps,
 ): void {
   send(track, 'ui_click', props);
 }
@@ -1177,6 +1196,13 @@ export function trackArtifactExportResult(
   send(track, 'artifact_export_result', props, options);
 }
 
+export function trackArtifactEditResult(
+  track: Track,
+  props: ArtifactEditResultProps,
+): void {
+  send(track, 'artifact_edit_result', props);
+}
+
 export function trackArtifactDeployResult(
   track: Track,
   props: ArtifactDeployResultProps,
@@ -1222,6 +1248,19 @@ export function trackSettingsView(
   props: SettingsViewProps,
 ): void {
   send(track, 'settings_view', props);
+}
+
+// ---- Labs ----------------------------------------------------------------
+
+/**
+ * Fires after the preference is persisted, not on click.
+ *
+ * The event asserts "this install now prefers X". A failed write rolls the
+ * switch back, so reporting the click would assert something that is not true
+ * of the machine. Losing the rare failed toggle is the cheaper error.
+ */
+export function trackLabsItemToggled(track: Track, props: LabsItemToggledProps): void {
+  send(track, 'labs_item_toggled', props);
 }
 
 export function trackSettingsCliTestResult(
@@ -1319,6 +1358,13 @@ export function trackOnboardingClick(
   props: OnboardingClickProps,
 ): void {
   send(track, 'ui_click', props);
+}
+
+export function trackAgentDetectDiagnostic(
+  track: Track,
+  props: AgentDetectDiagnosticProps,
+): void {
+  send(track, 'agent_detect_diagnostic', props);
 }
 
 export function trackOnboardingRuntimeScanResult(

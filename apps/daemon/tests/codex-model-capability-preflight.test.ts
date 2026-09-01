@@ -37,6 +37,7 @@ const EXTERNAL_ENV_KEYS = [
   'OPEN_DESIGN_TELEMETRY_RELAY_URL',
   'POSTHOG_KEY',
   'POSTHOG_HOST',
+  'OD_NEXT_STRATEGY_ROLLOUT',
   ...CODEX_AUTH_OR_ENDPOINT_ENV_KEYS,
 ] as const;
 
@@ -153,6 +154,10 @@ describe('Codex configured-model capability preflight', () => {
     );
 
     isolateExternalProcessEnv();
+    // This test owns the ordinary Codex model-capability probe. Keep the
+    // independent OD Next rollout probe out of the way so cancellation still
+    // races the exact preflight boundary named by the test.
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
     started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
     await putConfig(started.url, {
       agentId: 'codex',

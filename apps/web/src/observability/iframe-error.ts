@@ -125,6 +125,38 @@ function prunePreviewMessageBuffer(): void {
   }
 }
 
+/**
+ * Mirror one deck-stage measurement into the console at warn level.
+ *
+ * The analytics event answers "how often"; this answers "what happened on this
+ * machine". On desktop only warn/error console entries are persisted to
+ * `renderer.log` (apps/desktop/src/main/runtime.ts), and that file is one of
+ * the sources `od diagnostics export` bundles — so a user who hits the empty
+ * deck can hand over an export that already contains the measurement, without
+ * having to reproduce it while someone watches.
+ *
+ * The line is written as one flat, greppable record on purpose: the log is read
+ * as text, so a shape that survives `grep deck_stage_unscaled` is worth more
+ * than a pretty object that a log tail may truncate.
+ */
+function logDeckStageMeasurement(measurement: Record<string, unknown>): void {
+  if (typeof console === 'undefined' || typeof console.warn !== 'function') return;
+  const fields = [
+    `stage_kind=${measurement.stage_kind ?? 'n/a'}`,
+    `stage_scale=${measurement.stage_scale ?? 'n/a'}`,
+    `stage_transform=${measurement.stage_transform ?? 'n/a'}`,
+    `stage=${measurement.stage_width ?? 'n/a'}x${measurement.stage_height ?? 'n/a'}`,
+    `canvas=${measurement.canvas_width ?? 'n/a'}x${measurement.canvas_height ?? 'n/a'}`,
+    `frame=${measurement.viewport_width ?? 'n/a'}x${measurement.viewport_height ?? 'n/a'}`,
+    `ready_state=${measurement.ready_state ?? 'n/a'}`,
+    `visibility_state=${measurement.visibility_state ?? 'n/a'}`,
+    `elapsed_ms=${measurement.elapsed_ms ?? 'n/a'}`,
+    `render_mode=${measurement.render_mode ?? 'n/a'}`,
+    `surface=${measurement.surface ?? 'n/a'}`,
+  ].join(' ');
+  console.warn(`[od:preview-observability] deck_stage_unscaled ${fields}`);
+}
+
 export function reportPreviewIframeMessage(
   value: unknown,
   options: PreviewIframeReportOptions,
@@ -169,6 +201,33 @@ export function reportPreviewIframeMessage(
       blank_observation_count: boundedNumber(message.blank_observation_count),
       sample_interval_ms: boundedNumber(message.sample_interval_ms),
     });
+    return true;
+  }
+
+  if (message.event === 'deck_stage_unscaled') {
+    const measurement = {
+      ...common,
+      reason: 'stage_scale_collapsed',
+      // Which authored shape collapsed: the canonical `.deck-stage`, a
+      // `<deck-stage>` shadow canvas, or a template `.stage`. Frequency alone
+      // cannot triage this, and the bridge went to some trouble to resolve it.
+      stage_kind: boundedText(message.stage_kind, 32),
+      // Restored to the decimal the reader actually thinks in. The wire keeps
+      // it as an integer per-mille only because the shared normalizer rounds.
+      stage_scale: decimalFromPermille(message.stage_scale_permille),
+      stage_transform: boundedText(message.stage_transform, 32),
+      stage_width: boundedNumber(message.stage_width),
+      stage_height: boundedNumber(message.stage_height),
+      canvas_width: boundedNumber(message.canvas_width),
+      canvas_height: boundedNumber(message.canvas_height),
+      viewport_width: boundedNumber(message.viewport_width),
+      viewport_height: boundedNumber(message.viewport_height),
+      ready_state: boundedText(message.ready_state, 32),
+      visibility_state: boundedText(message.visibility_state, 32),
+      elapsed_ms: boundedNumber(message.elapsed_ms),
+    };
+    reportSafetyEvent('client_preview_deck_stage_unscaled', measurement);
+    logDeckStageMeasurement(measurement);
     return true;
   }
 
@@ -256,6 +315,17 @@ function boundedText(value: unknown, limit: number): string | undefined {
   if (typeof value !== 'string') return undefined;
   const next = value.trim();
   return next ? next.slice(0, limit) : undefined;
+}
+
+/**
+ * Turn the wire's integer per-mille scale back into the decimal a human reads.
+ * Absent stays absent: a missing measurement must not be reported as 0, which
+ * is the value that means "collapsed".
+ */
+function decimalFromPermille(value: unknown): number | undefined {
+  const permille = boundedNumber(value);
+  if (permille === undefined) return undefined;
+  return permille / 1000;
 }
 
 function boundedNumber(value: unknown): number | undefined {

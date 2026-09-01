@@ -26,11 +26,11 @@ import {
   stopProcesses,
 } from "@open-design/platform";
 
-import type { ToolPackConfig } from "./config.js";
+import type { ToolPackConfig } from "./config/index.js";
 import { domToPptxBundleResource } from "./dom-to-pptx-resource.js";
-import { copyBundledResourceTrees, linuxResources, packBundledDshRuntime } from "./resources.js";
+import { copyBundledResourceTrees, linuxResources, packBundledDshRuntime } from "./resources/index.js";
 import { copyOptionalVelaCliBinary } from "./vela-cli.js";
-import { electronBuilderVersionForAppVersion, readRuntimeAppVersion } from "./versions.js";
+import { electronBuilderVersionForAppVersion, readRuntimeAppVersion } from "./versioning/index.js";
 import { processWebSourcemaps } from "./web-sourcemaps.js";
 
 const execFileAsync = promisify(execFile);

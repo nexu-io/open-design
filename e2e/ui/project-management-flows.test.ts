@@ -1,4 +1,5 @@
 import { expect, test } from '@/playwright/suite';
+import { ACTIVE_ARTIFACT_PREVIEW_SELECTOR } from '@/playwright/artifact-preview';
 import { ensureRailOpen, openNewProjectModal } from '@/playwright/rail';
 import { openAllProjectFiles } from '@/playwright/workspace';
 import { T } from '@/timeouts';
@@ -28,8 +29,6 @@ async function stubCatalogsEmpty(page: Page): Promise<void> {
 }
 
 const STORAGE_KEY = 'open-design:config';
-const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
-
 function projectDesignSystemTrigger(page: Page): Locator {
   return page
     .getByTestId('chat-composer')
@@ -616,6 +615,27 @@ test('[P1] project detail composer design system picker switches the active proj
   const body = request.postDataJSON() as { designSystemId?: string | null };
   expect(body.designSystemId).toBe('editorial-noir');
   await expect(trigger).toHaveAccessibleName(/Editorial Noir/i);
+});
+
+test('[P1] design system create Back restores the originating project conversation', async ({ page }) => {
+  await page.route('**/api/design-systems', async (route) => {
+    await route.fulfill({ json: { designSystems: DESIGN_SYSTEMS } });
+  });
+
+  await page.goto('/');
+  await createProject(page, 'Design system create return target');
+  await expectWorkspaceReady(page);
+
+  const origin = new URL(page.url());
+  expect(origin.pathname).toMatch(/^\/projects\/[^/]+\/conversations\/[^/]+$/);
+
+  await projectDesignSystemTrigger(page).click();
+  await page.getByTestId('project-ds-picker-create').click();
+  await expect(page).toHaveURL(/\/design-systems\/create$/);
+
+  await page.getByRole('button', { name: /^(Back|返回)$/ }).first().click();
+  await expect(page).toHaveURL(origin.toString());
+  await expectWorkspaceReady(page);
 });
 
 test('[P0] @critical project detail composer design system switch carries into the next run request', async ({ page }) => {

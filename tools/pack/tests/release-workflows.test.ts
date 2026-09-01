@@ -2,6 +2,13 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
+import linuxPack from "@/linux.ts?raw";
+import macBuild from "@/mac/build.ts?raw";
+import macFs from "@/mac/fs.ts?raw";
+import macWorkspace from "@/mac/workspace.ts?raw";
+import winApp from "@/win/app.ts?raw";
+import winLifecycle from "@/win/lifecycle.ts?raw";
+
 function sectionBetween(content: string, start: string, end: string): string {
   const startIndex = content.indexOf(start);
   expect(startIndex).toBeGreaterThanOrEqual(0);
@@ -37,7 +44,7 @@ describe("release workflows", () => {
   });
 
   it("requires Vela CLI for every beta desktop packaging target", async () => {
-    const [beta, prerelease, stable, stablePrepare, buildMac, buildWin, prepareMac, prepareWin, publishPlatform, winLifecycle, desktopUpdater, macBuild, macFs, installUnsafeDmg, winApp, macWorkspace, linuxPack] = await Promise.all([
+    const [beta, prerelease, stable, stablePrepare, buildMac, buildWin, prepareMac, prepareWin, publishPlatform, desktopUpdater, installUnsafeDmg] = await Promise.all([
       readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),
       readFile(new URL("../../../.github/workflows/release-prerelease.yml", import.meta.url), "utf8"),
       readFile(new URL("../../../.github/workflows/release-stable.yml", import.meta.url), "utf8"),
@@ -47,14 +54,8 @@ describe("release workflows", () => {
       readFile(new URL("../../../tools/release/scripts/prepare-platform-assets.sh", import.meta.url), "utf8"),
       readFile(new URL("../../../tools/release/scripts/prepare-platform-assets.ps1", import.meta.url), "utf8"),
       readFile(new URL("../../../tools/release/src/storage/publish-platform.ts", import.meta.url), "utf8"),
-      readFile(new URL("../src/win/lifecycle.ts", import.meta.url), "utf8"),
       readFile(new URL("../../../apps/desktop/src/main/updater/payload.ts", import.meta.url), "utf8"),
-      readFile(new URL("../src/mac/build.ts", import.meta.url), "utf8"),
-      readFile(new URL("../src/mac/fs.ts", import.meta.url), "utf8"),
       readFile(new URL("../../../scripts/install-unsafe-dmg.sh", import.meta.url), "utf8"),
-      readFile(new URL("../src/win/app.ts", import.meta.url), "utf8"),
-      readFile(new URL("../src/mac/workspace.ts", import.meta.url), "utf8"),
-      readFile(new URL("../src/linux.ts", import.meta.url), "utf8"),
     ]);
     const mac = sectionBetween(beta, "  build_mac_arm64:", "  build_mac_x64:");
     const macX64 = sectionBetween(beta, "  build_mac_x64:", "  build_win_x64:");

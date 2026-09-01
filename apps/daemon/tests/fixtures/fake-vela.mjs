@@ -16,6 +16,9 @@
  *                                         login route only care that the
  *                                         config file appears.
  *
+ *   `vela run terminal ... --json`      → emits a terminal receipt or a stable
+ *                                         JSON error envelope.
+ *
  *   `vela models`                       → prints production-shaped public
  *                                         model ids from the Vela catalog.
  *
@@ -32,6 +35,9 @@
  *                            { stopReason: 'end_turn', usage }
  *
  * Behaviour can be tweaked through env vars set by the test:
+ *   FAKE_VELA_TERMINAL_MODE       – success, replay, transient, unsupported,
+ *                                   auth, forbidden, or invalid
+ *   FAKE_VELA_TERMINAL_LOG        – optional JSONL argv/environment log
  *   FAKE_VELA_SESSION_ID         – session id returned by session/new
  *   FAKE_VELA_TEXT               – assistant text streamed back to the host
  *   FAKE_VELA_THOUGHT            – optional thought chunk streamed before text
@@ -45,6 +51,31 @@
  *   FAKE_VELA_PROMPT_ERROR_ON_LOAD – when set, session/prompt errors only after session/load
  *   FAKE_VELA_STALL_AFTER_PROMPT – when set to '1', session/prompt never completes
  *                                   and emits non-substantive heartbeat updates
+ *   FAKE_VELA_STALL_HEARTBEAT_MS – heartbeat interval for the stall above
+ *                                   (default 20). '0' = emit nothing at all,
+ *                                   i.e. a bridge that goes silent on stdout
+ *                                   while the process stays alive
+ *   FAKE_VELA_TEXT_BEFORE_STALL  – when set to '1', stream the assistant text
+ *                                   once before stalling
+ *   FAKE_VELA_OPEN_TOOL_BEFORE_STALL – when set to '1', open a concrete
+ *                                   (non-think) tool call that never reaches a
+ *                                   terminal status before stalling. Models an
+ *                                   agent that goes silent WITH a tool in
+ *                                   flight, which is the shape that makes the
+ *                                   host synthesize terminal tool events on the
+ *                                   failure path
+ *   FAKE_VELA_STDERR_ON_SIGTERM  – when set to '1', log a shutdown line to
+ *                                   stderr on SIGTERM and exit 143, the way a
+ *                                   real CLI does when the host kills it
+ *   FAKE_VELA_IGNORE_SIGTERM     – when set to '1', swallow SIGTERM and stay
+ *                                   alive, modelling a CLI (or a wrapper shim)
+ *                                   that is slow to die or never honours the
+ *                                   signal at all
+ *   FAKE_VELA_DESCENDANT_ACTIVITY_FILE – when set, spawn a SIGTERM-ignoring
+ *                                   descendant that appends activity ticks to
+ *                                   this file while the ACP prompt is stalled
+ *   FAKE_VELA_DESCENDANT_PID_FILE – optional file that receives that
+ *                                   descendant's pid for leak-safe test cleanup
  *   FAKE_VELA_PROMPT_RESULT_DELAY_MS – delay the terminal session/prompt result
  *                                      after streaming substantive output
  *   FAKE_VELA_MODELS             – newline-separated `vela models` stdout
@@ -79,7 +110,15 @@ const SET_MODEL_ERROR = env.FAKE_VELA_SET_MODEL_ERROR || '';
 const PROMPT_ERROR = env.FAKE_VELA_PROMPT_ERROR || '';
 const PROMPT_ERROR_ON_LOAD = env.FAKE_VELA_PROMPT_ERROR_ON_LOAD || '';
 const STALL_AFTER_PROMPT = env.FAKE_VELA_STALL_AFTER_PROMPT === '1';
+const STALL_HEARTBEAT_MS = env.FAKE_VELA_STALL_HEARTBEAT_MS === undefined
+  ? 20
+  : Number(env.FAKE_VELA_STALL_HEARTBEAT_MS) || 0;
 const TEXT_BEFORE_STALL = env.FAKE_VELA_TEXT_BEFORE_STALL === '1';
+const OPEN_TOOL_BEFORE_STALL = env.FAKE_VELA_OPEN_TOOL_BEFORE_STALL === '1';
+const STDERR_ON_SIGTERM = env.FAKE_VELA_STDERR_ON_SIGTERM === '1';
+const IGNORE_SIGTERM = env.FAKE_VELA_IGNORE_SIGTERM === '1';
+const DESCENDANT_ACTIVITY_FILE = env.FAKE_VELA_DESCENDANT_ACTIVITY_FILE || '';
+const DESCENDANT_PID_FILE = env.FAKE_VELA_DESCENDANT_PID_FILE || '';
 const PROMPT_RESULT_DELAY_MS = Number(env.FAKE_VELA_PROMPT_RESULT_DELAY_MS) || 0;
 const OMIT_PROMPT_USAGE = env.FAKE_VELA_OMIT_PROMPT_USAGE === '1';
 const STAY_ALIVE_AFTER_PROMPT_MS = Number(env.FAKE_VELA_STAY_ALIVE_AFTER_PROMPT_MS) || 0;
@@ -172,6 +211,28 @@ function writeError(id, message, code = -32603) {
 
 function logDiag(line) {
   stderr.write(`[fake-vela] ${line}\n`);
+}
+
+// Real agent CLIs log a line or two while shutting down after the host kills
+// them. Modelling that is the only way a spec can cover what the daemon does
+// with agent bytes that arrive AFTER it has already given up on the turn.
+// The two knobs compose. `STDERR_ON_SIGTERM` alone models a CLI that logs a
+// shutdown line and exits; `IGNORE_SIGTERM` alone models one that never honours
+// the signal; together they model the worst case for the host — a child that
+// keeps talking on stderr while refusing to die, so every one of those late
+// bytes reaches the daemon's raw stderr handler after the verdict.
+if (STDERR_ON_SIGTERM || IGNORE_SIGTERM) {
+  // Logged once, like a real CLI announcing shutdown, not once per signal —
+  // repeating it on every SIGTERM would keep pushing the host's timers out and
+  // hide the race this models.
+  let announcedShutdown = false;
+  process.on('SIGTERM', () => {
+    if (STDERR_ON_SIGTERM && !announcedShutdown) {
+      announcedShutdown = true;
+      logDiag('shutting down after SIGTERM');
+    }
+    if (!IGNORE_SIGTERM) exit(143);
+  });
 }
 
 // Append one line per session-bind method (`new` / `load`) to the file named by
@@ -305,16 +366,56 @@ function handleMessage(msg) {
       }
       if (STALL_AFTER_PROMPT) {
         if (TEXT_BEFORE_STALL) emitSessionUpdates(sessionId);
+        if (DESCENDANT_ACTIVITY_FILE) {
+          const descendant = spawnChild(process.execPath, [
+            '-e',
+            `const fs = require('node:fs');
+const activityFile = ${JSON.stringify(DESCENDANT_ACTIVITY_FILE)};
+process.on('SIGTERM', () => {});
+const tick = () => fs.appendFileSync(activityFile, String(Date.now()) + '\\n');
+tick();
+setInterval(tick, 25);`,
+          ], { stdio: 'ignore' });
+          if (DESCENDANT_PID_FILE) writeFileSync(DESCENDANT_PID_FILE, String(descendant.pid));
+        }
+        // A concrete tool the agent never closes. `kind: 'read'` is a
+        // recognized non-think, non-write family, and `in_progress` is not a
+        // terminal status, so the host keeps this call open in
+        // `acpToolRunEventState` for the whole stall.
+        if (OPEN_TOOL_BEFORE_STALL) {
+          writeNotification('session/update', {
+            sessionId,
+            update: {
+              sessionUpdate: 'tool_call',
+              toolCallId: 'fake-vela-open-tool-1',
+              kind: 'read',
+              title: 'Read design tokens',
+              status: 'in_progress',
+              rawInput: { path: 'tokens.json' },
+            },
+          });
+        }
         // Keep both the ACP stage watchdog and the outer chat inactivity
         // watchdog fed without producing text, thinking, tools, artifacts, or
         // a terminal prompt result. This models a provider bridge that stays
         // transport-alive forever while never returning a first model output.
-        setInterval(() => {
-          writeNotification('session/update', {
-            sessionId,
-            update: { sessionUpdate: 'heartbeat' },
-          });
-        }, 20);
+        //
+        // `FAKE_VELA_STALL_HEARTBEAT_MS=0` drops the heartbeats entirely: the
+        // bridge goes completely silent on stdout while the process stays
+        // alive. That is the shape of the 2026-07-28 AMR stall — vela stopped
+        // writing ACP lines while still holding the turn open — and it is the
+        // only way to let a watchdog actually fire in a spec.
+        if (STALL_HEARTBEAT_MS > 0) {
+          setInterval(() => {
+            writeNotification('session/update', {
+              sessionId,
+              update: { sessionUpdate: 'heartbeat' },
+            });
+          }, STALL_HEARTBEAT_MS);
+        } else {
+          // Hold the event loop open without writing anything.
+          setInterval(() => {}, 60_000);
+        }
         return;
       }
       emitSessionUpdates(sessionId);
@@ -526,6 +627,38 @@ function loginAndExit() {
   stdout.write('Code: FAKE-CODE\n');
   if (delayMs > 0) setTimeout(finish, delayMs);
   else finish();
+}
+
+// `vela run terminal`: idempotent AMR terminal report fixture. It logs no
+// secrets and returns the same receipt fields the delivery worker validates.
+if (argv[2] === 'run' && argv[3] === 'terminal') {
+  const flag = (name) => {
+    const index = argv.indexOf(name);
+    return index >= 0 ? argv[index + 1] : undefined;
+  };
+  const runId = flag('--run-id');
+  const outcome = flag('--outcome');
+  const terminalAt = flag('--terminal-at');
+  if (env.FAKE_VELA_TERMINAL_LOG) {
+    appendFileSync(env.FAKE_VELA_TERMINAL_LOG, `${JSON.stringify({
+      args: argv.slice(2),
+      invocationSource: env.VELA_INVOCATION_SOURCE || null,
+    })}\n`);
+  }
+  const mode = env.FAKE_VELA_TERMINAL_MODE || 'success';
+  const failures = {
+    transient: { error: 'server_error', retryable: true },
+    unsupported: { error: 'unsupported', retryable: false },
+    auth: { error: 'auth_required', retryable: false },
+    forbidden: { error: 'forbidden', retryable: false },
+    invalid: { error: 'invalid_input', retryable: false },
+  };
+  if (failures[mode]) {
+    stdout.write(`${JSON.stringify(failures[mode])}\n`);
+    exit(1);
+  }
+  stdout.write(`${JSON.stringify({ runId, outcome, terminalAt, recorded: mode !== 'replay' })}\n`);
+  exit(0);
 }
 
 // `vela --version`: the daemon's executable-resolution probe (def.versionArgs)

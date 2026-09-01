@@ -59,6 +59,18 @@ export function diffSnapshots(input: DiffSnapshotsInput): SnapshotDiffReport {
   diffScalar(entries, 'pluginDescription',    a.pluginDescription,    b.pluginDescription);
   diffScalar(entries, 'query',                a.query,                b.query);
 
+  // Strategy diagnostics intentionally expose identity/digests only. Asset
+  // bodies never live on the snapshot and therefore cannot leak through diff.
+  diffScalar(entries, 'strategy.id', a.strategy?.id, b.strategy?.id);
+  diffScalar(entries, 'strategy.version', a.strategy?.version, b.strategy?.version);
+  diffScalar(entries, 'strategy.packageHash', a.strategy?.packageHash, b.strategy?.packageHash);
+  diffScalar(
+    entries,
+    'strategy.selectedTaskProfile.sha256',
+    a.strategy?.selectedTaskProfile.sha256,
+    b.strategy?.selectedTaskProfile.sha256,
+  );
+
   // Inputs (typed scalar map).
   diffMap(entries, 'inputs', recordToStringMap(a.inputs), recordToStringMap(b.inputs));
 

@@ -1,6 +1,6 @@
 import { join } from "node:path";
 
-import type { ToolPackConfig } from "./config.js";
+import type { ToolPackConfig } from "./config/index.js";
 
 export function domToPptxBundleResource(config: Pick<ToolPackConfig, "workspaceRoot">): { from: string; to: string } {
   return {

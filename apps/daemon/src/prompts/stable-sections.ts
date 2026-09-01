@@ -63,6 +63,10 @@ const SECTION_INPUTS = {
   skill: ['skillBody', 'skillName', 'skillMode', 'skillModes'],
   craft: ['craftBody', 'craftSections'],
   plugin: ['pluginBlock', 'activeStageBlocks'],
+  // Hash-gated OD Next recipe. Its payload includes the strategy package hash
+  // and selected Task Skill digest, so either content dimension is attributed
+  // without changing the overall-hash source of truth.
+  strategy: ['odNextStrategyRecipe'],
   instructions: ['userInstructions', 'projectInstructions'],
   locale: ['locale'],
   media: [

@@ -412,7 +412,16 @@ function projectViewElement(overrides: Partial<ComponentProps<typeof ProjectView
       project={project()}
       routeFileName={null}
       config={config}
-      agents={[{ id: 'amr', name: 'amr', available: true }] as unknown as AgentInfo[]}
+      agents={[{
+        id: 'amr',
+        name: 'amr',
+        available: true,
+        models: [{
+          id: 'deepseek-v4-flash',
+          label: 'DeepSeek V4 Flash',
+          default: true,
+        }],
+      }] as unknown as AgentInfo[]}
       skills={[] as SkillSummary[]}
       designTemplates={[] as SkillSummary[]}
       designSystems={[] as DesignSystemSummary[]}
@@ -502,7 +511,7 @@ describe('a Home auto-send identifies its caller before the project scope resolv
       workspaceType: 'team',
       workspaceId: TEAM_WORKSPACE,
       workspaceMemberId: TEAM_MEMBER,
-    });
+    }, 'deepseek-v4-flash');
     const options = mockedStreamViaDaemon.mock.calls[0]?.[0];
     expect(
       options?.workspaceContext,
@@ -997,7 +1006,7 @@ describe('a Home auto-send identifies its caller before the project scope resolv
       workspaceType: 'team',
       workspaceId: TEAM_WORKSPACE,
       workspaceMemberId: TEAM_MEMBER,
-    });
+    }, 'deepseek-v4-flash');
     expect(mockedStreamViaDaemon.mock.calls[0]?.[0].workspaceContext).toEqual(
       CALLER_CONTEXT,
     );
@@ -1018,7 +1027,16 @@ describe('a Home auto-send identifies its caller before the project scope resolv
 
     const stableOverrides: Partial<ComponentProps<typeof ProjectView>> = {
       project: project(),
-      agents: [{ id: 'amr', name: 'amr', available: true }] as unknown as AgentInfo[],
+      agents: [{
+        id: 'amr',
+        name: 'amr',
+        available: true,
+        models: [{
+          id: 'deepseek-v4-flash',
+          label: 'DeepSeek V4 Flash',
+          default: true,
+        }],
+      }] as unknown as AgentInfo[],
       skills: [] as SkillSummary[],
       designTemplates: [] as SkillSummary[],
       designSystems: [] as DesignSystemSummary[],
@@ -1080,7 +1098,7 @@ describe('a Home auto-send identifies its caller before the project scope resolv
         workspaceType: 'personal',
         workspaceId: PERSONAL_CONTEXT.workspaceId,
         workspaceMemberId: PERSONAL_CONTEXT.workspaceMemberId,
-      });
+      }, 'deepseek-v4-flash');
     });
     await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalled());
   });
@@ -1109,7 +1127,7 @@ describe('a Home auto-send identifies its caller before the project scope resolv
         workspaceType: 'personal',
         workspaceId: PERSONAL_CONTEXT.workspaceId,
         workspaceMemberId: PERSONAL_CONTEXT.workspaceMemberId,
-      });
+      }, 'deepseek-v4-flash');
     });
     await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalled());
     expect(mockedStreamViaDaemon.mock.calls[0]?.[0].workspaceContext).toEqual(
@@ -1205,7 +1223,16 @@ describe('a Home auto-send observes a project billing scope that settles after m
     // only dependency allowed to change in this regression.
     const stableOverrides: Partial<ComponentProps<typeof ProjectView>> = {
       project: project(),
-      agents: [{ id: 'amr', name: 'amr', available: true }] as unknown as AgentInfo[],
+      agents: [{
+        id: 'amr',
+        name: 'amr',
+        available: true,
+        models: [{
+          id: 'deepseek-v4-flash',
+          label: 'DeepSeek V4 Flash',
+          default: true,
+        }],
+      }] as unknown as AgentInfo[],
       skills: [] as SkillSummary[],
       designTemplates: [] as SkillSummary[],
       designSystems: [] as DesignSystemSummary[],
@@ -1249,7 +1276,7 @@ describe('a Home auto-send observes a project billing scope that settles after m
         workspaceType: 'team',
         workspaceId: TEAM_WORKSPACE,
         workspaceMemberId: TEAM_MEMBER,
-      });
+      }, 'deepseek-v4-flash');
     });
     await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalled());
   });

@@ -106,12 +106,16 @@ export function AmrLowBalanceDialog({
           {t('chat.amrLowBalance.dontRemind')}
         </label>
         <div className={styles.footerActions}>
-          <Button onClick={() => decide('proceed')} data-testid="amr-low-balance-dialog-proceed">
+          <Button
+            className={styles.action}
+            onClick={() => decide('proceed')}
+            data-testid="amr-low-balance-dialog-proceed"
+          >
             {t('chat.amrLowBalance.proceedCta')}
           </Button>
           <Button
             variant="primary"
-            className={styles.cta}
+            className={`${styles.action} ${styles.cta}`}
             onClick={openConsoleAndPark}
             data-testid="amr-low-balance-dialog-recharge"
           >

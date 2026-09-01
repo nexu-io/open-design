@@ -183,18 +183,21 @@ jobs:
             exit 1
           fi
 
-      # The short open-design.ai/install-dsh.* entry points ship with the
-      # landing page. Preserve the exact production bytes separately under an
-      # immutable R2 version before allowing Pages to deploy them. The version
-      # is derived from the installer bytes rather than pinned here: unchanged
-      # installers reuse the version already published, edited ones mint the
-      # next one, and every published version stays byte-for-byte immutable.
-      # `DSH_BOOTSTRAP_VERSION` remains an escape hatch that forces one specific
-      # version and still fails closed on a content mismatch.
+      # The short open-design.ai/install-dsh.* entry points still ship with the
+      # landing page, but the canonical installer bytes live under
+      # tools/release/resources/dsh-bootstrap/ (product-owned). Publish those
+      # bytes to an immutable R2 version before Pages deploys the temporary
+      # landing public copies. The version is derived from the installer bytes
+      # rather than pinned here: unchanged installers reuse the version already
+      # published, edited ones mint the next one, and every published version
+      # stays byte-for-byte immutable. `DSH_BOOTSTRAP_VERSION` remains an escape
+      # hatch that forces one specific version and still fails closed on a
+      # content mismatch. Product can also publish via dsh-bootstrap-publish.yml
+      # without a landing production deploy.
       - name: Publish immutable DeepSeek Harness bootstrap installers to R2
         id: dsh_bootstrap
         env:
-          DSH_BOOTSTRAP_SOURCE_DIR: apps/landing-page/public
+          DSH_BOOTSTRAP_SOURCE_DIR: tools/release/resources/dsh-bootstrap
           RELEASE_BRANCH: ${{ github.ref_name }}
           RELEASE_COMMIT: ${{ github.sha }}
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}

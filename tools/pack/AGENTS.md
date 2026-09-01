@@ -25,6 +25,8 @@ Read `tools/pack/CACHE.md` before changing any build-cache node key, adding a ca
 
 ## Rules
 
+- Keep cross-platform source responsibilities in named directories such as `cache/`, `config/`, `launcher/`, `resources/`, `updates/`, and `versioning/`; keep platform-owned behavior below `mac/` or `win/`. Mirror those responsibilities in `tests/` when a test set has the same ownership. A new root-level `src/*.ts` file is intentionally treated as unclassified by CI and pays the conservative Windows payload fallback until it is placed in an owned source unit.
+- Tests import source modules through the test-only `@/*` alias. Tests that intentionally inspect source text use the same alias with Vitest's `?raw` suffix; do not reintroduce directory-depth-dependent `../src/` imports or file URLs.
 - Do not hand-build `--od-stamp-*` args; use `createProcessStampArgs` with `OPEN_DESIGN_SIDECAR_CONTRACT`.
 - Do not use port numbers in data/log/runtime/cache path decisions. Namespace decides paths; ports are only transient transports.
 - Public release artifacts must use channel-specific app identity: stable uses `Open Design`, beta uses `Open Design Beta`, prerelease uses `Open Design Prerelease`, and preview uses `Open Design Preview`. Local tools-pack installs may still use namespace-scoped install paths only as a developer multi-instance validation convention.

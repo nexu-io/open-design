@@ -198,8 +198,18 @@ function transientSuppressedReason(
       : 'unsafe_failure_stage';
   }
   if (category === 'process_exit') {
-    return detail === 'agent_protocol_error' ||
-      detail === 'qoder_stop_sequence' ||
+    // An `agent_protocol_error` raised while the session was still being
+    // opened (`session_init`) is deterministic: the agent CLI refused the
+    // handshake, so nothing streamed and re-running the identical request
+    // against the identical CLI build only reproduces the same rejection.
+    // Every other protocol failure reaches `child_close` — after a session
+    // existed — and stays transient. Scoped to this one detail so the other
+    // process-exit shapes (and a resume-expired session, which recovers by
+    // reseeding) keep retrying at any stage.
+    if (detail === 'agent_protocol_error') {
+      return stage === 'session_init' ? 'unsafe_failure_stage' : null;
+    }
+    return detail === 'qoder_stop_sequence' ||
       detail === 'session_resume_expired' ||
       detail === 'stream_error' ||
       detail === 'fatal_rpc_error'

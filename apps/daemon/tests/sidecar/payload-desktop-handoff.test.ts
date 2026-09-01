@@ -8,21 +8,33 @@ import {
   parseLauncherHandoffResumeArgs,
   resolveLauncherPaths,
   resolveLauncherVersionPaths,
+  selectLauncherRuntimeTarget,
 } from "@open-design/launcher-proto";
 import { readProcessStamp } from "@open-design/platform";
+import { writeJsonFile } from "@open-design/sidecar";
 import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
+  SIDECAR_ENV,
   SIDECAR_SOURCES,
 } from "@open-design/sidecar-proto";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   executeLegacyPayloadDesktopHandoff,
   prepareLegacyPayloadDesktopHandoff,
 } from "../../src/sidecar/payload-desktop-handoff.js";
+import {
+  attachParentMonitor,
+  resetParentMonitorExitHoldForTests,
+  scheduleHeldDaemonExit,
+} from "../../src/sidecar/parent-monitor-gate.js";
 
 describe("legacy payload desktop handoff", () => {
+  afterEach(() => {
+    resetParentMonitorExitHoldForTests();
+  });
+
   it("captures the real previous pointer before old outer confirm, then arms and launches payload desktop", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-daemon-payload-handoff-"));
     try {
@@ -149,6 +161,7 @@ describe("legacy payload desktop handoff", () => {
         env: {
           ELECTRON_RUN_AS_NODE: "1",
           OD_SIDECAR_BASE: runtimeRoot,
+          [SIDECAR_ENV.TOOLS_DEV_PARENT_PID]: "4321",
           PATH: "/usr/bin",
         },
         now: () => new Date("2026-07-15T02:00:00.000Z"),
@@ -176,6 +189,7 @@ describe("legacy payload desktop handoff", () => {
       expect(spawn).toHaveBeenCalledOnce();
       expect(launchedEnv).not.toHaveProperty("ELECTRON_RUN_AS_NODE");
       expect(launchedEnv).not.toHaveProperty("OD_SIDECAR_BASE");
+      expect(launchedEnv).not.toHaveProperty(SIDECAR_ENV.TOOLS_DEV_PARENT_PID);
       expect(launchedEnv).toMatchObject({
         OD_PACKAGED_NAMESPACE_BASE_ROOT: join(root, "namespaces"),
         PATH: "/usr/bin",
@@ -404,6 +418,52 @@ describe("legacy payload desktop handoff", () => {
     }
   });
 
+  it("releases the parent-monitor hold when payload desktop spawn fails", async () => {
+    const { launcherPaths, prepared, root } = await armedHandoffFixture();
+    let disposeMonitor = () => {};
+    try {
+      let parentAlive = true;
+      let daemonExited = false;
+      disposeMonitor = attachParentMonitor(async () => undefined, {
+        env: { [SIDECAR_ENV.TOOLS_DEV_PARENT_PID]: "4321" },
+        exit: () => {
+          daemonExited = true;
+        },
+        intervalMs: 10,
+        isProcessAlive: () => parentAlive,
+      });
+      const spawn = vi.fn(() => {
+        parentAlive = false;
+        throw new Error("spawn ENOENT");
+      });
+      const requestDesktop = vi.fn(async (message: "shutdown" | "status") => (
+        message === "status"
+          ? { pid: 4321, state: "running" }
+          : { accepted: true }
+      ));
+
+      const result = await executeLegacyPayloadDesktopHandoff(prepared, {
+        confirmTimeoutMs: 100,
+        env: { PATH: "/usr/bin" },
+        now: () => new Date("2026-07-15T02:00:00.000Z"),
+        requestDesktop,
+        sleep: async () => undefined,
+        spawn: spawn as never,
+      });
+
+      expect(result).toEqual({ kind: "aborted", reason: "spawn-failed" });
+      expect(JSON.parse(await readFile(launcherPaths.handoffPath, "utf8"))).toMatchObject({
+        state: "prepared",
+      });
+      await vi.waitFor(() => {
+        expect(daemonExited).toBe(true);
+      });
+    } finally {
+      disposeMonitor();
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("does not strand launcher state when the old desktop shutdown fails", async () => {
     const { launcherPaths, prepared, root } = await armedHandoffFixture();
     try {
@@ -457,6 +517,311 @@ describe("legacy payload desktop handoff", () => {
         source: SIDECAR_SOURCES.PACKAGED,
       });
       expect(retry.kind).toBe("prepared");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("commits the armed journal when the outer parent dies at shutdown acknowledgement", async () => {
+    const { launcherPaths, prepared, root } = await armedHandoffFixture();
+    let disposeMonitor = () => {};
+    try {
+      let parentAlive = true;
+      let daemonExited = false;
+      disposeMonitor = attachParentMonitor(async () => undefined, {
+        env: { [SIDECAR_ENV.TOOLS_DEV_PARENT_PID]: "4321" },
+        exit: () => {
+          daemonExited = true;
+        },
+        intervalMs: 10,
+        isProcessAlive: () => parentAlive,
+      });
+
+      const child = {
+        once: vi.fn((event: string, callback: (...args: unknown[]) => void) => {
+          if (event === "spawn") queueMicrotask(callback);
+          return child;
+        }),
+        unref: vi.fn(),
+      };
+      const spawn = vi.fn(() => child);
+      const persist = vi.fn(async (filePath: string, payload: unknown) => {
+        expect(daemonExited, "parent monitor exited before journal commit").toBe(false);
+        await writeJsonFile(filePath, payload);
+      });
+      const requestDesktop = vi.fn(async (message: "shutdown" | "status") => {
+        if (message === "status") return { pid: 4321, state: "running" };
+        parentAlive = false;
+        await new Promise((resolve) => setTimeout(resolve, 35));
+        return { accepted: true };
+      });
+
+      const result = await executeLegacyPayloadDesktopHandoff(prepared, {
+        confirmTimeoutMs: 100,
+        env: { PATH: "/usr/bin" },
+        now: () => new Date("2026-07-15T02:00:00.000Z"),
+        requestDesktop,
+        sleep: async () => undefined,
+        spawn: spawn as never,
+        writeJsonFile: persist,
+      });
+
+      expect(result).toMatchObject({
+        kind: "scheduled",
+        target: { generation: 2, version: "1.2.3-beta.5" },
+      });
+      expect(daemonExited).toBe(false);
+      expect(persist).toHaveBeenCalledTimes(3);
+
+      const handoff = JSON.parse(await readFile(launcherPaths.handoffPath, "utf8"));
+      const attempt = JSON.parse(await readFile(launcherPaths.attemptsPath, "utf8"));
+      const runtime = JSON.parse(await readFile(launcherPaths.runtimePath, "utf8"));
+      expect(handoff).toMatchObject({
+        state: "armed",
+        target: { generation: 2, version: "1.2.3-beta.5" },
+      });
+      expect(selectLauncherRuntimeTarget({
+        attempted: attempt,
+        resume: handoff.target,
+        runtime,
+      })).toEqual({
+        pointer: { generation: 2, version: "1.2.3-beta.5" },
+        reason: "active-resume",
+        selected: true,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 35));
+      expect(daemonExited).toBe(true);
+    } finally {
+      disposeMonitor();
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("commits the armed journal when the outer parent dies after payload spawn", async () => {
+    const { launcherPaths, prepared, root } = await armedHandoffFixture();
+    let disposeMonitor = () => {};
+    try {
+      let parentAlive = true;
+      let daemonExited = false;
+      disposeMonitor = attachParentMonitor(async () => undefined, {
+        env: { [SIDECAR_ENV.TOOLS_DEV_PARENT_PID]: "4321" },
+        exit: () => {
+          daemonExited = true;
+        },
+        intervalMs: 10,
+        isProcessAlive: () => parentAlive,
+      });
+
+      const child = {
+        once: vi.fn((event: string, callback: (...args: unknown[]) => void) => {
+          if (event === "spawn") {
+            parentAlive = false;
+            queueMicrotask(callback);
+          }
+          return child;
+        }),
+        unref: vi.fn(),
+      };
+      const spawn = vi.fn(() => child);
+      const persist = vi.fn(async (filePath: string, payload: unknown) => {
+        expect(daemonExited, "parent monitor exited before journal commit").toBe(false);
+        await writeJsonFile(filePath, payload);
+      });
+      const requestDesktop = vi.fn(async (message: "shutdown" | "status") => {
+        if (message === "status") return { pid: 4321, state: "running" };
+        await new Promise((resolve) => setTimeout(resolve, 35));
+        return { accepted: true };
+      });
+
+      const result = await executeLegacyPayloadDesktopHandoff(prepared, {
+        confirmTimeoutMs: 100,
+        env: { PATH: "/usr/bin" },
+        now: () => new Date("2026-07-15T02:00:00.000Z"),
+        requestDesktop,
+        sleep: async () => undefined,
+        spawn: spawn as never,
+        writeJsonFile: persist,
+      });
+
+      expect(result).toMatchObject({
+        kind: "scheduled",
+        target: { generation: 2, version: "1.2.3-beta.5" },
+      });
+      expect(daemonExited).toBe(false);
+      expect(persist).toHaveBeenCalledTimes(3);
+
+      const handoff = JSON.parse(await readFile(launcherPaths.handoffPath, "utf8"));
+      const attempt = JSON.parse(await readFile(launcherPaths.attemptsPath, "utf8"));
+      const runtime = JSON.parse(await readFile(launcherPaths.runtimePath, "utf8"));
+      expect(handoff).toMatchObject({
+        state: "armed",
+        target: { generation: 2, version: "1.2.3-beta.5" },
+      });
+      expect(selectLauncherRuntimeTarget({
+        attempted: attempt,
+        resume: handoff.target,
+        runtime,
+      })).toEqual({
+        pointer: { generation: 2, version: "1.2.3-beta.5" },
+        reason: "active-resume",
+        selected: true,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 35));
+      expect(daemonExited).toBe(true);
+    } finally {
+      disposeMonitor();
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("commits the armed journal before packaged sidecar SHUTDOWN can exit the daemon", async () => {
+    const { launcherPaths, prepared, root } = await armedHandoffFixture();
+    try {
+      let daemonExited = false;
+      const child = {
+        once: vi.fn((event: string, callback: (...args: unknown[]) => void) => {
+          if (event === "spawn") queueMicrotask(callback);
+          return child;
+        }),
+        unref: vi.fn(),
+      };
+      const spawn = vi.fn(() => child);
+      const persist = vi.fn(async (filePath: string, payload: unknown) => {
+        expect(daemonExited, "daemon SHUTDOWN exited before journal commit").toBe(false);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        await writeJsonFile(filePath, payload);
+      });
+      const requestDesktop = vi.fn(async (message: "shutdown" | "status") => {
+        if (message === "status") return { pid: 4321, state: "running" };
+        // Packaged desktop acks SHUTDOWN, then beforeShutdown -> sidecars.close()
+        // sends daemon SHUTDOWN. Use the same deferred-exit helper the sidecar
+        // SHUTDOWN handler uses so delayed journal writes still finish first.
+        scheduleHeldDaemonExit(async () => undefined, () => {
+          daemonExited = true;
+        });
+        return { accepted: true };
+      });
+
+      const result = await executeLegacyPayloadDesktopHandoff(prepared, {
+        confirmTimeoutMs: 100,
+        env: { PATH: "/usr/bin" },
+        now: () => new Date("2026-07-15T02:00:00.000Z"),
+        requestDesktop,
+        sleep: async () => undefined,
+        spawn: spawn as never,
+        writeJsonFile: persist,
+      });
+
+      expect(result).toMatchObject({
+        kind: "scheduled",
+        target: { generation: 2, version: "1.2.3-beta.5" },
+      });
+      expect(persist).toHaveBeenCalledTimes(3);
+      expect(persist.mock.calls.map(([filePath]) => filePath)).toEqual([
+        launcherPaths.handoffPath,
+        launcherPaths.attemptsPath,
+        launcherPaths.runtimePath,
+      ]);
+
+      const handoff = JSON.parse(await readFile(launcherPaths.handoffPath, "utf8"));
+      const attempt = JSON.parse(await readFile(launcherPaths.attemptsPath, "utf8"));
+      const runtime = JSON.parse(await readFile(launcherPaths.runtimePath, "utf8"));
+      expect(handoff).toMatchObject({
+        state: "armed",
+        target: { generation: 2, version: "1.2.3-beta.5" },
+      });
+      expect(selectLauncherRuntimeTarget({
+        attempted: attempt,
+        resume: handoff.target,
+        runtime,
+      })).toEqual({
+        pointer: { generation: 2, version: "1.2.3-beta.5" },
+        reason: "active-resume",
+        selected: true,
+      });
+
+      await vi.waitFor(() => {
+        expect(daemonExited).toBe(true);
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("commits the armed journal before a second held SIGTERM exit runs", async () => {
+    const { launcherPaths, prepared, root } = await armedHandoffFixture();
+    try {
+      let daemonExited = false;
+      const child = {
+        once: vi.fn((event: string, callback: (...args: unknown[]) => void) => {
+          if (event === "spawn") queueMicrotask(callback);
+          return child;
+        }),
+        unref: vi.fn(),
+      };
+      const spawn = vi.fn(() => child);
+      const persist = vi.fn(async (filePath: string, payload: unknown) => {
+        expect(daemonExited, "daemon SIGTERM exited before journal commit").toBe(false);
+        // closeManagedChild waits 5s then stopProcesses() sends SIGTERM. Keep
+        // each write in flight across that escalation without a real 5s sleep.
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        await writeJsonFile(filePath, payload);
+      });
+      const requestDesktop = vi.fn(async (message: "shutdown" | "status") => {
+        if (message === "status") return { pid: 4321, state: "running" };
+        const exit = () => {
+          daemonExited = true;
+        };
+        scheduleHeldDaemonExit(async () => undefined, exit);
+        // Model the 5s force-stop: SIGTERM uses the same hold-aware helper as
+        // SHUTDOWN, so a write still in flight must finish first.
+        scheduleHeldDaemonExit(async () => undefined, exit);
+        return { accepted: true };
+      });
+
+      const result = await executeLegacyPayloadDesktopHandoff(prepared, {
+        confirmTimeoutMs: 100,
+        env: { PATH: "/usr/bin" },
+        now: () => new Date("2026-07-15T02:00:00.000Z"),
+        requestDesktop,
+        sleep: async () => undefined,
+        spawn: spawn as never,
+        writeJsonFile: persist,
+      });
+
+      expect(result).toMatchObject({
+        kind: "scheduled",
+        target: { generation: 2, version: "1.2.3-beta.5" },
+      });
+      expect(persist).toHaveBeenCalledTimes(3);
+      expect(persist.mock.calls.map(([filePath]) => filePath)).toEqual([
+        launcherPaths.handoffPath,
+        launcherPaths.attemptsPath,
+        launcherPaths.runtimePath,
+      ]);
+
+      const handoff = JSON.parse(await readFile(launcherPaths.handoffPath, "utf8"));
+      const attempt = JSON.parse(await readFile(launcherPaths.attemptsPath, "utf8"));
+      const runtime = JSON.parse(await readFile(launcherPaths.runtimePath, "utf8"));
+      expect(handoff).toMatchObject({
+        state: "armed",
+        target: { generation: 2, version: "1.2.3-beta.5" },
+      });
+      expect(selectLauncherRuntimeTarget({
+        attempted: attempt,
+        resume: handoff.target,
+        runtime,
+      })).toEqual({
+        pointer: { generation: 2, version: "1.2.3-beta.5" },
+        reason: "active-resume",
+        selected: true,
+      });
+
+      await vi.waitFor(() => {
+        expect(daemonExited).toBe(true);
+      });
     } finally {
       await rm(root, { force: true, recursive: true });
     }

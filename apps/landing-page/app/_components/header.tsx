@@ -24,13 +24,10 @@ const REPO_DISCUSSIONS = `${REPO}/discussions`;
 const DISCORD = 'https://discord.gg/mHAjSMV6gz';
 const X_PROFILE = 'https://x.com/OpenDesignHQ';
 
-// OpenDesign Cloud endpoints for the header account module.
-// Production defaults; overridable at build time via PUBLIC_* env so a
-// preview/staging build can point at a non-prod cloud. These are surfaced to
-// the runtime via `data-*` on `.nav-account` because the auth logic lives in
-// `header-enhancer.astro`'s `<script is:inline>` (NOT processed by Vite, so it
-// cannot read `import.meta.env` itself).
-const env = import.meta.env as Record<string, string | undefined>;
+// Pricing can opt into the existing Cloud account menu without restoring it
+// across the marketing site. The enhancer reads these values from data-*
+// because its inline script cannot access import.meta.env at runtime.
+const env = (import.meta.env ?? {}) as Record<string, string | undefined>;
 const CLOUD_API_BASE =
   env.PUBLIC_CLOUD_API_BASE ?? env.PUBLIC_AMR_API_BASE ?? 'https://amr-api.open-design.ai';
 const CLOUD_CONSOLE_URL =
@@ -148,6 +145,7 @@ export interface HeaderProps {
   github?: {
     starsLabel: string;
   };
+  /** Icon-only language switcher in the action cluster (footer has the twin). */
   localeSwitcher?: {
     label: string;
     prefix: string;
@@ -165,6 +163,8 @@ export interface HeaderProps {
   copy?: HeaderCopy;
   /** Brand link target — `#top` on the homepage, `/` on sub-pages. */
   brandHref?: string;
+  /** Render the signed-in Cloud avatar/menu. Disabled on marketing pages by default. */
+  showAccount?: boolean;
 }
 
 export function Header({
@@ -174,11 +174,23 @@ export function Header({
   locale = DEFAULT_LOCALE,
   copy,
   brandHref = '#top',
+  showAccount = false,
 }: HeaderProps) {
   const headerCopy = copy ?? getCommonCopy(locale).header;
   const href = (path: string) => localizedHref(path, locale);
   const homeBrandHref = brandHref === '/' ? href('/') : brandHref;
   const productMenuCopy = getHeaderProductMenuCopy(locale);
+  // Icon-only community entry in the action cluster: Discord for every locale
+  // (the zh / zh-tw Feishu group entry was retired in favour of one community).
+  const communityLabel =
+    locale === 'zh' || locale === 'zh-tw' ? '加入 Discord' : 'Join Discord';
+  // Hover card copy: the community hands out credits, say so right at the entry.
+  const communityPerk =
+    locale === 'zh'
+      ? '群内每周发放 Credits'
+      : locale === 'zh-tw'
+        ? '群內每週發放 Credits'
+        : 'Weekly credit drops inside';
 
   return (
     <header className='nav' data-od-id='nav'>
@@ -193,7 +205,7 @@ export function Header({
           />
         </a>
         {/*
-          Mobile / tablet hamburger. Hidden by CSS at ≥1100px (the desktop
+          Mobile / tablet hamburger. Hidden by CSS at ≥1367px (the desktop
           breakpoint where the full nav fits). At narrower widths it toggles
           `.is-open` on the parent <header> via a small handler in
           `header-enhancer.astro` — when open, the `<nav>` element below
@@ -461,7 +473,8 @@ export function Header({
 
             {/* Community — Contributors / Ambassadors / Moderators / Events. These
                 pages are now localized Astro routes, so link through `href()`
-                to keep visitors on their language variant. */}
+                to keep visitors on their language variant. Discord opens the
+                community space in a new tab. */}
             <li className='has-dropdown'>
               <a
                 href={href('/community/')}
@@ -498,20 +511,10 @@ export function Header({
                   </a>
                 </li>
                 <li>
-                  <a href={DISCORD} {...ext}>
-                    <span className='dropdown-name'>Discord</span>
-                  </a>
-                </li>
-                <li>
                   <a href={REPO_DISCUSSIONS} {...ext}>
                     <span className='dropdown-name'>
                       {productMenuCopy.communityItems.discussions}
                     </span>
-                  </a>
-                </li>
-                <li>
-                  <a href={X_PROFILE} {...ext}>
-                    <span className='dropdown-name'>X</span>
                   </a>
                 </li>
               </ul>
@@ -520,45 +523,64 @@ export function Header({
           </ul>
         </nav>
         <div className='nav-side'>
-          {localeSwitcher ? (
-            <details className='locale-switch nav-locale-switch' data-locale-switch>
-              <summary
-                className='locale-trigger locale-trigger-iconic'
-                aria-label={localeSwitcher.label}
-                title={localeSwitcher.label}
+          <div className='nav-social'>
+            <div className='nav-social-item nav-community-entry' data-community-platform='discord'>
+              <a
+                className='nav-social-link'
+                href={DISCORD}
+                {...ext}
+                aria-label={communityLabel}
+                title={communityLabel}
+                data-community-cta
+                data-community-platform='discord'
               >
-                {/* Language switcher rendered as the skill's Remix Icon
-                    "translate-2" glyph (\f226) instead of the 语言 · 简中 text. */}
-                <span className='locale-trigger-icon' aria-hidden='true' />
-                {/* Dropdown caret as the skill's Remix Icon "arrow-down-s-line"
-                    glyph () instead of an inline SVG path. */}
-                <span className='locale-trigger-caret ri-glyph' aria-hidden='true'>
-                  {''}
+                <svg className='nav-social-icon' viewBox='0 0 24 24' width='20' height='20' fill='currentColor' aria-hidden='true'>
+                  <path d='M20.317 4.369a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.6 12.6 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.74 19.74 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.1 13.1 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.009c.12.099.246.198.373.292a.077.077 0 0 1-.006.127c-.598.349-1.22.645-1.873.891a.076.076 0 0 0-.04.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.056c.5-5.177-.838-9.674-3.549-13.66a.06.06 0 0 0-.031-.028zM8.02 15.331c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z' />
+                </svg>
+                <span className='nav-social-badge' aria-hidden='true' />
+              </a>
+              <div className='nav-community-qr-card' role='tooltip'>
+                <span className='nav-community-card-title'>{communityLabel}</span>
+                <span className='nav-community-card-sub'>
+                  <span className='nav-community-perk-dot' aria-hidden='true' />
+                  {communityPerk}
                 </span>
-              </summary>
-              <div className='locale-menu' role='menu'>
-                {localeSwitcher.options.map((entry) => (
-                  <a
-                    className={`locale-menu-item${
-                      entry.code === locale ? ' is-active' : ''
-                    }`}
-                    role='menuitem'
-                    data-locale-link
-                    data-locale-code={entry.code}
-                    href={entry.href}
-                    lang={entry.htmlLang}
-                    aria-current={entry.code === locale ? 'true' : undefined}
-                    key={entry.code}
-                  >
-                    <span className='locale-menu-code'>
-                      {entry.code.toUpperCase()}
-                    </span>
-                    <span className='locale-menu-label'>{entry.label}</span>
-                  </a>
-                ))}
               </div>
-            </details>
-          ) : null}
+            </div>
+            <a className='nav-social-link' href={X_PROFILE} {...ext} aria-label='X' title='X'>
+              <svg className='nav-social-icon' viewBox='0 0 24 24' width='18' height='18' fill='currentColor' aria-hidden='true'>
+                <path d='M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.65l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25h6.815l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z' />
+              </svg>
+            </a>
+            {localeSwitcher ? (
+              <details className='locale-switch nav-locale-switch' data-locale-switch>
+                <summary
+                  className='locale-trigger locale-trigger-iconic nav-social-link nav-locale-trigger'
+                  aria-label={localeSwitcher.label}
+                  title={localeSwitcher.label}
+                >
+                  <span className='locale-trigger-icon' aria-hidden='true' />
+                </summary>
+                <div className='locale-menu' role='menu'>
+                  {localeSwitcher.options.map((entry) => (
+                    <a
+                      className={`locale-menu-item${entry.code === locale ? ' is-active' : ''}`}
+                      role='menuitem'
+                      data-locale-link
+                      data-locale-code={entry.code}
+                      href={entry.href}
+                      lang={entry.htmlLang}
+                      aria-current={entry.code === locale ? 'true' : undefined}
+                      key={entry.code}
+                    >
+                      <span className='locale-menu-code'>{entry.code.toUpperCase()}</span>
+                      <span className='locale-menu-label'>{entry.label}</span>
+                    </a>
+                  ))}
+                </div>
+              </details>
+            ) : null}
+          </div>
           {/* GitHub star chip — quiet pill so Download stays the only
               strong CTA in the bar. [data-github-stars] is refreshed by the
               header enhancers (homepage inline script / header-enhancer). */}
@@ -582,58 +604,53 @@ export function Header({
           >
             {headerCopy.download}
           </a>
-          {/*
-            OpenDesign Cloud account entry. Signed-out visitors only see the
-            download CTA above; the avatar menu stays `hidden` until the
-            enhancer confirms a live cloud session via
-            `GET {api}/api/auth/get-session`. Config flows through `data-*`
-            because the enhancer script cannot read `import.meta.env`.
-          */}
-          <div
-            className='nav-account'
-            data-amr-account
-            data-amr-api={CLOUD_API_BASE}
-            data-amr-console={CLOUD_CONSOLE_URL}
-          >
-            <details className='nav-account-menu' data-amr-menu hidden>
-              <summary
-                className='nav-account-trigger'
-                aria-label={headerCopy.accountAria}
-                title={headerCopy.accountAria}
-              >
-                <img className='nav-avatar' alt='' data-amr-avatar />
-                <span
-                  className='nav-avatar-fallback'
-                  data-amr-avatar-fallback
-                  aria-hidden='true'
-                />
-              </summary>
-              <div className='nav-account-dropdown' role='menu'>
-                <div className='nav-account-id'>
-                  <span className='nav-account-name' data-amr-name />
-                  <span className='nav-account-email' data-amr-email />
+          {showAccount ? (
+            <div
+              className='nav-account'
+              data-amr-account
+              data-amr-api={CLOUD_API_BASE}
+              data-amr-console={CLOUD_CONSOLE_URL}
+            >
+              <details className='nav-account-menu' data-amr-menu hidden>
+                <summary
+                  className='nav-account-trigger'
+                  aria-label={headerCopy.accountAria}
+                  title={headerCopy.accountAria}
+                >
+                  <img className='nav-avatar' alt='' data-amr-avatar />
+                  <span
+                    className='nav-avatar-fallback'
+                    data-amr-avatar-fallback
+                    aria-hidden='true'
+                  />
+                </summary>
+                <div className='nav-account-dropdown' role='menu'>
+                  <div className='nav-account-id'>
+                    <span className='nav-account-name' data-amr-name />
+                    <span className='nav-account-email' data-amr-email />
+                  </div>
+                  <a
+                    className='nav-account-item'
+                    role='menuitem'
+                    href={CLOUD_CONSOLE_URL}
+                    target='_blank'
+                    rel='noreferrer noopener'
+                    data-amr-console-link
+                  >
+                    {headerCopy.menuConsole}
+                  </a>
+                  <button
+                    type='button'
+                    className='nav-account-item nav-account-signout'
+                    role='menuitem'
+                    data-amr-signout
+                  >
+                    {headerCopy.menuSignOut}
+                  </button>
                 </div>
-                <a
-                  className='nav-account-item'
-                  role='menuitem'
-                  href={CLOUD_CONSOLE_URL}
-                  target='_blank'
-                  rel='noreferrer noopener'
-                  data-amr-console-link
-                >
-                  {headerCopy.menuConsole}
-                </a>
-                <button
-                  type='button'
-                  className='nav-account-item nav-account-signout'
-                  role='menuitem'
-                  data-amr-signout
-                >
-                  {headerCopy.menuSignOut}
-                </button>
-              </div>
-            </details>
-          </div>
+              </details>
+            </div>
+          ) : null}
         </div>
       </div>
       {/*

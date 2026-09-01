@@ -19,6 +19,19 @@ export type ProjectKind =
   | 'video'
   | 'audio';
 
+/**
+ * `metadata.videoModel` value that marks a project as HyperFrames.
+ *
+ * HyperFrames is a local HTML-to-video renderer, so a HyperFrames project is
+ * stored as `kind: 'video'` (the Home surface that offers it) even though the
+ * artifact the user authors, edits and previews is an HTML composition. Every
+ * surface that has to tell HyperFrames apart from a generative video provider
+ * — analytics `project_kind`, the system prompt's media contract, the Home
+ * starters, delivery validation — keys off this exact value, so it lives here
+ * next to `ProjectMetadata` rather than being re-declared per consumer.
+ */
+export const HYPERFRAMES_VIDEO_MODEL = 'hyperframes-html';
+
 export type MediaAspect = '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
 
 export type ProjectPlatform =
@@ -31,6 +44,70 @@ export type ProjectPlatform =
   | 'desktop-app';
 
 export type AudioKind = 'music' | 'speech' | 'sfx';
+
+export type ProjectScenarioBindingProvenance =
+  | 'automatic_default'
+  | 'explicit_user'
+  | 'legacy_unknown';
+
+export type ProjectScenarioTaskProfile =
+  | 'prototype'
+  | 'ppt'
+  | 'marketing'
+  | 'hyperframes';
+
+/**
+ * Daemon-owned identity for the scenario currently pinned to a project.
+ *
+ * The snapshot and plugin ids are deliberately stored together: provenance
+ * is authoritative only while both still match the live project pin. Old
+ * rows that pre-date this contract are migrated to `legacy_unknown` and never
+ * acquire automatic-routing authority by inference.
+ */
+export interface ProjectScenarioBinding {
+  schemaVersion: 1;
+  provenance: ProjectScenarioBindingProvenance;
+  pluginId: string;
+  snapshotId: string;
+  taskProfile?: ProjectScenarioTaskProfile;
+  boundAt: number;
+}
+
+/**
+ * Daemon-owned automatic OD Next route selected at project creation.
+ *
+ * Unlike `ProjectScenarioBinding`, this identity is independent of an
+ * ordinary plugin snapshot. That lets the daemon admit OD Next for a run while
+ * retaining the ordinary default plugin solely as an invisible fallback.
+ */
+export interface ProjectStrategyBinding {
+  schemaVersion: 1;
+  provenance: 'automatic_default';
+  taskProfile: ProjectScenarioTaskProfile;
+  boundAt: number;
+}
+
+/**
+ * Daemon-owned identity of the official example card that seeded this project.
+ *
+ * An example card is a task-type entry point, not a plugin the user chose to
+ * run: it keeps the automatic OD Next route and contributes its material as a
+ * user-selected Skill. So this binding deliberately carries no `snapshotId`
+ * and is never fed into the explicit-plugin tests — naming it must not move
+ * the task onto the ordinary route.
+ *
+ * `pluginSource` is the exact local catalogue identity the daemon re-resolved
+ * the record through, and `manifestSourceDigest` pins the bytes it read. A
+ * later read that cannot reproduce both is stale and carries no authority.
+ */
+export interface ProjectExampleBinding {
+  schemaVersion: 1;
+  provenance: 'example_card';
+  pluginId: string;
+  pluginSource: string;
+  manifestSourceDigest: string;
+  boundAt: number;
+}
 
 export type ProjectDisplayStatus =
   | 'not_started'
@@ -127,7 +204,14 @@ export interface ProjectMetadata {
   // `other`. `webgl-experience` and `worker-visualizer`: the powered-preview
   // GPU / off-main-thread scenario cards — analytics-only discriminators for the
   // powered-artifact chips.
-  intent?: 'live-artifact' | 'web-clone' | 'document' | 'webgl-experience' | 'worker-visualizer';
+  intent?:
+    | 'live-artifact'
+    | 'web-clone'
+    | 'document'
+    | 'webgl-experience'
+    | 'worker-visualizer'
+    | 'marketing'
+    | 'hyperframes';
   fidelity?: 'wireframe' | 'high-fidelity';
   speakerNotes?: boolean;
   slideCount?: string;
@@ -218,6 +302,12 @@ export interface ProjectMetadata {
    * identity is still loading; it is never Workspace ownership or authority.
    */
   localCatalogScopes?: ProjectResourceCatalogScopes;
+  /** Daemon-owned, exact provenance for the scenario currently pinned here. */
+  scenarioBinding?: ProjectScenarioBinding;
+  /** Daemon-owned automatic OD Next route, independent of plugin selection. */
+  strategyBinding?: ProjectStrategyBinding;
+  /** Daemon-owned identity of the official example card that seeded this project. */
+  exampleBinding?: ProjectExampleBinding;
   // Stored on design-system projects so the review overview can remember
   // which generated sections were accepted or sent back for another pass.
   designSystemReview?: Record<string, DesignSystemReviewEntry>;
@@ -330,6 +420,17 @@ export interface Conversation {
   };
 }
 
+/**
+ * Exact local catalogue identity of an official example card, as claimed by
+ * the client. Both fields are required: the daemon looks the record up by
+ * `source` — the same lookup `/api/plugins/:id/apply-local` performs — and
+ * rejects the request when the resolved record's id disagrees with `pluginId`.
+ */
+export interface CreateProjectExampleReference {
+  pluginId: string;
+  source: string;
+}
+
 export interface CreateProjectRequest {
   name: string;
   /** Optional project library location id. Omit or use `default` for .od/projects. */
@@ -347,6 +448,19 @@ export interface CreateProjectRequest {
   pluginSource?: string;
   appliedPluginSnapshotId?: string;
   pluginInputs?: Record<string, unknown>;
+  /** Product-owned automatic OD Next route. The daemon validates and stamps it. */
+  automaticStrategyTaskProfile?: ProjectScenarioTaskProfile;
+  /**
+   * The official example card the user picked under a task type.
+   *
+   * A claim about an identity, never content: the daemon re-resolves the
+   * record through the local catalogue and reads the example's material from
+   * disk. Unlike `pluginId`/`appliedPluginSnapshotId` this does not make the
+   * project an explicit plugin pin, so the automatic OD Next route stays in
+   * force and the example travels as a user-selected Skill instead of
+   * replacing the strategy.
+   */
+  exampleReference?: CreateProjectExampleReference;
   /** Session mode for the default conversation seeded with the project. */
   conversationMode?: ChatSessionMode;
   customInstructions?: string;
@@ -369,6 +483,17 @@ export interface ProjectsResponse {
 
 export interface ProjectResponse {
   project: Project;
+}
+
+export interface RestoreProjectAutomaticScenarioRequest {
+  /** Compare-and-swap guard for the project pin the caller inspected. */
+  expectedCurrentSnapshotId: string | null;
+}
+
+export interface RestoreProjectAutomaticScenarioResponse extends ProjectResponse {
+  scenarioBinding?: ProjectScenarioBinding;
+  strategyBinding?: ProjectStrategyBinding;
+  changed: boolean;
 }
 
 export type ProjectDesignTokenSuggestionProp =

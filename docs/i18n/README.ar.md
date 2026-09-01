@@ -335,7 +335,7 @@ pnpm tools-dev run web
 
 افتح الرابط الذي يطبعه `tools-dev`؛ تُخصَّص منافذ التطوير ديناميكيًا ما لم تمرر أعلام منافذ صريحة.
 
-‏Node `~24`، وpnpm `10.33.x`. مستخدمو Windows، راجعوا [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). البدء السريع الكامل، ومتغيرات البيئة، وNix flake، وسير بناء الحزمة ← [`QUICKSTART.md`](../../QUICKSTART.md).
+‏Node `~24`، وpnpm `10.33.x`. مستخدمو Windows، راجعوا [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). البدء السريع الكامل، ومتغيرات البيئة، وسير بناء الحزمة ← [`QUICKSTART.md`](../../QUICKSTART.md).
 
 ### سير عمل كامل — من الموجز إلى المخرَج
 
@@ -695,11 +695,11 @@ gh pr create --fill
 
 إن وفّر عليك هذا ثلاثين دقيقة، فامنحه ★. النجوم لا تدفع الإيجار — لكنها تخبر المصمم والوكيل والمساهم التالي بأن هذه التجربة تستحق اهتمامهم. نقرة واحدة، وثلاث ثوانٍ، وإشارة حقيقية.
 
-<a href="https://star-history.com/#nexu-io/open-design&Date">
+<a href="https://star-history.dera.page/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-08-04" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
-    <img alt="OpenDesign star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-08-04" />
+    <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+    <img alt="OpenDesign star history" src="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
   </picture>
 </a>
 

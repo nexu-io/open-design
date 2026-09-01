@@ -310,7 +310,9 @@ describe('EntryShell AMR workspace precheck race', () => {
     setHomeHeroPrompt('Create a poster after I sign in.');
     fireEvent.click(await screen.findByTestId('home-hero-submit'));
 
-    await waitFor(() => expect(mockedCheckAmrBalanceGate).toHaveBeenCalledWith(undefined));
+    await waitFor(() => {
+      expect(mockedCheckAmrBalanceGate).toHaveBeenCalledWith(undefined, 'glm-5');
+    });
     const dialog = await screen.findByTestId('amr-balance-dialog');
     expect(dialog.getAttribute('data-reason')).toBe('signed_out');
     expect(onCreateProject).not.toHaveBeenCalled();
@@ -393,7 +395,9 @@ describe('EntryShell AMR workspace precheck race', () => {
     setHomeHeroPrompt('Create through the old daemon compatibility lane.');
     fireEvent.click(await screen.findByTestId('home-hero-submit'));
 
-    await waitFor(() => expect(mockedCheckAmrBalanceGate).toHaveBeenCalledWith(undefined));
+    await waitFor(() => {
+      expect(mockedCheckAmrBalanceGate).toHaveBeenCalledWith(undefined, 'glm-5');
+    });
     await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
   });
 
@@ -890,7 +894,7 @@ describe('EntryShell AMR workspace precheck race', () => {
         workspaceType: 'team',
         workspaceId: 'workspace-a',
         workspaceMemberId: 'member-a',
-      });
+      }, 'glm-5');
     });
 
     currentContext = workspaceB;
@@ -905,7 +909,7 @@ describe('EntryShell AMR workspace precheck race', () => {
         workspaceType: 'team',
         workspaceId: 'workspace-b',
         workspaceMemberId: 'member-b',
-      });
+      }, 'glm-5');
     });
     await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
     expect(onCreateProject).toHaveBeenCalledWith(

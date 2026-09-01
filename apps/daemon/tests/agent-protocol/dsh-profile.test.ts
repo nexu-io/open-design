@@ -321,6 +321,7 @@ describe('DeepSeek Harness profile session controller', () => {
     const child = new FakeDshChild();
     const writes: Array<Record<string, unknown>> = [];
     const events: Array<{ event: string; payload: Record<string, unknown> }> = [];
+    const exactText = '<open_design_prompt_bundle version="1">exact DSH text</open_design_prompt_bundle>';
     child.stdin.on('data', (chunk) => {
       for (const line of String(chunk).trim().split('\n')) {
         if (line) writes.push(JSON.parse(line) as Record<string, unknown>);
@@ -329,7 +330,7 @@ describe('DeepSeek Harness profile session controller', () => {
     const controller = attachDshProfileSession({
       child: child as never,
       requestId: 'run-1',
-      prompt: 'create',
+      prompt: exactText,
       cwd: '/project',
       model: 'deepseek-official/model-1',
       send: (event, payload) => events.push({ event, payload: payload as Record<string, unknown> }),
@@ -338,6 +339,7 @@ describe('DeepSeek Harness profile session controller', () => {
     child.emitFrame(readyFrame);
     assert.equal(writes.length, 1);
     assert.equal(writes[0]?.type, 'execute');
+    assert.equal(writes[0]?.prompt, exactText);
     assert.equal(controller.completedSuccessfully(), false);
     child.emitFrame({ v: 1, type: 'session', request_id: 'run-1', session_id: 'session-1', resumed: false });
     child.emitFrame({ v: 1, type: 'thinking', request_id: 'run-1', content: 'checking' });

@@ -33,6 +33,7 @@ import {
   liveArtifactPreviewUrl,
   openProjectInEditor,
   projectRawUrl,
+  renewProjectPreviewBaseScope,
   refreshLiveArtifact,
   startDesignSystemGenerationJob,
   startDesignSystemRevisionJob,
@@ -94,12 +95,15 @@ afterEach(() => {
 describe('persisted project Workspace transport scope', () => {
   it('mints a srcDoc preview base without client-supplied Workspace authority', async () => {
     const workspaceA = teamContext('workspace-a', 'member-a');
+    const expiresAt = Date.now() + 60 * 60 * 1000;
+    vi.stubGlobal('location', { href: 'od://app/projects/project-1' });
     const fetchMock = vi.fn<typeof fetch>(async () => Response.json({
       url: '/api/projects/project-1/preview/scope-1/pages/brand.html',
       file: 'pages/brand.html',
       csp: "default-src 'none'",
       iframeSandbox: 'allow-scripts allow-forms',
       opaqueOrigin: true,
+      expiresAt,
     }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -107,7 +111,10 @@ describe('persisted project Workspace transport scope', () => {
       'project-1',
       'pages/brand.html',
       workspaceA,
-    )).resolves.toBe('/api/projects/project-1/preview/scope-1/pages/');
+    )).resolves.toEqual({
+      href: 'od://app/api/projects/project-1/preview/scope-1/pages/',
+      expiresAt,
+    });
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/projects/project-1/preview-url?file=pages%2Fbrand.html',
@@ -125,6 +132,7 @@ describe('persisted project Workspace transport scope', () => {
       csp: "default-src 'none'",
       iframeSandbox: 'allow-scripts allow-forms',
       opaqueOrigin: true,
+      expiresAt: Date.now() + 60 * 60 * 1000,
     })));
 
     await expect(fetchProjectPreviewBaseHref(
@@ -132,6 +140,53 @@ describe('persisted project Workspace transport scope', () => {
       'brand.html',
       workspaceA,
     )).resolves.toBeNull();
+  });
+
+  it('keeps previews working while a new web bundle rolls against an older daemon', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-21T00:00:00Z'));
+    vi.stubGlobal('location', { href: 'od://app/projects/project-1' });
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json({
+      url: '/api/projects/project-1/preview/legacy-scope/pages/brand.html',
+      file: 'pages/brand.html',
+      csp: "default-src 'none'",
+      iframeSandbox: 'allow-scripts allow-forms',
+      opaqueOrigin: true,
+    })));
+
+    await expect(fetchProjectPreviewBaseHref(
+      'project-1',
+      'pages/brand.html',
+    )).resolves.toEqual({
+      href: 'od://app/api/projects/project-1/preview/legacy-scope/pages/',
+      expiresAt: Date.now() + 45 * 60 * 1000,
+    });
+    vi.useRealTimers();
+  });
+
+  it('renews only a project-matching preview scope through the host-only route', async () => {
+    const expiresAt = Date.now() + 60 * 60 * 1000;
+    const fetchMock = vi.fn<typeof fetch>(async () => Response.json({ expiresAt }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(renewProjectPreviewBaseScope(
+      'project-1',
+      '/api/projects/project-1/preview/scope-0001/pages/',
+    )).resolves.toBe(expiresAt);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/projects/project-1/preview/scope-0001/renew',
+      {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'x-od-preview-scope-renewal': '1' },
+      },
+    );
+
+    await expect(renewProjectPreviewBaseScope(
+      'project-2',
+      '/api/projects/project-1/preview/scope-0001/pages/',
+    )).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('keeps raw project URLs server-authoritative while scoped streams retain captured A', () => {

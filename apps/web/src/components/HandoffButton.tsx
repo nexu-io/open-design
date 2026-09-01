@@ -12,6 +12,7 @@ import type {
 import {
   handoffTargetIdToTracking,
   type TrackingArtifactKind,
+  type TrackingProjectKind,
 } from '@open-design/contracts/analytics';
 import { fetchHostEditors, openProjectInEditor } from '../providers/registry';
 import { useAnalytics } from '../analytics/provider';
@@ -108,6 +109,7 @@ const FALLBACK_CLI_TARGETS: CliTarget[] = [
 
 interface Props {
   projectId: string;
+  projectKind: TrackingProjectKind;
   projectName?: string;
   projectDir?: string | null;
   agents?: AgentInfo[];
@@ -334,6 +336,7 @@ ${labels.projectId}: ${projectId}
 
 export function HandoffButton({
   projectId,
+  projectKind,
   projectName,
   projectDir,
   agents,
@@ -352,7 +355,7 @@ export function HandoffButton({
   const fireHandoff = (
     props: Omit<
       Parameters<typeof trackHandoffClick>[1],
-      'page_name' | 'area' | 'artifact_id' | 'artifact_kind'
+      'page_name' | 'area' | 'artifact_id' | 'artifact_kind' | 'project_id' | 'project_kind'
     >,
   ) => {
     trackHandoffClick(analytics.track, {
@@ -360,6 +363,8 @@ export function HandoffButton({
       area: 'handoff',
       artifact_id: artifactId,
       artifact_kind: artifactKind,
+      project_id: projectId,
+      project_kind: projectKind,
       ...props,
     });
   };

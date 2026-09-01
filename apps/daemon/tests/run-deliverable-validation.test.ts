@@ -127,6 +127,89 @@ describe('run deliverable validation', () => {
     });
   });
 
+  // Issue: a HyperFrames run delivered an editable root `index.html`, the run
+  // succeeded, and delivery validation still reported `type_mismatch` — which
+  // the OD Next coordinator turns into `od_next_canonical_deliverable_invalid`
+  // and surfaces to the user as "The strategy task could not continue."
+  //
+  // HyperFrames is an HTML-to-video renderer: the composition HTML *is* the
+  // authored deliverable and the MP4 is a render of it. The project rides on
+  // `kind: 'video'` only because that is the Home surface it was created from.
+  describe('hyperframes projects', () => {
+    const hyperFramesMetadata = {
+      kind: 'video' as const,
+      intent: 'hyperframes' as const,
+      videoModel: 'hyperframes-html',
+    };
+
+    it('accepts the authored composition html as the canonical deliverable', async () => {
+      // Mirrors the real project layout: the scaffolded composition lives in a
+      // dot-directory, which `listFiles` skips, so the root `index.html` the
+      // agent writes is the only candidate delivery validation can ever see.
+      const fixture = await projectFixture({
+        'index.html': '<!doctype html><title>Kinetic typography opener</title>',
+        '.hyperframes-cache/opener/hyperframes.json': '{}',
+      });
+
+      await expect(
+        validateRunDeliverable({
+          ...fixture,
+          runStatus: 'succeeded',
+          artifactCount: 1,
+          touchedPaths: ['index.html'],
+          projectMetadata: hyperFramesMetadata,
+        }),
+      ).resolves.toMatchObject({
+        valid: true,
+        validation: 'valid',
+        entryFile: 'index.html',
+        artifactKind: 'html',
+      });
+    });
+
+    it('accepts a rendered mp4 for the same project', async () => {
+      const fixture = await projectFixture({
+        'opener.mp4': 'not-really-an-mp4',
+      });
+
+      await expect(
+        validateRunDeliverable({
+          ...fixture,
+          runStatus: 'succeeded',
+          artifactCount: 1,
+          touchedPaths: ['opener.mp4'],
+          projectMetadata: hyperFramesMetadata,
+        }),
+      ).resolves.toMatchObject({
+        valid: true,
+        validation: 'valid',
+        entryFile: 'opener.mp4',
+        artifactKind: 'video',
+      });
+    });
+
+    it('still rejects html for a generative video project', async () => {
+      const fixture = await projectFixture({
+        'index.html': '<!doctype html><title>Not a video</title>',
+      });
+
+      await expect(
+        validateRunDeliverable({
+          ...fixture,
+          runStatus: 'succeeded',
+          artifactCount: 1,
+          touchedPaths: ['index.html'],
+          projectMetadata: { kind: 'video', videoModel: 'fal/veo-3' },
+        }),
+      ).resolves.toMatchObject({
+        valid: false,
+        validation: 'type_mismatch',
+        entryFile: 'index.html',
+        artifactKind: 'html',
+      });
+    });
+  });
+
   it('does not promote a Studio route or pre-existing file without a run artifact', async () => {
     const fixture = await projectFixture({
       'index.html': '<!doctype html><title>Old artifact</title>',

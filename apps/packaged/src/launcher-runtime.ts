@@ -330,6 +330,7 @@ async function resolvePayloadConfig(
       daemonSidecarEntry: await resolveOptionalPayloadEntry(resourcesPath, raw.daemonSidecarEntryRelative),
       nodeCommand,
       resourceRoot,
+      telemetryRelayUrl: raw.telemetryRelayUrl?.trim() || config.telemetryRelayUrl,
       webOutputMode: webOutputMode as PackagedWebOutputMode,
       webSidecarEntry: await resolveOptionalPayloadEntry(resourcesPath, raw.webSidecarEntryRelative),
       webStandaloneRoot,

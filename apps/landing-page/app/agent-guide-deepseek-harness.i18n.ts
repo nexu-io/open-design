@@ -40,12 +40,6 @@ const DEEPSEEK_HARNESS_HERO_ACTIONS = [
     variant: 'ghost' as const,
     external: true,
   },
-  {
-    label: 'Join the Feishu group',
-    href: 'https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=76ao915b-3a37-43dd-ba0e-152ae1aae78d',
-    variant: 'ghost' as const,
-    external: true,
-  },
 ];
 
 const DEEPSEEK_HARNESS_HERO_ACTIONS_ZH = [
@@ -53,12 +47,6 @@ const DEEPSEEK_HARNESS_HERO_ACTIONS_ZH = [
   {
     label: '加入 Discord',
     href: 'https://discord.gg/mHAjSMV6gz',
-    variant: 'ghost' as const,
-    external: true,
-  },
-  {
-    label: '加入飞书群',
-    href: 'https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=76ao915b-3a37-43dd-ba0e-152ae1aae78d',
     variant: 'ghost' as const,
     external: true,
   },

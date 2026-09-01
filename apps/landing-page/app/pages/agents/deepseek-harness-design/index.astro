@@ -30,7 +30,7 @@ const rich = page.rich;
 const tutorial = deepseekHarnessTutorialCopy(page);
 
 // This is an OpenDesign acquisition page: the hero download is the primary
-// action in every locale, followed by the Discord and Feishu community rooms.
+// action in every locale, followed by the Discord community.
 // Match by stable href so translated labels are kept.
 const heroCtas = rich ? deepseekHarnessHeroCtas(rich.heroCtaActions) : [];
 const finalCtas = rich ? downloadFirstCtas(rich.ctaActions) : [];

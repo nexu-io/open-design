@@ -188,30 +188,11 @@ export function InlineModelSwitcher({
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
-  // Both flags are reserved presentation branches with no trigger wired yet:
-  // `campaignRestricted` (已暂停 badge) is reserved for the backend
-  // usage-limit signal — no trigger wired yet — and `campaignNeedsUpgrade`
-  // (升级可用 badge) is reserved for a real unpaid-audience signal reaching
-  // this component. Until those land, every campaign badge renders the paid
-  // state.
-  const campaignRestricted = false;
+  // This flag is a reserved presentation branch with no trigger wired yet.
+  // It remains available for a real unpaid-audience signal reaching this
+  // component without surfacing an unlimited-use claim in the model picker.
   const campaignNeedsUpgrade = false;
   const campaignVisibility = useDeepSeekV4FlashCampaignVisibility();
-  const campaignModelBadge = campaignRestricted
-    ? t('campaign.deepseekV4Flash.restricted.modelBadge')
-    : campaignNeedsUpgrade
-      ? t('campaign.deepseekV4Flash.unpaid.modelBadge')
-      : t('campaign.deepseekV4Flash.paid.modelBadge');
-  const campaignModelTooltip = campaignRestricted
-    ? t('campaign.deepseekV4Flash.restricted.tooltip')
-    : campaignNeedsUpgrade
-      ? t('campaign.deepseekV4Flash.unpaid.tooltip')
-      : t('campaign.deepseekV4Flash.ruleSummary');
-  const campaignBadgeStateClass = campaignRestricted
-    ? ' is-restricted'
-    : campaignNeedsUpgrade
-      ? ' is-unpaid'
-      : '';
   // recvqfYKutwWlQ: gate the AMR upgrade entry on billing permission below,
   // not just plan tier — a team member without `canManageBilling` (owner-only)
   // can't act on an upgrade even when the tier itself is upgradeable.
@@ -1177,17 +1158,6 @@ export function InlineModelSwitcher({
               aria-hidden="true"
             />
             <span className="inline-switcher__chip-model-name">{chipModel}</span>
-            {deepSeekCampaignVisibleForCurrentExecution
-              && isDeepSeekV4FlashCampaignModel(currentModelId) ? (
-              <span
-                className={`inline-switcher__campaign-badge od-tooltip${campaignBadgeStateClass}`}
-                data-tooltip={campaignModelTooltip}
-                data-tooltip-placement="top"
-                aria-label={campaignModelTooltip}
-              >
-                {campaignModelBadge}
-              </span>
-            ) : null}
           </>
         ) : (
           <>
@@ -1406,8 +1376,6 @@ export function InlineModelSwitcher({
                     // A model above the caller's plan is shown, but honestly:
                     // disabled with the reason the settings picker already uses,
                     // never as a normal row whose click gets reverted.
-                    const campaignModel = deepSeekCampaignVisibleForCurrentExecution
-                      && isDeepSeekV4FlashCampaignModel(m.id);
                     const lockedHint = selectable
                       ? null
                       : t('settings.amrModelUpgradeHint');
@@ -1467,16 +1435,6 @@ export function InlineModelSwitcher({
                           <span className="inline-switcher__agent-name">
                             {m.label}
                           </span>
-                          {campaignModel ? (
-                            <span
-                              className={`inline-switcher__campaign-badge od-tooltip${campaignBadgeStateClass}`}
-                              data-tooltip={campaignModelTooltip}
-                              data-tooltip-placement="top"
-                              aria-label={campaignModelTooltip}
-                            >
-                              {campaignModelBadge}
-                            </span>
-                          ) : null}
                           {lockedHint ? (
                             <span
                               className="inline-switcher__agent-lock"

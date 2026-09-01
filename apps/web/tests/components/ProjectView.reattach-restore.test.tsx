@@ -501,6 +501,79 @@ describe('ProjectView daemon reattach restore', () => {
     window.sessionStorage.clear();
   });
 
+  it('flushes the pending predecessor delta and text event before pinning a task successor', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+
+    let streamOptions: any = null;
+    streamViaDaemon.mockImplementation(async (options: any) => {
+      streamOptions = options;
+      options.onRunCreated('run-request', {
+        taskExecutionId: 'task-live-boundary',
+        strategy: {
+          id: 'od-next-strategy',
+          version: '2.0.0',
+          packageHash: 'e'.repeat(64),
+          snapshotId: 'snapshot-live-boundary',
+        },
+        inputStage: 'request',
+        outcome: 'running',
+        route: 'full_plan',
+        executionMode: 'simple',
+        activeRunId: 'run-request',
+        terminal: false,
+      });
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView();
+    await waitFor(() => expect(chatPaneHarness.onSend).toBeTruthy());
+
+    void chatPaneHarness.onSend!('Build the requested design', [], []);
+    await waitFor(() => expect(streamOptions).not.toBeNull());
+
+    // Leave both values inside createBufferedTextUpdates' 250ms/RAF batch,
+    // then advance the daemon task before that scheduled batch can fire.
+    streamOptions.handlers.onDelta('Final predecessor decision.');
+    streamOptions.handlers.onAgentEvent({ kind: 'text', text: 'Pending predecessor event.' });
+    streamOptions.onRunCreated('run-production', {
+      taskExecutionId: 'task-live-boundary',
+      strategy: {
+        id: 'od-next-strategy',
+        version: '2.0.0',
+        packageHash: 'e'.repeat(64),
+        snapshotId: 'snapshot-live-boundary',
+      },
+      inputStage: 'production',
+      outcome: 'running',
+      route: 'full_plan',
+      executionMode: 'simple',
+      activeRunId: 'run-production',
+      terminal: false,
+    });
+
+    await waitFor(() => {
+      const pinnedSuccessor = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((message) => message?.runId === 'run-production')
+        .at(-1);
+      expect(pinnedSuccessor).toMatchObject({
+        content: 'Final predecessor decision.',
+        events: [{ kind: 'text', text: 'Pending predecessor event.' }],
+        strategyTaskPrefixLength: 'Final predecessor decision.'.length,
+        strategyTaskPrefixEventCount: 1,
+      });
+    });
+  });
+
   it('keeps terminal artifact selection and ignores external project-alias writes', async () => {
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([]);
@@ -708,6 +781,428 @@ describe('ProjectView daemon reattach restore', () => {
       expect(lastWithProduced?.producedFiles?.map((f) => f.name)).toEqual(['new.pptx']);
       expect(lastWithProduced?.runStatus).toBe('succeeded');
     });
+  });
+
+  it('claims the projected active task Run once and drops the predecessor cursor', async () => {
+    const startedAt = Date.now();
+    const visiblePrefix = 'Decision summary.\n';
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-task-crash-window',
+        role: 'assistant',
+        agentId: 'codex',
+        content: visiblePrefix,
+        events: [],
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-request',
+        runStatus: 'succeeded',
+        lastRunEventId: '41',
+        strategyTaskExecutionId: 'task-1',
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-request',
+      status: 'succeeded',
+      createdAt: startedAt,
+      updatedAt: startedAt + 1,
+      exitCode: 0,
+      signal: null,
+      strategyTask: {
+        taskExecutionId: 'task-1',
+        strategy: {
+          id: 'od-next-strategy',
+          version: '2.0.0',
+          packageHash: 'a'.repeat(64),
+          snapshotId: 'snapshot-1',
+        },
+        inputStage: 'production',
+        outcome: 'running',
+        route: 'full_plan',
+        executionMode: 'simple',
+        activeRunId: 'run-production',
+        nextRunId: 'run-production',
+        terminal: false,
+      },
+    });
+    reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(reattachDaemonRun).toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run-production',
+      initialLastEventId: null,
+      publishRunFinishedEvent: true,
+    }));
+    await waitFor(() => {
+      const normalized = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((message) => message?.id === 'msg-task-crash-window')
+        .at(-1);
+      expect(normalized).toMatchObject({
+        runId: 'run-production',
+        runStatus: 'running',
+        content: visiblePrefix,
+        strategyTaskPrefixLength: visiblePrefix.length,
+        strategyTaskPrefixEventCount: 0,
+      });
+      expect(normalized?.lastRunEventId).toBeUndefined();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(reattachDaemonRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves the predecessor visible prefix while replaying only the active successor', async () => {
+    const startedAt = Date.now();
+    const visiblePrefix = 'Decision summary.\n';
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-task-prefix',
+        role: 'assistant',
+        agentId: 'codex',
+        content: visiblePrefix,
+        events: [],
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-request-prefix',
+        runStatus: 'succeeded',
+        lastRunEventId: '9',
+        strategyTaskExecutionId: 'task-prefix',
+        preTurnFileNames: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    const runningProjection = {
+      taskExecutionId: 'task-prefix',
+      strategy: {
+        id: 'od-next-strategy',
+        version: '2.0.0',
+        packageHash: 'b'.repeat(64),
+        snapshotId: 'snapshot-prefix',
+      },
+      inputStage: 'production',
+      outcome: 'running',
+      route: 'full_plan',
+      executionMode: 'simple',
+      activeRunId: 'run-production-prefix',
+      nextRunId: 'run-production-prefix',
+      terminal: false,
+    };
+    fetchChatRunStatus
+      .mockResolvedValueOnce({
+        id: 'run-request-prefix',
+        status: 'succeeded',
+        createdAt: startedAt,
+        updatedAt: startedAt + 1,
+        exitCode: 0,
+        signal: null,
+        strategyTask: runningProjection,
+      })
+      .mockResolvedValue({
+        id: 'run-production-prefix',
+        status: 'succeeded',
+        createdAt: startedAt + 2,
+        updatedAt: startedAt + 3,
+        exitCode: 0,
+        signal: null,
+        strategyTask: {
+          ...runningProjection,
+          outcome: 'completed',
+          nextRunId: undefined,
+          terminal: true,
+        },
+      });
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      options.handlers.onDelta('Final delivery.');
+      options.onRunStatus('succeeded');
+      await options.handlers.onDone();
+    });
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(reattachDaemonRun).toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run-production-prefix',
+      initialLastEventId: null,
+    }));
+    await waitFor(() => {
+      const finalized = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter(
+          (message) =>
+            message?.id === 'msg-task-prefix'
+            && message.runStatus === 'succeeded',
+        )
+        .at(-1);
+      expect(finalized?.runId).toBe('run-production-prefix');
+      expect(finalized?.content).toBe(`${visiblePrefix}Final delivery.`);
+    });
+    expect(reattachDaemonRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the stored task prefix when a successor replay replaces partial local output', async () => {
+    const startedAt = Date.now();
+    const visiblePrefix = 'Decision summary.\n';
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-task-successor-retry',
+        role: 'assistant',
+        agentId: 'codex',
+        content: `${visiblePrefix}partial successor`,
+        events: [],
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-production-retry',
+        runStatus: 'running',
+        lastRunEventId: '12',
+        strategyTaskExecutionId: 'task-retry',
+        strategyTaskPrefixLength: visiblePrefix.length,
+        strategyTaskPrefixEventCount: 0,
+        preTurnFileNames: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    const projection = {
+      taskExecutionId: 'task-retry',
+      strategy: {
+        id: 'od-next-strategy',
+        version: '2.0.0',
+        packageHash: 'd'.repeat(64),
+        snapshotId: 'snapshot-retry',
+      },
+      inputStage: 'production',
+      outcome: 'running',
+      route: 'full_plan',
+      executionMode: 'simple',
+      activeRunId: 'run-production-retry',
+      terminal: false,
+    };
+    fetchChatRunStatus
+      .mockResolvedValueOnce({
+        id: 'run-production-retry',
+        status: 'running',
+        createdAt: startedAt,
+        updatedAt: startedAt + 1,
+        exitCode: null,
+        signal: null,
+        strategyTask: projection,
+      })
+      .mockResolvedValue({
+        id: 'run-production-retry',
+        status: 'succeeded',
+        createdAt: startedAt,
+        updatedAt: startedAt + 2,
+        exitCode: 0,
+        signal: null,
+        strategyTask: {
+          ...projection,
+          outcome: 'completed',
+          terminal: true,
+        },
+      });
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      options.handlers.onDelta('Final delivery.');
+      options.onRunStatus('succeeded');
+      await options.handlers.onDone();
+    });
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(reattachDaemonRun).toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run-production-retry',
+      initialLastEventId: null,
+    }));
+    await waitFor(() => {
+      const finalized = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter(
+          (message) =>
+            message?.id === 'msg-task-successor-retry'
+            && message.runStatus === 'succeeded',
+        )
+        .at(-1);
+      expect(finalized?.content).toBe(`${visiblePrefix}Final delivery.`);
+    });
+  });
+
+  it('persists the task prefix before same-successor replay and keeps stale partial output out of errors', async () => {
+    const startedAt = Date.now();
+    const visiblePrefix = 'Decision summary.\n';
+    const staleSuffix = 'stale partial successor';
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-task-successor-error',
+        role: 'assistant',
+        agentId: 'codex',
+        content: `${visiblePrefix}${staleSuffix}`,
+        events: [],
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-production-error',
+        runStatus: 'running',
+        lastRunEventId: '27',
+        strategyTaskExecutionId: 'task-error',
+        strategyTaskPrefixLength: visiblePrefix.length,
+        strategyTaskPrefixEventCount: 0,
+        preTurnFileNames: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-production-error',
+      status: 'running',
+      createdAt: startedAt,
+      updatedAt: startedAt + 1,
+      exitCode: null,
+      signal: null,
+      strategyTask: {
+        taskExecutionId: 'task-error',
+        strategy: {
+          id: 'od-next-strategy',
+          version: '2.0.0',
+          packageHash: 'f'.repeat(64),
+          snapshotId: 'snapshot-error',
+        },
+        inputStage: 'production',
+        outcome: 'running',
+        route: 'full_plan',
+        executionMode: 'simple',
+        activeRunId: 'run-production-error',
+        terminal: false,
+      },
+    });
+    let capturedHandlers: { onError: (error: Error) => Promise<void> } | null = null;
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      capturedHandlers = options.handlers;
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      const prefixOnlySave = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((message) => message?.id === 'msg-task-successor-error')
+        .at(-1);
+      expect(prefixOnlySave?.content).toBe(visiblePrefix);
+      expect(prefixOnlySave?.content).not.toContain(staleSuffix);
+    });
+
+    await capturedHandlers!.onError(new Error('successor replay blocked'));
+
+    await waitFor(() => {
+      const failed = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter(
+          (message) =>
+            message?.id === 'msg-task-successor-error'
+            && message.runStatus === 'failed',
+        )
+        .at(-1);
+      expect(failed?.content).toBe(visiblePrefix);
+      expect(failed?.content).not.toContain(staleSuffix);
+    });
+  });
+
+  it('does not replay an already-terminal logical task merely to probe its projection', async () => {
+    const startedAt = Date.now();
+    const finalContent = 'Decision summary.\nFinal delivery.';
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-task-terminal',
+        role: 'assistant',
+        agentId: 'codex',
+        content: finalContent,
+        events: [],
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-task-terminal',
+        runStatus: 'succeeded',
+        strategyTaskExecutionId: 'task-terminal',
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-task-terminal',
+      status: 'succeeded',
+      createdAt: startedAt,
+      updatedAt: startedAt + 1,
+      exitCode: 0,
+      signal: null,
+      strategyTask: {
+        taskExecutionId: 'task-terminal',
+        strategy: {
+          id: 'od-next-strategy',
+          version: '2.0.0',
+          packageHash: 'c'.repeat(64),
+          snapshotId: 'snapshot-terminal',
+        },
+        inputStage: 'production',
+        outcome: 'completed',
+        route: 'full_plan',
+        executionMode: 'simple',
+        activeRunId: 'run-task-terminal',
+        terminal: true,
+      },
+    });
+
+    renderProjectView();
+
+    await waitFor(() => expect(fetchChatRunStatus).toHaveBeenCalledTimes(1));
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+    expect(
+      saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .some(
+          (message) =>
+            message?.id === 'msg-task-terminal'
+            && message.content !== finalContent,
+        ),
+    ).toBe(false);
   });
 
   it('does not publish a run-finished event while replaying a historical success', async () => {

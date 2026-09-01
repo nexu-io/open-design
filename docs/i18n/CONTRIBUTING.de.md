@@ -218,7 +218,12 @@ Wir sind beim Formatting nicht pedantisch (Prettier on save ist okay), aber zwei
 Außerdem:
 
 - **Nicht erzählen.** Kein `// import the module`, kein `// loop through items`.
-- **TypeScript** für `apps/web/src/`. Der daemon (`apps/daemon/`) ist plain ESM JavaScript mit JSDoc, wenn Typen wichtig sind.
+- **TypeScript-first.** Verwende TypeScript für projekteigene Einstiegspunkte,
+  Module, Skripte, Tests, Reporter und Konfigurationen, einschließlich des Codes
+  in `apps/web/src/` und `apps/daemon/src/`. Neue `.js`-, `.mjs`- oder
+  `.cjs`-Dateien sind nur als generierte Dateien, eingebundener Fremdcode oder
+  aus ausdrücklich dokumentierten Kompatibilitätsgründen zulässig und müssen
+  `pnpm guard` bestehen.
 - **Keine neuen Top-Level Dependencies** ohne Absatz in der PR-Beschreibung, was sie bringen und wie viele Bytes sie kosten.
 - **Vor dem Push `pnpm typecheck` ausführen.** CI tut es auch.
 

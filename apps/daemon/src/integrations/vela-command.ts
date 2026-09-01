@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { isAbortedOperationError } from './aborted-error.js';
 
 import {
   collectProcessTreePids,
@@ -340,3 +341,7 @@ export function runVelaCommand(
     }
   });
 }
+
+// Re-exported so the vela-facing name stays available to callers that already
+// think in terms of vela commands; the implementation carries no dependencies.
+export { isAbortedOperationError as isAbortedVelaCommandError };

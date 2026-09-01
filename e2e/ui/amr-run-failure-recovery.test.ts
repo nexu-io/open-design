@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { expect, test } from '@/playwright/suite';
+import { ACTIVE_ARTIFACT_PREVIEW_SELECTOR } from '@/playwright/artifact-preview';
 import type { Page } from '@playwright/test';
 
 import { writeFakeVelaBin, seedVelaLoginConfig } from '@/amr';
@@ -24,7 +25,6 @@ import {
 } from '@/playwright/amr';
 
 let codexRuntime: Awaited<ReturnType<typeof createFakeAgentRuntimes>>['codex'];
-const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 const AMR_AGENT = {
   id: 'amr',
   name: 'OpenDesign AMR',

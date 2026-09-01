@@ -4,21 +4,21 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { hashJson, hashPath, type CacheNode, ToolPackCache } from "../cache.js";
-import type { ToolPackConfig } from "../config.js";
+import { hashJson, hashPath, type CacheNode, ToolPackCache } from "../cache/index.js";
+import type { ToolPackConfig } from "../config/index.js";
 import { domToPptxBundleResource } from "../dom-to-pptx-resource.js";
 import {
   assertNodePtyRuntime,
   validateNodePtyRuntime,
 } from "../node-pty-runtime.js";
-import { winResources } from "../resources.js";
-import { electronBuilderVersionForAppVersion, versionCoreForAppVersion } from "../versions.js";
+import { winResources } from "../resources/index.js";
+import { electronBuilderVersionForAppVersion, versionCoreForAppVersion } from "../versioning/index.js";
 import {
   WIN_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH,
   WIN_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH,
   WIN_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH,
   shouldUseWinStandalonePrebundle,
-} from "../win-prebundle.js";
+} from "./prebundle.js";
 import {
   buildCustomWinNsisInstaller,
   hashWinNsisBasePayloadInputs,

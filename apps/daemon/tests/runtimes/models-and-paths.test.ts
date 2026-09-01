@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   isKnownModel,
+  mergeFallbackModelMetadata,
   rememberLiveModels,
   sanitizeCustomModel,
 } from '../../src/runtimes/models.js';
@@ -69,6 +70,34 @@ describe('rememberLiveModels', () => {
     const def = defWith('alpha-remember-nonarray', []);
     expect(() => rememberLiveModels(def.id, undefined as never)).not.toThrow();
     expect(isKnownModel(def, 'anything')).toBe(false);
+  });
+});
+
+describe('mergeFallbackModelMetadata', () => {
+  it('adds model-scoped reasoning options to a matching live catalog entry only', () => {
+    const def = defWith('opencode-model-metadata', []);
+    def.fallbackModels = [{
+      id: 'openai/gpt-5.6-sol',
+      label: 'GPT-5.6 Sol',
+      reasoningOptions: [
+        { id: 'default', label: 'Default' },
+        { id: 'high', label: 'High' },
+      ],
+    }];
+    expect(mergeFallbackModelMetadata(def, [
+      { id: 'openai/gpt-5.6-sol', label: 'Live Sol' },
+      { id: 'anthropic/claude-sonnet-4-5', label: 'Live Claude' },
+    ])).toEqual([
+      {
+        id: 'openai/gpt-5.6-sol',
+        label: 'Live Sol',
+        reasoningOptions: [
+          { id: 'default', label: 'Default' },
+          { id: 'high', label: 'High' },
+        ],
+      },
+      { id: 'anthropic/claude-sonnet-4-5', label: 'Live Claude' },
+    ]);
   });
 });
 

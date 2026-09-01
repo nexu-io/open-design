@@ -34,6 +34,11 @@ vi.mock('electron', () => {
         return true;
       },
       on: () => undefined,
+      // Real Electron webContents is an EventEmitter; the renderer's document
+      // load waits on `once('dom-ready')`. The stub's loadURL resolves
+      // immediately, so a no-op is faithful here — the load simply never has a
+      // dom-ready to race against.
+      once: () => undefined,
       printToPDF: async () => Buffer.from('pdf'),
       setWindowOpenHandler: () => undefined,
     };

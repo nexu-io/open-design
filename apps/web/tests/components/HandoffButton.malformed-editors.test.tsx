@@ -50,7 +50,7 @@ function mockRawEditorsResponse(body: unknown) {
 function renderHandoff() {
   render(
     <I18nProvider initial="en">
-      <HandoffButton projectId="p1" projectDir="/tmp/p1" />
+      <HandoffButton projectId="p1" projectKind="prototype" projectDir="/tmp/p1" />
     </I18nProvider>,
   );
 }

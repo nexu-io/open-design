@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 
 import { NtExecutable, NtExecutableResource, Resource } from "resedit";
 
-import { electronBuilderVersionForAppVersion, versionCoreForAppVersion } from "../versions.js";
+import { electronBuilderVersionForAppVersion, versionCoreForAppVersion } from "../versioning/index.js";
 
 type VersionTranslation = {
   codepage: number;

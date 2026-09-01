@@ -3,6 +3,10 @@ import Layout from '../../../_components/sub-page-layout.astro';
 import '../../../globals.css';
 import '../../../sub-pages.css';
 import '../../../community.css';
+import { localeFromPath, localizedHref } from '../../../i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
 
 const title = 'OpenDesign Events';
 const description =
@@ -31,7 +35,7 @@ const jsonLd = {
     </section>
 
     <section class="events-section events-lead">
-      <a class="event-launch" href="/community/events/launch-week/">
+      <a class="event-launch" href={href('/community/events/launch-week/')}>
         <span class="event-launch-media">
           <img
             src="/launch-week/launch-week-card.jpg"
@@ -57,7 +61,7 @@ const jsonLd = {
           <p class="events-kicker">Latest recap</p>
           <h2>OpenDesign Hong Kong Workshop</h2>
         </div>
-        <a class="event-feature" href="/community/open-design-hong-kong-workshop/">
+        <a class="event-feature" href={href('/community/open-design-hong-kong-workshop/')}>
           <span class="event-feature-media">
             <img
               src="/stories/open-design-hong-kong-workshop-cover.webp"
@@ -85,7 +89,7 @@ const jsonLd = {
           <h2>More from the community.</h2>
         </div>
         <div class="event-grid">
-          <a class="event-card" href="/community/open-design-shanghai-workshop/">
+          <a class="event-card" href={href('/community/open-design-shanghai-workshop/')}>
             <span class="event-card-media">
               <img
                 src="/stories/open-design-shanghai-workshop-cover.webp"
@@ -103,7 +107,7 @@ const jsonLd = {
               <span class="event-link">Read the recap -></span>
             </span>
           </a>
-          <a class="event-card" href="/community/open-design-osaka-meetup/">
+          <a class="event-card" href={href('/community/open-design-osaka-meetup/')}>
             <span class="event-card-media">
               <img
                 src="/stories/osaka-kyoto-group-room.jpg"

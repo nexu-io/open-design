@@ -307,9 +307,9 @@ describe('GET /api/integrations/vela/wallet', () => {
 
   it('fetches the AMR wallet balance with the local control key and caches it briefly', async () => {
     const walletApi = await startWalletApi((req, res) => {
-      expect(req.url).toBe('/api/v1/wallet/balance');
       expect(req.headers.authorization).toBe('Bearer ck-wallet-balance');
       res.setHeader('content-type', 'application/json');
+      expect(req.url).toBe('/api/v1/wallet/balance');
       res.end(JSON.stringify({
         balanceUsd: '0.1000',
         updatedAt: '2026-06-23T06:05:18.782Z',
@@ -538,11 +538,11 @@ describe('GET /api/integrations/vela/wallet', () => {
   });
 
   it('does not serve a cached wallet balance after the control key is rejected', async () => {
-    let requestCount = 0;
-    const walletApi = await startWalletApi((_req, res) => {
-      requestCount += 1;
+    let walletRequestCount = 0;
+    const walletApi = await startWalletApi((req, res) => {
       res.setHeader('content-type', 'application/json');
-      if (requestCount === 1) {
+      walletRequestCount += 1;
+      if (walletRequestCount === 1) {
         res.end(JSON.stringify({
           balanceUsd: '0.1000',
           updatedAt: '2026-06-23T06:05:18.782Z',
@@ -3315,6 +3315,7 @@ describe('parseAmrEntryAnalyticsPayload — entry sources added in this PR', () 
     const cases: Array<[string, string]> = [
       ['settings_amr_upgrade', 'settings'],
       ['inline_amr_upgrade', 'chat_panel'],
+      ['go_plan_sunset_modal', 'home'],
       ['deepseek_unpaid_modal', 'home'],
       ['deepseek_workbench_badge', 'home'],
       ['deepseek_model_switcher_upgrade', 'chat_panel'],
@@ -3361,6 +3362,18 @@ describe('parseAmrEntryAnalyticsPayload — entry sources added in this PR', () 
     expect(parsed).toMatchObject({
       campaignId: 'deepseek_v4_pro',
       conversionSource: 'deepseek_workbench_badge',
+    });
+  });
+
+  it('accepts the targeted Go Plan sunset campaign dimensions', () => {
+    const parsed = parseAmrEntryAnalyticsPayload({
+      ...payloadFor('go_plan_sunset_modal', 'home'),
+      campaignId: 'go_plan_sunset_202608',
+      conversionSource: 'go_plan_sunset_modal',
+    });
+    expect(parsed).toMatchObject({
+      campaignId: 'go_plan_sunset_202608',
+      conversionSource: 'go_plan_sunset_modal',
     });
   });
 

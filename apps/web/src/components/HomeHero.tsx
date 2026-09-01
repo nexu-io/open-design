@@ -60,7 +60,6 @@ import { ScenarioArt } from './home-hero/ScenarioArt';
 import { useEdgeAutoScroll, EdgeScrollZones } from './home-hero/EdgeAutoScroll';
 import {
   isSubChipParent,
-  prototypeSubChipForSlug,
   subChipsForChip,
   type HomeHeroSubChip,
 } from './home-hero/sub-chips';
@@ -452,18 +451,15 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   // the suggestions match the picked output and a submit keeps that template);
   // with nothing bound we cycle the full set. Memoised by chip + locale so the
   // reference only changes on a real switch, which restarts the carousel.
-  const carouselScenarios = useMemo<PlaceholderScenario[]>(() => {
-    const nestedActionChipId =
-      activeChipId === 'prototype'
-        ? prototypeSubChipForSlug(activePrototypeSubtypeId ?? null)?.actionChipId ?? null
-        : null;
-    return buildPlaceholderScenarios({
-      activeChipId: nestedActionChipId ?? activeChipId,
-      resolveTextKey: (key) => t(key),
-      examplesForChip: (chipId) => homeHeroChipPromptExamples(chipId, locale),
-      fallbackForChip: (chipId) => fallbackPlaceholderScenarioText(chipId, locale, t),
-    });
-  }, [activeChipId, activePrototypeSubtypeId, locale, t]);
+  const carouselScenarios = useMemo<PlaceholderScenario[]>(() => buildPlaceholderScenarios({
+    activeChipId,
+    // The scene narrows the parent's lines; it is not a template of its own, so
+    // prompt-example and label fallbacks still key off the parent task type.
+    activePrototypeSubtypeId: activeChipId === 'prototype' ? activePrototypeSubtypeId ?? null : null,
+    resolveTextKey: (key) => t(key),
+    examplesForChip: (chipId) => homeHeroChipPromptExamples(chipId, locale),
+    fallbackForChip: (chipId) => fallbackPlaceholderScenarioText(chipId, locale, t),
+  }), [activeChipId, activePrototypeSubtypeId, locale, t]);
   // The placeholder carousel runs while the composer is empty and nothing
   // OTHER than a create-template chip is bound. A selected template keeps it
   // alive (showing that template's scenarios); only an explicit plugin/skill

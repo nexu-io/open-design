@@ -333,7 +333,7 @@ pnpm tools-dev run web
 
 Відкрийте URL, надрукований `tools-dev`; без явних портових прапорців порти розробки призначаються динамічно.
 
-Node `~24`, pnpm `10.33.x`. Користувачі Windows, див. [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). Повний швидкий старт, змінні середовища, Nix flake та процес упакованого збирання → [`QUICKSTART.md`](../../QUICKSTART.md).
+Node `~24`, pnpm `10.33.x`. Користувачі Windows, див. [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). Повний швидкий старт, змінні середовища та процес упакованого збирання → [`QUICKSTART.md`](../../QUICKSTART.md).
 
 ### Повний робочий процес — від брифа до артефакта
 
@@ -693,11 +693,11 @@ SVG вище щодня перегенеровується [`.github/workflows/m
 
 Якщо це зекономило вам тридцять хвилин, поставте ★. Зірки не платять за оренду — але вони кажуть наступному дизайнеру, агенту й контриб'ютору, що цей експеримент вартий їхньої уваги. Один клік, три секунди, реальний сигнал.
 
-<a href="https://star-history.com/#nexu-io/open-design&Date">
+<a href="https://star-history.dera.page/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-08-04" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
-    <img alt="OpenDesign star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-08-04" />
+    <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+    <img alt="OpenDesign star history" src="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
   </picture>
 </a>
 

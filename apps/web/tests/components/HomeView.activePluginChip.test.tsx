@@ -19,9 +19,11 @@ function activeFor(
   pluginId: string,
   chipId: string | null,
   explicitPick: boolean,
+  examplePick = false,
 ): ActivePlugin {
   // Only `record.id`, `chipId`, and `explicitPick` drive the gate; the rest is
-  // padded to satisfy the type.
+  // padded to satisfy the type. `examplePick` narrows `explicitPick` for
+  // ROUTING only — this gate must stay blind to it.
   return {
     record: { id: pluginId } as ActivePlugin['record'],
     result: null,
@@ -39,6 +41,7 @@ function activeFor(
     preserveInputFields: false,
     suppressPromptSync: false,
     explicitPick,
+    examplePick,
   };
 }
 
@@ -48,6 +51,17 @@ describe('shouldShowActivePluginChip', () => {
     expect(
       shouldShowActivePluginChip(
         activeFor('example-web-prototype', 'prototype', true),
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps surfacing the chip for an example-rail pick that yields its route to OD Next', () => {
+    // An official example card is `explicitPick` AND `examplePick`. Only the
+    // routing gates read the second bit; the composer chrome must be identical
+    // to any other explicit pick, so the plugin chip (and its clear ×) stays.
+    expect(
+      shouldShowActivePluginChip(
+        activeFor('example-web-prototype', 'prototype', true, true),
       ),
     ).toBe(true);
   });

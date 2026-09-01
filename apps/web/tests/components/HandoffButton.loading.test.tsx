@@ -60,7 +60,7 @@ describe('HandoffButton loading feedback (#100)', () => {
 
     render(
       <I18nProvider initial="en">
-        <HandoffButton projectId="p1" projectDir="/tmp/p1" />
+        <HandoffButton projectId="p1" projectKind="prototype" projectDir="/tmp/p1" />
       </I18nProvider>,
     );
 
@@ -85,7 +85,7 @@ describe('HandoffButton loading feedback (#100)', () => {
 
     render(
       <I18nProvider initial="en">
-        <HandoffButton projectId="p1" projectDir="/tmp/p1" />
+        <HandoffButton projectId="p1" projectKind="prototype" projectDir="/tmp/p1" />
       </I18nProvider>,
     );
 

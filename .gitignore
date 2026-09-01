@@ -50,6 +50,7 @@ apps/desktop/vendor/dom-to-pptx/dom-to-pptx.bundle.js
 
 .cursor/
 .agents/
+.pi/
 .opencode/
 .claude/*
 # Exception: od-contribute skill ships with the repo so the OD app can mount it
@@ -71,7 +72,7 @@ specs/change/active
 .ralph/
 docs/superpowers/
 
-# Nix and direnv
+# direnv
 .direnv/
 .envrc
 # Local secrets (PostHog keys, BYOK creds for local testing, etc.)

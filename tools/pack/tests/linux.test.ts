@@ -25,7 +25,7 @@ vi.mock("@open-design/sidecar", async (importOriginal) => {
   };
 });
 
-import type { ToolPackConfig } from "../src/config.js";
+import type { ToolPackConfig } from "@/config/index.js";
 import {
   buildDockerArgs,
   cleanupPackedLinuxNamespace,
@@ -42,7 +42,7 @@ import {
   stopPackedLinuxApp,
   sanitizeNamespace,
   stopPackedLinuxHeadless,
-} from "../src/linux.js";
+} from "@/linux.js";
 
 async function pathExists(path: string): Promise<boolean> {
   try {

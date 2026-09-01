@@ -42,6 +42,11 @@ const WEB_OUTPUT_MODE_ENV = "OD_WEB_OUTPUT_MODE";
 const WEB_STANDALONE_ROOT_ENV = "OD_WEB_STANDALONE_ROOT";
 const STANDALONE_PARENT_PID_ENV = "OD_STANDALONE_PARENT_PID";
 const STANDALONE_STARTUP_TIMEOUT_ENV = "OD_STANDALONE_STARTUP_TIMEOUT_MS";
+// Synthesized for daemon-routed paths when no daemon origin is configured:
+// same plain-text errno shape as a dead-daemon proxy failure so the web app's
+// isDaemonProxyConnectionFailure recognizes it as an outage.
+const DAEMON_PROXY_UNAVAILABLE_MESSAGE =
+  `connect ECONNREFUSED (${DAEMON_PORT_ENV} is not set; the web runtime has no daemon origin)`;
 const SHUTDOWN_TIMEOUT_MS = 3000;
 const STANDALONE_READINESS_POLL_MS = 150;
 const STANDALONE_TCP_READINESS_GRACE_MS = STANDALONE_READINESS_POLL_MS;
@@ -215,7 +220,23 @@ function shouldUseStandaloneOutput(runtime: SidecarRuntimeContext<SidecarStamp>)
 
 function resolveDaemonOrigin(): string | null {
   const port = parsePort(process.env[DAEMON_PORT_ENV]);
-  return port === 0 ? null : `http://${DAEMON_HOST}:${port}`;
+  if (port === 0) {
+    console.warn(
+      `[open-design web] ${DAEMON_PORT_ENV} is not set; /api, /artifacts and /frames will answer ${DAEMON_PROXY_UNAVAILABLE_MESSAGE}`,
+    );
+    return null;
+  }
+  return `http://${DAEMON_HOST}:${port}`;
+}
+
+function resolveRequestPathname(requestUrl: string | undefined): string | null {
+  if (requestUrl == null) return null;
+
+  try {
+    return new URL(requestUrl, `http://${HOST}`).pathname;
+  } catch {
+    return null;
+  }
 }
 
 function isDaemonProxyPathname(pathname: string): boolean {
@@ -1018,6 +1039,20 @@ export function createDaemonProxyHandler(
         response.statusCode = 502;
         response.end(error instanceof Error ? error.message : String(error));
       });
+      return;
+    }
+
+    // Daemon-routed pathnames must never fall through to the SPA shell: the
+    // Next.js catch-all answers every path with 200 text/html, which browser
+    // callers parse as JSON and crash on. With no daemon origin there is no
+    // proxy target, so answer as the connection-level outage it is.
+    if (
+      daemonOrigin == null &&
+      isDaemonProxyPathname(resolveRequestPathname(request.url) ?? "")
+    ) {
+      response.statusCode = 502;
+      response.setHeader("content-type", "text/plain; charset=utf-8");
+      response.end(DAEMON_PROXY_UNAVAILABLE_MESSAGE);
       return;
     }
 

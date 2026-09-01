@@ -4,10 +4,10 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import type { ToolPackConfig } from "../src/config.js";
-import { INTERNAL_PACKAGES } from "../src/win/constants.js";
-import { createWinPackagedAppCacheKey, createWorkspaceTarballsCacheKey } from "../src/win/app.js";
-import type { PackedTarballInfo } from "../src/win/types.js";
+import type { ToolPackConfig } from "@/config/index.js";
+import { INTERNAL_PACKAGES } from "@/win/constants.js";
+import { createWinPackagedAppCacheKey, createWorkspaceTarballsCacheKey } from "@/win/app.js";
+import type { PackedTarballInfo } from "@/win/types.js";
 
 const PACKAGE_DIRS = INTERNAL_PACKAGES.map((packageInfo) => packageInfo.directory);
 

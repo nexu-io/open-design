@@ -6,14 +6,14 @@ import { promisify } from "node:util";
 import { rebuild } from "@electron/rebuild";
 import { createCommandInvocation, createPackageManagerInvocation } from "@open-design/platform";
 
-import { hashJson, hashPath, ToolPackCache } from "../cache.js";
-import type { ToolPackConfig } from "../config.js";
+import { hashJson, hashPath, ToolPackCache } from "../cache/index.js";
+import type { ToolPackConfig } from "../config/index.js";
 import {
   prepareNodePtyRuntime,
   validateNodePtyRuntime,
 } from "../node-pty-runtime.js";
 import { hashPackageSourcePath } from "../package-source-hash.js";
-import { electronBuilderVersionForAppVersion } from "../versions.js";
+import { electronBuilderVersionForAppVersion } from "../versioning/index.js";
 import {
   WIN_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER,
   WIN_PREBUNDLE_ESBUILD_TARGET,
@@ -30,7 +30,7 @@ import {
   renderWinPackagedMainEntry,
   shouldInstallInternalPackageForWinPrebundle,
   shouldUseWinStandalonePrebundle,
-} from "../win-prebundle.js";
+} from "./prebundle.js";
 import { processWebSourcemaps } from "../web-sourcemaps.js";
 import { ensureWorkspaceBuildArtifacts } from "../workspace-build.js";
 import {

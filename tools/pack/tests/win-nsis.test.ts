@@ -4,9 +4,9 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import type { ToolPackConfig } from "../src/config.js";
-import { writeNsisInclude } from "../src/win/nsis.js";
-import type { WinPaths } from "../src/win/types.js";
+import type { ToolPackConfig } from "@/config/index.js";
+import { writeNsisInclude } from "@/win/nsis.js";
+import type { WinPaths } from "@/win/types.js";
 
 function makeConfig(namespaceRoot: string): ToolPackConfig {
   return {

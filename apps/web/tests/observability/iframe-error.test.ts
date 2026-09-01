@@ -179,6 +179,86 @@ describe('preview iframe observability', () => {
     );
   });
 
+  // OPEND-2147. Without its own branch this measurement falls through to the
+  // generic runtime-error path and is filed as a script crash that never
+  // happened, which is worse than not reporting it: it points the next reader
+  // at the artifact's JavaScript instead of at its layout.
+  it('files a collapsed deck stage as its own measurement, not a script crash', () => {
+    reportPreviewIframeMessage({
+      type: PREVIEW_OBSERVABILITY_MESSAGE_TYPE,
+      version: 1,
+      event: 'deck_stage_unscaled',
+      stage_kind: 'deck-stage',
+      stage_scale_permille: 0,
+      stage_transform: 'matrix',
+      stage_width: 0,
+      stage_height: 0,
+      canvas_width: 1920,
+      canvas_height: 1080,
+      viewport_width: 1075,
+      viewport_height: 530,
+      ready_state: 'complete',
+      visibility_state: 'visible',
+      elapsed_ms: 5000,
+    }, { surface: 'artifact_preview', renderMode: 'srcdoc', artifactKind: 'slide_deck' }, new Set());
+
+    expect(reportSafetyEvent).toHaveBeenCalledWith('client_preview_deck_stage_unscaled', expect.objectContaining({
+      surface: 'artifact_preview',
+      render_mode: 'srcdoc',
+      // Frequency alone cannot triage this: three authored shapes can collapse,
+      // and which one did is the whole reason the bridge sends stage_kind.
+      stage_kind: 'deck-stage',
+      stage_scale: 0,
+      stage_transform: 'matrix',
+      stage_width: 0,
+      canvas_width: 1920,
+      canvas_height: 1080,
+      viewport_width: 1075,
+      viewport_height: 530,
+      ready_state: 'complete',
+      visibility_state: 'visible',
+      elapsed_ms: 5000,
+    }));
+    expect(reportSafetyEvent).not.toHaveBeenCalledWith('client_preview_runtime_error', expect.anything());
+  });
+
+  // The reporter asked to be able to find the cause from an exported log, not
+  // only from a dashboard. On desktop only console warn/error reach
+  // renderer.log, and that file is what `od diagnostics export` bundles, so the
+  // measurement has to be written at warn level with everything needed to read
+  // it standalone.
+  it('writes one greppable warn line so the diagnostics export carries it', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      reportPreviewIframeMessage({
+        type: PREVIEW_OBSERVABILITY_MESSAGE_TYPE,
+        version: 1,
+        event: 'deck_stage_unscaled',
+        stage_kind: 'deck-stage',
+        stage_scale_permille: 0,
+        stage_transform: 'matrix',
+        stage_width: 0,
+        stage_height: 0,
+        canvas_width: 1920,
+        canvas_height: 1080,
+        viewport_width: 1075,
+        viewport_height: 530,
+        ready_state: 'complete',
+        visibility_state: 'visible',
+        elapsed_ms: 5000,
+      }, { surface: 'artifact_preview', renderMode: 'srcdoc' }, new Set());
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      const line = warn.mock.calls[0]?.join(' ') ?? '';
+      expect(line).toContain('[od:preview-observability] deck_stage_unscaled');
+      for (const fragment of ['stage_kind=deck-stage', 'stage_scale=0', 'canvas=1920x1080', 'frame=1075x530', 'elapsed_ms=5000']) {
+        expect(line).toContain(fragment);
+      }
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('deduplicates repeated failures from one preview', () => {
     const seen = new Set<string>();
     const message = {

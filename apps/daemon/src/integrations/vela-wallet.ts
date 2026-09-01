@@ -224,6 +224,7 @@ export function createVelaWalletSnapshotReader(options: VelaWalletReaderOptions 
       });
     } finally {
       clearTimeout(timeout);
+      controller.abort();
     }
   }
 

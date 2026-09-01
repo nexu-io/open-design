@@ -229,6 +229,7 @@ async function fetchWorkspaceWalletSnapshot(
 
 async function checkWorkspaceBalanceGate(
   scope: AmrBalanceGateScope,
+  modelId?: string | null,
 ): Promise<AmrBalanceGateResult> {
   // The URL carries the selected workspace identity. The daemon authorizes
   // that exact directory membership and returns a v2 identity-stamped wallet.
@@ -259,6 +260,16 @@ async function checkWorkspaceBalanceGate(
   }
   const balance = amrWalletBalanceUsd(workspaceSnapshot);
   if (balance == null) return { kind: 'unavailable' };
+  if (
+    balance <= AMR_LOW_BALANCE_WARN_USD
+    && scope.workspaceType === 'personal'
+    && modelId?.trim()
+  ) {
+    // Coding Plan membership is no longer exposed to the client. Personal
+    // requests therefore fail open here and let Vela enforce the authoritative
+    // billing and Model Limit decision at admission time.
+    return { kind: 'allow' };
+  }
   if (balance <= AMR_HARD_BLOCK_BALANCE_USD) {
     return {
       kind: 'hard',
@@ -274,10 +285,11 @@ async function checkWorkspaceBalanceGate(
 
 export async function checkAmrBalanceGate(
   scope?: AmrBalanceGateScope,
+  modelId?: string | null,
 ): Promise<AmrBalanceGateResult> {
   try {
     if (scope) {
-      return await checkWorkspaceBalanceGate(scope);
+      return await checkWorkspaceBalanceGate(scope, modelId);
     }
     const cached = await fetchAmrWalletSnapshot().catch(() => null);
     const cachedBalance = amrWalletBalanceUsd(cached);
@@ -290,7 +302,9 @@ export async function checkAmrBalanceGate(
         return { kind: 'allow' };
       }
       // cached is non-null here: a definitive balance implies a snapshot.
-      return { kind: 'soft', snapshot: cached! };
+      return modelId?.trim()
+        ? { kind: 'allow' }
+        : { kind: 'soft', snapshot: cached! };
     }
     // Hard-block candidate (signed out or empty): confirm against the live
     // wallet before blocking — the cache may predate a sign-in or recharge.
@@ -309,6 +323,9 @@ export async function checkAmrBalanceGate(
     if (fresh.stale || fresh.error != null) return { kind: 'allow' };
     const freshBalance = amrWalletBalanceUsd(fresh);
     if (freshBalance == null) return { kind: 'allow' };
+    if (freshBalance <= AMR_LOW_BALANCE_WARN_USD && modelId?.trim()) {
+      return { kind: 'allow' };
+    }
     if (freshBalance <= AMR_HARD_BLOCK_BALANCE_USD) {
       return { kind: 'hard', reason: 'insufficient', snapshot: fresh };
     }

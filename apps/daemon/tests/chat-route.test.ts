@@ -4068,6 +4068,13 @@ describe('chat prompt helpers', () => {
     expect(prompt).toContain('Canonical query for this run:');
     expect(prompt).toContain('EV market 2025 trends');
     expect(prompt).toContain('the first tool action must be the research command');
+
+    const explicit = resolveResearchCommandContract(
+      { enabled: true, query: 'explicit canonical query' },
+      'legacy full transcript must not replace it',
+    );
+    expect(explicit).toContain('explicit canonical query');
+    expect(explicit).not.toContain('legacy full transcript must not replace it');
   });
 
   it('resolves design-system selection precedence for run prompt composition', () => {

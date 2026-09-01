@@ -11,6 +11,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { InstalledPluginRecord } from '@open-design/contracts';
+import { automaticStrategyTaskProfileForRouteId } from '@open-design/contracts';
 
 vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
   PlaceholderCarousel: () => null,
@@ -523,13 +524,21 @@ describe('HomeHero intent rail', () => {
     expect(findChip('audio')?.action).toMatchObject({ pluginId: 'od-media-generation', projectKind: 'audio' });
   });
 
-  it('prototype and slide-deck chips route to their specialised bundled scenario plugin', () => {
+  it('marks prototype and slide-deck as daemon-owned automatic scenarios', () => {
     // Prototype now binds to web-prototype's seed template instead of
     // the generic od-new-generation router. Same for Slide deck →
     // simple-deck. See packages/contracts/src/plugins/scenario-defaults.ts
     // for the rationale (battle-tested seed + layouts + checklist).
-    expect(findChip('prototype')?.action).toMatchObject({ pluginId: 'example-web-prototype', projectKind: 'prototype' });
-    expect(findChip('deck')?.action).toMatchObject({ pluginId: 'example-simple-deck', projectKind: 'deck' });
+    expect(findChip('prototype')?.action).toMatchObject({
+      pluginId: 'example-web-prototype',
+      projectKind: 'prototype',
+      automaticDefault: true,
+    });
+    expect(findChip('deck')?.action).toMatchObject({
+      pluginId: 'example-simple-deck',
+      projectKind: 'deck',
+      automaticDefault: true,
+    });
   });
 
   it('specialised category chips route to their bundled scenario plugin', () => {
@@ -540,16 +549,31 @@ describe('HomeHero intent rail', () => {
       kind: 'apply-scenario',
       pluginId: 'example-hyperframes',
       projectKind: 'video',
+      automaticDefault: true,
+      projectMetadata: expect.objectContaining({ intent: 'hyperframes' }),
     });
     expect(findChip('live-artifact')?.action).toMatchObject({
       kind: 'apply-scenario',
       pluginId: 'example-live-artifact',
       projectKind: 'prototype',
+      automaticDefault: true,
       projectMetadata: {
         kind: 'prototype',
         intent: 'live-artifact',
         fidelity: 'high-fidelity',
       },
     });
+  });
+
+  // `automaticDefault` is not the OD Next gate and never was — it says the
+  // chip's plugin is the product's own choice for that surface, so the create
+  // travels without a plugin id and the daemon stamps the automatic scenario
+  // binding. The OD Next route is decided separately, by chip id, and these
+  // surfaces own none.
+  it('keeps ordinary media chips outside automatic OD Next routing', () => {
+    for (const id of ['image', 'video', 'audio', 'live-artifact']) {
+      expect(automaticStrategyTaskProfileForRouteId(id), id).toBeNull();
+      expect(findChip(id)?.action, id).toMatchObject({ automaticDefault: true });
+    }
   });
 });

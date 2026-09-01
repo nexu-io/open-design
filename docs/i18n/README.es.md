@@ -333,7 +333,7 @@ pnpm tools-dev run web
 
 Abre la URL que imprime `tools-dev`; los puertos de desarrollo se asignan dinámicamente salvo que indiques flags de puerto.
 
-Node `~24`, pnpm `10.33.x`. Usuarios de Windows, consulten [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). Inicio rápido completo, variables de entorno, Nix flake y flujo de compilación empaquetada → [`QUICKSTART.md`](../../QUICKSTART.md).
+Node `~24`, pnpm `10.33.x`. Usuarios de Windows, consulten [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). Inicio rápido completo, variables de entorno y flujo de compilación empaquetada → [`QUICKSTART.md`](../../QUICKSTART.md).
 
 ### Un flujo de trabajo completo — del brief al artefacto
 
@@ -693,11 +693,11 @@ El SVG de arriba se regenera diariamente mediante [`.github/workflows/metrics.ym
 
 Si esto te ahorró treinta minutos, dale una ★. Las estrellas no pagan el alquiler — pero le dicen al siguiente diseñador, agente y colaborador que este experimento merece su atención. Un clic, tres segundos, una señal real.
 
-<a href="https://star-history.com/#nexu-io/open-design&Date">
+<a href="https://star-history.dera.page/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-08-04" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
-    <img alt="OpenDesign star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-08-04" />
+    <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+    <img alt="OpenDesign star history" src="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
   </picture>
 </a>
 

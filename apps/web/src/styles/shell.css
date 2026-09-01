@@ -37,11 +37,10 @@
   backdrop-filter: none;
   overflow: hidden;
 }
-/* The shell grid owns exactly two children: the tabs chrome and the body.
-   Pin each to its row so a stray extra shell child (e.g. an inline popover
-   anchor mounted at shell level — the floating account cluster renders its
-   MessageCenter anchor there) falls into a zero-height implicit row instead
-   of auto-placing into (and stealing) the 1fr body row. */
+/* The shell grid owns exactly two layout children: the tabs chrome and the
+   body. Pin each to its row so any non-layout shell child falls into a
+   zero-height implicit row instead of auto-placing into (and stealing) the
+   1fr body row. */
 .workspace-shell > .workspace-tabs-chrome {
   grid-row: 1;
 }
@@ -77,9 +76,17 @@
   border-bottom: 0;
   user-select: none;
   -webkit-app-region: drag;
-  overflow: hidden;
+  overflow: visible;
   position: relative;
   z-index: 120;
+}
+.workspace-chrome-account-actions {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin-left: auto;
+  margin-right: 12px;
+  -webkit-app-region: no-drag;
 }
 .workspace-tabs-chrome .workspace-tabs-traffic {
   margin-right: var(--app-chrome-traffic-margin);
@@ -1212,6 +1219,11 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Two controls that do opposite things: one leaves the panel open and sends
+   the version to a new window, the other closes the panel. They share chrome
+   but not a name — spelling them the same way is what let the open control's
+   ambiguous glyph go unnoticed in review (OPEND-2160). */
+.artifact-version-panel__open,
 .artifact-version-panel__close {
   width: 28px;
   height: 28px;
@@ -1480,6 +1492,7 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
   align-items: center;
   gap: 6px;
 }
+.artifact-version-panel__open:disabled,
 .artifact-version-panel__close:disabled {
   cursor: not-allowed;
   opacity: 0.45;
@@ -2495,8 +2508,10 @@ a.avatar-item:visited {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: -10px;
-  right: -10px;
+  /* Keep the chat-side scroll edge entirely outside the resize hitbox in
+     both directions; extra grab room belongs on the workspace side only. */
+  inset-inline-start: 0;
+  inset-inline-end: -8px;
   cursor: col-resize;
 }
 .split-resize-handle::after {

@@ -1,3 +1,4 @@
+import os from 'node:os';
 import path from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
@@ -222,6 +223,23 @@ describe('agent runtime tool environment', () => {
     expect(env.OD_PROJECT_ID).toBe('project-1');
     expect(env.OD_PROJECT_DIR).toBe('/tmp/project');
     expect(env.OD_HYPERFRAMES_BIN).toBe('/opt/open-design/hyperframes/bin/hyperframes.mjs');
+  });
+
+  it('names the codex rollout root so a complex Run can observe its native Children', () => {
+    // `collectCodexChildEvidence` reads
+    // `<CODEX_HOME>/sessions/YYYY/MM/DD/rollout-*.jsonl` and deliberately
+    // refuses a homedir fallback, so it can never attribute one install's
+    // sessions to another. That leaves the caller owing it an explicit root,
+    // and nothing supplied one: the collector's `CODEX_HOME` guard was false on
+    // every default install, so a complex Run's native Children went
+    // unobserved and certification failed for evidence never looked for.
+    const env = spawnEnvForAgent('codex', { PATH: '/bin' });
+    expect(env.CODEX_HOME).toBe(path.join(os.homedir(), '.codex'));
+  });
+
+  it('leaves an explicitly configured codex rollout root alone', () => {
+    const env = spawnEnvForAgent('codex', { PATH: '/bin', CODEX_HOME: '/custom/codex' });
+    expect(env.CODEX_HOME).toBe('/custom/codex');
   });
 
   it('keeps non-sandbox NO_PROXY behavior unchanged', () => {

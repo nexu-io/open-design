@@ -125,3 +125,31 @@ export function eventsEndedWithUnfinishedWork(events: unknown): boolean {
 export function todoItemsFromTodoWriteInput(input: unknown): unknown {
   return todoItemsFromToolInput(input);
 }
+
+/**
+ * True when a strategy task's own terminal verdict already proves this turn
+ * delivered the work it declared.
+ *
+ * OD Next reaches `completed` only after the coordinator saw BOTH a succeeded
+ * process AND a canonical deliverable that this Run resolved on disk
+ * (`validateRunDeliverable`: the project's entry file exists, is readable, was
+ * touched by the Run, and matches the project kind). That is evidence Open
+ * Design produced itself. A TodoWrite snapshot is the agent's own unverified
+ * narration of the same turn, and agents routinely write the artifact while
+ * leaving the last checklist item on `pending`.
+ *
+ * When the two disagree the verified verdict wins. Otherwise a finished task
+ * reads "stopped with unfinished work", the chat offers to continue work that
+ * is already delivered, and taking that offer opens a SECOND task which can
+ * only block — it has nothing left to write, so its deliverable validation
+ * resolves `no_artifact`.
+ *
+ * A mid-generation truncation is deliberately NOT covered by this: the caller
+ * keeps `truncatedMidTurn` as an independent term, so a turn cut off by
+ * `max_tokens` stays unfinished no matter what verdict was recorded.
+ */
+export function strategyTaskProvesDelivery(
+  strategyTask: { outcome?: unknown; terminal?: unknown } | null | undefined,
+): boolean {
+  return strategyTask?.terminal === true && strategyTask.outcome === 'completed';
+}

@@ -33,8 +33,15 @@ import type { ChatSessionMode } from '../api/chat.js';
 import type { ProjectMetadata, ProjectTemplate } from '../api/projects.js';
 import { OFFICIAL_DESIGNER_PROMPT, renderOfficialDesignerPrompt } from './official-system.js';
 import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
-import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
+import {
+  renderDeckFrameworkDirective,
+  type DeckFrameworkMode,
+} from './deck-framework.js';
 import { MEDIA_GENERATION_CONTRACT } from './media-contract.js';
+import {
+  composeOdNextStrategyRequestPromptV2,
+  type OdNextStrategyRequestRecipeV2,
+} from './od-next-strategy.js';
 import { SETTINGS_MEDIA_PROVIDERS_PATH } from '../settings-nav.js';
 
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
@@ -176,6 +183,10 @@ Active design system exception: the active design system is the visual direction
 `;
 
 export interface ComposeInput {
+  // Mirrored internal request-recipe slot. Generic/BYOK callers do not infer
+  // this from plugin ids; the daemon must supply a verified recipe payload.
+  odNextStrategyRecipe?: OdNextStrategyRequestRecipeV2 | undefined;
+  agentId?: string | null | undefined;
   skillBody?: string | undefined;
   skillName?: string | undefined;
   skillMode?:
@@ -189,6 +200,14 @@ export interface ComposeInput {
     | undefined;
   designSystemBody?: string | undefined;
   designSystemTitle?: string | undefined;
+  designSystemUsageMd?: string | undefined;
+  designSystemTokensCss?: string | undefined;
+  designSystemComponentsManifest?: string | undefined;
+  designSystemFixtureHtml?: string | undefined;
+  designSystemPullIndex?: string | undefined;
+  designSystemImportMode?: 'normalized' | 'hybrid' | 'verbatim' | undefined;
+  craftBody?: string | undefined;
+  craftSections?: string[] | undefined;
   // Personal-memory block (auto-extracted facts + the hand-edited
   // MEMORY.md index). The daemon side composes this on disk and the
   // BYOK side fetches it from `GET /api/memory/system-prompt`; either
@@ -245,6 +264,12 @@ export interface ComposeInput {
   // UI locale selected by the client. User-visible generated form copy
   // must follow this locale even when the user's initial prompt is brief.
   locale?: string | undefined;
+  // Host-detected, user-authored deck intent. OD Next uses this only when the
+  // bound task type is not already PPT, so cross-surface deck requests receive
+  // the canonical runtime contract without changing their Task Profile.
+  freeformDeckSignal?: boolean | undefined;
+  /** Host-resolved OD Next deck scaffold policy for blank vs legacy/existing decks. */
+  deckFrameworkMode?: DeckFrameworkMode | undefined;
   // Free-form instructions the user set at the global (user-level)
   // settings panel. Injected after personal memory.
   userInstructions?: string | undefined;
@@ -254,11 +279,21 @@ export interface ComposeInput {
 }
 
 export function composeSystemPrompt({
+  odNextStrategyRecipe,
+  agentId,
   skillBody,
   skillName,
   skillMode,
   designSystemBody,
   designSystemTitle,
+  designSystemUsageMd,
+  designSystemTokensCss,
+  designSystemComponentsManifest,
+  designSystemFixtureHtml,
+  designSystemPullIndex,
+  designSystemImportMode,
+  craftBody,
+  craftSections,
   memoryBody,
   memoryHooks,
   metadata,
@@ -270,9 +305,40 @@ export function composeSystemPrompt({
   streamFormat,
   sessionMode,
   locale,
+  freeformDeckSignal,
+  deckFrameworkMode,
   userInstructions,
   projectInstructions,
 }: ComposeInput): string {
+  // ── FORK POINT (API/BYOK side) ──────────────────────────────────────────
+  // Mirrors the daemon fork in `apps/daemon/src/prompts/system.ts`. Everything
+  // below is the legacy stack; OD Next runs return here and never reach it.
+  // Read `docs/prompt-composition.md` before changing prompt text on either
+  // side of this fork.
+  if (odNextStrategyRecipe) {
+    return composeOdNextStrategyRequestPromptV2(odNextStrategyRecipe, {
+      agentId,
+      sessionMode,
+      locale,
+      deckIntent: odNextStrategyRecipe.taskType !== 'ppt' && freeformDeckSignal === true,
+      deckFrameworkMode,
+      metadata,
+      template,
+      designSystemBody,
+      designSystemTitle,
+      designSystemUsageMd,
+      designSystemTokensCss,
+      designSystemComponentsManifest,
+      designSystemFixtureHtml,
+      designSystemPullIndex,
+      designSystemImportMode,
+      craftBody,
+      craftSections,
+      memoryBody,
+      userInstructions,
+      projectInstructions,
+    });
+  }
   // Discovery + philosophy goes FIRST so its hard rules ("emit a form on
   // requirements decision, brand resolution, and TodoWrite workflow, run
   // checklist + critique before <artifact>) win precedence over softer
@@ -315,6 +381,9 @@ export function composeSystemPrompt({
   // still composed in — Ask mode is light, not amnesiac. Mirror the daemon
   // composer's `isAskMode` gating.
   const isAskMode = sessionMode === 'chat';
+  const deckFrameworkDirective = renderDeckFrameworkDirective(
+    streamFormat === 'plain' ? 'text_artifact' : 'filesystem',
+  );
 
   if (sessionMode === 'plan') {
     parts.push(PLAN_MODE_OVERRIDE);
@@ -464,22 +533,28 @@ export function composeSystemPrompt({
   // skill seed is on offer.
   const isDeckProject = skillMode === 'deck' || metadata?.kind === 'deck';
   const isFreeformProject = !skillMode && (!metadata || metadata.kind === 'other');
-  const hasSkillSeed =
-    !!skillBody && /assets\/template\.html/.test(skillBody);
-  if (!isAskMode && isDeckProject && !hasSkillSeed) {
-    parts.push(`\n\n---\n\n${DECK_FRAMEWORK_DIRECTIVE}`);
-  } else if (!isAskMode && isFreeformProject && !hasSkillSeed) {
-    // Freeform / kind=other projects skip the kind picker entirely and
-    // land here. If the user's brief is a deck/keynote/slides ("讲解",
-    // "presentation", "make a deck"), the agent used to invent its own
-    // scale-to-fit + slide visibility + nav script from scratch and
-    // shipped subtle CSS specificity bugs (per-slide layout classes
-    // overriding `.slide { display:none }`). Inject the same framework
-    // here, prefixed with a one-line conditional so the agent only
-    // adopts it when the brief actually is a deck — otherwise the
-    // directive is read as background reference and ignored.
+  const hasDeckSkillSeed =
+    skillMode === 'deck' && !!skillBody && /assets\/template\.html/.test(skillBody);
+  if (!isAskMode && isDeckProject && !hasDeckSkillSeed) {
+    // ⚠️ This decides WHEN the legacy path gets the deck scaffold. OD Next has
+    // its own gate — `resolveOdNextDeckFrameworkMode` in `od-next-strategy.ts`.
+    // The scaffold is shared; the injection conditions are not. Change both.
+    parts.push(`\n\n---\n\n${deckFrameworkDirective}`);
+  } else if (
+    !isAskMode &&
+    !isDeckProject &&
+    !isMediaSurfaceEarly &&
+    !hasDeckSkillSeed &&
+    (freeformDeckSignal === true || (isFreeformProject && freeformDeckSignal === undefined))
+  ) {
+    // A deck request may arrive after a project was created under another
+    // surface (most commonly Home's default prototype). The turn-latched
+    // signal is stronger than that creation-time kind, so give the agent the
+    // same framework instead of leaving classic/off-rollout runs to invent a
+    // third navigation runtime. Preserve the legacy absent-signal default for
+    // kind=other projects only.
     parts.push(
-      `\n\n---\n\n## If this brief is a slide deck / keynote / presentation\n\nThe user did not pre-select a "Slide deck" surface, but their request may still call for one. **If — and only if — the brief reads as slides, keynote, presentation, deck, PPT, or 讲解, follow the framework below.** Otherwise ignore everything in this section and continue with the freeform output you would have written anyway.\n\n${DECK_FRAMEWORK_DIRECTIVE}`,
+      `\n\n---\n\n## If this brief is a slide deck / keynote / presentation\n\nThe user did not pre-select a "Slide deck" surface, but their request may still call for one. **If — and only if — the brief reads as slides, keynote, presentation, deck, PPT, or 讲解, follow the framework below.** Otherwise ignore everything in this section and continue with the freeform output you would have written anyway.\n\n${deckFrameworkDirective}`,
     );
   }
 

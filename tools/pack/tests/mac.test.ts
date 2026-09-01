@@ -5,17 +5,18 @@ import process from "node:process";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { ToolPackConfig } from "../src/config.js";
+import type { ToolPackConfig } from "@/config/index.js";
 import {
   copyMacPrebundleRuntimeDependencies,
   copyResourceTree,
   createMacElectronRebuildOptions,
   renderMacPackagedConfig,
   validateMacNativeRebuildOutput,
-} from "../src/mac/app.js";
-import { runElectronBuilder } from "../src/mac/builder.js";
-import { resolveSeededAppConfigPaths, seedPackagedAppConfig, writeLaunchPackagedConfig } from "../src/mac/index.js";
-import { resolveMacPaths } from "../src/mac/paths.js";
+} from "@/mac/app.js";
+import macBuilderSource from "@/mac/builder.ts?raw";
+import { runElectronBuilder } from "@/mac/builder.js";
+import { resolveSeededAppConfigPaths, seedPackagedAppConfig, writeLaunchPackagedConfig } from "@/mac/index.js";
+import { resolveMacPaths } from "@/mac/paths.js";
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -75,10 +76,9 @@ afterEach(() => {
 });
 
 describe("resolveSeededAppConfigPaths", () => {
-  it("declares the Workspace invite URL scheme in the packaged app metadata", async () => {
-    const source = await readFile(new URL("../src/mac/builder.ts", import.meta.url), "utf8");
-    expect(source).toContain("protocols: [");
-    expect(source).toContain('schemes: ["opendesign"]');
+  it("declares the Workspace invite URL scheme in the packaged app metadata", () => {
+    expect(macBuilderSource).toContain("protocols: [");
+    expect(macBuilderSource).toContain('schemes: ["opendesign"]');
   });
 
   it("uses workspace .od by default", () => {

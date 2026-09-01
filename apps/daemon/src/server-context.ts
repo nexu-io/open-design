@@ -100,6 +100,12 @@ export interface ProjectPreviewScopeDeps {
     options?: { readonly ttlMs?: number },
   ) => string;
   revoke: (scope: string) => void;
+  expiresAt: (projectId: string, scope: string) => number | undefined;
+  renew: (
+    projectId: string,
+    scope: string,
+    options?: { readonly ttlMs?: number },
+  ) => number | undefined;
   validate: (projectId: string, scope: string) => boolean;
   resolve: (
     projectId: string,
