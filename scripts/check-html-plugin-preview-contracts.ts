@@ -108,9 +108,14 @@ export function validateHtmlPluginPreviewContract({
 async function readOptional(filePath: string): Promise<string | undefined> {
   try {
     return await readFile(filePath, "utf8");
-  } catch {
-    return undefined;
+  } catch (error) {
+    if (isRecord(error) && error.code === "ENOENT") return undefined;
+    throw error;
   }
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export async function checkHtmlPluginPreviewContracts(repoRoot: string = defaultRepoRoot): Promise<boolean> {
@@ -118,9 +123,14 @@ export async function checkHtmlPluginPreviewContracts(repoRoot: string = default
   let entries;
   try {
     entries = await readdir(examplesRoot, { withFileTypes: true });
-  } catch {
-    console.log("HTML plugin preview contract check passed: no bundled examples directory.");
-    return true;
+  } catch (error) {
+    if (isRecord(error) && error.code === "ENOENT") {
+      console.log("HTML plugin preview contract check passed: no bundled examples directory.");
+      return true;
+    }
+    console.error("HTML plugin preview contract violations:");
+    console.error(`- ${EXAMPLES_REPO_PATH}: could not be read: ${formatError(error)}`);
+    return false;
   }
 
   const violations: string[] = [];
@@ -128,7 +138,15 @@ export async function checkHtmlPluginPreviewContracts(repoRoot: string = default
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
     if (!entry.isDirectory()) continue;
     const pluginRoot = path.join(examplesRoot, entry.name);
-    const templateText = await readOptional(path.join(pluginRoot, "template.json"));
+    let templateText: string | undefined;
+    try {
+      templateText = await readOptional(path.join(pluginRoot, "template.json"));
+    } catch (error) {
+      violations.push(
+        `${EXAMPLES_REPO_PATH}/${entry.name}/template.json: could not be read: ${formatError(error)}`,
+      );
+      continue;
+    }
     if (templateText === undefined) continue;
 
     let template: unknown;
@@ -145,7 +163,15 @@ export async function checkHtmlPluginPreviewContracts(repoRoot: string = default
     if (!isHtmlBackedTemplate(template)) continue;
     checked += 1;
 
-    const manifestText = await readOptional(path.join(pluginRoot, "open-design.json"));
+    let manifestText: string | undefined;
+    try {
+      manifestText = await readOptional(path.join(pluginRoot, "open-design.json"));
+    } catch (error) {
+      violations.push(
+        `${EXAMPLES_REPO_PATH}/${entry.name}/open-design.json: could not be read: ${formatError(error)}`,
+      );
+      continue;
+    }
     let manifest: unknown;
     try {
       manifest = manifestText === undefined ? undefined : JSON.parse(manifestText) as unknown;
@@ -157,11 +183,20 @@ export async function checkHtmlPluginPreviewContracts(repoRoot: string = default
       );
       continue;
     }
+    let exampleHtml: string | undefined;
+    try {
+      exampleHtml = await readOptional(path.join(pluginRoot, "example.html"));
+    } catch (error) {
+      violations.push(
+        `${EXAMPLES_REPO_PATH}/${entry.name}/example.html: could not be read: ${formatError(error)}`,
+      );
+      continue;
+    }
     violations.push(...validateHtmlPluginPreviewContract({
       pluginId: entry.name,
       manifest,
       template,
-      exampleHtml: await readOptional(path.join(pluginRoot, "example.html")),
+      exampleHtml,
     }));
   }
 

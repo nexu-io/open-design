@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { test } from "vitest";
 
-import { validateHtmlPluginPreviewContract } from "../../../scripts/check-html-plugin-preview-contracts.ts";
+import {
+  checkHtmlPluginPreviewContracts,
+  validateHtmlPluginPreviewContract,
+} from "../../../scripts/check-html-plugin-preview-contracts.ts";
 
 const REFERENCE_HTML = "<!doctype html>\n<html>\n  <body>Report</body>\n</html>\n";
 
@@ -83,4 +89,18 @@ test("allows line-ending and trailing-whitespace normalization without treating 
     template: htmlTemplate(),
     exampleHtml: exampleWithFormattingNoise,
   }), []);
+});
+
+test("fails closed when a template path exists but cannot be read as a file", async () => {
+  const repoRoot = await mkdtemp(path.join(os.tmpdir(), "open-design-html-preview-contract-"));
+  const templatePath = path.join(
+    repoRoot,
+    "plugins/_official/examples/document-report/template.json",
+  );
+  try {
+    await mkdir(templatePath, { recursive: true });
+    assert.equal(await checkHtmlPluginPreviewContracts(repoRoot), false);
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
 });
