@@ -57,12 +57,14 @@ export function extractToolFilePath(input: unknown): string | null {
   const obj = input as {
     file_path?: unknown;
     path?: unknown;
+    name?: unknown;
     filename?: unknown;
     filePath?: unknown;
     TargetFile?: unknown;
   };
   if (typeof obj.file_path === 'string' && obj.file_path) return obj.file_path;
   if (typeof obj.path === 'string' && obj.path) return obj.path;
+  if (typeof obj.name === 'string' && obj.name) return obj.name;
   if (typeof obj.filename === 'string' && obj.filename) return obj.filename;
   if (typeof obj.filePath === 'string' && obj.filePath) return obj.filePath;
   if (typeof obj.TargetFile === 'string' && obj.TargetFile) return obj.TargetFile;

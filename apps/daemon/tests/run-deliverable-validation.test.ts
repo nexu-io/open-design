@@ -9,6 +9,10 @@ import {
   diffRunArtifacts,
   snapshotProjectArtifacts,
 } from '../src/run-artifact-fs.js';
+import {
+  createRunSideEffectLedger,
+  recordRunSideEffectEvent,
+} from '../src/runtimes/run-lifecycle-analytics.js';
 
 const temporaryRoots: string[] = [];
 
@@ -388,6 +392,61 @@ describe('run deliverable validation', () => {
           runStatus: 'succeeded',
           artifactCount: diff.touched,
           touchedPaths: diff.touchedPaths,
+          projectMetadata: {
+            kind: 'other',
+            entryFile: 'index.html',
+          },
+        }),
+      ).resolves.toMatchObject({
+        valid: true,
+        validation: 'valid',
+        entryFile: 'design-export.md',
+        artifactKind: 'text',
+      });
+    });
+
+    it('promotes export artifact when finalization relies on tool-stream create_artifact fallback', async () => {
+      const fixture = await projectFixture({
+        'index.html': '<!doctype html><title>Old prototype</title>',
+        'design-export.md': '# Design Export',
+        'design-export.md.artifact.json': JSON.stringify({
+          version: 1,
+          kind: 'markdown-document',
+          title: 'design-export.md',
+          entry: 'design-export.md',
+          renderer: 'markdown',
+          status: 'complete',
+          exports: ['md'],
+          metadata: {
+            task: 'export',
+          },
+        }),
+      });
+
+      // Simulate ledger tracking create_artifact tool-use with { name: 'design-export.md' }
+      const ledger = createRunSideEffectLedger();
+      recordRunSideEffectEvent(ledger, 'agent', {
+        type: 'tool_use',
+        id: 'tool-call-1',
+        name: 'create_artifact',
+        input: { name: 'design-export.md' },
+      });
+      recordRunSideEffectEvent(ledger, 'agent', {
+        type: 'tool_result',
+        tool_use_id: 'tool-call-1',
+        is_error: false,
+      });
+
+      expect(ledger.artifactPaths.has('design-export.md')).toBe(true);
+
+      const fallbackPaths = Array.from(ledger.artifactPaths);
+
+      await expect(
+        validateRunDeliverable({
+          ...fixture,
+          runStatus: 'succeeded',
+          artifactCount: ledger.artifactPaths.size,
+          touchedPaths: fallbackPaths,
           projectMetadata: {
             kind: 'other',
             entryFile: 'index.html',
