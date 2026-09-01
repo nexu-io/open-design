@@ -24,16 +24,18 @@ type GetObjectOptions = StorageConfig & {
 };
 
 /**
- * R2/S3 If-Match requires a strong quoted ETag. GET may return an unquoted
- * validator or a weak `W/"..."` value; either form 412s on PUT.
+ * R2/S3 If-Match requires a strong quoted ETag. GET may omit the quotes;
+ * a weak `W/"..."` validator is not promoted because If-Match is strong.
  */
 export function strongQuotedEtag(etag: string): string {
   const trimmed = etag.trim();
   if (trimmed.length === 0) {
     throw new Error("storage object ETag is empty");
   }
-  const strong = trimmed.replace(/^W\//i, "").trim();
-  const unquoted = strong.replace(/^"+|"+$/g, "");
+  if (/^W\//i.test(trimmed)) {
+    throw new Error("storage object ETag is weak; refusing If-Match without a strong validator");
+  }
+  const unquoted = trimmed.replace(/^"+|"+$/g, "");
   if (unquoted.length === 0) {
     throw new Error("storage object ETag is empty after removing quotes");
   }
