@@ -30,7 +30,7 @@ import ResourceHints from './resource-hints.astro';
 export interface SeoHeadProps {
   /** 'website' for landing/list pages, 'article' for blog posts. */
   kind: 'website' | 'article';
-  /** For article: raw post title (component appends " — Open Design"). For website: the full title string. */
+  /** For article: raw post title (component appends " — OpenDesign"). For website: the full title string. */
   title: string;
   /** Meta description, 150–160 chars recommended. */
   description: string;
@@ -43,7 +43,7 @@ export interface SeoHeadProps {
   dateModified?: Date;
   /** Required for kind: 'article'. e.g. "Guides". */
   category?: string;
-  /** Defaults to "Open Design". */
+  /** Defaults to "OpenDesign". */
   author?: string;
   /** Set when this page has no generated per-locale variants. */
   localeCanonicalOnly?: boolean;
@@ -90,7 +90,7 @@ const noindex = stagingNoindex || props.noindex === true;
 // but its outbound links should still pass equity, hence `follow`.
 const robotsContent = stagingNoindex ? 'noindex, nofollow' : 'noindex, follow';
 
-const SITE_NAME = 'Open Design';
+const SITE_NAME = 'OpenDesign';
 const TAGLINE = 'Design with the agent already on your laptop.';
 const isArticle = props.kind === 'article';
 const locale = localeFromPath(props.pathname);
@@ -200,7 +200,7 @@ const blogJsonLd =
     robots noindex drops its x-default pointer too (on `noindex: true` posts
     the English target itself is noindexed). */}
 {props.noindex !== true && <link rel='alternate' hreflang='x-default' href={xDefaultHref} />}
-<link rel='alternate' type='application/rss+xml' title='Open Design Blog' href={rssUrl} />
+<link rel='alternate' type='application/rss+xml' title='OpenDesign Blog' href={rssUrl} />
 <FaviconLinks />
 <ResourceHints />
 

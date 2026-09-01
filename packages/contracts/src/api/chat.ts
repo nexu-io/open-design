@@ -22,10 +22,14 @@ import type {
   TrackingRuntimeType,
 } from '../analytics/public-params.js';
 import type {
+  TrackingRunCancelOrigin,
   TrackingRunFailureCategory,
   TrackingRunFailureDetail,
   TrackingRunRecoveryActionType,
+  TrackingRunTerminalTrigger,
 } from '../analytics/events.js';
+import type { StrategyTaskProjectionV2 } from '../plugins/strategy-v2.js';
+import type { OdNextRolloutDecision } from './strategy-rollout.js';
 
 // The daemon's run-failure taxonomy, re-exported under product-facing names so
 // the run-status/error surface can carry the specific cause the daemon already
@@ -34,6 +38,8 @@ import type {
 // producer and consumer can't drift.
 export type RunFailureCategory = TrackingRunFailureCategory;
 export type RunFailureDetail = TrackingRunFailureDetail;
+export type RunCancelOrigin = TrackingRunCancelOrigin;
+export type RunTerminalTrigger = TrackingRunTerminalTrigger;
 export type RunFailureAction = 'relogin' | 'recharge' | 'upgrade' | 'retry' | 'none';
 
 export type ChatRole = 'user' | 'assistant';
@@ -74,8 +80,19 @@ export interface ByokMediaDefaults {
 export interface ChatRequest {
   agentId: string;
   message: string;
+  /**
+   * Explicit daemon-issued OD Next continuation handle. Omit for an ordinary
+   * chat turn; callers must never infer this value from conversation order.
+   */
+  taskExecutionId?: string;
   /** The latest user turn only, used for per-turn telemetry content. */
   currentPrompt?: string;
+  /**
+   * Canonically framed conversation context before currentPrompt. OD Next uses
+   * this explicit field instead of trying to subtract the latest turn from
+   * message; ordinary runs continue to consume message unchanged.
+   */
+  priorTranscript?: string;
   systemPrompt?: string;
   projectId?: string | null;
   conversationId?: string | null;
@@ -116,7 +133,7 @@ export interface ChatRequest {
   context?: RunContextSelection;
   appliedPluginSnapshotId?: string | null;
   /**
-   * Run-scoped media execution policy. Omitted means current Open Design
+   * Run-scoped media execution policy. Omitted means current OpenDesign
    * behavior: media generation is enabled and OD may execute its configured
    * local providers.
    */
@@ -349,6 +366,8 @@ export interface McpRunCreateRequest {
   message?: string;
   agentId?: string;
   skillId?: string;
+  /** Explicit per-run Skills. CLI --skill a,b and Web @Skill converge here. */
+  skillIds?: string[];
   pluginId?: string;
   model?: string;
   serviceTier?: string;
@@ -426,6 +445,8 @@ export interface ChatRunFeedbackResponse {
 
 export interface ChatRunCreateResponse {
   runId: string;
+  /** Present only when this physical Run belongs to a strategy task chain. */
+  taskExecutionId?: string;
   // Daemon-resolved conversation/message ids — populated for MCP /
   // SDK callers that POST /api/runs with only projectId. The web flow
   // normally sends these in already; daemon falls back to the
@@ -436,6 +457,19 @@ export interface ChatRunCreateResponse {
   pluginId?: string | null;
   /** Analytics-only data-quality signal; it never changes run reuse semantics. */
   analyticsAttributionMismatch?: boolean;
+  strategyTask?: StrategyTaskProjectionV2;
+}
+
+/**
+ * `ApiError.details` for `DESIGN_SYSTEM_ENRICHMENT_IN_PROGRESS` (HTTP 409 from
+ * `POST /api/runs` and `POST /api/chat`): the run that already owns the
+ * conversation's enrichment pass. Clients should treat the rejected request
+ * as a no-op and keep following `runId` rather than surfacing a failure.
+ */
+export interface DesignSystemEnrichmentInProgressDetails {
+  kind: 'design_system_enrichment_in_progress';
+  runId: string;
+  conversationId: string;
 }
 
 export type NativeSessionRecoveryState =
@@ -451,6 +485,7 @@ export type NativeSessionHandleKind =
   | 'opaque-id'
   | 'cli-thread-id'
   | 'acp-session-handle'
+  | 'profile-session-id'
   | 'session-file-path'
   | 'unknown';
 
@@ -458,6 +493,7 @@ export type NativeSessionAcquisitionMode =
   | 'daemon-specified'
   | 'stream-captured'
   | 'acp-session-load'
+  | 'profile-session-frame'
   | 'session-file-discovered'
   | 'none'
   | 'unknown';
@@ -465,6 +501,7 @@ export type NativeSessionAcquisitionMode =
 export type NativeSessionContinuationMode =
   | 'native-resume-by-id'
   | 'acp-session-load'
+  | 'profile-stdio-resume'
   | 'session-file-resume'
   | 'none'
   | 'unknown';
@@ -626,10 +663,21 @@ export interface ChatRunStatusResponse {
   designSystemDigest?: string | null;
   appliedPluginSnapshotId?: string | null;
   pluginId?: string | null;
+  /** Immutable OD Next routing decision captured for this logical Run. */
+  strategyRolloutDecision?: OdNextRolloutDecision | null;
   status: ChatRunStatus;
   createdAt: number;
   updatedAt: number;
+  /** The immutable instant this Run entered its terminal status, when terminal. */
+  terminalAt?: number | null;
   cancelRequested?: boolean;
+  /**
+   * Actor or lifecycle path that requested cancellation. Only `user_stop`
+   * proves the user explicitly stopped this run; older daemons may omit it.
+   */
+  cancelOrigin?: RunCancelOrigin | null;
+  /** Structured lifecycle or watchdog mechanism that forced termination. */
+  terminalTrigger?: RunTerminalTrigger | null;
   childPid?: number | null;
   processGroupId?: number | null;
   childExited?: boolean;
@@ -668,6 +716,10 @@ export interface ChatRunStatusResponse {
   /** Authoritative artifact files created or modified by this run. Mirrors
    *  ChatSseEndPayload.artifactCount and run_finished.artifact_count. */
   artifactCount?: number;
+  /** Authoritative project-relative artifact files created or modified by
+   *  this run. Unlike a before/after browser snapshot, this includes edits to
+   *  existing files and excludes untouched reference inputs. */
+  artifactPaths?: string[];
   /** Filesystem-backed validation of the one canonical artifact entry this
    *  run can deliver. Present for terminal runs when the daemon can inspect
    *  the project; callers must not infer validity from artifactCount alone. */
@@ -707,6 +759,7 @@ export interface ChatRunStatusResponse {
   workspace?: RunWorkspace;
   /** Available only after terminal completion; safe for eval/observability clients. */
   executionDiagnostics?: ChatRunExecutionDiagnostics;
+  strategyTask?: StrategyTaskProjectionV2;
 }
 
 export type ChatRunResultPackageResponse = RunResultPackageResponse;
@@ -861,6 +914,41 @@ export interface ChatMessage {
   endedAt?: number;
   sessionMode?: ChatSessionMode;
   runContext?: RunContextSelection;
+  /**
+   * Daemon-issued logical task handle for an OD Next assistant turn. Unlike
+   * taskAnalytics, this value is behavioral: question-form answers pass it
+   * back explicitly and reload recovery follows its active physical Run.
+   */
+  strategyTaskExecutionId?: string;
+  /**
+   * Position of this message's Run within its logical task chain. A Full Plan
+   * turn spans several physical Runs (request -> production) that the user
+   * asked for once, so only index 0 opens a conversation turn; later indices
+   * continue the same one and must not be drawn as separate answers.
+   */
+  strategyTaskRunIndex?: number;
+  /** Number of leading visible characters owned by completed predecessor Runs. */
+  strategyTaskPrefixLength?: number;
+  /** Number of leading normalized events owned by completed predecessor Runs. */
+  strategyTaskPrefixEventCount?: number;
+  /**
+   * True once the daemon's OD Next protocol gate settled this turn's strategy
+   * task as `blocked` — a sticky terminal verdict. Question forms rendered by
+   * this turn must stop accepting submissions (the daemon rejects any further
+   * continuation with 409 STRATEGY_TASK_STATE_MISMATCH).
+   */
+  strategyTaskBlocked?: boolean;
+  /** Agent-visible text persisted with the blocked verdict; preferred notice
+   *  copy when present (null when the gate left no visible text). */
+  strategyTaskBlockedText?: string | null;
+  /**
+   * True once this turn's strategy task settled `completed` — the daemon
+   * verified both a succeeded process and the canonical deliverable on disk.
+   * The turn's TodoWrite snapshot may still show pending items the agent forgot
+   * to flip; this flag is what lets the chat stop offering to "continue"
+   * already-delivered work (see continuableUnfinishedTodos).
+   */
+  strategyTaskDelivered?: boolean;
   /** Analytics-only task lineage persisted with the message so retries,
    *  resumes and clarification answers survive reloads without splitting one
    *  user intent into unrelated failures. */
@@ -879,6 +967,19 @@ export interface ChatMessage {
    * avoid telemetry reads before content and producedFiles are finalized.
    */
   telemetryFinalized?: boolean;
+  /**
+   * Request-only marker claiming this row exactly once.
+   *
+   * An inline question form's answer belongs to one occurrence (the assistant
+   * message that asked plus the form id), and the client cannot make
+   * "check whether it is already answered, then write" atomic against another
+   * tab. With this set the daemon refuses to overwrite an existing row and
+   * returns the stored one instead, so the first accepted answer stays
+   * authoritative and a later submitter learns what actually ran.
+   *
+   * The daemon does not store or return this field.
+   */
+  createOnly?: boolean;
 }
 
 export interface ChatTaskExecutionAnalytics {

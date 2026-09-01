@@ -1,0 +1,92 @@
+name: catalog-validate
+
+# Standalone PR validation for the product catalog producer.
+# Outside ci.yml / merge gate. No R2 secrets. Does not publish.
+
+on:
+  pull_request:
+    paths:
+      - "skills/**"
+      - "design-templates/**"
+      - "design-systems/**"
+      - "craft/**"
+      - "templates/live-artifacts/**"
+      - "plugins/**"
+      - "data/plugin-previews/**"
+      - "tools/release/src/catalog/**"
+      - "tools/release/src/storage/publish-catalog.ts"
+      - "tools/release/src/storage/common.ts"
+      - "tools/release/src/storage/s3-upload.ts"
+      - "tools/release/tests/catalog-*.test.ts"
+      - "tools/release/tests/fixtures/catalog/**"
+      - "tools/release/package.json"
+      - ".github/workflows/catalog-validate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catalog-validate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: catalog producer unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck tools-release
+        run: pnpm --filter @open-design/tools-release typecheck
+
+      - name: Test tools-release
+        run: pnpm --filter @open-design/tools-release test
+
+      - name: Build tools-release
+        run: pnpm --filter @open-design/tools-release build
+
+      - name: Export + validate fixture path (smoke)
+        env:
+          CATALOG_REPO_ROOT: tools/release/tests/fixtures/catalog
+          CATALOG_SOURCE_COMMIT: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          CATALOG_SOURCE_COMMITTED_AT: 2026-08-29T00:00:00.000Z
+          CATALOG_STAGING_DIR: .tmp/catalog-validate-fixture
+          CATALOG_PREVIEW_RENDERER: stub
+        run: |
+          pnpm exec tools-release export-catalog
+          pnpm exec tools-release render-catalog-previews
+          test -f .tmp/catalog-validate-fixture/catalog.json
+          test -f .tmp/catalog-validate-fixture/previews/skills/alpha.webp
+
+      - name: Export real product catalog
+        env:
+          CATALOG_SOURCE_COMMIT: ${{ github.sha }}
+          CATALOG_STAGING_DIR: .tmp/catalog-validate-repo
+        run: |
+          pnpm exec tools-release export-catalog
+          test -f .tmp/catalog-validate-repo/catalog.json
+          node --input-type=module <<'NODE'
+            import { readFileSync } from "node:fs";
+            const catalog = JSON.parse(readFileSync(".tmp/catalog-validate-repo/catalog.json", "utf8"));
+            if (catalog.schemaVersion !== 1) {
+              throw new Error(`expected schemaVersion 1, got ${JSON.stringify(catalog.schemaVersion)}`);
+            }
+            if (!Array.isArray(catalog.records)) {
+              throw new Error("catalog.records must be an array");
+            }
+            console.log(`ok schemaVersion=${catalog.schemaVersion} records=${catalog.records.length}`);
+          NODE

@@ -3,10 +3,10 @@
   "id": "tesla",
   "name": "Tesla",
   "category": "Automotive",
-  "description": "Bundled Open Design package for Tesla, derived from curated DESIGN.md, tokens.css, and components.html fixtures.",
+  "description": "Bundled OpenDesign package for Tesla, derived from curated DESIGN.md, tokens.css, and components.html fixtures.",
   "source": {
     "type": "bundled",
-    "origin": "Open Design curated bundled fixture"
+    "origin": "OpenDesign curated bundled fixture"
   },
   "files": {
     "design": "DESIGN.md",

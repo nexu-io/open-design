@@ -4,8 +4,8 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import type { ToolPackConfig } from "../src/config.js";
-import { createWinRemovalPlan } from "../src/win/paths.js";
+import type { ToolPackConfig } from "@/config/index.js";
+import { createWinRemovalPlan } from "@/win/paths.js";
 
 function createConfig(root: string, removeCache: boolean): ToolPackConfig {
   return {

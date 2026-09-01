@@ -51,7 +51,7 @@ export function asInProjectFilePath(
  *
  * - `workspace-file`: a file of the CURRENT project — open it through the
  *   right-pane workspace tab opener (`requestOpenFile`).
- * - `project-file`: a file of ANOTHER Open Design project (typical when the
+ * - `project-file`: a file of ANOTHER OpenDesign project (typical when the
  *   conversation @-references other projects and the assistant links their
  *   files) — navigate to that project's file route in the same window.
  */

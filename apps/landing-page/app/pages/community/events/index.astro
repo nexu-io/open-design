@@ -3,10 +3,14 @@ import Layout from '../../../_components/sub-page-layout.astro';
 import '../../../globals.css';
 import '../../../sub-pages.css';
 import '../../../community.css';
+import { localeFromPath, localizedHref } from '../../../i18n';
 
-const title = 'Open Design Events';
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+
+const title = 'OpenDesign Events';
 const description =
-  'Community events, recaps, and upcoming hands-on sessions for people building with Open Design.';
+  'Community events, recaps, and upcoming hands-on sessions for people building with OpenDesign.';
 
 const jsonLd = {
   '@context': 'https://schema.org',
@@ -22,7 +26,7 @@ const jsonLd = {
     <section class="events-hero">
       <div class="events-wrap">
         <p class="events-kicker">Community · Events</p>
-        <h1>Events where Open Design becomes hands-on.</h1>
+        <h1>Events where OpenDesign becomes hands-on.</h1>
         <p>
           Recaps from local rooms, plus upcoming sessions where builders, designers,
           educators, and community organizers make editable AI artifacts together.
@@ -30,27 +34,47 @@ const jsonLd = {
       </div>
     </section>
 
+    <section class="events-section events-lead">
+      <a class="event-launch" href={href('/community/events/launch-week/')}>
+        <span class="event-launch-media">
+          <img
+            src="/launch-week/launch-week-card.jpg"
+            alt="OpenDesign Launch Week Vol.01"
+            loading="eager"
+          />
+        </span>
+        <span class="event-launch-copy">
+          <span class="event-pill">Recently wrapped · Aug 10–14</span>
+          <strong class="event-launch-title">Launch Week <span>Vol.01</span></strong>
+          <span class="event-launch-body">
+            Five days, five design jobs, one launch a day — each one aimed at a tool
+            your team already pays for.
+          </span>
+          <span class="event-launch-link">See the five releases -></span>
+        </span>
+      </a>
+    </section>
+
     <section class="events-section">
       <div class="events-wrap">
         <div class="events-section-head">
           <p class="events-kicker">Latest recap</p>
-          <h2>Open Design Osaka Workshop</h2>
+          <h2>OpenDesign Hong Kong Workshop</h2>
         </div>
-        <a class="event-feature" href="/community/open-design-osaka-meetup/">
+        <a class="event-feature" href={href('/community/open-design-hong-kong-workshop/')}>
           <span class="event-feature-media">
             <img
-              src="/stories/osaka-kyoto-group-room.jpg"
-              alt="Participants gathered for the Osaka Open Design meetup"
+              src="/stories/open-design-hong-kong-workshop-cover.webp"
+              alt="Participants at the OpenDesign Hong Kong workshop"
               loading="eager"
             />
           </span>
           <span class="event-feature-copy">
-            <span class="event-pill">Recap · Osaka · July 6</span>
-            <strong>Open Design Osaka Meetup Recap</strong>
+            <span class="event-pill">Recap · Hong Kong · Aug 16</span>
+            <strong>OpenDesign Hong Kong Workshop Recap</strong>
             <span>
-              A warm offline session near Nipponbashi Station: AI-powered PPT workflows,
-              real estate brochures, local website concepts, and the lesson that editable
-              artifacts beat one-off generation.
+              A room of builders connected design systems, live data, models, and skills
+              to create interactive, shareable artifacts—and stress-test the full workflow.
             </span>
             <span class="event-link">Read the recap -></span>
           </span>
@@ -58,29 +82,48 @@ const jsonLd = {
       </div>
     </section>
 
-    <section class="events-section events-upcoming">
+    <section class="events-section events-more">
       <div class="events-wrap">
         <div class="events-section-head">
-          <p class="events-kicker">Coming soon</p>
-          <h2>Upcoming community sessions.</h2>
+          <p class="events-kicker">More recaps</p>
+          <h2>More from the community.</h2>
         </div>
         <div class="event-grid">
-          <a class="event-card" href="/blog/open-design-shanghai-ai-workshop/">
+          <a class="event-card" href={href('/community/open-design-shanghai-workshop/')}>
             <span class="event-card-media">
               <img
-                src="/blog/open-design-shanghai-ai-workshop-cover.webp"
-                alt="Open Design AI Workshop in Shanghai"
+                src="/stories/open-design-shanghai-workshop-cover.webp"
+                alt="Participants at the OpenDesign Shanghai workshop"
                 loading="lazy"
               />
             </span>
             <span class="event-card-body">
-              <span class="event-pill">Upcoming · Shanghai · July 25</span>
-              <strong>Open Design AI Workshop is coming to Shanghai</strong>
+              <span class="event-pill">Recap · Shanghai · July 25</span>
+              <strong>OpenDesign Shanghai Workshop Recap</strong>
               <span>
-                A hands-on workshop for students, developers, designers, and AI tool
-                builders to turn prompts and references into real AI artifacts.
+                Developers, designers, product managers, students, and creators came together
+                near Fudan University to turn their own ideas into editable artifacts.
               </span>
-              <span class="event-link">View event details -></span>
+              <span class="event-link">Read the recap -></span>
+            </span>
+          </a>
+          <a class="event-card" href={href('/community/open-design-osaka-meetup/')}>
+            <span class="event-card-media">
+              <img
+                src="/stories/osaka-kyoto-group-room.jpg"
+                alt="Participants gathered for the Osaka OpenDesign meetup"
+                loading="lazy"
+              />
+            </span>
+            <span class="event-card-body">
+              <span class="event-pill">Recap · Osaka · July 6</span>
+              <strong>OpenDesign Osaka Meetup Recap</strong>
+              <span>
+                A warm offline session near Nipponbashi Station: AI-powered PPT workflows,
+                real estate brochures, local website concepts, and the lesson that editable
+                artifacts beat one-off generation.
+              </span>
+              <span class="event-link">Read the recap -></span>
             </span>
           </a>
         </div>
@@ -89,6 +132,78 @@ const jsonLd = {
   </main>
 
   <style is:global>
+    /* Launch Week lead band — the flagship event carries its own campaign
+       language (ink, acid, condensed display) so it reads as the headline
+       rather than one more card in a neutral list. */
+    .events-lead { padding-top: 34px; }
+    .event-launch {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, 1.32fr) minmax(0, 1fr);
+      align-items: stretch;
+      width: min(1100px, calc(100% - 40px));
+      margin: 0 auto;
+      overflow: hidden;
+      color: var(--event-ink);
+      background: #fff;
+      border: 1px solid var(--event-line);
+      border-radius: 18px;
+      text-decoration: none;
+      transition: transform .18s ease, box-shadow .18s ease;
+    }
+    .event-launch:hover { transform: translateY(-3px); box-shadow: 0 24px 48px -28px rgba(7,7,7,.55); }
+    .event-launch-media { display: block; aspect-ratio: 16 / 9; }
+    .event-launch-media::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(rgba(7,7,7,.05), rgba(7,7,7,.12));
+      opacity: 0;
+      transition: opacity .18s ease;
+    }
+    .event-launch:hover .event-launch-media::after { opacity: 1; }
+    .event-launch-media img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .event-launch-copy {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 12px;
+      padding: clamp(24px, 2.6vw, 38px);
+    }
+    .event-launch-title {
+      font-family: var(--sans);
+      font-size: clamp(26px, 2.6vw, 34px);
+      font-weight: 800;
+      line-height: 1.04;
+      letter-spacing: -.03em;
+    }
+    .event-launch-title span { color: var(--event-green-dark); }
+    .event-launch-body {
+      max-width: 34ch;
+      font-size: 14.5px;
+      line-height: 1.55;
+      color: var(--event-soft);
+    }
+    .event-launch-link {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      color: var(--event-green-dark);
+    }
+    @media (max-width: 860px) {
+      .event-launch { grid-template-columns: 1fr; }
+      .event-launch-media { position: relative; aspect-ratio: 16 / 9; }
+      .event-launch-media::after { background: linear-gradient(rgba(7,7,7,0) 40%, rgba(7,7,7,.9)); }
+      .event-launch-copy { padding: 22px 20px 26px; }
+    }
+
     .od-events {
       --event-paper: #fafafa;
       --event-ink: #262626;
@@ -150,7 +265,7 @@ const jsonLd = {
       padding: 26px 0 0;
     }
 
-    .events-upcoming {
+    .events-more {
       padding-top: 88px;
     }
 
@@ -279,7 +394,7 @@ const jsonLd = {
 
     .event-grid {
       display: grid;
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 18px;
     }
 

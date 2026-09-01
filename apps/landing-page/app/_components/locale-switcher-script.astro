@@ -9,6 +9,7 @@ const localeRoutes = LANDING_LOCALES.map((locale) => ({
 const script = `
 (() => {
   const STORAGE_KEY = 'od.preferredLocale';
+  const ATTRIBUTION_HANDOFF_KEY = 'od.localeAttribution';
   const DEFAULT_LOCALE = ${JSON.stringify(DEFAULT_LOCALE)};
   const LOCALES = ${JSON.stringify(localeRoutes)};
   const codes = new Set(LOCALES.map((locale) => locale.code));
@@ -17,7 +18,7 @@ const script = `
   // strippable locale segment, or switching language on an alias page like
   // /zh-CN/blog/ would rebuild a nested, non-existent /<locale>/zh-CN/blog/.
   // Mirrors LEGACY_LOCALE_PREFIXES in app/i18n.ts.
-  const legacyAliases = new Set(['zh-cn', 'es-es', 'fa', 'hu', 'th']);
+  const legacyAliases = new Set(['zh-cn', 'zh-tw', 'es-es', 'fa', 'hu', 'th']);
   const isLocaleSegment = (segment) => {
     const value = (segment || '').toLowerCase();
     return value !== '' && (codes.has(value) || legacyAliases.has(value));
@@ -34,7 +35,7 @@ const script = `
       raw === 'zh-hant' ||
       raw.startsWith('zh-hant-')
     ) {
-      return 'zh-tw';
+      return codes.has('zh-tw') ? 'zh-tw' : 'zh';
     }
     if (raw === 'pt' || raw.startsWith('pt-br')) return 'pt-br';
     if (codes.has(raw)) return raw;
@@ -59,11 +60,18 @@ const script = `
   const isCanonicalOnly = () =>
     document.documentElement.getAttribute('data-locale-canonical') === 'true';
 
+  const searchWithoutLocaleHandoff = () => {
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.delete('od_locale');
+    const search = searchParams.toString();
+    return search ? \`?\${search}\` : '';
+  };
+
   const targetFor = (locale) => {
     const basePath = basePathFromCurrent();
     const nextPath =
       isCanonicalOnly() || locale === DEFAULT_LOCALE ? basePath : \`/\${locale}\${basePath}\`;
-    return \`\${nextPath}\${window.location.search}\${window.location.hash}\`;
+    return \`\${nextPath}\${searchWithoutLocaleHandoff()}\${window.location.hash}\`;
   };
 
   const persistLocale = (locale) => {
@@ -72,12 +80,54 @@ const script = `
     } catch {}
   };
 
-  const selectLocale = (locale, persist) => {
+  const handoffAttribution = (target, reason, detectedLocale) => {
+    try {
+      let safeReferrer = '';
+      let referringDomain = '';
+      if (document.referrer) {
+        const referrer = new URL(document.referrer);
+        // Same-site referrers are genuine continuations, not acquisitions that
+        // need to survive this automatic redirect.
+        if (referrer.hostname === window.location.hostname) return;
+        referringDomain = referrer.hostname;
+        // Referrer queries may contain search terms or tokens. The path and
+        // hostname are sufficient for acquisition classification.
+        safeReferrer = referrer.origin + referrer.pathname;
+      }
+      const inbound = new URLSearchParams(window.location.search);
+      const attribution = {};
+      ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'gclid'].forEach((key) => {
+        const value = inbound.get(key);
+        if (value) attribution[key] = value.slice(0, 200);
+      });
+      const originalSearch = new URLSearchParams(attribution).toString();
+      const originalLandingUrl =
+        (window.location.pathname || '/') + (originalSearch ? '?' + originalSearch : '');
+      window.sessionStorage.setItem(ATTRIBUTION_HANDOFF_KEY, JSON.stringify({
+        referrer: safeReferrer,
+        referringDomain,
+        entryPath: window.location.pathname || '/',
+        targetPath: new URL(target, window.location.href).pathname,
+        originalLandingUrl,
+        attribution,
+        redirectReason: reason,
+        detectedLocale,
+        redirectFrom: window.location.pathname || '/',
+        redirectTo: new URL(target, window.location.href).pathname,
+        createdAt: Date.now(),
+      }));
+    } catch {}
+  };
+
+  const selectLocale = (locale, persist, attributionReason) => {
     const next = normalizeLocale(locale) ?? DEFAULT_LOCALE;
     if (persist) persistLocale(next);
     const target = targetFor(next);
     const current = \`\${window.location.pathname}\${window.location.search}\${window.location.hash}\`;
-    if (current !== target) window.location.assign(target);
+    if (current !== target) {
+      if (attributionReason) handoffAttribution(target, attributionReason, next);
+      window.location.assign(target);
+    }
   };
 
   const bindSwitchers = () => {
@@ -100,7 +150,7 @@ const script = `
         const details = link.closest('[data-locale-switch]');
         if (details && details.open) details.open = false;
         event.preventDefault();
-        selectLocale(code, true);
+        selectLocale(code, true, null);
       });
     }
 
@@ -158,7 +208,21 @@ const script = `
     // design-system detail pages): keep the visitor on the URL they clicked.
     // hreflang + manual language switching stay intact.
     if (document.documentElement.getAttribute('data-locale-autoredirect') === 'off') return;
-    if (currentFromPath() !== DEFAULT_LOCALE) return;
+    const current = currentFromPath();
+    const searchParams = new URLSearchParams(window.location.search);
+    const requested = normalizeLocale(searchParams.get('od_locale'));
+    // A product that links here already knows the user's selected language.
+    // Honor that explicit handoff before this site's saved/browser fallback,
+    // then consume it so a later manual language choice remains authoritative.
+    if (requested) {
+      if (requested !== current) selectLocale(requested, false, 'explicit_handoff');
+      else {
+        const target = \`\${window.location.pathname}\${searchWithoutLocaleHandoff()}\${window.location.hash}\`;
+        window.history.replaceState(window.history.state, '', target);
+      }
+      return;
+    }
+    if (current !== DEFAULT_LOCALE) return;
     let saved = null;
     try {
       saved = normalizeLocale(window.localStorage.getItem(STORAGE_KEY) ?? '');
@@ -168,7 +232,9 @@ const script = `
       (Array.isArray(navigator.languages)
         ? navigator.languages.map(normalizeLocale).find(Boolean)
         : normalizeLocale(navigator.language));
-    if (detected && detected !== DEFAULT_LOCALE) selectLocale(detected, false);
+    if (detected && detected !== DEFAULT_LOCALE) {
+      selectLocale(detected, false, saved ? 'saved_preference' : 'browser_detected');
+    }
   };
 
   // Run the auto-redirect FIRST and synchronously: when this script is placed

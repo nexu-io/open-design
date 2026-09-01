@@ -1,11 +1,16 @@
 import fs from 'node:fs';
 import type { Express } from 'express';
 import type {
+  HyperFramesScaffoldRequest,
+  HyperFramesScaffoldResponse,
   MediaExecutionPolicy,
   MediaGenerationResultProps,
 } from '@open-design/contracts';
 import type { AnalyticsContext } from '../analytics.js';
 import { defaultMediaExecutionPolicy, mediaPolicyDenial } from '../media/policy.js';
+import { formatMediaTaskDiagnostic } from '../media/diagnostics.js';
+import { findMediaModel } from '../media/models.js';
+import type { MediaTaskError } from '../media/tasks.js';
 import type { ImageGenerationRequestSummary } from '../media/image-generation-retry.js';
 import type { RouteDeps } from '../server-context.js';
 import type {
@@ -21,16 +26,22 @@ import {
 } from '../integrations/aihubmix.js';
 import { isSandboxModeEnabled } from '../sandbox-mode.js';
 import {
+  HYPERFRAMES_SCAFFOLD_TOOL_ENDPOINT,
   MEDIA_TASK_WAIT_TOOL_ENDPOINT,
   type ToolTokenGrant,
 } from '../tool-tokens.js';
-import {
-  authorizePersistedAutomationWorkspaceScope,
-  normalizePersistedAutomationWorkspaceScope,
-} from '../automations/workspace-scope.js';
-import type { WorkspaceDirectoryFetchResult } from '../collab/vela-workspace-context.js';
+import { scaffoldHyperFramesComposition } from '../media/hyperframes-scaffold.js';
+import { normalizePersistedAutomationWorkspaceScope } from '../automations/workspace-scope.js';
 
 const LONG_MEDIA_PROXY_TIMEOUT_MS = 10 * 60 * 1000;
+
+function mediaProviderId(model: string): string | undefined {
+  const registered = findMediaModel(model)?.provider;
+  if (registered) return registered;
+  if (model.startsWith('fal-ai/')) return 'fal';
+  if (model.startsWith('aihubmix-')) return 'aihubmix';
+  return undefined;
+}
 
 // Short in-memory cache for the AIHubMix media catalogue so the picker can
 // refresh without hammering the upstream public endpoint. Keyed by
@@ -39,7 +50,6 @@ const AIHUBMIX_CATALOG_TTL_MS = 5 * 60 * 1000;
 const aihubmixCatalogCache = new Map<string, { at: number; models: Array<{ id: string; label: string }> }>();
 
 export interface RegisterMediaRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'ids' | 'auth' | 'media' | 'appConfig' | 'orbit' | 'nativeDialogs' | 'projectStore' | 'projectFiles' | 'conversations' | 'research'> {
-  fetchWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
   authorizeProjectRequest: AuthorizeProjectRequest;
   authorizeProjectToolRequest: AuthorizeProjectToolRequest;
 }
@@ -86,6 +96,32 @@ export function resolveLegacyMediaRouteGrant(input: {
   return { ok: true, grant: input.grant };
 }
 
+
+/**
+ * Build the persisted failure record for a media task.
+ *
+ * A media failure is the only thing the client has left to explain itself
+ * with, so anything the producer proved must survive into the snapshot: the
+ * stable `code` the web client keys its copy on, the optional `subject`
+ * naming what a safety policy objected to, and `retryable` so the UI can stop
+ * inviting a retry that cannot succeed. Absent fields stay absent rather than
+ * being defaulted — `retryable: false` invented here would tell a user a
+ * transient outage is permanent.
+ */
+function mediaTaskErrorFromFailure(err: any): MediaTaskError {
+  const subject = err?.subject;
+  const retryable = err?.retryable;
+  return {
+    message: String(err && err.message ? err.message : err),
+    status: typeof err?.status === 'number' ? err.status : 400,
+    code: err?.code,
+    ...(subject === 'prompt' || subject === 'input_image' || subject === 'output_image'
+      ? { subject }
+      : {}),
+    ...(typeof retryable === 'boolean' ? { retryable } : {}),
+  };
+}
+
 export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, requireLocalDaemonRequest, isLocalSameOrigin, resolvedPortRef } = ctx.http;
@@ -100,7 +136,8 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       : null;
   const { orbitService } = ctx.orbit;
   const { openBrowser, openNativeFolderDialog } = ctx.nativeDialogs;
-  const { getProject } = ctx.projectStore;
+  const { getWorkspaceProjectByProjectId, getProject } = ctx.projectStore;
+  const { resolveProjectDir } = ctx.projectFiles;
   const { insertConversation, upsertMessage } = ctx.conversations;
   const { searchResearch, ResearchError } = ctx.research;
   const getResolvedPort = () => resolvedPortRef.current;
@@ -190,13 +227,28 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       task = createMediaTask(taskId, projectId, {
         surface: req.body?.surface,
         model: req.body?.model,
+        runId: options.grant?.runId,
       });
-      console.error(
-        `[task ${taskId.slice(0, 8)}] queued model=${req.body?.model} ` +
-          `surface=${req.body?.surface} ` +
-          `image=${req.body?.image ? 'yes' : 'no'} ` +
-          `compositionDir=${req.body?.compositionDir ? 'yes' : 'no'}`,
-      );
+      const requestedProviderId = mediaProviderId(model);
+      const diagnosticContext = {
+        taskId,
+        runId: options.grant?.runId,
+        projectId,
+        surface,
+        model,
+      };
+      console.error(formatMediaTaskDiagnostic({
+        ...diagnosticContext,
+        event: 'queued',
+        providerId: requestedProviderId,
+        status: task.status,
+        referenceImageCount: Array.isArray(req.body?.images)
+          ? req.body.images.length
+          : req.body?.image
+            ? 1
+            : 0,
+        hasCompositionDir: Boolean(req.body?.compositionDir),
+      }));
 
       const proxyDispatcher = proxyDispatcherRequestInit(process.env, {
         headersTimeout: LONG_MEDIA_PROXY_TIMEOUT_MS,
@@ -204,6 +256,12 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       });
       task.status = 'running';
       persistMediaTask(task);
+      // Media billing follows the project's Workspace binding, not its sharing
+      // visibility. A private project inside a team Workspace must still spend
+      // that Workspace's balance; `findTeamWorkspaceIdForProject` deliberately
+      // answers the narrower collaboration question and excludes it.
+      const workspaceId =
+        getWorkspaceProjectByProjectId(db, projectId)?.workspaceId?.trim() || undefined;
       generateMedia({
         projectRoot: PROJECT_ROOT,
         projectsRoot: PROJECTS_DIR,
@@ -213,6 +271,8 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         prompt: req.body?.prompt,
         output: req.body?.output,
         aspect: req.body?.aspect,
+        quality: typeof req.body?.quality === 'string' ? req.body.quality : undefined,
+        resolution: typeof req.body?.resolution === 'string' ? req.body.resolution : undefined,
         length:
           typeof req.body?.length === 'number' ? req.body.length : undefined,
         duration:
@@ -229,6 +289,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         compositionDir: req.body?.compositionDir,
         image: req.body?.image,
         images: Array.isArray(req.body?.images) ? req.body.images : undefined,
+        workspaceId,
         onProgress: (line: any) => appendTaskProgress(task, line),
         requestInit: proxyDispatcher.requestInit,
         onProviderRequestSettled: (summary: ImageGenerationRequestSummary & { providerId: string }) => {
@@ -254,18 +315,19 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
             });
           }
           notifyTaskWaiters(task);
-          console.error(
-            `[task ${taskId.slice(0, 8)}] done size=${meta?.size} mime=${meta?.mime} ` +
-              `elapsed=${Math.round((task.endedAt - task.startedAt) / 1000)}s`,
-          );
+          console.error(formatMediaTaskDiagnostic({
+            ...diagnosticContext,
+            event: 'done',
+            providerId: meta?.providerId ?? providerRequestSummary?.providerId ?? requestedProviderId,
+            status: task.status,
+            elapsedMs: task.endedAt - task.startedAt,
+            fileSize: typeof meta?.size === 'number' ? meta.size : undefined,
+            mime: typeof meta?.mime === 'string' ? meta.mime : undefined,
+          }));
         })
         .catch((err: any) => {
           task.status = 'failed';
-          task.error = {
-            message: String(err && err.message ? err.message : err),
-            status: typeof err?.status === 'number' ? err.status : 400,
-            code: err?.code,
-          };
+          task.error = mediaTaskErrorFromFailure(err);
           task.endedAt = Date.now();
           persistMediaTask(task);
           if (analyticsContext && providerRequestSummary) {
@@ -281,10 +343,15 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
             });
           }
           notifyTaskWaiters(task);
-          console.error(
-            `[task ${taskId.slice(0, 8)}] failed status=${task.error.status} ` +
-              `message=${(task.error.message || '').slice(0, 240)}`,
-          );
+          console.error(formatMediaTaskDiagnostic({
+            ...diagnosticContext,
+            event: 'failed',
+            providerId: providerRequestSummary?.providerId ?? requestedProviderId,
+            status: task.error.status,
+            code: task.error.code,
+            elapsedMs: task.endedAt - task.startedAt,
+            error: task.error.message,
+          }));
         })
         .finally(() => proxyDispatcher.close());
 
@@ -296,17 +363,47 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     } catch (err: any) {
       if (task) {
         task.status = 'failed';
-        task.error = {
-          message: String(err && err.message ? err.message : err),
-          status: typeof err?.status === 'number' ? err.status : 400,
-          code: err?.code,
-        };
+        task.error = mediaTaskErrorFromFailure(err);
         task.endedAt = Date.now();
         persistMediaTask(task);
         notifyTaskWaiters(task);
+        console.error(formatMediaTaskDiagnostic({
+          event: 'failed',
+          taskId: task.id,
+          runId: options.grant?.runId,
+          projectId,
+          surface,
+          model,
+          providerId: mediaProviderId(model),
+          status: task.error.status,
+          code: task.error.code,
+          elapsedMs: task.endedAt - task.startedAt,
+          error: task.error.message,
+        }));
       }
       throw err;
     }
+  };
+
+  const handleHyperFramesScaffold = async (
+    req: any,
+    res: any,
+    projectId: string,
+  ) => {
+    const project = getProject(db, projectId);
+    if (!project) {
+      return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+    }
+    const body = (req.body ?? {}) as Partial<HyperFramesScaffoldRequest>;
+    if (typeof body.compositionDir !== 'string' || !body.compositionDir.trim()) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'compositionDir is required');
+    }
+    const projectDir = resolveProjectDir(PROJECTS_DIR, project.id, project.metadata);
+    const result: HyperFramesScaffoldResponse = await scaffoldHyperFramesComposition({
+      projectDir,
+      compositionDir: body.compositionDir,
+    });
+    return res.status(201).json(result);
   };
 
   const captureMediaGenerationResult = (input: {
@@ -531,10 +628,6 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
               code: 'WORKSPACE_CONTEXT_INCOMPLETE',
             });
           }
-          await authorizePersistedAutomationWorkspaceScope(
-            scope,
-            ctx.fetchWorkspaceDirectory,
-          );
         }
       }
       const config = await writeAppConfig(RUNTIME_DATA_DIR, req.body);
@@ -542,9 +635,16 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       onAppConfigWritten?.(config);
       res.json({ config });
     } catch (err: any) {
-      const status = err?.code === 'WORKSPACE_AUTHORITY_UNAVAILABLE'
-        ? 503
-        : err?.code === 'WORKSPACE_ACCESS_DENIED'
+      if (err?.code === 'INVALID_APP_CONFIG_VALUE') {
+        // Nested envelope on purpose. `od`'s error reader only finds a code in
+        // this shape; from a flat body it falls back to `daemon-not-running`
+        // and exits 64, which tells a caller to go start a daemon that just
+        // answered. Rejected input should read as a plain failure.
+        return res.status(400).json({
+          error: { code: err.code, message: String(err.message) },
+        });
+      }
+      const status = err?.code === 'WORKSPACE_ACCESS_DENIED'
           ? 403
           : 500;
       res
@@ -630,9 +730,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       const locale = typeof req.body?.locale === 'string' ? req.body.locale : null;
       res.json(await orbitService.start('manual', { locale }));
     } catch (err: any) {
-      const status = err?.code === 'WORKSPACE_AUTHORITY_UNAVAILABLE'
-        ? 503
-        : err?.code === 'WORKSPACE_ACCESS_DENIED'
+      const status = err?.code === 'WORKSPACE_ACCESS_DENIED'
           ? 403
           : 500;
       res
@@ -681,6 +779,54 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       res
         .status(500)
         .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  app.post('/api/projects/:id/media/hyperframes/scaffold', async (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) {
+      return res.status(403).json({
+        error: 'cross-origin request rejected: HyperFrames scaffolding is restricted to the local UI / CLI',
+      });
+    }
+    try {
+      const project = getProject(db, req.params.id);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      if (!await ctx.authorizeProjectRequest(
+        req,
+        res,
+        project.id,
+        { mode: 'write', capability: 'writeFiles' },
+      )) return;
+      await handleHyperFramesScaffold(req, res, project.id);
+    } catch (err: any) {
+      const status = typeof err?.status === 'number' ? err.status : 400;
+      const code = err?.code;
+      const body: any = { error: String(err && err.message ? err.message : err) };
+      if (code) body.code = code;
+      res.status(status).json(body);
+    }
+  });
+
+  app.post(HYPERFRAMES_SCAFFOLD_TOOL_ENDPOINT, async (req, res) => {
+    const grant = authorizeToolRequest(req, res, 'media:scaffold', {
+      endpoint: HYPERFRAMES_SCAFFOLD_TOOL_ENDPOINT,
+    });
+    if (!grant) return;
+    try {
+      if (!await ctx.authorizeProjectToolRequest(
+        res,
+        grant.projectId,
+        { mode: 'write', capability: 'writeFiles' },
+      )) return;
+      await handleHyperFramesScaffold(req, res, grant.projectId);
+    } catch (err: any) {
+      const status = typeof err?.status === 'number' ? err.status : 400;
+      const code = err?.code;
+      const body: any = { error: String(err && err.message ? err.message : err) };
+      if (code) body.code = code;
+      res.status(status).json(body);
     }
   });
 
@@ -815,8 +961,8 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       )
     ) return;
 
-    // Token callers must prove fresh project authority before task lookup so
-    // a revoked member or an authority outage cannot probe task existence.
+    // Token callers must prove their grant targets the persisted local project
+    // before task lookup; cloud availability is irrelevant to this local wait.
     const taskId = req.params.id;
     const task = getLiveMediaTask(taskId);
     if (!task) return res.status(404).json({ error: 'task not found' });

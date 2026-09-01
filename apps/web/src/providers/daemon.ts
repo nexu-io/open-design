@@ -19,6 +19,7 @@ import type {
   AmrAuthStageSource,
 } from '@open-design/contracts/analytics';
 import type {
+  ApiErrorResponse,
   ChatAnalyticsHints,
   ChatRunCreateResponse,
   ChatRunListResponse,
@@ -36,6 +37,7 @@ import type {
   ResearchOptions,
   RunContextSelection,
   SseErrorPayload,
+  StrategyTaskProjectionV2,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
 import type { StreamHandlers } from './anthropic';
@@ -68,6 +70,7 @@ import { trackRunProgress, trackRunStart, trackRunTerminal } from '../observabil
 const MAX_TRANSCRIPT_MESSAGE_CHARS = 12_000;
 const LARGE_TOOL_RESULT_CHARS = 8_000;
 const HIGH_INPUT_TOKEN_WARNING_THRESHOLD = 200_000;
+const RUN_CREATE_AUTHORITY_RETRY_DELAYS_MS = [500, 1_000, 2_000] as const;
 const BYOK_OPENCODE_AGENT_ID = 'byok-opencode';
 const API_MODE_AGENT_IDS = new Set([
   'anthropic-api',
@@ -91,7 +94,7 @@ export function latestUserPromptFromHistory(history: ChatMessage[]): string {
 function truncateForTranscript(content: string): string {
   if (content.length <= MAX_TRANSCRIPT_MESSAGE_CHARS) return content;
   const omitted = content.length - MAX_TRANSCRIPT_MESSAGE_CHARS;
-  return `${content.slice(0, MAX_TRANSCRIPT_MESSAGE_CHARS)}\n\n[Open Design truncated ${omitted} chars from this prior message before sending it to the agent. Full content remains in persisted history.]`;
+  return `${content.slice(0, MAX_TRANSCRIPT_MESSAGE_CHARS)}\n\n[OpenDesign truncated ${omitted} chars from this prior message before sending it to the agent. Full content remains in persisted history.]`;
 }
 
 function escapeTranscriptRoleDelimiters(content: string): string {
@@ -150,7 +153,7 @@ function buildPriorRunContextWarning(history: ChatMessage[]): string | null {
 
   return [
     '## context warning',
-    `Open Design detected ${notes.join(', ')}.`,
+    `OpenDesign detected ${notes.join(', ')}.`,
     'Keep this turn compact: summarize prior tool output, read large references from temp files, and quote only task-relevant lines.',
   ].join('\n');
 }
@@ -268,8 +271,27 @@ export function buildDaemonTranscript(history: ChatMessage[], targetAgentId?: st
   return warning ? `${warning}\n\n${transcript}` : transcript;
 }
 
+/** Build only the turns before the latest user message without text subtraction. */
+export function buildDaemonPriorTranscript(
+  history: ChatMessage[],
+  targetAgentId?: string,
+): string {
+  let latestUserIndex = -1;
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    if (history[index]?.role === 'user') {
+      latestUserIndex = index;
+      break;
+    }
+  }
+  return latestUserIndex < 0
+    ? buildDaemonTranscript(history, targetAgentId)
+    : buildDaemonTranscript(history.slice(0, latestUserIndex), targetAgentId);
+}
+
 export interface DaemonStreamHandlers extends StreamHandlers {
   onAgentEvent: (ev: AgentEvent) => void;
+  /** Authoritative artifact count from the daemon's terminal run record. */
+  onArtifactCount?: (count: number) => void;
   /**
    * Live-only incremental tool-input fragment (Claude `input_json_delta`).
    * Kept off `AgentEvent`/`PersistedAgentEvent` because it is ephemeral and
@@ -335,17 +357,27 @@ export interface DaemonStreamOptions {
   // (non-workspace) usage, matching those other call sites.
   workspaceContext?: WorkspaceCollabContext | null;
   initialLastEventId?: string | null;
-  onRunCreated?: (runId: string) => void;
   onRunStatus?: (status: ChatRunStatus) => void;
+  /** Authoritative project-relative artifacts created or modified by the run. */
+  onArtifactPaths?: (paths: string[]) => void;
   onRunEventId?: (eventId: string) => void;
   // v2 analytics context propagated to run_created / run_finished.
   // Optional; the daemon only consumes these to shape PostHog props
   // (page_name / area / entry_from / DS context). Behavior never
   // depends on them.
   analyticsHints?: ChatAnalyticsHints;
+  /** Daemon-issued continuation handle used only for an explicit task reply. */
+  taskExecutionId?: string;
+  /** Called for the initial Run and every daemon-projected successor Run. */
+  onRunCreated?: (runId: string, strategyTask?: StrategyTaskProjectionV2) => void;
+  /** Called once the daemon projects the logical strategy task as terminal
+   *  (completed / blocked / canceled), with the terminal projection. */
+  onStrategyTaskSettled?: (strategyTask: StrategyTaskProjectionV2) => void;
 }
 
 export interface DaemonReattachOptions {
+  /** Runtime that owns the reattached run, when persisted with its message. */
+  agentId?: string;
   runId: string;
   projectId?: string | null;
   conversationId?: string | null;
@@ -355,15 +387,22 @@ export interface DaemonReattachOptions {
   handlers: DaemonStreamHandlers;
   initialLastEventId?: string | null;
   onRunStatus?: (status: ChatRunStatus) => void;
+  onArtifactPaths?: (paths: string[]) => void;
   onRunEventId?: (eventId: string) => void;
   /** Publish a current-run success outcome to the app-level upgrade gate. */
   publishRunFinishedEvent?: boolean;
+  /** Called when reattach discovers a newer active Run in the same task. */
+  onRunCreated?: (runId: string, strategyTask?: StrategyTaskProjectionV2) => void;
+  /** Called once the daemon projects the logical strategy task as terminal
+   *  (completed / blocked / canceled), with the terminal projection. */
+  onStrategyTaskSettled?: (strategyTask: StrategyTaskProjectionV2) => void;
 }
 
 export const RUNS_CHANGED_EVENT = 'open-design:runs-changed';
 export const DAEMON_RUN_FINISHED_EVENT = 'open-design:daemon-run-finished';
 
 export interface DaemonRunFinishedEventDetail {
+  agentId: string;
   runId: string;
   projectId: string;
   conversationId: string;
@@ -376,6 +415,7 @@ export function publishDaemonRunFinishedEvent(
 ): void {
   if (
     typeof window === 'undefined'
+    || detail.agentId !== 'amr'
     || !detail.runId.trim()
     || !detail.projectId.trim()
     || !detail.conversationId.trim()
@@ -451,7 +491,7 @@ function shouldSuppressLifecycleExitFallback(
 }
 
 const AMR_OPENCODE_INCOMPLETE_MESSAGE =
-  'Open Design started, but the run did not complete. Please retry or check the run details for the session stream error.';
+  'OpenDesign started, but the run did not complete. Please retry or check the run details for the session stream error.';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -470,6 +510,30 @@ function readNumberField(record: Record<string, unknown> | null, key: string): n
 function readBooleanField(record: Record<string, unknown> | null, key: string): boolean | null {
   const value = record?.[key];
   return typeof value === 'boolean' ? value : null;
+}
+
+function daemonCreateRunError(response: Response, responseText: string): Error {
+  let payload: ApiErrorResponse | null = null;
+  try {
+    payload = JSON.parse(responseText) as ApiErrorResponse;
+  } catch {
+    // Older daemons and proxy failures can return plain text.
+  }
+  const apiError = payload?.error;
+  if (!apiError || typeof apiError !== 'object') {
+    return new Error(`daemon ${response.status}: ${responseText || 'no body'}`);
+  }
+  const error = new Error(apiError.message || `OpenDesign service returned ${response.status}`) as Error & {
+    code?: string;
+    requestId?: string;
+    retryable?: boolean;
+    status?: number;
+  };
+  error.status = response.status;
+  error.code = apiError.code;
+  error.retryable = apiError.retryable === true;
+  if (apiError.requestId) error.requestId = apiError.requestId;
+  return error;
 }
 
 interface OpenCodeSessionErrorDetails {
@@ -535,10 +599,10 @@ function formatOpenCodeSessionError(value: unknown): string | null {
     return message;
   }
   if (statusCode === 404) {
-    return 'The model service returned 404 Not Found for the configured runtime endpoint. Check the Open Design link URL or model route.';
+    return 'The model service returned 404 Not Found for the configured runtime endpoint. Check the OpenDesign link URL or model route.';
   }
   if (statusCode === 401 || statusCode === 403) {
-    return 'Open Design authentication failed. Please sign in again or refresh the runtime key.';
+    return 'OpenDesign authentication failed. Please sign in again or refresh the runtime key.';
   }
   if (statusCode === 429) {
     return 'The model service rejected the request due to quota or rate limits. Retry later or check quota and rate limits.';
@@ -680,8 +744,11 @@ export async function streamViaDaemon({
   initialLastEventId,
   onRunCreated,
   onRunStatus,
+  onArtifactPaths,
   onRunEventId,
   analyticsHints,
+  taskExecutionId,
+  onStrategyTaskSettled,
 }: DaemonStreamOptions): Promise<void> {
   const emitRunStatus = (status: ChatRunStatus) => {
     onRunStatus?.(status);
@@ -694,7 +761,9 @@ export async function streamViaDaemon({
   const request: ChatRequest = {
     agentId,
     message: transcript,
+    ...(taskExecutionId ? { taskExecutionId } : {}),
     currentPrompt: latestUserPromptFromHistory(history),
+    priorTranscript: buildDaemonPriorTranscript(history, agentId),
     projectId: projectId ?? null,
     conversationId: conversationId ?? null,
     sessionMode,
@@ -722,36 +791,52 @@ export async function streamViaDaemon({
   const body = JSON.stringify(request);
 
   try {
-    const createResp = await fetch('/api/runs', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        // Tells the daemon which front-end carrier started the run so the
-        // telemetry trace can be tagged 'client:desktop' vs 'client:web'.
-        // The daemon falls back to a User-Agent sniff when this header is
-        // absent (e.g. third-party clients), so omitting it in tests is OK.
-        'X-OD-Client': detectClientType(),
-        // Identifies the caller's workspace to the daemon's workspace-resource
-        // mutation gate (see `enforceWorkspaceProjectMutation` in
-        // apps/daemon/src/routes/runs.ts) — without it, a team member's own
-        // run on a team-bound project 401s exactly like an unauthenticated
-        // caller's would. Omitted (headers stay absent) for signed-out /
-        // personal usage, matching every other workspace-gated write.
-        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
-      },
-      body,
-    });
+    let createResp: Response;
+    for (let attempt = 0; ; attempt += 1) {
+      createResp = await fetch('/api/runs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Tells the daemon which front-end carrier started the run so the
+          // telemetry trace can be tagged 'client:desktop' vs 'client:web'.
+          // The daemon falls back to a User-Agent sniff when this header is
+          // absent (e.g. third-party clients), so omitting it in tests is OK.
+          'X-OD-Client': detectClientType(),
+          // Identifies the caller's workspace to the daemon's workspace-resource
+          // mutation gate (see `enforceWorkspaceProjectMutation` in
+          // apps/daemon/src/routes/runs.ts) — without it, a team member's own
+          // run on a team-bound project 401s exactly like an unauthenticated
+          // caller's would. Omitted (headers stay absent) for signed-out /
+          // personal usage, matching every other workspace-gated write.
+          ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+        },
+        body,
+      });
+      if (createResp.ok) break;
+
+      const errorBody = await createResp.clone().json().catch(() => null) as ApiErrorResponse | null;
+      const error = errorBody?.error;
+      const retryableAuthorityOutage =
+        createResp.status === 503
+        && error?.code === 'WORKSPACE_AUTHORITY_UNAVAILABLE'
+        && error.retryable === true;
+      const delayMs = RUN_CREATE_AUTHORITY_RETRY_DELAYS_MS[attempt];
+      if (!retryableAuthorityOutage || delayMs === undefined || cancelSignal?.aborted) break;
+      await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+      if (cancelSignal?.aborted) return;
+    }
 
     if (!createResp.ok) {
       const text = await createResp.text().catch(() => '');
       emitRunStatus('failed');
-      handlers.onError(new Error(`daemon ${createResp.status}: ${text || 'no body'}`));
+      handlers.onError(daemonCreateRunError(createResp, text));
       return;
     }
 
     const created = (await createResp.json()) as ChatRunCreateResponse;
     const runId = created.runId;
-    onRunCreated?.(runId);
+    if (created.strategyTask) onRunCreated?.(runId, created.strategyTask);
+    else onRunCreated?.(runId);
     // Start the stuck-run watchdog. trackRunProgress is called inside the
     // SSE consumer below on every event; trackRunTerminal fires when the
     // stream resolves to a terminal state (or errors out).
@@ -771,11 +856,14 @@ export async function streamViaDaemon({
       handlers,
       initialLastEventId,
       onRunStatus: emitRunStatus,
+      onArtifactPaths,
       onRunEventId,
       projectId,
       conversationId,
       workspaceContext,
       publishRunFinishedEvent: true,
+      onRunCreated,
+      onStrategyTaskSettled,
     });
   } catch (err) {
     if ((err as Error).name === 'AbortError') return;
@@ -905,6 +993,8 @@ export interface VelaLiveAccount {
 
 export interface VelaLoginStatus {
   loggedIn: boolean;
+  sessionState?: import('@open-design/contracts').AmrSessionState;
+  credentialRevision?: string;
   loginInFlight?: boolean;
   profile: string;
   user: VelaUser | null;
@@ -1152,7 +1242,51 @@ export async function listProjectRuns(
   }
 }
 
-async function consumeDaemonRun({
+interface DaemonPhysicalRunResult {
+  nextRunId?: string;
+  strategyTask?: StrategyTaskProjectionV2;
+}
+
+async function consumeDaemonRun(options: DaemonReattachOptions): Promise<void> {
+  let runId = options.runId;
+  let initialLastEventId = options.initialLastEventId;
+  let taskText = '';
+  const visited = new Set<string>();
+  const taskHandlers: DaemonStreamHandlers = {
+    ...options.handlers,
+    onDelta: (delta) => {
+      taskText += delta;
+      options.handlers.onDelta(delta);
+    },
+    onDone: () => options.handlers.onDone(taskText),
+  };
+  while (true) {
+    if (visited.has(runId)) {
+      options.onRunStatus?.('failed');
+      options.handlers.onError(new Error('daemon returned a cyclic strategy task Run chain'));
+      return;
+    }
+    visited.add(runId);
+    const result = await consumeDaemonPhysicalRun({
+      ...options,
+      handlers: taskHandlers,
+      runId,
+      initialLastEventId,
+    });
+    if (!result?.nextRunId) return;
+    runId = result.nextRunId;
+    initialLastEventId = null;
+    trackRunStart(runId, {
+      agent_id: options.agentId,
+      project_id: options.projectId ?? undefined,
+      conversation_id: options.conversationId ?? undefined,
+      client_type: detectClientType(),
+    });
+    options.onRunCreated?.(runId, result.strategyTask);
+  }
+}
+
+async function consumeDaemonPhysicalRun({
   agentId,
   runId,
   signal,
@@ -1160,17 +1294,20 @@ async function consumeDaemonRun({
   handlers,
   initialLastEventId,
   onRunStatus,
+  onArtifactPaths,
   onRunEventId,
   projectId,
   conversationId,
   workspaceContext,
   publishRunFinishedEvent,
-}: DaemonReattachOptions & { agentId?: string }): Promise<void> {
+  onStrategyTaskSettled,
+}: DaemonReattachOptions): Promise<DaemonPhysicalRunResult | void> {
   let acc = '';
   let stderrBuf = '';
   let exitCode: number | null = null;
   let exitSignal: string | null = null;
   let endStatus: ChatRunStatus | null = null;
+  let endStrategyTask: StrategyTaskProjectionV2 | undefined;
   let pendingStructuredError: Error | null = null;
   // Tracks whether the server explicitly declared `status: 'succeeded'` in
   // the SSE end payload (or via the fallback run-status fetch). Distinct
@@ -1196,6 +1333,14 @@ async function consumeDaemonRun({
   const reportArtifactCount = (value: unknown) => {
     if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return;
     resolvedArtifactCount = value;
+    handlers.onArtifactCount?.(value);
+  };
+  const reportArtifactPaths = (value: unknown) => {
+    if (!Array.isArray(value)) return;
+    const paths = value.filter(
+      (item): item is string => typeof item === 'string' && item.trim().length > 0,
+    );
+    onArtifactPaths?.([...new Set(paths)]);
   };
   let lastEventId: string | null = initialLastEventId ?? null;
   let canceled = false;
@@ -1348,13 +1493,14 @@ async function consumeDaemonRun({
             if (event.data.failureCategory) endFailureCategory = event.data.failureCategory;
             if (event.data.failureDetail) endFailureDetail = event.data.failureDetail;
             reportArtifactCount(event.data.artifactCount);
+            reportArtifactPaths(event.data.artifactPaths);
+            if (event.data.strategyTask) endStrategyTask = event.data.strategyTask;
             // `serverDeclaredSuccess` records whether the server explicitly
             // set `status: 'succeeded'` in the end payload — the local
             // `'succeeded'` fallback below does not count and must keep
             // hitting the exit-code/signal safety net later.
             serverDeclaredSuccess = event.data.status === 'succeeded';
             endStatus = isChatRunStatus(event.data.status) ? event.data.status : 'succeeded';
-            onRunStatus?.(endStatus);
           }
         }
       }
@@ -1375,7 +1521,8 @@ async function consumeDaemonRun({
           if (status.failureCategory) endFailureCategory = status.failureCategory;
           if (status.failureDetail) endFailureDetail = status.failureDetail;
           reportArtifactCount(status.artifactCount);
-          onRunStatus?.(endStatus);
+          reportArtifactPaths(status.artifactPaths);
+          if (status.strategyTask) endStrategyTask = status.strategyTask;
           break;
         }
         if (!status) {
@@ -1407,13 +1554,60 @@ async function consumeDaemonRun({
         if (status.failureCategory) endFailureCategory = status.failureCategory;
         if (status.failureDetail) endFailureDetail = status.failureDetail;
         reportArtifactCount(status.artifactCount);
-        onRunStatus?.(endStatus);
+        reportArtifactPaths(status.artifactPaths);
+        if (status.strategyTask) endStrategyTask = status.strategyTask;
       } else {
         onRunStatus?.('failed');
         handlers.onError(createGenericDaemonDisconnectError());
         return;
       }
     }
+
+    if (endStrategyTask && !endStrategyTask.terminal) {
+      const nextRunId = endStrategyTask.activeRunId !== runId
+        ? endStrategyTask.activeRunId
+        : endStrategyTask.nextRunId;
+      if (nextRunId && nextRunId !== runId) {
+        onRunStatus?.('running');
+        return { nextRunId, strategyTask: endStrategyTask };
+      }
+    }
+
+    if (endStrategyTask?.terminal) {
+      // Surface the terminal projection before the status/error handlers run,
+      // so a blocked verdict (with its gate attribution) is stamped onto the
+      // assistant message ahead of the failure finalization it triggers.
+      onStrategyTaskSettled?.(endStrategyTask);
+      if (endStrategyTask.outcome === 'canceled') {
+        endStatus = 'canceled';
+      } else if (endStrategyTask.outcome === 'blocked') {
+        // A blocked strategy verdict does not retroactively unmake a Run that
+        // already succeeded AND delivered. Observed across every runtime: the
+        // agent writes the canonical deliverable correctly, the daemon's own
+        // `validateRunDeliverable` resolves it, and then the turn is refused
+        // over a machine-block defect. Remapping that to `failed` hid the file
+        // the user asked for behind a generic error card and suppressed the
+        // next-step actions that reach it.
+        //
+        // The strategy contract is explicit that a post-claim failure keeps the
+        // current Run's own result rather than inventing a new one, so only a
+        // Run that did NOT succeed-and-deliver falls through to the failure
+        // branch. `deliverableValid` is filesystem-backed (entry resolved, this
+        // Run touched it, kind matches) — never the agent's own assertion — and
+        // an unreachable daemon fails closed to the previous behaviour.
+        const deliveredDespiteBlock = endStatus === 'succeeded'
+          && (await fetchChatRunStatus(runId, workspaceContext))?.deliverableValid === true;
+        if (!deliveredDespiteBlock) {
+          endStatus = 'failed';
+          pendingStructuredError ??= new Error('The strategy task could not continue.');
+        }
+      } else if (endStrategyTask.outcome === 'completed') {
+        endStatus = 'succeeded';
+        serverDeclaredSuccess = true;
+      }
+    }
+
+    onRunStatus?.(endStatus);
 
     if (endStatus === 'canceled') {
       handlers.onDone(acc);
@@ -1469,6 +1663,7 @@ async function consumeDaemonRun({
     }
     if (
       publishRunFinishedEvent
+      && agentId === 'amr'
       && Boolean(projectId?.trim())
       && Boolean(conversationId?.trim())
       && serverDeclaredSuccess
@@ -1477,6 +1672,7 @@ async function consumeDaemonRun({
       && resolvedArtifactCount > 0
     ) {
       publishDaemonRunFinishedEvent({
+        agentId,
         runId,
         projectId: projectId!,
         conversationId: conversationId!,

@@ -1,0 +1,41 @@
+name: landing-edge-cache-purge
+
+# Manual / test entry to host-purge open-design.ai (or staging) without a full
+# production rebuild. Production deploy also purges after pages deploy; this
+# workflow is for incident recovery and permission checks.
+#
+# Requires secrets.CLOUDFLARE_API_TOKEN with Zone → Cache Purge on the target
+# zone. Optional: vars.CLOUDFLARE_ZONE_ID.
+
+on:
+  workflow_dispatch:
+    inputs:
+      hosts:
+        description: 'Comma-separated hostnames to purge (no scheme)'
+        required: true
+        default: 'open-design.ai'
+
+permissions:
+  contents: read
+
+jobs:
+  purge:
+    name: Purge Cloudflare edge cache by hostname
+    if: github.repository == 'nexu-io/open-design'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Purge hosts
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_PURGE_HOSTS: ${{ inputs.hosts }}
+        run: node --experimental-strip-types .github/scripts/landing-page-purge-edge-cache.ts

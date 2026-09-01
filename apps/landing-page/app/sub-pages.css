@@ -36,7 +36,8 @@ body.sub-page {
 
 /* ---------- nav active state ---------- */
 
-.nav-links a.is-active {
+.nav-links a.is-active,
+.nav-links .nav-trigger.is-active {
   color: var(--ink);
 }
 .nav-links a.is-active::after {
@@ -47,11 +48,27 @@ body.sub-page {
   margin-top: 4px;
   border-radius: 2px;
 }
+/* The Product / Resources triggers are <button>s since the 2026-08 nav
+   consolidation and lay out as inline-flex, where a block ::after becomes
+   a collapsed flex item and the bar never paints. The trigger already has
+   position: relative (globals.css), so anchor the bar to its own box —
+   anchors keep the block-flow rule above because .nav-links a is NOT
+   positioned and an absolute bar would escape it. */
+.nav-links .nav-trigger.is-active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -5.5px; /* mirrors the anchors' 4px gap + 1.5px bar height */
+  height: 1.5px;
+  background: var(--coral);
+  border-radius: 2px;
+}
 
 /* ---------- breadcrumb ---------- */
 
 /*
- * The "OPEN DESIGN / <page>" breadcrumb strip was removed from the sub-page
+ * The "OpenDesign / <page>" breadcrumb strip was removed from the sub-page
  * design. The <nav class="breadcrumb"> markup still renders on ~100 pages
  * (and feeds the BreadcrumbList JSON-LD on some), so it is suppressed here
  * once instead of being stripped from every page file.
@@ -4262,6 +4279,250 @@ dialog.tpl-share-popover .detail-share-dialog-text {
   color: #e9e6dd;
   font-size: 12.5px;
   line-height: 1.75;
+}
+
+/* ---------------------------------------------------------------------------
+ * DeepSeek Harness single-column tutorial layout.
+ *
+ * Every tutorial element uses the same content rail: headings, prose, lists,
+ * code, figures, captions, and tables share one left and right edge. Page-only
+ * scoping prevents these rhythm changes from leaking into the other agents.
+ * ------------------------------------------------------------------------- */
+.agent-rich--deepseek-harness .agent-hero-banner {
+  width: 100%;
+  max-width: none;
+  margin: 22px 0 54px;
+}
+
+.agent-rich--deepseek-harness .agent-hero-banner > img {
+  aspect-ratio: auto;
+  object-fit: contain;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.agent-rich--deepseek-harness .agent-intro,
+.agent-rich--deepseek-harness .info-section > h2,
+.agent-rich--deepseek-harness .info-section > p,
+.agent-rich--deepseek-harness .info-section > ul,
+.agent-rich--deepseek-harness .info-section > ol {
+  width: 100%;
+  max-width: none;
+  margin-inline: 0;
+}
+
+.agent-rich--deepseek-harness .agent-intro .agent-hero-lead {
+  margin-bottom: 26px;
+  font-size: clamp(20px, 1.8vw, 23px);
+  line-height: 1.55;
+  letter-spacing: -0.012em;
+  text-align: left;
+}
+
+.agent-rich--deepseek-harness .agent-intro > p:not(.agent-hero-lead),
+.agent-rich--deepseek-harness .info-section > p {
+  margin-bottom: 20px;
+  font-size: 17px;
+  line-height: 1.68;
+  text-align: left;
+}
+
+.agent-rich--deepseek-harness .info-section > h2 {
+  margin-bottom: 30px;
+  font-size: clamp(32px, 3vw, 42px);
+  line-height: 1.12;
+  text-wrap: balance;
+}
+
+.agent-rich--deepseek-harness .info-section > ul,
+.agent-rich--deepseek-harness .info-section > ol {
+  margin-bottom: 28px;
+}
+
+.agent-rich--deepseek-harness .info-section > ul li,
+.agent-rich--deepseek-harness .info-section > ol:not(.faq-list) li {
+  margin-bottom: 15px;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.agent-rich--deepseek-harness .agent-rich-main .info-section {
+  padding-block: 64px;
+}
+
+.agent-rich--deepseek-harness .agent-rich-main .info-section + .info-section {
+  margin-top: 32px;
+}
+
+.agent-rich--deepseek-harness .agent-rich-main .info-section:first-of-type {
+  margin-top: 72px;
+}
+
+.agent-rich--deepseek-harness .agent-rich-main .agent-section-img {
+  width: 100%;
+  max-width: none;
+  margin: 48px 0 42px;
+}
+
+.agent-rich--deepseek-harness .agent-rich-main .agent-section-img figcaption {
+  width: 100%;
+  max-width: none;
+  margin: 16px 0 0;
+  text-align: left;
+  line-height: 1.55;
+}
+
+.agent-rich--deepseek-harness .agent-rich-main .agent-section-img img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: auto;
+  object-fit: contain;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.agent-rich--deepseek-harness .agent-rich-main .agent-code,
+.agent-rich--deepseek-harness .agent-rich-main .compare-table-wrap {
+  width: 100%;
+  max-width: none;
+  margin-block: 36px 42px;
+}
+
+/* The tutorial is intentionally linear: read, run, inspect, then continue. */
+.agent-rich--deepseek-harness .agent-section--setup {
+  display: block;
+}
+
+.agent-rich--deepseek-harness .agent-section--setup > h2,
+.agent-rich--deepseek-harness .agent-section--setup > p,
+.agent-rich--deepseek-harness .agent-section--setup > .agent-code,
+.agent-rich--deepseek-harness .agent-section--setup > .agent-section-img,
+.agent-rich--deepseek-harness .agent-section--setup > .agent-steps {
+  width: 100%;
+  max-width: none;
+  margin-inline: 0;
+}
+
+.agent-rich--deepseek-harness .agent-section--setup > .agent-section-img img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 3 / 2;
+}
+
+.agent-rich--deepseek-harness .agent-section--setup > .agent-steps {
+  columns: auto;
+}
+
+/* Workflow steps follow the same vertical reading order as the rest of page. */
+.agent-rich--deepseek-harness .agent-section--design-workflow > ol:first-of-type {
+  display: block;
+  width: 100%;
+  max-width: none;
+  margin-top: 34px;
+}
+
+.agent-rich--deepseek-harness .agent-section--design-workflow > ol:first-of-type li {
+  width: 100%;
+  margin: 0 0 16px;
+  padding: 18px 18px 18px 48px;
+  border-top: 1px solid var(--line);
+}
+
+/* Pitfalls remain on the shared rail instead of introducing an inset card. */
+.agent-rich--deepseek-harness .agent-section--pitfalls {
+  padding-inline: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.agent-rich--deepseek-harness .agent-section--pitfalls > h2,
+.agent-rich--deepseek-harness .agent-section--pitfalls > p,
+.agent-rich--deepseek-harness .agent-section--pitfalls > ul {
+  max-width: none;
+}
+
+@media (max-width: 900px) {
+  .agent-rich--deepseek-harness .agent-toc-rail .info-toc {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 16px 0;
+    scrollbar-width: none;
+    white-space: nowrap;
+  }
+
+  .agent-rich--deepseek-harness .agent-toc-rail .info-toc::-webkit-scrollbar {
+    display: none;
+  }
+
+  .agent-rich--deepseek-harness .agent-toc-rail .info-toc span,
+  .agent-rich--deepseek-harness .agent-toc-rail .info-toc a {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 0;
+  }
+
+  .agent-rich--deepseek-harness .agent-hero-banner {
+    margin-bottom: 46px;
+  }
+
+  .agent-rich--deepseek-harness .agent-section--setup > .agent-code,
+  .agent-rich--deepseek-harness .agent-section--setup > .agent-section-img {
+    margin: 36px 0;
+  }
+
+  .agent-rich--deepseek-harness .agent-section--setup > .agent-section-img img {
+    height: auto;
+    min-height: 0;
+  }
+
+}
+
+@media (max-width: 640px) {
+  .agent-rich--deepseek-harness .agent-hero-banner {
+    margin: 22px 0 40px;
+  }
+
+  .agent-rich--deepseek-harness .agent-intro .agent-hero-lead {
+    margin-bottom: 22px;
+    font-size: 20px;
+  }
+
+  .agent-rich--deepseek-harness .agent-intro > p:not(.agent-hero-lead),
+  .agent-rich--deepseek-harness .info-section > p {
+    font-size: 16.5px;
+    line-height: 1.65;
+  }
+
+  .agent-rich--deepseek-harness .info-section > h2 {
+    margin-bottom: 24px;
+    font-size: 30px;
+    line-height: 1.16;
+  }
+
+  .agent-rich--deepseek-harness .agent-rich-main .info-section {
+    padding-block: 52px;
+  }
+
+  .agent-rich--deepseek-harness .agent-rich-main .info-section + .info-section {
+    margin-top: 16px;
+  }
+
+  .agent-rich--deepseek-harness .agent-rich-main .agent-section-img {
+    margin: 40px 0 36px;
+  }
+
+  .agent-rich--deepseek-harness .agent-section--pitfalls {
+    padding-inline: 0;
+  }
 }
 
 /* Codex design collection — category filter chips. Global (not Astro-scoped)

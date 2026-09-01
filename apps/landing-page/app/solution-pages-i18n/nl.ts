@@ -2,9 +2,9 @@ import type { SolutionLocaleCopy } from './types';
 
 export const NL: SolutionLocaleCopy = {
   prototype: {
-    title: 'Bouw interactieve prototypes met Open Design + Claude Code',
+    title: 'Bouw interactieve prototypes met OpenDesign + Claude Code',
     description:
-      'Verander een prompt in een aanklikbaar prototype met meerdere schermen zonder je terminal te verlaten. Open Design geeft je coding agent de ontwerpvaardigheden, sjablonen en het designsysteem om echte prototypes te maken die je in een browser kunt openen.',
+      'Verander een prompt in een aanklikbaar prototype met meerdere schermen zonder je terminal te verlaten. OpenDesign geeft je coding agent de ontwerpvaardigheden, sjablonen en het designsysteem om echte prototypes te maken die je in een browser kunt openen.',
     breadcrumb: 'Prototype',
     label: 'Toepassing · Prototype',
     heading: 'Prototype zo snel als een prompt',
@@ -13,18 +13,18 @@ export const NL: SolutionLocaleCopy = {
       'Redactionele illustratie van een hand die een wireframe schetst die verandert in een aanklikbaar app-prototype met meerdere schermen',
     tldrTitle: 'In één zin',
     tldrBody:
-      'Open Design is de ontwerplaag voor de coding agent die je al gebruikt. Voor prototyping betekent dat: van een idee van één alinea naar een navigeerbaar, gestileerd prototype in één sessie — geen ontwerptool, geen exportstap, geen overdrachtskloof.',
-    stepsTitle: 'Hoe prototyping werkt met Open Design',
+      'OpenDesign is de ontwerplaag voor de coding agent die je al gebruikt. Voor prototyping betekent dat: van een idee van één alinea naar een navigeerbaar, gestileerd prototype in één sessie — geen ontwerptool, geen exportstap, geen overdrachtskloof.',
+    stepsTitle: 'Hoe prototyping werkt met OpenDesign',
     steps: [
       {
         title: 'Beschrijf de flow',
-        body: 'Vertel je agent in gewone taal wat je bouwt — “een onboardingflow met een welkomstscherm, een abonnementskiezer en een bevestiging.” Open Design laadt de prototypevaardigheid, zodat de agent weet dat hij schermen moet maken, niet één pagina.',
+        body: 'Vertel je agent in gewone taal wat je bouwt — “een onboardingflow met een welkomstscherm, een abonnementskiezer en een bevestiging.” OpenDesign laadt de prototypevaardigheid, zodat de agent weet dat hij schermen moet maken, niet één pagina.',
         imageAlt:
           'Illustratie van een persoon die een beschrijving van een app-flow in gewone taal in een terminal typt',
       },
       {
         title: 'Genereer gestileerde schermen',
-        body: 'De agent past een designsysteem en prototypesjablonen uit Open Design toe, zodat elk scherm typografie, witruimte en componenten deelt in plaats van op een ruwe schets te lijken. Je krijgt een samenhangende set schermen, geen losse mockups.',
+        body: 'De agent past een designsysteem en prototypesjablonen uit OpenDesign toe, zodat elk scherm typografie, witruimte en componenten deelt in plaats van op een ruwe schets te lijken. Je krijgt een samenhangende set schermen, geen losse mockups.',
         imageAlt:
           'Illustratie van meerdere app-schermen die na elkaar verschijnen, allemaal met één consistente visuele stijl',
       },
@@ -41,9 +41,9 @@ export const NL: SolutionLocaleCopy = {
           'Illustratie van een prototype dat wordt herzien en daarna aan een engineer wordt overgedragen, waarbij ontwerp en code samensmelten tot één bestand',
       },
     ],
-    tableTitle: 'Prototyping met Open Design versus de oude manier',
+    tableTitle: 'Prototyping met OpenDesign versus de oude manier',
     tableColCapability: 'Wat je nodig hebt',
-    tableColWithOd: 'Met Open Design',
+    tableColWithOd: 'Met OpenDesign',
     tableColWithout: 'Traditionele prototypingtools',
     tableRows: [
       {
@@ -110,7 +110,7 @@ export const NL: SolutionLocaleCopy = {
         thumb: 'example-gamified-app',
       },
     ],
-    galleryTitle: 'Prototypes die mensen bouwden met Open Design',
+    galleryTitle: 'Prototypes die mensen bouwden met OpenDesign',
     galleryLead:
       'Elk van deze begon als een prompt en renderde naar een aanklikbaar artefact. Kies een sjabloon dicht bij je idee, beschrijf je variant, en de agent past het aan.',
     gallery: [
@@ -124,8 +124,8 @@ export const NL: SolutionLocaleCopy = {
     faqTitle: 'Veelgestelde vragen over prototyping',
     faq: [
       {
-        q: 'Heb ik een ontwerptool als Figma nodig om te prototypen met Open Design?',
-        a: 'Nee. Open Design draait binnen je coding agent en rendert prototypes naar HTML. Je beschrijft de flow in taal; de agent maakt de schermen. Er is geen aparte canvastool om te leren of voor te betalen.',
+        q: 'Heb ik een ontwerptool als Figma nodig om te prototypen met OpenDesign?',
+        a: 'Nee. OpenDesign draait binnen je coding agent en rendert prototypes naar HTML. Je beschrijft de flow in taal; de agent maakt de schermen. Er is geen aparte canvastool om te leren of voor te betalen.',
       },
       {
         q: 'Zijn de prototypes interactief of zijn het slechts statische mockups?',
@@ -133,7 +133,7 @@ export const NL: SolutionLocaleCopy = {
       },
       {
         q: 'Welke agents kan ik gebruiken?',
-        a: 'Open Design werkt met Claude Code, Codex, Cursor Agent, Gemini CLI en een tiental andere eigen adapters. Je gebruikt je eigen providersleutels; er wordt niets voor je gehost.',
+        a: 'OpenDesign werkt met Claude Code, Codex, Cursor Agent, Gemini CLI en een tiental andere eigen adapters. Je gebruikt je eigen providersleutels; er wordt niets voor je gehost.',
       },
       {
         q: 'Kan een prototype het echte product worden?',
@@ -142,22 +142,22 @@ export const NL: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Prototype je volgende idee vanavond nog',
     ctaBody:
-      'Geef de repo een ster, installeer Open Design en verander je volgende “wat als” in iets dat je kunt aanklikken — in de agent die je al gebruikt.',
+      'Geef de repo een ster, installeer OpenDesign en verander je volgende “wat als” in iets dat je kunt aanklikken — in de agent die je al gebruikt.',
   },
   dashboard: {
-    title: 'Genereer datadashboards met Open Design + Claude Code',
+    title: 'Genereer datadashboards met OpenDesign + Claude Code',
     description:
       'Beschrijf de metrics die je bijhoudt en laat je coding agent een gestileerd, responsief dashboard bouwen — grafieken, KPI-kaarten en tabellen gerenderd naar HTML die je overal kunt hosten. Geen seat in een BI-tool, geen sleep-en-neerzetbouwer.',
     breadcrumb: 'Dashboard',
     label: 'Toepassing · Dashboard',
     heading: 'Dashboards uit een beschrijving, niet uit een sleep-en-neerzetbouwer',
-    lead: 'Vertel je agent wat hij moet tonen en hoe het moet aanvoelen. Open Design levert de grafiekpatronen, het indelingssysteem en de visuele taal, zodat je een samenhangend, presentabel dashboard krijgt — geen muur van standaard gestileerde widgets.',
+    lead: 'Vertel je agent wat hij moet tonen en hoe het moet aanvoelen. OpenDesign levert de grafiekpatronen, het indelingssysteem en de visuele taal, zodat je een samenhangend, presentabel dashboard krijgt — geen muur van standaard gestileerde widgets.',
     heroImageAlt:
       'Redactionele illustratie van ruwe cijfers links die overvloeien in een strak dashboard met grafieken en KPI-kaarten rechts',
     tldrTitle: 'In één zin',
     tldrBody:
-      'Open Design verandert een specificatie van je metrics in gewone taal in een gestileerd dashboard dat je agent naar HTML rendert — geversioneerd in je repo, overal te hosten, zonder BI-abonnement per seat.',
-    stepsTitle: 'Hoe dashboards werken met Open Design',
+      'OpenDesign verandert een specificatie van je metrics in gewone taal in een gestileerd dashboard dat je agent naar HTML rendert — geversioneerd in je repo, overal te hosten, zonder BI-abonnement per seat.',
+    stepsTitle: 'Hoe dashboards werken met OpenDesign',
     steps: [
       {
         title: 'Beschrijf de metrics',
@@ -166,7 +166,7 @@ export const NL: SolutionLocaleCopy = {
       },
       {
         title: 'Kies de grafiekpatronen',
-        body: 'Open Design levert grafiek- en indelingssjablonen, zodat trends lijngrafieken worden, uitsplitsingen staven en verhoudingen het juiste beeld — consistente typografie en witruimte overal in plaats van niet-passende standaarden.',
+        body: 'OpenDesign levert grafiek- en indelingssjablonen, zodat trends lijngrafieken worden, uitsplitsingen staven en verhoudingen het juiste beeld — consistente typografie en witruimte overal in plaats van niet-passende standaarden.',
         imageAlt: 'Illustratie van meerdere grafiektypes geordend in een samenhangend raster',
       },
       {
@@ -180,9 +180,9 @@ export const NL: SolutionLocaleCopy = {
         imageAlt: 'Illustratie van een dashboard dat wordt verfijnd en daarna uitgerold',
       },
     ],
-    tableTitle: 'Dashboards met Open Design versus de oude manier',
+    tableTitle: 'Dashboards met OpenDesign versus de oude manier',
     tableColCapability: 'Wat je nodig hebt',
-    tableColWithOd: 'Met Open Design',
+    tableColWithOd: 'Met OpenDesign',
     tableColWithout: 'BI-tools / met de hand gecodeerd',
     tableRows: [
       {
@@ -225,7 +225,7 @@ export const NL: SolutionLocaleCopy = {
       { title: "Social en marketing", body: "Kanaalprestaties en campagnetracking in één overzicht.", thumb: "example-social-media-dashboard" },
       { title: "Domeinrapporten", body: "Gestructureerde rapporten voor elk vakgebied — van klinisch tot trading.", thumb: "example-clinical-case-report" },
     ],
-    galleryTitle: 'Dashboards die mensen bouwden met Open Design',
+    galleryTitle: 'Dashboards die mensen bouwden met OpenDesign',
     galleryLead:
       'Echte dashboards gerenderd uit een prompt en een databron. Begin met een die dicht bij die van jou ligt en beschrijf de metrics die je bijhoudt.',
     gallery: [
@@ -240,7 +240,7 @@ export const NL: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Heb ik een BI-tool als Tableau of Looker nodig?',
-        a: 'Nee. Open Design rendert dashboards naar HTML binnen je coding agent. Je beschrijft de metrics en wijst hem naar je data; er is geen apart BI-platform om te licentiëren of te leren.',
+        a: 'Nee. OpenDesign rendert dashboards naar HTML binnen je coding agent. Je beschrijft de metrics en wijst hem naar je data; er is geen apart BI-platform om te licentiëren of te leren.',
       },
       {
         q: 'Waar komt de data vandaan?',
@@ -257,22 +257,22 @@ export const NL: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Bouw je dashboard vanavond nog',
     ctaBody:
-      'Geef de repo een ster, installeer Open Design en verander je metrics in een dashboard dat je overal kunt hosten — in de agent die je al gebruikt.',
+      'Geef de repo een ster, installeer OpenDesign en verander je metrics in een dashboard dat je overal kunt hosten — in de agent die je al gebruikt.',
   },
   slides: {
-    title: 'Genereer presentatiedecks met Open Design + Claude Code',
+    title: 'Genereer presentatiedecks met OpenDesign + Claude Code',
     description:
-      'Verander een outline in een ontworpen, on-brand slidedeck zonder een presentatie-app te openen. Open Design geeft je coding agent decksjablonen en een visueel systeem, en rendert slides naar HTML die je kunt presenteren, exporteren of delen.',
+      'Verander een outline in een ontworpen, on-brand slidedeck zonder een presentatie-app te openen. OpenDesign geeft je coding agent decksjablonen en een visueel systeem, en rendert slides naar HTML die je kunt presenteren, exporteren of delen.',
     breadcrumb: 'Slides',
     label: 'Toepassing · Slides',
     heading: 'Decks die ontworpen ogen, geschreven door een prompt',
-    lead: 'Geef je agent een outline en een toon. Open Design past een decksjabloon en visueel systeem toe, zodat elke slide opgemaakt, gezet en on-brand is — geen opsomming op een lege achtergrond.',
+    lead: 'Geef je agent een outline en een toon. OpenDesign past een decksjabloon en visueel systeem toe, zodat elke slide opgemaakt, gezet en on-brand is — geen opsomming op een lege achtergrond.',
     heroImageAlt:
       'Redactionele illustratie van een outline links die verandert in een reeks ontworpen presentatieslides rechts',
     tldrTitle: 'In één zin',
     tldrBody:
-      'Open Design verandert een outline in een ontworpen HTML-deck dat je agent in één sessie rendert — presenteer het in de browser, exporteer naar PDF of PPTX, en houd de bron in je repo.',
-    stepsTitle: 'Hoe decks werken met Open Design',
+      'OpenDesign verandert een outline in een ontworpen HTML-deck dat je agent in één sessie rendert — presenteer het in de browser, exporteer naar PDF of PPTX, en houd de bron in je repo.',
+    stepsTitle: 'Hoe decks werken met OpenDesign',
     steps: [
       {
         title: 'Geef de outline',
@@ -281,7 +281,7 @@ export const NL: SolutionLocaleCopy = {
       },
       {
         title: 'Kies een deckstijl',
-        body: 'Open Design levert decksjablonen — redactioneel, Zwitsers-internationaal, donker technisch en meer. De agent past er één toe, zodat typografie, raster en accenten over elke slide consistent blijven.',
+        body: 'OpenDesign levert decksjablonen — redactioneel, Zwitsers-internationaal, donker technisch en meer. De agent past er één toe, zodat typografie, raster en accenten over elke slide consistent blijven.',
         imageAlt: 'Illustratie van meerdere deckstijlopties naast elkaar gelegd',
       },
       {
@@ -295,9 +295,9 @@ export const NL: SolutionLocaleCopy = {
         imageAlt: 'Illustratie van een deck dat wordt gepresenteerd en geëxporteerd naar meerdere formaten',
       },
     ],
-    tableTitle: 'Decks met Open Design versus de oude manier',
+    tableTitle: 'Decks met OpenDesign versus de oude manier',
     tableColCapability: 'Wat je nodig hebt',
-    tableColWithOd: 'Met Open Design',
+    tableColWithOd: 'Met OpenDesign',
     tableColWithout: 'PowerPoint / Keynote / AI-slidetools',
     tableRows: [
       {
@@ -340,7 +340,7 @@ export const NL: SolutionLocaleCopy = {
       { title: "Presentatormodus", body: "Decks in reveal-stijl gebouwd om live in de browser te presenteren.", thumb: "example-html-ppt-presenter-mode-reveal" },
       { title: "Technische blauwdrukken", body: "Architectuur- en kennisdecks die complexe systemen in kaart brengen.", thumb: "example-html-ppt-knowledge-arch-blueprint" },
     ],
-    galleryTitle: 'Decks die mensen bouwden met Open Design',
+    galleryTitle: 'Decks die mensen bouwden met OpenDesign',
     galleryLead:
       'Echte decks gerenderd uit een outline. Kies een stijl dicht bij je presentatie en beschrijf de inhoud.',
     gallery: [
@@ -355,7 +355,7 @@ export const NL: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Heb ik PowerPoint of Keynote nodig?',
-        a: 'Nee. Open Design rendert decks naar HTML binnen je coding agent en kan exporteren naar PDF of PPTX. Je presenteert vanuit de browser of draagt een bestand over — er is geen presentatie-app nodig om het te bouwen.',
+        a: 'Nee. OpenDesign rendert decks naar HTML binnen je coding agent en kan exporteren naar PDF of PPTX. Je presenteert vanuit de browser of draagt een bestand over — er is geen presentatie-app nodig om het te bouwen.',
       },
       {
         q: 'Zijn dit gewoon door AI gegenereerde opsommingen?',
@@ -372,22 +372,22 @@ export const NL: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Bouw je volgende deck vanavond nog',
     ctaBody:
-      'Geef de repo een ster, installeer Open Design en verander je outline in een ontworpen deck — in de agent die je al gebruikt.',
+      'Geef de repo een ster, installeer OpenDesign en verander je outline in een ontworpen deck — in de agent die je al gebruikt.',
   },
   image: {
-    title: 'Genereer on-brand graphics met Open Design + Claude Code',
+    title: 'Genereer on-brand graphics met OpenDesign + Claude Code',
     description:
       'Maak socialkaarten, artikelomslagen en marketinggraphics uit een prompt — opgemaakt met echte typografie en jouw merksysteem, gerenderd naar scherpe HTML die je naar PNG kunt exporteren. Geen ontwerp-app, geen sjabloonabonnement.',
     breadcrumb: 'Afbeelding',
     label: 'Toepassing · Afbeelding',
     heading: 'On-brand graphics, voor je gegenereerd en opgemaakt',
-    lead: 'Beschrijf de kaart of omslag die je nodig hebt. Open Design stelt hem samen met echte typografie, raster en jouw merkkleuren — en rendert vervolgens naar HTML die je als afbeelding kunt exporteren, in plaats van te worstelen met een ontwerp-app of een generiek sjabloon.',
+    lead: 'Beschrijf de kaart of omslag die je nodig hebt. OpenDesign stelt hem samen met echte typografie, raster en jouw merkkleuren — en rendert vervolgens naar HTML die je als afbeelding kunt exporteren, in plaats van te worstelen met een ontwerp-app of een generiek sjabloon.',
     heroImageAlt:
       'Redactionele illustratie van een prompt die verandert in een set opgemaakte socialkaarten en artikelomslagen',
     tldrTitle: 'In één zin',
     tldrBody:
-      'Open Design verandert een prompt in een gezette, on-brand graphic die je agent naar HTML rendert en naar PNG exporteert — herhaalbaar, geversioneerd en vrij van ontwerptools per seat.',
-    stepsTitle: 'Hoe graphics werken met Open Design',
+      'OpenDesign verandert een prompt in een gezette, on-brand graphic die je agent naar HTML rendert en naar PNG exporteert — herhaalbaar, geversioneerd en vrij van ontwerptools per seat.',
+    stepsTitle: 'Hoe graphics werken met OpenDesign',
     steps: [
       {
         title: 'Beschrijf de graphic',
@@ -396,7 +396,7 @@ export const NL: SolutionLocaleCopy = {
       },
       {
         title: 'Pas het merksysteem toe',
-        body: 'Open Design haalt je kleuren, typografie en witruimte uit een herbruikbaar designsysteem, zodat elke kaart bij de rest van je merk past in plaats van eenmalig te ogen.',
+        body: 'OpenDesign haalt je kleuren, typografie en witruimte uit een herbruikbaar designsysteem, zodat elke kaart bij de rest van je merk past in plaats van eenmalig te ogen.',
         imageAlt: 'Illustratie van merkkleuren en typografie die op een kaartindeling worden toegepast',
       },
       {
@@ -410,9 +410,9 @@ export const NL: SolutionLocaleCopy = {
         imageAlt: 'Illustratie van één kaartsjabloon dat een consistente reeks graphics produceert',
       },
     ],
-    tableTitle: 'Graphics met Open Design versus de oude manier',
+    tableTitle: 'Graphics met OpenDesign versus de oude manier',
     tableColCapability: 'Wat je nodig hebt',
-    tableColWithOd: 'Met Open Design',
+    tableColWithOd: 'Met OpenDesign',
     tableColWithout: 'Ontwerp-apps / generieke sjablonen',
     tableRows: [
       {
@@ -455,7 +455,7 @@ export const NL: SolutionLocaleCopy = {
       { title: "Carrousels", body: "Socialcarrousels met meerdere slides die consistent blijven over frames.", thumb: "example-social-carousel" },
       { title: "UI-mockupframes", body: "Notificatie- en apparaatframes om productverhalen te vertellen.", thumb: "example-frame-macos-notification" },
     ],
-    galleryTitle: 'Graphics die mensen bouwden met Open Design',
+    galleryTitle: 'Graphics die mensen bouwden met OpenDesign',
     galleryLead:
       'Echte kaarten en omslagen gerenderd uit een prompt. Kies er een dicht bij wat je nodig hebt en wissel je tekst erin.',
     gallery: [
@@ -470,7 +470,7 @@ export const NL: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Is dit een AI-beeldgenerator zoals Midjourney?',
-        a: 'Nee. Open Design stelt graphics samen met echte opmaak en typografie — jouw kop, jouw merk, exacte afmetingen — en rendert naar HTML die je als PNG exporteert. Het is ontwerpcompositie, geen pixelgeneratie.',
+        a: 'Nee. OpenDesign stelt graphics samen met echte opmaak en typografie — jouw kop, jouw merk, exacte afmetingen — en rendert naar HTML die je als PNG exporteert. Het is ontwerpcompositie, geen pixelgeneratie.',
       },
       {
         q: 'Kan ik een consistente reeks kaarten maken?',
@@ -487,22 +487,22 @@ export const NL: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Maak je volgende graphic vanavond nog',
     ctaBody:
-      'Geef de repo een ster, installeer Open Design en verander een prompt in een on-brand graphic — in de agent die je al gebruikt.',
+      'Geef de repo een ster, installeer OpenDesign en verander een prompt in een on-brand graphic — in de agent die je al gebruikt.',
   },
   video: {
-    title: 'Genereer motion graphics en korte video met Open Design + Claude Code',
+    title: 'Genereer motion graphics en korte video met OpenDesign + Claude Code',
     description:
       'Verander een script in geanimeerde frames en korte video — titelkaarten, bewegende achtergronden en outro’s samengesteld met jouw merksysteem en gerenderd vanuit HTML. Geen motion-graphics-suite, geen tijdlijn-geschuif.',
     breadcrumb: 'Video',
     label: 'Toepassing · Video',
     heading: 'Motion graphics uit een script, niet uit een tijdlijn',
-    lead: 'Beschrijf het moment dat je wilt — een titelonthulling, een data-animatie, een logo-outro. Open Design stelt geanimeerde frames samen met jouw merksysteem en rendert ze naar video, zonder dat er een motion-graphics-suite nodig is.',
+    lead: 'Beschrijf het moment dat je wilt — een titelonthulling, een data-animatie, een logo-outro. OpenDesign stelt geanimeerde frames samen met jouw merksysteem en rendert ze naar video, zonder dat er een motion-graphics-suite nodig is.',
     heroImageAlt:
       'Redactionele illustratie van een script dat verandert in een reeks geanimeerde videoframes',
     tldrTitle: 'In één zin',
     tldrBody:
-      'Open Design verandert een script in geanimeerde, on-brand frames die je agent naar korte video rendert — samengesteld uit HTML, geversioneerd in je repo, zonder tijdlijneditor om te leren.',
-    stepsTitle: 'Hoe motion werkt met Open Design',
+      'OpenDesign verandert een script in geanimeerde, on-brand frames die je agent naar korte video rendert — samengesteld uit HTML, geversioneerd in je repo, zonder tijdlijneditor om te leren.',
+    stepsTitle: 'Hoe motion werkt met OpenDesign',
     steps: [
       {
         title: 'Beschrijf het moment',
@@ -511,7 +511,7 @@ export const NL: SolutionLocaleCopy = {
       },
       {
         title: 'Pas de merk- en motionstijl toe',
-        body: 'Open Design levert framesjablonen — cinematische light leaks, glitch-titels, logo-outro’s — en past jouw kleuren en typografie toe, zodat de beweging doelbewust en on-brand oogt.',
+        body: 'OpenDesign levert framesjablonen — cinematische light leaks, glitch-titels, logo-outro’s — en past jouw kleuren en typografie toe, zodat de beweging doelbewust en on-brand oogt.',
         imageAlt: 'Illustratie van merkstyling toegepast op geanimeerde frames',
       },
       {
@@ -525,9 +525,9 @@ export const NL: SolutionLocaleCopy = {
         imageAlt: 'Illustratie van een videoclip die wordt verfijnd en geëxporteerd voor social',
       },
     ],
-    tableTitle: 'Motion met Open Design versus de oude manier',
+    tableTitle: 'Motion met OpenDesign versus de oude manier',
     tableColCapability: 'Wat je nodig hebt',
-    tableColWithOd: 'Met Open Design',
+    tableColWithOd: 'Met OpenDesign',
     tableColWithout: 'After Effects / motion-suites',
     tableRows: [
       {
@@ -570,7 +570,7 @@ export const NL: SolutionLocaleCopy = {
       { title: "Glitch-titels", body: "Titelonthullingen met beweging en textuur.", thumb: "example-frame-glitch-title" },
       { title: "Logo-outro’s", body: "Merkgebonden afsluitende animaties voor elke clip.", thumb: "example-frame-logo-outro" },
     ],
-    galleryTitle: 'Motion die mensen bouwden met Open Design',
+    galleryTitle: 'Motion die mensen bouwden met OpenDesign',
     galleryLead:
       'Echte geanimeerde frames en clips gerenderd uit een prompt. Kies er een dicht bij je idee en beschrijf de beweging.',
     gallery: [
@@ -585,7 +585,7 @@ export const NL: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Heb ik After Effects of een motion-graphics-suite nodig?',
-        a: 'Nee. Open Design stelt geanimeerde frames samen in HTML en rendert ze naar video binnen je coding agent. Er is geen tijdlijneditor om te leren of te licentiëren.',
+        a: 'Nee. OpenDesign stelt geanimeerde frames samen in HTML en rendert ze naar video binnen je coding agent. Er is geen tijdlijneditor om te leren of te licentiëren.',
       },
       {
         q: 'Voor wat voor video is dit geschikt?',
@@ -602,31 +602,31 @@ export const NL: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Animeer je volgende idee vanavond nog',
     ctaBody:
-      'Geef de repo een ster, installeer Open Design en verander een script in motion — in de agent die je al gebruikt.',
+      'Geef de repo een ster, installeer OpenDesign en verander een script in motion — in de agent die je al gebruikt.',
   },
   designSystem: {
-    title: 'Bouw en pas een designsysteem toe met Open Design + Claude Code',
+    title: 'Bouw en pas een designsysteem toe met OpenDesign + Claude Code',
     description:
       'Vang je merk als een herbruikbaar designsysteem dat je coding agent toepast op elk artefact — kleuren, typografie, componenten en toon in één DESIGN.md. Definieer het één keer; elk prototype, deck en dashboard blijft on-brand.',
     breadcrumb: 'Designsysteem',
     label: 'Toepassing · Designsysteem',
     heading: 'Eén designsysteem, toegepast op alles wat je agent maakt',
-    lead: 'Definieer je merk één keer en Open Design draagt het mee naar elke uitvoer — prototypes, decks, dashboards, graphics. Het systeem leeft in je repo als een DESIGN.md die de agent leest, zodat consistentie automatisch is, niet handmatig.',
+    lead: 'Definieer je merk één keer en OpenDesign draagt het mee naar elke uitvoer — prototypes, decks, dashboards, graphics. Het systeem leeft in je repo als een DESIGN.md die de agent leest, zodat consistentie automatisch is, niet handmatig.',
     heroImageAlt:
       'Redactionele illustratie van één designsysteem dat uitstraalt naar vele on-brand artefacten',
     tldrTitle: 'In één zin',
     tldrBody:
-      'Open Design vangt je merk als een draagbaar designsysteem dat je agent toepast op elk artefact — één keer gedefinieerd in je repo, overal afgedwongen, zonder een centrale ontwerptool die de poort bewaakt.',
-    stepsTitle: 'Hoe designsystemen werken met Open Design',
+      'OpenDesign vangt je merk als een draagbaar designsysteem dat je agent toepast op elk artefact — één keer gedefinieerd in je repo, overal afgedwongen, zonder een centrale ontwerptool die de poort bewaakt.',
+    stepsTitle: 'Hoe designsystemen werken met OpenDesign',
     steps: [
       {
         title: 'Vang het systeem',
-        body: 'Beschrijf je merk — kleuren, typografie, witruimte, stem — of wijs de agent naar een bestaande site om het te extraheren. Open Design schrijft het in een DESIGN.md die in je project leeft.',
+        body: 'Beschrijf je merk — kleuren, typografie, witruimte, stem — of wijs de agent naar een bestaande site om het te extraheren. OpenDesign schrijft het in een DESIGN.md die in je project leeft.',
         imageAlt: 'Illustratie van een merk dat wordt gevangen in één designsysteembestand',
       },
       {
         title: 'Begin vanuit een bewezen basis',
-        body: 'Open Design levert 140+ referentiedesignsystemen — van Apple en Linear tot redactioneel en brutalistisch. Fork er een dicht bij je merk in plaats van te beginnen met een lege pagina.',
+        body: 'OpenDesign levert 140+ referentiedesignsystemen — van Apple en Linear tot redactioneel en brutalistisch. Fork er een dicht bij je merk in plaats van te beginnen met een lege pagina.',
         imageAlt: 'Illustratie van een galerij referentiedesignsystemen die wordt doorgebladerd',
       },
       {
@@ -640,9 +640,9 @@ export const NL: SolutionLocaleCopy = {
         imageAlt: 'Illustratie van een designsysteem dat wordt bijgewerkt en zich verspreidt naar alle uitvoer',
       },
     ],
-    tableTitle: 'Designsystemen met Open Design versus de oude manier',
+    tableTitle: 'Designsystemen met OpenDesign versus de oude manier',
     tableColCapability: 'Wat je nodig hebt',
-    tableColWithOd: 'Met Open Design',
+    tableColWithOd: 'Met OpenDesign',
     tableColWithout: 'Bibliotheken van ontwerptools / stijlgidsen',
     tableRows: [
       {
@@ -685,7 +685,7 @@ export const NL: SolutionLocaleCopy = {
       { title: "OpenAI", body: "Minimaal, neutraal, op onderzoeksniveau.", thumb: "design-system-openai" },
       { title: "GitHub", body: "Dicht, technisch, native voor ontwikkelaars.", thumb: "design-system-github" },
     ],
-    galleryTitle: 'Designsystemen in Open Design',
+    galleryTitle: 'Designsystemen in OpenDesign',
     galleryLead:
       'Een paar van de 140+ referentiesystemen die je als startpunt kunt forken. Kies er een dicht bij je merk en pas het aan.',
     gallery: [
@@ -700,11 +700,11 @@ export const NL: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Wat is het designsysteem hier precies?',
-        a: 'Een DESIGN.md-bestand in je repo dat kleuren, typografie, witruimte, componenten en stem vangt. Elke Open Design-vaardigheid leest het, zodat je merk automatisch wordt toegepast op alles wat de agent produceert.',
+        a: 'Een DESIGN.md-bestand in je repo dat kleuren, typografie, witruimte, componenten en stem vangt. Elke OpenDesign-vaardigheid leest het, zodat je merk automatisch wordt toegepast op alles wat de agent produceert.',
       },
       {
         q: 'Moet ik vanaf nul beginnen?',
-        a: 'Nee. Open Design levert 140+ referentiedesignsystemen die je kunt forken — van Apple en Linear tot redactioneel en brutalistisch — en daarna aan je merk aanpassen.',
+        a: 'Nee. OpenDesign levert 140+ referentiedesignsystemen die je kunt forken — van Apple en Linear tot redactioneel en brutalistisch — en daarna aan je merk aanpassen.',
       },
       {
         q: 'Hoe blijft het consistent over decks, dashboards en prototypes?',
@@ -717,12 +717,12 @@ export const NL: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Definieer je designsysteem vanavond nog',
     ctaBody:
-      'Geef de repo een ster, installeer Open Design en geef je agent één merk om overal toe te passen — in de agent die je al gebruikt.',
+      'Geef de repo een ster, installeer OpenDesign en geef je agent één merk om overal toe te passen — in de agent die je al gebruikt.',
   },
   roleSoloBuilder: {
-    title: 'Open Design voor solobouwers & indie hackers',
+    title: 'OpenDesign voor solobouwers & indie hackers',
     description:
-      'Lever als een team van één. Open Design verandert je coding agent in de ontwerphelft van je startup — prototypes, landingspaginas, dashboards en merkvisuals, allemaal vanuit een prompt, allemaal op merk, allemaal in je repo.',
+      'Lever als een team van één. OpenDesign verandert je coding agent in de ontwerphelft van je startup — prototypes, landingspaginas, dashboards en merkvisuals, allemaal vanuit een prompt, allemaal op merk, allemaal in je repo.',
     breadcrumb: 'Solobouwer',
     label: 'Voor · Solobouwers',
     heading: 'Jouw ontwerpteam is de agent die je al draait',
@@ -731,8 +731,8 @@ export const NL: SolutionLocaleCopy = {
       'Redactionele illustratie van één persoon aan een bureau, omringd door een landingspagina, een app, een dashboard en socialkaarten, allemaal in één consistente stijl',
     tldrTitle: 'In één zin',
     tldrBody:
-      'Open Design is de ontwerpafdeling die een solo-oprichter nooit had: van prompt naar artefact op elk oppervlak dat je product nodig heeft, op één merk, zonder overdracht en zonder extra tools.',
-    stepsTitle: 'Hoe een solobouwer Open Design gebruikt',
+      'OpenDesign is de ontwerpafdeling die een solo-oprichter nooit had: van prompt naar artefact op elk oppervlak dat je product nodig heeft, op één merk, zonder overdracht en zonder extra tools.',
+    stepsTitle: 'Hoe een solobouwer OpenDesign gebruikt',
     steps: [
       {
         title: 'Definieer je merk eenmaal',
@@ -750,9 +750,9 @@ export const NL: SolutionLocaleCopy = {
         imageAlt: 'Illustratie van een artefact dat rechtstreeks van prompt naar live gaat',
       },
     ],
-    tableTitle: 'Solo bouwen met Open Design vs het op de moeilijke manier doen',
+    tableTitle: 'Solo bouwen met OpenDesign vs het op de moeilijke manier doen',
     tableColCapability: 'Wat je nodig hebt',
-    tableColWithOd: 'Met Open Design',
+    tableColWithOd: 'Met OpenDesign',
     tableColWithout: 'Het er nu alleen voor staan',
     tableRows: [
       { capability: 'Dek elk ontwerpoppervlak', withOd: 'Eén agent doet prototype, landing, dashboard, merk', without: 'Vijf SaaS-tools en tutorials aan elkaar knopen' },
@@ -770,7 +770,7 @@ export const NL: SolutionLocaleCopy = {
       { title: 'Mobiele flows', body: 'Appschermen wanneer je verder gaat dan het web.', thumb: 'example-mobile-app' },
       { title: 'Socialkaarten', body: 'Lancerings- en updatekaarten voor elk kanaal.', thumb: 'example-card-twitter' },
     ],
-    galleryTitle: 'Solo gebouwd met Open Design',
+    galleryTitle: 'Solo gebouwd met OpenDesign',
     galleryLead:
       'Elk oppervlak dat een eenpersoonsstartup nodig heeft, vanuit een prompt. Kies er een die dicht bij je volgende stap ligt en beschrijf het.',
     gallery: [
@@ -790,12 +790,12 @@ export const NL: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Bouw je hele ding vanavond',
     ctaBody:
-      'Geef de repo een ster, installeer Open Design en laat één agent je ontwerpteam zijn — in de agent die je al gebruikt.',
+      'Geef de repo een ster, installeer OpenDesign en laat één agent je ontwerpteam zijn — in de agent die je al gebruikt.',
   },
   roleDesigner: {
-    title: 'Open Design voor ontwerpers',
+    title: 'OpenDesign voor ontwerpers',
     description:
-      'Besteed je tijd aan smaak, niet aan sleurwerk. Open Design laat je agent het repetitieve productiewerk afhandelen — varianten, statussen, complete ontwerpsystemen — terwijl jij de look stuurt en het laatste woord houdt.',
+      'Besteed je tijd aan smaak, niet aan sleurwerk. OpenDesign laat je agent het repetitieve productiewerk afhandelen — varianten, statussen, complete ontwerpsystemen — terwijl jij de look stuurt en het laatste woord houdt.',
     breadcrumb: 'Ontwerper',
     label: 'Voor · Ontwerpers',
     heading: 'Stuur het ontwerp — laat de agent de productie doen',
@@ -804,8 +804,8 @@ export const NL: SolutionLocaleCopy = {
       'Redactionele illustratie van een ontwerper die stuurt terwijl een agent schermen, varianten en een ontwerpsysteem invult',
     tldrTitle: 'In één zin',
     tldrBody:
-      'Open Design is de productieassistent die nooit moe wordt: jij definieert het ontwerpsysteem en bepaalt de smaak; de agent genereert de rest, op systeem, in je repo.',
-    stepsTitle: 'Hoe een ontwerper Open Design gebruikt',
+      'OpenDesign is de productieassistent die nooit moe wordt: jij definieert het ontwerpsysteem en bepaalt de smaak; de agent genereert de rest, op systeem, in je repo.',
+    stepsTitle: 'Hoe een ontwerper OpenDesign gebruikt',
     steps: [
       {
         title: 'Codeer je systeem',
@@ -823,9 +823,9 @@ export const NL: SolutionLocaleCopy = {
         imageAlt: 'Illustratie van een ontwerper die richting geeft en het ontwerp dat meebeweegt',
       },
     ],
-    tableTitle: 'Ontwerpen met Open Design vs de handmatige manier',
+    tableTitle: 'Ontwerpen met OpenDesign vs de handmatige manier',
     tableColCapability: 'Wat je nodig hebt',
-    tableColWithOd: 'Met Open Design',
+    tableColWithOd: 'Met OpenDesign',
     tableColWithout: 'Handmatige ontwerptools',
     tableRows: [
       { capability: 'Een ontwerpsysteem bouwen', withOd: 'Een DESIGN.md die de agent overal toepast', without: 'Een bibliotheek die je per tool met de hand onderhoudt' },
@@ -843,7 +843,7 @@ export const NL: SolutionLocaleCopy = {
       { title: 'Appschermen', body: 'Hifi mobiele en webschermen.', thumb: 'example-mobile-app' },
       { title: 'Dashboards', body: 'Data-UI die jouw systeem respecteert.', thumb: 'example-dashboard' },
     ],
-    galleryTitle: 'Gestuurd met Open Design',
+    galleryTitle: 'Gestuurd met OpenDesign',
     galleryLead:
       'Hifi, op-systeem werk dat de agent vanuit richting produceerde. Kies er een die dicht bij je stijl ligt en verfijn het.',
     gallery: [
@@ -863,12 +863,12 @@ export const NL: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Stuur je volgende ontwerp vanavond',
     ctaBody:
-      'Geef de repo een ster, installeer Open Design en laat de agent de productie afhandelen terwijl jij de smaak bepaalt — in de agent die je al gebruikt.',
+      'Geef de repo een ster, installeer OpenDesign en laat de agent de productie afhandelen terwijl jij de smaak bepaalt — in de agent die je al gebruikt.',
   },
   roleEngineering: {
-    title: 'Open Design voor engineers',
+    title: 'OpenDesign voor engineers',
     description:
-      'Sla de ontwerpoverdracht over. Open Design verandert een DESIGN.md in echte front-end die je coding agent rechtstreeks schrijft — op-systeem UI, prototypes en dashboards, in de repo, zonder Figma-heen-en-weer.',
+      'Sla de ontwerpoverdracht over. OpenDesign verandert een DESIGN.md in echte front-end die je coding agent rechtstreeks schrijft — op-systeem UI, prototypes en dashboards, in de repo, zonder Figma-heen-en-weer.',
     breadcrumb: 'Engineering',
     label: 'Voor · Engineering',
     heading: 'Van spec naar front-end, geen overdracht ertussen',
@@ -877,8 +877,8 @@ export const NL: SolutionLocaleCopy = {
       'Redactionele illustratie van een DESIGN.md die rechtstreeks doorstroomt naar front-endcode en gerenderde UI, met overslaan van een overdrachtsstap',
     tldrTitle: 'In één zin',
     tldrBody:
-      'Open Design dicht de kloof tussen ontwerper en engineer door het ontwerpsysteem machineleesbaar te maken: dezelfde agent die je code schrijft, past het systeem toe en rendert echte UI.',
-    stepsTitle: 'Hoe een engineer Open Design gebruikt',
+      'OpenDesign dicht de kloof tussen ontwerper en engineer door het ontwerpsysteem machineleesbaar te maken: dezelfde agent die je code schrijft, past het systeem toe en rendert echte UI.',
+    stepsTitle: 'Hoe een engineer OpenDesign gebruikt',
     steps: [
       {
         title: 'Lees het systeem, niet een redline',
@@ -896,9 +896,9 @@ export const NL: SolutionLocaleCopy = {
         imageAlt: 'Illustratie van gegenereerde UI die landt als een te beoordelen PR',
       },
     ],
-    tableTitle: 'Front-end met Open Design vs de overdrachtsmanier',
+    tableTitle: 'Front-end met OpenDesign vs de overdrachtsmanier',
     tableColCapability: 'Wat je nodig hebt',
-    tableColWithOd: 'Met Open Design',
+    tableColWithOd: 'Met OpenDesign',
     tableColWithout: 'Overdracht van ontwerp naar dev',
     tableRows: [
       { capability: 'Een ontwerp om vanuit te bouwen', withOd: 'Een DESIGN.md die je agent rechtstreeks leest', without: 'Een Figma-bestand dat je met de hand herinterpreteert' },
@@ -916,7 +916,7 @@ export const NL: SolutionLocaleCopy = {
       { title: 'Landingspaginas', body: 'Marketingpaginas zonder op ontwerp te wachten.', thumb: 'example-saas-landing' },
       { title: 'Kanban / borden', body: 'Interne workflow-UIs.', thumb: 'example-kanban-board' },
     ],
-    galleryTitle: 'Gebouwd door engineers met Open Design',
+    galleryTitle: 'Gebouwd door engineers met OpenDesign',
     galleryLead:
       'Echte, op-systeem front-end die rechtstreeks in de repo is gegenereerd. Kies er een die dicht bij wat je bouwt ligt en beschrijf het.',
     gallery: [
@@ -936,12 +936,12 @@ export const NL: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Genereer je volgende UI vanavond',
     ctaBody:
-      'Geef de repo een ster, installeer Open Design en verander een DESIGN.md in front-end — in de agent die je al gebruikt.',
+      'Geef de repo een ster, installeer OpenDesign en verander een DESIGN.md in front-end — in de agent die je al gebruikt.',
   },
   roleProductManagers: {
-    title: 'Open Design voor productmanagers',
+    title: 'OpenDesign voor productmanagers',
     description:
-      'Wacht niet meer op ontwerpcapaciteit om een idee over te brengen. Open Design laat een PM een prompt veranderen in een klikbaar prototype of wireframe — om stakeholders op één lijn te brengen en het team te briefen, zonder ontwerpticket.',
+      'Wacht niet meer op ontwerpcapaciteit om een idee over te brengen. OpenDesign laat een PM een prompt veranderen in een klikbaar prototype of wireframe — om stakeholders op één lijn te brengen en het team te briefen, zonder ontwerpticket.',
     breadcrumb: 'Productmanagers',
     label: 'Voor · Productmanagers',
     heading: 'Maak het idee klikbaar nog voor de kickoff',
@@ -950,8 +950,8 @@ export const NL: SolutionLocaleCopy = {
       'Redactionele illustratie van een PM die een geschreven idee verandert in een klikbaar prototype dat aan stakeholders wordt getoond',
     tldrTitle: 'In één zin',
     tldrBody:
-      'Open Design geeft een PM een ontwerpvrije manier om ideeën tastbaar te maken: van prompt naar prototype voor afstemming en briefings, zonder het ontwerpbudget van het team uit te geven.',
-    stepsTitle: 'Hoe een PM Open Design gebruikt',
+      'OpenDesign geeft een PM een ontwerpvrije manier om ideeën tastbaar te maken: van prompt naar prototype voor afstemming en briefings, zonder het ontwerpbudget van het team uit te geven.',
+    stepsTitle: 'Hoe een PM OpenDesign gebruikt',
     steps: [
       {
         title: 'Beschrijf de flow',
@@ -969,9 +969,9 @@ export const NL: SolutionLocaleCopy = {
         imageAlt: 'Illustratie van een prototype gedeeld voor afstemming en daarna overgedragen aan het team',
       },
     ],
-    tableTitle: 'PM-werk met Open Design vs wachten op ontwerp',
+    tableTitle: 'PM-werk met OpenDesign vs wachten op ontwerp',
     tableColCapability: 'Wat je nodig hebt',
-    tableColWithOd: 'Met Open Design',
+    tableColWithOd: 'Met OpenDesign',
     tableColWithout: 'Zonder het vandaag',
     tableRows: [
       { capability: 'Een idee tastbaar maken', withOd: 'Prompt → klikbaar prototype dat je zelf maakt', without: 'Een ontwerpticket indienen en op capaciteit wachten' },
@@ -989,7 +989,7 @@ export const NL: SolutionLocaleCopy = {
       { title: 'Webprototypes', body: 'Webflows met meerdere schermen om te reviewen.', thumb: 'example-web-prototype' },
       { title: 'Trendweergaven', body: 'Snapshots van 30 dagen en trends voor context.', thumb: 'example-last30days' },
     ],
-    galleryTitle: 'Geprototypeerd door PMs met Open Design',
+    galleryTitle: 'Geprototypeerd door PMs met OpenDesign',
     galleryLead:
       'Klikbare flows gerenderd vanuit een beschrijving, klaar voor een stakeholderreview. Kies er een die dicht bij je idee ligt en beschrijf het.',
     gallery: [
@@ -1009,12 +1009,12 @@ export const NL: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Maak je idee vanavond klikbaar',
     ctaBody:
-      'Geef de repo een ster, installeer Open Design en verander je volgende spec in iets waar mensen op kunnen klikken — in de agent die je al gebruikt.',
+      'Geef de repo een ster, installeer OpenDesign en verander je volgende spec in iets waar mensen op kunnen klikken — in de agent die je al gebruikt.',
   },
   roleMarketing: {
-    title: 'Open Design voor marketingteams',
+    title: 'OpenDesign voor marketingteams',
     description:
-      'Lever campagnes op contentsnelheid. Open Design laat je agent landingspaginas, socialkaarten en campagnevisuals produceren vanuit een prompt — op merk, op aanvraag, zonder ontwerp in de wachtrij te zetten.',
+      'Lever campagnes op contentsnelheid. OpenDesign laat je agent landingspaginas, socialkaarten en campagnevisuals produceren vanuit een prompt — op merk, op aanvraag, zonder ontwerp in de wachtrij te zetten.',
     breadcrumb: 'Marketing',
     label: 'Voor · Marketing',
     heading: 'Campagnevisuals op de snelheid van een prompt',
@@ -1023,8 +1023,8 @@ export const NL: SolutionLocaleCopy = {
       'Redactionele illustratie van een marketeer die een brief verandert in een landingspagina en een set socialkaarten op merk',
     tldrTitle: 'In één zin',
     tldrBody:
-      'Open Design is de altijd-beschikbare ontwerpresource voor marketing: van prompt naar asset voor landingspaginas en social, op merk, zodat campagnes worden geleverd op de snelheid waarmee je tekst schrijft.',
-    stepsTitle: 'Hoe een marketingteam Open Design gebruikt',
+      'OpenDesign is de altijd-beschikbare ontwerpresource voor marketing: van prompt naar asset voor landingspaginas en social, op merk, zodat campagnes worden geleverd op de snelheid waarmee je tekst schrijft.',
+    stepsTitle: 'Hoe een marketingteam OpenDesign gebruikt',
     steps: [
       {
         title: 'Zet het merk vast',
@@ -1042,9 +1042,9 @@ export const NL: SolutionLocaleCopy = {
         imageAlt: 'Illustratie van campagne-assets die worden geleverd en snel worden geïtereerd',
       },
     ],
-    tableTitle: 'Marketing met Open Design vs de gebruikelijke ren',
+    tableTitle: 'Marketing met OpenDesign vs de gebruikelijke ren',
     tableColCapability: 'Wat je nodig hebt',
-    tableColWithOd: 'Met Open Design',
+    tableColWithOd: 'Met OpenDesign',
     tableColWithout: 'Zonder het vandaag',
     tableRows: [
       { capability: 'Een landingspagina lanceren', withOd: 'Prompt → pagina op merk, deploybaar', without: 'Ontwerp briefen of vechten met een websitebouwer' },
@@ -1062,7 +1062,7 @@ export const NL: SolutionLocaleCopy = {
       { title: 'Artikelcovers', body: 'Blog- en nieuwsbriefcovers.', thumb: 'example-article-magazine' },
       { title: 'Webpaginas', body: 'Microsites en campagnepaginas.', thumb: 'example-web-prototype' },
     ],
-    galleryTitle: 'Geleverd door marketing met Open Design',
+    galleryTitle: 'Geleverd door marketing met OpenDesign',
     galleryLead:
       'Campagne-assets op merk gerenderd vanuit een prompt. Kies er een die dicht bij je campagne ligt en wissel je eigen tekst erin.',
     gallery: [
@@ -1082,6 +1082,6 @@ export const NL: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Lever je volgende campagne vanavond',
     ctaBody:
-      'Geef de repo een ster, installeer Open Design en verander briefs in assets op merk — in de agent die je al gebruikt.',
+      'Geef de repo een ster, installeer OpenDesign en verander briefs in assets op merk — in de agent die je al gebruikt.',
   },
 };

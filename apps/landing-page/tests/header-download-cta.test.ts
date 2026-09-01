@@ -96,14 +96,24 @@ function runDownloadDirectAssetGate(
 }
 
 describe('landing header account and download entry', () => {
-  it('keeps the nav download-page CTA and removes the signed-out login entry', async () => {
+  it('makes the nav CTA a platform-aware direct download and removes the signed-out login entry', async () => {
     const header = await readFile(headerPath, 'utf8');
+    const enhancer = await readFile(enhancerPath, 'utf8');
 
     assert.match(header, /href=\{href\('\/download\/'\)\}/);
+    assert.match(header, /data-direct-download/);
+    assert.doesNotMatch(header, /data-download-page/);
     assert.match(header, /data-download-placement='nav'/);
+    assert.match(enhancer, /getLatestRelease/);
+    assert.match(enhancer, /\[data-direct-download\]\[data-download-placement="nav"\]/);
+    assert.match(enhancer, /applyNavDownloadAsset\(directAssets\[navPlatform\.assetKey\]\)/);
+    assert.match(enhancer, /navPlatform\.match\(entry\.name\)/);
+    assert.match(enhancer, /navNeedsLiveRefresh = navPlatform && !downloadPrompt/);
     assert.doesNotMatch(header, /data-amr-signin|className='nav-signin'/);
-    assert.match(header, /data-amr-menu hidden/);
-    assert.match(header, /data-amr-console-link/);
+    // Account chrome is opt-in so only Pricing can restore it.
+    assert.match(header, /showAccount = false/);
+    assert.match(header, /showAccount \? \(/);
+    assert.match(header, /data-amr-account/);
   });
 
   it('silently reveals the avatar for an existing session without wiring login', async () => {
@@ -129,7 +139,7 @@ describe('mobile download-page guidance', () => {
     assert.match(page, /const narrowViewport = window\.matchMedia\('\(max-width: 767px\)'\)/);
     assert.match(page, /mobileNotice\.hidden = !\(isMobileDevice \|\| narrowViewport\.matches\)/);
     assert.match(page, /narrowViewport\.addEventListener\('change', syncMobileNotice\)/);
-    assert.match(copy, /Open Design 是桌面客户端，请在电脑上下载。/);
+    assert.match(copy, /OpenDesign 是桌面客户端，请在电脑上下载。/);
   });
 
   it('treats iPadOS desktop-mode Safari as a mobile device', async () => {

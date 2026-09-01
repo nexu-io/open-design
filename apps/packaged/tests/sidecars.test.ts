@@ -21,16 +21,19 @@ import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, posix } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createJsonIpcServer, resolveAppIpcPath } from '@open-design/sidecar';
-import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT } from '@open-design/sidecar-proto';
+import type { SidecarStamp } from '@open-design/sidecar';
+import { APP_KEYS } from '@open-design/sidecar-proto';
 
 import {
   buildPackagedDaemonSpawnEnv,
+  closeManagedChild,
   createPackagedSidecarSpawnOptions,
   createRestartPolicy,
   createWebSidecarSupervisor,
   openLog,
+  packagedChildStamp,
   registerPackagedWebUrl,
+  retireExistingSidecar,
   resolveDaemonStatusTimeoutMs,
   resolvePackagedChildBaseEnv,
   resolvePackagedElectronNodeCommand,
@@ -43,9 +46,79 @@ function slashPath(value: string): string {
   return value.replaceAll('\\', '/');
 }
 
+function testStamp(app: "daemon" | "web" = APP_KEYS.DAEMON): SidecarStamp {
+  return { app, channel: "stable", mode: "runtime", namespace: "test", source: "packaged" };
+}
+
+describe('packaged sidecar shutdown', () => {
+  it('rejects surviving generation processes and always closes the log handle', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-sidecar-close-'));
+    const logPath = join(root, 'latest.log');
+    const closeLog = vi.fn(async () => undefined);
+    const stop = vi.fn(async () => ({
+      alreadyStopped: false,
+      forcedPids: [42],
+      gracefulAccepted: false,
+      matchedPids: [42],
+      remainingPids: [42],
+      stoppedPids: [],
+    }));
+    const child = Object.assign(new EventEmitter(), {
+      exitCode: null,
+      pid: 42,
+      signalCode: null,
+    });
+
+    try {
+      await expect(closeManagedChild({
+        app: APP_KEYS.DAEMON,
+        child,
+        generation: { stop },
+        logHandle: { close: closeLog },
+        logPath,
+        stamp: testStamp(),
+      } as unknown as Parameters<typeof closeManagedChild>[0])).rejects.toThrow(
+        'failed to stop packaged daemon sidecar processes: 42',
+      );
+      expect(closeLog).toHaveBeenCalledOnce();
+      expect(readFileSync(logPath, 'utf8')).toContain('shutdown requested');
+      expect(readFileSync(logPath, 'utf8')).not.toContain('exited app=daemon');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('packaged child stamps', () => {
+  it.each(['runtime', 'headless'] as const)(
+    'propagates the owning %s mode to daemon and web children',
+    (mode) => {
+      const runtime = {
+        app: APP_KEYS.DESKTOP,
+        base: '/runtime',
+        mode,
+        namespace: 'test',
+        source: 'packaged',
+      } as const;
+
+      expect(packagedChildStamp(APP_KEYS.DAEMON, 'stable', runtime).mode).toBe(mode);
+      expect(packagedChildStamp(APP_KEYS.WEB, 'stable', runtime).mode).toBe(mode);
+    },
+  );
+});
+
 describe('resolveDaemonStatusTimeoutMs', () => {
   it('uses the 35-second baseline budget on platforms without a known slow-cold-start class', () => {
-    expect(resolveDaemonStatusTimeoutMs({}, 'darwin')).toBe(35_000);
+    expect(resolveDaemonStatusTimeoutMs({}, 'freebsd')).toBe(35_000);
+  });
+
+  it('widens the baseline to 90 seconds on darwin for packaged 0.18.1+ Apple Silicon cold starts', () => {
+    // Packaged 0.18.1 macOS launches can exceed the 35s baseline on slower
+    // Apple Silicon cold boots, after which the parent tears the sidecars down
+    // and the desktop falls back to a stale web URL. The wider budget matches
+    // the win32/linux "slow, not dead" safety net.
+    // https://github.com/nexu-io/open-design/issues/6637
+    expect(resolveDaemonStatusTimeoutMs({}, 'darwin')).toBe(90_000);
   });
 
   it('widens the baseline to 90 seconds on linux for AppImage FUSE cold starts', () => {
@@ -67,7 +140,7 @@ describe('resolveDaemonStatusTimeoutMs', () => {
   });
 
   it('treats an empty OD_LEGACY_DATA_DIR as unset', () => {
-    expect(resolveDaemonStatusTimeoutMs({ OD_LEGACY_DATA_DIR: '' }, 'darwin')).toBe(35_000);
+    expect(resolveDaemonStatusTimeoutMs({ OD_LEGACY_DATA_DIR: '' }, 'freebsd')).toBe(35_000);
   });
 
   it('extends the budget to 30 minutes when OD_LEGACY_DATA_DIR is set', () => {
@@ -90,7 +163,7 @@ describe('resolveDaemonStatusTimeoutMs', () => {
     try {
       delete process.env.OD_LEGACY_DATA_DIR;
       expect(resolveDaemonStatusTimeoutMs(undefined, 'linux')).toBe(90_000);
-      expect(resolveDaemonStatusTimeoutMs(undefined, 'darwin')).toBe(35_000);
+      expect(resolveDaemonStatusTimeoutMs(undefined, 'darwin')).toBe(90_000);
       process.env.OD_LEGACY_DATA_DIR = '/some/legacy/path';
       expect(resolveDaemonStatusTimeoutMs(undefined, 'linux')).toBe(30 * 60 * 1000);
     } finally {
@@ -102,37 +175,89 @@ describe('resolveDaemonStatusTimeoutMs', () => {
 
 describe('packaged web URL registration', () => {
   it('registers the current dynamic web URL with the daemon sidecar and supports a later port', async () => {
-    const namespace = `web-url-${process.pid}-${Date.now()}`;
-    const daemonIpc = resolveAppIpcPath({
-      app: APP_KEYS.DAEMON,
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-      namespace,
-    });
     const received: unknown[] = [];
-    const server = await createJsonIpcServer({
-      socketPath: daemonIpc,
-      handler: async (message) => {
-        received.push(message);
-        return { accepted: true };
-      },
-    });
+    const invoke = async (...args: unknown[]) => {
+      received.push(args);
+      return { accepted: true };
+    };
+    const daemonStamp = testStamp();
+    await registerPackagedWebUrl(daemonStamp, 'http://127.0.0.1:64248', invoke as never);
+    await registerPackagedWebUrl(daemonStamp, 'http://127.0.0.1:53421', invoke as never);
+    expect(received).toEqual([
+      [daemonStamp, 'register-web-url', { url: 'http://127.0.0.1:64248' }, { timeoutMs: 1200 }],
+      [daemonStamp, 'register-web-url', { url: 'http://127.0.0.1:53421' }, { timeoutMs: 1200 }],
+    ]);
+  });
+});
 
+describe('packaged stale sidecar retirement', () => {
+  const stopped = (overrides: Partial<{
+    matchedPids: number[];
+    remainingPids: number[];
+    staleEndpointRemoved: boolean;
+  }> = {}) => ({
+    alreadyStopped: false,
+    forcedPids: [],
+    gracefulAccepted: false,
+    matchedPids: overrides.matchedPids ?? [4321],
+    remainingPids: overrides.remainingPids ?? [],
+    staleEndpointRemoved: overrides.staleEndpointRemoved ?? false,
+    stoppedPids: overrides.matchedPids ?? [4321],
+  });
+
+  async function withLog(run: (logPath: string) => Promise<void>): Promise<void> {
+    const root = mkdtempSync(join(tmpdir(), 'od-packaged-retire-'));
     try {
-      await registerPackagedWebUrl(daemonIpc, 'http://127.0.0.1:64248');
-      await registerPackagedWebUrl(daemonIpc, 'http://127.0.0.1:53421');
-      expect(received).toEqual([
-        {
-          input: { url: 'http://127.0.0.1:64248' },
-          type: 'register-web-url',
-        },
-        {
-          input: { url: 'http://127.0.0.1:53421' },
-          type: 'register-web-url',
-        },
-      ]);
+      await run(join(root, 'latest.log'));
     } finally {
-      await server.close();
+      rmSync(root, { recursive: true, force: true });
     }
+  }
+
+  it('delegates a clean first boot to the sidecar lifecycle atomic', async () => {
+    await withLog(async (logPath) => {
+      const stop = vi.fn(async () => ({ ...stopped({ matchedPids: [] }), alreadyStopped: true }));
+      await expect(retireExistingSidecar(testStamp(), logPath, {
+        stop,
+      })).resolves.toBeUndefined();
+      expect(stop).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('retires an unresponsive daemon through the sidecar lifecycle atomic', async () => {
+    await withLog(async (logPath) => {
+      const stop = vi.fn(async () => stopped());
+      await expect(retireExistingSidecar(testStamp(), logPath, {
+        stop,
+      })).resolves.toBeUndefined();
+      expect(stop).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('retires an unresponsive web generation through the same lifecycle atomic', async () => {
+    await withLog(async (logPath) => {
+      const stop = vi.fn(async () => stopped());
+      await expect(retireExistingSidecar(testStamp(APP_KEYS.WEB), logPath, {
+        stop,
+      })).resolves.toBeUndefined();
+      expect(stop).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('allows recovery when the lifecycle atomic removes only a stale endpoint', async () => {
+    await withLog(async (logPath) => {
+      await expect(retireExistingSidecar(testStamp(APP_KEYS.WEB), logPath, {
+        stop: async () => stopped({ matchedPids: [], staleEndpointRemoved: true }),
+      })).resolves.toBeUndefined();
+    });
+  });
+
+  it('does not relaunch after a healthy generation fails to stop', async () => {
+    await withLog(async (logPath) => {
+      await expect(retireExistingSidecar(testStamp(APP_KEYS.WEB), logPath, {
+        stop: async () => stopped({ remainingPids: [4321] }),
+      })).rejects.toThrow('generation remains: 4321');
+    });
   });
 });
 
@@ -281,6 +406,17 @@ describe('packaged child Vite+ environment forwarding', () => {
     expect(env.NODE_USE_ENV_PROXY).toBeUndefined();
   });
 
+  it('forwards OD_ALLOWED_INTERNAL_HOSTS so the daemon can resolve trusted loopback hosts in packaged sidecars', () => {
+    const env = resolvePackagedChildBaseEnv({
+      HOME: '/Users/tester',
+      OD_ALLOWED_INTERNAL_HOSTS: '127.0.0.1,localhost',
+      RANDOM_INTERNAL_FLAG: 'drop-me',
+    });
+
+    expect(env.OD_ALLOWED_INTERNAL_HOSTS).toBe('127.0.0.1,localhost');
+    expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
+  });
+
   it('adds custom VP_HOME/bin to the packaged PATH builder', () => {
     const vpHome = mkdtempSync(join(tmpdir(), 'od-packaged-vp-home-'));
     const originalVpHome = process.env.VP_HOME;
@@ -387,12 +523,10 @@ describe('buildPackagedDaemonSpawnEnv', () => {
     return {
       cacheRoot: '/tmp/od-pkg/cache',
       dataRoot: '/tmp/od-pkg/data',
-      desktopIdentityPath: '/tmp/od-pkg/runtime/desktop-root.json',
       desktopLogPath: '/tmp/od-pkg/logs/desktop/latest.log',
       desktopLogsRoot: '/tmp/od-pkg/logs/desktop',
       electronSessionDataRoot: '/tmp/od-pkg/user-data/session',
       electronUserDataRoot: '/tmp/od-pkg/user-data',
-      headlessIdentityPath: '/tmp/od-pkg/runtime/headless-root.json',
       installationRoot: '/tmp/od-pkg/..',
       installerObservationRoot: '/tmp/od-pkg/data/observations/installer',
       logsRoot: '/tmp/od-pkg/logs',
@@ -400,7 +534,6 @@ describe('buildPackagedDaemonSpawnEnv', () => {
       resourceRoot: '/tmp/od-pkg/resources',
       runtimeRoot: '/tmp/od-pkg/runtime',
       updateRoot: '/tmp/od-pkg/updates',
-      webIdentityPath: '/tmp/od-pkg/runtime/web-root.json',
     };
   }
 
@@ -574,6 +707,27 @@ describe('buildPackagedDaemonSpawnEnv', () => {
     expect(env.OPEN_DESIGN_AMR_PROFILE).toBe('test');
   });
 
+  it('forwards the per-profile Vela console origins to the daemon', () => {
+    const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: null,
+      amrProfile: 'prod',
+      daemonCliEntry: null,
+      legacyDataDir: null,
+      requireDesktopAuth: true,
+      velaWebUrl: 'https://prod.example.invalid',
+      velaWebUrls: {
+        prod: 'https://prod.example.invalid',
+        test: 'https://test.example.invalid',
+        'feature-test': 'https://feature.example.invalid',
+      },
+    });
+    expect(JSON.parse(env.OD_VELA_WEB_URLS ?? '{}')).toEqual({
+      prod: 'https://prod.example.invalid',
+      test: 'https://test.example.invalid',
+      'feature-test': 'https://feature.example.invalid',
+    });
+  });
+
   it.each(['feature-test', 'test'] as const)(
     'enables the vela-cli workspace-team transport for a %s build with an injected vela web origin',
     (amrProfile) => {
@@ -736,7 +890,7 @@ describe('waitForStatus child-exit fast-fail', () => {
 
     const startedAt = Date.now();
     const promise = waitForStatus<{ url: string | null }>(
-      ipcPath,
+      { label: 'daemon', read: async () => { throw new Error(`missing ${ipcPath}`); } },
       (status) => status.url != null,
       30 * 60 * 1000,
       { child, logPath },
@@ -779,7 +933,7 @@ describe('waitForStatus child-exit fast-fail', () => {
     let captured: unknown;
     try {
       await waitForStatus<{ url: string | null }>(
-        '/tmp/od-test-no-such-ipc-pre-' + Date.now(),
+        { label: 'daemon', read: async () => { throw new Error('missing'); } },
         (status) => status.url != null,
         30 * 60 * 1000,
         { child, logPath: '/tmp/od-test-daemon.log' },
@@ -795,42 +949,18 @@ describe('waitForStatus child-exit fast-fail', () => {
     expect(elapsed).toBeLessThan(2_000);
   });
 
-  it('does not accept ready status from a stale IPC endpoint owned by a different pid', async () => {
+  it('does not interpret a business status pid as the generation root pid', async () => {
     const child = fakeChild();
     child.pid = 5678;
-    const ipcPath = resolveAppIpcPath({
-      app: APP_KEYS.WEB,
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-      namespace: `stale-ipc-${process.pid}-${Date.now()}`,
-    });
-    const server = await createJsonIpcServer({
-      socketPath: ipcPath,
-      handler: async () => ({
-        pid: 1234,
-        state: 'running',
-        updatedAt: new Date().toISOString(),
-        url: 'http://127.0.0.1:1234',
-      }),
-    });
-
-    try {
-      let captured: unknown;
-      try {
-        await waitForStatus<{ pid?: number | null; url: string | null }>(
-          ipcPath,
-          (status) => status.url != null,
-          250,
-          { child, logPath: join(tmpdir(), 'od-test-web.log') },
-        );
-      } catch (err) {
-        captured = err;
-      }
-
-      expect(captured).toBeInstanceOf(Error);
-      expect((captured as Error).message).toContain('sidecar status pid 1234 did not match spawned pid 5678');
-    } finally {
-      await server.close();
-    }
+    await expect(waitForStatus<{ pid: number; url: string | null }>(
+      {
+        label: 'web',
+        read: async () => ({ pid: 1234, url: 'http://127.0.0.1:1234' }),
+      },
+      (status) => status.url != null,
+      250,
+      { child, logPath: join(tmpdir(), 'od-test-web.log') },
+    )).resolves.toEqual({ pid: 1234, url: 'http://127.0.0.1:1234' });
   });
 });
 

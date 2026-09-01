@@ -15,79 +15,22 @@ import type { LandingLocaleCode } from '../i18n';
 import { DEFAULT_LOCALE } from '../i18n';
 import { CODEX_COLLECTION, CODEX_SKILLS, type CodexSkillCategory } from './codex-design';
 import { CODEX_COPY_OVERRIDES } from './codex-i18n/index';
+import {
+  curatedSkillCopy,
+  mergeCuratedCopy,
+  type CuratedCopyBase,
+  type CuratedSkillCopy,
+} from './curated-collection';
 
 /** Prose for one curated skill, keyed by slug in `CodexCopy.skills`. */
-export interface CodexSkillCopy {
-  readonly name: string;
-  readonly tagline: string;
-  readonly whatIsIt: string;
-  readonly whyForDesign: readonly string[];
-  readonly howWithCodex: readonly string[];
-  readonly example?: string;
-}
+export type CodexSkillCopy = CuratedSkillCopy;
 
-export interface CodexCopy {
-  /* Collection page. */
-  readonly collectionEyebrow: string;
-  readonly collectionHeading: string;
-  readonly collectionLede: string;
-  readonly collectionStats: readonly { readonly value: string; readonly label: string }[];
-  readonly collectionIntro: string;
-  readonly collectionCategoryBlurbs: readonly string[];
-  readonly collectionCloserHeading: string;
-  readonly collectionCloserBody: string;
-  readonly filterAll: string;
-
-  /* Category names, shown as card labels and in the "why these" strip. */
+export interface CodexCopy extends CuratedCopyBase {
+  /* Category names, shown as card labels and in the "why these" strip.
+     Each collection owns its category-label keys; everything else is the
+     shared curated-collection chrome (see `CuratedCopyBase`). */
   readonly categoryFrontend: string;
   readonly categoryDesignSystems: string;
-
-  /* Shared chrome. */
-  readonly ctaDownload: string;
-  readonly ctaStarList: string;
-  readonly ctaBrowseAll: string;
-  readonly ctaViewSource: string;
-  readonly ctaOurRepo: string;
-  readonly cardKind: string;
-  readonly cardWhatItDoes: string;
-  readonly cardCta: string;
-
-  /* Detail page section headings. */
-  readonly detailWhatIsIt: string;
-  readonly detailWhyForDesign: string;
-  readonly detailHowWithCodex: string;
-  readonly detailExampleTag: string;
-  readonly detailSource: string;
-  readonly detailCategory: string;
-  readonly detailMaintainer: string;
-  readonly detailTags: string;
-  readonly detailLicense: string;
-  readonly detailCovers: string;
-  readonly detailUpstream: string;
-  readonly detailCodexNote: string;
-  readonly detailTraction: string;
-  readonly detailRepo: string;
-  readonly detailStars: string;
-
-  /* Install module. Shell commands live in the data, never in these strings. */
-  readonly installHeading: string;
-  readonly installRunInCodex: string;
-  readonly installRestart: string;
-  readonly installClone: string;
-  readonly installPoint: string;
-  readonly installThenUse: string;
-
-  /* "How to install" module. The shell command itself is never translated. */
-  readonly installNote: string;
-  readonly installNoteCta: string;
-  readonly detailMoreOnList: string;
-  readonly detailRelated: string;
-  readonly finalEyebrow: string;
-  readonly detailCloserHeading: string;
-  readonly detailCloserBody: string;
-
-  /* Per-skill prose, keyed by the slug in `CODEX_SKILLS`. */
-  readonly skills: Readonly<Record<string, CodexSkillCopy>>;
 }
 
 /*
@@ -101,15 +44,15 @@ const en: CodexCopy = {
   collectionStats: CODEX_COLLECTION.stats,
   collectionIntro: CODEX_COLLECTION.intro,
   collectionCategoryBlurbs: CODEX_COLLECTION.categories.map((c) => c.blurb),
-  collectionCloserHeading: 'Skip the setup. Design with Codex inside Open Design',
+  collectionCloserHeading: 'Skip the setup. Design with Codex inside OpenDesign',
   filterAll: 'All',
   collectionCloserBody:
-    'Open Design is the open-source, agent-native design workspace that runs around Codex. It keeps your systems, skills and templates consistent, so the agent ships work you own.',
+    'OpenDesign is the open-source, agent-native design workspace that runs around Codex. It keeps your systems, skills and templates consistent, so the agent ships work you own.',
 
   categoryFrontend: 'Frontend & UI',
   categoryDesignSystems: 'Design Systems',
 
-  ctaDownload: 'Download Open Design',
+  ctaDownload: 'Download OpenDesign',
   ctaStarList: 'Star the list',
   ctaBrowseAll: 'Browse all plugins',
   ctaViewSource: 'View source',
@@ -120,7 +63,7 @@ const en: CodexCopy = {
 
   detailWhatIsIt: 'What it is',
   detailWhyForDesign: 'Why it matters for design',
-  detailHowWithCodex: 'How to run it with Codex',
+  detailHowWithAgent: 'How to run it with Codex',
   detailExampleTag: 'When to reach for it',
   detailSource: 'Source',
   detailCategory: 'Category',
@@ -129,13 +72,13 @@ const en: CodexCopy = {
   detailLicense: 'License',
   detailCovers: 'What it covers',
   detailUpstream: 'From the upstream SKILL.md',
-  detailCodexNote: 'Works with Codex',
+  detailAgentNote: 'Works with Codex',
   detailTraction: 'Traction',
   detailRepo: 'Source repo',
   detailStars: 'Stars',
 
   installHeading: 'How to install',
-  installRunInCodex: 'Run this inside Codex.',
+  installRunInAgent: 'Run this inside Codex.',
   installRestart: 'Restart Codex so it picks up the new skill.',
   installClone: 'Clone the repo.',
   installPoint: 'Point Codex at the skill file.',
@@ -147,9 +90,9 @@ const en: CodexCopy = {
   detailMoreOnList: 'More on the codex-design list',
   detailRelated: 'More Codex design plugins',
   finalEyebrow: 'Next step',
-  detailCloserHeading: 'Design with Open Design, without the setup',
+  detailCloserHeading: 'Design with OpenDesign, without the setup',
   detailCloserBody:
-    'Install this plugin yourself, or run a whole curated design layer around Codex with Open Design. Bring your own key, own your output.',
+    'Install this plugin yourself, or run a whole curated design layer around Codex with OpenDesign. Bring your own key, own your output.',
 
   skills: Object.fromEntries(
     CODEX_SKILLS.map((s) => [
@@ -159,22 +102,12 @@ const en: CodexCopy = {
         tagline: s.tagline,
         whatIsIt: s.whatIsIt,
         whyForDesign: s.whyForDesign,
-        howWithCodex: s.howWithCodex,
+        howWithAgent: s.howWithAgent,
         example: s.example,
       },
     ]),
   ),
 };
-
-/**
- * Drop explicitly-undefined keys so a partial override never overwrites an
- * English value with `undefined` when spread on top of the baseline.
- */
-function stripUndefined<T extends object>(value: T): Partial<T> {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, v]) => v !== undefined),
-  ) as Partial<T>;
-}
 
 /**
  * Locale copy with English fallback. Overrides are `Partial`, so a locale can
@@ -183,21 +116,7 @@ function stripUndefined<T extends object>(value: T): Partial<T> {
  */
 export function getCodexCopy(locale: LandingLocaleCode): CodexCopy {
   if (locale === DEFAULT_LOCALE) return en;
-  const override = CODEX_COPY_OVERRIDES[locale];
-  if (!override) return en;
-  const skills: Record<string, CodexSkillCopy> = { ...en.skills };
-  for (const [slug, copy] of Object.entries(override.skills ?? {})) {
-    const base = en.skills[slug];
-    // A slug the English baseline does not know about is a stale translation;
-    // ignore it rather than rendering a half-populated page.
-    if (!base || !copy) continue;
-    // A skill's name is its published product name (the id you install), so it
-    // stays in English in every locale — a translated name would not match the
-    // upstream catalogue. Drop any `name` a translation supplied.
-    const { name: _translatedName, ...translatable } = copy;
-    skills[slug] = { ...base, ...stripUndefined(translatable) };
-  }
-  return { ...en, ...stripUndefined(override), skills };
+  return mergeCuratedCopy(en, CODEX_COPY_OVERRIDES[locale]);
 }
 
 /**
@@ -206,9 +125,7 @@ export function getCodexCopy(locale: LandingLocaleCode): CodexCopy {
  * as a build failure instead of rendering blanks.
  */
 export function skillCopy(copy: CodexCopy, slug: string): CodexSkillCopy {
-  const entry = copy.skills[slug];
-  if (!entry) throw new Error(`No Codex skill copy for slug "${slug}".`);
-  return entry;
+  return curatedSkillCopy('Codex', copy, slug);
 }
 
 /** Localized label for a skill's category (categories are a closed set). */

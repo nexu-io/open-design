@@ -29,6 +29,8 @@ import { join } from 'node:path';
 
 import { describe, expect, test } from 'vitest';
 
+import type { AgentsResponse } from '@open-design/contracts';
+
 import { AMR_TEST_WORKSPACE_HEADERS } from '@/vitest/amr';
 import { requestJson } from '@/vitest/http';
 import { listMessages } from '@/vitest/messages';
@@ -40,7 +42,7 @@ type ProjectResponse = {
   project: { id: string; metadata?: { kind?: string }; name: string };
 };
 
-// Inline fake `vela` binary. Handles the two argv shapes Open Design's
+// Inline fake `vela` binary. Handles the two argv shapes OpenDesign's
 // daemon ever spawns:
 //
 //   `vela models`                       — legacy catalog probe compatibility.
@@ -63,8 +65,14 @@ import { argv, stdin, stdout, env, exit } from 'node:process';
 const ASSISTANT_TEXT = env.FAKE_VELA_TEXT || 'Hello from the e2e fake vela.';
 const SESSION_ID = 'fake-amr-session-1';
 const LIVE_MODEL_ID = 'glm-5';
-const PRESET_MODELS_JSON = JSON.stringify({ source: 'preset', data: [{ id: LIVE_MODEL_ID }] });
-const REMOTE_MODELS_JSON = JSON.stringify({ source: 'remote', data: [{ id: LIVE_MODEL_ID }] });
+const MIXED_MODELS = [
+  { id: LIVE_MODEL_ID },
+  { id: 'nano-banana-2' },
+  { id: 'seedream-5.0' },
+  { id: 'seedance-2' },
+];
+const PRESET_MODELS_JSON = JSON.stringify({ source: 'preset', data: MIXED_MODELS });
+const REMOTE_MODELS_JSON = JSON.stringify({ source: 'remote', data: MIXED_MODELS });
 
 function readBalanceState() {
   if (!env.FAKE_VELA_BALANCE_FILE) {
@@ -92,6 +100,15 @@ function writeNotification(method, params) {
   writeMessage({ jsonrpc: '2.0', method, params });
 }
 
+if (argv[2] === '--version') {
+  stdout.write('vela version 0.0.1\\n');
+  exit(0);
+}
+
+if (argv[2] === '--help') {
+  exit(0);
+}
+
 if (argv[2] === 'login') {
   const file = join(homedir(), '.amr', 'config.json');
   mkdirSync(dirname(file), { recursive: true });
@@ -111,16 +128,21 @@ if (argv[2] === 'login') {
 }
 
 if (argv[2] === 'models') {
-  stdout.write('public_model_glm_5    vela\\n');
+  stdout.write([
+    'public_model_glm_5         vela',
+    'public_model_nano_banana_2 vela',
+    'public_model_seedream_5_0  vela',
+    'public_model_seedance_2    vela',
+  ].join('\\n') + '\\n');
   exit(0);
 }
 
-if (argv[2] === 'model' && argv[3] === 'preset' && argv[4] === '--format' && argv[5] === 'json') {
+if (argv[2] === 'model' && argv[3] === 'preset' && argv.includes('--format') && argv.includes('json')) {
   stdout.write(PRESET_MODELS_JSON + '\\n');
   exit(0);
 }
 
-if (argv[2] === 'model' && argv[3] === 'list' && argv[4] === '--format' && argv[5] === 'json') {
+if (argv[2] === 'model' && argv[3] === 'list' && argv.includes('--format') && argv.includes('json')) {
   stdout.write(REMOTE_MODELS_JSON + '\\n');
   exit(0);
 }
@@ -302,6 +324,21 @@ describe('AMR chat-run end-to-end', () => {
         method: 'PUT',
       });
 
+      // Cross the real daemon catalog boundary before starting the run. The
+      // fake intentionally publishes image and video models beside a valid
+      // chat model; those media-only ids must never reach either chat picker.
+      const agents = await requestJson<AgentsResponse>(webUrl, '/api/agents');
+      const amr = agents.agents.find((agent) => agent.id === 'amr');
+      expect(amr, 'AMR agent is present in the detected runtime catalog').toBeDefined();
+      const modelIds = amr?.models?.map((model) => model.id) ?? [];
+      expect(modelIds.length, 'AMR retains a non-empty normalized chat catalog').toBeGreaterThan(0);
+      expect(modelIds, 'the response came from this test\'s live fake Vela catalog').toContain('glm-5');
+      expect(modelIds).not.toEqual(expect.arrayContaining([
+        'nano-banana-2',
+        'seedream-5.0',
+        'seedance-2',
+      ]));
+
       const project = await requestJson<ProjectResponse>(webUrl, '/api/projects', {
         body: {
           designSystemId: null,
@@ -357,6 +394,9 @@ describe('AMR chat-run end-to-end', () => {
       const runEvents = await readRunEvents(webUrl, run.runId, {
         headers: { ...AMR_TEST_WORKSPACE_HEADERS },
       });
+      const toolTokenExpiry = runEvents.match(/"toolTokenExpiresAt":"([^"]+)"/)?.[1];
+      expect(toolTokenExpiry, 'run start event exposes the run-scoped tool-token deadline').toBeTruthy();
+      expect(Date.parse(toolTokenExpiry ?? '') - t0).toBeGreaterThanOrEqual(44 * 60 * 1000);
       expect(runEvents).toContain('"type":"usage"');
       expect(runEvents).toContain('input_tokens');
       expect(runEvents).toContain('output_tokens');
@@ -409,20 +449,10 @@ describe('AMR chat-run end-to-end', () => {
     const authority = createServer((req, res) => {
       if (
         req.method === 'GET' &&
-        (req.url === '/api/v1/workspaces' || req.url === '/api/v1/workspaces/current')
+        req.url === '/api/v1/workspaces'
       ) {
         res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify(
-          req.url.endsWith('/current')
-            ? {
-                ...workspace,
-                billingState: 'active',
-                planId: 'team_plus',
-                providerMode: 'platform_credits',
-                seatSummary: { seatLimit: 5, usedSeats: 2 },
-              }
-            : { items: [personalWorkspace, workspace] },
-        ));
+        res.end(JSON.stringify({ items: [personalWorkspace, workspace] }));
         return;
       }
       res.writeHead(404, { 'content-type': 'application/json' });

@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { isAbortedOperationError } from './aborted-error.js';
 
 import {
   collectProcessTreePids,
@@ -17,6 +18,41 @@ import {
   resolveAgentLaunch,
 } from '../runtimes/launch.js';
 import { getAgentDef } from '../runtimes/registry.js';
+
+/**
+ * A failed Vela command still carries meaning on stdout.
+ *
+ * `vela image gen --json` prints the complete task object — including its
+ * structured `error` block — and only then exits non-zero. Rejecting with the
+ * bare exec error therefore threw away the one thing that distinguishes a
+ * content-safety rejection from a provider outage, leaving every caller with
+ * nothing but "Command failed with exit code 1".
+ *
+ * The stdout is attached to the rejection rather than resolved, so the command
+ * still fails and no caller can mistake a failure for success; readers that
+ * want the structured detail opt in through `velaCommandStdout`.
+ */
+function withCommandStdout(error: unknown, stdout: string): unknown {
+  if (!stdout || typeof error !== 'object' || error === null) return error;
+  try {
+    (error as { stdout?: string }).stdout = stdout;
+  } catch {
+    // A frozen or exotic error object must not turn a command failure into a
+    // different, more confusing failure.
+  }
+  return error;
+}
+
+/**
+ * Read the stdout captured by `withCommandStdout` off a rejected Vela command.
+ * Returns an empty string when the failure carried none (a crash before any
+ * output, or a non-object rejection).
+ */
+export function velaCommandStdout(error: unknown): string {
+  if (typeof error !== 'object' || error === null) return '';
+  const stdout = (error as { stdout?: unknown }).stdout;
+  return typeof stdout === 'string' ? stdout : '';
+}
 
 export interface VelaCommandOptions {
   env?: NodeJS.ProcessEnv;
@@ -37,6 +73,8 @@ export interface VelaCommandOptions {
    * stays unchanged; observer failures never affect command completion.
    */
   onStderr?: (stderr: string) => void;
+  /** Optional bytes written to the child stdin before it is closed. */
+  input?: string | Buffer;
 }
 
 type VelaTerminationReason = 'abort' | 'timeout';
@@ -134,7 +172,7 @@ function configuredAmrEnv(
 }
 
 /**
- * Run the same resolved Vela binary and environment used by Open Design login
+ * Run the same resolved Vela binary and environment used by OpenDesign login
  * and AMR agent launches. Resource/team/collab adapters must use this instead
  * of spawning a PATH-only `vela` process, otherwise a packaged login can
  * succeed while the collaboration command uses a different or missing CLI.
@@ -274,11 +312,19 @@ export function runVelaCommand(
             // Diagnostics are observational and must never change transport.
           }
         }
-        if (error) settle({ error });
+        if (error) settle({ error: withCommandStdout(error, stdout) });
         else settle({ stdout });
       },
     );
     childPid = child.pid;
+    if (options.input !== undefined && child.stdin) {
+      // The exec callback remains the command's completion authority. Ignore a
+      // redundant stream error here (for example EPIPE after an early CLI
+      // validation failure) so it cannot become an unhandled EventEmitter
+      // error while the callback reports the actual process result.
+      child.stdin.on('error', () => undefined);
+      child.stdin.end(options.input);
+    }
     if (settled) return;
 
     if (options.signal) {
@@ -295,3 +341,7 @@ export function runVelaCommand(
     }
   });
 }
+
+// Re-exported so the vela-facing name stays available to callers that already
+// think in terms of vela commands; the implementation carries no dependencies.
+export { isAbortedOperationError as isAbortedVelaCommandError };

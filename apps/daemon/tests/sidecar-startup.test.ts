@@ -9,11 +9,12 @@ import {
   SIDECAR_MESSAGES,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
+  type DesktopRenderFramesInput,
+  type DesktopRenderFramesResult,
 } from '@open-design/sidecar-proto';
-import { requestJsonIpc } from '@open-design/sidecar';
 
 const stopRuntime = vi.fn(async () => undefined);
-const startDaemonRuntime = vi.fn(async () => ({
+const startDaemonRuntime = vi.fn(async (_options?: unknown) => ({
   stop: stopRuntime,
   url: 'http://127.0.0.1:48123',
 }));
@@ -70,14 +71,32 @@ describe('daemon sidecar startup', () => {
     expect(stopRuntime).toHaveBeenCalled();
   });
 
+  it('passes the supervised child environment through the sidecar integration seam', async () => {
+    const { startDaemonSidecar } = await import('../src/sidecar/server.js');
+    const inheritedEnvironment = vi.fn(() => ({ OD_OPAQUE_CLIENT_CAPABILITY: 'capability' }));
+    const handle = await startDaemonSidecar({
+      app: APP_KEYS.DAEMON,
+      base: tmpdir(),
+      ipc: join(tmpdir(), 'daemon-environment.sock'),
+      mode: SIDECAR_MODES.DEV,
+      namespace: 'environment',
+      source: SIDECAR_SOURCES.TOOLS_DEV,
+    }, { inheritedEnvironment });
+
+    try {
+      expect(startDaemonRuntime).toHaveBeenCalledWith(expect.objectContaining({ inheritedEnvironment }));
+    } finally {
+      await handle.stop();
+    }
+  });
+
   it('registers the live packaged web URL after daemon startup and replaces it on restart', async () => {
     const { startDaemonSidecar } = await import('../src/sidecar/server.js');
     const root = await mkdtemp(join(tmpdir(), 'od-daemon-sidecar-web-url-'));
-    const ipc = join(root, 'daemon.sock');
     const handle = await startDaemonSidecar({
       app: APP_KEYS.DAEMON,
       base: root,
-      ipc,
+      ipc: join(root, 'daemon.sock'),
       mode: SIDECAR_MODES.RUNTIME,
       namespace: 'packaged-web-url',
       source: SIDECAR_SOURCES.PACKAGED,
@@ -86,31 +105,81 @@ describe('daemon sidecar startup', () => {
     try {
       expect((await handle.status()).trustedWebOriginPort).toBeNull();
 
-      await requestJsonIpc(
-        ipc,
-        {
-          input: { url: 'http://127.0.0.1:64248' },
-          type: SIDECAR_MESSAGES.REGISTER_WEB_URL,
-        },
-        { timeoutMs: 1_000 },
-      );
+      await handle.invoke(SIDECAR_MESSAGES.REGISTER_WEB_URL, { url: 'http://127.0.0.1:64248' });
       expect(process.env.OD_WEB_PORT).toBe('64248');
       expect((await handle.status()).trustedWebOriginPort).toBe(64248);
 
-      await requestJsonIpc(
-        ipc,
-        {
-          input: { url: 'http://127.0.0.1:53421' },
-          type: SIDECAR_MESSAGES.REGISTER_WEB_URL,
-        },
-        { timeoutMs: 1_000 },
-      );
+      await handle.invoke(SIDECAR_MESSAGES.REGISTER_WEB_URL, { url: 'http://127.0.0.1:53421' });
       expect(process.env.OD_WEB_PORT).toBe('53421');
       expect((await handle.status()).trustedWebOriginPort).toBe(53421);
     } finally {
       await handle.stop();
       await handle.waitUntilStopped();
       await rm(root, { recursive: true, force: true });
+    }
+  });
+  it('does not invoke frame rendering on an older desktop without the advertised capability', async () => {
+    const { startDaemonSidecar } = await import('../src/sidecar/server.js');
+    const root = await mkdtemp(join(tmpdir(), 'od-daemon-sidecar-frame-gate-'));
+    const invokeDesktop = vi.fn();
+    const statusDesktop = vi.fn(async () => ({
+      pid: process.pid,
+      state: 'running' as const,
+      updatedAt: new Date().toISOString(),
+      url: null,
+      windowVisible: false,
+    }));
+    const handle = await startDaemonSidecar({
+      app: APP_KEYS.DAEMON,
+      base: root,
+      ipc: join(root, 'daemon.sock'),
+      mode: SIDECAR_MODES.RUNTIME,
+      namespace: `frame-gate-${randomBytes(4).toString('hex')}`,
+      source: SIDECAR_SOURCES.PACKAGED,
+    }, { invokeDesktop, statusDesktop });
+
+    try {
+      const runtimeOptions = startDaemonRuntime.mock.lastCall?.[0] as {
+        desktopFrameRenderer?: (
+          input: DesktopRenderFramesInput,
+        ) => Promise<DesktopRenderFramesResult>;
+      };
+      const result = await runtimeOptions.desktopFrameRenderer?.({
+        height: 180,
+        html: '<main></main>',
+        outputDir: join(root, 'frames'),
+        width: 320,
+      });
+      expect(result).toMatchObject({
+        errorCode: 'FRAME_RENDERER_NOT_READY',
+        ok: false,
+      });
+      expect(statusDesktop).toHaveBeenCalledWith(5_000);
+      expect(invokeDesktop).not.toHaveBeenCalled();
+    } finally {
+      await handle.stop();
+      await handle.waitUntilStopped();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('defers lifecycle stop while a handoff journal hold is active', async () => {
+    const {
+      holdParentMonitorExit,
+      waitForParentMonitorRelease,
+    } = await import('../src/sidecar/parent-monitor-gate.js');
+    const release = holdParentMonitorExit();
+    const stop = vi.fn(async () => undefined);
+    const lifecycleStop = waitForParentMonitorRelease().then(stop);
+
+    try {
+      await Promise.resolve();
+      expect(stop).not.toHaveBeenCalled();
+      release();
+      await lifecycleStop;
+      expect(stop).toHaveBeenCalledOnce();
+    } finally {
+      release();
     }
   });
 });

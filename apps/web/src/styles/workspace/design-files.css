@@ -22,9 +22,6 @@
   -webkit-backdrop-filter: var(--scrim-backdrop);
   backdrop-filter: var(--scrim-backdrop);
 }
-.paste-text-dialog-backdrop.modal-backdrop {
-  z-index: 2000;
-}
 .df-main {
   position: relative;
   display: flex;
@@ -292,12 +289,11 @@
 }
 .df-batch-clear { color: var(--text-faint); }
 /* Category tab bar — one group visible at a time; a tab only exists when
-   its group has content, so empty categories disappear entirely. Sticky so
-   long lists keep the switcher in reach. */
+   its group has content, so empty categories disappear entirely. The bar
+   scrolls with the content and paints no background of its own: the panel's
+   veil-canvas wash shows through, so only the tab pills read as UI (the old
+   sticky near-opaque strip rendered as a full-width gray band). */
 .df-tabs {
-  position: sticky;
-  top: 0;
-  z-index: 3;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -305,18 +301,6 @@
   /* .df-body already owns the 20px page inset. Keep this bar on that same
      content baseline instead of applying a second horizontal inset. */
   padding: 8px 0 10px;
-  /* Sticky over the scrolling list: frost what slides beneath. recvqat3n4iNZn:
-     a plain `var(--glass-regular)` (66% alpha) leans on backdrop-filter to
-     hide the rest of the card grid, and backdrop-filter on a `position:
-     sticky` bar can fail to recomposite every frame while its scroll
-     container moves beneath it — the reported bug was the raw, unblurred
-     grid showing straight through the bar mid-scroll. Mix the tint mostly
-     into the fully opaque `--bg-elevated` so the bar's own background alone
-     (~94% opaque) already occludes the scrolled grid; backdrop-filter still
-     runs as a bonus frost on top, but correctness no longer depends on it. */
-  background: color-mix(in srgb, var(--bg-elevated) 82%, var(--glass-regular));
-  -webkit-backdrop-filter: var(--glass-backdrop);
-  backdrop-filter: var(--glass-backdrop);
 }
 .df-tab {
   all: unset;

@@ -1,6 +1,6 @@
 # Windows Troubleshooting Guide
 
-Open Design runs on Windows natively, but the path is less travelled than macOS, Linux, or WSL2. This guide covers the most common errors you will hit on a fresh Windows machine and the exact fix for each.
+OpenDesign runs on Windows natively, but the path is less travelled than macOS, Linux, or WSL2. This guide covers the most common errors you will hit on a fresh Windows machine and the exact fix for each.
 
 > **Tip:** If your coding-agent CLIs run inside WSL2, use the dedicated [`WSL2 setup guide`](wsl-setup.md). This guide is for native Windows (PowerShell).
 
@@ -23,7 +23,7 @@ The first dialog only shows a **Don't run** button. The **Run anyway** button is
 
 ### Why this happens
 
-This is expected and does not mean the app is unsafe or broken. SmartScreen warns about any installer that is not signed with a code-signing certificate it already recognizes. Open Design ships unsigned Windows builds today, so the installer reports `Publisher: Unknown publisher` and SmartScreen flags it until a given signed binary builds up download reputation. The warning is about verifying who published the file, not about detecting a threat.
+This is expected and does not mean the app is unsafe or broken. SmartScreen warns about any installer that is not signed with a code-signing certificate it already recognizes. OpenDesign ships unsigned Windows builds today, so the installer reports `Publisher: Unknown publisher` and SmartScreen flags it until a given signed binary builds up download reputation. The warning is about verifying who published the file, not about detecting a threat.
 
 ### Fix
 
@@ -222,7 +222,7 @@ pnpm tools-dev run web
 Expected output ends with something like:
 
 ```text
-Open Design dev server ready
+OpenDesign dev server ready
   - Local:   http://localhost:17573
 ```
 
@@ -261,7 +261,7 @@ That keeps the launcher on the supported `pnpm tools-dev run web` path while sti
 
 ## Optional: OpenCode agent CLI on Windows
 
-OpenCode is one of the local agent CLIs Open Design can drive. If you want to use it:
+OpenCode is one of the local agent CLIs OpenDesign can drive. If you want to use it:
 
 ```powershell
 npm install -g opencode-ai
@@ -269,4 +269,4 @@ where.exe opencode   # should show C:\Users\YOUR_USERNAME\AppData\Roaming\npm\op
 opencode --version
 ```
 
-If Open Design still shows OpenCode as *not installed* in **Settings → Execution mode**, click **Rescan** after confirming the `opencode.cmd` directory is on your user `PATH`.
+If OpenDesign still shows OpenCode as *not installed* in **Settings → Execution mode**, click **Rescan** after confirming the `opencode.cmd` directory is on your user `PATH`.

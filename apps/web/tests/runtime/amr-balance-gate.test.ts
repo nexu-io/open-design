@@ -4,21 +4,36 @@ import type { AmrWalletSnapshot } from '@open-design/contracts';
 import {
   AMR_HARD_BLOCK_BALANCE_USD,
   AMR_LOW_BALANCE_WARN_USD,
+  HOME_AMR_BALANCE_RETRY_DELAYS_MS,
   amrBalanceGateScopeForWorkspaceContext,
   amrBalanceGateScopesMatch,
   amrWalletBalanceInsufficient,
   amrWalletBalanceUsd,
   checkAmrBalanceGate,
   isAmrLowBalanceWarnOptedOut,
+  retryUnavailableAmrBalanceGate,
   setAmrLowBalanceWarnOptedOut,
 } from '../../src/runtime/amr-balance-gate';
-import { fetchAmrWalletSnapshot } from '../../src/providers/daemon';
+import {
+  fetchAmrWalletSnapshot,
+  fetchVelaLoginStatus,
+} from '../../src/providers/daemon';
 
 vi.mock('../../src/providers/daemon', () => ({
   fetchAmrWalletSnapshot: vi.fn(),
+  fetchVelaLoginStatus: vi.fn(),
 }));
 
 const mockedFetch = vi.mocked(fetchAmrWalletSnapshot);
+const mockedFetchStatus = vi.mocked(fetchVelaLoginStatus);
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
 
 function snapshot(overrides: Partial<AmrWalletSnapshot> = {}): AmrWalletSnapshot {
   return {
@@ -73,10 +88,12 @@ function authoritativeWorkspaceBillingResponse(
 
 beforeEach(() => {
   window.localStorage.clear();
+  mockedFetchStatus.mockRejectedValue(new Error('status unavailable'));
 });
 
 afterEach(() => {
   mockedFetch.mockReset();
+  mockedFetchStatus.mockReset();
   vi.unstubAllGlobals();
 });
 
@@ -169,6 +186,49 @@ describe('checkAmrBalanceGate', () => {
     await expect(checkAmrBalanceGate()).resolves.toEqual({ kind: 'allow' });
   });
 
+  it('allows a selected model without a client-side entitlement catalog', async () => {
+    const empty = snapshot({
+      balanceUsd: '0',
+      user: { id: 'u1', email: 'user@example.com', plan: 'go' },
+    });
+    mockedFetch
+      .mockResolvedValueOnce({ ...empty, source: 'daemon_cache' })
+      .mockResolvedValueOnce(empty);
+
+    await expect(
+      checkAmrBalanceGate(undefined, 'new-coding-plan-model'),
+    ).resolves.toEqual({ kind: 'allow' });
+  });
+
+  it.each([
+    ['plus', 'kimi-k2.7-code'],
+    ['pro', 'glm-5.2'],
+    ['max', 'minimax-m2.7'],
+  ])('lets Vela decide a selected %s plan model at low balance', async (plan, modelId) => {
+    const low = snapshot({
+      balanceUsd: '1.20',
+      user: { id: 'u1', email: 'user@example.com', plan },
+    });
+    mockedFetch.mockResolvedValueOnce(low);
+
+    await expect(checkAmrBalanceGate(undefined, modelId)).resolves.toEqual({
+      kind: 'allow',
+    });
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not guess whether a selected Pro model is wallet-metered', async () => {
+    const low = snapshot({
+      balanceUsd: '1.20',
+      user: { id: 'u1', email: 'user@example.com', plan: 'pro' },
+    });
+    mockedFetch.mockResolvedValueOnce(low);
+
+    await expect(
+      checkAmrBalanceGate(undefined, 'minimax-m2.7'),
+    ).resolves.toEqual({ kind: 'allow' });
+  });
+
   it('skips the soft warning once the user opted out — but never the hard block', async () => {
     expect(isAmrLowBalanceWarnOptedOut()).toBe(false);
     setAmrLowBalanceWarnOptedOut();
@@ -196,6 +256,60 @@ describe('checkAmrBalanceGate', () => {
       snapshot: fresh,
     });
     expect(mockedFetch).toHaveBeenNthCalledWith(2, { refresh: true });
+  });
+
+  it.each([
+    ['go', 'glm-5.2'],
+    ['plus', 'kimi-k2.7-code'],
+    ['pro', 'glm-5.2'],
+    ['max', 'glm-5.1'],
+  ])('lets Vela decide a selected %s model with a fresh zero-dollar wallet', async (plan, modelId) => {
+    const planAccount = snapshot({
+      balanceUsd: '0',
+      user: { id: 'u1', email: 'user@example.com', plan },
+    });
+    mockedFetch
+      .mockResolvedValueOnce({ ...planAccount, source: 'daemon_cache' })
+      .mockResolvedValueOnce(planAccount);
+
+    await expect(
+      checkAmrBalanceGate(undefined, modelId),
+    ).resolves.toEqual({ kind: 'allow' });
+    expect(mockedFetch).toHaveBeenNthCalledWith(2, { refresh: true });
+  });
+
+  it('allows a selected model when the fresh wallet omits the plan', async () => {
+    const emptyWallet = snapshot({
+      balanceUsd: '0',
+    });
+    mockedFetch
+      .mockResolvedValueOnce({ ...emptyWallet, source: 'daemon_cache' })
+      .mockResolvedValueOnce(emptyWallet);
+    mockedFetchStatus.mockResolvedValue({
+      loggedIn: true,
+      profile: 'prod',
+      user: null,
+      account: { plan: 'go', balanceUsd: '0' },
+      configPath: '/tmp/vela.json',
+    });
+
+    await expect(
+      checkAmrBalanceGate(undefined, 'glm-5.2'),
+    ).resolves.toEqual({ kind: 'allow' });
+  });
+
+  it('does not infer plan exclusion for a selected model', async () => {
+    const plusAccount = snapshot({
+      balanceUsd: '0',
+      user: { id: 'u1', email: 'user@example.com', plan: 'plus' },
+    });
+    mockedFetch
+      .mockResolvedValueOnce({ ...plusAccount, source: 'daemon_cache' })
+      .mockResolvedValueOnce(plusAccount);
+
+    await expect(
+      checkAmrBalanceGate(undefined, 'glm-5.1'),
+    ).resolves.toEqual({ kind: 'allow' });
   });
 
   it('hard-blocks a signed-out account after refresh confirmation', async () => {
@@ -268,11 +382,14 @@ describe('checkAmrBalanceGate', () => {
     });
   });
 
-  it('gates a team run from its explicit workspace balance, not the healthy account balance', async () => {
-    mockedFetch.mockResolvedValue(snapshot({ balanceUsd: '247.50' }));
+  it('starts the authoritative workspace request in parallel with the account snapshot', async () => {
+    const accountRead = deferred<AmrWalletSnapshot>();
+    mockedFetch.mockReturnValue(accountRead.promise);
+    let workspaceReadStarted = false;
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
+        workspaceReadStarted = true;
         expect(input.toString()).toBe(
           '/api/workspace/billing?scope=workspace&workspaceId=ws-team-a&freshness=authoritative',
         );
@@ -311,15 +428,127 @@ describe('checkAmrBalanceGate', () => {
       }),
     );
 
-    const result = await checkAmrBalanceGate({
+    const pendingResult = checkAmrBalanceGate({
       workspaceType: 'team',
       workspaceId: 'ws-team-a',
       workspaceMemberId: 'wm-a',
     });
+    await Promise.resolve();
+    expect(workspaceReadStarted).toBe(true);
+    accountRead.resolve(snapshot({ balanceUsd: '247.50' }));
+    const result = await pendingResult;
     expect(result.kind).toBe('soft');
     if (result.kind === 'soft') {
       expect(result.snapshot.balanceUsd).toBe('1.25');
     }
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the personal workspace wallet instead of an empty account wallet', async () => {
+    mockedFetch.mockResolvedValue(snapshot({ balanceUsd: '0' }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        expect(input.toString()).toBe(
+          '/api/workspace/billing?scope=workspace&workspaceId=ws-personal-a&freshness=authoritative',
+        );
+        return new Response(
+          JSON.stringify(authoritativeWorkspaceBillingResponse(
+            'ws-personal-a',
+            'wm-personal-a',
+            '98.22',
+          )),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }),
+    );
+
+    await expect(checkAmrBalanceGate({
+      workspaceType: 'personal',
+      workspaceId: 'ws-personal-a',
+      workspaceMemberId: 'wm-personal-a',
+    })).resolves.toEqual({ kind: 'allow' });
+  });
+
+  it('lets Vela decide a selected model in a zero-dollar Personal workspace', async () => {
+    mockedFetch.mockResolvedValue(snapshot({
+      balanceUsd: '0',
+      user: { id: 'u1', email: 'user@example.com', plan: 'go' },
+    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(
+        JSON.stringify(authoritativeWorkspaceBillingResponse(
+          'ws-personal-go',
+          'wm-personal-go',
+          '0',
+        )),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )),
+    );
+
+    await expect(
+      checkAmrBalanceGate({
+        workspaceType: 'personal',
+        workspaceId: 'ws-personal-go',
+        workspaceMemberId: 'wm-personal-go',
+      }, 'deepseek-v4-pro'),
+    ).resolves.toEqual({ kind: 'allow' });
+  });
+
+  it('lets Vela decide a selected model in a low-balance Personal workspace', async () => {
+    mockedFetch.mockResolvedValue(snapshot({
+      balanceUsd: '1.50',
+      user: { id: 'u1', email: 'user@example.com', plan: 'pro' },
+    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(
+        JSON.stringify(authoritativeWorkspaceBillingResponse(
+          'ws-personal-pro',
+          'wm-personal-pro',
+          '1.50',
+        )),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )),
+    );
+
+    await expect(
+      checkAmrBalanceGate({
+        workspaceType: 'personal',
+        workspaceId: 'ws-personal-pro',
+        workspaceMemberId: 'wm-personal-pro',
+      }, 'glm-5.2'),
+    ).resolves.toEqual({ kind: 'allow' });
+  });
+
+  it('does not use a personal Go plan to bypass a team workspace zero balance', async () => {
+    const goAccount = snapshot({
+      balanceUsd: '0',
+      user: { id: 'u1', email: 'user@example.com', plan: 'go' },
+    });
+    mockedFetch.mockResolvedValue(goAccount);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(
+        JSON.stringify(authoritativeWorkspaceBillingResponse(
+          'ws-team-go-member',
+          'wm-team-go-member',
+          '0',
+        )),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )),
+    );
+
+    await expect(checkAmrBalanceGate({
+      workspaceType: 'team',
+      workspaceId: 'ws-team-go-member',
+      workspaceMemberId: 'wm-team-go-member',
+    }, 'deepseek-v4-flash')).resolves.toEqual({
+      kind: 'hard',
+      reason: 'insufficient',
+      snapshot: expect.objectContaining({ balanceUsd: '0' }),
+    });
   });
 
   it('does not authorize a positive balance from a daemon that cannot prove an authoritative read', async () => {
@@ -498,5 +727,57 @@ describe('checkAmrBalanceGate', () => {
     const resultA = await teamA;
     expect(resultA.kind).toBe('soft');
     if (resultA.kind === 'soft') expect(resultA.snapshot.balanceUsd).toBe('1.50');
+  });
+});
+
+describe('retryUnavailableAmrBalanceGate', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('keeps one Home submit pending across the bounded cold-start retries', async () => {
+    const check = vi.fn()
+      .mockResolvedValueOnce({ kind: 'unavailable' } as const)
+      .mockResolvedValueOnce({ kind: 'unavailable' } as const)
+      .mockResolvedValueOnce({ kind: 'allow' } as const);
+
+    const result = retryUnavailableAmrBalanceGate(check);
+    await Promise.resolve();
+    expect(check).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(HOME_AMR_BALANCE_RETRY_DELAYS_MS[0] - 1);
+    expect(check).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(check).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(HOME_AMR_BALANCE_RETRY_DELAYS_MS[1] - 1);
+    expect(check).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+
+    await expect(result).resolves.toEqual({ kind: 'allow' });
+    expect(check).toHaveBeenCalledTimes(3);
+  });
+
+  it('returns a definitive decision immediately without scheduling a retry', async () => {
+    const check = vi.fn().mockResolvedValue({ kind: 'allow' } as const);
+
+    await expect(retryUnavailableAmrBalanceGate(check)).resolves.toEqual({ kind: 'allow' });
+
+    expect(check).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('returns unavailable after exhausting the bounded retry budget', async () => {
+    const check = vi.fn().mockResolvedValue({ kind: 'unavailable' } as const);
+
+    const result = retryUnavailableAmrBalanceGate(check);
+    await vi.runAllTimersAsync();
+
+    await expect(result).resolves.toEqual({ kind: 'unavailable' });
+    expect(check).toHaveBeenCalledTimes(3);
   });
 });

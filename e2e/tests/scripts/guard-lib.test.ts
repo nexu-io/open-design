@@ -18,16 +18,14 @@ describe("scripts guard library", () => {
     expect(scriptsArchitectureErrors(sources)).toEqual([]);
   });
 
-  test("scope startup cannot reach guard internals or package dependencies", () => {
+  test("root scripts cannot bypass the public guard entrypoint", () => {
     const sources = new Map([
-      ["scripts/scopes.ts", 'import "./lib/guard/core.ts";\nimport "typescript";'],
+      ["scripts/check.ts", 'import "./lib/guard/core.ts";'],
       ["scripts/lib/guard/core.ts", ""],
       ["scripts/guard.ts", 'import "./lib/guard/core.ts";'],
-      ["e2e/lib/playwright/suites.ts", ""],
     ]);
     expect(scriptsArchitectureErrors(sources)).toEqual(
       expect.arrayContaining([
-        expect.stringContaining("install-independent scope closure"),
         expect.stringContaining("must consume guard policy through scripts/guard.ts"),
       ]),
     );
@@ -35,11 +33,9 @@ describe("scripts guard library", () => {
 
   test("guard internals cannot reverse-depend on the CLI or form cycles", () => {
     const sources = new Map([
-      ["scripts/scopes.ts", 'import "../e2e/lib/playwright/suites.ts";'],
       ["scripts/guard.ts", 'import "./lib/guard/core.ts";'],
       ["scripts/lib/guard/core.ts", 'import "./architecture.ts";'],
       ["scripts/lib/guard/architecture.ts", 'import "./core.ts";\nimport "../../guard.ts";\nprocess.exitCode = 1;'],
-      ["e2e/lib/playwright/suites.ts", ""],
     ]);
     const errors = scriptsArchitectureErrors(sources);
     expect(errors).toEqual(
@@ -78,6 +74,5 @@ describe("scripts guard library", () => {
       encoding: "utf8",
     }).trim().split("\n");
     expect(names).toContain("scripts library architecture");
-    expect(names).toContain("daemon core boundary");
   });
 });

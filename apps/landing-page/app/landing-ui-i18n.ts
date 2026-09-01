@@ -157,7 +157,7 @@ function buildUiCopy(t: UiText): DeepPartial<LandingUiCopy> {
   return {
     blog: {
       title: t.blogTitle,
-      seoTitle: `${t.blogTitle} — Open Design`,
+      seoTitle: `${t.blogTitle} — OpenDesign`,
       description: t.blogDescription,
       categoriesLabel: t.blogCategories,
       categories: {
@@ -190,9 +190,9 @@ function buildUiCopy(t: UiText): DeepPartial<LandingUiCopy> {
       },
     },
     tutorials: {
-      title: `Open Design ${t.guides}`,
-      seoTitle: `Open Design ${t.guides}`,
-      description: `Open Design ${t.guides}: ${t.skills} / ${t.systems} / ${t.community}.`,
+      title: `OpenDesign ${t.guides}`,
+      seoTitle: `OpenDesign ${t.guides}`,
+      description: `OpenDesign ${t.guides}: ${t.skills} / ${t.systems} / ${t.community}.`,
       categoriesLabel: `${t.guides} · ${t.category}`,
       categories: {
         all: t.all,
@@ -213,17 +213,17 @@ function buildUiCopy(t: UiText): DeepPartial<LandingUiCopy> {
       suggestVideo: `${t.community} · GitHub`,
       noCategory: t.noPosts,
       thumbnailAlt: (title) => `${t.preview}: ${title}`,
-      detailTitle: (title) => `${title} — Open Design ${t.guides}`,
-      localizedTitle: (_title, author) => `Open Design ${t.guides}: ${author}`,
+      detailTitle: (title) => `${title} — OpenDesign ${t.guides}`,
+      localizedTitle: (_title, author) => `OpenDesign ${t.guides}: ${author}`,
       localizedSummary: (_title, author, category) =>
-        `${author} / ${category}: Open Design / ${t.skills} / ${t.systems} / ${t.templates}.`,
+        `${author} / ${category}: OpenDesign / ${t.skills} / ${t.systems} / ${t.templates}.`,
       localizedBodyHtml: (_title, author, summary) =>
-        `<p>${summary}</p><h2>${t.blogTitle}</h2><p>${author}: Open Design / ${t.skills} / ${t.systems} / ${t.templates}. ${t.blogDescription}</p>`,
+        `<p>${summary}</p><h2>${t.blogTitle}</h2><p>${author}: OpenDesign / ${t.skills} / ${t.systems} / ${t.templates}. ${t.blogDescription}</p>`,
     },
     catalog: {
       breadcrumbLabel: t.breadcrumb,
       skills: {
-        title: (count) => `${t.skills} — ${count} ${t.capabilities} | Open Design`,
+        title: (count) => `${t.skills} — ${count} ${t.capabilities} | OpenDesign`,
         description: `${t.catalog}: ${t.skills} / SKILL.md / ${t.templates} / ${t.systems}.`,
         label: `${t.catalog} · Nº 01`,
         heading: (count) => `${t.skills} — ${count} ${t.capabilities}.`,
@@ -233,8 +233,8 @@ function buildUiCopy(t: UiText): DeepPartial<LandingUiCopy> {
         platform: t.platform,
         featured: t.featured,
         allAria: t.allSkills,
-        detailTitle: (name) => `${name} — Open Design ${t.skill}`,
-        detailFallbackDescription: (name) => `Open Design ${t.skill}: ${name}.`,
+        detailTitle: (name) => `${name} — OpenDesign ${t.skill}`,
+        detailFallbackDescription: (name) => `OpenDesign ${t.skill}: ${name}.`,
         detailLabel: t.detailSkill,
         featuredNumber: (rank) => `· ${t.featured} Nº ${rank}`,
         viewOnGithub: t.viewOnGithub,
@@ -256,15 +256,15 @@ function buildUiCopy(t: UiText): DeepPartial<LandingUiCopy> {
         allSkills: (count) => `← ${t.allSkills}${typeof count === 'number' ? ` (${count})` : ''}`,
       },
       systems: {
-        title: (count) => `${t.systems} — ${count} ${t.visualSystems} | Open Design`,
+        title: (count) => `${t.systems} — ${count} ${t.visualSystems} | OpenDesign`,
         description: `${t.systems}: DESIGN.md / tokens / color / type / components.`,
         label: `${t.catalog} · Nº 02`,
         heading: (count) => `${t.systems} — ${count} ${t.visualSystems}.`,
         lead: `${t.system}: DESIGN.md token spec. ${t.skills} / shared visual language.`,
         category: t.category,
         allAria: t.allSystems,
-        detailTitle: (name) => `${name} — Open Design ${t.system}`,
-        detailFallbackDescription: (name, category) => `Open Design ${t.system}: ${name}, ${category}.`,
+        detailTitle: (name) => `${name} — OpenDesign ${t.system}`,
+        detailFallbackDescription: (name, category) => `OpenDesign ${t.system}: ${name}, ${category}.`,
         detailLabel: t.detailSystem,
         viewOnGithub: t.viewDesignOnGithub,
         paletteSample: t.paletteSample,
@@ -278,7 +278,7 @@ function buildUiCopy(t: UiText): DeepPartial<LandingUiCopy> {
         allSystems: `← ${t.allSystems}`,
       },
       templates: {
-        title: (count) => `${t.templates} — ${count} ${t.artifactTemplates} | Open Design`,
+        title: (count) => `${t.templates} — ${count} ${t.artifactTemplates} | OpenDesign`,
         description: `${t.templates}: fork / artifact / seed data / reusable files.`,
         label: `${t.catalog} · Nº 04`,
         heading: (count) => `${t.templates} — ${count} ${t.artifactTemplates}.`,
@@ -286,7 +286,7 @@ function buildUiCopy(t: UiText): DeepPartial<LandingUiCopy> {
         allAria: t.allTemplates,
         liveArtifact: t.template,
         skillTemplate: `${t.skill} ${t.template}`,
-        detailTitle: (name) => `${name} — Open Design ${t.template}`,
+        detailTitle: (name) => `${name} — OpenDesign ${t.template}`,
         detailLabel: t.detailTemplate,
         forkOnGithub: t.forkOnGithub,
         previewCaption: t.templatePreview,
@@ -297,14 +297,14 @@ function buildUiCopy(t: UiText): DeepPartial<LandingUiCopy> {
         readme: t.readme,
       },
       craft: {
-        title: (count) => `${t.craft} — ${count} ${t.principles} | Open Design`,
+        title: (count) => `${t.craft} — ${count} ${t.principles} | OpenDesign`,
         description: `${t.craft}: accessibility / motion / color / RTL/Bidi / states / typography.`,
         label: `${t.catalog} · Nº 03`,
         heading: (count) => `${t.craft} — ${count} ${t.principles}.`,
         lead: `${t.skill} + ${t.craftRule}: agent prompt quality rules.`,
         allAria: t.allCraft,
-        detailTitle: (name) => `${name} — Open Design ${t.craftRule}`,
-        detailFallbackDescription: (name) => `Open Design ${t.craftRule}: ${name}.`,
+        detailTitle: (name) => `${name} — OpenDesign ${t.craftRule}`,
+        detailFallbackDescription: (name) => `OpenDesign ${t.craftRule}: ${name}.`,
         detailLabel: t.detailCraft,
         readFullRule: t.readFullRule,
         related: t.relatedCraft,
@@ -339,7 +339,7 @@ function buildUiCopy(t: UiText): DeepPartial<LandingUiCopy> {
       visiblePlugins: t.visiblePlugins,
       openDetails: t.openDetails,
       details: t.details,
-      detailTitle: (title) => `${title} — Open Design ${t.plugin}`,
+      detailTitle: (title) => `${title} — OpenDesign ${t.plugin}`,
       detailDescription: t.pluginDetailDescription,
       detailRailRight: t.pluginRail,
       allPlugins: t.allPlugins,
@@ -389,16 +389,16 @@ function buildUiCopy(t: UiText): DeepPartial<LandingUiCopy> {
 
 const SHARED = {
   zh: {
-    blogTitle: '博客', blogDescription: '理解、探索和构建 Open Design 的本地化笔记。', blogCategories: '博客分类', all: '全部', product: '产品', guides: '指南', useCases: '使用场景', community: '社区', tools: '工具与技能', minRead: '分钟阅读', readMore: '继续阅读 →', read: '阅读 →', backToBlog: '← 返回博客', noEntries: '暂无文章。', noPosts: '这个分类还没有文章。', nextStep: '下一步', joinDiscord: '加入 Discord', viewSource: '在 GitHub 查看源码 ↗', downloadTitle: '下载桌面端', downloadBody: '试用开源设计工作台，查看 release notes，或加入社区。', downloadLabel: '下载桌面端 ↗', skillsTitle: '本地运行 Skill 工作流', skillsBody: '浏览工作流库，选择起点，并接入已有 agent。', skillsLabel: '浏览工作流 ↗', repoTitle: '查看 GitHub 实现', repoBody: '打开仓库查看源码、点 Star、fork 工作流或讨论下一步。', repoLabel: '打开仓库 ↗',
+    blogTitle: '博客', blogDescription: '理解、探索和构建 OpenDesign 的本地化笔记。', blogCategories: '博客分类', all: '全部', product: '产品', guides: '指南', useCases: '使用场景', community: '社区', tools: '工具与技能', minRead: '分钟阅读', readMore: '继续阅读 →', read: '阅读 →', backToBlog: '← 返回博客', noEntries: '暂无文章。', noPosts: '这个分类还没有文章。', nextStep: '下一步', joinDiscord: '加入 Discord', viewSource: '在 GitHub 查看源码 ↗', downloadTitle: '下载桌面端', downloadBody: '试用开源设计工作台，查看 release notes，或加入社区。', downloadLabel: '下载桌面端 ↗', skillsTitle: '本地运行 Skill 工作流', skillsBody: '浏览工作流库，选择起点，并接入已有 agent。', skillsLabel: '浏览工作流 ↗', repoTitle: '查看 GitHub 实现', repoBody: '打开仓库查看源码、点 Star、fork 工作流或讨论下一步。', repoLabel: '打开仓库 ↗',
     breadcrumb: '面包屑', catalog: '目录', skill: 'Skill', skills: 'Skill', system: '设计系统', systems: '设计系统', template: '模板', templates: '模板', craft: '工艺', craftRule: '工艺规则', plugin: '插件', plugins: '插件', capability: '能力', capabilities: '可组合设计能力', portable: '可移植', visualSystems: '可移植视觉系统', artifactTemplates: '可 fork 的 artifact 模板', principles: '品牌无关渲染原则', mode: '模式', scenario: '场景', platform: '平台', featured: '精选', category: '分类', allSkills: '全部 Skill', allSystems: '全部设计系统', allTemplates: '全部模板', allCraft: '全部工艺规则', detailSkill: 'Skill', detailSystem: '设计系统', detailTemplate: '模板', detailCraft: '工艺规则', viewOnGithub: '在 GitHub 查看', viewDesignOnGithub: '在 GitHub 查看 DESIGN.md', upstream: '上游来源', preview: '预览', triggers: '触发词', triggersLead: '选择器会用这些提示匹配 Skill。复制后按 brief 调整。', examplePrompt: '示例提示词', relatedSkills: '相关 Skill', relatedCraft: '其他工艺规则', paletteSample: '色板示例', paletteLead: (count: number) => `从 DESIGN.md 颜色章节提取的前 ${count} 个色值。`, visualTheme: '视觉主题', relatedSystems: (category: string) => `${category} 中的相关系统`, forkOnGithub: '在 GitHub fork', templatePreview: '由模板种子数据渲染。', whatsInside: '模板包含什么', whatsInsideLead: '模板包含渲染器、种子数据、SKILL.md 和连接说明。', renderer: 'artifact 渲染器', seedData: '离线 / 预览渲染的种子值', readme: '连接方式、刷新节奏和自定义说明', readFullRule: '在 GitHub 阅读完整规则',
-    pluginRegistryTitle: 'Open Design 插件 — 官方与社区注册表', pluginRegistryDescription: (count: number) => `浏览 ${count} 个 Open Design 插件。`, directoryRailRight: 'Open Design 注册表 · 官方 · 社区', directoryRailLeft: 'vendor/plugin-name · marketplace.json', topbarTitle: 'OD / 注册表', topbarSubtitle: '公开索引', topbarMeta: '官方 · 社区 · 自托管', sourceJson: '源 JSON', heroLabel: '插件注册表 · 公共生态', heroTitle: '浏览带实时预览的 agent 原生设计插件。', heroBody: '发现可安装的工作流、deck、图像模板、设计系统和原子能力。', browseRegistry: '浏览注册表', communityMarketplace: '社区 marketplace.json', registryPreview: '注册表预览', installableEntries: '可安装条目', official: '官方', withPreview: '带预览', surfaces: '表面类型', availableSources: '可用来源', registryEntries: '注册表条目', searchPlugins: '搜索插件', searchPlaceholder: '搜索插件、工作流、vendor...', filtersLabel: '注册表筛选', visiblePlugins: '个可见插件', openDetails: (title: string) => `打开 ${title} 详情`, details: '详情', pluginDetailTitle: (title: string) => `${title} — Open Design 插件`, pluginDetailDescription: (description: string, command: string) => `${description} 使用 ${command} 安装。`, pluginRail: (id: string) => `Open Design 插件 · ${id}`, allPlugins: '全部插件', registry: '注册表', deprecated: '已弃用', yanked: '已下架', installFromRegistry: '从注册表安装', copy: '复制', copied: '已复制', select: '选择', previewAndFacts: '插件预览与信息', marketplaceJson: 'Marketplace JSON 文件', sourceRepository: '源仓库', homepage: '主页', interactivePreview: '交互预览', imagePreview: '图片预览', videoPoster: '视频封面', liveHtmlPreview: 'Live HTML 预览', trusted: '可信', restricted: '受限', pluginId: '插件 ID', version: '版本', license: '许可证', publisher: '发布方', notSpecified: '未指定', howItResolves: '解析方式', provenance: '注册表来源', provenanceBody: '该条目来自 marketplace catalog，并解析到下方传输来源。', workflowSurface: '工作流表面', directSourceFallback: '直接来源 fallback', howPeopleUseIt: '使用方式', examplePromptBody: '注册表条目包含可直接运行的提示词种子。', moreFrom: (registryName: string) => `更多来自 ${registryName}`, relatedPlugins: '相关插件',
+    pluginRegistryTitle: 'OpenDesign 插件 — 官方与社区注册表', pluginRegistryDescription: (count: number) => `浏览 ${count} 个 OpenDesign 插件。`, directoryRailRight: 'OpenDesign 注册表 · 官方 · 社区', directoryRailLeft: 'vendor/plugin-name · marketplace.json', topbarTitle: 'OD / 注册表', topbarSubtitle: '公开索引', topbarMeta: '官方 · 社区 · 自托管', sourceJson: '源 JSON', heroLabel: '插件注册表 · 公共生态', heroTitle: '浏览带实时预览的 agent 原生设计插件。', heroBody: '发现可安装的工作流、deck、图像模板、设计系统和原子能力。', browseRegistry: '浏览注册表', communityMarketplace: '社区 marketplace.json', registryPreview: '注册表预览', installableEntries: '可安装条目', official: '官方', withPreview: '带预览', surfaces: '表面类型', availableSources: '可用来源', registryEntries: '注册表条目', searchPlugins: '搜索插件', searchPlaceholder: '搜索插件、工作流、vendor...', filtersLabel: '注册表筛选', visiblePlugins: '个可见插件', openDetails: (title: string) => `打开 ${title} 详情`, details: '详情', pluginDetailTitle: (title: string) => `${title} — OpenDesign 插件`, pluginDetailDescription: (description: string, command: string) => `${description} 使用 ${command} 安装。`, pluginRail: (id: string) => `OpenDesign 插件 · ${id}`, allPlugins: '全部插件', registry: '注册表', deprecated: '已弃用', yanked: '已下架', installFromRegistry: '从注册表安装', copy: '复制', copied: '已复制', select: '选择', previewAndFacts: '插件预览与信息', marketplaceJson: 'Marketplace JSON 文件', sourceRepository: '源仓库', homepage: '主页', interactivePreview: '交互预览', imagePreview: '图片预览', videoPoster: '视频封面', liveHtmlPreview: 'Live HTML 预览', trusted: '可信', restricted: '受限', pluginId: '插件 ID', version: '版本', license: '许可证', publisher: '发布方', notSpecified: '未指定', howItResolves: '解析方式', provenance: '注册表来源', provenanceBody: '该条目来自 marketplace catalog，并解析到下方传输来源。', workflowSurface: '工作流表面', directSourceFallback: '直接来源 fallback', howPeopleUseIt: '使用方式', examplePromptBody: '注册表条目包含可直接运行的提示词种子。', moreFrom: (registryName: string) => `更多来自 ${registryName}`, relatedPlugins: '相关插件',
   },
 } satisfies Record<'zh', UiText>;
 
 const zhTw: UiText = {
   ...SHARED.zh,
   blogTitle: '部落格',
-  blogDescription: '理解、探索與建構 Open Design 的本地化筆記。',
+  blogDescription: '理解、探索與建構 OpenDesign 的本地化筆記。',
   blogCategories: '部落格分類',
   all: '全部',
   product: '產品',
@@ -475,9 +475,9 @@ const zhTw: UiText = {
   readFullRule: '在 GitHub 閱讀完整規則',
   plugin: '外掛',
   plugins: '外掛',
-  pluginRegistryTitle: 'Open Design 外掛 — 官方與社群註冊表',
-  pluginRegistryDescription: (count: number) => `瀏覽 ${count} 個 Open Design 外掛。`,
-  directoryRailRight: 'Open Design 註冊表 · 官方 · 社群',
+  pluginRegistryTitle: 'OpenDesign 外掛 — 官方與社群註冊表',
+  pluginRegistryDescription: (count: number) => `瀏覽 ${count} 個 OpenDesign 外掛。`,
+  directoryRailRight: 'OpenDesign 註冊表 · 官方 · 社群',
   directoryRailLeft: 'vendor/plugin-name · marketplace.json',
   topbarTitle: 'OD / 註冊表',
   topbarSubtitle: '公開索引',
@@ -500,10 +500,10 @@ const zhTw: UiText = {
   visiblePlugins: '個可見外掛',
   openDetails: (title: string) => `打開 ${title} 詳情`,
   details: '詳情',
-  pluginDetailTitle: (title: string) => `${title} — Open Design 外掛`,
+  pluginDetailTitle: (title: string) => `${title} — OpenDesign 外掛`,
   pluginDetailDescription: (description: string, command: string) =>
     `${description} 使用 ${command} 安裝。`,
-  pluginRail: (id: string) => `Open Design 外掛 · ${id}`,
+  pluginRail: (id: string) => `OpenDesign 外掛 · ${id}`,
   allPlugins: '全部外掛',
   sourceJson: '來源 JSON',
   registry: '註冊表',
@@ -542,10 +542,10 @@ const zhTw: UiText = {
 const make = (text: UiText): DeepPartial<LandingUiCopy> => buildUiCopy(text);
 
 const zhTutorialsCopy = {
-  title: 'Open Design 教程',
-  seoTitle: 'Open Design 教程 — 免费视频指南与上手教程',
+  title: 'OpenDesign 教程',
+  seoTitle: 'OpenDesign 教程 — 免费视频指南与上手教程',
   description:
-    'Open Design 使用教程合集：手把手视频带你上手 Open Design，涵盖安装入门、插件、设计系统与实战工作流，全部可在页面内直接观看。',
+    'OpenDesign 使用教程合集：手把手视频带你上手 OpenDesign，涵盖安装入门、插件、设计系统与实战工作流，全部可在页面内直接观看。',
   categoriesLabel: '教程分类',
   categories: {
     all: '全部',
@@ -566,19 +566,19 @@ const zhTutorialsCopy = {
   suggestVideo: '推荐一支视频',
   noCategory: '这个分类还没有教程，更多内容正在整理。',
   thumbnailAlt: (title: string) => `${title} 的视频封面`,
-  detailTitle: (title: string) => `${title} — Open Design 教程`,
-  localizedTitle: (_title: string, author: string) => `Open Design 教程：${author}`,
+  detailTitle: (title: string) => `${title} — OpenDesign 教程`,
+  localizedTitle: (_title: string, author: string) => `OpenDesign 教程：${author}`,
   localizedSummary: (_title: string, author: string, category: string) =>
-    `${author} 通过一支 ${category} 视频讲解 Open Design 的本地优先设计工作流、Skill、设计系统与可复用模板。`,
+    `${author} 通过一支 ${category} 视频讲解 OpenDesign 的本地优先设计工作流、Skill、设计系统与可复用模板。`,
   localizedBodyHtml: (_title: string, author: string, summary: string) =>
-    `<p>${summary}</p><h2>本地化摘要</h2><p>这支视频来自 ${author}，围绕 Open Design 的安装、能力演示、设计系统、Skill 与本地 Agent 工作流展开。页面保留原始视频来源，非英文页面使用站内 i18n 摘要，避免正文回退成英文。</p>`,
+    `<p>${summary}</p><h2>本地化摘要</h2><p>这支视频来自 ${author}，围绕 OpenDesign 的安装、能力演示、设计系统、Skill 与本地 Agent 工作流展开。页面保留原始视频来源，非英文页面使用站内 i18n 摘要，避免正文回退成英文。</p>`,
 } satisfies NonNullable<DeepPartial<LandingUiCopy>['tutorials']>;
 
 const zhTwTutorialsCopy = {
-  title: 'Open Design 教學',
-  seoTitle: 'Open Design 教學 — 如何使用 Open Design',
+  title: 'OpenDesign 教學',
+  seoTitle: 'OpenDesign 教學 — 如何使用 OpenDesign',
   description:
-    'Open Design 使用教學合集：手把手影片帶你上手 Open Design，涵蓋安裝入門、外掛、設計系統與實戰工作流，全部可在頁面內直接觀看。',
+    'OpenDesign 使用教學合集：手把手影片帶你上手 OpenDesign，涵蓋安裝入門、外掛、設計系統與實戰工作流，全部可在頁面內直接觀看。',
   categoriesLabel: '教學分類',
   categories: {
     all: '全部',
@@ -599,19 +599,19 @@ const zhTwTutorialsCopy = {
   suggestVideo: '推薦一支影片',
   noCategory: '這個分類還沒有教學，更多內容正在整理。',
   thumbnailAlt: (title: string) => `${title} 的影片封面`,
-  detailTitle: (title: string) => `${title} — Open Design 教學`,
-  localizedTitle: (_title: string, author: string) => `Open Design 教學：${author}`,
+  detailTitle: (title: string) => `${title} — OpenDesign 教學`,
+  localizedTitle: (_title: string, author: string) => `OpenDesign 教學：${author}`,
   localizedSummary: (_title: string, author: string, category: string) =>
-    `${author} 透過一支 ${category} 影片講解 Open Design 的本地優先設計工作流、Skill、設計系統與可複用模板。`,
+    `${author} 透過一支 ${category} 影片講解 OpenDesign 的本地優先設計工作流、Skill、設計系統與可複用模板。`,
   localizedBodyHtml: (_title: string, author: string, summary: string) =>
-    `<p>${summary}</p><h2>本地化摘要</h2><p>這支影片來自 ${author}，圍繞 Open Design 的安裝、能力演示、設計系統、Skill 與本地 Agent 工作流展開。頁面保留原始影片來源，非英文頁面使用站內 i18n 摘要，避免正文回退成英文。</p>`,
+    `<p>${summary}</p><h2>本地化摘要</h2><p>這支影片來自 ${author}，圍繞 OpenDesign 的安裝、能力演示、設計系統、Skill 與本地 Agent 工作流展開。頁面保留原始影片來源，非英文頁面使用站內 i18n 摘要，避免正文回退成英文。</p>`,
 } satisfies NonNullable<DeepPartial<LandingUiCopy>['tutorials']>;
 
 const jp: UiText = {
   ...SHARED.zh,
-  blogTitle: '編集ノート', blogDescription: 'Open Design を理解し、試し、構築するためのローカライズされたノート。', blogCategories: '記事カテゴリ', all: 'すべて', product: 'プロダクト', guides: 'ガイド', useCases: 'ユースケース', community: 'コミュニティ', tools: 'ツールとスキル', minRead: '分で読めます', readMore: '続きを読む →', read: '読む →', backToBlog: '← ノートへ戻る', noEntries: '記事はまだありません。', noPosts: 'このカテゴリの記事はまだありません。', nextStep: '次のステップ', joinDiscord: 'Discord に参加', viewSource: 'GitHub でソースを見る ↗', downloadTitle: 'デスクトップ版をダウンロード', downloadBody: 'オープンソースのデザインワークスペースを試し、リリースノートを確認できます。', downloadLabel: 'デスクトップをダウンロード ↗', skillsTitle: 'Skill ワークフローをローカル実行', skillsBody: 'ワークフローライブラリから起点を選び、普段の agent に接続します。', skillsLabel: 'ワークフローを見る ↗', repoTitle: 'GitHub の実装を見る', repoBody: 'ソースを読み、Star し、workflow を fork し、次の改善を議論できます。', repoLabel: 'リポジトリを開く ↗',
+  blogTitle: '編集ノート', blogDescription: 'OpenDesign を理解し、試し、構築するためのローカライズされたノート。', blogCategories: '記事カテゴリ', all: 'すべて', product: 'プロダクト', guides: 'ガイド', useCases: 'ユースケース', community: 'コミュニティ', tools: 'ツールとスキル', minRead: '分で読めます', readMore: '続きを読む →', read: '読む →', backToBlog: '← ノートへ戻る', noEntries: '記事はまだありません。', noPosts: 'このカテゴリの記事はまだありません。', nextStep: '次のステップ', joinDiscord: 'Discord に参加', viewSource: 'GitHub でソースを見る ↗', downloadTitle: 'デスクトップ版をダウンロード', downloadBody: 'オープンソースのデザインワークスペースを試し、リリースノートを確認できます。', downloadLabel: 'デスクトップをダウンロード ↗', skillsTitle: 'Skill ワークフローをローカル実行', skillsBody: 'ワークフローライブラリから起点を選び、普段の agent に接続します。', skillsLabel: 'ワークフローを見る ↗', repoTitle: 'GitHub の実装を見る', repoBody: 'ソースを読み、Star し、workflow を fork し、次の改善を議論できます。', repoLabel: 'リポジトリを開く ↗',
   breadcrumb: 'パンくず', catalog: 'カタログ', skill: 'Skill', skills: 'Skill', system: 'デザインシステム', systems: 'デザインシステム', template: 'テンプレート', templates: 'テンプレート', craft: 'クラフト', craftRule: 'クラフトルール', plugin: 'プラグイン', plugins: 'プラグイン', capabilities: '構成可能なデザイン能力', visualSystems: '移植可能な視覚システム', artifactTemplates: 'fork 可能な artifact テンプレート', principles: 'ブランド非依存のレンダリング原則', mode: 'モード', scenario: 'シナリオ', platform: 'プラットフォーム', featured: '注目', category: 'カテゴリ', allSkills: 'すべての Skill', allSystems: 'すべてのデザインシステム', allTemplates: 'すべてのテンプレート', allCraft: 'すべてのクラフトルール', detailSkill: 'Skill', detailSystem: 'デザインシステム', detailTemplate: 'テンプレート', detailCraft: 'クラフトルール', viewOnGithub: 'GitHub で見る', viewDesignOnGithub: 'GitHub で DESIGN.md を見る', upstream: '上流ソース', triggers: 'トリガー', triggersLead: 'これらの prompt が Skill のマッチに使われます。', examplePrompt: 'サンプル prompt', relatedSkills: '関連 Skill', relatedCraft: 'その他のクラフトルール', paletteSample: 'パレット例', paletteLead: (count) => `DESIGN.md から抽出した最初の ${count} 色。`, visualTheme: '視覚テーマ', relatedSystems: (category) => `${category} の関連システム`, forkOnGithub: 'GitHub で fork', templatePreview: 'テンプレートの seed data からレンダリング。', whatsInside: 'テンプレートの中身', whatsInsideLead: 'renderer、seed data、SKILL.md、接続説明を含みます。', renderer: 'artifact renderer', seedData: 'オフライン / preview 用 seed value', readme: '接続、更新頻度、カスタム方法', readFullRule: 'GitHub で全文を読む',
-  pluginRegistryTitle: 'Open Design プラグイン — 公式とコミュニティ登録', pluginRegistryDescription: (count) => `${count} 個の Open Design プラグインを閲覧。`, directoryRailRight: 'Open Design Registry · 公式 · コミュニティ', topbarTitle: 'OD / レジストリ', topbarSubtitle: '公開インデックス', topbarMeta: '公式 · コミュニティ · セルフホスト', sourceJson: 'ソース JSON', heroLabel: 'プラグイン登録 · 公開エコシステム', heroTitle: 'ライブ preview 付き agent-native design plugin を閲覧。', heroBody: 'インストール可能な workflow、deck、画像テンプレート、デザインシステムを発見できます。', browseRegistry: '登録を閲覧', communityMarketplace: 'コミュニティ marketplace.json', registryPreview: '登録 preview', installableEntries: 'インストール可能項目', official: '公式', withPreview: 'preview あり', surfaces: 'surface', availableSources: '利用可能なソース', registryEntries: '登録項目', searchPlugins: 'プラグイン検索', searchPlaceholder: 'プラグイン、workflow、vendor を検索...', filtersLabel: '登録フィルタ', visiblePlugins: '表示中のプラグイン', openDetails: (title) => `${title} の詳細を開く`, details: '詳細', pluginDetailTitle: (title) => `${title} — Open Design プラグイン`, pluginDetailDescription: (description, command) => `${description} ${command} でインストール。`, pluginRail: (id) => `Open Design プラグイン · ${id}`, allPlugins: 'すべてのプラグイン', registry: 'レジストリ', deprecated: '非推奨', yanked: '取り下げ済み', installFromRegistry: 'レジストリからインストール', copy: 'コピー', copied: 'コピー済み', select: '選択', previewAndFacts: 'プラグイン preview と情報', marketplaceJson: 'Marketplace JSON ファイル', sourceRepository: 'ソースリポジトリ', homepage: 'ホームページ', interactivePreview: 'インタラクティブ preview', imagePreview: '画像 preview', videoPoster: '動画 poster', liveHtmlPreview: 'Live HTML preview', trusted: '信頼済み', restricted: '制限付き', pluginId: 'プラグイン ID', version: 'バージョン', license: 'ライセンス', publisher: '公開者', notSpecified: '未指定', howItResolves: '解決方法', provenance: '登録の由来', provenanceBody: 'この項目は marketplace catalog から検出され、下の転送ソースへ解決されます。', workflowSurface: 'ワークフロー surface', directSourceFallback: '直接ソース fallback', howPeopleUseIt: '利用方法', examplePromptBody: '登録項目にはすぐ試せる prompt seed が含まれます。', moreFrom: (registryName) => `${registryName} の他の項目`, relatedPlugins: '関連プラグイン',
+  pluginRegistryTitle: 'OpenDesign プラグイン — 公式とコミュニティ登録', pluginRegistryDescription: (count) => `${count} 個の OpenDesign プラグインを閲覧。`, directoryRailRight: 'OpenDesign Registry · 公式 · コミュニティ', topbarTitle: 'OD / レジストリ', topbarSubtitle: '公開インデックス', topbarMeta: '公式 · コミュニティ · セルフホスト', sourceJson: 'ソース JSON', heroLabel: 'プラグイン登録 · 公開エコシステム', heroTitle: 'ライブ preview 付き agent-native design plugin を閲覧。', heroBody: 'インストール可能な workflow、deck、画像テンプレート、デザインシステムを発見できます。', browseRegistry: '登録を閲覧', communityMarketplace: 'コミュニティ marketplace.json', registryPreview: '登録 preview', installableEntries: 'インストール可能項目', official: '公式', withPreview: 'preview あり', surfaces: 'surface', availableSources: '利用可能なソース', registryEntries: '登録項目', searchPlugins: 'プラグイン検索', searchPlaceholder: 'プラグイン、workflow、vendor を検索...', filtersLabel: '登録フィルタ', visiblePlugins: '表示中のプラグイン', openDetails: (title) => `${title} の詳細を開く`, details: '詳細', pluginDetailTitle: (title) => `${title} — OpenDesign プラグイン`, pluginDetailDescription: (description, command) => `${description} ${command} でインストール。`, pluginRail: (id) => `OpenDesign プラグイン · ${id}`, allPlugins: 'すべてのプラグイン', registry: 'レジストリ', deprecated: '非推奨', yanked: '取り下げ済み', installFromRegistry: 'レジストリからインストール', copy: 'コピー', copied: 'コピー済み', select: '選択', previewAndFacts: 'プラグイン preview と情報', marketplaceJson: 'Marketplace JSON ファイル', sourceRepository: 'ソースリポジトリ', homepage: 'ホームページ', interactivePreview: 'インタラクティブ preview', imagePreview: '画像 preview', videoPoster: '動画 poster', liveHtmlPreview: 'Live HTML preview', trusted: '信頼済み', restricted: '制限付き', pluginId: 'プラグイン ID', version: 'バージョン', license: 'ライセンス', publisher: '公開者', notSpecified: '未指定', howItResolves: '解決方法', provenance: '登録の由来', provenanceBody: 'この項目は marketplace catalog から検出され、下の転送ソースへ解決されます。', workflowSurface: 'ワークフロー surface', directSourceFallback: '直接ソース fallback', howPeopleUseIt: '利用方法', examplePromptBody: '登録項目にはすぐ試せる prompt seed が含まれます。', moreFrom: (registryName) => `${registryName} の他の項目`, relatedPlugins: '関連プラグイン',
 };
 
 function cloneWith(base: UiText, patch: Partial<UiText>): UiText {
@@ -988,16 +988,16 @@ function localizeOwnedUiText(locale: Exclude<LandingLocaleCode, 'en'>, text: UiT
   const seedData = `${text.template} data`;
   return {
     ...text,
-    blogDescription: `${text.blogTitle}: Open Design / ${text.product} / ${text.guides} / ${text.useCases} / ${text.community}.`,
+    blogDescription: `${text.blogTitle}: OpenDesign / ${text.product} / ${text.guides} / ${text.useCases} / ${text.community}.`,
     viewSource: `GitHub · ${labels.source} ↗`,
-    downloadTitle: `${labels.download} Open Design Desktop`,
-    downloadBody: `Open Design Desktop / GitHub / Discord.`,
+    downloadTitle: `${labels.download} OpenDesign Desktop`,
+    downloadBody: `OpenDesign Desktop / GitHub / Discord.`,
     downloadLabel: `${labels.download} ↗`,
-    skillsTitle: `${text.skills} · Open Design`,
+    skillsTitle: `${text.skills} · OpenDesign`,
     skillsBody: `${text.skills}: SKILL.md / daemon / DESIGN.md / ${text.systems}.`,
     skillsLabel: `${text.skills} ↗`,
     repoTitle: `GitHub · ${labels.repository}`,
-    repoBody: `GitHub: Open Design / ${text.skills} / ${text.templates} / ${text.systems}.`,
+    repoBody: `GitHub: OpenDesign / ${text.skills} / ${text.templates} / ${text.systems}.`,
     repoLabel: `GitHub ↗`,
     breadcrumb: `${text.catalog} / ${text.category}`,
     capability: text.skill,
@@ -1036,16 +1036,16 @@ function localizeOwnedUiText(locale: Exclude<LandingLocaleCode, 'en'>, text: UiT
     seedData,
     readme: `README / ${labels.source}`,
     readFullRule: `GitHub · ${text.craftRule}`,
-    pluginRegistryTitle: `${text.plugins} — Open Design`,
-    pluginRegistryDescription: (count: number) => `${count} ${text.plugins} · Open Design.`,
-    directoryRailRight: `Open Design · ${text.official} · ${text.community}`,
+    pluginRegistryTitle: `${text.plugins} — OpenDesign`,
+    pluginRegistryDescription: (count: number) => `${count} ${text.plugins} · OpenDesign.`,
+    directoryRailRight: `OpenDesign · ${text.official} · ${text.community}`,
     directoryRailLeft: `vendor/plugin-name · marketplace.json`,
     topbarTitle: `OD / ${labels.registry}`,
     topbarSubtitle: text.catalog,
     topbarMeta: `${text.official} · ${text.community} · local-first`,
     sourceJson: 'JSON',
     heroLabel: `${text.plugins} · ${labels.registry}`,
-    heroTitle: `${text.plugins} · Open Design`,
+    heroTitle: `${text.plugins} · OpenDesign`,
     heroBody: `${text.skills} / ${text.templates} / ${text.systems} / ${text.craft}.`,
     browseRegistry: `${labels.registry} ↗`,
     communityMarketplace: `${text.community} marketplace.json`,
@@ -1061,9 +1061,9 @@ function localizeOwnedUiText(locale: Exclude<LandingLocaleCode, 'en'>, text: UiT
     visiblePlugins: text.plugins,
     openDetails: (title: string) => `${labels.details}: ${title}`,
     details: labels.details,
-    pluginDetailTitle: (title: string) => `${title} — Open Design ${text.plugin}`,
+    pluginDetailTitle: (title: string) => `${title} — OpenDesign ${text.plugin}`,
     pluginDetailDescription: (description: string, command: string) => `${description} ${command}.`,
-    pluginRail: (id: string) => `Open Design ${text.plugin} · ${id}`,
+    pluginRail: (id: string) => `OpenDesign ${text.plugin} · ${id}`,
     allPlugins: `${text.all} ${text.plugins}`,
     deprecated: labels.deprecated,
     yanked: labels.yanked,
@@ -1091,20 +1091,20 @@ function localizeOwnedUiText(locale: Exclude<LandingLocaleCode, 'en'>, text: UiT
 }
 
 const ko = cloneWith(jp, {
-  blogTitle: '작업 노트', blogDescription: 'Open Design을 이해하고 탐색하고 구축하기 위한 현지화 노트.', blogCategories: '글 분류', all: '전체', product: '제품', guides: '가이드', useCases: '사용 사례', community: '커뮤니티', tools: '도구와 스킬', minRead: '분 읽기', readMore: '더 읽기 →', read: '읽기 →', backToBlog: '← 노트로 돌아가기', noEntries: '아직 글이 없습니다.', noPosts: '이 분류에는 아직 글이 없습니다.', nextStep: '다음 단계', joinDiscord: 'Discord 참여', viewSource: 'GitHub에서 소스 보기 ↗', downloadTitle: '데스크톱 빌드 다운로드', downloadBody: '오픈소스 디자인 워크스페이스를 실행하고 릴리스 노트를 확인하세요.', downloadLabel: '데스크톱 다운로드 ↗', skillsTitle: 'Skill 워크플로 로컬 실행', skillsBody: '워크플로 라이브러리에서 시작점을 골라 쓰는 agent에 연결합니다.', skillsLabel: '워크플로 보기 ↗', repoTitle: 'GitHub 구현 보기', repoBody: '소스를 확인하고 Star를 누르고 workflow를 fork하거나 다음 개선을 논의하세요.', repoLabel: '저장소 열기 ↗',
+  blogTitle: '작업 노트', blogDescription: 'OpenDesign을 이해하고 탐색하고 구축하기 위한 현지화 노트.', blogCategories: '글 분류', all: '전체', product: '제품', guides: '가이드', useCases: '사용 사례', community: '커뮤니티', tools: '도구와 스킬', minRead: '분 읽기', readMore: '더 읽기 →', read: '읽기 →', backToBlog: '← 노트로 돌아가기', noEntries: '아직 글이 없습니다.', noPosts: '이 분류에는 아직 글이 없습니다.', nextStep: '다음 단계', joinDiscord: 'Discord 참여', viewSource: 'GitHub에서 소스 보기 ↗', downloadTitle: '데스크톱 빌드 다운로드', downloadBody: '오픈소스 디자인 워크스페이스를 실행하고 릴리스 노트를 확인하세요.', downloadLabel: '데스크톱 다운로드 ↗', skillsTitle: 'Skill 워크플로 로컬 실행', skillsBody: '워크플로 라이브러리에서 시작점을 골라 쓰는 agent에 연결합니다.', skillsLabel: '워크플로 보기 ↗', repoTitle: 'GitHub 구현 보기', repoBody: '소스를 확인하고 Star를 누르고 workflow를 fork하거나 다음 개선을 논의하세요.', repoLabel: '저장소 열기 ↗',
   breadcrumb: '탐색 경로', catalog: '카탈로그', system: '디자인 시스템', systems: '디자인 시스템', template: '템플릿', templates: '템플릿', craft: '크래프트', craftRule: '크래프트 규칙', plugin: '플러그인', plugins: '플러그인', capabilities: '조합 가능한 디자인 능력', visualSystems: '이식 가능한 시각 시스템', artifactTemplates: 'fork 가능한 artifact 템플릿', principles: '브랜드 독립 렌더링 원칙', mode: '모드', scenario: '시나리오', platform: '플랫폼', featured: '추천', category: '분류', allSkills: '모든 Skill', allSystems: '모든 디자인 시스템', allTemplates: '모든 템플릿', allCraft: '모든 크래프트 규칙', detailSystem: '디자인 시스템', detailTemplate: '템플릿', detailCraft: '크래프트 규칙', viewOnGithub: 'GitHub에서 보기', viewDesignOnGithub: 'GitHub에서 DESIGN.md 보기', upstream: '상위 소스', triggers: '트리거', triggersLead: '선택기는 이 prompt로 Skill을 매칭합니다.', examplePrompt: '예시 prompt', relatedSkills: '관련 Skill', relatedCraft: '다른 크래프트 규칙', paletteSample: '팔레트 예시', paletteLead: (count) => `DESIGN.md에서 추출한 처음 ${count}개 색상입니다.`, visualTheme: '시각 테마', relatedSystems: (category) => `${category} 관련 시스템`, forkOnGithub: 'GitHub에서 fork', whatsInside: '템플릿 구성', readFullRule: 'GitHub에서 전체 규칙 읽기',
-  pluginRegistryTitle: 'Open Design 플러그인 — 공식 및 커뮤니티 레지스트리', pluginRegistryDescription: (count) => `${count}개의 Open Design 플러그인을 탐색합니다.`, topbarTitle: 'OD / 레지스트리', topbarSubtitle: '공개 인덱스', topbarMeta: '공식 · 커뮤니티 · 자체 호스팅', sourceJson: '소스 JSON', heroLabel: '플러그인 레지스트리 · 공개 생태계', heroTitle: '실시간 preview가 있는 agent-native 디자인 플러그인을 탐색하세요.', browseRegistry: '레지스트리 보기', registryPreview: '레지스트리 preview', installableEntries: '설치 가능 항목', official: '공식', withPreview: 'preview 있음', availableSources: '사용 가능한 소스', registryEntries: '레지스트리 항목', searchPlugins: '플러그인 검색', searchPlaceholder: '플러그인, workflow, vendor 검색...', visiblePlugins: '표시 중인 플러그인', openDetails: (title) => `${title} 상세 열기`, details: '상세', pluginDetailTitle: (title) => `${title} — Open Design 플러그인`, installFromRegistry: '레지스트리에서 설치', copy: '복사', copied: '복사됨', select: '선택', previewAndFacts: '플러그인 preview 및 정보', sourceRepository: '소스 저장소', homepage: '홈페이지', trusted: '신뢰됨', restricted: '제한됨', pluginId: '플러그인 ID', version: '버전', license: '라이선스', publisher: '게시자', notSpecified: '미지정', howItResolves: '해결 방식', provenance: '레지스트리 출처', workflowSurface: '워크플로 surface', howPeopleUseIt: '사용 방식', relatedPlugins: '관련 플러그인',
+  pluginRegistryTitle: 'OpenDesign 플러그인 — 공식 및 커뮤니티 레지스트리', pluginRegistryDescription: (count) => `${count}개의 OpenDesign 플러그인을 탐색합니다.`, topbarTitle: 'OD / 레지스트리', topbarSubtitle: '공개 인덱스', topbarMeta: '공식 · 커뮤니티 · 자체 호스팅', sourceJson: '소스 JSON', heroLabel: '플러그인 레지스트리 · 공개 생태계', heroTitle: '실시간 preview가 있는 agent-native 디자인 플러그인을 탐색하세요.', browseRegistry: '레지스트리 보기', registryPreview: '레지스트리 preview', installableEntries: '설치 가능 항목', official: '공식', withPreview: 'preview 있음', availableSources: '사용 가능한 소스', registryEntries: '레지스트리 항목', searchPlugins: '플러그인 검색', searchPlaceholder: '플러그인, workflow, vendor 검색...', visiblePlugins: '표시 중인 플러그인', openDetails: (title) => `${title} 상세 열기`, details: '상세', pluginDetailTitle: (title) => `${title} — OpenDesign 플러그인`, installFromRegistry: '레지스트리에서 설치', copy: '복사', copied: '복사됨', select: '선택', previewAndFacts: '플러그인 preview 및 정보', sourceRepository: '소스 저장소', homepage: '홈페이지', trusted: '신뢰됨', restricted: '제한됨', pluginId: '플러그인 ID', version: '버전', license: '라이선스', publisher: '게시자', notSpecified: '미지정', howItResolves: '해결 방식', provenance: '레지스트리 출처', workflowSurface: '워크플로 surface', howPeopleUseIt: '사용 방식', relatedPlugins: '관련 플러그인',
 });
 
 const de = cloneWith(jp, {
-  blogTitle: 'Journal', blogDescription: 'Lokalisierte Notizen zum Verstehen, Erkunden und Bauen mit Open Design.', blogCategories: 'Journal-Kategorien', all: 'Alle', product: 'Produkt', guides: 'Leitfäden', useCases: 'Anwendungsfälle', community: 'Gemeinschaft', tools: 'Tools & Skills', minRead: 'Min. Lesezeit', readMore: 'Weiterlesen →', read: 'Lesen →', backToBlog: '← Zurück zum Journal', noEntries: 'Noch keine Einträge.', noPosts: 'In dieser Kategorie gibt es noch keine Beiträge.', nextStep: 'Nächster Schritt', joinDiscord: 'Discord beitreten', viewSource: 'Quelle auf GitHub ansehen ↗', downloadTitle: 'Desktop-Build herunterladen', downloadBody: 'Teste den offenen Design-Workspace, lies die Versionsnotizen oder komm in die Gemeinschaft.', downloadLabel: 'Desktop herunterladen ↗', skillsTitle: 'Skill-Workflow lokal ausführen', skillsBody: 'Wähle einen Workflow und verbinde ihn mit deinem Agenten.', skillsLabel: 'Workflows ansehen ↗', repoTitle: 'Implementierung auf GitHub ansehen', repoBody: 'Prüfe den Quellcode, gib einen Stern, forke Workflows oder diskutiere nächste Schritte.', repoLabel: 'Repository öffnen ↗',
+  blogTitle: 'Journal', blogDescription: 'Lokalisierte Notizen zum Verstehen, Erkunden und Bauen mit OpenDesign.', blogCategories: 'Journal-Kategorien', all: 'Alle', product: 'Produkt', guides: 'Leitfäden', useCases: 'Anwendungsfälle', community: 'Gemeinschaft', tools: 'Tools & Skills', minRead: 'Min. Lesezeit', readMore: 'Weiterlesen →', read: 'Lesen →', backToBlog: '← Zurück zum Journal', noEntries: 'Noch keine Einträge.', noPosts: 'In dieser Kategorie gibt es noch keine Beiträge.', nextStep: 'Nächster Schritt', joinDiscord: 'Discord beitreten', viewSource: 'Quelle auf GitHub ansehen ↗', downloadTitle: 'Desktop-Build herunterladen', downloadBody: 'Teste den offenen Design-Workspace, lies die Versionsnotizen oder komm in die Gemeinschaft.', downloadLabel: 'Desktop herunterladen ↗', skillsTitle: 'Skill-Workflow lokal ausführen', skillsBody: 'Wähle einen Workflow und verbinde ihn mit deinem Agenten.', skillsLabel: 'Workflows ansehen ↗', repoTitle: 'Implementierung auf GitHub ansehen', repoBody: 'Prüfe den Quellcode, gib einen Stern, forke Workflows oder diskutiere nächste Schritte.', repoLabel: 'Repository öffnen ↗',
   breadcrumb: 'Navigationspfad', catalog: 'Katalog', system: 'Designsystem', systems: 'Designsysteme', template: 'Vorlage', templates: 'Vorlagen', craft: 'Gestaltung', craftRule: 'Gestaltungsregel', plugin: 'Plugin-Modul', plugins: 'Plugin-Module', capabilities: 'kombinierbare Designfähigkeiten', visualSystems: 'portable visuelle Systeme', artifactTemplates: 'forkbare Artifact-Vorlagen', principles: 'markenunabhängige Renderprinzipien', mode: 'Arbeitsmodus', scenario: 'Szenario', platform: 'Plattform', featured: 'Empfohlen', category: 'Kategorie', allSkills: 'Alle Skills', allSystems: 'Alle Designsysteme', allTemplates: 'Alle Vorlagen', allCraft: 'Alle Gestaltungsregeln', detailSystem: 'Designsystem', detailTemplate: 'Vorlage', detailCraft: 'Gestaltungsregel', viewOnGithub: 'Auf GitHub ansehen', viewDesignOnGithub: 'DESIGN.md auf GitHub ansehen', upstream: 'Ursprungsquelle', triggers: 'Auslöser', triggersLead: 'Diese Prompts helfen dem Picker beim passenden Skill.', examplePrompt: 'Beispielprompt', relatedSkills: 'Verwandte Skills', relatedCraft: 'Weitere Gestaltungsregeln', paletteSample: 'Palettenprobe', paletteLead: (count) => `Die ersten ${count} Farben aus DESIGN.md.`, visualTheme: 'Visuelles Thema', relatedSystems: (category) => `Verwandte Systeme in ${category}`, forkOnGithub: 'Auf GitHub forken', whatsInside: 'Inhalt der Vorlage', readFullRule: 'Vollständige Regel auf GitHub lesen',
-  pluginRegistryTitle: 'Open Design Plugins — offizielle und gemeinschaftliche Register', pluginRegistryDescription: (count) => `${count} Open Design Plugins durchsuchen.`, topbarTitle: 'OD / REGISTER', topbarSubtitle: 'Öffentlicher Index', topbarMeta: 'Offiziell · Gemeinschaft · selbst gehostet', sourceJson: 'Quell-JSON', heroLabel: 'Plugin-Register · öffentliches Ökosystem', heroTitle: 'Agent-native Design-Plugins mit Live-Vorschau durchsuchen.', browseRegistry: 'Register durchsuchen', registryPreview: 'Registervorschau', installableEntries: 'installierbare Einträge', official: 'Offiziell', withPreview: 'mit Vorschau', availableSources: 'Verfügbare Quellen', registryEntries: 'Registereinträge', searchPlugins: 'Plugins suchen', searchPlaceholder: 'Plugins, Workflows, Anbieter suchen...', filtersLabel: 'Registerfilter', visiblePlugins: 'sichtbare Plugins', openDetails: (title) => `Einzelheiten zu ${title} öffnen`, details: 'Einzelheiten', pluginDetailTitle: (title) => `${title} — Open Design Plugin`, installFromRegistry: 'Aus Register installieren', copy: 'Kopieren', copied: 'Kopiert', select: 'Auswählen', previewAndFacts: 'Plugin-Vorschau und Fakten', sourceRepository: 'Quell-Repository', homepage: 'Startseite', trusted: 'Vertrauenswürdig', restricted: 'Eingeschränkt', pluginId: 'Plugin-Kennung', version: 'Plugin-Version', license: 'Lizenz', publisher: 'Herausgeber', notSpecified: 'Nicht angegeben', howItResolves: 'Auflösung', provenance: 'Registerherkunft', workflowSurface: 'Workflow-Oberfläche', directSourceFallback: 'Direkte Quellenreserve', howPeopleUseIt: 'Nutzung', relatedPlugins: 'Verwandte Plugins',
+  pluginRegistryTitle: 'OpenDesign Plugins — offizielle und gemeinschaftliche Register', pluginRegistryDescription: (count) => `${count} OpenDesign Plugins durchsuchen.`, topbarTitle: 'OD / REGISTER', topbarSubtitle: 'Öffentlicher Index', topbarMeta: 'Offiziell · Gemeinschaft · selbst gehostet', sourceJson: 'Quell-JSON', heroLabel: 'Plugin-Register · öffentliches Ökosystem', heroTitle: 'Agent-native Design-Plugins mit Live-Vorschau durchsuchen.', browseRegistry: 'Register durchsuchen', registryPreview: 'Registervorschau', installableEntries: 'installierbare Einträge', official: 'Offiziell', withPreview: 'mit Vorschau', availableSources: 'Verfügbare Quellen', registryEntries: 'Registereinträge', searchPlugins: 'Plugins suchen', searchPlaceholder: 'Plugins, Workflows, Anbieter suchen...', filtersLabel: 'Registerfilter', visiblePlugins: 'sichtbare Plugins', openDetails: (title) => `Einzelheiten zu ${title} öffnen`, details: 'Einzelheiten', pluginDetailTitle: (title) => `${title} — OpenDesign Plugin`, installFromRegistry: 'Aus Register installieren', copy: 'Kopieren', copied: 'Kopiert', select: 'Auswählen', previewAndFacts: 'Plugin-Vorschau und Fakten', sourceRepository: 'Quell-Repository', homepage: 'Startseite', trusted: 'Vertrauenswürdig', restricted: 'Eingeschränkt', pluginId: 'Plugin-Kennung', version: 'Plugin-Version', license: 'Lizenz', publisher: 'Herausgeber', notSpecified: 'Nicht angegeben', howItResolves: 'Auflösung', provenance: 'Registerherkunft', workflowSurface: 'Workflow-Oberfläche', directSourceFallback: 'Direkte Quellenreserve', howPeopleUseIt: 'Nutzung', relatedPlugins: 'Verwandte Plugins',
 });
 
-const fr = cloneWith(de, { blogTitle: 'Carnet', blogDescription: 'Notes localisées pour comprendre, explorer et construire avec Open Design.', blogCategories: 'Catégories du carnet', all: 'Tout', product: 'Produit', guides: 'Guides pratiques', useCases: 'Cas d’usage', community: 'Communauté', tools: 'Outils et skills', minRead: 'min de lecture', readMore: 'Lire la suite →', read: 'Lire →', backToBlog: '← Retour au carnet', noEntries: 'Aucune entrée pour le moment.', noPosts: 'Aucun article dans cette catégorie.', nextStep: 'Étape suivante', joinDiscord: 'Rejoindre Discord', viewSource: 'Voir la source sur GitHub ↗', downloadTitle: 'Télécharger le build desktop', downloadLabel: 'Télécharger le desktop ↗', skillsTitle: 'Exécuter le workflow de skill en local', skillsLabel: 'Voir les workflows ↗', repoTitle: 'Voir l’implémentation sur GitHub', repoLabel: 'Ouvrir le dépôt ↗', breadcrumb: 'Fil d’Ariane', catalog: 'Catalogue', system: 'système de design', systems: 'systèmes de design', template: 'modèle', templates: 'modèles', craft: 'règles de conception', craftRule: 'règle de conception', plugin: 'plugin', plugins: 'plugins', capabilities: 'capacités de design composables', visualSystems: 'systèmes visuels portables', artifactTemplates: 'modèles d’artifact à forker', principles: 'principes de rendu indépendants de la marque', mode: 'Mode de flux', scenario: 'Scénario', platform: 'Plateforme', featured: 'Sélection', category: 'Catégorie', allSkills: 'Tous les skills', allSystems: 'Tous les systèmes de design', allTemplates: 'Tous les modèles', allCraft: 'Toutes les règles de conception', detailSystem: 'Système de design', detailTemplate: 'Modèle', detailCraft: 'Règle de conception', viewOnGithub: 'Voir sur GitHub', upstream: 'Source amont', triggers: 'Déclencheurs', examplePrompt: 'Prompt d’exemple', relatedSkills: 'Skills liés', relatedCraft: 'Autres règles', paletteSample: 'Exemple de palette', visualTheme: 'Thème visuel', forkOnGithub: 'Forker sur GitHub', pluginRegistryTitle: 'Plugins Open Design — registres officiels et communautaires', pluginRegistryDescription: (count) => `Parcourir ${count} plugins Open Design.`, topbarTitle: 'OD / REGISTRE', topbarSubtitle: 'Index public', topbarMeta: 'Officiel · Communauté · auto-hébergé', sourceJson: 'JSON source', heroLabel: 'Registre de plugins · écosystème public', heroTitle: 'Parcourir les plugins de design agent-native avec aperçu live.', browseRegistry: 'Parcourir le registre', installableEntries: 'entrées installables', official: 'Officiel', withPreview: 'avec aperçu', availableSources: 'Sources disponibles', registryEntries: 'Entrées du registre', searchPlugins: 'Rechercher des plugins', filtersLabel: 'Filtres du registre', visiblePlugins: 'plugins visibles', details: 'Détails locaux', installFromRegistry: 'Installer depuis le registre', copy: 'Copier', copied: 'Copié', select: 'Sélectionner', previewAndFacts: 'Aperçu et informations du plugin', sourceRepository: 'Dépôt source', homepage: 'Page d’accueil', trusted: 'Fiable', restricted: 'Restreint', pluginId: 'ID du plugin', version: 'Version du plugin', license: 'Licence', publisher: 'Éditeur', notSpecified: 'Non indiqué', howItResolves: 'Résolution', provenance: 'Provenance du registre', workflowSurface: 'Surface de workflow', howPeopleUseIt: 'Usages', relatedPlugins: 'Plugins liés' });
+const fr = cloneWith(de, { blogTitle: 'Carnet', blogDescription: 'Notes localisées pour comprendre, explorer et construire avec OpenDesign.', blogCategories: 'Catégories du carnet', all: 'Tout', product: 'Produit', guides: 'Guides pratiques', useCases: 'Cas d’usage', community: 'Communauté', tools: 'Outils et skills', minRead: 'min de lecture', readMore: 'Lire la suite →', read: 'Lire →', backToBlog: '← Retour au carnet', noEntries: 'Aucune entrée pour le moment.', noPosts: 'Aucun article dans cette catégorie.', nextStep: 'Étape suivante', joinDiscord: 'Rejoindre Discord', viewSource: 'Voir la source sur GitHub ↗', downloadTitle: 'Télécharger le build desktop', downloadLabel: 'Télécharger le desktop ↗', skillsTitle: 'Exécuter le workflow de skill en local', skillsLabel: 'Voir les workflows ↗', repoTitle: 'Voir l’implémentation sur GitHub', repoLabel: 'Ouvrir le dépôt ↗', breadcrumb: 'Fil d’Ariane', catalog: 'Catalogue', system: 'système de design', systems: 'systèmes de design', template: 'modèle', templates: 'modèles', craft: 'règles de conception', craftRule: 'règle de conception', plugin: 'plugin', plugins: 'plugins', capabilities: 'capacités de design composables', visualSystems: 'systèmes visuels portables', artifactTemplates: 'modèles d’artifact à forker', principles: 'principes de rendu indépendants de la marque', mode: 'Mode de flux', scenario: 'Scénario', platform: 'Plateforme', featured: 'Sélection', category: 'Catégorie', allSkills: 'Tous les skills', allSystems: 'Tous les systèmes de design', allTemplates: 'Tous les modèles', allCraft: 'Toutes les règles de conception', detailSystem: 'Système de design', detailTemplate: 'Modèle', detailCraft: 'Règle de conception', viewOnGithub: 'Voir sur GitHub', upstream: 'Source amont', triggers: 'Déclencheurs', examplePrompt: 'Prompt d’exemple', relatedSkills: 'Skills liés', relatedCraft: 'Autres règles', paletteSample: 'Exemple de palette', visualTheme: 'Thème visuel', forkOnGithub: 'Forker sur GitHub', pluginRegistryTitle: 'Plugins OpenDesign — registres officiels et communautaires', pluginRegistryDescription: (count) => `Parcourir ${count} plugins OpenDesign.`, topbarTitle: 'OD / REGISTRE', topbarSubtitle: 'Index public', topbarMeta: 'Officiel · Communauté · auto-hébergé', sourceJson: 'JSON source', heroLabel: 'Registre de plugins · écosystème public', heroTitle: 'Parcourir les plugins de design agent-native avec aperçu live.', browseRegistry: 'Parcourir le registre', installableEntries: 'entrées installables', official: 'Officiel', withPreview: 'avec aperçu', availableSources: 'Sources disponibles', registryEntries: 'Entrées du registre', searchPlugins: 'Rechercher des plugins', filtersLabel: 'Filtres du registre', visiblePlugins: 'plugins visibles', details: 'Détails locaux', installFromRegistry: 'Installer depuis le registre', copy: 'Copier', copied: 'Copié', select: 'Sélectionner', previewAndFacts: 'Aperçu et informations du plugin', sourceRepository: 'Dépôt source', homepage: 'Page d’accueil', trusted: 'Fiable', restricted: 'Restreint', pluginId: 'ID du plugin', version: 'Version du plugin', license: 'Licence', publisher: 'Éditeur', notSpecified: 'Non indiqué', howItResolves: 'Résolution', provenance: 'Provenance du registre', workflowSurface: 'Surface de workflow', howPeopleUseIt: 'Usages', relatedPlugins: 'Plugins liés' });
 
-const es = cloneWith(fr, { blogTitle: 'Bitácora', blogDescription: 'Notas localizadas para entender, explorar y construir con Open Design.', blogCategories: 'Categorías de la bitácora', all: 'Todo', product: 'Producto', guides: 'Guías', useCases: 'Casos de uso', community: 'Comunidad', tools: 'Herramientas y skills', minRead: 'min de lectura', readMore: 'Leer más →', read: 'Leer →', backToBlog: '← Volver a la bitácora', noEntries: 'Todavía no hay entradas.', noPosts: 'Todavía no hay artículos en esta categoría.', nextStep: 'Siguiente paso', joinDiscord: 'Unirse a Discord', downloadTitle: 'Descargar build de escritorio', downloadLabel: 'Descargar desktop ↗', skillsTitle: 'Ejecutar workflows de skill en local', skillsLabel: 'Ver workflows ↗', repoTitle: 'Ver implementación en GitHub', repoLabel: 'Abrir repositorio ↗', breadcrumb: 'Ruta de navegación', catalog: 'Catálogo', system: 'sistema de diseño', systems: 'sistemas de diseño', template: 'plantilla', templates: 'plantillas', craft: 'reglas de oficio', craftRule: 'regla de oficio', capabilities: 'capacidades de diseño componibles', visualSystems: 'sistemas visuales portables', artifactTemplates: 'plantillas de artifact para fork', principles: 'principios de render independientes de marca', mode: 'Modo', scenario: 'Escenario', platform: 'Plataforma', featured: 'Destacado', category: 'Categoría', allSkills: 'Todos los skills', allSystems: 'Todos los sistemas', allTemplates: 'Todas las plantillas', allCraft: 'Todas las reglas', viewOnGithub: 'Ver en GitHub', upstream: 'Fuente upstream', triggers: 'Disparadores', examplePrompt: 'Prompt de ejemplo', relatedSkills: 'Skills relacionados', paletteSample: 'Muestra de paleta', visualTheme: 'Tema visual', forkOnGithub: 'Fork en GitHub', pluginRegistryTitle: 'Plugins de Open Design — registros oficiales y comunitarios', pluginRegistryDescription: (count) => `Explora ${count} plugins de Open Design.`, topbarTitle: 'OD / REGISTRO', topbarSubtitle: 'Índice público', topbarMeta: 'Oficial · Comunidad · autohospedado', sourceJson: 'JSON fuente', heroLabel: 'Registro de plugins · ecosistema público', browseRegistry: 'Explorar registro', installableEntries: 'entradas instalables', official: 'Oficial', withPreview: 'con vista previa', availableSources: 'Fuentes disponibles', registryEntries: 'Entradas del registro', searchPlugins: 'Buscar plugins', filtersLabel: 'Filtros del registro', visiblePlugins: 'plugins visibles', installFromRegistry: 'Instalar desde el registro', copy: 'Copiar', copied: 'Copiado', select: 'Seleccionar', sourceRepository: 'Repositorio fuente', homepage: 'Página principal', trusted: 'Confiable', restricted: 'Restringido', pluginId: 'ID del plugin', version: 'Versión', license: 'Licencia', publisher: 'Publicador', notSpecified: 'No especificado', provenance: 'Procedencia del registro', workflowSurface: 'Superficie de workflow', relatedPlugins: 'Plugins relacionados' });
+const es = cloneWith(fr, { blogTitle: 'Bitácora', blogDescription: 'Notas localizadas para entender, explorar y construir con OpenDesign.', blogCategories: 'Categorías de la bitácora', all: 'Todo', product: 'Producto', guides: 'Guías', useCases: 'Casos de uso', community: 'Comunidad', tools: 'Herramientas y skills', minRead: 'min de lectura', readMore: 'Leer más →', read: 'Leer →', backToBlog: '← Volver a la bitácora', noEntries: 'Todavía no hay entradas.', noPosts: 'Todavía no hay artículos en esta categoría.', nextStep: 'Siguiente paso', joinDiscord: 'Unirse a Discord', downloadTitle: 'Descargar build de escritorio', downloadLabel: 'Descargar desktop ↗', skillsTitle: 'Ejecutar workflows de skill en local', skillsLabel: 'Ver workflows ↗', repoTitle: 'Ver implementación en GitHub', repoLabel: 'Abrir repositorio ↗', breadcrumb: 'Ruta de navegación', catalog: 'Catálogo', system: 'sistema de diseño', systems: 'sistemas de diseño', template: 'plantilla', templates: 'plantillas', craft: 'reglas de oficio', craftRule: 'regla de oficio', capabilities: 'capacidades de diseño componibles', visualSystems: 'sistemas visuales portables', artifactTemplates: 'plantillas de artifact para fork', principles: 'principios de render independientes de marca', mode: 'Modo', scenario: 'Escenario', platform: 'Plataforma', featured: 'Destacado', category: 'Categoría', allSkills: 'Todos los skills', allSystems: 'Todos los sistemas', allTemplates: 'Todas las plantillas', allCraft: 'Todas las reglas', viewOnGithub: 'Ver en GitHub', upstream: 'Fuente upstream', triggers: 'Disparadores', examplePrompt: 'Prompt de ejemplo', relatedSkills: 'Skills relacionados', paletteSample: 'Muestra de paleta', visualTheme: 'Tema visual', forkOnGithub: 'Fork en GitHub', pluginRegistryTitle: 'Plugins de OpenDesign — registros oficiales y comunitarios', pluginRegistryDescription: (count) => `Explora ${count} plugins de OpenDesign.`, topbarTitle: 'OD / REGISTRO', topbarSubtitle: 'Índice público', topbarMeta: 'Oficial · Comunidad · autohospedado', sourceJson: 'JSON fuente', heroLabel: 'Registro de plugins · ecosistema público', browseRegistry: 'Explorar registro', installableEntries: 'entradas instalables', official: 'Oficial', withPreview: 'con vista previa', availableSources: 'Fuentes disponibles', registryEntries: 'Entradas del registro', searchPlugins: 'Buscar plugins', filtersLabel: 'Filtros del registro', visiblePlugins: 'plugins visibles', installFromRegistry: 'Instalar desde el registro', copy: 'Copiar', copied: 'Copiado', select: 'Seleccionar', sourceRepository: 'Repositorio fuente', homepage: 'Página principal', trusted: 'Confiable', restricted: 'Restringido', pluginId: 'ID del plugin', version: 'Versión', license: 'Licencia', publisher: 'Publicador', notSpecified: 'No especificado', provenance: 'Procedencia del registro', workflowSurface: 'Superficie de workflow', relatedPlugins: 'Plugins relacionados' });
 
 const simple: Record<Exclude<LandingLocaleCode, 'en' | 'zh' | 'zh-tw' | 'ja' | 'ko' | 'de' | 'fr' | 'es'>, UiText> = {
   ru: cloneWith(es, { blogTitle: 'Журнал', blogCategories: 'Категории журнала', all: 'Все', product: 'Продукт', guides: 'Руководства', useCases: 'Сценарии', community: 'Сообщество', tools: 'Инструменты и навыки', minRead: 'мин чтения', readMore: 'Читать дальше →', read: 'Читать →', backToBlog: '← Назад в журнал', noEntries: 'Пока нет записей.', noPosts: 'В этой категории пока нет статей.', nextStep: 'Следующий шаг', joinDiscord: 'Войти в Discord', catalog: 'Каталог', system: 'дизайн-система', systems: 'дизайн-системы', template: 'шаблон', templates: 'шаблоны', craft: 'правила качества', craftRule: 'правило качества', plugin: 'плагин', plugins: 'плагины', mode: 'Режим', scenario: 'Сценарий', platform: 'Платформа', featured: 'Выбрано', category: 'Категория', copy: 'Копировать', copied: 'Скопировано', select: 'Выбрать', official: 'Официально', registry: 'Реестр', version: 'Версия', license: 'Лицензия', publisher: 'Издатель', notSpecified: 'Не указано', pluginId: 'ID плагина', installFromRegistry: 'Установить из реестра', relatedPlugins: 'Связанные плагины' }),
@@ -1120,20 +1120,20 @@ const simple: Record<Exclude<LandingLocaleCode, 'en' | 'zh' | 'zh-tw' | 'ja' | '
 };
 
 // Localized SEO <title> for the tutorials index page. Locales whose tutorials
-// copy comes from buildUiCopy() otherwise inherit a generic "Open Design <guides>"
+// copy comes from buildUiCopy() otherwise inherit a generic "OpenDesign <guides>"
 // title; this table injects a faithful localization of the English seoTitle
-// "Open Design Tutorials — Free Video Guides & How-Tos" for each. zh / zh-tw carry
+// "OpenDesign Tutorials — Free Video Guides & How-Tos" for each. zh / zh-tw carry
 // their own seoTitle inside zhTutorialsCopy / zhTwTutorialsCopy above.
 const TUTORIALS_SEO_TITLE_OVERRIDES: Partial<Record<LandingLocaleCode, string>> = {
-  ja: 'Open Design チュートリアル — 無料の動画ガイドと使い方',
-  ko: 'Open Design 튜토리얼 — 무료 동영상 가이드 및 사용법',
-  de: 'Open Design Tutorials — Kostenlose Video-Anleitungen & Praxistipps',
-  fr: 'Open Design Tutoriels — Guides vidéo gratuits et modes d’emploi',
-  es: 'Open Design Tutoriales — Guías en vídeo gratuitas y guías prácticas',
-  ru: 'Open Design Уроки — Бесплатные видеоруководства и инструкции',
-  'pt-br': 'Open Design Tutoriais — Guias em vídeo gratuitos e passo a passo',
-  it: 'Open Design Tutorial — Video guide gratuite e guide pratiche',
-  tr: 'Open Design Eğitimleri — Ücretsiz video kılavuzları ve nasıl yapılır rehberleri',
+  ja: 'OpenDesign チュートリアル — 無料の動画ガイドと使い方',
+  ko: 'OpenDesign 튜토리얼 — 무료 동영상 가이드 및 사용법',
+  de: 'OpenDesign Tutorials — Kostenlose Video-Anleitungen & Praxistipps',
+  fr: 'OpenDesign Tutoriels — Guides vidéo gratuits et modes d’emploi',
+  es: 'OpenDesign Tutoriales — Guías en vídeo gratuitas y guías prácticas',
+  ru: 'OpenDesign Уроки — Бесплатные видеоруководства и инструкции',
+  'pt-br': 'OpenDesign Tutoriais — Guias em vídeo gratuitos e passo a passo',
+  it: 'OpenDesign Tutorial — Video guide gratuite e guide pratiche',
+  tr: 'OpenDesign Eğitimleri — Ücretsiz video kılavuzları ve nasıl yapılır rehberleri',
 };
 
 function withTutorialsSeoTitle(

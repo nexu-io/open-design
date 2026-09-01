@@ -4,7 +4,7 @@
   "name": "refine-critique-loop",
   "title": "Critique And Refine",
   "version": "0.1.0",
-  "description": "Review, patch, and improve an existing Open Design artifact.",
+  "description": "Review, patch, and improve an existing OpenDesign artifact.",
   "license": "MIT",
   "tags": ["refine", "critique", "review", "patch-edit", "tune-collab"],
   "compat": {

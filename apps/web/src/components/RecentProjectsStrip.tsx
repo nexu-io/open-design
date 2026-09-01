@@ -7,7 +7,15 @@
 // surfaces (e.g. an in-project quick-switcher pane).
 
 import type { CSSProperties } from 'react';
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Dialog, DialogDescription, DialogFooter, DialogTitle } from '@open-design/components';
 
 const MOVE_CONFIRM_SKIP_KEY = 'od.projects.moveConfirmSkip';
@@ -32,6 +40,7 @@ import {
 import {
   canAccessWorkspaceInviteFlow,
   resolveWorkspaceInviteTarget,
+  workspaceInviteAvailableSeats,
   workspaceUpgradeUrl,
 } from './EntryNavRail';
 import { moveWorkspaceProject, workspaceProjectMoveErrorCode } from '../state/projects';
@@ -64,7 +73,11 @@ import {
   trackWorkspaceProjectActionResult,
   trackWorkspaceSharedProjectOpenResult,
 } from '../analytics/events';
-import { countBucket, workspaceAnalyticsDimensions } from '../analytics/workspace';
+import {
+  countBucket,
+  stableAnalyticsRequestErrorCode,
+  workspaceAnalyticsDimensions,
+} from '../analytics/workspace';
 import type { ProjectCollectionClickProps } from '@open-design/contracts/analytics';
 
 /** Which project space this strip renders. Drives the per-card 共享 badge
@@ -199,6 +212,8 @@ const deckCoverCache = new Map<string, string>();
 const deckCoverInflight = new Map<string, Promise<string>>();
 const DEFAULT_RECENT_PROJECT_LIMIT = 6;
 const WIDE_RECENT_PROJECT_LIMIT = 7;
+const PROJECT_MENU_GAP = 6;
+const PROJECT_MENU_VIEWPORT_MARGIN = 24;
 // Card covers are background decoration. Browsers commonly allow only six
 // concurrent connections per origin, so an unbounded All Projects scan can
 // occupy every slot and queue the project file list/preview the user just
@@ -344,10 +359,8 @@ export function RecentProjectsStrip({
   const analyticsPage = space === 'drafts' ? 'drafts' : space === 'team' ? 'all_projects' : 'home';
   const rowRef = useRef<HTMLDivElement | null>(null);
   // Real creator resolution (replaces the demo's mock 李娜/张伟 roster): the
-  // member directory turns an ownerMemberId into a display name, and the
-  // workspace context tells us which member is "me" so the owner's own cards
-  // read "我创建" instead of their display name. Both hooks degrade to
-  // empty/null off-team, so every card safely falls back to "我创建".
+  // member directory turns an ownerMemberId into a display name, while the
+  // workspace context supplies the signed-in user's own name and profile image.
   const { resolve: resolveMember } = useTeamMembers();
   const {
     context: workspaceContext,
@@ -391,10 +404,8 @@ export function RecentProjectsStrip({
     (workspaceContextHasTeamIdentity(workspaceContext) &&
       workspaceContext?.permissions.canShareProjects === true);
   const canAccessInviteFlow = canAccessWorkspaceInviteFlow(workspaceContext);
-  // The invite dialog's seat-gate upgrade CTA: personal workspace → B's
-  // personal plan modal, team → checkout vs change-plan by subscription state.
-  // One shared decision point — see `workspaceUpgradeUrl` in EntryNavRail.tsx
-  // (recvpYEiH019cD).
+  // The invite dialog's seat-gate upgrade CTA shares the public Pricing
+  // destination owned by `workspaceUpgradeUrl` in EntryNavRail.tsx.
   const inviteUpgradeUrl = workspaceUpgradeUrl(workspaceContext, workspaceBilling);
   const inviteTarget = resolveWorkspaceInviteTarget(workspaceContext);
   const canManageCollection =
@@ -471,6 +482,7 @@ export function RecentProjectsStrip({
     Record<string, ProjectCoverOverride | null>
   >({});
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [menuPlacement, setMenuPlacement] = useState<'down' | 'up'>('down');
   const [renameTarget, setRenameTarget] = useState<{ id: string; original: string } | null>(null);
   const [renameInput, setRenameInput] = useState('');
   const [confirmTarget, setConfirmTarget] = useState<Project | null>(null);
@@ -480,6 +492,7 @@ export function RecentProjectsStrip({
   // that anything went wrong. Track failure so the dialog can stay open and
   // say so instead of silently doing nothing.
   const [deleteFailed, setDeleteFailed] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
   // Project → team-space sharing (the project card entry). The daemon gates on
   // `canShareProjects` (403 off-team / no rights), so we only badge on success.
   const [sharingId, setSharingId] = useState<string | null>(null);
@@ -494,21 +507,29 @@ export function RecentProjectsStrip({
   // 全部项目 / 草稿 partition reads the very same predicate, so the badge and the
   // card's grid can no longer disagree.
   const isShared = isSharedProject ?? NOTHING_SHARED;
-  // The card's "{creator}创建" line. A project the team hub attributes to another
-  // member resolves through the directory to that member's display name; my own
-  // shares and every local (non-shared) project read "我创建". Falls back to a
-  // generic "团队成员" when a shared project's owner is not yet in the directory
-  // (off-team, or a member the daemon has not seen register), never an opaque id.
-  const resolveCreator = (projectId: string): { name: string; initial: string; ownedBySelf: boolean } => {
+  // The card's "{creator}创建" line. Self-owned projects use the account identity
+  // instead of the literal "我 / Me" (whose first letter previously produced the
+  // misleading M avatar). Other owners still resolve through the team directory.
+  const resolveCreator = (projectId: string): {
+    name: string;
+    initial: string;
+    avatarUrl: string | null;
+    ownedBySelf: boolean;
+  } => {
     const ownerMemberId = projectOwnerMemberIds?.get(projectId) ?? null;
     if (ownerMemberId === selfMemberId || (!ownerMemberId && !isShared(projectId))) {
-      const name = t('recentProjects.selfCreator');
+      const name = workspaceContext?.displayName?.trim() || t('recentProjects.selfCreator');
       const initial = Array.from(name.trim())[0]?.toUpperCase() ?? 'M';
-      return { name, initial, ownedBySelf: true };
+      return {
+        name,
+        initial,
+        avatarUrl: workspaceContext?.avatarUrl?.trim() || null,
+        ownedBySelf: true,
+      };
     }
     const name = resolveMember(ownerMemberId)?.displayName ?? t('recentProjects.teamMemberCreator');
     const initial = (Array.from(name.trim())[0] ?? 'T').toUpperCase();
-    return { name, initial, ownedBySelf: false };
+    return { name, initial, avatarUrl: null, ownedBySelf: false };
   };
   const visibleProjects = useMemo(
     () => sortedProjects
@@ -527,13 +548,18 @@ export function RecentProjectsStrip({
       kindFilter,
       ownerFilter,
       projectOwnerMemberIds,
+      resolveMember,
       resolvedLimit,
       selfMemberId,
       showOwnerFilter,
       sortedProjects,
+      t,
+      workspaceContext?.avatarUrl,
+      workspaceContext?.displayName,
     ],
   );
   const menuContainerRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const renameTitleId = useId();
   const confirmTitleId = useId();
   const moveTitleId = useId();
@@ -611,6 +637,48 @@ export function RecentProjectsStrip({
     }
     document.addEventListener('pointerdown', handlePointerDown);
     return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [menuOpenId]);
+
+  useLayoutEffect(() => {
+    if (!menuOpenId) return;
+    const anchor = menuContainerRef.current;
+    const menu = menuRef.current;
+    const trigger = anchor?.querySelector<HTMLElement>('.recent-projects__card-more');
+    if (!anchor || !menu || !trigger) return;
+
+    const measureMenuPlacement = () => {
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720;
+      const scrollBoundary = anchor.closest<HTMLElement>('.entry-main--scroll');
+      const scrollRect = scrollBoundary?.getBoundingClientRect();
+      const visibleTop = Math.max(0, scrollRect?.top ?? 0);
+      const visibleBottom = Math.min(viewportHeight, scrollRect?.bottom ?? viewportHeight);
+      const triggerRect = trigger.getBoundingClientRect();
+      const menuHeight = menu.getBoundingClientRect().height;
+      const spaceBelow =
+        visibleBottom - triggerRect.bottom - PROJECT_MENU_GAP - PROJECT_MENU_VIEWPORT_MARGIN;
+      const spaceAbove =
+        triggerRect.top - visibleTop - PROJECT_MENU_GAP - PROJECT_MENU_VIEWPORT_MARGIN;
+      const nextPlacement =
+        spaceBelow < menuHeight && spaceAbove > spaceBelow ? 'up' : 'down';
+
+      setMenuPlacement((current) => (current === nextPlacement ? current : nextPlacement));
+    };
+
+    measureMenuPlacement();
+    window.addEventListener('resize', measureMenuPlacement);
+    window.addEventListener('scroll', measureMenuPlacement, true);
+    const observer = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(measureMenuPlacement);
+    if (observer) {
+      observer.observe(anchor);
+      observer.observe(menu);
+    }
+    return () => {
+      window.removeEventListener('resize', measureMenuPlacement);
+      window.removeEventListener('scroll', measureMenuPlacement, true);
+      observer?.disconnect();
+    };
   }, [menuOpenId]);
 
   // Cover fetching must key off the *set of project ids and their readiness*, not the
@@ -1130,10 +1198,11 @@ export function RecentProjectsStrip({
   }
 
   async function commitDelete() {
-    if (!confirmTarget || !onDelete) return;
+    if (!confirmTarget || !onDelete || deletePending) return;
     const target = confirmTarget;
     const startedAt = performance.now();
     setDeleteFailed(false);
+    setDeletePending(true);
     try {
       const result = await onDelete(target.id);
       // A falsy result (false, or void from a caller that never resolves the
@@ -1180,9 +1249,11 @@ export function RecentProjectsStrip({
         succeeded_count: 0,
         failed_count: 1,
         duration_ms: Math.round(performance.now() - startedAt),
-        error_code: 'request_failed',
+        error_code: stableAnalyticsRequestErrorCode(err),
         ...workspaceDimensions,
       });
+    } finally {
+      setDeletePending(false);
     }
   }
 
@@ -1804,6 +1875,16 @@ export function RecentProjectsStrip({
                     <div className="recent-projects__card-time">
                       <span className="recent-projects__card-owner" aria-hidden>
                         {creator.initial}
+                        {creator.avatarUrl ? (
+                          <img
+                            key={creator.avatarUrl}
+                            src={creator.avatarUrl}
+                            alt=""
+                            onError={(event) => {
+                              event.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        ) : null}
                       </span>
                       <span>{t('recentProjects.creatorLine', { name: creator.name })}</span>
                       <span className="recent-projects__card-sep" aria-hidden>·</span>
@@ -1845,6 +1926,8 @@ export function RecentProjectsStrip({
                   {menuOpenId === project.id ? (
                     <div
                       className="recent-projects__card-menu"
+                      data-placement={menuPlacement}
+                      ref={menuRef}
                       role="menu"
                       onClick={(event) => event.stopPropagation()}
                     >
@@ -1993,9 +2076,11 @@ export function RecentProjectsStrip({
           className="modal-confirm"
           role="alertdialog"
           onClose={() => {
+            if (deletePending) return;
             setConfirmTarget(null);
             setDeleteFailed(false);
           }}
+          closeOnBackdrop={!deletePending}
           ariaLabelledBy={confirmTitleId}
         >
           <DialogTitle id={confirmTitleId}>{t('designs.deleteTitle')}</DialogTitle>
@@ -2010,6 +2095,7 @@ export function RecentProjectsStrip({
           <DialogFooter className="row">
             <button
               type="button"
+              disabled={deletePending}
               onClick={() => {
                 setConfirmTarget(null);
                 setDeleteFailed(false);
@@ -2017,7 +2103,12 @@ export function RecentProjectsStrip({
             >
               {t('designs.renameCancel')}
             </button>
-            <button type="button" className="primary danger" onClick={() => void commitDelete()}>
+            <button
+              type="button"
+              className="primary danger"
+              disabled={deletePending}
+              onClick={() => void commitDelete()}
+            >
               {t('designs.menuDelete')}
             </button>
           </DialogFooter>
@@ -2134,7 +2225,7 @@ export function RecentProjectsStrip({
         canAssignRoles={
           canAssignInviteRoles ?? workspaceContext?.permissions.canInviteMembers === true
         }
-        availableSeats={workspaceContext?.seatSummary?.availableSeats}
+        availableSeats={workspaceInviteAvailableSeats(workspaceContext)}
         entryFrom="all_projects"
         onUpgrade={
           inviteUpgradeUrl
@@ -2383,8 +2474,9 @@ async function loadDeckCover(
   return run;
 }
 
-function deckPreviewSrcDoc(html: string): string {
+export function deckPreviewSrcDoc(html: string): string {
   const withoutScripts = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/giu, '');
+  const withCoverSlide = markFirstDeckPage(withoutScripts);
   const style = `<style id="od-recent-deck-real-preview">
     html,
     body {
@@ -2397,6 +2489,22 @@ function deckPreviewSrcDoc(html: string): string {
       display: block !important;
       scroll-snap-type: none !important;
     }
+    /* Scripts normally fit fixed-stage decks at runtime. Static covers remove
+       those scripts, so normalize both named wrappers as well as the direct
+       slide parent instead of letting an outer transform move slide 1 away. */
+    .deck-shell,
+    .deck-stage,
+    :where(body *):has(> [data-od-cover-slide]) {
+      position: absolute !important;
+      inset: 0 !important;
+      width: ${DECK_PREVIEW_WIDTH}px !important;
+      height: ${DECK_PREVIEW_HEIGHT}px !important;
+      display: block !important;
+      margin: 0 !important;
+      overflow: hidden !important;
+      transform: none !important;
+      transform-origin: 0 0 !important;
+    }
     .slide,
     section[data-slide],
     section[data-screen-label] {
@@ -2407,9 +2515,24 @@ function deckPreviewSrcDoc(html: string): string {
       flex: none !important;
       scroll-snap-align: none !important;
     }
-    .slide:not(:first-of-type),
-    section[data-slide]:not(:first-of-type),
-    section[data-screen-label]:not(:first-of-type),
+    [data-od-cover-slide] {
+      opacity: 1 !important;
+      visibility: visible !important;
+      transform: none !important;
+    }
+    [data-od-cover-slide] > *,
+    [data-od-cover-slide] [data-anim],
+    [data-od-cover-slide] .reveal {
+      animation: none !important;
+      transition: none !important;
+      opacity: 1 !important;
+      visibility: visible !important;
+      transform: none !important;
+      clip-path: none !important;
+    }
+    .slide:not([data-od-cover-slide]),
+    section[data-slide]:not([data-od-cover-slide]),
+    section[data-screen-label]:not([data-od-cover-slide]),
     .deck-counter,
     .deck-controls,
     .deck-hint,
@@ -2428,6 +2551,7 @@ function deckPreviewSrcDoc(html: string): string {
     #deck-next,
     #deck-cur,
     #deck-total,
+    #hint,
     [data-deck-controls],
     [data-page-controls],
     [data-pagination],
@@ -2443,7 +2567,36 @@ function deckPreviewSrcDoc(html: string): string {
       pointer-events: none !important;
     }
   </style>`;
-  return injectBefore(withoutScripts, '</head>', style);
+  return injectBefore(withCoverSlide, '</head>', style);
+}
+
+function markFirstDeckPage(html: string): string {
+  // The cover document is already inert after script removal. Parse it as HTML
+  // so examples inside comments and raw-text elements cannot impersonate a slide.
+  if (typeof DOMParser === 'undefined') return html;
+  let parsed: Document;
+  try {
+    parsed = new DOMParser().parseFromString(html, 'text/html');
+  } catch {
+    return html;
+  }
+  const page = parsed.querySelector('.slide')
+    ?? parsed.querySelector('[data-slide]')
+    ?? parsed.querySelector('[data-screen-label]');
+  if (!page) return html;
+  const activeClasses = ['active', 'is-active'];
+  for (const activeClass of activeClasses) {
+    page.classList.add(activeClass);
+  }
+  if (page.getAttribute('aria-hidden')?.toLowerCase() === 'true') {
+    page.setAttribute('aria-hidden', 'false');
+  }
+  page.removeAttribute('hidden');
+  page.setAttribute('data-od-cover-slide', '');
+  const doctype = parsed.doctype && typeof XMLSerializer !== 'undefined'
+    ? new XMLSerializer().serializeToString(parsed.doctype)
+    : '';
+  return `${doctype}${parsed.documentElement.outerHTML}`;
 }
 
 function injectBefore(source: string, marker: string, addition: string): string {

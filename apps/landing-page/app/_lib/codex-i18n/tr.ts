@@ -8,7 +8,7 @@ export const tr: CodexCopyOverride = {
   collectionEyebrow: 'Küratörlü koleksiyon',
   collectionHeading: 'Codex’e gerçek arayüz çıkarttıran tasarım eklentileri',
   collectionLede:
-    'OpenAI Codex çalışan kod yazar. Kendi haline bırakılırsa güvenli fontlara, ortalama boşluklara ve ortalanmış Helvetica’ya kaçar. Ona zevk kazandıran eklentiler bunlar: estetik skill’ler ve tasarım sistemi kuralları. Birini kurun ya da hepsini Open Design içinde çalıştırın.',
+    'OpenAI Codex çalışan kod yazar. Kendi haline bırakılırsa güvenli fontlara, ortalama boşluklara ve ortalanmış Helvetica’ya kaçar. Ona zevk kazandıran eklentiler bunlar: estetik skill’ler ve tasarım sistemi kuralları. Birini kurun ya da hepsini OpenDesign içinde çalıştırın.',
   collectionStats: [
     { value: '50', label: 'seçilmiş eklenti' },
     { value: '13', label: 'kaynak repo' },
@@ -20,13 +20,13 @@ export const tr: CodexCopyOverride = {
     'Tek satır kod yazılmadan önce Codex’in varsayılan estetik kararlarını geçersiz kılın.',
     'Token’larınızı ve bileşenlerinizi, Codex’in uydurmak yerine uyduğu kurallara dönüştürün.',
   ],
-  collectionCloserHeading: 'Kurulumu atlayın: Codex ile Open Design içinde tasarlayın',
+  collectionCloserHeading: 'Kurulumu atlayın: Codex ile OpenDesign içinde tasarlayın',
   filterAll: 'Tümü',
   collectionCloserBody:
-    'Open Design, Codex’in etrafında çalışan açık kaynaklı, agent-native tasarım çalışma alanıdır. Sistemlerinizi, skill’lerinizi ve şablonlarınızı tutarlı tutar; ajan da sahibi olduğunuz işi çıkarır.',
+    'OpenDesign, Codex’in etrafında çalışan açık kaynaklı, agent-native tasarım çalışma alanıdır. Sistemlerinizi, skill’lerinizi ve şablonlarınızı tutarlı tutar; ajan da sahibi olduğunuz işi çıkarır.',
   categoryFrontend: 'Frontend & Arayüz',
   categoryDesignSystems: 'Tasarım Sistemleri',
-  ctaDownload: 'Open Design’ı indir',
+  ctaDownload: 'OpenDesign’ı indir',
   ctaStarList: 'Listeye yıldız ver',
   ctaBrowseAll: 'Tüm eklentilere göz at',
   ctaViewSource: 'Kaynağı gör',
@@ -36,7 +36,7 @@ export const tr: CodexCopyOverride = {
   cardCta: 'Eklentiyi gör',
   detailWhatIsIt: 'Nedir',
   detailWhyForDesign: 'Tasarım için neden önemli',
-  detailHowWithCodex: 'Codex ile nasıl çalıştırılır',
+  detailHowWithAgent: 'Codex ile nasıl çalıştırılır',
   detailExampleTag: 'Ne zaman başvurmalı',
   detailSource: 'Kaynak',
   detailCategory: 'Kategori',
@@ -45,12 +45,12 @@ export const tr: CodexCopyOverride = {
   detailLicense: 'Lisans',
   detailCovers: 'Neleri kapsıyor',
   detailUpstream: 'Kaynak SKILL.md’den',
-  detailCodexNote: 'Codex ile çalışır',
+  detailAgentNote: 'Codex ile çalışır',
   detailTraction: 'İlgi',
   detailRepo: 'Kaynak depo',
   detailStars: 'Yıldız',
   installHeading: 'Nasıl kurulur',
-  installRunInCodex: 'Bunu Codex içinde çalıştırın.',
+  installRunInAgent: 'Bunu Codex içinde çalıştırın.',
   installRestart: 'Yeni skill’i alması için Codex’i yeniden başlatın.',
   installClone: 'Depoyu klonlayın.',
   installPoint: 'Codex’i skill dosyasına yönlendirin.',
@@ -61,9 +61,9 @@ export const tr: CodexCopyOverride = {
   detailMoreOnList: 'codex-design listesinde dahası',
   detailRelated: 'Diğer Codex tasarım eklentileri',
   finalEyebrow: 'Sonraki adım',
-  detailCloserHeading: 'Kurulum derdi olmadan Open Design ile tasarlayın',
+  detailCloserHeading: 'Kurulum derdi olmadan OpenDesign ile tasarlayın',
   detailCloserBody:
-    'Bu eklentiyi kendiniz kurun ya da Open Design ile Codex’in etrafına baştan sona küratörlü bir tasarım katmanı geçirin. Kendi anahtarınızı getirin, çıktınızın sahibi olun.',
+    'Bu eklentiyi kendiniz kurun ya da OpenDesign ile Codex’in etrafına baştan sona küratörlü bir tasarım katmanı geçirin. Kendi anahtarınızı getirin, çıktınızın sahibi olun.',
   skills: {
     'gpt-taste': {
       tagline:
@@ -75,7 +75,7 @@ export const tr: CodexCopyOverride = {
         'Bento ızgaraları grid-flow-dense kullanır; hiçbir hücre boş ya da bozuk kalmaz.',
         'Ucuz meta-etiketler yasaktır ve çıktı öncesi buton metni kontrastı doğrulanır.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Bir sayfa isteyin; herhangi bir arayüz kodundan önce skill bir design_plan bloğu üretir.',
         'Rastgele seçimlerini gözden geçirin: hero düzeni, font seti, bileşenler, GSAP paradigmaları.',
         'Kalkış öncesi kontrol listesini denetleyin: hero genişlik hesabı, ızgara yoğunluğu, etiket taraması, kontrast.',
@@ -90,7 +90,7 @@ export const tr: CodexCopyOverride = {
         'Ortalanmış hero’lar ve üç eşit kart sırası, belirlenen varyans eşiğinin üzerinde yasaktır.',
         'Yükleme ve boş durumlar, jenerik döngü ikonları yerine iskelet ve kurgulanmış hale gelir.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Projenin havasını tarif edin; skill yoğunluk, varyans ve hareket puanlarını belirler.',
         'Onaltılık kodlar ve işlevsel renk rolleriyle yedi bölümlük bir DESIGN.md üretir.',
         'Bu dosyayı doğrudan Stitch’e, ya da Stitch MCP sunucusu üzerinden verin.',
@@ -106,7 +106,7 @@ export const tr: CodexCopyOverride = {
         'Her bölüm kendi büyük görselini alır; metin ve boşluk böylece incelenebilir kalır.',
         'Hero’lar üç başlık satırının altında kalır ve iç içe kapsayıcı yığınlarından arınır.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Bölüm sayısını belirtin; Codex içinde skill her bölüm için bir görsel üretir.',
         'Buton ya da yazı detayı okunaksız kaldığında daha yakın bir detay render isteyin.',
         'Herhangi bir uygulama dosyası yazmadan önce netlik kontrolünü çalıştırtın.',
@@ -121,7 +121,7 @@ export const tr: CodexCopyOverride = {
         'Sabitlenmiş bir tasarım kılavuzu; paleti, yazı tipini ve ikonları her ekranda tutarlı tutar.',
         'Çok ekranlı setler, birbiriyle ilgisiz tek seferlik mockup’lar değil, inandırıcı bir akış oluşturur.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Uygulama kategorisini ve ekran sayısını belirtin; her ekran kendi görseline dönüşür.',
         'Skill önce bir platform modu seçer: iOS, Android ya da çapraz platform nötr.',
         'Metni küçük ya da çerçevesi düzensiz kalan her ekranı yeniden ürettirin.',
@@ -136,7 +136,7 @@ export const tr: CodexCopyOverride = {
         'Hero kompozisyonu, aşırı kullanılan sol metin, sağ görsel varsayılanının ötesine çeşitlenir.',
         'Tek bir palet, yazı ölçeği ve CTA ailesi, üretilen her karede korunur.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Kaç bölüm istediğinizi söyleyin; belirtilmezse landing page varsayılan olarak altı bölüme kurulur.',
         'Skill önce sayıyı bildirir, sonra her çıktıyı bölüm numarasıyla etiketler.',
         'Hero ölçeğini ve arka planı yönlendirmek için editoryal ya da sinematik gibi hava kelimeleri verin.',
@@ -151,7 +151,7 @@ export const tr: CodexCopyOverride = {
         'Vurgular yalnızca etiketler ve satır içi kod için ayrılmış dört soluk pastelden gelir.',
         'Bölümler, düz boş arka planlar yerine düşük opaklıklı görsellerden derinlik kazanır.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Bir sayfa isteyin; skill önce py-24 ya da py-32 makro boşluğunu kurar.',
         'Yazı genişliğini max-w-4xl’le sınırlar ve monokrom değişkenleri hemen uygular.',
         'Scroll’la beliren solmalar yalnızca transform ve opacity üzerinde IntersectionObserver’la çalışır.',
@@ -166,7 +166,7 @@ export const tr: CodexCopyOverride = {
         'Kalkış öncesi kontrol; uzun tireyi, bölüm numaralı eyebrow’ları, scroll ipuçlarını ve tekrarlayan CTA niyetini yasaklar.',
         'Düzen tekrarı sınırlandırılır; sekiz bölüm en az dört farklı aileden kurulur.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Ajan, herhangi bir kod yazmadan önce tek satırlık bir tasarım okuması belirtir.',
         'Üç düğmeyi ayarlar: tasarım varyansı, hareket yoğunluğu, görsel yoğunluk.',
         'Kalkış öncesi listedeki her madde geçmeli; yoksa sayfa bitmiş sayılmaz.',
@@ -181,7 +181,7 @@ export const tr: CodexCopyOverride = {
         'border-radius tamamen reddedilir; her köşe doksan derecede kalır.',
         'Halftone, tarama çizgisi ve gürültü filtreleri, yüzeylerin düz vektör gibi durmasını engeller.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Tek bir arketip seçin: İsviçre endüstriyel baskı ya da taktik telemetri CRT terminali.',
         'Makro başlıklar negatif izlemeyle clamp kullanır; meta veriler küçük büyük harf monospace kullanır.',
         'Zıt arka planlı 1px ızgara boşlukları, jilet inceliğinde ayırıcı çizgiler üretir.',
@@ -196,7 +196,7 @@ export const tr: CodexCopyOverride = {
         'Kart gruplarındaki butonlar, farklı içeriklere rağmen tek bir alt çizgiye hizalanır.',
         'Eksik hover, focus, yükleme, boş ve hata durumları tamamlanır.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Önce framework ve stil yöntemini belirlemek için kod tabanını tarar.',
         'Herhangi bir şeyi değiştirmeden önce her jenerik deseni ve zayıf noktayı listeler.',
         'Düzeltmeler önceliğe göre gelir: fontlar, renk, durumlar, düzen, bileşenler, tipografi cilası.',
@@ -211,7 +211,7 @@ export const tr: CodexCopyOverride = {
         'Logo konseptleri; monogram, metafor füzyonu ya da negatif alan gibi belirtilen bir yöntemi izler.',
         'Panolar ritim taşır: tekdüze yükseklik yerine sessiz, işlevsel, duygusal ve teknik paneller.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Markayı ve kategoriyi verin; skill önce bir görsel mod seçer.',
         'Varsayılan olarak 3x3 bir panoya, ya da 2x3 referans tarzı mini bir sunuma döner.',
         'Metni az tutun: marka adı, tek bir tagline, tek bir komut, birkaç etiket.',
@@ -226,7 +226,7 @@ export const tr: CodexCopyOverride = {
         'Rastgele animasyon değerleri yerine adlandırılmış hareket token’ları verir.',
         'Bir sayfa anatomisi tanımlar; bölümler bilinçli bir sırayla gelir.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Depoyu klonlayın ve Codex’i bu skill dosyasına yönlendirin.',
         'Sayfanın scroll boyunca anlatması gereken hikâyeyi tarif edin.',
         'Hareket token’larını ayarlayın; skill’in kurduğu yığını ve anatomiyi koruyun.',
@@ -241,7 +241,7 @@ export const tr: CodexCopyOverride = {
         'Malzeme ve ışık varsayılanları sayesinde nesne oyuncak değil, ürün gibi durur.',
         'Hareket varsayılan olarak incedir; nesne hero’yu çalmaz, sabitler.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Depoyu klonlayın ve Codex’i bu skill dosyasına yönlendirin.',
         '3D bir hero nesnesi isteyin ve istediğiniz malzemeyi tarif edin.',
         'Malzeme ve ışık varsayılanlarını ayarlayın; kamera reçetesini koruyun.',
@@ -256,7 +256,7 @@ export const tr: CodexCopyOverride = {
         'Zevk kurallarını kodlar; efekt neona kaymadan ince kalır.',
         'Tailwind kısayoluyla gelir; mevcut stack’e olduğu gibi düşer.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Depoyu klonlayın ve Codex’i bu skill dosyasına yönlendirin.',
         'Bileşeni isteyin; kenar işlemesini skill sağlar.',
         'Yüzeye göre basit ya da maskeli deseni seçin.',
@@ -270,7 +270,7 @@ export const tr: CodexCopyOverride = {
         'Kartlar iç içe dış kabuk ve iç çekirdek alır; kapsayıcılara gerçek işlenmiş bir derinlik kazandırır.',
         'Bölüm dolgusu py-24’ten başlar; böylece düzenler sıkışmak yerine nefes alır.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex’ten bir sayfa isteyin; önce sessizce varyans motorunu çevirir.',
         'Arka plan dokusunu ve yazı ölçeğini iskeletler, sonra çift çerçeveli kapsayıcılar kurar.',
         'Özel cubic-bezier hareket enjekte eder, sonra çıktı öncesi kontrol listesini çalıştırır.',
@@ -284,7 +284,7 @@ export const tr: CodexCopyOverride = {
         'Önce package.json’a bakar; böylece projede zaten olanı yeniden kullanır.',
         'Elle yazılmış dropdown ve toast’ları yakalar, onları erişilebilir primitive’lerle değiştirir.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Açıkça çağırın; kendi başına asla tetiklenmez.',
         'Kitaplık adını değil, işi belirtin, örneğin ‘toast lazım’ gibi.',
         'Tek bir kitaplık söyler, kullanımını açıklar, sonra onu bağlar.',
@@ -298,7 +298,7 @@ export const tr: CodexCopyOverride = {
         'Animasyonlar ekrandaki canlı değerden başlar; kesintide görünen sıçramaları ortadan kaldırır.',
         'Fiskeler bir iniş noktası öngörür; savurmalar jestin hedeflediği yere iner.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex’ten bir sheet, drawer ya da sürükleme etkileşimi kurmasını isteyin.',
         'Pointer capture ile 1:1 takip eder ve hız geçmişini kaydeder.',
         'Bırakıldığında hızı, verilen sönümleme değerleriyle bir yaya devreder.',
@@ -312,7 +312,7 @@ export const tr: CodexCopyOverride = {
         'clip-path’e karşı mask, pop in’e karşı bounce gibi yakın çiftleri ayırt eder.',
         'Terim uydurmayı reddeder; böylece adlandırma güvenilir kalır.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Gördüğünüzü tarif edin, örneğin ‘iOS lastik bant scroll’ hareketi gibi.',
         'Kalınlaştırılmış terimi ve tek satırlık bir sözlük tanımını döndürür.',
         'İki terim de makul biçimde uyabildiğinde alternatifleri isteyin.',
@@ -326,7 +326,7 @@ export const tr: CodexCopyOverride = {
         'Girişler scale(0.95)’ten başlar, asla scale(0)’dan değil; böylece hiçbir şey yoktan belirmez.',
         'Popover’lar merkezleri yerine tetikleyicilerinden ölçeklenir; mekânsal bağı korur.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex’ten arayüz kodunu incelemesini isteyin; bir Before, After, Why tablosu döndürür.',
         'Yeni hareket için şunları yanıtlar: bu animasyonlanmalı mı, neden, hangi easing, ne kadar hızlı.',
         'Kontrol listesini uygular; transition: all kullanımını ve 300ms üzeri süreleri işaretler.',
@@ -340,7 +340,7 @@ export const tr: CodexCopyOverride = {
         'İkonlar SVG metni olarak üretilir; böylece raster değil, düzenlenebilir kalır.',
         'Banner kuralları güvenli alanları, en fazla iki fontu ve tek bir CTA’yı zorunlu kılar.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Önce GEMINI_API_KEY’i export edin ve google-genai ile pillow’u kurun.',
         'Bir tasarım brief’i için scripts/logo/search.py, sonra görseller için generate.py çalıştırın.',
         'Teslim edilebilir mockup’lar üretmek için logoyu scripts/cip/generate.py’ye verin.',
@@ -354,7 +354,7 @@ export const tr: CodexCopyOverride = {
         'Üretilen görseller metinsiz render edilir; böylece başlıklar keskin HTML kalır.',
         'İstek başına üç sanat yönü; böylece karar öncesi karşılaştırma yapılır.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Amaç, platform, içerik, marka, stil ve adet sorularını yanıtlayın.',
         'Güvenli alanlar uygulanmış olarak sanat yönü başına bir HTML banner kurar.',
         'Her birini belirlenen genişlik ve yükseklikte ekran görüntüsüne alır, sınırı aşan dosyaları sıkıştırır.',
@@ -368,7 +368,7 @@ export const tr: CodexCopyOverride = {
         'Tema renkleri CSS değişkenlerinde yaşar; böylece dark mode tutarlı kalır.',
         'Mobile-first breakpoint’ler, düzenlerin küçük başlayıp yukarı doğru katmanlandığı anlamına gelir.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Framework ve temayı yapılandırmak için npx shadcn@latest init çalıştırın.',
         'Bileşenleri npx shadcn@latest add button card dialog form ile ekleyin.',
         'Özel token’lı bir config üretmek için scripts/tailwind_config_gen.py çalıştırın.',
@@ -382,7 +382,7 @@ export const tr: CodexCopyOverride = {
         'Çıkarılan renkler palete karşı karşılaştırılır; savrulmayı erken yakalar.',
         'Varlıklar onaydan önce adlandırma, boyut ve format açısından denetlenir.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'docs/brand-guidelines.md’yi düzenleyin, sonra scripts/sync-brand-to-tokens.cjs çalıştırın.',
         'scripts/inject-brand-context.cjs --json ile doğrulayın.',
         'Herhangi bir yeni dosyayı göndermeden önce scripts/validate-asset.cjs ile kontrol edin.',
@@ -396,7 +396,7 @@ export const tr: CodexCopyOverride = {
         'Chart.js veri slaytlarını yönetir; böylece sayılar yapıştırılmış görsel yerine canlı kalır.',
         'Düzen desenleri bir setten seçilir; desteyi görsel olarak tutarlı tutar.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Onu create alt komutu artı bir konu ve slayt sayısıyla çağırın.',
         'references/create.md’yi yükler ve o oluşturma iş akışını izler.',
         'Düzen desenlerini ve metin yazarlığı formüllerini referans dosyalarından çeker.',
@@ -410,7 +410,7 @@ export const tr: CodexCopyOverride = {
         'Bileşen spesifikasyonları default, hover, active ve disabled durumlarını tablolar; böylece devir teslim hiçbir şeyi muğlak bırakmaz.',
         'Bir doğrulayıcı sabit kodlanmış hex değerlerini işaretler; bileşenleri ve slaytları token sisteminde tutar.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'CSS değişken dosyanızı üretmek için bir JSON token config üzerinde generate-tokens.cjs çalıştırın.',
         'Codex’ten bileşen spesifikasyonları isteyin, sonra ham değerleri yakalamak için src/ üzerinde validate-tokens.cjs çalıştırın.',
         'Bir deste için düzenleri seçmek üzere search-slides.py’yi position ve context bayraklarıyla kullanın.',
@@ -424,7 +424,7 @@ export const tr: CodexCopyOverride = {
         'Bir 8pt taban ızgarası; başlıklar, gövde metni ve boşluk boyunca dikey ritmi zorunlu kılar.',
         'Erişilebilirlik çıtası; reduced-motion desteğini, 44px dokunma hedeflerini ve yüksek kontrast yönetimini içerir.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex’ten tasarım niyetini yeniden ifade etmesini, sonra bileşenlere dokunmadan önce token’ları tanımlamasını isteyin.',
         'Anatomiyi, varyantları, durumları ve responsive davranışı kapsayan bileşen kuralları isteyin.',
         'Bir kod incelemecisinin çıktıyı doğrulayabilmesi için QA kontrol listesiyle kapatın.',
@@ -438,7 +438,7 @@ export const tr: CodexCopyOverride = {
         'Sıcak krem yüzeyler, saf beyaz sayfalara kıyasla uzun makalelerde parlamayı azaltır.',
         'Mürekkep kahvesi gövde metni üzerindeki serif başlıklar, net bir editoryal ritim kurar.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Herhangi bir bileşen yazmadan önce Codex’i terracotta ve krem token’larına yönlendirin.',
         'Bileşen başına anatomi, varyantlar ve durumları, boşluk token’ları açıkça adlandırılmış olarak isteyin.',
         'Var olan tutarsız arayüzü yenilerken anti-desenleri ve geçiş notlarını isteyin.',
@@ -452,7 +452,7 @@ export const tr: CodexCopyOverride = {
         'Yüksek kontrastlı render, yüzeyler yoğun desen dokusu taşısa bile metni okunur tutar.',
         'Kurallar dekoratif hareketi yasaklar; retro işlemin görsel gürültüye dönüşmesini durdurur.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Önce Codex’e palet sınırını söyleyin, sonra desen tabanlı gölgeleme kurallarını türetmesine izin verin.',
         'Desenli yüzeylerin okunur kalması için empty, loading ve error durumlarını isteyin.',
         'Bu skill’in açıkça belirttiği tıklama alanlarını ve focus durumlarını doğrulayın.',
@@ -466,7 +466,7 @@ export const tr: CodexCopyOverride = {
         'Kompakt yoğunlukta boşluk, dashboard ve ayar ekranları gibi kontrol yoğun panellere uygundur.',
         'Kurallar görsel metaforları karıştırmayı yasaklar; böylece yumuşak kabartma tek derinlik dili olarak kalır.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Herhangi bir tekil kontrolü stillemeden önce Codex’e yüzey ve gölge token’larını belirlettirin.',
         'Yumuşak gölgeler tek başına klavye kullanıcılarını yüzüstü bıraktığından, görünür focus durumları isteyin.',
         'Bu skill’in belirttiği gibi, ARIA’dan önce semantic HTML’i zorunlu kılın.',
@@ -480,7 +480,7 @@ export const tr: CodexCopyOverride = {
         'Kompakt 12 ile 32 arası yazı ölçeği, yoğun metni küçük döşemelere sığdırır.',
         'Krem #FFF5E6 yüzey, blok kenarlarını ağır kenarlıklar olmadan okunur tutar.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex’ten her bloğa içerik önceliğine göre bir boyut atamasını isteyin.',
         'Döşemeleri yerleştirmeden önce boşluk token’larını 4 ile 32 arası ölçekte tanımlayın.',
         'Bu skill’in uç durum olarak listelediği taşma ve uzun etiket yönetimini isteyin.',
@@ -494,7 +494,7 @@ export const tr: CodexCopyOverride = {
         'Beyaz üzerine koyu mavi metin #1C398E, palet oyuncul kalırken kontrastı korur.',
         'Kurallar metafor karıştırmayı yasaklar; böylece kil derinliği asla cam ya da düz ile birleşmez.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Kil görünümünü tanımladıkları için önce Codex’ten radius ve gölge token’ları isteyin.',
         'Belirtildiği gibi Poppins başlığı Montserrat gövdeyle eşleştirin, iki benzer sans yüzüyle değil.',
         'focus-visible ve disabled durumlarının yumuşak şekil işlemesinden sağ çıktığını kontrol edin.',
@@ -508,7 +508,7 @@ export const tr: CodexCopyOverride = {
         'İki güçlü vurgu, kırmızı ve okra, degradelerin ve gölgelerin yerini tümüyle alır.',
         'Erişilebilirlik tabanı yine de geçerlidir; böylece rahatsız edici düzenler kontrastı ve görünür focus’u korur.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex bileşenleri seçmeden önce ona tonun kalın ve süssüz olduğunu söyleyin.',
         'Kalite kapılarının gerektirdiği gibi her kuralı bir token’a ya da eşiğe bağlayın.',
         'Çıktıyı incelerken her yap kuralını somut bir yapma örneğiyle eşleştirin.',
@@ -522,7 +522,7 @@ export const tr: CodexCopyOverride = {
         'Kilitli token’lar, token bloğunu atlayan satır içi hex ya da font-family değerlerini yasaklar.',
         'Her çıktı 320, 375, 414 ve 768 piksel genişliklerinde doğrulanır.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Önce kalkış öncesi taramanın mevcut fontları, paleti ve hareket kitaplıklarını okumasına izin verin.',
         'Kitle, kullanım senaryosu ve ton kapısını yanıtlayın ya da devam edin deyin.',
         'Düzenleme yapmadan sıralı bir yapılacaklar listesi için bir sayfada hallmark audit çalıştırın.',
@@ -536,7 +536,7 @@ export const tr: CodexCopyOverride = {
         'Mutlak yasaklar; degrade metni, yan şeritli kenarlıkları ve her bölümün üstündeki eyebrow etiketlerini reddeder.',
         'Kontrast tabanları açıktır: gövde metni için 4.5:1, büyük metin için 3:1.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Skill’in PRODUCT.md ve DESIGN.md’yi yüklemesi için oturum başına bir kez context.mjs çalıştırın.',
         'Bir hedef dosyayla critique, polish ya da animate gibi bir komut çağırın.',
         'Tarayıcı içi varyantlar üretmek için çalışan bir dev sunucusuyla live mode kullanın.',
@@ -550,7 +550,7 @@ export const tr: CodexCopyOverride = {
         'Yalnızca ölçülebilir token’ları değil, ruh halini, kompozisyonu ve marka sesini de kaydeder.',
         'Düz CSS’in ifade edemediği Canvas, WebGL, shader ve scroll efektlerini yakalar.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Herhangi bir şeyi analiz etmeden önce üç boyutu da görmek için şemayı isteyin.',
         'Codex’e referans görselleri ya da URL’ler verin ve doldurulmuş bir DNA JSON’u isteyin.',
         'Kendi kendine yeten bir HTML sayfası üretmek için JSON’u ve içeriğinizi geçirin.',
@@ -564,7 +564,7 @@ export const tr: CodexCopyOverride = {
         'Tonal yüzeyler, güncel MD3 spesifikasyonuyla uyumlu biçimde gölgeler yerine derinlik taşır.',
         'Puanlı bir denetim on kategoriyi değerlendirir ve düzeltmeleri öncelik sırasına göre listeler.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex’in Compose, Flutter ya da CSS custom property’leri seçmesi için platformu belirtin.',
         'Bir bileşen isteyin ve doğru varyantı artı token bağlantısını alın.',
         'Bir uyumluluk raporu için denetimi bir URL’ye ya da kaynak dosyalara karşı çalıştırın.',
@@ -578,7 +578,7 @@ export const tr: CodexCopyOverride = {
         'Çoğu bileşenin bozuk görünmesine yol açan iç içe radius uyumsuzluğunu düzeltir.',
         'Değişen sayılardan kaynaklanan düzen kaymasını, kullanıcılara ulaşmadan önce yakalar.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex’i bir bileşene yönlendirin ve ilkeleri uygulamasını isteyin.',
         'Bir inceleme isteyin; bulgular Before ve After tabloları olarak döner.',
         'Herhangi bir frontend değişikliğini merge etmeden önce on dört maddelik kontrol listesini çalıştırın.',
@@ -592,7 +592,7 @@ export const tr: CodexCopyOverride = {
         'İncelemeciler sohbette tartışmak yerine sabitlenmiş öğeler üzerine yorum yapar.',
         'Çok adımlı akışlar, statik mockup’ların yanında çalıştırılabilir bir prototip alır.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Agent-Native CLI ile kurun, sonra /visual-plan komutunu çalıştırın.',
         'Kaynak olarak kullanmak için var olan bir Codex ya da Markdown planını yapıştırın.',
         'Geri bildirimi okuyun, planı yamalayın ve kalıcı sonucu doğrulayın.',
@@ -606,7 +606,7 @@ export const tr: CodexCopyOverride = {
         'Bir yoğunluk sözleşmesi, yarısından az dolu render olan gövde sayfalarını işaretler.',
         'Diyagram primitive’leri; mimariyi, akış şemalarını, dörtlü matrisleri, zaman çizelgelerini ve grafikleri kapsar.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'İhtiyacınızı söyleyin; karar ağacı eşleşen şablonu seçer.',
         'Önce Codex’in ham içeriğinizi doğrulanmış bir content.json’a süzmesine izin verin.',
         'HTML, PDF ve doğrulama raporları üretmek için kurma betiğini çalıştırın.',
@@ -620,7 +620,7 @@ export const tr: CodexCopyOverride = {
         'Ekran okuyucular yine de tam metni bir aria-label üzerinden alır.',
         'reduced-motion kullanıcıları, hiçbir transform uygulanmamış statik metin görür.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Bir başlığı data-masked-reveal ile işaretleyin ve CSS mask kurallarını ekleyin.',
         'Ücretli SplitText eklentisinden kaçınan split yardımcısını çağırın.',
         'ScrollTrigger’ın rota değişiminde temizlenmesi için React’te bir GSAP context’ine sarın.',
@@ -634,7 +634,7 @@ export const tr: CodexCopyOverride = {
         'Köşe ayraçları ek işaretleme gerektirmez; böylece yapı CSS’te kalır.',
         'Doku katmanı kaldırılsa bile düzen yine net okunur.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Teknik ya da editoryal bir sayfa isteyin ve önce ana ızgarayı alın.',
         'Gelişigüzel bölüm genişlikleri yerine açık span sınıfları atayın.',
         'Çerçeve kenarlarının her iki breakpoint’te dikey ve yatay olarak hizalandığını doğrulayın.',
@@ -648,7 +648,7 @@ export const tr: CodexCopyOverride = {
         'Kılavuzlar kapsayıcının max-width ve padding’ini paylaşır; böylece asla savrulmaz.',
         'Pointer olayları devre dışıdır; böylece çizgiler asla tıklamayı ya da seçimi engellemez.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'container-lines sınıfını düzen kabuğuna ekleyin.',
         'Köşe karelerini yalnızca gerçek kapsayıcı ya da bölüm köşelerine yerleştirin.',
         'Çizgilerin hem açık hem koyu arka planlarda ince kaldığını kontrol edin.',
@@ -662,7 +662,7 @@ export const tr: CodexCopyOverride = {
         'Derinlik yönlü kalır; ışık üstten, gölge alttan gelir.',
         'Tek bir bileşende glassmorphism, neumorphism ve skeuomorphism’i karıştırmaya karşı uyarır.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Temel token’ları bir kez belirleyin, sonra onları marka ve temaya göre ayarlayın.',
         'Kabarık yüzeyi kartlara, butonlara, sekmelere ve kontrol yuvalarına uygulayın.',
         'Basılı varyantı yalnızca aktif toggle’lar ve seçili sekmeler için ekleyin.',
@@ -676,7 +676,7 @@ export const tr: CodexCopyOverride = {
         'Üç sabit güç sırasıyla kontrollere, kartlara ve hero medyasına eşlenir.',
         'Üst üste yığılmış düşük opaklıklı katmanlar, tek bir künt gölge yerine gerçek derinlik olarak okunur.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex’ten md yardımcısını kartlara, panellere ve popover’lara uygulamasını isteyin.',
         'lg yardımcısını hero medyası ve modal benzeri kapsayıcılar için ayırın.',
         'Her gölgeyi temiz bir yüzey dolgusu ve tutarlı bir radius ile eşleştirin.',
@@ -690,7 +690,7 @@ export const tr: CodexCopyOverride = {
         'Altı adımlı monokrom palet, ağır bir overlay olmadan ön plandaki yazıyı okunur tutar.',
         'Vignette ve eksen dışı kütle, eşit parlaklık değil, tek bir parlak odak alanı verir.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Sabit canvas’ı içeriğin arkasına bırakın ve pointer-events’i none yapın.',
         'Matris okunurluğu için cellSize’ı 5px ile 10px arasında ayarlayın.',
         'Kütleyi biçimlendirmek için wave, cloud, ridge ve vignette değerlerini ayarlayın.',
@@ -704,7 +704,7 @@ export const tr: CodexCopyOverride = {
         'Ayrı çekirdek ve parıltı genişlikleri, ışını bir çubuk değil, bir bıçak tutar.',
         'Duman ışının yakınında yoğunlaşır ve dışa doğru dağılır; metin kontrastını korur.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Shader’ın RGB’ye çevirdiği bir --brand-accent custom property’si belirleyin.',
         'Sabit canvas’ı pointer-events none ile içeriğin arkasına yerleştirin.',
         'Işını konumlandırmak için coreWidth, glowWidth, smokeDensity ve xOffset’i ayarlayın.',
@@ -718,7 +718,7 @@ export const tr: CodexCopyOverride = {
         'Adlandırılmış token’lar; arka plan, kabuk, çizgi, metin ve vurgu değerlerini sayfa boyunca sabitler.',
         'Raylar, köşe kareleri ve düğüm hapları, minimal kabuğa teknik bir yapı kazandırır.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Token bloğunu yapıştırın, sonra sayfa temelini ve hero kabuğunu kurun.',
         'Mesh canvas’ı kabuğun içine, kabuk içeriğinin arkasına ekleyin.',
         'Birkaç düğüm, ray ve işaretçi yerleştirin, sonra sürüklenme döngülerini yavaş tutun.',
@@ -732,7 +732,7 @@ export const tr: CodexCopyOverride = {
         'Büyük başlıklar ile minik meta veri arasındaki ölçek kontrastı hiyerarşiyi taşır.',
         'Negatif alan doldurulmak yerine korunur; sayfayı editoryal tutar.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Önce görünür sütun bölmeleri olan geniş bir max-width kabuğu kurun.',
         'Bir hero başlığını çoğu sütuna sabitleyin, destek metnini bir yan sütuna koyun.',
         'Hizmet satırlarını minik meta veri etiketleriyle çok sütunlu listeler olarak kurun.',
@@ -746,7 +746,7 @@ export const tr: CodexCopyOverride = {
         'Işın çizgileri ve artı işaretleri kadrana hizalanır; kalibrasyon mantığını pekiştirir.',
         'Monokrom palet, parlaklığın doygun vurgulardan değil, cam vurgularından geldiği anlamına gelir.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Neredeyse siyah bir taban artı soluk ızgara ve ışın kılavuzlarıyla başlayın.',
         'Navigasyonu, hapları ve butonları 1px vurgu sarmalayıcılı koyu cam kapsüller olarak kurun.',
         'Kadranı katmanlayın: dış halka, tikler, dönen etiketler, merkez amblem.',
@@ -760,7 +760,7 @@ export const tr: CodexCopyOverride = {
         'ScrollTrigger ve timeline’lar gelişigüzel yığılmak yerine düzgün sıralanır.',
         'Performans kuralları, animasyonu scroll’da takılmak yerine akıcı tutar.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex’in ilgili modülü yükleyebilmesi için GSAP skill setini kurun.',
         'İstediğiniz hareketi isteyin; doğru modül API’yi yönetir.',
         'Bir bileşen ağacı içinde React ya da framework’ler modülüne başvurun.',
@@ -774,7 +774,7 @@ export const tr: CodexCopyOverride = {
         'Muğlak ‘daha hoş hissettir’ isteğini öncelikli bir hareket denetimine çevirir.',
         'Animasyonu kişisel zevke değil, adlandırılmış bir zanaat çıtasına tutar.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Arayüzünüzdeki hareket fırsatlarını bulmak için find geçişini çalıştırın.',
         'Mevcut animasyon kodunu yeniden işlemek için improve geçişini uygulayın.',
         'Düşük zanaatlı hareketi yakalamak için göndermeden önce review geçişini çalıştırın.',

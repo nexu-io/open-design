@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cloudflare Kumo UI spacing</title>
+    <link rel="stylesheet" href="../tokens.css" />
+    <style>
+      body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); }
+      main { max-width: var(--container-max); margin: 0 auto; padding: var(--space-12) var(--container-gutter-desktop); }
+      h1, h2 { margin: 0; line-height: var(--leading-tight); font-weight: 600; }
+      h1 { font-size: var(--text-2xl); }
+      h2 { margin-bottom: var(--space-4); font-size: var(--text-lg); }
+      .intro { margin: var(--space-2) 0 var(--space-8); color: var(--muted); }
+      .layout { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-8); }
+      .stack { display: grid; gap: var(--space-3); }
+      .row { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: var(--space-4); color: var(--muted); font-size: var(--text-sm); }
+      .bar { height: var(--space-3); width: var(--size); border-radius: var(--radius-sm); background: var(--accent); }
+      .radii { display: grid; grid-template-columns: repeat(2, minmax(120px, 1fr)); gap: var(--space-4); }
+      .radius { min-height: 96px; display: grid; place-items: center; background: var(--surface); color: var(--fg-2); font: 400 var(--text-xs) / 1.4 var(--font-mono); box-shadow: var(--elev-ring), var(--elev-raised); }
+      @media (max-width: 700px) { .layout { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Spacing and radius</h1>
+      <p class="intro">A compact 4px rhythm and concentric control radii support dense product workflows.</p>
+      <div class="layout">
+        <section>
+          <h2>Spacing scale</h2>
+          <div class="stack">
+            <div class="row"><span>4px</span><div class="bar" style="--size: var(--space-1)"></div></div>
+            <div class="row"><span>8px</span><div class="bar" style="--size: var(--space-2)"></div></div>
+            <div class="row"><span>12px</span><div class="bar" style="--size: var(--space-3)"></div></div>
+            <div class="row"><span>16px</span><div class="bar" style="--size: var(--space-4)"></div></div>
+            <div class="row"><span>24px</span><div class="bar" style="--size: var(--space-6)"></div></div>
+            <div class="row"><span>32px</span><div class="bar" style="--size: var(--space-8)"></div></div>
+            <div class="row"><span>48px</span><div class="bar" style="--size: var(--space-12)"></div></div>
+          </div>
+        </section>
+        <section>
+          <h2>Radius scale</h2>
+          <div class="radii">
+            <div class="radius" style="border-radius: var(--radius-sm)">4px / sm</div>
+            <div class="radius" style="border-radius: var(--radius-md)">6px / md</div>
+            <div class="radius" style="border-radius: var(--radius-lg)">8px / lg</div>
+            <div class="radius" style="border-radius: var(--radius-pill)">pill</div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

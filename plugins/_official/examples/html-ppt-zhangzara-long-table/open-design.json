@@ -10,15 +10,15 @@
   },
   "version": "0.1.0",
   "publishedAt": "2026-05-12T07:18:16Z",
-  "description": "Open Design's unit-economics and BYOK cost model: the assumptions, the sensitivity, and why it scales. Built as a decision-grade data & finance deck for CFO, investors.",
+  "description": "OpenDesign's unit-economics and BYOK cost model: the assumptions, the sensitivity, and why it scales. Built as a decision-grade data & finance deck for CFO, investors.",
   "description_i18n": {
-    "en": "Open Design's unit-economics and BYOK cost model: the assumptions, the sensitivity, and why it scales. Built as a decision-grade data & finance deck for CFO, investors.",
+    "en": "OpenDesign's unit-economics and BYOK cost model: the assumptions, the sensitivity, and why it scales. Built as a decision-grade data & finance deck for CFO, investors.",
     "zh-CN": "像 FP&A 伙伴一样讲清单位经济模型——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。",
     "zh-TW": "像 FP&A 伙伴一样讲清单位经济模型——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
-    "name": "Open Design",
+    "name": "OpenDesign",
     "url": "https://github.com/nexu-io"
   },
   "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/html-ppt-zhangzara-long-table",
@@ -69,8 +69,8 @@
     },
     "useCase": {
       "query": {
-        "en": "Create \"Present a Unit-Economics Model like an FP&A Partner\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: Open Design's unit-economics and BYOK cost model: the assumptions, the sensitivity, and why it scales. Audience: CFO, investors. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it.",
-        "zh-CN": "像 FP&A 伙伴一样讲清单位经济模型。像 FP&A 伙伴一样讲清单位经济模型——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's unit-economics and BYOK cost model: the assumptions, the sensitivity, and why it scales. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+        "en": "Create \"Present a Unit-Economics Model like an FP&A Partner\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: OpenDesign's unit-economics and BYOK cost model: the assumptions, the sensitivity, and why it scales. Audience: CFO, investors. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it.",
+        "zh-CN": "像 FP&A 伙伴一样讲清单位经济模型。像 FP&A 伙伴一样讲清单位经济模型——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。 主题：OpenDesign's unit-economics and BYOK cost model: the assumptions, the sensitivity, and why it scales. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {

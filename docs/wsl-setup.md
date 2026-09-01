@@ -1,7 +1,7 @@
 # WSL2 Setup Guide
 
 Use this guide when your coding-agent CLIs run inside WSL2. In that setup,
-install and run Open Design from WSL as well so the agent CLI, `od` command,
+install and run OpenDesign from WSL as well so the agent CLI, `od` command,
 daemon, Node modules, and credentials all come from the same Linux environment.
 
 For native Windows PowerShell setup, use
@@ -9,7 +9,7 @@ For native Windows PowerShell setup, use
 
 ## Recommended shape
 
-- Clone Open Design inside WSL2.
+- Clone OpenDesign inside WSL2.
 - Install Node `~24` and the repo-pinned pnpm (`10.33.2`) inside WSL2.
 - Put a WSL-native `od` wrapper before `/usr/bin` on `PATH`.
 - Start the daemon from WSL with `od --no-open`.
@@ -17,7 +17,7 @@ For native Windows PowerShell setup, use
 
 Do not assume the Windows desktop app's daemon is the right daemon for WSL
 agent clients. WSL2 networking and Windows credential stores can make that path
-ambiguous. A WSL-started daemon keeps the MCP clients and Open Design in the
+ambiguous. A WSL-started daemon keeps the MCP clients and OpenDesign in the
 same environment.
 
 ## 1. Install from source in WSL
@@ -51,7 +51,7 @@ Check what your shell resolves:
 type -a od
 ```
 
-If `/usr/bin/od` appears before Open Design, create a wrapper in `~/.local/bin`
+If `/usr/bin/od` appears before OpenDesign, create a wrapper in `~/.local/bin`
 and make sure that directory is first on `PATH`:
 
 ```bash
@@ -82,7 +82,7 @@ od is /home/<user>/.local/bin/od
 ```
 
 `od.exe` is not a reliable workaround from WSL. It may resolve to a Windows
-coreutils binary instead of Open Design, especially on machines with Windows
+coreutils binary instead of OpenDesign, especially on machines with Windows
 coreutils installed.
 
 ## 3. Start the daemon from WSL
@@ -97,7 +97,7 @@ od --no-open
 In another WSL terminal, verify it is reachable:
 
 ```bash
-curl -sSf http://127.0.0.1:7456/api/health && echo "Open Design daemon is reachable"
+curl -sSf http://127.0.0.1:7456/api/health && echo "OpenDesign daemon is reachable"
 ```
 
 Expected output includes `{"ok":true,...}` followed by the echo line.
@@ -134,7 +134,7 @@ for example `~/.claude.json`, `~/.config/opencode/opencode.json`,
 
 ## Native module mismatch after changing Node versions
 
-If dependencies were installed under Node 22 and Open Design later runs under
+If dependencies were installed under Node 22 and OpenDesign later runs under
 Node 24, native modules such as `better-sqlite3` can fail with a
 `NODE_MODULE_VERSION` mismatch.
 
@@ -174,6 +174,6 @@ enabled = false
 Current Codex CLI versions expect `[features]` values to be booleans. Remove or
 comment out the nested `[features.*]` block, then retry the command.
 
-Open Design also normalizes this shape before daemon-launched Codex runs, but
+OpenDesign also normalizes this shape before daemon-launched Codex runs, but
 manual cleanup may still be needed when Codex itself is invoked directly before
-Open Design gets a chance to patch the config.
+OpenDesign gets a chance to patch the config.

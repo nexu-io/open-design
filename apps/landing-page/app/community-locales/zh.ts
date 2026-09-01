@@ -2,15 +2,15 @@ import type { DeepPartial, CommunityCopy } from '../community-i18n';
 
 const zh: DeepPartial<CommunityCopy> = {
   hub: {
-    title: '社区 — Open Design',
-    desc: 'Open Design 社区：在公开场合交付作品的贡献者、在本地主理工坊的大使，以及让 Discord 始终热络的版主。',
+    title: '社区 — OpenDesign',
+    desc: 'OpenDesign 社区：在公开场合交付作品的贡献者、在本地主理工坊的大使，以及让 Discord 始终热络的版主。',
     heroTitle: '开放的设计，<em>在你交付时</em><br/>才真正成形。',
     heroLead:
-      'Open Design 由人构建，在公开场合完成。Skills、DESIGN.md 系统、插件、文档：每一次提交都是一笔。选下面的一扇门，找到属于你的房间。',
+      'OpenDesign 由人构建，在公开场合完成。Skills、DESIGN.md 系统、插件、文档：每一次提交都是一笔。选下面的一扇门，找到属于你的房间。',
     cardMetaH: '首次合并时自动铸造',
     cardMetaS: 'PNG · 分享到 X',
     cardHeroAlt:
-      'Open Design 贡献者荣誉卡 — @dev-kp-eloper，前 99.9%，Giotto 级',
+      'OpenDesign 贡献者荣誉卡 — @dev-kp-eloper，前 99.9%，Giotto 级',
     cards: [
       {
         ord: 'I',
@@ -21,7 +21,7 @@ const zh: DeepPartial<CommunityCopy> = {
       {
         ord: 'II',
         title: '大使',
-        sub: 'Open Design 在你城市里的<em>声音</em>。',
+        sub: 'OpenDesign 在你城市里的<em>声音</em>。',
         body: '开设一间本地工坊。召集聚会、演示、深夜评图。我们以预算、物料，以及一条直通核心团队的私密通道作为后盾。',
       },
       {
@@ -33,14 +33,14 @@ const zh: DeepPartial<CommunityCopy> = {
     ],
   },
   contributors: {
-    title: '贡献者 — Open Design',
-    desc: '为 Open Design 做贡献：维护者、每周与历史贡献者榜单、good first issue，以及一条交付第一件作品的零代码路径。',
+    title: '贡献者 — OpenDesign',
+    desc: '为 OpenDesign 做贡献：维护者、每周与历史贡献者榜单、good first issue，以及一条交付第一件作品的零代码路径。',
     heroTitle: '<em>交付</em>作品的那双手。',
     heroLead:
-      'Open Design 由人构建，在公开场合完成。Skills、DESIGN.md 系统、插件、文档：每一次提交都是一笔。挑一个 issue，发一个 PR，合并的那一刻，就赢得一张独一无二的荣誉卡。',
+      'OpenDesign 由人构建，在公开场合完成。Skills、DESIGN.md 系统、插件、文档：每一次提交都是一笔。挑一个 issue，发一个 PR，合并的那一刻，就赢得一张独一无二的荣誉卡。',
     showcase: {
       kicker: '万物皆可插件',
-      h2: 'Open Design 是舞台。<em>你的作品</em>是演出。',
+      h2: 'OpenDesign 是舞台。<em>你的作品</em>是演出。',
       intro:
         '这间工坊也是一座画廊。帮你把作品做出来只是一半；让这间屋子里的人来看，才是另一半。你交付的每一件作品，落脚的不是保险柜，而是一面墙，让全世界都能找到它。',
       tenets: [
@@ -70,7 +70,7 @@ const zh: DeepPartial<CommunityCopy> = {
         steps: [
           {
             h4: '把这行交给 agent',
-            body: '把上面这条命令粘贴进 Open Design 里的 agent，或粘进你手边惯用的那个：Claude Code、Codex、Cursor。它会自行安装。',
+            body: '把上面这条命令粘贴进 OpenDesign 里的 agent，或粘进你手边惯用的那个：Claude Code、Codex、Cursor。它会自行安装。',
           },
           {
             h4: '唤醒这个 skill',
@@ -87,20 +87,20 @@ const zh: DeepPartial<CommunityCopy> = {
       kicker: '掌舵',
       h2: '这些<em>维护者</em>。',
       intro:
-        '维护者守护 Open Design 的方向与质量：他们审阅贡献，让标准保持一致，并为更多贡献者腾出空间、赢得自己在项目里的位置。',
+        '维护者守护 OpenDesign 的方向与质量：他们审阅贡献，让标准保持一致，并为更多贡献者腾出空间、赢得自己在项目里的位置。',
       role: '维护者',
       bios: {
         'Nagendhra-web':
-          'Nagendhra 带着数据工程师对生产真相的本能：找到故障、量化边界情况、把它彻底修好。在 Open Design 里，这体现为部署预检工作、资产打包的加固，以及那些让贡献者交付时对项目更放心的 Windows 修复。',
+          'Nagendhra 带着数据工程师对生产真相的本能：找到故障、量化边界情况、把它彻底修好。在 OpenDesign 里，这体现为部署预检工作、资产打包的加固，以及那些让贡献者交付时对项目更放心的 Windows 修复。',
         'Sid-Qin':
-          'Sid 是一位有着设计师般细节眼光的全能工程师：既会注意到断掉的 CLI 路径，也会留意到歪掉的交互细节。在 Open Design 里，Sid 让导出流程、插件动作、Windows 垫片、MIME 处理和 agent 管道保持足够锋利，让一整个社区可以在其上构建。',
+          'Sid 是一位有着设计师般细节眼光的全能工程师：既会注意到断掉的 CLI 路径，也会留意到歪掉的交互细节。在 OpenDesign 里，Sid 让导出流程、插件动作、Windows 垫片、MIME 处理和 agent 管道保持足够锋利，让一整个社区可以在其上构建。',
       },
     },
     allTime: {
       kicker: '历史信号',
       h2: '扎根<em>最深</em>的贡献者。',
       intro:
-        '一份长期累积的记录，记下那些不断把想法、修复与匠心，化为 Open Design 共享标准的杰出贡献者。',
+        '一份长期累积的记录，记下那些不断把想法、修复与匠心，化为 OpenDesign 共享标准的杰出贡献者。',
       rankLabel: '历史贡献者',
       week: '仓库历史',
       quote:
@@ -116,12 +116,12 @@ const zh: DeepPartial<CommunityCopy> = {
       kicker: '本周信号',
       h2: '<em>本周</em>领跑的十位贡献者。',
       intro:
-        '一份快照，记录那些敏锐的贡献者：他们合入 PR、改进产品，让 Open Design 充满生气。',
+        '一份快照，记录那些敏锐的贡献者：他们合入 PR、改进产品，让 OpenDesign 充满生气。',
       rankLabel: '本周领跑者',
       week: '最近 7 天',
       handleSuffix: '· 本周领跑',
       blurbTemplate:
-        '{name} 本周以 {prs} 个已合并的 PR 定下节奏，那份稳定的匠心让 Open Design 持续向前。',
+        '{name} 本周以 {prs} 个已合并的 PR 定下节奏，那份稳定的匠心让 OpenDesign 持续向前。',
       statRank: '排名',
       statPrs: 'PR · 7 天',
       headContributor: '贡献者',
@@ -132,7 +132,7 @@ const zh: DeepPartial<CommunityCopy> = {
       kicker: '挑选你的第一次贡献',
       h2: '开放的 issue，<em>为你标记</em>。',
       intro:
-        '实时来自 Open Design 仓库上 <span class="num">label:&ldquo;good first issue&rdquo;</span> 的标签。在某个 issue 下留言即可认领，维护者会在一天内把它分配给你。',
+        '实时来自 OpenDesign 仓库上 <span class="num">label:&ldquo;good first issue&rdquo;</span> 的标签。在某个 issue 下留言即可认领，维护者会在一天内把它分配给你。',
       loading: 'good first issue',
       foot: '显示前 <span class="num" id="issue-count">—</span> 个开放的 good-first-issue',
       seeAll: '在 GitHub 上查看全部',
@@ -171,9 +171,9 @@ const zh: DeepPartial<CommunityCopy> = {
     },
   },
   ambassadors: {
-    title: '大使 — Open Design',
-    desc: '成为 Open Design 大使：开设一间本地工坊，主持聚会与评图，并获得预算、物料，以及一条直通核心团队的私密通道。',
-    heroTitle: '成为 Open Design 在你城市里的<em>声音</em>。',
+    title: '大使 — OpenDesign',
+    desc: '成为 OpenDesign 大使：开设一间本地工坊，主持聚会与评图，并获得预算、物料，以及一条直通核心团队的私密通道。',
+    heroTitle: '成为 OpenDesign 在你城市里的<em>声音</em>。',
     heroLead:
       '开设一间本地工坊。召集聚会、演示、深夜评图。我们以预算、物料，以及一条直通核心团队的私密通道作为你的后盾。',
     program: {
@@ -181,7 +181,7 @@ const zh: DeepPartial<CommunityCopy> = {
       h2: '志业、<em>赞助</em>、契约。',
       applyCta: '通过 Google 表单申请',
       applyNote:
-        '大使让 Open Design 从一个仓库，变成贡献者能在同一间屋子里相遇的东西——桌上有墨，咖啡已凉。',
+        '大使让 OpenDesign 从一个仓库，变成贡献者能在同一间屋子里相遇的东西——桌上有墨，咖啡已凉。',
       cols: [
         {
           n: 'I · 志业',
@@ -224,7 +224,7 @@ const zh: DeepPartial<CommunityCopy> = {
       kicker: '在一线',
       h2: '认识这些<em>大使</em>。',
       intro:
-        '本地组织者、创作者和社区建设者，帮助 Open Design 触及更多设计师与团队。',
+        '本地组织者、创作者和社区建设者，帮助 OpenDesign 触及更多设计师与团队。',
       places: [
         '澳大利亚，阳光海岸',
         '马来西亚，吉隆坡',
@@ -234,8 +234,8 @@ const zh: DeepPartial<CommunityCopy> = {
     },
   },
   moderators: {
-    title: '版主 — Open Design',
-    desc: '认识 Open Design 的 Discord 版主，加入这间屋子——AI 原生设计师在这里交付作品、开放插件、试破 Beta，并把彼此从卡点里拉出来。',
+    title: '版主 — OpenDesign',
+    desc: '认识 OpenDesign 的 Discord 版主，加入这间屋子——AI 原生设计师在这里交付作品、开放插件、试破 Beta，并把彼此从卡点里拉出来。',
     heroTitle: '<em>贡献者</em>聚在一起的那间屋子。',
     heroLead:
       'agent 设计时代的最前线在这里展开。Discord 是全世界最敏锐的 AI 原生设计师聚集之地。来认识让这间屋子始终温暖的守护者。',
@@ -248,11 +248,11 @@ const zh: DeepPartial<CommunityCopy> = {
       cards: [
         {
           role: '来自工作室',
-          bio: '来自 Open Design 创始团队。希望 Discord 一直是个待着舒服的地方。任何时候、任何问题，尽管打招呼。',
+          bio: '来自 OpenDesign 创始团队。希望 Discord 一直是个待着舒服的地方。任何时候、任何问题，尽管打招呼。',
         },
         {
           role: '这间屋子的守护者',
-          bio: '一位在 Discord 和社区照料上经验老到的人。让屋子温暖、门常开、对话流动。对 Open Design 充满热情。',
+          bio: '一位在 Discord 和社区照料上经验老到的人。让屋子温暖、门常开、对话流动。对 OpenDesign 充满热情。',
         },
       ],
       channelNotes: ['已交付的作品', '构建者', '早期反馈', '解开卡点'],

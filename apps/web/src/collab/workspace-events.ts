@@ -3,7 +3,11 @@ import type {
   WorkspaceInvalidationEventName,
   WorkspaceInvalidationSsePayload,
 } from '@open-design/contracts';
-import { useEventStream, type UseEventStreamResult } from '../hooks/useEventStream';
+import {
+  useEventStream,
+  type EventStreamActiveReason,
+  type UseEventStreamResult,
+} from '../hooks/useEventStream';
 import { workspaceResourceUrl } from './workspace-identity';
 
 // Collab realtime hop-2 — the workspace-scoped invalidation SSE
@@ -34,7 +38,7 @@ export interface UseWorkspaceInvalidationOptions {
   /** Exact selected/project-persisted identity encoded into EventSource URL. */
   workspaceContext: WorkspaceCollabContext | null;
   /** Re-fetch the subscribed resource's snapshot on (re)connect + tab-visible. */
-  onActive?: () => void;
+  onActive?: (reason: EventStreamActiveReason) => void;
   /** When false the hook stays poll-only. Defaults to true. */
   enabled?: boolean;
 }

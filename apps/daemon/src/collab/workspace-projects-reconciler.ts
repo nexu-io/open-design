@@ -52,6 +52,8 @@ export interface LocalTeamProjectBinding {
   resourceState?: string | null;
   createdByWorkspaceMemberId: string | null;
   resourceHubResourceId: string | null;
+  /** A stamped first-open row is not content authority, even for its remote owner. */
+  materializationPending?: boolean;
 }
 
 /** What the remote catalog says about a shared project — the subset
@@ -188,7 +190,14 @@ export function planWorkspaceProjectReconciliation(input: {
   for (const remote of remoteProjects) {
     const local = localBindings.get(remote.projectId) ?? null;
     const isOwner = remote.ownerMemberId === workspaceMemberId;
-    const wantCreatedBy = isOwner ? workspaceMemberId : null;
+    // Catalog reconciliation may race the background first pull. The catalog
+    // proves remote ownership, but it does not prove that this daemon has
+    // committed the owner's content. Preserve creator-null while the durable
+    // placeholder stamp exists; only the full mirror materializer may clear
+    // that stamp and restore the real owner in its content transaction.
+    const wantCreatedBy = isOwner && local?.materializationPending !== true
+      ? workspaceMemberId
+      : null;
     const alreadyCorrect =
       local != null &&
       local.workspaceId === workspaceId &&
@@ -539,12 +548,12 @@ export async function reconcileWorkspaceProjectMetadataWithRemote(
 export function handleHubTeamProjectsChanged(
   emitTeamProjectsChangedDeduped: () => void,
   reconcileWorkspaceProjects: () => Promise<unknown>,
-): void {
+): Promise<void> {
   // The web treats this signal as permission to re-read the currently open
   // project's scope. Emit only after the authoritative catalog diff has been
   // persisted; an eager signal can race the revoke write, re-confirm the stale
   // Team binding, and then leave the open page with no durable follow-up.
-  void reconcileWorkspaceProjects()
+  return reconcileWorkspaceProjects()
     .then(() => emitTeamProjectsChangedDeduped())
     .catch(() => undefined);
 }
@@ -555,9 +564,9 @@ export function handleHubTeamProjectsChanged(
 export function handleHubProjectMetadataChanged(
   emitProjectMetadataChanged: () => void,
   reconcileProjectMetadata: () => Promise<boolean>,
-): void {
+): Promise<void> {
   emitProjectMetadataChanged();
-  void reconcileProjectMetadata()
+  return reconcileProjectMetadata()
     .then((changed) => {
       if (changed) emitProjectMetadataChanged();
     })

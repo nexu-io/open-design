@@ -15,7 +15,7 @@
 import path from 'node:path';
 import { writeFile, readFile, readdir, stat } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
-import { assertExternalAssetUrl, assertAndFetchExternalAsset } from './connectionTest.js';
+import { assertAndFetchExternalAsset } from './connectionTest.js';
 import { resolveProviderConfig } from './media/config.js';
 import { IMAGE_MODELS } from './media/models.js';
 import { ensureProject } from './projects.js';
@@ -447,8 +447,15 @@ export interface BYOKToolContext {
   videoPollIntervalMs?: number;
   /** Optional per-request init copied from the live chat turn. Used to
    *  forward the current proxy dispatcher AND the client-cancellation
-   *  signal into every upstream/download fetch the BYOK tool executor
-   *  performs, so a disconnected client stops the tool loop's paid work. */
+   *  signal into every upstream fetch the BYOK tool executor performs,
+   *  so a disconnected client stops the tool loop's paid work.
+   *
+   *  Exception — asset downloads: when a provider result URL is fetched
+   *  through `assertAndFetchExternalAsset` (connectionTest.ts), that
+   *  helper intentionally OVERRIDES `init.dispatcher` with the shared
+   *  asset-validating dispatcher whose connect-time DNS lookup rejects
+   *  non-public addresses (issue #5478). Asset downloads therefore never
+   *  ride the turn proxy dispatcher; submit/poll hops keep it. */
   requestInit?: Pick<RequestInit, 'dispatcher' | 'signal'>;
 }
 
@@ -693,12 +700,11 @@ export async function executeGenerateImage(
     };
   }
 
-  const imageUrlCheck = await assertExternalAssetUrl(imageUrl);
-  if (!imageUrlCheck.ok) return { ok: false, error: imageUrlCheck.error };
-
   let bytes: Buffer;
   try {
-    const imgResp = await fetch(imageUrl, withToolRequestInit(ctx, { redirect: 'error' }));
+    // Use assertAndFetchExternalAsset (validate + pinned-DNS fetch) so a
+    // malicious gateway can't DNS-rebind into loopback/metadata space.
+    const imgResp = await assertAndFetchExternalAsset(imageUrl, withToolRequestInit(ctx, {}));
     if (!imgResp.ok) {
       return { ok: false, error: `image download ${imgResp.status}` };
     }
@@ -923,15 +929,12 @@ export async function executeGenerateVideo(
   }
 
   // Step 3: download the mp4 bytes and persist into the project folder.
-  // Re-validate the returned URL through validateBaseUrlResolved so a
-  // malicious gateway can't point us at 169.254.169.254 (AWS / Azure
-  // metadata service) or RFC1918 hosts via the response payload.
-  const videoUrlCheck = await assertExternalAssetUrl(videoUrl);
-  if (!videoUrlCheck.ok) return { ok: false, error: videoUrlCheck.error };
+  // Use assertAndFetchExternalAsset (validate + pinned-DNS fetch) so a
+  // malicious gateway can't DNS-rebind into loopback / metadata space.
 
   let bytes: Buffer;
   try {
-    const videoResp = await fetch(videoUrl, withToolRequestInit(ctx, { redirect: 'error' }));
+    const videoResp = await assertAndFetchExternalAsset(videoUrl, withToolRequestInit(ctx, {}));
     if (!videoResp.ok) {
       return { ok: false, error: `video download ${videoResp.status}` };
     }
@@ -1314,10 +1317,9 @@ async function resolveAIHubMixReferenceImage(
   if (typeof imageUrl !== 'string' || !imageUrl.trim()) return null;
   const raw = imageUrl.trim();
   if (/^https?:\/\//i.test(raw)) {
-    const check = await assertExternalAssetUrl(raw);
-    if (!check.ok) return null;
     try {
-      const resp = await fetch(raw, withToolRequestInit(ctx, { redirect: 'error' }));
+      // assertAndFetchExternalAsset validates + pins DNS to prevent rebind.
+      const resp = await assertAndFetchExternalAsset(raw, withToolRequestInit(ctx, {}));
       if (!resp.ok) return null;
       const buf = Buffer.from(await resp.arrayBuffer());
       if (!buf.length) return null;

@@ -1,4 +1,4 @@
-import { chmod, cp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { chmod, cp, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { createServer, type Server, type ServerResponse } from 'node:http';
 import { join } from 'node:path';
 
@@ -30,6 +30,7 @@ type TeamProjectRecord = {
 };
 
 type ResourceRecord = {
+  workspaceId: string;
   projectId: string | null;
   resourceId: string;
   kind: string;
@@ -52,9 +53,29 @@ type HubEvent = {
   version?: number;
 };
 
+type WorkspaceDirectoryEvent = {
+  type: 'workspace-directory-changed';
+  workspaceId: string;
+  change:
+    | 'created'
+    | 'updated'
+    | 'deleted'
+    | 'membership-added'
+    | 'membership-updated'
+    | 'membership-removed';
+  at: string;
+};
+
 type CommandLog = {
   args: string[];
   memberId: string;
+  workspaceId: string;
+};
+
+type RequestLog = {
+  method: string;
+  path: string;
+  memberId: string | null;
   workspaceId: string;
 };
 
@@ -62,6 +83,7 @@ type Subscriber = {
   response: ServerResponse;
   workspaceId: string;
   memberId: string;
+  heartbeat: ReturnType<typeof setInterval> | null;
 };
 
 export type FakeCollabHub = {
@@ -69,6 +91,7 @@ export type FakeCollabHub = {
   workspaceId: string;
   commandLog: CommandLog[];
   eventLog: HubEvent[];
+  requestLog: RequestLog[];
   writeVelaBin: (path: string) => Promise<string>;
   waitForCommand: (
     predicate: (entry: CommandLog) => boolean,
@@ -80,8 +103,12 @@ export type FakeCollabHub = {
   ) => Promise<HubEvent>;
   setEventsAvailable: (memberId: string, available: boolean) => void;
   eventSubscriberCount: (memberId: string) => number;
+  emitEvent: (event: HubEvent) => void;
   removeMember: (memberId: string) => void;
   setMemberRole: (memberId: string, role: ClientIdentity['role']) => void;
+  addWorkspace: (memberId: string, workspaceId: string, workspaceName: string) => void;
+  setAccountMembershipTier: (memberId: string, membershipTier: string) => void;
+  setWorkspacePlan: (planId: string, billingState?: string) => void;
   setWorkspaceBalance: (memberId: string, balanceUsd: string) => void;
   close: () => Promise<void>;
 };
@@ -92,6 +119,8 @@ export async function startFakeCollabHub(options: {
   workspaceName: string;
   clients: readonly ClientIdentity[];
   includePersonalWorkspace?: boolean;
+  /** Opt into the producer-health contract used by authority-cache E2E. */
+  strictAuthorityEvents?: boolean;
 }): Promise<FakeCollabHub> {
   const resourcesRoot = join(options.root, 'resources');
   await mkdir(resourcesRoot, { recursive: true });
@@ -107,11 +136,38 @@ export async function startFakeCollabHub(options: {
   const memberRoles = new Map(
     options.clients.map((client) => [client.memberId, client.role]),
   );
+  const addedWorkspaces = new Map<
+    string,
+    Map<string, { workspaceId: string; workspaceName: string; workspaceMemberId: string }>
+  >();
   const workspaceBalances = new Map(
-    options.clients.map((client) => [client.memberId, { balanceUsd: '0.00', revision: 1 }]),
+    options.clients.map((client) => [
+      workspaceMemberKey(options.workspaceId, client.memberId),
+      { balanceUsd: '0.00', revision: 1 },
+    ]),
   );
+  const accountBilling = new Map(
+    options.clients.map((client) => [client.memberId, {
+      membershipTier: 'team_plus',
+      balanceUsd: '0.00',
+      revision: 1,
+    }]),
+  );
+  const workspaceBilling = new Map([[options.workspaceId, {
+    billingState: 'active',
+    planId: 'team_plus' as string | null,
+    revision: 1,
+  }]]);
   const commandLog: CommandLog[] = [];
   const eventLog: HubEvent[] = [];
+  const requestLog: RequestLog[] = [];
+
+  const closeSubscriber = (subscriber: Subscriber): void => {
+    if (subscriber.heartbeat) clearInterval(subscriber.heartbeat);
+    subscriber.heartbeat = null;
+    subscribers.delete(subscriber);
+    subscriber.response.end();
+  };
 
   const server: Server = createServer(async (request, response) => {
     try {
@@ -125,37 +181,67 @@ export async function startFakeCollabHub(options: {
         : null;
       const workspaceId =
         headerValue(request.headers['x-vela-workspace-id']) || options.workspaceId;
+      requestLog.push({
+        method: request.method ?? 'GET',
+        path: url.pathname,
+        memberId: identity?.memberId ?? null,
+        workspaceId,
+      });
 
-      if (url.pathname === '/api/v1/workspaces/current' && request.method === 'GET') {
-        if (!identity) return json(response, 401, { error: 'unauthorized' });
-        if (
-          options.includePersonalWorkspace
-          && workspaceId === personalWorkspaceId(identity.memberId)
-        ) {
-          return json(response, 200, personalWorkspaceContext(identity));
-        }
-        if (removedMembers.has(identity.memberId)) {
-          if (workspaceId === personalWorkspaceId(identity.memberId)) {
-            return json(response, 200, personalWorkspaceContext(identity));
-          }
-          return json(response, 403, { error: 'workspace_membership_removed' });
-        }
-        return json(response, 200, workspaceContext(options, identity));
+      if (url.pathname === '/__e2e/stats' && request.method === 'GET') {
+        return json(response, 200, {
+          commands: commandLog,
+          events: eventLog,
+          requests: requestLog,
+          subscribers: [...subscribers].map((subscriber) => ({
+            memberId: subscriber.memberId,
+            workspaceId: subscriber.workspaceId,
+          })),
+        });
       }
+      if (url.pathname === '/__e2e/event' && request.method === 'POST') {
+        const body = await readJsonBody(request) as HubEvent;
+        emit(body);
+        return json(response, 200, { ok: true });
+      }
+      if (url.pathname === '/__e2e/events-available' && request.method === 'POST') {
+        const body = await readJsonBody(request) as {
+          available?: unknown;
+          memberId?: unknown;
+        };
+        const memberId = typeof body.memberId === 'string' ? body.memberId.trim() : '';
+        if (!memberId || typeof body.available !== 'boolean') {
+          return json(response, 400, { error: 'invalid_events_available_input' });
+        }
+        if (body.available) {
+          blockedEventMembers.delete(memberId);
+        } else {
+          blockedEventMembers.add(memberId);
+          for (const subscriber of [...subscribers]) {
+            if (subscriber.memberId === memberId) closeSubscriber(subscriber);
+          }
+        }
+        return json(response, 200, { ok: true });
+      }
+
       if (url.pathname === '/api/v1/workspaces' && request.method === 'GET') {
         if (!identity) return json(response, 401, { error: 'unauthorized' });
         return json(response, 200, {
           // This is a membership directory for the authenticated app user,
           // not a workspace roster. Two clients in the same workspace each
           // receive their own one membership row.
-          items: removedMembers.has(identity.memberId)
-            ? [personalWorkspaceDirectoryItem(identity)]
-            : options.includePersonalWorkspace
-              ? [
-                  personalWorkspaceDirectoryItem(identity),
-                  workspaceDirectoryItem(options, identity),
-                ]
-              : [workspaceDirectoryItem(options, identity)],
+          items: [
+            ...(removedMembers.has(identity.memberId)
+              ? [personalWorkspaceDirectoryItem(identity)]
+              : options.includePersonalWorkspace
+                ? [
+                    personalWorkspaceDirectoryItem(identity),
+                    workspaceDirectoryItem(options, identity),
+                  ]
+                : [workspaceDirectoryItem(options, identity)]),
+            ...[...(addedWorkspaces.get(identity.memberId)?.values() ?? [])]
+              .map(addedWorkspaceDirectoryItem),
+          ],
         });
       }
       if (url.pathname === '/api/v1/collab/events' && request.method === 'GET') {
@@ -168,15 +254,53 @@ export async function startFakeCollabHub(options: {
           connection: 'keep-alive',
           'content-type': 'text/event-stream; charset=utf-8',
         });
-        const subscriber = { response, workspaceId, memberId: identity.memberId };
+        const subscriber: Subscriber = {
+          response,
+          workspaceId,
+          memberId: identity.memberId,
+          heartbeat: null,
+        };
         subscribers.add(subscriber);
+        const listenerStatus = {
+          listenerEpoch: `fake-hub-${identity.memberId}`,
+          listenerHealth: 'healthy',
+          sourceGap: false,
+        } as const;
         response.write(
           `event: ready\ndata: ${JSON.stringify({
             workspaceId,
-            capabilities: ['authoritative-project-presence-v1'],
+            capabilities: options.strictAuthorityEvents
+              ? [
+                  'authoritative-project-presence-v1',
+                  'workspace-member-events-v1',
+                  'workspace-event-listener-status-v1',
+                  'billing-revision-clocks-v1',
+                  'workspace-directory-events-v1',
+                ]
+              : [
+                  'authoritative-project-presence-v1',
+                  'workspace-directory-events-v1',
+                ],
+            ...(options.strictAuthorityEvents ? listenerStatus : {}),
           })}\n\n`,
         );
-        request.on('close', () => subscribers.delete(subscriber));
+        if (options.strictAuthorityEvents) {
+          const writeHeartbeat = () => {
+            if (!subscribers.has(subscriber)) return;
+            response.write(
+              `event: heartbeat\ndata: ${JSON.stringify(listenerStatus)}\n\n`,
+            );
+          };
+          // `ready` is deliberately not sufficient for authority health. The
+          // immediate post-ready heartbeat proves the producer listener has
+          // crossed its membership revalidation boundary.
+          writeHeartbeat();
+          subscriber.heartbeat = setInterval(writeHeartbeat, 5_000);
+          subscriber.heartbeat.unref?.();
+        }
+        request.on('close', () => {
+          if (subscribers.has(subscriber)) closeSubscriber(subscriber);
+        });
         return;
       }
       if (url.pathname === '/__e2e/command' && request.method === 'POST') {
@@ -184,13 +308,15 @@ export async function startFakeCollabHub(options: {
         if (removedMembers.has(identity.memberId)) {
           return json(response, 403, { error: 'workspace_membership_removed' });
         }
-        const body = await readJsonBody(request) as { args?: unknown };
+        const body = await readJsonBody(request) as { args?: unknown; stdin?: unknown };
         const args = Array.isArray(body.args)
           ? body.args.filter((value): value is string => typeof value === 'string')
           : [];
+        const stdin = typeof body.stdin === 'string' ? body.stdin : '';
         commandLog.push({ args, memberId: identity.memberId, workspaceId });
         const stdout = await handleCommand({
           args,
+          stdin,
           identity,
           workspaceId,
           options,
@@ -199,6 +325,8 @@ export async function startFakeCollabHub(options: {
           resourcesRoot,
           comments,
           presence,
+          accountBilling,
+          workspaceBilling,
           workspaceBalances,
           memberRoles,
           removedMembers,
@@ -225,6 +353,14 @@ export async function startFakeCollabHub(options: {
     }
   }
 
+  function emitDirectory(memberId: string, event: WorkspaceDirectoryEvent): void {
+    const frame =
+      `event: workspace-directory-changed\ndata: ${JSON.stringify(event)}\n\n`;
+    for (const subscriber of subscribers) {
+      if (subscriber.memberId === memberId) subscriber.response.write(frame);
+    }
+  }
+
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
   if (address == null || typeof address === 'string') {
@@ -237,6 +373,7 @@ export async function startFakeCollabHub(options: {
     workspaceId: options.workspaceId,
     commandLog,
     eventLog,
+    requestLog,
     writeVelaBin: async (path) => {
       await writeFile(path, fakeVelaScript(), 'utf8');
       await chmod(path, 0o755);
@@ -254,12 +391,12 @@ export async function startFakeCollabHub(options: {
       blockedEventMembers.add(memberId);
       for (const subscriber of [...subscribers]) {
         if (subscriber.memberId !== memberId) continue;
-        subscribers.delete(subscriber);
-        subscriber.response.end();
+        closeSubscriber(subscriber);
       }
     },
     eventSubscriberCount: (memberId) =>
       [...subscribers].filter((subscriber) => subscriber.memberId === memberId).length,
+    emitEvent: emit,
     removeMember: (memberId) => {
       removedMembers.add(memberId);
       for (const roster of presence.values()) {
@@ -276,10 +413,59 @@ export async function startFakeCollabHub(options: {
       memberRoles.set(memberId, role);
       emit({ type: 'workspace-context-changed', workspaceId: options.workspaceId });
     },
-    setWorkspaceBalance: (memberId, balanceUsd) => {
-      const previous = workspaceBalances.get(memberId) ?? { balanceUsd: '0.00', revision: 0 };
+    addWorkspace: (memberId, workspaceId, workspaceName) => {
+      if (!identitiesByMemberId(options.clients).has(memberId)) {
+        throw new Error(`unknown fake collaboration member: ${memberId}`);
+      }
+      const memberships = addedWorkspaces.get(memberId) ?? new Map();
+      memberships.set(workspaceId, {
+        workspaceId,
+        workspaceName,
+        workspaceMemberId: `member-${memberId}-${workspaceId}`,
+      });
+      addedWorkspaces.set(memberId, memberships);
+      // Account-directory invalidation rides any existing Workspace stream for
+      // this account; the new Workspace itself need not be subscribed yet.
+      emitDirectory(memberId, {
+        type: 'workspace-directory-changed',
+        workspaceId,
+        change: 'created',
+        at: new Date().toISOString(),
+      });
+    },
+    setAccountMembershipTier: (memberId, membershipTier) => {
+      const previous = accountBilling.get(memberId) ?? {
+        membershipTier: 'team_plus',
+        balanceUsd: '0.00',
+        revision: 0,
+      };
       const revision = previous.revision + 1;
-      workspaceBalances.set(memberId, { balanceUsd, revision });
+      accountBilling.set(memberId, { ...previous, membershipTier, revision });
+      emit({
+        type: 'billing-changed',
+        workspaceId: options.workspaceId,
+        revision: `account-${memberId}-${revision}`,
+      });
+    },
+    setWorkspacePlan: (planId, billingState = 'active') => {
+      const previous = workspaceBilling.get(options.workspaceId) ?? {
+        billingState: 'free',
+        planId: null,
+        revision: 0,
+      };
+      const revision = previous.revision + 1;
+      workspaceBilling.set(options.workspaceId, { billingState, planId, revision });
+      emit({
+        type: 'billing-subscription-changed',
+        workspaceId: options.workspaceId,
+        revision: `billing-${revision}`,
+      });
+    },
+    setWorkspaceBalance: (memberId, balanceUsd) => {
+      const key = workspaceMemberKey(options.workspaceId, memberId);
+      const previous = workspaceBalances.get(key) ?? { balanceUsd: '0.00', revision: 0 };
+      const revision = previous.revision + 1;
+      workspaceBalances.set(key, { balanceUsd, revision });
       emit({
         type: 'wallet-balance-changed',
         workspaceId: options.workspaceId,
@@ -288,7 +474,7 @@ export async function startFakeCollabHub(options: {
       });
     },
     close: async () => {
-      for (const subscriber of subscribers) subscriber.response.end();
+      for (const subscriber of [...subscribers]) closeSubscriber(subscriber);
       await new Promise<void>((resolve) => server.close(() => resolve()));
       await rm(resourcesRoot, { force: true, recursive: true });
     },
@@ -297,6 +483,7 @@ export async function startFakeCollabHub(options: {
 
 async function handleCommand(input: {
   args: string[];
+  stdin: string;
   identity: ClientIdentity;
   workspaceId: string;
   options: { workspaceId: string; workspaceName: string; clients: readonly ClientIdentity[] };
@@ -305,6 +492,14 @@ async function handleCommand(input: {
   resourcesRoot: string;
   comments: Map<string, Array<Record<string, unknown>>>;
   presence: Map<string, Map<string, Record<string, unknown>>>;
+  accountBilling: Map<
+    string,
+    { membershipTier: string; balanceUsd: string; revision: number }
+  >;
+  workspaceBilling: Map<
+    string,
+    { billingState: string; planId: string | null; revision: number }
+  >;
   workspaceBalances: Map<string, { balanceUsd: string; revision: number }>;
   memberRoles: Map<string, ClientIdentity['role']>;
   removedMembers: Set<string>;
@@ -319,12 +514,26 @@ async function handleCommand(input: {
     return jsonLine({ models: [] });
   }
   if (args[0] === 'billing' && args[1] === 'summary') {
-    return jsonLine({ membershipTier: 'team_plus', balanceUsd: '0.00' });
+    const billing = input.accountBilling.get(input.identity.memberId) ?? {
+      membershipTier: 'team_plus',
+      balanceUsd: '0.00',
+    };
+    return jsonLine({
+      membershipTier: billing.membershipTier,
+      balanceUsd: billing.balanceUsd,
+    });
   }
   if (args[0] === 'billing' && args[1] === 'workspace-snapshot') {
-    const balance = input.workspaceBalances.get(input.identity.memberId) ?? {
+    const billing = input.workspaceBilling.get(input.workspaceId) ?? {
+      billingState: 'free',
+      planId: null,
+      revision: 0,
+    };
+    const balance = input.workspaceBalances.get(
+      workspaceMemberKey(input.workspaceId, input.identity.memberId),
+    ) ?? {
       balanceUsd: '0.00',
-      revision: 1,
+      revision: 0,
     };
     const updatedAt = new Date().toISOString();
     return jsonLine({
@@ -332,10 +541,13 @@ async function handleCommand(input: {
       workspaceId: input.workspaceId,
       workspaceMemberId: input.identity.memberId,
       billingScopeVersion: 2,
-      billing: { billingState: 'active', planId: 'team_plus' },
+      billing: {
+        billingState: billing.billingState,
+        planId: billing.planId,
+      },
       wallet: { balanceUsd: balance.balanceUsd, expiresAt: null, updatedAt },
       revisions: {
-        billing: 'billing-1',
+        billing: `billing-${billing.revision}`,
         wallet: `wallet-${balance.revision}`,
       },
     });
@@ -376,25 +588,34 @@ async function handleTeamProjectsCommand(input: {
     return jsonLine(recordForIdentity(project, input.identity));
   }
   if (command === 'pull' && projectId) {
-    const targetDir = input.args[3];
+    const authorizeOnly = input.args.includes('--authorize-only');
+    const targetDir = authorizeOnly ? null : input.args[3];
     const expectedVersion = Number(flag(input.args, '--expected-version'));
     const project = input.projects.get(projectId);
-    const resource = project ? input.resources.get(project.resourceId) : null;
+    const resource = project
+      ? input.resources.get(workspaceResourceKey(input.workspaceId, project.resourceId))
+      : null;
     const requestedSnapshot = resource?.versions.get(expectedVersion);
     if (
       !project ||
       !resource ||
       !requestedSnapshot ||
-      !targetDir ||
+      (!authorizeOnly && !targetDir) ||
       !Number.isSafeInteger(expectedVersion)
     ) {
       throw new Error('authorized_team_project_pull_rejected');
     }
-    // Vela replaces the caller-created empty stage inode before returning its
-    // short-lived authorization receipt.
-    await rm(targetDir, { force: true, recursive: true });
-    await cp(requestedSnapshot, targetDir, { recursive: true });
+    if (targetDir) {
+      // Vela replaces the caller-created empty stage inode before returning its
+      // short-lived authorization receipt.
+      await rm(targetDir, { force: true, recursive: true });
+      await cp(requestedSnapshot, targetDir, { recursive: true });
+    }
     const authorizedAt = Date.now();
+    const manifestEntryCount = authorizeOnly
+      ? (await readdir(requestedSnapshot, { recursive: true, withFileTypes: true }))
+          .filter((entry) => entry.isFile()).length
+      : undefined;
     return jsonLine({
       schemaVersion: 1,
       workspaceId: input.workspaceId,
@@ -410,6 +631,7 @@ async function handleTeamProjectsCommand(input: {
       lifecycleState: 'active',
       authorizedAt: new Date(authorizedAt).toISOString(),
       expiresAt: new Date(authorizedAt + 2_000).toISOString(),
+      ...(manifestEntryCount === undefined ? {} : { manifestEntryCount }),
     });
   }
   if (command === 'upsert' && projectId) {
@@ -455,6 +677,7 @@ async function handleTeamProjectsCommand(input: {
 
 async function handleResourceCommand(input: {
   args: string[];
+  stdin: string;
   identity: ClientIdentity;
   workspaceId: string;
   projects: Map<string, TeamProjectRecord>;
@@ -473,17 +696,23 @@ async function handleResourceCommand(input: {
       typeof metadata?.projectId === 'string'
         ? metadata.projectId
         : [...input.projects.values()]
-            .find((project) => project.resourceId === resourceId)?.projectId ?? null;
+            .find(
+              (project) =>
+                project.workspaceId === input.workspaceId
+                && project.resourceId === resourceId,
+            )?.projectId ?? null;
     if (kind === 'project' && !projectId) throw new Error('resource push missing project id');
-    const previous = input.resources.get(resourceId);
+    const resourceKey = workspaceResourceKey(input.workspaceId, resourceId);
+    const previous = input.resources.get(resourceKey);
     const version = (previous?.version ?? 0) + 1;
-    const resourceRoot = join(input.resourcesRoot, encodeURIComponent(resourceId));
+    const resourceRoot = join(input.resourcesRoot, encodeURIComponent(resourceKey));
     const snapshotDir = join(resourceRoot, `v${version}`);
     await rm(snapshotDir, { force: true, recursive: true });
     await cp(sourceDir, snapshotDir, { recursive: true });
     const versions = previous?.versions ?? new Map<number, string>();
     versions.set(version, snapshotDir);
-    input.resources.set(resourceId, {
+    input.resources.set(resourceKey, {
+      workspaceId: input.workspaceId,
       projectId,
       resourceId,
       kind,
@@ -513,7 +742,9 @@ async function handleResourceCommand(input: {
   }
   if (command === 'head') {
     const resourceId = input.args[2];
-    const resource = resourceId ? input.resources.get(resourceId) : null;
+    const resource = resourceId
+      ? input.resources.get(workspaceResourceKey(input.workspaceId, resourceId))
+      : null;
     return jsonLine(
       resource
         ? { version: resource.version, versionId: `v${resource.version}` }
@@ -523,7 +754,9 @@ async function handleResourceCommand(input: {
   if (command === 'pull') {
     const resourceId = input.args[3];
     const targetDir = input.args[4];
-    const resource = resourceId ? input.resources.get(resourceId) : null;
+    const resource = resourceId
+      ? input.resources.get(workspaceResourceKey(input.workspaceId, resourceId))
+      : null;
     if (!resource || !targetDir) throw new Error('resource_not_found');
     // Deliberately replace the directory inode. This is the production pull
     // shape that used to orphan the already-open member daemon's watcher.
@@ -531,10 +764,72 @@ async function handleResourceCommand(input: {
     await cp(resource.snapshotDir, targetDir, { recursive: true });
     return jsonLine({ version: resource.version, versionId: `v${resource.version}` });
   }
+  if (command === 'pull-batch') {
+    if (flag(input.args, '--requests-file') !== '-') {
+      throw new Error('fake resource pull-batch requires --requests-file -');
+    }
+    const parsed = JSON.parse(input.stdin) as { requests?: unknown };
+    if (!Array.isArray(parsed.requests) || parsed.requests.length === 0) {
+      throw new Error('resource pull batch requires at least one request');
+    }
+    if (parsed.requests.length > 128) {
+      throw new Error('resource pull batch contains more than 128 requests');
+    }
+    const keys = new Set<string>();
+    const requests = parsed.requests.map((raw, index) => {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        throw new Error(`requests[${index}] must be an object`);
+      }
+      const request = raw as Record<string, unknown>;
+      const key = typeof request.key === 'string' ? request.key.trim() : '';
+      const kind = typeof request.kind === 'string' ? request.kind.trim() : '';
+      const resourceId =
+        typeof request.resourceId === 'string' ? request.resourceId.trim() : '';
+      const dir = typeof request.dir === 'string' ? request.dir.trim() : '';
+      const ref = typeof request.ref === 'string' && request.ref.trim()
+        ? request.ref.trim()
+        : 'latest';
+      if (!key || !kind || !resourceId || !dir) {
+        throw new Error(`requests[${index}] is missing a required field`);
+      }
+      if (keys.has(key)) throw new Error(`duplicate resource pull key: ${key}`);
+      keys.add(key);
+      return { key, kind, resourceId, dir, ref };
+    });
+    const results = [];
+    let succeeded = 0;
+    for (const request of requests) {
+      const resource = input.resources.get(
+        workspaceResourceKey(input.workspaceId, request.resourceId),
+      );
+      if (!resource) {
+        results.push({
+          ...request,
+          ok: false,
+          error: 'resource_not_found',
+          errorCode: 'resource_not_found',
+        });
+        continue;
+      }
+      await rm(request.dir, { force: true, recursive: true });
+      await cp(resource.snapshotDir, request.dir, { recursive: true });
+      succeeded++;
+      results.push({
+        ...request,
+        ok: true,
+        version: resource.version,
+        versionId: `v${resource.version}`,
+      });
+    }
+    return jsonLine({ results, succeeded, failed: results.length - succeeded });
+  }
   if (command === 'remove') {
     const resourceId = input.args[2];
-    const resource = resourceId ? input.resources.get(resourceId) : null;
-    if (resourceId) input.resources.delete(resourceId);
+    const resourceKey = resourceId
+      ? workspaceResourceKey(input.workspaceId, resourceId)
+      : null;
+    const resource = resourceKey ? input.resources.get(resourceKey) : null;
+    if (resourceKey) input.resources.delete(resourceKey);
     if (resource && resource.kind !== 'project') {
       input.emit({
         type: 'team-resources-changed',
@@ -552,7 +847,11 @@ async function handleResourceCommand(input: {
   if (command === 'shared') {
     return jsonLine({
       resources: [...input.resources.values()]
-        .filter((resource) => resource.kind !== 'project')
+        .filter(
+          (resource) =>
+            resource.workspaceId === input.workspaceId
+            && resource.kind !== 'project',
+        )
         .map((resource) => ({
           id: resource.resourceId,
           kind: resource.kind,
@@ -689,19 +988,6 @@ function handleCollabCommand(input: {
   throw new Error(`unsupported collab command: ${input.args.join(' ')}`);
 }
 
-function workspaceContext(
-  options: { workspaceId: string; workspaceName: string },
-  identity: ClientIdentity,
-) {
-  return {
-    ...workspaceDirectoryItem(options, identity),
-    billingState: 'active',
-    planId: 'team_plus',
-    providerMode: 'platform_credits',
-    seatSummary: { seatLimit: 5, usedSeats: 2, availableSeats: 3, isSeatFull: false },
-  };
-}
-
 function recordForIdentity(
   project: TeamProjectRecord,
   identity: ClientIdentity,
@@ -730,8 +1016,30 @@ function workspaceDirectoryItem(
   };
 }
 
+function addedWorkspaceDirectoryItem(workspace: {
+  workspaceId: string;
+  workspaceName: string;
+  workspaceMemberId: string;
+}) {
+  return {
+    ...workspace,
+    workspaceType: 'team',
+    role: 'owner',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+  };
+}
+
 function personalWorkspaceId(memberId: string): string {
   return `personal-${memberId}`;
+}
+
+function workspaceMemberKey(workspaceId: string, memberId: string): string {
+  return `${workspaceId}\0${memberId}`;
+}
+
+function workspaceResourceKey(workspaceId: string, resourceId: string): string {
+  return `${workspaceId}\0${resourceId}`;
 }
 
 function personalWorkspaceDirectoryItem(identity: ClientIdentity) {
@@ -746,26 +1054,22 @@ function personalWorkspaceDirectoryItem(identity: ClientIdentity) {
   };
 }
 
-function personalWorkspaceContext(identity: ClientIdentity) {
-  return {
-    ...personalWorkspaceDirectoryItem(identity),
-    billingState: 'free',
-    planId: null,
-    providerMode: 'platform_credits',
-    seatSummary: { seatLimit: 1, usedSeats: 1, availableSeats: 0, isSeatFull: true },
-  };
-}
-
 function fakeVelaScript(): string {
   return `#!/usr/bin/env node
+const args = process.argv.slice(2);
+let stdin = '';
+const requestsFileIndex = args.indexOf('--requests-file');
+if (requestsFileIndex >= 0 && args[requestsFileIndex + 1] === '-') {
+  for await (const chunk of process.stdin) stdin += chunk;
+}
 const response = await fetch(new URL('/__e2e/command', process.env.VELA_API_URL), {
   method: 'POST',
   headers: {
     authorization: 'Bearer ' + process.env.VELA_CONTROL_KEY,
     'content-type': 'application/json',
-    'x-vela-workspace-id': process.env.OPEN_DESIGN_WORKSPACE_ID || '',
+    'x-vela-workspace-id': process.env.VELA_WORKSPACE_ID || process.env.OPEN_DESIGN_WORKSPACE_ID || '',
   },
-  body: JSON.stringify({ args: process.argv.slice(2) }),
+  body: JSON.stringify({ args, stdin }),
 });
 const payload = await response.json();
 if (!response.ok) {

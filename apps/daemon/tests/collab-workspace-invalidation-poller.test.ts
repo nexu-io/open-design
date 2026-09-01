@@ -57,12 +57,14 @@ function harness(initial: {
   projects?: TeamProject[] | null;
   members?: CollabCloudMemberDirectoryEntry[] | null;
   pollIntervalMs?: number;
+  realtimePollFloorMs?: number;
   recoveryFloorIntervalMs?: number;
   now?: () => number;
   onTeamProjectsObserved?: (input: {
     workspaceId: string;
     projects: readonly TeamProject[];
   }) => void | Promise<void>;
+  onPollSuppressed?: () => void;
 }): Harness {
   const h: Harness = {
     emitted: [],
@@ -100,8 +102,14 @@ function harness(initial: {
       h.emittedWorkspaceIds.push(context?.workspaceId ?? null);
     },
     onError: (error) => h.errors.push(error),
+    ...(initial.onPollSuppressed
+      ? { onPollSuppressed: initial.onPollSuppressed }
+      : {}),
     ...(initial.pollIntervalMs != null
       ? { pollIntervalMs: initial.pollIntervalMs }
+      : {}),
+    ...(initial.realtimePollFloorMs != null
+      ? { realtimePollFloorMs: initial.realtimePollFloorMs }
       : {}),
     ...(initial.recoveryFloorIntervalMs != null
       ? { recoveryFloorIntervalMs: initial.recoveryFloorIntervalMs }
@@ -454,6 +462,37 @@ describe('workspace invalidation poller', () => {
     } finally {
       h.poller.stop();
       releaseObservation();
+      vi.useRealTimers();
+    }
+  });
+
+  it('uses the realtime poll floor only while healthy and resumes immediately on disconnect', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const onPollSuppressed = vi.fn();
+    const h = harness({
+      pollIntervalMs: 10,
+      realtimePollFloorMs: 100,
+      onPollSuppressed,
+    });
+
+    try {
+      h.poller.start();
+      await vi.advanceTimersByTimeAsync(10);
+      expect(h.contextCalls).toBe(1);
+
+      h.poller.setRealtimeHealthy(true);
+      await vi.advanceTimersByTimeAsync(99);
+      expect(h.contextCalls).toBe(1);
+      expect(onPollSuppressed).toHaveBeenCalledTimes(9);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(h.contextCalls).toBe(2);
+
+      h.poller.setRealtimeHealthy(false);
+      await vi.runAllTicks();
+      expect(h.contextCalls).toBe(3);
+    } finally {
+      h.poller.stop();
       vi.useRealTimers();
     }
   });

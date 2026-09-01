@@ -280,6 +280,12 @@ if (process.argv.includes('--help')) {
   console.log('Usage: claude -p [--include-partial-messages] [--add-dir DIR]');
   process.exit(0);
 }
+// Auxiliary daemon invocations (memory extraction / title generation) must
+// not consume the chat-attempt counter.
+if (!process.argv.includes('--session-id') && !process.argv.includes('--resume')) {
+  process.stdout.write('{"entries":[]}');
+  process.exit(0);
+}
 let attempts = 0;
 try { attempts = Number(fs.readFileSync(counterPath, 'utf8')) || 0; } catch {}
 fs.writeFileSync(counterPath, String(attempts + 1));

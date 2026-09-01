@@ -166,6 +166,22 @@ describe('useEventStream', () => {
     expect(activeCount).toBe(3);
   });
 
+  it('distinguishes connection catch-up from ambient focus revalidation', () => {
+    const reasons: string[] = [];
+    renderHook(() =>
+      useEventStream('/api/workspace/events', {
+        events: {},
+        onActive: (reason) => reasons.push(reason),
+        EventSourceCtor: Ctor,
+      }),
+    );
+
+    act(() => MockEventSource.instances[0]!.open());
+    act(() => window.dispatchEvent(new Event('focus')));
+
+    expect(reasons).toEqual(['connected', 'ambient']);
+  });
+
   it('stays poll-only (never connects) when disabled', () => {
     const { result } = renderHook(() =>
       useEventStream('/api/workspace/events', {

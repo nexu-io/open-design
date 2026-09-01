@@ -1,3 +1,5 @@
+import { findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
+
 export type SpeakerNotesPresenterLabels = {
   title: string;
   edit: string;
@@ -92,8 +94,9 @@ export function upsertSpeakerNotesInHtml(source: string, notes: readonly string[
     return `${source.slice(0, block.start)}${block.open}\n${json}\n${block.close}${source.slice(block.end)}`;
   }
   const notesBlock = `\n<script type="application/json" id="speaker-notes">\n${json}\n</script>\n`;
-  if (/<\/body\s*>/i.test(source)) {
-    return source.replace(/<\/body\s*>/i, `${notesBlock}</body>`);
+  const bodyClose = findRealTagOffset(source, HTML_TAG_PATTERNS.bodyClose);
+  if (bodyClose >= 0) {
+    return `${source.slice(0, bodyClose)}${notesBlock}${source.slice(bodyClose)}`;
   }
   return `${source.trimEnd()}${notesBlock}`;
 }
@@ -123,8 +126,9 @@ function buildPresenterFrameHtml(previewHtml: string): string {
   pointer-events: none !important;
 }
 </style>`;
-  if (/<\/head\s*>/i.test(previewHtml)) {
-    return previewHtml.replace(/<\/head\s*>/i, `${chromeHidingStyle}</head>`);
+  const headClose = findRealTagOffset(previewHtml, HTML_TAG_PATTERNS.headClose);
+  if (headClose >= 0) {
+    return `${previewHtml.slice(0, headClose)}${chromeHidingStyle}${previewHtml.slice(headClose)}`;
   }
   return `${chromeHidingStyle}${previewHtml}`;
 }

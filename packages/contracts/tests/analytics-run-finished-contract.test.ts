@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import type {
   AnalyticsEventPayload,
   RunFinishedProps,
@@ -41,6 +41,15 @@ function makeBaseRunFinishedProps(): RunFinishedProps {
 }
 
 describe('analytics run_finished contract', () => {
+  it('accepts v3 evidence without retiring v2 or requiring new fields on legacy events', () => {
+    expectTypeOf<RunFinishedProps['classifier_version']>()
+      .toEqualTypeOf<'run-failure-v2' | 'run-failure-v3' | undefined>();
+    expectTypeOf<RunFinishedProps['admission_phase']>()
+      .toEqualTypeOf<'before_execution' | 'during_execution' | 'unknown' | undefined>();
+    expectTypeOf<RunFinishedProps['admission_status']>()
+      .toEqualTypeOf<'admitted' | 'rejected_policy' | 'unknown' | undefined>();
+  });
+
   it('uses schema v4 for the task-level, aggregated run payload', () => {
     expect(EVENT_SCHEMA_VERSION).toBe(4);
   });
@@ -107,6 +116,13 @@ describe('analytics run_finished contract', () => {
         error_code: 'RATE_LIMITED',
         failure_category: 'rate_limit',
         failure_stage: 'session_init',
+        failure_mechanism: 'policy_rejection',
+        failure_domain: 'policy_admission',
+        evidence_level: 'structured_code',
+        repair_owner: 'policy_owner',
+        admission_status: 'rejected_policy',
+        terminal_integrity: 'reconciled',
+        classifier_version: 'run-failure-v2',
         retryable: true,
         user_action: 'retry',
         terminal_reconciled: true,
@@ -146,6 +162,16 @@ describe('analytics run_finished contract', () => {
         tool_call_seen: true,
         tool_result_sent: false,
         approval_requested: true,
+        tool_execution_lifecycle_seen: true,
+        tool_execution_lifecycle_count_bucket: '2_5',
+        tool_execution_trigger: 'deadline',
+        tool_execution_terminal: 'interrupted',
+        tool_terminal_source: 'processor_cleanup',
+        tool_kill_outcome: 'sent',
+        tool_child_close_seen: true,
+        tool_stdout_close_seen: true,
+        tool_stderr_close_seen: false,
+        tool_execution_evidence_incomplete: true,
         stdin_backpressure: false,
         last_progress_age_ms: 610_000,
         amr_opencode_error_phase: 'timeout',
@@ -241,7 +267,9 @@ describe('analytics run_finished contract', () => {
 
     expect(payload.props.failure_category).toBe('rate_limit');
     expect(payload.props.conversation_turn_index).toBe(2);
-    expect(payload.props.failure_stage).toBe('session_init');
+      expect(payload.props.failure_stage).toBe('session_init');
+      expect(payload.props.failure_domain).toBe('policy_admission');
+      expect(payload.props.classifier_version).toBe('run-failure-v2');
     expect(payload.props.terminal_reconciled).toBe(true);
     expect(payload.props.terminal_recovery_reason).toBe('daemon_restart');
     expect(payload.props.user_action).toBe('retry');
@@ -254,6 +282,9 @@ describe('analytics run_finished contract', () => {
     expect(payload.props.first_token_seen).toBe(true);
     expect(payload.props.tool_result_sent).toBe(false);
     expect(payload.props.approval_requested).toBe(true);
+    expect(payload.props.tool_execution_trigger).toBe('deadline');
+    expect(payload.props.tool_terminal_source).toBe('processor_cleanup');
+    expect(payload.props.tool_execution_evidence_incomplete).toBe(true);
     expect(payload.props.stdin_backpressure).toBe(false);
     expect(payload.props.last_progress_age_ms).toBe(610_000);
     expect(payload.props.amr_opencode_error_phase).toBe('timeout');

@@ -471,6 +471,7 @@ function changeInputValue(input: HTMLInputElement, value: string) {
 function renderDesignFilesPanel(overrides: Partial<React.ComponentProps<typeof DesignFilesPanel>> = {}) {
   const props: React.ComponentProps<typeof DesignFilesPanel> = {
     projectId: 'project-1',
+    projectKind: 'prototype',
     files: [],
     liveArtifacts: [],
     onRefreshFiles: vi.fn(),
@@ -1319,9 +1320,11 @@ describe('FileWorkspace upload input', () => {
     expect(markup).toContain('class="ws-tabs-shell"');
     expect(markup).toContain('data-testid="workspace-focus-toggle"');
     // The expand control sits before the tabs bar (left side) so its
-    // direction matches where the chat pane re-emerges from.
+    // direction matches where the chat pane re-emerges from. In focus mode
+    // the project tab strip's dock host sits between them (the strip portals
+    // into it — see workspaceTabsDock.ts), so allow it in the order check.
     expect(markup).toMatch(
-      /<div class="ws-tabs-shell">\s*<button[^>]*data-testid="workspace-focus-toggle"[\s\S]*?<\/button>\s*<div class="ws-tabs-bar"/,
+      /<div class="ws-tabs-shell">\s*<button[^>]*data-testid="workspace-focus-toggle"[\s\S]*?<\/button>\s*(?:<div class="ws-tabs-project-dock"[^>]*><\/div>\s*)?<div class="ws-tabs-bar"/,
     );
   });
 
@@ -1366,30 +1369,36 @@ describe('FileWorkspace upload input', () => {
 });
 
 describe('FileWorkspace launcher tab creation', () => {
-  it('keeps the active HTML preview mounted across repeated Design Files round-trips', async () => {
+  it('keeps the active HTML preview full-sized and prewarms file revisions across Design Files round-trips', async () => {
     const file = workspaceFile('artifact.html');
     mockedFetchProjectFileText.mockResolvedValue('<html><body>artifact</body></html>');
 
     function Harness() {
+      const [mtime, setMtime] = useState(file.mtime);
       const [tabsState, setTabsState] = useState<OpenTabsState>({
         tabs: [file.name],
         active: file.name,
       });
       return (
-        <IframeKeepAliveProvider>
-          <CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}>
-            <FileWorkspace
-              projectId="project-1"
-              projectKind="prototype"
-              files={[file]}
-              liveArtifacts={[]}
-              onRefreshFiles={vi.fn()}
-              isDeck={false}
-              tabsState={tabsState}
-              onTabsStateChange={setTabsState}
-            />
-          </CollabProvider>
-        </IframeKeepAliveProvider>
+        <>
+          <button type="button" data-testid="advance-artifact-revision" onClick={() => setMtime(2_000_000_000)}>
+            advance revision
+          </button>
+          <IframeKeepAliveProvider>
+            <CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}>
+              <FileWorkspace
+                projectId="project-1"
+                projectKind="prototype"
+                files={[{ ...file, mtime }]}
+                liveArtifacts={[]}
+                onRefreshFiles={vi.fn()}
+                isDeck={false}
+                tabsState={tabsState}
+                onTabsStateChange={setTabsState}
+              />
+            </CollabProvider>
+          </IframeKeepAliveProvider>
+        </>
       );
     }
 
@@ -1398,6 +1407,7 @@ describe('FileWorkspace launcher tab creation', () => {
       expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(1);
     });
     const firstFrame = screen.getByTestId('artifact-preview-frame');
+    const initialSrc = firstFrame.getAttribute('src');
     const retainedViewer = screen.getByTestId('retained-file-viewer');
     expect(retainedViewer.style.display).toBe('flex');
 
@@ -1409,18 +1419,32 @@ describe('FileWorkspace launcher tab creation', () => {
       expect(retainedViewer.hasAttribute('hidden')).toBe(false);
       expect(retainedViewer.style.display).toBe('flex');
       expect(retainedViewer.style.position).toBe('absolute');
-      expect(retainedViewer.style.visibility).toBe('hidden');
+      expect(retainedViewer.style.inset).toBe('0px');
+      expect(retainedViewer.style.width).toBe('100%');
+      expect(retainedViewer.style.height).toBe('100%');
+      expect(retainedViewer.style.opacity).toBe('0');
+      expect(retainedViewer.style.visibility).toBe('');
       expect(container.querySelector('.iframe-keep-alive-pool iframe')).toBeNull();
+
+      if (round === 0) {
+        fireEvent.click(screen.getByTestId('advance-artifact-revision'));
+        await waitFor(() => expect(firstFrame.getAttribute('src')).toContain('v=2000000000'));
+      }
+
+      const prewarmedSrc = firstFrame.getAttribute('src');
 
       fireEvent.click(screen.getByRole('tab', { name: /artifact\.html/i }));
       expect(screen.getByTestId('artifact-preview-frame')).toBe(firstFrame);
       expect(screen.getByTestId('retained-file-viewer')).toBe(retainedViewer);
       expect(retainedViewer.style.display).toBe('flex');
+      expect(retainedViewer.style.opacity).toBe('');
       expect(retainedViewer.style.visibility).toBe('');
       expect(retainedViewer.hasAttribute('inert')).toBe(false);
+      expect(firstFrame.getAttribute('src')).toBe(prewarmedSrc);
     }
 
-    expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(1);
+    expect(firstFrame.getAttribute('src')).not.toBe(initialSrc);
+    expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(2);
   });
 
   it('keeps warmed HTML preview frames connected while switching between files', async () => {
@@ -2419,7 +2443,9 @@ describe('FileWorkspace launcher tab creation', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /alpha\.html/i }));
     await waitFor(() => expect(screen.getByTestId('artifact-preview-frame').getAttribute('title')).toBe('alpha.html'));
-    expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(5);
+    // The evicted frame remounts from its exact-version source snapshot. It
+    // must not add a fifth raw read before the file revision changes.
+    expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(4);
     await waitFor(() => {
       expect(screen.getAllByTestId('retained-file-viewer').map((viewer) => viewer.getAttribute('data-file-name')))
         .toEqual(['alpha.html', 'gamma.html', 'delta.html']);
@@ -2478,6 +2504,26 @@ describe('FileWorkspace launcher tab creation', () => {
         absolutePath: '/tmp/open-design/project-1',
       });
     });
+  });
+
+  it('shows Design Files when the persisted active file no longer exists', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['missing.png'], active: 'missing.png' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('design-files-empty')).toBeTruthy();
+    expect(screen.queryByText(/Open a file from/i)).toBeNull();
+    expect(renderedTabLabels()).toEqual(['Design Files']);
   });
 
   it('hides terminal creation while keeping browser creation available', () => {
@@ -3108,6 +3154,7 @@ describe('DesignFilesPanel plugin folders', () => {
     const container = renderWorkspace(
       <DesignFilesPanel
         projectId="project-1"
+        projectKind="prototype"
         files={[
           workspaceFile('generated-plugin/open-design.json'),
           workspaceFile('generated-plugin/SKILL.md'),
@@ -4283,6 +4330,55 @@ describe('FileWorkspace add-module menu', () => {
 });
 
 describe('FileWorkspace empty-project generation contract', () => {
+  it('shows the first-materialization syncing surface instead of mounting a cached workspace tab', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('stale.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['terminal:stale'], active: 'terminal:stale' }}
+        onTabsStateChange={vi.fn()}
+        materializationPending
+      />,
+    );
+
+    expect(screen.getByTestId('design-files-syncing')).toBeTruthy();
+    expect(screen.queryByTestId('design-files-empty')).toBeNull();
+  });
+
+  it('keeps an already-materialized viewer and header actions mounted during route revalidation', () => {
+    const file = workspaceFile('artifact.html');
+    const tabsState = { tabs: [file.name], active: file.name };
+    const onTabsStateChange = vi.fn();
+    const renderWorkspace = (materializationPending: boolean) => (
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[file]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={tabsState}
+        onTabsStateChange={onTabsStateChange}
+        materializationPending={materializationPending}
+        fileActionsBefore={<button type="button">Reveal artifact</button>}
+        headerActions={<button type="button">Project action</button>}
+      />
+    );
+    const { rerender } = render(renderWorkspace(false));
+    const retainedViewer = screen.getByTestId('retained-file-viewer');
+
+    rerender(renderWorkspace(true));
+
+    expect(screen.getByTestId('retained-file-viewer')).toBe(retainedViewer);
+    expect(screen.queryByTestId('design-files-syncing')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Reveal artifact' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Project action' })).toBeTruthy();
+  });
+
   function assistantMessage(runStatus: 'running' | 'failed'): ChatMessage {
     return {
       id: `msg-${runStatus}`,

@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  CHAT_TOOL_TOKEN_TTL_BUFFER_MS,
   CHAT_TOOL_ENDPOINTS,
   CHAT_TOOL_OPERATIONS,
+  DEFAULT_TOOL_TOKEN_TTL_MS,
   MEDIA_TASK_WAIT_TOOL_ENDPOINT,
+  resolveChatToolTokenTtlMs,
   ToolTokenRegistry,
 } from '../src/tool-tokens.js';
 
@@ -12,6 +15,41 @@ afterEach(() => {
 });
 
 describe('run-scoped tool tokens', () => {
+  it('keeps chat tokens alive beyond the runtime inactivity window', () => {
+    const thirtyMinutes = 30 * 60 * 1000;
+
+    expect(resolveChatToolTokenTtlMs(0)).toBe(DEFAULT_TOOL_TOKEN_TTL_MS);
+    expect(resolveChatToolTokenTtlMs(thirtyMinutes)).toBe(
+      thirtyMinutes + CHAT_TOOL_TOKEN_TTL_BUFFER_MS,
+    );
+    expect(() => resolveChatToolTokenTtlMs(Number.NaN)).toThrow(/inactivityTimeoutMs/);
+  });
+
+  it('refreshes an active run token until the run terminates', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const registry = new ToolTokenRegistry();
+    const ttlMs = resolveChatToolTokenTtlMs(30 * 60 * 1000);
+    const grant = registry.mint({
+      runId: 'run-active',
+      projectId: 'project-a',
+      ttlMs,
+    });
+
+    for (let elapsedMs = 10 * 60 * 1000; elapsedMs <= 60 * 60 * 1000; elapsedMs += 10 * 60 * 1000) {
+      vi.advanceTimersByTime(10 * 60 * 1000);
+      expect(registry.refreshToken(grant.token, { ttlMs })).not.toBeNull();
+      expect(registry.validate(grant.token)).toMatchObject({ ok: true });
+    }
+
+    expect(Date.now()).toBeGreaterThan(ttlMs);
+    registry.revokeRun(grant.runId, 'child_exit');
+    expect(registry.validate(grant.token)).toMatchObject({
+      ok: false,
+      code: 'TOOL_TOKEN_INVALID',
+    });
+  });
+
   it('mints isolated tokens for concurrent runs under the same project', () => {
     const registry = new ToolTokenRegistry();
     const first = registry.mint({ runId: 'run-1', projectId: 'project-a', nowMs: 1_000 });

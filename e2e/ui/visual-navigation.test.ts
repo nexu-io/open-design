@@ -116,16 +116,19 @@ test('[P2] captures the plugins page surface', async ({ page }) => {
   await captureVisual(page, 'visual-plugins');
 });
 
-// #5517 drops 连接器 from the settings nav. The section still renders, but its
-// only remaining UI entry is the new-project panel's "manage" link, which shows
-// solely once a connector is already configured — so there is no unconditional
-// path a visual capture can drive. Restore these when an entry point returns.
-test.skip('[P2] captures the integrations page surface', async ({ page }) => {
+test('[P2] captures the integrations page surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
-  const dialog = await openSettingsSection(page, 'settings-nav-connectors');
-  await expect(dialog.getByTestId('connector-grid-wrap')).toBeVisible();
+  await page.getByTestId('home-hero-plus-trigger').click();
+  await page.getByTestId('composer-plus-connectors').click();
+  await page.getByRole('menuitem', { name: 'Add connectors' }).click();
+  await expect(page).toHaveURL(/\/integrations$/);
+  await expect(page.getByTestId('integrations-tab-connectors')).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByTestId('connector-grid-wrap')).toBeVisible();
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-integrations');
@@ -142,13 +145,19 @@ test('[P2] captures the integrations use everywhere surface', async ({ page }) =
   await captureVisual(page, 'visual-integrations-use-everywhere');
 });
 
-// Skipped for the same reason as the integrations capture above.
-test.skip('[P2] captures the integrations MCP surface', async ({ page }) => {
+test('[P2] captures the integrations MCP surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
-  const dialog = await openSettingsSection(page, 'settings-nav-connectors');
-  await expect(dialog.getByText(/Composio|Connectors/i).first()).toBeVisible();
+  await page.getByTestId('home-hero-plus-trigger').click();
+  await page.getByTestId('composer-plus-mcp').click();
+  await page.getByRole('menuitem', { name: 'Add MCP server' }).click();
+  await expect(page).toHaveURL(/\/integrations$/);
+  await expect(page.getByTestId('integrations-tab-mcp')).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByRole('heading', { name: 'External MCP servers' })).toBeVisible();
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-integrations-mcp');

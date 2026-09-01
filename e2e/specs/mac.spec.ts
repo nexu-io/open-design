@@ -8,6 +8,18 @@ import { promisify } from 'node:util';
 
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
+import { createFakeAgentRuntimes } from '@/fake-agents';
+import { T } from '@/timeouts';
+import {
+  assertPackagedHomeFirstRunResult,
+  PACKAGED_HOME_FIRST_RUN_OUTPUT,
+  PACKAGED_HOME_FIRST_RUN_PROMPT,
+  packagedHomeFirstRunExpression,
+  packagedHomeFirstRunSnapshotExpression,
+  packagedHomeFirstRunSubmitExpression,
+  type PackagedHomeFirstRunResult,
+  waitForPackagedHomeFirstRunSetup,
+} from '@/vitest/packaged-home-first-run';
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
 import {
   assertPackagedPtySmokeResult,
@@ -55,6 +67,55 @@ const healthExpression = `
     };
   })()
 `;
+const pptxArchiveInspectionSource = `
+  async function inspectPptxArchive(bytes, expectedText) {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let eocd = -1;
+    for (let offset = bytes.length - 22; offset >= Math.max(0, bytes.length - 65557); offset -= 1) {
+      if (view.getUint32(offset, true) === 0x06054b50) { eocd = offset; break; }
+    }
+    if (eocd < 0) throw new Error('PPTX end-of-central-directory record not found');
+    const entries = new Map();
+    const entryCount = view.getUint16(eocd + 10, true);
+    let offset = view.getUint32(eocd + 16, true);
+    const decoder = new TextDecoder();
+    for (let index = 0; index < entryCount; index += 1) {
+      if (view.getUint32(offset, true) !== 0x02014b50) throw new Error('invalid PPTX central-directory entry');
+      const nameLength = view.getUint16(offset + 28, true);
+      const extraLength = view.getUint16(offset + 30, true);
+      const commentLength = view.getUint16(offset + 32, true);
+      const name = decoder.decode(bytes.slice(offset + 46, offset + 46 + nameLength));
+      entries.set(name, {
+        compressedSize: view.getUint32(offset + 20, true),
+        localOffset: view.getUint32(offset + 42, true),
+        method: view.getUint16(offset + 10, true),
+      });
+      offset += 46 + nameLength + extraLength + commentLength;
+    }
+    async function readText(name) {
+      const entry = entries.get(name);
+      if (!entry) throw new Error('missing PPTX entry: ' + name);
+      const nameLength = view.getUint16(entry.localOffset + 26, true);
+      const extraLength = view.getUint16(entry.localOffset + 28, true);
+      const start = entry.localOffset + 30 + nameLength + extraLength;
+      const compressed = bytes.slice(start, start + entry.compressedSize);
+      if (entry.method === 0) return decoder.decode(compressed);
+      if (entry.method !== 8) throw new Error('unsupported PPTX compression method: ' + entry.method);
+      const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      return decoder.decode(await new Response(stream).arrayBuffer());
+    }
+    const slideNames = Array.from(entries.keys())
+      .filter((name) => /^ppt\\/slides\\/slide\\d+\\.xml$/.test(name))
+      .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+    const slides = await Promise.all(slideNames.map(readText));
+    return {
+      hasContentTypes: entries.has('[Content_Types].xml'),
+      hasPresentation: entries.has('ppt/presentation.xml'),
+      slideCount: slideNames.length,
+      textMatches: expectedText.map((text, index) => slides[index]?.includes(text) === true),
+    };
+  }
+`;
 const upgradePersistenceProjectId = `packaged-upgrade-persistence-${Date.now().toString(36)}`;
 const upgradePersistenceSeedExpression = `
   (async () => {
@@ -88,14 +149,17 @@ const upgradePersistenceSeedExpression = `
 function existingProjectPptxExportExpression(projectId: string): string {
   return `
   (async () => {
+    ${pptxArchiveInspectionSource}
     const projectId = ${JSON.stringify(projectId)};
     const exported = await fetch('/api/projects/' + encodeURIComponent(projectId) + '/export/pptx', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileName: 'deck.html' }),
+      body: JSON.stringify({ fileName: 'deck.html', editable: true }),
     });
     const bytes = new Uint8Array(await exported.arrayBuffer());
+    const archive = await inspectPptxArchive(bytes, ['Upgrade From Outer', 'Persistence Check']);
     return {
+      archive,
       byteLength: bytes.length,
       contentType: exported.headers.get('content-type'),
       magic: String.fromCharCode(...bytes.slice(0, 2)),
@@ -155,6 +219,7 @@ const packagedOnboardingExpression = `
 `;
 
 type DesktopStatus = {
+  executablePath?: string;
   pid?: number;
   state?: string;
   title?: string | null;
@@ -278,6 +343,12 @@ type HealthEvalValue = {
 };
 
 type PptxExportEvalValue = {
+  archive: {
+    hasContentTypes: boolean;
+    hasPresentation: boolean;
+    slideCount: number;
+    textMatches: boolean[];
+  };
   byteLength: number;
   contentType: string | null;
   magic: string;
@@ -352,6 +423,69 @@ const desktopMacDescribe = shouldRunDesktopMacSmoke ? describe : describe.skip;
 macDescribe('packaged mac runtime smoke', () => {
   let installedAppPath: string | null = null;
   let started = false;
+
+  test('[P0] @electron-smoke cold first Home run renders assistant output without refresh or workspace-tab switching', async () => {
+    const fakeAgentRoot = join(toolsPackDir, 'fixtures', `home-first-run-${namespace}`);
+    let firstRunInstalledAppPath: string | null = null;
+    let firstRunStarted = false;
+    try {
+      await resetPackagedRuntimeState();
+      const fakeAgents = await createFakeAgentRuntimes({
+        root: fakeAgentRoot,
+        runtimeIds: ['codex'],
+      });
+      const install = await runToolsPackJson<MacInstallResult>('install');
+      firstRunInstalledAppPath = install.installedAppPath;
+      await seedPackagedHomeFirstRunConfig(fakeAgents.codex.env);
+
+      const start = await runToolsPackJson<MacStartResult>('start');
+      firstRunStarted = true;
+      expect(start.source).toBe('installed');
+      await waitForHealthyDesktop();
+
+      const setup = await waitForPackagedHomeFirstRunSetup(async () => {
+        const inspect = await runToolsPackJson<MacInspectResult>('inspect', [
+          '--expr',
+          packagedHomeFirstRunExpression(),
+        ]);
+        if (inspect.eval?.ok !== true) {
+          throw new Error(`packaged first Home run setup failed: ${formatUnknown(inspect.eval)}`);
+        }
+        return inspect.eval.value;
+      });
+      expect(setup).toMatchObject({
+        inputTextBeforeSubmit: PACKAGED_HOME_FIRST_RUN_PROMPT,
+        submitClicked: false,
+      });
+
+      await waitForPackagedHomeFirstRunSubmit();
+      const firstRun = await waitForPackagedHomeFirstRunOutput();
+      expect(firstRun.submitClicked).toBe(true);
+      expect(firstRun.projectId).toEqual(expect.any(String));
+      expect(firstRun.hrefBefore).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/$)/);
+      expect(firstRun.hrefAfter).toContain(`/projects/${firstRun.projectId}`);
+      expect(firstRun.injectedAuthorityOutageCount).toBe(1);
+      expect(firstRun.createRunRequestCount).toBeGreaterThanOrEqual(2);
+      expect(firstRun.createRunResponseStatuses[0]).toBe(503);
+      expect(firstRun.createRunResponseStatuses.at(-1)).toBeGreaterThanOrEqual(200);
+      expect(firstRun.createRunResponseStatuses.at(-1)).toBeLessThan(300);
+      expect(firstRun.runEventRequestCount).toBeGreaterThan(0);
+      expect(firstRun.runEventResponseStatuses).toContain(200);
+      expect(firstRun.runEventsContainExpectedOutput).toBe(true);
+      expect(firstRun.daemonAssistantText).toContain(PACKAGED_HOME_FIRST_RUN_OUTPUT);
+      expect(firstRun.assistantText).toContain(PACKAGED_HOME_FIRST_RUN_OUTPUT);
+      expect(firstRun.workspaceTabClicksBeforeOutput).toBe(0);
+      expect(firstRun.navigationEntryCountAfter).toBe(firstRun.navigationEntryCountBefore);
+      expect(firstRun.performanceTimeOriginAfter).toBe(firstRun.performanceTimeOriginBefore);
+    } finally {
+      if (firstRunStarted || firstRunInstalledAppPath != null) {
+        await runToolsPackJson<MacUninstallResult>('uninstall').catch((error: unknown) => {
+          console.error('failed to uninstall packaged first-Home-run app during cleanup', error);
+        });
+      }
+      await rm(fakeAgentRoot, { force: true, recursive: true }).catch(() => undefined);
+    }
+  }, 180_000);
 
   test('installs, starts, inspects, stops, and uninstalls the built mac artifact', async () => {
     const report = await createPackagedSmokeReport('mac');
@@ -1100,7 +1234,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
 
   beforeAll(async () => {
     await desktop.start();
-  }, 75_000);
+  }, T.xlong + T.long + T.medium);
 
   afterAll(async () => {
     await desktop.stop();
@@ -1407,253 +1541,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
     });
   }, 45_000);
 
-  test('opens the Orbit section from the desktop shell and renders its primary surface', async () => {
-    await seedDesktopConfig(desktop, {
-      mode: 'api',
-      apiKey: 'sk-test',
-      baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
-      apiProtocol: 'openai',
-      apiProviderBaseUrl: 'https://api.openai.com/v1',
-      agentId: null,
-      skillId: null,
-      designSystemId: null,
-      composio: { apiKeyConfigured: true },
-      orbit: {
-        enabled: false,
-        time: '09:00',
-        templateSkillId: 'orbit-general',
-      },
-      onboardingCompleted: true,
-      mediaProviders: {},
-      agentModels: {},
-      theme: 'system',
-    }, 'model');
-
-    await desktop.openSettings();
-    await openDesktopSettingsSection(desktop, 'Orbit');
-
-    await waitFor(async () => {
-      const snapshot = await readDesktopOrbitSnapshot(desktop);
-      expect(snapshot.dialogOpen).toBe(true);
-      expect(snapshot.heading).toBe('Orbit');
-      expect(snapshot.sectionTitle).toBe('Orbit');
-      expect(snapshot.runButtonVisible).toBe(true);
-      expect(snapshot.gateVisible || snapshot.automationCardVisible).toBe(true);
-    });
-  }, 45_000);
-
-  test('renders the Orbit Open artifact link as a desktop new-tab link when a live artifact target exists', async () => {
-    await seedDesktopConfig(desktop, {
-      mode: 'api',
-      apiKey: 'sk-test',
-      baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
-      apiProtocol: 'openai',
-      apiProviderBaseUrl: 'https://api.openai.com/v1',
-      agentId: null,
-      skillId: null,
-      designSystemId: null,
-      composio: { apiKeyConfigured: true },
-      orbit: {
-        enabled: false,
-        time: '09:00',
-        templateSkillId: 'orbit-general',
-      },
-      onboardingCompleted: true,
-      mediaProviders: {},
-      agentModels: {},
-      theme: 'system',
-    }, 'model');
-
-    await desktop.eval(`
-      (() => {
-        const originalFetch = window.fetch.bind(window);
-        window.fetch = async (input, init) => {
-          const url = typeof input === 'string'
-            ? input
-            : input instanceof Request
-              ? input.url
-              : String(input);
-          if (url === '/api/orbit/status') {
-            return new Response(JSON.stringify({
-              running: false,
-              nextRunAt: null,
-              lastRun: {
-                completedAt: '2026-05-06T10:00:00.000Z',
-                trigger: 'manual',
-                templateSkillId: 'orbit-general',
-                connectorsChecked: 5,
-                connectorsSucceeded: 3,
-                connectorsSkipped: 2,
-                connectorsFailed: 0,
-                markdown: 'General latest summary',
-                artifactId: 'artifact-123',
-                artifactProjectId: 'project-456',
-              },
-              lastRunsByTemplate: {
-                'orbit-general': {
-                  completedAt: '2026-05-06T10:00:00.000Z',
-                  trigger: 'manual',
-                  templateSkillId: 'orbit-general',
-                  connectorsChecked: 5,
-                  connectorsSucceeded: 3,
-                  connectorsSkipped: 2,
-                  connectorsFailed: 0,
-                  markdown: 'General latest summary',
-                  artifactId: 'artifact-123',
-                  artifactProjectId: 'project-456',
-                },
-              },
-            }), {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            });
-          }
-          return originalFetch(input, init);
-        };
-        return true;
-      })()
-    `);
-
-    await desktop.openSettings();
-    await openDesktopSettingsSection(desktop, 'Orbit');
-
-    await waitFor(async () => {
-      const snapshot = await readDesktopOrbitSnapshot(desktop);
-      expect(snapshot.dialogOpen).toBe(true);
-      expect(snapshot.heading).toBe('Orbit');
-      expect(snapshot.sectionTitle).toBe('Orbit');
-      expect(snapshot.openArtifactHref).toBe('/api/live-artifacts/artifact-123/preview?projectId=project-456');
-      expect(snapshot.openArtifactTarget).toBe('_blank');
-      expect(snapshot.openArtifactRel).toContain('noreferrer');
-    });
-  }, 45_000);
-
-  test('clicking the Orbit Open artifact link keeps the desktop settings dialog stable', async () => {
-    await seedDesktopConfig(desktop, {
-      mode: 'api',
-      apiKey: 'sk-test',
-      baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
-      apiProtocol: 'openai',
-      apiProviderBaseUrl: 'https://api.openai.com/v1',
-      agentId: null,
-      skillId: null,
-      designSystemId: null,
-      composio: { apiKeyConfigured: true },
-      orbit: {
-        enabled: false,
-        time: '09:00',
-        templateSkillId: 'orbit-general',
-      },
-      onboardingCompleted: true,
-      mediaProviders: {},
-      agentModels: {},
-      theme: 'system',
-    }, 'model');
-
-    await desktop.eval(`
-      (() => {
-        const originalFetch = window.fetch.bind(window);
-        window.fetch = async (input, init) => {
-          const url = typeof input === 'string'
-            ? input
-            : input instanceof Request
-              ? input.url
-              : String(input);
-          if (url === '/api/orbit/status') {
-            return new Response(JSON.stringify({
-              running: false,
-              nextRunAt: null,
-              lastRun: {
-                completedAt: '2026-05-06T10:00:00.000Z',
-                trigger: 'manual',
-                templateSkillId: 'orbit-general',
-                connectorsChecked: 5,
-                connectorsSucceeded: 3,
-                connectorsSkipped: 2,
-                connectorsFailed: 0,
-                markdown: 'General latest summary',
-                artifactId: 'artifact-123',
-                artifactProjectId: 'project-456',
-              },
-              lastRunsByTemplate: {
-                'orbit-general': {
-                  completedAt: '2026-05-06T10:00:00.000Z',
-                  trigger: 'manual',
-                  templateSkillId: 'orbit-general',
-                  connectorsChecked: 5,
-                  connectorsSucceeded: 3,
-                  connectorsSkipped: 2,
-                  connectorsFailed: 0,
-                  markdown: 'General latest summary',
-                  artifactId: 'artifact-123',
-                  artifactProjectId: 'project-456',
-                },
-              },
-            }), {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            });
-          }
-          return originalFetch(input, init);
-        };
-        window.__odLastOpenArtifactHref = null;
-        window.__odOpenArtifactClickCount = 0;
-        if (!window.__odOpenArtifactClickCaptureInstalled) {
-          document.addEventListener('click', (event) => {
-            const target = event.target instanceof Element ? event.target.closest('a') : null;
-            if (!(target instanceof HTMLAnchorElement)) return;
-            if (target.textContent?.trim() !== 'Open artifact') return;
-            window.__odLastOpenArtifactHref = target.getAttribute('href');
-            window.__odOpenArtifactClickCount += 1;
-            event.preventDefault();
-          }, true);
-          window.__odOpenArtifactClickCaptureInstalled = true;
-        }
-        return true;
-      })()
-    `);
-
-    await desktop.openSettings();
-    await openDesktopSettingsSection(desktop, 'Orbit');
-
-    await waitFor(async () => {
-      const snapshot = await readDesktopOrbitSnapshot(desktop);
-      expect(snapshot.openArtifactHref).toBe('/api/live-artifacts/artifact-123/preview?projectId=project-456');
-    });
-
-    const clicked = await desktop.eval<boolean>(`
-      (() => {
-        const link = Array.from(document.querySelectorAll('a'))
-          .find((node) => node.textContent?.trim() === 'Open artifact');
-        if (!(link instanceof HTMLAnchorElement)) return false;
-        link.click();
-        return true;
-      })()
-    `);
-    expect(clicked).toBe(true);
-
-    await waitFor(async () => {
-      const snapshot = await readDesktopOrbitSnapshot(desktop);
-      expect(snapshot.dialogOpen).toBe(true);
-      expect(snapshot.heading).toBe('Orbit');
-      expect(snapshot.sectionTitle).toBe('Orbit');
-      expect(snapshot.openArtifactHref).toBe('/api/live-artifacts/artifact-123/preview?projectId=project-456');
-    });
-
-    const clickCapture = await desktop.eval<{ count: number; href: string | null }>(`
-      (() => ({
-        count: typeof window.__odOpenArtifactClickCount === 'number' ? window.__odOpenArtifactClickCount : 0,
-        href: typeof window.__odLastOpenArtifactHref === 'string' ? window.__odLastOpenArtifactHref : null,
-      }))()
-    `);
-    expect(clickCapture.count).toBeGreaterThan(0);
-    expect(clickCapture.href).toBe('/api/live-artifacts/artifact-123/preview?projectId=project-456');
-  }, 45_000);
-
-  test('keeps the desktop workspace stable when the artifact Open link is clicked', async () => {
+  test('[P0] keeps the desktop artifact preview loaded and stable after its file route opens', async () => {
     await seedDesktopConfig(desktop, {
       mode: 'api',
       apiKey: 'sk-test',
@@ -1670,7 +1558,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       theme: 'system',
     }, 'model');
 
-    const seeded = await desktop.eval<{ projectId: string }>(`
+    await desktop.eval<{ projectId: string }>(`
       (async () => {
         const projectId = 'desktop-open-smoke-' + Date.now().toString(36);
         const projectResp = await fetch('/api/projects', {
@@ -1705,113 +1593,31 @@ desktopMacDescribe('mac desktop settings smoke', () => {
           throw new Error('failed to seed project file: ' + fileResp.status);
         }
 
-        window.__odDesktopOpenHref = null;
-        window.__odDesktopOpenClickCount = 0;
-        if (!window.__odDesktopOpenCaptureInstalled) {
-          document.addEventListener('click', (event) => {
-            const target = event.target instanceof Element ? event.target.closest('a') : null;
-            if (!(target instanceof HTMLAnchorElement)) return;
-            if (target.textContent?.trim() !== 'Open') return;
-            window.__odDesktopOpenHref = target.getAttribute('href');
-            window.__odDesktopOpenClickCount += 1;
-            event.preventDefault();
-          }, true);
-          window.__odDesktopOpenCaptureInstalled = true;
-        }
-
         window.location.assign('/projects/' + encodeURIComponent(projectId) + '/files/desktop-open.html');
         return { projectId };
       })()
     `);
 
     await waitFor(async () => {
-      const snapshot = await readDesktopArtifactOpenSnapshot(desktop);
+      const snapshot = await readDesktopArtifactPreviewSnapshot(desktop);
       expect(snapshot.fileWorkspaceVisible).toBe(true);
       expect(snapshot.selectedTab).toBe('desktop-open.html');
       expect(snapshot.artifactPreviewVisible).toBe(true);
-      expect(snapshot.openHref).toBe('/api/projects/' + seeded.projectId + '/raw/desktop-open.html?v=0&r=0');
-      expect(snapshot.openTarget).toBe('_blank');
-      expect(snapshot.openRel).toContain('noreferrer');
+      expect(snapshot.artifactPreviewActive).toBe(true);
+      expect(snapshot.artifactPreviewLoadedEpoch).toBeTruthy();
+      expect(snapshot.artifactPreviewLoadingVisible).toBe(false);
     });
 
-    const clicked = await desktop.eval<boolean>(`
-      (() => {
-        const link = Array.from(document.querySelectorAll('a'))
-          .find((node) => node.textContent?.trim() === 'Open');
-        if (!(link instanceof HTMLAnchorElement)) return false;
-        link.click();
-        return true;
-      })()
-    `);
-    expect(clicked).toBe(true);
-
-    await waitFor(async () => {
-      const snapshot = await readDesktopArtifactOpenSnapshot(desktop);
-      expect(snapshot.fileWorkspaceVisible).toBe(true);
-      expect(snapshot.selectedTab).toBe('desktop-open.html');
-      expect(snapshot.artifactPreviewVisible).toBe(true);
-      expect(snapshot.openHref).toBe('/api/projects/' + seeded.projectId + '/raw/desktop-open.html?v=0&r=0');
+    const stablePreview = await observeDesktopArtifactPreviewStability(desktop);
+    expect(stablePreview).toEqual({
+      activeThroughout: true,
+      loadedThroughout: true,
+      loadingSurfaceSeen: false,
+      sameFrameThroughout: true,
+      visibleThroughout: true,
     });
 
-    const clickCapture = await desktop.eval<{ count: number; href: string | null }>(`
-      (() => ({
-        count: typeof window.__odDesktopOpenClickCount === 'number' ? window.__odDesktopOpenClickCount : 0,
-        href: typeof window.__odDesktopOpenHref === 'string' ? window.__odDesktopOpenHref : null,
-      }))()
-    `);
-    expect(clickCapture.count).toBeGreaterThan(0);
-    expect(clickCapture.href).toBe('/api/projects/' + seeded.projectId + '/raw/desktop-open.html?v=0&r=0');
-  }, 45_000);
-
-  test('routes the Orbit gate CTA to the Connectors section inside the desktop shell', async () => {
-    await seedDesktopConfig(desktop, {
-      mode: 'api',
-      apiKey: 'sk-test',
-      baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
-      apiProtocol: 'openai',
-      apiProviderBaseUrl: 'https://api.openai.com/v1',
-      agentId: null,
-      skillId: null,
-      designSystemId: null,
-      composio: { apiKeyConfigured: false },
-      orbit: {
-        enabled: false,
-        time: '09:00',
-        templateSkillId: 'orbit-general',
-      },
-      onboardingCompleted: true,
-      mediaProviders: {},
-      agentModels: {},
-      theme: 'system',
-    }, 'model');
-
-    await desktop.openSettings();
-    await openDesktopSettingsSection(desktop, 'Orbit');
-
-    await waitFor(async () => {
-      const snapshot = await readDesktopOrbitSnapshot(desktop);
-      expect(snapshot.gateVisible).toBe(true);
-    });
-
-    const clicked = await desktop.eval<boolean>(`
-      (() => {
-        const action = document.querySelector('[data-testid="orbit-config-gate-action"]');
-        if (!(action instanceof HTMLElement)) return false;
-        action.click();
-        return true;
-      })()
-    `);
-    expect(clicked).toBe(true);
-
-    await waitFor(async () => {
-      const snapshot = await readDesktopConnectorsSnapshot(desktop);
-      expect(snapshot.dialogOpen).toBe(true);
-      expect(snapshot.heading).toBe('Connectors');
-      expect(snapshot.sectionTitle).toBe('Connectors');
-      expect(snapshot.apiKeyLabelVisible).toBe(true);
-    });
-  }, 45_000);
+  }, T.xlong);
 
   test('opens the Media providers section from the desktop shell and shows provider controls', async () => {
     await seedDesktopConfig(desktop, {
@@ -2068,18 +1874,6 @@ type DesktopConnectorsSnapshot = {
   sectionTitle: string | null;
 };
 
-type DesktopOrbitSnapshot = {
-  automationCardVisible: boolean;
-  dialogOpen: boolean;
-  gateVisible: boolean;
-  heading: string | null;
-  openArtifactHref: string | null;
-  openArtifactRel: string | null;
-  openArtifactTarget: string | null;
-  runButtonVisible: boolean;
-  sectionTitle: string | null;
-};
-
 type DesktopMediaSnapshot = {
   dialogOpen: boolean;
   heading: string | null;
@@ -2106,12 +1900,12 @@ type DesktopAppearanceSectionSnapshot = {
   themeSegControlVisible: boolean;
 };
 
-type DesktopArtifactOpenSnapshot = {
+type DesktopArtifactPreviewSnapshot = {
+  artifactPreviewActive: boolean;
+  artifactPreviewLoadedEpoch: string | null;
+  artifactPreviewLoadingVisible: boolean;
   artifactPreviewVisible: boolean;
   fileWorkspaceVisible: boolean;
-  openHref: string | null;
-  openRel: string | null;
-  openTarget: string | null;
   selectedTab: string | null;
 };
 
@@ -2302,31 +2096,6 @@ async function readDesktopConnectorsSnapshot(
   `);
 }
 
-async function readDesktopOrbitSnapshot(
-  desktop: DesktopHarness,
-): Promise<DesktopOrbitSnapshot> {
-  return await desktop.eval<DesktopOrbitSnapshot>(`
-    (() => {
-      const sectionTitle = document.querySelector('.orbit-section .orbit-hero-title')
-        ?.textContent?.trim() ?? null;
-      const openArtifactLink = Array.from(document.querySelectorAll('a'))
-        .find((node) => node.textContent?.trim() === 'Open artifact');
-      return {
-        automationCardVisible: Boolean(document.querySelector('[data-testid="orbit-automation-card"]')),
-        dialogOpen: Boolean(document.querySelector('[role="dialog"]')),
-        gateVisible: Boolean(document.querySelector('[data-testid="orbit-config-gate"]')),
-        heading: document.querySelector('[role="dialog"] h2')?.textContent?.trim() ?? null,
-        openArtifactHref: openArtifactLink?.getAttribute('href') ?? null,
-        openArtifactRel: openArtifactLink?.getAttribute('rel') ?? null,
-        openArtifactTarget: openArtifactLink?.getAttribute('target') ?? null,
-        runButtonVisible: Boolean(Array.from(document.querySelectorAll('button'))
-          .find((node) => node.textContent?.trim() === 'Run it now')),
-        sectionTitle,
-      };
-    })()
-  `);
-}
-
 async function readDesktopMediaSnapshot(
   desktop: DesktopHarness,
 ): Promise<DesktopMediaSnapshot> {
@@ -2395,23 +2164,91 @@ async function readDesktopAppearanceSectionSnapshot(
   `);
 }
 
-async function readDesktopArtifactOpenSnapshot(
+async function readDesktopArtifactPreviewSnapshot(
   desktop: DesktopHarness,
-): Promise<DesktopArtifactOpenSnapshot> {
-  return await desktop.eval<DesktopArtifactOpenSnapshot>(`
+): Promise<DesktopArtifactPreviewSnapshot> {
+  return await desktop.eval<DesktopArtifactPreviewSnapshot>(`
     (() => {
-      const openLink = Array.from(document.querySelectorAll('a'))
-        .find((node) => node.textContent?.trim() === 'Open');
-      const activeTab = Array.from(document.querySelectorAll('[role="tab"][aria-selected="true"]'))
-        .map((node) => node.textContent?.trim())
-        .find((value) => typeof value === 'string') ?? null;
+      const preview = document.querySelector('[data-testid="artifact-preview-frame"]');
+      const loadingSurface = document.querySelector('[data-testid="artifact-preview-first-load"]');
+      const elementIsVisible = (element) => {
+        if (!(element instanceof HTMLElement)) return false;
+        const style = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.display !== 'none'
+          && style.visibility !== 'hidden'
+          && Number(style.opacity) !== 0
+          && rect.width > 0
+          && rect.height > 0;
+      };
+      const fileWorkspace = document.querySelector('[data-testid="file-workspace"]');
+      const activeTab = fileWorkspace?.querySelector('[role="tab"][aria-selected="true"]');
+      const activeTabLabel = activeTab?.querySelector('.ws-tab-label')?.textContent?.trim()
+        ?? activeTab?.textContent?.trim()
+        ?? null;
       return {
-        artifactPreviewVisible: Boolean(document.querySelector('[data-testid="artifact-preview-frame"]')),
-        fileWorkspaceVisible: Boolean(document.querySelector('[data-testid="file-workspace"]')),
-        openHref: openLink?.getAttribute('href') ?? null,
-        openRel: openLink?.getAttribute('rel') ?? null,
-        openTarget: openLink?.getAttribute('target') ?? null,
-        selectedTab: activeTab,
+        artifactPreviewActive: preview?.getAttribute('data-od-active') === 'true',
+        artifactPreviewLoadedEpoch: preview instanceof HTMLIFrameElement
+          ? preview.dataset.odLoadedPreviewEpoch ?? null
+          : null,
+        artifactPreviewLoadingVisible: elementIsVisible(loadingSurface),
+        artifactPreviewVisible: elementIsVisible(preview),
+        fileWorkspaceVisible: Boolean(fileWorkspace),
+        selectedTab: activeTabLabel,
+      };
+    })()
+  `);
+}
+
+async function observeDesktopArtifactPreviewStability(
+  desktop: DesktopHarness,
+): Promise<{
+  activeThroughout: boolean;
+  loadedThroughout: boolean;
+  loadingSurfaceSeen: boolean;
+  sameFrameThroughout: boolean;
+  visibleThroughout: boolean;
+}> {
+  return await desktop.eval(`
+    (async () => {
+      const selector = '[data-testid="artifact-preview-frame"]';
+      const firstFrame = document.querySelector(selector);
+      const visible = (element) => {
+        if (!(element instanceof HTMLElement)) return false;
+        const style = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return element.isConnected
+          && style.display !== 'none'
+          && style.visibility !== 'hidden'
+          && Number(style.opacity) !== 0
+          && rect.width > 0
+          && rect.height > 0;
+      };
+      let activeThroughout = true;
+      let loadedThroughout = true;
+      let loadingSurfaceSeen = false;
+      let sameFrameThroughout = firstFrame instanceof HTMLIFrameElement;
+      let visibleThroughout = visible(firstFrame);
+
+      for (let sample = 0; sample < 16; sample += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 100));
+        const current = document.querySelector(selector);
+        sameFrameThroughout &&= current === firstFrame;
+        visibleThroughout &&= visible(current);
+        activeThroughout &&= current?.getAttribute('data-od-active') === 'true';
+        loadedThroughout &&= current instanceof HTMLIFrameElement
+          && Boolean(current.dataset.odLoadedPreviewEpoch);
+        loadingSurfaceSeen ||= Array.from(
+          document.querySelectorAll('[data-testid="artifact-preview-first-load"]'),
+        ).some(visible);
+      }
+
+      return {
+        activeThroughout,
+        loadedThroughout,
+        loadingSurfaceSeen,
+        sameFrameThroughout,
+        visibleThroughout,
       };
     })()
   `);
@@ -2471,6 +2308,62 @@ async function waitForHealthyDesktop(): Promise<MacInspectResult> {
   }
 
   throw new Error(`packaged mac runtime did not become healthy: ${formatUnknown(lastResult)}`);
+}
+
+async function waitForPackagedHomeFirstRunOutput(): Promise<PackagedHomeFirstRunResult> {
+  const timeoutMs = 15_000;
+  const startedAt = Date.now();
+  let lastResult: unknown = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const inspect = await runToolsPackJson<MacInspectResult>('inspect', [
+      '--expr',
+      packagedHomeFirstRunSnapshotExpression(),
+    ]);
+    lastResult = inspect;
+    if (inspect.eval?.ok === true) {
+      const snapshot = assertPackagedHomeFirstRunResult(inspect.eval.value);
+      lastResult = snapshot;
+      if (
+        snapshot.assistantText.includes(PACKAGED_HOME_FIRST_RUN_OUTPUT)
+        && snapshot.daemonAssistantText.includes(PACKAGED_HOME_FIRST_RUN_OUTPUT)
+        && snapshot.runEventsContainExpectedOutput
+      ) {
+        return snapshot;
+      }
+    }
+    await delay(750);
+  }
+
+  throw new Error(
+    `packaged first Home run did not render assistant output without recovery: ${formatUnknown(lastResult)}`,
+  );
+}
+
+async function waitForPackagedHomeFirstRunSubmit(): Promise<void> {
+  const timeoutMs = 15_000;
+  const startedAt = Date.now();
+  let lastResult: unknown = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const inspect = await runToolsPackJson<MacInspectResult>('inspect', [
+      '--expr',
+      packagedHomeFirstRunSubmitExpression(),
+    ]);
+    lastResult = inspect;
+    if (
+      inspect.eval?.ok === true
+      && isRecord(inspect.eval.value)
+      && inspect.eval.value.submitClicked === true
+    ) {
+      return;
+    }
+    await delay(250);
+  }
+
+  throw new Error(
+    `packaged first Home run submit never became ready: ${formatUnknown(lastResult)}`,
+  );
 }
 
 async function waitForHealthyDesktopVersion(
@@ -2714,18 +2607,14 @@ async function waitForUpdaterPopupMatching(
 }
 
 async function readDesktopIdentityMarker(): Promise<DesktopIdentityMarker> {
-  const markerPath = join(runtimeNamespaceRoot, 'runtime', 'desktop-root.json');
-  const value = JSON.parse(await readFile(markerPath, 'utf8')) as unknown;
-  if (
-    !isRecord(value) ||
-    typeof value.appPath !== 'string' ||
-    typeof value.executablePath !== 'string' ||
-    typeof value.pid !== 'number' ||
-    value.version !== 1
-  ) {
-    throw new Error(`invalid packaged desktop identity at ${markerPath}: ${formatUnknown(value)}`);
+  const status = (await runToolsPackJson<MacInspectResult>('inspect')).status;
+  if (typeof status?.executablePath !== 'string' || typeof status.pid !== 'number') {
+    throw new Error(`invalid packaged desktop sidecar status: ${formatUnknown(status)}`);
   }
-  return value as DesktopIdentityMarker;
+  const marker = '/Contents/MacOS/';
+  const markerIndex = status.executablePath.indexOf(marker);
+  const appPath = markerIndex < 0 ? status.executablePath : status.executablePath.slice(0, markerIndex);
+  return { appPath, executablePath: status.executablePath, pid: status.pid, version: 1 };
 }
 
 function assertPayloadDesktopIdentity(
@@ -2742,6 +2631,11 @@ function assertPayloadDesktopIdentity(
 function assertPptxExportEvalValue(value: unknown): PptxExportEvalValue {
   if (
     !isRecord(value) ||
+    !isRecord(value.archive) ||
+    typeof value.archive.hasContentTypes !== 'boolean' ||
+    typeof value.archive.hasPresentation !== 'boolean' ||
+    typeof value.archive.slideCount !== 'number' ||
+    !Array.isArray(value.archive.textMatches) ||
     typeof value.byteLength !== 'number' ||
     (value.contentType != null && typeof value.contentType !== 'string') ||
     typeof value.magic !== 'string' ||
@@ -2756,6 +2650,12 @@ function assertPptxExportEvalValue(value: unknown): PptxExportEvalValue {
   );
   expect(value.byteLength).toBeGreaterThan(0);
   expect(value.magic).toBe('PK');
+  expect(value.archive).toEqual({
+    hasContentTypes: true,
+    hasPresentation: true,
+    slideCount: 2,
+    textMatches: [true, true],
+  });
   return value as PptxExportEvalValue;
 }
 
@@ -2928,7 +2828,7 @@ async function assertMacInviteProtocolRegistration(installedAppPath: string): Pr
 
 async function invokeMacInviteDeeplink(installedAppPath: string): Promise<void> {
   // `-a` pins delivery to this namespace's installed test bundle instead of a
-  // developer's stable Open Design app that may own the same global scheme.
+  // developer's stable OpenDesign app that may own the same global scheme.
   await execFileAsync('/usr/bin/open', ['-a', installedAppPath, packagedInviteDeeplink]);
 }
 
@@ -2946,9 +2846,36 @@ async function fileSizeBytes(filePath: string): Promise<number> {
 }
 
 async function seedPackagedOnboardingComplete(): Promise<void> {
+  // Updater flows need the ordinary signed-out Home shell. Completion alone
+  // is insufficient when the daemon default selects the AMR cloud agent: the
+  // product correctly routes that signed-out identity back to Connect even
+  // though first-run onboarding was completed. Pin a local agent so this
+  // fixture models the actual post-onboarding state it claims to create.
+  await seedPackagedAppConfig({ agentId: 'codex', onboardingCompleted: true });
+}
+
+async function seedPackagedHomeFirstRunConfig(
+  codexEnv: Record<string, string>,
+): Promise<void> {
+  await seedPackagedAppConfig({
+    mode: 'daemon',
+    apiKey: '',
+    baseUrl: 'https://api.anthropic.com',
+    model: 'claude-sonnet-4-5',
+    agentId: 'codex',
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    mediaProviders: {},
+    agentModels: { codex: { model: 'default', reasoning: 'default' } },
+    agentCliEnv: { codex: codexEnv },
+  });
+}
+
+async function seedPackagedAppConfig(config: Record<string, unknown>): Promise<void> {
   const configPath = join(runtimeNamespaceRoot, 'data', 'app-config.json');
   await mkdir(dirname(configPath), { recursive: true });
-  await writeFile(configPath, `${JSON.stringify({ onboardingCompleted: true }, null, 2)}\n`, 'utf8');
+  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
 }
 
 async function resetPackagedMacRuntimeData(): Promise<void> {

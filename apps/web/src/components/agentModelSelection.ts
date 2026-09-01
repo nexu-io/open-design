@@ -48,6 +48,16 @@ export function effectiveAgentModelChoice(
   return normalizeAgentModelChoice(agent, choice) ?? choice;
 }
 
+export function effectiveAgentModelId(
+  agent: AgentModelSource,
+  choice: AgentModelChoice | undefined,
+): string | null {
+  const configuredModel = effectiveAgentModelChoice(agent, choice)?.model?.trim();
+  return configuredModel && configuredModel !== 'default'
+    ? configuredModel
+    : defaultAgentModelId(agent);
+}
+
 /**
  * Whether `modelId` may be OFFERED to the user as a selectable model.
  *

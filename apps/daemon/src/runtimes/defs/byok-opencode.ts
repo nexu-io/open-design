@@ -18,7 +18,7 @@ export const byokOpenCodeAgentDef = {
     const args = ['run', '--format', 'json'];
     if (typeof runtimeContext.cwd === 'string' && runtimeContext.cwd.length > 0) {
       // OpenCode promotes nested directories to the enclosing Git worktree
-      // unless its own directory flag is explicit. Managed Open Design
+      // unless its own directory flag is explicit. Managed OpenDesign
       // projects live under the development repository in local runs, so
       // relying on spawn({ cwd }) alone can make Write/Edit target the repo
       // root instead of the selected project.

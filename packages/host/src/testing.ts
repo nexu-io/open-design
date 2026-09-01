@@ -6,12 +6,13 @@ import {
   type OpenDesignHostUpdaterStatusSnapshot,
 } from "./index.js";
 
-export type MockOpenDesignHost = Partial<Omit<OpenDesignHostBridge, "capture" | "client" | "pdf" | "pet" | "project" | "shell" | "updater">> & {
+export type MockOpenDesignHost = Partial<Omit<OpenDesignHostBridge, "capture" | "client" | "pdf" | "pet" | "preview" | "project" | "shell" | "updater">> & {
   browser?: Partial<OpenDesignHostBridge["browser"]>;
   capture?: Partial<OpenDesignHostBridge["capture"]>;
   client?: Partial<OpenDesignHostBridge["client"]>;
   pdf?: Partial<OpenDesignHostBridge["pdf"]>;
   pet?: Partial<OpenDesignHostBridge["pet"]>;
+  preview?: Partial<NonNullable<OpenDesignHostBridge["preview"]>>;
   project?: Partial<OpenDesignHostBridge["project"]>;
   shell?: Partial<OpenDesignHostBridge["shell"]>;
   updater?: Partial<OpenDesignHostBridge["updater"]>;
@@ -74,6 +75,10 @@ function defaultHost(): OpenDesignHostBridge {
     pet: {
       setVisible: () => undefined,
     },
+    preview: {
+      getLatestNavigationFailure: () => null,
+      subscribeNavigationFailure: () => () => undefined,
+    },
     updater: {
       check: async () => updaterStatus,
       "clear-cache": async () => updaterStatus,
@@ -100,6 +105,14 @@ export function createMockOpenDesignHost(overrides: MockOpenDesignHost = {}): Op
     project: { ...base.project, ...overrides.project },
     pdf: { ...base.pdf, ...overrides.pdf },
     pet: { ...base.pet, ...overrides.pet },
+    preview: {
+      getLatestNavigationFailure:
+        overrides.preview?.getLatestNavigationFailure
+        ?? base.preview!.getLatestNavigationFailure,
+      subscribeNavigationFailure:
+        overrides.preview?.subscribeNavigationFailure
+        ?? base.preview!.subscribeNavigationFailure,
+    },
     updater: { ...base.updater, ...overrides.updater },
   };
 }

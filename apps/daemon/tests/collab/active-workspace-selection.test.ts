@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -165,6 +165,17 @@ describe('observed active team workspace snapshot', () => {
 });
 
 describe('active workspace selection generation', () => {
+  it('restores the last selection after the store is recreated', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'od-workspace-selection-'));
+    roots.push(root);
+    const firstRun = createActiveWorkspaceSelectionStore(root);
+
+    await firstRun.set('workspace-last-used');
+
+    const restarted = createActiveWorkspaceSelectionStore(root);
+    expect(restarted.get()).toBe('workspace-last-used');
+  });
+
   it('notifies subscribers after persisted selection changes', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'od-workspace-selection-'));
     roots.push(root);
@@ -183,6 +194,25 @@ describe('active workspace selection generation', () => {
     expect(selections).toEqual(['workspace-1', 'workspace-2', null]);
   });
 
+  it('keeps the previous selection when persistence fails', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'od-workspace-selection-'));
+    roots.push(root);
+    const store = createActiveWorkspaceSelectionStore(root);
+    const selections: Array<string | null> = [];
+    store.subscribe((workspaceId) => selections.push(workspaceId));
+    await store.set('workspace-1');
+    const captured = store.snapshot();
+    selections.length = 0;
+
+    await rm(root, { recursive: true });
+    await writeFile(root, 'not a directory', 'utf8');
+
+    await expect(store.set('workspace-2')).rejects.toThrow();
+    expect(store.get()).toBe('workspace-1');
+    expect(store.snapshot()).toEqual(captured);
+    expect(selections).toEqual([]);
+  });
+
   it('detects away-and-back changes even when the final workspace id matches', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'od-workspace-selection-'));
     roots.push(root);
@@ -197,6 +227,37 @@ describe('active workspace selection generation', () => {
       workspaceId: 'workspace-1',
       generation: captured.generation + 2,
     });
+  });
+
+  it('does not clear a newer selection with a stale compare-and-clear', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'od-workspace-selection-'));
+    roots.push(root);
+    const store = createActiveWorkspaceSelectionStore(root);
+    await store.set('workspace-a');
+    const inspected = store.get();
+    await store.set('workspace-b');
+    const beforeClear = store.snapshot();
+
+    await expect(store.clearIf(inspected!)).resolves.toBe(false);
+
+    expect(store.get()).toBe('workspace-b');
+    expect(store.snapshot()).toEqual(beforeClear);
+  });
+
+  it('does not replace a newer selection with a stale recovery fallback', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'od-workspace-selection-'));
+    roots.push(root);
+    const store = createActiveWorkspaceSelectionStore(root);
+    await store.set('workspace-a');
+    const inspected = store.get();
+    await store.set('workspace-b');
+    const beforeReplace = store.snapshot();
+
+    await expect(store.replaceIf(inspected!, 'workspace-fallback')).resolves.toBe(
+      'workspace-b',
+    );
+
+    expect(store.snapshot()).toEqual(beforeReplace);
   });
 
   it('increments generation when the selection is cleared', async () => {

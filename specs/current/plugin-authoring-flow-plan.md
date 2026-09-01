@@ -4,14 +4,14 @@
 
 ## Purpose
 
-Make "create my own plugin" a first-class product flow instead of a disconnected future tab. A user should be able to start from the Plugins area, land on the Home prompt with an authoring query already prepared, run an agent task that produces an Open Design plugin folder, inspect that folder as project output, and add it to `My plugins` with one click.
+Make "create my own plugin" a first-class product flow instead of a disconnected future tab. A user should be able to start from the Plugins area, land on the Home prompt with an authoring query already prepared, run an agent task that produces an OpenDesign plugin folder, inspect that folder as project output, and add it to `My plugins` with one click.
 
 This plan is intentionally focused on the authoring loop. Marketplace publishing, enterprise private catalogs, and team review policies stay out of scope.
 
 ## Requirements
 
 - R1. Plugins tab exposes a create entry that starts a guided plugin authoring task instead of only offering import options.
-- R2. The create entry navigates to Home, focuses `HomeHero`'s textarea, and pre-fills a prompt grounded in the Open Design plugin spec.
+- R2. The create entry navigates to Home, focuses `HomeHero`'s textarea, and pre-fills a prompt grounded in the OpenDesign plugin spec.
 - R3. The task should create a real plugin folder containing at minimum `SKILL.md` and `open-design.json`, with optional examples/assets when the user asks for them.
 - R4. Project output must support selecting or viewing the generated plugin folder as a folder, not only as flat single files.
 - R5. A generated plugin folder can be installed into the user plugin registry and then appears in `My plugins` and Home `@` search.
@@ -21,7 +21,7 @@ This plan is intentionally focused on the authoring loop. Marketplace publishing
 
 - No marketplace publishing in this pass. Installing to `My plugins` is enough.
 - No enterprise/team catalog permissions in this pass.
-- No new plugin spec dialect. The generated folder must validate against the existing Open Design plugin shape in `docs/plugins-spec.md` and `docs/schemas/open-design.plugin.v1.json`.
+- No new plugin spec dialect. The generated folder must validate against the existing OpenDesign plugin shape in `docs/plugins-spec.md` and `docs/schemas/open-design.plugin.v1.json`.
 - No requirement to build a full visual plugin IDE. The first version is an agent-guided task plus a one-click install action.
 
 ### Deferred to follow-up work
@@ -124,7 +124,7 @@ sequenceDiagram
 
   **Approach:**
   - The scenario should instruct the agent to output a folder such as `generated-plugin/` with `SKILL.md`, `open-design.json`, and optional `examples/` or `assets/`.
-  - The prompt should cite the Open Design plugin spec and require validation-ready output, not a prose-only explanation.
+  - The prompt should cite the OpenDesign plugin spec and require validation-ready output, not a prose-only explanation.
   - If the scenario includes GenUI, it should present checklist/progress and final "Add to My plugins" affordance, but the install action itself should call a daemon API rather than relying on copy/paste.
 
   **Test scenarios:**
@@ -203,7 +203,7 @@ sequenceDiagram
 The authoring prompt should be stable enough for tests and user trust. A first version can be:
 
 ```text
-Create an Open Design plugin for: <user goal>.
+Create an OpenDesign plugin for: <user goal>.
 
 Follow docs/plugins-spec.md and produce a folder named generated-plugin with:
 - SKILL.md describing the agent behavior and workflow

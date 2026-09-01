@@ -48,6 +48,14 @@ interface CustomDeckOptions {
    * registry hook can observe the registration.
    */
   registerBeforeBridge?: boolean;
+  /** Ignore navigation keys while an authored slide transition is running. */
+  navigationLockMs?: number;
+  /** Expose one artifact-owned direct-index control per slide. */
+  directIndexControls?: boolean;
+  /** Keep direct-index controls visible but ignore their click handlers. */
+  ignoreDirectIndexControls?: boolean;
+  /** Advertise a canonical deck protocol version in the source document. */
+  protocolVersion?: number;
 }
 
 function setupCustomCounterDeck(options: CustomDeckOptions = {}) {
@@ -69,7 +77,10 @@ function setupCustomCounterDeck(options: CustomDeckOptions = {}) {
     </div>
     <div class="deck-pager"><span id="pager-cur">1</span> / <span id="pager-total">3</span></div>
   `;
-  const srcdoc = buildSrcdoc(`<!doctype html><html><body>${bodyHtml}</body></html>`, {
+  const protocolAttribute = options.protocolVersion == null
+    ? ''
+    : ` data-od-deck-protocol="${options.protocolVersion}"`;
+  const srcdoc = buildSrcdoc(`<!doctype html><html${protocolAttribute}><body>${bodyHtml}</body></html>`, {
     deck: true,
   });
   const script = extractDeckBridgeScript(srcdoc);
@@ -105,14 +116,43 @@ function setupCustomCounterDeck(options: CustomDeckOptions = {}) {
   const track = win.document.getElementById('deck-track') as HTMLElement;
   const pagerCur = win.document.getElementById('pager-cur') as HTMLElement;
   let active = 0;
+  let navigationLocked = false;
+  const visited: number[] = [];
   function apply(index: number) {
     active = Math.max(0, Math.min(slides.length - 1, index));
+    visited.push(active);
+    slides.forEach((slide, slideIndex) => {
+      slide.classList.toggle('is-active', slideIndex === active);
+    });
     track.style.transform = `translateX(-${active * 100}vw)`;
     pagerCur.textContent = String(active + 1);
+  }
+  function lockNavigation() {
+    if (!options.navigationLockMs) return;
+    navigationLocked = true;
+    win.setTimeout(() => {
+      navigationLocked = false;
+    }, options.navigationLockMs);
+  }
+  if (options.directIndexControls) {
+    const nav = win.document.createElement('div');
+    nav.className = 'deck-dots';
+    slides.forEach((_slide, index) => {
+      const dot = win.document.createElement('button');
+      dot.className = 'nav-dot';
+      dot.addEventListener('click', () => {
+        if (options.ignoreDirectIndexControls || navigationLocked) return;
+        apply(index);
+        lockNavigation();
+      });
+      nav.appendChild(dot);
+    });
+    win.document.body.appendChild(nav);
   }
   const onKeydown = (event: KeyboardEvent) => {
     const key = event.key;
     if (key !== 'ArrowRight' && key !== 'ArrowLeft' && key !== 'Home' && key !== 'End') return;
+    if (navigationLocked) return;
     // Recompute from the live index inside the step, the way generated decks
     // do: when the update is deferred, every extra key event the bridge leaks
     // in becomes a visible extra advance.
@@ -124,6 +164,7 @@ function setupCustomCounterDeck(options: CustomDeckOptions = {}) {
     };
     if (options.deferUpdate) win.setTimeout(step, 0);
     else step();
+    lockNavigation();
   };
   const registerArtifactHandler = () => {
     const listenTarget = options.listenOn === 'window' ? win : win.document;
@@ -143,7 +184,70 @@ function setupCustomCounterDeck(options: CustomDeckOptions = {}) {
     registerArtifactHandler();
   }
 
-  return { win, parentPostMessage, track, pagerCur };
+  return { win, parentPostMessage, track, pagerCur, visited };
+}
+
+function setupSlashHashDeck() {
+  const bodyHtml = `
+    <section class="slide active">One</section>
+    <section class="slide">Two</section>
+    <section class="slide">Three</section>
+    <span id="pager-cur">1</span>
+  `;
+  const artifactScript = `
+    window.addEventListener('hashchange', function () {
+      var match = location.hash.match(/^#\\/(\\d+)$/);
+      if (match) window.__artifactGo(Number(match[1]) - 1);
+    });
+    function artifactRoute(index) {
+      var target = '#/' + (index + 1);
+      location.hash = target;
+    }
+  `;
+  const srcdoc = buildSrcdoc(
+    `<!doctype html><html><body>${bodyHtml}<script>${artifactScript}</script></body></html>`,
+    { deck: true },
+  );
+  const bridgeScript = extractDeckBridgeScript(srcdoc);
+  const dom = new JSDOM(`<!doctype html><html><body>${bodyHtml}</body></html>`, {
+    runScripts: 'outside-only',
+    pretendToBeVisual: true,
+    url: 'https://preview.test/',
+  });
+  const win = dom.window;
+  const replaceState = vi.spyOn(win.history, 'replaceState');
+  const parentPostMessage = vi.fn();
+  Object.defineProperty(win, 'parent', {
+    configurable: true,
+    value: { postMessage: parentPostMessage },
+  });
+  const slides = Array.from(win.document.querySelectorAll<HTMLElement>('.slide'));
+  const pagerCur = win.document.getElementById('pager-cur') as HTMLElement;
+  let current = 0;
+  const go = (index: number) => {
+    current = Math.max(0, Math.min(slides.length - 1, index));
+    slides.forEach((slide, slideIndex) => {
+      slide.classList.toggle('active', slideIndex === current);
+    });
+    pagerCur.textContent = String(current + 1);
+  };
+  Object.defineProperty(win, '__artifactGo', {
+    configurable: true,
+    value: go,
+  });
+  win.addEventListener('hashchange', () => {
+    const match = win.location.hash.match(/^#\/(\d+)$/);
+    if (match) go(Number(match[1]) - 1);
+  });
+  new win.Function(bridgeScript).call(win);
+
+  return {
+    current: () => current,
+    pagerCur,
+    parentPostMessage,
+    replaceState,
+    win,
+  };
 }
 
 function slideStatesOf(parentPostMessage: ReturnType<typeof vi.fn>) {
@@ -235,6 +339,169 @@ describe('deck bridge - keyboard paging keeps page counters in sync', () => {
     expect(track.style.transform).toBe('translateX(-100vw)');
     expect(pagerCur.textContent).toBe('2');
     expect(slideStatesOf(parentPostMessage).at(-1)).toMatchObject({ active: 1, count: 3 });
+  });
+
+  it('reaches a selected thumbnail before the direct-index retry window', async () => {
+    vi.useFakeTimers();
+    try {
+      const { win, parentPostMessage, track, pagerCur, visited } = setupCustomCounterDeck({
+        directIndexControls: true,
+        ignoreDirectIndexControls: true,
+        listenOn: 'window',
+      });
+      visited.length = 0;
+
+      win.dispatchEvent(new win.MessageEvent('message', {
+        data: { type: 'od:slide', action: 'go', index: 2 },
+      }));
+      await vi.advanceTimersByTimeAsync(1499);
+
+      // The authored dots deliberately ignore clicks, matching the reported
+      // legacy deck. Keyboard navigation must still reach the target before
+      // the bridge's 1.5s direct-index retry window can expire.
+      expect(track.style.transform).toBe('translateX(-200vw)');
+      expect(pagerCur.textContent).toBe('3');
+      expect(win.document.querySelectorAll('.slide')[2]?.classList.contains('is-active')).toBe(true);
+      expect(visited).toEqual([1, 2]);
+      expect(slideStatesOf(parentPostMessage).at(-1)).toMatchObject({ active: 2, count: 3 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('retries a proven keyboard path through an authored transition lock', async () => {
+    vi.useFakeTimers();
+    try {
+      const { win, parentPostMessage, track, pagerCur, visited } = setupCustomCounterDeck({
+        navigationLockMs: 120,
+        directIndexControls: true,
+        ignoreDirectIndexControls: true,
+        listenOn: 'window',
+      });
+      visited.length = 0;
+
+      win.dispatchEvent(new win.MessageEvent('message', {
+        data: { type: 'od:slide', action: 'go', index: 2 },
+      }));
+      await vi.advanceTimersByTimeAsync(499);
+
+      expect(track.style.transform).toBe('translateX(-200vw)');
+      expect(pagerCur.textContent).toBe('3');
+      expect(win.document.querySelectorAll('.slide')[2]?.classList.contains('is-active')).toBe(true);
+      expect(visited).toEqual([1, 2]);
+      expect(slideStatesOf(parentPostMessage).at(-1)).toMatchObject({ active: 2, count: 3 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ignores future-version bridge commands while accepting legacy and v1 navigation', async () => {
+    vi.useFakeTimers();
+    try {
+      const { win, track, pagerCur, visited } = setupCustomCounterDeck({
+        listenOn: 'window',
+        protocolVersion: 1,
+      });
+      visited.length = 0;
+
+      win.dispatchEvent(new win.MessageEvent('message', {
+        data: { type: 'od:slide', action: 'go', index: 2, protocolVersion: 2 },
+      }));
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(track.style.transform).toBe('translateX(-0vw)');
+      expect(pagerCur.textContent).toBe('1');
+      expect(visited).toEqual([]);
+
+      win.dispatchEvent(new win.MessageEvent('message', {
+        data: { type: 'od:slide', action: 'next' },
+      }));
+      await vi.advanceTimersByTimeAsync(100);
+      expect(pagerCur.textContent).toBe('2');
+
+      win.dispatchEvent(new win.MessageEvent('message', {
+        data: { type: 'od:slide', action: 'next', protocolVersion: 1 },
+      }));
+      await vi.advanceTimersByTimeAsync(100);
+      expect(track.style.transform).toBe('translateX(-200vw)');
+      expect(pagerCur.textContent).toBe('3');
+      expect(visited).toEqual([1, 2]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps keyboard-only deck state in sync across direct selection and later paging', async () => {
+    const { win, track, pagerCur, visited } = setupCustomCounterDeck();
+    visited.length = 0;
+
+    // This artifact deliberately exposes no nav dots, indexed controls, hash
+    // route, or public goTo API. Its keyboard handler is the only owner of the
+    // private page index that drives both the canvas and its own counter.
+    win.dispatchEvent(new win.MessageEvent('message', {
+      data: { type: 'od:slide', action: 'go', index: 2 },
+    }));
+    await vi.waitFor(() => {
+      expect(track.style.transform).toBe('translateX(-200vw)');
+      expect(pagerCur.textContent).toBe('3');
+    });
+    expect(visited).toEqual([1, 2]);
+
+    win.dispatchEvent(new win.MessageEvent('message', {
+      data: { type: 'od:slide', action: 'next' },
+    }));
+    await vi.waitFor(() => {
+      expect(track.style.transform).toBe('translateX(-200vw)');
+      expect(pagerCur.textContent).toBe('3');
+      expect(visited).toEqual([1, 2, 2]);
+    });
+
+    win.dispatchEvent(new win.MessageEvent('message', {
+      data: { type: 'od:slide', action: 'prev' },
+    }));
+    await vi.waitFor(() => {
+      expect(track.style.transform).toBe('translateX(-100vw)');
+      expect(pagerCur.textContent).toBe('2');
+    });
+  });
+
+  it('preserves slash-hash routes for immediate artifact-owned thumbnail jumps', async () => {
+    const { current, pagerCur, parentPostMessage, replaceState, win } = setupSlashHashDeck();
+
+    win.dispatchEvent(new win.MessageEvent('message', {
+      data: { type: 'od:slide', action: 'go', index: 2 },
+    }));
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 100));
+
+    expect(win.location.hash).toBe('#/3');
+    expect(current()).toBe(2);
+    expect(replaceState).toHaveBeenCalledWith(null, '', '#/3');
+    expect(pagerCur.textContent).toBe('3');
+    expect(slideStatesOf(parentPostMessage).at(-1)).toMatchObject({ active: 2, count: 3 });
+  });
+
+  it('retries only the latest direct target while authored navigation is locked', async () => {
+    const { win, parentPostMessage, track, pagerCur, visited } = setupCustomCounterDeck({
+      navigationLockMs: 120,
+      directIndexControls: true,
+    });
+    visited.length = 0;
+
+    win.dispatchEvent(new win.MessageEvent('message', {
+      data: { type: 'od:slide', action: 'go', index: 2 },
+    }));
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 20));
+    win.dispatchEvent(new win.MessageEvent('message', {
+      data: { type: 'od:slide', action: 'go', index: 0 },
+    }));
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 500));
+
+    expect(track.style.transform).toBe('translateX(-0vw)');
+    expect(pagerCur.textContent).toBe('1');
+    expect(win.document.querySelectorAll('.slide')[0]?.classList.contains('is-active')).toBe(true);
+    // The second selection arrives before the document-listener probe has
+    // moved at all, so it cancels the stale jump and keeps slide 1 selected.
+    expect(visited).toEqual([]);
+    expect(slideStatesOf(parentPostMessage).at(-1)).toMatchObject({ active: 0, count: 3 });
   });
 
   it('seeds the keyboard-navigation flag from the artifact source, ignoring od-injected bridge scripts', () => {

@@ -3,9 +3,9 @@ name: huashu-takram-soft-tech
 en_name: "Build a Buyer-Committee Leave-Behind like an Enterprise Sales Lead"
 zh_name: "像企业销售负责人一样写买方委员会转发稿"
 description: |
-  Open Design procurement & security leave-behind: the one-pager-plus a buying committee can forward and approve internally. Built as a decision-grade B2B sales deck for buying committee, security, procurement.
+  OpenDesign procurement & security leave-behind: the one-pager-plus a buying committee can forward and approve internally. Built as a decision-grade B2B sales deck for buying committee, security, procurement.
 en_description: |
-  Open Design procurement & security leave-behind: the one-pager-plus a buying committee can forward and approve internally. Built as a decision-grade B2B sales deck for buying committee, security, procurement.
+  OpenDesign procurement & security leave-behind: the one-pager-plus a buying committee can forward and approve internally. Built as a decision-grade B2B sales deck for buying committee, security, procurement.
 zh_description: |
   像企业销售负责人一样写买方委员会转发稿——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -39,7 +39,7 @@ od:
     zh-CN: "用「东方柔光科技」模板把我的内容做成柔和自然色系的 HTML 幻灯片：1920×1080 固定画布、米色和纸底 #F5F0EB、鼠尾草绿 #6B8F71 + 唯一金 #D4A574 + 暖灰系、Noto Serif SC 衬线大标题 + Inter 标签混排、圆角半透明数据卡片、SVG 雷达图三色叠加当艺术品并配 Fig. NN 图版注记。从 example.html 出发只换内容，不要重写设计。"
   category: "b2b-sales"
   scenario: "sales"
-  example_prompt: "Create \"Build a Buyer-Committee Leave-Behind like an Enterprise Sales Lead\" as a decision-grade B2B sales deck in this template's own visual system. Subject: Open Design procurement & security leave-behind: the one-pager-plus a buying committee can forward and approve internally. Audience: buying committee, security, procurement. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the champion forward this internally without rewriting it."
+  example_prompt: "Create \"Build a Buyer-Committee Leave-Behind like an Enterprise Sales Lead\" as a decision-grade B2B sales deck in this template's own visual system. Subject: OpenDesign procurement & security leave-behind: the one-pager-plus a buying committee can forward and approve internally. Audience: buying committee, security, procurement. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the champion forward this internally without rewriting it."
 ---
 
 # Takram Soft Tech · 东方柔光科技

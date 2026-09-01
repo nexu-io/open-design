@@ -3,8 +3,8 @@ import { mkdir, rm, stat } from "node:fs/promises";
 import { dirname } from "node:path";
 import { promisify } from "node:util";
 
-import type { ToolPackConfig } from "../config.js";
-import { winResources } from "../resources.js";
+import type { ToolPackConfig } from "../config/index.js";
+import { winResources } from "../resources/index.js";
 import type { WinBuiltAppManifest, WinPackTiming, WinPaths } from "./types.js";
 
 const execFileAsync = promisify(execFile);

@@ -2275,7 +2275,13 @@ describe("desktop updater", () => {
       expect(spawned).toHaveLength(1);
       expect(unref).toHaveBeenCalledTimes(1);
       expect(spawned[0]?.command).toBe(payloadLaunchPath);
-      expect(spawned[0]?.options).toEqual({ cwd: runtimeBase, detached: true, stdio: "ignore", windowsHide: true });
+      expect(spawned[0]?.options).toEqual(expect.objectContaining({
+        cwd: runtimeBase,
+        detached: true,
+        env: expect.any(Object),
+        stdio: "ignore",
+        windowsHide: true,
+      }));
       const args = spawned[0]?.args ?? [];
       expect(args).toEqual(expect.arrayContaining([
         LAUNCHER_AFTER_QUIT_FLAG,
@@ -3106,7 +3112,7 @@ describe("desktop updater", () => {
 
       const checked = await updater.checkForUpdates();
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
-      expect(checked.channel).toBe(DESKTOP_UPDATE_CHANNELS.PREVIEW);
+      expect(checked.channel).toBe("preview");
       expect(checked.availableVersion).toBe("1.0.1-preview.2");
     } finally {
       await fixture.close();

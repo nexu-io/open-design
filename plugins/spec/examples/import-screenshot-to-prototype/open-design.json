@@ -4,7 +4,7 @@
   "name": "import-screenshot-to-prototype",
   "title": "Screenshot To Prototype",
   "version": "0.1.0",
-  "description": "Rebuild a screenshot as an editable Open Design prototype.",
+  "description": "Rebuild a screenshot as an editable OpenDesign prototype.",
   "license": "MIT",
   "tags": ["import", "screenshot-import", "image-import", "prototype"],
   "compat": {

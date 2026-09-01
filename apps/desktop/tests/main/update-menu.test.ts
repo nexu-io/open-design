@@ -73,7 +73,7 @@ describe("macOS update menu", () => {
       status: status("downloaded", {
         artifact: { type: "payload", url: "https://example.test/payload.zip" },
       }),
-    })).toMatchObject({ label: "Restart to Update Open Design…", enabled: true, action: "open-dialog" });
+    })).toMatchObject({ label: "Restart to Update OpenDesign…", enabled: true, action: "open-dialog" });
     expect(deriveDesktopUpdateMenuItem({
       labels: DEFAULT_DESKTOP_UPDATE_MENU_LABELS,
       platform: "darwin",
@@ -95,7 +95,7 @@ describe("macOS update menu", () => {
     const item = deriveDesktopUpdateMenuItem({
       labels: {
         ...DEFAULT_DESKTOP_UPDATE_MENU_LABELS,
-        restart: "重新启动以更新 Open Design…",
+        restart: "重新启动以更新 OpenDesign…",
       },
       platform: "darwin",
       status: status("downloaded", {
@@ -105,7 +105,7 @@ describe("macOS update menu", () => {
     expect(item).toMatchObject({
       action: "open-dialog",
       enabled: true,
-      label: "重新启动以更新 Open Design…",
+      label: "重新启动以更新 OpenDesign…",
       visible: true,
     });
   });

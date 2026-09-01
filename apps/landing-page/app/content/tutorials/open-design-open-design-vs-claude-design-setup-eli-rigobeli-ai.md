@@ -1,7 +1,7 @@
 ---
-title: 'Make Slide Decks From a Video or Article With Open Design (On Free Credits)'
+title: 'Make Slide Decks From a Video or Article With OpenDesign (On Free Credits)'
 youtubeId: JxYA51g_x5k
-summary: Use Open Design as a presentation generator — turn a YouTube transcript or any article into a polished, animated slide deck, running free on a coding agent's free tier. Also covers installing, connecting Codex for free, design systems, the sketch tool, and importing a Claude Design ZIP. Based on Eli Rigobeli's deep walkthrough.
+summary: Use OpenDesign as a presentation generator — turn a YouTube transcript or any article into a polished, animated slide deck, running free on a coding agent's free tier. Also covers installing, connecting Codex for free, design systems, the sketch tool, and importing a Claude Design ZIP. Based on Eli Rigobeli's deep walkthrough.
 date: 2026-05-13
 category: Demo
 durationSeconds: 1813
@@ -9,14 +9,14 @@ author: 'Eli Rigobeli - AI'
 official: false
 ---
 
-Open Design isn't just for web pages — it's a strong **presentation generator**. This guide focuses on that: turn a YouTube transcript or any article into a polished, animated slide deck, running **free** on a coding agent's free tier. It also covers the free Codex setup, design systems, the sketch tool, and importing a Claude Design ZIP. It follows the deep walkthrough **Eli Rigobeli** gives in [his video](https://www.youtube.com/watch?v=JxYA51g_x5k), rewritten in English and brought up to date with the current release. Watch the video above, or read on for the written version.
+OpenDesign isn't just for web pages — it's a strong **presentation generator**. This guide focuses on that: turn a YouTube transcript or any article into a polished, animated slide deck, running **free** on a coding agent's free tier. It also covers the free Codex setup, design systems, the sketch tool, and importing a Claude Design ZIP. It follows the deep walkthrough **Eli Rigobeli** gives in [his video](https://www.youtube.com/watch?v=JxYA51g_x5k), rewritten in English and brought up to date with the current release. Watch the video above, or read on for the written version.
 
-![Slide-deck mode in Open Design with example decks.](/tutorials/open-design-open-design-vs-claude-design-setup-eli-rigobeli-ai/slide-deck-creator.webp)
+![Slide-deck mode in OpenDesign with example decks.](/tutorials/open-design-open-design-vs-claude-design-setup-eli-rigobeli-ai/slide-deck-creator.webp)
 *Slide-deck mode: choose a deck category and fork an example as your starting point.*
 
-## What is Open Design?
+## What is OpenDesign?
 
-Open Design is an open-source, local-first design platform — a Claude Design alternative you run on your own machine, driving **any agent or model you want** (Codex, Claude Code, Gemini, OpenCode, or your own API key) instead of being locked to one provider with a token cap. It ships with a deep library of design systems (each a `DESIGN.md`) and design skills, and goes beyond pages to slide decks, images, and video.
+OpenDesign is an open-source, local-first design platform — a Claude Design alternative you run on your own machine, driving **any agent or model you want** (Codex, Claude Code, Gemini, OpenCode, or your own API key) instead of being locked to one provider with a token cap. It ships with a deep library of design systems (each a `DESIGN.md`) and design skills, and goes beyond pages to slide decks, images, and video.
 
 ## Step 1 — Install and connect a free model
 
@@ -33,26 +33,26 @@ Open the local URL it prints (a dynamic port — don't hardcode one). For a **fr
 
 ## Step 2 — Generate a slide deck from existing content
 
-This is the standout workflow. You don't have to write a deck from scratch — feed Open Design content you already have:
+This is the standout workflow. You don't have to write a deck from scratch — feed OpenDesign content you already have:
 
 1. Choose **Slide deck**, name it, and pick a design system (you can even mix two, e.g. a brand look + a code look).
 2. Take the source content — Eli copies the **transcript of a YouTube video** (any article works too) — and have an LLM turn it into a deck brief ("generate a prompt for a 5-slide presentation from this transcript: …").
-3. Paste that into Open Design and send. It runs a short **discovery** pass (audience, visual tone — e.g. "editorial magazine," animation level) and a **visual direction**, then builds.
+3. Paste that into OpenDesign and send. It runs a short **discovery** pass (audience, visual tone — e.g. "editorial magazine," animation level) and a **visual direction**, then builds.
 
 The result is a genuinely polished deck — Eli's had smooth slide-transition animations and a consistent editorial look across five slides, presentable full-screen. It's the fastest way to turn a talk, article, or video into shareable slides.
 
-![A real prototype generated in Open Design.](/tutorials/open-design-open-design-vs-claude-design-setup-eli-rigobeli-ai/generated-prototype.webp)
-*A real generated prototype rendered in the preview — Open Design also builds full interactive pages, not just decks.*
+![A real prototype generated in OpenDesign.](/tutorials/open-design-open-design-vs-claude-design-setup-eli-rigobeli-ai/generated-prototype.webp)
+*A real generated prototype rendered in the preview — OpenDesign also builds full interactive pages, not just decks.*
 
 ## Step 3 — More inputs: sketches, references, and Claude Design ZIPs
 
-Open Design accepts several starting points beyond a text prompt:
+OpenDesign accepts several starting points beyond a text prompt:
 
 - **Sketch tool** — draw a rough layout ("banner here, cards below"), annotate it, and have it built from your sketch.
 - **Reference files** — drag in images, screenshots, or folders as context, and `@`-mention them (or skills) right in the prompt.
-- **Claude Design ZIP import** — already have a design system in Claude Design? Export it as a ZIP, import it, and Open Design builds new artifacts that follow your existing tokens and brand.
+- **Claude Design ZIP import** — already have a design system in Claude Design? Export it as a ZIP, import it, and OpenDesign builds new artifacts that follow your existing tokens and brand.
 
-![The HyperFrames motion and video gallery in Open Design.](/tutorials/open-design-open-design-vs-claude-design-setup-eli-rigobeli-ai/motion-gallery.webp)
+![The HyperFrames motion and video gallery in OpenDesign.](/tutorials/open-design-open-design-vs-claude-design-setup-eli-rigobeli-ai/motion-gallery.webp)
 *The HyperFrames gallery: code-driven motion and video pieces you can fork and remix.*
 
 ## Step 4 — Edit, watch your cost, and ship
@@ -71,7 +71,7 @@ His cost tip: if you'd rather use an API key, pick **cheap models** (GLM, Kimi, 
 
 ## FAQ
 
-**Can Open Design make presentations, not just web pages?**
+**Can OpenDesign make presentations, not just web pages?**
 Yes — Slide-deck mode turns a prompt (or a transcript/article you paste) into a polished, animated HTML deck you can present full-screen or export to PowerPoint/PDF.
 
 **Can I run it completely free?**

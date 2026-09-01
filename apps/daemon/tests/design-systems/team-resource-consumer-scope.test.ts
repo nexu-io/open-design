@@ -2,12 +2,18 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { closeDatabase, ensureWorkspaceResource, openDatabase } from '../../src/db.js';
+import {
+  closeDatabase,
+  ensureWorkspaceResource,
+  openDatabase,
+  updateWorkspaceResource,
+} from '../../src/db.js';
 import * as designSystems from '../../src/design-systems/index.js';
 import { createDesignSystemServerServices } from '../../src/design-systems/server-services.js';
 import * as skills from '../../src/skills.js';
 import { materializeWorkspaceScopedTeamResource } from '../../src/collab/team-resource-materialization.js';
 import { workspaceTeamSkillBindingResourceId } from '../../src/skills/workspace-team-binding.js';
+import { workspaceTeamDesignSystemBindingResourceId } from '../../src/design-systems/workspace-team-binding.js';
 
 const roots: string[] = [];
 
@@ -100,6 +106,16 @@ describe('Team resource consumers use explicit Workspace scope', () => {
       });
       ensureWorkspaceResource(
         fixture.db,
+        'design_system',
+        workspaceId,
+        workspaceTeamDesignSystemBindingResourceId(
+          workspaceId,
+          'user:same-design-system',
+        ),
+        { visibility: 'team', resourceState: 'active' },
+      );
+      ensureWorkspaceResource(
+        fixture.db,
         'skill',
         workspaceId,
         workspaceTeamSkillBindingResourceId(workspaceId, 'same-skill'),
@@ -165,6 +181,49 @@ describe('Team resource consumers use explicit Workspace scope', () => {
         { workspaceId: 'workspace-b' },
       ),
     ).resolves.toEqual({ ok: true, id: 'user:same-design-system' });
+  });
+
+  it('drops a Team design system after local reconciliation tombstones its binding', async () => {
+    const fixture = await createFixture();
+    const workspaceId = 'workspace-a';
+    const designSystemId = 'user:reconciled-away';
+    const bindingId = workspaceTeamDesignSystemBindingResourceId(
+      workspaceId,
+      designSystemId,
+    );
+    await materializeWorkspaceScopedTeamResource({
+      kindRoot: fixture.userDesignSystems,
+      storageName: 'reconciled-away',
+      identity: {
+        kind: 'design_system',
+        workspaceId,
+        resourceId: designSystemId,
+        hubResourceId: 'ds-reconciled-away',
+      },
+      pullInto: (dir) => writeDesignSystem(dir, workspaceId, 'still on disk'),
+      verifyWorkspaceScope: async () => true,
+      verifyStillShared: async () => true,
+    });
+    ensureWorkspaceResource(fixture.db, 'design_system', workspaceId, bindingId, {
+      visibility: 'team',
+      resourceState: 'active',
+    });
+
+    await expect(fixture.services.listAllDesignSystems({
+      workspaceId,
+      exactTeam: true,
+    })).resolves.toEqual([
+      expect.objectContaining({ id: designSystemId, teamSynced: true }),
+    ]);
+
+    updateWorkspaceResource(fixture.db, 'design_system', workspaceId, bindingId, {
+      resourceState: 'deleted',
+    });
+
+    await expect(fixture.services.listAllDesignSystems({
+      workspaceId,
+      exactTeam: true,
+    })).resolves.toEqual([]);
   });
 
   it('lets only the exact Personal creator validate a same-Workspace design system', async () => {

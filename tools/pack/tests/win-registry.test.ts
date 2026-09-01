@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { stripRegistryQuotedValue } from "../src/win/registry.js";
+import { stripRegistryQuotedValue } from "@/win/registry.js";
 
 describe("stripRegistryQuotedValue", () => {
   it("returns the quoted body when the value is fully quoted", () => {

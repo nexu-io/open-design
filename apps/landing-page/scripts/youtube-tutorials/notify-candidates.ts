@@ -42,7 +42,7 @@ function fmtDuration(seconds: number): string {
 
 function buildDigest(candidates: ScoredCandidate[], today: string): string {
   const lines: string[] = [];
-  lines.push(`📺 Open Design 教程候选 · ${today} · 共 ${candidates.length} 条待审(按建议评分排序)`);
+  lines.push(`📺 OpenDesign 教程候选 · ${today} · 共 ${candidates.length} 条待审(按建议评分排序)`);
   lines.push('');
   candidates.forEach((v, i) => {
     const s = v.score;
@@ -63,7 +63,7 @@ function buildDigest(candidates: ScoredCandidate[], today: string): string {
   lines.push('• 全上 / 全不上');
   lines.push('• 全上 除 2 4    除这几条其余都上');
   lines.push('');
-  lines.push('(已自动过滤:已收录的 + 经 LLM 闸门判定非 Open Design 的内容)');
+  lines.push('(已自动过滤:已收录的 + 经 LLM 闸门判定非 OpenDesign 的内容)');
   return lines.join('\n');
 }
 
@@ -138,7 +138,7 @@ function buildCard(
     config: { wide_screen_mode: true },
     header: {
       template: recommended > 0 ? 'green' : 'grey',
-      title: { tag: 'plain_text', content: `📺 Open Design 教程候选 · ${today}` },
+      title: { tag: 'plain_text', content: `📺 OpenDesign 教程候选 · ${today}` },
     },
     elements,
   };

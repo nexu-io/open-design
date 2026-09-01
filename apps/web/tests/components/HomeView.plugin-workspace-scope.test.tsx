@@ -50,15 +50,47 @@ vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
 
 vi.mock('../../src/components/HomeHero', () => ({
   HomeHero: React.forwardRef(function HomeHeroMock(props: {
-    pluginOptions: Array<{ id: string }>;
+    pluginOptions: Array<{ id: string; title: string }>;
     pluginsLoading: boolean;
+    prompt: string;
     onStartBlankProject: () => void;
-  }) {
+    activePluginTitle: string | null;
+    activePluginRecord: { id: string; title: string } | null;
+    activeSkillRecord: { id: string; name: string } | null;
+    selectedPluginContexts: Array<{ id: string; title: string }>;
+    selectedDesignSystemId: string | null;
+    onPickExamplePlugin: (record: any, chipId: string, promptText: string) => void;
+    onPickPlugin: (record: any, nextPrompt: string | null) => void;
+    onPickSkill: (skill: any, nextPrompt: string | null) => void;
+    onDesignSystemChange: (id: string | null) => void;
+  }, _ref) {
     return (
       <div>
         <output data-testid="plugin-catalog">
           {props.pluginsLoading ? 'loading' : props.pluginOptions.map((plugin) => plugin.id).join(',')}
         </output>
+        <output data-testid="prompt">{props.prompt}</output>
+        <output data-testid="active-plugin">
+          {props.activePluginRecord ? `${props.activePluginRecord.id}:${props.activePluginRecord.title}` : 'none'}
+        </output>
+        <output data-testid="plugin-contexts">
+          {props.selectedPluginContexts.map((record) => `${record.id}:${record.title}`).join(',') || 'none'}
+        </output>
+        <output data-testid="active-skill">
+          {props.activeSkillRecord ? `${props.activeSkillRecord.id}:${props.activeSkillRecord.name}` : 'none'}
+        </output>
+        <output data-testid="active-design-system">{props.selectedDesignSystemId ?? 'none'}</output>
+        {props.pluginOptions.map((record) => (
+          <span key={record.id}>
+            <button type="button" onClick={() => props.onPickExamplePlugin(record, 'prototype', 'draft')}>active-{record.id}</button>
+            <button type="button" onClick={() => props.onPickPlugin(record, null)}>context-{record.id}</button>
+          </span>
+        ))}
+        <button
+          type="button"
+          onClick={() => props.onPickSkill({ id: 'shared-skill', name: 'Skill A', description: '', triggers: [], mode: 'prototype', previewType: 'none', designSystemRequired: false, defaultFor: [], upstream: null, hasBody: true, examplePrompt: '' }, null)}
+        >skill</button>
+        <button type="button" onClick={() => props.onDesignSystemChange('shared-ds')}>design-system</button>
         <button type="button" onClick={props.onStartBlankProject}>blank</button>
       </div>
     );
@@ -92,10 +124,10 @@ function teamContext(workspaceId: string, workspaceMemberId: string): WorkspaceC
   };
 }
 
-function plugin(id: string) {
+function plugin(id: string, title = id) {
   return {
     id,
-    title: id,
+    title,
     version: '1.0.0',
     trust: 'bundled',
     sourceKind: 'bundled',
@@ -104,7 +136,38 @@ function plugin(id: string) {
     fsPath: `/tmp/${id}`,
     installedAt: 0,
     updatedAt: 0,
-    manifest: { name: id, title: id, version: '1.0.0', od: { kind: 'scenario' } },
+    manifest: { name: id, title, version: '1.0.0', od: { kind: 'scenario' } },
+  };
+}
+
+function designSystem(id: string, title: string) {
+  return {
+    id,
+    title,
+    source: 'user' as const,
+    status: 'published' as const,
+    category: 'Brand',
+    summary: `${title} summary`,
+    swatches: ['#111111'],
+    surface: 'web' as const,
+    isEditable: true,
+  };
+}
+
+function skill(name: string) {
+  return {
+    id: 'shared-skill',
+    name,
+    description: '',
+    triggers: [],
+    mode: 'prototype' as const,
+    previewType: 'none',
+    designSystemRequired: false,
+    defaultFor: [],
+    upstream: null,
+    hasBody: true,
+    examplePrompt: '',
+    aggregatesExamples: false,
   };
 }
 
@@ -140,6 +203,57 @@ describe('HomeView workspace-scoped plugin catalog', () => {
     };
     workspaceInvalidationHarness.onActive.length = 0;
     workspaceInvalidationHarness.autoActivate = true;
+  });
+
+  it('masks the provisional catalog until the first Workspace-scoped read settles', async () => {
+    const pluginRequests: Headers[] = [];
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input, init) => {
+      if (String(input) === '/api/plugins') {
+        const headers = new Headers(init?.headers);
+        pluginRequests.push(headers);
+        const pluginId = headers.has('x-od-workspace-id')
+          ? 'scoped-plugin'
+          : 'provisional-plugin';
+        return new Response(JSON.stringify({ plugins: [plugin(pluginId)] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+    }));
+    workspaceMock.state = {
+      context: null,
+      loading: true,
+      identityChangePending: false,
+      failure: undefined,
+    };
+    const view = renderHome();
+
+    await waitFor(() => expect(pluginRequests).toHaveLength(1));
+    expect(pluginRequests[0]?.has('x-od-workspace-id')).toBe(false);
+    expect(screen.getByTestId('plugin-catalog').textContent).toBe('loading');
+
+    workspaceMock.state = {
+      context: teamContext('workspace-startup', 'member-startup'),
+      loading: false,
+      identityChangePending: false,
+      failure: undefined,
+    };
+    view.rerender(
+      <HomeView
+        projects={[]}
+        onSubmit={() => undefined}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await waitFor(() => expect(pluginRequests).toHaveLength(2));
+    expect(pluginRequests[1]?.get('x-od-workspace-id')).toBe('workspace-startup');
+    expect(pluginRequests[1]?.get('x-od-workspace-member-id')).toBe('member-startup');
+    await waitFor(() => {
+      expect(screen.getByTestId('plugin-catalog').textContent).toBe('scoped-plugin');
+    });
   });
 
   it('parks hidden plugin invalidations and performs one bounded catch-up when Home activates', async () => {
@@ -254,7 +368,180 @@ describe('HomeView workspace-scoped plugin catalog', () => {
     expect(screen.getByTestId('plugin-catalog').textContent).toBe('plugin-b');
   });
 
-  it('does not create through the previous workspace while an identity change is pending', async () => {
+  it('rebinds same-id staged resources to B without clearing the draft', async () => {
+    let workspaceB = false;
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input) => {
+      if (String(input) === '/api/plugins') {
+        return new Response(JSON.stringify({
+          plugins: [plugin('shared-plugin', workspaceB ? 'Plugin B' : 'Plugin A')],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+    }));
+    workspaceMock.state = {
+      context: teamContext('workspace-a', 'member-a'),
+      loading: false,
+      identityChangePending: false,
+      failure: undefined,
+    };
+    const view = render(
+      <HomeView
+        projects={[]}
+        onSubmit={() => undefined}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+        skills={[skill('Skill A')]}
+        designSystems={[designSystem('shared-ds', 'DS A')]}
+      />,
+    );
+    await screen.findByRole('button', { name: 'active-shared-plugin' });
+    fireEvent.click(screen.getByRole('button', { name: 'active-shared-plugin' }));
+    fireEvent.click(screen.getByRole('button', { name: 'context-shared-plugin' }));
+    fireEvent.click(screen.getByRole('button', { name: 'design-system' }));
+
+    workspaceB = true;
+    workspaceMock.state = {
+      context: teamContext('workspace-b', 'member-b'),
+      loading: false,
+      identityChangePending: false,
+      failure: undefined,
+    };
+    view.rerender(
+      <HomeView
+        projects={[]}
+        onSubmit={() => undefined}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+        skills={[skill('Skill B')]}
+        designSystems={[designSystem('shared-ds', 'DS B')]}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('active-plugin').textContent).toBe('shared-plugin:Plugin B'));
+    expect(screen.getByTestId('plugin-contexts').textContent).toBe('shared-plugin:Plugin B');
+    expect(screen.getByTestId('prompt').textContent).toBe('draft');
+    expect(screen.getByTestId('active-design-system').textContent).toBe('shared-ds');
+  });
+
+  it('invalidates only staged resources missing from B', async () => {
+    let workspaceB = false;
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input) => {
+      if (String(input) === '/api/plugins') {
+        return new Response(JSON.stringify({
+          plugins: workspaceB ? [] : [plugin('workspace-a-plugin', 'Plugin A')],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+    }));
+    workspaceMock.state = {
+      context: teamContext('workspace-a', 'member-a'),
+      loading: false,
+      identityChangePending: false,
+      failure: undefined,
+    };
+    const view = render(
+      <HomeView
+        projects={[]}
+        onSubmit={() => undefined}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+        skills={[skill('Skill A')]}
+        designSystems={[designSystem('shared-ds', 'DS A')]}
+      />,
+    );
+    await screen.findByRole('button', { name: 'active-workspace-a-plugin' });
+    fireEvent.click(screen.getByRole('button', { name: 'active-workspace-a-plugin' }));
+    fireEvent.click(screen.getByRole('button', { name: 'context-workspace-a-plugin' }));
+    fireEvent.click(screen.getByRole('button', { name: 'design-system' }));
+
+    workspaceB = true;
+    workspaceMock.state = {
+      context: teamContext('workspace-b', 'member-b'),
+      loading: false,
+      identityChangePending: false,
+      failure: undefined,
+    };
+    view.rerender(
+      <HomeView
+        projects={[]}
+        onSubmit={() => undefined}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+        skills={[]}
+        designSystems={[]}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('active-plugin').textContent).toBe('none'));
+    expect(screen.getByTestId('plugin-contexts').textContent).toBe('none');
+    expect(screen.getByTestId('prompt').textContent).toBe('draft');
+    expect(screen.getByTestId('active-design-system').textContent).toBe('none');
+  });
+
+  it('rebinds a same-id active skill and invalidates it when the next catalog omits it', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input) => {
+      if (String(input) === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+    }));
+    workspaceMock.state = {
+      context: teamContext('workspace-a', 'member-a'),
+      loading: false,
+      identityChangePending: false,
+      failure: undefined,
+    };
+    const view = render(
+      <HomeView
+        projects={[]}
+        onSubmit={() => undefined}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+        skills={[skill('Skill A')]}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'skill' }));
+    expect(screen.getByTestId('active-skill').textContent).toBe('shared-skill:Skill A');
+
+    workspaceMock.state = {
+      context: teamContext('workspace-b', 'member-b'),
+      loading: false,
+      identityChangePending: false,
+      failure: undefined,
+    };
+    view.rerender(
+      <HomeView
+        projects={[]}
+        onSubmit={() => undefined}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+        skills={[skill('Skill B')]}
+      />,
+    );
+    await waitFor(() => expect(screen.getByTestId('active-skill').textContent).toBe('shared-skill:Skill B'));
+
+    workspaceMock.state = {
+      context: teamContext('workspace-c', 'member-c'),
+      loading: false,
+      identityChangePending: false,
+      failure: undefined,
+    };
+    view.rerender(
+      <HomeView
+        projects={[]}
+        onSubmit={() => undefined}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+        skills={[]}
+      />,
+    );
+    await waitFor(() => expect(screen.getByTestId('active-skill').textContent).toBe('none'));
+  });
+
+  it('creates locally without stale Workspace attribution while identity changes', async () => {
     const projectCreates: RequestInit[] = [];
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input, init) => {
       const url = String(input);
@@ -277,8 +564,10 @@ describe('HomeView workspace-scoped plugin catalog', () => {
     renderHome();
     fireEvent.click(screen.getByRole('button', { name: 'blank' }));
 
-    await Promise.resolve();
-    expect(projectCreates).toHaveLength(0);
+    await waitFor(() => expect(projectCreates).toHaveLength(1));
+    const requestHeaders = new Headers(projectCreates[0]?.headers);
+    expect(requestHeaders.has('x-od-workspace-id')).toBe(false);
+    expect(requestHeaders.has('x-od-workspace-member-id')).toBe(false);
   });
 
   it('restarts a cold plugin read after a transient identity mask instead of joining the cancelled request', async () => {

@@ -308,11 +308,11 @@ describe('adapter conformance harness (Phase 10)', () => {
       yield '    <PANELIST role="designer">\n';
       yield '      <ARTIFACT mime="text/html"><![CDATA[<p>v1</p>]]></ARTIFACT>\n';
       yield '    </PANELIST>\n';
-      yield '    <PANELIST role="critic" score="6"><DIM name="x" score="6">n</DIM></PANELIST>\n';
-      yield '    <PANELIST role="brand" score="6"><DIM name="x" score="6">n</DIM></PANELIST>\n';
+      yield '    <PANELIST role="critic" score="6"><DIM name="x" score="6">n</DIM><MUST_FIX>Fix hierarchy.</MUST_FIX></PANELIST>\n';
+      yield '    <PANELIST role="brand" score="6"><DIM name="x" score="6">n</DIM><MUST_FIX>Use brand color.</MUST_FIX></PANELIST>\n';
       yield '    <PANELIST role="a11y" score="6"><DIM name="x" score="6">n</DIM></PANELIST>\n';
       yield '    <PANELIST role="copy" score="6"><DIM name="x" score="6">n</DIM></PANELIST>\n';
-      yield '    <ROUND_END n="1" composite="6.0" must_fix="3" decision="continue">\n';
+      yield '    <ROUND_END n="1" composite="6.0" must_fix="2" decision="continue">\n';
       yield '      <REASON>more work</REASON>\n';
       yield '    </ROUND_END>\n';
       yield '  </ROUND>\n';
@@ -398,13 +398,11 @@ describe('adapter conformance harness (Phase 10)', () => {
   // off PARSER_WARNING_KINDS directly. Adding a sixth kind to the
   // contracts export auto-grows the matrix without a harness-test edit.
   // Kinds reachable in a single-fixture generator are covered here;
-  // kinds that need a multi-round or cross-panelist setup are marked
-  // `it.todo` so the gap is documented rather than silently uncovered.
+  // multi-round and cross-panelist cases use dedicated fixtures below.
   describe('parser_warning matrix across PARSER_WARNING_KINDS (PerishCode P3 on PR #1317)', () => {
     it('all kinds documented match the contracts enum', () => {
       // Bare guard: if PARSER_WARNING_KINDS changes shape without the
-      // matrix being updated, this test points at the missing fixtures
-      // (it.todo lines below) before the next reviewer has to ask.
+      // matrix being updated, this test points at the missing fixtures.
       expect([...PARSER_WARNING_KINDS]).toEqual([
         'weak_debate',
         'unknown_role',
@@ -448,19 +446,115 @@ describe('adapter conformance harness (Phase 10)', () => {
       expect(warnings.some((w) => w.type === 'parser_warning' && w.kind === 'score_clamped')).toBe(true);
     });
 
-    // The four kinds below need single-fixture generators that the
-    // parser currently emits in isolation. The score_clamped case is
-    // the simplest because the trigger is a literal attribute on a
-    // single <PANELIST>. The other four need either cross-panelist
-    // (weak_debate, composite_mismatch), unknown-enum (unknown_role),
-    // or multi-block (duplicate_ship) setups whose isolation behavior
-    // depends on parser invariants the harness should not duplicate.
-    // Marking them it.todo documents the gap explicitly so the next
-    // contributor finishing the matrix sees what's missing rather than
-    // assuming the kind is uncovered by accident.
-    it.todo('classifies weak_debate as degraded parser_warning');
-    it.todo('classifies unknown_role as degraded parser_warning');
-    it.todo('classifies composite_mismatch as degraded parser_warning');
-    it.todo('classifies duplicate_ship as degraded parser_warning');
+    it('classifies weak_debate as degraded parser_warning', async () => {
+      async function* fixture(): AsyncIterable<string> {
+        yield `<CRITIQUE_RUN version="1" maxRounds="2" threshold="8" scale="10">
+          <ROUND n="1">
+            <PANELIST role="designer"><ARTIFACT mime="text/html"><![CDATA[<p>v1</p>]]></ARTIFACT></PANELIST>
+            <PANELIST role="critic" score="6"><MUST_FIX>Fix contrast.</MUST_FIX></PANELIST>
+            <PANELIST role="brand" score="6"><MUST_FIX>Fix contrast.</MUST_FIX></PANELIST>
+            <PANELIST role="a11y" score="6"></PANELIST>
+            <PANELIST role="copy" score="6"></PANELIST>
+            <ROUND_END n="1" composite="6" must_fix="2" decision="continue"><REASON>iterate</REASON></ROUND_END>
+          </ROUND>
+          <ROUND n="2">
+            <PANELIST role="designer" score="9"><NOTES>done</NOTES></PANELIST>
+            <PANELIST role="critic" score="9"></PANELIST>
+            <PANELIST role="brand" score="9"></PANELIST>
+            <PANELIST role="a11y" score="9"></PANELIST>
+            <PANELIST role="copy" score="9"></PANELIST>
+            <ROUND_END n="2" composite="9" must_fix="0" decision="ship"><REASON>ship</REASON></ROUND_END>
+          </ROUND>
+          <SHIP round="2" composite="9" status="shipped"><ARTIFACT mime="text/html"><![CDATA[<p>final</p>]]></ARTIFACT><SUMMARY>done</SUMMARY></SHIP>
+        </CRITIQUE_RUN>`;
+      }
+      const outcome = await runAdapterConformance({
+        adapterId: 'synthetic-weak-debate',
+        runId: 'run-weak-debate',
+        source: fixture(),
+      });
+      expect(outcome.kind).toBe('degraded');
+      expect(outcome.events.some(
+        (event) => event.type === 'parser_warning' && event.kind === 'weak_debate',
+      )).toBe(true);
+    });
+
+    it('classifies unknown_role as degraded parser_warning', async () => {
+      async function* fixture(): AsyncIterable<string> {
+        yield `<CRITIQUE_RUN version="1" maxRounds="1" threshold="8" scale="10">
+          <ROUND n="1">
+            <PANELIST role="designer"><ARTIFACT mime="text/html"><![CDATA[<p>v1</p>]]></ARTIFACT></PANELIST>
+            <PANELIST role="phantom" score="9"><DIM name="x" score="9">ignored</DIM></PANELIST>
+            <PANELIST role="critic" score="9"></PANELIST>
+            <PANELIST role="brand" score="9"></PANELIST>
+            <PANELIST role="a11y" score="9"></PANELIST>
+            <PANELIST role="copy" score="9"></PANELIST>
+            <ROUND_END n="1" composite="9" must_fix="0" decision="ship"><REASON>ship</REASON></ROUND_END>
+          </ROUND>
+          <SHIP round="1" composite="9" status="shipped"><ARTIFACT mime="text/html"><![CDATA[<p>final</p>]]></ARTIFACT><SUMMARY>done</SUMMARY></SHIP>
+        </CRITIQUE_RUN>`;
+      }
+      const outcome = await runAdapterConformance({
+        adapterId: 'synthetic-unknown-role',
+        runId: 'run-unknown-role',
+        source: fixture(),
+      });
+      expect(outcome.kind).toBe('degraded');
+      expect(outcome.events.some(
+        (event) => event.type === 'parser_warning' && event.kind === 'unknown_role',
+      )).toBe(true);
+    });
+
+    it('classifies composite_mismatch as degraded parser_warning', async () => {
+      async function* fixture(): AsyncIterable<string> {
+        yield `<CRITIQUE_RUN version="1" maxRounds="1" threshold="8" scale="10">
+          <ROUND n="1">
+            <PANELIST role="designer"><ARTIFACT mime="text/html"><![CDATA[<p>v1</p>]]></ARTIFACT></PANELIST>
+            <PANELIST role="critic" score="9"></PANELIST>
+            <PANELIST role="brand" score="9"></PANELIST>
+            <PANELIST role="a11y" score="9"></PANELIST>
+            <PANELIST role="copy" score="9"></PANELIST>
+            <ROUND_END n="1" composite="2" must_fix="0" decision="ship"><REASON>ship</REASON></ROUND_END>
+          </ROUND>
+          <SHIP round="1" composite="2" status="shipped"><ARTIFACT mime="text/html"><![CDATA[<p>final</p>]]></ARTIFACT><SUMMARY>done</SUMMARY></SHIP>
+        </CRITIQUE_RUN>`;
+      }
+      const outcome = await runAdapterConformance({
+        adapterId: 'synthetic-composite-mismatch',
+        runId: 'run-composite-mismatch',
+        source: fixture(),
+      });
+      expect(outcome.kind).toBe('degraded');
+      expect(outcome.events.some(
+        (event) => event.type === 'parser_warning' && event.kind === 'composite_mismatch',
+      )).toBe(true);
+    });
+
+    it('classifies a SHIP composite mismatch after a correct ROUND_END as degraded', async () => {
+      async function* fixture(): AsyncIterable<string> {
+        yield `<CRITIQUE_RUN version="1" maxRounds="1" threshold="8" scale="10">
+          <ROUND n="1">
+            <PANELIST role="designer"><ARTIFACT mime="text/html"><![CDATA[<p>v1</p>]]></ARTIFACT></PANELIST>
+            <PANELIST role="critic" score="9"></PANELIST>
+            <PANELIST role="brand" score="9"></PANELIST>
+            <PANELIST role="a11y" score="9"></PANELIST>
+            <PANELIST role="copy" score="9"></PANELIST>
+            <ROUND_END n="1" composite="9" must_fix="0" decision="ship"><REASON>ship</REASON></ROUND_END>
+          </ROUND>
+          <SHIP round="1" composite="2" status="shipped"><ARTIFACT mime="text/html"><![CDATA[<p>final</p>]]></ARTIFACT><SUMMARY>done</SUMMARY></SHIP>
+        </CRITIQUE_RUN>`;
+      }
+      const outcome = await runAdapterConformance({
+        adapterId: 'synthetic-ship-composite-mismatch',
+        runId: 'run-ship-composite-mismatch',
+        source: fixture(),
+      });
+      expect(outcome.kind).toBe('degraded');
+      expect(outcome.events.some(
+        (event) => event.type === 'parser_warning' && event.kind === 'composite_mismatch',
+      )).toBe(true);
+    });
+    // duplicate_ship is covered by the dedicated post-SHIP conformance case
+    // above, where the harness must continue draining after the first SHIP.
   });
 });

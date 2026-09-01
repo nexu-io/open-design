@@ -30,6 +30,7 @@ import {
   createRunSideEffectLedger,
   foldEventIntoRunSideEffectLedger,
   runArtifactCountForRun,
+  runFilesWrittenForRun,
   runSideEffectsForRun,
   sideEffectsFromLedger,
 } from '../src/runtimes/run-lifecycle-analytics.js';
@@ -60,6 +61,25 @@ describe('run event-buffer truncation vs artifact verdict (unit)', () => {
     const verdict = sideEffectsFromLedger(ledger);
     expect(verdict.artifactWriteSeen).toBe(true);
     expect(ledger.artifactPaths.size).toBe(1);
+  });
+
+  it('the ledger tracks non-artifact writes for files_written_count', () => {
+    // An md-only delivery: artifact_count stays 0 (md is not a renderable
+    // extension) but the all-types write set must survive truncation so
+    // `run_finished.files_written_count` reports it from the ledger.
+    const ledger = createRunSideEffectLedger();
+    foldEventIntoRunSideEffectLedger(ledger, {
+      event: 'agent',
+      data: { type: 'tool_use', id: 'toolu_md', name: 'Write', input: { file_path: 'PROMPTS.md' } },
+    });
+    foldEventIntoRunSideEffectLedger(ledger, {
+      event: 'agent',
+      data: { type: 'tool_result', toolUseId: 'toolu_md', isError: false },
+    });
+    expect(ledger.artifactPaths.size).toBe(0);
+    expect(ledger.writtenFilePaths.size).toBe(1);
+    expect(runFilesWrittenForRun({ sideEffectLedger: ledger })).toBe(1);
+    expect(runArtifactCountForRun({ sideEffectLedger: ledger })).toBe(0);
   });
 
   it('a failed (isError) tool_result does not count as an artifact', () => {

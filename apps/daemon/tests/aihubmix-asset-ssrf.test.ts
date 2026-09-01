@@ -100,12 +100,12 @@ describe('AIHubMix asset downloads pin redirect:"error"', () => {
         return new Response(
           JSON.stringify({
             status: 'completed',
-            video_url: 'https://cdn.example.test/video/done.mp4',
+            video_url: 'https://93.184.216.34/video/done.mp4',
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
-      if (url === 'https://cdn.example.test/video/done.mp4') {
+      if (url === 'https://93.184.216.34/video/done.mp4') {
         downloadInit = init;
         return new Response(mp4Bytes, {
           status: 200,
@@ -128,11 +128,11 @@ describe('AIHubMix asset downloads pin redirect:"error"', () => {
       const url = String(input);
       if (url === 'https://aihubmix.com/v1/images/generations') {
         return new Response(
-          JSON.stringify({ data: [{ url: 'https://cdn.example.test/img/out.png' }] }),
+          JSON.stringify({ data: [{ url: 'https://93.184.216.34/img/out.png' }] }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
-      if (url === 'https://cdn.example.test/img/out.png') {
+      if (url === 'https://93.184.216.34/img/out.png') {
         downloadInit = init;
         return new Response(pngBytes, {
           status: 200,

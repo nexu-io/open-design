@@ -10,6 +10,7 @@ import {
 export interface LiveMediaTask {
   id: string;
   projectId: string;
+  runId?: string | undefined;
   status: MediaTaskStatus;
   surface?: string | undefined;
   model?: string | undefined;
@@ -25,6 +26,11 @@ export interface LiveMediaTask {
 export interface CreateMediaTaskInfo {
   surface?: string | undefined;
   model?: string | undefined;
+  runId?: string | undefined;
+}
+
+export interface MediaTaskStoreOptions {
+  isRunActive?: ((runId: string) => boolean) | undefined;
 }
 
 export interface MediaTaskSnapshot {
@@ -38,10 +44,16 @@ export interface MediaTaskSnapshot {
   error?: MediaTaskRow['error'];
 }
 
-export const TASK_TTL_AFTER_DONE_MS = 10 * 60 * 1000;
+// Terminal tasks receive a bounded cleanup sweep. Tasks owned by an active run
+// are retained and reconsidered on the next sweep so a sliding tool token can
+// never outlive its pollable result.
+export const TASK_TTL_AFTER_DONE_MS = 60 * 60 * 1000;
 const MEDIA_TERMINAL_STATUSES = new Set<MediaTaskStatus>(['done', 'failed', 'interrupted']);
 
-export function createMediaTaskStore(db: Database.Database): {
+export function createMediaTaskStore(
+  db: Database.Database,
+  options: MediaTaskStoreOptions = {},
+): {
   mediaTasks: Map<string, LiveMediaTask>;
   hydrateMediaTask(row: MediaTaskRow): LiveMediaTask;
   getLiveMediaTask(taskId: string): LiveMediaTask | null;
@@ -82,6 +94,7 @@ export function createMediaTaskStore(db: Database.Database): {
     const task: LiveMediaTask = {
       id: taskId,
       projectId,
+      runId: info.runId,
       status: 'queued',
       surface: info.surface,
       model: info.model,
@@ -143,13 +156,22 @@ export function createMediaTaskStore(db: Database.Database): {
       !task._gcScheduled
     ) {
       task._gcScheduled = true;
-      setTimeout(() => {
-        if (task.waiters.size === 0) {
-          mediaTasks.delete(task.id);
-          deleteMediaTask(db, task.id);
-        }
-      }, TASK_TTL_AFTER_DONE_MS).unref?.();
+      scheduleTerminalTaskGc(task);
     }
+  }
+
+  function scheduleTerminalTaskGc(task: LiveMediaTask): void {
+    setTimeout(() => {
+      if (
+        task.waiters.size > 0
+        || (task.runId && options.isRunActive?.(task.runId) === true)
+      ) {
+        scheduleTerminalTaskGc(task);
+        return;
+      }
+      mediaTasks.delete(task.id);
+      deleteMediaTask(db, task.id);
+    }, TASK_TTL_AFTER_DONE_MS).unref?.();
   }
 
   function mediaTaskSnapshot(task: LiveMediaTask, since = 0): MediaTaskSnapshot {

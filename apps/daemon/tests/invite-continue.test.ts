@@ -56,6 +56,35 @@ describe('consumeInviteContinuation', () => {
     expect((init as RequestInit).headers).toMatchObject({ authorization: 'Bearer ck-1' });
   });
 
+  it('maps the returned context with the settings-selected AMR profile', async () => {
+    const previousOrigins = process.env.OD_VELA_WEB_URLS;
+    process.env.OD_VELA_WEB_URLS = JSON.stringify({
+      prod: 'https://prod.example',
+      'feature-test': 'https://feature.example',
+    });
+    try {
+      const fetchImpl = vi.fn(async () => jsonResponse(200, {
+        ...CONSUME_BODY,
+        currentWorkspaceContext: {
+          ...B_CONTEXT,
+          workspaceSettingsUrl: 'https://prod.example/settings',
+        },
+      })) as unknown as typeof fetch;
+      const out = await consumeInviteContinuation('nonce-1', {
+        fetch: fetchImpl,
+        readSession: () => SESSION,
+        configuredEnv: { OPEN_DESIGN_AMR_PROFILE: 'feature-test' },
+      });
+
+      expect(out.ok && out.context?.workspaceSettingsUrl).toBe(
+        'https://feature.example/settings?workspaceId=ws-team-1&source=open_design',
+      );
+    } finally {
+      if (previousOrigins === undefined) delete process.env.OD_VELA_WEB_URLS;
+      else process.env.OD_VELA_WEB_URLS = previousOrigins;
+    }
+  });
+
   it('returns no_session without calling B when signed out', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(200, CONSUME_BODY)) as unknown as typeof fetch;
     const out = await consumeInviteContinuation('nonce-1', { fetch: fetchImpl, readSession: () => null });

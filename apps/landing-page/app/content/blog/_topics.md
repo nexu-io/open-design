@@ -1,14 +1,14 @@
-# Open Design — blog topic backlog
+# OpenDesign — blog topic backlog
 
 _Last reviewed: 2026-05-22 (0.8.0 release scoring pass)_
 
-This file is the single source of truth for what we're considering, drafting, and have shipped on the Open Design blog. The leading underscore keeps Astro's content collection from treating it as a post.
+This file is the single source of truth for what we're considering, drafting, and have shipped on the OpenDesign blog. The leading underscore keeps Astro's content collection from treating it as a post.
 
 Maintained by the `open-design-blog-factory` skill (`~/.codex/skills/open-design-blog-factory/SKILL.md`). Update on every scoring pass, draft start, and ship.
 
 Scoring rubric (4 dimensions × 5 = 20):
 
-- **Fit** — how naturally Open Design slots into the post
+- **Fit** — how naturally OpenDesign slots into the post
 - **Intent** — clarity of the search or reading intent
 - **Timing** — leverage of the moment (reactive window or weak SERP competition)
 - **Effort** — inverse cost to ship (5 = existing skill + existing artefact already covers it)
@@ -24,26 +24,26 @@ Scored, not yet drafting. Sorted by total descending. Pick from the top when sta
 | # | Topic | Channel | Fit | Intent | Timing | Effort | Total | Source | Notes |
 |---|---|---|---|---|---|---|---|---|---|
 | 1 | Claude Code vs Cursor for design work — a side-by-side | Guides (comparison) | 5 | 5 | 4 | 4 | **18** | reader question + r/cursor weekly | Reactive-ish; both products active in design-engineer mindshare. Use the same brief on both, ship the artefacts. |
-| 2 | **Claude Design pricing — and the BYOK math** (A2) | Guides (comparison) | 5 | 4 | 4 | 5 | **18** | Anthropic launch pricing public ($20/$100/$200/Enterprise) | Cost-comparison companion to seed BYOK post. Run the same brief on Claude Pro vs Open Design + BYOK; publish the token bill. High commercial intent. |
-| 3 | How to ship a launch deck with Open Design in 30 minutes | Use cases | 5 | 4 | 3 | 5 | **17** | own workflow | Re-uses `guizang-ppt` skill + a real shipped deck. Hero image = the deck cover. |
-| 4 | BYOK with DeepSeek: a $0.10 design pass on Open Design | Guides (BYOK) | 5 | 4 | 3 | 5 | **17** | DeepSeek search volume + own usage | Concrete cost numbers from a real run. Single-provider deep-dive companion to the "BYOK reality check" overview just shipped. |
-| 5 | Open Design on Windows — a working setup guide (and what's still rough) | Guides (tutorial) | 5 | 5 | 4 | 3 | **17** | gh issues #1620 #1611 #1610 #1559 #1581 | Pure search intent — Windows users are hitting these. Lists each known issue + workaround with linked GitHub issue numbers so it stays auditable. Needs to be revised whenever a Windows fix lands. The "BYOK reality check" post (shipped 2026-05-14) already covers the BYOK subset; this one widens to non-BYOK Windows pain. |
-| 6 | **Claude Design vs Figma Make vs Open Design** (A3) | Guides (comparison) | 4 | 5 | 4 | 4 | **17** | strong existing SERP for "claude design vs figma make" (Magic Patterns / XDA / CreateWith / claude-codex.fr); no vs-Open-Design content yet | Three-way comparison piggybacking on existing search heat. Use the existing comparison tables as evidence. |
+| 2 | **Claude Design pricing — and the BYOK math** (A2) | Guides (comparison) | 5 | 4 | 4 | 5 | **18** | Anthropic launch pricing public ($20/$100/$200/Enterprise) | Cost-comparison companion to seed BYOK post. Run the same brief on Claude Pro vs OpenDesign + BYOK; publish the token bill. High commercial intent. |
+| 3 | How to ship a launch deck with OpenDesign in 30 minutes | Use cases | 5 | 4 | 3 | 5 | **17** | own workflow | Re-uses `guizang-ppt` skill + a real shipped deck. Hero image = the deck cover. |
+| 4 | BYOK with DeepSeek: a $0.10 design pass on OpenDesign | Guides (BYOK) | 5 | 4 | 3 | 5 | **17** | DeepSeek search volume + own usage | Concrete cost numbers from a real run. Single-provider deep-dive companion to the "BYOK reality check" overview just shipped. |
+| 5 | OpenDesign on Windows — a working setup guide (and what's still rough) | Guides (tutorial) | 5 | 5 | 4 | 3 | **17** | gh issues #1620 #1611 #1610 #1559 #1581 | Pure search intent — Windows users are hitting these. Lists each known issue + workaround with linked GitHub issue numbers so it stays auditable. Needs to be revised whenever a Windows fix lands. The "BYOK reality check" post (shipped 2026-05-14) already covers the BYOK subset; this one widens to non-BYOK Windows pain. |
+| 6 | **Claude Design vs Figma Make vs OpenDesign** (A3) | Guides (comparison) | 4 | 5 | 4 | 4 | **17** | strong existing SERP for "claude design vs figma make" (Magic Patterns / XDA / CreateWith / claude-codex.fr); no vs-Open-Design content yet | Three-way comparison piggybacking on existing search heat. Use the existing comparison tables as evidence. |
 | 7 | What an agent-native design system looks like (a DESIGN.md walkthrough) | Guides (how it works) | 5 | 3 | 4 | 4 | **16** | own framework | Sibling to the "31 skills, 72 systems" post but at the system layer. Useful for design-system-curious readers. |
-| 8 | Inside Atelier Zero — designing the Open Design landing page with the agent that ships it | Use cases | 5 | 3 | 4 | 4 | **16** | own dogfooding | Meta in the right way: the page you're reading was built this way. Hero = a real screen recording still. |
+| 8 | Inside Atelier Zero — designing the OpenDesign landing page with the agent that ships it | Use cases | 5 | 3 | 4 | 4 | **16** | own dogfooding | Meta in the right way: the page you're reading was built this way. Hero = a real screen recording still. |
 | ~~9~~ | ~~We just shipped in-app auto-update on Windows + Linux~~ | ~~Product (announcement)~~ | ~~5~~ | ~~3~~ | ~~4~~ | ~~4~~ | ~~**16**~~ | gh issue #1613 (closed 2026-05-13) | **Folded into the 0.8.0 release announcement (shipped 2026-05-22). Auto-update lands as one of the three architectural plates in that post.** |
 | 10 | 96 contributors in our first month — what the Synclo bot taught us about open-source onboarding | Community (essay) | 4 | 3 | 4 | 5 | **16** | bot leveling cards across all issues + #1605 #1637 examples | Meta-essay about how the project runs. Easy to write — the data is already in the bot card images. CTA = `Contribute a skill`. |
 | 11 | Inside the Skill protocol — how @-mention skills compose, and the regression we just fixed | Guides (how it works) | 5 | 3 | 4 | 4 | **16** | gh issue #1635 + PR #1636 | Pull a real bug-and-fix into a "how the system actually works" piece. Sibling to the seed post `31-skills-72-systems-how-the-library-works`. Wait until #1636 merges to publish. |
 | 12 | **What Claude Design actually is — a designer-engineer's read of the launch** (B1) | Product (essay) | 4 | 4 | 4 | 4 | **16** | Anthropic launch April 2026 + first-hand use | Top-of-funnel explainer; high AI-Overviews citation potential. Pair with A1 (comparison) and A2 (pricing). |
 | 13 | **Claude Design self-hosted? What Anthropic's tool isn't, and what is** (A4) | Guides (comparison) | 5 | 4 | 3 | 4 | **16** | local-first / privacy angle; Anthropic only ships hosted | Anchors the local-first claim against a current named product. CTA = `Try the open-source workflow`. |
-| 14 | **Using Open Design with Claude Code — the open handoff to engineering** (C1) | Use cases | 5 | 4 | 3 | 4 | **16** | Anthropic users in OD overlap; Claude Code = handoff target in Claude Design tutorial | Catches "claude code design" searchers; pairs naturally with A1. |
+| 14 | **Using OpenDesign with Claude Code — the open handoff to engineering** (C1) | Use cases | 5 | 4 | 3 | 4 | **16** | Anthropic users in OD overlap; Claude Code = handoff target in Claude Design tutorial | Catches "claude code design" searchers; pairs naturally with A1. |
 | 15 | How @Romantin shipped a collapsible comments panel in one day | Community (contributor) | 4 | 2 | 4 | 5 | **15** | gh issue #1605 → PR #1607 | Get Romantin's consent before publishing. Use the actual PR diff as a screenshot, link the original issue + the leveling card. CTA = `Contribute a skill`. |
-| 16 | Deploying a pnpm monorepo Astro app to Vercel — the output directory gotcha | Guides (tutorial) | 4 | 4 | 3 | 4 | **15** | gh issue #1628 (live) | Pure how-to. Cover root vs `apps/web` Vercel project root, `vercel.json#outputDirectory`, and the actual Open Design `vercel.json`. Useful long-tail SEO. |
+| 16 | Deploying a pnpm monorepo Astro app to Vercel — the output directory gotcha | Guides (tutorial) | 4 | 4 | 3 | 4 | **15** | gh issue #1628 (live) | Pure how-to. Cover root vs `apps/web` Vercel project root, `vercel.json#outputDirectory`, and the actual OpenDesign `vercel.json`. Useful long-tail SEO. |
 | 17 | **Claude Design limitations — what the research preview can't do yet** (B2) | Guides (comparison) | 4 | 4 | 4 | 3 | **15** | Anthropic itself calls it "research preview" | Honest counter-take to the official tutorial. Stay observational, not snarky (per skill comparison rules). |
-| 18 | Taste memory for design agents — a community proposal worth shipping | Community (proposal) | 4 | 2 | 4 | 4 | **14** | gh issue #1637 (itsmeved24) | Profile the proposal, cite the author, do not promise we'll build it. Get itsmeved24's consent. Frames Open Design as a place where serious proposals get serious replies. |
-| 19 | **Should designers use Claude Design? A field test** (B3) | Use cases | 4 | 4 | 3 | 3 | **14** | own dogfooding | Run the same brief on Claude Design + Open Design, publish both artefacts. Requires actually buying a Claude Pro seat for the test. |
-| 20 | **From Claude Design to Open Design — moving your design system** (C2) | Guides (tutorial) | 5 | 3 | 3 | 3 | **14** | migration intent (long-tail evergreen) | Step-by-step: export from Claude Design, fold tokens into a `DESIGN.md`, re-run the brief. Wait until we have a real migrator. |
-| 21 | huashu, guizang, open-codesign — the lineage behind Open Design's skill protocol | Community (lineage) | 4 | 2 | 3 | 4 | **13** | own history | Lower intent but high voice value. Worth writing once we have 4–5 posts in flight to anchor the Community channel. |
+| 18 | Taste memory for design agents — a community proposal worth shipping | Community (proposal) | 4 | 2 | 4 | 4 | **14** | gh issue #1637 (itsmeved24) | Profile the proposal, cite the author, do not promise we'll build it. Get itsmeved24's consent. Frames OpenDesign as a place where serious proposals get serious replies. |
+| 19 | **Should designers use Claude Design? A field test** (B3) | Use cases | 4 | 4 | 3 | 3 | **14** | own dogfooding | Run the same brief on Claude Design + OpenDesign, publish both artefacts. Requires actually buying a Claude Pro seat for the test. |
+| 20 | **From Claude Design to OpenDesign — moving your design system** (C2) | Guides (tutorial) | 5 | 3 | 3 | 3 | **14** | migration intent (long-tail evergreen) | Step-by-step: export from Claude Design, fold tokens into a `DESIGN.md`, re-run the brief. Wait until we have a real migrator. |
+| 21 | huashu, guizang, open-codesign — the lineage behind OpenDesign's skill protocol | Community (lineage) | 4 | 2 | 3 | 4 | **13** | own history | Lower intent but high voice value. Worth writing once we have 4–5 posts in flight to anchor the Community channel. |
 
 ## Drafting
 
@@ -60,15 +60,15 @@ Re-scored 2026-05-22 against the live tag `open-design-v0.8.0` (305 PRs · 75 co
 | Dim | Score | Why |
 |---|---|---|
 | Fit | 5 | Every claim in the post maps to a real PR or skill folder shipping in 0.8.0 |
-| Intent | 5 | "Open Design 0.8.0 release notes / what's new" is a direct search intent |
+| Intent | 5 | "OpenDesign 0.8.0 release notes / what's new" is a direct search intent |
 | Timing | 5 | Reactive — within hours of the tag dropping; no third-party coverage yet |
 | Effort | 4 | Release notes already structured; just needs editorial pass + hero plate |
 | **Total** | **19** | Fast-track |
 
-Title chosen (Step 2.5 fast-track): **"Open Design 0.8.0: everything is a plugin"** — declarative, hits the search intent, ≤ 60 chars.
+Title chosen (Step 2.5 fast-track): **"OpenDesign 0.8.0: everything is a plugin"** — declarative, hits the search intent, ≤ 60 chars.
 
 Alternates considered:
-- "Open Design 0.8.0 ships the plugin engine, headless CLI, and auto-update" (subhead-shaped, too long for a slug)
+- "OpenDesign 0.8.0 ships the plugin engine, headless CLI, and auto-update" (subhead-shaped, too long for a slug)
 - "The 0.8.0 rebuild — and what it changes about agent-native design" (essay-shaped, less search-friendly)
 
 ### A1 fast-track context
@@ -88,7 +88,7 @@ We are already #2 on the exact phrase, with no canonical comparison post yet. Wr
 Title chosen (Step 2.5 fast-track): **"The open-source alternative to Claude Design"** — exact-match the SERP query.
 
 Alternates considered:
-- "Open Design vs Claude Design — and which one to pick this quarter" (comparative angle)
+- "OpenDesign vs Claude Design — and which one to pick this quarter" (comparative angle)
 - "If you can't use Claude Design, what do you use instead?" (question-shaped, weaker keyword density)
 
 ## Watch (8–11, monitor for context shift)
@@ -98,7 +98,7 @@ These didn't clear the queue threshold but might if conditions change. Re-score 
 | Topic | Channel candidate | Total | What would push it higher |
 |---|---|---|---|
 | How designers should think about MCP | Guides (essay) | 12 | A specific MCP server that matters for design (Figma MCP, Sketch MCP) ships with adoption signal |
-| Designing for agent-driven UI patterns (chat-as-canvas, IM-as-editor) | Use cases | 11 | An Open Design skill ships that produces one of these patterns end-to-end |
+| Designing for agent-driven UI patterns (chat-as-canvas, IM-as-editor) | Use cases | 11 | An OpenDesign skill ships that produces one of these patterns end-to-end |
 | Local-first design tools — a privacy posture comparison | Guides (comparison) | 10 | A real privacy incident in a hosted design tool puts the topic into search |
 
 ## Shipped
@@ -110,8 +110,8 @@ Posts that are live. The right-hand columns get filled by the GSC review automat
 | 2026-05-13 | why-we-built-open-design-as-a-skill-layer | Product (essay / manifesto) | 18 | pending GSC propagation (3–14d) | pending | — | 2026-06-13 | Seed post. Anchors the Product channel and the "skill layer, not a product" framing. GSC indexing requested via Issue #4 playbook. |
 | 2026-05-13 | 31-skills-72-systems-how-the-library-works | Guides (how it works) | 18 | pending GSC propagation (3–14d) | pending | — | 2026-06-13 | Seed post. The mechanical companion to the manifesto. GSC indexing requested via Issue #4 playbook. |
 | 2026-05-13 | byok-design-workflow-claude-codex-qwen | Guides (BYOK) | 18 | pending GSC propagation (3–14d) | pending | — | 2026-06-13 | Seed post. Pairs with the new "BYOK reality check" as the positive-case companion. GSC indexing requested via Issue #4 playbook. |
-| 2026-05-14 | byok-reality-check-5-things-that-break | Guides (BYOK) | 18 | pending (just shipped) | pending | — | 2026-06-14 | Reactive piece — written same-day after mining gh issues #1619 #1611 #1610 #1603 #1620. Title alternates noted: "BYOK in Open Design: what works today across Gemini, DeepSeek, OpenCode" / "Should you BYOK with Open Design today? Five tests, five real bugs". Pairs with seed `byok-design-workflow-claude-codex-qwen` (positive case) and seeds the future "Open Design on Windows" Guide. |
-| 2026-05-14 | open-source-alternative-to-claude-design | Guides (comparison) | 19 | pending (just shipped) | pending | — | 2026-06-14 | A1, anchor of the Claude Design keyword cluster (A1–A4 / B1–B3 / C1–C2). Fast-tracked off live SERP intel: opendesigner.io already #2 for "claude design open source alternative"; this post targets the #1 slot. 1446 words. Title alternates: "Open Design vs Claude Design — and which one to pick this quarter" / "If you can't use Claude Design, what do you use instead?". Honest read on Anthropic's Claude Design (Opus 4.7, April 2026), `OpenCoworkAI/open-codesign` (MIT competitor), and Open Design with a who-picks-which table. CTA = `Try the open-source workflow`. Next step: ship A2 (pricing) + B1 (explainer) to thicken the cluster, then cross-post A1 to dev.to / Medium / HN. |
+| 2026-05-14 | byok-reality-check-5-things-that-break | Guides (BYOK) | 18 | pending (just shipped) | pending | — | 2026-06-14 | Reactive piece — written same-day after mining gh issues #1619 #1611 #1610 #1603 #1620. Title alternates noted: "BYOK in OpenDesign: what works today across Gemini, DeepSeek, OpenCode" / "Should you BYOK with OpenDesign today? Five tests, five real bugs". Pairs with seed `byok-design-workflow-claude-codex-qwen` (positive case) and seeds the future "OpenDesign on Windows" Guide. |
+| 2026-05-14 | open-source-alternative-to-claude-design | Guides (comparison) | 19 | pending (just shipped) | pending | — | 2026-06-14 | A1, anchor of the Claude Design keyword cluster (A1–A4 / B1–B3 / C1–C2). Fast-tracked off live SERP intel: opendesigner.io already #2 for "claude design open source alternative"; this post targets the #1 slot. 1446 words. Title alternates: "OpenDesign vs Claude Design — and which one to pick this quarter" / "If you can't use Claude Design, what do you use instead?". Honest read on Anthropic's Claude Design (Opus 4.7, April 2026), `OpenCoworkAI/open-codesign` (MIT competitor), and OpenDesign with a who-picks-which table. CTA = `Try the open-source workflow`. Next step: ship A2 (pricing) + B1 (explainer) to thicken the cluster, then cross-post A1 to dev.to / Medium / HN. |
 | 2026-05-18 | layout-layer-canvas-used-to-hide | Community | 16 | pending (just shipped) | pending | — | 2026-06-18 | Community post from GitHub Discussion #1727. Uses the "Layout Understanding Layer" reply as a product-community signal without promising implementation. CTA = `Contribute a skill`. |
 | 2026-05-18 | port-figma-workflow-open-design-plugin | Use cases | 17 | pending (just shipped) | pending | — | 2026-06-18 | Use-case post from the 0.8.0-preview plugin call. Turns "port a Figma workflow" into a concrete `SKILL.md` + `open-design.json` + validate/pack/publish path. CTA = `Try this workflow`. |
 | 2026-05-22 | open-design-0-8-0-everything-is-a-plugin | Product (announcement) | 19 | pending (just shipped) | pending | — | 2026-06-22 | Release announcement for `open-design-v0.8.0` (tag `c20d156`, 305 PRs · 75 contributors · 7 days). Covers the three architectural shifts (plugin engine, headless-by-default, plugins create plugins) and the packaged-auto-update + design-system + media-provider plate. CTA = `Download desktop`. Supersedes queued #9 "auto-update on Windows + Linux" — that row is dropped now that the broader plate is live. hero: plate-15-plugin-engine-modular.png · gpt-image-2 via cursor-builtin |
@@ -120,7 +120,7 @@ Posts that are live. The right-hand columns get filled by the GSC review automat
 
 Keep this list short — only entries useful as guard-rails so we don't re-litigate them.
 
-- **"AI is replacing designers" hot take** — failed fit filter rule 1 (no Open Design surface) and rule 4 (no real CTA). Open Design's voice is editorial, not anxiety-driven.
+- **"AI is replacing designers" hot take** — failed fit filter rule 1 (no OpenDesign surface) and rule 4 (no real CTA). OpenDesign's voice is editorial, not anxiety-driven.
 - **Weekly "Top 5 AI design tools" roundup** — failed fit filter rule 3 (no unique angle vs existing roundups) and rule 4 (no real CTA). This is what nexu's `blog-factory` calls AI News; we deliberately don't run that lane.
 - **"Why every design team needs an AI strategy in 2026"** — failed fit filter rule 1 (generic) and triggered the Blacklist ("the future of design" framing). Drop.
 

@@ -4,7 +4,7 @@
 
 > Want to read the shared `SKILL.md` protocol instead? See [`skills-protocol.md`](skills-protocol.md). This file is the **how-to** for shipping a rendering template upstream — what to write, how to run it locally, and what we'll send back at review.
 
-A design template is the most leverage you can ship into Open Design without writing framework code. One folder, one Markdown file with frontmatter, a hand-built example, and the Templates gallery shows it. This guide covers rendering templates (`prototype`, `deck`, `template`, `image`, `video`, and `audio`). Functional skills that do work on user input belong in [`skills/`](../skills/); read [`design-templates/AGENTS.md`](../design-templates/AGENTS.md) for the ownership rule.
+A design template is the most leverage you can ship into OpenDesign without writing framework code. One folder, one Markdown file with frontmatter, a hand-built example, and the Templates gallery shows it. This guide covers rendering templates (`prototype`, `deck`, `template`, `image`, `video`, and `audio`). Functional skills that do work on user input belong in [`skills/`](../skills/); read [`design-templates/AGENTS.md`](../design-templates/AGENTS.md) for the ownership rule.
 
 If you only have ten seconds, the picture is:
 

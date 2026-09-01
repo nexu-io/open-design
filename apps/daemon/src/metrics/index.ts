@@ -108,6 +108,7 @@ export async function getCritiqueMetrics(): Promise<string> {
 }
 
 export { register };
+export * from './workspace-authority.js';
 
 /**
  * Test-only: wipe the default registry so vitest cases can assert

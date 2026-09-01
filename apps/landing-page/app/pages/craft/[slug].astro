@@ -36,7 +36,7 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Open Design', item: origin },
+      { '@type': 'ListItem', position: 1, name: 'OpenDesign', item: origin },
       { '@type': 'ListItem', position: 2, name: ui.catalog.craft.detailLabel, item: new URL('/craft/', origin).toString() },
       { '@type': 'ListItem', position: 3, name: craft.name, item: craftUrl },
     ],
@@ -56,12 +56,12 @@ const jsonLd = [
     inLanguage: locale,
     author: {
       '@type': 'Organization',
-      name: 'Open Design',
+      name: 'OpenDesign',
       url: origin,
     },
     publisher: {
       '@type': 'Organization',
-      name: 'Open Design',
+      name: 'OpenDesign',
       url: origin,
       logo: {
         '@type': 'ImageObject',
@@ -74,7 +74,7 @@ const jsonLd = [
 
 <Layout title={title} description={description} active="craft" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={ui.catalog.breadcrumbLabel}>
-    <a href={href('/')}>Open Design</a>
+    <a href={href('/')}>OpenDesign</a>
     <span>/</span>
     <a href={href('/craft/')}>{ui.catalog.craft.detailLabel}</a>
     <span>/</span>

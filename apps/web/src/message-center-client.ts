@@ -2,6 +2,9 @@ export type MessageCenterFilter = 'all' | 'unread' | 'read';
 
 export interface MessageCenterMessage {
   id: string;
+  /** Optional stable selector for client-owned special behavior. Ordinary
+   *  messages do not need one and continue through the inbox unchanged. */
+  messageKey?: string | null;
   audienceType: 'global' | 'targeted';
   typeName: string;
   title: string;
@@ -10,6 +13,20 @@ export interface MessageCenterMessage {
   ctaUrl: string | null;
   publishedAt: string;
   readAt: string | null;
+}
+
+/** One-off, client-owned announcement selector. The message center remains a
+ * generic inbox: only slugs with this prefix opt into the preset strong dialog. */
+export const GO_PLAN_SUNSET_MESSAGE_KEY_PREFIX = 'go-plan-sunset-2026-08';
+
+export function findGoPlanSunsetMessage(
+  messages: readonly MessageCenterMessage[],
+): MessageCenterMessage | null {
+  return messages.find((message) => (
+    message.audienceType === 'targeted'
+    && message.readAt == null
+    && message.messageKey?.startsWith(GO_PLAN_SUNSET_MESSAGE_KEY_PREFIX)
+  )) ?? null;
 }
 
 interface MessageCenterPage {
@@ -50,6 +67,10 @@ export function clearAnonymousState(storage: Storage): void {
 
 export async function isAmrLoggedIn(): Promise<boolean> {
   const response = await fetch('/api/integrations/vela/status', { cache: 'no-store' });
+  if (response.status === 503) {
+    const payload = (await response.clone().json().catch(() => null)) as { error?: string } | null;
+    if (payload?.error === 'amr-runtime-unavailable') return false;
+  }
   if (!response.ok) throw new Error(`AMR status failed: ${response.status}`);
   const payload = (await response.json()) as { loggedIn?: boolean };
   return payload.loggedIn === true;
@@ -93,11 +114,6 @@ export async function pullMessageCenter(input: {
 export async function markAccountMessageRead(messageId: string): Promise<void> {
   const response = await fetch(`${ACCOUNT_PROXY}/messages/${encodeURIComponent(messageId)}/read`, { method: 'POST' });
   if (!response.ok) throw new Error(`Mark message read failed: ${response.status}`);
-}
-
-export async function markAllAccountMessagesRead(): Promise<void> {
-  const response = await fetch(`${ACCOUNT_PROXY}/read-all`, { method: 'POST' });
-  if (!response.ok) throw new Error(`Mark all messages read failed: ${response.status}`);
 }
 
 function apiLocale(locale: string): string {

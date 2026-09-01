@@ -1,10 +1,23 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 export const DEFAULT_TOOL_TOKEN_TTL_MS = 15 * 60 * 1000;
+export const CHAT_TOOL_TOKEN_TTL_BUFFER_MS = 15 * 60 * 1000;
+
+export function resolveChatToolTokenTtlMs(inactivityTimeoutMs: number): number {
+  if (!Number.isFinite(inactivityTimeoutMs) || inactivityTimeoutMs < 0) {
+    throw new RangeError(`inactivityTimeoutMs must be a non-negative finite number, got ${String(inactivityTimeoutMs)}`);
+  }
+  return Math.max(
+    DEFAULT_TOOL_TOKEN_TTL_MS,
+    inactivityTimeoutMs + CHAT_TOOL_TOKEN_TTL_BUFFER_MS,
+  );
+}
 
 // Capability key for the parameterized media wait route. Token grants cannot
 // enumerate a task id that is created after the grant is minted.
 export const MEDIA_TASK_WAIT_TOOL_ENDPOINT = '/api/media/tasks/:id/wait';
+export const HYPERFRAMES_SCAFFOLD_TOOL_ENDPOINT = '/api/tools/media/hyperframes/scaffold';
+export const PROJECT_EXPORT_TOOL_ENDPOINT = '/api/projects/:id/export/:format';
 
 export const CHAT_TOOL_ENDPOINTS = [
   '/api/tools/live-artifacts/create',
@@ -15,7 +28,9 @@ export const CHAT_TOOL_ENDPOINTS = [
   '/api/tools/connectors/execute',
   '/api/tools/design-systems/read',
   '/api/tools/media/generate',
+  HYPERFRAMES_SCAFFOLD_TOOL_ENDPOINT,
   MEDIA_TASK_WAIT_TOOL_ENDPOINT,
+  PROJECT_EXPORT_TOOL_ENDPOINT,
   '/api/tools/library/search',
   '/api/tools/library/apply',
 ] as const;
@@ -29,6 +44,8 @@ export const CHAT_TOOL_OPERATIONS = [
   'connectors:execute',
   'design-systems:read',
   'media:generate',
+  'media:scaffold',
+  'project:export',
   'library:search',
   'library:apply',
 ] as const;
@@ -72,6 +89,11 @@ export interface MintToolTokenOptions {
   pluginSnapshotId?: string;
   pluginTrust?: 'trusted' | 'restricted' | 'bundled';
   pluginCapabilitiesGranted?: readonly string[];
+}
+
+export interface RefreshToolTokenOptions {
+  ttlMs?: number;
+  nowMs?: number;
 }
 
 export type ToolTokenValidationResult =
@@ -198,6 +220,33 @@ export class ToolTokenRegistry {
     }
 
     return { ok: true, grant: asPublicGrant(stored) };
+  }
+
+  refreshToken(
+    token: string | null | undefined,
+    options: RefreshToolTokenOptions = {},
+  ): ToolTokenGrant | null {
+    if (!token) return null;
+    const stored = this.#byTokenHash.get(tokenHash(token));
+    if (!stored) return null;
+
+    const nowMs = options.nowMs ?? Date.now();
+    if (nowMs >= stored.expiresAtMs) {
+      this.revokeToken(token, 'ttl_expired');
+      return null;
+    }
+
+    const ttlMs = options.ttlMs ?? DEFAULT_TOOL_TOKEN_TTL_MS;
+    if (!Number.isFinite(ttlMs) || ttlMs <= 0) throw new Error('ttlMs must be positive');
+
+    clearTimeout(stored.timer);
+    stored.expiresAtMs = nowMs + ttlMs;
+    stored.expiresAt = new Date(stored.expiresAtMs).toISOString();
+    stored.timer = setTimeout(() => {
+      this.revokeToken(token, 'ttl_expired');
+    }, ttlMs);
+    stored.timer.unref?.();
+    return asPublicGrant(stored);
   }
 
   revokeToken(token: string | null | undefined, _reason: ToolTokenRevocationReason = 'manual'): boolean {

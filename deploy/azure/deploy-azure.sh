@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Deploy Open Design to Azure from the Bicep templates in this directory.
+# Deploy OpenDesign to Azure from the Bicep templates in this directory.
 #
 #   deploy/azure/deploy-azure.sh --target app-service --resource-group od-rg --location eastus
 #   deploy/azure/deploy-azure.sh --target aci         --resource-group od-rg --location eastus

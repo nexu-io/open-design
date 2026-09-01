@@ -45,7 +45,7 @@ function waitForCode(): Promise<string> {
         const code = url.searchParams.get('code');
         if (!code) throw new Error('No authorization code in callback.');
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-        res.end('<h1>Open Design GSC authorization complete</h1><p>You can close this tab and return to Cursor.</p>');
+        res.end('<h1>OpenDesign GSC authorization complete</h1><p>You can close this tab and return to Cursor.</p>');
         server.close();
         resolve(code);
       } catch (err) {

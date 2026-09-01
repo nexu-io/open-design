@@ -2,9 +2,9 @@ import type { SolutionLocaleCopy } from './types';
 
 export const ID: SolutionLocaleCopy = {
   prototype: {
-    title: 'Bangun prototipe interaktif dengan Open Design + Claude Code',
+    title: 'Bangun prototipe interaktif dengan OpenDesign + Claude Code',
     description:
-      'Ubah sebuah prompt menjadi prototipe multi-layar yang bisa diklik tanpa keluar dari terminal Anda. Open Design memberi coding agent Anda keterampilan desain, templat, dan sistem desain untuk menghasilkan prototipe nyata yang bisa Anda buka di browser.',
+      'Ubah sebuah prompt menjadi prototipe multi-layar yang bisa diklik tanpa keluar dari terminal Anda. OpenDesign memberi coding agent Anda keterampilan desain, templat, dan sistem desain untuk menghasilkan prototipe nyata yang bisa Anda buka di browser.',
     breadcrumb: 'Prototipe',
     label: 'Kasus penggunaan · Prototipe',
     heading: 'Buat prototipe secepat sebuah prompt',
@@ -13,18 +13,18 @@ export const ID: SolutionLocaleCopy = {
       'Ilustrasi bergaya editorial tentang sebuah tangan menggambar wireframe yang berubah menjadi prototipe aplikasi multi-layar yang bisa diklik',
     tldrTitle: 'Dalam satu kalimat',
     tldrBody:
-      'Open Design adalah lapisan desain untuk coding agent yang sudah Anda pakai. Untuk pembuatan prototipe, itu berarti beranjak dari ide satu paragraf menjadi prototipe bergaya yang bisa dinavigasi dalam satu sesi — tanpa alat desain, tanpa langkah ekspor, tanpa celah serah terima.',
-    stepsTitle: 'Cara kerja pembuatan prototipe dengan Open Design',
+      'OpenDesign adalah lapisan desain untuk coding agent yang sudah Anda pakai. Untuk pembuatan prototipe, itu berarti beranjak dari ide satu paragraf menjadi prototipe bergaya yang bisa dinavigasi dalam satu sesi — tanpa alat desain, tanpa langkah ekspor, tanpa celah serah terima.',
+    stepsTitle: 'Cara kerja pembuatan prototipe dengan OpenDesign',
     steps: [
       {
         title: 'Jelaskan alurnya',
-        body: 'Beri tahu agent apa yang Anda bangun dengan bahasa biasa — “alur onboarding dengan layar sambutan, pemilih paket, dan konfirmasi”. Open Design memuat keterampilan prototipe sehingga agent tahu harus menghasilkan layar, bukan satu halaman.',
+        body: 'Beri tahu agent apa yang Anda bangun dengan bahasa biasa — “alur onboarding dengan layar sambutan, pemilih paket, dan konfirmasi”. OpenDesign memuat keterampilan prototipe sehingga agent tahu harus menghasilkan layar, bukan satu halaman.',
         imageAlt:
           'Ilustrasi seseorang mengetikkan deskripsi alur aplikasi dengan bahasa biasa ke dalam terminal',
       },
       {
         title: 'Hasilkan layar bergaya',
-        body: 'Agent menerapkan sistem desain dan templat prototipe dari Open Design, sehingga setiap layar berbagi tipografi, jarak, dan komponen alih-alih terlihat seperti draf kasar. Anda mendapatkan satu set layar yang koheren, bukan mockup yang terpisah-pisah.',
+        body: 'Agent menerapkan sistem desain dan templat prototipe dari OpenDesign, sehingga setiap layar berbagi tipografi, jarak, dan komponen alih-alih terlihat seperti draf kasar. Anda mendapatkan satu set layar yang koheren, bukan mockup yang terpisah-pisah.',
         imageAlt:
           'Ilustrasi beberapa layar aplikasi muncul secara berurutan, semuanya berbagi satu gaya visual yang konsisten',
       },
@@ -41,9 +41,9 @@ export const ID: SolutionLocaleCopy = {
           'Ilustrasi sebuah prototipe yang direvisi lalu diserahkan kepada seorang insinyur, dengan desain dan kode menyatu menjadi satu berkas',
       },
     ],
-    tableTitle: 'Pembuatan prototipe dengan Open Design vs. cara lama',
+    tableTitle: 'Pembuatan prototipe dengan OpenDesign vs. cara lama',
     tableColCapability: 'Yang Anda butuhkan',
-    tableColWithOd: 'Dengan Open Design',
+    tableColWithOd: 'Dengan OpenDesign',
     tableColWithout: 'Alat prototipe tradisional',
     tableRows: [
       {
@@ -110,7 +110,7 @@ export const ID: SolutionLocaleCopy = {
         thumb: 'example-gamified-app',
       },
     ],
-    galleryTitle: 'Prototipe yang dibangun orang dengan Open Design',
+    galleryTitle: 'Prototipe yang dibangun orang dengan OpenDesign',
     galleryLead:
       'Setiap karya ini dimulai sebagai prompt dan dirender menjadi artefak yang bisa diklik. Pilih templat yang dekat dengan ide Anda, jelaskan variasi Anda, dan agent menyesuaikannya.',
     gallery: [
@@ -124,8 +124,8 @@ export const ID: SolutionLocaleCopy = {
     faqTitle: 'FAQ pembuatan prototipe',
     faq: [
       {
-        q: 'Apakah saya butuh alat desain seperti Figma untuk membuat prototipe dengan Open Design?',
-        a: 'Tidak. Open Design berjalan di dalam coding agent Anda dan merender prototipe ke HTML. Anda menjelaskan alur dengan bahasa; agent menghasilkan layar. Tidak ada alat kanvas terpisah untuk dipelajari atau dibayar.',
+        q: 'Apakah saya butuh alat desain seperti Figma untuk membuat prototipe dengan OpenDesign?',
+        a: 'Tidak. OpenDesign berjalan di dalam coding agent Anda dan merender prototipe ke HTML. Anda menjelaskan alur dengan bahasa; agent menghasilkan layar. Tidak ada alat kanvas terpisah untuk dipelajari atau dibayar.',
       },
       {
         q: 'Apakah prototipenya interaktif atau hanya mockup statis?',
@@ -133,7 +133,7 @@ export const ID: SolutionLocaleCopy = {
       },
       {
         q: 'Agent mana saja yang bisa saya pakai?',
-        a: 'Open Design bekerja dengan Claude Code, Codex, Cursor Agent, Gemini CLI, dan belasan adapter resmi lainnya. Anda membawa kunci penyedia Anda sendiri; tidak ada yang dihosting untuk Anda.',
+        a: 'OpenDesign bekerja dengan Claude Code, Codex, Cursor Agent, Gemini CLI, dan belasan adapter resmi lainnya. Anda membawa kunci penyedia Anda sendiri; tidak ada yang dihosting untuk Anda.',
       },
       {
         q: 'Bisakah sebuah prototipe menjadi produk nyata?',
@@ -142,22 +142,22 @@ export const ID: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Prototipekan ide Anda berikutnya malam ini',
     ctaBody:
-      'Beri bintang pada repo, pasang Open Design, dan ubah “bagaimana jika” Anda berikutnya menjadi sesuatu yang bisa Anda klik — di agent yang sudah Anda pakai.',
+      'Beri bintang pada repo, pasang OpenDesign, dan ubah “bagaimana jika” Anda berikutnya menjadi sesuatu yang bisa Anda klik — di agent yang sudah Anda pakai.',
   },
   dashboard: {
-    title: 'Hasilkan dashboard data dengan Open Design + Claude Code',
+    title: 'Hasilkan dashboard data dengan OpenDesign + Claude Code',
     description:
       'Jelaskan metrik yang Anda lacak dan biarkan coding agent membangun dashboard bergaya dan responsif — grafik, kartu KPI, dan tabel dirender ke HTML yang bisa Anda hosting di mana saja. Tanpa kursi alat BI, tanpa pembangun seret dan lepas.',
     breadcrumb: 'Dashboard',
     label: 'Kasus penggunaan · Dashboard',
     heading: 'Dashboard dari sebuah deskripsi, bukan pembangun seret dan lepas',
-    lead: 'Beri tahu agent apa yang harus ditampilkan dan bagaimana seharusnya terasa. Open Design menyediakan pola grafik, sistem tata letak, dan bahasa visual sehingga Anda mendapatkan dashboard yang koheren dan layak presentasi — bukan tembok widget bergaya bawaan.',
+    lead: 'Beri tahu agent apa yang harus ditampilkan dan bagaimana seharusnya terasa. OpenDesign menyediakan pola grafik, sistem tata letak, dan bahasa visual sehingga Anda mendapatkan dashboard yang koheren dan layak presentasi — bukan tembok widget bergaya bawaan.',
     heroImageAlt:
       'Ilustrasi bergaya editorial tentang angka mentah di kiri yang mengalir menjadi dashboard rapi berisi grafik dan kartu KPI di kanan',
     tldrTitle: 'Dalam satu kalimat',
     tldrBody:
-      'Open Design mengubah spesifikasi metrik Anda dalam bahasa biasa menjadi dashboard bergaya yang dirender agent ke HTML — diversikan di repo Anda, bisa dihosting di mana saja, tanpa langganan BI per kursi.',
-    stepsTitle: 'Cara kerja dashboard dengan Open Design',
+      'OpenDesign mengubah spesifikasi metrik Anda dalam bahasa biasa menjadi dashboard bergaya yang dirender agent ke HTML — diversikan di repo Anda, bisa dihosting di mana saja, tanpa langganan BI per kursi.',
+    stepsTitle: 'Cara kerja dashboard dengan OpenDesign',
     steps: [
       {
         title: 'Jelaskan metriknya',
@@ -166,7 +166,7 @@ export const ID: SolutionLocaleCopy = {
       },
       {
         title: 'Pilih pola grafiknya',
-        body: 'Open Design menyertakan templat grafik dan tata letak, sehingga tren menjadi grafik garis, rincian menjadi batang, dan rasio menjadi visual yang tepat — tipografi dan jarak yang konsisten di seluruh bagian alih-alih bawaan yang tak serasi.',
+        body: 'OpenDesign menyertakan templat grafik dan tata letak, sehingga tren menjadi grafik garis, rincian menjadi batang, dan rasio menjadi visual yang tepat — tipografi dan jarak yang konsisten di seluruh bagian alih-alih bawaan yang tak serasi.',
         imageAlt: 'Ilustrasi beberapa jenis grafik yang ditata menjadi kisi yang koheren',
       },
       {
@@ -180,9 +180,9 @@ export const ID: SolutionLocaleCopy = {
         imageAlt: 'Ilustrasi sebuah dashboard yang disempurnakan lalu di-deploy',
       },
     ],
-    tableTitle: 'Dashboard dengan Open Design vs. cara lama',
+    tableTitle: 'Dashboard dengan OpenDesign vs. cara lama',
     tableColCapability: 'Yang Anda butuhkan',
-    tableColWithOd: 'Dengan Open Design',
+    tableColWithOd: 'Dengan OpenDesign',
     tableColWithout: 'Alat BI / dikode manual',
     tableRows: [
       {
@@ -225,7 +225,7 @@ export const ID: SolutionLocaleCopy = {
       { title: "Sosial dan pemasaran", body: "Kinerja kanal dan pelacakan kampanye dalam satu tampilan.", thumb: "example-social-media-dashboard" },
       { title: "Laporan bidang", body: "Laporan terstruktur untuk bidang apa pun — dari klinis hingga trading.", thumb: "example-clinical-case-report" },
     ],
-    galleryTitle: 'Dashboard yang dibangun orang dengan Open Design',
+    galleryTitle: 'Dashboard yang dibangun orang dengan OpenDesign',
     galleryLead:
       'Dashboard nyata yang dirender dari sebuah prompt dan sumber data. Mulai dari yang dekat dengan milik Anda dan jelaskan metrik yang Anda lacak.',
     gallery: [
@@ -240,7 +240,7 @@ export const ID: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Apakah saya butuh alat BI seperti Tableau atau Looker?',
-        a: 'Tidak. Open Design merender dashboard ke HTML di dalam coding agent Anda. Anda menjelaskan metrik dan mengarahkannya ke data Anda; tidak ada platform BI terpisah untuk dilisensikan atau dipelajari.',
+        a: 'Tidak. OpenDesign merender dashboard ke HTML di dalam coding agent Anda. Anda menjelaskan metrik dan mengarahkannya ke data Anda; tidak ada platform BI terpisah untuk dilisensikan atau dipelajari.',
       },
       {
         q: 'Dari mana datanya berasal?',
@@ -257,22 +257,22 @@ export const ID: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Bangun dashboard Anda malam ini',
     ctaBody:
-      'Beri bintang pada repo, pasang Open Design, dan ubah metrik Anda menjadi dashboard yang bisa Anda hosting di mana saja — di agent yang sudah Anda pakai.',
+      'Beri bintang pada repo, pasang OpenDesign, dan ubah metrik Anda menjadi dashboard yang bisa Anda hosting di mana saja — di agent yang sudah Anda pakai.',
   },
   slides: {
-    title: 'Hasilkan dek presentasi dengan Open Design + Claude Code',
+    title: 'Hasilkan dek presentasi dengan OpenDesign + Claude Code',
     description:
-      'Ubah sebuah kerangka menjadi dek slide yang dirancang dan sesuai merek tanpa membuka aplikasi presentasi. Open Design memberi coding agent Anda templat dek dan sistem visual, merender slide ke HTML yang bisa Anda presentasikan, ekspor, atau bagikan.',
+      'Ubah sebuah kerangka menjadi dek slide yang dirancang dan sesuai merek tanpa membuka aplikasi presentasi. OpenDesign memberi coding agent Anda templat dek dan sistem visual, merender slide ke HTML yang bisa Anda presentasikan, ekspor, atau bagikan.',
     breadcrumb: 'Slide',
     label: 'Kasus penggunaan · Slide',
     heading: 'Dek yang terlihat dirancang, ditulis oleh sebuah prompt',
-    lead: 'Serahkan kerangka dan nada kepada agent Anda. Open Design menerapkan templat dek dan sistem visual sehingga setiap slide tertata, terketik, dan sesuai merek — bukan daftar poin pada latar kosong.',
+    lead: 'Serahkan kerangka dan nada kepada agent Anda. OpenDesign menerapkan templat dek dan sistem visual sehingga setiap slide tertata, terketik, dan sesuai merek — bukan daftar poin pada latar kosong.',
     heroImageAlt:
       'Ilustrasi bergaya editorial tentang sebuah kerangka di kiri yang berubah menjadi rangkaian slide presentasi yang dirancang di kanan',
     tldrTitle: 'Dalam satu kalimat',
     tldrBody:
-      'Open Design mengubah kerangka menjadi dek HTML yang dirancang dan dirender agent dalam satu sesi — presentasikan di browser, ekspor ke PDF atau PPTX, dan simpan sumbernya di repo Anda.',
-    stepsTitle: 'Cara kerja dek dengan Open Design',
+      'OpenDesign mengubah kerangka menjadi dek HTML yang dirancang dan dirender agent dalam satu sesi — presentasikan di browser, ekspor ke PDF atau PPTX, dan simpan sumbernya di repo Anda.',
+    stepsTitle: 'Cara kerja dek dengan OpenDesign',
     steps: [
       {
         title: 'Beri kerangkanya',
@@ -281,7 +281,7 @@ export const ID: SolutionLocaleCopy = {
       },
       {
         title: 'Pilih gaya dek',
-        body: 'Open Design menyertakan templat dek — editorial, Swiss-internasional, teknis gelap, dan lainnya. Agent menerapkan salah satunya sehingga tipografi, kisi, dan aksen tetap konsisten di setiap slide.',
+        body: 'OpenDesign menyertakan templat dek — editorial, Swiss-internasional, teknis gelap, dan lainnya. Agent menerapkan salah satunya sehingga tipografi, kisi, dan aksen tetap konsisten di setiap slide.',
         imageAlt: 'Ilustrasi beberapa pilihan gaya dek yang ditata berdampingan',
       },
       {
@@ -295,9 +295,9 @@ export const ID: SolutionLocaleCopy = {
         imageAlt: 'Ilustrasi sebuah dek yang dipresentasikan dan diekspor ke berbagai format',
       },
     ],
-    tableTitle: 'Dek dengan Open Design vs. cara lama',
+    tableTitle: 'Dek dengan OpenDesign vs. cara lama',
     tableColCapability: 'Yang Anda butuhkan',
-    tableColWithOd: 'Dengan Open Design',
+    tableColWithOd: 'Dengan OpenDesign',
     tableColWithout: 'PowerPoint / Keynote / alat slide AI',
     tableRows: [
       {
@@ -340,7 +340,7 @@ export const ID: SolutionLocaleCopy = {
       { title: "Mode presenter", body: "Dek bergaya reveal yang dibangun untuk presentasi langsung di browser.", thumb: "example-html-ppt-presenter-mode-reveal" },
       { title: "Cetak biru teknis", body: "Dek arsitektur dan pengetahuan yang memetakan sistem kompleks.", thumb: "example-html-ppt-knowledge-arch-blueprint" },
     ],
-    galleryTitle: 'Dek yang dibangun orang dengan Open Design',
+    galleryTitle: 'Dek yang dibangun orang dengan OpenDesign',
     galleryLead:
       'Dek nyata yang dirender dari sebuah kerangka. Pilih gaya yang dekat dengan presentasi Anda dan jelaskan kontennya.',
     gallery: [
@@ -355,7 +355,7 @@ export const ID: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Apakah saya butuh PowerPoint atau Keynote?',
-        a: 'Tidak. Open Design merender dek ke HTML di dalam coding agent Anda dan bisa mengekspor ke PDF atau PPTX. Anda presentasikan dari browser atau serahkan sebuah berkas — tanpa aplikasi presentasi untuk membangunnya.',
+        a: 'Tidak. OpenDesign merender dek ke HTML di dalam coding agent Anda dan bisa mengekspor ke PDF atau PPTX. Anda presentasikan dari browser atau serahkan sebuah berkas — tanpa aplikasi presentasi untuk membangunnya.',
       },
       {
         q: 'Apakah ini hanya poin-poin yang dihasilkan AI?',
@@ -372,22 +372,22 @@ export const ID: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Bangun dek Anda berikutnya malam ini',
     ctaBody:
-      'Beri bintang pada repo, pasang Open Design, dan ubah kerangka Anda menjadi dek yang dirancang — di agent yang sudah Anda pakai.',
+      'Beri bintang pada repo, pasang OpenDesign, dan ubah kerangka Anda menjadi dek yang dirancang — di agent yang sudah Anda pakai.',
   },
   image: {
-    title: 'Hasilkan grafik sesuai merek dengan Open Design + Claude Code',
+    title: 'Hasilkan grafik sesuai merek dengan OpenDesign + Claude Code',
     description:
       'Buat kartu sosial, sampul artikel, dan grafik pemasaran dari sebuah prompt — ditata dengan tipografi nyata dan sistem merek Anda, dirender ke HTML tajam yang bisa Anda ekspor ke PNG. Tanpa aplikasi desain, tanpa langganan templat.',
     breadcrumb: 'Gambar',
     label: 'Kasus penggunaan · Gambar',
     heading: 'Grafik sesuai merek, dihasilkan dan ditata untuk Anda',
-    lead: 'Jelaskan kartu atau sampul yang Anda perlukan. Open Design menyusunnya dengan tipe, kisi, dan warna merek Anda yang nyata — lalu merender ke HTML yang bisa Anda ekspor sebagai gambar, alih-alih bergumul dengan aplikasi desain atau templat generik.',
+    lead: 'Jelaskan kartu atau sampul yang Anda perlukan. OpenDesign menyusunnya dengan tipe, kisi, dan warna merek Anda yang nyata — lalu merender ke HTML yang bisa Anda ekspor sebagai gambar, alih-alih bergumul dengan aplikasi desain atau templat generik.',
     heroImageAlt:
       'Ilustrasi bergaya editorial tentang sebuah prompt yang berubah menjadi seperangkat kartu sosial dan sampul artikel yang ditata',
     tldrTitle: 'Dalam satu kalimat',
     tldrBody:
-      'Open Design mengubah sebuah prompt menjadi grafik yang terketik dan sesuai merek yang dirender agent ke HTML dan diekspor ke PNG — bisa diulang, diversikan, dan bebas dari alat desain per kursi.',
-    stepsTitle: 'Cara kerja grafik dengan Open Design',
+      'OpenDesign mengubah sebuah prompt menjadi grafik yang terketik dan sesuai merek yang dirender agent ke HTML dan diekspor ke PNG — bisa diulang, diversikan, dan bebas dari alat desain per kursi.',
+    stepsTitle: 'Cara kerja grafik dengan OpenDesign',
     steps: [
       {
         title: 'Jelaskan grafiknya',
@@ -396,7 +396,7 @@ export const ID: SolutionLocaleCopy = {
       },
       {
         title: 'Terapkan sistem merek',
-        body: 'Open Design menarik warna, tipe, dan jarak Anda dari sistem desain yang dapat dipakai ulang, sehingga setiap kartu cocok dengan sisa merek Anda alih-alih terlihat seperti sekali pakai.',
+        body: 'OpenDesign menarik warna, tipe, dan jarak Anda dari sistem desain yang dapat dipakai ulang, sehingga setiap kartu cocok dengan sisa merek Anda alih-alih terlihat seperti sekali pakai.',
         imageAlt: 'Ilustrasi warna merek dan tipe yang diterapkan pada tata letak kartu',
       },
       {
@@ -410,9 +410,9 @@ export const ID: SolutionLocaleCopy = {
         imageAlt: 'Ilustrasi satu templat kartu yang menghasilkan rangkaian grafik yang konsisten',
       },
     ],
-    tableTitle: 'Grafik dengan Open Design vs. cara lama',
+    tableTitle: 'Grafik dengan OpenDesign vs. cara lama',
     tableColCapability: 'Yang Anda butuhkan',
-    tableColWithOd: 'Dengan Open Design',
+    tableColWithOd: 'Dengan OpenDesign',
     tableColWithout: 'Aplikasi desain / templat generik',
     tableRows: [
       {
@@ -455,7 +455,7 @@ export const ID: SolutionLocaleCopy = {
       { title: "Korsel", body: "Korsel sosial multi-slide yang tetap konsisten antar bingkai.", thumb: "example-social-carousel" },
       { title: "Bingkai mockup UI", body: "Bingkai notifikasi dan perangkat untuk bercerita tentang produk.", thumb: "example-frame-macos-notification" },
     ],
-    galleryTitle: 'Grafik yang dibangun orang dengan Open Design',
+    galleryTitle: 'Grafik yang dibangun orang dengan OpenDesign',
     galleryLead:
       'Kartu dan sampul nyata yang dirender dari sebuah prompt. Pilih satu yang dekat dengan kebutuhan Anda dan tukar dengan salinan Anda.',
     gallery: [
@@ -470,7 +470,7 @@ export const ID: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Apakah ini generator gambar AI seperti Midjourney?',
-        a: 'Tidak. Open Design menyusun grafik dengan tata letak dan tipografi nyata — judul Anda, merek Anda, dimensi persis — dan merender ke HTML yang Anda ekspor sebagai PNG. Ini komposisi desain, bukan pembuatan piksel.',
+        a: 'Tidak. OpenDesign menyusun grafik dengan tata letak dan tipografi nyata — judul Anda, merek Anda, dimensi persis — dan merender ke HTML yang Anda ekspor sebagai PNG. Ini komposisi desain, bukan pembuatan piksel.',
       },
       {
         q: 'Bisakah saya membuat rangkaian kartu yang konsisten?',
@@ -487,22 +487,22 @@ export const ID: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Buat grafik Anda berikutnya malam ini',
     ctaBody:
-      'Beri bintang pada repo, pasang Open Design, dan ubah sebuah prompt menjadi grafik sesuai merek — di agent yang sudah Anda pakai.',
+      'Beri bintang pada repo, pasang OpenDesign, dan ubah sebuah prompt menjadi grafik sesuai merek — di agent yang sudah Anda pakai.',
   },
   video: {
-    title: 'Hasilkan grafik gerak dan video pendek dengan Open Design + Claude Code',
+    title: 'Hasilkan grafik gerak dan video pendek dengan OpenDesign + Claude Code',
     description:
       'Ubah sebuah naskah menjadi bingkai beranimasi dan video format pendek — kartu judul, latar bergerak, dan outro disusun dengan sistem merek Anda dan dirender dari HTML. Tanpa suite grafik gerak, tanpa menggeser linimasa.',
     breadcrumb: 'Video',
     label: 'Kasus penggunaan · Video',
     heading: 'Grafik gerak dari sebuah naskah, bukan dari linimasa',
-    lead: 'Jelaskan momen yang Anda inginkan — sebuah penyingkapan judul, animasi data, outro logo. Open Design menyusun bingkai beranimasi dengan sistem merek Anda dan merendernya ke video, tanpa perlu suite grafik gerak.',
+    lead: 'Jelaskan momen yang Anda inginkan — sebuah penyingkapan judul, animasi data, outro logo. OpenDesign menyusun bingkai beranimasi dengan sistem merek Anda dan merendernya ke video, tanpa perlu suite grafik gerak.',
     heroImageAlt:
       'Ilustrasi bergaya editorial tentang sebuah naskah yang berubah menjadi rangkaian bingkai video beranimasi',
     tldrTitle: 'Dalam satu kalimat',
     tldrBody:
-      'Open Design mengubah sebuah naskah menjadi bingkai beranimasi yang sesuai merek yang dirender agent ke video format pendek — disusun dari HTML, diversikan di repo Anda, tanpa editor linimasa untuk dipelajari.',
-    stepsTitle: 'Cara kerja gerak dengan Open Design',
+      'OpenDesign mengubah sebuah naskah menjadi bingkai beranimasi yang sesuai merek yang dirender agent ke video format pendek — disusun dari HTML, diversikan di repo Anda, tanpa editor linimasa untuk dipelajari.',
+    stepsTitle: 'Cara kerja gerak dengan OpenDesign',
     steps: [
       {
         title: 'Jelaskan momennya',
@@ -511,7 +511,7 @@ export const ID: SolutionLocaleCopy = {
       },
       {
         title: 'Terapkan gaya merek dan gerak',
-        body: 'Open Design menyediakan templat bingkai — light leak sinematik, judul glitch, outro logo — dan menerapkan warna serta tipe Anda, sehingga geraknya terlihat disengaja dan sesuai merek.',
+        body: 'OpenDesign menyediakan templat bingkai — light leak sinematik, judul glitch, outro logo — dan menerapkan warna serta tipe Anda, sehingga geraknya terlihat disengaja dan sesuai merek.',
         imageAlt: 'Ilustrasi gaya merek yang diterapkan pada bingkai beranimasi',
       },
       {
@@ -525,9 +525,9 @@ export const ID: SolutionLocaleCopy = {
         imageAlt: 'Ilustrasi klip video yang disempurnakan dan diekspor untuk sosial',
       },
     ],
-    tableTitle: 'Gerak dengan Open Design vs. cara lama',
+    tableTitle: 'Gerak dengan OpenDesign vs. cara lama',
     tableColCapability: 'Yang Anda butuhkan',
-    tableColWithOd: 'Dengan Open Design',
+    tableColWithOd: 'Dengan OpenDesign',
     tableColWithout: 'After Effects / suite gerak',
     tableRows: [
       {
@@ -570,7 +570,7 @@ export const ID: SolutionLocaleCopy = {
       { title: "Judul glitch", body: "Penyingkapan judul dengan gerak dan tekstur.", thumb: "example-frame-glitch-title" },
       { title: "Outro logo", body: "Animasi penutup bermerek untuk klip apa pun.", thumb: "example-frame-logo-outro" },
     ],
-    galleryTitle: 'Gerak yang dibangun orang dengan Open Design',
+    galleryTitle: 'Gerak yang dibangun orang dengan OpenDesign',
     galleryLead:
       'Bingkai dan klip beranimasi nyata yang dirender dari sebuah prompt. Pilih satu yang dekat dengan ide Anda dan jelaskan geraknya.',
     gallery: [
@@ -585,7 +585,7 @@ export const ID: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Apakah saya butuh After Effects atau suite grafik gerak?',
-        a: 'Tidak. Open Design menyusun bingkai beranimasi dalam HTML dan merendernya ke video di dalam coding agent Anda. Tidak ada editor linimasa untuk dipelajari atau dilisensikan.',
+        a: 'Tidak. OpenDesign menyusun bingkai beranimasi dalam HTML dan merendernya ke video di dalam coding agent Anda. Tidak ada editor linimasa untuk dipelajari atau dilisensikan.',
       },
       {
         q: 'Untuk jenis video apa ini cocok?',
@@ -602,31 +602,31 @@ export const ID: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Animasikan ide Anda berikutnya malam ini',
     ctaBody:
-      'Beri bintang pada repo, pasang Open Design, dan ubah sebuah naskah menjadi gerak — di agent yang sudah Anda pakai.',
+      'Beri bintang pada repo, pasang OpenDesign, dan ubah sebuah naskah menjadi gerak — di agent yang sudah Anda pakai.',
   },
   designSystem: {
-    title: 'Bangun dan terapkan sistem desain dengan Open Design + Claude Code',
+    title: 'Bangun dan terapkan sistem desain dengan OpenDesign + Claude Code',
     description:
       'Tangkap merek Anda sebagai sistem desain yang dapat dipakai ulang yang diterapkan coding agent Anda ke setiap artefak — warna, tipe, komponen, dan nada dalam satu DESIGN.md. Definisikan sekali; setiap prototipe, dek, dan dashboard tetap sesuai merek.',
     breadcrumb: 'Sistem Desain',
     label: 'Kasus penggunaan · Sistem Desain',
     heading: 'Satu sistem desain, diterapkan ke semua yang dibuat agent Anda',
-    lead: 'Definisikan merek Anda sekali dan Open Design membawanya ke setiap keluaran — prototipe, dek, dashboard, grafik. Sistem hidup di repo Anda sebagai DESIGN.md yang dibaca agent, sehingga konsistensi bersifat otomatis, bukan manual.',
+    lead: 'Definisikan merek Anda sekali dan OpenDesign membawanya ke setiap keluaran — prototipe, dek, dashboard, grafik. Sistem hidup di repo Anda sebagai DESIGN.md yang dibaca agent, sehingga konsistensi bersifat otomatis, bukan manual.',
     heroImageAlt:
       'Ilustrasi bergaya editorial tentang sebuah sistem desain tunggal yang memancar menjadi banyak artefak sesuai merek',
     tldrTitle: 'Dalam satu kalimat',
     tldrBody:
-      'Open Design menangkap merek Anda sebagai sistem desain portabel yang diterapkan agent ke setiap artefak — didefinisikan sekali di repo Anda, ditegakkan di mana-mana, tanpa alat desain pusat yang menjaganya.',
-    stepsTitle: 'Cara kerja sistem desain dengan Open Design',
+      'OpenDesign menangkap merek Anda sebagai sistem desain portabel yang diterapkan agent ke setiap artefak — didefinisikan sekali di repo Anda, ditegakkan di mana-mana, tanpa alat desain pusat yang menjaganya.',
+    stepsTitle: 'Cara kerja sistem desain dengan OpenDesign',
     steps: [
       {
         title: 'Tangkap sistemnya',
-        body: 'Jelaskan merek Anda — warna, tipe, jarak, suara — atau arahkan agent ke situs yang ada untuk mengekstraknya. Open Design menuliskannya ke dalam DESIGN.md yang hidup di proyek Anda.',
+        body: 'Jelaskan merek Anda — warna, tipe, jarak, suara — atau arahkan agent ke situs yang ada untuk mengekstraknya. OpenDesign menuliskannya ke dalam DESIGN.md yang hidup di proyek Anda.',
         imageAlt: 'Ilustrasi sebuah merek yang ditangkap ke dalam satu berkas sistem desain',
       },
       {
         title: 'Mulai dari basis yang terbukti',
-        body: 'Open Design menyertakan 140+ sistem desain referensi — dari Apple dan Linear hingga editorial dan brutalis. Fork salah satu yang dekat dengan merek Anda alih-alih mulai dari halaman kosong.',
+        body: 'OpenDesign menyertakan 140+ sistem desain referensi — dari Apple dan Linear hingga editorial dan brutalis. Fork salah satu yang dekat dengan merek Anda alih-alih mulai dari halaman kosong.',
         imageAlt: 'Ilustrasi sebuah galeri sistem desain referensi yang sedang dijelajahi',
       },
       {
@@ -640,9 +640,9 @@ export const ID: SolutionLocaleCopy = {
         imageAlt: 'Ilustrasi sebuah sistem desain yang diperbarui dan menyebar ke semua keluaran',
       },
     ],
-    tableTitle: 'Sistem desain dengan Open Design vs. cara lama',
+    tableTitle: 'Sistem desain dengan OpenDesign vs. cara lama',
     tableColCapability: 'Yang Anda butuhkan',
-    tableColWithOd: 'Dengan Open Design',
+    tableColWithOd: 'Dengan OpenDesign',
     tableColWithout: 'Pustaka alat desain / panduan gaya',
     tableRows: [
       {
@@ -685,7 +685,7 @@ export const ID: SolutionLocaleCopy = {
       { title: "OpenAI", body: "Minimal, netral, kelas riset.", thumb: "design-system-openai" },
       { title: "GitHub", body: "Padat, teknis, native bagi developer.", thumb: "design-system-github" },
     ],
-    galleryTitle: 'Sistem desain di Open Design',
+    galleryTitle: 'Sistem desain di OpenDesign',
     galleryLead:
       'Beberapa dari 140+ sistem referensi yang bisa Anda fork sebagai titik awal. Pilih satu yang dekat dengan merek Anda dan sesuaikan.',
     gallery: [
@@ -700,11 +700,11 @@ export const ID: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Apa sebenarnya sistem desain di sini?',
-        a: 'Sebuah berkas DESIGN.md di repo Anda yang menangkap warna, tipe, jarak, komponen, dan suara. Setiap keterampilan Open Design membacanya, sehingga merek Anda diterapkan otomatis ke apa pun yang dihasilkan agent.',
+        a: 'Sebuah berkas DESIGN.md di repo Anda yang menangkap warna, tipe, jarak, komponen, dan suara. Setiap keterampilan OpenDesign membacanya, sehingga merek Anda diterapkan otomatis ke apa pun yang dihasilkan agent.',
       },
       {
         q: 'Apakah saya harus mulai dari nol?',
-        a: 'Tidak. Open Design menyertakan 140+ sistem desain referensi yang bisa Anda fork — dari Apple dan Linear hingga editorial dan brutalis — lalu sesuaikan dengan merek Anda.',
+        a: 'Tidak. OpenDesign menyertakan 140+ sistem desain referensi yang bisa Anda fork — dari Apple dan Linear hingga editorial dan brutalis — lalu sesuaikan dengan merek Anda.',
       },
       {
         q: 'Bagaimana ia tetap konsisten lintas dek, dashboard, dan prototipe?',
@@ -717,12 +717,12 @@ export const ID: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Definisikan sistem desain Anda malam ini',
     ctaBody:
-      'Beri bintang pada repo, pasang Open Design, dan beri agent Anda satu merek untuk diterapkan di mana-mana — di agent yang sudah Anda pakai.',
+      'Beri bintang pada repo, pasang OpenDesign, dan beri agent Anda satu merek untuk diterapkan di mana-mana — di agent yang sudah Anda pakai.',
   },
   roleSoloBuilder: {
-    title: 'Open Design untuk solo builder & indie hacker',
+    title: 'OpenDesign untuk solo builder & indie hacker',
     description:
-      'Rilis layaknya satu tim, padahal seorang diri. Open Design mengubah coding agent Anda menjadi separuh sisi desain dari startup Anda — prototipe, halaman arahan, dasbor, dan visual merek, semuanya dari satu prompt, semuanya sesuai merek, semuanya di dalam repo Anda.',
+      'Rilis layaknya satu tim, padahal seorang diri. OpenDesign mengubah coding agent Anda menjadi separuh sisi desain dari startup Anda — prototipe, halaman arahan, dasbor, dan visual merek, semuanya dari satu prompt, semuanya sesuai merek, semuanya di dalam repo Anda.',
     breadcrumb: 'Solo Builder',
     label: 'Untuk · Solo Builder',
     heading: 'Tim desain Anda adalah agent yang sudah Anda jalankan',
@@ -731,8 +731,8 @@ export const ID: SolutionLocaleCopy = {
       'Ilustrasi gaya editorial seseorang di meja kerja dikelilingi halaman arahan, sebuah aplikasi, sebuah dasbor, dan kartu sosial, semuanya dalam satu gaya yang konsisten',
     tldrTitle: 'Dalam satu kalimat',
     tldrBody:
-      'Open Design adalah departemen desain yang tidak pernah dimiliki seorang founder tunggal: dari prompt menjadi artefak di setiap permukaan yang dibutuhkan produk Anda, dalam satu merek, tanpa serah terima dan tanpa alat tambahan.',
-    stepsTitle: 'Cara solo builder memakai Open Design',
+      'OpenDesign adalah departemen desain yang tidak pernah dimiliki seorang founder tunggal: dari prompt menjadi artefak di setiap permukaan yang dibutuhkan produk Anda, dalam satu merek, tanpa serah terima dan tanpa alat tambahan.',
+    stepsTitle: 'Cara solo builder memakai OpenDesign',
     steps: [
       {
         title: 'Definisikan merek Anda sekali',
@@ -750,9 +750,9 @@ export const ID: SolutionLocaleCopy = {
         imageAlt: 'Ilustrasi sebuah artefak melaju langsung dari prompt ke versi tayang',
       },
     ],
-    tableTitle: 'Membangun seorang diri dengan Open Design vs cara yang berat',
+    tableTitle: 'Membangun seorang diri dengan OpenDesign vs cara yang berat',
     tableColCapability: 'Yang Anda butuhkan',
-    tableColWithOd: 'Dengan Open Design',
+    tableColWithOd: 'Dengan OpenDesign',
     tableColWithout: 'Berjuang sendiri saat ini',
     tableRows: [
       { capability: 'Cakup setiap permukaan desain', withOd: 'Satu agent mengerjakan prototipe, halaman arahan, dasbor, merek', without: 'Menjahit lima alat SaaS dan tutorial menjadi satu' },
@@ -770,7 +770,7 @@ export const ID: SolutionLocaleCopy = {
       { title: 'Alur seluler', body: 'Layar aplikasi saat Anda melangkah di luar web.', thumb: 'example-mobile-app' },
       { title: 'Kartu sosial', body: 'Kartu peluncuran dan pembaruan untuk setiap kanal.', thumb: 'example-card-twitter' },
     ],
-    galleryTitle: 'Dibangun seorang diri dengan Open Design',
+    galleryTitle: 'Dibangun seorang diri dengan OpenDesign',
     galleryLead:
       'Setiap permukaan yang dibutuhkan startup satu orang, dari sebuah prompt. Pilih satu yang dekat dengan langkah Anda berikutnya dan jelaskan.',
     gallery: [
@@ -790,12 +790,12 @@ export const ID: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Bangun seluruh proyek Anda malam ini',
     ctaBody:
-      'Beri bintang pada repo, pasang Open Design, dan biarkan satu agent menjadi tim desain Anda — di dalam agent yang sudah Anda pakai.',
+      'Beri bintang pada repo, pasang OpenDesign, dan biarkan satu agent menjadi tim desain Anda — di dalam agent yang sudah Anda pakai.',
   },
   roleDesigner: {
-    title: 'Open Design untuk desainer',
+    title: 'OpenDesign untuk desainer',
     description:
-      'Habiskan waktu Anda untuk selera, bukan kerja melelahkan. Open Design membiarkan agent Anda menangani pekerjaan produksi berulang — varian, status, sistem desain lengkap — sementara Anda mengarahkan tampilan dan memegang keputusan akhir.',
+      'Habiskan waktu Anda untuk selera, bukan kerja melelahkan. OpenDesign membiarkan agent Anda menangani pekerjaan produksi berulang — varian, status, sistem desain lengkap — sementara Anda mengarahkan tampilan dan memegang keputusan akhir.',
     breadcrumb: 'Desainer',
     label: 'Untuk · Desainer',
     heading: 'Arahkan desainnya — biarkan agent yang memproduksi',
@@ -804,8 +804,8 @@ export const ID: SolutionLocaleCopy = {
       'Ilustrasi gaya editorial seorang desainer yang mengarahkan sementara sebuah agent mengisi layar, varian, dan sebuah sistem desain',
     tldrTitle: 'Dalam satu kalimat',
     tldrBody:
-      'Open Design adalah asisten produksi yang tak pernah lelah: Anda mendefinisikan sistem desain dan menentukan seleranya; agent menghasilkan sisanya, sesuai sistem, di dalam repo Anda.',
-    stepsTitle: 'Cara desainer memakai Open Design',
+      'OpenDesign adalah asisten produksi yang tak pernah lelah: Anda mendefinisikan sistem desain dan menentukan seleranya; agent menghasilkan sisanya, sesuai sistem, di dalam repo Anda.',
+    stepsTitle: 'Cara desainer memakai OpenDesign',
     steps: [
       {
         title: 'Kodekan sistem Anda',
@@ -823,9 +823,9 @@ export const ID: SolutionLocaleCopy = {
         imageAlt: 'Ilustrasi seorang desainer memberi arahan dan desain ikut diperbarui',
       },
     ],
-    tableTitle: 'Mendesain dengan Open Design vs cara manual',
+    tableTitle: 'Mendesain dengan OpenDesign vs cara manual',
     tableColCapability: 'Yang Anda butuhkan',
-    tableColWithOd: 'Dengan Open Design',
+    tableColWithOd: 'Dengan OpenDesign',
     tableColWithout: 'Perkakas desain manual',
     tableRows: [
       { capability: 'Membangun sistem desain', withOd: 'Sebuah DESIGN.md yang diterapkan agent di mana-mana', without: 'Pustaka yang Anda rawat manual di tiap alat' },
@@ -843,7 +843,7 @@ export const ID: SolutionLocaleCopy = {
       { title: 'Layar aplikasi', body: 'Layar seluler dan web berfidelitas tinggi.', thumb: 'example-mobile-app' },
       { title: 'Dasbor', body: 'Antarmuka data yang menghormati sistem Anda.', thumb: 'example-dashboard' },
     ],
-    galleryTitle: 'Diarahkan dengan Open Design',
+    galleryTitle: 'Diarahkan dengan OpenDesign',
     galleryLead:
       'Karya berfidelitas tinggi, sesuai sistem, yang dihasilkan agent dari arahan. Pilih satu yang dekat dengan gaya Anda dan sempurnakan.',
     gallery: [
@@ -863,12 +863,12 @@ export const ID: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Arahkan desain Anda berikutnya malam ini',
     ctaBody:
-      'Beri bintang pada repo, pasang Open Design, dan biarkan agent menangani produksi sementara Anda menentukan seleranya — di dalam agent yang sudah Anda pakai.',
+      'Beri bintang pada repo, pasang OpenDesign, dan biarkan agent menangani produksi sementara Anda menentukan seleranya — di dalam agent yang sudah Anda pakai.',
   },
   roleEngineering: {
-    title: 'Open Design untuk engineer',
+    title: 'OpenDesign untuk engineer',
     description:
-      'Lewati serah terima desain. Open Design mengubah sebuah DESIGN.md menjadi front-end nyata yang ditulis langsung oleh coding agent Anda — UI sesuai sistem, prototipe, dan dasbor, di dalam repo, tanpa bolak-balik ke Figma.',
+      'Lewati serah terima desain. OpenDesign mengubah sebuah DESIGN.md menjadi front-end nyata yang ditulis langsung oleh coding agent Anda — UI sesuai sistem, prototipe, dan dasbor, di dalam repo, tanpa bolak-balik ke Figma.',
     breadcrumb: 'Teknik',
     label: 'Untuk · Teknik',
     heading: 'Dari spesifikasi ke front-end, tanpa serah terima di antaranya',
@@ -877,8 +877,8 @@ export const ID: SolutionLocaleCopy = {
       'Ilustrasi gaya editorial sebuah DESIGN.md yang mengalir langsung ke kode front-end dan UI yang dirender, melewati langkah serah terima',
     tldrTitle: 'Dalam satu kalimat',
     tldrBody:
-      'Open Design menutup jurang dari desainer ke engineer dengan membuat sistem desain dapat dibaca mesin: agent yang sama yang menulis kode Anda menerapkan sistem dan merender UI nyata.',
-    stepsTitle: 'Cara engineer memakai Open Design',
+      'OpenDesign menutup jurang dari desainer ke engineer dengan membuat sistem desain dapat dibaca mesin: agent yang sama yang menulis kode Anda menerapkan sistem dan merender UI nyata.',
+    stepsTitle: 'Cara engineer memakai OpenDesign',
     steps: [
       {
         title: 'Baca sistemnya, bukan anotasi koreksi',
@@ -896,9 +896,9 @@ export const ID: SolutionLocaleCopy = {
         imageAlt: 'Ilustrasi UI yang dihasilkan mendarat sebagai sebuah PR yang dapat ditinjau',
       },
     ],
-    tableTitle: 'Front-end dengan Open Design vs cara serah terima',
+    tableTitle: 'Front-end dengan OpenDesign vs cara serah terima',
     tableColCapability: 'Yang Anda butuhkan',
-    tableColWithOd: 'Dengan Open Design',
+    tableColWithOd: 'Dengan OpenDesign',
     tableColWithout: 'Serah terima desain-ke-dev',
     tableRows: [
       { capability: 'Dapatkan desain untuk dibangun', withOd: 'Sebuah DESIGN.md yang dibaca agent Anda langsung', without: 'Berkas Figma yang Anda tafsirkan ulang manual' },
@@ -916,7 +916,7 @@ export const ID: SolutionLocaleCopy = {
       { title: 'Halaman arahan', body: 'Halaman pemasaran tanpa menunggu desain.', thumb: 'example-saas-landing' },
       { title: 'Kanban / papan', body: 'Antarmuka alur kerja internal.', thumb: 'example-kanban-board' },
     ],
-    galleryTitle: 'Dibangun oleh engineer dengan Open Design',
+    galleryTitle: 'Dibangun oleh engineer dengan OpenDesign',
     galleryLead:
       'Front-end nyata, sesuai sistem, yang dihasilkan langsung di dalam repo. Pilih satu yang dekat dengan yang Anda bangun dan jelaskan.',
     gallery: [
@@ -936,12 +936,12 @@ export const ID: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Hasilkan UI Anda berikutnya malam ini',
     ctaBody:
-      'Beri bintang pada repo, pasang Open Design, dan ubah sebuah DESIGN.md menjadi front-end — di dalam agent yang sudah Anda pakai.',
+      'Beri bintang pada repo, pasang OpenDesign, dan ubah sebuah DESIGN.md menjadi front-end — di dalam agent yang sudah Anda pakai.',
   },
   roleProductManagers: {
-    title: 'Open Design untuk product manager',
+    title: 'OpenDesign untuk product manager',
     description:
-      'Berhenti menunggu kapasitas desain untuk mengomunikasikan sebuah ide. Open Design memungkinkan seorang PM mengubah sebuah prompt menjadi prototipe yang dapat diklik atau wireframe — untuk menyelaraskan pemangku kepentingan dan memberi brief ke tim, tanpa tiket desain.',
+      'Berhenti menunggu kapasitas desain untuk mengomunikasikan sebuah ide. OpenDesign memungkinkan seorang PM mengubah sebuah prompt menjadi prototipe yang dapat diklik atau wireframe — untuk menyelaraskan pemangku kepentingan dan memberi brief ke tim, tanpa tiket desain.',
     breadcrumb: 'Product Manager',
     label: 'Untuk · Product Manager',
     heading: 'Jadikan idenya dapat diklik sebelum kickoff',
@@ -950,8 +950,8 @@ export const ID: SolutionLocaleCopy = {
       'Ilustrasi gaya editorial seorang PM mengubah ide tertulis menjadi prototipe yang dapat diklik yang ditunjukkan ke pemangku kepentingan',
     tldrTitle: 'Dalam satu kalimat',
     tldrBody:
-      'Open Design memberi PM cara tanpa desain untuk membuat ide menjadi nyata: dari prompt ke prototipe untuk penyelarasan dan brief, tanpa menghabiskan anggaran desain tim.',
-    stepsTitle: 'Cara seorang PM memakai Open Design',
+      'OpenDesign memberi PM cara tanpa desain untuk membuat ide menjadi nyata: dari prompt ke prototipe untuk penyelarasan dan brief, tanpa menghabiskan anggaran desain tim.',
+    stepsTitle: 'Cara seorang PM memakai OpenDesign',
     steps: [
       {
         title: 'Jelaskan alurnya',
@@ -969,9 +969,9 @@ export const ID: SolutionLocaleCopy = {
         imageAlt: 'Ilustrasi sebuah prototipe dibagikan untuk penyelarasan lalu diserahkan ke tim',
       },
     ],
-    tableTitle: 'Kerja PM dengan Open Design vs menunggu desain',
+    tableTitle: 'Kerja PM dengan OpenDesign vs menunggu desain',
     tableColCapability: 'Yang Anda butuhkan',
-    tableColWithOd: 'Dengan Open Design',
+    tableColWithOd: 'Dengan OpenDesign',
     tableColWithout: 'Tanpa itu saat ini',
     tableRows: [
       { capability: 'Membuat ide menjadi nyata', withOd: 'Prompt → prototipe yang dapat diklik Anda sendiri', without: 'Mengajukan tiket desain dan menunggu kapasitas' },
@@ -989,7 +989,7 @@ export const ID: SolutionLocaleCopy = {
       { title: 'Prototipe web', body: 'Alur web multilayar untuk ditinjau.', thumb: 'example-web-prototype' },
       { title: 'Tampilan tren', body: 'Cuplikan 30 hari dan tren untuk konteks.', thumb: 'example-last30days' },
     ],
-    galleryTitle: 'Diprototipekan oleh PM dengan Open Design',
+    galleryTitle: 'Diprototipekan oleh PM dengan OpenDesign',
     galleryLead:
       'Alur yang dapat diklik dirender dari sebuah deskripsi, siap untuk tinjauan pemangku kepentingan. Pilih satu yang dekat dengan ide Anda dan jelaskan.',
     gallery: [
@@ -1009,12 +1009,12 @@ export const ID: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Jadikan ide Anda dapat diklik malam ini',
     ctaBody:
-      'Beri bintang pada repo, pasang Open Design, dan ubah spesifikasi Anda berikutnya menjadi sesuatu yang bisa diklik orang — di dalam agent yang sudah Anda pakai.',
+      'Beri bintang pada repo, pasang OpenDesign, dan ubah spesifikasi Anda berikutnya menjadi sesuatu yang bisa diklik orang — di dalam agent yang sudah Anda pakai.',
   },
   roleMarketing: {
-    title: 'Open Design untuk tim pemasaran',
+    title: 'OpenDesign untuk tim pemasaran',
     description:
-      'Rilis kampanye secepat konten. Open Design memungkinkan agent Anda menghasilkan halaman arahan, kartu sosial, dan visual kampanye dari sebuah prompt — sesuai merek, sesuai permintaan, tanpa mengantre desain.',
+      'Rilis kampanye secepat konten. OpenDesign memungkinkan agent Anda menghasilkan halaman arahan, kartu sosial, dan visual kampanye dari sebuah prompt — sesuai merek, sesuai permintaan, tanpa mengantre desain.',
     breadcrumb: 'Pemasaran',
     label: 'Untuk · Pemasaran',
     heading: 'Visual kampanye secepat sebuah prompt',
@@ -1023,8 +1023,8 @@ export const ID: SolutionLocaleCopy = {
       'Ilustrasi gaya editorial seorang pemasar mengubah sebuah brief menjadi halaman arahan dan satu set kartu sosial yang sesuai merek',
     tldrTitle: 'Dalam satu kalimat',
     tldrBody:
-      'Open Design adalah sumber daya desain yang selalu siap untuk pemasaran: dari prompt ke aset untuk halaman arahan dan media sosial, sesuai merek, sehingga kampanye dirilis secepat Anda menulis naskah.',
-    stepsTitle: 'Cara tim pemasaran memakai Open Design',
+      'OpenDesign adalah sumber daya desain yang selalu siap untuk pemasaran: dari prompt ke aset untuk halaman arahan dan media sosial, sesuai merek, sehingga kampanye dirilis secepat Anda menulis naskah.',
+    stepsTitle: 'Cara tim pemasaran memakai OpenDesign',
     steps: [
       {
         title: 'Kunci mereknya',
@@ -1042,9 +1042,9 @@ export const ID: SolutionLocaleCopy = {
         imageAlt: 'Ilustrasi aset kampanye dirilis dan diiterasi dengan cepat',
       },
     ],
-    tableTitle: 'Pemasaran dengan Open Design vs kalang kabut seperti biasa',
+    tableTitle: 'Pemasaran dengan OpenDesign vs kalang kabut seperti biasa',
     tableColCapability: 'Yang Anda butuhkan',
-    tableColWithOd: 'Dengan Open Design',
+    tableColWithOd: 'Dengan OpenDesign',
     tableColWithout: 'Tanpa itu saat ini',
     tableRows: [
       { capability: 'Luncurkan halaman arahan', withOd: 'Prompt → halaman sesuai merek, dapat dideploy', without: 'Memberi brief desain atau bergulat dengan pembuat situs' },
@@ -1062,7 +1062,7 @@ export const ID: SolutionLocaleCopy = {
       { title: 'Sampul artikel', body: 'Sampul blog dan buletin.', thumb: 'example-article-magazine' },
       { title: 'Halaman web', body: 'Microsite dan halaman kampanye.', thumb: 'example-web-prototype' },
     ],
-    galleryTitle: 'Dirilis oleh pemasaran dengan Open Design',
+    galleryTitle: 'Dirilis oleh pemasaran dengan OpenDesign',
     galleryLead:
       'Aset kampanye sesuai merek yang dirender dari sebuah prompt. Pilih satu yang dekat dengan kampanye Anda dan ganti dengan naskah Anda.',
     gallery: [
@@ -1082,6 +1082,6 @@ export const ID: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Rilis kampanye Anda berikutnya malam ini',
     ctaBody:
-      'Beri bintang pada repo, pasang Open Design, dan ubah brief menjadi aset yang sesuai merek — di dalam agent yang sudah Anda pakai.',
+      'Beri bintang pada repo, pasang OpenDesign, dan ubah brief menjadi aset yang sesuai merek — di dalam agent yang sudah Anda pakai.',
   },
 };

@@ -27,7 +27,7 @@ test('landing page serves install.sh as a shell script, not the HTML app fallbac
   assert.doesNotMatch(body, /<html/i);
 });
 
-test('install.sh delegates to the Open Design CLI installer with the requested agent', () => {
+test('install.sh delegates to the OpenDesign CLI installer with the requested agent', () => {
   const tmp = mkdtempSync(join(tmpdir(), 'od-install-sh-'));
   const argvOut = join(tmp, 'argv.txt');
   const fakeOd = join(tmp, 'od');
@@ -84,7 +84,7 @@ exit 0
     const result = runInstall(['cursor'], tmp);
 
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /does not look like the Open Design CLI/);
+    assert.match(result.stderr, /does not look like the OpenDesign CLI/);
     assert.match(result.stderr, /macOS, Linux, and WSL2/);
     assert.match(result.stderr, /Settings -> MCP server/);
     assert.throws(() => readFileSync(argvOut, 'utf8'), /ENOENT/);
@@ -109,7 +109,7 @@ exit 1
     const result = runInstall(['cursor'], tmp);
 
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /does not look like the Open Design CLI/);
+    assert.match(result.stderr, /does not look like the OpenDesign CLI/);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

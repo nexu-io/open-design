@@ -4,6 +4,7 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 
 ## Active apps
 
+- `apps/closure`: independently distributable OpenDesign Closure content. During the cold-start phase it owns only a Web/daemon-independent lifecycle fixture and component contribution; do not add shell, Store, channel, or generation policy here.
 - `apps/web`: Next.js 16 App Router + React 18 web runtime. Entrypoints live in `apps/web/app/`; the main client shell is `apps/web/src/App.tsx`. During local `tools-dev` web runs, `apps/web/next.config.ts` rewrites `/api/*`, `/artifacts/*`, and `/frames/*` to `OD_PORT`.
 - `apps/daemon`: Express + SQLite local daemon and `od` bin. It owns REST/SSE APIs, agent CLI spawning, skills, design systems, artifact persistence, static serving, and daemon-managed data. Before describing or changing daemon data paths, read the root `AGENTS.md` section **Daemon data directory contract**; it is mandatory and must not be restated here.
 - `apps/desktop`: Electron shell. Desktop does not guess the web port; it reads runtime status through sidecar IPC and opens the reported web URL.
@@ -41,7 +42,7 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 
 - `apps/nextjs` has been removed; do not restore it.
 - Packaged web uses Next.js SSR through the web sidecar; do not put Next output under daemon `OD_RESOURCE_ROOT`.
-- Packaged `OD_RESOURCE_ROOT` is for daemon non-Next read-only resources. The authoritative bundled-tree list lives in `tools/pack/src/resources.ts` and currently includes skills, design templates, design systems, craft, official and registry plugin data, frames, community pets, prompt templates, and baked plugin-preview metadata.
+- Packaged `OD_RESOURCE_ROOT` is for daemon non-Next read-only resources. The authoritative bundled-tree list lives in `tools/pack/src/resources/index.ts` and currently includes skills, design templates, design systems, craft, official and registry plugin data, frames, community pets, prompt templates, and baked plugin-preview metadata.
 - Packaged data/log/runtime/cache paths must be namespace-scoped and must not depend on daemon or web ports.
 - Daemon↔web packaged traffic still uses an HTTP origin/port because Next.js dev server and SSR proxy paths assume HTTP origins; switching to Unix sockets would require patching Next internals. The invariant is that data/log/runtime/cache paths never embed ports.
 

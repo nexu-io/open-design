@@ -1122,6 +1122,32 @@ describe("wellKnownUserToolchainBins", () => {
     }
   });
 
+  it("includes Nix profile bin dirs so nix-darwin CLIs resolve under GUI launch (issue #6121)", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-nix-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
+      // User's active Nix profile (home-relative — always safe)
+      expect(dirs).toContain(join(home, ".nix-profile", "bin"));
+      // System-wide Nix paths must NOT appear when includeSystemBins is false
+      expect(dirs).not.toContain("/run/current-system/sw/bin");
+      expect(dirs).not.toContain("/nix/var/nix/profiles/default/bin");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("includes system-wide Nix paths only when includeSystemBins is true (issue #6121)", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-nix-sys-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: true });
+      expect(dirs).toContain("/run/current-system/sw/bin");
+      expect(dirs).toContain("/nix/var/nix/profiles/default/bin");
+      expect(dirs).toContain(join(home, ".nix-profile", "bin"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it("includes /opt/homebrew/bin and /usr/local/bin when includeSystemBins is true", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-sys-"));
     try {

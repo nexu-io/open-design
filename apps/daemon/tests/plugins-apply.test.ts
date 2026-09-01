@@ -125,4 +125,27 @@ describe('applyPlugin', () => {
     const result = applyPlugin({ plugin: pluginFixture(), inputs: { topic: 'design' }, registry: REGISTRY });
     expect(result.result.appliedPlugin.pluginId).toBe('sample-plugin');
   });
+
+  it('does not interpret a community strategy extension as a bundled declaration', () => {
+    const base = pluginFixture();
+    const plugin = pluginFixture({
+      sourceKind: 'local',
+      manifest: {
+        ...base.manifest,
+        od: {
+          ...base.manifest.od,
+          strategy: {
+            schema: 'community.example/v9',
+            customRecipe: true,
+          },
+        },
+      },
+    });
+
+    expect(applyPlugin({
+      plugin,
+      inputs: { topic: 'design' },
+      registry: REGISTRY,
+    }).result.appliedPlugin.pluginId).toBe('sample-plugin');
+  });
 });

@@ -53,8 +53,14 @@ export interface RegisterCollabPresenceRoutesDeps {
     | null
   >;
   /**
+   * Leave must bypass any background authority outage lease so closing a tab
+   * still gets one chance to release its remote presence lease. Heartbeats use
+   * `verifyWorkspaceRequest`; leave falls back to it when this seam is absent.
+   */
+  verifyWorkspaceLeaveRequest?: RegisterCollabPresenceRoutesDeps['verifyWorkspaceRequest'];
+  /**
    * Bounded successful authority lease for the idempotent GET surface.
-   * Heartbeat and leave deliberately keep using `verifyWorkspaceRequest`.
+   * Heartbeat deliberately keeps using `verifyWorkspaceRequest`.
    */
   verifyWorkspaceReadRequest?: RegisterCollabPresenceRoutesDeps['verifyWorkspaceRequest'];
   /** Test/operations seam for the short-lived cloud list cache. */
@@ -301,7 +307,9 @@ export function createCollabPresenceCloudClient(
     const workspaceId =
       context?.workspaceId?.trim() || workspaceScopeFor(projectId)?.trim() || '';
     if (!workspaceId) {
-      throw new Error('explicit workspace scope is required');
+      throw Object.assign(new Error('workspace scope is unavailable'), {
+        code: 'workspace_scope_unavailable',
+      });
     }
     return workspaceId;
   };
@@ -737,12 +745,14 @@ export function registerCollabPresenceRoutes(
   async function verifiedContext(
     req: Request,
     projectId: string,
-    mode: 'read' | 'write',
+    mode: 'read' | 'heartbeat' | 'leave',
   ): Promise<PresenceWorkspaceVerification> {
-    const verify =
-      mode === 'read'
-        ? deps.verifyWorkspaceReadRequest ?? deps.verifyWorkspaceRequest
-        : deps.verifyWorkspaceRequest;
+    let verify = deps.verifyWorkspaceRequest;
+    if (mode === 'read') {
+      verify = deps.verifyWorkspaceReadRequest ?? verify;
+    } else if (mode === 'leave') {
+      verify = deps.verifyWorkspaceLeaveRequest ?? verify;
+    }
     if (!verify) {
       return { ok: true, context: null };
     }
@@ -819,7 +829,7 @@ export function registerCollabPresenceRoutes(
   app.post('/api/projects/:id/presence/heartbeat', async (req, res) => {
     const heartbeat = readHeartbeat(req.body);
     if (!heartbeat) return res.status(400).json({ error: 'memberId required' });
-    const verification = await verifiedContext(req, req.params.id, 'write');
+    const verification = await verifiedContext(req, req.params.id, 'heartbeat');
     if (cloud && !verification.ok) {
       return sendWorkspaceVerificationFailure(res, verification);
     }
@@ -920,14 +930,14 @@ export function registerCollabPresenceRoutes(
   app.post('/api/projects/:id/presence/leave', async (req, res) => {
     const leave = readLeave(req.body);
     if (!leave) return res.status(400).json({ error: 'memberId required' });
-    const verification = await verifiedContext(req, req.params.id, 'write');
+    const verification = await verifiedContext(req, req.params.id, 'leave');
     if (cloud && !verification.ok) {
       return sendWorkspaceVerificationFailure(res, verification);
     }
     const context = verification.ok ? verification.context : null;
     if (
       cloud
-      && deps.verifyWorkspaceRequest
+      && (deps.verifyWorkspaceLeaveRequest ?? deps.verifyWorkspaceRequest)
       && (!verification.ok || !context || leave.memberId !== context.workspaceMemberId)
     ) {
       return res.status(403).json({ error: 'WORKSPACE_PROJECT_PRESENCE_DENIED' });

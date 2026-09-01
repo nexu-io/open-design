@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { hashPackageSourcePath } from "../src/package-source-hash.js";
+import { hashPackageSourcePath } from "@/package-source-hash.js";
 
 describe("hashPackageSourcePath", () => {
   it("includes package versions in the source hash", async () => {

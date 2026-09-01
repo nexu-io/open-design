@@ -42,8 +42,10 @@ export type AnalyticsEventName =
   | 'context_link_result'
   | 'speaker_notes_save_result'
   // Artifact
+  | 'artifact_edit_result'
   | 'artifact_export_result'
   | 'artifact_deploy_result'
+  | 'artifact_publish_result'
   | 'file_version_restore_result'
   // Workspace redesign: authoritative outcome events. Clicks and impressions
   // continue to use the core ui_click/surface_view catalogue.
@@ -53,6 +55,9 @@ export type AnalyticsEventName =
   | 'workspace_shared_project_open_result'
   | 'workspace_resource_action_result'
   | 'project_comment_create_result'
+  // Message-level conversation forking. Entry clicks stay on `ui_click`;
+  // this result event records whether the new conversation was created.
+  | 'conversation_fork_result'
   // Feedback
   | 'feedback_submit_result'
   | 'assistant_feedback_click'
@@ -61,11 +66,17 @@ export type AnalyticsEventName =
   | 'assistant_feedback_reason_submit'
   // Settings
   | 'settings_view'
+  // Labs experiment opt-in / opt-out (generic across experiments).
+  | 'labs_item_toggled'
   | 'settings_cli_test_result'
   | 'settings_byok_test_result'
   | 'settings_byok_models_fetch_result'
   | 'byok_preflight_blocked'
   | 'settings_connector_auth_result'
+  // Fleet health for locally installed agent CLIs. Detection is the only stage
+  // that learns an installed CLI cannot actually be used; without this, the
+  // only way we hear about it is a user filing a report with a diagnostics zip.
+  | 'agent_detect_diagnostic'
   // AMR (hosted model) account auth result.
   | 'amr_auth_stage'
   | 'amr_auth_result'

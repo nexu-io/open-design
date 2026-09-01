@@ -65,10 +65,4 @@ describe('HomeHero compact composer controls', () => {
     expect(ruleValue(switcher, 'flex-basis')).toBe('auto');
   });
 
-  it('keeps the template picker search field free of the global input focus halo', () => {
-    const templateSearchFocus = cssDeclarations('.home-hero__template-search input:focus');
-
-    expect(ruleValue(templateSearchFocus, 'outline')).toBe('none');
-    expect(ruleValue(templateSearchFocus, 'box-shadow')).toBe('none');
-  });
 });

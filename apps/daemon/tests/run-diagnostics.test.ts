@@ -7,6 +7,135 @@ import {
 } from '../src/run-diagnostics.js';
 
 describe('run diagnostics', () => {
+  it('summarizes tool execution lifecycle evidence with bounded low-cardinality fields', () => {
+    const result = summarizeRunDiagnosticsForAnalytics({
+      events: [
+        {
+          event: 'agent',
+          data: {
+            type: 'diagnostic',
+            name: 'tool_execution_lifecycle',
+            schema: 'vela.tool_execution_lifecycle',
+            version: 1,
+            toolCallIdHash: 'acp_deadbeefdeadbeefdeadbeef',
+            trigger: 'deadline',
+            terminal: 'interrupted',
+            droppedEvents: 2,
+            events: [
+              { phase: 'kill_requested' },
+              { phase: 'kill_sent' },
+              { phase: 'close', stdoutClosed: true, stderrClosed: false },
+            ],
+            toolTerminal: { source: 'processor_cleanup', confirmed: false },
+          },
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      tool_execution_lifecycle_seen: true,
+      tool_execution_lifecycle_count_bucket: '1',
+      tool_execution_trigger: 'deadline',
+      tool_execution_terminal: 'interrupted',
+      tool_terminal_source: 'processor_cleanup',
+      tool_kill_outcome: 'sent',
+      tool_child_close_seen: true,
+      tool_stdout_close_seen: true,
+      tool_stderr_close_seen: false,
+      tool_execution_evidence_incomplete: true,
+    });
+    expect(JSON.stringify(result)).not.toContain('acp_deadbeefdeadbeefdeadbeef');
+  });
+
+  it('aggregates only the latest lifecycle snapshot for each tool execution', () => {
+    const toolCallIdHash = 'acp_0123456789abcdef01234567';
+    const result = summarizeRunDiagnosticsForAnalytics({
+      events: [
+        {
+          event: 'agent',
+          data: {
+            type: 'diagnostic',
+            name: 'tool_execution_lifecycle',
+            schema: 'vela.tool_execution_lifecycle',
+            version: 1,
+            toolCallIdHash,
+            terminal: 'running',
+          },
+        },
+        {
+          event: 'agent',
+          data: {
+            type: 'diagnostic',
+            name: 'tool_execution_lifecycle',
+            schema: 'vela.tool_execution_lifecycle',
+            version: 1,
+            toolCallIdHash,
+            trigger: 'exit',
+            terminal: 'returned',
+            events: [{ phase: 'close', stdoutClosed: true, stderrClosed: true }],
+            toolTerminal: { source: 'tool_result', confirmed: true },
+          },
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      tool_execution_lifecycle_count_bucket: '1',
+      tool_execution_terminal: 'returned',
+      tool_execution_evidence_incomplete: false,
+    });
+  });
+
+  it('bounds lifecycle aggregation to the latest 64 distinct diagnostics', () => {
+    const events = Array.from({ length: 100 }, (_, index) => ({
+      event: 'agent',
+      data: {
+        type: 'diagnostic',
+        name: 'tool_execution_lifecycle',
+        schema: 'vela.tool_execution_lifecycle',
+        version: 1,
+        toolCallIdHash: `acp_${index.toString(16).padStart(24, '0')}`,
+        trigger: index < 36 ? 'deadline' : 'exit',
+        terminal: 'returned',
+        events: [{ phase: 'close', stdoutClosed: true, stderrClosed: true }],
+        toolTerminal: { source: 'tool_result', confirmed: true },
+      },
+    }));
+
+    expect(summarizeRunDiagnosticsForAnalytics({ events })).toMatchObject({
+      tool_execution_lifecycle_count_bucket: 'gt_20',
+      tool_execution_trigger: 'exit',
+      tool_execution_terminal: 'returned',
+      tool_terminal_source: 'tool_result',
+      tool_execution_evidence_incomplete: false,
+    });
+  });
+
+  it('ignores arbitrary persisted diagnostic objects without blocking run_finished', () => {
+    const circular: Record<string, unknown> = { command: 'cat /private/secret' };
+    circular.self = circular;
+    const events = [{
+      event: 'agent',
+      data: {
+        type: 'diagnostic',
+        name: 'tool_execution_lifecycle',
+        schema: 'vela.tool_execution_lifecycle',
+        version: 1,
+        toolCallIdHash: 'acp_0123456789abcdef01234567',
+        trigger: 'exit',
+        terminal: 'returned',
+        events: [{ phase: 'close', stdoutClosed: true, stderrClosed: true }],
+        toolTerminal: { source: 'tool_result', confirmed: true },
+        metadata: circular,
+      },
+    }];
+
+    expect(() => summarizeRunDiagnosticsForAnalytics({ events })).not.toThrow();
+    const serialized = JSON.stringify(summarizeRunDiagnosticsForAnalytics({ events }));
+    expect(serialized).not.toContain('/private/secret');
+    expect(serialized).not.toContain('command');
+  });
+
   it('summarizes stderr into redacted bounded tails for Langfuse', () => {
     const events = Array.from({ length: 25 }, (_, i) => ({
       event: 'stderr',

@@ -24,16 +24,12 @@ import {
 } from '../routines.js';
 import {
   AutomationWorkspaceScopeError,
-  authorizePersistedAutomationWorkspaceScope,
-  authorizePersistedProjectWorkspace,
   normalizePersistedAutomationWorkspaceScope,
 } from '../automations/workspace-scope.js';
-import type { WorkspaceDirectoryFetchResult } from '../collab/vela-workspace-context.js';
 import type { PathDeps, RouteDeps } from '../server-context.js';
 
 export interface RegisterRoutineRoutesDeps extends RouteDeps<'db' | 'routines'> {
   paths: Pick<PathDeps, 'RUNTIME_DATA_DIR'>;
-  fetchWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
 }
 
 export type RoutineRoutesService = Pick<
@@ -151,7 +147,7 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
   const { db } = ctx;
   const { routineService } = ctx.routines;
 
-  async function authorizeRoutineWorkspaceContext(
+  function authorizeRoutineWorkspaceContext(
     req: any,
     context: ReturnType<typeof normalizeRoutineContext>,
     targetMode: 'create_each_run' | 'reuse',
@@ -172,7 +168,6 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
     ) {
       throw new Error('routine Workspace scope must match the explicit request identity');
     }
-    await authorizePersistedAutomationWorkspaceScope(scope, ctx.fetchWorkspaceDirectory);
     return { ...context, workspaceScope: scope };
   }
 
@@ -197,7 +192,7 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
     )?.workspaceId ?? null;
   }
 
-  async function authorizeRoutineRecord(req: any, row: any) {
+  function authorizeRoutineRecord(req: any, row: any) {
     const claimed = claimedWorkspaceScope(req);
     if (row.projectMode === 'reuse' && row.projectId) {
       const binding = getWorkspaceProjectByProjectId(db, row.projectId);
@@ -209,11 +204,10 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
           false,
         );
       }
-      const context = await authorizePersistedProjectWorkspace(
-        binding.workspaceId,
-        ctx.fetchWorkspaceDirectory,
-      );
-      if (context.workspaceMemberId !== claimed.workspaceMemberId) {
+      if (
+        binding.createdByWorkspaceMemberId
+        && binding.createdByWorkspaceMemberId !== claimed.workspaceMemberId
+      ) {
         throw new AutomationWorkspaceScopeError(
           'WORKSPACE_ACCESS_DENIED',
           'the routine belongs to a different Workspace member',
@@ -221,8 +215,8 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
         );
       }
       return {
-        workspaceId: context.workspaceId,
-        workspaceMemberId: context.workspaceMemberId,
+        workspaceId: binding.workspaceId,
+        workspaceMemberId: claimed.workspaceMemberId,
       };
     }
 
@@ -241,10 +235,6 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
         false,
       );
     }
-    await authorizePersistedAutomationWorkspaceScope(
-      persisted,
-      ctx.fetchWorkspaceDirectory,
-    );
     return persisted;
   }
 
@@ -264,7 +254,7 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
 
   function sendRoutineError(res: any, err: any, fallbackStatus: number) {
     const status = err instanceof AutomationWorkspaceScopeError
-      ? err.code === 'WORKSPACE_AUTHORITY_UNAVAILABLE' ? 503 : 403
+      ? 403
       : fallbackStatus;
     return res.status(status).json({
       error: String(err?.message ?? err),
@@ -338,12 +328,6 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
   app.get('/api/routines', async (req, res) => {
     try {
       const claimed = claimedWorkspaceScope(req);
-      if (claimed) {
-        await authorizePersistedAutomationWorkspaceScope(
-          claimed,
-          ctx.fetchWorkspaceDirectory,
-        );
-      }
       const routines = listRoutines(db).flatMap((row) => {
         const persistedWorkspaceId = persistedRoutineWorkspaceId(row);
         const persistedScope = row.projectMode === 'reuse'
@@ -419,7 +403,7 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
       });
     } catch (err: any) {
       const status = err instanceof AutomationWorkspaceScopeError
-        ? err.code === 'WORKSPACE_AUTHORITY_UNAVAILABLE' ? 503 : 403
+        ? 403
         : 400;
       res.status(status).json({
         error: String(err?.message ?? err),

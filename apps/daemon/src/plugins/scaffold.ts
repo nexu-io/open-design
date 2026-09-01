@@ -143,7 +143,7 @@ export async function scaffoldPlugin(input: ScaffoldInput): Promise<ScaffoldResu
     '## Files',
     '',
     '- `SKILL.md` — the canonical agent skill body.',
-    '- `open-design.json` — the versioned Open Design marketplace sidecar.',
+    '- `open-design.json` — the versioned OpenDesign marketplace sidecar.',
     '',
     'Edit `SKILL.md` to teach the agent how to perform the workflow.',
     'Edit `open-design.json` to refine the marketplace card and inputs.',

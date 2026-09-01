@@ -3,9 +3,9 @@ name: html-ppt-graphify-dark-graph
 en_name: "Write a Feature Business Case like a Principal PM"
 zh_name: "像 Principal PM 一样写功能商业论证"
 description: |
-  Open Design's feature business case for the plugin marketplace: the user pain, options, tradeoffs, and the measure of success. Built as a decision-grade product management deck for PM, eng, design, leadership.
+  OpenDesign's feature business case for the plugin marketplace: the user pain, options, tradeoffs, and the measure of success. Built as a decision-grade product management deck for PM, eng, design, leadership.
 en_description: |
-  Open Design's feature business case for the plugin marketplace: the user pain, options, tradeoffs, and the measure of success. Built as a decision-grade product management deck for PM, eng, design, leadership.
+  OpenDesign's feature business case for the plugin marketplace: the user pain, options, tradeoffs, and the measure of success. Built as a decision-grade product management deck for PM, eng, design, leadership.
 zh_description: |
   像 Principal PM 一样写功能商业论证——一份可商业交付的产品管理 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -39,7 +39,7 @@ od:
   animations: true
   category: "product-management"
   scenario: "product"
-  example_prompt: "Create \"Write a Feature Business Case like a Principal PM\" as a decision-grade Product management deck in this template's own visual system. Subject: Open Design's feature business case for the plugin marketplace: the user pain, options, tradeoffs, and the measure of success. Audience: PM, eng, design, leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can cross-functional reviewers agree on the next irreversible step."
+  example_prompt: "Create \"Write a Feature Business Case like a Principal PM\" as a decision-grade Product management deck in this template's own visual system. Subject: OpenDesign's feature business case for the plugin marketplace: the user pain, options, tradeoffs, and the measure of success. Audience: PM, eng, design, leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can cross-functional reviewers agree on the next irreversible step."
 ---
 # HTML PPT · 暗底知识图谱
 

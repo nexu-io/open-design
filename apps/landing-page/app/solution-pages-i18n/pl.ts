@@ -2,9 +2,9 @@ import type { SolutionLocaleCopy } from './types';
 
 export const PL: SolutionLocaleCopy = {
   prototype: {
-    title: 'Buduj interaktywne prototypy z Open Design + Claude Code',
+    title: 'Buduj interaktywne prototypy z OpenDesign + Claude Code',
     description:
-      'Zamień polecenie w klikalny, wieloekranowy prototyp bez opuszczania terminala. Open Design daje Twojemu coding agentowi umiejętności projektowe, szablony i system projektowy, by tworzyć prawdziwe prototypy, które otworzysz w przeglądarce.',
+      'Zamień polecenie w klikalny, wieloekranowy prototyp bez opuszczania terminala. OpenDesign daje Twojemu coding agentowi umiejętności projektowe, szablony i system projektowy, by tworzyć prawdziwe prototypy, które otworzysz w przeglądarce.',
     breadcrumb: 'Prototyp',
     label: 'Przypadek użycia · Prototyp',
     heading: 'Prototypuj z szybkością polecenia',
@@ -13,18 +13,18 @@ export const PL: SolutionLocaleCopy = {
       'Redakcyjna ilustracja dłoni szkicującej wireframe, który zamienia się w klikalny, wieloekranowy prototyp aplikacji',
     tldrTitle: 'W jednym zdaniu',
     tldrBody:
-      'Open Design to warstwa projektowa dla coding agenta, którego już używasz. W prototypowaniu oznacza to przejście od pomysłu opisanego w jednym akapicie do nawigowalnego, ostylowanego prototypu w jednej sesji — bez narzędzia projektowego, bez kroku eksportu, bez luki przy przekazywaniu.',
-    stepsTitle: 'Jak działa prototypowanie z Open Design',
+      'OpenDesign to warstwa projektowa dla coding agenta, którego już używasz. W prototypowaniu oznacza to przejście od pomysłu opisanego w jednym akapicie do nawigowalnego, ostylowanego prototypu w jednej sesji — bez narzędzia projektowego, bez kroku eksportu, bez luki przy przekazywaniu.',
+    stepsTitle: 'Jak działa prototypowanie z OpenDesign',
     steps: [
       {
         title: 'Opisz przepływ',
-        body: 'Powiedz agentowi prostym językiem, co budujesz — „przepływ onboardingu z ekranem powitalnym, wyborem planu i potwierdzeniem”. Open Design ładuje umiejętność prototypowania, więc agent wie, że ma stworzyć ekrany, a nie pojedynczą stronę.',
+        body: 'Powiedz agentowi prostym językiem, co budujesz — „przepływ onboardingu z ekranem powitalnym, wyborem planu i potwierdzeniem”. OpenDesign ładuje umiejętność prototypowania, więc agent wie, że ma stworzyć ekrany, a nie pojedynczą stronę.',
         imageAlt:
           'Ilustracja osoby wpisującej w terminalu opis przepływu aplikacji prostym językiem',
       },
       {
         title: 'Wygeneruj ostylowane ekrany',
-        body: 'Agent stosuje system projektowy i szablony prototypów z Open Design, więc każdy ekran dzieli typografię, odstępy i komponenty, zamiast wyglądać jak zgrubny szkic. Otrzymujesz spójny zestaw ekranów, a nie rozłączne makiety.',
+        body: 'Agent stosuje system projektowy i szablony prototypów z OpenDesign, więc każdy ekran dzieli typografię, odstępy i komponenty, zamiast wyglądać jak zgrubny szkic. Otrzymujesz spójny zestaw ekranów, a nie rozłączne makiety.',
         imageAlt:
           'Ilustracja kilku ekranów aplikacji pojawiających się po kolei, wszystkie w jednym spójnym stylu wizualnym',
       },
@@ -41,9 +41,9 @@ export const PL: SolutionLocaleCopy = {
           'Ilustracja prototypu, który jest poprawiany, a następnie przekazywany inżynierowi, gdzie projekt i kod łączą się w jeden plik',
       },
     ],
-    tableTitle: 'Prototypowanie z Open Design kontra dawny sposób',
+    tableTitle: 'Prototypowanie z OpenDesign kontra dawny sposób',
     tableColCapability: 'Czego potrzebujesz',
-    tableColWithOd: 'Z Open Design',
+    tableColWithOd: 'Z OpenDesign',
     tableColWithout: 'Tradycyjne narzędzia do prototypowania',
     tableRows: [
       {
@@ -110,7 +110,7 @@ export const PL: SolutionLocaleCopy = {
         thumb: 'example-gamified-app',
       },
     ],
-    galleryTitle: 'Prototypy, które ludzie zbudowali z Open Design',
+    galleryTitle: 'Prototypy, które ludzie zbudowali z OpenDesign',
     galleryLead:
       'Każdy z nich zaczął się od polecenia i wyrenderował do klikalnego artefaktu. Wybierz szablon bliski Twojemu pomysłowi, opisz swoją wariację, a agent go dostosuje.',
     gallery: [
@@ -124,8 +124,8 @@ export const PL: SolutionLocaleCopy = {
     faqTitle: 'FAQ o prototypowaniu',
     faq: [
       {
-        q: 'Czy potrzebuję narzędzia projektowego jak Figma, by prototypować z Open Design?',
-        a: 'Nie. Open Design działa wewnątrz Twojego coding agenta i renderuje prototypy do HTML. Opisujesz przepływ językiem; agent tworzy ekrany. Nie ma osobnego narzędzia z płótnem, którego trzeba się uczyć lub za które trzeba płacić.',
+        q: 'Czy potrzebuję narzędzia projektowego jak Figma, by prototypować z OpenDesign?',
+        a: 'Nie. OpenDesign działa wewnątrz Twojego coding agenta i renderuje prototypy do HTML. Opisujesz przepływ językiem; agent tworzy ekrany. Nie ma osobnego narzędzia z płótnem, którego trzeba się uczyć lub za które trzeba płacić.',
       },
       {
         q: 'Czy prototypy są interaktywne, czy to tylko statyczne makiety?',
@@ -133,7 +133,7 @@ export const PL: SolutionLocaleCopy = {
       },
       {
         q: 'Których agentów mogę używać?',
-        a: 'Open Design współpracuje z Claude Code, Codex, Cursor Agent, Gemini CLI i kilkunastoma innymi natywnymi adapterami. Korzystasz z własnych kluczy dostawcy; nic nie jest hostowane za Ciebie.',
+        a: 'OpenDesign współpracuje z Claude Code, Codex, Cursor Agent, Gemini CLI i kilkunastoma innymi natywnymi adapterami. Korzystasz z własnych kluczy dostawcy; nic nie jest hostowane za Ciebie.',
       },
       {
         q: 'Czy prototyp może stać się prawdziwym produktem?',
@@ -142,22 +142,22 @@ export const PL: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Sprototypuj swój kolejny pomysł jeszcze dziś wieczorem',
     ctaBody:
-      'Daj gwiazdkę repozytorium, zainstaluj Open Design i zamień swoje kolejne „a gdyby” w coś, co możesz kliknąć — w agencie, którego już używasz.',
+      'Daj gwiazdkę repozytorium, zainstaluj OpenDesign i zamień swoje kolejne „a gdyby” w coś, co możesz kliknąć — w agencie, którego już używasz.',
   },
   dashboard: {
-    title: 'Generuj dashboardy danych z Open Design + Claude Code',
+    title: 'Generuj dashboardy danych z OpenDesign + Claude Code',
     description:
       'Opisz metryki, które śledzisz, a Twój coding agent zbuduje ostylowany, responsywny dashboard — wykresy, karty KPI i tabele wyrenderowane do HTML, który zahostujesz gdziekolwiek. Bez stanowiska w narzędziu BI, bez kreatora przeciągnij i upuść.',
     breadcrumb: 'Dashboard',
     label: 'Przypadek użycia · Dashboard',
     heading: 'Dashboardy z opisu, a nie z kreatora przeciągnij i upuść',
-    lead: 'Powiedz agentowi, co pokazać i jak ma to wyglądać. Open Design dostarcza wzorce wykresów, system układu i język wizualny, więc otrzymujesz spójny, prezentowalny dashboard — a nie ścianę domyślnie ostylowanych widżetów.',
+    lead: 'Powiedz agentowi, co pokazać i jak ma to wyglądać. OpenDesign dostarcza wzorce wykresów, system układu i język wizualny, więc otrzymujesz spójny, prezentowalny dashboard — a nie ścianę domyślnie ostylowanych widżetów.',
     heroImageAlt:
       'Redakcyjna ilustracja surowych liczb po lewej, które przepływają w czysty dashboard z wykresami i kartami KPI po prawej',
     tldrTitle: 'W jednym zdaniu',
     tldrBody:
-      'Open Design zamienia opisaną prostym językiem specyfikację Twoich metryk w ostylowany dashboard, który agent renderuje do HTML — wersjonowany w Twoim repozytorium, hostowalny gdziekolwiek, bez abonamentu BI za stanowisko.',
-    stepsTitle: 'Jak działają dashboardy z Open Design',
+      'OpenDesign zamienia opisaną prostym językiem specyfikację Twoich metryk w ostylowany dashboard, który agent renderuje do HTML — wersjonowany w Twoim repozytorium, hostowalny gdziekolwiek, bez abonamentu BI za stanowisko.',
+    stepsTitle: 'Jak działają dashboardy z OpenDesign',
     steps: [
       {
         title: 'Opisz metryki',
@@ -166,7 +166,7 @@ export const PL: SolutionLocaleCopy = {
       },
       {
         title: 'Wybierz wzorce wykresów',
-        body: 'Open Design dostarcza szablony wykresów i układów, więc trendy stają się wykresami liniowymi, podziały słupkami, a proporcje właściwą wizualizacją — spójna typografia i odstępy w całości, zamiast niedopasowanych domyślnych ustawień.',
+        body: 'OpenDesign dostarcza szablony wykresów i układów, więc trendy stają się wykresami liniowymi, podziały słupkami, a proporcje właściwą wizualizacją — spójna typografia i odstępy w całości, zamiast niedopasowanych domyślnych ustawień.',
         imageAlt: 'Ilustracja kilku typów wykresów ułożonych w spójną siatkę',
       },
       {
@@ -180,9 +180,9 @@ export const PL: SolutionLocaleCopy = {
         imageAlt: 'Ilustracja dashboardu, który jest dopracowywany, a następnie wdrażany',
       },
     ],
-    tableTitle: 'Dashboardy z Open Design kontra dawny sposób',
+    tableTitle: 'Dashboardy z OpenDesign kontra dawny sposób',
     tableColCapability: 'Czego potrzebujesz',
-    tableColWithOd: 'Z Open Design',
+    tableColWithOd: 'Z OpenDesign',
     tableColWithout: 'Narzędzia BI / ręcznie kodowane',
     tableRows: [
       {
@@ -225,7 +225,7 @@ export const PL: SolutionLocaleCopy = {
       { title: "Social i marketing", body: "Wydajność kanałów i śledzenie kampanii w jednym widoku.", thumb: "example-social-media-dashboard" },
       { title: "Raporty dziedzinowe", body: "Ustrukturyzowane raporty dla dowolnej dziedziny — od klinicznej po tradingową.", thumb: "example-clinical-case-report" },
     ],
-    galleryTitle: 'Dashboardy, które ludzie zbudowali z Open Design',
+    galleryTitle: 'Dashboardy, które ludzie zbudowali z OpenDesign',
     galleryLead:
       'Prawdziwe dashboardy wyrenderowane z polecenia i źródła danych. Zacznij od jednego bliskiego Twojemu i opisz metryki, które śledzisz.',
     gallery: [
@@ -240,7 +240,7 @@ export const PL: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Czy potrzebuję narzędzia BI jak Tableau lub Looker?',
-        a: 'Nie. Open Design renderuje dashboardy do HTML wewnątrz Twojego coding agenta. Opisujesz metryki i wskazujesz mu swoje dane; nie ma osobnej platformy BI, którą trzeba licencjonować lub poznawać.',
+        a: 'Nie. OpenDesign renderuje dashboardy do HTML wewnątrz Twojego coding agenta. Opisujesz metryki i wskazujesz mu swoje dane; nie ma osobnej platformy BI, którą trzeba licencjonować lub poznawać.',
       },
       {
         q: 'Skąd biorą się dane?',
@@ -257,22 +257,22 @@ export const PL: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Zbuduj swój dashboard jeszcze dziś wieczorem',
     ctaBody:
-      'Daj gwiazdkę repozytorium, zainstaluj Open Design i zamień swoje metryki w dashboard, który zahostujesz gdziekolwiek — w agencie, którego już używasz.',
+      'Daj gwiazdkę repozytorium, zainstaluj OpenDesign i zamień swoje metryki w dashboard, który zahostujesz gdziekolwiek — w agencie, którego już używasz.',
   },
   slides: {
-    title: 'Generuj prezentacje z Open Design + Claude Code',
+    title: 'Generuj prezentacje z OpenDesign + Claude Code',
     description:
-      'Zamień konspekt w zaprojektowaną, zgodną z marką prezentację bez otwierania aplikacji do prezentacji. Open Design daje Twojemu coding agentowi szablony slajdów i system wizualny, renderując slajdy do HTML, które zaprezentujesz, wyeksportujesz lub udostępnisz.',
+      'Zamień konspekt w zaprojektowaną, zgodną z marką prezentację bez otwierania aplikacji do prezentacji. OpenDesign daje Twojemu coding agentowi szablony slajdów i system wizualny, renderując slajdy do HTML, które zaprezentujesz, wyeksportujesz lub udostępnisz.',
     breadcrumb: 'Slajdy',
     label: 'Przypadek użycia · Slajdy',
     heading: 'Prezentacje, które wyglądają na zaprojektowane, napisane poleceniem',
-    lead: 'Przekaż agentowi konspekt i ton. Open Design stosuje szablon prezentacji i system wizualny, więc każdy slajd jest rozłożony, złożony typograficznie i zgodny z marką — a nie listą punktowaną na pustym tle.',
+    lead: 'Przekaż agentowi konspekt i ton. OpenDesign stosuje szablon prezentacji i system wizualny, więc każdy slajd jest rozłożony, złożony typograficznie i zgodny z marką — a nie listą punktowaną na pustym tle.',
     heroImageAlt:
       'Redakcyjna ilustracja konspektu po lewej, który zamienia się w sekwencję zaprojektowanych slajdów prezentacji po prawej',
     tldrTitle: 'W jednym zdaniu',
     tldrBody:
-      'Open Design zamienia konspekt w zaprojektowaną prezentację HTML, którą agent renderuje w jednej sesji — zaprezentuj ją w przeglądarce, wyeksportuj do PDF lub PPTX i zachowaj źródło w swoim repozytorium.',
-    stepsTitle: 'Jak działają prezentacje z Open Design',
+      'OpenDesign zamienia konspekt w zaprojektowaną prezentację HTML, którą agent renderuje w jednej sesji — zaprezentuj ją w przeglądarce, wyeksportuj do PDF lub PPTX i zachowaj źródło w swoim repozytorium.',
+    stepsTitle: 'Jak działają prezentacje z OpenDesign',
     steps: [
       {
         title: 'Podaj konspekt',
@@ -281,7 +281,7 @@ export const PL: SolutionLocaleCopy = {
       },
       {
         title: 'Wybierz styl prezentacji',
-        body: 'Open Design dostarcza szablony prezentacji — redakcyjny, szwajcarski międzynarodowy, ciemny techniczny i więcej. Agent stosuje jeden, więc typografia, siatka i akcenty pozostają spójne na każdym slajdzie.',
+        body: 'OpenDesign dostarcza szablony prezentacji — redakcyjny, szwajcarski międzynarodowy, ciemny techniczny i więcej. Agent stosuje jeden, więc typografia, siatka i akcenty pozostają spójne na każdym slajdzie.',
         imageAlt: 'Ilustracja kilku opcji stylu prezentacji ułożonych obok siebie',
       },
       {
@@ -295,9 +295,9 @@ export const PL: SolutionLocaleCopy = {
         imageAlt: 'Ilustracja prezentacji, która jest pokazywana i eksportowana do wielu formatów',
       },
     ],
-    tableTitle: 'Prezentacje z Open Design kontra dawny sposób',
+    tableTitle: 'Prezentacje z OpenDesign kontra dawny sposób',
     tableColCapability: 'Czego potrzebujesz',
-    tableColWithOd: 'Z Open Design',
+    tableColWithOd: 'Z OpenDesign',
     tableColWithout: 'PowerPoint / Keynote / narzędzia AI do slajdów',
     tableRows: [
       {
@@ -340,7 +340,7 @@ export const PL: SolutionLocaleCopy = {
       { title: "Tryb prezentera", body: "Prezentacje w stylu reveal zbudowane do pokazywania na żywo w przeglądarce.", thumb: "example-html-ppt-presenter-mode-reveal" },
       { title: "Plany techniczne", body: "Prezentacje architektury i wiedzy, które mapują złożone systemy.", thumb: "example-html-ppt-knowledge-arch-blueprint" },
     ],
-    galleryTitle: 'Prezentacje, które ludzie zbudowali z Open Design',
+    galleryTitle: 'Prezentacje, które ludzie zbudowali z OpenDesign',
     galleryLead:
       'Prawdziwe prezentacje wyrenderowane z konspektu. Wybierz styl bliski Twojemu wystąpieniu i opisz treść.',
     gallery: [
@@ -355,7 +355,7 @@ export const PL: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Czy potrzebuję PowerPointa lub Keynote?',
-        a: 'Nie. Open Design renderuje prezentacje do HTML wewnątrz Twojego coding agenta i może eksportować do PDF lub PPTX. Prezentujesz z przeglądarki lub przekazujesz plik — by ją zbudować, nie potrzeba aplikacji do prezentacji.',
+        a: 'Nie. OpenDesign renderuje prezentacje do HTML wewnątrz Twojego coding agenta i może eksportować do PDF lub PPTX. Prezentujesz z przeglądarki lub przekazujesz plik — by ją zbudować, nie potrzeba aplikacji do prezentacji.',
       },
       {
         q: 'Czy to tylko punkty wygenerowane przez AI?',
@@ -372,22 +372,22 @@ export const PL: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Zbuduj swoją kolejną prezentację jeszcze dziś wieczorem',
     ctaBody:
-      'Daj gwiazdkę repozytorium, zainstaluj Open Design i zamień swój konspekt w zaprojektowaną prezentację — w agencie, którego już używasz.',
+      'Daj gwiazdkę repozytorium, zainstaluj OpenDesign i zamień swój konspekt w zaprojektowaną prezentację — w agencie, którego już używasz.',
   },
   image: {
-    title: 'Generuj grafiki zgodne z marką z Open Design + Claude Code',
+    title: 'Generuj grafiki zgodne z marką z OpenDesign + Claude Code',
     description:
       'Twórz karty społecznościowe, okładki artykułów i grafiki marketingowe z polecenia — rozłożone z prawdziwą typografią i Twoim systemem marki, wyrenderowane do ostrego HTML, który wyeksportujesz do PNG. Bez aplikacji projektowej, bez abonamentu na szablony.',
     breadcrumb: 'Grafika',
     label: 'Przypadek użycia · Grafika',
     heading: 'Grafiki zgodne z marką, wygenerowane i rozłożone za Ciebie',
-    lead: 'Opisz kartę lub okładkę, której potrzebujesz. Open Design komponuje ją z prawdziwą typografią, siatką i Twoimi kolorami marki — a potem renderuje do HTML, który wyeksportujesz jako obraz, zamiast mocować się z aplikacją projektową lub ogólnym szablonem.',
+    lead: 'Opisz kartę lub okładkę, której potrzebujesz. OpenDesign komponuje ją z prawdziwą typografią, siatką i Twoimi kolorami marki — a potem renderuje do HTML, który wyeksportujesz jako obraz, zamiast mocować się z aplikacją projektową lub ogólnym szablonem.',
     heroImageAlt:
       'Redakcyjna ilustracja polecenia, które zamienia się w zestaw rozłożonych kart społecznościowych i okładek artykułów',
     tldrTitle: 'W jednym zdaniu',
     tldrBody:
-      'Open Design zamienia polecenie w złożoną typograficznie, zgodną z marką grafikę, którą agent renderuje do HTML i eksportuje do PNG — powtarzalną, wersjonowaną i wolną od narzędzi projektowych rozliczanych za stanowisko.',
-    stepsTitle: 'Jak działają grafiki z Open Design',
+      'OpenDesign zamienia polecenie w złożoną typograficznie, zgodną z marką grafikę, którą agent renderuje do HTML i eksportuje do PNG — powtarzalną, wersjonowaną i wolną od narzędzi projektowych rozliczanych za stanowisko.',
+    stepsTitle: 'Jak działają grafiki z OpenDesign',
     steps: [
       {
         title: 'Opisz grafikę',
@@ -396,7 +396,7 @@ export const PL: SolutionLocaleCopy = {
       },
       {
         title: 'Zastosuj system marki',
-        body: 'Open Design czerpie Twoje kolory, typografię i odstępy z wielokrotnego systemu projektowego, więc każda karta pasuje do reszty Twojej marki, zamiast wyglądać na jednorazową.',
+        body: 'OpenDesign czerpie Twoje kolory, typografię i odstępy z wielokrotnego systemu projektowego, więc każda karta pasuje do reszty Twojej marki, zamiast wyglądać na jednorazową.',
         imageAlt: 'Ilustracja kolorów marki i typografii nakładanych na układ karty',
       },
       {
@@ -410,9 +410,9 @@ export const PL: SolutionLocaleCopy = {
         imageAlt: 'Ilustracja jednego szablonu karty tworzącego spójną serię grafik',
       },
     ],
-    tableTitle: 'Grafiki z Open Design kontra dawny sposób',
+    tableTitle: 'Grafiki z OpenDesign kontra dawny sposób',
     tableColCapability: 'Czego potrzebujesz',
-    tableColWithOd: 'Z Open Design',
+    tableColWithOd: 'Z OpenDesign',
     tableColWithout: 'Aplikacje projektowe / ogólne szablony',
     tableRows: [
       {
@@ -455,7 +455,7 @@ export const PL: SolutionLocaleCopy = {
       { title: "Karuzele", body: "Wieloslajdowe karuzele społecznościowe, które pozostają spójne między ramkami.", thumb: "example-social-carousel" },
       { title: "Ramki makiet UI", body: "Ramki powiadomień i urządzeń do opowiadania historii produktu.", thumb: "example-frame-macos-notification" },
     ],
-    galleryTitle: 'Grafiki, które ludzie zbudowali z Open Design',
+    galleryTitle: 'Grafiki, które ludzie zbudowali z OpenDesign',
     galleryLead:
       'Prawdziwe karty i okładki wyrenderowane z polecenia. Wybierz jedną bliską temu, czego potrzebujesz, i podmień swoją treść.',
     gallery: [
@@ -470,7 +470,7 @@ export const PL: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Czy to generator obrazów AI jak Midjourney?',
-        a: 'Nie. Open Design komponuje grafiki z prawdziwym układem i typografią — Twój nagłówek, Twoja marka, dokładne wymiary — i renderuje do HTML, który eksportujesz jako PNG. To kompozycja projektowa, a nie generowanie pikseli.',
+        a: 'Nie. OpenDesign komponuje grafiki z prawdziwym układem i typografią — Twój nagłówek, Twoja marka, dokładne wymiary — i renderuje do HTML, który eksportujesz jako PNG. To kompozycja projektowa, a nie generowanie pikseli.',
       },
       {
         q: 'Czy mogę stworzyć spójną serię kart?',
@@ -487,22 +487,22 @@ export const PL: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Stwórz swoją kolejną grafikę jeszcze dziś wieczorem',
     ctaBody:
-      'Daj gwiazdkę repozytorium, zainstaluj Open Design i zamień polecenie w grafikę zgodną z marką — w agencie, którego już używasz.',
+      'Daj gwiazdkę repozytorium, zainstaluj OpenDesign i zamień polecenie w grafikę zgodną z marką — w agencie, którego już używasz.',
   },
   video: {
-    title: 'Generuj grafikę ruchomą i krótkie wideo z Open Design + Claude Code',
+    title: 'Generuj grafikę ruchomą i krótkie wideo z OpenDesign + Claude Code',
     description:
       'Zamień scenariusz w animowane klatki i krótkie wideo — plansze tytułowe, ruchome tła i końcówki skomponowane z Twoim systemem marki i wyrenderowane z HTML. Bez pakietu do grafiki ruchomej, bez przewijania osi czasu.',
     breadcrumb: 'Wideo',
     label: 'Przypadek użycia · Wideo',
     heading: 'Grafika ruchoma ze scenariusza, a nie z osi czasu',
-    lead: 'Opisz moment, którego chcesz — odsłonięcie tytułu, animację danych, końcówkę z logo. Open Design komponuje animowane klatki z Twoim systemem marki i renderuje je do wideo, bez potrzeby pakietu do grafiki ruchomej.',
+    lead: 'Opisz moment, którego chcesz — odsłonięcie tytułu, animację danych, końcówkę z logo. OpenDesign komponuje animowane klatki z Twoim systemem marki i renderuje je do wideo, bez potrzeby pakietu do grafiki ruchomej.',
     heroImageAlt:
       'Redakcyjna ilustracja scenariusza, który zamienia się w sekwencję animowanych klatek wideo',
     tldrTitle: 'W jednym zdaniu',
     tldrBody:
-      'Open Design zamienia scenariusz w animowane, zgodne z marką klatki, które agent renderuje do krótkiego wideo — skomponowane z HTML, wersjonowane w Twoim repozytorium, bez edytora osi czasu, którego trzeba się uczyć.',
-    stepsTitle: 'Jak działa ruch z Open Design',
+      'OpenDesign zamienia scenariusz w animowane, zgodne z marką klatki, które agent renderuje do krótkiego wideo — skomponowane z HTML, wersjonowane w Twoim repozytorium, bez edytora osi czasu, którego trzeba się uczyć.',
+    stepsTitle: 'Jak działa ruch z OpenDesign',
     steps: [
       {
         title: 'Opisz moment',
@@ -511,7 +511,7 @@ export const PL: SolutionLocaleCopy = {
       },
       {
         title: 'Zastosuj styl marki i ruchu',
-        body: 'Open Design dostarcza szablony klatek — filmowe rozbłyski światła, glitchowe tytuły, końcówki z logo — i nakłada Twoje kolory oraz typografię, więc ruch wygląda na zamierzony i zgodny z marką.',
+        body: 'OpenDesign dostarcza szablony klatek — filmowe rozbłyski światła, glitchowe tytuły, końcówki z logo — i nakłada Twoje kolory oraz typografię, więc ruch wygląda na zamierzony i zgodny z marką.',
         imageAlt: 'Ilustracja stylu marki nakładanego na animowane klatki',
       },
       {
@@ -525,9 +525,9 @@ export const PL: SolutionLocaleCopy = {
         imageAlt: 'Ilustracja klipu wideo, który jest dopracowywany i eksportowany na social media',
       },
     ],
-    tableTitle: 'Ruch z Open Design kontra dawny sposób',
+    tableTitle: 'Ruch z OpenDesign kontra dawny sposób',
     tableColCapability: 'Czego potrzebujesz',
-    tableColWithOd: 'Z Open Design',
+    tableColWithOd: 'Z OpenDesign',
     tableColWithout: 'After Effects / pakiety do grafiki ruchomej',
     tableRows: [
       {
@@ -570,7 +570,7 @@ export const PL: SolutionLocaleCopy = {
       { title: "Glitchowe tytuły", body: "Odsłonięcia tytułów z ruchem i teksturą.", thumb: "example-frame-glitch-title" },
       { title: "Końcówki z logo", body: "Markowe animacje końcowe do dowolnego klipu.", thumb: "example-frame-logo-outro" },
     ],
-    galleryTitle: 'Ruch, który ludzie zbudowali z Open Design',
+    galleryTitle: 'Ruch, który ludzie zbudowali z OpenDesign',
     galleryLead:
       'Prawdziwe animowane klatki i klipy wyrenderowane z polecenia. Wybierz jeden bliski Twojemu pomysłowi i opisz ruch.',
     gallery: [
@@ -585,7 +585,7 @@ export const PL: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Czy potrzebuję After Effects lub pakietu do grafiki ruchomej?',
-        a: 'Nie. Open Design komponuje animowane klatki w HTML i renderuje je do wideo wewnątrz Twojego coding agenta. Nie ma edytora osi czasu, którego trzeba się uczyć lub który trzeba licencjonować.',
+        a: 'Nie. OpenDesign komponuje animowane klatki w HTML i renderuje je do wideo wewnątrz Twojego coding agenta. Nie ma edytora osi czasu, którego trzeba się uczyć lub który trzeba licencjonować.',
       },
       {
         q: 'Do jakiego rodzaju wideo to się nadaje?',
@@ -602,31 +602,31 @@ export const PL: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Zanimuj swój kolejny pomysł jeszcze dziś wieczorem',
     ctaBody:
-      'Daj gwiazdkę repozytorium, zainstaluj Open Design i zamień scenariusz w ruch — w agencie, którego już używasz.',
+      'Daj gwiazdkę repozytorium, zainstaluj OpenDesign i zamień scenariusz w ruch — w agencie, którego już używasz.',
   },
   designSystem: {
-    title: 'Zbuduj i zastosuj system projektowy z Open Design + Claude Code',
+    title: 'Zbuduj i zastosuj system projektowy z OpenDesign + Claude Code',
     description:
       'Uchwyć swoją markę jako wielokrotny system projektowy, który Twój coding agent stosuje do każdego artefaktu — kolory, typografia, komponenty i ton w jednym DESIGN.md. Zdefiniuj raz; każdy prototyp, prezentacja i dashboard pozostaje zgodny z marką.',
     breadcrumb: 'System projektowy',
     label: 'Przypadek użycia · System projektowy',
     heading: 'Jeden system projektowy, zastosowany do wszystkiego, co tworzy Twój agent',
-    lead: 'Zdefiniuj swoją markę raz, a Open Design przenosi ją do każdego efektu — prototypów, prezentacji, dashboardów, grafik. System żyje w Twoim repozytorium jako DESIGN.md, który agent czyta, więc spójność jest automatyczna, a nie ręczna.',
+    lead: 'Zdefiniuj swoją markę raz, a OpenDesign przenosi ją do każdego efektu — prototypów, prezentacji, dashboardów, grafik. System żyje w Twoim repozytorium jako DESIGN.md, który agent czyta, więc spójność jest automatyczna, a nie ręczna.',
     heroImageAlt:
       'Redakcyjna ilustracja pojedynczego systemu projektowego promieniującego na wiele artefaktów zgodnych z marką',
     tldrTitle: 'W jednym zdaniu',
     tldrBody:
-      'Open Design ujmuje Twoją markę jako przenośny system projektowy, który agent stosuje do każdego artefaktu — zdefiniowany raz w Twoim repozytorium, egzekwowany wszędzie, bez centralnego narzędzia projektowego, które by go strzegło.',
-    stepsTitle: 'Jak działają systemy projektowe z Open Design',
+      'OpenDesign ujmuje Twoją markę jako przenośny system projektowy, który agent stosuje do każdego artefaktu — zdefiniowany raz w Twoim repozytorium, egzekwowany wszędzie, bez centralnego narzędzia projektowego, które by go strzegło.',
+    stepsTitle: 'Jak działają systemy projektowe z OpenDesign',
     steps: [
       {
         title: 'Uchwyć system',
-        body: 'Opisz swoją markę — kolory, typografię, odstępy, głos — albo wskaż agentowi istniejącą stronę, by ją wyodrębnił. Open Design zapisuje to w DESIGN.md, który żyje w Twoim projekcie.',
+        body: 'Opisz swoją markę — kolory, typografię, odstępy, głos — albo wskaż agentowi istniejącą stronę, by ją wyodrębnił. OpenDesign zapisuje to w DESIGN.md, który żyje w Twoim projekcie.',
         imageAlt: 'Ilustracja marki ujmowanej w pojedynczy plik systemu projektowego',
       },
       {
         title: 'Zacznij od sprawdzonej bazy',
-        body: 'Open Design dostarcza ponad 140 referencyjnych systemów projektowych — od Apple i Linear po redakcyjne i brutalistyczne. Sforkuj jeden bliski Twojej marce zamiast zaczynać od pustej strony.',
+        body: 'OpenDesign dostarcza ponad 140 referencyjnych systemów projektowych — od Apple i Linear po redakcyjne i brutalistyczne. Sforkuj jeden bliski Twojej marce zamiast zaczynać od pustej strony.',
         imageAlt: 'Ilustracja przeglądanej galerii referencyjnych systemów projektowych',
       },
       {
@@ -640,9 +640,9 @@ export const PL: SolutionLocaleCopy = {
         imageAlt: 'Ilustracja systemu projektowego, który jest aktualizowany i propagowany do wszystkich efektów',
       },
     ],
-    tableTitle: 'Systemy projektowe z Open Design kontra dawny sposób',
+    tableTitle: 'Systemy projektowe z OpenDesign kontra dawny sposób',
     tableColCapability: 'Czego potrzebujesz',
-    tableColWithOd: 'Z Open Design',
+    tableColWithOd: 'Z OpenDesign',
     tableColWithout: 'Biblioteki narzędzi projektowych / przewodniki stylu',
     tableRows: [
       {
@@ -685,7 +685,7 @@ export const PL: SolutionLocaleCopy = {
       { title: "OpenAI", body: "Minimalistyczny, neutralny, na poziomie badawczym.", thumb: "design-system-openai" },
       { title: "GitHub", body: "Gęsty, techniczny, natywny dla deweloperów.", thumb: "design-system-github" },
     ],
-    galleryTitle: 'Systemy projektowe w Open Design',
+    galleryTitle: 'Systemy projektowe w OpenDesign',
     galleryLead:
       'Kilka z ponad 140 referencyjnych systemów, które możesz sforkować jako punkt wyjścia. Wybierz jeden bliski Twojej marce i dostosuj go.',
     gallery: [
@@ -700,11 +700,11 @@ export const PL: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Czym dokładnie jest tutaj system projektowy?',
-        a: 'Plikiem DESIGN.md w Twoim repozytorium, który ujmuje kolory, typografię, odstępy, komponenty i głos. Każda umiejętność Open Design go czyta, więc Twoja marka jest stosowana automatycznie do wszystkiego, co tworzy agent.',
+        a: 'Plikiem DESIGN.md w Twoim repozytorium, który ujmuje kolory, typografię, odstępy, komponenty i głos. Każda umiejętność OpenDesign go czyta, więc Twoja marka jest stosowana automatycznie do wszystkiego, co tworzy agent.',
       },
       {
         q: 'Czy muszę zaczynać od zera?',
-        a: 'Nie. Open Design dostarcza ponad 140 referencyjnych systemów projektowych, które możesz sforkować — od Apple i Linear po redakcyjne i brutalistyczne — a potem dostosować do swojej marki.',
+        a: 'Nie. OpenDesign dostarcza ponad 140 referencyjnych systemów projektowych, które możesz sforkować — od Apple i Linear po redakcyjne i brutalistyczne — a potem dostosować do swojej marki.',
       },
       {
         q: 'Jak pozostaje spójny między prezentacjami, dashboardami i prototypami?',
@@ -717,12 +717,12 @@ export const PL: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Zdefiniuj swój system projektowy jeszcze dziś wieczorem',
     ctaBody:
-      'Daj gwiazdkę repozytorium, zainstaluj Open Design i daj swojemu agentowi jedną markę do stosowania wszędzie — w agencie, którego już używasz.',
+      'Daj gwiazdkę repozytorium, zainstaluj OpenDesign i daj swojemu agentowi jedną markę do stosowania wszędzie — w agencie, którego już używasz.',
   },
   roleSoloBuilder: {
-    title: 'Open Design dla samodzielnych twórców i indie hackerów',
+    title: 'OpenDesign dla samodzielnych twórców i indie hackerów',
     description:
-      'Twórz jak cały zespół w pojedynkę. Open Design zamienia Twojego agenta kodującego w projektową połowę Twojego startupu — prototypy, strony docelowe, pulpity i materiały marki, wszystko z jednego polecenia, wszystko spójne z marką, wszystko w Twoim repozytorium.',
+      'Twórz jak cały zespół w pojedynkę. OpenDesign zamienia Twojego agenta kodującego w projektową połowę Twojego startupu — prototypy, strony docelowe, pulpity i materiały marki, wszystko z jednego polecenia, wszystko spójne z marką, wszystko w Twoim repozytorium.',
     breadcrumb: 'Samodzielny twórca',
     label: 'Dla · Samodzielnych twórców',
     heading: 'Twój zespół projektowy to agent, którego już używasz',
@@ -731,8 +731,8 @@ export const PL: SolutionLocaleCopy = {
       'Redakcyjna ilustracja jednej osoby przy biurku otoczonej stroną docelową, aplikacją, pulpitem i kartami społecznościowymi, wszystko w jednym spójnym stylu',
     tldrTitle: 'W jednym zdaniu',
     tldrBody:
-      'Open Design to dział projektowy, którego samodzielny założyciel nigdy nie miał: od polecenia do gotowego materiału na każdej powierzchni, jakiej potrzebuje Twój produkt, na jednej marce, bez przekazywania prac i bez dodatkowych narzędzi.',
-    stepsTitle: 'Jak samodzielny twórca korzysta z Open Design',
+      'OpenDesign to dział projektowy, którego samodzielny założyciel nigdy nie miał: od polecenia do gotowego materiału na każdej powierzchni, jakiej potrzebuje Twój produkt, na jednej marce, bez przekazywania prac i bez dodatkowych narzędzi.',
+    stepsTitle: 'Jak samodzielny twórca korzysta z OpenDesign',
     steps: [
       {
         title: 'Zdefiniuj swoją markę raz',
@@ -750,9 +750,9 @@ export const PL: SolutionLocaleCopy = {
         imageAlt: 'Ilustracja materiału przechodzącego prosto z polecenia do działającej wersji',
       },
     ],
-    tableTitle: 'Tworzenie w pojedynkę z Open Design vs robienie tego na trudniejszy sposób',
+    tableTitle: 'Tworzenie w pojedynkę z OpenDesign vs robienie tego na trudniejszy sposób',
     tableColCapability: 'Czego potrzebujesz',
-    tableColWithOd: 'Z Open Design',
+    tableColWithOd: 'Z OpenDesign',
     tableColWithout: 'Radząc sobie samodzielnie dzisiaj',
     tableRows: [
       { capability: 'Pokryj każdą powierzchnię projektową', withOd: 'Jeden agent robi prototyp, stronę docelową, pulpit i markę', without: 'Sklejasz ze sobą pięć narzędzi SaaS i poradników' },
@@ -770,7 +770,7 @@ export const PL: SolutionLocaleCopy = {
       { title: 'Przepływy mobilne', body: 'Ekrany aplikacji, gdy wychodzisz poza web.', thumb: 'example-mobile-app' },
       { title: 'Karty społecznościowe', body: 'Karty premierowe i aktualizacyjne dla każdego kanału.', thumb: 'example-card-twitter' },
     ],
-    galleryTitle: 'Zbudowane w pojedynkę z Open Design',
+    galleryTitle: 'Zbudowane w pojedynkę z OpenDesign',
     galleryLead:
       'Każda powierzchnia, jakiej potrzebuje jednoosobowy startup, z jednego polecenia. Wybierz coś bliskiego Twojemu kolejnemu krokowi i opisz to.',
     gallery: [
@@ -790,12 +790,12 @@ export const PL: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Zbuduj całość jeszcze dziś wieczorem',
     ctaBody:
-      'Daj gwiazdkę repozytorium, zainstaluj Open Design i pozwól jednemu agentowi być Twoim zespołem projektowym — w agencie, którego już używasz.',
+      'Daj gwiazdkę repozytorium, zainstaluj OpenDesign i pozwól jednemu agentowi być Twoim zespołem projektowym — w agencie, którego już używasz.',
   },
   roleDesigner: {
-    title: 'Open Design dla projektantów',
+    title: 'OpenDesign dla projektantów',
     description:
-      'Poświęcaj czas na smak, nie na mozół. Open Design pozwala Twojemu agentowi zająć się powtarzalną pracą produkcyjną — wariantami, stanami, całymi systemami projektowymi — podczas gdy Ty kierujesz wyglądem i masz ostatnie słowo.',
+      'Poświęcaj czas na smak, nie na mozół. OpenDesign pozwala Twojemu agentowi zająć się powtarzalną pracą produkcyjną — wariantami, stanami, całymi systemami projektowymi — podczas gdy Ty kierujesz wyglądem i masz ostatnie słowo.',
     breadcrumb: 'Projektant',
     label: 'Dla · Projektantów',
     heading: 'Kieruj projektem — pozwól agentowi zająć się produkcją',
@@ -804,8 +804,8 @@ export const PL: SolutionLocaleCopy = {
       'Redakcyjna ilustracja projektanta kierującego pracą, podczas gdy agent uzupełnia ekrany, warianty i system projektowy',
     tldrTitle: 'W jednym zdaniu',
     tldrBody:
-      'Open Design to asystent produkcji, który nigdy się nie męczy: Ty definiujesz system projektowy i wyrokujesz o smaku; agent generuje resztę, zgodnie z systemem, w Twoim repozytorium.',
-    stepsTitle: 'Jak projektant korzysta z Open Design',
+      'OpenDesign to asystent produkcji, który nigdy się nie męczy: Ty definiujesz system projektowy i wyrokujesz o smaku; agent generuje resztę, zgodnie z systemem, w Twoim repozytorium.',
+    stepsTitle: 'Jak projektant korzysta z OpenDesign',
     steps: [
       {
         title: 'Zakoduj swój system',
@@ -823,9 +823,9 @@ export const PL: SolutionLocaleCopy = {
         imageAlt: 'Ilustracja projektanta dającego wskazówki i projektu aktualizującego się',
       },
     ],
-    tableTitle: 'Projektowanie z Open Design vs sposób ręczny',
+    tableTitle: 'Projektowanie z OpenDesign vs sposób ręczny',
     tableColCapability: 'Czego potrzebujesz',
-    tableColWithOd: 'Z Open Design',
+    tableColWithOd: 'Z OpenDesign',
     tableColWithout: 'Ręczne narzędzia projektowe',
     tableRows: [
       { capability: 'Zbuduj system projektowy', withOd: 'DESIGN.md, który agent stosuje wszędzie', without: 'Biblioteka utrzymywana ręcznie w każdym narzędziu' },
@@ -843,7 +843,7 @@ export const PL: SolutionLocaleCopy = {
       { title: 'Ekrany aplikacji', body: 'Ekrany mobilne i webowe o wysokiej wierności.', thumb: 'example-mobile-app' },
       { title: 'Pulpity', body: 'Interfejs danych, który respektuje Twój system.', thumb: 'example-dashboard' },
     ],
-    galleryTitle: 'Kierowane z Open Design',
+    galleryTitle: 'Kierowane z OpenDesign',
     galleryLead:
       'Praca o wysokiej wierności, zgodna z systemem, którą agent stworzył na podstawie wskazówek. Wybierz coś bliskiego Twojemu stylowi i dopracuj to.',
     gallery: [
@@ -863,12 +863,12 @@ export const PL: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Pokieruj swoim kolejnym projektem jeszcze dziś wieczorem',
     ctaBody:
-      'Daj gwiazdkę repozytorium, zainstaluj Open Design i pozwól agentowi zająć się produkcją, podczas gdy Ty wyrokujesz o smaku — w agencie, którego już używasz.',
+      'Daj gwiazdkę repozytorium, zainstaluj OpenDesign i pozwól agentowi zająć się produkcją, podczas gdy Ty wyrokujesz o smaku — w agencie, którego już używasz.',
   },
   roleEngineering: {
-    title: 'Open Design dla inżynierów',
+    title: 'OpenDesign dla inżynierów',
     description:
-      'Pomiń przekazywanie projektu. Open Design zamienia DESIGN.md w prawdziwy front-end, który Twój agent kodujący pisze bezpośrednio — zgodny z systemem interfejs, prototypy i pulpity, w repozytorium, bez podróży tam i z powrotem do Figmy.',
+      'Pomiń przekazywanie projektu. OpenDesign zamienia DESIGN.md w prawdziwy front-end, który Twój agent kodujący pisze bezpośrednio — zgodny z systemem interfejs, prototypy i pulpity, w repozytorium, bez podróży tam i z powrotem do Figmy.',
     breadcrumb: 'Inżynieria',
     label: 'Dla · Inżynierii',
     heading: 'Od specyfikacji do front-endu, bez przekazywania prac po drodze',
@@ -877,8 +877,8 @@ export const PL: SolutionLocaleCopy = {
       'Redakcyjna ilustracja pliku DESIGN.md płynącego wprost do kodu front-endu i wyrenderowanego interfejsu, z pominięciem etapu przekazania prac',
     tldrTitle: 'W jednym zdaniu',
     tldrBody:
-      'Open Design domyka lukę między projektantem a inżynierem, czyniąc system projektowy odczytywalnym maszynowo: ten sam agent, który pisze Twój kod, stosuje system i renderuje prawdziwy interfejs.',
-    stepsTitle: 'Jak inżynier korzysta z Open Design',
+      'OpenDesign domyka lukę między projektantem a inżynierem, czyniąc system projektowy odczytywalnym maszynowo: ten sam agent, który pisze Twój kod, stosuje system i renderuje prawdziwy interfejs.',
+    stepsTitle: 'Jak inżynier korzysta z OpenDesign',
     steps: [
       {
         title: 'Czytaj system, nie adnotacje',
@@ -896,9 +896,9 @@ export const PL: SolutionLocaleCopy = {
         imageAlt: 'Ilustracja wygenerowanego interfejsu lądującego jako możliwy do przejrzenia PR',
       },
     ],
-    tableTitle: 'Front-end z Open Design vs sposób z przekazywaniem prac',
+    tableTitle: 'Front-end z OpenDesign vs sposób z przekazywaniem prac',
     tableColCapability: 'Czego potrzebujesz',
-    tableColWithOd: 'Z Open Design',
+    tableColWithOd: 'Z OpenDesign',
     tableColWithout: 'Przekazanie z projektu do dev',
     tableRows: [
       { capability: 'Mieć projekt, z którego budujesz', withOd: 'DESIGN.md, który Twój agent czyta bezpośrednio', without: 'Plik Figmy, który reinterpretujesz ręcznie' },
@@ -916,7 +916,7 @@ export const PL: SolutionLocaleCopy = {
       { title: 'Strony docelowe', body: 'Strony marketingowe bez czekania na projekt.', thumb: 'example-saas-landing' },
       { title: 'Kanban / tablice', body: 'Wewnętrzne interfejsy przepływu pracy.', thumb: 'example-kanban-board' },
     ],
-    galleryTitle: 'Zbudowane przez inżynierów z Open Design',
+    galleryTitle: 'Zbudowane przez inżynierów z OpenDesign',
     galleryLead:
       'Prawdziwy, zgodny z systemem front-end wygenerowany wprost w repozytorium. Wybierz coś bliskiego temu, co budujesz, i opisz to.',
     gallery: [
@@ -936,12 +936,12 @@ export const PL: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Wygeneruj swój kolejny interfejs jeszcze dziś wieczorem',
     ctaBody:
-      'Daj gwiazdkę repozytorium, zainstaluj Open Design i zamień DESIGN.md we front-end — w agencie, którego już używasz.',
+      'Daj gwiazdkę repozytorium, zainstaluj OpenDesign i zamień DESIGN.md we front-end — w agencie, którego już używasz.',
   },
   roleProductManagers: {
-    title: 'Open Design dla menedżerów produktu',
+    title: 'OpenDesign dla menedżerów produktu',
     description:
-      'Przestań czekać na przepustowość projektową, by zakomunikować pomysł. Open Design pozwala PM-owi zamienić polecenie w klikalny prototyp lub szkielet — by uzgodnić stanowiska interesariuszy i poinstruować zespół, bez zgłoszenia projektowego.',
+      'Przestań czekać na przepustowość projektową, by zakomunikować pomysł. OpenDesign pozwala PM-owi zamienić polecenie w klikalny prototyp lub szkielet — by uzgodnić stanowiska interesariuszy i poinstruować zespół, bez zgłoszenia projektowego.',
     breadcrumb: 'Menedżerowie produktu',
     label: 'Dla · Menedżerów produktu',
     heading: 'Spraw, by pomysł był klikalny jeszcze przed startem',
@@ -950,8 +950,8 @@ export const PL: SolutionLocaleCopy = {
       'Redakcyjna ilustracja PM-a zamieniającego spisany pomysł w klikalny prototyp pokazywany interesariuszom',
     tldrTitle: 'W jednym zdaniu',
     tldrBody:
-      'Open Design daje PM-owi sposób bez projektowania, by uczynić pomysły namacalnymi: od polecenia do prototypu dla uzgodnień i instrukcji, bez wydawania budżetu projektowego zespołu.',
-    stepsTitle: 'Jak PM korzysta z Open Design',
+      'OpenDesign daje PM-owi sposób bez projektowania, by uczynić pomysły namacalnymi: od polecenia do prototypu dla uzgodnień i instrukcji, bez wydawania budżetu projektowego zespołu.',
+    stepsTitle: 'Jak PM korzysta z OpenDesign',
     steps: [
       {
         title: 'Opisz przepływ',
@@ -969,9 +969,9 @@ export const PL: SolutionLocaleCopy = {
         imageAlt: 'Ilustracja prototypu udostępnionego do uzgodnień, a następnie przekazanego zespołowi',
       },
     ],
-    tableTitle: 'Praca PM-a z Open Design vs czekanie na projekt',
+    tableTitle: 'Praca PM-a z OpenDesign vs czekanie na projekt',
     tableColCapability: 'Czego potrzebujesz',
-    tableColWithOd: 'Z Open Design',
+    tableColWithOd: 'Z OpenDesign',
     tableColWithout: 'Bez tego dzisiaj',
     tableRows: [
       { capability: 'Uczyń pomysł namacalnym', withOd: 'Polecenie → klikalny prototyp zrobiony przez Ciebie', without: 'Składasz zgłoszenie projektowe i czekasz na przepustowość' },
@@ -989,7 +989,7 @@ export const PL: SolutionLocaleCopy = {
       { title: 'Prototypy webowe', body: 'Wieloekranowe przepływy webowe do przeglądu.', thumb: 'example-web-prototype' },
       { title: 'Widoki trendów', body: 'Migawki 30-dniowe i trendowe dla kontekstu.', thumb: 'example-last30days' },
     ],
-    galleryTitle: 'Prototypowane przez PM-ów z Open Design',
+    galleryTitle: 'Prototypowane przez PM-ów z OpenDesign',
     galleryLead:
       'Klikalne przepływy wyrenderowane z opisu, gotowe na przegląd z interesariuszami. Wybierz coś bliskiego Twojemu pomysłowi i opisz to.',
     gallery: [
@@ -1009,12 +1009,12 @@ export const PL: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Uczyń swój pomysł klikalnym jeszcze dziś wieczorem',
     ctaBody:
-      'Daj gwiazdkę repozytorium, zainstaluj Open Design i zamień swoją kolejną specyfikację w coś, co ludzie mogą kliknąć — w agencie, którego już używasz.',
+      'Daj gwiazdkę repozytorium, zainstaluj OpenDesign i zamień swoją kolejną specyfikację w coś, co ludzie mogą kliknąć — w agencie, którego już używasz.',
   },
   roleMarketing: {
-    title: 'Open Design dla zespołów marketingu',
+    title: 'OpenDesign dla zespołów marketingu',
     description:
-      'Wydawaj kampanie w tempie treści. Open Design pozwala Twojemu agentowi tworzyć strony docelowe, karty społecznościowe i materiały kampanijne z jednego polecenia — zgodne z marką, na żądanie, bez kolejkowania projektu.',
+      'Wydawaj kampanie w tempie treści. OpenDesign pozwala Twojemu agentowi tworzyć strony docelowe, karty społecznościowe i materiały kampanijne z jednego polecenia — zgodne z marką, na żądanie, bez kolejkowania projektu.',
     breadcrumb: 'Marketing',
     label: 'Dla · Marketingu',
     heading: 'Materiały kampanijne w tempie polecenia',
@@ -1023,8 +1023,8 @@ export const PL: SolutionLocaleCopy = {
       'Redakcyjna ilustracja marketingowca zamieniającego brief w stronę docelową i zestaw zgodnych z marką kart społecznościowych',
     tldrTitle: 'W jednym zdaniu',
     tldrBody:
-      'Open Design to zawsze dostępny zasób projektowy dla marketingu: od polecenia do materiału na strony docelowe i media społecznościowe, zgodnego z marką, by kampanie wychodziły w tempie, w jakim piszesz teksty.',
-    stepsTitle: 'Jak zespół marketingu korzysta z Open Design',
+      'OpenDesign to zawsze dostępny zasób projektowy dla marketingu: od polecenia do materiału na strony docelowe i media społecznościowe, zgodnego z marką, by kampanie wychodziły w tempie, w jakim piszesz teksty.',
+    stepsTitle: 'Jak zespół marketingu korzysta z OpenDesign',
     steps: [
       {
         title: 'Zablokuj markę',
@@ -1042,9 +1042,9 @@ export const PL: SolutionLocaleCopy = {
         imageAlt: 'Ilustracja materiałów kampanijnych wychodzących i szybko iterowanych',
       },
     ],
-    tableTitle: 'Marketing z Open Design vs zwykła gonitwa',
+    tableTitle: 'Marketing z OpenDesign vs zwykła gonitwa',
     tableColCapability: 'Czego potrzebujesz',
-    tableColWithOd: 'Z Open Design',
+    tableColWithOd: 'Z OpenDesign',
     tableColWithout: 'Bez tego dzisiaj',
     tableRows: [
       { capability: 'Uruchom stronę docelową', withOd: 'Polecenie → zgodna z marką strona, gotowa do wdrożenia', without: 'Brief projektowy albo walka z kreatorem stron' },
@@ -1062,7 +1062,7 @@ export const PL: SolutionLocaleCopy = {
       { title: 'Okładki artykułów', body: 'Okładki blogów i newsletterów.', thumb: 'example-article-magazine' },
       { title: 'Strony webowe', body: 'Mikrowitryny i strony kampanijne.', thumb: 'example-web-prototype' },
     ],
-    galleryTitle: 'Wydane przez marketing z Open Design',
+    galleryTitle: 'Wydane przez marketing z OpenDesign',
     galleryLead:
       'Zgodne z marką materiały kampanijne wyrenderowane z polecenia. Wybierz coś bliskiego Twojej kampanii i podmień własny tekst.',
     gallery: [
@@ -1082,6 +1082,6 @@ export const PL: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Wydaj swoją kolejną kampanię jeszcze dziś wieczorem',
     ctaBody:
-      'Daj gwiazdkę repozytorium, zainstaluj Open Design i zamień briefy w zgodne z marką materiały — w agencie, którego już używasz.',
+      'Daj gwiazdkę repozytorium, zainstaluj OpenDesign i zamień briefy w zgodne z marką materiały — w agencie, którego już używasz.',
   },
 };

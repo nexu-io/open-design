@@ -128,6 +128,8 @@ export type MediaSurface = 'image' | 'video' | 'audio';
 export interface CreateInput {
   name: string;
   skillId: string | null;
+  /** UI-only intent marker; the public project contract still receives only the resolved skill id. */
+  skillSelectionProvenance?: 'automatic-default' | 'explicit-user';
   designSystemId: string | null;
   metadata: ProjectMetadata;
   userWorkingDirToken?: string;
@@ -766,6 +768,7 @@ export function NewProjectPanel({
     onCreate({
       name: trimmedName || autoName(tab, mediaSurface, t),
       skillId: startTemplateId ?? skillIdForTab,
+      skillSelectionProvenance: startTemplateId ? 'explicit-user' : 'automatic-default',
       designSystemId: primaryDs,
       metadata: {
         ...metadata,
@@ -791,7 +794,7 @@ export function NewProjectPanel({
         }
         if ('canceled' in result && result.canceled) return;
         setWorkingDirError({
-          message: `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update Open Design and try again.`,
+          message: `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update OpenDesign and try again.`,
         });
         return;
       }
@@ -2759,7 +2762,7 @@ function MediaProjectOptions(props:
 
 export function supportedModels(surface: 'image' | 'video' | 'audio', models: MediaModel[]): MediaModel[] {
   const supportedProviders: Record<'image' | 'video' | 'audio', Set<string>> = {
-    image: new Set(['openai', 'codex', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image', 'aihubmix', 'minimax']),
+    image: new Set(['vela', 'openai', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image', 'aihubmix', 'minimax']),
     video: new Set(['volcengine', 'hyperframes', 'grok', 'openrouter', 'imagerouter', 'aihubmix']),
     audio: new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine', 'aihubmix']),
   };

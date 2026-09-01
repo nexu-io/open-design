@@ -73,6 +73,7 @@ describe('claude sub-agent assistant error false failure', () => {
     LANGFUSE_SECRET_KEY: process.env.LANGFUSE_SECRET_KEY,
     LANGFUSE_BASE_URL: process.env.LANGFUSE_BASE_URL,
     OPEN_DESIGN_TELEMETRY_RELAY_URL: process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL,
+    OD_NEXT_STRATEGY_ROLLOUT: process.env.OD_NEXT_STRATEGY_ROLLOUT,
   };
   let started: StartedServer | null = null;
   let binDir: string | null = null;
@@ -102,6 +103,11 @@ describe('claude sub-agent assistant error false failure', () => {
     delete process.env.LANGFUSE_SECRET_KEY;
     delete process.env.LANGFUSE_BASE_URL;
     delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+    // This parser regression does not exercise OD Next. Keep the fixture on
+    // the ordinary run path even when a mock happens to report a production-
+    // verified CLI version; the worker-scoped OD_DATA_DIR from tests/setup.ts
+    // keeps its config and rollout controls isolated from the developer.
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
 
     started = await startServer({ port: 0, returnServer: true }) as StartedServer;
 
@@ -135,6 +141,7 @@ describe('claude sub-agent assistant error false failure', () => {
     // (toMatchObject so a violation prints the full misclassified run body.)
     expect(sidechainRun).toMatchObject({ status: 'succeeded', exitCode: 0 });
   });
+
 });
 
 async function writeRecoveringClaude(

@@ -3,9 +3,9 @@ name: deck-swiss-international
 en_name: "Write a Board Pre-Read like a Fortune-500 Board Chair"
 zh_name: "像财富 500 强董事长一样写董事会预读"
 description: |
-  Open Design's FY26 board pre-read: the open-core bet, growth vs burn, and the one decision the board must approve. Built as a decision-grade corporate strategy deck for board, CEO, CFO.
+  OpenDesign's FY26 board pre-read: the open-core bet, growth vs burn, and the one decision the board must approve. Built as a decision-grade corporate strategy deck for board, CEO, CFO.
 en_description: |
-  Open Design's FY26 board pre-read: the open-core bet, growth vs burn, and the one decision the board must approve. Built as a decision-grade corporate strategy deck for board, CEO, CFO.
+  OpenDesign's FY26 board pre-read: the open-core bet, growth vs burn, and the one decision the board must approve. Built as a decision-grade corporate strategy deck for board, CEO, CFO.
 zh_description: |
   像财富 500 强董事长一样写董事会预读——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -55,7 +55,7 @@ od:
     zh-CN: "用「瑞士国际主义 Deck」模板把我的内容做成一套「16 列网格 + 单一饱和 accent + 22 个锁死版面 (Klein Blue / Lemon / Mint / Safety Orange)」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
   category: "corporate-strategy"
   scenario: "strategy"
-  example_prompt: "Create \"Write a Board Pre-Read like a Fortune-500 Board Chair\" as a decision-grade Corporate strategy deck in this template's own visual system. Subject: Open Design's FY26 board pre-read: the open-core bet, growth vs burn, and the one decision the board must approve. Audience: board, CEO, CFO. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a board member know what to approve and why before page five."
+  example_prompt: "Create \"Write a Board Pre-Read like a Fortune-500 Board Chair\" as a decision-grade Corporate strategy deck in this template's own visual system. Subject: OpenDesign's FY26 board pre-read: the open-core bet, growth vs burn, and the one decision the board must approve. Audience: board, CEO, CFO. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a board member know what to approve and why before page five."
 ---
 
 【模板: 瑞士国际主义 Deck (Swiss International)】

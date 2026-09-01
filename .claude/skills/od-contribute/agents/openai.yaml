@@ -3,9 +3,9 @@
 # Not required — Codex loads SKILL.md regardless.
 
 interface:
-  display_name: "Open Design — Contribute"
+  display_name: "OpenDesign — Contribute"
   short_description: "Ship a Skill / Design System / translation / typo fix to nexu-io/open-design without writing code."
-  default_prompt: "I want to contribute to Open Design."
+  default_prompt: "I want to contribute to OpenDesign."
 
 policy:
   # Allow Codex to surface this skill when the user mentions OD contribution

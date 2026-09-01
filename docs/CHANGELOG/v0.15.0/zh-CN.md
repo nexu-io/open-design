@@ -1,11 +1,11 @@
 ---
-title: Open Design 0.15.0
+title: OpenDesign 0.15.0
 description: 更低成本，更快交付：OD 的 DeepSeek 时刻。
 ---
 
-# Open Design 0.15.0 — 更低成本，更快交付：OD 的 DeepSeek 时刻
+# OpenDesign 0.15.0 — 更低成本，更快交付：OD 的 DeepSeek 时刻
 
-Open Design 0.15.0 通过优化整体 Design System Prompt，让日常设计任务更快、消耗更低：代表性评测中，首 token 时间缩短 **49.5%**，端到端时长缩短 **21.2%**，平均输入 token 消耗降低 **25.1%**。同时，从制作和演示 deck、通过 URL 复刻公开网站，到任务失败后的提示与恢复路径，整个创作流程也更加顺畅。
+OpenDesign 0.15.0 通过优化整体 Design System Prompt，让日常设计任务更快、消耗更低：代表性评测中，首 token 时间缩短 **49.5%**，端到端时长缩短 **21.2%**，平均输入 token 消耗降低 **25.1%**。同时，从制作和演示 deck、通过 URL 复刻公开网站，到任务失败后的提示与恢复路径，整个创作流程也更加顺畅。
 
 ## ✨ 新增
 
@@ -21,7 +21,7 @@ Open Design 0.15.0 通过优化整体 Design System Prompt，让日常设计任�
 
 ### 🌐 网站复刻
 
-- **用一个 URL 开始网站复刻，而不是从空白 prompt 开始。** Website Clone 现已成为首页和资源库的一等入口：选择能力、粘贴公开 URL，Open Design 会用正确的上下文创建项目。
+- **用一个 URL 开始网站复刻，而不是从空白 prompt 开始。** Website Clone 现已成为首页和资源库的一等入口：选择能力、粘贴公开 URL，OpenDesign 会用正确的上下文创建项目。
 
 - **复刻过程有审计说明。** 工作流会先侦察页面结构、路由、资源与交互；生成项目中会保留 NOTES.md 风格的说明，记录方法、资源来源与已知差异。
 

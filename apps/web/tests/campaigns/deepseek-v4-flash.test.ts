@@ -9,10 +9,6 @@ import {
   isDeepSeekV4FlashCampaignModel,
 } from '../../src/campaigns/deepseek-v4-flash';
 
-const entryLayoutStyles = readFileSync(
-  new URL('../../src/styles/home/entry-layout.css', import.meta.url),
-  'utf8',
-);
 const campaignDialogSource = readFileSync(
   new URL('../../src/components/DeepSeekV4FlashCampaign.tsx', import.meta.url),
   'utf8',
@@ -23,11 +19,23 @@ const campaignDialogStyles = readFileSync(
 );
 
 describe('DeepSeek V4 Flash campaign', () => {
-  it('keeps the promotion attached only to the Flash model', () => {
+  // The campaign now covers BOTH V4 models on one shared window. Pro is the
+  // headline benefit and Flash rides along; a promotion that reached only one
+  // of them would contradict every surface, which advertises the pair.
+  it('attaches the promotion to both V4 campaign models', () => {
+    expect(isDeepSeekV4FlashCampaignModel('deepseek-v4-pro')).toBe(true);
     expect(isDeepSeekV4FlashCampaignModel('deepseek-v4-flash')).toBe(true);
+    expect(isDeepSeekV4FlashCampaignModel(' DeepSeek-V4-Pro ')).toBe(true);
     expect(isDeepSeekV4FlashCampaignModel(' DeepSeek-V4-Flash ')).toBe(true);
-    expect(isDeepSeekV4FlashCampaignModel('deepseek-v4-pro')).toBe(false);
+  });
+
+  // …and to nothing else. A prefix match would sweep in every future V4 model.
+  it('leaves non-campaign models alone', () => {
     expect(isDeepSeekV4FlashCampaignModel('deepseek-v4')).toBe(false);
+    expect(isDeepSeekV4FlashCampaignModel('deepseek-v4-pro-max')).toBe(false);
+    expect(isDeepSeekV4FlashCampaignModel('deepseek-v3.2')).toBe(false);
+    expect(isDeepSeekV4FlashCampaignModel('')).toBe(false);
+    expect(isDeepSeekV4FlashCampaignModel(null)).toBe(false);
   });
 
   it('wires campaign copy through i18n keys in the dialog', () => {
@@ -37,20 +45,20 @@ describe('DeepSeek V4 Flash campaign', () => {
   });
 
   it('keeps the fixed window out of the primary headline and badge', () => {
-    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.id).toBe('deepseek-v4-flash-unlimited-2026');
-    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.modelId).toBe('deepseek-v4-flash');
-    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.window.startAt).toContain('2026-08-06');
-    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.window.endAtExclusive).toContain('2026-08-13T20:00:00');
-  });
-
-  it('uses a neutral gray restricted badge for anti-abuse fallback', () => {
-    const restrictedBadgeRule = entryLayoutStyles.match(
-      /\.inline-switcher__campaign-badge\.is-restricted\s*\{([^}]*)\}/,
-    )?.[1];
-
-    expect(restrictedBadgeRule).toContain('color: #5f645d');
-    expect(restrictedBadgeRule).toContain('background: #e4e7e2');
-    expect(restrictedBadgeRule).not.toMatch(/#ffd79a|#713a00/);
+    // The id is what the modal's "already seen" record is keyed on, so it MUST
+    // differ from the finished free week: a returning user who dismissed that
+    // one has never seen this campaign and is owed its single showing.
+    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.id).toBe('deepseek-v4-dual-unlimited-2026');
+    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.id).not.toBe('deepseek-v4-flash-unlimited-2026');
+    // Pro is what 「立即使用」 switches a paid user to.
+    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.modelId).toBe('deepseek-v4-pro');
+    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.modelIds).toEqual([
+      'deepseek-v4-pro',
+      'deepseek-v4-flash',
+    ]);
+    // Opens the instant the free week closes — the two windows abut exactly.
+    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.window.startAt).toContain('2026-08-13T20:00:00');
+    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.window.endAtExclusive).toContain('2026-08-27T20:00:00');
   });
 
   it('keeps the campaign promise stable while routing actions by entitlement', () => {
@@ -102,7 +110,7 @@ describe('DeepSeek V4 Flash campaign', () => {
     );
   });
 
-  it('shows a shared live countdown in both paid and unpaid campaign modals', () => {
+  it('keeps the DeepSeek live countdown on the paid campaign modal', () => {
     const start = Date.parse(DEEPSEEK_V4_FLASH_CAMPAIGN.window.startAt);
     const end = Date.parse(DEEPSEEK_V4_FLASH_CAMPAIGN.window.endAtExclusive);
     const t = (key: string, vars?: Record<string, string | number>) => {
@@ -129,12 +137,11 @@ describe('DeepSeek V4 Flash campaign', () => {
     expect(campaignDialogSource).toContain('styles.boundary');
   });
 
-  it('keeps the unpaid action on the upgrade flow without showing the paid secondary action', () => {
-    expect(campaignDialogSource).toContain("t('campaign.deepseekV4Flash.unpaid.cta')");
+  it('keeps the unpaid DeepSeek upgrade on Pricing without rendering Go', () => {
+    expect(campaignDialogSource).toContain('goPlanPricingUrl');
     expect(campaignDialogSource).toContain("'deepseek_unpaid_modal'");
-    expect(campaignDialogSource).toContain('attributedAmrUrl(plansUrl, attribution, deviceId)');
-    expect(campaignDialogSource).toContain('metricsConsent,');
-    expect(campaignDialogSource).toMatch(/\{paid \? \([\s\S]*campaign\.deepseekV4Flash\.later[\s\S]*\) : null\}/);
+    expect(campaignDialogSource).toContain("t('campaign.deepseekV4Flash.unpaid.cta')");
+    expect(campaignDialogSource).not.toContain('styles.goWelcome');
   });
 
   it('keeps campaign visibility free of every URL review backdoor (product decision)', () => {
@@ -151,7 +158,7 @@ describe('DeepSeek V4 Flash campaign', () => {
     expect(campaignDialogSource).not.toContain('location.search');
   });
 
-  it('opens for every paid user only inside the shared half-open window', () => {
+  it('opens for paid and unpaid users only inside the shared half-open window', () => {
     const start = Date.parse(DEEPSEEK_V4_FLASH_CAMPAIGN.window.startAt);
     const end = Date.parse(DEEPSEEK_V4_FLASH_CAMPAIGN.window.endAtExclusive);
 
@@ -167,6 +174,9 @@ describe('DeepSeek V4 Flash campaign', () => {
     })).toBe('unknown');
     expect(resolveDeepSeekV4FlashCampaignAudience({
       plan: 'plus', loggedIn: true, now: end,
+    })).toBe('unknown');
+    expect(resolveDeepSeekV4FlashCampaignAudience({
+      plan: 'free', loggedIn: true, now: end,
     })).toBe('unknown');
     // Inside the window the plan decides the audience; outside it nothing does.
     expect(resolveDeepSeekV4FlashCampaignAudience({

@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test';
 import type { Locator, Page, Route } from '@playwright/test';
+import type { Project } from '@open-design/contracts';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fulfillAgentsRoute } from './mock-factory.js';
@@ -99,7 +100,7 @@ export const VISUAL_CLI_AGENTS = [
 
 export const VISUAL_AMR_AGENT = {
   id: 'amr',
-  name: 'Open Design',
+  name: 'OpenDesign',
   bin: 'vela',
   available: true,
   version: '0.1.0',
@@ -120,7 +121,7 @@ const VISUAL_PROJECTS = [
     createdAt: 1_700_000_000_000,
     updatedAt: 1_700_000_050_000,
     metadata: { kind: 'prototype' },
-    status: { label: 'Ready', tone: 'success' },
+    status: { value: 'succeeded' },
   },
   {
     id: 'visual-project-brand-kit',
@@ -130,11 +131,11 @@ const VISUAL_PROJECTS = [
     createdAt: 1_700_000_100_000,
     updatedAt: 1_700_000_150_000,
     metadata: { kind: 'image' },
-    status: { label: 'Needs input', tone: 'warning' },
+    status: { value: 'awaiting_input' },
   },
 ] as const;
 
-type VisualProject = (typeof VISUAL_PROJECTS)[number];
+export type VisualProject = Project;
 
 /** The single conversation every workspace capture opens into. */
 const VISUAL_CONVERSATION = {
@@ -224,7 +225,7 @@ const VISUAL_PLUGINS = [
   makeVisualPlugin({
     id: 'visual-figma-importer',
     title: 'Figma Importer',
-    description: 'Migrate a Figma frame into an editable Open Design project.',
+    description: 'Migrate a Figma frame into an editable OpenDesign project.',
     mode: 'prototype',
     taskKind: 'figma-migration',
     tags: ['migration'],
@@ -262,6 +263,11 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
   const projects = options.projects ?? VISUAL_PROJECTS;
   const config = { ...VISUAL_CONFIG, ...(options.config ?? {}) };
   const agents = options.agents ?? [MOCK_AGENT];
+
+  // Screenshot-level `animations: 'disabled'` only fast-forwards CSS motion.
+  // The home wordmark and placeholder carousel are driven by requestAnimationFrame
+  // and timers, so make them take the product's deterministic static fallback too.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
 
   // Visual coverage is a web rendering contract, not a daemon behavior lane.
   // Register these first so the narrower fixtures below win; every other
@@ -691,7 +697,7 @@ export async function mockSignedInVelaAccount(
 }
 
 export async function waitForVisualReady(page: Page): Promise<void> {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.xlong });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.xlong });
   await expect(page.getByTestId('home-hero')).toBeVisible({ timeout: T.medium });
   await expect(page.getByTestId('home-hero-input')).toBeVisible({ timeout: T.medium });
   await page.evaluate(async () => {
@@ -721,7 +727,7 @@ export async function gotoVisualWorkspace(page: Page): Promise<void> {
   // leave the route guard and deep-link bootstrap racing the mocked list.
   await waitForVisualProjects(page, VISUAL_PROJECTS);
   await page.goto('/projects/visual-project-launchpad', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
   await expect(page).toHaveURL(/\/projects\/visual-project-launchpad/, { timeout: T.medium });
   await expect(page.getByTestId('chat-composer')).toBeVisible({ timeout: T.medium });
   await expect(page.getByTestId('chat-composer-input')).toBeVisible({ timeout: T.medium });
@@ -786,8 +792,8 @@ export async function prepareVisualWorkspacePreview(page: Page): Promise<void> {
 export async function prepareVisualAvatarMenu(page: Page): Promise<Locator> {
   await prepareVisualWorkspaceFileList(page);
   const menu = await openAvatarMenu(page);
-  // The composer popover is a model picker: the Open Design account card is
-  // conditional (Open Design has to be installed), so gate on the model list.
+  // The composer popover is a model picker: the OpenDesign account card is
+  // conditional (OpenDesign has to be installed), so gate on the model list.
   await expect(menu.locator('.avatar-model-section').first()).toBeVisible();
   await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
   await expect(menu.locator('.avatar-item').first()).toBeVisible();

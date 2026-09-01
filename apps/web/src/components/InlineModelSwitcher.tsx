@@ -76,6 +76,7 @@ import {
   AMR_LOGIN_STARTUP_SETTLE_MS,
   amrLoginPollOutcome,
   amrLoginStatusEventReason,
+  isAmrSessionAuthenticated,
   notifyAmrLoginStatusChanged,
 } from './amrLoginPolling';
 import { orderAgentsWithOpenDesignFirst } from './agentOrdering';
@@ -164,11 +165,11 @@ function markAmrReminderSeen(): void {
 }
 
 function displayAgentName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
-  return agent.id === 'amr' ? 'Open Design' : agent.name;
+  return agent.id === 'amr' ? 'OpenDesign' : agent.name;
 }
 
 function displayAgentChipName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
-  return agent.id === 'amr' ? 'Open Design' : displayAgentName(agent);
+  return agent.id === 'amr' ? 'OpenDesign' : displayAgentName(agent);
 }
 
 export function InlineModelSwitcher({
@@ -187,30 +188,11 @@ export function InlineModelSwitcher({
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
-  // Both flags are reserved presentation branches with no trigger wired yet:
-  // `campaignRestricted` (已暂停 badge) is reserved for the backend
-  // usage-limit signal — no trigger wired yet — and `campaignNeedsUpgrade`
-  // (升级可用 badge) is reserved for a real unpaid-audience signal reaching
-  // this component. Until those land, every campaign badge renders the paid
-  // state.
-  const campaignRestricted = false;
+  // This flag is a reserved presentation branch with no trigger wired yet.
+  // It remains available for a real unpaid-audience signal reaching this
+  // component without surfacing an unlimited-use claim in the model picker.
   const campaignNeedsUpgrade = false;
   const campaignVisibility = useDeepSeekV4FlashCampaignVisibility();
-  const campaignModelBadge = campaignRestricted
-    ? t('campaign.deepseekV4Flash.restricted.modelBadge')
-    : campaignNeedsUpgrade
-      ? t('campaign.deepseekV4Flash.unpaid.modelBadge')
-      : t('campaign.deepseekV4Flash.paid.modelBadge');
-  const campaignModelTooltip = campaignRestricted
-    ? t('campaign.deepseekV4Flash.restricted.tooltip')
-    : campaignNeedsUpgrade
-      ? t('campaign.deepseekV4Flash.unpaid.tooltip')
-      : t('campaign.deepseekV4Flash.ruleSummary');
-  const campaignBadgeStateClass = campaignRestricted
-    ? ' is-restricted'
-    : campaignNeedsUpgrade
-      ? ' is-unpaid'
-      : '';
   // recvqfYKutwWlQ: gate the AMR upgrade entry on billing permission below,
   // not just plan tier — a team member without `canManageBilling` (owner-only)
   // can't act on an upgrade even when the tier itself is upgradeable.
@@ -317,7 +299,7 @@ export function InlineModelSwitcher({
       const pendingStartup =
         amrLoginStartedAtRef.current !== null &&
         Date.now() - amrLoginStartedAtRef.current < AMR_LOGIN_STARTUP_SETTLE_MS;
-      if (next.loggedIn) {
+      if (isAmrSessionAuthenticated(next)) {
         amrLoginStartedAtRef.current = null;
         setAmrLoginPending(false);
       } else if (next.loginInFlight) {
@@ -557,7 +539,7 @@ export function InlineModelSwitcher({
         { metricsConsent: config.telemetry?.metrics === true },
       );
       const latest = await refreshAmrStatus();
-      if (latest?.loggedIn) return;
+      if (isAmrSessionAuthenticated(latest)) return;
       await handleAmrSignIn(attribution);
     },
     [
@@ -670,7 +652,7 @@ export function InlineModelSwitcher({
         if (next?.authAttemptId) {
           amrAuthAttemptIdRef.current = next.authAttemptId;
         }
-        if (next?.loggedIn) {
+        if (isAmrSessionAuthenticated(next)) {
           amrLoginStartedAtRef.current = null;
           stopAmrPolling();
           return;
@@ -728,6 +710,14 @@ export function InlineModelSwitcher({
       : configuredModelId ?? defaultAgentModelId(currentAgent);
   const currentModelOption =
     currentAgentModels.find((m) => m.id === currentModelId) ?? null;
+  // `agentId` and `agentModels` intentionally retain the last local-agent
+  // choice while BYOK is active so switching back restores that choice. Do
+  // not let campaign UI read that dormant AMR state: in BYOK mode the visible
+  // model comes from `config.model` and usage is billed by the user's provider.
+  const deepSeekCampaignVisibleForCurrentExecution =
+    campaignVisibility.visible
+    && config.mode === 'daemon'
+    && currentAgent?.id === 'amr';
 
   useEffect(() => {
     if (!currentAgentId || !normalizedCurrentModelId) return;
@@ -799,29 +789,35 @@ export function InlineModelSwitcher({
       campaignBenefitTrackedForOpenRef.current = false;
       return;
     }
-    if (
-      !compact
-      || !campaignVisibility.visible
-      || campaignBenefitTrackedForOpenRef.current
-      || !compactModelRows.some(({ model }) => isDeepSeekV4FlashCampaignModel(model.id))
-    ) {
+    if (!compact || !deepSeekCampaignVisibleForCurrentExecution
+      || campaignBenefitTrackedForOpenRef.current) {
       return;
     }
+    // One impression per campaign model actually on screen, not one for the
+    // popover: the campaign runs two models and product compares their reach
+    // separately, so a single row-agnostic event would make Pro and Flash
+    // indistinguishable in the funnel.
+    const visibleCampaignModelIds = compactModelRows
+      .filter(({ model }) => isDeepSeekV4FlashCampaignModel(model.id))
+      .map(({ model }) => model.id);
+    if (visibleCampaignModelIds.length === 0) return;
     campaignBenefitTrackedForOpenRef.current = true;
-    trackDeepSeekCampaignModelBenefitSurfaceView(analytics.track, {
-      page_name: 'home',
-      area: 'execution_settings_popover',
-      element: 'deepseek_v4_flash_benefit',
-      campaign_id: 'deepseek_v4_flash',
-      user_state: campaignNeedsUpgrade ? 'unpaid' : 'paid',
-      model_id: 'deepseek-v4-flash',
-    });
+    for (const modelId of visibleCampaignModelIds) {
+      trackDeepSeekCampaignModelBenefitSurfaceView(analytics.track, {
+        page_name: 'home',
+        area: 'execution_settings_popover',
+        element: 'deepseek_v4_pro_benefit',
+        campaign_id: 'deepseek_v4_pro',
+        user_state: campaignNeedsUpgrade ? 'unpaid' : 'paid',
+        model_id: modelId,
+      });
+    }
   }, [
     analytics.track,
     campaignNeedsUpgrade,
-    campaignVisibility.visible,
     compact,
     compactModelRows,
+    deepSeekCampaignVisibleForCurrentExecution,
     open,
   ]);
 
@@ -838,7 +834,7 @@ export function InlineModelSwitcher({
         metricsConsent: config.telemetry?.metrics === true,
         ...(campaignNeedsUpgrade
           ? {
-              campaignId: 'deepseek_v4_flash' as const,
+              campaignId: 'deepseek_v4_pro' as const,
               conversionSource: 'deepseek_model_switcher_upgrade' as const,
             }
           : {}),
@@ -868,7 +864,7 @@ export function InlineModelSwitcher({
     config.installationId,
     config.telemetry?.metrics,
   ]);
-  const amrLoggedIn = amrStatus?.loggedIn === true;
+  const amrLoggedIn = isAmrSessionAuthenticated(amrStatus);
 
   useEffect(() => {
     if (!amrLoggedIn || workspaceContext?.workspaceType === 'team') {
@@ -1162,16 +1158,6 @@ export function InlineModelSwitcher({
               aria-hidden="true"
             />
             <span className="inline-switcher__chip-model-name">{chipModel}</span>
-            {campaignVisibility.visible && isDeepSeekV4FlashCampaignModel(currentModelId) ? (
-              <span
-                className={`inline-switcher__campaign-badge od-tooltip${campaignBadgeStateClass}`}
-                data-tooltip={campaignModelTooltip}
-                data-tooltip-placement="top"
-                aria-label={campaignModelTooltip}
-              >
-                {campaignModelBadge}
-              </span>
-            ) : null}
           </>
         ) : (
           <>
@@ -1390,8 +1376,6 @@ export function InlineModelSwitcher({
                     // A model above the caller's plan is shown, but honestly:
                     // disabled with the reason the settings picker already uses,
                     // never as a normal row whose click gets reverted.
-                    const campaignModel = campaignVisibility.visible
-                      && isDeepSeekV4FlashCampaignModel(m.id);
                     const lockedHint = selectable
                       ? null
                       : t('settings.amrModelUpgradeHint');
@@ -1451,16 +1435,6 @@ export function InlineModelSwitcher({
                           <span className="inline-switcher__agent-name">
                             {m.label}
                           </span>
-                          {campaignModel ? (
-                            <span
-                              className={`inline-switcher__campaign-badge od-tooltip${campaignBadgeStateClass}`}
-                              data-tooltip={campaignModelTooltip}
-                              data-tooltip-placement="top"
-                              aria-label={campaignModelTooltip}
-                            >
-                              {campaignModelBadge}
-                            </span>
-                          ) : null}
                           {lockedHint ? (
                             <span
                               className="inline-switcher__agent-lock"
@@ -1563,7 +1537,7 @@ export function InlineModelSwitcher({
                     type="button"
                     role="radio"
                     aria-checked={config.agentId === 'amr'}
-                    aria-label={`Open Design ${amrInlineStatus}`}
+                    aria-label={`OpenDesign ${amrInlineStatus}`}
                     className="inline-switcher__account-id inline-switcher__account-select"
                     data-testid="inline-model-switcher-agent-amr"
                     title={amrLoginPending ? amrPendingHoverLabel : undefined}
@@ -1582,7 +1556,7 @@ export function InlineModelSwitcher({
                     <span className="inline-switcher__account-text">
                       <span className="inline-switcher__account-name-row">
                         <span className="inline-switcher__account-name">
-                          Open Design
+                          OpenDesign
                         </span>
                         {amrLoggedIn ? (
                           <PlanBadge plan={amrPlanLabel} size="md" />

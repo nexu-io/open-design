@@ -92,6 +92,13 @@
 .produced-file:hover {
   background: var(--bg-fill-tertiary);
 }
+.produced-file-openable {
+  cursor: pointer;
+}
+.produced-file-openable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 .produced-file-icon { width: 22px; text-align: center; color: var(--text-muted); }
 .produced-file-name {
   flex: 1;

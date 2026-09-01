@@ -1,5 +1,6 @@
 import {
   type DragEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -8,6 +9,10 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import {
+  getWorkspaceTabsDock,
+  subscribeWorkspaceTabsDock,
+} from './workspaceTabsDock';
 import { useT } from '../i18n';
 import { buildPath, navigate, type EntryHomeView, type Route } from '../router';
 import type { Project } from '../types';
@@ -25,6 +30,7 @@ import {
 import { homeHeroChipLabel } from './home-hero/chip-labels';
 import { useGlideIndicator } from '../hooks/useGlideIndicator';
 import { useLiquidGlass } from '../hooks/useLiquidGlass';
+import { WORKSPACE_CHROME_ACCOUNT_ACTIONS_ID } from './workspaceChromeActions';
 
 type WorkspaceChromeTab =
   | {
@@ -114,6 +120,7 @@ interface Props {
 
 const STORAGE_KEY = 'open-design:workspace-tabs:v1';
 const OPEN_WORKSPACE_TAB_EVENT = 'open-design:workspace-tabs:open';
+const REMOVE_WORKSPACE_PROJECT_TABS_EVENT = 'open-design:workspace-tabs:remove-project';
 const MAX_PERSISTED_TAB_SCOPES = 12;
 const TAB_DRAG_HAPTIC_MS = 8;
 const TAB_DROP_HAPTIC_MS = 12;
@@ -132,6 +139,14 @@ export function openWorkspaceTab(route: Route): void {
   window.dispatchEvent(
     new CustomEvent<{ route: Route }>(OPEN_WORKSPACE_TAB_EVENT, {
       detail: { route },
+    }),
+  );
+}
+
+export function removeWorkspaceProjectTabs(projectId: string): void {
+  window.dispatchEvent(
+    new CustomEvent<{ projectId: string }>(REMOVE_WORKSPACE_PROJECT_TABS_EVENT, {
+      detail: { projectId },
     }),
   );
 }
@@ -632,6 +647,17 @@ function shouldRehomeAuthorizedProjectAfterSignIn({
   );
 }
 
+
+/** Corner home glyph (per product: the brand tile gave way to a plain home
+ *  icon). `currentColor` so it follows the button's muted/hover ink. */
+function ChromeHomeGlyph() {
+  return (
+    <svg className="workspace-chrome-logo" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M19 21H5C4.44772 21 4 20.5523 4 20V11L1 11L11.3273 1.6115C11.7087 1.26475 12.2913 1.26475 12.6727 1.6115L23 11L20 11V20C20 20.5523 19.5523 21 19 21ZM6 19H18V9.15745L12 3.7029L6 9.15745V19ZM8 15H16V17H8V15Z" />
+    </svg>
+  );
+}
+
 export function WorkspaceTabsBar({
   route,
   projects,
@@ -659,6 +685,17 @@ export function WorkspaceTabsBar({
   // #5517 corner fan: the "+" button opens a corner-anchored radial menu of
   // template wedges instead of immediately spawning a home tab.
   const [radialMenu, setRadialMenu] = useState<{ x: number; y: number } | null>(null);
+  // Docked-mode white dropdown (project route): open state of its tab list.
+  const [dockMenuOpen, setDockMenuOpen] = useState(false);
+  // Most-recently-activated tab ids, newest first — the dropdown lists tabs
+  // in this order (最近打开的在前). Session-local: falls back to strip order
+  // for tabs never activated since launch.
+  const tabMruRef = useRef<string[]>([]);
+  useEffect(() => {
+    const id = state.activeTabId;
+    if (!id) return;
+    tabMruRef.current = [id, ...tabMruRef.current.filter((x) => x !== id)].slice(0, 50);
+  }, [state.activeTabId]);
   const [radialHoverId, setRadialHoverId] = useState<string | null>(null);
   useEffect(() => {
     if (!radialMenu) setRadialHoverId(null);
@@ -805,6 +842,20 @@ export function WorkspaceTabsBar({
     () => new Map(projects.map((project) => [project.id, project])),
     [projects],
   );
+
+  // Project-route dock (workspaceTabsDock.ts): when ProjectView registers a
+  // dock element at the top of the chat column, the strip portals there and
+  // the full-width chrome row collapses (`is-docked` + the :has() row rule in
+  // routines.css). Whenever no dock exists — home/marketplace, focus mode —
+  // the strip renders in the chrome row as before.
+  const [tabsDockEl, setTabsDockEl] = useState<HTMLElement | null>(() => getWorkspaceTabsDock());
+  useEffect(
+    () => subscribeWorkspaceTabsDock(() => setTabsDockEl(getWorkspaceTabsDock())),
+    [],
+  );
+  useEffect(() => {
+    if (!tabsDockEl) setDockMenuOpen(false);
+  }, [tabsDockEl]);
 
   // Refresh the fallback cache from whatever this fetch actually returned,
   // before `displayTabFor` below reads it — same render pass, so a tab
@@ -1094,8 +1145,42 @@ export function WorkspaceTabsBar({
       });
     }
 
+    function onRemoveWorkspaceProjectTabs(event: Event) {
+      const detail = (event as CustomEvent<{ projectId?: string }>).detail;
+      const projectId = detail?.projectId;
+      if (!projectId) return;
+      setState((current) => {
+        const normalized = normalizeTabsState(current);
+        const nextTabs = normalized.tabs.filter(
+          (tab) => tab.kind !== 'project' || tab.projectId !== projectId,
+        );
+        if (nextTabs.length === normalized.tabs.length) return normalized;
+        const removedActiveTab = normalized.tabs.some(
+          (tab) => tab.id === normalized.activeTabId
+            && tab.kind === 'project'
+            && tab.projectId === projectId,
+        );
+        return normalizeTabsState({
+          tabs: nextTabs,
+          activeTabId: removedActiveTab
+            ? nextTabs.find((tab) => tab.kind === 'entry')?.id ?? ''
+            : normalized.activeTabId,
+        });
+      });
+    }
+
     window.addEventListener(OPEN_WORKSPACE_TAB_EVENT, onOpenWorkspaceTab);
-    return () => window.removeEventListener(OPEN_WORKSPACE_TAB_EVENT, onOpenWorkspaceTab);
+    window.addEventListener(
+      REMOVE_WORKSPACE_PROJECT_TABS_EVENT,
+      onRemoveWorkspaceProjectTabs,
+    );
+    return () => {
+      window.removeEventListener(OPEN_WORKSPACE_TAB_EVENT, onOpenWorkspaceTab);
+      window.removeEventListener(
+        REMOVE_WORKSPACE_PROJECT_TABS_EVENT,
+        onRemoveWorkspaceProjectTabs,
+      );
+    };
   }, []);
 
   useEffect(() => {
@@ -1513,9 +1598,117 @@ export function WorkspaceTabsBar({
     }, 0);
   }
 
+  const dockPortal = (node: ReactNode) =>
+    tabsDockEl ? createPortal(node, tabsDockEl) : node;
+
+  // Docked (project-route) presentation: one white dropdown spanning the chat
+  // column instead of the pill strip. The strip still renders (hidden by CSS)
+  // so its measurement/drag hooks keep their DOM.
+  const dockDropdownNode = (() => {
+    if (!tabsDockEl) return null;
+    const activeTab = state.tabs.find((tab) => tab.id === state.activeTabId) ?? state.tabs[0];
+    if (!activeTab) return null;
+    const activeDisplay =
+      displayTabById.get(activeTab.id)
+        ?? displayTabFor(activeTab, projectById, t, knownProjectNamesRef.current);
+    const isEntryActive = activeTab.kind === 'entry';
+    // Most recently opened first. The active tab ranks first even before the
+    // MRU effect has run for it; never-activated tabs keep strip order after.
+    const mru = tabMruRef.current;
+    const mruRank = (tab: WorkspaceChromeTab): number => {
+      if (tab.id === state.activeTabId) return -1;
+      const index = mru.indexOf(tab.id);
+      return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+    };
+    const projectTabs = state.tabs
+      .filter((tab) => tab.kind !== 'entry')
+      .sort((a, b) => mruRank(a) - mruRank(b));
+    return (
+      <div className="workspace-tabs-dropdown" data-testid="workspace-tabs-dropdown">
+        <button
+          type="button"
+          className="workspace-tabs-dropdown__trigger"
+          aria-haspopup="listbox"
+          aria-expanded={dockMenuOpen}
+          onClick={() => setDockMenuOpen((v) => !v)}
+          data-testid="workspace-tabs-dropdown-trigger"
+        >
+          <span className="workspace-tabs-dropdown__icon" aria-hidden>
+            <Icon name={isEntryActive ? 'home' : activeDisplay.icon} size={14} />
+          </span>
+          <span className="workspace-tabs-dropdown__label">{activeDisplay.title}</span>
+          <Icon name="chevron-down" size={14} />
+        </button>
+        {dockMenuOpen ? (
+          <>
+            <div
+              className="workspace-tabs-dropdown__backdrop"
+              onClick={() => setDockMenuOpen(false)}
+            />
+            <div className="workspace-tabs-dropdown__menu" role="listbox">
+              {projectTabs.map((tab) => {
+                const display =
+                  displayTabById.get(tab.id)
+                    ?? displayTabFor(tab, projectById, t, knownProjectNamesRef.current);
+                const active = tab.id === state.activeTabId;
+                return (
+                  <div
+                    key={tab.id}
+                    className={`workspace-tabs-dropdown__row${active ? ' is-active' : ''}`}
+                  >
+                    <button
+                      type="button"
+                      className="workspace-tabs-dropdown__row-main"
+                      role="option"
+                      aria-selected={active}
+                      onClick={() => {
+                        setDockMenuOpen(false);
+                        openTab(tab);
+                      }}
+                    >
+                      <Icon name={display.icon} size={14} />
+                      <span className="workspace-tabs-dropdown__row-label">{display.title}</span>
+                      {active ? <Icon name="check" size={14} /> : null}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : null}
+      </div>
+    );
+  })();
+
   return (
-    <header className="app-chrome-header workspace-tabs-chrome" aria-label="Workspace tabs">
+    <header
+      className={`app-chrome-header workspace-tabs-chrome${tabsDockEl ? ' is-docked' : ''}`}
+      aria-label="Workspace tabs"
+    >
       <div className="app-chrome-traffic-space workspace-tabs-traffic" aria-hidden />
+      {/* Docked mode: the chrome row keeps the brand-logo button plus the
+          account actions host at the window's top-right; the strip renders in
+          the chat column's dock, level with
+          the workspace 设计文件 row. The strip's own pinned entry tab hides
+          inside the dock (CSS) — this button is its chrome-row stand-in.
+          In chat the logo means 回到首页. */}
+      {tabsDockEl && state.tabs[0] ? (
+        <button
+          type="button"
+          className="workspace-tabs-home-chrome od-tooltip"
+          aria-label={t('entry.navHome')}
+          title={t('entry.navHome')}
+          data-tooltip={t('entry.navHome')}
+          data-tooltip-placement="bottom"
+          data-testid="workspace-home-chrome"
+          onClick={() => openTab(state.tabs[0]!)}
+        >
+          <ChromeHomeGlyph />
+        </button>
+      ) : null}
+      {dockPortal(
+      <>
+      {dockDropdownNode}
       <div
         className={`workspace-tabs-strip${tabsOverflowing ? ' is-overflowing' : ''}`}
         role="tablist"
@@ -1543,6 +1736,12 @@ export function WorkspaceTabsBar({
             ref={setGlidePillRef}
           />
         </div>
+        {/* Every tab always renders a strip row — rows are the state/
+            measurement/drag DOM the tab machinery (and its tests) rely on.
+            The chrome row VISUALLY shows only the pinned Home tab (per
+            product: 顶部只保留 home 和头像/积分): undocked project rows are
+            hidden by CSS (routines.css), the same way the docked strip hides
+            behind the chat-column dropdown. */}
         {state.tabs.map((tab) => {
           const display =
             displayTabById.get(tab.id) ?? displayTabFor(tab, projectById, t, knownProjectNamesRef.current);
@@ -1566,27 +1765,43 @@ export function WorkspaceTabsBar({
               onDragEnd={handleTabDragEnd}
             >
               {isPinned && active && tab.view === 'home' ? (
-                /* Home view only: the pinned tab is the sidebar toggle — a Home
-                   button would be redundant since you are already home. */
+                /* Home view: the pinned tab is the brand-logo button. The
+                   COLLAPSE control moved into the rail (after its search box),
+                   so the logo only re-opens a collapsed rail — with the rail
+                   open it is inert (you are already home, nothing to expand). */
                 <button
                   type="button"
-                  className="workspace-tab__rail-toggle od-tooltip"
-                  aria-label={entryRailOpen ? t('entry.navCollapse') : t('entry.navExpand')}
+                  className={`workspace-tab__rail-toggle od-tooltip${entryRailOpen ? ' is-inert' : ''}`}
+                  aria-label={entryRailOpen ? t('entry.navHome') : t('entry.navExpand')}
                   aria-expanded={entryRailOpen}
-                  title={entryRailOpen ? t('entry.navCollapse') : t('entry.navExpand')}
-                  data-tooltip={entryRailOpen ? t('entry.navCollapse') : t('entry.navExpand')}
+                  title={entryRailOpen ? undefined : t('entry.navExpand')}
+                  data-tooltip={entryRailOpen ? undefined : t('entry.navExpand')}
                   data-tooltip-placement="bottom"
                   data-testid="workspace-home-rail-toggle"
                   onClick={(event) => {
                     event.stopPropagation();
-                    window.dispatchEvent(new CustomEvent(ENTRY_RAIL_TOGGLE_EVENT));
+                    if (!entryRailOpen) {
+                      window.dispatchEvent(new CustomEvent(ENTRY_RAIL_TOGGLE_EVENT));
+                    }
                   }}
                 >
-                  <Icon name="panel-left" size={14} />
+                  <ChromeHomeGlyph />
+                  {/* Collapsed-rail hover swaps the logo for the expand-sidebar
+                      glyph, so the button telegraphs its one action. CSS keys
+                      the swap off :not(.is-inert):hover. */}
+                  <svg
+                    className="workspace-chrome-logo-swap"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    aria-hidden
+                  >
+                    <path d="M5 5H13V19H5V5ZM19 19H15V5H19V19ZM4 3C3.44772 3 3 3.44772 3 4V20C3 20.5523 3.44772 21 4 21H20C20.5523 21 21 20.5523 21 20V4C21 3.44772 20.5523 3 20 3H4ZM11 12L7 8.5V15.5L11 12Z" />
+                  </svg>
                 </button>
               ) : isPinned && active ? (
                 /* Any other entry section (settings / all-projects / community /
-                   design-systems …): show the Home icon; clicking returns home. */
+                   design-systems …): the logo reads as Home; clicking returns
+                   home. */
                 <button
                   type="button"
                   className="workspace-tab__rail-toggle od-tooltip"
@@ -1600,7 +1815,7 @@ export function WorkspaceTabsBar({
                     openTab(tab);
                   }}
                 >
-                  <Icon name="home" size={14} />
+                  <ChromeHomeGlyph />
                 </button>
               ) : (
                 <>
@@ -1613,8 +1828,13 @@ export function WorkspaceTabsBar({
                       {/* The pinned entry tab remembers its last section
                           (settings / community / …), but clicking it always
                           lands on home (openTab), so it must read as the Home
-                          button — not the remembered section's icon. */}
-                      <Icon name={isPinned ? 'home' : display.icon} size={14} />
+                          button — the brand logo — not the remembered
+                          section's icon. */}
+                      {isPinned ? (
+                        <ChromeHomeGlyph />
+                      ) : (
+                        <Icon name={display.icon} size={14} />
+                      )}
                     </span>
                     <span className="workspace-tab__label">{display.title}</span>
                   </button>
@@ -1645,6 +1865,13 @@ export function WorkspaceTabsBar({
             (2026-07-24); a tab scrolled out of view is reached by scrolling
             the strip or cycling with Ctrl+Tab / ⌘1-9. */}
       </div>
+      </>,
+      )}
+      <div
+        id={WORKSPACE_CHROME_ACCOUNT_ACTIONS_ID}
+        className="workspace-chrome-account-actions"
+        data-testid="workspace-chrome-account-actions"
+      />
       {radialMenu ? createPortal(
         <div className="workspace-radial-layer" onMouseDown={() => setRadialMenu(null)}>
           <div

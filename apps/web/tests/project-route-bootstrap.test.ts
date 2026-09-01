@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { bootstrapProjectRoute } from '../src/state/projects';
+import {
+  bootstrapFirstOpenTeamProjectRoute,
+  bootstrapProjectRoute,
+} from '../src/state/projects';
 import { resetCoalescedGet } from '../src/lib/coalesced-get';
 import { workspaceContextFixture } from './helpers/workspace-context';
 
@@ -263,5 +266,89 @@ describe('bootstrapProjectRoute', () => {
     await bootstrapProjectRoute(PROJECT_ID, { accountGeneration: 3 });
     await bootstrapProjectRoute(PROJECT_ID, { accountGeneration: 3 });
     expect(failedFetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('bootstrapFirstOpenTeamProjectRoute', () => {
+  it('uses one exact idempotent bootstrap then mounts only a confirmed Team binding', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    let bound = false;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, init });
+      if (url.endsWith('/collab/bootstrap')) {
+        bound = true;
+        return new Response(JSON.stringify({
+          ok: true,
+          awaitingFirstMaterialization: true,
+        }), { status: 202 });
+      }
+      if (url.endsWith('/workspace-scope')) {
+        if (!bound) return new Response('{}', { status: 404 });
+        return new Response(JSON.stringify({
+          scope: {
+            kind: 'team',
+            projectId: PROJECT_ID,
+            workspaceId: CONTEXT_A.workspaceId,
+            visibility: 'team',
+            context: CONTEXT_A,
+          },
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ project: PROJECT_A }), { status: 200 });
+    }));
+
+    await expect(bootstrapProjectRoute(PROJECT_ID, {
+      accountGeneration: 4,
+      exactContext: CONTEXT_A,
+    })).resolves.toEqual({ kind: 'not-found' });
+
+    await expect(bootstrapFirstOpenTeamProjectRoute(PROJECT_ID, {
+      accountGeneration: 4,
+      exactContext: CONTEXT_A,
+    })).resolves.toMatchObject({
+      kind: 'found',
+      project: PROJECT_A,
+      awaitingFirstMaterialization: true,
+      scope: { kind: 'team', context: CONTEXT_A },
+    });
+
+    expect(calls).toHaveLength(4);
+    expect(calls[1]?.url).toContain('/collab/bootstrap');
+    expect(calls[1]?.init?.method).toBe('PUT');
+    expect(calls.every((call) =>
+      new Headers(call.init?.headers).get('x-od-workspace-id') === CONTEXT_A.workspaceId,
+    )).toBe(true);
+  });
+
+  it('rejects an old-daemon unbound placeholder and preserves the fallback lane', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ok: true,
+        awaitingFirstMaterialization: true,
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        scope: {
+          kind: 'unbound',
+          projectId: PROJECT_ID,
+          workspaceId: null,
+          context: null,
+        },
+      }), { status: 200 })));
+
+    await expect(bootstrapFirstOpenTeamProjectRoute(PROJECT_ID, {
+      accountGeneration: 4,
+      exactContext: CONTEXT_A,
+    })).resolves.toEqual({ kind: 'unavailable' });
+  });
+
+  it('never starts the Team lane for a Personal context', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(bootstrapFirstOpenTeamProjectRoute(PROJECT_ID, {
+      accountGeneration: 4,
+      exactContext: { ...CONTEXT_A, workspaceType: 'personal', teamId: undefined },
+    })).resolves.toEqual({ kind: 'not-found' });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

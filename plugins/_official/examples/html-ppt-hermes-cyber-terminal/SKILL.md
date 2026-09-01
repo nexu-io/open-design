@@ -3,9 +3,9 @@ name: html-ppt-hermes-cyber-terminal
 en_name: "Run a BYOK Model-Choice Session like an Applied-AI Engineer"
 zh_name: "像应用 AI 工程师一样讲 BYOK 选型"
 description: |
-  Open Design + BYOK: choosing and wiring your own model, hands-on — cost, quality, and the routing decision. Built as a decision-grade AI literacy deck for engineers, IT, applied-AI teams.
+  OpenDesign + BYOK: choosing and wiring your own model, hands-on — cost, quality, and the routing decision. Built as a decision-grade AI literacy deck for engineers, IT, applied-AI teams.
 en_description: |
-  Open Design + BYOK: choosing and wiring your own model, hands-on — cost, quality, and the routing decision. Built as a decision-grade AI literacy deck for engineers, IT, applied-AI teams.
+  OpenDesign + BYOK: choosing and wiring your own model, hands-on — cost, quality, and the routing decision. Built as a decision-grade AI literacy deck for engineers, IT, applied-AI teams.
 zh_description: |
   像应用 AI 工程师一样讲 BYOK 选型——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -40,7 +40,7 @@ od:
   animations: true
   category: "ai-literacy"
   scenario: "ai"
-  example_prompt: "Create \"Run a BYOK Model-Choice Session like an Applied-AI Engineer\" as a decision-grade AI literacy deck in this template's own visual system. Subject: Open Design + BYOK: choosing and wiring your own model, hands-on — cost, quality, and the routing decision. Audience: engineers, IT, applied-AI teams. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck make AI implementation concrete enough to fund."
+  example_prompt: "Create \"Run a BYOK Model-Choice Session like an Applied-AI Engineer\" as a decision-grade AI literacy deck in this template's own visual system. Subject: OpenDesign + BYOK: choosing and wiring your own model, hands-on — cost, quality, and the routing decision. Audience: engineers, IT, applied-AI teams. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck make AI implementation concrete enough to fund."
 ---
 # HTML PPT · 暗终端测评
 

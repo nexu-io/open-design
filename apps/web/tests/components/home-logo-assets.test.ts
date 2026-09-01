@@ -16,7 +16,7 @@ const heroLogotypeSvg = read('../../public/logo-03.svg');
 // channel as the glyph mask it assembles out of coloured blocks.
 const heroPixelScanSvg = read('../../public/logo-scan.svg');
 
-// The current Open Design brand glyph is the ink superellipse tile introduced
+// The current OpenDesign brand glyph is the ink superellipse tile introduced
 // with the landing-page rebrand (landing PR #3444): its outline starts with
 // this path command in every export of the mark.
 const CURRENT_GLYPH_PATH_PREFIX = 'M41 0.726562';

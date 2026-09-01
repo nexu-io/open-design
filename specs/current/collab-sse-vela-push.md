@@ -1,10 +1,30 @@
-# Collab realtime — vela → daemon push channel (Hop 1 design)
+# Collab realtime — current implementation and hop 1 design history
 
-Status: draft for vela-backend review. Owner: workspace-team.
+Status: implemented on `main`. Owner: workspace-team.
+
+## Implemented state
+
+Collaboration invalidations now travel over two implemented SSE hops:
+
+- **Hop 1 (vela → daemon):** the daemon opens an exact-workspace cloud-hub
+  subscription at `/api/v1/collab/events`. It verifies that the `ready` event
+  names the requested workspace, uses heartbeats to monitor stream health,
+  reconnects after interruptions, and performs source-gap catch-up.
+- **Hop 2 (daemon → web):** the daemon publishes thin invalidations at
+  `/api/projects/:id/events` and `/api/workspace/events`; web clients re-fetch
+  the affected state rather than receiving full resource payloads.
+- **Polling floor:** polling remains as a slower recovery floor so missed or
+  unavailable push events still converge.
+
+## Historical design context — July 15 proposal
+
+The remainder of this document preserves the original July 15 design snapshot
+and rationale. Its proposed endpoint, event catalogue, status statements, and
+sequencing are historical context, not the current wire contract.
 
 ## Why this exists
 
-Open Design is local-first: **every user runs their own daemon** on their own
+OpenDesign is local-first: **every user runs their own daemon** on their own
 machine, and **vela (cloud) is the shared collaboration backend**. Any
 cross-user change (user A comments on a shared project; user B should see it)
 travels two hops:
@@ -31,7 +51,7 @@ interval (~5s for comments; on-demand for members/context).
 change made by one user reaches other members' daemons in near-real-time,
 replacing the daemon's polling of vela.
 
-## Verified current state (as of this branch)
+## Historical implementation snapshot (July 15)
 
 - `apps/daemon/src/collab/collab-cloud-service.ts` runs an internal `setInterval`
   poll (~5s) that calls `client.pullComments(...)`. This is the only self-driven

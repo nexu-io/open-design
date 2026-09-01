@@ -1,0 +1,301 @@
+---
+import Layout from '../../../_components/sub-page-layout.astro';
+import LazyImg from '../../../_components/lazy-img.astro';
+import { getInfoPageCopy } from '../../../info-page-i18n';
+import { localeFromPath, localizedHref, localePath, stripLocaleFromPath } from '../../../i18n';
+import {
+  IMAGE_GENERATION_COPY,
+  IMAGE_GENERATION_EXAMPLES,
+  type ImageGenerationLocale,
+} from '../../../data/image-generation-data';
+import './image-generation.css';
+
+const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
+const REPO = 'https://github.com/nexu-io/open-design';
+const REPO_RELEASES = `${REPO}/releases`;
+const locale = localeFromPath(Astro.url.pathname);
+const contentLocale: ImageGenerationLocale = locale === 'zh' || locale === 'zh-tw' ? 'zh' : 'en';
+const isZh = contentLocale === 'zh';
+const copy = IMAGE_GENERATION_COPY[contentLocale];
+const common = getInfoPageCopy(locale).common;
+const href = (path: string) => localizedHref(path, locale);
+
+const pagePath = localePath(locale, stripLocaleFromPath(Astro.url.pathname).pathname);
+const pageUrl = new URL(pagePath, SITE).toString();
+const pageCopy = isZh
+  ? {
+      pageName: 'AI 图片生成',
+      promptLabel: '提示词',
+      modelRailTitle: '一个工作区，三种图片模型',
+      modelRailBody: '无需单独配置供应商 API Key',
+      galleryTitle: '看看 Open Design 能生成什么',
+      galleryBody: '这些图片均由 Open Design 实时生成。点击任意案例，即可查看完整提示词。',
+      workflowTitle: '从一句话，到最终成图',
+      accessTitle: '一个订阅，无需配置供应商 Key',
+      accessBody: '登录 Open Design 并开通会员，即可在同一个项目里生成图片、继续调整并保留完整提示词。',
+      faqTitle: '图片生成常见问题',
+      finalTitle: '把下一条提示词，变成一张图片',
+      finalBody: '下载 Open Design，使用会员订阅开始生成图片。',
+      dialogTitle: '生成提示词',
+      close: '关闭',
+    }
+  : {
+      pageName: 'AI image generation',
+      promptLabel: 'Prompt',
+      modelRailTitle: 'One workspace, three image models',
+      modelRailBody: 'No separate provider API keys',
+      galleryTitle: 'See what Open Design can generate',
+      galleryBody: 'Every image is generated live in Open Design. Select any example to inspect its complete prompt.',
+      workflowTitle: 'From one sentence to a finished image',
+      accessTitle: 'One subscription. No provider-key setup.',
+      accessBody: 'Sign in with an active membership to generate, refine, and keep every prompt inside the same Open Design project.',
+      faqTitle: 'Image generation FAQ',
+      finalTitle: 'Turn your next prompt into an image',
+      finalBody: 'Download Open Design and start generating with your membership.',
+      dialogTitle: 'Generation prompt',
+      close: 'Close',
+    };
+
+const examples = IMAGE_GENERATION_EXAMPLES.map((example) => ({
+  ...example,
+  title: example.title[contentLocale],
+  category: example.category[contentLocale],
+  alt: example.alt[contentLocale],
+  prompt: example.prompt[contentLocale],
+}));
+const heroExample = examples[0]!;
+
+const promptPayload = JSON.stringify(examples.map(({ id, title, model, aspect, prompt }) => ({
+  id,
+  title,
+  model,
+  aspect,
+  prompt,
+}))).replace(/</g, '\\u003c');
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: SITE },
+      { '@type': 'ListItem', position: 2, name: pageCopy.pageName, item: pageUrl },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: copy.title,
+    description: copy.description,
+    url: pageUrl,
+    isPartOf: { '@id': `${SITE}#website` },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: copy.faq.map(({ q, a }) => ({
+      '@type': 'Question',
+      name: q,
+      acceptedAnswer: { '@type': 'Answer', text: a },
+    })),
+  },
+];
+---
+
+<Layout
+  title={copy.title}
+  description={copy.description}
+  active="solution"
+  jsonLd={jsonLd}
+  mainClassName="sub-main container image-generation-main"
+>
+  <article class="info-page solution-page image-generation-solution" data-image-generation-page>
+    <section class="ig-hero">
+      <header class="ig-hero-copy">
+        <span class="ig-kicker">{copy.eyebrow}</span>
+        <h1>
+          <span>{copy.headingA}</span>
+          <span>{copy.headingB}</span>
+        </h1>
+        <p>{copy.lead}</p>
+        <div class="solution-hero-cta">
+          <a class="btn btn-primary solution-download-cta hero-download-attention" href={href('/download/')} data-download-cta data-direct-download data-download-placement="solution_hero">{common.downloadDesktop}</a>
+          <a class="btn btn-ghost" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
+        </div>
+      </header>
+
+      <figure class="ig-hero-visual">
+        <div class="ig-hero-media">
+          <LazyImg
+            src={heroExample.image}
+            alt={heroExample.alt}
+            loading="priority"
+            width={1600}
+            height={900}
+          />
+        </div>
+        <button class="ig-hero-prompt" type="button" data-prompt-open={heroExample.id}>
+          <span>{pageCopy.promptLabel}</span>
+          <strong>{heroExample.prompt}</strong>
+          <b aria-hidden="true">↗</b>
+        </button>
+      </figure>
+    </section>
+
+    <section class="ig-model-rail" aria-label={pageCopy.modelRailTitle}>
+      <div>
+        <strong>{pageCopy.modelRailTitle}</strong>
+        <span>{pageCopy.modelRailBody}</span>
+      </div>
+      <ul>
+        <li>Seedream 5.0 Pro</li>
+        <li>GPT Image 2</li>
+        <li>Nano Banana 2</li>
+      </ul>
+    </section>
+
+    <section class="ig-gallery" id="examples">
+      <header class="ig-section-head">
+        <h2>{pageCopy.galleryTitle}</h2>
+        <p>{pageCopy.galleryBody}</p>
+      </header>
+
+      <div class="ig-gallery-grid">
+        {examples.map((example) => (
+          <article class={`ig-gallery-card ig-gallery-card-${example.layout}`}>
+            <button class="ig-gallery-open" type="button" data-prompt-open={example.id}>
+              <div class="ig-gallery-media">
+                <LazyImg
+                  src={example.image}
+                  alt={example.alt}
+                  loading="precise"
+                  width={1600}
+                  height={900}
+                />
+              </div>
+              <div class="ig-gallery-caption">
+                <div>
+                  <span>{example.category}</span>
+                  <h3>{example.title}</h3>
+                </div>
+                <p><strong>{example.model}</strong><span>{example.aspect}</span></p>
+              </div>
+            </button>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    <section class="ig-workflow" id="how">
+      <header class="ig-section-head">
+        <h2>{pageCopy.workflowTitle}</h2>
+      </header>
+      <ol>
+        {copy.steps.map((step) => (
+          <li>
+            <h3>{step.title}</h3>
+            <p>{step.body}</p>
+          </li>
+        ))}
+      </ol>
+    </section>
+
+    <section class="ig-access">
+      <div>
+        <h2>{pageCopy.accessTitle}</h2>
+        <p>{pageCopy.accessBody}</p>
+      </div>
+      <ul>
+        {copy.accessItems.map((item) => <li>{item}</li>)}
+      </ul>
+    </section>
+
+    <section class="ig-faq" id="faq">
+      <h2>{pageCopy.faqTitle}</h2>
+      <ol class="faq-list">
+        {copy.faq.map(({ q, a }, index) => (
+          <li class="faq-item">
+            <details>
+              <summary>
+                <span class="faq-index">{String(index + 1).padStart(2, '0')}</span>
+                <span class="faq-q">{q}</span>
+                <span class="faq-toggle" aria-hidden="true">+</span>
+              </summary>
+              <p class="faq-a">{a}</p>
+            </details>
+          </li>
+        ))}
+      </ol>
+    </section>
+
+    <section class="ig-final-cta" aria-label={pageCopy.finalTitle}>
+      <div>
+        <h2>{pageCopy.finalTitle}</h2>
+        <p>{pageCopy.finalBody}</p>
+      </div>
+      <div class="info-cta-actions">
+        <a class="btn btn-primary solution-download-cta hero-download-attention" href={REPO_RELEASES} data-download-cta data-direct-download data-download-placement="solution_footer" target="_blank" rel="noreferrer noopener">{common.downloadDesktop}</a>
+        <a class="btn btn-ghost" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
+      </div>
+    </section>
+
+    <dialog class="ig-solution-prompt-dialog" data-prompt-dialog>
+      <div class="ig-dialog-head">
+        <div>
+          <span>{pageCopy.dialogTitle}</span>
+          <h2 data-prompt-title></h2>
+        </div>
+        <button class="ig-dialog-close" type="button" data-prompt-close aria-label={pageCopy.close}>
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M5.5 5.5 14.5 14.5M14.5 5.5 5.5 14.5"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="ig-dialog-meta">
+        <span data-prompt-model></span>
+        <span data-prompt-aspect></span>
+      </div>
+      <pre><code data-prompt-body></code></pre>
+    </dialog>
+
+    <script is:inline id="image-generation-prompts" type="application/json" set:html={promptPayload}></script>
+  </article>
+
+  <script is:inline>
+    (() => {
+      const page = document.querySelector('[data-image-generation-page]');
+      if (!page) return;
+
+      const payload = page.querySelector('#image-generation-prompts');
+      const examples = payload ? JSON.parse(payload.textContent || '[]') : [];
+      const exampleMap = new Map(examples.map((item) => [item.id, item]));
+      const dialog = page.querySelector('[data-prompt-dialog]');
+      const title = page.querySelector('[data-prompt-title]');
+      const model = page.querySelector('[data-prompt-model]');
+      const aspect = page.querySelector('[data-prompt-aspect]');
+      const body = page.querySelector('[data-prompt-body]');
+
+      page.querySelectorAll('[data-prompt-open]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const item = exampleMap.get(button.getAttribute('data-prompt-open'));
+          if (!item || !(dialog instanceof HTMLDialogElement)) return;
+          if (title) title.textContent = item.title;
+          if (model) model.textContent = item.model;
+          if (aspect) aspect.textContent = item.aspect;
+          if (body) body.textContent = item.prompt;
+          dialog.showModal();
+        });
+      });
+
+      page.querySelectorAll('[data-prompt-close]').forEach((button) => {
+        button.addEventListener('click', () => {
+          if (dialog instanceof HTMLDialogElement) dialog.close();
+        });
+      });
+
+      dialog?.addEventListener('click', (event) => {
+        if (event.target === dialog && dialog instanceof HTMLDialogElement) dialog.close();
+      });
+    })();
+  </script>
+</Layout>

@@ -1,6 +1,6 @@
 ---
 name: od-contribute
-description: One-click contribution flow for Open Design (nexu-io/open-design) — even for non-coders. Pick one of four cards (ship a Skill or Design System you made with OD; translate docs; fix a typo / write a blog; report a bug), the agent validates and opens a PR (or issue) for you. Trigger words contribute to open design, ship my OD skill, ship my OD design system, translate OD docs, report an OD bug, od-contribute.
+description: One-click contribution flow for OpenDesign (nexu-io/open-design) — even for non-coders. Pick one of four cards (ship a Skill or Design System you made with OD; translate docs; fix a typo / write a blog; report a bug), the agent validates and opens a PR (or issue) for you. Trigger words contribute to open design, ship my OD skill, ship my OD design system, translate OD docs, report an OD bug, od-contribute.
 allowed-tools:
   - Bash
   - Read
@@ -12,7 +12,7 @@ allowed-tools:
   - WebFetch
 ---
 
-# od-contribute — first-contribution flow for Open Design
+# od-contribute — first-contribution flow for OpenDesign
 
 Locked to `nexu-io/open-design`. Branches by **contribution type**, not by issue. Replaces the dev-loop with type-specific no-code validators. Designed so a product user with zero coding background can ship a real PR.
 
@@ -317,4 +317,4 @@ Print the PR URL on its own line. Done.
 ## When NOT to use this skill
 
 - The user wants to fix a daemon / web bug or add a feature with code changes → use `auto-github-contributor` instead (it has the TDD loop). This skill deliberately doesn't run lint/typecheck/tests because content paths don't need them.
-- The user wants to *generate* a Skill / Design System from scratch → that's Open Design itself. Run OD first, get an artifact, then come back here to ship it.
+- The user wants to *generate* a Skill / Design System from scratch → that's OpenDesign itself. Run OD first, get an artifact, then come back here to ship it.

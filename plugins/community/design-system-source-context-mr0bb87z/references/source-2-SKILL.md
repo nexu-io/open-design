@@ -72,7 +72,7 @@ Use it to design prototypes, mockups, interfaces, production artifacts, dashboar
 
 ## Reuse workflow
 
-Use this package when creating or revising an Open Design artifact:
+Use this package when creating or revising an OpenDesign artifact:
 
 1. Read `DESIGN.md` before authoring.
 2. Import `colors_and_type.css` or copy its `:root` tokens.

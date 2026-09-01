@@ -95,7 +95,7 @@ function freezeBriefCatalog<
 }
 
 /**
- * Canonical V1 decision catalog shared by the local Open Design MCP, Codex
+ * Canonical V1 decision catalog shared by the local OpenDesign MCP, Codex
  * Desktop widget, and structured CLI representation. Visible copy may be
  * localized later, but ids, ordering, defaults, and skip behavior are product
  * protocol.
@@ -486,7 +486,7 @@ export function formatOpenDesignBriefForCli(
   displayArtifactType: string = brief.artifactType,
 ): string {
   const lines = [
-    'Open Design brief',
+    'OpenDesign brief',
     `Artifact: ${displayArtifactType}`,
   ];
   if (brief.questions.length > 0) {

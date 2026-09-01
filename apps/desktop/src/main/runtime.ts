@@ -6,7 +6,8 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { BrowserWindow, app, dialog, ipcMain, nativeImage, nativeTheme, screen, session, shell } from "electron";
+import { BrowserWindow, app, dialog, ipcMain, nativeImage, nativeTheme, screen, session, shell, webFrameMain } from "electron";
+import type { WebFrameMain } from "electron";
 import {
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_MODES,
@@ -15,6 +16,8 @@ import {
   type DesktopExportArtifactResult,
   type DesktopExportPdfInput,
   type DesktopExportPdfResult,
+  type DesktopRenderFramesInput,
+  type DesktopRenderFramesResult,
   type DesktopRenderSlidesInput,
   type DesktopRenderSlidesResult,
   type DesktopUpdateStatusSnapshot,
@@ -22,6 +25,7 @@ import {
 import type {
   OpenDesignHostActionResult,
   OpenDesignHostCaptureResult,
+  OpenDesignHostPreviewNavigationFailure,
   OpenDesignHostProjectImportInit,
   OpenDesignHostUpdaterActionOptions,
   OpenDesignHostUpdaterMenuLabels,
@@ -29,6 +33,7 @@ import type {
 } from "@open-design/host";
 
 import { renderDeckSlides } from "./deck-capture.js";
+import { renderDeterministicFrames } from "./frame-capture.js";
 import { openFirstPartyMailto } from "./mailto-open.js";
 import { openValidatedDirectory } from "./open-path.js";
 import { exportArtifact as exportArtifactFromHtml } from "./artifact-export.js";
@@ -45,6 +50,35 @@ import {
 } from "./update-preflight.js";
 
 const execFileAsync = promisify(execFile);
+const PREVIEW_NAVIGATION_FAILURE_IPC_CHANNEL = "od:preview-navigation-failed";
+const ABORTED_NAVIGATION_ERROR_CODE = -3;
+let previewNavigationFailureEventSequence = 0;
+
+function isPreviewTransportNavigationUrl(url: string): boolean {
+  return url === "about:srcdoc" || url.startsWith("blob:od://app/");
+}
+
+export function previewNavigationFailureFromDidFailLoad(input: {
+  errorCode: number;
+  eventId: number;
+  frameName?: string;
+  isMainFrame: boolean;
+  occurredAtMs: number;
+  validatedUrl: string;
+}): OpenDesignHostPreviewNavigationFailure | null {
+  if (
+    input.isMainFrame
+    || input.errorCode !== ABORTED_NAVIGATION_ERROR_CODE
+    || !isPreviewTransportNavigationUrl(input.validatedUrl)
+  ) return null;
+  return {
+    errorCode: input.errorCode,
+    eventId: input.eventId,
+    ...(input.frameName ? { frameName: input.frameName } : {}),
+    occurredAtMs: input.occurredAtMs,
+    validatedUrl: input.validatedUrl,
+  };
+}
 
 /**
  * Result of validating a candidate path before exposing it to a
@@ -264,7 +298,7 @@ const MIN_SPLASH_MS = 2000;
 // While the splash is up, the real web app loads in a hidden main window. We
 // reveal it only once the web bundle reports it has actually mounted (it sets
 // `data-od-app-mounted="1"` on first paint of the real UI), so the user never
-// sees the web's own "Loading Open Design…" shell flash between the splash and
+// sees the web's own "Loading OpenDesign…" shell flash between the splash and
 // the app. Poll cadence + a hard ceiling so a missing mount signal can never
 // strand the user on the splash forever.
 const WEB_MOUNT_POLL_MS = 80;
@@ -356,6 +390,7 @@ export type DesktopRuntime = {
   exportArtifact(input: DesktopExportArtifactInput): Promise<DesktopExportArtifactResult>;
   exportPdf(input: DesktopExportPdfInput): Promise<DesktopExportPdfResult>;
   openUpdateDialog(request: OpenDesignHostUpdaterOpenDialogRequest): void;
+  renderFrames(input: DesktopRenderFramesInput): Promise<DesktopRenderFramesResult>;
   renderSlides(input: DesktopRenderSlidesInput): Promise<DesktopRenderSlidesResult>;
   screenshot(input: DesktopScreenshotInput): Promise<DesktopScreenshotResult>;
   show(): void;
@@ -906,7 +941,7 @@ function createPendingHtml(): string {
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Open Design</title>
+    <title>OpenDesign</title>
     <style>
       html,
       body {
@@ -1133,7 +1168,7 @@ function buildCrashReportUrl(ctx: RendererCrashScreenContext): string {
   const title = `Desktop app keeps crashing (renderer ${ctx.reason})`;
   const body = [
     "**What happened**",
-    "The Open Design desktop window crashed several times in a row and showed the recovery screen.",
+    "The OpenDesign desktop window crashed several times in a row and showed the recovery screen.",
     "",
     "**What I was doing when it started** (please add any detail):",
     "",
@@ -1152,9 +1187,9 @@ function buildCrashReportUrl(ctx: RendererCrashScreenContext): string {
 // Prefilled mailto for the "Email us" action — same auto-filled diagnostics as
 // the issue, for users who'd rather email than open a GitHub account.
 function buildCrashMailtoUrl(ctx: RendererCrashScreenContext): string {
-  const subject = `Open Design keeps crashing (renderer ${ctx.reason})`;
+  const subject = `OpenDesign keeps crashing (renderer ${ctx.reason})`;
   const body = [
-    "The Open Design desktop app crashed several times in a row on my device.",
+    "The OpenDesign desktop app crashed several times in a row on my device.",
     "",
     "(If possible, attach the diagnostics file you saved with the “Save logs…” button.)",
     "",
@@ -1172,7 +1207,7 @@ function createRendererCrashHtml(ctx: RendererCrashScreenContext): string {
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Open Design</title>
+    <title>OpenDesign</title>
     <style>
       /* Palette mirrors the app's neutral design tokens (apps/web tokens.css):
          warm off-white + near-black, no accent color — matching the black/white
@@ -1268,7 +1303,7 @@ function createRendererCrashHtml(ctx: RendererCrashScreenContext): string {
   </head>
   <body>
     <div class="panel">
-      <p class="title">Open Design keeps closing on this device</p>
+      <p class="title">OpenDesign keeps closing on this device</p>
       <p class="body">The app window crashed several times in a row, so it has paused to avoid getting stuck reloading.</p>
       <p class="body">It will try to recover on its own in a few minutes.</p>
       <div class="actions">
@@ -1278,7 +1313,7 @@ function createRendererCrashHtml(ctx: RendererCrashScreenContext): string {
       <p class="hint" id="diag-note">Saved logs include a crash memory snapshot so we can find the cause. Nothing is sent unless you choose to share it.</p>
       <p class="status" id="status" aria-live="polite"></p>
       <p class="email" id="email-line">Prefer email? <a href="#" id="email">Contact ${SUPPORT_EMAIL}</a></p>
-      <p class="hint">If this keeps happening, quitting and reinstalling Open Design usually resolves it.</p>
+      <p class="hint">If this keeps happening, quitting and reinstalling OpenDesign usually resolves it.</p>
     </div>
     <script>
       (function () {
@@ -1366,7 +1401,7 @@ const SPLASH_STAGE_SEQUENCE: readonly SplashBootStage[] = [
 ];
 
 const SPLASH_STAGE_LABELS: Record<SplashBootStage, string> = {
-  starting: "Starting Open Design",
+  starting: "Starting OpenDesign",
   engine: "Starting the local engine",
   engineReady: "Local engine ready",
   interface: "Preparing the interface",
@@ -1493,7 +1528,7 @@ export function pinNativeAppearanceToLight(): void {
  * + matching size so the reveal swap reads as a single window, never a flash.
  */
 export function createSplashWindow(): SplashWindowHandle {
-  // Open Design ships light-only (the theme setting was removed), so pin the
+  // OpenDesign ships light-only (the theme setting was removed), so pin the
   // native appearance before the first window exists. Electron defaults
   // `themeSource` to `system`, which paints the macOS vibrancy glass and the
   // native chrome dark on a dark-mode Mac — visible on the splash and again in
@@ -1510,7 +1545,7 @@ export function createSplashWindow(): SplashWindowHandle {
     // On Windows, the frameless GPU-composited path can ignore the initial
     // `show: true` after a DWM update. Reveal explicitly after first paint.
     show: false,
-    title: "Open Design",
+    title: "OpenDesign",
     width: 1280,
     webPreferences: {
       contextIsolation: true,
@@ -2240,7 +2275,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
 
   const consoleEntries: DesktopConsoleEntry[] = [];
   const petWindow = createDesktopPetWindow(preloadPath, options.osLocale);
-  const windowTitle = options.windowTitle ?? "Open Design";
+  const windowTitle = options.windowTitle ?? "OpenDesign";
   const window = new BrowserWindow({
     height: 900,
     icon: resolveDesktopIconPath(),
@@ -2253,7 +2288,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     // Starts hidden: the splash window is what the user sees while the real web
     // app loads in here. We reveal this window only once the app has actually
     // mounted (see `revealWhenReady` below), so there is never a flash of the
-    // web's own "Loading Open Design…" shell.
+    // web's own "Loading OpenDesign…" shell.
     show: false,
     title: windowTitle,
     autoHideMenuBar: true,
@@ -2272,6 +2307,34 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   installWindowChromeCssHook(window);
   showWindowButtons(window);
   attachDownloadSaveAsDialog(window);
+  const previewFrameNameByRoutingId = new Map<string, string>();
+  const previewFrameRoutingKey = (processId: number, routingId: number) =>
+    `${processId}:${routingId}`;
+  const rememberPreviewFrameName = (frame: WebFrameMain | null | undefined) => {
+    if (!frame?.name.startsWith("od-artifact-preview-srcdoc-")) return;
+    const key = previewFrameRoutingKey(frame.processId, frame.routingId);
+    previewFrameNameByRoutingId.set(key, frame.name);
+    // Routing IDs are unique for a frame lifetime, but this process can run
+    // for days. Keep the late-failure lookup bounded without retaining frame
+    // objects after Chromium destroys them.
+    if (previewFrameNameByRoutingId.size > 512) {
+      const oldestKey = previewFrameNameByRoutingId.keys().next().value;
+      if (oldestKey) previewFrameNameByRoutingId.delete(oldestKey);
+    }
+  };
+  window.webContents.on("frame-created", (_event, details) => {
+    const frame = details.frame;
+    if (!frame) return;
+    rememberPreviewFrameName(frame);
+    frame.on("dom-ready", () => rememberPreviewFrameName(frame));
+  });
+  window.webContents.on("did-start-navigation", (details) => {
+    if (details.isMainFrame || !isPreviewTransportNavigationUrl(details.url)) return;
+    // `did-fail-load` can arrive after Chromium has destroyed the frame, at
+    // which point webFrameMain.fromId() and frame-created/dom-ready are too
+    // late to recover its name. Snapshot the identity when navigation starts.
+    rememberPreviewFrameName(details.frame);
+  });
   window.on("page-title-updated", (event) => {
     event.preventDefault();
     window.setTitle(windowTitle);
@@ -2294,15 +2357,42 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       url: window.webContents.getURL(),
     });
   });
-  window.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+  window.webContents.on("did-fail-load", (
+    _event,
+    errorCode,
+    errorDescription,
+    validatedURL,
+    isMainFrame,
+    frameProcessId,
+    frameRoutingId,
+  ) => {
+    const failedFrame = isMainFrame
+      ? undefined
+      : webFrameMain.fromId(frameProcessId, frameRoutingId);
+    const cachedFrameName = isMainFrame
+      ? undefined
+      : previewFrameNameByRoutingId.get(previewFrameRoutingKey(frameProcessId, frameRoutingId));
+    const frameName = failedFrame?.name || cachedFrameName;
     console.error("[open-design desktop] main window did-fail-load", {
       errorCode,
       errorDescription,
+      frameName,
+      frameProcessId,
+      frameRoutingId,
       isMainFrame,
       pendingUrl,
       validatedURL,
       url: window.webContents.getURL(),
     });
+    const failure = previewNavigationFailureFromDidFailLoad({
+      errorCode,
+      eventId: ++previewNavigationFailureEventSequence,
+      ...(frameName ? { frameName } : {}),
+      isMainFrame,
+      occurredAtMs: Date.now(),
+      validatedUrl: validatedURL,
+    });
+    if (failure) window.webContents.send(PREVIEW_NAVIGATION_FAILURE_IPC_CHANNEL, failure);
   });
   window.on("unresponsive", () => {
     console.error("[open-design desktop] main window unresponsive", {
@@ -2407,7 +2497,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   const unsubscribeUpdater = options.updater?.subscribe(() => sendUpdaterStatus()) ?? (() => undefined);
   const requireMainWindowSender = (event: Electron.IpcMainInvokeEvent): void => {
     if (event.sender !== window.webContents) {
-      throw new Error("host IPC is only available to the main Open Design window");
+      throw new Error("host IPC is only available to the main OpenDesign window");
     }
   };
   const discoverUpdateDaemonBaseUrl = async (): Promise<string> => {
@@ -2764,7 +2854,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
 
   // Hold the splash until BOTH (a) the web bundle reports it has mounted — it
   // sets `data-od-app-mounted="1"` on first paint of the real UI — so we never
-  // reveal the web's own dark "Loading Open Design…" shell, and (b) the splash
+  // reveal the web's own dark "Loading OpenDesign…" shell, and (b) the splash
   // has been up at least MIN_SPLASH_MS so the brand clip plays through. A hard
   // ceiling guarantees the user is never stranded on the splash if the mount
   // signal never arrives.
@@ -3007,6 +3097,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       window.webContents.send(UPDATER_OPEN_DIALOG_EVENT, request);
       window.show();
       window.focus();
+    },
+    renderFrames(input) {
+      return renderDeterministicFrames(input);
     },
     renderSlides(input) {
       return renderDeckSlides(input);

@@ -22,6 +22,21 @@ export const API_ERROR_CODES = [
   // triage can count this failure class by code.
   'AGENT_CONNECTION_DROPPED',
   'AGENT_PROMPT_TOO_LARGE',
+  // An ACP agent CLI answered `initialize` and then refused to open a session
+  // (`session/new` / `session/load`) without naming a cause of its own — the
+  // shape Kimi Code 0.37.x / 0.38.0 fails in. Nothing streamed, so the run
+  // produced nothing, and re-running the identical request against the
+  // identical build only reproduces it. The one variable left is the installed
+  // CLI build, so clients render "this version can't start a session — change
+  // it, then retry" from THIS code rather than from any sentence the daemon
+  // writes: a daemon-authored string never passes through the client's i18n.
+  // The agent's own JSON-RPC line stays in the error `message` (it is both the
+  // classifier's input and the text the error card shows under details), and
+  // `details` carries the runtime identity the localized copy interpolates:
+  // `{ kind: 'agent_cli', action: 'update_cli', agent? }`.
+  // A handshake failure that DOES name its cause (signed out, throttled, no
+  // credit, upstream 5xx) keeps that cause's own code instead.
+  'AGENT_CLI_SESSION_REFUSED',
   'AMR_MODEL_UNAVAILABLE',
   'AMR_AUTH_REQUIRED',
   'AMR_INSUFFICIENT_BALANCE',
@@ -59,6 +74,7 @@ export const API_ERROR_CODES = [
   // than silently disabling the agent-specific watchdog.
   'AGENT_RUNTIME_DEF_INVALID',
   'PROJECT_NOT_FOUND',
+  'PROJECT_MATERIALIZATION_PENDING',
   // Handoff (`POST /api/projects/:id/handoff`): the requested conversation
   // is not in the project, or has no messages to synthesize a handoff from.
   'CONVERSATION_NOT_FOUND',
@@ -138,6 +154,16 @@ export const API_ERROR_CODES = [
   // registered owner unshares the project, so clients must not render it as
   // a "try again later" error.
   'TEAM_PROJECT_OWNER_CONFLICT',
+  // A design-system enrichment ("AI Optimize") run was requested while the
+  // same conversation already has a non-terminal run. The enrichment turn is
+  // a hidden seeded prompt that refines the registered design system in
+  // place, so a second concurrent pass bills twice and races on the same
+  // files (2026-07-28: one double-triggered affordance billed two runs). The
+  // daemon rejects the newcomer with HTTP 409 and names the run that already
+  // owns the conversation in `details` (`DesignSystemEnrichmentInProgressDetails`)
+  // so a client can attach to it instead of starting another. Not retryable
+  // while that run is active; ordinary chat turns are never gated by this.
+  'DESIGN_SYSTEM_ENRICHMENT_IN_PROGRESS',
   'INTERNAL_ERROR',
 ] as const;
 

@@ -53,7 +53,7 @@ ship a tiny local runtime with the same minimum behavior.
   every navigation path, and mark it with `aria-current="true"`.
 - **Active slide state:** keep the visible slide marked with
   `.slide.active`; adding `.is-active` as a compatibility alias is fine.
-  Open Design's preview bridge reads this state for the host slide counter,
+  OpenDesign's preview bridge reads this state for the host slide counter,
   so it must stay in sync with keyboard, wheel, touch, and dot navigation.
 - **Iframe safety:** focus the deck on load / pointer interaction so keyboard
   navigation works after the gallery preview appears. Avoid

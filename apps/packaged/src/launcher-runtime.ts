@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { access, lstat, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { access, lstat, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
 
 import {
@@ -229,9 +229,15 @@ async function resolvePayloadDesktopExecutable(
   return executablePath;
 }
 
-function sameExecutablePath(left: string, right: string): boolean {
-  const normalizedLeft = resolve(left);
-  const normalizedRight = resolve(right);
+async function canonicalExecutablePath(path: string): Promise<string> {
+  return await realpath(path).catch(() => resolve(path));
+}
+
+export async function sameExecutablePath(left: string, right: string): Promise<boolean> {
+  const [normalizedLeft, normalizedRight] = await Promise.all([
+    canonicalExecutablePath(left),
+    canonicalExecutablePath(right),
+  ]);
   return process.platform === "win32"
     ? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
     : normalizedLeft === normalizedRight;
@@ -330,6 +336,7 @@ async function resolvePayloadConfig(
       daemonSidecarEntry: await resolveOptionalPayloadEntry(resourcesPath, raw.daemonSidecarEntryRelative),
       nodeCommand,
       resourceRoot,
+      telemetryRelayUrl: raw.telemetryRelayUrl?.trim() || config.telemetryRelayUrl,
       webOutputMode: webOutputMode as PackagedWebOutputMode,
       webSidecarEntry: await resolveOptionalPayloadEntry(resourcesPath, raw.webSidecarEntryRelative),
       webStandaloneRoot,
@@ -475,7 +482,7 @@ export async function resolvePackagedLauncherRuntime(
     descriptor.active.generation === handoff.target.generation &&
     attempted?.version === handoff.target.version &&
     attempted.generation === handoff.target.generation &&
-    sameExecutablePath(currentExecutablePath, handoff.payloadExecutablePath)
+    await sameExecutablePath(currentExecutablePath, handoff.payloadExecutablePath)
     ? handoff.target
     : null;
   const selection = selectLauncherRuntimeTarget({
@@ -485,7 +492,11 @@ export async function resolvePackagedLauncherRuntime(
     runtime: descriptor,
   });
   const persistedInstall = await readLauncherInstallDescriptor(launcherPaths, channel, config.namespace).catch(() => null);
-  const currentPackageLaunchPath = stableAppLaunchPathFromExecutable(process.execPath);
+  // Track the stable launch path of the CURRENT launcher executable (the
+  // `currentExecutablePath` option, defaulting to process.execPath), so the
+  // payload branch can refresh install.json when an update moved the launcher
+  // (issue #6494) instead of keeping a stale persisted launchPath forever.
+  const currentPackageLaunchPath = stableAppLaunchPathFromExecutable(currentExecutablePath);
 
   if (selection.selected) {
     const versionPaths = resolveLauncherVersionPaths({
@@ -496,16 +507,16 @@ export async function resolvePackagedLauncherRuntime(
     });
     const payloadConfig = await resolvePayloadConfig(config, versionPaths, channel);
     if (payloadConfig != null) {
-      const payloadDesktopProcess = sameExecutablePath(
+      const payloadDesktopProcess = await sameExecutablePath(
         currentExecutablePath,
         payloadConfig.desktopExecutablePath,
       );
       if (
         selection.reason === "active-resume" &&
-        (handoff == null || !payloadDesktopProcess || !sameExecutablePath(
+        (handoff == null || !payloadDesktopProcess || !(await sameExecutablePath(
           handoff.payloadExecutablePath,
           payloadConfig.desktopExecutablePath,
-        ))
+        )))
       ) {
         return await resolvePackagedLauncherRuntime(config, paths, {
           currentExecutablePath,
@@ -522,12 +533,34 @@ export async function resolvePackagedLauncherRuntime(
           version: selection.pointer.version,
         } satisfies LauncherAttemptDescriptor);
       }
+      // Issue #6494: the payload branch previously only READ the persisted
+      // install.json launchPath (written by the cold-start current-package
+      // branch) and never refreshed it, so after an update that moved the
+      // launcher executable (0.17.0 Local\Programs\... → 0.18.0 launcher
+      // payload), the stale path kept flowing into the MCP bootstrap
+      // command published by /api/mcp/install-info, making MCP clients
+      // relaunch the old executable on the same sidecar pipe until the
+      // launcher's stale-sidecar sweep killed the fresh daemon. Refresh
+      // install.json so launchPath tracks the current launcher executable
+      // across updates. Only the launcher process owns the descriptor: a
+      // delegated payload desktop runs from the versioned payload exe and
+      // must keep the stable launch path the launcher persisted.
+      const installedLaunchPath = !payloadDesktopProcess
+        && (persistedInstall == null
+          || !(await sameExecutablePath(persistedInstall.launchPath, currentPackageLaunchPath)))
+        ? (await writeLauncherInstallDescriptor(
+          launcherPaths,
+          channel,
+          config.namespace,
+          currentPackageLaunchPath,
+        )).launchPath
+        : (persistedInstall?.launchPath ?? currentPackageLaunchPath);
       return {
         config: payloadConfig.config,
         desktopExecutablePath: payloadConfig.desktopExecutablePath,
         descriptor,
         electronNodeCommand: payloadConfig.electronNodeCommand,
-        installedLaunchPath: persistedInstall?.launchPath ?? currentPackageLaunchPath,
+        installedLaunchPath,
         launcherPaths,
         paths: { ...paths, resourceRoot: payloadConfig.config.resourceRoot },
         payloadDesktopProcess,

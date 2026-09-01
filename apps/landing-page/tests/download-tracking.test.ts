@@ -9,12 +9,43 @@ import { pageNameFromPath } from '../app/i18n.ts';
  * The landing-site trackers are emitted as inline-script STRINGS, so neither
  * `astro check` nor a plain import exercises their runtime branches. These
  * tests extract the real emitted script and run it against a minimal DOM shim,
- * proving that download CTAs which route to the /download/ installer-matrix
- * page (the header nav button + sub-page CTAs) still emit a download event —
- * the gap this change closes — distinguished by `download_target`.
+ * proving that both direct installer CTAs and links to the /download/
+ * installer matrix emit a download event distinguished by `download_target`.
  */
 
 type CaptureCall = { name: string; props: Record<string, unknown> };
+
+function runPosthogBeforeSend(handoff: Record<string, unknown>) {
+  const html = posthogHeadHtml('phc_test_key', 'https://us.i.posthog.com');
+  const script = html.slice(html.indexOf('<script>') + '<script>'.length, html.lastIndexOf('</script>'));
+  const win: any = {
+    location: {
+      href: 'https://open-design.dev/zh/',
+      pathname: '/zh/',
+    },
+    sessionStorage: {
+      getItem: (key: string) => (key === 'od.localeAttribution' ? JSON.stringify(handoff) : null),
+      removeItem: () => {},
+    },
+  };
+  const doc: any = {
+    documentElement: { getAttribute: () => 'zh' },
+    referrer: 'https://open-design.dev/',
+    createElement: () => ({}),
+    getElementsByTagName: () => [{ parentNode: { insertBefore: () => {} } }],
+    addEventListener: () => {},
+  };
+
+  // Browser globals are properties on window; `with` reproduces that lookup
+  // while exercising the actual emitted inline script in this Node test.
+  // eslint-disable-next-line no-new-func
+  new Function('window', 'document', 'navigator', `with (window) { ${script} }`)(
+    win,
+    doc,
+    { userAgent: 'mozilla mac os x', platform: 'MacIntel' },
+  );
+  return win.posthog._i[0][1].before_send as (event: any) => any;
+}
 
 function makeLink(opts: {
   href: string;
@@ -92,6 +123,48 @@ test('posthog: page_view fires on load', () => {
   assert.equal(pv!.props.page_name, 'landing_home');
 });
 
+test('posthog: locale redirect handoff corrects referrer before the automatic pageview', () => {
+  const html = posthogHeadHtml('phc_test_key', 'https://us.i.posthog.com');
+  const handoffRead = html.indexOf("sessionStorage.getItem('od.localeAttribution')");
+  const init = html.indexOf('posthog.init(');
+
+  assert.ok(handoffRead > 0 && handoffRead < init, 'handoff must be read before PostHog init');
+  assert.match(html, /before_send: function \(event\)/);
+  assert.match(html, /event\.properties\.\$referrer = odLocaleAttribution\.referrer/);
+  assert.match(html, /event\.properties\.\$referring_domain = odLocaleAttribution\.referringDomain/);
+  assert.match(html, /event\.properties\.locale_redirect_reason/);
+  assert.match(html, /event\.properties\.original_landing_url/);
+  assert.match(html, /event\.properties\['original_' \+ odAttributionKey\]/);
+  assert.match(html, /posthog\.register_for_session\(odSessionAttribution\)/);
+  assert.match(html, /locale_switch_manual: true/);
+  assert.match(html, /locale_from: localeNow\(\)/);
+});
+
+test('posthog: direct locale handoff remains Direct when the event is sent', () => {
+  const beforeSend = runPosthogBeforeSend({
+    referrer: '',
+    referringDomain: '',
+    entryPath: '/',
+    targetPath: '/zh/',
+    originalLandingUrl: '/',
+    redirectReason: 'browser_detected',
+    detectedLocale: 'zh',
+    redirectFrom: '/',
+    redirectTo: '/zh/',
+    createdAt: Date.now(),
+  });
+  const event = beforeSend({
+    event: '$pageview',
+    properties: {
+      $referrer: 'https://open-design.dev/',
+      $referring_domain: 'open-design.dev',
+    },
+  });
+
+  assert.equal(event.properties.$referrer, '$direct');
+  assert.equal(event.properties.$referring_domain, '$direct');
+});
+
 test('posthog: hero direct download (rewritten to .dmg) → direct + placement=hero', () => {
   const { captures, click } = runPosthogTracker();
   // After the enhancer rewrites the hero CTA, its href is a direct .dmg asset.
@@ -135,19 +208,19 @@ test('posthog: cta-band direct download → direct + placement=cta', () => {
   assert.equal(dl!.props.placement, 'cta');
 });
 
-test('posthog: nav /download/ button → download_page + placement=nav', () => {
+test('posthog: nav direct installer → direct + placement=nav', () => {
   const { captures, click } = runPosthogTracker();
   click(
     makeLink({
-      href: 'https://open-design.dev/zh/download/',
-      pathname: '/zh/download/',
-      attrs: { 'data-download-page': '', 'data-download-placement': 'nav' },
+      href: 'https://github.com/nexu-io/open-design/releases/download/v1/od-mac-arm64.dmg',
+      pathname: '/nexu-io/open-design/releases/download/v1/od-mac-arm64.dmg',
+      attrs: { 'data-direct-download': '', 'data-download-placement': 'nav' },
       text: '下载',
     }),
   );
   const dl = captures.find((c) => c.name === 'ui_click' && c.props.element === 'download_desktop');
   assert.ok(dl, 'expected a download_desktop click event for the nav download button');
-  assert.equal(dl!.props.download_target, 'download_page');
+  assert.equal(dl!.props.download_target, 'direct');
   assert.equal(dl!.props.placement, 'nav');
 });
 

@@ -8,3 +8,4 @@ export * from './digest.js';
 export * from './validate.js';
 export * from './resolve.js';
 export * from './pipeline-fallback.js';
+export * from './strategy-package.js';

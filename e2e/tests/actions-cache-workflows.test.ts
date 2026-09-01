@@ -28,6 +28,24 @@ describe("GitHub Actions cache workflows", () => {
     expect(action).toContain("run: ${{ inputs.install-command }}");
   });
 
+  it("[P1] pins the Blacksmith apt mirrorlist before installing browser deps", async () => {
+    const action = await readFile(setupPlaywrightAction, "utf8");
+
+    // A dead third-party mirror in the Blacksmith mirrorlist makes the
+    // apt-get update inside `playwright install --with-deps` hang until the
+    // job timeout; the action must pin the canonical archive first.
+    const pinIndex = action.indexOf("Pin Blacksmith apt mirror");
+    expect(pinIndex).toBeGreaterThanOrEqual(0);
+    expect(pinIndex).toBeLessThan(action.indexOf("run: ${{ inputs.install-command }}"));
+    expect(action).toContain("*'\"blacksmith-'*");
+    expect(action).toContain("/etc/apt/blacksmith-ubuntu-mirrors.txt");
+    expect(action).toContain("http://archive.ubuntu.com/ubuntu");
+
+    const baseline = await readFile(visualBaselineWorkflow, "utf8");
+    const setupPlaywrightStep = sectionBetween(baseline, "- name: Setup Playwright", "- name: Prebuild");
+    expect(setupPlaywrightStep).toContain("runner-labels:");
+  });
+
   it("[P1] keeps pnpm cache writes on explicit trusted main seed jobs", async () => {
     const action = await readFile(setupWorkspaceAction, "utf8");
 

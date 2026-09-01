@@ -1,7 +1,7 @@
 ---
-title: 'Open Design — An Honest First Look (Bugs, Fixes, and Any-Model Setup)'
+title: 'OpenDesign — An Honest First Look (Bugs, Fixes, and Any-Model Setup)'
 youtubeId: lgwFdKAyaMM
-summary: A warts-and-all first look at Open Design — install it, configure any agent, build a real prototype live (rough edges included), use the on-canvas edit/inspect/comment tools, and wire up any model cheaply through an OpenAI-compatible provider like OpenRouter. Based on Sasha (ИИШНЫЙ)'s hands-on review.
+summary: A warts-and-all first look at OpenDesign — install it, configure any agent, build a real prototype live (rough edges included), use the on-canvas edit/inspect/comment tools, and wire up any model cheaply through an OpenAI-compatible provider like OpenRouter. Based on Sasha (ИИШНЫЙ)'s hands-on review.
 date: 2026-05-07
 category: Review
 durationSeconds: 2167
@@ -9,14 +9,14 @@ author: 'ИИШНЫЙ'
 official: false
 ---
 
-This guide is a deliberately honest first look at Open Design — the parts that just work, and the rough edges you'll hit, shown live rather than edited out. It also covers a genuinely useful trick: wiring up *any* model cheaply through an OpenAI-compatible provider. It follows the hands-on review **Sasha (ИИШНЫЙ)** records in [his walkthrough](https://www.youtube.com/watch?v=lgwFdKAyaMM), rewritten in English and brought up to date with the current release. Watch the video above for the live run, or read on for the written version.
+This guide is a deliberately honest first look at OpenDesign — the parts that just work, and the rough edges you'll hit, shown live rather than edited out. It also covers a genuinely useful trick: wiring up *any* model cheaply through an OpenAI-compatible provider. It follows the hands-on review **Sasha (ИИШНЫЙ)** records in [his walkthrough](https://www.youtube.com/watch?v=lgwFdKAyaMM), rewritten in English and brought up to date with the current release. Watch the video above for the live run, or read on for the written version.
 
-![The Open Design workspace — describe what you want and pick a mode.](/tutorials/open-design-open-design-vs-claude-design-first-look-community/workspace-home.webp)
-*The Open Design workspace: describe what you want to build, pick a mode, and your agent does the rest.*
+![The OpenDesign workspace — describe what you want and pick a mode.](/tutorials/open-design-open-design-vs-claude-design-first-look-community/workspace-home.webp)
+*The OpenDesign workspace: describe what you want to build, pick a mode, and your agent does the rest.*
 
-## What is Open Design?
+## What is OpenDesign?
 
-Open Design is an open-source, local-first design platform — an agent-native alternative to Claude Design. The "AI purple slop" problem (every generated UI looking the same) is exactly what tools like this try to solve, and Open Design's answer is to run **on top of the coding agent you already use** rather than ship its own model. It detects Claude Code, Codex, Cursor, OpenCode, Qwen, and more on your machine and uses that as the engine. Sasha's framing: it collected tens of thousands of GitHub stars in its first week because it's free, open, and not locked to one provider.
+OpenDesign is an open-source, local-first design platform — an agent-native alternative to Claude Design. The "AI purple slop" problem (every generated UI looking the same) is exactly what tools like this try to solve, and OpenDesign's answer is to run **on top of the coding agent you already use** rather than ship its own model. It detects Claude Code, Codex, Cursor, OpenCode, Qwen, and more on your machine and uses that as the engine. Sasha's framing: it collected tens of thousands of GitHub stars in its first week because it's free, open, and not locked to one provider.
 
 - **Open source, Apache-2.0** — clone it, read it, self-host it.
 - **Runs locally** — your projects are folders on your own machine.
@@ -37,10 +37,10 @@ Open the local URL it prints (a dynamic port — don't hardcode one). Prefer zer
 
 ## Step 2 — Use any model via an OpenAI-compatible provider
 
-This is the most useful nugget in Sasha's review. Beyond the detected CLIs, Open Design lets you **bring your own key for any OpenAI-compatible API** — which means you can route through an aggregator like OpenRouter and use almost any model, often more cheaply:
+This is the most useful nugget in Sasha's review. Beyond the detected CLIs, OpenDesign lets you **bring your own key for any OpenAI-compatible API** — which means you can route through an aggregator like OpenRouter and use almost any model, often more cheaply:
 
 1. In your provider, create an API key and copy it.
-2. In Open Design settings, choose the **OpenAI** provider type (OpenRouter and similar aggregators speak the OpenAI API).
+2. In OpenDesign settings, choose the **OpenAI** provider type (OpenRouter and similar aggregators speak the OpenAI API).
 3. Paste the key, and crucially **change the base URL** to your provider's endpoint (e.g. the OpenRouter base URL), then pick the model you want.
 4. Save — generation now routes through that provider.
 
@@ -48,9 +48,9 @@ One gotcha Sasha hits: the model selection switches **globally**, not per-projec
 
 ## Step 3 — Build a prototype (rough edges and all)
 
-Create a project, write your brief, choose **high fidelity**, and send. Open Design runs a **discovery form** first — it adapts the questions to your prompt (target platform, who it's for, tone, animation, constraints), then a **visual-direction picker** (typography + palette), then builds. The output is a live, interactive prototype with built-in controls — Sasha's generated app lets you toggle animations and swap the accent colour right on the page.
+Create a project, write your brief, choose **high fidelity**, and send. OpenDesign runs a **discovery form** first — it adapts the questions to your prompt (target platform, who it's for, tone, animation, constraints), then a **visual-direction picker** (typography + palette), then builds. The output is a live, interactive prototype with built-in controls — Sasha's generated app lets you toggle animations and swap the accent colour right on the page.
 
-![A real prototype generated in Open Design.](/tutorials/open-design-open-design-vs-claude-design-first-look-community/generated-prototype.webp)
+![A real prototype generated in OpenDesign.](/tutorials/open-design-open-design-vs-claude-design-first-look-community/generated-prototype.webp)
 *A real generated prototype rendered in the preview — a dark, cinematic agency landing page.*
 
 Honest caveats Sasha shows on camera (and how to handle them):
@@ -63,7 +63,7 @@ Honest caveats Sasha shows on camera (and how to handle them):
 
 Once tagged, the editing loop is the standout. **Inspect** lets you hover any element and tweak colour, size, and style directly. **Edit** lets you rewrite text inline (no round-trip to the chat for a one-word change). **Comment/picker** lets you select an area, draw, and send a note to the agent ("make this menu a scrolling carousel with a progress bar"). It's the fast, visual feedback loop that's awkward to reproduce with a plain agent in a terminal.
 
-![The Open Design plugins hub.](/tutorials/open-design-open-design-vs-claude-design-first-look-community/plugins-hub.webp)
+![The OpenDesign plugins hub.](/tutorials/open-design-open-design-vs-claude-design-first-look-community/plugins-hub.webp)
 *The plugins hub: browse the registry, import plugins, and prepare them for your team.*
 
 When you're done, **Share** exports to PDF, PPTX, standalone HTML, or markdown — or deploys to Vercel in one click. Sasha's honest verdict: for presentations and lead-magnet pages it's already a convenient mini-builder; for complex app/site prototyping expect to do real iteration. Given it's only a week old and updating constantly, the foundation is strong.
@@ -79,7 +79,7 @@ When you're done, **Share** exports to PDF, PPTX, standalone HTML, or markdown �
 ## FAQ
 
 **Can I use a model other than Claude — and pay less?**
-Yes. Point Open Design at any detected CLI, or bring your own key for any OpenAI-compatible provider (e.g. OpenRouter) by setting the key and base URL — that opens up almost any model.
+Yes. Point OpenDesign at any detected CLI, or bring your own key for any OpenAI-compatible provider (e.g. OpenRouter) by setting the key and base URL — that opens up almost any model.
 
 **Inspect/edit isn't selecting elements — why?**
 The artifact needs `data-oid` tags. Ask the agent to rebuild the prototype with them, then reload the preview.

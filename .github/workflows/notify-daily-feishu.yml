@@ -44,6 +44,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       ref: ${{ steps.pick.outputs.ref }}
+      force: ${{ steps.recovery.outputs.force }}
+      promote: ${{ steps.recovery.outputs.promote }}
+      release_version: ${{ steps.recovery.outputs.release_version }}
     steps:
       - name: Pick build ref (main, or override)
         id: pick
@@ -59,6 +62,30 @@ jobs:
           echo "using default ref: main"
           echo "ref=main" >> "$GITHUB_OUTPUT"
 
+      - name: Checkout workflow helper
+        uses: actions/checkout@v6.0.2
+        with:
+          path: workflow-source
+
+      - name: Checkout build ref for recovery check
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ steps.pick.outputs.ref }}
+          path: build-source
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Resolve foreign beta recovery
+        id: recovery
+        env:
+          BUILD_REF: ${{ steps.pick.outputs.ref }}
+          OPEN_DESIGN_BETA_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/beta/latest/metadata.json
+          PACKAGED_PACKAGE_JSON_PATH: build-source/apps/packaged/package.json
+        run: node --experimental-strip-types workflow-source/.github/scripts/release/resolve-daily-beta-recovery.ts
+
   build:
     name: Build beta from main
     needs: resolve
@@ -67,7 +94,10 @@ jobs:
     with:
       enable_mac_arm64: true
       enable_win_x64: true
+      force: ${{ needs.resolve.outputs.force == 'true' }}
+      promote: ${{ needs.resolve.outputs.promote == 'true' }}
       ref: ${{ needs.resolve.outputs.ref }}
+      release_version: ${{ needs.resolve.outputs.release_version }}
 
   notify:
     name: Notify Feishu (daily)
@@ -116,9 +146,46 @@ jobs:
           PREVIOUS_COMMIT: ${{ needs.build.outputs.previous_commit }}
           CHANGELOG_FILE: ${{ steps.changelog.outputs.file }}
           BUILD_STATE: ${{ needs.build.result }}
+          RELEASE_STATE: ${{ needs.build.outputs.release_state }}
+          RELEASE_NOTE: ${{ needs.build.outputs.release_state == 'partial' && '共享 beta/latest 当前版本高于 main，已保留原指针；本次仅发布可下载的版本化快照。' || '' }}
+          MAC_ARM64_SMOKE_RESULT: ${{ needs.build.outputs.mac_arm64_smoke_result }}
+          WIN_X64_SMOKE_RESULT: ${{ needs.build.outputs.win_x64_smoke_result }}
           MAC_ARM64_URL: ${{ needs.build.outputs.mac_arm64_url }}
           WIN_URL: ${{ needs.build.outputs.win_x64_url }}
           STREAM_LABEL: "每日定时"
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: node --experimental-strip-types tools/release/src/notifications/feishu.ts
+
+  notify_failure:
+    name: Notify Feishu when daily beta fails
+    needs:
+      - resolve
+      - build
+    if: ${{ always() && needs.build.result == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout trusted notifier
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Post daily beta failure card
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
+          FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_RELEASE_SIGN_SECRET }}
+          NOTICE_TITLE: "🚨 每日 beta 构建失败"
+          NOTICE_TEMPLATE: "red"
+          NOTICE_BODY: |
+            main 的每日 beta 构建未完成。失败可能发生在版本 / release metadata 校验阶段，因此即使尚未生成 beta_version，也必须立即处理。
+
+            **构建 ref**: `${{ needs.resolve.outputs.ref }}`
+
+            独立的 prerelease Windows canary 不受该 metadata 门禁影响；请结合两个 workflow 判断是发布状态问题还是产品 smoke 问题。
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node --experimental-strip-types tools/release/src/notifications/feishu-notice.ts

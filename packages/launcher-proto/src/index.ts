@@ -1,6 +1,6 @@
 import { isAbsolute, join, resolve, sep } from "node:path";
 
-import { RELEASE_CHANNELS, type ReleaseChannel } from "@open-design/release";
+import { isReleaseChannel, RELEASE_CHANNELS, type ReleaseChannel } from "@open-design/release";
 import { normalizeNamespace } from "@open-design/sidecar-proto";
 
 export const LAUNCHER_SCHEMA_VERSION = 1 as const;
@@ -13,15 +13,11 @@ export const LAUNCHER_DELEGATED_VERSION_ARG = "--od-launcher-delegated-version" 
 
 export const LAUNCHER_CHANNELS = Object.freeze({
   BETA: RELEASE_CHANNELS.BETA,
-  BETAS: RELEASE_CHANNELS.BETAS,
   PRERELEASE: RELEASE_CHANNELS.PRERELEASE,
-  PREVIEW: RELEASE_CHANNELS.PREVIEW,
   STABLE: RELEASE_CHANNELS.STABLE,
 } as const);
 
 export type LauncherChannel = ReleaseChannel;
-
-const LAUNCHER_CHANNEL_VALUES = new Set<string>(Object.values(LAUNCHER_CHANNELS));
 
 export type LauncherRootRequest = {
   channel: string;
@@ -219,7 +215,7 @@ export function normalizeLauncherChannel(value: unknown): LauncherChannel {
   if (typeof value !== "string") throw new LauncherProtocolError("launcher channel must be a string");
   const channel = value.trim();
   if (channel !== value) throw new LauncherProtocolError("launcher channel must not contain leading or trailing whitespace");
-  if (!LAUNCHER_CHANNEL_VALUES.has(channel)) {
+  if (!isReleaseChannel(channel)) {
     throw new LauncherProtocolError(`unsupported launcher channel: ${value}`);
   }
   return channel as LauncherChannel;

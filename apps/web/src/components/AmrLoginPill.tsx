@@ -29,6 +29,7 @@ import {
   AMR_LOGIN_STARTUP_SETTLE_MS,
   amrLoginPollOutcome,
   amrLoginStatusEventReason,
+  isAmrSessionAuthenticated,
   notifyAmrLoginStatusChanged,
 } from './amrLoginPolling';
 import {
@@ -352,7 +353,7 @@ export function AmrLoginPill({
     // clear any stale login error/pending the early-stopped poll left behind so
     // `accountStatus`, which ranks `errorMessage` above `loggedIn`, doesn't keep
     // the pill stuck on Authorize.
-    if (initialStatus?.loggedIn) {
+    if (isAmrSessionAuthenticated(initialStatus)) {
       stopPolling();
       loginStartedAtRef.current = null;
       loginPendingRef.current = false;
@@ -485,7 +486,7 @@ export function AmrLoginPill({
       void refresh().then((next) => {
         if (!next) return;
         if (next.authAttemptId) authAttemptIdRef.current = next.authAttemptId;
-        if (next.loggedIn) {
+        if (isAmrSessionAuthenticated(next)) {
           stopPolling();
           loginStartedAtRef.current = null;
           loginPendingRef.current = false;
@@ -745,6 +746,15 @@ export function AmrLoginPill({
     await onSignedOut?.();
   }, [onSignedOut, refresh, t]);
 
+  // Keep the management link on the same status snapshot that supplies the
+  // visible profile badge and account data. The module-level runtime origin is
+  // only a compatibility fallback; it can be reset by a dev hot reload while
+  // React retains the feature-test status shown on this card.
+  const statusConsoleUrl = amrConsoleUrlForProfile(
+    status?.profile,
+    status?.consoleOrigin,
+  );
+
   const handleConsoleClick = useCallback(
     (event: MouseEvent<HTMLAnchorElement>) => {
       event.stopPropagation();
@@ -758,7 +768,7 @@ export function AmrLoginPill({
         installationId,
       });
       const url = attributedAmrUrl(
-        amrConsoleUrlForProfile(status?.profile),
+        statusConsoleUrl,
         attribution,
         deviceId,
       );
@@ -768,17 +778,17 @@ export function AmrLoginPill({
       // Open the final, attributed URL directly to mint the browser bridge.
       void openExternalUrl(url);
     },
-    [analytics.track, installationId, metricsConsent, status?.profile],
+    [analytics.track, installationId, metricsConsent, statusConsoleUrl],
   );
 
-  const loggedIn = status?.loggedIn === true;
+  const loggedIn = isAmrSessionAuthenticated(status);
   const userEmail = status?.user?.email ?? '';
   const loginInFlight =
-    pending === 'login' || (status?.loggedIn !== true && status?.loginInFlight === true);
+    pending === 'login' || (!loggedIn && status?.loginInFlight === true);
   const logoutInFlight = pending === 'logout';
   const cancelInFlight = pending === 'cancel';
   const activeLoginActivationStatus =
-    showActivationDetails && status?.loggedIn !== true && status?.loginInFlight === true
+    showActivationDetails && !loggedIn && status?.loginInFlight === true
       ? status
       : null;
   const accountStatus: AmrAccountControlStatus = errorMessage
@@ -809,6 +819,7 @@ export function AmrLoginPill({
         signInLabel={signInLabel}
         signInIcon={signInIcon}
         showConsoleAction={showConsoleAction}
+        consoleUrl={statusConsoleUrl}
         iconOnlySignOut={iconOnlySignOut}
         signInDisabled={loginInFlight}
         signOutDisabled={logoutInFlight}

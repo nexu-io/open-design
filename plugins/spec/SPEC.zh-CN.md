@@ -1,8 +1,8 @@
-# Open Design 插件规范
+# OpenDesign 插件规范
 
 语言：[English](SPEC.md) | 简体中文
 
-这是可移植 Open Design 插件的精简契约。完整产品规范仍以 `docs/plugins-spec.zh-CN.md` 为准；本文档面向贡献者和外部编码 agent。
+这是可移植 OpenDesign 插件的精简契约。完整产品规范仍以 `docs/plugins-spec.zh-CN.md` 为准；本文档面向贡献者和外部编码 agent。
 
 ## 1. 最小插件
 
@@ -24,9 +24,9 @@ description: Use this plugin when the user wants...
 
 文件夹名、`name` 和 manifest `name` 应保持一致。使用小写字母、数字和连字符。
 
-## 2. 增强版 Open Design 插件
+## 2. 增强版 OpenDesign 插件
 
-当插件需要出现在 Open Design marketplace 卡片或 starter 中时，添加 `open-design.json`：
+当插件需要出现在 OpenDesign marketplace 卡片或 starter 中时，添加 `open-design.json`：
 
 ```text
 my-plugin/
@@ -129,7 +129,7 @@ HyperFrames 插件可以使用 `od.mode: "video"` 加 `hyperframes` tag，让它
 ## 6. Manifest 规则
 
 - `name` 是稳定插件 id。
-- `specVersion` 是此 manifest 遵循的 Open Design 插件规范版本。除非 schema 升级，否则使用当前规范包的值（`1.0.0`）。
+- `specVersion` 是此 manifest 遵循的 OpenDesign 插件规范版本。除非 schema 升级，否则使用当前规范包的值（`1.0.0`）。
 - `version` 必填。尽量使用 semver。
 - `version` 是插件包自身版本，独立于 `specVersion`。
 - `compat.agentSkills[0].path` 应指向 `./SKILL.md`。
@@ -215,4 +215,4 @@ preview 应展示真实输出形态，而不是装饰性的 splash screen。
 6. 视觉类插件包含一张截图、渲染 preview 或示例输出。
 7. 在 PR body 里说明 trust 和 capabilities。
 
-外部 registry 分发策略见 [`PUBLISHING-REGISTRIES.zh-CN.md`](PUBLISHING-REGISTRIES.zh-CN.md)。简言之：把 GitHub 或 Open Design PR 作为 source of truth，让文件夹能作为通用 `SKILL.md` skill 安装；本地验证通过后，再发布或登记到 skills.sh、ClawHub 或其他 registry。
+外部 registry 分发策略见 [`PUBLISHING-REGISTRIES.zh-CN.md`](PUBLISHING-REGISTRIES.zh-CN.md)。简言之：把 GitHub 或 OpenDesign PR 作为 source of truth，让文件夹能作为通用 `SKILL.md` skill 安装；本地验证通过后，再发布或登记到 skills.sh、ClawHub 或其他 registry。

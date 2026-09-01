@@ -79,6 +79,10 @@ const projectViewRenameFenceHarness = vi.hoisted(() => ({
   token: null as ProjectRenameFenceToken | null,
 }));
 
+const workspaceTabsHarness = vi.hoisted(() => ({
+  projectIds: new Set<string>(),
+}));
+
 vi.mock('../../src/collab/workspace-events', () => ({
   useWorkspaceInvalidation: vi.fn((
     handlers: Record<string, (payload: any) => void>,
@@ -173,6 +177,7 @@ vi.mock('../../src/components/EntryView', () => ({
             skillId: null,
             designSystemId: null,
             pendingPrompt: 'Build the retained artifact prompt',
+            pendingFiles: [new File(['brief'], 'brief.txt', { type: 'text/plain' })],
             autoSendFirstMessage: true,
             metadata: { kind: 'prototype' },
           })).catch(() => {});
@@ -546,7 +551,14 @@ vi.mock('../../src/components/WorkspaceTabsBar', () => ({
       ))}
     </>
   ),
-  openWorkspaceTab: () => {},
+  openWorkspaceTab: (route: { kind: string; projectId?: string }) => {
+    if (route.kind === 'project' && route.projectId) {
+      workspaceTabsHarness.projectIds.add(route.projectId);
+    }
+  },
+  removeWorkspaceProjectTabs: (projectId: string) => {
+    workspaceTabsHarness.projectIds.delete(projectId);
+  },
 }));
 
 vi.mock('../../src/components/pet/PetOverlay', () => ({
@@ -691,10 +703,12 @@ const existingProject: Project = {
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((res) => {
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
     resolve = res;
+    reject = rej;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 function workspaceContextPayload(
@@ -763,6 +777,7 @@ describe('App project creation routing', () => {
     workspaceInvalidationHarness.handlers.length = 0;
     workspaceInvalidationHarness.onActive.length = 0;
     projectViewRenameFenceHarness.token = null;
+    workspaceTabsHarness.projectIds.clear();
     window.history.replaceState(null, '', '/');
     mockedDaemonIsLive.mockResolvedValue(true);
     mockedFetchAgentsStream.mockResolvedValue([]);
@@ -1208,6 +1223,105 @@ describe('App project creation routing', () => {
     );
   });
 
+  it('enters the project preparing surface before Home project creation settles', async () => {
+    mockedListProjects.mockResolvedValue([]);
+    const creation = deferred<{
+      project: Project;
+      conversationId: string;
+    }>();
+    let requestedProjectId: string | undefined;
+    mockedCreateProject.mockImplementation((input) => {
+      requestedProjectId = (input as typeof input & { id?: string }).id;
+      return creation.promise;
+    });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
+
+    await screen.findByTestId('project-creation-pending-view');
+    expect(requestedProjectId).toBeTruthy();
+    expect(window.location.pathname).toBe(`/projects/${requestedProjectId}`);
+    expect(screen.getByText('Build the retained artifact prompt')).toBeTruthy();
+    expect(screen.getByText('Preparing...')).toBeTruthy();
+    expect(screen.queryByTestId('entry-home-surface')).toBeNull();
+    expect(screen.queryByTestId('project-view')).toBeNull();
+
+    creation.resolve({
+      project: {
+        ...freshProject,
+        id: requestedProjectId!,
+        name: 'Prompted project',
+        pendingPrompt: 'Build the retained artifact prompt',
+      },
+      conversationId: 'conv-new',
+    });
+
+    await screen.findByTestId('project-view');
+    expect(window.location.pathname).toBe(`/projects/${requestedProjectId}`);
+  });
+
+  it('rolls a failed optimistic Home creation back to the preserved Home surface', async () => {
+    mockedListProjects.mockResolvedValue([]);
+    const creation = deferred<{
+      project: Project;
+      conversationId: string;
+    }>();
+    let requestedProjectId: string | undefined;
+    mockedCreateProject.mockImplementation((input) => {
+      requestedProjectId = (input as typeof input & { id?: string }).id;
+      return creation.promise;
+    });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
+    await screen.findByTestId('project-creation-pending-view');
+    expect(workspaceTabsHarness.projectIds.has(requestedProjectId!)).toBe(true);
+
+    creation.reject(new Error('Could not create project'));
+
+    await screen.findByTestId('entry-home-surface');
+    expect(window.location.pathname).toBe('/');
+    expect(screen.queryByTestId('project-creation-pending-view')).toBeNull();
+    expect(screen.queryByTestId(`entry-project-${requestedProjectId}`)).toBeNull();
+    expect(workspaceTabsHarness.projectIds.has(requestedProjectId!)).toBe(false);
+    expect(screen.getByRole('alert').textContent).toContain('Could not create project');
+  });
+
+  it('releases a persisted project when attachment setup fails after creation', async () => {
+    mockedListProjects.mockResolvedValue([]);
+    mockedUploadProjectFiles.mockRejectedValue(new Error('Attachment upload failed'));
+    const creation = deferred<{
+      project: Project;
+      conversationId: string;
+    }>();
+    let requestedProjectId: string | undefined;
+    mockedCreateProject.mockImplementation((input) => {
+      requestedProjectId = (input as typeof input & { id?: string }).id;
+      return creation.promise;
+    });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Create prompted project' }));
+    await screen.findByTestId('project-creation-pending-view');
+
+    creation.resolve({
+      project: {
+        ...freshProject,
+        id: requestedProjectId!,
+        name: 'Persisted prompted project',
+        pendingPrompt: 'Build the retained artifact prompt',
+      },
+      conversationId: 'conv-new',
+    });
+
+    await screen.findByTestId('project-view');
+    expect(screen.getByTestId('project-title').textContent).toBe('Persisted prompted project');
+    expect(window.location.pathname).toBe(`/projects/${requestedProjectId}`);
+    expect(screen.queryByTestId('project-creation-pending-view')).toBeNull();
+    expect(workspaceTabsHarness.projectIds.has(requestedProjectId!)).toBe(true);
+    expect(screen.getByRole('alert').textContent).toContain('Attachment upload failed');
+  });
+
   it('stores the plugin-share prompt before its prepared project projection can refresh', async () => {
     mockedListProjects.mockResolvedValue([]);
 
@@ -1226,7 +1340,7 @@ describe('App project creation routing', () => {
     ['Local CLI', { ...baseConfig, mode: 'daemon' as const, agentId: 'codex' }],
     ['BYOK', { ...baseConfig, mode: 'api' as const, agentId: 'amr' }],
   ])(
-    'lets %s create an unscoped project while AMR workspace discovery is unavailable',
+    'lets %s create an unscoped project without waiting for AMR identity discovery',
     async (_label, executionConfig) => {
       mockedLoadConfig.mockReturnValue(executionConfig);
       mockedListProjects.mockResolvedValue([]);
@@ -1235,15 +1349,7 @@ describe('App project creation routing', () => {
         vi.fn(async (input: RequestInfo | URL) => {
           const pathname = new URL(String(input), 'http://d.local').pathname;
           if (pathname.endsWith('/integrations/vela/status')) {
-            return new Response(JSON.stringify({
-              loggedIn: false,
-              profile: 'default',
-              user: null,
-              configPath: '/test/vela.json',
-            }), {
-              status: 200,
-              headers: { 'content-type': 'application/json' },
-            });
+            return new Promise<Response>(() => {});
           }
           if (pathname.endsWith('/workspace/directory')) {
             return new Promise<Response>(() => {});
@@ -1256,7 +1362,7 @@ describe('App project creation routing', () => {
       );
 
       render(<App />);
-      await screen.findByText('false', { selector: '[data-testid="amr-login-status"]' });
+      await screen.findByText('null', { selector: '[data-testid="amr-login-status"]' });
       fireEvent.click(await screen.findByRole('button', { name: 'Create project' }));
 
       await waitFor(() => {
@@ -1268,11 +1374,62 @@ describe('App project creation routing', () => {
     },
   );
 
+  it('does not wait for directory identity while the richer Workspace context is still loading', async () => {
+    const context = workspaceContext('ws-cold-create', 'wm-cold-create');
+    const richContextRead = deferred<Response>();
+    mockedLoadConfig.mockReturnValue({
+      ...baseConfig,
+      mode: 'daemon',
+      agentId: 'amr',
+    });
+    mockedListProjects.mockResolvedValue([]);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const pathname = new URL(String(input), 'http://d.local').pathname;
+        if (pathname.endsWith('/integrations/vela/status')) {
+          return new Response(JSON.stringify({
+            loggedIn: true,
+            profile: 'default',
+            user: { id: 'account-team-member' },
+            configPath: '/test/vela.json',
+          }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (pathname.endsWith('/workspace/directory')) {
+          return new Response(
+            JSON.stringify(workspaceDirectoryFixture([context])),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        }
+        if (pathname.endsWith('/workspace/context')) return richContextRead.promise;
+        return new Response('{}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }),
+    );
+
+    render(<App />);
+    await screen.findByText('true', { selector: '[data-testid="amr-login-status"]' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Create project' }));
+
+    await waitFor(() => {
+      expect(mockedCreateProject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workspaceContext: null,
+        }),
+      );
+    });
+  });
+
   it.each([
     ['Local CLI', 'loading', { ...baseConfig, mode: 'daemon' as const, agentId: 'codex' }],
     ['BYOK', 'unavailable', { ...baseConfig, mode: 'api' as const, agentId: 'amr' }],
   ])(
-    'keeps %s project creation fail-closed for a signed-in account while Team workspace discovery is %s',
+    'lets %s create locally for a signed-in account while Team workspace discovery is %s',
     async (_label, discoveryState, executionConfig) => {
       mockedLoadConfig.mockReturnValue(executionConfig);
       mockedListProjects.mockResolvedValue([]);
@@ -1307,12 +1464,15 @@ describe('App project creation routing', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Create project' }));
 
       await waitFor(() => {
-        expect(mockedCreateProject).not.toHaveBeenCalled();
+        expect(mockedCreateProject).toHaveBeenCalledWith(
+          expect.objectContaining({ workspaceContext: null }),
+        );
       });
+      expect(screen.getByTestId('project-title').textContent).toBe('Fresh project');
     },
   );
 
-  it('keeps AMR Cloud project creation fail-closed while workspace discovery is loading even when signed out', async () => {
+  it('allows an unbound local AMR project while workspace discovery is loading', async () => {
     mockedLoadConfig.mockReturnValue({
       ...baseConfig,
       mode: 'daemon',
@@ -1349,7 +1509,9 @@ describe('App project creation routing', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Create project' }));
 
     await waitFor(() => {
-      expect(mockedCreateProject).not.toHaveBeenCalled();
+      expect(mockedCreateProject).toHaveBeenCalledWith(
+        expect.objectContaining({ workspaceContext: null }),
+      );
     });
   });
 
@@ -1616,7 +1778,7 @@ describe('App project creation routing', () => {
     expect(screen.queryByTestId('entry-project-project-existing')).toBeNull();
   });
 
-  it('does not re-add a locally deleted project when an older project list resolves stale', async () => {
+  it('removes a locally deleted project from workspace tabs and ignores a stale list', async () => {
     const initialProjects = deferred<Project[]>();
     const staleRefreshProjects = deferred<Project[]>();
     mockedListProjects
@@ -1640,6 +1802,8 @@ describe('App project creation routing', () => {
     await waitFor(() => {
       expect(screen.getByTestId('project-title').textContent).toBe('Fresh project');
     });
+    workspaceTabsHarness.projectIds.add('project-new');
+    expect(workspaceTabsHarness.projectIds.has('project-new')).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: 'Refresh projects' }));
     expect(mockedListProjects).toHaveBeenCalledTimes(2);
@@ -1650,6 +1814,7 @@ describe('App project creation routing', () => {
     await waitFor(() => {
       expect(mockedDeleteProject).toHaveBeenCalledWith('project-new', null);
       expect(screen.queryByTestId('entry-project-project-new')).toBeNull();
+      expect(workspaceTabsHarness.projectIds.has('project-new')).toBe(false);
     });
 
     await act(async () => {

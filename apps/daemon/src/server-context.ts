@@ -97,7 +97,15 @@ export interface ProjectPreviewScopeDeps {
   mint: (
     projectId: string,
     workspace?: { workspaceId: string; workspaceMemberId: string } | null,
+    options?: { readonly ttlMs?: number },
   ) => string;
+  revoke: (scope: string) => void;
+  expiresAt: (projectId: string, scope: string) => number | undefined;
+  renew: (
+    projectId: string,
+    scope: string,
+    options?: { readonly ttlMs?: number },
+  ) => number | undefined;
   validate: (projectId: string, scope: string) => boolean;
   resolve: (
     projectId: string,
@@ -160,6 +168,7 @@ export interface ServerContext {
   projectStore: any;
   authorizeProjectRequest: AuthorizeProjectRequest;
   authorizeProjectToolRequest: AuthorizeProjectToolRequest;
+  isApiTokenAuthorization: (authorization: string | undefined) => boolean;
   projectFiles: any;
   conversations: any;
   templates: any;
@@ -177,7 +186,11 @@ export interface ServerContext {
   orbit: any;
   nativeDialogs: any;
   research: any;
-  mcp: any;
+  mcp: {
+    pendingAuth: any;
+    daemonUrlRef: { current: string };
+    inheritedEnvironment: (baseEnv?: NodeJS.ProcessEnv) => Record<string, string>;
+  };
   plugins: any;
   resources: ResourceDeps;
   routines: RoutineDeps;

@@ -41,20 +41,6 @@ function workspaceHeaders(workspace: typeof TEAM | typeof PERSONAL): Record<stri
 
 beforeAll(async () => {
   authority = createServer((req, res) => {
-    if (req.url === '/api/v1/workspaces/current' && req.method === 'GET') {
-      const current = authorityWorkspace === 'team' ? TEAM : PERSONAL;
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({
-        ...current,
-        billingState: authorityWorkspace === 'team' ? 'active' : 'free',
-        planId: authorityWorkspace === 'team' ? 'team_plus' : null,
-        providerMode: 'platform_credits',
-        seatSummary: authorityWorkspace === 'team'
-          ? { seatLimit: 5, usedSeats: 2 }
-          : { seatLimit: 1, usedSeats: 1 },
-      }));
-      return;
-    }
     if (req.url === '/api/v1/workspaces' && req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ items: [authorityWorkspace === 'team' ? TEAM : PERSONAL] }));
