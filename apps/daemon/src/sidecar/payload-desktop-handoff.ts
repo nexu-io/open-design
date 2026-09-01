@@ -165,7 +165,43 @@ async function resolvePayloadExecutable(options: {
     manifest.version !== options.appVersion ||
     manifest.platform !== options.platform ||
     typeof manifest.entry?.executable !== "string"
-  ) return null;
+  ) {
+    // Fallback when manifest is missing or mismatched but the payload
+    // executable already exists on disk (e.g., corrupted manifest during
+    // first install or a partial installer write). Check the conventional
+    // payload locations directly so a valid payload is not reported as
+    // invalid-payload and `prepareLegacyPayloadDesktopHandoff` can return the
+    // more accurate `launcher-state-not-eligible` instead of masking the
+    // state.
+    const fallbackCandidates: string[] = [];
+    if (options.platform === "win32") {
+      const baseNames =
+        options.launcherPaths.channel === "beta"
+          ? ["Open Design Beta.exe", "Open Design.exe"]
+          : options.launcherPaths.channel === "prerelease"
+            ? ["Open Design Prerelease.exe", "Open Design.exe"]
+            : options.launcherPaths.channel === "preview"
+              ? ["Open Design Preview.exe", "Open Design.exe"]
+              : ["Open Design.exe", "Open Design Beta.exe"];
+      for (const name of baseNames) fallbackCandidates.push(join(versionPaths.payloadRoot, name));
+    } else if (options.platform === "darwin") {
+      const baseNames =
+        options.launcherPaths.channel === "beta"
+          ? ["Open Design Beta", "Open Design"]
+          : options.launcherPaths.channel === "prerelease"
+            ? ["Open Design Prerelease", "Open Design"]
+            : ["Open Design", "Open Design Beta"];
+      for (const name of baseNames) {
+        fallbackCandidates.push(join(versionPaths.payloadRoot, `${name}.app`, "Contents", "MacOS", name));
+      }
+    }
+    for (const candidate of fallbackCandidates) {
+      if (!containsPath(versionPaths.versionRoot, candidate)) continue;
+      const entry = await lstat(candidate).catch(() => null);
+      if (entry != null && entry.isFile() && !entry.isSymbolicLink()) return candidate;
+    }
+    return null;
+  }
   const executablePath = resolve(versionPaths.versionRoot, manifest.entry.executable);
   if (!containsPath(versionPaths.versionRoot, executablePath)) return null;
   const entry = await lstat(executablePath).catch(() => null);
@@ -309,8 +345,7 @@ export async function prepareLegacyPayloadDesktopHandoff(options: {
   ]);
   if (runtime == null) return { kind: "none", reason: "invalid-runtime" };
   if (outer == null) return { kind: "none", reason: "invalid-install-anchor" };
-  if (payloadExecutablePath == null) return { kind: "none", reason: "invalid-payload" };
-  if (identity != null && samePath(identity.executablePath, payloadExecutablePath, platform)) {
+  if (payloadExecutablePath != null && identity != null && samePath(identity.executablePath, payloadExecutablePath, platform)) {
     return { kind: "none", reason: "payload-desktop-active" };
   }
   if (identity != null && (
@@ -355,6 +390,7 @@ export async function prepareLegacyPayloadDesktopHandoff(options: {
   if (!canCaptureInitialState && !canCaptureConfirmedBinding && !canResumePreparedState) {
     return { kind: "none", reason: "launcher-state-not-eligible" };
   }
+  if (payloadExecutablePath == null) return { kind: "none", reason: "invalid-payload" };
 
   const now = (options.now ?? (() => new Date()))().toISOString();
   const descriptor: LauncherDesktopHandoffDescriptor = canResumePreparedState && existing != null
