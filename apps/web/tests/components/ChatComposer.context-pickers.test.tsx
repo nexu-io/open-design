@@ -1067,6 +1067,23 @@ describe('ChatComposer context pickers', () => {
     expect(skill.textContent).not.toContain('Active');
   });
 
+  it('clears staged skill context when that skill is deleted from the registry', async () => {
+    const view = renderComposer();
+    await flushMounts();
+
+    await typeAndSettle('@deck');
+    await waitFor(() => expect(screen.getByText('Deck Builder')).toBeTruthy());
+    fireEvent.click(screen.getByText('Deck Builder'));
+    await waitFor(() => expect(composerText()).toBe('@Deck Builder '));
+    expect(screen.getByTestId('staged-contexts').textContent).toContain('Deck Builder');
+
+    skills = [];
+    view.rerender(composerElement());
+
+    await waitFor(() => expect(screen.queryByTestId('staged-contexts')).toBeNull());
+    expect(composerText().trim()).toBe('');
+  });
+
   it('shows all matching skills and ranks exact prefix matches first', async () => {
     skills = [
       makeSkill({
