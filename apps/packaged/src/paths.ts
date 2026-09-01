@@ -52,7 +52,7 @@ function getScopedPackagedDataRootNamespace(raw: string): string | null {
 
 function resolvePackagedDataRoot(
   config: Pick<PackagedConfig, "namespaceBaseRoot">,
-  namespace: string,
+  dataNamespace: string,
   env: NodeJS.ProcessEnv = {},
 ): string {
   const odDataDir = env.OD_DATA_DIR?.trim();
@@ -75,14 +75,14 @@ function resolvePackagedDataRoot(
     }
     const scopedNamespace = getScopedPackagedDataRootNamespace(expanded);
     if (scopedNamespace) {
-      if (scopedNamespace !== namespace) {
+      if (scopedNamespace !== dataNamespace) {
         throw new PackagedPathAccessError(
           [
             "Open Design's packaged runtime requires OD_DATA_DIR to target the active namespace.",
             "",
             `Configured value: ${odDataDir}`,
             `Configured namespace: ${scopedNamespace}`,
-            `Active namespace: ${namespace}`,
+            `Active data namespace: ${dataNamespace}`,
             "",
             "Use an unscoped absolute base path or relaunch the matching packaged namespace.",
           ].join("\n"),
@@ -91,20 +91,22 @@ function resolvePackagedDataRoot(
       }
       return expanded;
     }
-    return join(expanded, "namespaces", namespace, "data");
+    return join(expanded, "namespaces", dataNamespace, "data");
   }
 
-  return join(config.namespaceBaseRoot, namespace, "data");
+  return join(config.namespaceBaseRoot, dataNamespace, "data");
 }
 
 export function resolvePackagedNamespacePaths(
   config: PackagedConfig,
-  namespace = config.namespace,
+  runtimeNamespace = config.namespace,
   env: NodeJS.ProcessEnv = {},
+  dataNamespace = runtimeNamespace,
 ): PackagedNamespacePaths {
-  const normalizedNamespace = normalizeNamespace(namespace);
-  const namespaceRoot = join(config.namespaceBaseRoot, normalizedNamespace);
-  const dataRoot = resolvePackagedDataRoot(config, normalizedNamespace, env);
+  const normalizedRuntimeNamespace = normalizeNamespace(runtimeNamespace);
+  const normalizedDataNamespace = normalizeNamespace(dataNamespace);
+  const namespaceRoot = join(config.namespaceBaseRoot, normalizedRuntimeNamespace);
+  const dataRoot = resolvePackagedDataRoot(config, normalizedDataNamespace, env);
   // Channel root = parent of the `namespaces/` directory. With the default
   // packaged layout this resolves to `<electronApp.userData>` — e.g.
   // `~/Library/Application Support/Open Design Prerelease/` on mac. Custom

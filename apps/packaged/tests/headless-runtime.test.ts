@@ -3,8 +3,23 @@ import { describe, expect, it, vi } from "vitest";
 import {
   acquirePackagedHeadlessStartup,
   parsePackagedHeadlessRequest,
+  resolvePackagedHeadlessRuntimeNamespace,
   resolvePackagedMcpBootstrapLaunch,
 } from "../src/headless-runtime.js";
+
+describe("resolvePackagedHeadlessRuntimeNamespace", () => {
+  it("separates headless IPC from the desktop namespace by default", () => {
+    expect(resolvePackagedHeadlessRuntimeNamespace("release-stable", {})).toBe(
+      "release-stable-headless",
+    );
+  });
+
+  it("preserves an explicit runtime namespace override", () => {
+    expect(resolvePackagedHeadlessRuntimeNamespace("release-stable", {
+      OD_PACKAGED_RUNTIME_NAMESPACE: "custom-headless",
+    })).toBe("custom-headless");
+  });
+});
 
 describe("parsePackagedHeadlessRequest", () => {
   it("accepts a headless Codex MCP install request", () => {

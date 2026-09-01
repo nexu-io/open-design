@@ -132,11 +132,18 @@ export async function ensureMcpDaemonUrl(
   }
 
   await spawnBootstrap(plan);
+  const postSpawnEnv = env.OD_MCP_BOOTSTRAP_IPC_PATH == null
+    || env.OD_MCP_BOOTSTRAP_IPC_PATH.length === 0
+    ? env
+    : {
+        ...env,
+        [SIDECAR_ENV.IPC_PATH]: env.OD_MCP_BOOTSTRAP_IPC_PATH,
+      };
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     await sleep(DEFAULT_BOOTSTRAP_POLL_MS);
     daemonUrl = registeredBootstrapTarget
-      ? await discoverTargetDaemonUrl(env, 300)
+      ? await discoverTargetDaemonUrl(postSpawnEnv, 300)
       : await resolveDaemonUrl({
           env,
           flagUrl: null,

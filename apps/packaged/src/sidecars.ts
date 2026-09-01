@@ -769,6 +769,7 @@ export type PackagedDaemonSpawnEnvOptions = {
   desktopHandoffEnv?: NodeJS.ProcessEnv;
   mcpBootstrapArgs?: readonly string[];
   mcpBootstrapCommand?: string | null;
+  mcpBootstrapRuntimeNamespace?: string | null;
   nodeCommand?: string | null;
   /**
    * PR #974 round-5 (lefarcen P2): only pin the daemon's import-folder
@@ -836,6 +837,17 @@ export function buildPackagedDaemonSpawnEnv(
     ...(options.mcpBootstrapArgs == null
       ? {}
       : { OD_MCP_BOOTSTRAP_ARGS: JSON.stringify(options.mcpBootstrapArgs) }),
+    ...(options.mcpBootstrapRuntimeNamespace == null
+      || options.mcpBootstrapRuntimeNamespace.length === 0
+      ? {}
+      : {
+          OD_MCP_BOOTSTRAP_IPC_PATH: resolveAppIpcPath({
+            app: APP_KEYS.DAEMON,
+            contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+            namespace: options.mcpBootstrapRuntimeNamespace,
+          }),
+          OD_PACKAGED_RUNTIME_NAMESPACE: options.mcpBootstrapRuntimeNamespace,
+        }),
     ...pickPackagedDesktopHandoffEnv(options.desktopHandoffEnv ?? {}),
     ...(options.telemetryRelayUrl == null || options.telemetryRelayUrl.length === 0
       ? {}
@@ -1032,6 +1044,7 @@ export async function startPackagedSidecars(
     nodeCommand: string | null;
     mcpBootstrapCommand: string | null;
     mcpBootstrapArgs: readonly string[];
+    mcpBootstrapRuntimeNamespace?: string | null;
     telemetryRelayUrl: string | null;
     posthogKey: string | null;
     posthogHost: string | null;
@@ -1110,6 +1123,7 @@ export async function startPackagedSidecars(
         legacyDataDir: process.env.OD_LEGACY_DATA_DIR ?? null,
         mcpBootstrapArgs: options.mcpBootstrapArgs,
         mcpBootstrapCommand: options.mcpBootstrapCommand,
+        mcpBootstrapRuntimeNamespace: options.mcpBootstrapRuntimeNamespace,
         nodeCommand: options.nodeCommand,
         requireDesktopAuth: options.requireDesktopAuth,
         telemetryRelayUrl: options.telemetryRelayUrl,
