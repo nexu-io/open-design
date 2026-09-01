@@ -33,7 +33,9 @@ export function strongQuotedEtag(etag: string): string {
     throw new Error("storage object ETag is empty");
   }
   if (/^W\//i.test(trimmed)) {
-    throw new Error("storage object ETag is weak; refusing If-Match without a strong validator");
+    throw new Error(
+      `storage object ETag is weak; refusing If-Match without a strong validator: ${trimmed}`,
+    );
   }
   const unquoted = trimmed.replace(/^"+|"+$/g, "");
   if (unquoted.length === 0) {
@@ -195,6 +197,7 @@ export async function getStorageObject(options: GetObjectOptions): Promise<{ byt
   const payloadHash = hash("");
   const { canonicalUri, url } = objectUrl(options, options.objectKey);
   const headers: Record<string, string> = {
+    "accept-encoding": "identity",
     host: url.host,
     "x-amz-content-sha256": payloadHash,
     "x-amz-date": "",
