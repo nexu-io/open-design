@@ -11352,7 +11352,7 @@ export async function startServer({
         // the probe failure and applies the identical fallback.
       }
     }
-    const resolvedAgentResumeCtx =
+    let resolvedAgentResumeCtx =
       agentSupportsSessionResume && run.conversationId
         ? resolveAgentResumeContext(db, {
             conversationId: run.conversationId,
@@ -11362,6 +11362,39 @@ export async function startServer({
             currentAssistantMessageId: run.assistantMessageId ?? null,
           })
         : { storedSessionId: null as string | null, resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null, storedStableSections: null as StableSectionHashes | null, invalidationReason: null };
+    // Prime 0.8.0 silently creates a new session at a missing `--resume` path
+    // instead of reporting a resume failure. Reject a stale local file handle
+    // before prompt composition so this turn keeps the full DB transcript.
+    if (
+      def.piRpcResumeViaProcessArgs === true &&
+      run.conversationId &&
+      resolvedAgentResumeCtx.resumeSessionId
+    ) {
+      let resumeFileExists = false;
+      try {
+        resumeFileExists = fs.statSync(resolvedAgentResumeCtx.resumeSessionId).isFile();
+      } catch {
+        resumeFileExists = false;
+      }
+      if (!resumeFileExists) {
+        const staleSessionId = resolvedAgentResumeCtx.resumeSessionId;
+        clearAgentSession(db, run.conversationId, def.id);
+        resolvedAgentResumeCtx = resolveAgentResumeContext(db, {
+          conversationId: run.conversationId,
+          agentId: def.id,
+          currentModel: safeModel ?? null,
+          currentCwd: effectiveCwd,
+          currentAssistantMessageId: run.assistantMessageId ?? null,
+        });
+        design.runs.emit(run, 'diagnostic', {
+          type: 'agent_resume_auto_reseed',
+          agent_id: def.id,
+          reason: 'resume_failed',
+          previous_session_id: staleSessionId,
+          stale_session_cleared: true,
+        });
+      }
+    }
     // A same-run post-tool recovery resumes the exact session id captured from
     // the interrupted attempt. The ordinary cross-turn cursor guard cannot
     // admit it yet because the current assistant placeholder is still in
@@ -12780,6 +12813,17 @@ export async function startServer({
       antigravityModelLockRelease = await acquireAntigravityModelLock();
     }
 
+    // Prime's default session directory is shared by every process. Give each
+    // fresh Open Design child its own durable directory before spawn so file
+    // discovery is attributable by construction. Resume turns keep using the
+    // directory containing their already-attributed native session file.
+    const runPiRpcSessionDir =
+      def.piRpcResumeViaProcessArgs === true && def.piRpcSessionDir
+        ? agentResumePromptPolicy.resumeSessionId
+          ? path.dirname(agentResumePromptPolicy.resumeSessionId)
+          : path.join(def.piRpcSessionDir, 'open-design', run.id)
+        : def.piRpcSessionDir;
+
     let args;
     const observeClaudeNativeChildBehavior =
       def.id === 'claude' && strategyTaskAtStart !== null;
@@ -12827,6 +12871,7 @@ export async function startServer({
           promptFilePath: promptFile?.path,
           resumeSessionId: agentResumePromptPolicy.resumeSessionId,
           newSessionId: agentResumeCtx.newSessionId,
+          piRpcSessionDir: runPiRpcSessionDir,
           disablePlugins:
             def.id === 'codex'
             && run.externalPluginAnalytics?.externalPluginId
@@ -14536,7 +14581,7 @@ export async function startServer({
         prompt: composed,
         cwd: effectiveCwd,
         model: safeModel,
-        parentSession: agentResumePromptPolicy.resumeSessionId
+        parentSession: !def.piRpcResumeViaProcessArgs && agentResumePromptPolicy.resumeSessionId
           ? agentResumePromptPolicy.resumeSessionId
           : undefined,
         send: (channel, payload) => {
@@ -14570,6 +14615,23 @@ export async function startServer({
         },
         imagePaths: def.supportsImagePaths ? promptImagePaths : [],
         uploadRoot: odNextTaskInputSnapshot?.projectionDir ?? UPLOAD_DIR,
+        sessionDir: runPiRpcSessionDir,
+        ...(def.piRpcResumeViaProcessArgs === true && runPiRpcSessionDir
+          ? {
+              onSessionPath: (sessionPath: string) => {
+                persistCapturedAgentSession(db, {
+                  conversationId: run.conversationId,
+                  agentId: def.id,
+                  sessionId: sessionPath,
+                  stablePromptHash: currentStableHash,
+                  stablePromptSections: currentStableSectionsJson,
+                  model: safeModel ?? null,
+                  cwd: effectiveCwd,
+                  lastMessageId: run.assistantMessageId ?? null,
+                });
+              },
+            }
+          : {}),
       });
     } else if (def.streamFormat === 'acp-json-rpc') {
       const acpStageTimeoutMs = resolveAcpStageTimeoutMs(def.inactivityTimeoutMs);
@@ -15498,7 +15560,7 @@ export async function startServer({
       // another conversation in the same cwd cannot inherit this history.
       if (acpSession && typeof acpSession.getLastSessionPath === 'function') {
         const sessionPath = acpSession.getLastSessionPath();
-        if (status === 'succeeded' && def.streamFormat === 'pi-rpc') {
+        if (sessionPath && def.streamFormat === 'pi-rpc') {
           persistCapturedAgentSession(db, {
             conversationId: run.conversationId,
             agentId: def.id,

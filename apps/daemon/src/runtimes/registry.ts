@@ -23,6 +23,7 @@ import { aiderAgentDef } from './defs/aider.js';
 import { antigravityAgentDef } from './defs/antigravity.js';
 import { codebuddyAgentDef } from './defs/codebuddy.js';
 import { reasonixAgentDef } from './defs/reasonix.js';
+import { primeAgentDef } from './defs/prime-agent.js';
 import { mimoAgentDef } from './defs/mimo.js';
 import { atomcodeAgentDef } from './defs/atomcode.js';
 import { readLocalAgentProfileDefs as readLocalAgentProfileDefsFromFile } from './local-profiles.js';
@@ -62,6 +63,7 @@ export const SHIPPED_AGENT_DEFS: RuntimeAgentDef[] = [
   aiderAgentDef,
   antigravityAgentDef,
   reasonixAgentDef,
+  primeAgentDef,
   codebuddyAgentDef,
   mimoAgentDef,
   atomcodeAgentDef,

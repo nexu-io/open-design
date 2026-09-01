@@ -859,6 +859,100 @@ test('attachPiRpcSession sends prompt without images when imagePaths is empty', 
   assert.equal(parsed.images, undefined, 'prompt should not include images when none provided');
 });
 
+test('attachPiRpcSession retains a live session path when aborted', async () => {
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const sessionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-rpc-abort-'));
+  const child = createMockChild();
+  const captured: string[] = [];
+  try {
+    const session = attachPiRpcSession({
+      child: child as unknown as ChildProcess,
+      prompt: 'hello',
+      cwd: '/tmp',
+      model: null,
+      send: () => {},
+      sessionDir,
+      onSessionPath: (sessionPath) => captured.push(sessionPath),
+    });
+    const sessionPath = path.join(sessionDir, 'session.jsonl');
+    await fs.writeFile(sessionPath, '{"type":"session"}\n');
+    session.abort();
+    assert.equal(session.getLastSessionPath(), sessionPath);
+    assert.deepEqual(captured, [sessionPath]);
+  } finally {
+    await fs.rm(sessionDir, { recursive: true, force: true });
+  }
+});
+
+test('attachPiRpcSession never publishes a foreign shared-directory change before its isolated child file', async () => {
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const sharedDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-rpc-shared-'));
+  const childSessionDir = path.join(sharedDir, 'open-design', 'run-child');
+  const child = createMockChild();
+  const captured: string[] = [];
+  try {
+    await fs.mkdir(childSessionDir, { recursive: true });
+    attachPiRpcSession({
+      child: child as unknown as ChildProcess,
+      prompt: 'hello',
+      cwd: '/tmp',
+      model: null,
+      send: () => {},
+      sessionDir: childSessionDir,
+      onSessionPath: (sessionPath) => captured.push(sessionPath),
+    });
+
+    const foreignPath = path.join(sharedDir, 'foreign.jsonl');
+    await fs.writeFile(foreignPath, '{"type":"foreign"}\n');
+    feedStdoutLines(child, [{ type: 'response', id: 1, success: true }]);
+    assert.deepEqual(captured, [], 'a foreign file must never become a live candidate');
+
+    const ownPath = path.join(childSessionDir, 'own.jsonl');
+    await fs.writeFile(ownPath, '{"type":"session"}\n');
+    feedStdoutLines(child, [{ type: 'agent_start' }]);
+    assert.deepEqual(captured, [ownPath]);
+    assert.notEqual(captured[0], foreignPath);
+  } finally {
+    await fs.rm(sharedDir, { recursive: true, force: true });
+  }
+});
+
+test('attachPiRpcSession does not latch a foreign file live for ordinary Pi without a sessionDir override', async () => {
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-rpc-ordinary-'));
+  const sharedDir = path.join(cwd, '.pi', 'sessions');
+  const child = createMockChild();
+  try {
+    await fs.mkdir(sharedDir, { recursive: true });
+    const session = attachPiRpcSession({
+      child: child as unknown as ChildProcess,
+      prompt: 'hello',
+      cwd,
+      model: null,
+      send: () => {},
+    });
+
+    const foreignPath = path.join(sharedDir, 'foreign.jsonl');
+    await fs.writeFile(foreignPath, '{"type":"foreign"}\n');
+    feedStdoutLines(child, [{ type: 'response', id: 1, success: true }]);
+    assert.equal(session.getLastSessionPath(), null, 'foreign first-frame change must not latch');
+
+    const ownPath = path.join(sharedDir, 'own.jsonl');
+    await fs.writeFile(ownPath, '{"type":"session"}\n');
+    feedStdoutLines(child, [{ type: 'agent_start' }, { type: 'agent_end' }]);
+    assert.equal(
+      session.getLastSessionPath(),
+      null,
+      'terminal resolution must reject the now-ambiguous shared-directory changes',
+    );
+  } finally {
+    await fs.rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test('attachPiRpcSession skips unreadable image paths gracefully', () => {
   const events: TestSentEvent[] = [];
   const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });
