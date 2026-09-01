@@ -219,6 +219,7 @@ const packagedOnboardingExpression = `
 `;
 
 type DesktopStatus = {
+  executablePath?: string;
   pid?: number;
   state?: string;
   title?: string | null;
@@ -2606,18 +2607,14 @@ async function waitForUpdaterPopupMatching(
 }
 
 async function readDesktopIdentityMarker(): Promise<DesktopIdentityMarker> {
-  const markerPath = join(runtimeNamespaceRoot, 'runtime', 'desktop-root.json');
-  const value = JSON.parse(await readFile(markerPath, 'utf8')) as unknown;
-  if (
-    !isRecord(value) ||
-    typeof value.appPath !== 'string' ||
-    typeof value.executablePath !== 'string' ||
-    typeof value.pid !== 'number' ||
-    value.version !== 1
-  ) {
-    throw new Error(`invalid packaged desktop identity at ${markerPath}: ${formatUnknown(value)}`);
+  const status = (await runToolsPackJson<MacInspectResult>('inspect')).status;
+  if (typeof status?.executablePath !== 'string' || typeof status.pid !== 'number') {
+    throw new Error(`invalid packaged desktop sidecar status: ${formatUnknown(status)}`);
   }
-  return value as DesktopIdentityMarker;
+  const marker = '/Contents/MacOS/';
+  const markerIndex = status.executablePath.indexOf(marker);
+  const appPath = markerIndex < 0 ? status.executablePath : status.executablePath.slice(0, markerIndex);
+  return { appPath, executablePath: status.executablePath, pid: status.pid, version: 1 };
 }
 
 function assertPayloadDesktopIdentity(
@@ -2849,7 +2846,12 @@ async function fileSizeBytes(filePath: string): Promise<number> {
 }
 
 async function seedPackagedOnboardingComplete(): Promise<void> {
-  await seedPackagedAppConfig({ onboardingCompleted: true });
+  // Updater flows need the ordinary signed-out Home shell. Completion alone
+  // is insufficient when the daemon default selects the AMR cloud agent: the
+  // product correctly routes that signed-out identity back to Connect even
+  // though first-run onboarding was completed. Pin a local agent so this
+  // fixture models the actual post-onboarding state it claims to create.
+  await seedPackagedAppConfig({ agentId: 'codex', onboardingCompleted: true });
 }
 
 async function seedPackagedHomeFirstRunConfig(

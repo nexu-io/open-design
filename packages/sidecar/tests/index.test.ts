@@ -1,14 +1,12 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { lstat, mkdtemp, rm } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
+import { bootstrapSidecarRuntime, createSidecarLaunchEnv } from "../src/bootstrap.js";
+import { createJsonIpcServer, requestJsonIpc } from "../src/json-ipc.js";
+import { resolveAppIpcPath } from "../src/paths.js";
 import {
-  bootstrapSidecarRuntime,
-  createJsonIpcServer,
-  createSidecarLaunchEnv,
-  requestJsonIpc,
-  resolveAppIpcPath,
   resolveAppRuntimePath,
   resolveLogFilePath,
   resolveNamespace,
@@ -16,11 +14,10 @@ import {
   resolveRuntimeNamespaceRoot,
   resolveSidecarBase,
   resolveSourceRuntimeRoot,
-  type SidecarContractDescriptor,
-  type SidecarStampShape,
 } from "../src/index.js";
+import type { RuntimeLayoutStampShape, SidecarContractDescriptor } from "../src/types.js";
 
-type FakeStamp = SidecarStampShape & {
+type FakeStamp = RuntimeLayoutStampShape & {
   app: "api" | "ui";
   mode: "dev" | "prod";
   source: "tool" | "pack";
@@ -141,6 +138,45 @@ describe("generic sidecar path boundary", () => {
 });
 
 describe("generic sidecar JSON IPC", () => {
+  it("does not unlink a replacement socket when an old server finishes closing", async () => {
+    if (process.platform === "win32") return;
+    const root = await mkdtemp(join(tmpdir(), "open-design-sidecar-owned-ipc-"));
+    const socketPath = testIpcPath(root);
+    let releaseOld!: () => void;
+    let markEntered!: () => void;
+    const entered = new Promise<void>((resolve) => { markEntered = resolve; });
+    const holdOld = new Promise<void>((resolve) => { releaseOld = resolve; });
+    const old = await createJsonIpcServer({
+      socketPath,
+      handler: async () => {
+        markEntered();
+        await holdOld;
+        return { generation: "old" };
+      },
+    });
+    const oldRequest = requestJsonIpc(socketPath, { type: "status" });
+    await entered;
+    const closing = old.close();
+    await vi.waitFor(async () => {
+      await expect(lstat(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
+    });
+    const replacement = await createJsonIpcServer({
+      socketPath,
+      handler: async () => ({ generation: "replacement" }),
+    });
+
+    try {
+      releaseOld();
+      await oldRequest;
+      await closing;
+      await expect(requestJsonIpc(socketPath, { type: "status" })).resolves.toEqual({ generation: "replacement" });
+    } finally {
+      releaseOld();
+      await replacement.close();
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("traces low-level IPC events without changing request semantics", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-sidecar-ipc-"));
     const socketPath = testIpcPath(root);
@@ -242,7 +278,6 @@ describe("generic sidecar bootstrap", () => {
     ).toEqual({
       app: "api",
       base: resolve("/runtime/base"),
-      ipc: stamp.ipc,
       mode: "dev",
       namespace: "alpha",
       source: "tool",

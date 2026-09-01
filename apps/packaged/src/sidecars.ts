@@ -1,5 +1,5 @@
-import { spawn, type ChildProcess } from "node:child_process";
-import { access, appendFile, lstat, mkdir, open, rename, rm, type FileHandle } from "node:fs/promises";
+import type { ChildProcess } from "node:child_process";
+import { access, appendFile, mkdir, open, rename, type FileHandle } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { delimiter, dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -13,30 +13,23 @@ import {
   type AppKey,
   type DaemonStatusSnapshot,
   type RegisterWebUrlResult,
-  type ShutdownResult,
-  type SidecarStamp,
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
 import {
-  createSidecarLaunchEnv,
-  isWindowsNamedPipePath,
-  requestJsonIpc,
-  resolveAppIpcPath,
+  getSidecarStatus,
+  invokeSidecar,
+  spawnSidecar,
+  stopSidecar,
+  type SpawnedSidecar,
+  type SidecarStamp,
   type SidecarRuntimeContext,
 } from "@open-design/sidecar";
 import {
-  collectProcessTreePids,
-  createProcessStampArgs,
-  isProcessAlive,
-  listProcessSnapshots,
-  matchesStampedProcess,
   mergeProxyAwareEnv,
   resolveSystemProxyEnv,
-  stopProcesses,
-  waitForProcessExit,
   wellKnownUserToolchainBins,
-  type StopProcessesOptions,
 } from "@open-design/platform";
+import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-design/release";
 
 import type { PackagedWebOutputMode } from "./config.js";
 import type { PackagedNamespacePaths } from "./paths.js";
@@ -115,12 +108,13 @@ export type PackagedSidecarHandle = {
   web: WebStatusSnapshot;
 };
 
-export type ManagedSidecarChild = {
+type ManagedSidecarChild = {
   app: AppKey;
   child: ChildProcess;
-  ipcPath: string;
+  generation: SpawnedSidecar;
   logHandle: FileHandle;
   logPath: string;
+  stamp: SidecarStamp;
 };
 
 type PackagedDaemonManagedPathEnv = {
@@ -493,7 +487,7 @@ export function resolveDaemonStatusTimeoutMs(
  * so the user can read the actual failure reason.
  */
 export async function waitForStatus<T>(
-  ipcPath: string,
+  probe: { label: string; read(timeoutMs: number): Promise<T> },
   isReady: (status: T) => boolean,
   timeoutMs = DAEMON_STATUS_TIMEOUT_MS,
   watch: { child: { exitCode: number | null; pid?: number; signalCode: NodeJS.Signals | null; once: (event: 'exit', listener: (code: number | null, signal: NodeJS.Signals | null) => void) => void; off: (event: 'exit', listener: (code: number | null, signal: NodeJS.Signals | null) => void) => void }; logPath: string } | null = null,
@@ -523,33 +517,14 @@ export async function waitForStatus<T>(
         );
       }
       try {
-        const status = await requestJsonIpc<T>(
-          ipcPath,
-          { type: SIDECAR_MESSAGES.STATUS },
-          { timeoutMs: 800 },
-        );
-        const statusPid = typeof (status as { pid?: unknown }).pid === "number"
-          ? (status as { pid: number }).pid
-          : null;
-        if (watch?.child.pid != null) {
-          if (statusPid == null) {
-            lastError = new Error(`sidecar status did not include pid for spawned pid ${watch.child.pid}`);
-            await sleep(STATUS_POLL_INITIAL_MS);
-            continue;
-          }
-          if (statusPid !== watch.child.pid) {
-            lastError = new Error(`sidecar status pid ${statusPid} did not match spawned pid ${watch.child.pid}`);
-            await sleep(STATUS_POLL_INITIAL_MS);
-            continue;
-          }
-        }
+        const status = await probe.read(800);
         if (isReady(status)) return status;
       } catch (error) {
         lastError = error;
       }
       // Keep timeoutMs a hard-ish upper bound: never sleep past the deadline, so
       // the widened win32 budget can't be overshot by a full backoff interval on
-      // a slow/dead sidecar. The in-flight requestJsonIpc timeout is the only
+      // a slow/dead sidecar. The in-flight client request timeout is the only
       // residual overshoot; the while-condition re-checks the deadline next tick.
       const remaining = timeoutMs - (Date.now() - startedAt);
       if (remaining <= 0) break;
@@ -558,7 +533,7 @@ export async function waitForStatus<T>(
     }
 
     throw new Error(
-      `timed out waiting for sidecar status at ${ipcPath}${
+      `timed out waiting for ${probe.label} sidecar status${
         lastError instanceof Error ? ` (${lastError.message})` : ""
       }`,
     );
@@ -567,142 +542,28 @@ export async function waitForStatus<T>(
   }
 }
 
-type StopStampedWebSidecarOwnerDeps = {
-  listProcessSnapshots?: typeof listProcessSnapshots;
-  stopProcesses?: typeof stopProcesses;
-};
-
-type StampedWebSidecarRetirement = "absent" | "stopped" | "still-running" | "discovery-failed";
-
-async function stopStampedWebSidecarOwner(
-  ipcPath: string,
+export async function retireExistingSidecar(
+  stamp: SidecarStamp,
   logPath: string,
-  deps: StopStampedWebSidecarOwnerDeps = {},
-): Promise<StampedWebSidecarRetirement> {
-  const listSnapshots = deps.listProcessSnapshots ?? listProcessSnapshots;
-  const stop = deps.stopProcesses ?? stopProcesses;
-  let processes: Awaited<ReturnType<typeof listProcessSnapshots>>;
-  try {
-    processes = await listSnapshots();
-  } catch (error) {
-    await appendSidecarLifecycleLog(
-      logPath,
-      `[open-design packaged] failed to enumerate processes before web socket takeover ipc=${ipcPath} error=${error instanceof Error ? error.message : String(error)}`,
-    );
-    return "discovery-failed";
-  }
-  // listProcessSnapshots returns [] on enumeration failure, so an empty table
-  // is not proof that no stamped owner exists. Leave the live socket in place.
-  if (processes.length === 0) {
-    await appendSidecarLifecycleLog(
-      logPath,
-      `[open-design packaged] process discovery failed before web socket takeover ipc=${ipcPath}`,
-    );
-    return "discovery-failed";
-  }
-  const rootPids = processes
-    .filter((processInfo) =>
-      matchesStampedProcess(
-        processInfo,
-        { app: APP_KEYS.WEB, ipc: ipcPath },
-        OPEN_DESIGN_SIDECAR_CONTRACT,
-      ),
-    )
-    .map((processInfo) => processInfo.pid);
-  // Successful discovery, no stamped owner: leftover or unstamped hung socket.
-  // Unlink remains the original recovery. A live JsonIpcServer.close() race
-  // requires a stamped sidecar, which this helper would have found.
-  if (rootPids.length === 0) return "absent";
-
-  // Stop the whole tree before unlinking. A later SIGTERM on the old owner
-  // would run JsonIpcServer.close(), which unconditionally removes this
-  // pathname and can delete the replacement socket after rebind.
-  const pids = collectProcessTreePids(processes, rootPids);
-  await appendSidecarLifecycleLog(
-    logPath,
-    `[open-design packaged] stopping unresponsive stamped web sidecar before socket takeover ipc=${ipcPath} pids=${pids.join(",")}`,
-  );
-  try {
-    const result = await stop(pids, { killGraceMs: 1_500, termGraceMs: 1_500 });
-    if (result.remainingPids.length > 0) {
-      await appendSidecarLifecycleLog(
-        logPath,
-        `[open-design packaged] unresponsive stamped web sidecar still running after stop ipc=${ipcPath} remainingPids=${result.remainingPids.join(",")}`,
-      );
-      return "still-running";
-    }
-    return "stopped";
-  } catch (error) {
-    await appendSidecarLifecycleLog(
-      logPath,
-      `[open-design packaged] failed to stop unresponsive stamped web sidecar ipc=${ipcPath} error=${error instanceof Error ? error.message : String(error)}`,
-    );
-    return "still-running";
-  }
-}
-
-export async function retireExistingSidecarEndpoint(
-  ipcPath: string,
-  logPath: string,
-  app: AppKey,
-  deps: StopStampedWebSidecarOwnerDeps = {},
+  deps: {
+    stop?: typeof stopSidecar;
+  } = {},
 ): Promise<void> {
-  let status: { pid?: number | null } | null = null;
-  try {
-    status = await requestJsonIpc<{ pid?: number | null }>(
-      ipcPath,
-      { type: SIDECAR_MESSAGES.STATUS },
-      { timeoutMs: 350 },
-    );
-  } catch (error) {
-    // A web sidecar can survive an abruptly-terminated desktop while becoming
-    // too wedged to answer STATUS. A plain connect probe still sees its Unix
-    // socket as live, so the generic JSON-IPC stale-socket cleanup cannot
-    // distinguish it from a healthy endpoint and the replacement dies with
-    // EADDRINUSE. Web is stateless, so taking over this exact namespace socket
-    // is safe; daemon recovery remains conservative because starting a second
-    // daemon beside a hung first owner could put two writers on the same DB.
-    if (app !== APP_KEYS.WEB || isWindowsNamedPipePath(ipcPath)) return;
-    const retirement = await stopStampedWebSidecarOwner(ipcPath, logPath, deps);
-    if (retirement === "still-running" || retirement === "discovery-failed") return;
-    try {
-      const stat = await lstat(ipcPath);
-      if (!stat.isSocket()) return;
-      await rm(ipcPath, { force: true });
-      const message =
-        `[open-design packaged] unresponsive web sidecar endpoint removed before relaunch ipc=${ipcPath} error=${error instanceof Error ? error.message : String(error)}`;
-      await appendSidecarLifecycleLog(logPath, message);
-      // The child log handle is already open and may overwrite a pre-spawn
-      // append from offset zero. Also emit through the packaged desktop logger,
-      // whose append-only file is the durable startup-recovery record.
-      console.warn(message);
-    } catch {
-      // ENOENT means the endpoint disappeared during the probe. Other failures
-      // are left for the real bind to report without deleting an unknown path.
-    }
-    return;
-  }
-
-  const pid = typeof status.pid === "number" ? status.pid : null;
   await appendSidecarLifecycleLog(
     logPath,
-    `[open-design packaged] existing sidecar endpoint detected ipc=${ipcPath} pid=${pid ?? "unknown"}; requesting shutdown before relaunch`,
+    `[open-design packaged] retiring prior ${stamp.app} generation before launch`,
   );
   try {
-    await requestJsonIpc(ipcPath, { type: SIDECAR_MESSAGES.SHUTDOWN }, { timeoutMs: 800 });
+    const stopped = await (deps.stop ?? stopSidecar)(stamp, { termGraceMs: 2_500 });
+    if (stopped.remainingPids.length > 0) {
+      throw new Error(`generation remains: ${stopped.remainingPids.join(", ")}`);
+    }
   } catch (error) {
     await appendSidecarLifecycleLog(
       logPath,
-      `[open-design packaged] existing sidecar shutdown request failed ipc=${ipcPath} error=${error instanceof Error ? error.message : String(error)}`,
+      `[open-design packaged] existing sidecar shutdown failed app=${stamp.app} error=${error instanceof Error ? error.message : String(error)}`,
     );
-  }
-
-  if (pid != null && pid !== process.pid && isProcessAlive(pid)) {
-    const exited = await waitForProcessExit(pid, 2500);
-    await appendSidecarLifecycleLog(
-      logPath,
-      `[open-design packaged] existing sidecar endpoint ${exited ? "exited" : "still-running"} ipc=${ipcPath} pid=${pid}`,
-    );
+    throw error;
   }
 }
 
@@ -740,16 +601,9 @@ export function resolvePackagedChildBaseEnv(
       forwardedEnv[key] = value;
     }
   }
-  const mergedEnv = includeSystemProxyEnv
+  return includeSystemProxyEnv
     ? mergeProxyAwareEnv(process.platform, systemProxyEnv, forwardedEnv)
     : mergeProxyAwareEnv(process.platform, forwardedEnv);
-  return {
-    ...mergedEnv,
-    // Daemon and web already monitor this protocol-owned parent PID. Packaged
-    // launches must provide it too so a SIGKILL/crash of the Electron owner
-    // cannot leave sidecars holding namespace IPC endpoints indefinitely.
-    [SIDECAR_ENV.TOOLS_DEV_PARENT_PID]: String(process.pid),
-  };
 }
 
 function createPackagedDaemonManagedPathEnv(
@@ -872,8 +726,23 @@ function pickPackagedDesktopHandoffEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEn
   return selected;
 }
 
+export function packagedChildStamp(
+  app: AppKey,
+  channel: string,
+  runtime: SidecarRuntimeContext<SidecarStamp>,
+): SidecarStamp {
+  return {
+    app,
+    channel,
+    mode: runtime.mode,
+    namespace: runtime.namespace,
+    source: runtime.source,
+  };
+}
+
 async function spawnSidecarChild(options: {
   app: AppKey;
+  channel: string;
   electronNodeCommand: string | null;
   entryPath: string;
   env: NodeJS.ProcessEnv;
@@ -881,29 +750,15 @@ async function spawnSidecarChild(options: {
   paths: PackagedNamespacePaths;
   runtime: SidecarRuntimeContext<SidecarStamp>;
 }): Promise<ManagedSidecarChild> {
-  const ipcPath = resolveAppIpcPath({
-    app: options.app,
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-    namespace: options.runtime.namespace,
-  });
-  const stamp = {
-    app: options.app,
-    ipc: ipcPath,
-    mode: SIDECAR_MODES.RUNTIME,
-    namespace: options.runtime.namespace,
-    source: options.runtime.source,
-  } satisfies SidecarStamp;
+  const stamp = packagedChildStamp(options.app, options.channel, options.runtime);
   const logPath = logPathFor(options.paths, options.app);
   const logHandle = await openLog(logPath);
-  await retireExistingSidecarEndpoint(ipcPath, logPath, options.app);
+  await retireExistingSidecar(stamp, logPath);
   const usesElectronAsNode = options.nodeCommand == null;
   const command = options.nodeCommand
     ?? options.electronNodeCommand
     ?? await resolvePackagedElectronNodeCommand();
-  const childEnv = createSidecarLaunchEnv({
-    base: options.paths.runtimeRoot,
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-    extraEnv: {
+  const childEnv = {
       ...resolvePackagedChildBaseEnv(
         process.env,
         options.app === APP_KEYS.DAEMON,
@@ -914,25 +769,25 @@ async function spawnSidecarChild(options: {
       NODE_ENV: "production",
       PATH: resolvePackagedPathEnv(),
       ...(usesElectronAsNode ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
+  };
+  const generation = await spawnSidecar({
+    args: [options.entryPath],
+    command,
+    cwd: options.paths.runtimeRoot,
+    env: childEnv,
+    logFd: logHandle.fd,
+    resources: {
+      dataRoot: options.paths.dataRoot,
+      ownerPid: process.pid,
+      port: Number(options.env[
+        options.app === APP_KEYS.DAEMON ? SIDECAR_ENV.DAEMON_PORT : SIDECAR_ENV.WEB_PORT
+      ] ?? 0),
+      runtimeRoot: options.paths.runtimeRoot,
     },
     stamp,
   });
-  const child = spawn(
-    command,
-    [options.entryPath, ...createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT)],
-    createPackagedSidecarSpawnOptions({
-      env: childEnv,
-      logFd: logHandle.fd,
-      paths: options.paths,
-    }),
-  );
 
-  await new Promise<void>((resolveSpawn, rejectSpawn) => {
-    child.once("error", rejectSpawn);
-    child.once("spawn", resolveSpawn);
-  });
-
-  return { app: options.app, child, ipcPath, logHandle, logPath };
+  return { app: options.app, child: generation.process, generation, logHandle, logPath, stamp };
 }
 
 export function createPackagedSidecarSpawnOptions(input: {
@@ -953,66 +808,35 @@ export function createPackagedSidecarSpawnOptions(input: {
   };
 }
 
-export const MANAGED_CHILD_EXIT_GRACE_MS = 5_000;
-export const DEFERRED_MANAGED_CHILD_EXIT_GRACE_MS = 30_000;
-
-export type CloseManagedChildDeps = {
-  deferredExitGraceMs?: number;
-  exitGraceMs?: number;
-  requestIpc?: typeof requestJsonIpc;
-  stopOptions?: StopProcessesOptions;
-  stopProcesses?: typeof stopProcesses;
-  waitForExit?: typeof waitForProcessExit;
-};
-
-export function resolveManagedChildExitGraceMs(
-  shutdown: ShutdownResult | null | undefined,
-): number {
-  return shutdown?.deferred === true
-    ? DEFERRED_MANAGED_CHILD_EXIT_GRACE_MS
-    : MANAGED_CHILD_EXIT_GRACE_MS;
-}
-
-export async function closeManagedChild(
-  child: ManagedSidecarChild,
-  deps: CloseManagedChildDeps = {},
-): Promise<void> {
+export async function closeManagedChild(child: ManagedSidecarChild): Promise<void> {
   const appendLifecycleLog = async (message: string): Promise<void> => appendSidecarLifecycleLog(child.logPath, message);
-  await appendLifecycleLog(`[open-design packaged] shutdown requested app=${child.app} pid=${child.child.pid ?? "unknown"}`);
-  let shutdown: ShutdownResult | undefined;
   try {
-    shutdown = await (deps.requestIpc ?? requestJsonIpc)<ShutdownResult>(
-      child.ipcPath,
-      { type: SIDECAR_MESSAGES.SHUTDOWN },
-      { timeoutMs: 1200 },
-    );
-  } catch {
-    // Fall through to process cleanup.
+    await appendLifecycleLog(`[open-design packaged] shutdown requested app=${child.app} pid=${child.child.pid ?? "unknown"}`);
+    // A daemon may briefly hold shutdown while committing a desktop handoff.
+    // The sidecar generation boundary still owns escalation; packaged only
+    // supplies a bounded grace appropriate for that lifecycle operation.
+    const stop = await child.generation.stop({ termGraceMs: child.app === APP_KEYS.DAEMON ? 30_000 : 5_000 });
+    if (stop.forcedPids.length > 0) {
+      await appendLifecycleLog(`[open-design packaged] graceful shutdown timed out app=${child.app} pid=${child.child.pid ?? "unknown"}; forced=${stop.forcedPids.join(",")}`);
+    }
+    if (stop.remainingPids.length > 0) {
+      throw new Error(`failed to stop packaged ${child.app} sidecar processes: ${stop.remainingPids.join(", ")}`);
+    }
+    await appendLifecycleLog(`[open-design packaged] exited app=${child.app} pid=${child.child.pid ?? "unknown"} code=${child.child.exitCode ?? "unknown"} signal=${child.child.signalCode ?? "none"}`);
+  } finally {
+    await child.logHandle.close().catch(() => undefined);
   }
-
-  const exitGraceMs = shutdown?.deferred === true
-    ? (deps.deferredExitGraceMs ?? resolveManagedChildExitGraceMs(shutdown))
-    : (deps.exitGraceMs ?? resolveManagedChildExitGraceMs(shutdown));
-
-  if (!(await (deps.waitForExit ?? waitForProcessExit)(child.child.pid, exitGraceMs))) {
-    await appendLifecycleLog(`[open-design packaged] shutdown timeout app=${child.app} pid=${child.child.pid ?? "unknown"}; forcing stop`);
-    await (deps.stopProcesses ?? stopProcesses)([child.child.pid], deps.stopOptions);
-  }
-
-  await appendLifecycleLog(`[open-design packaged] exited app=${child.app} pid=${child.child.pid ?? "unknown"} code=${child.child.exitCode ?? "unknown"} signal=${child.child.signalCode ?? "none"}`);
-  await child.logHandle.close().catch(() => undefined);
 }
 
 export async function registerPackagedWebUrl(
-  daemonIpcPath: string,
+  daemonStamp: SidecarStamp,
   webUrl: string,
+  invoke: typeof invokeSidecar = invokeSidecar,
 ): Promise<void> {
-  const result = await requestJsonIpc<RegisterWebUrlResult>(
-    daemonIpcPath,
-    {
-      input: { url: webUrl },
-      type: SIDECAR_MESSAGES.REGISTER_WEB_URL,
-    },
+  const result = await invoke<RegisterWebUrlResult>(
+    daemonStamp,
+    SIDECAR_MESSAGES.REGISTER_WEB_URL,
+    { url: webUrl },
     { timeoutMs: 1_200 },
   );
   if (result.accepted !== true) {
@@ -1061,6 +885,9 @@ export async function startPackagedSidecars(
     onPhase?: (phase: "daemon-spawning" | "daemon-ready" | "web-spawning" | "web-ready") => void;
   },
 ): Promise<PackagedSidecarHandle> {
+  const channel = releaseChannelFromVersion(options.appVersion)
+    ?? releaseChannelFromNamespace(runtime.namespace, "default")
+    ?? "stable";
   await mkdir(paths.namespaceRoot, { recursive: true });
   await mkdir(paths.cacheRoot, { recursive: true });
   await mkdir(paths.dataRoot, { recursive: true });
@@ -1101,6 +928,7 @@ export async function startPackagedSidecars(
     options.onPhase?.("daemon-spawning");
     const daemon = await spawnSidecarChild({
       app: APP_KEYS.DAEMON,
+      channel,
       entryPath: daemonSidecarEntry,
       env: buildPackagedDaemonSpawnEnv(paths, {
         appVersion: options.appVersion,
@@ -1136,7 +964,13 @@ export async function startPackagedSidecars(
       { log: prewarmLog },
     );
     const daemonStatus = await waitForStatus<DaemonStatusSnapshot>(
-      daemon.ipcPath,
+      {
+        label: APP_KEYS.DAEMON,
+        read: async (timeoutMs) => await getSidecarStatus<DaemonStatusSnapshot>(daemon.stamp, {
+          generationPid: daemon.generation.process.pid,
+          timeoutMs,
+        }),
+      },
       (status) => status.url != null,
       resolveDaemonStatusTimeoutMs(),
       // Race the IPC polling against the daemon child's exit. Without
@@ -1162,9 +996,10 @@ export async function startPackagedSidecars(
       closeChild: closeManagedChild,
       hasExited: (web) => web.child.exitCode !== null || web.child.signalCode !== null,
       onExit: (web, listener) => web.child.once("exit", listener),
-      registerUrl: async (url) => await registerPackagedWebUrl(daemon.ipcPath, url),
+      registerUrl: async (url) => await registerPackagedWebUrl(daemon.stamp, url),
       spawn: async () => await spawnSidecarChild({
         app: APP_KEYS.WEB,
+        channel,
         entryPath: webSidecarEntry,
         env: {
           [SIDECAR_ENV.DAEMON_PORT]: daemonPort,
@@ -1179,7 +1014,13 @@ export async function startPackagedSidecars(
         runtime,
       }),
       waitUntilReady: async (web) => await waitForStatus<WebStatusSnapshot>(
-        web.ipcPath,
+        {
+          label: APP_KEYS.WEB,
+          read: async (timeoutMs) => await getSidecarStatus<WebStatusSnapshot>(web.stamp, {
+            generationPid: web.generation.process.pid,
+            timeoutMs,
+          }),
+        },
         (candidate) => candidate.url != null,
         // Web has no legacy-migration path, so it uses the plain platform
         // baseline (still widened on win32, where AV scanning can also slow the
@@ -1202,11 +1043,19 @@ export async function startPackagedSidecars(
       web: webStatus,
       currentWebUrl: supervisor.currentUrl,
       async close() {
-        await supervisor.close();
+        const closeErrors: unknown[] = [];
+        await supervisor.close().catch((error: unknown) => {
+          closeErrors.push(error);
+          console.error("failed to close packaged web sidecar", error);
+        });
         for (const child of [...children].reverse()) {
           await closeManagedChild(child).catch((error: unknown) => {
+            closeErrors.push(error);
             console.error(`failed to close packaged ${child.app} sidecar`, error);
           });
+        }
+        if (closeErrors.length > 0) {
+          throw new AggregateError(closeErrors, "failed to close packaged sidecars");
         }
       },
     };

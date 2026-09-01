@@ -9,7 +9,7 @@ import {
   normalizeDaemonSidecarMessage,
   normalizeDesktopSidecarMessage,
   normalizeNamespace,
-  normalizeSidecarStamp,
+  normalizeSidecarRuntimeLayout,
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_MESSAGES,
   SIDECAR_SOURCES,
@@ -58,16 +58,16 @@ describe("open-design sidecar contract", () => {
   });
 
   it("accepts exactly app, mode, namespace, ipc, and source", () => {
-    expect(normalizeSidecarStamp(validStamp)).toEqual(validStamp);
+    expect(normalizeSidecarRuntimeLayout(validStamp)).toEqual(validStamp);
   });
 
   it("rejects legacy or extra stamp fields", () => {
-    expect(() => normalizeSidecarStamp({ ...validStamp, runtimeToken: "legacy" })).toThrow();
-    expect(() => normalizeSidecarStamp({ ...validStamp, role: "web-sidecar" })).toThrow();
+    expect(() => normalizeSidecarRuntimeLayout({ ...validStamp, runtimeToken: "legacy" })).toThrow();
+    expect(() => normalizeSidecarRuntimeLayout({ ...validStamp, role: "web-sidecar" })).toThrow();
   });
 
   it("rejects non-contract sidecar sources", () => {
-    expect(() => normalizeSidecarStamp({ ...validStamp, source: "custom-script" })).toThrow();
+    expect(() => normalizeSidecarRuntimeLayout({ ...validStamp, source: "custom-script" })).toThrow();
   });
 
   it("validates daemon IPC messages", () => {

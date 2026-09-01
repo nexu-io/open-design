@@ -17,7 +17,7 @@ import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_MODES,
-  type SidecarStamp,
+  type LegacySidecarRuntimeLayout,
 } from '@open-design/sidecar-proto';
 import {
   resolveLogFilePath,
@@ -85,7 +85,7 @@ async function resolveDiagnosticsAgentEnvironment(
 
 export interface DiagnosticsHandlerOptions {
   /** Sidecar runtime context, present when daemon is launched via tools-dev or packaged sidecar. */
-  runtime: SidecarRuntimeContext<SidecarStamp> | null;
+  runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout> | null;
   /** Project root used to derive crash-report match strings. */
   projectRoot: string;
   /** Directory containing per-run event logs at <runsDir>/<runId>/events.jsonl. */
@@ -137,7 +137,7 @@ async function shouldListOptionalSource(path: string): Promise<boolean> {
 }
 
 async function buildSidecarLogSources(
-  runtime: SidecarRuntimeContext<SidecarStamp> | null,
+  runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout> | null,
 ): Promise<LogSource[]> {
   if (runtime == null) return [];
   // In packaged builds `runtime.base` is `<namespaceRoot>/runtime`, so the log
@@ -209,7 +209,7 @@ async function buildSidecarLogSources(
 // The desktop relocates Electron's crashDumps to `<logs/desktop>/crashes` (see
 // apps/desktop/src/main/crash-diagnostics.ts) so the minidumps live inside the
 // same log tree this export already collects. Derive that dir the same way.
-function resolveDesktopCrashDumpsDir(runtime: SidecarRuntimeContext<SidecarStamp> | null): string | null {
+function resolveDesktopCrashDumpsDir(runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout> | null): string | null {
   if (runtime == null) return null;
   const namespaceRoot = resolveRuntimeNamespaceRoot({
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,

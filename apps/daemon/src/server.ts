@@ -1708,6 +1708,7 @@ export function createAgentRuntimeEnv(
   daemonUrl: string,
   toolTokenGrant: { token?: string } | null = null,
   nodeBin: string = OD_NODE_BIN,
+  inheritedEnvironment: (baseEnv?: NodeJS.ProcessEnv) => Record<string, string> = () => ({}),
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = applySandboxRuntimeEnv(
     {
@@ -1718,6 +1719,7 @@ export function createAgentRuntimeEnv(
     },
     SANDBOX_RUNTIME,
   );
+  Object.assign(env, inheritedEnvironment(baseEnv));
   // The daemon API token authorizes the whole non-loopback API surface. Agent
   // children receive only their run-scoped tool capability, never that broad
   // credential inherited from the daemon process (including Windows casing).
@@ -1735,10 +1737,6 @@ export function createAgentRuntimeEnv(
     if (!/\.exe/i.test(pathextValue)) {
       env[pathextKey] = '.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC';
     }
-  }
-  const sidecarIpcPath = baseEnv[SIDECAR_ENV.IPC_PATH];
-  if (typeof sidecarIpcPath === 'string' && sidecarIpcPath.length > 0) {
-    env[SIDECAR_ENV.IPC_PATH] = sidecarIpcPath;
   }
   if (SANDBOX_RUNTIME.enabled) {
     const noProxy = mergeNoProxyWithLoopbackDefaults(env.NO_PROXY ?? env.no_proxy);
@@ -2833,6 +2831,8 @@ export interface StartServerOptions {
   returnServer?: boolean;
   runtime?: DaemonRuntimeContext | null;
   staticDir?: string;
+  /** Opaque child-process environment supplied by the runtime integration seam. */
+  inheritedEnvironment?: (baseEnv?: NodeJS.ProcessEnv) => Record<string, string>;
   /** Daemon-owned host capability facts. HTTP/model output cannot populate it. */
   odNextExecutionPreflightResolver?: OdNextExecutionPreflightResolver | null;
   /**
@@ -2869,6 +2869,7 @@ export async function startServer({
   desktopArtifactExporter = null,
   runtime = null,
   staticDir = STATIC_DIR,
+  inheritedEnvironment = () => ({}),
   odNextExecutionPreflightResolver = null,
   odNextComplexProductionResolver = null,
 }: StartServerOptions = {}) {
@@ -7469,6 +7470,7 @@ export async function startServer({
 
   const telemetry = registerTelemetryRoutes(app, {
     dataDir: RUNTIME_DATA_DIR,
+    namespace: runtime?.namespace,
     readAppConfig,
     writeAppConfig,
   });
@@ -8150,7 +8152,7 @@ export async function startServer({
   registerMcpRoutes(app, {
     http: httpDeps,
     paths: pathDeps,
-    mcp: { pendingAuth: mcpPendingAuth, daemonUrlRef },
+    mcp: { pendingAuth: mcpPendingAuth, daemonUrlRef, inheritedEnvironment },
   });
   registerXaiRoutes(app, {
     http: httpDeps,
@@ -12505,7 +12507,7 @@ export async function startServer({
             spawnEnvForAgent(
               def.id,
               {
-                ...createAgentRuntimeEnv(process.env, daemonUrl, toolTokenGrant),
+                ...createAgentRuntimeEnv(process.env, daemonUrl, toolTokenGrant, OD_NODE_BIN, inheritedEnvironment),
                 ...(def.env || {}),
               },
               configuredAgentEnv,
@@ -13346,7 +13348,7 @@ export async function startServer({
     const agentSpawnEnv = spawnEnvForAgent(
       def.id,
       {
-        ...createAgentRuntimeEnv(process.env, daemonUrl, toolTokenGrant),
+        ...createAgentRuntimeEnv(process.env, daemonUrl, toolTokenGrant, OD_NODE_BIN, inheritedEnvironment),
         ...(def.env || {}),
         ...browserUseRuntimeEnv,
       },

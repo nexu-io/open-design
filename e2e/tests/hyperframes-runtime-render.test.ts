@@ -7,71 +7,51 @@ import { fileURLToPath } from 'node:url';
 
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import ffprobeInstaller from '@ffprobe-installer/ffprobe';
-import { PNG } from 'pngjs';
 import {
-  createJsonIpcServer,
-  resolveAppIpcPath,
+  convergeSidecarLaunch,
+  stopSidecar,
 } from '@open-design/sidecar';
 import {
   APP_KEYS,
-  OPEN_DESIGN_SIDECAR_CONTRACT,
-  SIDECAR_MESSAGES,
-  normalizeDesktopSidecarMessage,
-  type DesktopRenderFramesInput,
+  SIDECAR_MODES,
+  SIDECAR_SOURCES,
 } from '@open-design/sidecar-proto';
 import { describe, expect, test } from 'vitest';
 
 import { createSmokeSuite } from '@/vitest/suite';
 
 const odBin = fileURLToPath(new URL('../../apps/daemon/bin/od.mjs', import.meta.url));
+const desktopFixture = fileURLToPath(new URL('../lib/desktop/hyperframes-sidecar.ts', import.meta.url));
 
 describe('HyperFrames bundled runtime end-to-end', () => {
   test('[P0] real od media generate renders MP4 through the daemon-owned HyperFrames runtime', async () => {
     const suite = await createSmokeSuite('hyperframes-runtime-render');
-    const desktopIpc = resolveAppIpcPath({
+    const desktopStamp = {
       app: APP_KEYS.DESKTOP,
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      channel: 'local',
+      mode: SIDECAR_MODES.DEV,
       namespace: suite.namespace,
-    });
-    let receivedFrameDocument = '';
-    const framePng = solidPng(320, 180);
-    const desktop = await createJsonIpcServer({
-      socketPath: desktopIpc,
-      handler: async (message) => {
-        const request = normalizeDesktopSidecarMessage(message);
-        if (request.type === SIDECAR_MESSAGES.STATUS) {
-          return {
-            capabilities: { frameRenderer: true },
-            pid: process.pid,
-            state: 'running',
-            updatedAt: new Date().toISOString(),
-            url: null,
-            windowVisible: false,
-          };
-        }
-        if (request.type === SIDECAR_MESSAGES.RENDER_FRAMES) {
-          const input = request.input as DesktopRenderFramesInput;
-          receivedFrameDocument = input.html;
-          await mkdir(input.outputDir, { recursive: true });
-          for (let frame = 0; frame < 3; frame += 1) {
-            await writeFile(
-              join(input.outputDir, `frame-${String(frame).padStart(8, '0')}.png`),
-              framePng,
-            );
-          }
-          return {
-            duration: 0.1,
-            fps: 30,
-            frameCount: 3,
-            framePattern: join(input.outputDir, 'frame-%08d.png'),
-            height: 180,
-            ok: true,
-            width: 320,
-          };
-        }
-        throw new Error(`unexpected desktop request: ${request.type}`);
+      source: SIDECAR_SOURCES.TOOLS_DEV,
+    };
+    const capturedFrameDocument = join(suite.dataDir, 'captured-frame-document.html');
+    await convergeSidecarLaunch({
+      args: ['--import', 'tsx', desktopFixture],
+      command: process.execPath,
+      env: {
+        ...process.env,
+        OD_TEST_CAPTURED_FRAME_DOCUMENT: capturedFrameDocument,
+        OD_TEST_SIDECAR_DATA_ROOT: suite.dataDir,
+        OD_TEST_SIDECAR_RUNTIME_ROOT: join(suite.dataDir, 'runtime'),
       },
-    });
+      logFd: null,
+      resources: {
+        dataRoot: suite.dataDir,
+        ownerPid: null,
+        port: 0,
+        runtimeRoot: join(suite.dataDir, 'runtime'),
+      },
+      stamp: desktopStamp,
+    }, { stabilityMs: 100, timeoutMs: 10_000 });
 
     try {
       await suite.with.env(
@@ -148,26 +128,15 @@ window.__timelines.main={duration:function(){return .1},seek:function(){}};
             ]);
             expect(outputStat.size).toBe(payload.file?.size);
             expect(bytes.subarray(4, 8).toString('ascii')).toBe('ftyp');
-            expect(receivedFrameDocument).toContain('window.__odFrameRenderer');
+            expect(await readFile(capturedFrameDocument, 'utf8')).toContain('window.__odFrameRenderer');
           });
         },
       );
     } finally {
-      await desktop.close();
+      await stopSidecar(desktopStamp);
     }
   }, 180_000);
 });
-
-function solidPng(width: number, height: number): Buffer {
-  const image = new PNG({ width, height });
-  for (let offset = 0; offset < image.data.length; offset += 4) {
-    image.data[offset] = 16;
-    image.data[offset + 1] = 37;
-    image.data[offset + 2] = 63;
-    image.data[offset + 3] = 255;
-  }
-  return PNG.sync.write(image);
-}
 
 async function runOd(
   daemonUrl: string,

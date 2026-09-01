@@ -158,7 +158,7 @@ For any change to `packages/contracts`, `packages/sidecar-proto`, persisted SQLi
 - The contract/protocol/schema change lands **before** consumers wire against it (or in the same PR with both sides updated).
 - Changes are backwards-compatible, OR there is an explicit migration plan: schema migration script, backfill strategy, or one-release window of compatible reads.
 - `packages/contracts` stays free of Next.js, Express, Node filesystem/process APIs, browser APIs, SQLite, daemon internals, and sidecar control-plane dependencies.
-- Sidecar process stamps still have exactly five fields: `app`, `mode`, `namespace`, `ipc`, `source`.
+- Sidecar process stamps still have exactly five fields: `channel`, `namespace`, `source`, `mode`, `app`.
 - Both producers and consumers have type/test coverage of the new shape.
 
 **Block when:**
@@ -296,7 +296,7 @@ Review in this order. Each priority lists the concrete checks for it.
 
 - No committed secrets, API keys, or `media-config.json` content. No widening of credential storage scope without explicit need.
 - Logs do not leak credentials, tokens, or full prompt payloads.
-- Keep control-plane runtime state separate from daemon-owned data. Sidecar and `tools-dev` runtime/log/IPC state follows the namespace-scoped `.tmp/<source>/<namespace>/...` contract (with `tools-dev` logs under `.tmp/tools-dev/<namespace>/...`) and POSIX IPC sockets under `/tmp/open-design/ipc/<namespace>/<app>.sock`.
+- Keep control-plane runtime state separate from daemon-owned data. Sidecar and `tools-dev` runtime/log state follows the namespace-scoped `.tmp/<source>/<namespace>/...` contract (with `tools-dev` logs under `.tmp/tools-dev/<namespace>/...`). Private IPC endpoints are derived by `@open-design/sidecar` from the five-field stamp and current OS principal; POSIX endpoints use a principal-scoped, hashed directory under the OS temporary directory, and callers must treat the concrete path as opaque.
 - Daemon-owned data must derive from the daemon's already-resolved `RUNTIME_DATA_DIR`; subprocesses inherit that truth through `OD_DATA_DIR`. Review the root **Daemon data directory contract** instead of documenting or recomputing another concrete daemon data path.
 - For daemon, desktop, sidecar, path, log, or namespace changes, validate the relevant side of that split per `AGENTS.md`: resolved daemon data-root propagation for daemon data; concurrent namespaces, log-path inspection, and desktop `inspect eval`/`inspect screenshot` for control-plane state.
 
