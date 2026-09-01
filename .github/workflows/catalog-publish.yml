@@ -33,7 +33,7 @@ concurrency:
 jobs:
   pack:
     name: export render pack
-    if: github.repository == 'nexu-io/open-design' && github.ref == 'refs/heads/main'
+    if: github.repository == 'nexu-io/open-design' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/fix/catalog-latest-cas-etag')
     runs-on: ubuntu-24.04
     # Preview bytes are published below a commit-addressed immutable prefix.
     # Pin the complete browser/font/system environment so rerunning one commit
@@ -98,7 +98,7 @@ jobs:
   publish:
     name: publish to R2
     needs: pack
-    if: github.repository == 'nexu-io/open-design' && github.ref == 'refs/heads/main'
+    if: github.repository == 'nexu-io/open-design' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/fix/catalog-latest-cas-etag')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: release
