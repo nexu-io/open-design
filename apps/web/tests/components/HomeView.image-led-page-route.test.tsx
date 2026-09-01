@@ -36,7 +36,7 @@ import { setHomeHeroPrompt } from '../helpers/home-hero-lexical';
 // jsdom rewrites `import.meta.url` to an http scheme, so resolve from the
 // package cwd (`apps/web`) the way the repo-root path actually sits.
 const SKILL_MD = readFileSync(
-  resolve(process.cwd(), '../../skills/image-led-page/SKILL.md'),
+  resolve(process.cwd(), '../../design-templates/image-led-page/SKILL.md'),
   'utf8',
 );
 
