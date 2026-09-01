@@ -241,13 +241,15 @@ export async function validateRunDeliverable(
         const candidatePath = filePath(candidate);
         const manifest = candidate.artifactManifest!;
         // Map the manifest's ArtifactKind namespace to ProjectFileKind so the
-        // result field carries the user-meaningful value.
-        const mk = manifest.kind as string | undefined;
+        // result field carries the user-meaningful value. ArtifactKind in
+        // @open-design/contracts only enumerates the eight accepted persisted
+        // kinds (html, deck, react-component, markdown-document, svg, diagram,
+        // code-snippet, mini-app, design-system); the only one that maps to a
+        // different ProjectFileKind is markdown-document → document. Other
+        // manifests (code-snippet, html, ...) report the file-extension kind
+        // directly without rewriting.
         const candidateArtifactKind: ProjectFileKind =
-          mk === 'markdown-document' ? 'document'
-          : mk === 'pptx-presentation' ? 'presentation'
-          : mk === 'xlsx-document' ? 'spreadsheet'
-          : candidate.kind;
+          manifest.kind === 'markdown-document' ? 'document' : candidate.kind;
 
         try {
           const target = path.resolve(projectRoot, candidatePath);
