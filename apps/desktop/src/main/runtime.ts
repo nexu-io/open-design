@@ -1507,7 +1507,9 @@ export function createSplashWindow(): SplashWindowHandle {
     frame: false,
     height: 900,
     resizable: false,
-    show: true,
+    // On Windows, the frameless GPU-composited path can ignore the initial
+    // `show: true` after a DWM update. Reveal explicitly after first paint.
+    show: false,
     title: "Open Design",
     width: 1280,
     webPreferences: {
@@ -1520,6 +1522,19 @@ export function createSplashWindow(): SplashWindowHandle {
   // page loads is deferred and replayed rather than dropped (see
   // `registerSplashStageTracking`).
   registerSplashStageTracking(splash);
+
+  // Electron's initial `show` path can leave a frameless splash hidden on
+  // affected Windows/DWM combinations. Waiting for paint gives the window an
+  // explicit visibility transition; did-finish-load covers a missed or delayed
+  // ready-to-show event without presenting the splash twice.
+  let splashRevealed = false;
+  const revealSplash = () => {
+    if (splashRevealed || splash.isDestroyed()) return;
+    splashRevealed = true;
+    splash.show();
+  };
+  splash.once("ready-to-show", revealSplash);
+  splash.webContents.once("did-finish-load", revealSplash);
   void splash.loadURL(createPendingHtml());
   return { startedAt, window: splash };
 }
