@@ -1,10 +1,15 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { StrictMode } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { RecentProjectsStrip } from '../../src/components/RecentProjectsStrip';
+import {
+  deckPreviewSrcDoc,
+  RecentProjectsStrip,
+} from '../../src/components/RecentProjectsStrip';
 import {
   fetchProjectFiles,
   fetchProjectFileText,
@@ -94,6 +99,10 @@ vi.mock('../../src/providers/registry', () => ({
 
 afterEach(() => {
   cleanup();
+  Object.assign(recentWorkspaceState.context, {
+    displayName: undefined,
+    avatarUrl: undefined,
+  });
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.mocked(invalidateProjectFilesCache).mockClear();
@@ -208,6 +217,73 @@ class MockWorkspaceEventSource {
 }
 
 describe('RecentProjectsStrip', () => {
+  it('turns a script-activated deck into a deterministic visible first-page cover', () => {
+    const cover = deckPreviewSrcDoc(`<!doctype html>
+      <html><head><style>
+        .deck-shell { position: fixed; transform: translateX(1400px) }
+        .deck-stage { position: relative; width: 1920px; height: 1080px; transform: scale(.6) }
+        .slide { display: none; opacity: 0; visibility: hidden }
+        .slide.active,
+        .slide.is-active { display: flex; opacity: 1; visibility: visible }
+        [data-anim] { opacity: 0; transform: translateY(24px) }
+      </style></head><body>
+        <div class="deck-shell">
+          <div class="deck-stage">
+            <section class="slide orange"><h1 data-anim="fade-up">Launch</h1></section>
+            <section class="slide dark"><h1>Details</h1></section>
+          </div>
+        </div>
+        <script>document.querySelector('.slide').classList.add('is-active')</script>
+      </body></html>`);
+
+    expect(cover).not.toContain('<script>');
+    expect(cover).toMatch(
+      /<section class="slide orange active is-active" data-od-cover-slide(?:="")?>/,
+    );
+    expect(cover).toContain('[data-od-cover-slide] > *');
+    expect(cover).toMatch(
+      /\.deck-shell,\s*\.deck-stage,\s*:where\(body \*\):has\(> \[data-od-cover-slide\]\)\s*\{[^}]*display: block !important/s,
+    );
+    expect(cover).toContain('transform-origin: 0 0 !important');
+    expect(cover).toContain('[data-od-cover-slide] [data-anim]');
+    expect(cover).toContain('opacity: 1 !important');
+    expect(cover).toContain('.slide:not([data-od-cover-slide])');
+  });
+
+  it('marks the first real slide when a style comment contains a slide tag example', () => {
+    const cover = deckPreviewSrcDoc(`<!doctype html>
+      <html><head><style>
+        /* Put content inside <section class="slide"> bodies. */
+        .slide { display: none }
+        .slide.active { display: grid }
+      </style></head><body>
+        <div class="deck-shell"><div class="deck-stage">
+          <section class="slide s-title active"><h1>Real cover</h1></section>
+          <section class="slide s-details"><h2>Details</h2></section>
+        </div></div>
+      </body></html>`);
+
+    expect(cover).toContain('inside <section class="slide"> bodies');
+    expect(cover).toMatch(
+      /<section class="slide s-title active is-active" data-od-cover-slide(?:="")?>/,
+    );
+    expect(cover).not.toContain(
+      'inside <section class="slide active is-active" data-od-cover-slide> bodies',
+    );
+  });
+
+  it('lets a 16:9 project cover determine its grid-card height without a taller minimum', () => {
+    const css = readFileSync(
+      join(process.cwd(), 'src/styles/home/recent-projects.css'),
+      'utf8',
+    );
+    const gridThumb = css.match(
+      /\.recent-projects__row--grid \.recent-projects__card-thumb\s*\{([^}]*)\}/u,
+    )?.[1];
+    expect(gridThumb).toContain('min-height: 0');
+    expect(gridThumb).not.toContain('min-height: 108px');
+  });
+
   it('scans a shared project cover once after the same card materializes', async () => {
     stubCoverProbe();
     vi.mocked(fetchProjectFiles).mockResolvedValue([{
@@ -268,6 +344,25 @@ describe('RecentProjectsStrip', () => {
         }),
       }),
     );
+  });
+
+  it('renders the signed-in creator name and profile image for a self-owned project', async () => {
+    Object.assign(recentWorkspaceState.context, {
+      displayName: 'Elian Zhang',
+      avatarUrl: 'https://example.com/elian.png',
+    });
+
+    const { container } = render(
+      <RecentProjectsStrip
+        projects={[project({ id: 'project-owned', name: 'Owned project' })]}
+        onOpen={() => {}}
+      />,
+    );
+
+    await screen.findByText('Created by Elian Zhang');
+    expect(screen.queryByText('Created by Me')).toBeNull();
+    const avatar = container.querySelector<HTMLImageElement>('.recent-projects__card-owner img');
+    expect(avatar?.src).toBe('https://example.com/elian.png');
   });
 
   it('refreshes only the card named by team-project-content-ready', async () => {
@@ -1320,5 +1415,37 @@ describe('recvqbh189zBY6 — single-card delete confirmation', () => {
       expect(onDelete).toHaveBeenCalledWith('project-1');
     });
     expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('submits at most one delete while the request is pending', async () => {
+    let resolveDelete!: (value: true) => void;
+    const pendingDelete = new Promise<true>((resolve) => {
+      resolveDelete = resolve;
+    });
+    const onDelete = vi.fn(() => pendingDelete);
+    render(
+      <RecentProjectsStrip
+        projects={[project({ id: 'project-1', name: 'My project' })]}
+        onOpen={() => {}}
+        onDelete={onDelete}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+
+    const dialog = await screen.findByRole('alertdialog');
+    const deleteButton = within(dialog).getByRole('button', { name: 'Delete' });
+    fireEvent.click(deleteButton);
+    fireEvent.click(deleteButton);
+
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect((deleteButton as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(dialog.parentElement as HTMLElement);
+    expect(screen.getByRole('alertdialog')).toBe(dialog);
+    expect(within(dialog).getByText(/My project/)).toBeTruthy();
+
+    await act(async () => resolveDelete(true));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
   });
 });

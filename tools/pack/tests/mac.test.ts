@@ -1,11 +1,11 @@
-import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os, { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { ToolPackConfig } from "../src/config.js";
+import type { ToolPackConfig } from "@/config/index.js";
 import {
   copyMacPrebundleRuntimeDependencies,
   copyResourceTree,
@@ -13,11 +13,12 @@ import {
   renderMacAssembledPackageManifest,
   renderMacPackagedConfig,
   validateMacNativeRebuildOutput,
-} from "../src/mac/app.js";
-import { runElectronBuilder } from "../src/mac/builder.js";
-import { formatNpmPackageManagerIdentity } from "../src/mac/commands.js";
-import { resolveSeededAppConfigPaths, seedPackagedAppConfig, writeLaunchPackagedConfig } from "../src/mac/index.js";
-import { resolveMacPaths } from "../src/mac/paths.js";
+} from "@/mac/app.js";
+import macBuilderSource from "@/mac/builder.ts?raw";
+import { runElectronBuilder } from "@/mac/builder.js";
+import { formatNpmPackageManagerIdentity } from "@/mac/commands.js";
+import { resolveSeededAppConfigPaths, seedPackagedAppConfig, writeLaunchPackagedConfig } from "@/mac/index.js";
+import { resolveMacPaths } from "@/mac/paths.js";
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -77,10 +78,9 @@ afterEach(() => {
 });
 
 describe("resolveSeededAppConfigPaths", () => {
-  it("declares the Workspace invite URL scheme in the packaged app metadata", async () => {
-    const source = await readFile(new URL("../src/mac/builder.ts", import.meta.url), "utf8");
-    expect(source).toContain("protocols: [");
-    expect(source).toContain('schemes: ["opendesign"]');
+  it("declares the Workspace invite URL scheme in the packaged app metadata", () => {
+    expect(macBuilderSource).toContain("protocols: [");
+    expect(macBuilderSource).toContain('schemes: ["opendesign"]');
   });
 
   it("uses workspace .od by default", () => {
@@ -183,10 +183,28 @@ describe("copyResourceTree", () => {
       for (const name of resourceNames) {
         await mkdir(join(root, name), { recursive: true });
       }
+      const dshRuntimeRoot = join(root, "packages", "dsh-runtime");
+      await mkdir(join(dshRuntimeRoot, "dist", "types"), { recursive: true });
+      await writeFile(
+        join(dshRuntimeRoot, "package.json"),
+        `${JSON.stringify({
+          name: "@open-design/dsh-runtime",
+          version: "0.1.0",
+          files: ["dist"],
+        }, null, 2)}\n`,
+        "utf8",
+      );
+      await writeFile(join(dshRuntimeRoot, "dist", "index.js"), "export {};\n", "utf8");
+      await writeFile(join(dshRuntimeRoot, "dist", "types", "index.d.ts"), "export {};\n", "utf8");
 
       await copyResourceTree(config, paths);
 
       expect(await pathExists(join(paths.resourceRoot, "bin", "node"))).toBe(false);
+      const dshRuntimeResourceRoot = join(paths.resourceRoot, "agent-runtimes", "deepseek-harness");
+      await expect(readFile(join(dshRuntimeResourceRoot, "manifest.json"), "utf8")).resolves.toContain(
+        '"packageName": "@open-design/dsh-runtime"',
+      );
+      expect((await readdir(dshRuntimeResourceRoot)).filter((entry) => entry.endsWith(".tgz"))).toHaveLength(1);
     } finally {
       await rm(root, { force: true, recursive: true });
     }

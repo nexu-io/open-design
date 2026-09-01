@@ -31,7 +31,7 @@ const App = dynamic(() => import('../../src/App').then((m) => m.App), {
   loading: () => (
     <div className="od-loading-shell">
       <MatrixLoader />
-      <span>Loading Open Design…</span>
+      <span>Loading OpenDesign…</span>
     </div>
   ),
 });

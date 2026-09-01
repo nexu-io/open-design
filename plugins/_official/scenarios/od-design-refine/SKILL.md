@@ -1,6 +1,6 @@
 # Design Refine
 
-Use this plugin when the user wants to improve an existing Open Design artifact rather than create a new one.
+Use this plugin when the user wants to improve an existing OpenDesign artifact rather than create a new one.
 
 ## Workflow
 

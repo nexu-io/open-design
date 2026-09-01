@@ -180,7 +180,7 @@ describe('server.ts wiring (source boundary)', () => {
   const source = fs.readFileSync(serverSourcePath, 'utf8');
 
   function extractOnEventSwitchBody(): string {
-    const anchor = 'onEvent: (event) => {';
+    const anchor = 'onEvent: (event, connection) => {';
     const start = source.indexOf(anchor);
     expect(start, 'expected to find the hub events onEvent handler in server.ts').toBeGreaterThan(-1);
     const switchStart = source.indexOf('switch (event.type) {', start);
@@ -197,6 +197,39 @@ describe('server.ts wiring (source boundary)', () => {
     expect(depth, 'expected the switch braces to balance').toBe(0);
     return source.slice(switchStart, i + 1);
   }
+
+  it('resets directory and exact authority across credential changes before refreshing hub endpoints', () => {
+    const resetHelperStart = source.indexOf(
+      'const resetWorkspaceIdentityCaches = (): void => {',
+    );
+    const start = source.indexOf(
+      'const refreshWorkspaceHubAccountIdentity = (): void => {',
+    );
+    const end = source.indexOf(
+      'const fetchWorkspaceDirectoryForAccountSurface = () => {',
+      start,
+    );
+    expect(resetHelperStart).toBeGreaterThan(-1);
+    expect(start).toBeGreaterThan(resetHelperStart);
+    expect(end).toBeGreaterThan(start);
+    const resetHelperBody = source.slice(resetHelperStart, start);
+    expect(resetHelperBody).toContain(
+      'workspaceDirectoryAuthority.resetIdentity();',
+    );
+    expect(resetHelperBody).toContain(
+      'workspaceExactAuthorityCache.resetIdentity();',
+    );
+    expect(resetHelperBody).toContain(
+      'workspaceExactContextCache.resetIdentity();',
+    );
+    const body = source.slice(start, end);
+    const resetStart = body.indexOf('resetWorkspaceIdentityCaches();');
+    const endpointRefreshStart = body.indexOf(
+      'workspaceHubSubscriptions?.refreshEndpoints();',
+    );
+    expect(resetStart).toBeGreaterThan(-1);
+    expect(endpointRefreshStart).toBeGreaterThan(resetStart);
+  });
 
   it('routes both project catalog event families through project reconciliation', () => {
     const switchBody = extractOnEventSwitchBody();
@@ -248,9 +281,24 @@ describe('server.ts wiring (source boundary)', () => {
   });
 
   it('logs broad-head cooldown deferrals in catch-up completion diagnostics', () => {
+    // Matched without the closing backtick so the assertion survives further
+    // fields being appended to the same template — it is here to pin that
+    // suppressed/complete are still reported, not to freeze the line's length.
     expect(source).toContain(
-      '`suppressed=${event.suppressed ?? 0} complete=${event.complete === true}`',
+      'suppressed=${event.suppressed ?? 0} complete=${event.complete === true}',
     );
+  });
+
+  it('reports background materialization volume in catch-up completion diagnostics', () => {
+    // `candidates` counts projects CONSIDERED, which says nothing about what
+    // actually landed on a member's disk. These totals are the only reading
+    // that makes OD_COLLAB_BACKGROUND_PULL_MAX_CUMULATIVE_ENTRIES choosable
+    // from a diagnostics bundle, so the guard's `volume()` has to reach this
+    // sink — a counter nothing reads is why that ceiling stayed unset.
+    expect(source).toContain('const backgroundVolume = backgroundPullSizeGuard.volume();');
+    expect(source).toContain('processEntries=${backgroundVolume.entries}');
+    expect(source).toContain('processProjects=${backgroundVolume.countedProjects}');
+    expect(source).toContain('processUncounted=${backgroundVolume.uncountedProjects}');
   });
 
   it('wires exact-scope recovery pollers through reconciliation and bounded full recovery', () => {
@@ -394,7 +442,7 @@ describe('server.ts wiring (source boundary)', () => {
       start,
     );
     const body = source.slice(start, end);
-    const reconnectStart = body.indexOf('onReconnect: () => {');
+    const reconnectStart = body.indexOf('onReconnect: (connection) => {');
     const sourceGapStart = body.indexOf('onSourceGap:', reconnectStart);
     const errorStart = body.indexOf('onError:', sourceGapStart);
     expect(reconnectStart).toBeGreaterThan(-1);

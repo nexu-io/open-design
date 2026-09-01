@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import http from 'node:http';
 import type { Response } from 'express';
 import {
+  emitWorkspaceEventToAllScopes,
   emitWorkspaceEventToScope,
   registerCollabContextRoutes,
   type WorkspaceEventSinksByWorkspace,
@@ -34,7 +35,10 @@ afterEach(async () => {
   }
 });
 
-async function startServer(workspaceEventSinks: WorkspaceEventSinksByWorkspace) {
+async function startServer(
+  workspaceEventSinks: WorkspaceEventSinksByWorkspace,
+  retainWorkspaceEventInterest?: (workspaceId: string) => () => void,
+) {
   const app = express();
   app.use(express.json());
   registerCollabContextRoutes(app, {
@@ -53,6 +57,7 @@ async function startServer(workspaceEventSinks: WorkspaceEventSinksByWorkspace) 
     }),
     createSseResponse: (res) => makeSseResponse(res as Response),
     workspaceEventSinks,
+    ...(retainWorkspaceEventInterest ? { retainWorkspaceEventInterest } : {}),
   });
   server = http.createServer(app);
   await new Promise<void>((resolve) => server!.listen(0, resolve));
@@ -83,7 +88,9 @@ async function readUntil(
 describe('GET /api/workspace/events', () => {
   it('registers a sink, streams a pushed thin event, and drops the sink on disconnect', async () => {
     const sinks: WorkspaceEventSinksByWorkspace = new Map();
-    const base = await startServer(sinks);
+    const releaseInterest = vi.fn();
+    const retainInterest = vi.fn(() => releaseInterest);
+    const base = await startServer(sinks, retainInterest);
     const controller = new AbortController();
 
     const resp = await fetch(
@@ -98,6 +105,7 @@ describe('GET /api/workspace/events', () => {
     // The route sends a `ready` handshake and registers exactly one sink.
     await readUntil(reader, (text) => text.includes('event: ready'));
     expect(sinks.size).toBe(1);
+    expect(retainInterest).toHaveBeenCalledWith('workspace-a');
 
     // Emitting into the sinks streams the thin event with its `type` as the SSE
     // event name (the client re-fetches on receipt; no body is required).
@@ -126,6 +134,16 @@ describe('GET /api/workspace/events', () => {
     expect(resourceFrame).toContain('"resourceKind":"skill"');
     expect(resourceFrame).not.toContain('resourceStatus');
 
+    emitWorkspaceEventToAllScopes(sinks, {
+      type: 'workspace-directory-changed',
+      at: 125,
+    });
+    const directoryFrame = await readUntil(
+      reader,
+      (text) => text.includes('event: workspace-directory-changed'),
+    );
+    expect(directoryFrame).toContain('"type":"workspace-directory-changed"');
+
     // Disconnect → the route's res.on('close') cleanup drops the sink.
     controller.abort();
     await reader.cancel().catch(() => {});
@@ -134,6 +152,7 @@ describe('GET /api/workspace/events', () => {
       await new Promise((r) => setTimeout(r, 25));
     }
     expect(sinks.size).toBe(0);
+    expect(releaseInterest).toHaveBeenCalled();
   });
 
   it('404-free no-op: the route is simply absent when the SSE seams are omitted', async () => {

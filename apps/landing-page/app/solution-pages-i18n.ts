@@ -3,7 +3,7 @@
  * (`/solutions/<slug>/` and `/roles/<slug>/`).
  *
  * These pages are image + text + table surfaces that explain how a given
- * workflow or role uses Open Design. They are kept OUT of the large
+ * workflow or role uses OpenDesign. They are kept OUT of the large
  * `InfoPageCopy` shape in `info-page-i18n.ts` on purpose: that interface is
  * mirrored field-by-field inside `compactInfoPageCopy()` for all 18 locales,
  * so adding rich page bodies there would force a hand-written entry per

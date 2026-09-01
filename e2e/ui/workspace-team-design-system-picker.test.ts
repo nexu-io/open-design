@@ -46,6 +46,7 @@ test('[P0] Team design systems catch up missed shares, updates, and retractions'
   const commonEnv = {
     OD_COLLAB_TRANSPORT: 'vela-cli',
     OD_RESOURCE_TRANSPORT: 'vela-cli',
+    OD_TEAM_PROJECTS_TRANSPORT: 'vela-cli',
     OD_WORKSPACE_CONTEXT_SOURCE: 'vela',
     VELA_API_URL: hub.url,
     VELA_BIN: velaBin,
@@ -85,6 +86,14 @@ test('[P0] Team design systems catch up missed shares, updates, and retractions'
       pinWorkspace(memberPage, MEMBER.memberId),
     ]);
 
+    await gotoHome(ownerPage);
+    await ensureRailOpen(ownerPage);
+    await ownerPage.getByTestId('workspace-switcher').click();
+    await ownerPage.getByRole('menuitem', { name: 'Design System Team' }).click();
+    await expect(ownerPage.getByTestId('workspace-switcher')).toContainText(
+      'Design System Team',
+    );
+
     const createResponse = await ownerPage.request.post('/api/design-systems', {
       data: {
         title: 'Shared Product Language',
@@ -111,6 +120,38 @@ test('[P0] Team design systems catch up missed shares, updates, and retractions'
       },
     );
     expect(workspaceResponse.ok(), await workspaceResponse.text()).toBeTruthy();
+    const workspace = await workspaceResponse.json() as { project?: { id?: string } };
+    const projectId = workspace.project?.id;
+    expect(projectId).toBeTruthy();
+
+    await writeLogoProjectFile(
+      ownerPage,
+      projectId!,
+      'brand.json',
+      JSON.stringify(sharedLogoBrand()),
+    );
+    await writeLogoProjectFile(ownerPage, projectId!, 'assets/logo.svg', sharedLogoSvg());
+    const syncResponse = await ownerPage.request.post(
+      `/api/design-systems/${encodeURIComponent(designSystemId!)}/sync-assets`,
+      { headers: workspaceHeaders(OWNER), timeout: T.long },
+    );
+    expect(syncResponse.ok(), await syncResponse.text()).toBeTruthy();
+
+    await ownerPage.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+    await expectProjectSharedLogo(
+      ownerPage,
+      'Shared Product Language',
+    );
+
+    await gotoDesignSystems(ownerPage);
+    await ownerPage.getByRole('tab', { name: /Your systems/i }).click();
+    const ownerCard = ownerPage.getByTestId(`design-system-card-${designSystemId}`);
+    await expect(ownerCard).toBeVisible({ timeout: T.xlong });
+    await ownerCard.click();
+    await expectSharedLogo(
+      ownerPage.getByTestId(`design-system-detail-${designSystemId}`),
+      'Shared Product Language',
+    );
 
     const shareResponse = await ownerPage.request.post(
       `/api/workspace/design-systems/${encodeURIComponent(designSystemId!)}/share`,
@@ -153,6 +194,24 @@ test('[P0] Team design systems catch up missed shares, updates, and retractions'
     const teamOption = picker.getByTestId(`project-ds-picker-option-${designSystemId}`);
     await expect(teamOption).toContainText('Shared Product Language');
     await teamOption.click();
+    await expect(memberPage.getByTestId('home-hero-design-system-trigger')).toContainText(
+      'Shared Product Language',
+    );
+
+    await gotoDesignSystems(memberPage);
+    await memberPage.getByRole('tab', { name: /^Team/ }).click();
+    const memberCard = memberPage.getByTestId(`design-system-card-${designSystemId}`);
+    await expect(memberCard).toBeVisible({ timeout: T.xlong });
+    await memberCard.click();
+    await expectSharedLogo(
+      memberPage.getByTestId(`design-system-detail-${designSystemId}`),
+      'Shared Product Language',
+    );
+    await gotoHome(memberPage);
+    await ensureRailOpen(memberPage);
+    await expect(memberPage.getByTestId('workspace-switcher')).toContainText(
+      'Design System Team',
+    );
     await expect(memberPage.getByTestId('home-hero-design-system-trigger')).toContainText(
       'Shared Product Language',
     );
@@ -359,9 +418,102 @@ async function pinWorkspace(page: Page, workspaceMemberId: string): Promise<void
 
 async function gotoHome(page: Page): Promise<void> {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, {
+  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0, {
     timeout: T.xlong,
   });
+}
+
+async function gotoDesignSystems(page: Page): Promise<void> {
+  await page.goto('/design-systems', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0, {
+    timeout: T.xlong,
+  });
+}
+
+async function writeLogoProjectFile(
+  page: Page,
+  projectId: string,
+  name: string,
+  content: string,
+): Promise<void> {
+  const response = await page.request.post(`/api/projects/${projectId}/files`, {
+    data: { name, content },
+    headers: workspaceHeaders(OWNER),
+    timeout: T.long,
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+}
+
+async function expectSharedLogo(
+  container: ReturnType<Page['getByTestId']>,
+  alt: string,
+): Promise<void> {
+  const logo = container.getByTestId('design-kit-logo-section').getByRole('img', { name: alt });
+  await expect(logo).toBeVisible({ timeout: T.xlong });
+  await expect.poll(
+    () => logo.evaluate((image: HTMLImageElement) => ({
+      complete: image.complete,
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+      workspaceId: new URL(image.src).searchParams.get('workspaceId'),
+      workspaceMemberId: new URL(image.src).searchParams.get('workspaceMemberId'),
+    })),
+    { timeout: T.long },
+  ).toEqual({
+    complete: true,
+    width: 320,
+    height: 160,
+    workspaceId: null,
+    workspaceMemberId: null,
+  });
+}
+
+async function expectProjectSharedLogo(
+  page: Page,
+  alt: string,
+): Promise<void> {
+  const tab = page.getByTestId('design-system-project-tab');
+  const panel = page.getByTestId('design-system-project-tab-panel');
+  const logo = page
+    .getByTestId('design-system-project-kit')
+    .getByTestId('design-kit-logo-section')
+    .getByRole('img', { name: alt });
+  let matchingSince = 0;
+
+  await expect.poll(async () => {
+    const tabReady = await tab.getAttribute('aria-selected') === 'true'
+      && await panel.isVisible();
+    if (!tabReady) {
+      matchingSince = 0;
+      await tab.click({ timeout: T.short });
+      return 0;
+    }
+
+    // A late workspace restoration can replace this panel after tabReady was
+    // observed. Bound the locator probe so the outer poll can select the tab
+    // again instead of waiting on the removed image until the full timeout.
+    const image = await logo.evaluate((element: HTMLImageElement) => ({
+      complete: element.complete,
+      width: element.naturalWidth,
+      height: element.naturalHeight,
+      workspaceId: new URL(element.src).searchParams.get('workspaceId'),
+      workspaceMemberId: new URL(element.src).searchParams.get('workspaceMemberId'),
+    }), { timeout: T.short }).catch(() => null);
+    const matches = image?.complete === true
+      && image.width === 320
+      && image.height === 160
+      && image.workspaceId === null
+      && image.workspaceMemberId === null;
+    if (!matches) {
+      matchingSince = 0;
+      return 0;
+    }
+    if (matchingSince === 0) matchingSince = Date.now();
+    return Date.now() - matchingSince;
+  }, {
+    message: 'project Design system tab and scoped logo should survive workspace restoration',
+    timeout: T.xlong,
+  }).toBeGreaterThanOrEqual(500);
 }
 
 function workspaceHeaders(identity: typeof OWNER | typeof MEMBER): Record<string, string> {
@@ -375,5 +527,52 @@ function workspaceHeaders(identity: typeof OWNER | typeof MEMBER): Record<string
     'x-od-workspace-can-share-projects': identity.role === 'owner' ? 'true' : 'false',
     'x-od-workspace-can-write-synced-files': identity.role === 'owner' ? 'true' : 'false',
     'x-od-workspace-can-manage-shared-resources': identity.role === 'owner' ? 'true' : 'false',
+  };
+}
+
+function sharedLogoSvg(): string {
+  return [
+    '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="160" viewBox="0 0 320 160">',
+    '<rect width="320" height="160" rx="32" fill="#1867c0"/>',
+    '<text x="160" y="102" text-anchor="middle" font-family="sans-serif" font-size="72" fill="white">SL</text>',
+    '</svg>',
+  ].join('');
+}
+
+function sharedLogoBrand() {
+  return {
+    name: 'Shared Product Language',
+    tagline: 'One visual language for the Team.',
+    description: 'A Team-owned design system with a real logo asset.',
+    sourceUrl: '',
+    logo: {
+      primary: 'assets/logo.svg',
+      alternates: [],
+      notes: 'Shared logo regression witness.',
+    },
+    colors: [{
+      role: 'accent',
+      hex: '#1867c0',
+      oklch: '',
+      name: 'Team blue',
+      usage: 'Primary actions',
+    }],
+    typography: {
+      display: { family: 'Inter', fallbacks: ['sans-serif'], weights: [700] },
+      body: { family: 'Inter', fallbacks: ['sans-serif'], weights: [400] },
+    },
+    voice: {
+      adjectives: ['clear'],
+      tone: 'direct',
+      messagingPillars: ['Build together'],
+      vocabulary: { use: ['team'], avoid: ['silo'] },
+    },
+    imagery: { style: 'graphic', subjects: [], treatment: 'flat', avoid: [] },
+    layout: {
+      radius: '12px',
+      borderWeight: '1px',
+      spacing: '8px grid',
+      postureRules: ['Keep layouts open'],
+    },
   };
 }

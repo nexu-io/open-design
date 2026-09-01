@@ -11,6 +11,7 @@ const repoRoot = resolve(scriptDir, "..");
 const buildTargets = [
   "packages/release",
   "packages/contracts",
+  "packages/standalone",
   "packages/components",
   "packages/platform",
   "packages/download",
@@ -22,6 +23,7 @@ const buildTargets = [
   "packages/launcher-proto",
   "packages/sidecar",
   "packages/diagnostics",
+  "packages/dsh-runtime",
   "apps/daemon",
   "tools/dev",
   "tools/pack",

@@ -1,4 +1,5 @@
 import { expect, test } from '@/playwright/suite';
+import { ACTIVE_ARTIFACT_PREVIEW_SELECTOR } from '@/playwright/artifact-preview';
 import { ensureRailOpen, openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import { runErrorCard } from '@/playwright/chat';
 import {
@@ -27,8 +28,6 @@ import {
 } from '@/playwright/mock-factory';
 
 const STORAGE_KEY = 'open-design:config';
-const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
-
 test.describe.configure({ timeout: process.env.CI ? 90_000 : 60_000 });
 
 function artifactPreview(page: Page) {
@@ -84,9 +83,8 @@ function artifactRunEventBody(identifier: string, title: string, html: string): 
   ]);
 }
 
-function questionFormRunEventBody(required: boolean, followUpChunk: string) {
-  let eventCount = 0;
-  const questionForm = [
+function questionFormContent(required: boolean): string {
+  return [
     '<question-form id="discovery" title="Quick brief">',
     JSON.stringify(
       {
@@ -105,19 +103,6 @@ function questionFormRunEventBody(required: boolean, followUpChunk: string) {
     ),
     '</question-form>',
   ].join('\n');
-
-  return () => {
-    eventCount += 1;
-    const chunk = eventCount === 1 ? questionForm : followUpChunk;
-    return successfulRunEventBody([
-      'event: start',
-      'data: {"bin":"mock-agent"}',
-      '',
-      'event: stdout',
-      `data: ${JSON.stringify({ chunk })}`,
-      '',
-    ]);
-  };
 }
 
 test('[P0] @critical workspace restores the last manually selected file tab after reload instead of jumping back to the generated artifact', async ({ page }) => {
@@ -1389,21 +1374,6 @@ test('[P1] stopping an active run sends cancel, persists canceled state, and lea
 test('[P1] chat file links open project files in workspace tabs and keep trailing punctuation out of hrefs', async ({ page }) => {
   await routeMockAgents(page);
 
-  await routeSuccessfulRuns(page, {
-    runIdPrefix: 'link-run',
-    eventBody: successfulRunEventBody([
-      'event: start',
-      'data: {"bin":"mock-agent"}',
-      '',
-      'event: stdout',
-      `data: ${JSON.stringify({
-        chunk:
-          'Open [details.html](details.html). Also see https://example.com/release-notes。 for external notes.',
-      })}`,
-      '',
-    ]),
-  });
-
   const projectId = await createEmptyProject(page, 'Chat file links stay in workspace');
   await expectWorkspaceReady(page);
   await seedHtmlArtifact(
@@ -1412,8 +1382,25 @@ test('[P1] chat file links open project files in workspace tabs and keep trailin
     'details.html',
     '<!doctype html><html><body><main><h1>Linked Details</h1></main></body></html>',
   );
+  const { conversationId } = await getCurrentProjectContext(page);
+  const assistantText =
+    'Open [details.html](details.html). Also see https://example.com/release-notes。 for external notes.';
+  const assistantResponse = await page.request.put(
+    `/api/projects/${projectId}/conversations/${conversationId}/messages/file-link-assistant`,
+    {
+      data: {
+        role: 'assistant',
+        content: assistantText,
+        runStatus: 'succeeded',
+        events: [{ kind: 'text', text: assistantText }],
+        createdAt: Date.now(),
+      },
+    },
+  );
+  expect(assistantResponse.ok(), `seed assistant message: ${await assistantResponse.text()}`).toBeTruthy();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
 
-  await sendPrompt(page, 'send chat links');
   const localLink = page.getByRole('link', { name: 'details.html' }).last();
   await expect(localLink).toBeVisible();
   const externalLink = page.getByRole('link', { name: 'https://example.com/release-notes' }).last();
@@ -1724,7 +1711,7 @@ test('[P1] project composer design toolbox hides disabled skill resources', asyn
   await expect(page.getByRole('menuitem', { name: /Disabled Runtime Skill/i })).toHaveCount(0);
 });
 
-test('[P1] completed background run sends the configured desktop notification', async ({ page }) => {
+test('[P1] completed hidden-page run sends the configured desktop notification', async ({ page }) => {
   const notificationConfig = {
     soundEnabled: false,
     successSoundId: 'ding',
@@ -1833,7 +1820,13 @@ test('[P1] completed background run sends the configured desktop notification', 
         'data: {"bin":"mock-agent"}',
         '',
         'event: stdout',
-        `data: ${JSON.stringify({ chunk: 'Background completion notification body.' })}`,
+        `data: ${JSON.stringify({
+          chunk:
+            'Background completion notification body.\n' +
+            '<artifact identifier="notification-result" type="text/html" title="Notification Result">' +
+            '<!doctype html><html><body><h1>Notification Result</h1></body></html>' +
+            '</artifact>',
+        })}`,
         '',
       ]);
     },
@@ -1841,13 +1834,6 @@ test('[P1] completed background run sends the configured desktop notification', 
 
   await createEmptyProject(page, 'Background notification run');
   await expectWorkspaceReady(page);
-  const sessionModeTrigger = page.getByTestId('chat-composer').getByTestId('session-mode-trigger');
-  await sessionModeTrigger.click();
-  await page
-    .locator('.session-mode-toggle__menu[role="menu"]')
-    .getByRole('menuitemradio', { name: 'Ask mode' })
-    .click();
-  await expect(sessionModeTrigger).toHaveAttribute('aria-label', 'Ask mode');
   await sendPrompt(page, 'Finish and notify me');
   await expect(page.getByRole('button', { name: 'Stop' })).toBeVisible();
   releaseEvents();
@@ -1864,7 +1850,7 @@ test('[P1] completed background run sends the configured desktop notification', 
     }));
 });
 
-test('[P1] failed foreground run still sends the configured desktop notification', async ({ page }) => {
+test('[P0] failed foreground run does not send a desktop notification', async ({ page }) => {
   const notificationConfig = {
     soundEnabled: false,
     successSoundId: 'ding',
@@ -1989,16 +1975,17 @@ test('[P1] failed foreground run still sends the configured desktop notification
   await expect(page.getByRole('button', { name: 'Stop' })).toBeVisible();
   releaseEvents();
 
-  await expect
-    .poll(async () =>
-      page.evaluate(() => (window as typeof window & {
-        __odTestNotifications?: Array<{ title: string; body?: string }>;
-      }).__odTestNotifications ?? []),
-    )
-    .toContainEqual(expect.objectContaining({
-      title: 'Task failed',
-      body: 'The task ended with an error.',
-    }));
+  await expect(runErrorCard(page)).toBeVisible();
+  await expectStableCount(
+    () => page.evaluate(() => (window as typeof window & {
+      __odTestNotifications?: Array<{ title: string; body?: string }>;
+    }).__odTestNotifications?.length ?? 0),
+    0,
+    {
+      timeout: 750,
+      message: 'a foreground failure must remain silent after the terminal run state renders',
+    },
+  );
 });
 
 test('[P1] Browser Inspiration page_info action seeds Browser tab context into the next run request', async ({ page }) => {
@@ -2024,7 +2011,7 @@ test('[P1] Browser Inspiration page_info action seeds Browser tab context into t
 
   const input = page.getByTestId('chat-composer-input');
   await expect(input).toContainText('@agent-browser');
-  await expect(input).toContainText('Use the selected Open Design Browser tab as the bound target.');
+  await expect(input).toContainText('Use the selected OpenDesign Browser tab as the bound target.');
   await expect(input).toContainText('Operation: page_info');
   await expect(input).toContainText('- tab: Browser');
   await expect(input).toContainText('- url: about:blank');
@@ -2168,13 +2155,12 @@ test('[P1] inline question form Skip all sends structured skipped answers into t
   const runRequests = await routeSuccessfulRuns(page, {
     bodies: runBodies,
     runIdPrefix: 'questions-skip-run',
-    eventBody: questionFormRunEventBody(false, 'Thanks — continuing with skipped answers.'),
   });
 
   const projectId = await createEmptyProject(page, 'Inline questions skip all');
   await expectWorkspaceReady(page);
+  await seedAssistantMessage(page, projectId, 'questions-skip-assistant', questionFormContent(false));
 
-  await sendPrompt(page, 'Plan a landing page after asking clarifying questions.');
   const form = page.locator('.question-form').first();
   await expect(form).toBeVisible();
   await expect(form.getByText('Audience')).toBeVisible();
@@ -2186,9 +2172,9 @@ test('[P1] inline question form Skip all sends structured skipped answers into t
     skipAll.click(),
   ]);
 
-  await runRequests.expectCount(2);
-  expect(runBodies[1]?.message).toContain('[form answers — discovery]');
-  expect(runBodies[1]?.message).toContain('Audience: (skipped)');
+  await runRequests.expectCount(1);
+  expect(runBodies[0]?.message).toContain('[form answers — discovery]');
+  expect(runBodies[0]?.message).toContain('Audience: (skipped)');
 
   const conversationsResponse = await page.request.get(`/api/projects/${projectId}/conversations`);
   expect(conversationsResponse.ok()).toBeTruthy();
@@ -2221,13 +2207,12 @@ test('[P1] inline question form submits selected answers into the next run reque
   const runRequests = await routeSuccessfulRuns(page, {
     bodies: runBodies,
     runIdPrefix: 'questions-continue-run',
-    eventBody: questionFormRunEventBody(true, 'Thanks — continuing with selected answers.'),
   });
 
   const projectId = await createEmptyProject(page, 'Inline questions submit run context');
   await expectWorkspaceReady(page);
+  await seedAssistantMessage(page, projectId, 'questions-submit-assistant', questionFormContent(true));
 
-  await sendPrompt(page, 'Plan a landing page after user choices.');
   const form = page.locator('.question-form').first();
   await expect(form).toBeVisible();
   const audienceQuestion = form.locator('.qf-field', { has: page.getByText('Audience') });
@@ -2240,10 +2225,10 @@ test('[P1] inline question form submits selected answers into the next run reque
     submitButton.click(),
   ]);
 
-  await runRequests.expectCount(2);
-  expect(runBodies[1]?.message).toContain('[form answers — discovery]');
-  expect(runBodies[1]?.message).toContain('Audience: Product marketers');
-  expect(runBodies[1]?.message).not.toContain('(skipped)');
+  await runRequests.expectCount(1);
+  expect(runBodies[0]?.message).toContain('[form answers — discovery]');
+  expect(runBodies[0]?.message).toContain('Audience: Product marketers');
+  expect(runBodies[0]?.message).not.toContain('(skipped)');
 
   const conversationsResponse = await page.request.get(`/api/projects/${projectId}/conversations`);
   expect(conversationsResponse.ok()).toBeTruthy();
@@ -2271,7 +2256,6 @@ test('[P1] inline question form submits selected answers into the next run reque
 
 test('[P1] project composer working directory replace and clear update linked dirs metadata', async ({ page }) => {
   const workingDir = process.cwd();
-  const workingDirLabel = workingDir.split(/[\\/]/).at(-1) ?? workingDir;
   const patchBodies: Array<Record<string, unknown>> = [];
 
   await page.route('**/api/recent-dirs', async (route) => {
@@ -2300,16 +2284,18 @@ test('[P1] project composer working directory replace and clear update linked di
   await createEmptyProject(page, 'Project composer working directory metadata');
   await expectWorkspaceReady(page);
 
-  await page.getByTestId('working-dir-trigger').click();
-  await page.getByTestId('working-dir-pick').click();
-  await expect(page.getByTestId('working-dir-trigger')).toContainText(workingDirLabel);
+  await page.getByTestId('chat-plus-trigger').click();
+  await page.getByTestId('composer-plus-working-dir').click();
+  await page.getByTestId('composer-plus-working-dir-pick').click();
   await expect
     .poll(() => patchBodies.at(-1)?.metadata)
     .toMatchObject({ linkedDirs: [workingDir] });
 
-  await page.getByTestId('working-dir-trigger').click();
-  await page.getByTestId('working-dir-clear').click();
-  await expect(page.getByTestId('working-dir-trigger')).toContainText('Select working directory');
+  await page.getByTestId('chat-plus-trigger').click();
+  await page.getByTestId('composer-plus-working-dir').click();
+  await expect(page.getByTestId('composer-plus-working-dir-pick')).toBeVisible();
+  await expect(page.getByTestId('composer-plus-working-dir-clear')).toBeVisible();
+  await page.getByTestId('composer-plus-working-dir-clear').click();
   await expect
     .poll(() => patchBodies.at(-1)?.metadata)
     .toMatchObject({ linkedDirs: [] });
@@ -2361,15 +2347,18 @@ test('[P1] project composer working directory rejects stale folder without promo
   await createEmptyProject(page, 'Project composer stale working directory');
   await expectWorkspaceReady(page);
 
-  await page.getByTestId('working-dir-trigger').click();
-  await page.getByTestId('working-dir-pick').click();
+  await page.getByTestId('chat-plus-trigger').click();
+  await page.getByTestId('composer-plus-working-dir').click();
+  await page.getByTestId('composer-plus-working-dir-pick').click();
 
-  await expect(page.getByTestId('working-dir-trigger')).toContainText('Select working directory');
   await expect(page.getByText("Couldn't set the working directory")).toBeVisible();
   await expect
     .poll(() => patchBodies.at(-1)?.metadata)
     .toMatchObject({ linkedDirs: [staleDir] });
   expect(recentDirPutBodies).toHaveLength(0);
+  await page.getByTestId('chat-plus-trigger').click();
+  await page.getByTestId('composer-plus-working-dir').click();
+  await expect(page.getByTestId('composer-plus-working-dir-clear')).toHaveCount(0);
 });
 
 async function routeAppConfig(page: Page, override: Record<string, unknown>) {
@@ -2469,6 +2458,30 @@ async function seedHtmlArtifact(
     },
   });
   expect(resp.ok()).toBeTruthy();
+}
+
+async function seedAssistantMessage(
+  page: Page,
+  projectId: string,
+  messageId: string,
+  content: string,
+): Promise<void> {
+  const { conversationId } = await getCurrentProjectContext(page);
+  const response = await page.request.put(
+    `/api/projects/${projectId}/conversations/${conversationId}/messages/${messageId}`,
+    {
+      data: {
+        role: 'assistant',
+        content,
+        runStatus: 'succeeded',
+        events: [{ kind: 'text', text: content }],
+        createdAt: Date.now(),
+      },
+    },
+  );
+  expect(response.ok(), `seed assistant message: ${await response.text()}`).toBeTruthy();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
 }
 
 async function openDesignFile(page: Page, fileName: string) {
@@ -2632,6 +2645,15 @@ function escapeRegExp(value: string): string {
  * journey still leaves through real chrome rather than a URL jump.
  */
 async function leaveProjectForEntry(page: Page) {
+  // In docked project mode the state-bearing pinned tab remains mounted in
+  // the hidden dock strip while `workspace-home-chrome` is its visible,
+  // interactive stand-in in the top chrome.
+  const dockedHome = page.getByTestId('workspace-home-chrome');
+  if (await dockedHome.isVisible().catch(() => false)) {
+    await dockedHome.click();
+    await expect(page.getByTestId('file-workspace')).toHaveCount(0);
+    return;
+  }
   const pinnedEntryTab = page.locator('.workspace-tab.is-pinned');
   await expect(pinnedEntryTab).toBeVisible();
   await pinnedEntryTab.locator('.workspace-tab__main').click();
@@ -2910,7 +2932,7 @@ async function createProjectNameOnly(
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
@@ -2979,7 +3001,7 @@ async function expectProjectsView(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
 }
 
 async function getCurrentProjectContext(

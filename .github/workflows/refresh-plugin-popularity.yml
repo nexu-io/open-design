@@ -53,7 +53,7 @@ jobs:
           POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
         run: pnpm exec tsx scripts/refresh-plugin-popularity.ts --write --window=${{ github.event.inputs.window || '28' }}
 
-      - name: Generate Open Design bot token
+      - name: Generate OpenDesign bot token
         id: open-design-bot-token
         uses: actions/create-github-app-token@v3.2.0
         with:

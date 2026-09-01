@@ -273,7 +273,7 @@ function printRunForegroundResult(started: Partial<Record<ToolDevAppName, unknow
   const daemonUrl = stringField(daemonStatus ?? {}, "url");
 
   if (webUrl != null || daemonUrl != null) {
-    process.stdout.write("\n  Open Design dev server ready\n\n");
+    process.stdout.write("\n  OpenDesign dev server ready\n\n");
     if (webUrl != null) process.stdout.write(`  ➜  Web:    ${colorizeLink(normalizeDisplayUrl(webUrl))}\n`);
     if (daemonUrl != null) process.stdout.write(`  ➜  Daemon: ${colorizeLink(normalizeDisplayUrl(daemonUrl))}\n`);
     process.stdout.write("\n  Press Ctrl+C to stop\n\n");
@@ -1120,7 +1120,7 @@ async function runForeground(config: ToolDevConfig, appName: string | undefined,
       if (shuttingDown) return;
       shuttingDown = true;
       clearInterval(keepAlive);
-      process.stderr.write("\nStopping Open Design dev server...\n");
+      process.stderr.write("\nStopping OpenDesign dev server...\n");
       void runSequential(stopOrderFor(targets), (target) => stopApp(config, target)).finally(() => {
         for (const sig of ["SIGINT", "SIGTERM"] as const) {
           process.off(sig, shutdown);

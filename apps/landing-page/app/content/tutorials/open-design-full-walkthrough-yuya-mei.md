@@ -1,7 +1,7 @@
 ---
-title: '开源版 Claude Design？Open Design 完整体验'
+title: '开源版 Claude Design？OpenDesign 完整体验'
 youtubeId: WDD4QsOB_78
-summary: Yuya Mei 把 Open Design 当成一个 local-first 的 Claude Design alternative 来使用，连接 Claude Code、Codex、Cursor、Gemini CLI、DeepSeek 把已有的 AI coding workflow 升级成完整的设计引擎。
+summary: Yuya Mei 把 OpenDesign 当成一个 local-first 的 Claude Design alternative 来使用，连接 Claude Code、Codex、Cursor、Gemini CLI、DeepSeek 把已有的 AI coding workflow 升级成完整的设计引擎。
 date: 2026-05-06
 category: Demo
 durationSeconds: 691
@@ -9,7 +9,7 @@ author: By Yuya Mei
 official: false
 ---
 
-Yuya Mei 把 Open Design 跟自己已经在用的多家 coding agent（Claude Code / Codex / Cursor / Gemini CLI / DeepSeek）串到一起，演示同一份产品需求在不同后端下的产出差异。
+Yuya Mei 把 OpenDesign 跟自己已经在用的多家 coding agent（Claude Code / Codex / Cursor / Gemini CLI / DeepSeek）串到一起，演示同一份产品需求在不同后端下的产出差异。
 
 重点段落：
 

@@ -62,6 +62,52 @@ export function workspaceIdentityCacheKey(
 }
 
 /**
+ * Monotonic account boundary, independent from ambient Workspace selection.
+ *
+ * Lives here rather than in `useWorkspaceContext` so shared catalog modules can
+ * partition their caches on it without importing a React hook module — the same
+ * reason `workspaceProjectHeaders` lives here. `useWorkspaceContext` re-exports
+ * the reader so existing callers are unaffected.
+ *
+ * A sign-in/sign-out cycle can leave every context field identical while the
+ * authority behind them has changed, so any cache keyed only on the context
+ * fields would let a post-boundary reader adopt a pre-boundary answer.
+ */
+let workspaceAccountGeneration = 0;
+let workspaceAccountGenerationStamp = 'initial';
+
+export function currentWorkspaceAccountGeneration(): number {
+  return workspaceAccountGeneration;
+}
+
+export function advanceWorkspaceAccountGeneration(stamp: string): void {
+  if (workspaceAccountGenerationStamp === stamp) return;
+  workspaceAccountGenerationStamp = stamp;
+  workspaceAccountGeneration += 1;
+}
+
+export function resetWorkspaceAccountGeneration(): void {
+  workspaceAccountGeneration = 0;
+  workspaceAccountGenerationStamp = 'initial';
+}
+
+/**
+ * Cache partition for a Workspace-scoped read: the context fields that go on
+ * the wire, plus the account boundary they were captured under.
+ *
+ * A caller that makes several dependent reads should capture the generation ONCE
+ * and pass it to each, so the whole operation is keyed as of one boundary. Left
+ * to default, two reads a few hundred ms apart can straddle a boundary and mix a
+ * pre-boundary answer into a post-boundary one.
+ */
+export function workspaceAccountScopedCacheKey(
+  context: WorkspaceCollabContext | null | undefined,
+  generation: number = currentWorkspaceAccountGeneration(),
+): string {
+  return `${generation}:${workspaceIdentityCacheKey(context)}`;
+}
+
+/**
  * Exact authority for a read-only Workspace resource request. The generation
  * is intentionally part of the identity even when every context field stays
  * unchanged: a newer directory witness must supersede work issued under the

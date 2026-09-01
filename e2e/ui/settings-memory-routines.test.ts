@@ -89,13 +89,13 @@ async function seedSettingsBase(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0, { timeout: 15_000 });
 }
 
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
@@ -185,7 +185,7 @@ test.describe('Settings Memory flows', () => {
           entries: [
             {
               id: 'feedback_ui_density',
-              name: 'Open Design plugin authoring flow',
+              name: 'OpenDesign plugin authoring flow',
               description: 'Keep plugin setup terse and reproducible.',
               type: 'feedback',
               updatedAt: Date.now(),
@@ -226,7 +226,7 @@ test.describe('Settings Memory flows', () => {
               id: 'feedback_ui_density',
               parentId: 'folder-feedback',
               path: '/FEEDBACK/open-design-plugin-authoring-flow',
-              name: 'Open Design plugin authoring flow',
+              name: 'OpenDesign plugin authoring flow',
               description: 'Keep plugin setup terse and reproducible.',
               kind: 'entry',
               type: 'feedback',
@@ -332,7 +332,7 @@ test.describe('Settings Memory flows', () => {
     await expect(memoryTree.getByText('/FEEDBACK', { exact: true })).toBeVisible();
     await expect(memoryTree.getByText('Project', { exact: true })).toBeVisible();
     await expect(memoryTree.getByText('/PROJECT', { exact: true })).toBeVisible();
-    await expect(memoryTree.getByText('Open Design plugin authoring flow')).toBeVisible();
+    await expect(memoryTree.getByText('OpenDesign plugin authoring flow')).toBeVisible();
     await expect(memoryTree.getByText('Weekly launch brief')).toBeVisible();
   });
 
@@ -599,10 +599,8 @@ test.describe('Settings Memory flows', () => {
     await expect(dialog).toBeHidden();
     await expect(settingsDialog.locator('.library-card', { hasText: 'UI preferences' })).toBeVisible();
 
-    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await settingsDialog.getByRole('button', { name: 'Back to home', exact: true }).click();
     await expect(settingsSurface(page)).toHaveCount(0);
-    await settingsDialog.getByRole('button', { name: 'Close', exact: true }).click();
-    await expect(page.getByRole('dialog')).toHaveCount(0);
 
     const reopened = await openMemorySettings(page);
     await expect(reopened.getByText('UI preferences')).toBeVisible();
@@ -658,7 +656,7 @@ test.describe('Settings Memory flows', () => {
     await dialog.getByLabel('Enable memory injection').uncheck();
     await expect(dialog.locator('.memory-disabled-banner')).toBeVisible();
 
-    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Back to home', exact: true }).click();
     const reopened = await openMemorySettings(page);
     await expect(reopened.locator('.memory-disabled-banner')).toBeVisible();
   });
@@ -735,7 +733,7 @@ test.describe('Settings Memory flows', () => {
     await dialog.getByTitle('Learn from chats').click();
     await expect(toggle).not.toBeChecked();
 
-    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Back to home', exact: true }).click();
     const reopened = await openMemorySettings(page);
     await reopened.getByRole('tab', { name: 'How it works' }).click();
     await expect(
@@ -830,8 +828,9 @@ test.describe('Settings Memory flows', () => {
     await expect(addDialog.getByRole('heading', { name: 'Import from apps' })).toBeVisible();
     await addDialog.getByRole('button', { name: 'Manage' }).click();
 
-    await expect(dialog.getByRole('button', { name: /^Connectors$/i })).toHaveClass(/active/);
+    await expect(page).toHaveURL(/\/settings$/);
     await expect(dialog.getByText('Composio API Key', { exact: true })).toBeVisible();
+    await expect(dialog.getByRole('searchbox', { name: /Search connectors/i })).toBeVisible();
   });
 
   test('[P1] scans connected apps from Import from apps and shows suggested memories', async ({ page }) => {
@@ -1114,7 +1113,7 @@ test.describe('Settings Memory flows', () => {
     await expect(githubRow.getByRole('button', { name: 'Connect GitHub' })).toBeDisabled();
 
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
-    await settingsDialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await settingsDialog.getByRole('button', { name: 'Back to home', exact: true }).click();
     settingsDialog = await openMemorySettings(page);
     dialog = await openMemoryAddDialog(page, 'Import from apps', settingsDialog);
 

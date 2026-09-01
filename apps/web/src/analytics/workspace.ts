@@ -1,4 +1,8 @@
-import type { WorkspaceCollabContext } from '@open-design/contracts';
+import {
+  API_ERROR_CODES,
+  workspaceSeatCapacityState,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
 import type {
   TrackingCountBucket,
   TrackingWorkspaceDimensions,
@@ -12,7 +16,6 @@ export function workspaceAnalyticsDimensions(
   if (!context) return {};
   const plan = context.planId?.trim().toLowerCase();
   const planBucket = !plan || plan === 'free' ? 'free' : 'paid';
-  const isSeatFull = context.seatSummary?.isSeatFull;
   return {
     workspace_key: context.workspaceId,
     workspace_type: context.workspaceType,
@@ -21,7 +24,7 @@ export function workspaceAnalyticsDimensions(
     billing_state: context.billingState,
     plan_bucket: planBucket,
     provider_mode: context.providerMode,
-    seat_state: isSeatFull == null ? 'unknown' : isSeatFull ? 'full' : 'available',
+    seat_state: workspaceSeatCapacityState(context.seatSummary),
     $groups: { workspace: context.workspaceId },
   };
 }
@@ -59,4 +62,51 @@ export function stableAnalyticsErrorCode(status?: number): string {
   if (status === 409) return 'conflict';
   if (status === 429) return 'rate_limited';
   return status >= 500 ? 'server_error' : 'request_failed';
+}
+
+const REQUEST_ERROR_CODES = new Set<string>([
+  ...API_ERROR_CODES,
+  // Client-side transport failures and HTTP fallbacks are already bounded
+  // analytics classes. Some call sites classify them before reaching this
+  // helper, so keep the same finite vocabulary accepted as input.
+  'network_error',
+  'unauthorized',
+  'forbidden',
+  'not_found',
+  'conflict',
+  'rate_limited',
+  'server_error',
+  'request_failed',
+  // The remote skill installer predates the shared ApiError envelope. Keep
+  // its operation-specific failure classes explicit and finite here;
+  // BAD_REQUEST, CONFLICT, and INTERNAL_ERROR already live in API_ERROR_CODES.
+  'FETCH_FAILED',
+  'INVALID_ARCHIVE',
+  'INVALID_MANIFEST',
+]);
+
+/** Accept only contract-owned or explicitly enumerated installer error codes. */
+export function boundedRequestErrorCode(value: unknown): string | undefined {
+  return typeof value === 'string' && REQUEST_ERROR_CODES.has(value)
+    ? value
+    : undefined;
+}
+
+/**
+ * Preserve a daemon-provided, bounded API error code when one is available,
+ * then fall back to the stable HTTP status buckets above. This deliberately
+ * refuses arbitrary messages so analytics cardinality cannot grow with paths,
+ * project names, or upstream error text.
+ */
+export function stableAnalyticsRequestErrorCode(
+  error: unknown,
+  fallback = 'request_failed',
+): string {
+  if (!error || typeof error !== 'object') return fallback;
+  const candidate = error as { code?: unknown; status?: unknown };
+  const boundedCode = boundedRequestErrorCode(candidate.code);
+  if (boundedCode) return boundedCode;
+  return typeof candidate.status === 'number'
+    ? stableAnalyticsErrorCode(candidate.status)
+    : fallback;
 }

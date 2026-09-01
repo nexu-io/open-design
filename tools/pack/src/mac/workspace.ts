@@ -1,8 +1,8 @@
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { ToolPackCache } from "../cache.js";
-import type { ToolPackConfig } from "../config.js";
+import type { ToolPackCache } from "../cache/index.js";
+import type { ToolPackConfig } from "../config/index.js";
 import { processWebSourcemaps } from "../web-sourcemaps.js";
 import { ensureWorkspaceBuildArtifacts } from "../workspace-build.js";
 import { runPnpm } from "./commands.js";
@@ -22,6 +22,7 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   await runPnpm(config, ["--filter", "@open-design/download", "build"]);
   await runPnpm(config, ["--filter", "@open-design/host", "build"]);
   await runPnpm(config, ["--filter", "@open-design/diagnostics", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/dsh-runtime", "build"]);
   await runPnpm(config, ["--filter", "@open-design/components", "build"]);
   await runPnpm(config, ["--filter", "@open-design/daemon", "build"]);
   try {

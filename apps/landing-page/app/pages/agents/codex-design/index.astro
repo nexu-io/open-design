@@ -3,7 +3,7 @@
  * /agents/codex-design/ — agent detail page (industrial long-form).
  *
  * Captures "codex design", "codex for design", "build UI with codex",
- * "openai codex frontend" intent and drives to Open Design. When the
+ * "openai codex frontend" intent and drives to OpenDesign. When the
  * agent guide carries a `rich` payload this renders the deep how-to
  * layout (hero CTA + sectioned long-form + images); otherwise it falls
  * back to the compact layout. Linked from the `/agents/` hub.
@@ -73,7 +73,7 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Open Design', item: homeUrl },
+      { '@type': 'ListItem', position: 1, name: 'OpenDesign', item: homeUrl },
       { '@type': 'ListItem', position: 2, name: copy.agents.breadcrumb, item: agentsHubUrl },
       { '@type': 'ListItem', position: 3, name: page.breadcrumb, item: pageUrl },
     ],
@@ -100,7 +100,7 @@ const jsonLd = [
 
 <Layout title={page.title} description={page.description} active="agent" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
-    <a href={href('/')}>Open Design</a>
+    <a href={href('/')}>OpenDesign</a>
     <span>/</span>
     <a href={href('/agents/')}>{copy.agents.breadcrumb}</a>
     <span>/</span>

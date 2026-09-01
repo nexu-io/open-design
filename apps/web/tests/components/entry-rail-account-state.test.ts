@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   resolveEntryRailAccountFooterState,
+  requiresAmrReauthentication,
 } from '../../src/components/entry-rail-account-state';
 import type { WorkspaceContextState } from '../../src/collab/useWorkspaceContext';
 
@@ -26,13 +27,13 @@ describe('resolveEntryRailAccountFooterState', () => {
   });
 
   it.each([true, null] as const)(
-    'does not claim sign-out during an outage when local login is %s',
+    'shows automatic recovery during an outage when local login is %s',
     (amrLoggedIn) => {
       expect(resolveEntryRailAccountFooterState({
         context: null,
         loading: false,
         failure: 'unavailable',
-      }, amrLoggedIn)).toBe('syncing');
+      }, amrLoggedIn)).toBe('recovering');
     },
   );
 
@@ -42,6 +43,22 @@ describe('resolveEntryRailAccountFooterState', () => {
       loading: false,
       failure: 'unavailable',
     }, false)).toBe('sign-in');
+  });
+
+  it('offers the existing sign-in card when authoritative auth has expired', () => {
+    expect(resolveEntryRailAccountFooterState({
+      context: null,
+      loading: false,
+      failure: 'reauth-required',
+    }, true, 'reauth_required')).toBe('sign-in');
+  });
+
+  it('does not keep a stale cached account row above the sign-in card after auth expires', () => {
+    expect(resolveEntryRailAccountFooterState({
+      context: SIGNED_IN_CONTEXT,
+      loading: false,
+      failure: 'reauth-required',
+    }, true, 'reauth_required')).toBe('sign-in');
   });
 
   it('accepts the next successful null response as authoritative sign-out', () => {
@@ -57,5 +74,11 @@ describe('resolveEntryRailAccountFooterState', () => {
       loading: false,
       failure: 'unsupported',
     }, true)).toBe('sign-in');
+  });
+});
+
+describe('requiresAmrReauthentication', () => {
+  it('requires reauthentication when workspace authority detects expiry before status polling', () => {
+    expect(requiresAmrReauthentication('authenticated', 'reauth-required')).toBe(true);
   });
 });

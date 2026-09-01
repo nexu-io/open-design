@@ -29,6 +29,7 @@ export interface ActiveConversationChatState {
     commentAttachments?: ChatCommentAttachment[];
   }>;
   error: string | null;
+  errorSourceAssistantId?: string | null;
   onSend: (
     prompt: string,
     attachments: ChatAttachment[],
@@ -145,13 +146,14 @@ export function SideChatTab({
           messages={controlledChat?.messages ?? chat.messages}
           streaming={controlledChat?.streaming ?? chat.streaming}
           loading={controlledChat?.loading ?? chat.loading}
-          sendDisabled={controlledChat?.sendDisabled}
+          sendDisabled={controlledChat?.sendDisabled ?? chat.sendDisabled}
           queuedItems={controlledChat?.queuedItems}
           onRemoveQueuedSend={controlledChat?.onRemoveQueuedSend}
           onUpdateQueuedSend={controlledChat?.onUpdateQueuedSend}
           onReorderQueuedSends={controlledChat?.onReorderQueuedSends}
           onSendQueuedNow={controlledChat?.onSendQueuedNow}
           error={controlledChat ? controlledChat.error : chat.error}
+          errorSourceAssistantId={controlledChat?.errorSourceAssistantId}
           projectId={projectId}
           sessionMode={sessionMode}
           onSessionModeChange={(mode) => onSessionModeChange?.(conversationId, mode)}

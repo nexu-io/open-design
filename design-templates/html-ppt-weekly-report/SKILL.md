@@ -3,9 +3,9 @@ name: html-ppt-weekly-report
 en_name: "Write a Weekly Growth Review like a Head of Analytics"
 zh_name: "像分析负责人一样写每周增长复盘"
 description: |
-  Open Design's weekly growth review: stars, installs, activation — the number, the driver, and the recommended move. Built as a decision-grade data & finance deck for growth & product team.
+  OpenDesign's weekly growth review: stars, installs, activation — the number, the driver, and the recommended move. Built as a decision-grade data & finance deck for growth & product team.
 en_description: |
-  Open Design's weekly growth review: stars, installs, activation — the number, the driver, and the recommended move. Built as a decision-grade data & finance deck for growth & product team.
+  OpenDesign's weekly growth review: stars, installs, activation — the number, the driver, and the recommended move. Built as a decision-grade data & finance deck for growth & product team.
 zh_description: |
   像分析负责人一样写每周增长复盘——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -39,7 +39,7 @@ od:
   animations: true
   category: "data-finance"
   scenario: "finance"
-  example_prompt: "Create \"Write a Weekly Growth Review like a Head of Analytics\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: Open Design's weekly growth review: stars, installs, activation — the number, the driver, and the recommended move. Audience: growth & product team. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it."
+  example_prompt: "Create \"Write a Weekly Growth Review like a Head of Analytics\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: OpenDesign's weekly growth review: stars, installs, activation — the number, the driver, and the recommended move. Audience: growth & product team. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it."
 ---
 # HTML PPT · Weekly Report
 

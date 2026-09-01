@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { APP_KEYS } from "@open-design/sidecar-proto";
 
-import type { ToolPackConfig } from "../config.js";
+import type { ToolPackConfig } from "../config/index.js";
 import { PRODUCT_NAME } from "./constants.js";
 import {
   MAC_PREBUNDLE_ENTRYPOINTS_DIR_NAME,
@@ -13,7 +13,7 @@ import {
   MAC_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH,
   MAC_PREBUNDLED_PACKAGED_MAIN_RELATIVE_PATH,
   MAC_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH,
-} from "../mac-prebundle.js";
+} from "./prebundle.js";
 import { resolveMacInstallIdentity } from "./identity.js";
 import type { MacPaths } from "./types.js";
 

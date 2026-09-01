@@ -1,5 +1,5 @@
 ---
-title: "Open Design is coming to Osaka / Kyoto"
+title: "OpenDesign is coming to Osaka / Kyoto"
 date: 2026-06-29
 category: "Community"
 readingTime: 3
@@ -7,19 +7,19 @@ summary: "A small meetup for designers, builders, and AI-native teams exploring 
 socialImage: "/blog/open-design-osaka-kyoto-meetup-cover.jpg"
 ctaKind: event-register
 ctaTitle: "Join the Osaka / Kyoto meetup"
-ctaBody: "Save your spot for the July 6 Open Design meetup / workshop."
+ctaBody: "Save your spot for the July 6 OpenDesign meetup / workshop."
 ctaLabel: "Register on Luma ↗"
 ctaHref: "https://luma.com/zd4pqs91?utm_source=open_design_blog&utm_medium=referral&utm_campaign=osaka_kyoto_meetup_2026_07_06&utm_content=bottom_cta"
 i18n:
   zh:
-    title: "Open Design 来到大阪 / 京都"
+    title: "OpenDesign 来到大阪 / 京都"
     summary: "一场面向设计师、builder 和 AI-native 团队的小型 meetup，一起探讨 agent 如何改变设计、原型和产品工作。"
     category: "社区"
     readingTime: 3
     bodyHtml: |
       <p>AI 设计正在走出 demo 阶段。</p>
       <p>现在真正有意思的问题，已经不是 agent 能不能生成一个好看的界面，而是 agent 能不能帮团队把 idea、reference 和设计系统，变成真正可编辑的项目。</p>
-      <p>7 月 6 日，Open Design 将在大阪 / 京都举办一场小型 meetup / workshop，聚集正在实践这一转变的人。我们会把规模控制得很小，大约 20 人，让讨论保持具体而直接。</p>
+      <p>7 月 6 日，OpenDesign 将在大阪 / 京都举办一场小型 meetup / workshop，聚集正在实践这一转变的人。我们会把规模控制得很小，大约 20 人，让讨论保持具体而直接。</p>
       <p><a href="https://luma.com/zd4pqs91?utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=osaka_kyoto_meetup_2026_07_06&amp;utm_content=hero_link">报名大阪 / 京都 meetup</a></p>
       <table><tbody>
         <tr><th>地点</th><td>大阪 / 京都</td></tr>
@@ -30,7 +30,7 @@ i18n:
         <tr><th>主题</th><td>用 agent 做设计、原型、网站和产品工作流</td></tr>
       </tbody></table>
       <h2>我们为什么要聚在一起</h2>
-      <p>Open Design 建立在一个简单的信念之上：设计工具的未来，不会是一块封闭的画布。</p>
+      <p>OpenDesign 建立在一个简单的信念之上：设计工具的未来，不会是一块封闭的画布。</p>
       <p>它会是 local-first、agent-native、可编辑的，并且能和团队已经在用的工具连接起来。</p>
       <p>这带来一种不一样的讨论。少一些把 prompt 当技巧的话题，多一些关于 workflow 的思考：人们究竟是如何从粗糙的意图走到视觉方向，从视觉方向走到代码，再从代码回到迭代的。</p>
       <figure><img src="/blog/open-design-osaka-kyoto-meetup-inline.webp" alt="想法、prompt、reference 和设计系统，经由 agent 汇入一个可编辑的项目" /></figure>
@@ -52,14 +52,14 @@ i18n:
       <p>座位有限，这样我们才能把对话保持得务实而直接。</p>
       <p><a href="https://luma.com/zd4pqs91?utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=osaka_kyoto_meetup_2026_07_06&amp;utm_content=final_cta">点击这里报名</a></p>
   ja:
-    title: "Open Design が大阪 / 京都にやってきます"
+    title: "OpenDesign が大阪 / 京都にやってきます"
     summary: "デザイン、プロトタイピング、プロダクト開発を agent がどう変えるかを探る、デザイナー・builder・AI-native チームのための小さな meetup。"
     category: "コミュニティ"
     readingTime: 3
     bodyHtml: |
       <p>AI デザインは demo の段階を越えつつあります。</p>
       <p>いま面白い問いは、agent が見栄えの良い画面を生成できるかどうかではありません。agent がチームを、アイデア・参考資料・デザインシステムから、実際に編集できるプロジェクトへと運べるかどうかです。</p>
-      <p>7 月 6 日、Open Design は大阪 / 京都で小さな meetup / workshop を開催します。この変化を実践の中で探っている人たちのための場です。会話を具体的で率直に保てるよう、20 人ほどの小さな規模にします。</p>
+      <p>7 月 6 日、OpenDesign は大阪 / 京都で小さな meetup / workshop を開催します。この変化を実践の中で探っている人たちのための場です。会話を具体的で率直に保てるよう、20 人ほどの小さな規模にします。</p>
       <p><a href="https://luma.com/zd4pqs91?utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=osaka_kyoto_meetup_2026_07_06&amp;utm_content=hero_link">大阪 / 京都 meetup に登録する</a></p>
       <table><tbody>
         <tr><th>場所</th><td>大阪 / 京都</td></tr>
@@ -70,7 +70,7 @@ i18n:
         <tr><th>テーマ</th><td>デザイン、プロトタイピング、ウェブサイト、プロダクトワークフローのための agent</td></tr>
       </tbody></table>
       <h2>なぜ集まるのか</h2>
-      <p>Open Design は、ひとつのシンプルな信念のうえに作られています。デザインツールの未来は、閉じた単一のキャンバスにはならない、という信念です。</p>
+      <p>OpenDesign は、ひとつのシンプルな信念のうえに作られています。デザインツールの未来は、閉じた単一のキャンバスにはならない、という信念です。</p>
       <p>それは local-first で、agent-native で、編集可能で、チームがすでに使っているツールとつながっているものになります。</p>
       <p>そこから、これまでとは違う会話が生まれます。prompt をテクニックとして語るより、workflow について語る会話です。人が実際に、ざっくりした意図からビジュアルの方向へ、ビジュアルの方向からコードへ、そしてコードから反復へと、どう進んでいくのか。</p>
       <figure><img src="/blog/open-design-osaka-kyoto-meetup-inline.webp" alt="アイデア、prompt、参考資料、デザインシステムが agent を通って編集可能なプロジェクトへ流れ込む様子" /></figure>
@@ -92,14 +92,14 @@ i18n:
       <p>席は限られています。だからこそ、会話を実践的で率直に保てます。</p>
       <p><a href="https://luma.com/zd4pqs91?utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=osaka_kyoto_meetup_2026_07_06&amp;utm_content=final_cta">こちらから登録</a></p>
   ko:
-    title: "Open Design가 오사카 / 교토에 옵니다"
+    title: "OpenDesign가 오사카 / 교토에 옵니다"
     summary: "agent가 디자인, 프로토타이핑, 제품 작업을 어떻게 바꾸는지 함께 살펴보는, 디자이너·builder·AI-native 팀을 위한 작은 meetup."
     category: "커뮤니티"
     readingTime: 3
     bodyHtml: |
       <p>AI 디자인은 demo 단계를 지나가고 있습니다.</p>
       <p>지금 흥미로운 질문은 agent가 보기 좋은 화면을 만들 수 있는가가 아닙니다. agent가 팀을 아이디어, 레퍼런스, 디자인 시스템에서 실제로 편집 가능한 프로젝트로 옮겨 줄 수 있는가입니다.</p>
-      <p>7월 6일, Open Design은 오사카 / 교토에서 작은 meetup / workshop을 엽니다. 이 변화를 실제로 실험하고 있는 사람들을 위한 자리입니다. 대화를 구체적이고 솔직하게 유지할 수 있도록 20명 정도의 작은 규모로 진행합니다.</p>
+      <p>7월 6일, OpenDesign은 오사카 / 교토에서 작은 meetup / workshop을 엽니다. 이 변화를 실제로 실험하고 있는 사람들을 위한 자리입니다. 대화를 구체적이고 솔직하게 유지할 수 있도록 20명 정도의 작은 규모로 진행합니다.</p>
       <p><a href="https://luma.com/zd4pqs91?utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=osaka_kyoto_meetup_2026_07_06&amp;utm_content=hero_link">오사카 / 교토 meetup 등록하기</a></p>
       <table><tbody>
         <tr><th>장소</th><td>오사카 / 교토</td></tr>
@@ -110,7 +110,7 @@ i18n:
         <tr><th>주제</th><td>디자인, 프로토타이핑, 웹사이트, 제품 워크플로를 위한 agent</td></tr>
       </tbody></table>
       <h2>왜 모이는가</h2>
-      <p>Open Design은 단순한 믿음 위에 세워졌습니다. 디자인 도구의 미래는 닫힌 하나의 캔버스가 아닐 것이라는 믿음입니다.</p>
+      <p>OpenDesign은 단순한 믿음 위에 세워졌습니다. 디자인 도구의 미래는 닫힌 하나의 캔버스가 아닐 것이라는 믿음입니다.</p>
       <p>그것은 local-first이고, agent-native이며, 편집 가능하고, 팀이 이미 쓰는 도구와 이어져 있을 것입니다.</p>
       <p>그러면 다른 종류의 대화가 생깁니다. prompt를 요령으로 다루기보다, workflow에 대한 대화입니다. 사람들이 실제로 거친 의도에서 시각적 방향으로, 시각적 방향에서 코드로, 그리고 코드에서 다시 반복으로 어떻게 나아가는지에 관한 이야기입니다.</p>
       <figure><img src="/blog/open-design-osaka-kyoto-meetup-inline.webp" alt="아이디어, prompt, 레퍼런스, 디자인 시스템이 agent를 거쳐 편집 가능한 프로젝트로 흘러 들어가는 모습" /></figure>
@@ -132,14 +132,14 @@ i18n:
       <p>자리가 한정되어 있어 대화를 실용적이고 솔직하게 유지할 수 있습니다.</p>
       <p><a href="https://luma.com/zd4pqs91?utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=osaka_kyoto_meetup_2026_07_06&amp;utm_content=final_cta">여기에서 등록하기</a></p>
   de:
-    title: "Open Design kommt nach Osaka / Kyoto"
+    title: "OpenDesign kommt nach Osaka / Kyoto"
     summary: "Ein kleines Meetup für Designer, Builder und AI-native Teams, um zu erkunden, wie Agents Design, Prototyping und Produktarbeit verändern."
     category: "Gemeinschaft"
     readingTime: 3
     bodyHtml: |
       <p>AI Design lässt die Demo-Phase hinter sich.</p>
       <p>Die spannende Frage ist jetzt nicht, ob ein Agent einen hübschen Screen erzeugen kann. Sie lautet, ob Agents Teams dabei helfen können, von Ideen, Referenzen und Design-Systemen zu echten, editierbaren Projekten zu gelangen.</p>
-      <p>Am 6. Juli veranstaltet Open Design ein kleines Meetup / Workshop in Osaka / Kyoto für Menschen, die diesen Wandel in der Praxis erkunden. Wir halten die Runde klein, rund 20 Personen, damit das Gespräch konkret und direkt bleibt.</p>
+      <p>Am 6. Juli veranstaltet OpenDesign ein kleines Meetup / Workshop in Osaka / Kyoto für Menschen, die diesen Wandel in der Praxis erkunden. Wir halten die Runde klein, rund 20 Personen, damit das Gespräch konkret und direkt bleibt.</p>
       <p><a href="https://luma.com/zd4pqs91?utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=osaka_kyoto_meetup_2026_07_06&amp;utm_content=hero_link">Für das Meetup in Osaka / Kyoto anmelden</a></p>
       <table><tbody>
         <tr><th>Ort</th><td>Osaka / Kyoto</td></tr>
@@ -150,7 +150,7 @@ i18n:
         <tr><th>Fokus</th><td>Agents für Design, Prototyping, Websites und Produkt-Workflows</td></tr>
       </tbody></table>
       <h2>Warum wir zusammenkommen</h2>
-      <p>Open Design gründet auf einer einfachen Überzeugung: Die Zukunft der Design-Tools wird keine einzelne geschlossene Canvas sein.</p>
+      <p>OpenDesign gründet auf einer einfachen Überzeugung: Die Zukunft der Design-Tools wird keine einzelne geschlossene Canvas sein.</p>
       <p>Sie wird local-first, agent-native, editierbar und mit den Tools verbunden sein, die Teams bereits nutzen.</p>
       <p>Das schafft ein anderes Gespräch. Weniger über Prompts als Tricks, mehr über Workflows: wie Menschen tatsächlich von einer groben Absicht zur visuellen Richtung kommen, von der visuellen Richtung zum Code und vom Code zurück in die Iteration.</p>
       <figure><img src="/blog/open-design-osaka-kyoto-meetup-inline.webp" alt="Ideen, Prompts, Referenzen und Design-Systeme fließen durch einen Agent in ein editierbares Projekt" /></figure>
@@ -172,14 +172,14 @@ i18n:
       <p>Die Plätze sind begrenzt, damit das Gespräch praktisch und direkt bleibt.</p>
       <p><a href="https://luma.com/zd4pqs91?utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=osaka_kyoto_meetup_2026_07_06&amp;utm_content=final_cta">Hier anmelden</a></p>
   fr:
-    title: "Open Design arrive à Osaka / Kyoto"
+    title: "OpenDesign arrive à Osaka / Kyoto"
     summary: "Un petit meetup pour designers, builders et équipes AI-native afin d'explorer comment les agents transforment le design, le prototypage et le travail produit."
     category: "Communauté"
     readingTime: 3
     bodyHtml: |
       <p>Le design avec l'IA dépasse le stade des démos.</p>
       <p>La question intéressante n'est plus de savoir si un agent peut générer un écran esthétique. C'est de savoir si les agents peuvent aider les équipes à passer des idées, des références et des design systems à de vrais projets éditables.</p>
-      <p>Le 6 juillet, Open Design organise un petit meetup / atelier à Osaka / Kyoto pour celles et ceux qui explorent ce changement dans la pratique. Nous gardons un groupe restreint, une vingtaine de personnes, pour que la conversation reste concrète et directe.</p>
+      <p>Le 6 juillet, OpenDesign organise un petit meetup / atelier à Osaka / Kyoto pour celles et ceux qui explorent ce changement dans la pratique. Nous gardons un groupe restreint, une vingtaine de personnes, pour que la conversation reste concrète et directe.</p>
       <p><a href="https://luma.com/zd4pqs91?utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=osaka_kyoto_meetup_2026_07_06&amp;utm_content=hero_link">S'inscrire au meetup d'Osaka / Kyoto</a></p>
       <table><tbody>
         <tr><th>Lieu</th><td>Osaka / Kyoto</td></tr>
@@ -190,7 +190,7 @@ i18n:
         <tr><th>Thème</th><td>Les agents pour le design, le prototypage, les sites web et les workflows produit</td></tr>
       </tbody></table>
       <h2>Pourquoi nous nous réunissons</h2>
-      <p>Open Design repose sur une conviction simple : l'avenir des outils de design ne sera pas un canevas fermé et unique.</p>
+      <p>OpenDesign repose sur une conviction simple : l'avenir des outils de design ne sera pas un canevas fermé et unique.</p>
       <p>Il sera local-first, agent-native, éditable et connecté aux outils que les équipes utilisent déjà.</p>
       <p>Cela crée un autre type de conversation. Moins sur les prompts comme astuces, davantage sur les workflows : comment les gens passent réellement d'une intention brute à une direction visuelle, de la direction visuelle au code, puis du code à l'itération.</p>
       <figure><img src="/blog/open-design-osaka-kyoto-meetup-inline.webp" alt="Idées, prompts, références et design systems circulant à travers un agent vers un projet éditable" /></figure>
@@ -212,14 +212,14 @@ i18n:
       <p>Les places sont limitées pour que la conversation reste concrète et directe.</p>
       <p><a href="https://luma.com/zd4pqs91?utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=osaka_kyoto_meetup_2026_07_06&amp;utm_content=final_cta">S'inscrire ici</a></p>
   ru:
-    title: "Open Design приезжает в Осаку / Киото"
+    title: "OpenDesign приезжает в Осаку / Киото"
     summary: "Небольшой meetup для дизайнеров, builder'ов и AI-native команд, чтобы исследовать, как агенты меняют дизайн, прототипирование и работу над продуктом."
     category: "Сообщество"
     readingTime: 3
     bodyHtml: |
       <p>AI-дизайн выходит за пределы демок.</p>
       <p>Интересный вопрос теперь не в том, может ли агент сгенерировать красивый экран. Он в том, могут ли агенты помочь командам перейти от идей, референсов и дизайн-систем к реальным редактируемым проектам.</p>
-      <p>6 июля Open Design проведет небольшой meetup / workshop в Осаке / Киото для тех, кто исследует этот сдвиг на практике. Мы держим группу небольшой, около 20 человек, чтобы разговор оставался конкретным и прямым.</p>
+      <p>6 июля OpenDesign проведет небольшой meetup / workshop в Осаке / Киото для тех, кто исследует этот сдвиг на практике. Мы держим группу небольшой, около 20 человек, чтобы разговор оставался конкретным и прямым.</p>
       <p><a href="https://luma.com/zd4pqs91?utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=osaka_kyoto_meetup_2026_07_06&amp;utm_content=hero_link">Зарегистрироваться на meetup в Осаке / Киото</a></p>
       <table><tbody>
         <tr><th>Где</th><td>Осака / Киото</td></tr>
@@ -230,7 +230,7 @@ i18n:
         <tr><th>Фокус</th><td>Агенты для дизайна, прототипирования, сайтов и продуктовых workflow</td></tr>
       </tbody></table>
       <h2>Зачем мы собираемся</h2>
-      <p>Open Design строится на простом убеждении: будущее дизайн-инструментов не будет единым закрытым холстом.</p>
+      <p>OpenDesign строится на простом убеждении: будущее дизайн-инструментов не будет единым закрытым холстом.</p>
       <p>Оно будет local-first, agent-native, редактируемым и связанным с инструментами, которыми команды уже пользуются.</p>
       <p>Это рождает другой разговор. Меньше о промптах как трюках, больше о workflow: как люди на самом деле идут от грубого замысла к визуальному направлению, от визуального направления к коду и от кода обратно к итерации.</p>
       <figure><img src="/blog/open-design-osaka-kyoto-meetup-inline.webp" alt="Идеи, промпты, референсы и дизайн-системы проходят через агента в редактируемый проект" /></figure>
@@ -252,14 +252,14 @@ i18n:
       <p>Мест немного, чтобы разговор оставался практичным и прямым.</p>
       <p><a href="https://luma.com/zd4pqs91?utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=osaka_kyoto_meetup_2026_07_06&amp;utm_content=final_cta">Зарегистрироваться</a></p>
   es:
-    title: "Open Design llega a Osaka / Kyoto"
+    title: "OpenDesign llega a Osaka / Kyoto"
     summary: "Un pequeño meetup para diseñadores, builders y equipos AI-native para explorar cómo los agentes cambian el diseño, el prototipado y el trabajo de producto."
     category: "Comunidad"
     readingTime: 3
     bodyHtml: |
       <p>El diseño con IA está dejando atrás las demos.</p>
       <p>La pregunta interesante ya no es si un agente puede generar una pantalla atractiva. Es si los agentes pueden ayudar a los equipos a pasar de ideas, referencias y design systems a proyectos reales y editables.</p>
-      <p>El 6 de julio, Open Design organiza un pequeño meetup / taller en Osaka / Kyoto para quienes exploran ese cambio en la práctica. Mantenemos el grupo reducido, unas 20 personas, para que la conversación siga siendo concreta y directa.</p>
+      <p>El 6 de julio, OpenDesign organiza un pequeño meetup / taller en Osaka / Kyoto para quienes exploran ese cambio en la práctica. Mantenemos el grupo reducido, unas 20 personas, para que la conversación siga siendo concreta y directa.</p>
       <p><a href="https://luma.com/zd4pqs91?utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=osaka_kyoto_meetup_2026_07_06&amp;utm_content=hero_link">Registrarse al meetup de Osaka / Kyoto</a></p>
       <table><tbody>
         <tr><th>Dónde</th><td>Osaka / Kyoto</td></tr>
@@ -270,7 +270,7 @@ i18n:
         <tr><th>Enfoque</th><td>Agentes para diseño, prototipado, sitios web y workflows de producto</td></tr>
       </tbody></table>
       <h2>Por qué nos reunimos</h2>
-      <p>Open Design se basa en una creencia simple: el futuro de las herramientas de diseño no será un único lienzo cerrado.</p>
+      <p>OpenDesign se basa en una creencia simple: el futuro de las herramientas de diseño no será un único lienzo cerrado.</p>
       <p>Será local-first, agent-native, editable y conectado con las herramientas que los equipos ya usan.</p>
       <p>Eso crea otro tipo de conversación. Menos sobre los prompts como trucos y más sobre los workflows: cómo la gente pasa realmente de una intención en bruto a una dirección visual, de la dirección visual al código, y del código de vuelta a la iteración.</p>
       <figure><img src="/blog/open-design-osaka-kyoto-meetup-inline.webp" alt="Ideas, prompts, referencias y design systems fluyendo a través de un agente hacia un proyecto editable" /></figure>
@@ -292,14 +292,14 @@ i18n:
       <p>Las plazas son limitadas para que la conversación siga siendo práctica y directa.</p>
       <p><a href="https://luma.com/zd4pqs91?utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=osaka_kyoto_meetup_2026_07_06&amp;utm_content=final_cta">Regístrate aquí</a></p>
   pt-br:
-    title: "O Open Design chega a Osaka / Kyoto"
+    title: "O OpenDesign chega a Osaka / Kyoto"
     summary: "Um pequeno meetup para designers, builders e times AI-native explorarem como os agentes mudam o design, a prototipagem e o trabalho de produto."
     category: "Comunidade"
     readingTime: 3
     bodyHtml: |
       <p>O design com IA está deixando as demos para trás.</p>
       <p>A pergunta interessante agora não é se um agente consegue gerar uma tela bonita. É se os agentes conseguem ajudar os times a sair de ideias, referências e design systems para projetos reais e editáveis.</p>
-      <p>Em 6 de julho, a Open Design realiza um pequeno meetup / workshop em Osaka / Kyoto para quem está explorando essa mudança na prática. Mantemos o grupo pequeno, cerca de 20 pessoas, para que a conversa continue concreta e direta.</p>
+      <p>Em 6 de julho, a OpenDesign realiza um pequeno meetup / workshop em Osaka / Kyoto para quem está explorando essa mudança na prática. Mantemos o grupo pequeno, cerca de 20 pessoas, para que a conversa continue concreta e direta.</p>
       <p><a href="https://luma.com/zd4pqs91?utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=osaka_kyoto_meetup_2026_07_06&amp;utm_content=hero_link">Inscrever-se no meetup de Osaka / Kyoto</a></p>
       <table><tbody>
         <tr><th>Onde</th><td>Osaka / Kyoto</td></tr>
@@ -310,7 +310,7 @@ i18n:
         <tr><th>Foco</th><td>Agentes para design, prototipagem, sites e workflows de produto</td></tr>
       </tbody></table>
       <h2>Por que vamos nos reunir</h2>
-      <p>A Open Design nasce de uma crença simples: o futuro das ferramentas de design não será um único canvas fechado.</p>
+      <p>A OpenDesign nasce de uma crença simples: o futuro das ferramentas de design não será um único canvas fechado.</p>
       <p>Ele será local-first, agent-native, editável e conectado às ferramentas que os times já usam.</p>
       <p>Isso cria outro tipo de conversa. Menos sobre prompts como truques e mais sobre workflows: como as pessoas realmente saem de uma intenção crua para uma direção visual, da direção visual para o código, e do código de volta para a iteração.</p>
       <figure><img src="/blog/open-design-osaka-kyoto-meetup-inline.webp" alt="Ideias, prompts, referências e design systems fluindo através de um agente para um projeto editável" /></figure>
@@ -332,14 +332,14 @@ i18n:
       <p>As vagas são limitadas para que a conversa continue prática e direta.</p>
       <p><a href="https://luma.com/zd4pqs91?utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=osaka_kyoto_meetup_2026_07_06&amp;utm_content=final_cta">Inscreva-se aqui</a></p>
   it:
-    title: "Open Design arriva a Osaka / Kyoto"
+    title: "OpenDesign arriva a Osaka / Kyoto"
     summary: "Un piccolo meetup per designer, builder e team AI-native per esplorare come gli agent cambiano design, prototipazione e lavoro di prodotto."
     category: "Comunità"
     readingTime: 3
     bodyHtml: |
       <p>Il design con l'AI sta superando la fase delle demo.</p>
       <p>La domanda interessante ora non è se un agent riesce a generare una schermata gradevole. È se gli agent possono aiutare i team a passare da idee, reference e design system a veri progetti modificabili.</p>
-      <p>Il 6 luglio, Open Design organizza un piccolo meetup / workshop a Osaka / Kyoto per chi sta esplorando questo cambiamento nella pratica. Manteniamo il gruppo ristretto, una ventina di persone, così la conversazione resta concreta e diretta.</p>
+      <p>Il 6 luglio, OpenDesign organizza un piccolo meetup / workshop a Osaka / Kyoto per chi sta esplorando questo cambiamento nella pratica. Manteniamo il gruppo ristretto, una ventina di persone, così la conversazione resta concreta e diretta.</p>
       <p><a href="https://luma.com/zd4pqs91?utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=osaka_kyoto_meetup_2026_07_06&amp;utm_content=hero_link">Registrati al meetup di Osaka / Kyoto</a></p>
       <table><tbody>
         <tr><th>Dove</th><td>Osaka / Kyoto</td></tr>
@@ -350,7 +350,7 @@ i18n:
         <tr><th>Focus</th><td>Agent per design, prototipazione, siti web e workflow di prodotto</td></tr>
       </tbody></table>
       <h2>Perché ci riuniamo</h2>
-      <p>Open Design nasce da una convinzione semplice: il futuro degli strumenti di design non sarà un'unica canvas chiusa.</p>
+      <p>OpenDesign nasce da una convinzione semplice: il futuro degli strumenti di design non sarà un'unica canvas chiusa.</p>
       <p>Sarà local-first, agent-native, modificabile e collegato agli strumenti che i team già usano.</p>
       <p>Questo crea un altro tipo di conversazione. Meno sui prompt come trucchi, più sui workflow: come le persone passano davvero da un'intenzione grezza a una direzione visiva, dalla direzione visiva al codice e dal codice di nuovo all'iterazione.</p>
       <figure><img src="/blog/open-design-osaka-kyoto-meetup-inline.webp" alt="Idee, prompt, reference e design system che passano attraverso un agent verso un progetto modificabile" /></figure>
@@ -372,14 +372,14 @@ i18n:
       <p>I posti sono limitati così la conversazione resta concreta e diretta.</p>
       <p><a href="https://luma.com/zd4pqs91?utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=osaka_kyoto_meetup_2026_07_06&amp;utm_content=final_cta">Registrati qui</a></p>
   tr:
-    title: "Open Design Osaka / Kyoto'ya geliyor"
+    title: "OpenDesign Osaka / Kyoto'ya geliyor"
     summary: "Agent'ların tasarımı, prototiplemeyi ve ürün çalışmasını nasıl değiştirdiğini keşfetmek için tasarımcılar, builder'lar ve AI-native ekipler için küçük bir meetup."
     category: "Topluluk"
     readingTime: 3
     bodyHtml: |
       <p>AI tasarım demo aşamasını geride bırakıyor.</p>
       <p>Artık ilginç soru, bir agent'ın güzel görünen bir ekran üretip üretemeyeceği değil. Soru, agent'ların ekiplere fikirlerden, referanslardan ve design system'lerden gerçek, düzenlenebilir projelere geçişte yardımcı olup olamayacağı.</p>
-      <p>6 Temmuz'da Open Design, bu değişimi pratikte keşfeden kişiler için Osaka / Kyoto'da küçük bir meetup / workshop düzenliyor. Sohbetin somut ve doğrudan kalabilmesi için grubu küçük tutuyoruz, yaklaşık 20 kişi.</p>
+      <p>6 Temmuz'da OpenDesign, bu değişimi pratikte keşfeden kişiler için Osaka / Kyoto'da küçük bir meetup / workshop düzenliyor. Sohbetin somut ve doğrudan kalabilmesi için grubu küçük tutuyoruz, yaklaşık 20 kişi.</p>
       <p><a href="https://luma.com/zd4pqs91?utm_source=open_design_blog&amp;utm_medium=referral&amp;utm_campaign=osaka_kyoto_meetup_2026_07_06&amp;utm_content=hero_link">Osaka / Kyoto meetup'ına kayıt ol</a></p>
       <table><tbody>
         <tr><th>Nerede</th><td>Osaka / Kyoto</td></tr>
@@ -390,7 +390,7 @@ i18n:
         <tr><th>Odak</th><td>Tasarım, prototipleme, web siteleri ve ürün workflow'ları için agent'lar</td></tr>
       </tbody></table>
       <h2>Neden bir araya geliyoruz</h2>
-      <p>Open Design basit bir inanç üzerine kurulu: tasarım araçlarının geleceği tek ve kapalı bir canvas olmayacak.</p>
+      <p>OpenDesign basit bir inanç üzerine kurulu: tasarım araçlarının geleceği tek ve kapalı bir canvas olmayacak.</p>
       <p>Local-first, agent-native, düzenlenebilir ve ekiplerin zaten kullandığı araçlarla bağlantılı olacak.</p>
       <p>Bu, farklı türde bir sohbet doğuruyor. Prompt'ları birer numara olarak konuşmaktan çok, workflow'lar üzerine: insanların gerçekte kaba bir niyetten görsel yöne, görsel yönden koda ve koddan tekrar iterasyona nasıl geçtiği.</p>
       <figure><img src="/blog/open-design-osaka-kyoto-meetup-inline.webp" alt="Fikirler, prompt'lar, referanslar ve design system'ler bir agent aracılığıyla düzenlenebilir bir projeye akıyor" /></figure>
@@ -417,7 +417,7 @@ AI design is moving past demos.
 
 The interesting question now is not whether an agent can generate a good-looking screen. It is whether agents can help teams move from ideas, references, and design systems into real editable projects.
 
-On July 6, Open Design is hosting a small meetup / workshop in Osaka / Kyoto for people exploring that shift in practice. We are keeping the room small, around 20 people, so the conversation can stay practical and direct.
+On July 6, OpenDesign is hosting a small meetup / workshop in Osaka / Kyoto for people exploring that shift in practice. We are keeping the room small, around 20 people, so the conversation can stay practical and direct.
 
 [Register for the Osaka / Kyoto meetup](https://luma.com/zd4pqs91?utm_source=open_design_blog&utm_medium=referral&utm_campaign=osaka_kyoto_meetup_2026_07_06&utm_content=hero_link)
 
@@ -432,7 +432,7 @@ On July 6, Open Design is hosting a small meetup / workshop in Osaka / Kyoto for
 
 ## Why we are gathering
 
-Open Design is built around a simple belief: the future of design tools will not be a single closed canvas.
+OpenDesign is built around a simple belief: the future of design tools will not be a single closed canvas.
 
 It will be local-first, agent-native, editable, and connected to the tools teams already use.
 

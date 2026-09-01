@@ -27,6 +27,18 @@ function ruleValue(block: string, property: string): string {
 }
 
 describe('workspace tabs chrome styles', () => {
+  it('keeps the account actions clickable inside the native draggable chrome', () => {
+    const chrome = cssDeclarations(shellCss, '.workspace-tabs-chrome.app-chrome-header');
+    const actions = cssDeclarations(shellCss, '.workspace-chrome-account-actions');
+    const cluster = cssDeclarations(entryLayoutCss, '.entry-top-right-cluster');
+
+    expect(ruleValue(chrome, '-webkit-app-region')).toBe('drag');
+    expect(ruleValue(chrome, 'overflow')).toBe('visible');
+    expect(ruleValue(actions, '-webkit-app-region')).toBe('no-drag');
+    expect(ruleValue(actions, 'margin-left')).toBe('auto');
+    expect(cluster).not.toContain('position:');
+  });
+
   it('keeps only a small intentional inset before the first tab', () => {
     const chrome = cssDeclarations(shellCss, '.workspace-tabs-chrome.app-chrome-header');
     const traffic = cssDeclarations(shellCss, '.workspace-tabs-chrome .workspace-tabs-traffic');
@@ -401,5 +413,16 @@ describe('workspace tabs chrome styles', () => {
     expect(ruleValue(projectDragging, 'box-shadow')).toContain('0 14px 30px');
     expect(shellCss).not.toContain('.workspace-tab.is-drag-over-before::after');
     expect(shellCss).not.toContain('.workspace-tab.is-drag-over-after::after');
+  });
+
+  it('caps the docked tab dropdown at six rows and scrolls the rest', () => {
+    const menu = cssDeclarations(routinesCss, '.workspace-tabs-dropdown__menu');
+    const row = cssDeclarations(routinesCss, '.workspace-tabs-dropdown__row-main');
+
+    // Six 32px rows plus the menu's own 6px paddings and 1px borders.
+    expect(ruleValue(row, 'height')).toBe('32px');
+    expect(ruleValue(menu, 'max-height')).toBe('calc(6 * 32px + 2 * 6px + 2 * 1px)');
+    expect(ruleValue(menu, 'overflow-y')).toBe('auto');
+    expect(ruleValue(menu, 'overscroll-behavior')).toBe('contain');
   });
 });

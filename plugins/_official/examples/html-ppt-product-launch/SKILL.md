@@ -3,9 +3,9 @@ name: html-ppt-product-launch
 en_name: "Pitch a Team Rollout like a Strategic Account Executive"
 zh_name: "像战略客户 AE 一样推动团队落地"
 description: |
-  Open Design Teams: a launch-and-adoption proposal for a mid-market design team weighing a switch from closed cloud tools. Built as a decision-grade B2B sales deck for design team lead, IT.
+  OpenDesign Teams: a launch-and-adoption proposal for a mid-market design team weighing a switch from closed cloud tools. Built as a decision-grade B2B sales deck for design team lead, IT.
 en_description: |
-  Open Design Teams: a launch-and-adoption proposal for a mid-market design team weighing a switch from closed cloud tools. Built as a decision-grade B2B sales deck for design team lead, IT.
+  OpenDesign Teams: a launch-and-adoption proposal for a mid-market design team weighing a switch from closed cloud tools. Built as a decision-grade B2B sales deck for design team lead, IT.
 zh_description: |
   像战略客户 AE 一样推动团队落地——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -40,7 +40,7 @@ od:
   animations: true
   category: "b2b-sales"
   scenario: "sales"
-  example_prompt: "Create \"Pitch a Team Rollout like a Strategic Account Executive\" as a decision-grade B2B sales deck in this template's own visual system. Subject: Open Design Teams: a launch-and-adoption proposal for a mid-market design team weighing a switch from closed cloud tools. Audience: design team lead, IT. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the champion forward this internally without rewriting it."
+  example_prompt: "Create \"Pitch a Team Rollout like a Strategic Account Executive\" as a decision-grade B2B sales deck in this template's own visual system. Subject: OpenDesign Teams: a launch-and-adoption proposal for a mid-market design team weighing a switch from closed cloud tools. Audience: design team lead, IT. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the champion forward this internally without rewriting it."
 ---
 # HTML PPT · Product Launch
 

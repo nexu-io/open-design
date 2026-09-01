@@ -437,6 +437,76 @@ describe('ProjectView pending prompt seeding', () => {
     expect(mockedFetchProjectFiles.mock.calls.at(-1)?.[1]?.fresh).toBe(true);
   });
 
+  it('does not force a preview refresh when SSE-ready reconciliation finds the same files', async () => {
+    const file: ProjectFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: 100,
+      mtime: 1_000,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    mockedFetchProjectFiles.mockResolvedValue([file]);
+
+    renderProjectView(project('sse-ready-same-files'));
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.files).toEqual([file]);
+      expect(props?.filesRefreshKey).toBe(0);
+    });
+
+    const options = mockedUseProjectFileEvents.mock.calls.at(-1)?.[3];
+    await act(async () => {
+      options?.onReady?.();
+    });
+
+    await waitFor(() => expect(mockedFetchProjectFiles).toHaveBeenCalledTimes(2));
+    const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+    expect(props?.files).toEqual([file]);
+    expect(props?.filesRefreshKey).toBe(0);
+    expect(mockedFetchProjectFiles.mock.calls.at(-1)?.[1]).toMatchObject({
+      fresh: true,
+      requireAuthoritative: true,
+    });
+  });
+
+  it('refreshes the preview when SSE-ready reconciliation finds changed files', async () => {
+    const oldFile: ProjectFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: 100,
+      mtime: 1_000,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    const changedFile: ProjectFile = {
+      ...oldFile,
+      size: 120,
+      mtime: 2_000,
+    };
+    mockedFetchProjectFiles
+      .mockResolvedValueOnce([oldFile])
+      .mockResolvedValue([changedFile]);
+
+    renderProjectView(project('sse-ready-changed-files'));
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.files).toEqual([oldFile]);
+      expect(props?.filesRefreshKey).toBe(0);
+    });
+
+    const options = mockedUseProjectFileEvents.mock.calls.at(-1)?.[3];
+    await act(async () => {
+      options?.onReady?.();
+    });
+
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.files).toEqual([changedFile]);
+      expect(props?.filesRefreshKey).toBe(1);
+    });
+  });
+
   it('does not advance the file generation when a fresh revalidation fails', async () => {
     const file: ProjectFile = {
       name: 'index.html',

@@ -84,7 +84,6 @@ test('download page refreshes the complete stable release snapshot on entry', as
     ['[data-dl-key="mac-arm64-dmg"]', [macDownload]],
     ['[data-dl-key="mac-x64-dmg"]', []],
     ['[data-dl-key="win-setup"]', []],
-    ['[data-dl-key="linux-appimage"]', []],
   ]);
   const document = {
     addEventListener() {},
@@ -248,7 +247,6 @@ test('download page keeps the static snapshot when stable metadata is incomplete
     ['[data-dl-key="mac-arm64-dmg"]', [macDownload]],
     ['[data-dl-key="mac-x64-dmg"]', []],
     ['[data-dl-key="win-setup"]', []],
-    ['[data-dl-key="linux-appimage"]', []],
   ]);
   const document = {
     addEventListener() {},

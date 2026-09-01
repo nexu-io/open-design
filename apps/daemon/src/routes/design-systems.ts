@@ -23,10 +23,8 @@ import {
   enforceVerifiedWorkspaceResourceMutation,
   enforceVerifiedWorkspaceResourceRead,
   headerValue,
-  isWorkspaceResourceLocked,
   requestWithWorkspaceNavigationScope,
-  resolveOptionalWorkspaceRequestAuthority,
-  workspaceResourceContextFromRequest,
+  resolveOptionalLocalWorkspaceRequestAuthority,
   type VerifyWorkspaceRequestAuthority,
   type WorkspaceResourceAccessInput,
 } from '../collab/workspace-resource-mutation.js';
@@ -107,16 +105,16 @@ export interface RegisterDesignSystemRoutesDeps extends RouteDeps<'db' | 'paths'
     prepareDesignTokenContractRebuild: (root: string, id: string, options?: { force?: boolean }) => Promise<DesignTokenContractRebuildPreparation>;
     readAvailableDesignSystem: (
       id: string,
-      options?: { workspaceId?: string | null; exactTeam?: boolean },
+      options?: { workspaceId?: string | null; workspaceMemberId?: string | null; exactTeam?: boolean },
     ) => Promise<string | null>;
     readAvailableDesignSystemPackageInfo: (
       id: string,
-      options?: { workspaceId?: string | null; exactTeam?: boolean },
+      options?: { workspaceId?: string | null; workspaceMemberId?: string | null; exactTeam?: boolean },
     ) => Promise<DesignSystemPackageInfo | null>;
     readAvailableDesignSystemStaticFile: (
       id: string,
       filePath: string,
-      options?: { workspaceId?: string | null; exactTeam?: boolean },
+      options?: { workspaceId?: string | null; workspaceMemberId?: string | null; exactTeam?: boolean },
     ) => Promise<{
       bytes: Buffer;
       contentType: string;
@@ -297,10 +295,7 @@ export function registerDesignSystemRoutes(
       });
       return false;
     }
-    const resolution = await resolveOptionalWorkspaceRequestAuthority(
-      scopedRequest,
-      ctx.verifyWorkspaceRequestAuthority,
-    );
+    const resolution = resolveOptionalLocalWorkspaceRequestAuthority(scopedRequest);
     if (!resolution.ok) {
       res.status(resolution.status).json({
         error: resolution.code,
@@ -385,10 +380,7 @@ export function registerDesignSystemRoutes(
     res: Response,
     id: string,
   ): Promise<boolean> {
-    const resolution = await resolveOptionalWorkspaceRequestAuthority(
-      req,
-      ctx.verifyWorkspaceRequestAuthority,
-    );
+    const resolution = resolveOptionalLocalWorkspaceRequestAuthority(req);
     if (!resolution.ok) {
       res.status(resolution.status).json({
         error: resolution.code,
@@ -462,10 +454,7 @@ export function registerDesignSystemRoutes(
     req: any,
     res: Response,
   ): Promise<{ workspaceId: string; workspaceMemberId: string } | null | 'denied'> {
-    const resolution = await resolveOptionalWorkspaceRequestAuthority(
-      req,
-      ctx.verifyWorkspaceRequestAuthority,
-    );
+    const resolution = resolveOptionalLocalWorkspaceRequestAuthority(req);
     if (!resolution.ok) {
       res.status(resolution.status).json({
         error: resolution.code,
@@ -504,21 +493,6 @@ export function registerDesignSystemRoutes(
     return job.designSystemId
       ? authorizeDesignSystemRead(req, res, job.designSystemId)
       : true;
-  }
-
-  // Workspace-lock gate (spec 9.2), unconditional and independent of
-  // `canMutateUserDesignSystem`'s own teamSynced/canUnshare verdict — a
-  // locked/deleted workspace (billing lapse, deletion in progress) must
-  // refuse every PATCH/DELETE regardless of who the caller is, the same
-  // guarantee `enforceWorkspaceResourceMutation` gives project/plugin/skill.
-  // Reuses that module's own `workspaceResourceContextFromRequest`/
-  // `isWorkspaceResourceLocked` rather than re-deriving the header contract
-  // here. Checked at the route rather than folded silently into
-  // `canMutateUserDesignSystem`'s boolean so it applies no matter what a
-  // caller-supplied implementation of that hook decides.
-  function isRequestWorkspaceLocked(req: any): boolean {
-    const requestCtx = workspaceResourceContextFromRequest(req);
-    return Boolean(requestCtx && requestCtx !== 'missing' && isWorkspaceResourceLocked(requestCtx));
   }
 
   function sendWorkspaceScopeError(res: Response, error: unknown): boolean {
@@ -661,9 +635,6 @@ export function registerDesignSystemRoutes(
       // accept/reject its pending revision (surfaced to anyone who can read
       // the system, not just the owner) with no server-side check at all,
       // even after the UI stopped showing it as editable.
-      if (isRequestWorkspaceLocked(req)) {
-        return res.status(403).json({ error: 'WORKSPACE_LOCKED' });
-      }
       const storage = resolveDesignSystemStorage(req, req.params.id);
       if (!(await canMutateUserDesignSystem(storage.root, req.params.id, req))) {
         return res.status(403).json({ error: 'WORKSPACE_RESOURCE_MANAGE_DENIED' });
@@ -702,6 +673,7 @@ export function registerDesignSystemRoutes(
       const projectBody = await readDesignSystemWorkspaceTextFile(db, summary, 'DESIGN.md');
       const body = projectBody ?? await readAvailableDesignSystem(req.params.id, {
         workspaceId,
+        workspaceMemberId,
         exactTeam: storage.exactTeam,
       });
       if (body === null || !summary) {
@@ -709,6 +681,7 @@ export function registerDesignSystemRoutes(
       }
       const packageInfo = await readAvailableDesignSystemPackageInfo(req.params.id, {
         workspaceId,
+        workspaceMemberId,
         exactTeam: storage.exactTeam,
       });
       // recvqb6mfyqXLD: mirror the exact PATCH/DELETE verdict onto the read
@@ -739,9 +712,14 @@ export function registerDesignSystemRoutes(
         headerValue(req, 'x-od-workspace-id')
         ?? designSystemNavigationWorkspaceQuery(req)?.workspaceId
         ?? null;
+      const workspaceMemberId =
+        headerValue(req, 'x-od-workspace-member-id')
+        ?? designSystemNavigationWorkspaceQuery(req)?.workspaceMemberId
+        ?? null;
       const storage = resolveDesignSystemStorage(req, req.params.id, true);
       const body = await readAvailableDesignSystem(req.params.id, {
         workspaceId,
+        workspaceMemberId,
         exactTeam: storage.exactTeam,
       });
       if (body === null) return res.status(404).type('text/plain').send('not found');
@@ -759,11 +737,15 @@ export function registerDesignSystemRoutes(
         headerValue(req, 'x-od-workspace-id')
         ?? designSystemNavigationWorkspaceQuery(req)?.workspaceId
         ?? null;
+      const workspaceMemberId =
+        headerValue(req, 'x-od-workspace-member-id')
+        ?? designSystemNavigationWorkspaceQuery(req)?.workspaceMemberId
+        ?? null;
       const storage = resolveDesignSystemStorage(req, req.params.id, true);
       const packaged = await readAvailableDesignSystemStaticFile(
         req.params.id,
         PACKAGED_SHOWCASE_PATH,
-        { workspaceId, exactTeam: storage.exactTeam },
+        { workspaceId, workspaceMemberId, exactTeam: storage.exactTeam },
       );
       if (packaged?.contentType.startsWith('text/html')) {
         const workspaceQuery = designSystemNavigationWorkspaceQuery(req);
@@ -780,6 +762,7 @@ export function registerDesignSystemRoutes(
       }
       const body = await readAvailableDesignSystem(req.params.id, {
         workspaceId,
+        workspaceMemberId,
         exactTeam: storage.exactTeam,
       });
       if (body === null) return res.status(404).type('text/plain').send('not found');
@@ -797,12 +780,16 @@ export function registerDesignSystemRoutes(
         headerValue(req, 'x-od-workspace-id')
         ?? designSystemNavigationWorkspaceQuery(req)?.workspaceId
         ?? null;
+      const workspaceMemberId =
+        headerValue(req, 'x-od-workspace-member-id')
+        ?? designSystemNavigationWorkspaceQuery(req)?.workspaceMemberId
+        ?? null;
       const storage = resolveDesignSystemStorage(req, req.params.id, true);
       const requestedPath = typeof req.query.path === 'string' ? req.query.path : '';
       const file = await readAvailableDesignSystemStaticFile(
         req.params.id,
         requestedPath,
-        { workspaceId, exactTeam: storage.exactTeam },
+        { workspaceId, workspaceMemberId, exactTeam: storage.exactTeam },
       );
       if (!file) return res.status(404).type('text/plain').send('not found');
       res.setHeader('Cache-Control', 'no-store');
@@ -899,9 +886,6 @@ export function registerDesignSystemRoutes(
   app.patch('/api/design-systems/:id', async (req, res) => {
     try {
       if (!(await authorizeDesignSystemMutation(req, res, req.params.id))) return;
-      if (isRequestWorkspaceLocked(req)) {
-        return res.status(403).json({ error: 'WORKSPACE_LOCKED' });
-      }
       const storage = resolveDesignSystemStorage(req, req.params.id);
       if (!(await canMutateUserDesignSystem(storage.root, req.params.id, req))) {
         return res.status(403).json({ error: 'WORKSPACE_RESOURCE_MANAGE_DENIED' });
@@ -932,9 +916,6 @@ export function registerDesignSystemRoutes(
   app.post('/api/design-systems/:id/sync-assets', async (req, res) => {
     try {
       if (!(await authorizeDesignSystemMutation(req, res, req.params.id))) return;
-      if (isRequestWorkspaceLocked(req)) {
-        return res.status(403).json({ error: 'WORKSPACE_LOCKED' });
-      }
       const storage = resolveDesignSystemStorage(req, req.params.id);
       if (!(await canMutateUserDesignSystem(storage.root, req.params.id, req))) {
         return res.status(403).json({ error: 'WORKSPACE_RESOURCE_MANAGE_DENIED' });
@@ -971,10 +952,6 @@ export function registerDesignSystemRoutes(
   ): Promise<boolean> {
     try {
       if (!(await authorizeDesignSystemMutation(req, res, id))) return false;
-      if (isRequestWorkspaceLocked(req)) {
-        res.status(403).json({ error: 'WORKSPACE_LOCKED' });
-        return false;
-      }
       const storage = resolveDesignSystemStorage(req, id);
       if (!(await canMutateUserDesignSystem(storage.root, id, req))) {
         res.status(403).json({ error: 'WORKSPACE_RESOURCE_MANAGE_DENIED' });

@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { access, appendFile, mkdir, open, rename, type FileHandle } from "node:fs/promises";
+import { access, appendFile, lstat, mkdir, open, rename, rm, type FileHandle } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { delimiter, dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -13,23 +13,29 @@ import {
   type AppKey,
   type DaemonStatusSnapshot,
   type RegisterWebUrlResult,
+  type ShutdownResult,
   type SidecarStamp,
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
 import {
   createSidecarLaunchEnv,
+  isWindowsNamedPipePath,
   requestJsonIpc,
   resolveAppIpcPath,
   type SidecarRuntimeContext,
 } from "@open-design/sidecar";
 import {
+  collectProcessTreePids,
   createProcessStampArgs,
   isProcessAlive,
+  listProcessSnapshots,
+  matchesStampedProcess,
   mergeProxyAwareEnv,
   resolveSystemProxyEnv,
   stopProcesses,
   waitForProcessExit,
   wellKnownUserToolchainBins,
+  type StopProcessesOptions,
 } from "@open-design/platform";
 
 import type { PackagedWebOutputMode } from "./config.js";
@@ -60,6 +66,7 @@ const PACKAGED_CHILD_ENV_ALLOWLIST = [
   "http_proxy",
   "https_proxy",
   "no_proxy",
+  "OD_ALLOWED_INTERNAL_HOSTS",
 ] as const;
 
 // The daemon owns the historical-outer compatibility handoff. Preserve the
@@ -108,7 +115,7 @@ export type PackagedSidecarHandle = {
   web: WebStatusSnapshot;
 };
 
-type ManagedSidecarChild = {
+export type ManagedSidecarChild = {
   app: AppKey;
   child: ChildProcess;
   ipcPath: string;
@@ -248,6 +255,13 @@ const WIN32_STATUS_TIMEOUT_MS = 90_000;
 // widened budget is the safety net for slow devices, mirroring the win32
 // rationale above (same "slow, not dead" failure class as #5515).
 const LINUX_STATUS_TIMEOUT_MS = 90_000;
+// Packaged 0.18.1 macOS cold starts on Apple Silicon can exceed the 35s
+// baseline: the daemon sidecar needs extra time to finish initialization
+// before the desktop's status timeout fires. Widening the darwin budget
+// to 90s matches the win32/linux safety net for "slow, not dead" first
+// launches and prevents the timeout cascade that leaves the desktop on a
+// stale web URL (issue #6637).
+const DARWIN_STATUS_TIMEOUT_MS = 90_000;
 const DAEMON_MIGRATION_STATUS_TIMEOUT_MS = 30 * 60 * 1000;
 
 // Poll cadence for waitForStatus: start tight so a fast daemon is detected
@@ -259,18 +273,21 @@ const STATUS_POLL_MAX_MS = 1500;
 
 // Baseline status wait budget by platform, before the daemon-only legacy
 // migration override. win32 gets the wider AV-scan headroom, linux gets the
-// same headroom for AppImage FUSE cold starts; every other OS keeps the 35s
-// baseline.
+// same headroom for AppImage FUSE cold starts; darwin gets the same headroom
+// for packaged 0.18.1+ cold starts on Apple Silicon; every other OS keeps the
+// 35s baseline.
 function baseStatusTimeoutMs(platform: NodeJS.Platform = process.platform): number {
   if (platform === "win32") return WIN32_STATUS_TIMEOUT_MS;
   if (platform === "linux") return LINUX_STATUS_TIMEOUT_MS;
+  if (platform === "darwin") return DARWIN_STATUS_TIMEOUT_MS;
   return DAEMON_STATUS_TIMEOUT_MS;
 }
 
 /**
  * Daemon status wait budget. The platform baseline (35s, or 90s on win32 for
- * AV-scan headroom and on linux for AppImage FUSE cold starts) is fine for
- * normal cold boots, but the OD_LEGACY_DATA_DIR
+ * AV-scan headroom, on linux for AppImage FUSE cold starts, and on darwin for
+ * packaged 0.18.1+ Apple Silicon cold starts) is fine for normal cold boots,
+ * but the OD_LEGACY_DATA_DIR
  * one-shot recovery flow can synch-copy a multi-GB legacy `.od/` payload before
  * SQLite even opens, and killing the child mid-migration can leave dataDir
  * half-promoted. When the env var is set, use a 30-minute budget so the parent
@@ -550,7 +567,86 @@ export async function waitForStatus<T>(
   }
 }
 
-async function retireExistingSidecarEndpoint(ipcPath: string, logPath: string): Promise<void> {
+type StopStampedWebSidecarOwnerDeps = {
+  listProcessSnapshots?: typeof listProcessSnapshots;
+  stopProcesses?: typeof stopProcesses;
+};
+
+type StampedWebSidecarRetirement = "absent" | "stopped" | "still-running" | "discovery-failed";
+
+async function stopStampedWebSidecarOwner(
+  ipcPath: string,
+  logPath: string,
+  deps: StopStampedWebSidecarOwnerDeps = {},
+): Promise<StampedWebSidecarRetirement> {
+  const listSnapshots = deps.listProcessSnapshots ?? listProcessSnapshots;
+  const stop = deps.stopProcesses ?? stopProcesses;
+  let processes: Awaited<ReturnType<typeof listProcessSnapshots>>;
+  try {
+    processes = await listSnapshots();
+  } catch (error) {
+    await appendSidecarLifecycleLog(
+      logPath,
+      `[open-design packaged] failed to enumerate processes before web socket takeover ipc=${ipcPath} error=${error instanceof Error ? error.message : String(error)}`,
+    );
+    return "discovery-failed";
+  }
+  // listProcessSnapshots returns [] on enumeration failure, so an empty table
+  // is not proof that no stamped owner exists. Leave the live socket in place.
+  if (processes.length === 0) {
+    await appendSidecarLifecycleLog(
+      logPath,
+      `[open-design packaged] process discovery failed before web socket takeover ipc=${ipcPath}`,
+    );
+    return "discovery-failed";
+  }
+  const rootPids = processes
+    .filter((processInfo) =>
+      matchesStampedProcess(
+        processInfo,
+        { app: APP_KEYS.WEB, ipc: ipcPath },
+        OPEN_DESIGN_SIDECAR_CONTRACT,
+      ),
+    )
+    .map((processInfo) => processInfo.pid);
+  // Successful discovery, no stamped owner: leftover or unstamped hung socket.
+  // Unlink remains the original recovery. A live JsonIpcServer.close() race
+  // requires a stamped sidecar, which this helper would have found.
+  if (rootPids.length === 0) return "absent";
+
+  // Stop the whole tree before unlinking. A later SIGTERM on the old owner
+  // would run JsonIpcServer.close(), which unconditionally removes this
+  // pathname and can delete the replacement socket after rebind.
+  const pids = collectProcessTreePids(processes, rootPids);
+  await appendSidecarLifecycleLog(
+    logPath,
+    `[open-design packaged] stopping unresponsive stamped web sidecar before socket takeover ipc=${ipcPath} pids=${pids.join(",")}`,
+  );
+  try {
+    const result = await stop(pids, { killGraceMs: 1_500, termGraceMs: 1_500 });
+    if (result.remainingPids.length > 0) {
+      await appendSidecarLifecycleLog(
+        logPath,
+        `[open-design packaged] unresponsive stamped web sidecar still running after stop ipc=${ipcPath} remainingPids=${result.remainingPids.join(",")}`,
+      );
+      return "still-running";
+    }
+    return "stopped";
+  } catch (error) {
+    await appendSidecarLifecycleLog(
+      logPath,
+      `[open-design packaged] failed to stop unresponsive stamped web sidecar ipc=${ipcPath} error=${error instanceof Error ? error.message : String(error)}`,
+    );
+    return "still-running";
+  }
+}
+
+export async function retireExistingSidecarEndpoint(
+  ipcPath: string,
+  logPath: string,
+  app: AppKey,
+  deps: StopStampedWebSidecarOwnerDeps = {},
+): Promise<void> {
   let status: { pid?: number | null } | null = null;
   try {
     status = await requestJsonIpc<{ pid?: number | null }>(
@@ -558,7 +654,32 @@ async function retireExistingSidecarEndpoint(ipcPath: string, logPath: string): 
       { type: SIDECAR_MESSAGES.STATUS },
       { timeoutMs: 350 },
     );
-  } catch {
+  } catch (error) {
+    // A web sidecar can survive an abruptly-terminated desktop while becoming
+    // too wedged to answer STATUS. A plain connect probe still sees its Unix
+    // socket as live, so the generic JSON-IPC stale-socket cleanup cannot
+    // distinguish it from a healthy endpoint and the replacement dies with
+    // EADDRINUSE. Web is stateless, so taking over this exact namespace socket
+    // is safe; daemon recovery remains conservative because starting a second
+    // daemon beside a hung first owner could put two writers on the same DB.
+    if (app !== APP_KEYS.WEB || isWindowsNamedPipePath(ipcPath)) return;
+    const retirement = await stopStampedWebSidecarOwner(ipcPath, logPath, deps);
+    if (retirement === "still-running" || retirement === "discovery-failed") return;
+    try {
+      const stat = await lstat(ipcPath);
+      if (!stat.isSocket()) return;
+      await rm(ipcPath, { force: true });
+      const message =
+        `[open-design packaged] unresponsive web sidecar endpoint removed before relaunch ipc=${ipcPath} error=${error instanceof Error ? error.message : String(error)}`;
+      await appendSidecarLifecycleLog(logPath, message);
+      // The child log handle is already open and may overwrite a pre-spawn
+      // append from offset zero. Also emit through the packaged desktop logger,
+      // whose append-only file is the durable startup-recovery record.
+      console.warn(message);
+    } catch {
+      // ENOENT means the endpoint disappeared during the probe. Other failures
+      // are left for the real bind to report without deleting an unknown path.
+    }
     return;
   }
 
@@ -619,9 +740,16 @@ export function resolvePackagedChildBaseEnv(
       forwardedEnv[key] = value;
     }
   }
-  return includeSystemProxyEnv
+  const mergedEnv = includeSystemProxyEnv
     ? mergeProxyAwareEnv(process.platform, systemProxyEnv, forwardedEnv)
     : mergeProxyAwareEnv(process.platform, forwardedEnv);
+  return {
+    ...mergedEnv,
+    // Daemon and web already monitor this protocol-owned parent PID. Packaged
+    // launches must provide it too so a SIGKILL/crash of the Electron owner
+    // cannot leave sidecars holding namespace IPC endpoints indefinitely.
+    [SIDECAR_ENV.TOOLS_DEV_PARENT_PID]: String(process.pid),
+  };
 }
 
 function createPackagedDaemonManagedPathEnv(
@@ -661,6 +789,7 @@ export type PackagedDaemonSpawnEnvOptions = {
    * the workspace-team gate — see {@link workspaceTeamTransportEnv}.
    */
   velaWebUrl?: string | null;
+  velaWebUrls?: Record<string, string>;
 };
 
 /**
@@ -696,6 +825,9 @@ export function buildPackagedDaemonSpawnEnv(
       ? {}
       : { OPEN_DESIGN_AMR_PROFILE: options.amrProfile }),
     ...workspaceTeamTransportEnv(options.amrProfile, options.velaWebUrl),
+    ...(options.velaWebUrls == null || Object.keys(options.velaWebUrls).length === 0
+      ? {}
+      : { OD_VELA_WEB_URLS: JSON.stringify(options.velaWebUrls) }),
     ...(options.appVersion == null ? {} : { OD_APP_VERSION: options.appVersion }),
     ...(options.mcpBootstrapCommand == null
       || options.mcpBootstrapCommand.length === 0
@@ -763,7 +895,7 @@ async function spawnSidecarChild(options: {
   } satisfies SidecarStamp;
   const logPath = logPathFor(options.paths, options.app);
   const logHandle = await openLog(logPath);
-  await retireExistingSidecarEndpoint(ipcPath, logPath);
+  await retireExistingSidecarEndpoint(ipcPath, logPath, options.app);
   const usesElectronAsNode = options.nodeCommand == null;
   const command = options.nodeCommand
     ?? options.electronNodeCommand
@@ -821,18 +953,50 @@ export function createPackagedSidecarSpawnOptions(input: {
   };
 }
 
-async function closeManagedChild(child: ManagedSidecarChild): Promise<void> {
+export const MANAGED_CHILD_EXIT_GRACE_MS = 5_000;
+export const DEFERRED_MANAGED_CHILD_EXIT_GRACE_MS = 30_000;
+
+export type CloseManagedChildDeps = {
+  deferredExitGraceMs?: number;
+  exitGraceMs?: number;
+  requestIpc?: typeof requestJsonIpc;
+  stopOptions?: StopProcessesOptions;
+  stopProcesses?: typeof stopProcesses;
+  waitForExit?: typeof waitForProcessExit;
+};
+
+export function resolveManagedChildExitGraceMs(
+  shutdown: ShutdownResult | null | undefined,
+): number {
+  return shutdown?.deferred === true
+    ? DEFERRED_MANAGED_CHILD_EXIT_GRACE_MS
+    : MANAGED_CHILD_EXIT_GRACE_MS;
+}
+
+export async function closeManagedChild(
+  child: ManagedSidecarChild,
+  deps: CloseManagedChildDeps = {},
+): Promise<void> {
   const appendLifecycleLog = async (message: string): Promise<void> => appendSidecarLifecycleLog(child.logPath, message);
   await appendLifecycleLog(`[open-design packaged] shutdown requested app=${child.app} pid=${child.child.pid ?? "unknown"}`);
+  let shutdown: ShutdownResult | undefined;
   try {
-    await requestJsonIpc(child.ipcPath, { type: SIDECAR_MESSAGES.SHUTDOWN }, { timeoutMs: 1200 });
+    shutdown = await (deps.requestIpc ?? requestJsonIpc)<ShutdownResult>(
+      child.ipcPath,
+      { type: SIDECAR_MESSAGES.SHUTDOWN },
+      { timeoutMs: 1200 },
+    );
   } catch {
     // Fall through to process cleanup.
   }
 
-  if (!(await waitForProcessExit(child.child.pid, 5000))) {
+  const exitGraceMs = shutdown?.deferred === true
+    ? (deps.deferredExitGraceMs ?? resolveManagedChildExitGraceMs(shutdown))
+    : (deps.exitGraceMs ?? resolveManagedChildExitGraceMs(shutdown));
+
+  if (!(await (deps.waitForExit ?? waitForProcessExit)(child.child.pid, exitGraceMs))) {
     await appendLifecycleLog(`[open-design packaged] shutdown timeout app=${child.app} pid=${child.child.pid ?? "unknown"}; forcing stop`);
-    await stopProcesses([child.child.pid]);
+    await (deps.stopProcesses ?? stopProcesses)([child.child.pid], deps.stopOptions);
   }
 
   await appendLifecycleLog(`[open-design packaged] exited app=${child.app} pid=${child.child.pid ?? "unknown"} code=${child.child.exitCode ?? "unknown"} signal=${child.child.signalCode ?? "none"}`);
@@ -872,6 +1036,7 @@ export async function startPackagedSidecars(
     posthogKey: string | null;
     posthogHost: string | null;
     velaWebUrl: string | null;
+    velaWebUrls?: Record<string, string>;
     /**
      * PR #974 round-5 (lefarcen P2): caller asserts whether a desktop
      * runtime is being started in this packaged process group. The
@@ -951,6 +1116,7 @@ export async function startPackagedSidecars(
         posthogKey: options.posthogKey,
         posthogHost: options.posthogHost,
         velaWebUrl: options.velaWebUrl,
+        velaWebUrls: options.velaWebUrls,
       }),
       electronNodeCommand: options.electronNodeCommand,
       nodeCommand: options.nodeCommand,

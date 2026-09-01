@@ -1,0 +1,362 @@
+/* Experience survey card. Floats bottom-right above the workspace after a
+   successful export, mounted globally (App.tsx) so navigating project → home
+   keeps the same card and the same answers.
+
+   Never a modal: it must not block the export the user just finished. */
+.card {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 1400;
+  /* 380 rather than 340: the 0–10 scale is eleven cells on one row, and at 340
+     the last cells could not hold a legible width. */
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  overflow: hidden;
+  border-radius: var(--radius-lg, 16px);
+  border: 1px solid var(--border, #dbdbdb);
+  /* Solid, not the glass material used by the nav rail and toolbars. Those
+     surfaces are always-present chrome that should recede; this one appears
+     once in a user's life and has to be noticed. Translucency let the page
+     behind it show through and the card stopped reading as a foreground
+     object. */
+  background: var(--bg, #fff);
+  color: var(--text, #494949);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 12px 32px rgba(0, 0, 0, 0.1),
+    0 32px 64px rgba(0, 0, 0, 0.08);
+  pointer-events: auto;
+}
+
+@media (max-width: 900px) {
+  .card {
+    left: 12px;
+    right: 12px;
+    bottom: max(88px, calc(env(safe-area-inset-bottom) + 88px));
+    width: auto;
+    max-width: none;
+  }
+}
+
+/* Progress reads as one thin line across the top rather than four dots: it
+   shows how much is left without adding another object to parse. */
+.progress {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: var(--brand-text, #0d5400);
+  opacity: 0.85;
+  transform-origin: left center;
+  transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* The floor is set at runtime, not here — see the ratchet in the component.
+   The card is pinned to a corner, so every height change is paid for by the
+   opposite edge moving; the ratchet lets it grow once and never shrink back,
+   which removes the bounce without padding the short step with dead space. */
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 16px 14px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tag {
+  font-size: var(--font-size-12, 12px);
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  color: var(--brand-text, #0d5400);
+}
+
+.close {
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--text-soft, #848484);
+  cursor: pointer;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.close:hover {
+  background: var(--bg-fill-tertiary, rgba(0, 0, 0, 0.03));
+  color: var(--text-strong, #202020);
+}
+
+.close:focus-visible {
+  outline: 2px solid var(--brand-text, #0d5400);
+  outline-offset: 1px;
+}
+
+.question {
+  margin: 0;
+  font-size: var(--font-size-14, 14px);
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+  color: var(--text-strong, #202020);
+  text-wrap: balance;
+}
+
+/* The scale sits in one inset rail so eleven cells read as a single control
+   rather than eleven separate boxes. */
+.rail {
+  display: grid;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-md, 10px);
+  background: var(--bg-fill-tertiary, rgba(0, 0, 0, 0.03));
+}
+
+.rail.five {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+/* minmax(0, 1fr), not 1fr: a bare 1fr floors at min-content, so the two-digit
+   "10" column refuses to shrink to its share and pushes the last cell out. */
+.rail.eleven {
+  grid-template-columns: repeat(11, minmax(0, 1fr));
+}
+
+.cell {
+  height: 32px;
+  min-width: 0;
+  border: 0;
+  border-radius: var(--radius-sm, 7px);
+  background: transparent;
+  color: var(--text, #494949);
+  font: inherit;
+  font-size: var(--font-size-13, 13px);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition:
+    background 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.rail.eleven .cell {
+  height: 30px;
+  font-size: var(--font-size-12, 12px);
+}
+
+.cell:hover {
+  background: var(--bg-subtle, #ededed);
+  color: var(--text-strong, #202020);
+}
+
+.cell:active {
+  transform: scale(0.94);
+}
+
+.cell:focus-visible {
+  outline: 2px solid var(--brand-text, #0d5400);
+  outline-offset: -1px;
+}
+
+/* Held for a beat before the step advances, so the tap is acknowledged
+   instead of the card silently swapping content underneath the finger. */
+.cell.picked {
+  background: var(--brand, #87ea5c);
+  color: var(--brand-text, #0d5400);
+  font-weight: 650;
+  box-shadow: none;
+}
+
+.bounds {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: -6px;
+  /* Below the app's 12px scale floor, which is deliberate: these are the
+     scale's end labels, not content, and at 12 they compete with the question. */
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  color: var(--text-soft, #848484);
+}
+
+/* Chips that wrap, not a grid of full-width rows. The grid made this step
+   ~120px taller than the score step, and since the card is pinned to the
+   bottom-right corner that difference was spent throwing the card's top edge
+   up and back down on every answer. Chips size to their own text, so the two
+   steps end up close enough that the card stops moving. */
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.option {
+  padding: 7px 12px;
+  text-align: center;
+  border-radius: 999px;
+  border: 0;
+  background: var(--bg-fill-tertiary, rgba(0, 0, 0, 0.03));
+  color: var(--text, #494949);
+  font: inherit;
+  font-size: var(--font-size-12, 12px);
+  line-height: 1.35;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.option:hover {
+  background: var(--bg-subtle, #ededed);
+  color: var(--text-strong, #202020);
+}
+
+.option:active {
+  transform: scale(0.985);
+}
+
+.option:focus-visible {
+  outline: 2px solid var(--brand-text, #0d5400);
+  outline-offset: -1px;
+}
+
+.option.picked {
+  background: var(--brand, #87ea5c);
+  color: var(--brand-text, #0d5400);
+  font-weight: 600;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 68px;
+  resize: none;
+  padding: 10px 11px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md, 9px);
+  background: var(--bg-fill-tertiary, rgba(0, 0, 0, 0.03));
+  color: var(--text-strong, #202020);
+  font: inherit;
+  font-size: var(--font-size-12, 12px);
+  line-height: 1.55;
+  transition:
+    background 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.textarea::placeholder {
+  color: var(--text-faint, #bdbdbd);
+}
+
+/* Keep the inset fill on focus — switching it to --bg made the field the same
+   white as the card behind it and the input dissolved into the panel. The
+   border alone carries the focus cue: neutral, because green here competed
+   with the brand fill on the selected chip right above it. */
+.textarea:focus {
+  outline: none;
+  border-color: var(--text-strong, #202020);
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-soft, #848484);
+}
+
+.skip {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: var(--text-soft, #848484);
+  font: inherit;
+  font-size: var(--font-size-12, 12px);
+  padding: 5px 8px;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.skip:hover {
+  color: var(--text-strong, #202020);
+  background: var(--bg-fill-tertiary, rgba(0, 0, 0, 0.03));
+}
+
+.skip:focus-visible {
+  outline: 2px solid var(--brand-text, #0d5400);
+  outline-offset: 1px;
+}
+
+/* Sizing only — colour, hover and focus come from the shared Button primitive
+   so this stays in step with every other primary action in the app. */
+.submit {
+  /* Same push as .skip. Submit replaces Skip in the footer, so without this it
+     collapsed back against the counter and the primary action jumped from the
+     right edge to the left the moment the field opened. */
+  margin-left: auto;
+  font-size: var(--font-size-12, 12px);
+  padding: 6px 14px;
+  border-radius: 999px;
+}
+
+.thanks {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0;
+}
+
+.thanksMark {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--brand, #87ea5c);
+  color: var(--brand-text, #0d5400);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.thanksText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.thanksTitle {
+  margin: 0;
+  font-size: var(--font-size-13, 13px);
+  font-weight: 650;
+  color: var(--text-strong, #202020);
+}
+
+.thanksBody {
+  margin: 0;
+  font-size: var(--font-size-12, 12px);
+  line-height: 1.5;
+  color: var(--text, #494949);
+}

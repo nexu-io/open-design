@@ -1700,6 +1700,9 @@ export function DesignSystemDetailView({
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [projectChatMessages, setProjectChatMessages] = useState<ChatMessage[]>([]);
+  const [projectChatMessagesConversationId, setProjectChatMessagesConversationId] =
+    useState<string | null>(null);
+  const [projectChatLoadError, setProjectChatLoadError] = useState<string | null>(null);
   const [chatStreaming, setChatStreaming] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [workspaceTabsState, setWorkspaceTabsState] = useState<OpenTabsState>({
@@ -1732,6 +1735,8 @@ export function DesignSystemDetailView({
     setConversations([]);
     setActiveConversationId(null);
     setProjectChatMessages([]);
+    setProjectChatMessagesConversationId(null);
+    setProjectChatLoadError(null);
     setChatError(null);
     setChatSeed(null);
     setWorkspaceTabsState({ tabs: [], active: null });
@@ -1855,8 +1860,13 @@ export function DesignSystemDetailView({
   useEffect(() => {
     if (!workspaceProjectId || !activeConversationId) {
       setProjectChatMessages([]);
+      setProjectChatMessagesConversationId(null);
+      setProjectChatLoadError(null);
       return undefined;
     }
+    setProjectChatMessages([]);
+    setProjectChatMessagesConversationId(null);
+    setProjectChatLoadError(null);
     let cancelled = false;
     void listMessages(
       workspaceProjectId,
@@ -1865,6 +1875,16 @@ export function DesignSystemDetailView({
     ).then((messages) => {
       if (cancelled) return;
       setProjectChatMessages(messages);
+      setProjectChatMessagesConversationId(activeConversationId);
+    }).catch((error) => {
+      if (cancelled) return;
+      setProjectChatMessages([]);
+      setProjectChatLoadError(
+        error instanceof Error
+          ? error.message
+          : 'Could not load messages for this conversation.',
+      );
+      console.warn('Failed to load design-system project messages', error);
     });
     return () => {
       cancelled = true;
@@ -2064,6 +2084,10 @@ export function DesignSystemDetailView({
     [activeJob, generationActive, recentRevisions, system, t],
   );
   const chatMessages = projectChatMessages.length > 0 ? projectChatMessages : introChatMessages;
+  const projectChatMessagesReady =
+    !activeConversationId || projectChatMessagesConversationId === activeConversationId;
+  const projectChatMessagesLoading =
+    Boolean(activeConversationId) && !projectChatMessagesReady && !projectChatLoadError;
   const workspaceActivityMessage = useMemo(
     () => findWorkspaceActivityMessage(chatMessages),
     [chatMessages],
@@ -2356,6 +2380,7 @@ export function DesignSystemDetailView({
     ) => {
       const rawText = prompt.trim();
       if (!rawText || chatStreaming || !system) return;
+      if (activeConversationId && !projectChatMessagesReady) return;
       const text = feedbackSection ? `${rawText}\n\nFocus section: ${feedbackSection}` : rawText;
       const projectId = workspaceProjectId ?? await ensureWorkspaceProject();
       if (!projectId) {
@@ -2666,6 +2691,7 @@ export function DesignSystemDetailView({
       onProjectsRefresh,
       persistProjectMessage,
       projectChatMessages,
+      projectChatMessagesReady,
       refreshWorkspaceProjectFiles,
       requestWorkspaceFileOpen,
       syncDesignSystemAssetsFromWorkspace,
@@ -2683,6 +2709,13 @@ export function DesignSystemDetailView({
     chatAbortRef.current = null;
     pendingWorkspaceFileWritesRef.current.clear();
     setChatStreaming(false);
+  }, []);
+
+  const selectProjectChatConversation = useCallback((conversationId: string) => {
+    setProjectChatMessages([]);
+    setProjectChatMessagesConversationId(null);
+    setProjectChatLoadError(null);
+    setActiveConversationId(conversationId);
   }, []);
 
   const createProjectChatConversation = useCallback(() => {
@@ -2704,6 +2737,8 @@ export function DesignSystemDetailView({
       setConversations((current) => [fresh, ...current]);
       setActiveConversationId(fresh.id);
       setProjectChatMessages([]);
+      setProjectChatMessagesConversationId(null);
+      setProjectChatLoadError(null);
       setChatError(null);
       setChatSeed({
         id: `general-${Date.now()}`,
@@ -2810,7 +2845,9 @@ export function DesignSystemDetailView({
             key={`${activeConversationId ?? 'design-system-chat'}:${chatSeed?.id ?? 'ready'}`}
             messages={chatMessages}
             streaming={generationActive || saving || chatStreaming}
-            error={chatError}
+            loading={projectChatMessagesLoading}
+            sendDisabled={!projectChatMessagesReady}
+            error={chatError ?? projectChatLoadError}
             config={config}
             projectId={workspaceProjectId}
             projectFiles={workspaceProjectFiles}
@@ -2831,7 +2868,7 @@ export function DesignSystemDetailView({
             // trusting the live length would show the previous conversation's
             // count for the newly active row. Fall back to the persisted
             // `conversation.messageCount` for a stable list count instead.
-            onSelectConversation={setActiveConversationId}
+            onSelectConversation={selectProjectChatConversation}
             onDeleteConversation={() => {}}
             onNewConversation={createProjectChatConversation}
           />
@@ -5372,7 +5409,7 @@ function buildFallbackDesignMdFromState(state: SetupState): string {
     state.company.trim()
     || state.notes.trim()
     || sourceNotes
-    || 'Design system generated from source material supplied in Open Design.';
+    || 'Design system generated from source material supplied in OpenDesign.';
   return [
     '---',
     `name: ${yamlString(title.replace(/\s+Design System$/iu, ''))}`,
@@ -5435,7 +5472,7 @@ function buildCreationAgentPrompt(
   const localFolderRunbook = buildLocalFolderRunbook(state.codeFolders);
   const title = inferDesignSystemTitle(state);
   return [
-    'Create this project as a complete Open Design design system workspace.',
+    'Create this project as a complete OpenDesign design system workspace.',
     '',
     'Autonomy requirement:',
     '- Do not ask setup or clarification questions during design-system generation.',
@@ -5499,7 +5536,7 @@ function buildCreationAgentPrompt(
       ? githubRunbook
       : '',
     state.codeFolders.length
-      ? `Read the linked local code folders that Open Design attached to this project: ${state.codeFolders.join(', ')}. Treat them as source context only unless the user asks you to edit them.\n\n${localFolderRunbook}`
+      ? `Read the linked local code folders that OpenDesign attached to this project: ${state.codeFolders.join(', ')}. Treat them as source context only unless the user asks you to edit them.\n\n${localFolderRunbook}`
       : '',
     stagedLocalCode?.uploadedPaths.length
       ? `Inspect the copied local code snapshot files in this project under \`${LOCAL_CODE_UPLOAD_ROOT}/\`: ${stagedLocalCode.uploadedPaths.slice(0, 20).join(', ')}${stagedLocalCode.uploadedPaths.length > 20 ? `, and ${stagedLocalCode.uploadedPaths.length - 20} more` : ''}.`
@@ -5644,7 +5681,7 @@ function buildSourceContextManifest(
     '- DESIGN.md is the canonical source of truth.',
     '- Use the canonical design-system title above for headings, README/SKILL names, preview labels, and UI-kit copy unless inspected evidence proves a more accurate product name. Never title the system from URL protocol text such as `https`.',
     '- colors_and_type.css should hold concrete reusable tokens when the source evidence supports them; if fonts/ contains preserved font files, colors_and_type.css must bind those files with @font-face, @import, or url(...) references so typography does not fall back to substitute fonts.',
-    '- README.md and SKILL.md should make the extracted system reusable as a real Open Design design-system package.',
+    '- README.md and SKILL.md should make the extracted system reusable as a real OpenDesign design-system package.',
     '- README.md should include a source-backed Product Overview/Product Context section, source repository or source folder references, package contents, a concrete `## Preview Manifest` listing every generated `preview/*.html` card, and reuse workflow, similar to Claude Design exports.',
     '- SKILL.md should include YAML frontmatter with `name`, `description`, and `user-invocable`, plus Claude-style reusable skill sections: What is inside, Source context, When to use this skill, How to use, and Design system highlights. The usage guidance should point agents at README.md, DESIGN.md, colors_and_type.css, preview/, assets/, build/, fonts/, source_examples/, and ui_kits/app/.',
     '- README.md, SKILL.md, DESIGN.md, and ui_kits/app/README.md must describe the final focused preview cards and `ui_kits/app/` paths, not old scaffold names such as `preview/typography-scale.html` or `ui_kits/generated_interface/`.',

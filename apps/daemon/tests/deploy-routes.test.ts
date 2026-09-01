@@ -187,7 +187,7 @@ describe('deploy provider routes', () => {
     });
   });
 
-  it('derives Cloudflare Pages project names from the Open Design project', async () => {
+  it('derives Cloudflare Pages project names from the OpenDesign project', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-auto-project-'));
     const priorStateRoot = process.env.OD_USER_STATE_DIR;
     process.env.OD_USER_STATE_DIR = stateRoot;
@@ -1246,6 +1246,151 @@ describe('deploy provider routes', () => {
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
   }
+
+  // Every deploy failure used to flatten to the envelope's BAD_REQUEST, so a
+  // missing token, a non-HTML file, an unresolved asset reference and an
+  // oversized asset were indistinguishable once the client mirrored the code
+  // into `artifact_deploy_result.error_code` — in production that collapsed
+  // into one opaque HTTP_400 bucket we could not act on. Distinct causes must
+  // carry distinct codes.
+  it('surfaces a specific error code for a non-HTML deploy instead of a generic BAD_REQUEST', async () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-error-code-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      const projectId = await setupProjectAndVercelConfig('deploy-error-code', 'Deploy error code test');
+      await writeFile(path.join(dataDir, 'projects', projectId, 'notes.txt'), 'not html');
+
+      const resp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: 'notes.txt', providerId: VERCEL_PROVIDER_ID }),
+      });
+      const text = await resp.text();
+      expect(resp.status, text).toBe(400);
+      const body = JSON.parse(text) as { error?: { code?: string; message?: string } };
+      expect(body.error?.code).toBe('NOT_HTML');
+      expect(body.error?.message).toMatch(/HTML/i);
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  // The other half of the same telemetry contract: a failure the provider
+  // rejected is classified by ITS HTTP status client-side (HTTP_403 /
+  // HTTP_429 / HTTP_502), and the client only falls back to that status when
+  // the envelope code is generic. So the provider catch-alls must NOT stamp a
+  // structured code — doing so would fold auth, quota and upstream faults into
+  // one bucket, which is coarser than what production already had.
+  it('leaves a provider-rejected deploy on the generic envelope code so the client keeps status bucketing', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-provider-status-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      const projectId = await setupProjectAndVercelConfig('provider-status', 'Provider status test');
+      const realFetch = globalThis.fetch;
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url =
+          typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        if (url.includes('/v13/deployments')) {
+          return new Response(JSON.stringify({ error: { code: 'too_many_requests', message: 'Too many requests.' } }), {
+            status: 429,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const resp = await realFetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileName: 'index.html', providerId: VERCEL_PROVIDER_ID }),
+        });
+        const text = await resp.text();
+        expect(resp.status, text).toBe(429);
+        const body = JSON.parse(text) as { error?: { code?: string } };
+        expect(body.error?.code).toBe('BAD_REQUEST');
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  // A provider failure whose CAUSE is known — not merely its status — still
+  // earns a specific code.
+  it('reports PROVIDER_FORBIDDEN when the provider names a permission failure', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-provider-forbidden-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      const projectId = await setupProjectAndVercelConfig('provider-forbidden', 'Provider forbidden test');
+      const realFetch = globalThis.fetch;
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url =
+          typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        if (url.includes('/v13/deployments')) {
+          return new Response(JSON.stringify({ error: { code: 'forbidden', message: 'Not authorized.' } }), {
+            status: 403,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const resp = await realFetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileName: 'index.html', providerId: VERCEL_PROVIDER_ID }),
+        });
+        const text = await resp.text();
+        expect(resp.status, text).toBe(403);
+        const body = JSON.parse(text) as { error?: { code?: string } };
+        expect(body.error?.code).toBe('PROVIDER_FORBIDDEN');
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  // The config-save route is the only place CF_TOKEN_REQUIRED can surface, so
+  // it needs the same passthrough as the deploy route — otherwise the code is
+  // dead on arrival.
+  it('surfaces CF_TOKEN_REQUIRED when saving a Cloudflare Pages config without a token', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-cf-token-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      const resp = await fetch(`${baseUrl}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ providerId: CLOUDFLARE_PAGES_PROVIDER_ID, accountId: 'acct-1' }),
+      });
+      const text = await resp.text();
+      expect(resp.status, text).toBe(400);
+      const body = JSON.parse(text) as { error?: { code?: string } };
+      expect(body.error?.code).toBe('CF_TOKEN_REQUIRED');
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
 
   it('rejects vercel-self target=production with 400 BAD_REQUEST before attempting a deploy', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-vercel-prod-reject-'));

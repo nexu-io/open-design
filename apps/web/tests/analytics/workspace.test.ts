@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   countBucket,
   stableAnalyticsErrorCode,
+  stableAnalyticsRequestErrorCode,
   workspaceAnalyticsDimensions,
 } from '../../src/analytics/workspace';
 import { workspaceContextFixture } from '../helpers/workspace-context';
@@ -42,6 +43,14 @@ describe('workspace analytics dimensions', () => {
     expect(stableAnalyticsErrorCode(403)).toBe('forbidden');
     expect(stableAnalyticsErrorCode(503)).toBe('server_error');
     expect(stableAnalyticsErrorCode()).toBe('network_error');
+    expect(stableAnalyticsRequestErrorCode({ code: 'network_error' })).toBe('network_error');
+    expect(stableAnalyticsRequestErrorCode({ code: 'WORKSPACE_AUTHORITY_UNAVAILABLE', status: 503 }))
+      .toBe('WORKSPACE_AUTHORITY_UNAVAILABLE');
+    expect(stableAnalyticsRequestErrorCode({ status: 404 })).toBe('not_found');
+    expect(stableAnalyticsRequestErrorCode({ code: 'bad code / project-name' }))
+      .toBe('request_failed');
+    expect(stableAnalyticsRequestErrorCode({ code: 'UPSTREAM_abc123', status: 503 }))
+      .toBe('server_error');
   });
 
   it('does not treat unresolved seat state as available', () => {
@@ -50,6 +59,21 @@ describe('workspace analytics dimensions', () => {
       workspaceMemberId: 'member-loading',
     });
     delete (context as Partial<typeof context>).seatSummary;
+
+    expect(workspaceAnalyticsDimensions(context).seat_state).toBe('unknown');
+  });
+
+  it('treats the directory-only zero-seat sentinel as unknown', () => {
+    const context = workspaceContextFixture({
+      workspaceId: 'workspace-directory',
+      workspaceMemberId: 'member-directory',
+      seatSummary: {
+        seatLimit: 0,
+        usedSeats: 0,
+        availableSeats: 0,
+        isSeatFull: true,
+      },
+    });
 
     expect(workspaceAnalyticsDimensions(context).seat_state).toBe('unknown');
   });

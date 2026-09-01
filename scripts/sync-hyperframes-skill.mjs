@@ -14,7 +14,7 @@
 //
 // This script does NOT auto-merge. Reasons:
 //   1. We add an OD-specific frontmatter shim (od.mode/surface/preview/…)
-//      and an "Open Design integration" section near the top of
+//      and an "OpenDesign integration" section near the top of
 //      SKILL.md. An auto-merge would either drop the shim (breaking OD
 //      classification) or duplicate it on every sync.
 //   2. Upstream may rename references, restructure subdirs, or change
@@ -33,7 +33,7 @@
 //                                                       by hand
 //
 // To actually apply: copy the upstream files in by hand, re-add the OD
-// frontmatter shim and the "Open Design integration" section.
+// frontmatter shim and the "OpenDesign integration" section.
 
 import { execFile as execFileCb } from 'node:child_process';
 import { mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises';

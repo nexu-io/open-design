@@ -960,7 +960,7 @@ strong { font-weight: 500; }
   function applySlide(n) {
     idx = Math.max(0, Math.min(total - 1, n));
     deck.style.transform = 'translateX(' + (-idx * 100) + 'vw)';
-    /* load-bearing: .slide.active is read by Open Design's host bridge
+    /* load-bearing: .slide.active is read by OpenDesign's host bridge
        (src/runtime/srcdoc.ts findActiveByClass) to drive the slide
        counter. No CSS targets it — do not remove. */
     slides.forEach(function (s, i) { s.classList.toggle('active', i === idx); });
@@ -1058,7 +1058,7 @@ strong { font-weight: 500; }
     }
   }, { passive: true });
 
-  /* Host-driven navigation: Open Design's host bridge classifies this deck
+  /* Host-driven navigation: OpenDesign's host bridge classifies this deck
      as class-driven (because go() toggles .slide.active) but the visible
      slide is moved by deck.style.transform, which the bridge can't drive.
      Two cooperating handlers keep the deck in sync with the host:

@@ -83,6 +83,39 @@ describe('DeckThumbnailRail', () => {
     expect(rebuilt).toHaveBeenCalledTimes(3);
   });
 
+  it('renders iframe fallbacks at the live preview viewport before scaling them down', () => {
+    const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(145);
+    const height = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(82);
+    try {
+      const { container } = render(
+        <DeckThumbnailRail
+          {...railProps({ count: 1, labelTotal: 1 })}
+          previewViewport={{ width: 716, height: 429 }}
+        />,
+      );
+
+      const iframe = container.querySelector('.deck-thumbnail-frame iframe') as HTMLIFrameElement;
+      expect(iframe.style.width).toBe('716px');
+      expect(iframe.style.height).toBe('429px');
+      expect(iframe.style.transform).toMatch(/^scale\(0\.19/);
+    } finally {
+      width.mockRestore();
+      height.mockRestore();
+    }
+  });
+
+  it('removes the loading cover after an iframe fallback loads', () => {
+    const { container } = render(
+      <DeckThumbnailRail {...railProps({ count: 1, labelTotal: 1 })} />,
+    );
+    const iframe = container.querySelector('.deck-thumbnail-frame iframe') as HTMLIFrameElement;
+    expect(container.querySelector('.deck-thumbnail-loading')).toBeTruthy();
+
+    fireEvent.load(iframe);
+
+    expect(container.querySelector('.deck-thumbnail-loading')).toBeNull();
+  });
+
   it('reports the clicked slide index and marks the active thumbnail', () => {
     const onSelect = vi.fn();
     const { container } = render(

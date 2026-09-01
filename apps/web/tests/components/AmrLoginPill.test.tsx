@@ -107,7 +107,7 @@ describe('AmrAccountControl', () => {
     });
 
     expect(
-      screen.getByRole('group', { name: 'Open Design Cloud account status' }),
+      screen.getByRole('group', { name: 'OpenDesign Cloud account status' }),
     ).toBeTruthy();
     expect(screen.getByText('Not signed in')).toBeTruthy();
     const signIn = screen.getByRole('button', { name: 'Sign in' });
@@ -371,6 +371,44 @@ describe('AmrLoginPill', () => {
     );
   });
 
+  it('uses the feature-test origin carried by the visible status for management', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === '/api/system/open-external') return jsonResponse({ body: { ok: true } });
+      return new Response('{}', { status: 202 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderPill({
+      initialStatus: {
+        loggedIn: true,
+        loginInFlight: false,
+        profile: 'feature-test',
+        consoleOrigin: 'https://feature.example',
+        configPath: '/x',
+        user: { id: 'u', email: 'leaf@example.com', plan: 'plus' },
+      },
+      skipInitialRefresh: true,
+      showConsoleAction: true,
+    });
+
+    const link = screen.getByRole('link', { name: 'Manage' }) as HTMLAnchorElement;
+    expect(link.href).toBe('https://feature.example/dashboard?source=open_design');
+    fireEvent.click(link);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/system/open-external',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('https://feature.example/dashboard'),
+      }),
+    ));
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/attribution/bridge-url',
+      expect.anything(),
+    );
+  });
+
   it('renders a "Signed in" pill (with the Sign-out aria-label) when /status reports a logged-in user', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({
@@ -438,7 +476,7 @@ describe('AmrLoginPill', () => {
     });
   });
 
-  it('passes the Open Design device id in login attribution when metrics consent is enabled', async () => {
+  it('passes the OpenDesign device id in login attribution when metrics consent is enabled', async () => {
     const fetchMock = vi.fn(async (input, init) => {
       const url = typeof input === 'string' ? input : (input as URL).toString();
       if (url.endsWith('/api/integrations/vela/status')) {
@@ -600,7 +638,7 @@ describe('AmrLoginPill', () => {
   });
 
   // This pill is what Settings' "Sign in / Register" cloud callout and the
-  // Open Design agent card's "Authorize" action both render (SettingsDialog
+  // OpenDesign agent card's "Authorize" action both render (SettingsDialog
   // renders it from a full-page `/settings` route, so the entry rail — and
   // its `useWorkspaceContext` hook — is unmounted the whole time the user is
   // on that page). Besides notifyAmrLoginStatusChanged(), it also fires

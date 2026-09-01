@@ -26,11 +26,11 @@ import {
   stopProcesses,
 } from "@open-design/platform";
 
-import type { ToolPackConfig } from "./config.js";
+import type { ToolPackConfig } from "./config/index.js";
 import { domToPptxBundleResource } from "./dom-to-pptx-resource.js";
-import { copyBundledResourceTrees, linuxResources } from "./resources.js";
+import { copyBundledResourceTrees, linuxResources, packBundledDshRuntime } from "./resources/index.js";
 import { copyOptionalVelaCliBinary } from "./vela-cli.js";
-import { electronBuilderVersionForAppVersion, readRuntimeAppVersion } from "./versions.js";
+import { electronBuilderVersionForAppVersion, readRuntimeAppVersion } from "./versioning/index.js";
 import { processWebSourcemaps } from "./web-sourcemaps.js";
 
 const execFileAsync = promisify(execFile);
@@ -478,6 +478,7 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   await runPnpm(config, ["--filter", "@open-design/download", "build"]);
   await runPnpm(config, ["--filter", "@open-design/host", "build"]);
   await runPnpm(config, ["--filter", "@open-design/diagnostics", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/dsh-runtime", "build"]);
   await runPnpm(config, ["--filter", "@open-design/components", "build"]);
   await runPnpm(config, ["--filter", "@open-design/daemon", "build"]);
   try {
@@ -530,6 +531,10 @@ async function copyResourceTree(config: ToolPackConfig, paths: LinuxPaths): Prom
   await rm(paths.resourceRoot, { force: true, recursive: true });
   await mkdir(paths.resourceRoot, { recursive: true });
   await copyBundledResourceTrees({
+    workspaceRoot: config.workspaceRoot,
+    resourceRoot: paths.resourceRoot,
+  });
+  await packBundledDshRuntime({
     workspaceRoot: config.workspaceRoot,
     resourceRoot: paths.resourceRoot,
   });
@@ -593,6 +598,7 @@ async function writeAssembledApp(
         ...(config.posthogKey == null ? {} : { posthogKey: config.posthogKey }),
         ...(config.posthogHost == null ? {} : { posthogHost: config.posthogHost }),
         ...(config.velaWebUrl == null ? {} : { velaWebUrl: config.velaWebUrl }),
+        ...(config.velaWebUrls == null ? {} : { velaWebUrls: config.velaWebUrls }),
         ...(config.portable ? {} : { namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }),
       },
       null,

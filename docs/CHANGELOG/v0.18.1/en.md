@@ -1,13 +1,13 @@
 ---
-title: Open Design 0.18.1
+title: OpenDesign 0.18.1
 description: DeepSeek V4 Flash is unlimited for every paid plan from August 6 to August 13, and 0.18.1 brings the offer into the app — alongside fixes for the first week of Team Workspace on production.
 ---
 
-🎁 **`24 PRs` · `9 contributors` · `2 days`** — **DeepSeek V4 Flash is unlimited for one week, and 0.18.1 puts it where you actually work.** August 6 20:00 → August 13 20:00 (Asia/Shanghai): every paid plan gets unlimited DeepSeek V4 Flash on Open Design Cloud — it doesn't eat your plan's quota, doesn't carry over, and there's nothing to claim. 0.18.1 also cleans up the first week of Team Workspace on production: the 502 storm, the file grid that crawled, the BYOK picker that forgot your models. 🚀
+🎁 **`24 PRs` · `9 contributors` · `2 days`** — **DeepSeek V4 Flash is unlimited for one week, and 0.18.1 puts it where you actually work.** August 6 20:00 → August 13 20:00 (Asia/Shanghai): every paid plan gets unlimited DeepSeek V4 Flash on OpenDesign Cloud — it doesn't eat your plan's quota, doesn't carry over, and there's nothing to claim. 0.18.1 also cleans up the first week of Team Workspace on production: the 502 storm, the file grid that crawled, the BYOK picker that forgot your models. 🚀
 
 ## 🔥 Highlights
 
-- 🎁 **DeepSeek V4 Flash — unlimited, August 6–13.** *A fast model you have to spend quota on carefully is the one you reach for least.* For one week, every paid plan gets DeepSeek V4 Flash unlimited on Open Design Cloud — and 0.18.1 brings the offer into the app instead of leaving it on the pricing page: the home screen tells you it's live, the model picker carries an **Unlimited** badge, and one click switches you over. It runs on top of your plan, not out of it — your normal quota is untouched, and on August 13 at 20:00 everything returns to standard rules. (#6507)
+- 🎁 **DeepSeek V4 Flash — unlimited, August 6–13.** *A fast model you have to spend quota on carefully is the one you reach for least.* For one week, every paid plan gets DeepSeek V4 Flash unlimited on OpenDesign Cloud — and 0.18.1 brings the offer into the app instead of leaving it on the pricing page: the home screen tells you it's live, the model picker carries an **Unlimited** badge, and one click switches you over. It runs on top of your plan, not out of it — your normal quota is untouched, and on August 13 at 20:00 everything returns to standard rules. (#6507)
 
 - ☁️ **A cloud blip stops taking the workspace down with it.** *The packaged app could get stuck in a 502 loop — a failing presence call retried on a tight heartbeat until the whole workspace felt broken.* 0.18.1 backs the heartbeat off, relays what the server actually said instead of a generic failure, and replays proxied requests that deserve a second chance. A cloud outage now looks like a bad minute, not a broken install. (#6521)
 

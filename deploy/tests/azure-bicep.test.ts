@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-// Guards the Azure Bicep templates against drifting from the Open Design
+// Guards the Azure Bicep templates against drifting from the OpenDesign
 // runtime contract. Source-level checks run without the Azure CLI; the extra
 // `bicep build` pass runs only when the bicep binary is on PATH.
 

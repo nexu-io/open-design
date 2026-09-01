@@ -124,16 +124,10 @@ describe('codebuddy definition metadata', () => {
     expect(codebuddyAgentDef.externalMcpInjection).toBe('claude-mcp-json');
   });
 
-  it('exposes fallback models with multi-provider coverage', () => {
-    const modelIds = codebuddyAgentDef.fallbackModels.map((m) => m.id);
-    expect(modelIds).toContain('default');
-    expect(modelIds).toContain('glm-5.1-ioa');
-    expect(modelIds).toContain('claude-opus-4.8');
-    expect(modelIds).toContain('gpt-5.5');
-    expect(modelIds).toContain('gemini-3.5-flash');
-    expect(modelIds).toContain('deepseek-v4-pro-ioa');
-    expect(modelIds).toContain('kimi-k2.6-ioa');
-    expect(modelIds).toContain('minimax-m3-ioa');
+  it('fails closed to the CLI-configured default when live model discovery is unavailable', () => {
+    expect(codebuddyAgentDef.fallbackModels).toEqual([
+      { id: 'default', label: 'Default (CLI config)' },
+    ]);
   });
 
   it('probes -p subcommand for capability flags', () => {
@@ -145,6 +139,44 @@ describe('codebuddy definition metadata', () => {
   it('provides install and docs URLs', () => {
     expect(codebuddyAgentDef.installUrl).toBe('https://www.codebuddy.cn');
     expect(codebuddyAgentDef.docsUrl).toBe('https://www.codebuddy.cn/docs/workbuddy/Overview');
+  });
+});
+
+describe('codebuddy model discovery', () => {
+  it('parses the model ids advertised by the installed CLI help', () => {
+    const help = `
+Options:
+  --model <model>  Model for the current session. Please provide the model ID. Currently supported: (hy3, glm-5.2, glm-5.1,
+                     glm-5v-turbo, minimax-m3, kimi-k3-1, deepseek-v4-pro)
+  --text-to-image-model <model>  Model for text-to-image generation
+`;
+
+    expect(codebuddyAgentDef.listModels?.args).toEqual(['--help']);
+    expect(codebuddyAgentDef.listModels?.parse(help)).toEqual([
+      { id: 'default', label: 'Default (CLI config)' },
+      { id: 'hy3', label: 'hy3' },
+      { id: 'glm-5.2', label: 'glm-5.2' },
+      { id: 'glm-5.1', label: 'glm-5.1' },
+      { id: 'glm-5v-turbo', label: 'glm-5v-turbo' },
+      { id: 'minimax-m3', label: 'minimax-m3' },
+      { id: 'kimi-k3-1', label: 'kimi-k3-1' },
+      { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
+    ]);
+  });
+
+  it('deduplicates advertised model ids while preserving CLI order', () => {
+    const help = '--model <model> Currently supported: (hy3, glm-5.2, hy3)';
+
+    expect(codebuddyAgentDef.listModels?.parse(help)?.map((model) => model.id)).toEqual([
+      'default',
+      'hy3',
+      'glm-5.2',
+    ]);
+  });
+
+  it('returns null when the CLI does not advertise a usable model catalog', () => {
+    expect(codebuddyAgentDef.listModels?.parse('--model <model> Model for the session')).toBeNull();
+    expect(codebuddyAgentDef.listModels?.parse('--model <model> Currently supported: ()')).toBeNull();
   });
 });
 

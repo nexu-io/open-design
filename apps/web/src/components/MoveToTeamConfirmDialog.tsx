@@ -1,4 +1,5 @@
 import { useId, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Dialog, DialogDescription, DialogFooter, DialogTitle } from '@open-design/components';
 import { useT } from '../i18n';
 
@@ -31,10 +32,9 @@ export function MoveToTeamConfirmDialog({
   const t = useT();
   const titleId = useId();
   const [dontRemind, setDontRemind] = useState(false);
-  return (
+  const dialog = (
     <Dialog
       className="modal-confirm"
-      backdropClassName="modal-backdrop--no-blur"
       role="alertdialog"
       onClose={onCancel}
       closeOnEscape
@@ -93,4 +93,6 @@ export function MoveToTeamConfirmDialog({
       </DialogFooter>
     </Dialog>
   );
+
+  return typeof document !== 'undefined' ? createPortal(dialog, document.body) : dialog;
 }

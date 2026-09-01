@@ -81,6 +81,7 @@ function ProjectResourceFanout(props: {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
   vi.unstubAllGlobals();
   resetWorkspaceContextCache();
@@ -290,6 +291,240 @@ describe('fresh project route Workspace gate', () => {
       expect(hook.result.current.failure).toBeUndefined();
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the last verified member authority through a transient directory outage', async () => {
+    const memberContext = workspaceContextFixture({
+      workspaceId: WORKSPACE_A.workspaceId,
+      workspaceMemberId: 'member-a-readonly',
+      role: 'member',
+      workspaceName: WORKSPACE_A.workspaceName,
+    });
+    let directoryUnavailable = false;
+    const fetchMock = vi.fn(async () => {
+      if (directoryUnavailable) {
+        return new Response(JSON.stringify({ error: 'temporarily unavailable' }), {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify(workspaceDirectoryFixture([memberContext])), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const hook = renderHook(() => useProjectRouteWorkspaceContext(
+      memberContext.workspaceId,
+      { context: WORKSPACE_B, loading: false },
+    ));
+
+    await waitFor(() => {
+      expect(hook.result.current.context).toMatchObject({
+        workspaceId: memberContext.workspaceId,
+        workspaceMemberId: memberContext.workspaceMemberId,
+        role: 'member',
+      });
+    });
+    const verifiedMemberContext = hook.result.current.context;
+    expect(verifiedMemberContext).not.toBeNull();
+
+    directoryUnavailable = true;
+    act(() => window.dispatchEvent(new Event('focus')));
+
+    await waitFor(() => {
+      expect(hook.result.current).toMatchObject({
+        context: verifiedMemberContext,
+        loading: false,
+        failure: 'unavailable',
+      });
+    });
+
+    directoryUnavailable = false;
+    act(() => hook.result.current.retry());
+
+    await waitFor(() => {
+      expect(hook.result.current.context).toEqual(verifiedMemberContext);
+      expect(hook.result.current.failure).toBeUndefined();
+    });
+  });
+
+  it('keeps the open project authority when an ambient Workspace switch cannot revalidate it', async () => {
+    let directoryRejected = false;
+    vi.stubGlobal('fetch', vi.fn(async () => directoryRejected
+      ? new Response(JSON.stringify({ error: 'account authorization unavailable' }), {
+          status: 403,
+          headers: { 'content-type': 'application/json' },
+        })
+      : new Response(JSON.stringify(workspaceDirectoryFixture([WORKSPACE_A, WORKSPACE_B])), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })));
+
+    const hook = renderHook(() => useProjectRouteWorkspaceContext(
+      WORKSPACE_A.workspaceId,
+      { context: WORKSPACE_B, loading: false },
+    ));
+    await waitFor(() => expect(hook.result.current.context).toMatchObject({
+      workspaceId: WORKSPACE_A.workspaceId,
+      workspaceMemberId: WORKSPACE_A.workspaceMemberId,
+    }));
+    const projectAuthority = hook.result.current.context;
+
+    directoryRejected = true;
+    act(() => notifyWorkspaceContextRefresh({ context: WORKSPACE_B }));
+
+    await waitFor(() => {
+      expect(hook.result.current).toMatchObject({
+        context: projectAuthority,
+        loading: false,
+        failure: 'unavailable',
+      });
+    });
+    expect(currentWorkspaceAccountGeneration()).toBe(0);
+  });
+
+  it('revokes a retained authority after a successful directory response removes the member', async () => {
+    let membershipAvailable = true;
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      JSON.stringify(workspaceDirectoryFixture(
+        membershipAvailable ? [WORKSPACE_A] : [],
+      )),
+      {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      },
+    )));
+
+    const hook = renderHook(() => useProjectRouteWorkspaceContext(
+      WORKSPACE_A.workspaceId,
+      { context: WORKSPACE_B, loading: false },
+    ));
+
+    await waitFor(() => expect(hook.result.current.context).toMatchObject({
+      workspaceId: WORKSPACE_A.workspaceId,
+      workspaceMemberId: WORKSPACE_A.workspaceMemberId,
+      role: WORKSPACE_A.role,
+    }));
+
+    membershipAvailable = false;
+    act(() => window.dispatchEvent(new Event('pageshow')));
+
+    await waitFor(() => {
+      expect(hook.result.current).toMatchObject({
+        context: null,
+        loading: false,
+        failure: 'forbidden',
+      });
+    });
+  });
+
+  it('does not promote an incomplete legacy bootstrap row during an outage', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      JSON.stringify({ error: 'temporarily unavailable' }),
+      {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      },
+    )));
+    const legacyBootstrap = {
+      ...WORKSPACE_A,
+      workspaceMemberId: '',
+    };
+
+    const hook = renderHook(() => useProjectRouteWorkspaceContext(
+      WORKSPACE_A.workspaceId,
+      { context: WORKSPACE_B, loading: false },
+      legacyBootstrap,
+    ));
+
+    await waitFor(() => {
+      expect(hook.result.current).toMatchObject({
+        context: null,
+        loading: false,
+        failure: 'unavailable',
+      });
+    });
+  });
+
+  it('retries transient failures with jittered exponential backoff and resets after recovery', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    let directoryUnavailable = false;
+    let directoryReads = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      directoryReads += 1;
+      return directoryUnavailable
+        ? new Response(JSON.stringify({ error: 'temporarily unavailable' }), {
+            status: 503,
+            headers: { 'content-type': 'application/json' },
+          })
+        : new Response(JSON.stringify(workspaceDirectoryFixture([WORKSPACE_A])), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+    }));
+
+    const hook = renderHook(() => useProjectRouteWorkspaceContext(
+      WORKSPACE_A.workspaceId,
+      { context: WORKSPACE_B, loading: false },
+    ));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(hook.result.current.context?.workspaceId).toBe(WORKSPACE_A.workspaceId);
+
+    directoryUnavailable = true;
+    await act(async () => {
+      hook.result.current.retry();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(directoryReads).toBe(2);
+    expect(hook.result.current.failure).toBe('unavailable');
+
+    // random=0 applies the minimum 0.5 jitter multiplier: 1s base -> 500ms.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(499);
+    });
+    expect(directoryReads).toBe(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(directoryReads).toBe(3);
+
+    // The next base doubled to 2s -> 1s with the same deterministic jitter.
+    directoryUnavailable = false;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(999);
+    });
+    expect(directoryReads).toBe(3);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(directoryReads).toBe(4);
+    expect(hook.result.current.failure).toBeUndefined();
+
+    // A genuine success resets the next failure to the initial 500ms delay.
+    // Move beyond the directory single-flight share window before starting a
+    // genuinely new failure cycle.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_001);
+    });
+    directoryUnavailable = true;
+    await act(async () => {
+      hook.result.current.retry();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const readsBeforeResetRetry = directoryReads;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(499);
+    });
+    expect(directoryReads).toBe(readsBeforeResetRetry);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(directoryReads).toBe(readsBeforeResetRetry + 1);
   });
 
   it('fails closed across an account generation change and never reuses old member headers', async () => {

@@ -2,15 +2,15 @@ import type { DeepPartial, CommunityCopy } from '../community-i18n';
 
 const es: DeepPartial<CommunityCopy> = {
   hub: {
-    title: "Comunidad — Open Design",
-    desc: "La comunidad de Open Design: colaboradores que publican en abierto, embajadores que organizan ateliers locales y moderadores que mantienen viva la Discord.",
+    title: "Comunidad — OpenDesign",
+    desc: "La comunidad de OpenDesign: colaboradores que publican en abierto, embajadores que organizan ateliers locales y moderadores que mantienen viva la Discord.",
     heroTitle: "El diseño abierto <em>toma forma</em><br/>cuando lo publicas.",
     heroLead:
-      "Open Design lo construyen personas, en abierto. Skills, sistemas DESIGN.md, plugins, documentación: cada commit es una pincelada. Elige una puerta abajo y encuentra tu sala.",
+      "OpenDesign lo construyen personas, en abierto. Skills, sistemas DESIGN.md, plugins, documentación: cada commit es una pincelada. Elige una puerta abajo y encuentra tu sala.",
     cardMetaH: "Acuñada automáticamente en el primer merge",
     cardMetaS: "PNG · compartida en X",
     cardHeroAlt:
-      "Tarjeta de honor de colaborador de Open Design — @dev-kp-eloper, top 99,9 %, nivel Giotto",
+      "Tarjeta de honor de colaborador de OpenDesign — @dev-kp-eloper, top 99,9 %, nivel Giotto",
     cards: [
       {
         ord: "I",
@@ -21,7 +21,7 @@ const es: DeepPartial<CommunityCopy> = {
       {
         ord: "II",
         title: "Embajadores",
-        sub: "La <em>voz</em> de Open Design en tu ciudad.",
+        sub: "La <em>voz</em> de OpenDesign en tu ciudad.",
         body: "Abre un atelier local. Convoca los meetups, las demos, las críticas nocturnas. Con respaldo de presupuesto, materiales y un canal privado con el equipo central.",
       },
       {
@@ -33,14 +33,14 @@ const es: DeepPartial<CommunityCopy> = {
     ],
   },
   contributors: {
-    title: "Colaboradores — Open Design",
-    desc: "Contribuye a Open Design: maintainers, clasificaciones de colaboradores semanales e históricas, good first issues y un camino sin código para publicar tu primera pieza.",
+    title: "Colaboradores — OpenDesign",
+    desc: "Contribuye a OpenDesign: maintainers, clasificaciones de colaboradores semanales e históricas, good first issues y un camino sin código para publicar tu primera pieza.",
     heroTitle: "Las manos que <em>publican</em> el trabajo.",
     heroLead:
-      "Open Design lo construyen personas, en abierto. Skills, sistemas DESIGN.md, plugins, documentación: cada commit es una pincelada. Elige un issue, envía un PR y gana una tarjeta de honor única en el momento en que se hace merge.",
+      "OpenDesign lo construyen personas, en abierto. Skills, sistemas DESIGN.md, plugins, documentación: cada commit es una pincelada. Elige un issue, envía un PR y gana una tarjeta de honor única en el momento en que se hace merge.",
     showcase: {
       kicker: "Todo como plugin",
-      h2: "Open Design como escenario. <em>Tu trabajo</em> como espectáculo.",
+      h2: "OpenDesign como escenario. <em>Tu trabajo</em> como espectáculo.",
       intro:
         "El atelier es también una galería. Ayudarte a crear el trabajo es la mitad de la dirección; asegurar que la sala venga a verlo es la otra. Cada pieza que publicas no aterriza en una bóveda, sino en una pared, donde el mundo puede encontrarla.",
       tenets: [
@@ -70,7 +70,7 @@ const es: DeepPartial<CommunityCopy> = {
         steps: [
           {
             h4: "Entrega la línea al agente",
-            body: "Pega el comando de arriba en el agente dentro de Open Design, o en el que ya tengas a mano: Claude Code, Codex, Cursor. Se instala solo.",
+            body: "Pega el comando de arriba en el agente dentro de OpenDesign, o en el que ya tengas a mano: Claude Code, Codex, Cursor. Se instala solo.",
           },
           {
             h4: "Despierta el skill",
@@ -87,20 +87,20 @@ const es: DeepPartial<CommunityCopy> = {
       kicker: "Al timón del barco",
       h2: "Los <em>maintainers</em>.",
       intro:
-        "Los maintainers protegen la dirección y la calidad de Open Design: revisan las contribuciones, mantienen coherente el estándar y hacen sitio para que más colaboradores se ganen su lugar en el proyecto.",
+        "Los maintainers protegen la dirección y la calidad de OpenDesign: revisan las contribuciones, mantienen coherente el estándar y hacen sitio para que más colaboradores se ganen su lugar en el proyecto.",
       role: "Maintainer",
       bios: {
         "Nagendhra-web":
-          "Nagendhra aporta el instinto de un ingeniero de datos por la verdad en producción: encontrar el fallo, medir el caso límite y arreglarlo como es debido. En Open Design, eso se refleja en el trabajo de preflight de despliegue, el endurecimiento del empaquetado de assets y las correcciones de Windows que hacen que el proyecto se sienta fiable cuando los colaboradores publican.",
+          "Nagendhra aporta el instinto de un ingeniero de datos por la verdad en producción: encontrar el fallo, medir el caso límite y arreglarlo como es debido. En OpenDesign, eso se refleja en el trabajo de preflight de despliegue, el endurecimiento del empaquetado de assets y las correcciones de Windows que hacen que el proyecto se sienta fiable cuando los colaboradores publican.",
         "Sid-Qin":
-          "Sid es el ingeniero generalista con el ojo de un diseñador para el detalle: el tipo de maintainer que nota tanto la ruta rota de la CLI como el affordance de interacción torcido. En Open Design, Sid mantiene los flujos de exportación, las acciones de plugins, los shims de Windows, el manejo de MIME y la fontanería de agentes lo bastante afinados como para que una comunidad construya sobre ellos.",
+          "Sid es el ingeniero generalista con el ojo de un diseñador para el detalle: el tipo de maintainer que nota tanto la ruta rota de la CLI como el affordance de interacción torcido. En OpenDesign, Sid mantiene los flujos de exportación, las acciones de plugins, los shims de Windows, el manejo de MIME y la fontanería de agentes lo bastante afinados como para que una comunidad construya sobre ellos.",
       },
     },
     allTime: {
       kicker: "Señal histórica",
       h2: "Los colaboradores con <em>raíces profundas</em>.",
       intro:
-        "Un registro de largo recorrido de colaboradores talentosos que no dejan de convertir ideas, correcciones y oficio en el estándar compartido de Open Design.",
+        "Un registro de largo recorrido de colaboradores talentosos que no dejan de convertir ideas, correcciones y oficio en el estándar compartido de OpenDesign.",
       rankLabel: "Colaborador histórico",
       week: "Historial del repositorio",
       quote:
@@ -116,12 +116,12 @@ const es: DeepPartial<CommunityCopy> = {
       kicker: "La señal de esta semana",
       h2: "Diez colaboradores que lideran <em>esta semana</em>.",
       intro:
-        "Una instantánea de colaboradores brillantes que hacen merge de PRs, mejoran el producto y hacen que Open Design se sienta vivo.",
+        "Una instantánea de colaboradores brillantes que hacen merge de PRs, mejoran el producto y hacen que OpenDesign se sienta vivo.",
       rankLabel: "Líder de esta semana",
       week: "Últimos 7 días",
       handleSuffix: "· líder esta semana",
       blurbTemplate:
-        "{name} marca el ritmo esta semana con {prs} PRs mergeados y ese oficio constante que mantiene a Open Design en movimiento.",
+        "{name} marca el ritmo esta semana con {prs} PRs mergeados y ese oficio constante que mantiene a OpenDesign en movimiento.",
       statRank: "Rango",
       statPrs: "PRs · 7 d",
       headContributor: "Colaborador",
@@ -132,7 +132,7 @@ const es: DeepPartial<CommunityCopy> = {
       kicker: "Elige tu primera contribución",
       h2: "Issues abiertos, <em>etiquetados para ti</em>.",
       intro:
-        'En directo desde <span class="num">label:&ldquo;good first issue&rdquo;</span> en el repo de Open Design. Comenta un issue para reclamarlo y un maintainer te lo asignará en un día.',
+        'En directo desde <span class="num">label:&ldquo;good first issue&rdquo;</span> en el repo de OpenDesign. Comenta un issue para reclamarlo y un maintainer te lo asignará en un día.',
       loading: "good first issue",
       foot: 'Mostrando los primeros <span class="num" id="issue-count">—</span> good-first-issues abiertos',
       seeAll: "Ver todos en GitHub",
@@ -171,9 +171,9 @@ const es: DeepPartial<CommunityCopy> = {
     },
   },
   ambassadors: {
-    title: "Embajadores — Open Design",
-    desc: "Conviértete en embajador de Open Design: abre un atelier local, organiza meetups y críticas, y consigue presupuesto, materiales y un canal privado con el equipo central.",
-    heroTitle: "Sé la <em>voz</em> de Open Design en tu ciudad.",
+    title: "Embajadores — OpenDesign",
+    desc: "Conviértete en embajador de OpenDesign: abre un atelier local, organiza meetups y críticas, y consigue presupuesto, materiales y un canal privado con el equipo central.",
+    heroTitle: "Sé la <em>voz</em> de OpenDesign en tu ciudad.",
     heroLead:
       "Abre un atelier local. Convoca los meetups, las demos, las críticas nocturnas. Te respaldamos con presupuesto, materiales y un canal privado con el equipo central.",
     program: {
@@ -181,7 +181,7 @@ const es: DeepPartial<CommunityCopy> = {
       h2: "Vocación, <em>mecenazgo</em>, pacto.",
       applyCta: "Solicita vía Google Form",
       applyNote:
-        "Los embajadores convierten Open Design de un repositorio en algo que los colaboradores pueden encontrar en una sala, con tinta sobre la mesa y el café ya frío.",
+        "Los embajadores convierten OpenDesign de un repositorio en algo que los colaboradores pueden encontrar en una sala, con tinta sobre la mesa y el café ya frío.",
       cols: [
         {
           n: "I · Vocación",
@@ -224,7 +224,7 @@ const es: DeepPartial<CommunityCopy> = {
       kicker: "Sobre el terreno",
       h2: "Conoce a los <em>embajadores</em>.",
       intro:
-        "Organizadores locales, creadores y constructores de comunidad que ayudan a Open Design a llegar a más diseñadores y equipos.",
+        "Organizadores locales, creadores y constructores de comunidad que ayudan a OpenDesign a llegar a más diseñadores y equipos.",
       places: [
         "Sunshine Coast, Australia",
         "Kuala Lumpur, Malasia",
@@ -234,8 +234,8 @@ const es: DeepPartial<CommunityCopy> = {
     },
   },
   moderators: {
-    title: "Moderadores — Open Design",
-    desc: "Conoce a los moderadores de la Discord de Open Design y únete a la sala donde los diseñadores AI-native publican trabajo, abren plugins, rompen betas y se desatascan entre sí.",
+    title: "Moderadores — OpenDesign",
+    desc: "Conoce a los moderadores de la Discord de OpenDesign y únete a la sala donde los diseñadores AI-native publican trabajo, abren plugins, rompen betas y se desatascan entre sí.",
     heroTitle: "La sala donde se reúnen los <em>colaboradores</em>.",
     heroLead:
       "La primera línea de la era del diseño con agentes se abre aquí. Discord es donde se reúnen los diseñadores AI-native más brillantes del mundo. Conoce a quienes mantienen la sala acogedora.",
@@ -248,11 +248,11 @@ const es: DeepPartial<CommunityCopy> = {
       cards: [
         {
           role: "Desde el estudio",
-          bio: "Del equipo fundador de Open Design. Espera que la Discord siga siendo un buen sitio donde estar. Saluda en cualquier momento, con cualquier pregunta.",
+          bio: "Del equipo fundador de OpenDesign. Espera que la Discord siga siendo un buen sitio donde estar. Saluda en cualquier momento, con cualquier pregunta.",
         },
         {
           role: "Guardián de la sala",
-          bio: "Una mano experta en Discord y en el cuidado de comunidades. Mantiene la sala acogedora, las puertas abiertas, la conversación fluida. Apasionado por Open Design.",
+          bio: "Una mano experta en Discord y en el cuidado de comunidades. Mantiene la sala acogedora, las puertas abiertas, la conversación fluida. Apasionado por OpenDesign.",
         },
       ],
       channelNotes: ["trabajo publicado", "constructores", "feedback temprano", "desatascados"],

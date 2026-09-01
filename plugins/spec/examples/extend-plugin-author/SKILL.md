@@ -1,6 +1,6 @@
 ---
 name: extend-plugin-author
-description: Use this plugin when the user wants to create, improve, validate, publish, or submit an Open Design plugin using the plugin spec, examples, and PR workflow.
+description: Use this plugin when the user wants to create, improve, validate, publish, or submit an OpenDesign plugin using the plugin spec, examples, and PR workflow.
 license: MIT
 metadata:
   author: open-design-spec

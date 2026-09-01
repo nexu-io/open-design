@@ -2,6 +2,7 @@ packages:
   - packages/*
   - apps/*
   - tools/*
+  - shells/*
   - e2e
 
 overrides:
@@ -22,5 +23,6 @@ onlyBuiltDependencies:
   - electron
   - electron-winstaller
   - esbuild
+  - onnxruntime-node
   - protobufjs
   - sharp

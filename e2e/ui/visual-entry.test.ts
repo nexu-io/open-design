@@ -6,6 +6,7 @@ import {
   captureVisualTarget,
   configureVisualPage,
   gotoVisualHome,
+  mockSignedInVelaAccount,
   scrollVisualLocatorIntoStableView,
   VISUAL_AMR_AGENT,
   VISUAL_CLI_AGENTS,
@@ -15,10 +16,6 @@ import {
 
 test('[P2] captures the onboarding cloud sign-in surface', async ({ page }) => {
   test.setTimeout(T.xlong);
-  test.fail(
-    true,
-    'PR #6475 currently omits anonymous Local Agent and BYOK actions from the sign-in surface.',
-  );
 
   await configureVisualPage(page, {
     projects: [],
@@ -30,24 +27,66 @@ test('[P2] captures the onboarding cloud sign-in surface', async ({ page }) => {
   });
 
   await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
-  // The connect step opens on the cloud sign-in landing. Local CLI and BYOK
-  // remain available as secondary paths from the same first screen.
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
+  // Cloud stays primary while identity-independent Local Agent and BYOK setup
+  // remain available directly from the signed-out landing.
   await expect(
-    page.getByRole('heading', { name: /Sign in to Open Design|登录 Open Design/i }),
+    page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i }),
   ).toBeVisible({ timeout: T.medium });
   await expect(
-    page.getByRole('button', { name: /Sign in to Open Design|登录 Open Design/i }),
+    page.getByRole('button', { name: /Sign in to OpenDesign|登录 OpenDesign/i }),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: /Local coding agent|本地 Coding Agent/i }),
+    page.getByRole('button', { name: /Local (coding )?agent|本地 (Coding )?Agent/i }),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: /Bring your own key|自己的模型 Key/i }),
+    page.getByRole('button', { name: /Bring your own key|使用自己的 Key|自己的模型 Key/i }),
   ).toBeVisible();
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-onboarding-cloud');
+});
+
+// The step past sign-in had no baseline at all, so the one surface whose whole
+// job is to line up a two-column grid of detected CLIs was invisible to the
+// visual suite. `visual-avatar-local-agent-list` covers the avatar menu's agent
+// list — a different component — and stayed 0px through an alignment change to
+// this one.
+test('[P2] captures the onboarding Local Agent CLI list surface', async ({ page }) => {
+  test.setTimeout(T.xlong);
+
+  await configureVisualPage(page, {
+    projects: [],
+    agents: [VISUAL_AMR_AGENT, ...VISUAL_CLI_AGENTS],
+    config: {
+      onboardingCompleted: false,
+    },
+  });
+  await mockSignedInVelaAccount(page);
+
+  await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
+
+  await page
+    .getByRole('button', { name: /Continue \(signed in\)|继续（已登录）/i })
+    .click();
+  await expect(
+    page.getByRole('heading', { name: /Choose your model source|选择模型来源/i }),
+  ).toBeVisible({ timeout: T.medium });
+  await page.getByRole('radio', { name: /Local Agent|本地 Agent/i }).click();
+  await page.getByRole('button', { name: /^(Continue|继续)$/ }).click();
+
+  const panel = page.locator('.onboarding-view__setup-panel');
+  await expect(panel).toBeVisible({ timeout: T.medium });
+  const chips = page.locator('.onboarding-view__agent-chip');
+  // More than one chip is the point: a single card cannot show whether the
+  // column shares an alignment line.
+  await expect(chips.first()).toBeVisible();
+  expect(await chips.count()).toBeGreaterThan(1);
+  await waitForVisualFonts(page);
+
+  await captureVisual(page, 'visual-onboarding-local-agent');
+  await captureVisualTarget(page, 'visual-onboarding-local-agent-panel', panel);
 });
 
 test('[P2] captures the visual home harness', async ({ page }) => {
@@ -59,6 +98,53 @@ test('[P2] captures the visual home harness', async ({ page }) => {
   await waitForVisualProjects(page, []);
 
   await captureVisual(page, 'visual-home');
+});
+
+test('[P2] captures the unpaid DeepSeek campaign at narrow and short viewport boundaries', async ({ page }) => {
+  test.setTimeout(T.xlong);
+
+  await page.clock.setFixedTime('2026-08-21T00:00:00+08:00');
+  await page.setViewportSize({ width: 600, height: 720 });
+  await configureVisualPage(page, { projects: [] });
+  await mockSignedInVelaAccount(page, { plan: 'free' });
+  await gotoVisualHome(page);
+  // Functional specs seed campaign dismissals globally so marketing surfaces
+  // cannot interrupt unrelated flows. This visual contract deliberately opts
+  // back into the DeepSeek modal after establishing same-origin storage.
+  await page.evaluate(() => {
+    window.localStorage.removeItem('open-design:campaign-seen:deepseek-v4-dual-unlimited-2026');
+  });
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-community').evaluate((element: HTMLButtonElement) => {
+    element.click();
+  });
+  await expect(page.getByTestId('entry-view-home')).toHaveAttribute('data-active', 'false');
+  await page.getByTestId('entry-nav-home').evaluate((element: HTMLButtonElement) => {
+    element.click();
+  });
+
+  const dialog = page.getByTestId('deepseek-v4-flash-campaign-dialog');
+  const close = page.getByRole('button', { name: 'Close' });
+  const cta = page.getByRole('button', { name: 'Upgrade and use' });
+  await expect(dialog).toBeVisible();
+  await expect(close).toBeVisible();
+  await expect(cta).toBeVisible();
+  await expectInsideViewport(page, dialog);
+  await expectInsideViewport(page, close);
+  await expectInsideViewport(page, cta);
+  await captureVisual(page, 'visual-deepseek-unpaid-campaign-600');
+
+  await page.setViewportSize({ width: 760, height: 400 });
+  await expect(close).toBeVisible();
+  await expectInsideViewport(page, dialog);
+  await expectInsideViewport(page, close);
+  await expect.poll(async () => dialog.evaluate((element) => (
+    element.scrollHeight > element.clientHeight
+  ))).toBe(true);
+  await captureVisual(page, 'visual-deepseek-unpaid-campaign-short-height');
+  await cta.scrollIntoViewIfNeeded();
+  await expect(cta).toBeVisible();
+  await expectInsideViewport(page, cta);
 });
 
 test('[P2] captures the home plugin catalog surface', async ({ page }) => {
@@ -113,6 +199,33 @@ test('[P2] captures the plugin detail share menu surface', async ({ page }) => {
 
   await captureVisual(page, 'visual-plugin-share-menu');
   await captureVisualTarget(page, 'visual-plugin-share-menu-popover', [trigger, popover]);
+});
+
+test('[P2] plugin detail owns vertical scrolling inside the fixed workspace shell', async ({ page }) => {
+  await configureVisualPage(page);
+  const plugins = await openVisualPluginsCatalog(page);
+  // Navigate with the standard visual viewport; shrink only the detail page so
+  // the assertion owns the detail scroller rather than the responsive nav.
+  await page.setViewportSize({ width: 960, height: 600 });
+
+  const card = plugins.getByTestId('plugins-card-visual-prototype-starter');
+  await expect(card).toBeVisible();
+  await card.locator('.plugin-marketplace__row-main').click();
+  await expect(page).toHaveURL(/\/marketplace\/visual-prototype-starter$/);
+
+  const detail = page.locator('.plugin-suite-detail');
+  await expect(detail).toBeVisible();
+  await expect(detail).toHaveCSS('overflow-y', 'auto');
+  const before = await detail.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+    scrollTop: element.scrollTop,
+  }));
+  expect(before.scrollHeight).toBeGreaterThan(before.clientHeight);
+  expect(before.scrollTop).toBe(0);
+
+  await detail.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+  await expect.poll(() => detail.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 });
 
 test('[P2] captures the home context picker surface', async ({ page }) => {
@@ -232,4 +345,25 @@ async function openVisualPluginsCatalog(page: import('@playwright/test').Page) {
 
 function pluginMarketplaceCard(root: import('@playwright/test').Locator, title: string) {
   return root.locator('article.plugin-marketplace__item').filter({ hasText: title }).first();
+}
+
+async function expectInsideViewport(
+  page: import('@playwright/test').Page,
+  locator: import('@playwright/test').Locator,
+): Promise<void> {
+  const viewport = page.viewportSize();
+  expect(viewport).not.toBeNull();
+  await expect.poll(async () => {
+    const box = await locator.boundingBox();
+    if (!box || !viewport) return null;
+    return {
+      left: Math.max(0, -box.x),
+      top: Math.max(0, -box.y),
+      right: Math.max(0, box.x + box.width - (viewport.width + 1)),
+      bottom: Math.max(0, box.y + box.height - (viewport.height + 1)),
+    };
+  }, {
+    message: 'expected locator bounds to settle inside the viewport',
+    timeout: T.short,
+  }).toEqual({ left: 0, top: 0, right: 0, bottom: 0 });
 }

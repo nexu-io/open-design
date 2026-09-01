@@ -8,7 +8,7 @@ export const ko: CodexCopyOverride = {
   collectionEyebrow: '엄선한 컬렉션',
   collectionHeading: 'Codex가 진짜 쓸 만한 UI를 내놓게 만드는 디자인 플러그인',
   collectionLede:
-    'OpenAI Codex는 돌아가는 코드를 짭니다. 다만 그냥 두면 무난한 폰트, 평범한 여백, 가운데 정렬된 Helvetica로 흘러가죠. 여기 모은 것은 Codex에 안목을 심어 주는 플러그인 모음입니다. 미감을 잡아 주는 스킬과 디자인 시스템 규칙까지. 하나만 설치해도 되고, Open Design 안에서 전부 돌려도 됩니다.',
+    'OpenAI Codex는 돌아가는 코드를 짭니다. 다만 그냥 두면 무난한 폰트, 평범한 여백, 가운데 정렬된 Helvetica로 흘러가죠. 여기 모은 것은 Codex에 안목을 심어 주는 플러그인 모음입니다. 미감을 잡아 주는 스킬과 디자인 시스템 규칙까지. 하나만 설치해도 되고, OpenDesign 안에서 전부 돌려도 됩니다.',
   collectionStats: [
     { value: '50', label: '엄선한 플러그인' },
     { value: '13', label: '출처 저장소' },
@@ -20,13 +20,13 @@ export const ko: CodexCopyOverride = {
     '코드 한 줄이 나오기 전에 Codex의 기본 미감 판단을 덮어씁니다.',
     '토큰과 컴포넌트를 Codex가 지어내는 대신 따르는 규칙으로 바꿉니다.',
   ],
-  collectionCloserHeading: '세팅은 건너뛰세요. Open Design 안에서 Codex와 디자인하기',
+  collectionCloserHeading: '세팅은 건너뛰세요. OpenDesign 안에서 Codex와 디자인하기',
   filterAll: '전체',
   collectionCloserBody:
-    'Open Design은 Codex를 감싸고 도는 오픈소스 에이전트 네이티브 디자인 워크스페이스입니다. 시스템과 스킬, 템플릿을 일관되게 지켜 주므로 에이전트가 내놓는 결과물은 온전히 여러분의 것입니다.',
+    'OpenDesign은 Codex를 감싸고 도는 오픈소스 에이전트 네이티브 디자인 워크스페이스입니다. 시스템과 스킬, 템플릿을 일관되게 지켜 주므로 에이전트가 내놓는 결과물은 온전히 여러분의 것입니다.',
   categoryFrontend: '프런트엔드 & UI',
   categoryDesignSystems: '디자인 시스템',
-  ctaDownload: 'Open Design 다운로드',
+  ctaDownload: 'OpenDesign 다운로드',
   ctaStarList: '목록에 Star 남기기',
   ctaBrowseAll: '전체 플러그인 둘러보기',
   ctaViewSource: '소스 보기',
@@ -36,7 +36,7 @@ export const ko: CodexCopyOverride = {
   cardCta: '플러그인 보기',
   detailWhatIsIt: '무엇인가',
   detailWhyForDesign: '디자인에 왜 중요한가',
-  detailHowWithCodex: 'Codex로 실행하는 법',
+  detailHowWithAgent: 'Codex로 실행하는 법',
   detailExampleTag: '언제 꺼내 쓰나',
   detailSource: '출처',
   detailCategory: '카테고리',
@@ -45,12 +45,12 @@ export const ko: CodexCopyOverride = {
   detailLicense: '라이선스',
   detailCovers: '다루는 내용',
   detailUpstream: '업스트림 SKILL.md에서',
-  detailCodexNote: 'Codex 지원',
+  detailAgentNote: 'Codex 지원',
   detailTraction: '인기도',
   detailRepo: '소스 저장소',
   detailStars: '스타',
   installHeading: '설치 방법',
-  installRunInCodex: 'Codex 안에서 실행하세요.',
+  installRunInAgent: 'Codex 안에서 실행하세요.',
   installRestart: '새 스킬을 인식하도록 Codex를 다시 시작하세요.',
   installClone: '저장소를 클론하세요.',
   installPoint: 'Codex에 스킬 파일 경로를 지정하세요.',
@@ -61,9 +61,9 @@ export const ko: CodexCopyOverride = {
   detailMoreOnList: 'codex-design 목록에서 더 보기',
   detailRelated: '다른 Codex 디자인 플러그인',
   finalEyebrow: '다음 단계',
-  detailCloserHeading: '세팅 없이, Open Design으로 디자인하기',
+  detailCloserHeading: '세팅 없이, OpenDesign으로 디자인하기',
   detailCloserBody:
-    '이 플러그인을 직접 설치해도 되고, Open Design으로 Codex 주위에 잘 정돈된 디자인 레이어를 통째로 두를 수도 있습니다. 키는 직접 가져오고, 산출물도 직접 소유하세요.',
+    '이 플러그인을 직접 설치해도 되고, OpenDesign으로 Codex 주위에 잘 정돈된 디자인 레이어를 통째로 두를 수도 있습니다. 키는 직접 가져오고, 산출물도 직접 소유하세요.',
   skills: {
     'gpt-taste': {
       tagline: 'GSAP 스크롤 모션과 빈틈없는 벤토 그리드로 수상작급 랜딩 페이지를 만듭니다.',
@@ -74,7 +74,7 @@ export const ko: CodexCopyOverride = {
         '벤토 그리드는 grid-flow-dense를 써서 어떤 칸도 비거나 깨진 채로 남지 않습니다.',
         '값싼 메타 라벨은 금지되며, 출력 전에 버튼 텍스트 대비를 검증합니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '페이지를 요청하면, UI 코드보다 먼저 스킬이 design_plan 블록을 내놓습니다.',
         '히어로 레이아웃, 폰트 스택, 컴포넌트, GSAP 패러다임 등 무작위 선택 결과를 검토하세요.',
         '히어로 폭 계산, 그리드 밀도, 라벨 점검, 대비 등 프리플라이트 항목을 확인하세요.',
@@ -89,7 +89,7 @@ export const ko: CodexCopyOverride = {
         '가운데 정렬 히어로와 동일한 카드 세 개짜리 행은 설정된 변주 기준을 넘으면 금지됩니다.',
         '로딩과 빈 상태는 뻔한 스피너 대신 스켈레톤 형태로 정교하게 구성됩니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '프로젝트 분위기를 설명하면 스킬이 밀도, 변주, 모션 점수를 정합니다.',
         '헥스 코드와 기능별 컬러 역할을 담은 7개 섹션짜리 DESIGN.md를 출력합니다.',
         '그 파일을 Stitch에 바로 넘기거나, Stitch MCP 서버를 통해 전달하세요.',
@@ -104,7 +104,7 @@ export const ko: CodexCopyOverride = {
         '섹션마다 각자 큰 이미지를 받아 텍스트와 여백을 분석할 수 있게 유지합니다.',
         '히어로는 헤드라인 세 줄 이내로, 중첩된 컨테이너 스택 없이 유지됩니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '섹션 수를 말하면, Codex에서는 스킬이 섹션당 이미지를 하나씩 생성합니다.',
         '버튼이나 타입 디테일이 읽히지 않으면 더 가까운 디테일 렌더를 요청하세요.',
         '구현 파일을 쓰기 전에 명료성 점검을 먼저 실행하게 하세요.',
@@ -119,7 +119,7 @@ export const ko: CodexCopyOverride = {
         '고정된 디자인 바이블이 모든 화면에서 팔레트와 타입, 아이콘을 일관되게 유지합니다.',
         '여러 화면 세트가 서로 무관한 일회성 목업이 아니라 그럴듯한 플로우를 이룹니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '앱 카테고리와 화면 수를 말하면, 화면마다 각자의 이미지가 됩니다.',
         '스킬은 먼저 플랫폼 모드부터 정합니다. iOS, Android, 또는 중립적인 크로스플랫폼.',
         '텍스트가 작거나 프레이밍이 고르지 않은 화면은 다시 생성해 달라고 요청하세요.',
@@ -134,7 +134,7 @@ export const ko: CodexCopyOverride = {
         '히어로 구성이 흔해 빠진 좌측 텍스트, 우측 이미지 기본값을 벗어나 다양해집니다.',
         '생성된 프레임 전체에서 팔레트 하나, 타입 스케일 하나, CTA 계열 하나가 유지됩니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '원하는 섹션 수를 말하세요. 말하지 않으면 랜딩 페이지는 기본 6개로 잡힙니다.',
         '스킬이 개수를 먼저 알리고, 각 출력물에 섹션 번호로 라벨을 답니다.',
         '에디토리얼이나 시네마틱 같은 분위기 단어를 주면 히어로 스케일과 배경을 그쪽으로 이끕니다.',
@@ -149,7 +149,7 @@ export const ko: CodexCopyOverride = {
         '액센트는 태그와 인라인 코드에만 쓰는 네 가지 워시드 파스텔에서만 가져옵니다.',
         '섹션은 밋밋하고 빈 배경 대신 낮은 불투명도의 이미지로 깊이를 얻습니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '페이지를 요청하면, 스킬이 py-24나 py-32 같은 큼직한 여백부터 먼저 잡습니다.',
         '타입 폭을 max-w-4xl로 제한하고 모노크롬 변수를 곧바로 적용합니다.',
         '스크롤 진입 페이드는 IntersectionObserver로 transform과 opacity에만 걸립니다.',
@@ -164,7 +164,7 @@ export const ko: CodexCopyOverride = {
         '프리플라이트는 줄표, 섹션 번호를 매긴 아이브로우, 스크롤 유도 문구, 중복된 CTA 의도를 금지합니다.',
         '레이아웃 반복에 상한을 두어, 8개 섹션이면 최소 네 가지 서로 다른 계열을 씁니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '에이전트는 코드를 쓰기 전에 한 줄짜리 디자인 판단을 먼저 밝힙니다.',
         '디자인 변주, 모션 강도, 시각 밀도라는 세 가지 다이얼을 설정합니다.',
         '프리플라이트 체크박스를 모두 통과해야 하며, 그러지 못하면 페이지는 미완성입니다.',
@@ -179,7 +179,7 @@ export const ko: CodexCopyOverride = {
         'border-radius를 전면 거부하므로 모든 모서리가 직각으로 유지됩니다.',
         '하프톤, 스캔라인, 노이즈 필터가 표면이 밋밋한 벡터처럼 보이지 않게 잡아 줍니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '원형 하나를 고르세요. 스위스 산업 인쇄체 또는 전술 텔레메트리 CRT 터미널.',
         '큰 제목은 음수 트래킹을 준 clamp를 쓰고, 메타데이터는 작은 대문자 모노스페이스를 씁니다.',
         '대비되는 배경과 1px 그리드 간격이 면도날처럼 얇은 구분선을 만듭니다.',
@@ -194,7 +194,7 @@ export const ko: CodexCopyOverride = {
         '카드 그룹 안의 버튼은 콘텐츠 길이가 제각각이어도 하단 한 줄에 맞춰 정렬됩니다.',
         '누락된 호버, 포커스, 로딩, 빈 상태, 에러 상태를 채워 넣습니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '먼저 코드베이스를 스캔해 프레임워크와 스타일링 방식을 파악합니다.',
         '무엇도 바꾸기 전에 모든 뻔한 패턴과 약점을 먼저 나열합니다.',
         '수정은 우선순위대로 진행됩니다. 폰트, 컬러, 상태, 레이아웃, 컴포넌트, 타이포그래피 다듬기 순입니다.',
@@ -209,7 +209,7 @@ export const ko: CodexCopyOverride = {
         '로고 콘셉트는 모노그램, 메타포 융합, 네거티브 스페이스 같은 명시된 방식을 따릅니다.',
         '보드는 한결같이 시끄럽지 않고 리듬을 갖춥니다. 조용한, 기능적인, 감성적인, 기술적인 패널이 섞여 있습니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '브랜드와 카테고리를 알려 주면, 스킬이 먼저 시각 모드를 정합니다.',
         '기본값은 3x3 보드이며, 2x3 레퍼런스 스타일의 미니 덱도 가능합니다.',
         '텍스트는 최소한으로 유지하세요. 브랜드명, 태그라인 하나, 명령어 하나, 라벨 몇 개면 됩니다.',
@@ -224,7 +224,7 @@ export const ko: CodexCopyOverride = {
         '모든 효과에 레이아웃과 대비를 그대로 지키는 reduced-motion 분기가 있습니다.',
         '빌드 순서가 정적 페이지를 먼저, 그다음 모션을 얹어, 뒤엉킨 스크롤 장면을 피합니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'gsap과 lenis를 설치한 뒤 Lenis를 GSAP 티커에 연결하세요.',
         '등장, 스택, 패럴랙스를 위한 데이터 속성으로 섹션에 표시하세요.',
         '스크럽으로 고정된 장면을 마지막에 추가한 뒤 QA 체크리스트를 돌리세요.',
@@ -239,7 +239,7 @@ export const ko: CodexCopyOverride = {
         '머티리얼 프리셋이 고급스러운 메탈, 부드러운 세라믹, 발광 색이 밴 테크 룩을 아우릅니다.',
         '움직임을 느린 회전과 작은 위아래 흔들림으로 제한해 카피가 주역으로 남습니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '정사각 캔버스 셸을 추가한 뒤 그 위에 Three.js 초기화기를 실행하세요.',
         '브랜드 무드에 맞춰 color, metalness, roughness, emissive를 설정하세요.',
         '리사이즈 처리와 지오메트리, 머티리얼, 렌더러의 정리를 확인하세요.',
@@ -254,7 +254,7 @@ export const ko: CodexCopyOverride = {
         '마스크된 변형은 기존 배경을 덮어쓰지 않고 그대로 지켜 줍니다.',
         '기본값이 정지점을 0.4 불투명도 아래로 두어, 테두리가 튀기보다 감싸 줍니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '가장자리가 아쉬운 카드나 요금제 패널을 Codex에 가리키세요.',
         '단색 채움에는 단순 패턴을, 복잡한 배경에는 마스크 방식을 고르세요.',
         '알파는 좀처럼 그대로 옮겨가지 않으므로 라이트와 다크 테마를 따로 확인하세요.',
@@ -269,7 +269,7 @@ export const ko: CodexCopyOverride = {
         '카드는 바깥 껍데기와 안쪽 코어를 겹쳐, 컨테이너에 정교하게 깎은 듯한 깊이를 줍니다.',
         '섹션 패딩이 py-24부터 시작하므로 레이아웃이 빽빽하지 않고 숨을 쉽니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex에 페이지를 요청하면, 먼저 변주 엔진을 조용히 돌립니다.',
         '배경 질감과 타입 스케일을 먼저 잡고, 이중 베젤 컨테이너를 만듭니다.',
         '커스텀 cubic-bezier 모션을 넣은 뒤 출력 전 체크리스트를 돌립니다.',
@@ -284,7 +284,7 @@ export const ko: CodexCopyOverride = {
         'package.json을 먼저 확인해, 프로젝트에 이미 있는 것을 재사용합니다.',
         '직접 만든 드롭다운과 토스트를 잡아내 접근성 있는 프리미티브로 바꿉니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '직접 호출하세요. 스스로 발동하지 않습니다.',
         '라이브러리 이름 말고 작업을 말하세요. 예를 들어 ‘토스트가 필요해’처럼요.',
         '라이브러리 하나를 짚고, 쓰임을 설명한 뒤 연결까지 해 줍니다.',
@@ -299,7 +299,7 @@ export const ko: CodexCopyOverride = {
         '애니메이션이 화면에 살아 있는 현재 값에서 출발해, 중단 시 눈에 띄는 점프가 사라집니다.',
         '튕기는 동작이 도착 지점을 예측하므로, 던진 결과가 제스처가 겨눈 곳에 안착합니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex에 시트, 드로어, 드래그 인터랙션을 만들어 달라고 하세요.',
         '포인터 캡처로 1:1 추적하며 속도 이력을 기록합니다.',
         '손을 떼면 기본 제공되는 감쇠 값으로 속도를 스프링에 넘깁니다.',
@@ -314,7 +314,7 @@ export const ko: CodexCopyOverride = {
         'clip-path와 mask, pop in과 bounce처럼 헷갈리는 쌍을 갈라 줍니다.',
         '용어를 지어내지 않으므로 이름을 믿을 수 있습니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '본 것을 설명하세요. 예를 들어 ‘iOS 고무줄 스크롤’처럼요.',
         '굵게 표시한 용어와 한 줄짜리 용어 정의를 돌려줍니다.',
         '두 용어가 모두 그럴듯하면 대안을 요청하세요.',
@@ -329,7 +329,7 @@ export const ko: CodexCopyOverride = {
         '등장은 scale(0)이 아니라 scale(0.95)에서 시작해, 무엇도 허공에서 튀어나오지 않습니다.',
         '팝오버는 가운데가 아니라 트리거에서 커지며 공간적 연결을 유지합니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex에 UI 코드 리뷰를 맡기면 Before, After, Why 표로 돌려줍니다.',
         '새 모션이라면 이걸 움직여야 하나, 왜, 어떤 이징으로, 얼마나 빠르게에 답합니다.',
         '체크리스트를 적용해 transition: all과 300ms를 넘는 지속 시간을 짚어냅니다.',
@@ -344,7 +344,7 @@ export const ko: CodexCopyOverride = {
         '아이콘은 SVG 텍스트로 생성되어 래스터가 아니라 편집 가능한 상태로 남습니다.',
         '배너 규칙은 세이프 존, 최대 두 개의 폰트, 하나의 CTA를 강제합니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '먼저 GEMINI_API_KEY를 내보내고 google-genai와 pillow를 설치하세요.',
         'scripts/logo/search.py로 디자인 브리프를 잡고, generate.py로 이미지를 만드세요.',
         '그 로고를 scripts/cip/generate.py에 넣어 납품용 목업을 만드세요.',
@@ -359,7 +359,7 @@ export const ko: CodexCopyOverride = {
         '생성한 비주얼은 텍스트 없이 렌더링되어, 헤드라인은 또렷한 HTML로 남습니다.',
         '요청마다 세 가지 아트 디렉션을 내놓아, 정하기 전에 비교할 수 있습니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '목적, 플랫폼, 콘텐츠, 브랜드, 스타일, 수량 질문에 답하세요.',
         '아트 디렉션마다 세이프 존을 적용한 HTML 배너를 하나씩 만듭니다.',
         '각 배너를 지정된 너비와 높이로 스크린샷하고, 용량이 넘치면 압축합니다.',
@@ -374,7 +374,7 @@ export const ko: CodexCopyOverride = {
         '테마 컬러가 CSS 변수에 담겨 있어 다크 모드가 일관되게 유지됩니다.',
         '모바일 우선 브레이크포인트라 레이아웃이 작게 시작해 위로 쌓아 올라갑니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'npx shadcn@latest init으로 프레임워크와 테마를 설정하세요.',
         'npx shadcn@latest add button card dialog form으로 컴포넌트를 추가하세요.',
         'scripts/tailwind_config_gen.py를 실행해 커스텀 토큰이 담긴 설정을 만드세요.',
@@ -389,7 +389,7 @@ export const ko: CodexCopyOverride = {
         '추출한 컬러를 팔레트와 대조해 어긋남을 일찍 잡아냅니다.',
         '애셋은 승인 전에 이름, 크기, 포맷을 점검받습니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'docs/brand-guidelines.md를 편집한 뒤 scripts/sync-brand-to-tokens.cjs를 실행하세요.',
         'scripts/inject-brand-context.cjs --json으로 확인하세요.',
         '새 파일은 내보내기 전에 scripts/validate-asset.cjs로 점검하세요.',
@@ -404,7 +404,7 @@ export const ko: CodexCopyOverride = {
         'Chart.js가 데이터 슬라이드를 맡아, 숫자가 붙여 넣은 이미지가 아니라 살아 있는 상태로 남습니다.',
         '레이아웃 패턴을 정해진 세트에서 골라, 덱의 시각적 일관성을 유지합니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'create 서브커맨드에 주제와 슬라이드 수를 붙여 호출하세요.',
         'references/create.md를 불러와 그 제작 워크플로를 따릅니다.',
         '레퍼런스 파일에서 레이아웃 패턴과 카피라이팅 공식을 끌어옵니다.',
@@ -419,7 +419,7 @@ export const ko: CodexCopyOverride = {
         '컴포넌트 스펙이 기본, 호버, 액티브, 비활성 상태를 표로 정리해 핸드오프에 모호함을 남기지 않습니다.',
         '검증기가 하드코딩된 hex 값을 짚어내, 컴포넌트와 슬라이드를 토큰 체계 위에 붙들어 둡니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'JSON 토큰 설정에 generate-tokens.cjs를 돌려 CSS 변수 파일을 뽑으세요.',
         'Codex에 컴포넌트 스펙을 요청한 뒤, src/에 validate-tokens.cjs를 돌려 날것의 값을 잡아내세요.',
         'search-slides.py에 위치와 맥락 플래그를 주어 덱에 쓸 레이아웃을 고르세요.',
@@ -434,7 +434,7 @@ export const ko: CodexCopyOverride = {
         '8pt 베이스라인 그리드가 제목, 본문, 여백에 걸쳐 세로 리듬을 강제합니다.',
         '접근성 기준에 reduced-motion 지원, 44px 터치 영역, 고대비 처리가 포함됩니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex에 디자인 의도를 먼저 다시 정리하게 한 뒤, 컴포넌트에 손대기 전에 토큰을 정의하세요.',
         '구조, 변형, 상태, 반응형 동작을 아우르는 컴포넌트 규칙을 요청하세요.',
         '코드 리뷰어가 결과를 확인할 수 있도록 QA 체크리스트로 마무리하세요.',
@@ -449,7 +449,7 @@ export const ko: CodexCopyOverride = {
         '따뜻한 크림색 면이 순백 페이지보다 긴 글의 눈부심을 덜어 줍니다.',
         '잉크 브라운 본문 위에 얹힌 디스플레이 세리프 헤드라인이 또렷한 에디토리얼 리듬을 만듭니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '컴포넌트를 쓰기 전에 Codex에 테라코타와 크림 토큰부터 가리키세요.',
         '컴포넌트마다 구조, 변형, 상태를 요청하고 여백 토큰은 이름으로 명시하게 하세요.',
         '들쭉날쭉한 기존 UI를 손볼 때는 안티패턴과 마이그레이션 노트를 요청하세요.',
@@ -464,7 +464,7 @@ export const ko: CodexCopyOverride = {
         '고대비 렌더링 덕분에 면에 짙은 패턴 질감이 깔려도 텍스트가 읽힙니다.',
         '규칙이 장식적인 모션을 금지해, 레트로 처리가 시각적 잡음으로 번지지 않게 막습니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex에 팔레트 제한을 먼저 알려 준 뒤, 패턴 기반 음영 규칙을 뽑아내게 하세요.',
         '패턴이 깔린 면이 계속 읽히도록 빈 상태, 로딩, 에러 상태를 요청하세요.',
         '이 스킬이 콕 짚어 두는 터치 영역과 포커스 상태를 확인하세요.',
@@ -479,7 +479,7 @@ export const ko: CodexCopyOverride = {
         '촘촘한 여백이 대시보드나 설정 화면처럼 컨트롤이 빽빽한 패널에 잘 맞습니다.',
         '규칙이 시각적 메타포 혼용을 막아, 부드러운 돌출이 유일한 깊이 언어로 남습니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '개별 컨트롤을 스타일링하기 전에 Codex가 면과 그림자 토큰을 먼저 잡게 하세요.',
         '부드러운 그림자만으로는 키보드 사용자를 놓치므로 눈에 보이는 포커스 상태를 요청하세요.',
         '이 스킬이 규정한 대로 ARIA에 앞서 시맨틱 HTML을 요구하세요.',
@@ -494,7 +494,7 @@ export const ko: CodexCopyOverride = {
         '12에서 32까지의 촘촘한 타입 스케일이 작은 타일 안에 빽빽한 텍스트를 담아냅니다.',
         '크림색 #FFF5E6 면이 두꺼운 테두리 없이도 블록 경계를 또렷하게 지켜 줍니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '콘텐츠 우선순위에 따라 각 블록의 크기를 정하도록 Codex에 요청하세요.',
         '타일을 배치하기 전에 4에서 32까지의 스케일로 여백 토큰을 정의하세요.',
         '이 스킬이 엣지 케이스로 꼽는 오버플로와 긴 라벨 처리를 요청하세요.',
@@ -509,7 +509,7 @@ export const ko: CodexCopyOverride = {
         '흰 바탕 위 짙은 블루 텍스트 #1C398E가 팔레트는 경쾌하게 두면서도 대비를 지킵니다.',
         '규칙이 메타포 혼용을 막아, 클레이 깊이가 글래스나 플랫과 절대 섞이지 않습니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '클레이 룩을 좌우하는 라디우스와 그림자 토큰을 Codex에 먼저 요청하세요.',
         '비슷한 산세리프 둘이 아니라, 규정대로 Poppins 디스플레이와 Montserrat 본문을 짝지으세요.',
         '부드러운 형태 처리 속에서도 focus-visible과 비활성 상태가 살아남는지 확인하세요.',
@@ -524,7 +524,7 @@ export const ko: CodexCopyOverride = {
         '강한 액센트 둘, 빨강과 오커가 그러데이션과 그림자를 통째로 대신합니다.',
         '접근성 최저선은 그대로 적용되어, 거슬리는 레이아웃도 대비와 보이는 포커스를 지킵니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex가 컴포넌트를 고르기 전에 톤이 대담하고 꾸밈없다는 것을 알려 주세요.',
         '품질 게이트가 요구하는 대로 모든 규칙을 토큰이나 기준값에 묶으세요.',
         '결과를 검토할 때 해야 할 규칙마다 하지 말아야 할 구체적 예시를 짝지으세요.',
@@ -539,7 +539,7 @@ export const ko: CodexCopyOverride = {
         '고정된 토큰이 토큰 블록을 우회하는 인라인 hex나 font-family 값을 금지합니다.',
         '모든 출력물을 320, 375, 414, 768픽셀 너비에서 검증합니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '프리플라이트 스캔이 기존 폰트, 팔레트, 모션 라이브러리를 먼저 읽게 두세요.',
         '대상, 사용 사례, 톤 게이트에 답하거나, 그냥 진행하라고 말하세요.',
         '페이지에 hallmark audit을 돌리면 수정 없이 우선순위가 매겨진 개선 목록을 받습니다.',
@@ -554,7 +554,7 @@ export const ko: CodexCopyOverride = {
         '절대 금지 항목이 그러데이션 텍스트, 옆줄 테두리, 섹션마다 얹은 아이브로 라벨을 걷어냅니다.',
         '대비 최저선이 명시적입니다. 본문 텍스트 4.5:1, 큰 텍스트 3:1.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '세션마다 context.mjs를 한 번 돌려 스킬이 PRODUCT.md와 DESIGN.md를 불러오게 하세요.',
         'critique, polish, animate 같은 커맨드를 대상 파일과 함께 호출하세요.',
         '개발 서버를 띄운 상태에서 라이브 모드로 브라우저 안에서 변주를 생성하세요.',
@@ -569,7 +569,7 @@ export const ko: CodexCopyOverride = {
         '측정 가능한 토큰뿐 아니라 무드, 구성, 브랜드 보이스까지 기록합니다.',
         '평범한 CSS로는 담아낼 수 없는 Canvas, WebGL, 셰이더, 스크롤 효과까지 잡아냅니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '무엇이든 분석하기 전에 스키마를 요청해 세 가지 차원을 먼저 훑어보세요.',
         'Codex에 레퍼런스 이미지나 URL을 건네고 값이 채워진 DNA JSON을 요청하세요.',
         '그 JSON과 여러분의 콘텐츠를 함께 넘겨 독립 실행 가능한 HTML 페이지를 생성하세요.',
@@ -584,7 +584,7 @@ export const ko: CodexCopyOverride = {
         '톤 기반 면이 그림자 대신 깊이를 담아, 현행 MD3 스펙과 맞아떨어집니다.',
         '점수제 감사가 열 개 범주를 평가하고 수정 사항을 우선순위대로 나열합니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '플랫폼을 지정하면 Codex가 Compose, Flutter, CSS 커스텀 프로퍼티 중에서 고릅니다.',
         '컴포넌트를 요청하면 올바른 변형과 토큰 연결까지 함께 받습니다.',
         'URL이나 소스 파일에 감사를 돌려 준수 여부 리포트를 받으세요.',
@@ -599,7 +599,7 @@ export const ko: CodexCopyOverride = {
         '대부분의 컴포넌트가 어딘가 어색해 보이게 만드는 중첩 라디우스 불일치를 바로잡습니다.',
         '숫자가 바뀔 때 생기는 레이아웃 이동을 사용자에게 닿기 전에 잡아냅니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex에 컴포넌트를 가리키고 원칙을 적용해 달라고 하세요.',
         '리뷰를 요청하면 결과가 Before와 After 표로 돌아옵니다.',
         '프런트엔드 변경을 머지하기 전에 열네 항목짜리 체크리스트를 돌리세요.',
@@ -614,7 +614,7 @@ export const ko: CodexCopyOverride = {
         '검토자가 채팅에서 옥신각신하는 대신 고정된 요소에 직접 코멘트합니다.',
         '여러 단계짜리 플로에는 정적 목업 옆에 실제로 조작 가능한 프로토타입이 붙습니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Agent-Native CLI로 설치한 뒤 /visual-plan 커맨드를 실행하세요.',
         '기존 Codex나 Markdown 계획을 붙여 넣어 원본으로 쓰세요.',
         '피드백을 읽고, 계획을 손보고, 저장된 결과를 확인하세요.',
@@ -629,7 +629,7 @@ export const ko: CodexCopyOverride = {
         '밀도 계약이 절반도 안 차게 렌더링되는 본문 페이지를 짚어냅니다.',
         '다이어그램 프리미티브가 아키텍처, 플로차트, 사분면, 타임라인, 차트를 아우릅니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '필요한 것을 말하면 결정 트리가 맞는 템플릿을 고릅니다.',
         '먼저 Codex가 여러분의 날것 콘텐츠를 검증된 content.json으로 정리하게 하세요.',
         '빌드 스크립트를 실행해 HTML, PDF, 검증 리포트를 만드세요.',
@@ -644,7 +644,7 @@ export const ko: CodexCopyOverride = {
         '스크린 리더는 aria-label을 통해 전체 텍스트를 그대로 받습니다.',
         'reduced-motion 사용자는 transform 없이 정적인 텍스트를 봅니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '제목에 data-masked-reveal을 달고 CSS 마스크 규칙을 추가하세요.',
         '유료 SplitText 플러그인을 피해 가는 split 헬퍼를 호출하세요.',
         'React에서 GSAP 컨텍스트로 감싸, 라우트가 바뀔 때 ScrollTrigger가 정리되게 하세요.',
@@ -659,7 +659,7 @@ export const ko: CodexCopyOverride = {
         '모서리 브래킷에 별도 마크업이 필요 없어 구조가 CSS 안에 머뭅니다.',
         '질감 레이어를 걷어내도 레이아웃은 여전히 또렷하게 읽힙니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '기술 문서나 에디토리얼 페이지를 요청하면 부모 그리드를 먼저 받습니다.',
         '섹션 폭을 즉흥적으로 잡지 말고 명시적인 span 클래스를 지정하세요.',
         '두 브레이크포인트 모두에서 프레임 가장자리가 세로와 가로로 맞아떨어지는지 확인하세요.',
@@ -674,7 +674,7 @@ export const ko: CodexCopyOverride = {
         '가이드가 컨테이너의 max-width와 패딩을 공유하므로 절대 어긋나지 않습니다.',
         '포인터 이벤트가 꺼져 있어 선이 클릭이나 선택을 막지 않습니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '레이아웃 셸에 container-lines 클래스를 추가하세요.',
         '모서리 사각형은 실제 컨테이너나 섹션 모서리에만 두세요.',
         '라이트와 다크 배경 모두에서 선이 은은하게 유지되는지 확인하세요.',
@@ -689,7 +689,7 @@ export const ko: CodexCopyOverride = {
         '깊이가 방향을 지켜, 빛은 위에서 오고 그림자는 아래에 깔립니다.',
         '한 컴포넌트에 글래스모피즘, 뉴모피즘, 스큐어모피즘을 섞지 말라고 경고합니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '기본 토큰을 한 번 잡은 뒤 브랜드와 테마에 맞춰 조정하세요.',
         '돌출 표면을 카드, 버튼, 탭, 컨트롤 하우징에 적용하세요.',
         '눌림 변형은 활성 토글과 선택된 탭에만 추가하세요.',
@@ -704,7 +704,7 @@ export const ko: CodexCopyOverride = {
         '세 가지 고정 강도가 각각 컨트롤, 카드, 히어로 미디어에 대응합니다.',
         '낮은 불투명도로 겹친 레이어가 뭉툭한 드롭 섀도 하나가 아니라 진짜 깊이로 읽힙니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex에 md 유틸리티를 카드, 패널, 팝오버에 적용해 달라고 하세요.',
         'lg 유틸리티는 히어로 미디어와 모달 같은 컨테이너에 아껴 두세요.',
         '그림자마다 깔끔한 표면 채움과 일관된 라디우스를 짝지으세요.',
@@ -719,7 +719,7 @@ export const ko: CodexCopyOverride = {
         '여섯 단계 모노크롬 팔레트가 무거운 오버레이 없이도 전경 타입을 읽히게 유지합니다.',
         '비네트와 중심에서 벗어난 덩어리가 고른 밝기가 아니라 밝은 초점 하나를 만듭니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '고정 캔버스를 콘텐츠 뒤에 깔고 pointer-events를 none으로 설정하세요.',
         '매트릭스 가독성을 위해 cellSize를 5px에서 10px 사이로 조정하세요.',
         'wave, cloud, ridge, vignette 값을 조정해 덩어리의 형태를 잡으세요.',
@@ -734,7 +734,7 @@ export const ko: CodexCopyOverride = {
         '코어와 글로 폭을 따로 두어 광선을 막대가 아니라 칼날로 유지합니다.',
         '연기가 광선 근처에 모였다가 바깥으로 흩어져 카피의 대비를 지켜 줍니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '셰이더가 RGB로 변환하는 --brand-accent 커스텀 프로퍼티를 설정하세요.',
         '고정 캔버스를 pointer-events none으로 콘텐츠 뒤에 두세요.',
         'coreWidth, glowWidth, smokeDensity, xOffset을 조정해 광선을 배치하세요.',
@@ -749,7 +749,7 @@ export const ko: CodexCopyOverride = {
         '이름 붙은 토큰이 페이지 전반의 배경, 셸, 선, 카피, 액센트 값을 고정합니다.',
         '레일, 모서리 사각형, 노드 필이 미니멀한 셸에 기술적인 구조를 부여합니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '토큰 블록을 붙여 넣은 뒤 페이지 토대와 히어로 셸을 만드세요.',
         '메시 캔버스를 셸 안, 셸 콘텐츠 뒤에 추가하세요.',
         '노드, 레일, 마커를 몇 개 배치한 뒤 드리프트 루프는 느리게 유지하세요.',
@@ -764,7 +764,7 @@ export const ko: CodexCopyOverride = {
         '디스플레이 헤드라인과 자잘한 메타데이터 사이의 크기 대비가 위계를 짊어집니다.',
         '여백을 채우지 않고 남겨 두어 페이지를 에디토리얼하게 유지합니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '먼저 컬럼 구분이 눈에 보이는 넓은 max-width 셸을 잡으세요.',
         '히어로 헤드라인을 대부분의 컬럼에 걸쳐 앉히고, 보조 카피는 옆 컬럼에 두세요.',
         '서비스 행을 자잘한 메타데이터 라벨이 붙은 멀티컬럼 목록으로 만드세요.',
@@ -779,7 +779,7 @@ export const ko: CodexCopyOverride = {
         '빔 선과 십자선이 다이얼에 맞춰져 캘리브레이션 논리를 강화합니다.',
         '모노크롬 팔레트라 밝기가 채도 높은 액센트가 아니라 글래스 하이라이트에서 나옵니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '검정에 가까운 바탕에 희미한 그리드와 빔 가이드를 더해 시작하세요.',
         '내비, 필, 버튼을 1px 하이라이트 래퍼를 두른 다크 글래스 캡슐로 만드세요.',
         '다이얼을 겹겹이 쌓으세요. 바깥 링, 눈금, 회전 라벨, 중앙 엠블럼.',
@@ -794,7 +794,7 @@ export const ko: CodexCopyOverride = {
         'ScrollTrigger와 타임라인이 즉흥적으로 쌓이지 않고 제대로 순서를 잡습니다.',
         '성능 규칙이 애니메이션을 스크롤에서 버벅이지 않고 매끄럽게 유지합니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'GSAP 스킬 세트를 설치해 Codex가 관련 모듈을 불러올 수 있게 하세요.',
         '원하는 모션을 요청하면 알맞은 모듈이 API를 처리합니다.',
         '컴포넌트 트리 안에서는 React나 프레임워크 모듈을 꺼내 쓰세요.',
@@ -809,7 +809,7 @@ export const ko: CodexCopyOverride = {
         '두루뭉술한 ‘더 좋게 만들어 줘’를 우선순위가 매겨진 모션 감사로 바꿉니다.',
         '애니메이션을 개인 취향이 아니라 명시된 완성도 기준에 붙들어 둡니다.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'find 패스를 돌려 UI에서 모션을 넣을 만한 지점을 찾으세요.',
         'improve 패스를 적용해 기존 애니메이션 코드를 손보세요.',
         '내보내기 전에 review 패스를 돌려 완성도 낮은 모션을 잡아내세요.',

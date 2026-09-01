@@ -28,6 +28,8 @@ import {
   parseVelaAuthRequestId,
   applyVelaLiveAccount,
   clearAllVelaLiveAccounts,
+  clearVelaAuthorizationState,
+  markVelaAuthorizationExpired,
   parseVelaLoginAttribution,
   peekVelaLiveAccount,
   readVelaApiContext,
@@ -53,6 +55,7 @@ import {
   fetchVelaPresetModels,
   fetchVelaRemoteModelsWithRetry,
 } from '../runtimes/defs/amr.js';
+import { classifyAmrAccountFailure } from '../integrations/vela-errors.js';
 
 const AMR_API_PROXY_PREFIX = '/api/integrations/vela/api-proxy';
 const VELA_MESSAGE_CENTER_PREFIX = '/api/integrations/vela/message-center';
@@ -143,6 +146,8 @@ export interface RegisterVelaRoutesDeps {
     getPublicBaseUrl?: PublicBaseUrlResolver;
   };
   env?: NodeJS.ProcessEnv;
+  /** Reconcile account-scoped caches/streams after credential observation. */
+  onCredentialStateObserved?: () => void;
 }
 
 interface AmrModelProbe {
@@ -400,6 +405,8 @@ function proxyVelaMessageCenterRequest(
 
 export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): void {
   const env = deps.env ?? process.env;
+  const onCredentialStateObserved =
+    deps.onCredentialStateObserved ?? (() => undefined);
   const { RUNTIME_DATA_DIR } = deps.paths;
   const { readAppConfig } = deps.appConfig;
   const getPublicBaseUrl = deps.http.getPublicBaseUrl ?? ((req: Request) => {
@@ -481,6 +488,9 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
         // is read by focus/menu/login surfaces, so a persistent optional
         // billing failure must not make every poll await the same slow probe.
         console.warn('[amr] live account fetch failed', err);
+        if (classifyAmrAccountFailure(err instanceof Error ? err.message : String(err))?.code === 'AMR_AUTH_REQUIRED') {
+          markVelaAuthorizationExpired(env, probe.configuredEnv);
+        }
         return null;
       })
       .finally(() => {
@@ -508,15 +518,23 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
+      onCredentialStateObserved();
+      const amrDef = getAgentDef('amr');
+      const amrLaunch = amrDef ? resolveAgentLaunch(amrDef, configuredEnv) : null;
+      if (!(amrLaunch?.launchPath ?? amrLaunch?.selectedPath)) {
+        res.status(503).json({ error: 'amr-runtime-unavailable' });
+        return;
+      }
       const refresh = _req.query.refresh === '1' || _req.query.refresh === 'true';
       const status = readVelaLoginStatus(mergeVelaEnv(env, configuredEnv));
       // Reported on every response, signed in or not: the client builds console
       // links (wallet, plans, upgrade) from it and must not have to carry a
-      // hostname table for internal AMR environments. Absent for prod/fork
-      // builds, where the client keeps using the public product console.
-      const consoleOrigin = resolveVelaConsoleOrigin(env);
+      // hostname table for internal AMR environments. The resolver also sees
+      // the settings-selected profile, so this cannot retain the package's
+      // console origin after an environment switch.
+      const consoleOrigin = resolveVelaConsoleOrigin(env, configuredEnv);
       if (consoleOrigin) status.consoleOrigin = consoleOrigin;
-      if (status.loggedIn) {
+      if (status.loggedIn && status.sessionState === 'authenticated') {
         // Key the live-account cache by the full credential revision (not just
         // profile) so a logout / account switch can never surface the previous
         // account's plan or balance. Merge the cached projection synchronously
@@ -569,6 +587,10 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
             }).catch(() => {});
           }
         }
+      }
+      const authoritativeStatus = readVelaLoginStatus(env, configuredEnv);
+      if (authoritativeStatus.sessionState === 'reauth_required') {
+        Object.assign(status, authoritativeStatus);
       }
       res.json(status);
     } catch (err) {
@@ -800,6 +822,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
       forgetVelaLogin(mergeVelaEnv(env, configuredEnv));
+      clearVelaAuthorizationState();
       // Drop any cached plan/balance so the next login can't surface this
       // (now signed-out) account's billing data.
       clearAllVelaLiveAccounts();
@@ -816,6 +839,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
         delete agentCliEnv.amr;
       }
       await writeAppConfig(RUNTIME_DATA_DIR, { agentCliEnv });
+      onCredentialStateObserved();
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ error: String(err) });

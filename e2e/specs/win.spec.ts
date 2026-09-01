@@ -12,6 +12,7 @@ import { describe, expect, test } from 'vitest';
 
 import {
   packagedAppShellExpression,
+  packagedAppRouteUrl,
   PackagedOnboardingConfigError,
   packagedOnboardingCompletedFromProbe,
   packagedOnboardingConfigExpression,
@@ -111,8 +112,58 @@ const healthExpression = `
     }
   })()
 `;
+const pptxArchiveInspectionSource = `
+  async function inspectPptxArchive(bytes, expectedText) {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let eocd = -1;
+    for (let offset = bytes.length - 22; offset >= Math.max(0, bytes.length - 65557); offset -= 1) {
+      if (view.getUint32(offset, true) === 0x06054b50) { eocd = offset; break; }
+    }
+    if (eocd < 0) throw new Error('PPTX end-of-central-directory record not found');
+    const entries = new Map();
+    const entryCount = view.getUint16(eocd + 10, true);
+    let offset = view.getUint32(eocd + 16, true);
+    const decoder = new TextDecoder();
+    for (let index = 0; index < entryCount; index += 1) {
+      if (view.getUint32(offset, true) !== 0x02014b50) throw new Error('invalid PPTX central-directory entry');
+      const nameLength = view.getUint16(offset + 28, true);
+      const extraLength = view.getUint16(offset + 30, true);
+      const commentLength = view.getUint16(offset + 32, true);
+      const name = decoder.decode(bytes.slice(offset + 46, offset + 46 + nameLength));
+      entries.set(name, {
+        compressedSize: view.getUint32(offset + 20, true),
+        localOffset: view.getUint32(offset + 42, true),
+        method: view.getUint16(offset + 10, true),
+      });
+      offset += 46 + nameLength + extraLength + commentLength;
+    }
+    async function readText(name) {
+      const entry = entries.get(name);
+      if (!entry) throw new Error('missing PPTX entry: ' + name);
+      const nameLength = view.getUint16(entry.localOffset + 26, true);
+      const extraLength = view.getUint16(entry.localOffset + 28, true);
+      const start = entry.localOffset + 30 + nameLength + extraLength;
+      const compressed = bytes.slice(start, start + entry.compressedSize);
+      if (entry.method === 0) return decoder.decode(compressed);
+      if (entry.method !== 8) throw new Error('unsupported PPTX compression method: ' + entry.method);
+      const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      return decoder.decode(await new Response(stream).arrayBuffer());
+    }
+    const slideNames = Array.from(entries.keys())
+      .filter((name) => /^ppt\\/slides\\/slide\\d+\\.xml$/.test(name))
+      .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+    const slides = await Promise.all(slideNames.map(readText));
+    return {
+      hasContentTypes: entries.has('[Content_Types].xml'),
+      hasPresentation: entries.has('ppt/presentation.xml'),
+      slideCount: slideNames.length,
+      textMatches: expectedText.map((text, index) => slides[index]?.includes(text) === true),
+    };
+  }
+`;
 const pptxExportExpression = `
   (async () => {
+    ${pptxArchiveInspectionSource}
     const projectId = 'packaged-payload-pptx-' + Date.now().toString(36);
     const html = '<!doctype html><html><head><style>' +
       'html,body{margin:0}.slide{width:1920px;height:1080px;display:flex;align-items:center;justify-content:center;font:96px sans-serif;color:white}' +
@@ -133,10 +184,12 @@ const pptxExportExpression = `
     const exported = await fetch('/api/projects/' + encodeURIComponent(projectId) + '/export/pptx', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileName: 'deck.html' }),
+      body: JSON.stringify({ fileName: 'deck.html', editable: true }),
     });
     const bytes = new Uint8Array(await exported.arrayBuffer());
+    const archive = await inspectPptxArchive(bytes, ['Payload One', 'Payload Two']);
     return {
+      archive,
       byteLength: bytes.length,
       contentType: exported.headers.get('content-type'),
       magic: String.fromCharCode(...bytes.slice(0, 2)),
@@ -178,14 +231,17 @@ const upgradePersistenceSeedExpression = `
 function existingProjectPptxExportExpression(projectId: string): string {
   return `
     (async () => {
+      ${pptxArchiveInspectionSource}
       const projectId = ${JSON.stringify(projectId)};
       const exported = await fetch('/api/projects/' + encodeURIComponent(projectId) + '/export/pptx', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileName: 'deck.html' }),
+        body: JSON.stringify({ fileName: 'deck.html', editable: true }),
       });
       const bytes = new Uint8Array(await exported.arrayBuffer());
+      const archive = await inspectPptxArchive(bytes, ['Upgrade From 0.12', 'Persistence Check']);
       return {
+        archive,
         byteLength: bytes.length,
         contentType: exported.headers.get('content-type'),
         magic: String.fromCharCode(...bytes.slice(0, 2)),
@@ -444,6 +500,12 @@ type HealthEvalValue = {
 };
 
 type PptxExportEvalValue = {
+  archive: {
+    hasContentTypes: boolean;
+    hasPresentation: boolean;
+    slideCount: number;
+    textMatches: boolean[];
+  };
   byteLength: number;
   contentType: string | null;
   magic: string;
@@ -662,15 +724,30 @@ winDescribe('packaged windows runtime smoke', () => {
       const inspect = await measureSmokeStep(timings, 'wait healthy inspect eval', async () => waitForHealthyDesktop());
       expect(inspect.status?.state).toBe('running');
       if (inspect.desktopIpcUnavailable) expectWindowsFallbackWebUrl(inspect.status?.url);
-      else expectWindowsPackagedAppUrl(inspect.status?.url);
+      else expectWindowsPackagedRouteUrl(inspect.status?.url);
 
       const value = assertHealthEvalValue(inspect.eval?.value);
       if (inspect.desktopIpcUnavailable) expectWindowsDaemonUrl(value.href);
-      else expectWindowsPackagedAppUrl(value.href);
+      else expectWindowsPackagedRouteUrl(value.href);
       expect(value.status).toBe(200);
       expect(value.health.ok).toBe(true);
       if (releaseVersion != null && releaseVersion !== '') expect(value.health.version).toBe(releaseVersion);
       else expect(value.health.version).toEqual(expect.any(String));
+
+      // Establish the data-root postcondition before probing unrelated runtime
+      // capabilities. A healthy auth-first renderer may already be on
+      // od://app/onboarding, but it must still read the completed seed written
+      // into this tools-pack namespace.
+      if (!inspect.desktopIpcUnavailable) {
+        seededOnboardingCompleted = await measureSmokeStep(timings, 'verify seeded onboarding config', async () =>
+          packagedOnboardingCompletedFromProbe(await readPackagedOnboardingConfig()),
+        );
+        expect(
+          seededOnboardingCompleted,
+          'daemon did not read the seeded onboardingCompleted config; check that the packaged data root still resolves to the tools-pack runtime namespace root',
+        ).toBe(true);
+      }
+
       const ptyInspect = await measureSmokeStep(timings, 'packaged PTY capability', async () =>
         runToolsPackJson<WinInspectResult>('inspect', [
           '--expr',
@@ -688,23 +765,6 @@ winDescribe('packaged windows runtime smoke', () => {
       expect(pty.cleanup.projectStatus).toBe(200);
       assertLauncherPointer(inspect.launcher.active, updateScenario.expectedCurrentVersion, 0, 'initial active');
       assertLauncherPointer(inspect.launcher.lastSuccessful, updateScenario.expectedCurrentVersion, 0, 'initial lastSuccessful');
-
-      // The seed's postcondition, asserted where it must hold: this process was
-      // started by `tools-pack win start`, which points the packaged runtime at
-      // the same data root `seedPackagedOnboardingComplete` wrote. If the daemon
-      // does not see it here, the completed-onboarding boot path is broken —
-      // the #4389-era failure where the seed landed in the AppData fallback and
-      // the daemon never read it. Fail with that named cause instead of letting
-      // it surface later as an unexplained onboarding screen.
-      if (!inspect.desktopIpcUnavailable) {
-        seededOnboardingCompleted = await measureSmokeStep(timings, 'verify seeded onboarding config', async () =>
-          packagedOnboardingCompletedFromProbe(await readPackagedOnboardingConfig()),
-        );
-        expect(
-          seededOnboardingCompleted,
-          'daemon did not read the seeded onboardingCompleted config; check that the packaged data root still resolves to the tools-pack runtime namespace root',
-        ).toBe(true);
-      }
 
       // Runtime registration must preserve the stable installed outer path;
       // pointing at a versioned payload would break the scheme after cleanup.
@@ -753,8 +813,9 @@ winDescribe('packaged windows runtime smoke', () => {
         // environment — so it is a different daemon, and only it can say what
         // config the surface being asserted on is actually running under.
         // Phase 2 — the completed user. The seed must have been confirmed before
-        // this point; anything else means the run never established the fact
-        // this phase depends on.
+        // this point; the core auth-first profile may legitimately stop at the
+        // cloud sign-in landing, while the full updater profile still needs
+        // Home. Either way, a cold launch that lost the seed fails first.
         if (seededOnboardingCompleted !== true) {
           throw new Error('reached the completed-user app-shell check without a confirmed seeded onboarding state');
         }
@@ -769,7 +830,7 @@ winDescribe('packaged windows runtime smoke', () => {
         );
         onboardingCompleted = completedUser.onboardingCompleted;
         appShell = completedUser.appShell;
-        expect(appShell).toBe('home');
+        if (!verifyCoreOnly) expect(appShell).toBe('home');
 
         if (verifyUpgradePersistence) {
           const seedInspect = await measureSmokeStep(timings, 'seed pre-update persistence project', async () =>
@@ -2469,6 +2530,11 @@ async function readDesktopStartupResourceRoot(pid: number): Promise<string> {
 function assertPptxExportEvalValue(value: unknown): PptxExportEvalValue {
   if (
     !isRecord(value) ||
+    !isRecord(value.archive) ||
+    typeof value.archive.hasContentTypes !== 'boolean' ||
+    typeof value.archive.hasPresentation !== 'boolean' ||
+    typeof value.archive.slideCount !== 'number' ||
+    !Array.isArray(value.archive.textMatches) ||
     typeof value.byteLength !== 'number' ||
     (value.contentType != null && typeof value.contentType !== 'string') ||
     typeof value.magic !== 'string' ||
@@ -2483,6 +2549,12 @@ function assertPptxExportEvalValue(value: unknown): PptxExportEvalValue {
   );
   expect(value.byteLength).toBeGreaterThan(0);
   expect(value.magic).toBe('PK');
+  expect(value.archive).toEqual({
+    hasContentTypes: true,
+    hasPresentation: true,
+    slideCount: 2,
+    textMatches: [true, true],
+  });
   return value as PptxExportEvalValue;
 }
 
@@ -2561,6 +2633,10 @@ function expectPathInside(filePath: string, expectedRoot: string): void {
 
 function expectWindowsPackagedAppUrl(value: string | null | undefined): void {
   expect(value).toEqual(expect.stringMatching(/^od:\/\/app\/$/));
+}
+
+function expectWindowsPackagedRouteUrl(value: string | null | undefined): void {
+  expect(packagedAppRouteUrl(value), `${String(value)} should be an od://app/* packaged renderer URL`).toBe(true);
 }
 
 function expectWindowsFallbackWebUrl(value: string | null | undefined): void {

@@ -9,7 +9,7 @@ Führen Sie das vollständige Produkt lokal aus.
 - **Node.js:** `~24` (Node 24.x). Das Repository erzwingt dies über `package.json#engines`.
 - **pnpm:** `10.33.x`. Das Repository pinnt `pnpm@10.33.2` über `packageManager`; verwenden Sie Corepack, damit automatisch die gepinnte Version gewählt wird.
 - **OS:** macOS, Linux und WSL2 sind die primären Pfade. Windows nativ sollte für die meisten Abläufe funktionieren, WSL2 ist aber die sicherere Basis.
-- **Optionale lokale Agent-CLI:** Open Design unterstützt eine Registry lokaler Runtimes, darunter Claude Code, Codex, Devin for Terminal, OpenCode, Cursor Agent, Qwen, Qoder CLI, GitHub Copilot CLI und weitere. Die aktuelle Liste steht in [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts). Wenn keine installiert ist, verwenden Sie eine in den Einstellungen konfigurierte BYOK-Runtime.
+- **Optionale lokale Agent-CLI:** OpenDesign unterstützt eine Registry lokaler Runtimes, darunter Claude Code, Codex, Devin for Terminal, OpenCode, Cursor Agent, Qwen, Qoder CLI, GitHub Copilot CLI und weitere. Die aktuelle Liste steht in [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts). Wenn keine installiert ist, verwenden Sie eine in den Einstellungen konfigurierte BYOK-Runtime.
 
 `nvm` / `fnm` sind optionale Komfortwerkzeuge, keine Voraussetzung für das Projektsetup. Wenn Sie eines davon verwenden, installieren/selektieren Sie Node 24 vor pnpm:
 
@@ -74,7 +74,7 @@ Während lokaler Entwicklung startet `tools-dev` zuerst den daemon, übergibt de
 
 ## Docker-Setup
 
-Führen Sie Open Design in einer vollständig containerisierten Umgebung aus, ohne Node.js oder pnpm lokal zu installieren.
+Führen Sie OpenDesign in einer vollständig containerisierten Umgebung aus, ohne Node.js oder pnpm lokal zu installieren.
 
 ### Voraussetzungen
 
@@ -89,7 +89,7 @@ docker compose version
 
 ---
 
-## Open Design starten
+## OpenDesign starten
 
 Gehen Sie vom Repository-Stammverzeichnis aus wie folgt vor:
 
@@ -223,7 +223,7 @@ ls -la apps/daemon/dist/cli.js
 curl -s http://127.0.0.1:7457/api/health
 ```
 
-Öffnen Sie danach das Projekt erneut aus der Open Design App, statt eine alte Terminal-Agent-Session fortzusetzen. Ein vom daemon gestarteter Agent sollte Werte wie diese sehen:
+Öffnen Sie danach das Projekt erneut aus der OpenDesign App, statt eine alte Terminal-Agent-Session fortzusetzen. Ein vom daemon gestarteter Agent sollte Werte wie diese sehen:
 
 ```bash
 echo "OD_BIN=$OD_BIN"
@@ -310,7 +310,7 @@ open-design/
 │   └── desktop/               # Electron runtime, launched/inspected by tools-dev
 ├── packages/
 │   ├── contracts/             # shared web/daemon app contracts
-│   ├── sidecar-proto/         # Open Design sidecar protocol contract
+│   ├── sidecar-proto/         # OpenDesign sidecar protocol contract
 │   ├── sidecar/               # generic sidecar runtime primitives
 │   └── platform/              # generic process/platform primitives
 ├── tools/dev/                 # `pnpm tools-dev` lifecycle and inspect CLI
@@ -328,8 +328,8 @@ open-design/
 
 - **"no agents found on PATH"** — installieren Sie eine der in [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) registrierten lokalen Runtimes, stellen Sie sicher, dass der daemon deren Executable findet, und verwenden Sie danach **Rescan** unter **Settings → Execution mode**. Alternativ konfigurieren Sie in den Einstellungen eine BYOK-Runtime.
 - **daemon 500 on /api/chat** — prüfen Sie das daemon-Terminal und den stderr-Auszug; meist hat die CLI ihre Argumente abgelehnt. Unterschiedliche CLIs haben unterschiedliche argv-Formen; prüfen Sie die passende Definition unter `apps/daemon/src/runtimes/defs/`, falls Sie nachjustieren müssen.
-- **media generation says `OD_BIN` is missing or daemon URL is `:0`** — führen Sie die Media Dispatcher Checks oben aus. Setzen Sie keine alte CLI-Session fort; öffnen Sie das Projekt aus der Open Design App neu, damit der daemon frische `OD_*` Variablen injiziert.
-- **Codex lädt zu viel Plugin-Kontext** — starten Sie Open Design mit `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev`, damit vom daemon gestartete Codex-Prozesse mit `--disable plugins` laufen.
+- **media generation says `OD_BIN` is missing or daemon URL is `:0`** — führen Sie die Media Dispatcher Checks oben aus. Setzen Sie keine alte CLI-Session fort; öffnen Sie das Projekt aus der OpenDesign App neu, damit der daemon frische `OD_*` Variablen injiziert.
+- **Codex lädt zu viel Plugin-Kontext** — starten Sie OpenDesign mit `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev`, damit vom daemon gestartete Codex-Prozesse mit `--disable plugins` laufen.
 - **artifact never renders** — bestimmen Sie zuerst das Übergabeprofil. Prüfen Sie bei einer dateisystemfähigen lokalen Runtime, ob der Agent eine darstellbare Projektdatei angelegt hat und Datei-Events den daemon erreicht haben; Quelltext gehört dort nicht in `<artifact>`. Prüfen Sie bei Plain-/Text-only- oder BYOK-Läufen auf genau einen vollständigen `<artifact>`-Block und suchen Sie im daemon-Log die erste fehlgeschlagene Grenze.
 
 ## Bezug zur Vision

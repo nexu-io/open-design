@@ -7,6 +7,8 @@
  * stable workspace id used for PostHog group analytics.
  */
 
+import type { TrackingProjectKind } from './shared-enums.js';
+
 export type TrackingWorkspaceType = 'personal' | 'team';
 export type TrackingWorkspaceRole = 'owner' | 'admin' | 'member';
 export type TrackingWorkspaceScope = 'official' | 'personal' | 'team' | 'unknown';
@@ -17,7 +19,8 @@ export type TrackingWorkspacePage =
   | 'all_projects'
   | 'design_systems'
   | 'plugins'
-  | 'workspace_settings';
+  | 'workspace_settings'
+  | 'project';
 
 export interface TrackingWorkspaceDimensions {
   /** Opaque workspace id. Never a display name. */
@@ -218,4 +221,6 @@ export interface ProjectCommentCreateResultProps extends TrackingWorkspaceDimens
   result: 'success';
   target_project_relation: TrackingProjectRelation;
   comment_level: 'top_level' | 'reply';
+  project_id: string;
+  project_kind: TrackingProjectKind | null;
 }

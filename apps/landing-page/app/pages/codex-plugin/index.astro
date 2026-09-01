@@ -22,7 +22,7 @@ const REPO = 'https://github.com/nexu-io/open-design-agent-plugins';
 const AGENT_INSTALL_GUIDE = `${REPO}/blob/main/AGENTS.md`;
 const DOWNLOAD = href('/download/');
 const INSTALL_INSTRUCTION =
-  '/goal Read https://open-design.ai/codex-plugin/ to install Open Design for Codex and set up a new task for me.';
+  '/goal Read https://open-design.ai/codex-plugin/ to install OpenDesign for Codex and set up a new task for me.';
 const codexRunFrames = [
   {
     src: '/open-design-pugin/codex-real-plugin-detail.png',
@@ -57,7 +57,7 @@ const promptExamples = [
   },
   {
     prompt:
-      '@open-design Create an event landing page for Open Design Osaka. Lead with a typographic map of Japan, restrained ivory and olive colors, the date and location, speaker details, and a clear registration action.',
+      '@open-design Create an event landing page for OpenDesign Osaka. Lead with a typographic map of Japan, restrained ivory and olive colors, the date and location, speaker details, and a clear registration action.',
   },
   {
     prompt:
@@ -65,7 +65,7 @@ const promptExamples = [
   },
   {
     prompt:
-      '@open-design Create an interactive release story for Open Design 0.9.0. Visualize a model timeline on a bright canvas with floating cards, connecting lines, color-coded labels, and responsive horizontal exploration.',
+      '@open-design Create an interactive release story for OpenDesign 0.9.0. Visualize a model timeline on a bright canvas with floating cards, connecting lines, color-coded labels, and responsive horizontal exploration.',
   },
 ] as const;
 
@@ -110,12 +110,12 @@ const jsonLd = [
     description: copy.metadata.description,
     url: PAGE_URL,
     inLanguage: localeDefinition.htmlLang,
-    isPartOf: { '@type': 'WebSite', name: 'Open Design', url: new URL(href('/'), SITE).toString() },
+    isPartOf: { '@type': 'WebSite', name: 'OpenDesign', url: new URL(href('/'), SITE).toString() },
     about: {
       '@type': 'SoftwareApplication',
       name: copy.schema.applicationName,
       applicationCategory: 'DesignApplication',
-      operatingSystem: 'macOS, Windows, Linux',
+      operatingSystem: 'macOS, Windows',
       inLanguage: localeDefinition.htmlLang,
       url: PAGE_URL,
       sameAs: REPO,

@@ -182,21 +182,27 @@ export function metadataForHomeMediaComposer(
       }
     : undefined;
 
-  // Media surfaces no longer seed ratio / duration / model / audio kind from
+  // Media surfaces no longer seed ratio / duration / audio kind from
   // the composer footer. The prompt marks them as not provided, infers safe
   // defaults, and asks only when a choice materially changes the output. We
-  // seed `kind` (+ the hyperframes route discriminator) and any picked prompt
-  // template, mirroring how prototype/deck defer their settings.
+  // seed `kind`, the selected image route, (+ the hyperframes route
+  // discriminator) and any picked prompt template, mirroring how
+  // prototype/deck defer their settings. Persisting the image route keeps the
+  // run aligned with the model shown in the Home composer.
   if (surface === 'image') {
+    const imageModel = stringValue(inputs.model);
     return {
       kind: 'image',
+      ...(imageModel ? { imageModel } : {}),
       ...(promptTemplate ? { promptTemplate } : {}),
     };
   }
   if (surface === 'video' || surface === 'hyperframes') {
     return {
       kind: 'video',
-      ...(surface === 'hyperframes' ? { videoModel: 'hyperframes-html' as const } : {}),
+      ...(surface === 'hyperframes'
+        ? { intent: 'hyperframes' as const, videoModel: 'hyperframes-html' as const }
+        : {}),
       ...(promptTemplate ? { promptTemplate } : {}),
     };
   }

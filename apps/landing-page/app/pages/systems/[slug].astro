@@ -37,7 +37,7 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Open Design', item: Astro.site?.toString() },
+      { '@type': 'ListItem', position: 1, name: 'OpenDesign', item: Astro.site?.toString() },
       { '@type': 'ListItem', position: 2, name: ui.catalog.systems.detailLabel, item: new URL('/systems/', Astro.site).toString() },
       { '@type': 'ListItem', position: 3, name: system.name, item: new URL(`/systems/${system.slug}/`, Astro.site).toString() },
     ],
@@ -56,7 +56,7 @@ const jsonLd = [
 
 <Layout title={title} description={description} active="systems" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={ui.catalog.breadcrumbLabel}>
-    <a href={href('/')}>Open Design</a>
+    <a href={href('/')}>OpenDesign</a>
     <span>/</span>
     <a href={href('/systems/')}>{ui.catalog.systems.detailLabel}</a>
     <span>/</span>

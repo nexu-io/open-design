@@ -139,7 +139,7 @@
 .recent-projects__row--grid .recent-projects__card-thumb {
   flex: 0 0 auto;
   width: 100%;
-  min-height: 108px;
+  min-height: 0;
   margin-top: 0;
 }
 .recent-projects__row--grid .recent-projects__card-meta {
@@ -503,6 +503,10 @@
   border-radius: var(--radius);
   background: var(--bg-panel);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+.recent-projects__card-menu[data-placement='up'] {
+  top: auto;
+  bottom: calc(100% + 6px);
 }
 .recent-projects__card-menu button {
   appearance: none;
@@ -1131,6 +1135,8 @@
   opacity: 1;
 }
 .recent-projects__card-owner {
+  position: relative;
+  overflow: hidden;
   width: 16px;
   height: 16px;
   border-radius: var(--radius-pill);
@@ -1144,7 +1150,15 @@
   flex: 0 0 16px;
 }
 
-.recent-projects__card-owner img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+.recent-projects__card-owner img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
 
 /* First open of a team-shared card runs a full content pull before the
    project can open; the overlay makes that wait visible (previously the

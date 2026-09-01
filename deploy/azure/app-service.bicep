@@ -1,10 +1,10 @@
-// Open Design on Azure App Service for Containers (evaluation deployment).
+// OpenDesign on Azure App Service for Containers (evaluation deployment).
 //
 // Single-instance Linux web app behind Azure's managed HTTPS. State lives on
 // the container's local disk, which is EPHEMERAL — it is reset on restart,
 // redeploy, or scale. This lane is for evaluation and demos, not durable data.
 //
-// Why no persistent volume: Open Design stores SQLite under OD_DATA_DIR, and
+// Why no persistent volume: OpenDesign stores SQLite under OD_DATA_DIR, and
 // SQLite needs real file locking. App Service's persistent storage is backed
 // by Azure Files (SMB), where SQLite WAL/locking is unsupported and corrupts.
 // So we deliberately keep the data dir on the container's local filesystem.

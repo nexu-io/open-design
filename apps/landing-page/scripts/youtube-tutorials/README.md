@@ -1,7 +1,7 @@
 # youtube-tutorials
 
 Keeps `app/content/tutorials/*.md` in sync with the latest community YouTube
-tutorials about Open Design, with a human in the loop.
+tutorials about OpenDesign, with a human in the loop.
 
 ## Flow
 

@@ -42,6 +42,7 @@ export async function buildDesktopPdfExportInput(
 }
 
 export interface BuildDesktopArtifactExportInputOptions {
+  baseHref?: string;
   daemonUrl: string;
   deck?: boolean;
   fileName: string;
@@ -69,7 +70,7 @@ export async function buildDesktopArtifactExportInput(
   )).buffer.toString('utf8');
   const title = displayTitle(options.title, options.fileName);
   return {
-    baseHref: rawBaseHref(options.daemonUrl, options.projectId, options.fileName),
+    baseHref: options.baseHref ?? rawBaseHref(options.daemonUrl, options.projectId, options.fileName),
     deck: options.deck === true,
     format: options.format,
     html,

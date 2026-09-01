@@ -1,6 +1,6 @@
 // External MCP (Model Context Protocol) server configuration.
 //
-// Open Design acts as an MCP CLIENT here: the user configures one or more
+// OpenDesign acts as an MCP CLIENT here: the user configures one or more
 // external MCP servers (stdio, SSE, or streamable HTTP), and the daemon
 // surfaces those servers to the underlying agent (Claude Code, ACP agents,
 // etc.) at spawn time so the agent can call their tools.
@@ -29,7 +29,7 @@ export interface McpServerConfig {
    * spawn so users can keep credentials around without them being wired into
    * every run. */
   enabled: boolean;
-  /** HTTP/SSE only: whether Open Design should offer its managed OAuth flow.
+  /** HTTP/SSE only: whether OpenDesign should offer its managed OAuth flow.
    * `none` means no daemon-managed OAuth; credentials, if any, are supplied
    * by headers or by a trusted local server. */
   authMode?: McpAuthMode;

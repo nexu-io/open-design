@@ -1,4 +1,4 @@
-# Contributing to Open Design
+# Contributing to OpenDesign
 
 Thanks for thinking about contributing. OD is small on purpose — most of the value lives in **files** (skills, design systems, prompt fragments) rather than framework code. That means the highest-leverage contributions are usually one folder, one Markdown file, or one PR-sized adapter.
 
@@ -41,7 +41,7 @@ Node `~24` and pnpm `10.33.x` are required. `nvm` / `fnm` are optional; use `nvm
 
 ## Docker Setup
 
-Run Open Design without installing Node.js or pnpm.
+Run OpenDesign without installing Node.js or pnpm.
 
 ### Prerequisites
 
@@ -51,7 +51,7 @@ Make sure Docker Desktop with Compose v2 is installed:
 docker compose version
 ```
 
-### Start Open Design
+### Start OpenDesign
 
 ```bash
 cd deploy
@@ -61,7 +61,7 @@ docker compose up -d
 Open in your browser:
 
 ```text
-http://localhost:7456
+http://127.0.0.1:7456
 ```
 
 ### Common Commands
@@ -244,7 +244,10 @@ We're not pedantic about formatting (Prettier on save is fine), but two rules ar
 Beyond that:
 
 - **Don't narrate.** No `// import the module`, no `// loop through items`. If the code reads obviously, the comment is noise. Save comments for non-obvious intent or constraints the code can't express.
-- **TypeScript** for `apps/web/src/`. The daemon (`apps/daemon/`) is plain ESM JavaScript with JSDoc when types matter — keep it that way.
+- **TypeScript-first.** Keep project-owned entrypoints, modules, scripts, tests,
+  reporters, and configs in TypeScript, including code in `apps/web/src/` and
+  `apps/daemon/src/`. New `.js`, `.mjs`, or `.cjs` files need an explicit
+  generated, vendored, or compatibility reason and must pass `pnpm guard`.
 - **No new top-level dependencies** without a paragraph in the PR description on what we get vs. what bytes we ship. The dep list in [`package.json`](package.json) is small on purpose.
 - **Run `pnpm typecheck`** before pushing. CI runs it; failing it earns a "please fix" comment.
 

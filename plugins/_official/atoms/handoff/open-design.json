@@ -8,7 +8,7 @@
   "description": "Push the run's accepted artifact to a downstream collaboration surface (cli, other code agents, cloud, desktop, github, figma) and stamp the artifact manifest with the export target.",
   "license": "MIT",
   "author": {
-    "name": "Open Design",
+    "name": "OpenDesign",
     "url": "https://github.com/nexu-io"
   },
   "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/atoms/handoff",

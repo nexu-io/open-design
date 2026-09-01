@@ -113,6 +113,7 @@ describe('daemonAgentPayloadToPersistedAgentEvent — transient ACP status label
     ['tool_call'],
     ['tool_call_update'],
     ['session_update'],
+    ['opencode_compaction'],
   ])('returns null for transient status %s', (label) => {
     expect(
       persist({

@@ -377,15 +377,15 @@ export interface CommunityCopy {
 
 const EN: CommunityCopy = {
   hub: {
-    title: 'Community — Open Design',
-    desc: 'The Open Design community: contributors shipping in public, ambassadors hosting local ateliers, and moderators keeping the Discord warm.',
+    title: 'Community — OpenDesign',
+    desc: 'The OpenDesign community: contributors shipping in public, ambassadors hosting local ateliers, and moderators keeping the Discord warm.',
     heroTitle: 'Open design <em>takes shape</em><br/>when you ship it.',
     heroLead:
-      'Open Design is built by people, in public. Skills, DESIGN.md systems, plugins, docs: every commit is a brushstroke. Pick a door below, find your room.',
+      'OpenDesign is built by people, in public. Skills, DESIGN.md systems, plugins, docs: every commit is a brushstroke. Pick a door below, find your room.',
     cardMetaH: 'Auto-minted on first merge',
     cardMetaS: 'PNG · shared on X',
     cardHeroAlt:
-      'Open Design contributor honor card — @dev-kp-eloper, top 99.9%, Giotto tier',
+      'OpenDesign contributor honor card — @dev-kp-eloper, top 99.9%, Giotto tier',
     cards: [
       {
         ord: 'I',
@@ -396,7 +396,7 @@ const EN: CommunityCopy = {
       {
         ord: 'II',
         title: 'Ambassadors',
-        sub: "Open Design's <em>voice</em> in your city.",
+        sub: "OpenDesign's <em>voice</em> in your city.",
         body: 'Open a local atelier. Convene the meetups, the demos, the late-night critiques. Backed with budget, materials, and a private channel to the core team.',
       },
       {
@@ -408,14 +408,14 @@ const EN: CommunityCopy = {
     ],
   },
   contributors: {
-    title: 'Contributors — Open Design',
-    desc: 'Contribute to Open Design: maintainers, weekly and all-time contributor leaderboards, good first issues, and a zero-code path to ship your first piece.',
+    title: 'Contributors — OpenDesign',
+    desc: 'Contribute to OpenDesign: maintainers, weekly and all-time contributor leaderboards, good first issues, and a zero-code path to ship your first piece.',
     heroTitle: 'The hands that <em>ship</em> the work.',
     heroLead:
-      "Open Design is built by people, in public. Skills, DESIGN.md systems, plugins, docs: every commit is a brushstroke. Pick an issue, send a PR, and earn a one-of-one honor card the moment you're merged.",
+      "OpenDesign is built by people, in public. Skills, DESIGN.md systems, plugins, docs: every commit is a brushstroke. Pick an issue, send a PR, and earn a one-of-one honor card the moment you're merged.",
     showcase: {
       kicker: 'Plugin everything',
-      h2: 'Open Design as a stage. <em>Your work</em> as the show.',
+      h2: 'OpenDesign as a stage. <em>Your work</em> as the show.',
       intro:
         'The atelier is also a gallery. Helping you make the work is half the address; making sure the room comes to look is the other. Every piece you ship lands not in a vault but on a wall, where the world can find it.',
       tenets: [
@@ -445,7 +445,7 @@ const EN: CommunityCopy = {
         steps: [
           {
             h4: 'Hand the line to the agent',
-            body: 'Paste the command above into the agent within Open Design, or into whichever you already keep at hand: Claude Code, Codex, Cursor. It installs itself.',
+            body: 'Paste the command above into the agent within OpenDesign, or into whichever you already keep at hand: Claude Code, Codex, Cursor. It installs itself.',
           },
           {
             h4: 'Wake the skill',
@@ -462,20 +462,20 @@ const EN: CommunityCopy = {
       kicker: 'Steering the ship',
       h2: 'The <em>maintainers</em>.',
       intro:
-        'Maintainers protect the direction and quality of Open Design: they review contributions, keep the standard coherent, and make room for more contributors to earn their place in the project.',
+        'Maintainers protect the direction and quality of OpenDesign: they review contributions, keep the standard coherent, and make room for more contributors to earn their place in the project.',
       role: 'Maintainer',
       bios: {
         'Nagendhra-web':
-          "Nagendhra brings a data engineer's instinct for production truth: find the failure, measure the edge case, and fix it properly. In Open Design, that shows up in deploy preflight work, asset-bundling hardening, and Windows fixes that make the project feel trustworthy when contributors ship.",
+          "Nagendhra brings a data engineer's instinct for production truth: find the failure, measure the edge case, and fix it properly. In OpenDesign, that shows up in deploy preflight work, asset-bundling hardening, and Windows fixes that make the project feel trustworthy when contributors ship.",
         'Sid-Qin':
-          "Sid is the generalist engineer with a designer's eye for detail: the kind of maintainer who notices both the broken CLI path and the crooked interaction affordance. In Open Design, Sid keeps export flows, plugin actions, Windows shims, MIME handling, and agent plumbing sharp enough for a community to build on.",
+          "Sid is the generalist engineer with a designer's eye for detail: the kind of maintainer who notices both the broken CLI path and the crooked interaction affordance. In OpenDesign, Sid keeps export flows, plugin actions, Windows shims, MIME handling, and agent plumbing sharp enough for a community to build on.",
       },
     },
     allTime: {
       kicker: 'All-time signal',
       h2: 'The contributors with <em>deep roots</em>.',
       intro:
-        'A long-running record of talented contributors who keep turning ideas, fixes, and craft into the shared Open Design standard.',
+        'A long-running record of talented contributors who keep turning ideas, fixes, and craft into the shared OpenDesign standard.',
       rankLabel: 'All-time contributor',
       week: 'Repository history',
       quote:
@@ -491,12 +491,12 @@ const EN: CommunityCopy = {
       kicker: "This week's signal",
       h2: 'Ten contributors leading <em>this week</em>.',
       intro:
-        'A snapshot of sharp contributors landing PRs, improving the product, and making Open Design feel alive.',
+        'A snapshot of sharp contributors landing PRs, improving the product, and making OpenDesign feel alive.',
       rankLabel: "This week's leader",
       week: 'Last 7 days',
       handleSuffix: '· leading this week',
       blurbTemplate:
-        '{name} is setting the pace this week with {prs} merged PRs and the kind of steady craft that keeps Open Design moving.',
+        '{name} is setting the pace this week with {prs} merged PRs and the kind of steady craft that keeps OpenDesign moving.',
       statRank: 'Rank',
       statPrs: 'PRs · 7d',
       headContributor: 'Contributor',
@@ -507,7 +507,7 @@ const EN: CommunityCopy = {
       kicker: 'Pick your first contribution',
       h2: 'Open issues, <em>tagged for you</em>.',
       intro:
-        'Live from <span class="num">label:&ldquo;good first issue&rdquo;</span> on the Open Design repo. Comment on an issue to claim it, and a maintainer will assign it within a day.',
+        'Live from <span class="num">label:&ldquo;good first issue&rdquo;</span> on the OpenDesign repo. Comment on an issue to claim it, and a maintainer will assign it within a day.',
       loading: 'good first issue',
       foot: 'Showing first <span class="num" id="issue-count">—</span> open good-first-issues',
       seeAll: 'See all on GitHub',
@@ -546,9 +546,9 @@ const EN: CommunityCopy = {
     },
   },
   ambassadors: {
-    title: 'Ambassadors — Open Design',
-    desc: "Become an Open Design ambassador: open a local atelier, host meetups and critiques, and get budget, materials, and a private channel to the core team.",
-    heroTitle: "Be Open Design's <em>voice</em> in your city.",
+    title: 'Ambassadors — OpenDesign',
+    desc: "Become an OpenDesign ambassador: open a local atelier, host meetups and critiques, and get budget, materials, and a private channel to the core team.",
+    heroTitle: "Be OpenDesign's <em>voice</em> in your city.",
     heroLead:
       'Open a local atelier. Convene the meetups, the demos, the late-night critiques. We back you with budget, materials, and a private channel to the core team.',
     program: {
@@ -556,7 +556,7 @@ const EN: CommunityCopy = {
       h2: 'Vocation, <em>patronage</em>, covenant.',
       applyCta: 'Apply via Google Form',
       applyNote:
-        'Ambassadors turn Open Design from a repository into something contributors can meet in a room, with ink on the table and coffee gone cold.',
+        'Ambassadors turn OpenDesign from a repository into something contributors can meet in a room, with ink on the table and coffee gone cold.',
       cols: [
         {
           n: 'I · Vocation',
@@ -599,7 +599,7 @@ const EN: CommunityCopy = {
       kicker: 'In the field',
       h2: 'Meet the <em>ambassadors</em>.',
       intro:
-        'Local organizers, creators, and community builders helping Open Design reach more designers and teams.',
+        'Local organizers, creators, and community builders helping OpenDesign reach more designers and teams.',
       places: [
         'Sunshine Coast, Australia',
         'Kuala Lumpur, Malaysia',
@@ -609,8 +609,8 @@ const EN: CommunityCopy = {
     },
   },
   moderators: {
-    title: 'Moderators — Open Design',
-    desc: 'Meet the Open Design Discord moderators and join the room where AI-native designers ship work, open plugins, break betas, and pull one another unstuck.',
+    title: 'Moderators — OpenDesign',
+    desc: 'Meet the OpenDesign Discord moderators and join the room where AI-native designers ship work, open plugins, break betas, and pull one another unstuck.',
     heroTitle: 'The room where <em>contributors</em> hang out.',
     heroLead:
       'The front line of the agent-design era opens here. Discord is where the world\'s sharpest AI-native designers gather. Meet the stewards keeping the room warm.',
@@ -623,11 +623,11 @@ const EN: CommunityCopy = {
       cards: [
         {
           role: 'From the studio',
-          bio: 'From the Open Design founding team. Hopes the Discord stays a good place to be. Wave at any time, on any question.',
+          bio: 'From the OpenDesign founding team. Hopes the Discord stays a good place to be. Wave at any time, on any question.',
         },
         {
           role: 'Steward of the room',
-          bio: 'A practiced hand at Discord and community-tending. Keeps the room warm, the doors open, the conversation flowing. Passionate about Open Design.',
+          bio: 'A practiced hand at Discord and community-tending. Keeps the room warm, the doors open, the conversation flowing. Passionate about OpenDesign.',
         },
       ],
       channelNotes: ['work shipped', 'builders', 'early feedback', 'unstuck'],

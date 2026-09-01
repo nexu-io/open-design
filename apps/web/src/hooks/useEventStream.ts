@@ -29,6 +29,7 @@ import { BackoffController } from '../lib/backoff';
 // browser's ~6-per-host budget.
 
 export type EventStreamHandler = (data: unknown) => void;
+export type EventStreamActiveReason = 'connected' | 'ambient';
 
 export interface UseEventStreamOptions {
   /** Named-event handlers, keyed by SSE `event:` name. */
@@ -38,7 +39,7 @@ export interface UseEventStreamOptions {
    * visible/focus. Re-fetch the current snapshot of the subscribed resources
    * here to close any gap opened during a disconnect.
    */
-  onActive?: () => void;
+  onActive?: (reason: EventStreamActiveReason) => void;
   /** When false the hook never subscribes (stays poll-only). Defaults to true. */
   enabled?: boolean;
   /** Test seam: substitute a mock EventSource constructor. */
@@ -48,7 +49,7 @@ export interface UseEventStreamOptions {
 interface InternalSubscriber {
   eventNames: string[];
   getHandler: (name: string) => EventStreamHandler | undefined;
-  onActive: (() => void) | undefined;
+  onActive: ((reason: EventStreamActiveReason) => void) | undefined;
   onConnectedChange: (connected: boolean) => void;
 }
 
@@ -105,7 +106,7 @@ class EventStreamManager {
     sub.onConnectedChange(this.connected);
     this.ensureOpen();
     if (this.source) this.attachNames();
-    if (this.connected) sub.onActive?.();
+    if (this.connected) sub.onActive?.('connected');
     return () => this.unsubscribe(sub);
   }
 
@@ -149,7 +150,9 @@ class EventStreamManager {
       this.setConnected(true);
       // Snapshot catch-up on (re)connect — the thin-event model relies on this
       // instead of replaying buffered events.
-      for (const sub of Array.from(this.subscribers)) sub.onActive?.();
+      for (const sub of Array.from(this.subscribers)) {
+        sub.onActive?.('connected');
+      }
     };
     es.onerror = () => {
       // EventSource would auto-reconnect, but we drive our own jittered backoff
@@ -164,7 +167,9 @@ class EventStreamManager {
       if (!this.connected) {
         this.backoff.reset();
         this.setConnected(true);
-        for (const sub of Array.from(this.subscribers)) sub.onActive?.();
+        for (const sub of Array.from(this.subscribers)) {
+          sub.onActive?.('connected');
+        }
       }
     });
     this.attachNames();
@@ -254,7 +259,7 @@ class EventStreamManager {
       const now = Date.now();
       if (now - this.lastAmbientActiveAt < AMBIENT_ACTIVE_DEDUPE_MS) return;
       this.lastAmbientActiveAt = now;
-      for (const sub of Array.from(this.subscribers)) sub.onActive?.();
+      for (const sub of Array.from(this.subscribers)) sub.onActive?.('ambient');
     }
   };
 
@@ -335,7 +340,7 @@ export function useEventStream(
     const sub: InternalSubscriber = {
       eventNames: eventNamesRef.current,
       getHandler: (name) => eventsRef.current[name],
-      onActive: () => onActiveRef.current?.(),
+      onActive: (reason) => onActiveRef.current?.(reason),
       onConnectedChange: setConnected,
     };
     const unsubscribe = manager.subscribe(sub);

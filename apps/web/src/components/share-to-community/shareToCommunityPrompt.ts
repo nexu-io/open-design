@@ -1,4 +1,4 @@
-// Trigger prompt for the post-completion "Share to Open Design" submission
+// Trigger prompt for the post-completion "Share to OpenDesign" submission
 // action. Mirrors the constraint surface of
 // `home-hero/plugin-authoring.ts`'s `PLUGIN_AUTHORING_PROMPT_TEMPLATE`
 // (no chained shell suggestions, no jq, point user at the plugin-folder
@@ -11,7 +11,7 @@
 // the conversation when the user clicks the button.
 
 export const SHARE_TO_COMMUNITY_PROMPT = [
-  'Package the work I just finished in this project as an Open Design plugin so I can install it into My plugins and open a PR to the Open Design community catalog.',
+  'Package the work I just finished in this project as an OpenDesign plugin so I can install it into My plugins and open a PR to the OpenDesign community catalog.',
   '',
   'Follow the bundled `od-share-to-community` scenario at `plugins/_official/scenarios/od-share-to-community/SKILL.md` end to end. Do not ask me for fields the project files already answer — read `*.artifact.json`, `brand-spec.md` / `DESIGN.md`, and the generated artifacts in this workspace, then derive the manifest from what you find.',
   '',
@@ -28,7 +28,7 @@ export const SHARE_TO_COMMUNITY_PROMPT = [
   '**Do NOT** suggest follow-up CLI commands such as `od plugin publish`, `od plugin publish --to open-design`, `gh repo create`, `git init` / `git remote add` / `git push`, or any other publish / repo wiring. The plugin-folder card under Design Files already exposes three buttons whose prompts drive those flows end-to-end with the right auth gates, fallbacks, and retry rules baked in:',
   '- **Add to My plugins** — already satisfied by this turn\'s `od plugin install --source` step.',
   '- **Publish repo** — creates / updates the author\'s `plugin.repo` GitHub repo through a gh + git sequence the agent is told exactly how to run.',
-  '- **Open Design PR** — opens a draft PR against `nexu-io/open-design` for the community catalog.',
+  '- **OpenDesign PR** — opens a draft PR against `nexu-io/open-design` for the community catalog.',
   '',
   'Point the user at whichever button they want next; do NOT recreate those flows as freeform shell suggestions in this summary. Recreating them drifts from the button prompts\' guarantees and is the source of the bug that closed #2332.',
   '',

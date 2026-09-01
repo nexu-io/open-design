@@ -9,7 +9,7 @@ import {
   releaseInstallIdentity,
 } from "@open-design/release";
 
-import type { ToolPackConfig } from "../config.js";
+import type { ToolPackConfig } from "../config/index.js";
 import { PRODUCT_NAME } from "./constants.js";
 
 export type WinInstallIdentity = {

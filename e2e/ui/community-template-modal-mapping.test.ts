@@ -11,7 +11,7 @@
 
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
-import { applyStandardMocks } from '@/playwright/mock-factory';
+import { applyStandardMocks, routeSignedOutVelaStatus } from '@/playwright/mock-factory';
 import { ensureRailOpen } from '@/playwright/rail';
 import { T } from '@/timeouts';
 
@@ -39,6 +39,27 @@ const DECK_PLUGIN = {
       category: 'fundraising-pitch',
       preview: { type: 'html', entry: './example.html' },
       useCase: { query: { en: 'Create a seed round pitch deck.' } },
+    },
+  },
+} as const;
+
+const PROTOTYPE_PLUGIN = {
+  ...DECK_PLUGIN,
+  id: 'mapping-product-prototype',
+  title: 'Mapping Product Prototype',
+  source: '/tmp/mapping-product-prototype',
+  fsPath: '/tmp/mapping-product-prototype',
+  manifest: {
+    ...DECK_PLUGIN.manifest,
+    name: 'mapping-product-prototype',
+    title: 'Mapping Product Prototype',
+    description: 'A high-fidelity product prototype.',
+    tags: ['prototype'],
+    od: {
+      ...DECK_PLUGIN.manifest.od,
+      mode: 'prototype',
+      category: 'product-prototype',
+      useCase: { query: { en: 'Create a high-fidelity product prototype.' } },
     },
   },
 } as const;
@@ -77,7 +98,7 @@ function makeApplyResult(pluginId: string) {
 
 async function routeMappingFixtures(page: Page) {
   await page.route('**/api/plugins', async (route) => {
-    await route.fulfill({ json: { plugins: [DECK_PLUGIN] } });
+    await route.fulfill({ json: { plugins: [DECK_PLUGIN, PROTOTYPE_PLUGIN] } });
   });
   await page.route(`**/api/plugins/${DECK_PLUGIN.id}/preview`, async (route) => {
     await route.fulfill({
@@ -93,8 +114,8 @@ async function routeMappingFixtures(page: Page) {
 
 async function gotoCommunity(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible().catch(() => false)) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
@@ -105,15 +126,23 @@ async function gotoCommunity(page: Page) {
   await expect(page.locator('article.community-template-card').first()).toBeVisible();
 }
 
+async function openDeckCommunityCard(page: Page) {
+  await page.getByRole('button', { name: 'Slides', exact: true }).click();
+  const card = page.locator('article.community-template-card').first();
+  await expect(card.locator('.community-template-card__foot')).toContainText('Slides');
+  await card.click();
+}
+
 test.beforeEach(async ({ page }) => {
   await applyStandardMocks(page);
+  await routeSignedOutVelaStatus(page);
   await routeMappingFixtures(page);
 });
 
 test('[P1] community template card opens the full details modal (Use split + Share), not the lightweight preview', async ({ page }) => {
   await gotoCommunity(page);
 
-  await page.locator('article.community-template-card').first().click();
+  await openDeckCommunityCard(page);
 
   // Full modal chrome: Use split action (main face + caret), Share menu,
   // and the ds-modal shell — the lightweight footer-Remix preview must not
@@ -132,12 +161,12 @@ test('[P1] community template card opens the full details modal (Use split + Sha
   await page.keyboard.press('Escape');
 });
 
-test('[P1] community Use hands into Home and the active template chip opens the lightweight preview', async ({ page }) => {
+test('[P0] signed-out Local setup can use a Community template on Home', async ({ page }) => {
   await gotoCommunity(page);
 
   // Use from the community card's full modal routes the plugin as the Home
   // composer's active driver (EntryShell onUsePlugin hand-off).
-  await page.locator('article.community-template-card').first().click();
+  await openDeckCommunityCard(page);
   await page.getByTestId(`plugin-details-use-${DECK_PLUGIN.id}`).click();
   await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
 
@@ -154,4 +183,17 @@ test('[P1] community Use hands into Home and the active template chip opens the 
   await page.getByRole('button', { name: 'Close preview' }).click();
   await expect(page.locator('.community-template-preview')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
+});
+
+test('[P1] community category tabs filter the current template catalog', async ({ page }) => {
+  await gotoCommunity(page);
+
+  const cards = page.locator('article.community-template-card');
+  await expect(cards).toHaveCount(1);
+  await expect(cards.locator('.community-template-card__foot')).toContainText('Prototype');
+
+  await page.getByRole('button', { name: 'Slides', exact: true }).click();
+
+  await expect(cards).toHaveCount(1);
+  await expect(cards.locator('.community-template-card__foot')).toContainText('Slides');
 });

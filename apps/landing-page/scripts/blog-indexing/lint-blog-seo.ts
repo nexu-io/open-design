@@ -1,5 +1,5 @@
 /*
- * lint-blog-seo — source + rendered SEO checks for Open Design blog posts.
+ * lint-blog-seo — source + rendered SEO checks for OpenDesign blog posts.
  *
  * Usage:
  *   tsx lint-blog-seo.ts [--base <sha> --head <sha>] [--files file1,file2]

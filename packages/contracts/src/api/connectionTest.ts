@@ -9,6 +9,13 @@ export interface BaseUrlValidationResult {
   parsed?: ParsedBaseUrl;
   error?: string;
   forbidden?: boolean;
+  // Addresses resolved by DNS lookup that passed validation. Present when
+  // `validateBaseUrlResolved` performed a DNS lookup and every resolved address
+  // was safe (public, or allowlisted). Callers that fetch the URL (e.g.
+  // `assertAndFetchExternalAsset`) pin the connection to these addresses so
+  // that a DNS-rebinding domain cannot return a different (loopback/internal)
+  // address at fetch time (issue #5478).
+  resolvedAddresses?: ReadonlyArray<{ address: string; family: number }>;
 }
 
 export interface ParsedBaseUrl {
@@ -148,6 +155,13 @@ export interface ValidateBaseUrlOptions {
   // from the internal-IP block. Defaults to none, keeping the strict
   // default-deny behavior for every caller that does not opt in.
   allowedInternalHosts?: readonly string[];
+  // When true, loopback hosts (127.0.0.0/8, ::1, localhost) are treated as
+  // forbidden rather than allowed. Used by `assertExternalAssetUrl` for
+  // attacker-controllable asset download URLs (issue #5478), where loopback
+  // must never be reachable regardless of the operator allowlist. Defaults to
+  // false so user-configured provider endpoints (connection test, BYOK chat)
+  // keep working with local gateways.
+  forbidLoopback?: boolean;
 }
 
 export function validateBaseUrl(
@@ -164,6 +178,12 @@ export function validateBaseUrl(
     return { error: 'Only http/https allowed' };
   }
   const hostname = parsed.hostname.toLowerCase();
+  // When forbidLoopback is set (asset download URLs), reject loopback
+  // hosts entirely — they should never be reachable from an
+  // attacker-controllable response field (issue #5478).
+  if (options.forbidLoopback && isLoopbackApiHost(hostname)) {
+    return { error: 'Loopback addresses blocked for asset URLs', forbidden: true };
+  }
   if (
     !isLoopbackApiHost(hostname) &&
     !isAllowlistedInternalHost(hostname, options.allowedInternalHosts) &&

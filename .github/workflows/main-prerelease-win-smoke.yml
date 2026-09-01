@@ -1,0 +1,264 @@
+name: main-prerelease-win-smoke
+
+# Keep the Windows packaged prerelease path continuously exercised from main.
+# This intentionally does not prepare, reserve, or publish release metadata: a
+# stale workspace version must not prevent the product smoke from starting.
+on:
+  schedule:
+    - cron: "0 23 * * *" # 07:00 Asia/Shanghai, before the 09:00 release cuts
+  workflow_dispatch:
+  workflow_call:
+    outputs:
+      commit:
+        description: "The exact commit that was exercised by the Windows packaged smoke."
+        value: ${{ jobs.smoke.outputs.commit }}
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: main-prerelease-win-smoke
+  cancel-in-progress: false
+
+env:
+  OPEN_DESIGN_AMR_PROFILE: prod
+  OD_VELA_WEB_URL: ${{ secrets.VELA_WEB_URL_PROD }}
+  OD_VELA_WEB_URL_FEATURE_TEST: ${{ secrets.VELA_WEB_URL_FEATURE_TEST }}
+  OD_VELA_WEB_URL_TEST: ${{ secrets.VELA_WEB_URL_TEST }}
+  OD_VELA_WEB_URL_PROD: ${{ secrets.VELA_WEB_URL_PROD }}
+  OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
+  POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
+  POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
+
+jobs:
+  smoke:
+    if: github.repository == 'nexu-io/open-design'
+    runs-on: windows-latest
+    outputs:
+      commit: ${{ steps.commit.outputs.commit }}
+    steps:
+      - name: Checkout main canary ref
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve canary commit
+        id: commit
+        shell: pwsh
+        run: |
+          "commit=$(git rev-parse HEAD)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Resolve canary version
+        id: version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $baseVersion = (Get-Content apps/packaged/package.json -Raw | ConvertFrom-Json).version
+          if ($baseVersion -notmatch '^\d+\.\d+\.\d+$') {
+            throw "main prerelease canary requires a stable packaged base version; got $baseVersion"
+          }
+          $version = "$baseVersion-prerelease.${{ github.run_number }}"
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "main prerelease Windows canary version: $version"
+
+      - name: Compute Windows tools-pack cache key
+        id: win_tools_pack_cache_key
+        shell: pwsh
+        env:
+          WIN_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'apps/desktop/**', 'apps/packaged/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/workflows/main-prerelease-win-smoke.yml', '.github/workflows/release-prerelease.yml', '.github/scripts/release/cache/win.ps1') }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WIN_TOOLS_PACK_ORIGIN_KEY)) {
+            throw "Windows tools-pack cache origin key is empty"
+          }
+          $prefix = "tools-pack-win-v1-prerelease-canary-$env:RUNNER_OS-"
+          "prefix=$prefix" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "key=$prefix$env:WIN_TOOLS_PACK_ORIGIN_KEY" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Restore Windows tools-pack cache
+        id: win_tools_pack_cache_restore
+        uses: actions/cache/restore@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}\tools-pack-cache
+          key: ${{ steps.win_tools_pack_cache_key.outputs.key }}
+          restore-keys: |
+            ${{ steps.win_tools_pack_cache_key.outputs.prefix }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup NSIS
+        shell: pwsh
+        run: |
+          function Test-Makensis {
+            [bool]((Get-Command makensis.exe -ErrorAction SilentlyContinue) -or (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe"))
+          }
+          if (Test-Makensis) { Write-Host "makensis already present"; exit 0 }
+          foreach ($attempt in 1..4) {
+            Write-Host "choco install nsis (attempt $attempt)"
+            choco install nsis -y --no-progress
+            if (Test-Makensis) { break }
+            Start-Sleep -Seconds (15 * $attempt)
+          }
+          if (-not (Test-Makensis)) {
+            Write-Error "NSIS install failed after 4 attempts"
+            exit 1
+          }
+
+      - name: Build prerelease Windows canary
+        id: win_tools_pack_build
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $toolsPackDir = "${{ runner.temp }}/tools-pack"
+          $cacheDir = "${{ runner.temp }}/tools-pack-cache"
+          $buildJsonPath = Join-Path $env:RUNNER_TEMP "release-build\win_x64\build.json"
+          New-Item -ItemType Directory -Force -Path (Split-Path -Parent $buildJsonPath) | Out-Null
+          pnpm.cmd exec tools-pack win cleanup --dir $toolsPackDir --namespace release-prerelease-canary-win --json
+          $buildArgs = @(
+            "exec", "tools-pack", "win", "build",
+            "--dir", $toolsPackDir,
+            "--cache-dir", $cacheDir,
+            "--namespace", "release-prerelease-canary-win",
+            "--portable",
+            "--app-version", "${{ steps.version.outputs.version }}",
+            "--to", "all",
+            "--require-vela-cli",
+            "--json"
+          )
+          $buildOutput = pnpm.cmd @buildArgs
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows tools-pack cached canary build exited with code $LASTEXITCODE"
+          }
+          $buildOutput | Set-Content -Path $buildJsonPath -Encoding utf8
+          $build = $buildOutput | ConvertFrom-Json
+          pnpm.cmd exec tools-pack win validate-payload --namespace release-prerelease-canary-win --payload-path $build.payloadPath --expected-version "${{ steps.version.outputs.version }}" --json
+
+      - name: Retry prerelease Windows canary without restored cache
+        if: ${{ steps.win_tools_pack_build.outcome == 'failure' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $toolsPackDir = "${{ runner.temp }}/tools-pack"
+          $cacheDir = "${{ runner.temp }}/tools-pack-cache"
+          $buildJsonPath = Join-Path $env:RUNNER_TEMP "release-build\win_x64\build.json"
+          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $cacheDir
+          pnpm.cmd exec tools-pack win cleanup --dir $toolsPackDir --namespace release-prerelease-canary-win --json
+          $buildOutput = pnpm.cmd exec tools-pack win build `
+            --dir $toolsPackDir `
+            --cache-dir $cacheDir `
+            --namespace release-prerelease-canary-win `
+            --portable `
+            --app-version "${{ steps.version.outputs.version }}" `
+            --to all `
+            --require-vela-cli `
+            --json
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows tools-pack uncached canary build exited with code $LASTEXITCODE"
+          }
+          $buildOutput | Set-Content -Path $buildJsonPath -Encoding utf8
+          $build = $buildOutput | ConvertFrom-Json
+          pnpm.cmd exec tools-pack win validate-payload --namespace release-prerelease-canary-win --payload-path $build.payloadPath --expected-version "${{ steps.version.outputs.version }}" --json
+
+      - name: Smoke prerelease Windows packaged runtime
+        working-directory: e2e
+        env:
+          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
+          OD_PACKAGED_E2E_NAMESPACE: release-prerelease-canary-win
+          OD_PACKAGED_E2E_RELEASE_CHANNEL: prerelease
+          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+          OD_PACKAGED_E2E_WIN: "1"
+          OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: core
+        run: pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts
+
+      - name: Write prerelease Windows canary report
+        if: ${{ always() }}
+        env:
+          BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
+          RELEASE_BUILD_TARGET: all
+          RELEASE_CHANNEL: prerelease
+          RELEASE_NAMESPACE: release-prerelease-canary-win
+          RELEASE_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
+          RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}\release-report\win_x64\report.json
+          RELEASE_REPORT_SUMMARY_PATH: ${{ runner.temp }}\release-report\win_x64\summary.md
+          RELEASE_SMOKE_MODE: core
+          RELEASE_TARGET: win_x64
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          REPORT_TITLE: main prerelease win_x64 canary
+        run: pnpm exec tools-release write-report
+
+      - name: Publish canary report summary
+        if: ${{ always() }}
+        shell: pwsh
+        run: Get-Content "${{ runner.temp }}\release-report\win_x64\summary.md" | Add-Content $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload Windows canary report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-main-prerelease-win-canary-report
+          path: ${{ runner.temp }}\release-report\win_x64
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Prune Windows tools-pack cache
+        if: ${{ success() }}
+        shell: pwsh
+        continue-on-error: true
+        run: .\.github\scripts\release\cache\win.ps1
+
+      - name: Save Windows tools-pack cache
+        if: ${{ success() && (steps.win_tools_pack_cache_restore.outputs.cache-hit != 'true' || steps.win_tools_pack_build.outcome == 'failure') }}
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}\tools-pack-cache
+          key: ${{ steps.win_tools_pack_cache_key.outputs.key }}
+
+  notify_failure:
+    name: Notify Feishu on canary failure
+    needs: smoke
+    if: ${{ always() && needs.smoke.result == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout notifier
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Post prerelease Windows canary failure
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
+          FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_RELEASE_SIGN_SECRET }}
+          NOTICE_TITLE: "🚨 main prerelease Windows smoke 失败"
+          NOTICE_TEMPLATE: "red"
+          NOTICE_BODY: |
+            main 的 Windows packaged prerelease canary 未通过。该 canary 不依赖 beta/prerelease 发布元数据，因此失败表示构建或产品 smoke 本身需要处理。
+
+            **目标 ref**: `main`
+
+            该 smoke 是独立质量信号，不阻塞 release cut 或 prerelease 打包 / 发布。
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node --experimental-strip-types tools/release/src/notifications/feishu-notice.ts

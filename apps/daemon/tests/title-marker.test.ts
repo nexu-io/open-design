@@ -51,3 +51,22 @@ test('title marker stripper drops malformed marker content without throwing', ()
   assert.equal(stripper.flush(), '');
   assert.deepEqual(titles, []);
 });
+
+// A Run that never asked for a title still has to consume the marker: the
+// directive lives in the agent's own session history, so a resumed CLI can
+// repeat it on a later turn. server.ts therefore keeps `enabled` on for every
+// Run and only swaps the announce callback.
+test('title marker stripper consumes the marker without announcing a title', () => {
+  const titles: string[] = [];
+  const stripper = createAgentTitleMarkerStripper({
+    enabled: true,
+    emitTitle: () => {},
+  });
+
+  assert.equal(
+    stripper.strip('Lead in\n<od-title>Leaked Title</od-title>\nReal answer'),
+    'Lead in\n\nReal answer',
+  );
+  assert.equal(stripper.flush(), '');
+  assert.deepEqual(titles, []);
+});

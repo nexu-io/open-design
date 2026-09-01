@@ -6,9 +6,9 @@
 
 A drop-in `html_template_v1` live-artifact template for an editorial On-Time Delivery brief. It ships:
 
-- a tokenized HTML template (`template.html`) wired entirely with Open Design's scalar-only `{{data.X}}` bindings;
+- a tokenized HTML template (`template.html`) wired entirely with OpenDesign's scalar-only `{{data.X}}` bindings;
 - a default sample `data.json` covering a 14-account month-over-month OTD slice plus a "lowest 8" deep-dive;
-- the canonical `artifact.json` and `provenance.json` shapes the Open Design daemon expects;
+- the canonical `artifact.json` and `provenance.json` shapes the OpenDesign daemon expects;
 - a pre-rendered `index.html` and `preview.png` so reviewers can see the artifact without spinning up a daemon.
 
 ## Files
@@ -29,7 +29,7 @@ templates/live-artifacts/otd-operations-brief/
 
 ## How it binds
 
-Open Design's `html_template_v1` renderer is intentionally narrow:
+OpenDesign's `html_template_v1` renderer is intentionally narrow:
 
 - only `{{data.path.to.value}}` interpolation, paths must start with `data`;
 - bindings must resolve to scalars (no array or object values);

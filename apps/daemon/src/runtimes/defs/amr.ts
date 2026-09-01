@@ -42,7 +42,7 @@ const OPENCODE_MODEL_PRICE_PROVIDER_PRIORITY = [
 //   2. Vela 0.0.1 exposes the current link-supported catalog through
 //      `vela models`, but that command prints public ids such as
 //      `public_model_deepseek_v3_2`. The ACP `session/set_model` call accepts
-//      the link-facing slug (`deepseek-v3.2` / `glm-5.1`), so Open Design
+//      the link-facing slug (`deepseek-v3.2` / `glm-5.1`), so OpenDesign
 //      normalizes those public ids at the daemon boundary until Vela exposes
 //      canonical ACP ids directly.
 export function normalizeVelaModelId(rawId: string): string | null {
@@ -100,10 +100,12 @@ function normalizeKnownVelaVersionId(rawId: string): string | null {
 
 function isVelaChatModelId(modelId: string): boolean {
   // Temporary chat-surface guard: Vela already lists media-generation models,
-  // but Open Design's AMR runtime currently drives only chat completions.
+  // but OpenDesign's AMR runtime currently drives only chat completions.
   // Remove this filter when AMR grows first-class image/video execution.
   const id = modelId.toLowerCase();
   if (id.startsWith('gpt-image-')) return false;
+  if (id.startsWith('nano-banana-')) return false;
+  if (id.startsWith('seedream-')) return false;
   if (id.startsWith('seedance-')) return false;
   if (id.startsWith('doubao-seedance-')) return false;
   if (id.startsWith('veo-')) return false;

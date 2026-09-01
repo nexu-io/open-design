@@ -1,4 +1,8 @@
+import fs, { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { WorkspaceDirectoryItem } from '@open-design/contracts';
 import {
   createCachedWorkspaceDirectoryFetcher,
   createFreshWorkspaceDirectoryFetcher,
@@ -6,11 +10,19 @@ import {
   createVelaWorkspaceContextProvider,
   fetchVelaWorkspaceDirectory,
   mapVelaWorkspaceContext,
+  resolveVelaWorkspaceHubEventsEndpoint,
+  velaWorkspaceDirectoryIdentityForSession,
   workspaceContextFromDirectoryItem,
 } from '../src/collab/vela-workspace-context.js';
+import { createActiveWorkspaceSelectionStore } from '../src/collab/active-workspace-selection.js';
+import {
+  clearVelaAuthorizationState,
+  readVelaControlApiContext,
+  readVelaLoginStatus,
+} from '../src/integrations/vela.js';
 
-// A well-formed body as B's GET /api/v1/workspaces/current returns it — a team
-// member on a BYOK provider (workspace features stay on regardless of provider).
+// A well-formed rich workspace-context body, as returned inside flows such as
+// invite continuation — a team member on a BYOK provider.
 const B_TEAM_CONTEXT = {
   userId: 'auth-user-1',
   appUserId: 'app-user-1',
@@ -37,14 +49,29 @@ const B_TEAM_CONTEXT = {
   lastActiveWorkspaceId: 'ws-team-1',
 };
 
+const B_DIRECTORY_ITEM: WorkspaceDirectoryItem = {
+  workspaceId: 'ws-team-1',
+  workspaceName: 'Team 1',
+  workspaceType: 'team',
+  workspaceMemberId: 'wm-1',
+  role: 'member',
+  memberStatus: 'active',
+  lifecycleState: 'active',
+};
+
 const SESSION = { profile: 'prod', apiUrl: 'https://vela.example', controlKey: 'ck-1', user: null, configMtimeMs: null };
+const tempDirs: string[] = [];
 
 function jsonResponse(status: number, body: unknown): Response {
   return { ok: status >= 200 && status < 300, status, json: async () => body } as unknown as Response;
 }
 
 afterEach(() => {
+  clearVelaAuthorizationState();
   vi.unstubAllEnvs();
+  for (const dir of tempDirs.splice(0)) {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 describe('mapVelaWorkspaceContext', () => {
@@ -136,10 +163,103 @@ describe('mapVelaWorkspaceContext', () => {
 });
 
 describe('createCachedWorkspaceDirectoryFetcher', () => {
+  it('builds hub URL, authorization, and identity from the same merged session', () => {
+    const inherited = {
+      VELA_API_URL: 'https://account-a.example',
+      VELA_CONTROL_KEY: 'account-a-control-key',
+    } as NodeJS.ProcessEnv;
+    const configured = { VELA_API_URL: 'https://account-b.example' };
+    const accountA = readVelaControlApiContext(inherited);
+    const accountB = readVelaControlApiContext(inherited, configured);
+
+    const endpoint = resolveVelaWorkspaceHubEventsEndpoint(
+      ' workspace-b ',
+      inherited,
+      configured,
+    );
+
+    expect(endpoint).toEqual({
+      url: 'https://account-b.example/api/v1/collab/events',
+      workspaceId: 'workspace-b',
+      identityKey: velaWorkspaceDirectoryIdentityForSession(accountB),
+      headers: {
+        authorization: 'Bearer account-a-control-key',
+        'x-vela-workspace-id': 'workspace-b',
+      },
+    });
+    expect(endpoint?.identityKey).not.toBe(
+      velaWorkspaceDirectoryIdentityForSession(accountA),
+    );
+  });
+
   it('treats a missing local session as authoritative signed-out, not an outage', async () => {
     await expect(
       fetchVelaWorkspaceDirectory({ readSession: () => null }),
     ).resolves.toEqual({ ok: true, items: [] });
+  });
+
+  it.each([401, 403])(
+    'preserves an authoritative %s as an expired authorization result',
+    async (status) => {
+      await expect(fetchVelaWorkspaceDirectory({
+        readSession: () => SESSION,
+        fetch: async () => jsonResponse(status, { error: 'unauthenticated' }),
+      })).resolves.toEqual({
+        ok: false,
+        items: [],
+        reason: 'unauthorized',
+        status,
+      });
+    },
+  );
+
+  it('marks the Settings-backed credential revision when the directory rejects its file control key', async () => {
+    const amrHome = mkdtempSync(join(tmpdir(), 'od-vela-directory-auth-'));
+    tempDirs.push(amrHome);
+    vi.stubEnv('AMR_HOME', amrHome);
+    writeFileSync(
+      join(amrHome, 'config.json'),
+      JSON.stringify({
+        profiles: {
+          prod: {
+            apiUrl: 'https://vela.example',
+            controlKey: 'file-control-key',
+          },
+        },
+      }),
+      'utf8',
+    );
+    const configuredEnv = {
+      VELA_LINK_URL: 'https://settings.example/link',
+      VELA_RUNTIME_KEY: 'settings-runtime-key',
+    };
+
+    await expect(fetchVelaWorkspaceDirectory({
+      configuredEnv,
+      fetch: async () => jsonResponse(401, { error: 'unauthenticated' }),
+    })).resolves.toMatchObject({
+      ok: false,
+      reason: 'unauthorized',
+      status: 401,
+    });
+
+    expect(readVelaLoginStatus(process.env, configuredEnv)).toMatchObject({
+      loggedIn: true,
+      sessionState: 'reauth_required',
+    });
+  });
+
+  it('keeps a transport failure distinct from an expired authorization result', async () => {
+    await expect(fetchVelaWorkspaceDirectory({
+      readSession: () => SESSION,
+      fetch: async () => {
+        throw new TypeError('fetch failed');
+      },
+    })).resolves.toEqual({
+      ok: false,
+      items: [],
+      reason: 'network',
+    });
   });
 
   it('coalesces concurrent readers and briefly reuses one authoritative success', async () => {
@@ -176,14 +296,25 @@ describe('createCachedWorkspaceDirectoryFetcher', () => {
     await expect(refreshed).resolves.toEqual({ ok: true, items: [] });
   });
 
-  it('does not cache a failed directory read', async () => {
+  it('backs off a failed directory read and probes again after the outage lease', async () => {
+    let now = 0;
     const fetchDirectory = vi
       .fn()
       .mockResolvedValueOnce({ ok: false, items: [] })
       .mockResolvedValueOnce({ ok: true, items: [] });
-    const read = createCachedWorkspaceDirectoryFetcher({ fetchDirectory });
+    const read = createCachedWorkspaceDirectoryFetcher({
+      fetchDirectory,
+      failureBackoffMinMs: 100,
+      failureBackoffMaxMs: 100,
+      now: () => now,
+      random: () => 0,
+    });
 
     await expect(read()).resolves.toEqual({ ok: false, items: [] });
+    await expect(read()).resolves.toEqual({ ok: false, items: [] });
+    expect(fetchDirectory).toHaveBeenCalledOnce();
+
+    now = 100;
     await expect(read()).resolves.toEqual({ ok: true, items: [] });
     expect(fetchDirectory).toHaveBeenCalledTimes(2);
   });
@@ -222,6 +353,38 @@ describe('createCachedWorkspaceDirectoryFetcher', () => {
 
     reads[1]!.resolve({ ok: true, items: [] });
     await expect(accountB).resolves.toEqual({ ok: true, items: [] });
+  });
+
+  it('reports directory lease hits and mutation invalidation without identity labels', async () => {
+    let now = 1_000;
+    const onDecision = vi.fn();
+    const onSuppressedRequest = vi.fn();
+    const onInvalidation = vi.fn();
+    const broker = createWorkspaceDirectoryAuthorityBroker({
+      now: () => now,
+      ttlMs: 5_000,
+      fetchDirectory: async () => ({ ok: true, items: [] }),
+      onDecision,
+      onSuppressedRequest,
+      onInvalidation,
+    });
+
+    await broker.read();
+    now += 250;
+    await broker.read();
+    expect(onDecision).toHaveBeenLastCalledWith({
+      source: 'cache',
+      reason: 'lease_hit',
+      outcome: 'allow',
+      ageMs: 250,
+    });
+    expect(onSuppressedRequest).toHaveBeenCalledOnce();
+
+    await broker.refreshAfterMutation();
+    expect(onInvalidation).toHaveBeenCalledWith({
+      source: 'cache',
+      reason: 'mutation',
+    });
   });
 });
 
@@ -275,7 +438,198 @@ describe('createFreshWorkspaceDirectoryFetcher', () => {
 });
 
 describe('createWorkspaceDirectoryAuthorityBroker', () => {
-  it('single-flights shell and project bootstrap reads per account generation without caching failures', async () => {
+  it('keeps a successful lease past 15s while realtime is healthy, then expires it after disconnect', async () => {
+    let now = 0;
+    const first = { ok: true as const, items: [{ ...B_DIRECTORY_ITEM }] };
+    const second = { ok: true as const, items: [] };
+    const fetchDirectory = vi
+      .fn()
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(second);
+    const authority = createWorkspaceDirectoryAuthorityBroker({
+      fetchDirectory,
+      identityKey: () => 'account-a:config-a',
+      ttlMs: 15_000,
+      now: () => now,
+    });
+
+    await expect(authority.read()).resolves.toEqual(first);
+    authority.setRealtimeHealthy(true);
+    now = 120_000;
+    await expect(authority.read()).resolves.toEqual(first);
+    expect(fetchDirectory).toHaveBeenCalledOnce();
+
+    authority.setRealtimeHealthy(false);
+    await expect(authority.read()).resolves.toEqual(second);
+    expect(fetchDirectory).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves the outage circuit when event storms invalidate successful state', async () => {
+    let now = 0;
+    const unavailable = {
+      ok: false as const,
+      items: [],
+      reason: 'network' as const,
+    };
+    const fetchDirectory = vi.fn(async () => unavailable);
+    const authority = createWorkspaceDirectoryAuthorityBroker({
+      fetchDirectory,
+      identityKey: () => 'account-a:config-a',
+      failureBackoffMinMs: 15_000,
+      now: () => now,
+      random: () => 0,
+    });
+
+    await authority.backgroundFresh();
+    for (let index = 0; index < 100; index += 1) {
+      authority.invalidate('event_dirty');
+      await authority.backgroundFresh();
+    }
+    expect(fetchDirectory).toHaveBeenCalledOnce();
+
+    now = 15_000;
+    await authority.backgroundFresh();
+    expect(fetchDirectory).toHaveBeenCalledTimes(2);
+  });
+
+  it('invalidates the current account lease and forces the next read to refresh', async () => {
+    const first = {
+      ok: true as const,
+      items: [{ ...B_DIRECTORY_ITEM }],
+    };
+    const second = { ok: true as const, items: [] };
+    const fetchDirectory = vi
+      .fn()
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(second);
+    const authority = createWorkspaceDirectoryAuthorityBroker({
+      fetchDirectory,
+      identityKey: () => 'account-a:config-a',
+    });
+
+    await expect(authority.read()).resolves.toEqual(first);
+    await expect(authority.read()).resolves.toEqual(first);
+    authority.invalidate();
+    await expect(authority.read()).resolves.toEqual(second);
+    expect(fetchDirectory).toHaveBeenCalledTimes(2);
+  });
+
+  it('retires every settled lease across an observed A -> B -> A identity round trip', async () => {
+    let identity = 'account-a:config-a';
+    const accountA = {
+      ok: true as const,
+      items: [{ ...B_DIRECTORY_ITEM }],
+    };
+    const refreshedAccountA = { ok: true as const, items: [] };
+    const fetchDirectory = vi
+      .fn()
+      .mockResolvedValueOnce(accountA)
+      .mockResolvedValueOnce(refreshedAccountA);
+    const authority = createWorkspaceDirectoryAuthorityBroker({
+      fetchDirectory,
+      identityKey: () => identity,
+    });
+
+    await expect(authority.read()).resolves.toEqual(accountA);
+    authority.setRealtimeHealthy(true);
+    identity = 'account-b:config-b';
+    authority.resetIdentity();
+    identity = 'account-a:config-a';
+
+    await expect(authority.read()).resolves.toEqual(refreshedAccountA);
+    expect(fetchDirectory).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not let an invalidated in-flight result seed or satisfy the new generation', async () => {
+    const pending: Array<
+      (result: { ok: true; items: WorkspaceDirectoryItem[] }) => void
+    > = [];
+    const fetchDirectory = vi.fn(
+      () =>
+        new Promise<{ ok: true; items: WorkspaceDirectoryItem[] }>(
+          (resolve) => pending.push(resolve),
+        ),
+    );
+    const onAcceptedResult = vi.fn();
+    const authority = createWorkspaceDirectoryAuthorityBroker({
+      fetchDirectory,
+      identityKey: () => 'account-a:config-a',
+      onAcceptedResult,
+    });
+
+    const staleRead = authority.read();
+    authority.invalidate();
+    const currentRead = authority.read();
+    expect(fetchDirectory).toHaveBeenCalledTimes(2);
+
+    const stale = { ok: true as const, items: [{ ...B_DIRECTORY_ITEM }] };
+    pending[0]!(stale);
+    await expect(staleRead).resolves.toEqual(stale);
+    expect(onAcceptedResult).not.toHaveBeenCalled();
+
+    let currentSettled = false;
+    void currentRead.then(() => {
+      currentSettled = true;
+    });
+    await Promise.resolve();
+    expect(currentSettled).toBe(false);
+
+    const current = {
+      ok: true as const,
+      items: [{ ...B_DIRECTORY_ITEM, workspaceId: 'ws-team-2' }],
+    };
+    pending[1]!(current);
+    await expect(currentRead).resolves.toEqual(current);
+    expect(onAcceptedResult).toHaveBeenCalledOnce();
+    expect(onAcceptedResult).toHaveBeenCalledWith(
+      current,
+      'account-a:config-a',
+    );
+    await expect(authority.read()).resolves.toEqual(current);
+    expect(fetchDirectory).toHaveBeenCalledTimes(2);
+  });
+
+  it('exposes a cached-only lease that never starts I/O and is partitioned by account identity and expiry', async () => {
+    let identity = 'account-a:config-a';
+    let now = 0;
+    const accepted = {
+      ok: true as const,
+      items: [{
+        workspaceId: 'ws-team-1',
+        workspaceName: 'Team',
+        workspaceType: 'team' as const,
+        workspaceMemberId: 'wm-1',
+        role: 'member' as const,
+        memberStatus: 'active' as const,
+        lifecycleState: 'active' as const,
+      }],
+    };
+    const fetchDirectory = vi.fn(async () => accepted);
+    const authority = createWorkspaceDirectoryAuthorityBroker({
+      fetchDirectory,
+      identityKey: () => identity,
+      now: () => now,
+      ttlMs: 100,
+    });
+
+    await expect(authority.cached()).resolves.toEqual({ ok: false, items: [] });
+    expect(fetchDirectory).not.toHaveBeenCalled();
+
+    await authority.read();
+    await expect(authority.cached()).resolves.toEqual(accepted);
+    expect(fetchDirectory).toHaveBeenCalledTimes(1);
+
+    identity = 'account-b:config-b';
+    await expect(authority.cached()).resolves.toEqual({ ok: false, items: [] });
+    expect(fetchDirectory).toHaveBeenCalledTimes(1);
+
+    identity = 'account-a:config-a';
+    now = 100;
+    await expect(authority.cached()).resolves.toEqual({ ok: false, items: [] });
+    expect(fetchDirectory).toHaveBeenCalledTimes(1);
+  });
+
+  it('single-flights shell and project bootstrap reads per account generation and shares outage backoff', async () => {
     let identity = 'account-a:config-a';
     const fetchDirectory = vi.fn(async () => ({
       ok: true as const,
@@ -306,10 +660,136 @@ describe('createWorkspaceDirectoryAuthorityBroker', () => {
     });
     await failedAuthority.read();
     await failedAuthority.read();
-    expect(failedFetch).toHaveBeenCalledTimes(2);
+    expect(failedFetch).toHaveBeenCalledOnce();
   });
 
-  it('bounds 30s of status polls while every heartbeat mutation stays fresh', async () => {
+  it('uses one account-wide exponential outage circuit across read and fresh callers', async () => {
+    let now = 0;
+    const onDecision = vi.fn();
+    const onSuppressedRequest = vi.fn();
+    const networkFailure = {
+      ok: false as const,
+      items: [],
+      reason: 'network' as const,
+    };
+    const recovered = { ok: true as const, items: [{ ...B_DIRECTORY_ITEM }] };
+    const fetchDirectory = vi
+      .fn()
+      .mockResolvedValueOnce(networkFailure)
+      .mockResolvedValueOnce(networkFailure)
+      .mockResolvedValueOnce(recovered);
+    const authority = createWorkspaceDirectoryAuthorityBroker({
+      fetchDirectory,
+      identityKey: () => 'account-a:config-a',
+      failureBackoffMinMs: 100,
+      failureBackoffMaxMs: 400,
+      now: () => now,
+      random: () => 0,
+      onDecision,
+      onSuppressedRequest,
+    });
+
+    await expect(authority.read()).resolves.toEqual(networkFailure);
+    await expect(Promise.all([
+      authority.read(),
+      authority.backgroundFresh(),
+      authority.read(),
+    ])).resolves.toEqual([networkFailure, networkFailure, networkFailure]);
+    expect(fetchDirectory).toHaveBeenCalledOnce();
+    expect(onDecision).toHaveBeenCalledWith({
+      source: 'cache',
+      reason: 'failure_backoff',
+      outcome: 'unavailable',
+    });
+    expect(onSuppressedRequest).toHaveBeenCalledWith({
+      source: 'directory',
+      reason: 'failure_backoff',
+    });
+
+    now = 99;
+    await authority.read();
+    expect(fetchDirectory).toHaveBeenCalledOnce();
+    now = 100;
+    await authority.backgroundFresh();
+    expect(fetchDirectory).toHaveBeenCalledTimes(2);
+
+    // The second failed probe doubles the floor to 200ms. Positive jitter never
+    // probes faster than that floor.
+    now = 299;
+    await authority.read();
+    expect(fetchDirectory).toHaveBeenCalledTimes(2);
+    now = 300;
+    await expect(authority.read()).resolves.toEqual(recovered);
+    expect(fetchDirectory).toHaveBeenCalledTimes(3);
+
+    // A genuine recovery rewinds both the failure depth and the normal success
+    // lease, so later reads return immediately without another upstream call.
+    await expect(authority.read()).resolves.toEqual(recovered);
+    expect(fetchDirectory).toHaveBeenCalledTimes(3);
+  });
+
+  it('lets a user-initiated fresh authority read recover immediately through an open read circuit', async () => {
+    const networkFailure = {
+      ok: false as const,
+      items: [],
+      reason: 'network' as const,
+    };
+    const recovered = { ok: true as const, items: [{ ...B_DIRECTORY_ITEM }] };
+    const fetchDirectory = vi
+      .fn()
+      .mockResolvedValueOnce(networkFailure)
+      .mockResolvedValueOnce(recovered);
+    const authority = createWorkspaceDirectoryAuthorityBroker({
+      fetchDirectory,
+      identityKey: () => 'account-a:config-a',
+      failureBackoffMinMs: 120_000,
+      random: () => 0,
+    });
+
+    await expect(authority.read()).resolves.toEqual(networkFailure);
+    await expect(authority.fresh()).resolves.toEqual(recovered);
+    expect(fetchDirectory).toHaveBeenCalledTimes(2);
+    await expect(authority.read()).resolves.toEqual(recovered);
+    expect(fetchDirectory).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not outage-cache authorization rejection and lets authoritative invalidation probe immediately', async () => {
+    let now = 0;
+    const unauthorized = {
+      ok: false as const,
+      items: [],
+      reason: 'unauthorized' as const,
+      status: 401,
+    };
+    const networkFailure = {
+      ok: false as const,
+      items: [],
+      reason: 'network' as const,
+    };
+    const recovered = { ok: true as const, items: [{ ...B_DIRECTORY_ITEM }] };
+    const fetchDirectory = vi
+      .fn()
+      .mockResolvedValueOnce(unauthorized)
+      .mockResolvedValueOnce(networkFailure)
+      .mockResolvedValueOnce(recovered);
+    const authority = createWorkspaceDirectoryAuthorityBroker({
+      fetchDirectory,
+      identityKey: () => 'account-a:config-a',
+      failureBackoffMinMs: 100,
+      now: () => now,
+      random: () => 0,
+    });
+
+    await expect(authority.read()).resolves.toEqual(unauthorized);
+    await expect(authority.read()).resolves.toEqual(networkFailure);
+    expect(fetchDirectory).toHaveBeenCalledTimes(2);
+
+    authority.invalidate('catch_up');
+    await expect(authority.fresh()).resolves.toEqual(recovered);
+    expect(fetchDirectory).toHaveBeenCalledTimes(3);
+  });
+
+  it('avoids directory reads for status and heartbeat while realtime stays healthy', async () => {
     let now = 0;
     let activeReads = 0;
     let maxActiveReads = 0;
@@ -326,15 +806,18 @@ describe('createWorkspaceDirectoryAuthorityBroker', () => {
       now: () => now,
     });
 
+    await authority.read();
+    authority.setRealtimeHealthy(true);
     // Model the production order pessimistically: status first every 5s, then
-    // heartbeat at each 10s boundary. A fresh heartbeat seeds the next read
-    // lease, but never consumes a settled lease itself.
+    // heartbeat at each 10s boundary. Both are idempotent display/presence
+    // reads of the same directory authority while the strict account event
+    // stream remains healthy.
     for (now = 0; now <= 30_000; now += 5_000) {
       await authority.read();
-      if (now % 10_000 === 0) await authority.fresh();
+      if (now % 10_000 === 0) await authority.read();
     }
 
-    expect(fetchDirectory).toHaveBeenCalledTimes(5);
+    expect(fetchDirectory).toHaveBeenCalledOnce();
     expect(maxActiveReads).toBe(1);
   });
 
@@ -421,17 +904,44 @@ describe('createWorkspaceDirectoryAuthorityBroker', () => {
 });
 
 describe('createVelaWorkspaceContextProvider', () => {
-  it('fetches B with the vela session bearer token and maps the result', async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse(200, B_TEAM_CONTEXT)) as unknown as typeof fetch;
+  it('adds the signed-in user name and profile image to the workspace identity', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, {
+      items: [B_DIRECTORY_ITEM],
+    })) as unknown as typeof fetch;
+    const provider = createVelaWorkspaceContextProvider({
+      fetch: fetchImpl,
+      readSession: () => ({
+        ...SESSION,
+        user: {
+          id: 'auth-user-1',
+          email: 'elian@example.com',
+          name: 'Elian Zhang',
+          image: 'https://example.com/elian.png',
+        },
+      }),
+      getActiveWorkspaceId: () => 'ws-team-1',
+    });
+
+    await expect(provider.current({})).resolves.toMatchObject({
+      displayName: 'Elian Zhang',
+      avatarUrl: 'https://example.com/elian.png',
+    });
+  });
+
+  it('fetches the membership directory with the vela session bearer token', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, {
+      items: [B_DIRECTORY_ITEM],
+    })) as unknown as typeof fetch;
     const provider = createVelaWorkspaceContextProvider({
       fetch: fetchImpl,
       readSession: () => SESSION,
+      getActiveWorkspaceId: () => 'ws-team-1',
     });
     const context = await provider.current({});
     expect(context?.workspaceMemberId).toBe('wm-1');
     expect(context?.teamId).toBe('ws-team-1');
     const [url, init] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
-    expect(String(url)).toBe('https://vela.example/api/v1/workspaces/current');
+    expect(String(url)).toBe('https://vela.example/api/v1/workspaces');
     expect((init as RequestInit).headers).toMatchObject({ authorization: 'Bearer ck-1' });
   });
 
@@ -440,6 +950,28 @@ describe('createVelaWorkspaceContextProvider', () => {
     const provider = createVelaWorkspaceContextProvider({ fetch: fetchImpl, readSession: () => null });
     expect(await provider.current({})).toBeNull();
     expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0);
+  });
+
+  it('reads the current configured AMR environment on every workspace request', async () => {
+    let profile = 'prod';
+    const readSession = vi.fn((
+      _env?: NodeJS.ProcessEnv,
+      _configuredEnv?: Record<string, string>,
+    ) => SESSION as ReturnType<typeof readVelaControlApiContext>);
+    const provider = createVelaWorkspaceContextProvider({
+      fetch: (async () => jsonResponse(200, B_TEAM_CONTEXT)) as unknown as typeof fetch,
+      configuredEnv: () => ({ OPEN_DESIGN_AMR_PROFILE: profile }),
+      readSession,
+    });
+
+    await provider.current({});
+    profile = 'test';
+    await provider.current({});
+
+    expect(readSession.mock.calls.map((call) => call[1])).toEqual([
+      { OPEN_DESIGN_AMR_PROFILE: 'prod' },
+      { OPEN_DESIGN_AMR_PROFILE: 'test' },
+    ]);
   });
 
   it('degrades to null on a 401 (signed out) or a network error', async () => {
@@ -459,20 +991,11 @@ describe('createVelaWorkspaceContextProvider', () => {
   });
 });
 
-// B-line explicit-workspace handoff: the client must not perceive (or write)
-// B's account-level Active Workspace. The provider serves the LOCALLY selected
-// workspace — enriched from B when B agrees, synthesized from the workspace
-// directory when it does not — and only falls back to B's current when the
-// client has no selection at all. A fresh account (no current anywhere) picks
-// a LOCAL default (personal first) without ever PUTting server state.
+// B-line explicit-workspace handoff: the client does not perceive or write B's
+// account-level Active Workspace. The provider resolves its LOCALLY selected
+// workspace exclusively through the authenticated membership directory. A
+// client with no saved selection picks and persists a local bootstrap default.
 describe('createVelaWorkspaceContextProvider explicit local scope', () => {
-  const B_PERSONAL_CONTEXT = {
-    ...B_TEAM_CONTEXT,
-    workspaceId: 'ws-personal-1',
-    workspaceType: 'personal',
-    workspaceMemberId: 'wm-p1',
-    role: 'owner',
-  };
   const DIRECTORY = {
     items: [
       {
@@ -496,35 +1019,32 @@ describe('createVelaWorkspaceContextProvider explicit local scope', () => {
     ],
   };
 
-  function scriptedFetch(handlers: {
-    current?: () => Response;
-    directory?: () => Response;
-    put?: () => Response;
-  }) {
+  function scriptedFetch(handlers: { directory?: () => Response }) {
     const calls: Array<{ url: string; method: string }> = [];
     const fetchImpl = vi.fn(async (url: URL | string, init?: RequestInit) => {
       const method = init?.method ?? 'GET';
       const u = String(url);
       calls.push({ url: u, method });
-      if (u.includes('/workspaces/current') && method === 'GET' && handlers.current) return handlers.current();
       if (u.endsWith('/api/v1/workspaces') && method === 'GET' && handlers.directory) return handlers.directory();
-      if (u.includes('/workspaces/current') && method === 'PUT' && handlers.put) return handlers.put();
       throw new Error(`unexpected fetch ${method} ${u}`);
     }) as unknown as typeof fetch;
     return { fetchImpl, calls };
   }
 
-  it('picks a LOCAL default (personal first) with no server write when B has no current', async () => {
+  it('picks a LOCAL bootstrap default (personal first) with no server write', async () => {
     vi.stubEnv('OD_VELA_WEB_URL', 'https://web.example.com/console');
     const { fetchImpl, calls } = scriptedFetch({
-      current: () => jsonResponse(403, { error: 'missing_principal' }),
       directory: () => jsonResponse(200, DIRECTORY),
     });
     const selected: string[] = [];
     const provider = createVelaWorkspaceContextProvider({
       fetch: fetchImpl,
       readSession: () => SESSION,
-      setLocalSelection: (id) => { selected.push(id); },
+      replaceLocalSelection: (expected, id) => {
+        expect(expected).toBeNull();
+        selected.push(id);
+        return id;
+      },
     });
     const context = await provider.current({});
     expect(selected).toEqual(['ws-personal-1']);
@@ -532,21 +1052,38 @@ describe('createVelaWorkspaceContextProvider explicit local scope', () => {
     expect(context?.workspaceType).toBe('personal');
     expect(context?.workspaceMemberId).toBe('wm-p1');
     expect(context?.workspaceSettingsUrl).toBe(
-      'https://web.example.com/console/settings?workspaceId=ws-personal-1',
+      'https://web.example.com/console/settings?workspaceId=ws-personal-1&source=open_design',
     );
     // Resource semantics from the handoff: a plain read NEVER writes the
     // account-level Active Workspace.
     expect(calls.some((c) => c.method === 'PUT')).toBe(false);
   });
 
-  it('keeps Personal workspace actions stable from a synthesized context to a rich refresh', async () => {
+  it('restores the saved local workspace after recreating the provider', async () => {
+    let localSelection: string | null = 'ws-team-1';
+    const { fetchImpl, calls } = scriptedFetch({
+      directory: () => jsonResponse(200, DIRECTORY),
+    });
+    const createProvider = () => createVelaWorkspaceContextProvider({
+      fetch: fetchImpl,
+      readSession: () => SESSION,
+      getActiveWorkspaceId: () => localSelection,
+      replaceLocalSelection: (expectedWorkspaceId, workspaceId) => {
+        if (localSelection !== expectedWorkspaceId) return localSelection;
+        localSelection = workspaceId;
+        return localSelection;
+      },
+    });
+
+    expect((await createProvider().current({}))?.workspaceId).toBe('ws-team-1');
+    expect((await createProvider().current({}))?.workspaceId).toBe('ws-team-1');
+    expect(localSelection).toBe('ws-team-1');
+    expect(calls.every((call) => call.url.endsWith('/api/v1/workspaces'))).toBe(true);
+  });
+
+  it('keeps Personal workspace actions stable across directory refreshes', async () => {
     vi.stubEnv('OD_VELA_WEB_URL', 'https://web.example.com/console');
-    let currentRead = 0;
     const { fetchImpl } = scriptedFetch({
-      // First read disagrees with OD's Personal pin and forces directory
-      // synthesis. The next read models the rich response after switching away
-      // and back, when B's account-level current finally matches the local pin.
-      current: () => jsonResponse(200, currentRead++ === 0 ? B_TEAM_CONTEXT : B_PERSONAL_CONTEXT),
       directory: () => jsonResponse(200, DIRECTORY),
     });
     const provider = createVelaWorkspaceContextProvider({
@@ -560,14 +1097,13 @@ describe('createVelaWorkspaceContextProvider explicit local scope', () => {
 
     expect(initial?.workspaceType).toBe('personal');
     expect(initial?.workspaceSettingsUrl).toBe(
-      'https://web.example.com/console/settings?workspaceId=ws-personal-1',
+      'https://web.example.com/console/settings?workspaceId=ws-personal-1&source=open_design',
     );
     expect(refreshed?.workspaceSettingsUrl).toBe(initial?.workspaceSettingsUrl);
   });
 
-  it('serves the local selection and ignores a mismatched server current', async () => {
+  it('serves the local selection regardless of directory ordering', async () => {
     const { fetchImpl } = scriptedFetch({
-      current: () => jsonResponse(200, B_PERSONAL_CONTEXT),
       directory: () => jsonResponse(200, DIRECTORY),
     });
     const provider = createVelaWorkspaceContextProvider({
@@ -576,17 +1112,15 @@ describe('createVelaWorkspaceContextProvider explicit local scope', () => {
       getActiveWorkspaceId: () => 'ws-team-1',
     });
     const context = await provider.current({});
-    // Another device switched B's Active Workspace to personal; this daemon's
-    // pinned scope must not follow it.
     expect(context?.workspaceId).toBe('ws-team-1');
     expect(context?.workspaceType).toBe('team');
     expect(context?.teamId).toBe('ws-team-1');
     expect(context?.workspaceMemberId).toBe('wm-1');
   });
 
-  it('enriches from B when the server current matches the local selection', async () => {
+  it('derives the selected context entirely from the membership directory', async () => {
     const { fetchImpl } = scriptedFetch({
-      current: () => jsonResponse(200, B_TEAM_CONTEXT),
+      directory: () => jsonResponse(200, DIRECTORY),
     });
     const provider = createVelaWorkspaceContextProvider({
       fetch: fetchImpl,
@@ -595,20 +1129,46 @@ describe('createVelaWorkspaceContextProvider explicit local scope', () => {
     });
     const context = await provider.current({});
     expect(context?.workspaceId).toBe('ws-team-1');
-    // Rich billing data only B carries — proof the mapped body was used.
-    expect(context?.planId).toBe('team-pro');
+    expect(context?.workspaceName).toBe('Team');
+    expect(context?.planId).toBeNull();
   });
 
-  it('does not bootstrap on 401 (signed out is not a missing principal)', async () => {
+  it('routes current and exact reads through the injected directory authority broker', async () => {
+    const fetchWorkspaceDirectory = vi.fn(async () => ({
+      ok: true as const,
+      items: [B_DIRECTORY_ITEM],
+    }));
+    const directFetch = vi.fn(async () => {
+      throw new Error('direct directory fetch must stay behind the broker');
+    }) as unknown as typeof fetch;
+    const provider = createVelaWorkspaceContextProvider({
+      fetch: directFetch,
+      fetchWorkspaceDirectory,
+      readSession: () => SESSION,
+      getActiveWorkspaceId: () => B_DIRECTORY_ITEM.workspaceId,
+    });
+
+    await expect(provider.current({})).resolves.toMatchObject({
+      workspaceId: B_DIRECTORY_ITEM.workspaceId,
+    });
+    await expect(provider.resolveExact?.({
+      workspaceId: B_DIRECTORY_ITEM.workspaceId,
+    })).resolves.toMatchObject({
+      workspaceId: B_DIRECTORY_ITEM.workspaceId,
+    });
+    expect(fetchWorkspaceDirectory).toHaveBeenCalledTimes(2);
+    expect(directFetch).not.toHaveBeenCalled();
+  });
+
+  it('does not bootstrap when the directory returns 401', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(401, { error: 'unauthenticated' })) as unknown as typeof fetch;
     const provider = createVelaWorkspaceContextProvider({ fetch: fetchImpl, readSession: () => SESSION });
     expect(await provider.current({})).toBeNull();
     expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1);
   });
 
-  it('cools down after a failed default pick instead of hammering the directory', async () => {
+  it('keeps an empty directory unselected and retries on the next read', async () => {
     const { fetchImpl, calls } = scriptedFetch({
-      current: () => jsonResponse(403, { error: 'missing_principal' }),
       directory: () => jsonResponse(200, { items: [] }),
     });
     const provider = createVelaWorkspaceContextProvider({
@@ -618,7 +1178,7 @@ describe('createVelaWorkspaceContextProvider explicit local scope', () => {
     expect(await provider.current({})).toBeNull();
     expect(await provider.current({})).toBeNull();
     const directoryCalls = calls.filter((c) => c.url.endsWith('/api/v1/workspaces'));
-    expect(directoryCalls.length).toBe(1);
+    expect(directoryCalls.length).toBe(2);
   });
 });
 
@@ -662,55 +1222,60 @@ describe('createVelaWorkspaceContextProvider — stale pin recovery', () => {
       },
     ],
   };
+  const CONCURRENT_WORKSPACE = {
+    workspaceId: 'ws-team-2',
+    workspaceName: 'Other team',
+    workspaceType: 'team',
+    workspaceMemberId: 'wm-2',
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+  } satisfies WorkspaceDirectoryItem;
+  const DIRECTORY_WITH_CONCURRENT_WORKSPACE = {
+    items: [...DIRECTORY_WITHOUT_TEAM.items, CONCURRENT_WORKSPACE],
+  };
 
-  /** A stateful local-pin double: `clearLocalSelection`/`setLocalSelection`
-   *  mutate the SAME backing value `getActiveWorkspaceId` reads, exactly like
-   *  the real `ActiveWorkspaceSelectionStore` — so a clear takes effect for
-   *  the very same `current()` call's fallback pick, not just the next one. */
+  /** A stateful local-pin double whose conditional replacement mutates the
+   *  SAME backing value `getActiveWorkspaceId` reads, exactly like the real
+   *  `ActiveWorkspaceSelectionStore`. */
   function statefulPin(initial: string | undefined) {
     let value = initial;
     const setCalls: string[] = [];
-    const clearCalls: number[] = [];
+    const replaceCalls: Array<[string | null, string]> = [];
     return {
       getActiveWorkspaceId: () => value,
-      setLocalSelection: (id: string) => {
+      replaceLocalSelection: (expectedWorkspaceId: string | null, id: string) => {
+        if ((value ?? null) !== expectedWorkspaceId) return value ?? null;
         value = id;
         setCalls.push(id);
-      },
-      clearLocalSelection: () => {
-        value = undefined;
-        clearCalls.push(1);
+        replaceCalls.push([expectedWorkspaceId, id]);
+        return value;
       },
       setCalls,
-      clearCalls,
+      replaceCalls,
     };
   }
 
-  function scriptedFetch(handlers: { current?: () => Response; directory?: () => Response }) {
+  function scriptedFetch(handlers: { directory?: () => Response }) {
     const fetchImpl = vi.fn(async (url: URL | string, init?: RequestInit) => {
       const method = init?.method ?? 'GET';
       const u = String(url);
-      if (u.includes('/workspaces/current') && method === 'GET' && handlers.current) return handlers.current();
       if (u.endsWith('/api/v1/workspaces') && method === 'GET' && handlers.directory) return handlers.directory();
       throw new Error(`unexpected fetch ${method} ${u}`);
     }) as unknown as typeof fetch;
     return fetchImpl;
   }
 
-  it('RED→GREEN: clears the pin and falls back to personal when the workspace vanished from the directory', async () => {
+  it('RED→GREEN: replaces the pin with personal when the workspace vanished from the directory', async () => {
     const pin = statefulPin('ws-team-1');
     const fetchImpl = scriptedFetch({
-      // B also refuses this pinned scope now (not a 401 — the vela session
-      // itself is still fine, just this workspace is no longer usable).
-      current: () => jsonResponse(403, { error: 'membership_not_found' }),
       directory: () => jsonResponse(200, DIRECTORY_WITHOUT_TEAM),
     });
     const provider = createVelaWorkspaceContextProvider({
       fetch: fetchImpl,
       readSession: () => SESSION,
       getActiveWorkspaceId: pin.getActiveWorkspaceId,
-      setLocalSelection: pin.setLocalSelection,
-      clearLocalSelection: pin.clearLocalSelection,
+      replaceLocalSelection: pin.replaceLocalSelection,
     });
 
     const context = await provider.current({});
@@ -721,30 +1286,109 @@ describe('createVelaWorkspaceContextProvider — stale pin recovery', () => {
     expect(context).not.toBeNull();
     expect(context?.workspaceId).toBe('ws-personal-1');
     expect(context?.workspaceType).toBe('personal');
-    expect(pin.clearCalls.length).toBe(1);
+    expect(pin.replaceCalls).toEqual([['ws-team-1', 'ws-personal-1']]);
     expect(pin.setCalls).toEqual(['ws-personal-1']);
     expect(pin.getActiveWorkspaceId()).toBe('ws-personal-1');
   });
 
-  it('RED→GREEN: clears the pin when the membership is listed but no longer active', async () => {
+  it('RED→GREEN: replaces the pin when the membership is listed but no longer active', async () => {
     const pin = statefulPin('ws-team-1');
     const fetchImpl = scriptedFetch({
-      current: () => jsonResponse(403, { error: 'membership_not_found' }),
       directory: () => jsonResponse(200, DIRECTORY_TEAM_MEMBER_REMOVED),
     });
     const provider = createVelaWorkspaceContextProvider({
       fetch: fetchImpl,
       readSession: () => SESSION,
       getActiveWorkspaceId: pin.getActiveWorkspaceId,
-      setLocalSelection: pin.setLocalSelection,
-      clearLocalSelection: pin.clearLocalSelection,
+      replaceLocalSelection: pin.replaceLocalSelection,
     });
 
     const context = await provider.current({});
 
     expect(context?.workspaceId).toBe('ws-personal-1');
-    expect(pin.clearCalls.length).toBe(1);
+    expect(pin.replaceCalls).toEqual([['ws-team-1', 'ws-personal-1']]);
     expect(pin.setCalls).toEqual(['ws-personal-1']);
+  });
+
+  it('preserves a concurrent selection that wins before stale replacement starts', async () => {
+    let pin = 'ws-team-1';
+    const replaceLocalSelection = vi.fn(() => {
+      pin = CONCURRENT_WORKSPACE.workspaceId;
+      return pin;
+    });
+    const provider = createVelaWorkspaceContextProvider({
+      fetch: scriptedFetch({
+        directory: () => jsonResponse(200, DIRECTORY_WITH_CONCURRENT_WORKSPACE),
+      }),
+      readSession: () => SESSION,
+      getActiveWorkspaceId: () => pin,
+      replaceLocalSelection,
+    });
+
+    const context = await provider.current({});
+
+    expect(context?.workspaceId).toBe(CONCURRENT_WORKSPACE.workspaceId);
+    expect(pin).toBe(CONCURRENT_WORKSPACE.workspaceId);
+    expect(replaceLocalSelection).toHaveBeenCalledWith(
+      'ws-team-1',
+      'ws-personal-1',
+    );
+  });
+
+  it('keeps a user switch queued while stale recovery persists its fallback', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-stale-workspace-recovery-'));
+    tempDirs.push(root);
+    const activeWorkspace = createActiveWorkspaceSelectionStore(root);
+    await activeWorkspace.set('ws-team-1');
+
+    let releaseRename!: () => void;
+    const renameGate = new Promise<void>((resolve) => {
+      releaseRename = resolve;
+    });
+    let renameStarted!: () => void;
+    const renameWasStarted = new Promise<void>((resolve) => {
+      renameStarted = resolve;
+    });
+    const originalRename = fs.promises.rename.bind(fs.promises);
+    let pauseNextRename = true;
+    const renameSpy = vi.spyOn(fs.promises, 'rename').mockImplementation(
+      async (oldPath, newPath) => {
+        if (pauseNextRename) {
+          pauseNextRename = false;
+          renameStarted();
+          await renameGate;
+        }
+        return originalRename(oldPath, newPath);
+      },
+    );
+
+    const provider = createVelaWorkspaceContextProvider({
+      fetch: scriptedFetch({
+        directory: () => jsonResponse(200, DIRECTORY_WITH_CONCURRENT_WORKSPACE),
+      }),
+      readSession: () => SESSION,
+      getActiveWorkspaceId: () => activeWorkspace.get(),
+      replaceLocalSelection: (expectedWorkspaceId, workspaceId) =>
+        activeWorkspace.replaceIf(expectedWorkspaceId, workspaceId),
+    });
+
+    try {
+      const recovering = provider.current({});
+      await renameWasStarted;
+      const userSwitch = activeWorkspace.set(CONCURRENT_WORKSPACE.workspaceId);
+      releaseRename();
+
+      const [context] = await Promise.all([recovering, userSwitch]);
+
+      expect(context?.workspaceId).toBe(CONCURRENT_WORKSPACE.workspaceId);
+      expect(activeWorkspace.get()).toBe(CONCURRENT_WORKSPACE.workspaceId);
+      expect(createActiveWorkspaceSelectionStore(root).get()).toBe(
+        CONCURRENT_WORKSPACE.workspaceId,
+      );
+    } finally {
+      releaseRename();
+      renameSpy.mockRestore();
+    }
   });
 
   it('does NOT clear the pin when the directory request fails (network error) — preserve on B outage', async () => {
@@ -752,9 +1396,6 @@ describe('createVelaWorkspaceContextProvider — stale pin recovery', () => {
     const fetchImpl = vi.fn(async (url: URL | string, init?: RequestInit) => {
       const method = init?.method ?? 'GET';
       const u = String(url);
-      if (u.includes('/workspaces/current') && method === 'GET') {
-        return jsonResponse(403, { error: 'membership_not_found' });
-      }
       if (u.endsWith('/api/v1/workspaces') && method === 'GET') {
         throw new Error('network down');
       }
@@ -764,8 +1405,7 @@ describe('createVelaWorkspaceContextProvider — stale pin recovery', () => {
       fetch: fetchImpl,
       readSession: () => SESSION,
       getActiveWorkspaceId: pin.getActiveWorkspaceId,
-      setLocalSelection: pin.setLocalSelection,
-      clearLocalSelection: pin.clearLocalSelection,
+      replaceLocalSelection: pin.replaceLocalSelection,
     });
 
     const context = await provider.current({});
@@ -775,7 +1415,7 @@ describe('createVelaWorkspaceContextProvider — stale pin recovery', () => {
     // untouched so the NEXT successful poll can still recover the real
     // workspace instead of having already been evicted to a fallback.
     expect(context).toBeNull();
-    expect(pin.clearCalls.length).toBe(0);
+    expect(pin.replaceCalls.length).toBe(0);
     expect(pin.setCalls.length).toBe(0);
     expect(pin.getActiveWorkspaceId()).toBe('ws-team-1');
   });
@@ -783,21 +1423,19 @@ describe('createVelaWorkspaceContextProvider — stale pin recovery', () => {
   it('does NOT clear the pin when the directory request itself returns a non-2xx', async () => {
     const pin = statefulPin('ws-team-1');
     const fetchImpl = scriptedFetch({
-      current: () => jsonResponse(403, { error: 'membership_not_found' }),
       directory: () => jsonResponse(500, { error: 'internal' }),
     });
     const provider = createVelaWorkspaceContextProvider({
       fetch: fetchImpl,
       readSession: () => SESSION,
       getActiveWorkspaceId: pin.getActiveWorkspaceId,
-      setLocalSelection: pin.setLocalSelection,
-      clearLocalSelection: pin.clearLocalSelection,
+      replaceLocalSelection: pin.replaceLocalSelection,
     });
 
     const context = await provider.current({});
 
     expect(context).toBeNull();
-    expect(pin.clearCalls.length).toBe(0);
+    expect(pin.replaceCalls.length).toBe(0);
     expect(pin.setCalls.length).toBe(0);
     expect(pin.getActiveWorkspaceId()).toBe('ws-team-1');
   });

@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 
-import { ToolPackCache } from "../cache.js";
-import type { ToolPackConfig } from "../config.js";
+import { ToolPackCache } from "../cache/index.js";
+import type { ToolPackConfig } from "../config/index.js";
 import {
   collectWorkspaceTarballs,
   createWinPackagedAppCacheKey,
@@ -98,7 +98,13 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
   });
   const workspaceBuildKey = await runPhase("workspace-build", async () => ensureWinWorkspaceBuild(config, cache));
   const resourceTree = await runPhase("resource-tree", async () =>
-    prepareResourceTree(config, paths, cache, { materialize: config.to !== "dir" })
+    prepareResourceTree(
+      config,
+      paths,
+      cache,
+      { bundleAgentRuntimes: true, materialize: config.to !== "dir" },
+      workspaceBuildKey,
+    )
   );
   await runPhase("win-icon", async () => {
     await copyWinIcon(paths);

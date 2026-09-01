@@ -1,7 +1,7 @@
 // @vitest-environment node
 
-import { execFile } from 'node:child_process';
-import { stat } from 'node:fs/promises';
+import { execFile, spawn } from 'node:child_process';
+import { readdir, readFile, rm, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -33,6 +33,7 @@ const linuxHeadlessDescribe = shouldRunLinuxHeadlessSmoke ? describe : describe.
 const shouldRunLinuxAppImageSmoke =
   process.platform === 'linux' && process.env.OD_PACKAGED_E2E_LINUX_APPIMAGE === '1';
 const linuxAppImageDescribe = shouldRunLinuxAppImageSmoke ? describe : describe.skip;
+const expectedTelemetryRelayUrl = process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim() || null;
 
 const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'linux', 'namespaces', namespace);
 const userHome = linuxUserHome();
@@ -167,7 +168,7 @@ linuxHeadlessDescribe('packaged linux headless runtime smoke', () => {
         throw new Error('expected desktop log entry');
       }
       expectPathInside(desktopLog.logPath, join(runtimeNamespaceRoot, 'logs', 'desktop'));
-      expect(desktopLog.lines.join('\n')).toContain('Open Design is running');
+      expect(desktopLog.lines.join('\n')).toContain('OpenDesign is running');
 
       const stop = await runToolsPackJson<LinuxStopResult>('stop', ['--headless']);
       started = false;
@@ -204,8 +205,10 @@ linuxHeadlessDescribe('packaged linux headless runtime smoke', () => {
 linuxAppImageDescribe('packaged linux AppImage runtime smoke', () => {
   let installed = false;
   let started = false;
+  let headlessStarted = false;
+  let headlessLaunchPid: number | null = null;
 
-  test('installs, starts, inspects with eval and screenshot, stops, and uninstalls the built AppImage', async () => {
+  test('installs, validates a configured baked relay in AppImage headless, starts desktop, and uninstalls', async () => {
     let passed = false;
     try {
       const install = await runToolsPackJson<LinuxAppImageInstallResult>('install');
@@ -215,6 +218,26 @@ linuxAppImageDescribe('packaged linux AppImage runtime smoke', () => {
       expectPathInside(install.appImagePath, join(userHome, '.local', 'bin'));
       expectPathInside(install.desktopFilePath, join(userHome, '.local', 'share', 'applications'));
       expectPathInside(install.iconPath, join(userHome, '.local', 'share', 'icons', 'hicolor'));
+
+      // This is the official AppImage executable's own `--headless` branch,
+      // not tools-pack's separate standalone headless launcher. Release jobs
+      // inject the relay while building the AppImage; remove it from the
+      // launch env so the daemon can only receive the baked config value.
+      if (expectedTelemetryRelayUrl != null) {
+        const headless = await startInstalledAppImageHeadlessAndFindRelay(
+          install.appImagePath,
+          expectedTelemetryRelayUrl,
+        );
+        headlessStarted = true;
+        headlessLaunchPid = headless.launchPid;
+        expect(headless.relayDaemonPid).toBeGreaterThan(0);
+
+        const headlessStop = await runToolsPackJson<LinuxStopResult>('stop', ['--headless']);
+        expect(headlessStop.status).not.toBe('partial');
+        expect(headlessStop.remainingPids).toEqual([]);
+        headlessStarted = false;
+        headlessLaunchPid = null;
+      }
 
       const start = await runToolsPackJson<LinuxAppImageStartResult>('start');
       started = true;
@@ -264,6 +287,20 @@ linuxAppImageDescribe('packaged linux AppImage runtime smoke', () => {
           console.error('failed to read packaged linux logs after failure', error);
         });
       }
+      if (headlessStarted) {
+        await runToolsPackJson<LinuxStopResult>('stop', ['--headless']).catch((error: unknown) => {
+          console.error('failed to stop packaged AppImage --headless runtime during cleanup', error);
+          if (headlessLaunchPid != null) {
+            try {
+              process.kill(-headlessLaunchPid, 'SIGTERM');
+            } catch {
+              // The process may already have exited.
+            }
+          }
+        });
+        headlessStarted = false;
+        headlessLaunchPid = null;
+      }
       if (started || installed) {
         await runToolsPackJson<LinuxAppImageUninstallResult>('uninstall').catch((error: unknown) => {
           console.error('failed to uninstall packaged linux AppImage during cleanup', error);
@@ -274,6 +311,118 @@ linuxAppImageDescribe('packaged linux AppImage runtime smoke', () => {
     }
   }, 240_000);
 });
+
+async function startInstalledAppImageHeadlessAndFindRelay(
+  appImagePath: string,
+  expectedRelayUrl: string,
+): Promise<{ launchPid: number; relayDaemonPid: number }> {
+  const markerPath = join(runtimeNamespaceRoot, 'runtime', 'headless-root.json');
+  const webMarkerPath = join(runtimeNamespaceRoot, 'runtime', 'web-root.json');
+  await Promise.all([
+    rm(markerPath, { force: true }),
+    rm(webMarkerPath, { force: true }),
+  ]);
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    OD_PACKAGED_NAMESPACE: namespace,
+    OD_PACKAGED_NAMESPACE_BASE_ROOT: dirname(runtimeNamespaceRoot),
+  };
+  delete env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+  const child = spawn(appImagePath, ['--appimage-extract-and-run', '--headless'], {
+    cwd: dirname(appImagePath),
+    detached: true,
+    env,
+    stdio: 'ignore',
+  });
+  if (child.pid == null) throw new Error('AppImage --headless did not report a process id');
+  const launchPid = child.pid;
+  child.unref();
+
+  try {
+    const timeoutMs = 90_000;
+    const startedAt = Date.now();
+    let lastState = 'headless identity not written';
+    while (Date.now() - startedAt < timeoutMs) {
+      if (child.exitCode != null) {
+        throw new Error(`AppImage --headless exited before relay observation (code ${child.exitCode})`);
+      }
+      const rootPid = await readHeadlessRootPid(markerPath);
+      if (rootPid != null) {
+        if (!await isProcessDescendant(rootPid, launchPid)) {
+          lastState = `headless marker pid ${rootPid} does not belong to launch pid ${launchPid}`;
+        } else {
+          const relayPid = await findDescendantWithRelay(rootPid, expectedRelayUrl);
+          if (relayPid != null) return { launchPid, relayDaemonPid: relayPid };
+          lastState = `headless root pid ${rootPid} is live but no descendant has the baked relay`;
+        }
+      }
+      await delay(200);
+    }
+    throw new Error(`AppImage --headless did not pass its baked relay to the daemon: ${lastState}`);
+  } catch (error) {
+    try {
+      process.kill(-launchPid, 'SIGTERM');
+    } catch {
+      // The process may already have exited; preserve the original failure.
+    }
+    throw error;
+  }
+}
+
+async function readHeadlessRootPid(markerPath: string): Promise<number | null> {
+  try {
+    const marker = JSON.parse(await readFile(markerPath, 'utf8')) as { pid?: unknown };
+    return typeof marker.pid === 'number' && Number.isSafeInteger(marker.pid) ? marker.pid : null;
+  } catch {
+    return null;
+  }
+}
+
+async function findDescendantWithRelay(rootPid: number, expectedRelayUrl: string): Promise<number | null> {
+  const entries = await readdir('/proc', { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !/^\d+$/u.test(entry.name)) continue;
+    const pid = Number(entry.name);
+    if (!await isProcessDescendant(pid, rootPid)) continue;
+    const relay = await readProcessEnvValue(pid, 'OPEN_DESIGN_TELEMETRY_RELAY_URL');
+    if (relay === expectedRelayUrl) return pid;
+  }
+  return null;
+}
+
+async function isProcessDescendant(pid: number, rootPid: number): Promise<boolean> {
+  let current = pid;
+  const visited = new Set<number>();
+  while (current > 1 && !visited.has(current)) {
+    if (current === rootPid) return true;
+    visited.add(current);
+    const parent = await readProcessParentPid(current);
+    if (parent == null) return false;
+    current = parent;
+  }
+  return false;
+}
+
+async function readProcessParentPid(pid: number): Promise<number | null> {
+  try {
+    const status = await readFile(`/proc/${pid}/status`, 'utf8');
+    const match = /^PPid:\s+(\d+)$/mu.exec(status);
+    return match == null ? null : Number(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+async function readProcessEnvValue(pid: number, key: string): Promise<string | null> {
+  try {
+    const raw = await readFile(`/proc/${pid}/environ`, 'utf8');
+    const prefix = `${key}=`;
+    const entry = raw.split('\0').find((value) => value.startsWith(prefix));
+    return entry == null ? null : entry.slice(prefix.length);
+  } catch {
+    return null;
+  }
+}
 
 async function runToolsPackJson<T>(action: string, extraArgs: string[] = []): Promise<T> {
   const args = [

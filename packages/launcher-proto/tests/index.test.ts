@@ -38,10 +38,10 @@ describe("launcher protocol paths", () => {
     expect(paths.releasesRoot).toBe(join(paths.namespaceRoot, "updates", "releases"));
   });
 
-  it("resolves the self-hosted betas launcher channel", () => {
-    const paths = resolveLauncherPaths({ channel: "betas", namespace: "release-betas-win", root });
+  it("resolves a data-defined exact launcher channel", () => {
+    const paths = resolveLauncherPaths({ channel: "canary", namespace: "release-canary-win", root });
 
-    expect(paths.namespaceRoot).toBe(join(root, "launcher", "channels", "betas", "namespaces", "release-betas-win"));
+    expect(paths.namespaceRoot).toBe(join(root, "launcher", "channels", "canary", "namespaces", "release-canary-win"));
     expect(paths.runtimePath).toBe(join(paths.namespaceRoot, "runtime.json"));
   });
 
@@ -60,7 +60,7 @@ describe("launcher protocol paths", () => {
 
   it("rejects unsafe roots, namespaces, channels, and version path segments", () => {
     expect(() => resolveLauncherPaths({ channel: "beta", namespace: "../escape", root })).toThrow(LauncherProtocolError);
-    expect(() => resolveLauncherPaths({ channel: "canary", namespace: "release-beta", root })).toThrow(LauncherProtocolError);
+    expect(() => resolveLauncherPaths({ channel: "local", namespace: "release-local", root })).toThrow(LauncherProtocolError);
     expect(() => resolveLauncherPaths({ channel: "beta", namespace: "release-beta", root: "relative" })).toThrow(LauncherProtocolError);
     expect(() => resolveLauncherVersionPaths({ channel: "beta", namespace: "release-beta", root, version: "../0.8.1" })).toThrow(LauncherProtocolError);
     expect(() => resolveLauncherVersionPaths({ channel: "beta", namespace: "release-beta", root, version: "0.8..1" })).toThrow(LauncherProtocolError);

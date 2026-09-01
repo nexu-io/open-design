@@ -24,7 +24,7 @@ function getActionBlock(source: string, className: string): string {
 }
 
 test('solution pages prioritize the desktop client in every CTA group', () => {
-  assert.equal(solutionPages.length, 19, 'expected every solution detail page to be covered');
+  assert.equal(solutionPages.length, 20, 'expected every solution detail page to be covered');
 
   for (const { slug, source } of solutionPages) {
     const hero = getActionBlock(source, 'solution-hero-cta');

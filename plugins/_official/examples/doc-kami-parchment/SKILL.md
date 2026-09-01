@@ -16,7 +16,7 @@ example_id: sample-kami-parchment
 example_name: "Kami 羊皮纸 · One-Pager"
 example_format: markdown
 example_tagline: "暖羊皮纸 + 墨蓝单色 + 单一衬线"
-example_desc: "一页 Open Design Studio Issue №26 编辑级 one-pager"
+example_desc: "一页 OpenDesign Studio Issue №26 编辑级 one-pager"
 example_source_url: "https://github.com/tw93/kami"
 example_source_label: "tw93/kami"
 od:

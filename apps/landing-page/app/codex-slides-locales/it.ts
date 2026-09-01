@@ -9,7 +9,7 @@ const it: DeepPartial<CodexSlidesCopy> = {
   heading: "Lo studio di slide con IA dentro il tuo coding agent",
   lead:
     "Quasi tutti i generatori di slide con IA nascondono il lavoro dietro un'unica richiesta e ti restituiscono un file. Codex Slides tiene viva l'intera catena dentro Codex — ricerca, scaletta, direzione visiva, render, editing, presentazione, export — e ogni presentazione resta un progetto duraturo sul tuo disco. Image-native: ogni slide è una tela visiva intera, non un template a cui è stato cambiato il testo.",
-  downloadCta: "Scarica Open Design",
+  downloadCta: "Scarica OpenDesign",
   heroAlt:
     "Codex Slides — a sinistra Codex che guida lo studio di slide nel browser, a destra una slide renderizzata di report di mercato",
 
@@ -105,9 +105,9 @@ const it: DeepPartial<CodexSlidesCopy> = {
     "Aggiungi il repository come marketplace di plugin, installa il plugin, riavvia Codex e apri una nuova attività. Ti servono Codex con il supporto ai plugin, Node.js 20 o superiore e un `codex login`: nessuna chiave OpenAI separata e nessun file `.env` per il flusso predefinito.",
 
   finalEyebrow: "Prossimo passo",
-  tiebackTitle: "Dalla famiglia Open Design",
+  tiebackTitle: "Dalla famiglia OpenDesign",
   tiebackBody:
-    "Open Design è lo spazio di design aperto e local-first che sta fuori dal coding agent che già usi. Codex Slides è la stessa idea puntata sulle presentazioni: il tuo agente lavora allo scoperto, il progetto resta sulla tua macchina e nulla finisce chiuso dietro un abbonamento. Per l'intero toolkit di design oltre le slide, scarica l'app Open Design.",
+    "OpenDesign è lo spazio di design aperto e local-first che sta fuori dal coding agent che già usi. Codex Slides è la stessa idea puntata sulle presentazioni: il tuo agente lavora allo scoperto, il progetto resta sulla tua macchina e nulla finisce chiuso dietro un abbonamento. Per l'intero toolkit di design oltre le slide, scarica l'app OpenDesign.",
 
   schemaAlternateName: "Lo studio di slide con IA open source dentro Codex",
   schemaWhatQuestion: "Che cos'è Codex Slides?",
@@ -119,9 +119,9 @@ const it: DeepPartial<CodexSlidesCopy> = {
   schemaExportQuestion: "Codex Slides può esportare file PowerPoint veri?",
   schemaExportAnswer:
     "Sì. Codex Slides esporta un PPTX vero e un PDF pronto per la stampa, entrambi con le note del relatore del progetto conservate, con qualità di render 1K/2K/4K su cinque formati (16:9, 4:3, 1:1, 9:16, 3:4). Essendo image-native, le slide del PPTX esportato contengono immagini a pagina intera invece di forme PowerPoint modificabili una per una; l'export con forme modificabili è in roadmap.",
-  schemaRelationQuestion: "Codex Slides ha a che fare con Open Design?",
+  schemaRelationQuestion: "Codex Slides ha a che fare con OpenDesign?",
   schemaRelationAnswer:
-    "Sì. Codex Slides è un progetto gemello nato dal team dietro Open Design: lo stesso approccio aperto, local-first e agent-native applicato alle presentazioni invece che ai file di design.",
+    "Sì. Codex Slides è un progetto gemello nato dal team dietro OpenDesign: lo stesso approccio aperto, local-first e agent-native applicato alle presentazioni invece che ai file di design.",
 };
 
 export default it;

@@ -42,7 +42,7 @@ describe("open-design sidecar contract", () => {
     });
     expect(OPEN_DESIGN_SIDECAR_CONTRACT.updateActions).toBe(DESKTOP_UPDATE_ACTIONS);
     expect(OPEN_DESIGN_SIDECAR_CONTRACT.updateChannels).toBe(DESKTOP_UPDATE_CHANNELS);
-    expect(Object.values(DESKTOP_UPDATE_CHANNELS)).toEqual(["beta", "betas", "prerelease", "preview", "stable"]);
+    expect(Object.values(DESKTOP_UPDATE_CHANNELS)).toEqual(["beta", "prerelease", "stable"]);
     expect(OPEN_DESIGN_SIDECAR_CONTRACT.updateModes).toBe(DESKTOP_UPDATE_MODES);
     expect(OPEN_DESIGN_SIDECAR_CONTRACT.updateStates).toBe(DESKTOP_UPDATE_STATES);
   });
@@ -336,6 +336,47 @@ describe("open-design sidecar contract", () => {
         type: SIDECAR_MESSAGES.RENDER_SLIDES,
       }),
     ).toThrow();
+  });
+
+  it("validates deterministic desktop frame-render IPC inputs", () => {
+    expect(
+      normalizeDesktopSidecarMessage({
+        input: {
+          baseHref: "file:///project/composition/",
+          fps: 30,
+          height: 720,
+          html: "<!doctype html><main data-composition-id=\"main\"></main>",
+          outputDir: "/tmp/open-design-frames",
+          width: 1280,
+        },
+        type: SIDECAR_MESSAGES.RENDER_FRAMES,
+      }),
+    ).toEqual({
+      input: {
+        baseHref: "file:///project/composition/",
+        fps: 30,
+        height: 720,
+        html: "<!doctype html><main data-composition-id=\"main\"></main>",
+        outputDir: "/tmp/open-design-frames",
+        width: 1280,
+      },
+      type: "render-frames",
+    });
+
+    for (const input of [
+      { fps: 0, height: 720, html: "<p>x</p>", outputDir: "/tmp/x", width: 1280 },
+      { fps: 241, height: 720, html: "<p>x</p>", outputDir: "/tmp/x", width: 1280 },
+      { height: 0, html: "<p>x</p>", outputDir: "/tmp/x", width: 1280 },
+      { height: 720, html: "", outputDir: "/tmp/x", width: 1280 },
+      { height: 720, html: "<p>x</p>", outputDir: "relative", width: 1280 },
+      { height: 720, html: "<p>x</p>", outputDir: "/tmp/x", width: 8193 },
+      { bogus: true, height: 720, html: "<p>x</p>", outputDir: "/tmp/x", width: 1280 },
+    ]) {
+      expect(() => normalizeDesktopSidecarMessage({
+        input,
+        type: SIDECAR_MESSAGES.RENDER_FRAMES,
+      })).toThrow();
+    }
   });
 
   it("accepts PNG/JPEG artifact image export and rejects WebP up front", () => {

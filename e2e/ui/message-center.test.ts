@@ -1,10 +1,10 @@
 import { expect, test } from '@/playwright/suite';
 import { routeAgents } from '@/playwright/mock-factory';
+import { ensureRailOpen } from '@/playwright/rail';
 import type { Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
 const READ_KEY = 'open-design.message-center.anonymous-read-ids.v1';
-const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
 
 test.describe.configure({ timeout: 30_000 });
 
@@ -72,65 +72,12 @@ async function seedEntryHome(page: Page, options?: { locale?: string }) {
   });
 }
 
-async function gotoEntryHome(page: Page) {
+async function gotoEntryHome(page: Page, timeout = 10_000) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: 15_000 });
-  await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
+  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByTestId('home-hero')).toBeVisible({ timeout });
+  await ensureRailOpen(page);
 }
-
-test('[P1] message center shows anonymous platform messages and keeps read state locally', async ({ page }) => {
-  await seedEntryHome(page);
-
-  await page.route('**/api/integrations/vela/status', async (route) => {
-    await route.fulfill({ json: { loggedIn: false } });
-  });
-  await page.route('**/api/integrations/vela/message-center-public/messages**', async (route) => {
-    await route.fulfill({
-      json: {
-        messages: [
-          {
-            id: 'msg-prerelease-update',
-            audienceType: 'global',
-            typeName: 'Release',
-            title: 'Prerelease update recovered',
-            body: 'The prerelease updater can apply a payload update without requiring account sign-in.',
-            ctaLabel: 'Open release notes',
-            ctaUrl: 'https://open-design.example.test/releases/prerelease',
-            publishedAt: '2026-07-21T08:00:00.000Z',
-            readAt: null,
-          },
-        ],
-        nextCursor: null,
-        unreadCount: 1,
-      },
-    });
-  });
-
-  await gotoEntryHome(page);
-
-  const trigger = page.getByTestId('message-center-trigger');
-  await expect(trigger).toHaveAccessibleName(/Open message center.*1 unread/i);
-  await trigger.click();
-
-  const dialog = page.getByTestId('message-center-dialog');
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('heading', { name: 'Message center' })).toBeVisible();
-  await expect(dialog.getByText('Prerelease update recovered')).toBeVisible();
-  await expect(dialog.getByText('The prerelease updater can apply a payload update')).toBeVisible();
-
-  await dialog.getByRole('button', { name: /Prerelease update recovered/i }).click();
-  await expect(dialog.getByRole('button', { name: 'Open release notes' })).toBeVisible();
-  await expect(trigger).toHaveAccessibleName('Open message center');
-  await expect
-    .poll(() => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? '[]') as string[], READ_KEY))
-    .toEqual(['msg-prerelease-update']);
-
-  await dialog.getByRole('button', { name: 'Unread' }).click();
-  await expect(dialog.getByText('All caught up')).toBeVisible();
-
-  await dialog.getByRole('button', { name: 'Read', exact: true }).click();
-  await expect(dialog.getByText('Prerelease update recovered')).toBeVisible();
-});
 
 test('[P1] message center uses account read APIs when Vela is signed in', async ({ page }) => {
   await seedEntryHome(page);
@@ -180,22 +127,22 @@ test('[P1] message center uses account read APIs when Vela is signed in', async 
 
   await gotoEntryHome(page);
 
-  const trigger = page.getByTestId('message-center-trigger');
-  await expect(trigger).toHaveAccessibleName(/Open message center.*2 unread/i);
+  const trigger = page.getByTestId('entry-nav-message-center');
+  await expect(trigger.locator('.entry-nav-rail__btn-dot')).toBeVisible();
   await trigger.click();
 
   const dialog = page.getByTestId('message-center-dialog');
   await expect(dialog.getByText('Build output recovered')).toBeVisible();
   await dialog.getByRole('button', { name: /Build output recovered/i }).click();
   await expect.poll(() => readMessageIds).toEqual(['msg-account-build']);
-  await expect(trigger).toHaveAccessibleName(/Open message center.*1 unread/i);
+  await expect(trigger.locator('.entry-nav-rail__btn-dot')).toBeVisible();
   await expect
     .poll(() => page.evaluate((key) => window.localStorage.getItem(key), READ_KEY))
     .toBeNull();
 
   await dialog.getByRole('button', { name: 'Mark all read' }).click();
   await expect.poll(() => readAllCalls).toBe(1);
-  await expect(trigger).toHaveAccessibleName('Open message center');
+  await expect(trigger.locator('.entry-nav-rail__btn-dot')).toHaveCount(0);
 
   await dialog.getByRole('button', { name: 'Unread' }).click();
   await expect(dialog.getByText('All caught up')).toBeVisible();
@@ -205,19 +152,74 @@ test('[P1] message center uses account read APIs when Vela is signed in', async 
   await expect(dialog.getByText('Prerelease channel ready')).toBeVisible();
 });
 
-test('[P1] message center keeps the close affordance visible and dismisses the panel', async ({ page }) => {
+test('[P1] targeted Go Plan announcement opens automatically once and stays dismissed after acknowledgement', async ({ page }) => {
+  await seedEntryHome(page);
+
+  let acknowledged = false;
+  let readCalls = 0;
+  await page.route('**/api/integrations/vela/status', async (route) => {
+    await route.fulfill({ json: { loggedIn: true } });
+  });
+  await page.route('**/api/integrations/vela/message-center/messages**', async (route) => {
+    await route.fulfill({
+      json: {
+        messages: [
+          {
+            id: 'go-plan-sunset-e2e',
+            messageKey: 'go-plan-sunset-2026-08',
+            audienceType: 'targeted',
+            typeName: 'Account notice',
+            title: 'Remote selector copy is not the modal contract',
+            body: 'Only the allowlisted key and unread state select the client-owned dialog.',
+            publishedAt: '2026-08-26T00:00:00.000Z',
+            readAt: acknowledged ? '2026-08-26T01:00:00.000Z' : null,
+          },
+        ],
+        nextCursor: null,
+        unreadCount: acknowledged ? 0 : 1,
+      },
+    });
+  });
+  await page.route('**/api/integrations/vela/message-center/messages/*/read', async (route) => {
+    readCalls += 1;
+    acknowledged = true;
+    await route.fulfill({ json: { ok: true } });
+  });
+
+  // The announcement is expected to win the first-paint race. Do not use the
+  // normal Home helper here: it opens the rail, which is deliberately blocked
+  // by the modal backdrop we are trying to witness.
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByTestId('home-hero')).toBeVisible();
+
+  const announcement = page.getByTestId('go-plan-sunset-dialog');
+  await expect(announcement).toBeVisible();
+  await expect(page.getByTestId('message-center-dialog')).toHaveCount(0);
+
+  await announcement.locator('footer button').last().click();
+  await expect.poll(() => readCalls).toBe(1);
+  await expect(announcement).toHaveCount(0);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByTestId('home-hero')).toBeVisible();
+  await expect(announcement).toHaveCount(0);
+});
+
+test('[P1] message center dismisses with Escape and restores the trigger state', async ({ page }) => {
   await seedEntryHome(page);
 
   await page.route('**/api/integrations/vela/status', async (route) => {
-    await route.fulfill({ json: { loggedIn: false } });
+    await route.fulfill({ json: { loggedIn: true } });
   });
-  await page.route('**/api/integrations/vela/message-center-public/messages**', async (route) => {
+  await page.route('**/api/integrations/vela/message-center/messages**', async (route) => {
     await route.fulfill({
       json: {
         messages: [
           {
             id: 'msg-close-affordance',
-            audienceType: 'global',
+            audienceType: 'account',
             typeName: 'Release',
             title: 'Close button stays visible',
             body: 'The panel can be dismissed without hunting for hover-only controls.',
@@ -231,31 +233,13 @@ test('[P1] message center keeps the close affordance visible and dismisses the p
     });
   });
 
-  await gotoEntryHome(page);
-  const trigger = page.getByTestId('message-center-trigger');
+  await gotoEntryHome(page, 3_000);
+  const trigger = page.getByTestId('entry-nav-message-center');
   await trigger.click();
 
   const dialog = page.getByTestId('message-center-dialog');
   await expect(dialog).toBeVisible();
-  const closeButton = dialog.getByRole('button', { name: 'Close message center' });
-  await expect(closeButton).toBeVisible();
-
-  const closeMetrics = await closeButton.evaluate((node) => {
-    const rect = node.getBoundingClientRect();
-    const style = window.getComputedStyle(node);
-    return {
-      width: rect.width,
-      height: rect.height,
-      borderTopWidth: style.borderTopWidth,
-      backgroundColor: style.backgroundColor,
-    };
-  });
-  expect(closeMetrics.width).toBeGreaterThanOrEqual(32);
-  expect(closeMetrics.height).toBeGreaterThanOrEqual(32);
-  expect(closeMetrics.borderTopWidth).not.toBe('0px');
-  expect(closeMetrics.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
-
-  await closeButton.click();
+  await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await expect(trigger).toHaveAttribute('aria-expanded', 'false');
 });
@@ -270,15 +254,15 @@ test('[P1] message center formats published dates with the selected zh-CN locale
   await seedEntryHome(page, { locale: 'zh-CN' });
 
   await page.route('**/api/integrations/vela/status', async (route) => {
-    await route.fulfill({ json: { loggedIn: false } });
+    await route.fulfill({ json: { loggedIn: true } });
   });
-  await page.route('**/api/integrations/vela/message-center-public/messages**', async (route) => {
+  await page.route('**/api/integrations/vela/message-center/messages**', async (route) => {
     await route.fulfill({
       json: {
         messages: [
           {
             id: 'msg-localized-date',
-            audienceType: 'global',
+            audienceType: 'account',
             typeName: 'Release',
             title: 'Localized release date',
             body: 'Message dates follow the selected application language.',
@@ -292,8 +276,8 @@ test('[P1] message center formats published dates with the selected zh-CN locale
     });
   });
 
-  await gotoEntryHome(page);
-  await page.getByTestId('message-center-trigger').click();
+  await gotoEntryHome(page, 3_000);
+  await page.getByTestId('entry-nav-message-center').click();
 
   const dialog = page.getByTestId('message-center-dialog');
   await expect(dialog).toBeVisible();

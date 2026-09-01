@@ -11,7 +11,8 @@
 //
 // 用法(首选, --url 直接捕获):
 //   node scripts/asset-harvest.mjs --url <URL> --out assets [--recon RECON/original-recon.json]
-//     [--types image,font,media,stylesheet] [--max-bytes 26214400] [--scroll-step 700] [--settle 2500]
+//     [--types image,font,media,stylesheet] [--max-bytes 26214400] [--download-timeout 10000]
+//     [--navigation-timeout 30000] [--concurrency 8] [--scroll-step 700] [--settle 2500]
 // 兼容旧用法(--recon-only, 无浏览器捕获, 仅按 recon JSON 里的 URL 裸下载):
 //   node scripts/asset-harvest.mjs --recon original-recon.json --out assets/original --recon-only
 //
@@ -32,7 +33,8 @@ function usage() {
   console.log(`asset-harvest.mjs — 抓取页面真实用到的图片/字体/媒体(含第三方 CDN)并生成本地映射
 
   node scripts/asset-harvest.mjs --url <URL> --out assets [--recon RECON/original-recon.json]
-    [--types image,font,media,stylesheet] [--max-bytes 26214400] [--scroll-step 700] [--settle 2500]
+    [--types image,font,media,stylesheet] [--max-bytes 26214400] [--download-timeout 10000]
+    [--navigation-timeout 30000] [--concurrency 8] [--scroll-step 700] [--settle 2500]
 
 产物: <out>/{images,fonts,media}/<host>/<name> + <out>/fonts/fonts.css(自托管 @font-face)
       + <out>/asset-manifest.json(originalUrl → localPath, 构建时照此机械替换)`);
@@ -46,6 +48,9 @@ function parseArgs(argv) {
     manifest: "",
     types: ["image", "font", "media", "stylesheet"],
     maxBytes: 25 * 1024 * 1024,
+    downloadTimeout: 10_000,
+    navigationTimeout: 30_000,
+    concurrency: 8,
     scrollStep: 700,
     settle: 2500,
     reconOnly: false,
@@ -60,6 +65,9 @@ function parseArgs(argv) {
     else if (arg === "--manifest") out.manifest = argv[++i] || "";
     else if (arg === "--types") out.types = (argv[++i] || "").split(",").map((s) => s.trim()).filter(Boolean);
     else if (arg === "--max-bytes") out.maxBytes = Number(argv[++i] || out.maxBytes);
+    else if (arg === "--download-timeout") out.downloadTimeout = Number(argv[++i] || "10000");
+    else if (arg === "--navigation-timeout") out.navigationTimeout = Number(argv[++i] || "30000");
+    else if (arg === "--concurrency") out.concurrency = Math.max(1, Number(argv[++i] || "8"));
     else if (arg === "--scroll-step") out.scrollStep = Number(argv[++i] || "700");
     else if (arg === "--settle") out.settle = Number(argv[++i] || "2500");
     else if (arg === "--recon-only") out.reconOnly = true;
@@ -146,27 +154,59 @@ function rewriteFontCss(cssText, cssUrl, urlToLocal) {
 }
 
 async function downloadAll(entries, ctx, args, refererUrl) {
-  const results = [];
+  const results = new Array(entries.length);
   const outDir = path.resolve(args.outDir);
-  for (const entry of entries) {
+  let nextIndex = 0;
+  let completed = 0;
+  const downloadOne = async (entry) => {
     const rel = localPathFor(entry.kind, entry.url);
     const dest = path.join(outDir, rel);
     try {
-      const resp = ctx
-        ? await ctx.request.get(entry.url, { headers: { referer: refererUrl }, maxRedirects: 5 })
-        : await fetch(entry.url, { headers: { referer: refererUrl, accept: "*/*" } });
-      const ok = ctx ? resp.ok() : resp.ok;
-      const status = ctx ? resp.status() : resp.status;
-      if (!ok) throw new Error(`HTTP ${status}`);
-      const buffer = ctx ? await resp.body() : Buffer.from(await resp.arrayBuffer());
+      const fetchAsset = async () => {
+        const resp = ctx
+          ? await ctx.request.get(entry.url, {
+              headers: { referer: refererUrl },
+              maxRedirects: 5,
+              timeout: args.downloadTimeout,
+            })
+          : await fetch(entry.url, {
+              headers: { referer: refererUrl, accept: "*/*" },
+              signal: AbortSignal.timeout(args.downloadTimeout),
+            });
+        const ok = ctx ? resp.ok() : resp.ok;
+        const status = ctx ? resp.status() : resp.status;
+        if (!ok) throw new Error(`HTTP ${status}`);
+        return ctx ? resp.body() : Buffer.from(await resp.arrayBuffer());
+      };
+      let timeoutId;
+      const buffer = await Promise.race([
+        fetchAsset(),
+        new Promise((_, reject) => {
+          timeoutId = setTimeout(
+            () => reject(new Error(`download timed out after ${args.downloadTimeout}ms`)),
+            args.downloadTimeout,
+          );
+        }),
+      ]).finally(() => clearTimeout(timeoutId));
       if (buffer.length > args.maxBytes) throw new Error(`exceeds --max-bytes (${buffer.length})`);
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.writeFileSync(dest, buffer);
-      results.push({ ...entry, status: "ok", bytes: buffer.length, localPath: rel.split(path.sep).join("/") });
+      return { ...entry, status: "ok", bytes: buffer.length, localPath: rel.split(path.sep).join("/") };
     } catch (error) {
-      results.push({ ...entry, status: "error", error: error.message });
+      return { ...entry, status: "error", error: error.message };
     }
-  }
+  };
+  const worker = async () => {
+    while (nextIndex < entries.length) {
+      const index = nextIndex++;
+      results[index] = await downloadOne(entries[index]);
+      completed += 1;
+      if (completed % 10 === 0 || completed === entries.length) {
+        console.log(`  下载进度 ${completed}/${entries.length}`);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(args.concurrency, entries.length) }, worker));
   return results;
 }
 
@@ -202,7 +242,13 @@ try {
       } catch {}
     });
     console.log(`▸ 加载 + 全程滚动捕获资产请求: ${pageUrl}`);
-    await page.goto(pageUrl, { waitUntil: "networkidle", timeout: 90000 }).catch((e) => console.warn("  goto:", e.message));
+    await page.goto(pageUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: args.navigationTimeout,
+    }).catch((e) => console.warn("  goto:", e.message));
+    await page.waitForLoadState("networkidle", {
+      timeout: Math.min(args.navigationTimeout, 5_000),
+    }).catch(() => {});
     const total = await page.evaluate(() => document.documentElement.scrollHeight);
     for (let y = 0; y <= total; y += args.scrollStep) {
       await page.evaluate((yy) => window.scrollTo(0, yy), y);
@@ -211,7 +257,6 @@ try {
     await page.waitForTimeout(args.settle);
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.waitForTimeout(800);
-    await page.close();
   }
 
   if (recon) {

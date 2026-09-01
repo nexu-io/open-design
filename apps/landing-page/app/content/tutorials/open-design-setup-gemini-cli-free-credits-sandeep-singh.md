@@ -1,7 +1,7 @@
 ---
 title: 'Claude Design is Done... The BEST FREE Claude Design Alternative (Unlimited & Open Source)'
 youtubeId: RqjrENimZP4
-summary: 'An archived Gemini CLI walkthrough from an older Open Design release, plus the current replacement: configure Google Gemini through BYOK, which runs through the isolated OpenCode adapter.'
+summary: 'An archived Gemini CLI walkthrough from an older OpenDesign release, plus the current replacement: configure Google Gemini through BYOK, which runs through the isolated OpenCode adapter.'
 date: 2026-05-11
 category: Getting started
 durationSeconds: 664
@@ -9,24 +9,24 @@ author: 'Sandeep Singh'
 official: false
 ---
 
-This page documents the **Gemini CLI** workflow Sandeep Singh used in [his May 2026 walkthrough](https://www.youtube.com/watch?v=RqjrENimZP4). That direct runtime has since been retired from Open Design. The archived sections below explain what appears in the recording; they are not current setup instructions.
+This page documents the **Gemini CLI** workflow Sandeep Singh used in [his May 2026 walkthrough](https://www.youtube.com/watch?v=RqjrENimZP4). That direct runtime has since been retired from OpenDesign. The archived sections below explain what appears in the recording; they are not current setup instructions.
 
-To use Google Gemini models in the current release, configure **Google Gemini as a BYOK provider**. Open Design executes configured BYOK providers through its isolated OpenCode adapter; it does not detect or invoke the `gemini` executable.
+To use Google Gemini models in the current release, configure **Google Gemini as a BYOK provider**. OpenDesign executes configured BYOK providers through its isolated OpenCode adapter; it does not detect or invoke the `gemini` executable.
 
 ## Current setup: Google Gemini through BYOK
 
 1. Create a Gemini API key in Google AI Studio and check Google's current pricing and free-tier terms.
-2. Open Open Design **Settings**, choose the BYOK execution path, select **Google Gemini**, then enter the API key and model.
+2. Open OpenDesign **Settings**, choose the BYOK execution path, select **Google Gemini**, then enter the API key and model.
 3. Test the provider, save it, and select that BYOK runtime for the project. The provider call is isolated behind OpenCode rather than a direct Gemini CLI process.
 
-The cost story still depends on the provider plan you bring: Open Design is free and open source, while Google controls Gemini API quotas and billing.
+The cost story still depends on the provider plan you bring: OpenDesign is free and open source, while Google controls Gemini API quotas and billing.
 
-![The Open Design workspace.](/tutorials/open-design-setup-gemini-cli-free-credits-sandeep-singh/01-workspace.webp)
-*The Open Design workspace — open-source, local-first, and driven by whichever coding agent you connect.*
+![The OpenDesign workspace.](/tutorials/open-design-setup-gemini-cli-free-credits-sandeep-singh/01-workspace.webp)
+*The OpenDesign workspace — open-source, local-first, and driven by whichever coding agent you connect.*
 
-## What is Open Design?
+## What is OpenDesign?
 
-Open Design is an open-source, local-first design platform that runs **on top of the coding agent you already use** rather than locking you to one model provider. It is "bring your own agent": Claude Code, Codex, Cursor, GitHub Copilot, OpenCode, Qwen, and many others can drive generation. You can also configure Google Gemini and other providers through BYOK.
+OpenDesign is an open-source, local-first design platform that runs **on top of the coding agent you already use** rather than locking you to one model provider. It is "bring your own agent": Claude Code, Codex, Cursor, GitHub Copilot, OpenCode, Qwen, and many others can drive generation. You can also configure Google Gemini and other providers through BYOK.
 
 A few things that make it worth a look:
 
@@ -40,7 +40,7 @@ It stands on its own merits: a local, model-agnostic design workspace. A provide
 
 ## Before you start
 
-You have three ways to install Open Design. Pick the one that fits you:
+You have three ways to install OpenDesign. Pick the one that fits you:
 
 | Path | Best for | Requirements |
 | --- | --- | --- |
@@ -50,7 +50,7 @@ You have three ways to install Open Design. Pick the one that fits you:
 
 The **desktop app is the recommended route** today — no Node, no pnpm, no clone. Sandeep downloads the installer for his platform (a `.dmg` on macOS, a `setup.exe` on Windows) straight from the latest release.
 
-## Step 1 — Install Open Design
+## Step 1 — Install OpenDesign
 
 ### Option A — Desktop app (recommended, zero config)
 
@@ -71,7 +71,7 @@ Then open the local URL it prints — the port is assigned dynamically, so use w
 
 ### Option C — Install into your coding agent
 
-To use Open Design without ever opening the GUI — calling it as a skill or MCP server inside your agent — run:
+To use OpenDesign without ever opening the GUI — calling it as a skill or MCP server inside your agent — run:
 
 ```bash
 od mcp install <agent>
@@ -82,26 +82,26 @@ Then, inside the agent, just ask: `Use open-design to generate a landing page wi
 
 ## Archived workflow: connect Gemini CLI in the older release
 
-> The steps in this section describe the release shown in the embedded video. They do not work in current Open Design releases; use the BYOK setup above instead.
+> The steps in this section describe the release shown in the embedded video. They do not work in current OpenDesign releases; use the BYOK setup above instead.
 
-At the time of the recording, this was the step that made the workflow free. Open Design drove Gemini CLI and used its account-level allowance.
+At the time of the recording, this was the step that made the workflow free. OpenDesign drove Gemini CLI and used its account-level allowance.
 
-**Why did the recording use Gemini CLI?** Two reasons, as Sandeep put it: the Gemini models held their own against the rest, and the free tier was generous. Those account-level CLI terms are historical context, not the current Open Design integration contract.
+**Why did the recording use Gemini CLI?** Two reasons, as Sandeep put it: the Gemini models held their own against the rest, and the free tier was generous. Those account-level CLI terms are historical context, not the current OpenDesign integration contract.
 
 1. **Install Gemini CLI.** Follow the install command on the Gemini CLI homepage (Homebrew on macOS and Linux, or the documented installer elsewhere). Any terminal works.
 2. **Run `gemini` and authenticate.** Launch it, trust the working folder when prompted, then choose **Sign in with Google**. Your browser opens for a two-click Google login and reports success. Restart Gemini CLI; you should see the active model and `0%` quota used.
-3. **Point that older Open Design release at it.** In the recorded build, restarting Open Design made Gemini CLI appear as an available agent for connection testing.
+3. **Point that older OpenDesign release at it.** In the recorded build, restarting OpenDesign made Gemini CLI appear as an available agent for connection testing.
 
 The recording also showed API-key and media-provider settings. In the current release, use the Google Gemini BYOK path documented above for Gemini text generation.
 
 ## Explore the workspace
 
-Open Design keeps your work **project-scoped**: each project lives in its own folder, and switching folders switches projects. Inside a project you can create prototypes, live artifacts, slide decks, images, and even video and audio — not just UI.
+OpenDesign keeps your work **project-scoped**: each project lives in its own folder, and switching folders switches projects. Inside a project you can create prototypes, live artifacts, slide decks, images, and even video and audio — not just UI.
 
 ![The built-in design-systems library.](/tutorials/open-design-setup-gemini-cli-free-credits-sandeep-singh/02-design-systems.webp)
 *The design-systems library — branded starting points you can preview and snap into any project.*
 
-The built-in design-systems library gives you branded starting points to preview and reuse, so you are not blocked on defining tokens before you can begin. You can also bring your own design system, import an existing Claude Design project, or start from nothing and let Open Design infer sensible defaults.
+The built-in design-systems library gives you branded starting points to preview and reuse, so you are not blocked on defining tokens before you can begin. You can also bring your own design system, import an existing Claude Design project, or start from nothing and let OpenDesign infer sensible defaults.
 
 ![The templates library.](/tutorials/open-design-setup-gemini-cli-free-credits-sandeep-singh/03-templates.webp)
 *Templates: prototype, slide, image, and video starting points — filter by type and fork to begin.*
@@ -113,7 +113,7 @@ The templates library reaches beyond brand systems into prototypes, slides, and 
 With Gemini CLI connected in that older release, Sandeep ran this build flow:
 
 1. **Create a project.** Name it, pick a design system that suits the look you want, and choose **High fidelity** so you see the real thing rather than a wireframe.
-2. **Write the brief.** Instead of one of the suggested prompts, describe what you want — Sandeep asks for a landing page. You can also attach a screenshot of a layout you like and ask Open Design to follow that theme.
+2. **Write the brief.** Instead of one of the suggested prompts, describe what you want — Sandeep asks for a landing page. You can also attach a screenshot of a layout you like and ask OpenDesign to follow that theme.
 3. **Answer the clarifying questions.** The agent asks smart follow-ups: single landing page or landing-plus-pricing, responsive surface, who it is for, a visual tone (Sandeep chooses a modern, minimal, Linear/Vercel feel), and any brand colors or fonts. You can leave fields blank or let it pick a direction for you.
 4. **Pick a visual direction and generate.** Choose one of the proposed directions, send, and a few seconds later the styled landing page appears with the sections you asked for.
 5. **Iterate by prompting.** Want to swap a logo, add a missing icon, or extend the FAQ? Just describe the change and send. If an edit knocks something out of place, a follow-up prompt nudges it back.
@@ -124,25 +124,25 @@ In the recording, Sandeep built two prototypes with several iterations and repor
 
 ## Notes from the archived Gemini CLI workflow
 
-- **The recording signs in to Gemini CLI with a Google account.** Current Open Design releases use a Gemini API key through BYOK instead.
+- **The recording signs in to Gemini CLI with a Google account.** Current OpenDesign releases use a Gemini API key through BYOK instead.
 - **Start with high fidelity** when you want to judge the real design; drop to wireframe only to block out structure quickly.
 - **The recording checks `stats` in Gemini CLI.** For the current BYOK path, inspect usage and quotas in the Google provider console.
-- **Your designs stay with the project folder** — organize work by running Open Design against the right directory.
-- **You do not need a design system to start.** Begin from a built-in one, import a Claude Design project, or let Open Design infer defaults.
+- **Your designs stay with the project folder** — organize work by running OpenDesign against the right directory.
+- **You do not need a design system to start.** Begin from a built-in one, import a Claude Design project, or let OpenDesign infer defaults.
 
 ## FAQ
 
 **Is it really free?**
-Open Design is free and open source under Apache-2.0. Gemini API usage depends on Google's current free-tier and billing terms; the video's roughly 2% figure came from the retired direct-CLI workflow.
+OpenDesign is free and open source under Apache-2.0. Gemini API usage depends on Google's current free-tier and billing terms; the video's roughly 2% figure came from the retired direct-CLI workflow.
 
 **Which coding agents does it support?**
-21+ agents, including Claude Code, Codex, Cursor, GitHub Copilot, OpenCode, and Qwen. Open Design detects supported CLIs already installed on your machine and also offers configured BYOK runtimes.
+21+ agents, including Claude Code, Codex, Cursor, GitHub Copilot, OpenCode, and Qwen. OpenDesign detects supported CLIs already installed on your machine and also offers configured BYOK runtimes.
 
 **Do I have to use Gemini CLI?**
-No. Current Open Design releases do not expose Gemini CLI as a direct runtime. Choose a supported local agent, or configure Google Gemini through BYOK.
+No. Current OpenDesign releases do not expose Gemini CLI as a direct runtime. Choose a supported local agent, or configure Google Gemini through BYOK.
 
 **Do I need a design system before I can start?**
-No. Open Design ships branded design systems and templates as starting points, and you can import an existing design system or let it infer sensible defaults.
+No. OpenDesign ships branded design systems and templates as starting points, and you can import an existing design system or let it infer sensible defaults.
 
 ---
 

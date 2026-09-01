@@ -122,6 +122,18 @@ export interface WorkspaceContextChangedSsePayload {
   at?: number;
 }
 
+/**
+ * The signed-in account's workspace membership directory changed.
+ *
+ * This is intentionally account-wide and carries no Workspace id or content:
+ * a newly-created/joined Workspace cannot yet have a local Workspace-scoped
+ * stream, and consumers only need a signal to re-read the authoritative list.
+ */
+export interface WorkspaceDirectoryChangedSsePayload {
+  type: 'workspace-directory-changed';
+  at?: number;
+}
+
 /** Subscription / seat billing changed. */
 export interface WorkspaceBillingChangedSsePayload {
   type: 'billing-changed';
@@ -168,6 +180,7 @@ export type WorkspaceInvalidationSsePayload =
   | TeamResourcesChangedSsePayload
   | WorkspaceMembersChangedSsePayload
   | WorkspaceContextChangedSsePayload
+  | WorkspaceDirectoryChangedSsePayload
   | WorkspaceBillingChangedSsePayload
   | WorkspaceBillingSubscriptionChangedSsePayload
   | WorkspaceWalletBalanceChangedSsePayload;
@@ -179,6 +192,7 @@ export const WORKSPACE_INVALIDATION_EVENTS = [
   'team-resources-changed',
   'members-changed',
   'workspace-context-changed',
+  'workspace-directory-changed',
   'billing-changed',
   'billing-subscription-changed',
   'wallet-balance-changed',

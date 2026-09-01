@@ -1,6 +1,6 @@
 {
   "name": "@open-design/landing-page",
-  "version": "0.16.2",
+  "version": "0.21.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,10 +16,6 @@
   "dependencies": {
     "@astrojs/rss": "4.0.18",
     "@astrojs/sitemap": "3.7.2",
-    "@fontsource-variable/inter": "5.2.8",
-    "@fontsource-variable/inter-tight": "5.2.7",
-    "@fontsource-variable/jetbrains-mono": "5.2.8",
-    "@fontsource-variable/playfair-display": "5.2.8",
     "astro": "6.3.5",
     "cobe": "2.0.1",
     "matter-js": "0.20.0",

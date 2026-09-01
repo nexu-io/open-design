@@ -926,54 +926,6 @@
   border-bottom: 1px solid var(--border);
 }
 
-.palette-tweaks-anchor { position: relative; display: inline-flex; }
-.palette-tweaks-badge {
-  width: 8px; height: 8px; border-radius: var(--radius-pill); margin-left: 4px;
-  box-shadow: 0 0 0 1px var(--bg-panel);
-}
-.palette-tweaks {
-  position: absolute; top: calc(100% + 6px); right: 0; z-index: 60;
-  min-width: 240px; background: var(--bg-panel); border: 1px solid var(--border);
-  border-radius: var(--radius-md, 10px);
-  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
-  padding: 8px; display: flex; flex-direction: column; gap: 6px; user-select: none;
-}
-.palette-tweaks-header {
-  display: flex; flex-direction: column; gap: 1px;
-  padding: 4px 6px 6px;
-  border-bottom: 1px solid var(--border-subtle, var(--border));
-}
-.palette-tweaks-title { font-size: 12px; font-weight: 600; color: var(--text); }
-.palette-tweaks-sub { font-size: 12px; color: var(--text-muted); }
-.palette-tweaks-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.palette-tweaks-item {
-  display: flex; align-items: center; gap: 10px;
-  padding: 6px 8px; border-radius: var(--radius-sm, 6px);
-  cursor: pointer; font-size: 13px; color: var(--text);
-  transition: background 100ms var(--ease-out);
-}
-.palette-tweaks-item:hover, .palette-tweaks-item.hovered { background: var(--bg-subtle); }
-.palette-tweaks-item.selected { background: var(--bg-muted); }
-.palette-tweaks-stripe {
-  display: inline-flex; border-radius: var(--radius-xs); overflow: hidden;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06); flex-shrink: 0;
-}
-.palette-tweaks-chip { width: 14px; height: 18px; display: inline-block; }
-.palette-tweaks-stripe-original { box-shadow: none; background: transparent; }
-.palette-tweaks-chip-original {
-  width: 56px; height: 18px;
-  background: linear-gradient(
-    to top right,
-    transparent calc(50% - 1px),
-    var(--text-muted) calc(50% - 1px),
-    var(--text-muted) calc(50% + 1px),
-    transparent calc(50% + 1px)
-  );
-  border: 1px dashed var(--border-strong, var(--border)); border-radius: var(--radius-xs);
-}
-.palette-tweaks-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.palette-tweaks-check { display: inline-flex; align-items: center; color: var(--text-muted); }
-
 /* Project page audit pass: one final rule set for the active project shell.
    Keep the outer panes flat; only controls and repeated items get radius. */
 .workspace-shell {
@@ -981,6 +933,229 @@
      top/bottom breathing room and the row below (sidebar) keeps its own 10px
      top margin — one consistent 10px rhythm around the strip. */
   grid-template-rows: 52px minmax(0, 1fr);
+}
+/* ── Project-route tab-strip dock (workspaceTabsDock.ts) ──────────────────
+   On the project route the strip portals into .split-chat-tabs-dock at the
+   top of the chat column, one level below the chrome row and level with the
+   workspace column's 设计文件 row (which stays put). The chrome row remains,
+   keeping only Home (.workspace-tabs-home-chrome) — the floating account
+   cluster rides the window's top-right on its own. No dock registered
+   (home / marketplace, workspace-focused mode) → the strip renders in the
+   classic full-width chrome row again. */
+.split-chat-tabs-dock {
+  display: flex;
+  /* Top-aligned, not centered: the 36px dropdown hugs the row's top edge —
+     no headroom above it — leaving only the 4px below to the chat card. */
+  align-items: flex-start;
+  gap: 8px;
+  height: 40px;
+  min-height: 40px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+/* The chrome row VISUALLY keeps only the pinned Home tab (per product: 顶部
+   只保留 home 和头像/积分) — project tabs surface through the docked
+   dropdown above instead, never as pills in the chrome. Rows still render
+   (they are the tab machinery's state/measurement/drag DOM), so this is
+   presentation-only. Only the undocked strip can match: the docked strip is
+   portaled into .split-chat-tabs-dock, outside .workspace-tabs-chrome. */
+.workspace-tabs-chrome .workspace-tab:not(.is-pinned) {
+  display: none;
+}
+/* With the active project row hidden the glide pill has nothing to hug —
+   hide it rather than let it collapse onto a zero-rect. */
+.workspace-tabs-chrome:has(.workspace-tab.is-active:not(.is-pinned)) .workspace-tabs-glide {
+  display: none;
+}
+/* Collapse-chat control, lifted from the chat card header into the dock row
+   (left of the white tab dropdown). */
+.split-chat-collapse {
+  appearance: none;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  /* Dock is top-aligned; re-center this 32px button on the 36px dropdown. */
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  /* White seat matching the dropdown beside it. */
+  background: #fff;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text);
+  -webkit-app-region: no-drag;
+}
+.split-chat-collapse:hover {
+  background: color-mix(in srgb, var(--bg-panel) 78%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
+}
+.split-chat-tabs-dock .workspace-tabs-strip {
+  align-items: center;
+}
+/* Inside either dock the strip's pinned entry tab hides — Home stays up in
+   the chrome row as .workspace-tabs-home-chrome. */
+.split-chat-tabs-dock .workspace-tab.is-pinned,
+.ws-tabs-project-dock .workspace-tab.is-pinned {
+  display: none;
+}
+/* Focus-mode dock: it still OWNS the strip (registering here is what keeps
+   the strip out of the full-width chrome row), but shows nothing — the
+   workspace tab row keeps its own controls only (per product: 收起侧边栏后不要
+   把项目 tab / 项目下拉带到这一行). The strip stays mounted for its
+   measurement and drag hooks. */
+.ws-tabs-project-dock {
+  display: none;
+}
+/* Docked mode swaps the pill strip for the white dropdown below. The strip
+   stays mounted (its measurement/drag hooks keep their DOM) but invisible. */
+.split-chat-tabs-dock .workspace-tabs-strip {
+  display: none;
+}
+/* ── Docked tab dropdown: one pure-white select spanning the chat column ── */
+.workspace-tabs-dropdown {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  -webkit-app-region: no-drag;
+}
+.workspace-tabs-dropdown__trigger {
+  appearance: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.workspace-tabs-dropdown__icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+.workspace-tabs-dropdown__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.workspace-tabs-dropdown__trigger > svg:last-child {
+  flex: 0 0 auto;
+  color: var(--text-soft);
+}
+.workspace-tabs-dropdown__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 59;
+}
+.workspace-tabs-dropdown__menu {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  padding: 6px;
+  border: 1px solid var(--material-separator);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: var(--shadow-lg);
+  /* Six 32px rows plus vertical padding and borders. Global border-box sizing
+     means the border must be included or the sixth row is slightly clipped. */
+  max-height: calc(6 * 32px + 2 * 6px + 2 * 1px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.workspace-tabs-dropdown__row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 8px;
+}
+.workspace-tabs-dropdown__row:hover {
+  background: var(--bg-subtle);
+}
+.workspace-tabs-dropdown__row-main {
+  appearance: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+.workspace-tabs-dropdown__row-main > svg:first-child {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+.workspace-tabs-dropdown__row.is-active .workspace-tabs-dropdown__row-label {
+  font-weight: 600;
+}
+.workspace-tabs-dropdown__row-main > svg:last-child:not(:first-child) {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.workspace-tabs-dropdown__row-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-tabs-home-chrome {
+  /* Same leading inset as .workspace-tabs-strip's padding-left, so the Home
+     icon lands on the IDENTICAL x in both chrome states — docked (this
+     button) and undocked (the strip's pinned entry tab). Without it the icon
+     jumped 10px left on every entry→project→entry trip. */
+  margin-left: 10px;
+  width: 78px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: 0 0 auto;
+  -webkit-app-region: no-drag;
+}
+.workspace-tabs-home-chrome:hover {
+  background: color-mix(in srgb, var(--bg-panel) 78%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
+}
+.app .split-chat-slot {
+  /* Column: the docked strip sits above the chat card. */
+  flex-direction: column;
+}
+.app .split-chat-slot > .pane {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .workspace-shell .workspace-tabs-chrome.app-chrome-header {
   --workspace-tabs-chrome-height: 52px;
@@ -2941,6 +3116,13 @@
   justify-content: center;
   min-width: 24px;
   width: 24px;
+  /* Matches `.handoff-trigger`. Without an explicit height the caret inherits the
+     global `button { height: 36px }` while the trigger is 30px, and
+     `.handoff-split`'s `align-items: stretch` then renders an uneven split —
+     visible wherever no host-scoped override sizes the pair (the viewer toolbar
+     mount; `.ws-tabs-actions` sizes both to 28px and was masking this). */
+  height: 30px;
+  min-height: 30px;
   padding: 0;
   border: 0;
   background: transparent;

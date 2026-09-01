@@ -60,12 +60,12 @@
       "minSeats": 3,
       "monthlyCreditsPerSeatUsd": 0,
       "monthly": {
-        "priceUsd": 20,
-        "introPriceUsd": 16
+        "priceUsd": 5,
+        "introPriceUsd": 4
       },
       "yearly": {
-        "priceUsd": 240,
-        "introPriceUsd": 168,
+        "priceUsd": 60,
+        "introPriceUsd": 42,
         "discountPct": 30
       }
     },
@@ -76,12 +76,12 @@
       "minSeats": 3,
       "monthlyCreditsPerSeatUsd": 20,
       "monthly": {
-        "priceUsd": 40,
-        "introPriceUsd": 32
+        "priceUsd": 25,
+        "introPriceUsd": 20
       },
       "yearly": {
-        "priceUsd": 480,
-        "introPriceUsd": 336,
+        "priceUsd": 300,
+        "introPriceUsd": 210,
         "discountPct": 30
       }
     },
@@ -92,12 +92,12 @@
       "minSeats": 3,
       "monthlyCreditsPerSeatUsd": 100,
       "monthly": {
-        "priceUsd": 120,
-        "introPriceUsd": 84
+        "priceUsd": 105,
+        "introPriceUsd": 73.5
       },
       "yearly": {
-        "priceUsd": 1440,
-        "introPriceUsd": 864,
+        "priceUsd": 1260,
+        "introPriceUsd": 756,
         "discountPct": 40
       }
     },
@@ -108,12 +108,12 @@
       "minSeats": 3,
       "monthlyCreditsPerSeatUsd": 200,
       "monthly": {
-        "priceUsd": 220,
-        "introPriceUsd": 132
+        "priceUsd": 205,
+        "introPriceUsd": 123
       },
       "yearly": {
-        "priceUsd": 2640,
-        "introPriceUsd": 1296,
+        "priceUsd": 2460,
+        "introPriceUsd": 1207.61,
         "discountPct": 51
       }
     }

@@ -3,7 +3,6 @@
    ------------------------------------------------------------------
    Shared visual language for the four detail variants:
    - Smooth scale-in entry (used by every detail backdrop + modal)
-   - Trust-tinted byline strip (PluginByline) reused across surfaces
    - Share popover (PluginShareMenu) reused across surfaces
    - Cinematic media detail layout
    The goal: detail modals feel like curated content viewers users
@@ -20,13 +19,11 @@
 }
 
 .plugin-details-modal-backdrop,
-.ds-modal-backdrop,
-.prompt-template-modal-backdrop {
+.ds-modal-backdrop {
   animation: plugin-detail-fade 160ms ease-out;
 }
 .plugin-details-modal,
-.ds-modal,
-.prompt-template-modal {
+.ds-modal {
   animation: plugin-detail-rise 220ms cubic-bezier(0.16, 0.84, 0.44, 1);
 }
 
@@ -131,93 +128,6 @@
 .plugin-share-item:focus-visible {
   background: var(--bg-subtle);
   outline: none;
-}
-
-/* PluginByline — author avatar + name + trust tier + version chip,
-   shared by media + scenario variants, lives just under the modal
-   title bar. The compact variant collapses the secondary link row
-   when used inside dark/gradient headers. */
-.plugin-byline {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-panel);
-}
-.plugin-byline--compact {
-  padding: 8px 16px;
-  border-bottom: none;
-  background: transparent;
-}
-.plugin-byline__avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-pill);
-  background: var(--bg-subtle);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-muted);
-  flex-shrink: 0;
-  overflow: hidden;
-  object-fit: cover;
-}
-.plugin-byline__avatar--fallback {
-  background: linear-gradient(
-    135deg,
-    var(--accent-tint) 0%,
-    var(--bg-subtle) 100%
-  );
-  color: var(--accent);
-}
-.plugin-byline__meta {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-  flex: 1;
-}
-.plugin-byline__primary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.plugin-byline__by {
-  font-size: 12px;
-  color: var(--text-faint);
-  text-transform: lowercase;
-}
-.plugin-byline__name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-}
-.plugin-byline__version {
-  font-size: 12px;
-  color: var(--text-faint);
-  font-variant-numeric: tabular-nums;
-}
-.plugin-byline__secondary {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.plugin-byline__link {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--text-muted);
-  text-decoration: none;
-  transition: color 120ms var(--ease-out);
-}
-.plugin-byline__link:hover {
-  color: var(--accent);
 }
 
 /* Plugins section composite — wraps InlinePluginsRail + ContextChipStrip +

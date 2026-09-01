@@ -145,7 +145,7 @@ describe('UpdateDialog', () => {
 
     await screen.findByRole('dialog', { name: 'Check for updates' });
     expect(
-      screen.getByText('Open Design 1.2.4 requires a full reinstall. Open Design will close and open the installer.'),
+      screen.getByText('OpenDesign 1.2.4 requires a full reinstall. OpenDesign will close and open the installer.'),
     ).toBeTruthy();
     expect(screen.getByTestId('update-dialog-reinstall-learn-more')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Explore new features' })).toBeNull();
@@ -336,7 +336,7 @@ describe('UpdateDialog', () => {
     });
     fireEvent.click(await screen.findByRole('button', { name: 'Install and restart' }));
 
-    expect(await screen.findByText('Open Design is still working')).toBeTruthy();
+    expect(await screen.findByText('OpenDesign is still working')).toBeTruthy();
     expect(screen.getByText('2 active tasks are still running. Restarting now will interrupt them.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Later' })).toHaveFocus();
 

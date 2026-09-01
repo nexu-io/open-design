@@ -17,7 +17,7 @@
 | [entry.md](./entry.md) | Home / New project 创建路径、左侧导航、连接器入口、提示词模板与资源驱动场景 | `e2e/ui/app.test.ts`, `e2e/ui/entry-configuration-flows.test.ts`, `e2e/ui/entry-chrome-flows.test.ts`, `e2e/ui/project-management-flows.test.ts` |
 | [project-management.md](./project-management.md) | 首页/项目管理、设计系统、项目重命名、删除流程、搜索与视图切换 | `e2e/ui/project-management-flows.test.ts` |
 | [workspace.md](./workspace.md) | 工作区标签、会话、文件流、快速切换器、源码预览与手动编辑模式 | `e2e/ui/app.test.ts`, `e2e/ui/app-design-files.test.ts`, `e2e/ui/app-manual-edit.test.ts`, `e2e/ui/app-restoration.test.ts`, `e2e/ui/workspace-keyboard-flows.test.ts` |
-| [settings.md](./settings.md) | API protocol 回归、国际化内容、Integrations Skills、Design systems 与 Orbit 设置 | `e2e/ui/settings-api-protocol.test.ts`, `e2e/ui/settings-design-systems.test.ts`, `e2e/tests/localized-content.test.ts`, `apps/web/tests/components/SettingsDialog.execution.test.tsx`, `apps/web/tests/components/SettingsDialog.orbit.test.tsx` |
+| [settings.md](./settings.md) | API protocol 回归、国际化内容、Integrations Skills，以及无入口组件契约 | `e2e/ui/settings-api-protocol.test.ts`, `e2e/tests/localized-content.test.ts`, `apps/web/tests/components/SettingsDialog.execution.test.tsx`, `apps/web/tests/components/SettingsDialog.orbit.test.tsx` |
 | [desktop.md](./desktop.md) | mac 桌面 shell smoke，以及 mac / Linux 打包产物运行时 smoke | `e2e/specs/mac.spec.ts`, `e2e/specs/linux.spec.ts` |
 
 ## 维护规则

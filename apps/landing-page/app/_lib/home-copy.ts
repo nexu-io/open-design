@@ -224,7 +224,7 @@ const en: HomeCopy = {
   aboutSideNote:
     'From model behavior to visual taste, we prototype the full stack of creative systems.',
   aboutCaption: 'Studies in form · perception · machine imagination.',
-  aboutCaptionCredit: '(Open Design, MMXXVI)',
+  aboutCaptionCredit: '(OpenDesign, MMXXVI)',
 
   capLabel: 'Capabilities · Nº 03',
   capTitleA: 'Skills, systems, and surfaces',
@@ -311,7 +311,7 @@ const en: HomeCopy = {
     'An editorial paper system. Warm parchment canvas, ink-blue accent, serif-led hierarchy — multilingual by design (EN · zh-CN · ja).',
 
   testimonialLabel: 'Collaborators · Nº 06',
-  testimonialQuotePre: '“Open Design helped us turn vague',
+  testimonialQuotePre: '“OpenDesign helped us turn vague',
   testimonialQuoteEm1: 'AI ideas',
   testimonialQuoteMid: 'into a visual system that felt',
   testimonialQuoteEm2: 'sharp, believable,',
@@ -390,7 +390,7 @@ const zhCN: Partial<HomeCopy> = {
   aboutFooterRow: '调研 · 设计 · 工程 · 循环',
   aboutSideNote: '从模型行为到视觉品味，我们把整个创意系统当作原型来打磨。',
   aboutCaption: '关于形态 · 感知 · 机器想象的研究。',
-  aboutCaptionCredit: '(Open Design, MMXXVI)',
+  aboutCaptionCredit: '(OpenDesign, MMXXVI)',
 
   capLabel: '能力 · Nº 03',
   capTitleA: '为创意智能打造的',
@@ -474,7 +474,7 @@ const zhCN: Partial<HomeCopy> = {
     '一套编辑级的纸面系统。暖羊皮纸底色、墨蓝点缀、衬线主导的层级——天生支持多语言（EN · zh-CN · ja）。',
 
   testimonialLabel: '合作者 · Nº 06',
-  testimonialQuotePre: '“Open Design 帮我们把模糊的',
+  testimonialQuotePre: '“OpenDesign 帮我们把模糊的',
   testimonialQuoteEm1: 'AI 想法',
   testimonialQuoteMid: '变成了一个视觉系统——',
   testimonialQuoteEm2: '锐利、可信、',
@@ -561,7 +561,7 @@ const ja: Partial<HomeCopy> = {
   aboutSideNote:
     'モデルの振る舞いからビジュアルの審美まで、創造的システムのフルスタックをプロトタイプします。',
   aboutCaption: '形態 · 知覚 · 機械的想像力をめぐる研究。',
-  aboutCaptionCredit: '(Open Design, MMXXVI)',
+  aboutCaptionCredit: '(OpenDesign, MMXXVI)',
 
   capLabel: '能力 · Nº 03',
   capTitleA: '創造的知性のための',
@@ -648,7 +648,7 @@ const ja: Partial<HomeCopy> = {
     'エディトリアルな紙のシステム。暖かい羊皮紙のキャンバス、墨青のアクセント、セリフ主導の階層 — 多言語で生まれた(EN · zh-CN · ja)。',
 
   testimonialLabel: 'コラボレーター · Nº 06',
-  testimonialQuotePre: '「Open Design は私たちの曖昧な',
+  testimonialQuotePre: '「OpenDesign は私たちの曖昧な',
   testimonialQuoteEm1: 'AI のアイデア',
   testimonialQuoteMid: 'を、',
   testimonialQuoteEm2: '鋭く、信じられて、',
@@ -732,7 +732,7 @@ const ko: Partial<HomeCopy> = {
   aboutSideNote:
     '모델의 행동에서 시각적 취향까지, 창의적 시스템의 풀스택을 프로토타입합니다.',
   aboutCaption: '형태 · 지각 · 기계의 상상에 관한 연구.',
-  aboutCaptionCredit: '(Open Design, MMXXVI)',
+  aboutCaptionCredit: '(OpenDesign, MMXXVI)',
 
   capLabel: '능력 · Nº 03',
   capTitleA: '창의적 지능을 위한',
@@ -819,7 +819,7 @@ const ko: Partial<HomeCopy> = {
     '에디토리얼한 종이 시스템. 따뜻한 양피지 캔버스, 잉크 블루 악센트, 세리프 중심 위계 — 다국어 설계(EN · zh-CN · ja).',
 
   testimonialLabel: '협력자 · Nº 06',
-  testimonialQuotePre: '"Open Design 은 우리의 모호한',
+  testimonialQuotePre: '"OpenDesign 은 우리의 모호한',
   testimonialQuoteEm1: 'AI 아이디어',
   testimonialQuoteMid: '를',
   testimonialQuoteEm2: '날카롭고, 신뢰할 수 있으며,',
@@ -903,7 +903,7 @@ const zhTW: Partial<HomeCopy> = {
   aboutFooterRow: '研究 · 設計 · 工程 · 循環',
   aboutSideNote: '從模型行為到視覺品味，我們把整個創意系統當作原型來打磨。',
   aboutCaption: '關於形態 · 感知 · 機器想像的研究。',
-  aboutCaptionCredit: '(Open Design, MMXXVI)',
+  aboutCaptionCredit: '(OpenDesign, MMXXVI)',
 
   capLabel: '能力 · Nº 03',
   capTitleA: '為創意智慧打造的',
@@ -989,7 +989,7 @@ const zhTW: Partial<HomeCopy> = {
     '一套編輯級的紙面系統。暖羊皮紙底色、墨藍點綴、襯線主導的層級——天生支援多語言（EN · zh-CN · ja）。',
 
   testimonialLabel: '合作者 · Nº 06',
-  testimonialQuotePre: '「Open Design 幫我們把模糊的',
+  testimonialQuotePre: '「OpenDesign 幫我們把模糊的',
   testimonialQuoteEm1: 'AI 想法',
   testimonialQuoteMid: '變成了一個視覺系統——',
   testimonialQuoteEm2: '銳利、可信、',
@@ -1072,7 +1072,7 @@ const de: Partial<HomeCopy> = {
   aboutSideNote:
     'Vom Modellverhalten bis zum visuellen Geschmack — wir prototypisieren den gesamten Stack kreativer Systeme.',
   aboutCaption: 'Studien über Form · Wahrnehmung · maschinelle Vorstellung.',
-  aboutCaptionCredit: '(Open Design, MMXXVI)',
+  aboutCaptionCredit: '(OpenDesign, MMXXVI)',
 
   capLabel: 'Fähigkeiten · Nº 03',
   capTitleA: 'Skills, Systeme und Oberflächen',
@@ -1160,7 +1160,7 @@ const de: Partial<HomeCopy> = {
     'Ein redaktionelles Papier-System. Warmes Pergament als Canvas, tintenblauer Akzent, serifenbetonte Hierarchie — mehrsprachig von Anfang an (EN · zh-CN · ja).',
 
   testimonialLabel: 'Kollaborateure · Nº 06',
-  testimonialQuotePre: '„Open Design hat uns geholfen, vage',
+  testimonialQuotePre: '„OpenDesign hat uns geholfen, vage',
   testimonialQuoteEm1: 'KI-Ideen',
   testimonialQuoteMid: 'in ein visuelles System zu verwandeln, das',
   testimonialQuoteEm2: 'scharf, glaubhaft',
@@ -1244,7 +1244,7 @@ const fr: Partial<HomeCopy> = {
   aboutSideNote:
     'Du comportement des modèles au goût visuel, nous prototypons toute la stack des systèmes créatifs.',
   aboutCaption: 'Études sur la forme · la perception · l\u2019imagination machine.',
-  aboutCaptionCredit: '(Open Design, MMXXVI)',
+  aboutCaptionCredit: '(OpenDesign, MMXXVI)',
 
   capLabel: 'Capacités · Nº 03',
   capTitleA: 'Des compétences, systèmes et surfaces',
@@ -1332,7 +1332,7 @@ const fr: Partial<HomeCopy> = {
     'Un système papier éditorial. Toile parchemin chaude, accent bleu encre, hiérarchie portée par les serifs — multilingue par conception (EN · zh-CN · ja).',
 
   testimonialLabel: 'Collaborateurs · Nº 06',
-  testimonialQuotePre: '« Open Design nous a aidés à transformer de vagues',
+  testimonialQuotePre: '« OpenDesign nous a aidés à transformer de vagues',
   testimonialQuoteEm1: 'idées IA',
   testimonialQuoteMid: 'en un système visuel qui semblait',
   testimonialQuoteEm2: 'aiguisé, crédible',
@@ -1416,7 +1416,7 @@ const esES: Partial<HomeCopy> = {
   aboutSideNote:
     'Del comportamiento del modelo al gusto visual, prototipamos la stack completa de sistemas creativos.',
   aboutCaption: 'Estudios sobre forma · percepción · imaginación máquina.',
-  aboutCaptionCredit: '(Open Design, MMXXVI)',
+  aboutCaptionCredit: '(OpenDesign, MMXXVI)',
 
   capLabel: 'Capacidades · Nº 03',
   capTitleA: 'Habilidades, sistemas y superficies',
@@ -1504,7 +1504,7 @@ const esES: Partial<HomeCopy> = {
     'Un sistema papel editorial. Lienzo pergamino cálido, acento azul tinta, jerarquía con serif — multilingüe por diseño (EN · zh-CN · ja).',
 
   testimonialLabel: 'Colaboradores · Nº 06',
-  testimonialQuotePre: '«Open Design nos ayudó a convertir',
+  testimonialQuotePre: '«OpenDesign nos ayudó a convertir',
   testimonialQuoteEm1: 'ideas vagas de IA',
   testimonialQuoteMid: 'en un sistema visual que se sentía',
   testimonialQuoteEm2: 'agudo, creíble',
@@ -1588,7 +1588,7 @@ const ptBR: Partial<HomeCopy> = {
   aboutSideNote:
     'Do comportamento dos modelos ao gosto visual, prototipamos a stack inteira de sistemas criativos.',
   aboutCaption: 'Estudos em forma · percepção · imaginação de máquina.',
-  aboutCaptionCredit: '(Open Design, MMXXVI)',
+  aboutCaptionCredit: '(OpenDesign, MMXXVI)',
 
   capLabel: 'Capacidades · Nº 03',
   capTitleA: 'Skills, sistemas e superfícies',
@@ -1675,7 +1675,7 @@ const ptBR: Partial<HomeCopy> = {
     'Um sistema-papel editorial. Tela pergaminho quente, acento azul tinta, hierarquia liderada por serifa — multilíngue por design (EN · zh-CN · ja).',
 
   testimonialLabel: 'Colaboradores · Nº 06',
-  testimonialQuotePre: '"O Open Design nos ajudou a transformar',
+  testimonialQuotePre: '"O OpenDesign nos ajudou a transformar',
   testimonialQuoteEm1: 'ideias vagas de IA',
   testimonialQuoteMid: 'em um sistema visual que parecia',
   testimonialQuoteEm2: 'afiado, crível',

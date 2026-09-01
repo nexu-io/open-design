@@ -31,6 +31,7 @@ import {
 import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
+  SIDECAR_ENV,
   SIDECAR_MESSAGES,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
@@ -38,6 +39,8 @@ import {
   type SidecarSource,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
+
+import { holdParentMonitorExit } from "./parent-monitor-gate.js";
 
 const HANDOFF_CONFIRM_TIMEOUT_MS = 60_000;
 const HANDOFF_POLL_INTERVAL_MS = 100;
@@ -49,6 +52,10 @@ const SIDECAR_ONLY_ENV_KEYS = [
   "OD_SIDECAR_IPC_PATH",
   "OD_SIDECAR_NAMESPACE",
   "OD_SIDECAR_SOURCE",
+  // Packaged daemon/web now inherit OD_TOOLS_DEV_PARENT_PID so they exit with
+  // the outer Electron. The replacement payload desktop waits for that same
+  // PID to die, then must not treat it as its own lifecycle owner.
+  SIDECAR_ENV.TOOLS_DEV_PARENT_PID,
 ] as const;
 
 type DesktopRootIdentity = {
@@ -425,6 +432,7 @@ export async function executeLegacyPayloadDesktopHandoff(
     requestDesktop?: (message: "shutdown" | "status") => Promise<unknown>;
     sleep?: (durationMs: number) => Promise<unknown>;
     spawn?: typeof spawn;
+    writeJsonFile?: typeof writeJsonFile;
   } = {},
 ): Promise<LegacyPayloadDesktopHandoffResult> {
   const desktopIpcPath = resolveAppIpcPath({
@@ -494,41 +502,54 @@ export async function executeLegacyPayloadDesktopHandoff(
     ...buildLauncherHandoffResumeArgs({ handoffId: prepared.descriptor.handoffId }),
     ...createProcessStampArgs(desktopStamp, OPEN_DESIGN_SIDECAR_CONTRACT),
   ];
-  let child: ReturnType<typeof spawn>;
+  // Packaged daemons now monitor OD_TOOLS_DEV_PARENT_PID and exit when the
+  // outer Electron dies. Hold before spawn: a crash after the child emits
+  // `spawn` but before the hold would let the parent monitor stop the daemon
+  // while the journal is still `prepared`, and the detached replacement then
+  // rejects resume. Desktop SHUTDOWN also acks before asynchronously exiting,
+  // then beforeShutdown -> sidecars.close() sends daemon SHUTDOWN. Keep the
+  // hold through the three commits so the replacement can still resume.
+  const persist = options.writeJsonFile ?? writeJsonFile;
+  const releaseParentMonitor = holdParentMonitorExit();
   try {
-    child = (options.spawn ?? spawn)(prepared.descriptor.payloadExecutablePath, args, {
-      cwd: dirname(prepared.descriptor.payloadExecutablePath),
-      detached: true,
-      env: desktopProcessEnv(options.env ?? process.env, prepared.runtimeRoot),
-      stdio: "ignore",
-      windowsHide: true,
-    });
-    await new Promise<void>((resolveSpawn, rejectSpawn) => {
-      child.once("spawn", () => resolveSpawn());
-      child.once("error", rejectSpawn);
-    });
-    child.unref();
-  } catch {
-    return { kind: "aborted", reason: "spawn-failed" };
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = (options.spawn ?? spawn)(prepared.descriptor.payloadExecutablePath, args, {
+        cwd: dirname(prepared.descriptor.payloadExecutablePath),
+        detached: true,
+        env: desktopProcessEnv(options.env ?? process.env, prepared.runtimeRoot),
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      await new Promise<void>((resolveSpawn, rejectSpawn) => {
+        child.once("spawn", () => resolveSpawn());
+        child.once("error", rejectSpawn);
+      });
+      child.unref();
+    } catch {
+      return { kind: "aborted", reason: "spawn-failed" };
+    }
+
+    try {
+      await requestDesktop("shutdown");
+    } catch {
+      return { kind: "aborted", reason: "shutdown-failed" };
+    }
+
+    // Commit the armed journal and rewritten runtime/attempt state only after both
+    // the payload child has actually spawned and the old desktop has accepted the
+    // shutdown. Writing earlier would strand an "armed" journal on disk when
+    // `spawn()` throws or the shutdown request fails: the next cold start bails out
+    // of prepareLegacyPayloadDesktopHandoff() with reason "already-armed" and the
+    // install stays pinned to the old desktop generation. The old desktop is still
+    // alive while it acks the shutdown, and the payload waits for its pid to exit
+    // before resuming, so these writes still land before the payload reads them.
+    await persist(prepared.launcherPaths.handoffPath, armed);
+    await persist(prepared.launcherPaths.attemptsPath, attempt);
+    await persist(prepared.launcherPaths.runtimePath, runtime);
+
+    return { kind: "scheduled", target };
+  } finally {
+    releaseParentMonitor();
   }
-
-  try {
-    await requestDesktop("shutdown");
-  } catch {
-    return { kind: "aborted", reason: "shutdown-failed" };
-  }
-
-  // Commit the armed journal and rewritten runtime/attempt state only after both
-  // the payload child has actually spawned and the old desktop has accepted the
-  // shutdown. Writing earlier would strand an "armed" journal on disk when
-  // `spawn()` throws or the shutdown request fails: the next cold start bails out
-  // of prepareLegacyPayloadDesktopHandoff() with reason "already-armed" and the
-  // install stays pinned to the old desktop generation. The old desktop is still
-  // alive while it acks the shutdown, and the payload waits for its pid to exit
-  // before resuming, so these writes still land before the payload reads them.
-  await writeJsonFile(prepared.launcherPaths.handoffPath, armed);
-  await writeJsonFile(prepared.launcherPaths.attemptsPath, attempt);
-  await writeJsonFile(prepared.launcherPaths.runtimePath, runtime);
-
-  return { kind: "scheduled", target };
 }

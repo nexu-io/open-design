@@ -1,4 +1,4 @@
-// Map an Open Design native event onto the AG-UI canonical wire shape.
+// Map an OpenDesign native event onto the AG-UI canonical wire shape.
 //
 // The OD native union covers more than AG-UI cares about (e.g. internal
 // daemon-control events). We project only what an external AG-UI client

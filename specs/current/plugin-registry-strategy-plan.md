@@ -1,14 +1,14 @@
-# Open Design Plugin Registry Strategy Plan
+# OpenDesign Plugin Registry Strategy Plan
 
 **Date:** 2026-05-13
 **Related:** [docs/plugins-spec.zh-CN.md](../../docs/plugins-spec.zh-CN.md), [docs/plans/plugins-implementation.md](../../docs/plans/plugins-implementation.md), [specs/current/plugin-authoring-flow-plan.md](plugin-authoring-flow-plan.md), [specs/current/plugin-driven-flow-plan.md](plugin-driven-flow-plan.md)
 
 ## Purpose
 
-Turn Open Design plugins from "installed local workflows plus a light marketplace index" into a registry-shaped ecosystem:
+Turn OpenDesign plugins from "installed local workflows plus a light marketplace index" into a registry-shaped ecosystem:
 
-- Open Design hosts the official catalog on the main site and ships first-party plugins there.
-- Community authors publish by opening GitHub PRs into the Open Design registry repository.
+- OpenDesign hosts the official catalog on the main site and ships first-party plugins there.
+- Community authors publish by opening GitHub PRs into the OpenDesign registry repository.
 - `od` remains the canonical headless API for CRUD, search, install, update, trust, pack, doctor, and publish.
 - Third parties can self-host the same `open-design-marketplace.json` shape as their own plugin source.
 - The initial backend is GitHub repository state driven through `gh`; the daemon and CLI speak through a registry interface that can later be backed by a database.
@@ -58,7 +58,7 @@ The repo already has the right substrate:
 - `apps/landing-page` now has a static public `/plugins/` registry renderer and per-plugin detail routes generated from `plugins/registry/*/open-design-marketplace.json` plus bundled official manifests.
 - `apps/web/src/components/PluginsView.tsx` now has the first `Installed / Available / Sources / Team` UI slice: source management is enabled and Available entries are built from cached marketplace manifests.
 - `apps/daemon/src/plugins/pack.ts` can produce `.tgz` plugin archives.
-- `apps/daemon/src/plugins/publish.ts` now builds submission links for external catalogs and the Open Design registry target. Full GitHub fork/branch/PR mutation is still future backend work.
+- `apps/daemon/src/plugins/publish.ts` now builds submission links for external catalogs and the OpenDesign registry target. Full GitHub fork/branch/PR mutation is still future backend work.
 
 Main gaps:
 
@@ -74,8 +74,8 @@ Main gaps:
 There are three product surfaces, all backed by the same registry contract:
 
 1. **Official web registry**
-   - Hosted on the main Open Design site.
-   - Renders official and community-approved plugins from the Open Design registry repo.
+   - Hosted on the main OpenDesign site.
+   - Renders official and community-approved plugins from the OpenDesign registry repo.
    - Provides SEO pages, preview screenshots, install commands, `od://` deep links, provenance, trust/risk metadata, and publish/contribute guidance.
 
 2. **In-app marketplace**
@@ -125,7 +125,7 @@ The UI layers are not additional backends; they are different views over this sa
 - **Plugins / Team** is the future enterprise governance layer: private catalogs, organization policy, allowlists, review, audit, and refresh policy.
 - **open-design.ai/plugins** is the public presentation of the official and community registry sources. It is equivalent to a polished static renderer over repo-owned catalog data, not a separate source of truth. `open-design.ai/marketplace` can remain an alias later if needed.
 - **`od` CLI** remains the canonical client. Every UI action must map to a CLI operation or daemon API that the CLI can also drive.
-- **Open Design GitHub registry repo** is the v1 storage backend. It can later be swapped for a database backend without changing user-facing nouns.
+- **OpenDesign GitHub registry repo** is the v1 storage backend. It can later be swapped for a database backend without changing user-facing nouns.
 
 The agent consumption boundary is explicit:
 
@@ -136,7 +136,7 @@ User adds registry source
   -> Install writes local installed record
   -> Installed becomes part of agent context/runtime consumption
 
-Open Design packaged runtime
+OpenDesign packaged runtime
   -> official registry entries are bundled as a preinstall cache
   -> startup records them as Installed/bundled with sourceMarketplaceId=official
   -> Home / Official starters exposes a curated quick-use shelf
@@ -183,7 +183,7 @@ High-level architecture relationship:
                                |
                                v
 +--------------------------------------------------+
-| Open Design GitHub registry repo                 |
+| OpenDesign GitHub registry repo                 |
 |                                                  |
 | plugins/registry/official/open-design-marketplace.json |
 | plugins/registry/community/open-design-marketplace.json |
@@ -227,7 +227,7 @@ First-phase registry scope:
 - In v1, "registry" can be understood as **a GitHub repo containing source entries plus a generated marketplace index JSON**.
 - The generated `open-design-marketplace.json` is the machine-readable artifact fetched by daemon/CLI/UI.
 - The per-plugin `community/**/open-design.json` or `entry.json` files are the human-reviewable source data used for GitHub PR governance.
-- The file can initially live in the main Open Design repo if that lowers setup cost, but the product abstraction should still be `RegistryBackend`, not "read this monorepo path". Moving to `open-design/plugin-registry` later should be a data relocation, not a product rewrite.
+- The file can initially live in the main OpenDesign repo if that lowers setup cost, but the product abstraction should still be `RegistryBackend`, not "read this monorepo path". Moving to `open-design/plugin-registry` later should be a data relocation, not a product rewrite.
 
 ## Registry Repository Shape
 
@@ -394,7 +394,7 @@ Commercial invariant:
 `gh` is a first-class runtime dependency for registry-backed publishing and private GitHub sources.
 
 - Installing the `od` CLI should ensure `gh` is available. If the host has no `gh`, the installer bootstraps it using the platform package path available to that distribution channel, or fails with a precise remediation when auto-install is impossible.
-- `od plugin login` wraps `gh auth login` with Open Design copy and required scopes/host guidance.
+- `od plugin login` wraps `gh auth login` with OpenDesign copy and required scopes/host guidance.
 - `od plugin whoami` wraps `gh auth status` plus `gh api user` and prints the active account, host, scopes, and whether it can publish to the configured registry repo.
 - `od plugin logout` can wrap `gh auth logout` only after an explicit confirmation, because it affects the user's global GitHub CLI session.
 - Daemon code must never read or store GitHub tokens directly. When it needs GitHub data, it calls a `GhClient` abstraction that shells out to `gh` or consumes `gh auth token` only in-memory for one request.
@@ -478,7 +478,7 @@ Detail page:
 
 Publish page:
 
-- "Contribute to Open Design registry" flow with required files, checklist, CLI command, and GitHub PR path.
+- "Contribute to OpenDesign registry" flow with required files, checklist, CLI command, and GitHub PR path.
 - "Self-host your own source" flow with static JSON instructions and `od marketplace add`.
 
 ### In-App UI
@@ -597,7 +597,7 @@ Goal: move from "catalog index" to "registry entry".
 
 ### P2: GitHub-Backed Publish Flow
 
-Goal: make Open Design contributions feel like npm publish, while actually opening a GitHub PR.
+Goal: make OpenDesign contributions feel like npm publish, while actually opening a GitHub PR.
 
 - [ ] Define official registry repo layout and generated index build step.
 - [ ] Make `gh` an explicit `od` CLI dependency and installer prerequisite/bootstrap step.
@@ -719,7 +719,7 @@ Additional validation by area:
 ## Open Questions
 
 - Should the official registry live in this monorepo or a separate `open-design/plugin-registry` repo? Separate is cleaner for community PR review and static-site generation.
-- Should `official` marketplace trust be allowed for user-added URLs, or only for built-in source ids shipped by Open Design? Recommendation: only built-in sources can be `official`; user-added sources can be `trusted` or `restricted`.
+- Should `official` marketplace trust be allowed for user-added URLs, or only for built-in source ids shipped by OpenDesign? Recommendation: only built-in sources can be `official`; user-added sources can be `trusted` or `restricted`.
 - Should lockfile be project-local or user-global? Recommendation: project-local for reproducible runs, with user-global cache as an implementation detail. This plan MUST NOT define daemon data paths; read root [`AGENTS.md`](../../AGENTS.md) → **Daemon data directory contract**.
 - Should `od plugin publish --to marketplace-json` mutate a local catalog file directly or create a branch/PR when the catalog URL maps to GitHub? Recommendation: support both, but default to PR when a GitHub remote is detectable.
 - How much popularity/ranking data should the official site show before telemetry policy is settled? Recommendation: show stars/downloads only when sourced from public GitHub or explicit registry events; keep install telemetry opt-in.
@@ -735,4 +735,4 @@ Additional validation by area:
 
 ## Product Judgment
 
-The architecture is already pointed in the right direction: Open Design can become a "multi-source plugin registry" without giving up local-first/headless operation. The next move should not be a bigger gallery. It should be provenance, trust vocabulary, and exact resolution first; then the UI can safely graduate from "official plugins plus import" to "installed and available plugins across sources."
+The architecture is already pointed in the right direction: OpenDesign can become a "multi-source plugin registry" without giving up local-first/headless operation. The next move should not be a bigger gallery. It should be provenance, trust vocabulary, and exact resolution first; then the UI can safely graduate from "official plugins plus import" to "installed and available plugins across sources."

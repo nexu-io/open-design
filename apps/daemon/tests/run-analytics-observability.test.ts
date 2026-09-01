@@ -105,6 +105,32 @@ describe('scanRunEventsForUsageAnalytics', () => {
     expect(result.cache_hit_ratio).toBeUndefined();
   });
 
+  it('uses provider-qualified model attribution from DeepSeek Harness usage', () => {
+    const result = scanRunEventsForUsageAnalytics(
+      [
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            provider: 'deepseek-official',
+            model: 'deepseek-v4-flash',
+            usage: {
+              input_tokens: 300,
+              output_tokens: 30,
+            },
+          },
+        },
+      ],
+      'default',
+      10,
+    );
+
+    expect(result.agent_reported_model).toBe(
+      'deepseek-official/deepseek-v4-flash',
+    );
+    expect(result.token_count_source).toBe('provider_usage');
+  });
+
   it('treats normalized cached_read_tokens / cached_write_tokens aliases as input subsets', () => {
     const result = scanRunEventsForUsageAnalytics(
       [
@@ -1122,12 +1148,14 @@ describe('summarizeRunTimingAnalytics', () => {
       time_to_first_token_ms: 1300,
       time_to_first_visible_output_ms: 1300,
       runtime_init_to_first_token_ms: 650,
+      runtime_init_to_first_model_response_ms: 150,
       spawn_to_first_token_ms: 740,
       time_to_first_artifact_ms: 3050,
       // No subsegment markers were observed, so the whole spawn->first-token
       // span is unattributed and falls into the remainder.
       spawn_to_first_token_remainder_ms: 740,
       generation_duration_ms: 5500,
+      model_active_duration_ms: 6000,
       tool_call_count: 2,
       tool_duration_ms: 650,
       artifact_write_duration_ms: 250,
@@ -1136,6 +1164,7 @@ describe('summarizeRunTimingAnalytics', () => {
       finalize_duration_ms: 20,
       total_duration_ms: 7020,
       bottleneck_phase: 'stream_output',
+      phase_schema_version: 2,
       last_observed_phase: 'artifact_write',
       phase_timing_status: 'complete',
       attempt_index: 1,
@@ -1231,11 +1260,13 @@ describe('summarizeRunTimingAnalytics', () => {
     expect(result).toEqual({
       queue_duration_ms: 100,
       generation_duration_ms: 2440,
+      model_active_duration_ms: 2440,
       tool_call_count: 0,
       artifact_write_status: 'none',
       total_duration_ms: 2450,
       first_model_event_type: 'text_delta',
       bottleneck_phase: 'stream_output',
+      phase_schema_version: 2,
       last_observed_phase: 'stream_output',
       phase_timing_status: 'partial',
       attempt_duration_ms: 2400,
@@ -1474,5 +1505,640 @@ describe('summarizeToolAnalytics', () => {
     ]);
     expect(result.tool_names).toEqual(['Write', 'Bash', 'Fetch', 'Tool']);
     expect(result.tool_name_count).toBe(4);
+  });
+});
+
+describe('summarizeRunTimingAnalytics phase anchoring', () => {
+  // A tool-first run: the model starts working at 4s (a tool_use) but stays
+  // silent until 24s, then emits one short closing sentence before the run
+  // ends at 25s. This is the dominant shape for OpenCode/OpenAI runs.
+  //
+  // Phase boundaries must follow when the model STARTED RESPONDING, not when
+  // it first emitted text. Anchoring phases on `firstTokenAt` charges the
+  // whole 20s tool loop to `runtime_init` and leaves the generation phase
+  // holding only the closing sentence.
+  const toolFirstRun = {
+    runCreatedAt: 1_000,
+    runUpdatedAt: 25_000,
+    analyticsCapturedAt: 25_200,
+    telemetry: {
+      startRequestedAt: 1_100,
+      startChatRunStartedAt: 2_000,
+      processSpawnStartedAt: 2_500,
+      processSpawnedAt: 3_000,
+      modelCallStartAt: 3_100,
+      stdinWriteStartAt: 3_100,
+      stdinWriteEndAt: 3_200,
+      firstModelEventAt: 4_000,
+      firstModelEventType: 'tool_use' as const,
+      firstTokenAt: 24_000,
+      firstVisibleOutputAt: 24_000,
+      attemptIndex: 1,
+      attemptStartedAt: 2_000,
+    },
+    events: [
+      { id: 1, event: 'agent', timestamp: 4_000, data: { type: 'tool_use', id: 't1', name: 'Read' } },
+      { id: 2, event: 'agent', timestamp: 9_000, data: { type: 'tool_result', toolUseId: 't1' } },
+      { id: 3, event: 'agent', timestamp: 10_000, data: { type: 'tool_use', id: 't2', name: 'Bash' } },
+      { id: 4, event: 'agent', timestamp: 16_000, data: { type: 'tool_result', toolUseId: 't2' } },
+      { id: 5, event: 'agent', timestamp: 17_000, data: { type: 'tool_use', id: 't3', name: 'Write' } },
+      { id: 6, event: 'agent', timestamp: 22_000, data: { type: 'tool_result', toolUseId: 't3' } },
+    ],
+  };
+
+  it('measures runtime init up to the first model event, not the first token', () => {
+    const result = summarizeRunTimingAnalytics(toolFirstRun);
+
+    // stdin closed at 3.2s and the model responded at 4s.
+    expect(result.runtime_init_to_first_model_response_ms).toBe(800);
+  });
+
+  it('counts the whole tool loop as model-active time', () => {
+    const result = summarizeRunTimingAnalytics(toolFirstRun);
+
+    // The model responded at 4s and the run ended at 25s.
+    expect(result.model_active_duration_ms).toBe(21_000);
+  });
+
+  it('blames the tool loop rather than startup for a tool-first run', () => {
+    const result = summarizeRunTimingAnalytics(toolFirstRun);
+
+    // Tool execution is 16s of the 21s model-active window; the re-anchored
+    // runtime_init phase is 0.8s. Anchoring on firstTokenAt reports a 20.8s
+    // `runtime_init` phase and wins the bottleneck with pure startup.
+    expect(result.tool_duration_ms).toBe(16_000);
+    expect(result.bottleneck_phase).toBe('tool_execution');
+  });
+
+  it('stamps the phase schema version so old and new rows are separable', () => {
+    const result = summarizeRunTimingAnalytics(toolFirstRun);
+
+    expect(result.phase_schema_version).toBe(2);
+  });
+
+  it('leaves every first-token metric at its published meaning', () => {
+    const result = summarizeRunTimingAnalytics(toolFirstRun);
+
+    // These four are consumed by existing dashboards. Re-anchoring phases
+    // must not silently redefine them.
+    expect(result.time_to_first_token_ms).toBe(22_000);
+    expect(result.runtime_init_to_first_token_ms).toBe(20_800);
+    expect(result.spawn_to_first_token_ms).toBe(21_000);
+    expect(result.generation_duration_ms).toBe(1_000);
+  });
+
+  it('reports identical old and new values when the model leads with text', () => {
+    const result = summarizeRunTimingAnalytics({
+      runCreatedAt: 1_000,
+      runUpdatedAt: 8_000,
+      analyticsCapturedAt: 8_020,
+      telemetry: {
+        startRequestedAt: 1_100,
+        startChatRunStartedAt: 2_000,
+        processSpawnStartedAt: 2_500,
+        processSpawnedAt: 3_000,
+        stdinWriteStartAt: 3_100,
+        stdinWriteEndAt: 3_200,
+        firstModelEventAt: 4_000,
+        firstModelEventType: 'text_delta' as const,
+        firstTokenAt: 4_000,
+        firstVisibleOutputAt: 4_000,
+        attemptIndex: 1,
+        attemptStartedAt: 2_000,
+      },
+      events: [
+        { id: 1, event: 'agent', timestamp: 5_000, data: { type: 'tool_use', id: 't1', name: 'Read' } },
+        { id: 2, event: 'agent', timestamp: 5_500, data: { type: 'tool_result', toolUseId: 't1' } },
+      ],
+    });
+
+    // Text-first runs already had a truthful anchor, so the new fields must
+    // land on exactly the old numbers -- no drift for Claude Code-shaped runs.
+    expect(result.runtime_init_to_first_model_response_ms).toBe(result.runtime_init_to_first_token_ms);
+    expect(result.model_active_duration_ms).toBe(result.generation_duration_ms);
+  });
+
+  it('falls back to the first token when the client reported no model event', () => {
+    const result = summarizeRunTimingAnalytics({
+      runCreatedAt: 1_000,
+      runUpdatedAt: 25_000,
+      analyticsCapturedAt: 25_100,
+      telemetry: {
+        startRequestedAt: 1_100,
+        startChatRunStartedAt: 2_000,
+        processSpawnedAt: 3_000,
+        stdinWriteEndAt: 3_200,
+        firstTokenAt: 24_000,
+        attemptIndex: 1,
+        attemptStartedAt: 2_000,
+      },
+      events: [
+        { id: 1, event: 'agent', timestamp: 4_000, data: { type: 'tool_use', id: 't1', name: 'Read' } },
+        { id: 2, event: 'agent', timestamp: 9_000, data: { type: 'tool_result', toolUseId: 't1' } },
+      ],
+    });
+
+    // Older clients send no `firstModelEventAt`. The phase anchor falls back
+    // to the first token rather than to the scanned `tool_use` timestamp:
+    // event records carry the daemon's clock, not the lifecycle tracer's, and
+    // are not reset per retry attempt. `time_to_first_model_event_ms` keeps
+    // its existing scan-based fallback and is unaffected.
+    expect(result.time_to_first_model_event_ms).toBe(2_000);
+    expect(result.runtime_init_to_first_model_response_ms).toBe(20_800);
+    expect(result.model_active_duration_ms).toBe(1_000);
+  });
+});
+
+describe('summarizeRunTimingAnalytics tool phase occupancy', () => {
+  // Phase durations have to partition elapsed time. `tool_duration_ms` sums
+  // each paired tool_use -> tool_result span, which is the right definition
+  // for a published "how much tool work happened" metric but the wrong one for
+  // a phase: parallel calls, a retried run's earlier attempt, and a
+  // producer-supplied `startedAt` from another clock all push the sum past the
+  // wall clock it is supposed to occupy.
+
+  it('uses wall-clock occupancy, not summed tool work, for the tool phase', () => {
+    const result = summarizeRunTimingAnalytics({
+      runCreatedAt: 1_000,
+      runUpdatedAt: 16_000,
+      analyticsCapturedAt: 16_050,
+      telemetry: {
+        startRequestedAt: 1_100,
+        startChatRunStartedAt: 8_000,
+        processSpawnedAt: 8_500,
+        stdinWriteEndAt: 9_000,
+        firstModelEventAt: 10_000,
+        firstModelEventType: 'tool_use' as const,
+        firstTokenAt: 15_800,
+        attemptIndex: 1,
+        attemptStartedAt: 8_000,
+      },
+      events: [
+        // Two overlapping tools: 4s and 5s of work, but only 5.5s of wall
+        // clock (10.0s -> 15.5s).
+        { id: 1, event: 'agent', timestamp: 10_000, data: { type: 'tool_use', id: 't1', name: 'Read' } },
+        { id: 2, event: 'agent', timestamp: 10_500, data: { type: 'tool_use', id: 't2', name: 'Bash' } },
+        { id: 3, event: 'agent', timestamp: 14_000, data: { type: 'tool_result', toolUseId: 't1' } },
+        { id: 4, event: 'agent', timestamp: 15_500, data: { type: 'tool_result', toolUseId: 't2' } },
+      ],
+    });
+
+    // The model was active for 6s total, so no phase inside that window can
+    // exceed 6s. Summing gives 9s, which would beat the genuine 7s queue wait
+    // and report the wrong bottleneck.
+    expect(result.model_active_duration_ms).toBe(6_000);
+    expect(result.bottleneck_phase).toBe('queued');
+    // The published metric keeps summing paired spans.
+    expect(result.tool_duration_ms).toBe(9_000);
+  });
+
+  it('ignores a previous attempt\'s tool work when the anchor is from this attempt', () => {
+    const result = summarizeRunTimingAnalytics({
+      runCreatedAt: 1_000,
+      runUpdatedAt: 25_000,
+      analyticsCapturedAt: 25_100,
+      telemetry: {
+        // A retry clears lifecycle telemetry down to `startRequestedAt`, so
+        // every mark here belongs to attempt 2.
+        startRequestedAt: 1_100,
+        stdinWriteEndAt: 19_000,
+        firstModelEventAt: 20_000,
+        firstModelEventType: 'tool_use' as const,
+        firstTokenAt: 24_000,
+        attemptIndex: 2,
+        attemptStartedAt: 18_000,
+      },
+      events: [
+        // `run.events` is never cleared between attempts, so attempt 1's 10s
+        // tool is still in the list even though the anchor is at 20s.
+        { id: 1, event: 'agent', timestamp: 3_000, data: { type: 'tool_use', id: 'a1', name: 'Bash' } },
+        { id: 2, event: 'agent', timestamp: 13_000, data: { type: 'tool_result', toolUseId: 'a1' } },
+        { id: 3, event: 'agent', timestamp: 21_000, data: { type: 'tool_use', id: 'a2', name: 'Read' } },
+        { id: 4, event: 'agent', timestamp: 22_000, data: { type: 'tool_result', toolUseId: 'a2' } },
+      ],
+    });
+
+    // Attempt 2 was active for 5s and spent 1s of it in a tool. Counting
+    // attempt 1's 10s tool here reports 11s of tool execution inside a 5s
+    // window and blames tooling for work that predates the anchor.
+    expect(result.model_active_duration_ms).toBe(5_000);
+    expect(result.bottleneck_phase).toBe('stream_output');
+    // Whole-run tool work is unchanged: the published metric is not
+    // attempt-scoped.
+    expect(result.tool_duration_ms).toBe(11_000);
+  });
+
+  it('clips a producer-supplied tool start that predates the anchor', () => {
+    const result = summarizeRunTimingAnalytics({
+      runCreatedAt: 1_000,
+      runUpdatedAt: 10_000,
+      analyticsCapturedAt: 10_050,
+      telemetry: {
+        startRequestedAt: 1_050,
+        startChatRunStartedAt: 1_100,
+        stdinWriteEndAt: 1_200,
+        firstModelEventAt: 5_000,
+        firstModelEventType: 'tool_use' as const,
+        firstTokenAt: 9_000,
+        attemptIndex: 1,
+        attemptStartedAt: 1_100,
+      },
+      events: [
+        // ACP producers supply their own `startedAt`; here it is 4s earlier
+        // than the anchor, which cannot be time this run spent in a tool.
+        { id: 1, event: 'agent', timestamp: 6_000, data: { type: 'tool_use', id: 't1', name: 'Read', startedAt: 1_000 } },
+        { id: 2, event: 'agent', timestamp: 8_000, data: { type: 'tool_result', toolUseId: 't1' } },
+      ],
+    });
+
+    // Only 5.0s -> 8.0s falls inside the model-active window, so runtime init
+    // (3.8s) is the real bottleneck. The unclipped 7s span would outrank it.
+    expect(result.model_active_duration_ms).toBe(5_000);
+    expect(result.bottleneck_phase).toBe('runtime_init');
+    expect(result.tool_duration_ms).toBe(7_000);
+  });
+});
+
+describe('summarizeRunTimingAnalytics anchor and completeness edges', () => {
+  it('does not let a late daemon-persisted artifact push the anchor past the first token', () => {
+    const result = summarizeRunTimingAnalytics({
+      runCreatedAt: 1_000,
+      runUpdatedAt: 20_000,
+      analyticsCapturedAt: 20_050,
+      telemetry: {
+        startRequestedAt: 1_100,
+        startChatRunStartedAt: 2_000,
+        processSpawnedAt: 2_500,
+        stdinWriteEndAt: 3_000,
+        // Plain-stream runs stamp first-token from the first buffered stdout
+        // chunk, then the daemon persists stdout artifacts at close time and
+        // emits an `artifact` agent event. That event is a daemon action, not
+        // a model response, and it arrives near the end of the run.
+        firstTokenAt: 5_000,
+        firstVisibleOutputAt: 5_000,
+        firstModelEventAt: 19_000,
+        firstModelEventType: 'artifact' as const,
+        attemptIndex: 1,
+        attemptStartedAt: 2_000,
+      },
+      events: [],
+    });
+
+    // The model had produced output by 5s. Anchoring on the 19s artifact
+    // reports a 1s active window and a 16s runtime init for a run that was
+    // streaming the whole time.
+    expect(result.model_active_duration_ms).toBe(15_000);
+    expect(result.runtime_init_to_first_model_response_ms).toBe(2_000);
+    expect(result.bottleneck_phase).toBe('stream_output');
+  });
+
+  it('reports complete phase timing for a fully instrumented run with no text token', () => {
+    const result = summarizeRunTimingAnalytics({
+      runCreatedAt: 1_000,
+      runUpdatedAt: 12_000,
+      analyticsCapturedAt: 12_050,
+      telemetry: {
+        startRequestedAt: 1_100,
+        startChatRunStartedAt: 2_000,
+        promptBuildStartAt: 2_100,
+        promptBuildEndAt: 2_200,
+        processSpawnStartedAt: 2_300,
+        processSpawnedAt: 2_400,
+        modelCallStartAt: 2_500,
+        stdinWriteEndAt: 2_600,
+        // A tool-only turn: the model worked and finished without ever
+        // emitting text.
+        firstModelEventAt: 3_000,
+        firstModelEventType: 'tool_use' as const,
+        attemptIndex: 1,
+        attemptStartedAt: 2_000,
+      },
+      events: [
+        { id: 1, event: 'agent', timestamp: 3_000, data: { type: 'tool_use', id: 't1', name: 'Bash' } },
+        { id: 2, event: 'agent', timestamp: 8_000, data: { type: 'tool_result', toolUseId: 't1' } },
+      ],
+    });
+
+    // Every boundary the phases are actually measured from is present, so
+    // this run is fully measured. Requiring a text token here marks it
+    // partial and drops it from dashboards that filter on complete timings.
+    expect(result.time_to_first_token_ms).toBeUndefined();
+    expect(result.phase_timing_status).toBe('complete');
+  });
+
+  it('counts a tool still running at run end as tool occupancy', () => {
+    const result = summarizeRunTimingAnalytics({
+      runCreatedAt: 1_000,
+      runUpdatedAt: 15_000,
+      analyticsCapturedAt: 15_050,
+      telemetry: {
+        startRequestedAt: 1_100,
+        startChatRunStartedAt: 2_000,
+        processSpawnedAt: 3_000,
+        stdinWriteEndAt: 3_500,
+        firstModelEventAt: 4_000,
+        firstModelEventType: 'tool_use' as const,
+        attemptIndex: 1,
+        attemptStartedAt: 2_000,
+      },
+      events: [
+        // The run died while this tool was still outstanding, so there is no
+        // tool_result to pair with.
+        { id: 1, event: 'agent', timestamp: 5_000, data: { type: 'tool_use', id: 't1', name: 'Bash' } },
+      ],
+    });
+
+    // 10s of the 11s active window was spent inside that tool. Treating the
+    // unpaired span as zero occupancy hands the whole window to stream_output
+    // and contradicts last_observed_phase.
+    expect(result.model_active_duration_ms).toBe(11_000);
+    expect(result.bottleneck_phase).toBe('tool_execution');
+    expect(result.last_observed_phase).toBe('tool_execution');
+    // The published metric only ever sums completed pairs.
+    expect(result.tool_duration_ms).toBe(0);
+  });
+});
+
+describe('summarizeRunTimingAnalytics outstanding tools across a retry', () => {
+  it('does not carry a killed attempt\'s unfinished tool into the new attempt', () => {
+    const result = summarizeRunTimingAnalytics({
+      runCreatedAt: 1_000,
+      runUpdatedAt: 25_000,
+      analyticsCapturedAt: 25_100,
+      telemetry: {
+        // Post-retry telemetry: attempt 2 only, and it never called a tool.
+        startRequestedAt: 1_100,
+        attemptStartedAt: 18_000,
+        attemptIndex: 2,
+        stdinWriteEndAt: 19_000,
+        firstModelEventAt: 20_000,
+        firstModelEventType: 'text_delta' as const,
+        firstTokenAt: 20_000,
+      },
+      events: [
+        // Attempt 1's child was killed mid-tool, so this tool_use never got a
+        // result and stays open. `run.events` survives the retry.
+        { id: 1, event: 'agent', timestamp: 3_000, data: { type: 'tool_use', id: 'a1', name: 'Bash' } },
+      ],
+    });
+
+    // Closing that span at run end stretches it across the retry boundary, so
+    // clipping to the attempt-2 window hands 5s of "tool execution" to an
+    // attempt that made no tool call at all.
+    expect(result.model_active_duration_ms).toBe(5_000);
+    expect(result.bottleneck_phase).toBe('stream_output');
+    expect(result.tool_duration_ms).toBe(0);
+  });
+
+  it('still closes an outstanding tool whose producer start predates the anchor', () => {
+    const result = summarizeRunTimingAnalytics({
+      runCreatedAt: 1_000,
+      runUpdatedAt: 15_000,
+      analyticsCapturedAt: 15_050,
+      telemetry: {
+        startRequestedAt: 1_050,
+        startChatRunStartedAt: 1_100,
+        stdinWriteEndAt: 3_500,
+        firstModelEventAt: 4_000,
+        firstModelEventType: 'tool_use' as const,
+      },
+      events: [
+        // Observed after the anchor, so this tool really is running in this
+        // attempt; only its producer-supplied start is skewed early.
+        { id: 1, event: 'agent', timestamp: 5_000, data: { type: 'tool_use', id: 't1', name: 'Bash', startedAt: 1_000 } },
+      ],
+    });
+
+    // The skewed start is clipped to the anchor, not discarded: 4s -> 15s.
+    expect(result.model_active_duration_ms).toBe(11_000);
+    expect(result.bottleneck_phase).toBe('tool_execution');
+  });
+});
+
+describe('summarizeRunTimingAnalytics outstanding tools without a model-event mark', () => {
+  it('keeps a current-attempt outstanding tool when the anchor fell back to the first token', () => {
+    const result = summarizeRunTimingAnalytics({
+      runCreatedAt: 1_000,
+      runUpdatedAt: 30_000,
+      analyticsCapturedAt: 30_050,
+      telemetry: {
+        // Legacy or recovery telemetry: no `firstModelEventAt`, so the phase
+        // anchor falls back to the first token at 10s.
+        startRequestedAt: 1_100,
+        startChatRunStartedAt: 2_000,
+        stdinWriteEndAt: 3_000,
+        firstTokenAt: 10_000,
+        attemptStartedAt: 2_000,
+        attemptIndex: 1,
+      },
+      events: [
+        // Issued by THIS attempt at 4s and never completed. It was observed
+        // before the first token, which is exactly the tool-first shape this
+        // change exists to measure.
+        { id: 1, event: 'agent', timestamp: 4_000, data: { type: 'tool_use', id: 't1', name: 'Bash' } },
+      ],
+    });
+
+    // The tool held the whole 10s-30s active window. Gating the close on the
+    // phase anchor rather than the attempt boundary discards it and hands the
+    // window to stream_output.
+    expect(result.model_active_duration_ms).toBe(20_000);
+    expect(result.bottleneck_phase).toBe('tool_execution');
+  });
+});
+
+describe('summarizeRunTimingAnalytics tool id reuse across a retry', () => {
+  it('does not pair a dead attempt\'s open tool with a same-id retry tool', () => {
+    const result = summarizeRunTimingAnalytics({
+      runCreatedAt: 1_000,
+      runUpdatedAt: 25_000,
+      analyticsCapturedAt: 25_050,
+      telemetry: {
+        startRequestedAt: 1_100,
+        attemptStartedAt: 20_000,
+        attemptIndex: 2,
+        stdinWriteEndAt: 20_200,
+        firstModelEventAt: 20_500,
+        firstModelEventType: 'text_delta' as const,
+        firstTokenAt: 20_500,
+      },
+      events: [
+        // Attempt 1's child was killed mid-tool, leaving `call_0` open.
+        { id: 1, event: 'agent', timestamp: 3_000, data: { type: 'tool_use', id: 'call_0', name: 'Bash' } },
+        // Sequential ids restart at `call_0` in the retry's fresh session, so
+        // the id collides with the corpse above.
+        { id: 2, event: 'agent', timestamp: 21_500, data: { type: 'tool_use', id: 'call_0', name: 'Read' } },
+        { id: 3, event: 'agent', timestamp: 22_000, data: { type: 'tool_result', toolUseId: 'call_0' } },
+      ],
+    });
+
+    // The retry tool ran 21.5s -> 22.0s. Keeping the stale start pairs
+    // attempt 1's 3s opening with attempt 2's 22s close and reports a 19s
+    // tool that never existed.
+    expect(result.tool_duration_ms).toBe(500);
+    expect(result.model_active_duration_ms).toBe(4_500);
+  });
+});
+
+describe('summarizeRunTimingAnalytics with a truncated event stream', () => {
+  const truncatedRun = {
+    runCreatedAt: 1_000,
+    runUpdatedAt: 60_000,
+    analyticsCapturedAt: 60_050,
+    telemetry: {
+      startRequestedAt: 1_100,
+      startChatRunStartedAt: 2_000,
+      promptBuildStartAt: 2_100,
+      promptBuildEndAt: 2_200,
+      processSpawnStartedAt: 2_300,
+      processSpawnedAt: 2_400,
+      modelCallStartAt: 2_500,
+      stdinWriteEndAt: 2_600,
+      firstModelEventAt: 3_000,
+      firstModelEventType: 'tool_use' as const,
+      firstTokenAt: 25_000,
+      attemptStartedAt: 2_000,
+      attemptIndex: 1,
+    },
+    // The run's event ring buffer evicted everything before id 2001, which is
+    // where the opening tool_use lived. Every lifecycle mark still survives,
+    // because those live on the run rather than in the event list.
+    events: [
+      { id: 2_001, event: 'agent', timestamp: 55_000, data: { type: 'text_delta', text: 'done' } },
+    ],
+  };
+
+  it('does not claim complete phase timing when tool intervals may be missing', () => {
+    const result = summarizeRunTimingAnalytics(truncatedRun);
+
+    expect(result.phase_timing_status).toBe('partial');
+  });
+
+  it('withholds the bottleneck rather than blaming the phase that survived', () => {
+    const result = summarizeRunTimingAnalytics(truncatedRun);
+
+    // With the tool events evicted, occupancy reconstructs as zero and the
+    // whole active window lands on stream_output. That is not a measurement,
+    // it is an artefact of what the buffer happened to keep.
+    expect(result.bottleneck_phase).toBeUndefined();
+  });
+
+  it('still reports timings that come from lifecycle marks', () => {
+    const result = summarizeRunTimingAnalytics(truncatedRun);
+
+    // These never depended on the event list, so truncation does not touch
+    // them.
+    expect(result.model_active_duration_ms).toBe(57_000);
+    expect(result.time_to_first_token_ms).toBe(23_000);
+    expect(result.total_duration_ms).toBe(59_050);
+  });
+});
+
+describe('summarizeRunTimingAnalytics late tool results from a dead attempt', () => {
+  it('does not charge the current attempt for a tool opened before it started', () => {
+    const result = summarizeRunTimingAnalytics({
+      runCreatedAt: 1_000,
+      runUpdatedAt: 30_000,
+      analyticsCapturedAt: 30_050,
+      telemetry: {
+        startRequestedAt: 1_100,
+        attemptStartedAt: 20_000,
+        attemptIndex: 2,
+        stdinWriteEndAt: 20_500,
+        firstModelEventAt: 21_000,
+        firstModelEventType: 'text_delta' as const,
+        firstTokenAt: 21_000,
+      },
+      events: [
+        // Opened by attempt 1.
+        { id: 1, event: 'agent', timestamp: 3_000, data: { type: 'tool_use', id: 'call_0', name: 'Bash' } },
+        // Its result lands long after attempt 2 is under way -- a buffered
+        // stdout flush racing the abort, which the ACP session code already
+        // documents as a real sequence. Attempt 2 issued no tool of its own.
+        { id: 2, event: 'agent', timestamp: 29_900, data: { type: 'tool_result', toolUseId: 'call_0' } },
+      ],
+    });
+
+    // Pairing this into an interval spans the retry boundary; clipping then
+    // reports 8.9s of tool execution inside a 9s window for an attempt that
+    // never called a tool.
+    expect(result.model_active_duration_ms).toBe(9_000);
+    expect(result.bottleneck_phase).toBe('stream_output');
+    // The published metric keeps its whole-run paired-sum definition.
+    expect(result.tool_duration_ms).toBe(26_900);
+  });
+});
+
+describe('summarizeRunTimingAnalytics separates the response anchor from the event mark', () => {
+  it('anchors phases on the response while the published metric keeps arrival', () => {
+    const result = summarizeRunTimingAnalytics({
+      runCreatedAt: 1_000,
+      runUpdatedAt: 30_000,
+      analyticsCapturedAt: 30_050,
+      telemetry: {
+        startRequestedAt: 1_100,
+        startChatRunStartedAt: 2_000,
+        stdinWriteEndAt: 3_000,
+        // ACP: the canonical tool_use arrived at 20s, but the tool began at 4s.
+        firstModelEventAt: 20_000,
+        firstModelResponseAt: 4_000,
+        firstModelEventType: 'tool_use' as const,
+        attemptStartedAt: 2_000,
+        attemptIndex: 1,
+      },
+      events: [],
+    });
+
+    // Already published, and this PR promised not to move it.
+    expect(result.time_to_first_model_event_ms).toBe(18_000);
+    // New, and measured from when the model actually started working.
+    expect(result.runtime_init_to_first_model_response_ms).toBe(1_000);
+    expect(result.model_active_duration_ms).toBe(26_000);
+  });
+});
+
+describe('summarizeRunTimingAnalytics with an unattributable tool ledger', () => {
+  const ambiguousRun = {
+    runCreatedAt: 1_000,
+    runUpdatedAt: 30_000,
+    analyticsCapturedAt: 30_050,
+    telemetry: {
+      startRequestedAt: 1_100,
+      attemptStartedAt: 20_000,
+      attemptIndex: 2,
+      stdinWriteEndAt: 20_500,
+      firstModelEventAt: 21_000,
+      firstModelResponseAt: 21_000,
+      firstModelEventType: 'text_delta' as const,
+      firstTokenAt: 21_000,
+    },
+    events: [
+      // Attempt 1 opened `call_0` and was killed before it returned.
+      { id: 1, event: 'agent', timestamp: 3_000, data: { type: 'tool_use', id: 'call_0', name: 'Bash' } },
+      // Attempt 2's fresh session restarts sequential ids and opens the same
+      // one for a different call.
+      { id: 2, event: 'agent', timestamp: 21_500, data: { type: 'tool_use', id: 'call_0', name: 'Read' } },
+      // A result arrives. Nothing in the event log says which of the two it
+      // belongs to, and the two readings differ by 8s of occupancy.
+      { id: 3, event: 'agent', timestamp: 22_000, data: { type: 'tool_result', toolUseId: 'call_0' } },
+    ],
+  };
+
+  it('withholds the bottleneck when a result cannot be attributed to an attempt', () => {
+    const result = summarizeRunTimingAnalytics(ambiguousRun);
+
+    expect(result.bottleneck_phase).toBeUndefined();
+  });
+
+  it('marks phase timing partial rather than complete', () => {
+    const result = summarizeRunTimingAnalytics(ambiguousRun);
+
+    expect(result.phase_timing_status).toBe('partial');
+  });
+
+  it('still reports mark-derived timings', () => {
+    const result = summarizeRunTimingAnalytics(ambiguousRun);
+
+    expect(result.model_active_duration_ms).toBe(9_000);
   });
 });

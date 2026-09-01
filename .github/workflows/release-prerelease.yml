@@ -84,6 +84,12 @@ on:
       previous_commit:
         description: "Commit SHA of the previously published prerelease; empty on cold start."
         value: ${{ jobs.metadata.outputs.previous_commit }}
+      mac_arm64_smoke_result:
+        description: "macOS arm64 packaged smoke outcome; advisory to publication."
+        value: ${{ jobs.build_mac.outputs.smoke_result }}
+      win_x64_smoke_result:
+        description: "Windows x64 packaged smoke outcome; advisory to publication."
+        value: ${{ jobs.build_win.outputs.smoke_result }}
       version_metadata_url:
         description: "Public R2 URL of this build's version metadata.json."
         value: ${{ jobs.publish.outputs.version_metadata_url }}
@@ -138,6 +144,9 @@ env:
   # VELA_WEB_URL_PROD.
   OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}
   OD_VELA_WEB_URL: ${{ inputs.amr_profile == 'feature-test' && secrets.VELA_WEB_URL_FEATURE_TEST || inputs.amr_profile == 'test' && secrets.VELA_WEB_URL_TEST || inputs.amr_profile == 'prod' && secrets.VELA_WEB_URL_PROD || '' }}
+  OD_VELA_WEB_URL_FEATURE_TEST: ${{ secrets.VELA_WEB_URL_FEATURE_TEST }}
+  OD_VELA_WEB_URL_TEST: ${{ secrets.VELA_WEB_URL_TEST }}
+  OD_VELA_WEB_URL_PROD: ${{ secrets.VELA_WEB_URL_PROD }}
 jobs:
   metadata:
     name: Prepare prerelease metadata
@@ -209,6 +218,81 @@ jobs:
           RELEASE_STORAGE_REGION: auto
           RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
         run: pnpm exec tools-release check-storage
+  functional_e2e:
+    name: P0 Functional E2E
+    needs: metadata
+    uses: ./.github/workflows/ui-extended-main.yml
+    with:
+      ref: ${{ needs.metadata.outputs.commit }}
+      suite: p0
+  e2e_vitest:
+    name: E2E Vitest
+    needs: metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Setup Playwright
+        run: pnpm -C e2e exec playwright install --with-deps chromium
+      # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor.
+      # The daemon launches the installed Chromium directly instead of through
+      # Playwright. Restore user namespaces on this ephemeral runner so the real
+      # Chromium sandbox remains enabled rather than disabling that protection.
+      - name: Allow Chromium user namespaces on GitHub Ubuntu
+        shell: bash
+        run: |
+          set -euo pipefail
+          if sysctl kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Prebuild workspace type declarations
+        run: |
+          pnpm --filter @open-design/daemon build
+          pnpm --filter @open-design/desktop build
+          pnpm --filter @open-design/web build:sidecar
+      - name: Run E2E Vitest
+        run: pnpm --filter @open-design/e2e test
+  daemon_unit_tests:
+    name: Daemon tests (${{ matrix.shard }}/4)
+    needs: metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run daemon test shard
+        env:
+          OD_WATCHER_TEST_DEBUG: "1"
+        run: pnpm --filter @open-design/daemon test --shard=${{ matrix.shard }}/4
   verify:
     name: Verify build (typecheck + tests)
     needs: metadata
@@ -217,7 +301,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
-          ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
+          ref: ${{ needs.metadata.outputs.commit }}
           fetch-depth: 0
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
@@ -239,8 +323,10 @@ jobs:
         run: pnpm guard
   build_mac:
     name: Build prerelease mac arm64
-    needs: [metadata, verify]
+    needs: [metadata, functional_e2e, e2e_vitest, daemon_unit_tests, verify]
     runs-on: macos-14
+    outputs:
+      smoke_result: ${{ steps.mac_smoke.outcome }}
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
@@ -248,7 +334,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
-          ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
+          ref: ${{ needs.metadata.outputs.commit }}
           fetch-depth: 0
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
@@ -505,6 +591,8 @@ jobs:
             ${{ runner.temp }}/mac-framework-diagnostics.txt
           if-no-files-found: warn
       - name: Smoke prerelease mac packaged runtime
+        id: mac_smoke
+        continue-on-error: true
         working-directory: e2e
         env:
           OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
@@ -619,8 +707,10 @@ jobs:
           retention-days: 1
   build_mac_intel:
     name: Build prerelease mac intel x64
-    needs: [metadata, verify]
+    needs: [metadata, functional_e2e, e2e_vitest, daemon_unit_tests, verify]
     runs-on: macos-15-intel
+    outputs:
+      smoke_result: ${{ steps.mac_x64_smoke.outcome }}
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
@@ -628,7 +718,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
-          ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
+          ref: ${{ needs.metadata.outputs.commit }}
           fetch-depth: 0
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
@@ -792,6 +882,23 @@ jobs:
           xcrun stapler validate "$candidate_app"
           spctl --assess --type execute --verbose=4 "$candidate_app"
 
+      - name: Smoke prerelease mac_x64 packaged runtime
+        id: mac_x64_smoke
+        continue-on-error: true
+        working-directory: e2e
+        env:
+          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_x64/build.json
+          OD_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/release-build/mac_x64/build.log
+          OD_PACKAGED_E2E_MAC: "1"
+          OD_PACKAGED_E2E_NAMESPACE: release-prerelease-intel
+          OD_PACKAGED_E2E_RELEASE_CHANNEL: prerelease
+          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac_x64
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        run: |
+          set -euo pipefail
+          pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
+
       - name: Write mac_x64 release report
         if: ${{ always() }}
         env:
@@ -803,7 +910,7 @@ jobs:
           RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac_x64
           RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}/release-report/mac_x64/report.json
           RELEASE_REPORT_SUMMARY_PATH: ${{ runner.temp }}/release-report/mac_x64/summary.md
-          RELEASE_SMOKE_MODE: skip
+          RELEASE_SMOKE_MODE: core
           RELEASE_TARGET: mac_x64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
           REPORT_TITLE: mac_x64 prerelease build
@@ -885,8 +992,10 @@ jobs:
           retention-days: 1
   build_win:
     name: Build prerelease win x64
-    needs: [metadata, verify]
+    needs: [metadata, functional_e2e, e2e_vitest, daemon_unit_tests, verify]
     runs-on: windows-latest
+    outputs:
+      smoke_result: ${{ steps.win_smoke.outcome }}
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
@@ -894,7 +1003,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
-          ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
+          ref: ${{ needs.metadata.outputs.commit }}
           fetch-depth: 0
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
@@ -1018,6 +1127,7 @@ jobs:
           "deletedFailedCacheKey=$matchedKey count=$($caches.Count)"
       - name: Build prerelease win_x64 update fixture
         if: ${{ inputs.win_x64_smoke_mode == 'full' && inputs.win_x64_update_metadata_url == '' && inputs.win_x64_update_target_version == '' }}
+        continue-on-error: true
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -1031,7 +1141,9 @@ jobs:
           $updateBuild = $updateOutput | ConvertFrom-Json
           pnpm.cmd exec tools-pack win validate-payload --namespace release-prerelease-win --payload-path $updateBuild.payloadPath --expected-version $updateVersion --json
       - name: Smoke prerelease windows packaged runtime
+        id: win_smoke
         if: ${{ inputs.win_x64_smoke_mode != 'skip' }}
+        continue-on-error: true
         working-directory: e2e
         env:
           OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
@@ -1147,9 +1259,11 @@ jobs:
           retention-days: 1
   build_linux:
     name: Build prerelease linux x64
-    needs: [metadata, verify]
+    needs: [metadata, functional_e2e, e2e_vitest, daemon_unit_tests, verify]
     if: ${{ vars.ENABLE_STABLE_LINUX == 'true' }}
     runs-on: ubuntu-latest
+    outputs:
+      smoke_result: ${{ steps.linux_smoke.outcome }}
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
@@ -1157,7 +1271,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
-          ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
+          ref: ${{ needs.metadata.outputs.commit }}
           fetch-depth: 0
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
@@ -1172,14 +1286,63 @@ jobs:
       - name: Build prerelease linux artifacts
         run: |
           set -euo pipefail
-          pnpm exec tools-pack linux build \
-            --dir "$RUNNER_TEMP/tools-pack" \
-            --namespace release-prerelease-linux \
-            --portable \
-            --app-version "${{ needs.metadata.outputs.release_version }}" \
-            --to appimage \
-            --containerized \
+          report_dir="$RUNNER_TEMP/release-report/linux_x64"
+          mkdir -p "$report_dir"
+          : > "$report_dir/tools-pack.log"
+          build_args=(
+            exec tools-pack linux build
+            --dir "$RUNNER_TEMP/tools-pack"
+            --namespace release-prerelease-linux
+            --portable
+            --app-version "${{ needs.metadata.outputs.release_version }}"
+            --to appimage
+            --containerized
             --json
+          )
+          if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$report_dir/tools-pack.log" >&2))"; then
+            printf '%s\n' "$build_output" | tee "$report_dir/tools-pack.json"
+            node -e 'const fs = require("node:fs"); JSON.parse(fs.readFileSync(process.argv[1], "utf8"));' "$report_dir/tools-pack.json"
+          else
+            build_status=$?
+            printf '%s\n' "$build_output" | tee "$report_dir/tools-pack.json"
+            exit "$build_status"
+          fi
+      - name: Smoke prerelease linux AppImage runtime
+        id: linux_smoke
+        continue-on-error: true
+        working-directory: e2e
+        env:
+          OD_PACKAGED_E2E_LINUX_APPIMAGE: "1"
+          OD_PACKAGED_E2E_NAMESPACE: release-prerelease-linux
+          OD_PACKAGED_E2E_SCREENSHOT_PATH: ${{ runner.temp }}/release-report/linux_x64/screenshots/open-design-linux-smoke.png
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        run: |
+          set -euo pipefail
+          report_dir="$RUNNER_TEMP/release-report/linux_x64"
+          mkdir -p "$report_dir/screenshots"
+          cat > "$report_dir/manifest.json" <<EOF
+          {
+            "channel": "prerelease",
+            "platform": "linux",
+            "releaseVersion": "${{ needs.metadata.outputs.release_version }}",
+            "spec": "specs/linux.spec.ts",
+            "namespace": "release-prerelease-linux",
+            "screenshot": "screenshots/open-design-linux-smoke.png",
+            "githubRunId": "$GITHUB_RUN_ID",
+            "githubRunAttempt": "$GITHUB_RUN_ATTEMPT",
+            "commit": "${{ needs.metadata.outputs.commit }}"
+          }
+          EOF
+          sudo apt-get update 2>&1 | tee "$report_dir/apt-get-update.log"
+          sudo apt-get install -y xvfb 2>&1 | tee "$report_dir/apt-get-install-xvfb.log"
+          xvfb-run -a pnpm test specs/linux.spec.ts 2>&1 | tee "$report_dir/vitest.log"
+      - name: Upload linux e2e spec report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-prerelease-linux-e2e-report
+          path: ${{ runner.temp }}/release-report/linux_x64
+          if-no-files-found: warn
       - name: Prepare linux prerelease assets
         env:
           RELEASE_ASSET_SUFFIX: ""
@@ -1219,6 +1382,9 @@ jobs:
     name: Publish prerelease release
     needs:
       - metadata
+      - functional_e2e
+      - e2e_vitest
+      - daemon_unit_tests
       - verify
       - build_mac
       - build_mac_intel
@@ -1229,6 +1395,9 @@ jobs:
         always() &&
         !cancelled() &&
         needs.metadata.result == 'success' &&
+        needs.functional_e2e.result == 'success' &&
+        needs.e2e_vitest.result == 'success' &&
+        needs.daemon_unit_tests.result == 'success' &&
         needs.verify.result == 'success' &&
         needs.build_mac.result == 'success' &&
         needs.build_mac_intel.result == 'success' &&
@@ -1264,7 +1433,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
-          ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
+          ref: ${{ needs.metadata.outputs.commit }}
           fetch-depth: 0
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -1394,6 +1563,7 @@ jobs:
   cleanup_partial_release_assets:
     name: Cleanup unpublished prerelease asset artifacts
     needs:
+      - metadata
       - build_mac
       - build_mac_intel
       - build_win
@@ -1407,7 +1577,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
-          ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
+          ref: ${{ needs.metadata.outputs.commit || inputs.ref || github.ref }}
 
       - name: Delete unpublished prerelease asset artifacts
         env:

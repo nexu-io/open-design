@@ -84,13 +84,13 @@ async function main(): Promise<void> {
 
   // Relevance gate: titles alone produce false positives (lookalike products,
   // tool roundups that only mention OD in passing). Confirm each is actually
-  // about Open Design before generating.
+  // about OpenDesign before generating.
   let fresh = notDup;
   if (!noGate) {
     const verdicts = await mapPool(notDup, 4, async (v) => ({ v, ok: await isAboutOpenDesign(v) }));
     fresh = verdicts.filter((r) => r.ok).map((r) => r.v);
     for (const r of verdicts.filter((r) => !r.ok)) {
-      console.log(`  - rejected (not Open Design): ${r.v.videoId} | ${r.v.author} | ${r.v.title}`);
+      console.log(`  - rejected (not OpenDesign): ${r.v.videoId} | ${r.v.author} | ${r.v.title}`);
     }
     console.log(`Gate: ${fresh.length} kept, ${notDup.length - fresh.length} rejected`);
   }

@@ -6,11 +6,10 @@
  * English rather than rendering an empty string.
  */
 import type { LandingLocaleCode } from '../../i18n';
-import type { CodexCopy, CodexSkillCopy } from '../codex-i18n';
+import type { CodexCopy } from '../codex-i18n';
+import type { CuratedCopyOverrideOf } from '../curated-collection';
 
-export type CodexCopyOverride = Partial<Omit<CodexCopy, 'skills'>> & {
-  readonly skills?: Readonly<Record<string, Partial<CodexSkillCopy>>>;
-};
+export type CodexCopyOverride = CuratedCopyOverrideOf<CodexCopy>;
 
 import { zh } from './zh';
 import { ja } from './ja';

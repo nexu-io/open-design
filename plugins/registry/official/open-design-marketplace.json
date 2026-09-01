@@ -4,12 +4,12 @@
   "name": "open-design-official",
   "version": "0.1.0",
   "owner": {
-    "name": "Open Design",
+    "name": "OpenDesign",
     "url": "https://open-design.ai"
   },
   "trust": "official",
   "metadata": {
-    "description": "Official Open Design plugin registry seed. The generated public catalog is served from open-design.ai/marketplace.",
+    "description": "Official OpenDesign plugin registry seed. The generated public catalog is served from open-design.ai/marketplace.",
     "version": "0.1.0",
     "generatedFrom": "plugins/_official",
     "bundledPreinstallCount": 414
@@ -6828,7 +6828,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "Create refreshable, auditable Open Design artifacts backed by connector or local data.\nTrigger when the user asks for live dashboards, refreshable reports, synced views, or reusable data-backed artifacts.",
+      "description": "Create refreshable, auditable OpenDesign artifacts backed by connector or local data.\nTrigger when the user asks for live dashboards, refreshable reports, synced views, or reusable data-backed artifacts.",
       "tags": [
         "example",
         "first-party",
@@ -7096,7 +7096,7 @@
     },
     {
       "name": "open-design/example-open-design-landing",
-      "title": "Open Design Landing",
+      "title": "OpenDesign Landing",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/open-design-landing",
       "publisher": {
@@ -7107,7 +7107,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "Produce a world-class single-page editorial landing site in the Atelier Zero visual language (Monocle / Apartamento / Études editorial collage) — the same aesthetic Open Design uses for its own marketing surface. The agent fills a typed `inputs.json` from a brand brief, optionally generates 16 collage assets via gpt-image-2, then runs a pure-function composer that emits a self-contained HTML file; a separate path can mirror the Astro marketing site in `apps/landing-page/`. Drop-in scroll-reveal motion and a Headroom-style sticky nav are wired automatically.",
+      "description": "Produce a world-class single-page editorial landing site in the Atelier Zero visual language (Monocle / Apartamento / Études editorial collage) — the same aesthetic OpenDesign uses for its own marketing surface. The agent fills a typed `inputs.json` from a brand brief, optionally generates 16 collage assets via gpt-image-2, then runs a pure-function composer that emits a self-contained HTML file; a separate path can mirror the Astro marketing site in `apps/landing-page/`. Drop-in scroll-reveal motion and a Headroom-style sticky nav are wired automatically.",
       "tags": [
         "example",
         "first-party",
@@ -7129,7 +7129,7 @@
     },
     {
       "name": "open-design/example-open-design-landing-deck",
-      "title": "Open Design Landing Deck",
+      "title": "OpenDesign Landing Deck",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/open-design-landing-deck",
       "publisher": {
@@ -7140,7 +7140,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "Produce a single-file slide deck in the Atelier Zero visual language (warm-paper background, italic-serif emphasis spans, coral terminating dots, surreal collage plates) — Open Design's brand deck recipe. The deck uses **horizontal magazine-style swipe pagination** (←/→, wheel, swipe), a per-slide chrome strip with brand mark and slide counter, an ESC overview grid, a coral progress bar, and inherits the canonical stylesheet + 16-slot image library from the sister `open-design-landing` skill.",
+      "description": "Produce a single-file slide deck in the Atelier Zero visual language (warm-paper background, italic-serif emphasis spans, coral terminating dots, surreal collage plates) — OpenDesign's brand deck recipe. The deck uses **horizontal magazine-style swipe pagination** (←/→, wheel, swipe), a per-slide chrome strip with brand mark and slide counter, an ESC overview grid, a coral progress bar, and inherits the canonical stylesheet + 16-slot image library from the sister `open-design-landing` skill.",
       "tags": [
         "example",
         "first-party",
@@ -9725,7 +9725,7 @@
         "fs:read",
         "fs:write"
       ],
-      "description": "Baseline Refine plugin for improving an existing Open Design artifact with a focused critique, small patch, and handoff summary.",
+      "description": "Baseline Refine plugin for improving an existing OpenDesign artifact with a focused critique, small patch, and handoff summary.",
       "tags": [
         "scenario",
         "first-party",
@@ -9833,7 +9833,7 @@
         "fs:read",
         "fs:write"
       ],
-      "description": "Starter downstream export plugin for turning an accepted Open Design artifact into a Next.js App Router handoff.",
+      "description": "Starter downstream export plugin for turning an accepted OpenDesign artifact into a Next.js App Router handoff.",
       "tags": [
         "scenario",
         "first-party",
@@ -9861,7 +9861,7 @@
       "capabilitiesSummary": [
         "prompt:inject"
       ],
-      "description": "Guided scenario for creating a local Open Design plugin folder that can be added to My plugins.",
+      "description": "Guided scenario for creating a local OpenDesign plugin folder that can be added to My plugins.",
       "tags": [
         "scenario",
         "first-party",
@@ -9875,7 +9875,7 @@
     },
     {
       "name": "open-design/od-plugin-contribute-open-design",
-      "title": "Contribute Plugin to Open Design",
+      "title": "Contribute Plugin to OpenDesign",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/od-plugin-contribute-open-design",
       "publisher": {
@@ -9889,7 +9889,7 @@
         "subprocess",
         "network"
       ],
-      "description": "Opens a pull request that adds a local Open Design plugin to the Open Design community catalog using the GitHub CLI.",
+      "description": "Opens a pull request that adds a local OpenDesign plugin to the OpenDesign community catalog using the GitHub CLI.",
       "tags": [
         "share",
         "github",
@@ -9921,7 +9921,7 @@
         "subprocess",
         "network"
       ],
-      "description": "Creates a public GitHub repository for a local Open Design plugin using the GitHub CLI.",
+      "description": "Creates a public GitHub repository for a local OpenDesign plugin using the GitHub CLI.",
       "tags": [
         "share",
         "publish",
@@ -9951,7 +9951,7 @@
         "fs:read",
         "fs:write"
       ],
-      "description": "Starter downstream export plugin for turning an accepted Open Design artifact into a React component handoff.",
+      "description": "Starter downstream export plugin for turning an accepted OpenDesign artifact into a React component handoff.",
       "tags": [
         "scenario",
         "first-party",
@@ -10005,7 +10005,7 @@
         "fs:read",
         "fs:write"
       ],
-      "description": "Starter downstream export plugin for turning an accepted Open Design artifact into a Vue 3 single-file component handoff.",
+      "description": "Starter downstream export plugin for turning an accepted OpenDesign artifact into a Vue 3 single-file component handoff.",
       "tags": [
         "scenario",
         "first-party",
@@ -10036,7 +10036,7 @@
         "fs:write",
         "subprocess"
       ],
-      "description": "Extract visual effects, Canvas/WebGL/Shader behavior, and interaction details from a reference website, then rebuild them as an editable Open Design artifact.",
+      "description": "Extract visual effects, Canvas/WebGL/Shader behavior, and interaction details from a reference website, then rebuild them as an editable OpenDesign artifact.",
       "tags": [
         "scenario",
         "first-party",
@@ -11038,7 +11038,7 @@
         "prompt:inject",
         "media:video-generate"
       ],
-      "description": "A two-phase Seedance 2.0 workflow for the viral desk-hologram format: first lock a photoreal keyframe on a real developer desk (Open Design UI on the monitor, a cobalt-blue extraterrestrial hunter standing on the keyboard), then animate that still into a ~15s 9:16 image-to-video clip. Tuned for believable AR passthrough — medium-strength VFX, real desk clutter, monitor glow spill on the character, and light physical interactions (open mug, keyboard step, bow draw). Inspired by the desk-hologram Seedance 2.0 trend; no copyrighted character names in the prompt.",
+      "description": "A two-phase Seedance 2.0 workflow for the viral desk-hologram format: first lock a photoreal keyframe on a real developer desk (OpenDesign UI on the monitor, a cobalt-blue extraterrestrial hunter standing on the keyboard), then animate that still into a ~15s 9:16 image-to-video clip. Tuned for believable AR passthrough — medium-strength VFX, real desk clutter, monitor glow spill on the character, and light physical interactions (open mug, keyboard step, bow draw). Inspired by the desk-hologram Seedance 2.0 trend; no copyrighted character names in the prompt.",
       "tags": [
         "video-template",
         "first-party",

@@ -14,7 +14,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { hasOdCard } from '@open-design/contracts';
+import { hasOdCard, OD_NEXT_STRATEGY_ID } from '@open-design/contracts';
 import { useAnalytics } from '../analytics/provider';
 import { getResolvedDeviceId } from '../analytics/client';
 import {
@@ -29,7 +29,7 @@ import {
   runAgentProviderId,
 } from '../analytics/run-task';
 import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
-import { useT } from '../i18n';
+import { useI18n, useT } from '../i18n';
 import { startersForProduct, type ProductType } from '../onboarding/recommendation';
 import { starterCopyFor } from '../onboarding/starter-copy';
 import {
@@ -39,6 +39,10 @@ import {
   type DesignToolboxActionId,
 } from '../runtime/design-toolbox';
 import { isRetryableAssistantTerminalFailure } from '../runtime/design-delivery';
+import {
+  isInternalStrategySnapshot,
+  shouldShowSessionModeChip,
+} from '../runtime/strategy-turn-chrome';
 import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { useLiquidGlass } from '../hooks/useLiquidGlass';
@@ -65,9 +69,9 @@ import {
   isDesignSystemWorkspacePrompt,
 } from '../design-system-auto-prompt';
 import {
+  continuableUnfinishedTodos,
   isTodoWriteToolName,
   latestTodoWriteInputForPinnedCard,
-  unfinishedTodosFromEvents,
 } from '../runtime/todos';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, DesignSystemSummary, PreviewComment, Project, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
 import { agentDisplayName } from '../utils/agentLabels';
@@ -84,10 +88,12 @@ import { AmrLoginPill } from './AmrLoginPill';
 import {
   AMR_LOGIN_STATUS_EVENT,
   amrLoginStatusEventReason,
+  isAmrSessionAuthenticated,
 } from './amrLoginPolling';
 import {
   amrPlansUrlForProfile,
   amrRechargeUrlForProfile,
+  formatModelWindowRetryAt,
   resolveRunFailureUi,
 } from '../runtime/amr-guidance';
 import {
@@ -520,6 +526,10 @@ interface Props {
   streaming: boolean;
   loading?: boolean;
   error: string | null;
+  // Identifies a pane-level error produced by an assistant run. This lets the
+  // pane distinguish a stale run error from a later failure with identical
+  // canonical text; non-run errors leave the source undefined.
+  errorSourceAssistantId?: string | null;
   projectId: string | null;
   sessionMode?: ChatSessionMode;
   onSessionModeChange?: (mode: ChatSessionMode) => void;
@@ -595,7 +605,7 @@ interface Props {
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
-  // "Share to Open Design" button on each completed assistant message —
+  // "Share to OpenDesign" button on each completed assistant message —
   // wired by ProjectView to handleSend with the bundled
   // `od-share-to-community` scenario's trigger prompt.
   onShareToOpenDesign?: (assistantMessageId: string) => void;
@@ -762,6 +772,9 @@ interface Props {
   /** Collapse the conversation pane into workspace-focused mode (#5517's
    *  panel-left control). Takes precedence over onBack in the header. */
   onCollapse?: () => void;
+  /** True when the collapse control renders OUTSIDE this pane (lifted into
+   *  the tabs dock row) — suppresses the header's collapse/back slot. */
+  collapseControlLifted?: boolean;
   backLabel?: string;
   projectHeader?: ReactNode;
   designSystemPicker?: ReactNode;
@@ -811,6 +824,66 @@ interface QueuedSendUpdate {
 // Gap left above the anchored user message when it is pinned to the top.
 const ANCHOR_TOP_PADDING = 12;
 
+/**
+ * Fold an OD Next logical task into ONE conversation turn.
+ *
+ * A Full Plan turn runs as several physical Runs (request -> production). The
+ * user asked once, and the daemon-issued continuation carries no prompt of its
+ * own, so rendering each Run as its own message shows an answer nobody asked
+ * for — with its own author line and its own "finished" affordances mid-turn.
+ *
+ * The daemon stays the single writer of one message per Run; only the view is
+ * folded. Every continuation's content, events and produced files are appended
+ * to the turn's first message in Run order, so nothing is dropped and nothing
+ * is duplicated.
+ */
+export function foldStrategyTaskTurns(messages: ChatMessage[]): ChatMessage[] {
+  if (!messages.some((message) => (message.strategyTaskRunIndex ?? 0) > 0)) {
+    return messages;
+  }
+  const folded: ChatMessage[] = [];
+  const turnHeadIndexByTask = new Map<string, number>();
+  for (const message of messages) {
+    const taskId = message.strategyTaskExecutionId;
+    const runIndex = message.strategyTaskRunIndex ?? 0;
+    if (message.role !== 'assistant' || !taskId) {
+      folded.push(message);
+      continue;
+    }
+    if (runIndex === 0 || !turnHeadIndexByTask.has(taskId)) {
+      turnHeadIndexByTask.set(taskId, folded.length);
+      folded.push(message);
+      continue;
+    }
+    const headIndex = turnHeadIndexByTask.get(taskId)!;
+    const head = folded[headIndex]!;
+    const headContent = head.content ?? '';
+    const tailContent = message.content ?? '';
+    folded[headIndex] = {
+      ...head,
+      content: tailContent
+        ? `${headContent}${headContent && !headContent.endsWith('\n') ? '\n\n' : ''}${tailContent}`
+        : headContent,
+      events: [...(head.events ?? []), ...(message.events ?? [])],
+      producedFiles: [...(head.producedFiles ?? []), ...(message.producedFiles ?? [])],
+      // The turn's status is the latest Run's: the earlier Runs finishing is an
+      // internal step, not the turn ending.
+      runId: message.runId ?? head.runId,
+      runStatus: message.runStatus ?? head.runStatus,
+      // Likewise the task verdict: only the final Run of the chain carries it,
+      // and the folded turn is what the pinned todo card reads.
+      ...(message.strategyTaskDelivered
+        ? { strategyTaskDelivered: message.strategyTaskDelivered }
+        : {}),
+      ...(message.endedAt ? { endedAt: message.endedAt } : {}),
+      ...(message.resultDeliveryState
+        ? { resultDeliveryState: message.resultDeliveryState }
+        : {}),
+    };
+  }
+  return folded;
+}
+
 function shouldHideEmptyBrandAssistantMessage(message: ChatMessage, metadata?: ProjectMetadata): boolean {
   if (metadata?.importedFrom !== 'brand-extraction' && metadata?.kind !== 'brand') return false;
   if (message.role !== 'assistant') return false;
@@ -836,6 +909,7 @@ const HIDDEN_BRAND_ASSISTANT_STATUS_LABELS = new Set([
   'streaming',
   'starting',
   'running',
+  'working',
   'requesting',
   'thinking',
   'empty_response',
@@ -875,6 +949,7 @@ export function ChatPane({
   viewerOnly = false,
   queuedItems = [],
   error,
+  errorSourceAssistantId,
   projectId,
   sessionMode = 'design',
   onSessionModeChange,
@@ -991,16 +1066,19 @@ export function ChatPane({
   chatLogTray,
   onBack,
   onCollapse,
+  collapseControlLifted,
   backLabel,
   projectHeader,
   designSystemPicker,
   config,
 }: Props) {
   const { workspaceContext } = useProjectCollabContext();
-  const t = useT();
+  const { t, locale } = useI18n();
   const analytics = useAnalytics();
   const displayMessages = useMemo(
-    () => messages.filter((message) => !shouldHideEmptyBrandAssistantMessage(message, projectMetadata)),
+    () => foldStrategyTaskTurns(
+      messages.filter((message) => !shouldHideEmptyBrandAssistantMessage(message, projectMetadata)),
+    ),
     [messages, projectMetadata],
   );
   const amrProfile = config?.agentCliEnv?.amr?.[AMR_PROFILE_ENV_KEY] ?? null;
@@ -1296,6 +1374,10 @@ export function ChatPane({
         failedRunErrorEvent?.code,
         failedRunErrorEvent?.failureDetail,
         retryAssistant.agentId,
+        // The raw upstream sentence, so a failure whose copy names something the
+        // gateway reported (the instant a model window reopens) can read it back
+        // out. Same string the card renders under 「查看详情」.
+        failedRunErrorEvent?.detail,
       )
     : null;
   const hasInlineAmrAuthorizeFailure = Boolean(
@@ -1343,9 +1425,10 @@ export function ChatPane({
     retryAssistant?.id,
   ]);
   const consumeAmrAuthRetryIfAuthorized = useCallback((status: VelaLoginStatus | null) => {
-    if (status?.loggedIn === false) {
+    if (!isAmrSessionAuthenticated(status)) {
       if (
-        amrAuthRetryContinuation
+        status?.loginInFlight === true
+        && amrAuthRetryContinuation
         && amrAuthRetryContinuation.workspaceIdentityKey === 'none'
         && amrAuthRetryContinuation.originMountId === amrAuthRetryMountId
       ) {
@@ -1354,7 +1437,7 @@ export function ChatPane({
       return;
     }
     if (
-      status?.loggedIn !== true
+      !isAmrSessionAuthenticated(status)
       || !amrAuthRetryContinuation
       || !amrAuthRetryMountId
       || !amrAuthRetryWorkspaceIdentityKey
@@ -1371,7 +1454,7 @@ export function ChatPane({
     // Every continuation is consumed against the account identity returned by
     // this exact status observation. An ambient shell snapshot can belong to a
     // prior account during sign-out/sign-in transitions.
-    const loggedInAccountId = status.user?.id ?? null;
+    const loggedInAccountId = status?.user?.id ?? null;
     if (!canConsumeAmrAuthRetryContinuation(amrAuthRetryContinuation, {
       projectId,
       conversationId: activeConversationId,
@@ -1406,7 +1489,7 @@ export function ChatPane({
     retryAssistant,
   ]);
   useEffect(() => {
-    if (!amrAuthRetryContinuation || inlineAmrLoginStatus?.loggedIn !== true) return;
+    if (!amrAuthRetryContinuation || !isAmrSessionAuthenticated(inlineAmrLoginStatus)) return;
     // A Settings handoff remounts the whole project surface, so there is no
     // inline AmrLoginPill callback to drive consumption. The fresh pane's own
     // status read may request the one-shot retry; the common guard above still
@@ -1464,17 +1547,41 @@ export function ChatPane({
     !!retryAssistant?.resumable &&
     !!retryAssistant?.agentId &&
     retryAssistant.agentId === config?.agentId;
+  // `error` is a shared escape hatch for both run failures and unrelated pane
+  // errors. A run error also lives durably on its assistant message. Suppress
+  // it only when its exact source assistant owns the persisted diagnostic and
+  // a later assistant has succeeded; canonical error text alone cannot prove
+  // ownership because a new run can fail with the same detail.
+  const historicalRunError = useMemo(
+    () =>
+      !retryAssistant &&
+      isRecoveredAssistantRunError(
+        displayMessages,
+        error,
+        errorSourceAssistantId,
+      ),
+    [displayMessages, error, errorSourceAssistantId, retryAssistant],
+  );
+  const currentGlobalError = historicalRunError ? null : error;
   // Prefer a case-specific message (AMR auth / balance) over the raw upstream
-  // string; fall back to the live global error (also covers conversation-load
-  // / audio errors) then the persisted run error so a reload still shows it.
-  const rawError = error ?? failedRunErrorEvent?.detail ?? null;
+  // string; otherwise keep a current pane-level error ahead of the persisted
+  // failed-run detail. Historical run errors were already removed above.
+  const rawError = currentGlobalError ?? failedRunErrorEvent?.detail ?? null;
   // Friendly agent name for {agent} interpolation in failure copy (e.g. the
   // sign-in messages). Falls back to a neutral word when unreadable, never null.
   const failedAgentLabel =
     agentDisplayName(retryAssistant?.agentId, retryAssistant?.agentName) ??
     t('chat.runError.agentFallback');
+  // Values the failure copy names, localized before interpolation: the gateway
+  // reports a UTC instant, the reader waits on their own clock.
+  const runFailureMessageVars = runFailureUi?.messageVars?.retryAt
+    ? {
+        ...runFailureUi.messageVars,
+        retryAt: formatModelWindowRetryAt(runFailureUi.messageVars.retryAt, locale),
+      }
+    : runFailureUi?.messageVars;
   const displayError = runFailureUi?.messageKey
-    ? t(runFailureUi.messageKey, { agent: failedAgentLabel })
+    ? t(runFailureUi.messageKey, { agent: failedAgentLabel, ...runFailureMessageVars })
     : rawError;
   const errorDiagnosticText = displayError
     ? buildRunErrorDiagnosticText({
@@ -2441,7 +2548,7 @@ export function ChatPane({
   return (
     <div className="pane">
       <div className="chat-project-header">
-        {onCollapse ? (
+        {collapseControlLifted ? null : onCollapse ? (
           <button
             type="button"
             className="chat-project-back od-tooltip"
@@ -2712,7 +2819,7 @@ export function ChatPane({
                 nextStepSkills={skills}
                 toolboxSkillNames={featuredToolboxSkillNames}
                 nextStepVariant={nextStepVariant}
-                onForkFromMessage={onForkFromMessage}
+                onForkFromMessage={viewerOnly ? undefined : onForkFromMessage}
                 onAssistantFeedback={onAssistantFeedback}
                 forkingMessageId={forkingMessageId}
                 t={t}
@@ -3495,7 +3602,10 @@ function ChatRows({
       const pluginSnapshot = message.appliedPluginSnapshot ?? activePluginSnapshot ?? null;
       const contextItems: AppliedContextItem[] = [];
 
-      if (pluginSnapshot) {
+      // A strategy package is daemon-applied plumbing, never a plugin the
+      // user chose, so it stays out of the applied-context line in both the
+      // snapshot and the raw-id form.
+      if (pluginSnapshot && !isInternalStrategySnapshot(pluginSnapshot)) {
         contextItems.push({
           kind: 'plugin',
           title: pluginSnapshot.pluginTitle ?? pluginSnapshot.pluginId,
@@ -3504,6 +3614,7 @@ function ChatRows({
       }
       for (const pluginId of message.runContext?.pluginIds ?? []) {
         if (pluginSnapshot?.pluginId === pluginId) continue;
+        if (pluginId === OD_NEXT_STRATEGY_ID) continue;
         contextItems.push({ kind: 'plugin', title: pluginId, pluginId });
       }
       for (const skillId of message.runContext?.skillIds ?? []) {
@@ -3579,6 +3690,7 @@ function ChatRows({
           onRequestDesignSystemDetails={onRequestDesignSystemDetails}
           t={t}
           appliedContextItems={appliedContextByMessageId.get(m.id) ?? []}
+          showSessionModeChip={shouldShowSessionModeChip(m.sessionMode)}
           highlighted={highlightedUserMessageId === m.id}
         />
       );
@@ -3616,12 +3728,13 @@ function ChatRows({
         hasDesignSystemContext={hasActiveDesignSystem || !!activeDesignSystem}
         onSubmitQuestionForm={
           onSubmitQuestionForm
-            ? (text, attachments, context) =>
+            ? (text, attachments, context, _sourceAssistantMessageId, formId) =>
                 assistantCallbacksRef.current.onSubmitQuestionForm?.(
                   text,
                   attachments,
                   context,
                   m.id,
+                  formId,
                 )
             : undefined
         }
@@ -4005,7 +4118,7 @@ function PinnedTodoSlot({
       ? `${owner.id}:${ownerTodoEvent.id}`
       : null;
   if (snapshotKey != null && snapshotKey === dismissedSnapshotKey) return null;
-  const unfinishedTodos = owner ? unfinishedTodosFromEvents(owner.events) : [];
+  const unfinishedTodos = continuableUnfinishedTodos(owner);
 
   return (
     <div
@@ -4449,6 +4562,31 @@ export function retryableAssistantMessage(
   return isRetryableAssistantTerminalFailure(last) ? last : null;
 }
 
+function isRecoveredAssistantRunError(
+  messages: ChatMessage[],
+  error: string | null,
+  sourceAssistantId: string | null | undefined,
+): boolean {
+  const target = error?.trim();
+  if (!target || !sourceAssistantId) return false;
+  const sourceIndex = messages.findIndex(
+    (message) =>
+      message.role === 'assistant' && message.id === sourceAssistantId,
+  );
+  if (sourceIndex < 0) return false;
+  const source = messages[sourceIndex]!;
+  const ownsPersistedError = (source.events ?? []).some(
+    (event) =>
+      event.kind === 'status' &&
+      event.label === 'error' &&
+      event.detail?.trim() === target,
+  );
+  if (!ownsPersistedError) return false;
+  return messages.slice(sourceIndex + 1).some(
+    (message) => message.role === 'assistant' && message.runStatus === 'succeeded',
+  );
+}
+
 export function isAssistantMessageStreaming(
   message: ChatMessage,
   paneStreaming: boolean,
@@ -4456,12 +4594,12 @@ export function isAssistantMessageStreaming(
   forceStreamingMessageIds?: Set<string>,
 ): boolean {
   if (message.role !== 'assistant') return false;
+  if (isTerminalRunStatus(message.runStatus)) return false;
   if (forceStreamingMessageIds?.has(message.id)) return true;
   if (isActiveRunStatus(message.runStatus)) return true;
   if (message.id !== lastAssistantId) return false;
   if (!paneStreaming) return false;
   if (message.endedAt !== undefined) return false;
-  if (isTerminalRunStatus(message.runStatus)) return false;
   return true;
 }
 
@@ -4473,7 +4611,7 @@ export function buildRunErrorDiagnosticText(input: RunErrorDiagnosticInput): str
   }
 
   lines.push(
-    'Open Design run error diagnostics',
+    'OpenDesign run error diagnostics',
     `trace_id: ${input.traceId ?? 'n/a'}`,
     `run_id: ${input.traceId ?? 'n/a'}`,
     `error_code: ${input.errorCode ?? 'n/a'}`,
@@ -4600,6 +4738,7 @@ function UserMessageImpl({
   onRequestDesignSystemDetails,
   t,
   appliedContextItems,
+  showSessionModeChip,
   highlighted,
 }: {
   message: ChatMessage;
@@ -4610,6 +4749,7 @@ function UserMessageImpl({
   onRequestDesignSystemDetails?: (system: DesignSystemSummary) => void;
   t: TranslateFn;
   appliedContextItems: AppliedContextItem[];
+  showSessionModeChip: boolean;
   highlighted?: boolean;
 }) {
   const { workspaceContext } = useProjectCollabContext();
@@ -4618,7 +4758,7 @@ function UserMessageImpl({
   const workspaceItems = message.runContext?.workspaceItems ?? [];
   const visibleWorkspaceItems = workspaceItems.filter((item) => item.kind !== 'design-system');
   const hasRunContext = Boolean(
-    message.sessionMode ||
+    showSessionModeChip ||
       visibleWorkspaceItems.length > 0 ||
       appliedContextItems.length > 0,
   );
@@ -4653,7 +4793,7 @@ function UserMessageImpl({
       <span className="sr-only">{t('chat.you')}</span>
       {hasRunContext ? (
         <div className="msg-run-context-row" data-testid="msg-run-context-row">
-          {message.sessionMode ? (
+          {showSessionModeChip && message.sessionMode ? (
             <MessageSessionModeChip mode={message.sessionMode} t={t} />
           ) : null}
           {visibleWorkspaceItems.map((item) => (

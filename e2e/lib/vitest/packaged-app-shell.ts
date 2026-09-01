@@ -96,6 +96,21 @@ export function asPackagedAppShellSnapshot(value: unknown): PackagedAppShellSnap
 export type PackagedAppShellState = 'home' | 'onboarding-landing';
 
 /**
+ * Whether a health/readiness observation still belongs to the packaged
+ * renderer. Route ownership is the health boundary; the app-shell probe below
+ * decides whether a particular route rendered an allowed product surface.
+ */
+export function packagedAppRouteUrl(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'od:' && url.hostname === 'app';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Which settled surface the renderer is showing, or `null` while it is showing
  * neither — a blank window, a crashed renderer, a boot still on the loader, or
  * a half-rendered onboarding shell all fall through to `null`.
@@ -337,12 +352,11 @@ export type PackagedAppShellPolicyInput = {
  *
  * Derived from the daemon's own `onboardingCompleted`, never from the smoke
  * profile, so a run's setup and its accepted terminal state cannot disagree.
- * The smoke seeds `onboardingCompleted: true` before start; if the daemon
- * confirms it, the renderer must honour it and home is the only acceptable
- * outcome — that is what keeps a broken completed-onboarding boot path
- * detectable on the core release lane. Only a run whose daemon reports
- * onboarding as *not* completed is a genuine first run, and only then is the
- * cloud sign-in landing a legitimate place to stop.
+ * The smoke seeds `onboardingCompleted: true` before start and independently
+ * confirms that the daemon retains it. The auth-first entry shell may still
+ * route a signed-out core run to the cloud sign-in landing; that is an identity
+ * gate, not evidence that onboarding state was lost. A genuine first run may
+ * stop on the same surface after the daemon explicitly reports `false`.
  *
  * `coreProfile` still narrows it: the full profile goes on to drive the entry
  * rail, which `clickUpdaterRailExpression` refuses while onboarding is up, so
@@ -351,18 +365,20 @@ export type PackagedAppShellPolicyInput = {
 export function packagedAppShellPolicy(
   input: PackagedAppShellPolicyInput,
 ): { readonly acceptOnboardingLanding: boolean } {
-  // A run that seeded completion and saw the daemon confirm it may never accept
-  // the landing, whatever a later reading says. Losing the seed across a
-  // relaunch is a regression, not a downgrade to "genuine first run" — see
-  // `assertSeededOnboardingRetained`, which is what turns that loss into a
-  // named failure rather than merely a stricter expectation here.
-  if (input.seededOnboardingCompleted !== false) return { acceptOnboardingLanding: false };
-  // Only an explicit `false` — a daemon that positively said "not completed" —
-  // buys permission. Testing for truthiness instead would let any non-boolean
-  // that leaked past the type fall through to the permissive branch, which is
-  // the same shape of defect as coercing the reading in the first place.
-  if (input.daemonOnboardingCompleted !== false) return { acceptOnboardingLanding: false };
-  return { acceptOnboardingLanding: input.coreProfile === true };
+  if (input.coreProfile !== true) return { acceptOnboardingLanding: false };
+  // A completed-user run earns auth-first permission only when both the seed
+  // and the daemon reading are explicit `true`. `assertSeededOnboardingRetained`
+  // turns the `true -> false` cold-launch regression into a named failure before
+  // this policy is applied.
+  if (input.seededOnboardingCompleted === true) {
+    return { acceptOnboardingLanding: input.daemonOnboardingCompleted === true };
+  }
+  // A first-run landing likewise requires two explicit facts. Closed checks
+  // keep malformed values from falling through to the permissive branch.
+  return {
+    acceptOnboardingLanding:
+      input.seededOnboardingCompleted === false && input.daemonOnboardingCompleted === false,
+  };
 }
 
 /**
@@ -445,12 +461,11 @@ export function assertSeededOnboardingRetained(input: {
 /**
  * The two launch scenarios the packaged app legitimately has.
  *
- * Both are real product behaviour, not a contradiction.
- * `shouldRouteToFirstRunOnboarding` (apps/web/src/App.tsx) keys purely on
- * `onboardingCompleted`, and `connectStepRuntimeReady` (EntryShell.tsx) lets
- * onboarding complete through cloud sign-in *or* a local CLI *or* a verified
- * BYOK key. So "completed setup, currently signed out -> home" and "never
- * completed -> cloud sign-in landing" are both correct.
+ * Both are real product behaviour, not a contradiction. A first run reaches
+ * the cloud sign-in landing because setup has not completed; a completed but
+ * signed-out core run can reach the same landing because identity is now the
+ * entry gate. The daemon config reading distinguishes the two and the retained
+ * seed proves a protocol cold launch did not switch data roots.
  */
 export type PackagedLaunchScenario = 'completed-user' | 'first-run';
 

@@ -3,24 +3,24 @@ title: "BYOK design workflow: run Claude, Codex, or Qwen on your own key"
 date: 2026-05-13
 category: "Guides"
 readingTime: 8
-summary: "Most AI design tools quietly add a margin to every token you spend. Open Design takes the opposite stance — bring your own model key, pay the provider directly, and keep full control of where inference runs. Here's how the BYOK layer actually works."
+summary: "Most AI design tools quietly add a margin to every token you spend. OpenDesign takes the opposite stance — bring your own model key, pay the provider directly, and keep full control of where inference runs. Here's how the BYOK layer actually works."
 i18n:
   zh:
     title: "BYOK 设计工作流：用你自己的密钥运行 Claude、Codex 或 Qwen"
-    summary: "大多数 AI 设计工具都会在你花掉的每一个 token 上悄悄加一道差价。Open Design 的立场恰恰相反——自带模型密钥，直接向服务商付费，并完全掌控推理在哪里运行。下面讲讲 BYOK 这一层到底是怎么工作的。"
+    summary: "大多数 AI 设计工具都会在你花掉的每一个 token 上悄悄加一道差价。OpenDesign 的立场恰恰相反——自带模型密钥，直接向服务商付费，并完全掌控推理在哪里运行。下面讲讲 BYOK 这一层到底是怎么工作的。"
     bodyHtml: |
       <p>如果你在 2026 年用过托管式 AI 设计产品，多半已经注意到账单在悄悄往上走。一层订阅费，叠加按席位的收费，再叠加一道没人公开的推理加价。这笔账故意算不清楚。</p>
-      <p>Open Design 不运行推理。我们在 token 上没有差价。整个工作流都是围绕 <strong>自带密钥（BYOK）</strong> 构建的——你把 daemon 指向任意一个兼容 OpenAI 的端点，粘贴你自己的 API 密钥，就完成了。</p>
-      <p>这篇文章会解释我们为什么做出这个选择、它在底层是怎么工作的，以及它在日常工作流中究竟改变了什么。如果你想了解背后更宏观的理念论证，<a href="/blog/why-we-built-open-design-as-a-skill-layer/">我们为什么把 Open Design 构建成一个 skill 层、而不是一款产品</a> 是配套的姊妹篇——这一篇则是上手实操版。</p>
+      <p>OpenDesign 不运行推理。我们在 token 上没有差价。整个工作流都是围绕 <strong>自带密钥（BYOK）</strong> 构建的——你把 daemon 指向任意一个兼容 OpenAI 的端点，粘贴你自己的 API 密钥，就完成了。</p>
+      <p>这篇文章会解释我们为什么做出这个选择、它在底层是怎么工作的，以及它在日常工作流中究竟改变了什么。如果你想了解背后更宏观的理念论证，<a href="/blog/why-we-built-open-design-as-a-skill-layer/">我们为什么把 OpenDesign 构建成一个 skill 层、而不是一款产品</a> 是配套的姊妹篇——这一篇则是上手实操版。</p>
       <h2>这里说的「BYOK」到底是什么意思</h2>
       <p>在 AI 工具领域，「BYOK」其实有两种定义，它们并不是一回事：</p>
       <ul>
       <li><strong>表面 BYOK</strong>——工具允许你粘贴一个密钥，但推理仍然经过它们的服务器，会记录你的 prompt，还可能施加速率限制。</li>
       <li><strong>真正的 BYOK</strong>——工具直接从你的机器（或你的基础设施）调用模型服务商。你的 prompt 从不接触厂商的服务器。厂商不抽取任何差价。</li>
       </ul>
-      <p>Open Design 属于第二种。daemon 用你的密钥、从你的机器，向你配置的任意端点发起 HTTP 调用。我们不做代理。我们不记录。我们看不到你的 prompt。</p>
+      <p>OpenDesign 属于第二种。daemon 用你的密钥、从你的机器，向你配置的任意端点发起 HTTP 调用。我们不做代理。我们不记录。我们看不到你的 prompt。</p>
       <h3>这个调用实际去了哪里</h3>
-      <p>当 daemon 拿到一个任务时，它会组装 prompt——把该任务相关的 <code>SKILL.md</code> 和 <code>DESIGN.md</code> 文件拉进来——然后向你设置的 base URL 发起一次 HTTP 请求。响应流式回到你的机器，agent 把产物写到磁盘，整个循环就这样。这条链路里没有 Open Design 的服务器。发现你 skill 的那个 daemon，也同时掌管着这次网络调用，所以「它在哪里运行？」是一个设置项，而不是一场销售对话。</p>
+      <p>当 daemon 拿到一个任务时，它会组装 prompt——把该任务相关的 <code>SKILL.md</code> 和 <code>DESIGN.md</code> 文件拉进来——然后向你设置的 base URL 发起一次 HTTP 请求。响应流式回到你的机器，agent 把产物写到磁盘，整个循环就这样。这条链路里没有 OpenDesign 的服务器。发现你 skill 的那个 daemon，也同时掌管着这次网络调用，所以「它在哪里运行？」是一个设置项，而不是一场销售对话。</p>
       <h2>兼容 OpenAI 的适配器</h2>
       <p>2026 年大多数 AI 推理端点都讲 OpenAI Chat Completions API。我们把它当作最大公约数的协议。如果你的服务商讲这套（几乎所有服务商都讲），那它默认就被支持——不需要插件，也不用等待针对单个服务商的集成。</p>
       <h3>你可以把它指向哪些服务商</h3>
@@ -143,7 +143,7 @@ i18n:
       <h2>隐私与合规</h2>
       <p>BYOK 之所以重要还有第二个原因：<strong>prompt 里包含着你客户的品牌。</strong></p>
       <p>托管推理意味着把品牌文档、尚未公布的产品名、内部定价、未发布的创意，统统经由第三方的服务器来回传输。大多数公司对此都有自己的看法。有些公司对此甚至有合同约束。</p>
-      <p>有了 BYOK，prompt 的往返就只发生在你的笔记本和你早已审查过（或自托管）的模型服务商之间。Open Design 不在这条链路里。我们没有可被传唤的日志，没有可被泄露的攻击面，没有需要解释的审计缺口。</p>
+      <p>有了 BYOK，prompt 的往返就只发生在你的笔记本和你早已审查过（或自托管）的模型服务商之间。OpenDesign 不在这条链路里。我们没有可被传唤的日志，没有可被泄露的攻击面，没有需要解释的审计缺口。</p>
       <h3>「无日志」在实践中给你买来了什么</h3>
       <p>对于代理机构的工作、受监管的行业，或者任何未发布的内容来说，这是唯一站得住脚的立场。如果一次安全审查问「我们的品牌资产去了哪里？」，答案是「去了我们合同里的那家模型服务商，别无他处」——而不是「去了一个我们无法掌控的厂商仪表盘」。自托管一个 Ollama 或 vLLM 端点会把它收得更紧：字节根本不会离开你的网络。这正是 <a href="/blog/byok-reality-check-5-things-that-break/">BYOK 现实检验</a> 中探讨的同一组权衡，那篇文章很坦诚地讲了哪些地方仍有毛刺——本地模型和前沿模型在审美上并不可互换，而 prompt 注入这块攻击面要由你自己来扛。</p>
       <h2>如何在项目进行中切换服务商</h2>
@@ -154,7 +154,7 @@ i18n:
       <li><strong>敏感内容</strong>——为涉客户机密的 prompt 换上一个本地 Ollama 模型</li>
       <li><strong>最终精修</strong>——在当下最强的模型上烧掉一个环节（Opus、GPT-5 Pro）</li>
       </ul>
-      <p>在 Open Design 里，切换就是在 <code>.env.local</code> 里改两行。没有迁移，没有重新上手，没有套餐升级。</p>
+      <p>在 OpenDesign 里，切换就是在 <code>.env.local</code> 里改两行。没有迁移，没有重新上手，没有套餐升级。</p>
       <h3>针对一份 brief 的一条实操路由</h3>
       <p>具体来说，一份单页落地页 brief 可能这样跑：</p>
       <pre class="astro-code open-design-editorial" style="background-color:#f7f1de;color:#15140f; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span># draft + first iterations — cheap and fast</span></span>
@@ -170,26 +170,26 @@ i18n:
       <p>这就是 BYOK 故事的全部。没有特别的档位，没有升级流程，没有跟我们之间的计费关系。你付费给模型服务商，你保管你的密钥，你保管你的 prompt。我们提供这一层。</p>
       <h2>延伸阅读</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">我们为什么把 Open Design 构建成一个 skill 层、而不是一款产品</a>——选择交付一个薄薄的层、而非一款托管应用，背后的赌注</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">我们为什么把 OpenDesign 构建成一个 skill 层、而不是一款产品</a>——选择交付一个薄薄的层、而非一款托管应用，背后的赌注</li>
       <li><a href="/blog/byok-reality-check-5-things-that-break/">BYOK 现实检验：会出问题的 5 件事</a>——自带密钥诚实的权衡取舍与毛刺所在</li>
-      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 个 skill、72 个 system：Open Design 库是怎么运作的</a>——无论你跑哪个模型都保持不变的那些 <code>SKILL.md</code> / <code>DESIGN.md</code> 文件</li>
+      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 个 skill、72 个 system：OpenDesign 库是怎么运作的</a>——无论你跑哪个模型都保持不变的那些 <code>SKILL.md</code> / <code>DESIGN.md</code> 文件</li>
       </ul>
   zh-tw:
     title: "BYOK 設計工作流程：用你自己的金鑰跑 Claude、Codex 或 Qwen"
-    summary: "大多數 AI 設計工具都會在你花掉的每個 token 上悄悄加一層利潤。Open Design 採取相反的立場——自備你自己的模型金鑰，直接向供應商付費，並完全掌控推論在哪裡執行。以下說明 BYOK 這一層實際上是怎麼運作的。"
+    summary: "大多數 AI 設計工具都會在你花掉的每個 token 上悄悄加一層利潤。OpenDesign 採取相反的立場——自備你自己的模型金鑰，直接向供應商付費，並完全掌控推論在哪裡執行。以下說明 BYOK 這一層實際上是怎麼運作的。"
     bodyHtml: |
       <p>如果你在 2026 年用過代管式 AI 設計產品，你大概已經注意到帳單一直往上爬。訂閱費疊在按席位收費之上，再疊上一層誰都不公開的推論加價。這套數學是故意算得不透明的。</p>
-      <p>Open Design 不跑推論。我們不在 token 上抽利潤。整個工作流程都圍繞著<strong>自備金鑰（BYOK）</strong>打造——你把 daemon 指向任何 OpenAI 相容的端點，貼上你自己的 API 金鑰，就完成了。</p>
-      <p>這篇文章說明我們為什麼做出這個選擇、它在底層如何運作，以及它在你的日常工作流程中到底改變了什麼。如果你想了解背後更大的理念論述，<a href="/blog/why-we-built-open-design-as-a-skill-layer/">我們為什麼把 Open Design 打造成一層技能層，而不是一個產品</a>是它的姊妹篇——這一篇則是實作版。</p>
+      <p>OpenDesign 不跑推論。我們不在 token 上抽利潤。整個工作流程都圍繞著<strong>自備金鑰（BYOK）</strong>打造——你把 daemon 指向任何 OpenAI 相容的端點，貼上你自己的 API 金鑰，就完成了。</p>
+      <p>這篇文章說明我們為什麼做出這個選擇、它在底層如何運作，以及它在你的日常工作流程中到底改變了什麼。如果你想了解背後更大的理念論述，<a href="/blog/why-we-built-open-design-as-a-skill-layer/">我們為什麼把 OpenDesign 打造成一層技能層，而不是一個產品</a>是它的姊妹篇——這一篇則是實作版。</p>
       <h2>這裡的「BYOK」到底是什麼意思</h2>
       <p>在 AI 工具圈裡，BYOK 有兩種定義在流傳，而它們並不是同一回事：</p>
       <ul>
       <li><strong>表面 BYOK</strong>——工具讓你貼上金鑰，但推論仍然透過它們的伺服器路由、記錄你的提示，還可能套用速率限制。</li>
       <li><strong>真正的 BYOK</strong>——工具直接從你的機器（或你的基礎設施）呼叫模型供應商。你的提示永遠不會碰到廠商的伺服器。廠商不抽任何利潤。</li>
       </ul>
-      <p>Open Design 屬於第二種。daemon 用你的金鑰、從你的機器，對你設定的任何端點發出 HTTP 呼叫。我們不做代理。我們不做記錄。我們看不到你的提示。</p>
+      <p>OpenDesign 屬於第二種。daemon 用你的金鑰、從你的機器，對你設定的任何端點發出 HTTP 呼叫。我們不做代理。我們不做記錄。我們看不到你的提示。</p>
       <h3>呼叫實際上送到哪裡</h3>
-      <p>當 daemon 接下一項工作時，它會組出提示——拉進該任務相關的 <code>SKILL.md</code> 和 <code>DESIGN.md</code> 檔案——然後對你設定的 base URL 發出單一一個 HTTP 請求。回應串流回你的機器，agent 把產物寫到磁碟，這就是整個迴圈。這條路徑上沒有任何 Open Design 伺服器。同一個發現你技能的 daemon 也掌管著這個網路呼叫，這正是為什麼「這會跑在哪裡？」是一個設定項，而不是一場銷售對話。</p>
+      <p>當 daemon 接下一項工作時，它會組出提示——拉進該任務相關的 <code>SKILL.md</code> 和 <code>DESIGN.md</code> 檔案——然後對你設定的 base URL 發出單一一個 HTTP 請求。回應串流回你的機器，agent 把產物寫到磁碟，這就是整個迴圈。這條路徑上沒有任何 OpenDesign 伺服器。同一個發現你技能的 daemon 也掌管著這個網路呼叫，這正是為什麼「這會跑在哪裡？」是一個設定項，而不是一場銷售對話。</p>
       <h2>OpenAI 相容轉接器</h2>
       <p>到了 2026 年，大多數 AI 推論端點都講 OpenAI Chat Completions API。我們把它當作最低共同標準的協定。如果你的供應商會講它（而幾乎所有供應商都會），那你預設就被支援了——不需要外掛、不需要等待逐家供應商的整合。</p>
       <h3>你可以把它指向的供應商</h3>
@@ -312,7 +312,7 @@ i18n:
       <h2>隱私與合規</h2>
       <p>BYOK 之所以重要還有第二個原因：<strong>提示裡含有你客戶的品牌。</strong></p>
       <p>代管式推論意味著把品牌文件、尚未公布的產品名稱、內部定價，以及上市前的創意，路由穿過第三方的伺服器。大多數公司對這件事都有意見。有些公司則對此立有合約。</p>
-      <p>有了 BYOK，提示的來回往返只發生在你的筆電和你已經審核過（或自架）的模型供應商之間。Open Design 不在這個迴圈裡。我們沒有日誌可被傳喚、沒有可外洩的入侵面、沒有需要解釋的稽核缺口。</p>
+      <p>有了 BYOK，提示的來回往返只發生在你的筆電和你已經審核過（或自架）的模型供應商之間。OpenDesign 不在這個迴圈裡。我們沒有日誌可被傳喚、沒有可外洩的入侵面、沒有需要解釋的稽核缺口。</p>
       <h3>「無日誌」實務上替你換來什麼</h3>
       <p>對於代理商工作、受監管產業，或任何上市前的事物，這是唯一站得住腳的立場。如果一場安全審查問「我們的品牌資產去了哪裡？」，答案是「去到我們合約裡的模型供應商，別處都不去」——而不是「去到一個我們無法掌控的廠商儀表板」。自架一個 Ollama 或 vLLM 端點會把它收得更緊：那些位元組根本不會離開你的網路。這正是<a href="/blog/byok-reality-check-5-things-that-break/">那篇 BYOK 現實檢驗</a>所探討的同一種取捨，它誠實地談了還有哪些粗糙的邊角——本機模型和前沿模型在品味上並不能互換，而且提示注入的防護面是你自己要扛的。</p>
       <h2>如何在專案進行中切換供應商</h2>
@@ -323,7 +323,7 @@ i18n:
       <li><strong>敏感內容</strong>——對客戶機密的提示，換成一個本機 Ollama 模型</li>
       <li><strong>最終打磨</strong>——在當下最強的模型（Opus、GPT-5 Pro）上燒掉一輪</li>
       </ul>
-      <p>在 Open Design 裡，切換就是編輯 <code>.env.local</code> 裡的兩行。沒有遷移、沒有重新上手、沒有方案升級。</p>
+      <p>在 OpenDesign 裡，切換就是編輯 <code>.env.local</code> 裡的兩行。沒有遷移、沒有重新上手、沒有方案升級。</p>
       <h3>一份簡報的一套實際路由</h3>
       <p>具體來說，一份單一的落地頁簡報可能會這樣跑：</p>
       <pre class="astro-code open-design-editorial" style="background-color:#f7f1de;color:#15140f; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span># draft + first iterations — cheap and fast</span></span>
@@ -339,26 +339,26 @@ i18n:
       <p>這就是 BYOK 的全部故事。沒有特殊層級、沒有升級流程、沒有跟我們的帳務關係。你付費給模型供應商，你保有你的金鑰，你保有你的提示。我們提供的是那一層。</p>
       <h2>延伸閱讀</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">我們為什麼把 Open Design 打造成一層技能層，而不是一個產品</a>——選擇出貨一層薄層而非一個代管 app 背後的賭注</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">我們為什麼把 OpenDesign 打造成一層技能層，而不是一個產品</a>——選擇出貨一層薄層而非一個代管 app 背後的賭注</li>
       <li><a href="/blog/byok-reality-check-5-things-that-break/">BYOK 現實檢驗：會出問題的 5 件事</a>——自備金鑰誠實的取捨與粗糙邊角</li>
-      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 個技能、72 個系統：Open Design 函式庫如何運作</a>——不管你跑哪個模型都保持不變的 <code>SKILL.md</code> / <code>DESIGN.md</code> 檔案</li>
+      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 個技能、72 個系統：OpenDesign 函式庫如何運作</a>——不管你跑哪個模型都保持不變的 <code>SKILL.md</code> / <code>DESIGN.md</code> 檔案</li>
       </ul>
   ja:
     title: "BYOK デザインワークフロー：自分のキーで Claude、Codex、Qwen を動かす"
-    summary: "ほとんどの AI デザインツールは、消費するトークンごとにこっそりマージンを上乗せしています。Open Design はその逆の立場を取ります。自分のモデルキーを持ち込み、プロバイダーに直接支払い、推論がどこで動くかを完全にコントロールできるのです。BYOK レイヤーが実際にどう機能するのかを解説します。"
+    summary: "ほとんどの AI デザインツールは、消費するトークンごとにこっそりマージンを上乗せしています。OpenDesign はその逆の立場を取ります。自分のモデルキーを持ち込み、プロバイダーに直接支払い、推論がどこで動くかを完全にコントロールできるのです。BYOK レイヤーが実際にどう機能するのかを解説します。"
     bodyHtml: |
       <p>2026 年にホスト型の AI デザイン製品を使ったことがあるなら、請求額がじわじわ増えていることに気づいているはずです。シート単位の課金の上にサブスクリプションが乗り、さらにその上に誰も公表していない推論マークアップが重なる。この計算は意図的に不透明になっています。</p>
-      <p>Open Design は推論を実行しません。トークンにマージンを乗せることもありません。ワークフロー全体が <strong>bring-your-own-key（BYOK）</strong> を中心に構築されています。daemon を任意の OpenAI 互換エンドポイントに向け、自分の API キーを貼り付ければ、それで完了です。</p>
-      <p>この記事では、なぜその選択をしたのか、内部でどう動くのか、そして日々のワークフローで実際に何が変わるのかを説明します。その背景にあるより大きな哲学的な議論を知りたい方には、<a href="/blog/why-we-built-open-design-as-a-skill-layer/">なぜ Open Design を製品ではなくスキルレイヤーとして作ったのか</a>が対になる記事です。こちらは実践編になります。</p>
+      <p>OpenDesign は推論を実行しません。トークンにマージンを乗せることもありません。ワークフロー全体が <strong>bring-your-own-key（BYOK）</strong> を中心に構築されています。daemon を任意の OpenAI 互換エンドポイントに向け、自分の API キーを貼り付ければ、それで完了です。</p>
+      <p>この記事では、なぜその選択をしたのか、内部でどう動くのか、そして日々のワークフローで実際に何が変わるのかを説明します。その背景にあるより大きな哲学的な議論を知りたい方には、<a href="/blog/why-we-built-open-design-as-a-skill-layer/">なぜ OpenDesign を製品ではなくスキルレイヤーとして作ったのか</a>が対になる記事です。こちらは実践編になります。</p>
       <h2>ここでの「BYOK」が本当に意味するもの</h2>
       <p>AI ツールの分野には BYOK の定義が 2 つ出回っており、両者は同じものではありません。</p>
       <ul>
       <li><strong>表面的な BYOK</strong> — キーを貼り付けさせてはくれるが、依然として推論は自社サーバー経由でルーティングされ、プロンプトはログに記録され、レート制限がかかる場合もある。</li>
       <li><strong>本物の BYOK</strong> — ツールがあなたのマシン（またはあなたのインフラ）からモデルプロバイダーを直接呼び出す。プロンプトがベンダーのサーバーに触れることはない。ベンダーはマージンを取らない。</li>
       </ul>
-      <p>Open Design は後者です。daemon は、あなたが設定したエンドポイントに対して、あなたのキーで、あなたのマシンから HTTP 呼び出しを行います。プロキシしません。ログを取りません。あなたのプロンプトを見ません。</p>
+      <p>OpenDesign は後者です。daemon は、あなたが設定したエンドポイントに対して、あなたのキーで、あなたのマシンから HTTP 呼び出しを行います。プロキシしません。ログを取りません。あなたのプロンプトを見ません。</p>
       <h3>呼び出しが実際に向かう先</h3>
-      <p>daemon がジョブを拾うと、プロンプトを構成します。タスクに関連する <code>SKILL.md</code> と <code>DESIGN.md</code> ファイルを取り込み、あなたが設定したベース URL に対して 1 回の HTTP リクエストを行います。レスポンスはあなたのマシンにストリーミングで返り、エージェントが成果物をディスクに書き込む。これがループの全体です。経路の中に Open Design のサーバーは存在しません。スキルを発見するのと同じ daemon がネットワーク呼び出しも担うため、「これはどこで動くのか？」は設定項目であって、営業との会話にはならないのです。</p>
+      <p>daemon がジョブを拾うと、プロンプトを構成します。タスクに関連する <code>SKILL.md</code> と <code>DESIGN.md</code> ファイルを取り込み、あなたが設定したベース URL に対して 1 回の HTTP リクエストを行います。レスポンスはあなたのマシンにストリーミングで返り、エージェントが成果物をディスクに書き込む。これがループの全体です。経路の中に OpenDesign のサーバーは存在しません。スキルを発見するのと同じ daemon がネットワーク呼び出しも担うため、「これはどこで動くのか？」は設定項目であって、営業との会話にはならないのです。</p>
       <h2>OpenAI 互換アダプター</h2>
       <p>2026 年のほとんどの AI 推論エンドポイントは OpenAI Chat Completions API を話します。私たちはこれを最小公倍数的なプロトコルとして使っています。あなたのプロバイダーがこれを話すなら（そしてほぼすべてが話します）、デフォルトでサポートされます。プラグインもなく、プロバイダーごとの統合を待つ必要もありません。</p>
       <h3>向けられるプロバイダー</h3>
@@ -401,7 +401,7 @@ i18n:
       <h2>プライバシーとコンプライアンス</h2>
       <p>BYOK が重要なもう 1 つの理由：<strong>プロンプトにはクライアントのブランドが含まれている。</strong></p>
       <p>ホスト型推論は、ブランド文書、未発表の製品名、社内価格、ローンチ前のクリエイティブを第三者のサーバー経由でルーティングすることを意味します。ほとんどの企業はそれについて意見を持っています。なかには契約上の規定を持つところもあります。</p>
-      <p>BYOK では、プロンプトの往復はあなたのノート PC と、すでに精査済み（あるいはセルフホスト）のモデルプロバイダーとの間で行われます。Open Design はその経路にいません。召喚状を出されるログもなく、漏洩する侵害面もなく、説明すべき監査の穴もありません。</p>
+      <p>BYOK では、プロンプトの往復はあなたのノート PC と、すでに精査済み（あるいはセルフホスト）のモデルプロバイダーとの間で行われます。OpenDesign はその経路にいません。召喚状を出されるログもなく、漏洩する侵害面もなく、説明すべき監査の穴もありません。</p>
       <h3>「ログなし」が実際に何をもたらすか</h3>
       <p>エージェンシーの仕事、規制業界、あるいはローンチ前のあらゆるものにとって、これが唯一耐えうる立場です。セキュリティレビューで「我々のブランドアセットはどこへ行くのか？」と問われたら、答えは「契約しているモデルプロバイダーへ、そしてそれ以外のどこへも行かない」となります。「我々がコントロールできないベンダーのダッシュボードへ」ではありません。Ollama や vLLM のエンドポイントをセルフホストすれば、さらに締まります。バイトがネットワークの外に出ることが一切なくなるのです。これは <a href="/blog/byok-reality-check-5-things-that-break/">BYOK の現実チェック</a>で掘り下げているのと同じトレードオフであり、そこでは粗い部分がまだどこにあるかについて正直に書いています。ローカルモデルとフロンティアモデルはセンスの面で互換ではなく、プロンプトインジェクションの面はあなた自身が負うことになります。</p>
       <h2>プロジェクトの途中でプロバイダーを切り替える方法</h2>
@@ -412,7 +412,7 @@ i18n:
       <li><strong>機密コンテンツ</strong> — クライアント機密のプロンプトにはローカルの Ollama モデルに替える</li>
       <li><strong>最終仕上げ</strong> — 利用可能な最強のモデル（Opus、GPT-5 Pro）に 1 パスを投じる</li>
       </ul>
-      <p>Open Design では、切り替えは <code>.env.local</code> の 2 行を編集することです。マイグレーションも、再オンボーディングも、プランのアップグレードもありません。</p>
+      <p>OpenDesign では、切り替えは <code>.env.local</code> の 2 行を編集することです。マイグレーションも、再オンボーディングも、プランのアップグレードもありません。</p>
       <h3>1 つのブリーフに対する実際のルーティング例</h3>
       <p>具体的には、1 つのランディングページのブリーフはこんなふうに進められます。</p>
       <pre class="astro-code open-design-editorial" style="background-color:#f7f1de;color:#15140f; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span># draft + first iterations — cheap and fast</span></span>
@@ -428,26 +428,26 @@ i18n:
       <p>これが BYOK のすべてです。特別な階層も、アップグレードのフローも、私たちとの請求関係もありません。あなたはモデルプロバイダーに支払い、自分のキーを保持し、自分のプロンプトを保持します。私たちはレイヤーを提供するだけです。</p>
       <h2>関連する読み物</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">なぜ Open Design を製品ではなくスキルレイヤーとして作ったのか</a> — ホスト型アプリではなく薄いレイヤーを出すという賭けの裏側</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">なぜ OpenDesign を製品ではなくスキルレイヤーとして作ったのか</a> — ホスト型アプリではなく薄いレイヤーを出すという賭けの裏側</li>
       <li><a href="/blog/byok-reality-check-5-things-that-break/">BYOK の現実チェック：壊れる 5 つのこと</a> — 自分のキーを持ち込むことの正直なトレードオフと粗い部分</li>
-      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 のスキル、72 のシステム：Open Design ライブラリの仕組み</a> — どのモデルを動かしても変わらない <code>SKILL.md</code> / <code>DESIGN.md</code> ファイル</li>
+      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 のスキル、72 のシステム：OpenDesign ライブラリの仕組み</a> — どのモデルを動かしても変わらない <code>SKILL.md</code> / <code>DESIGN.md</code> ファイル</li>
       </ul>
   ko:
     title: "BYOK 디자인 워크플로: 자신의 키로 Claude, Codex, Qwen 실행하기"
-    summary: "대부분의 AI 디자인 도구는 여러분이 쓰는 모든 토큰에 슬그머니 마진을 붙입니다. Open Design은 정반대 입장을 취합니다 — 자신의 모델 키를 가져와 공급자에게 직접 결제하고, 추론이 어디에서 실행되는지에 대한 통제권을 온전히 유지하세요. BYOK 레이어가 실제로 어떻게 작동하는지 살펴봅니다."
+    summary: "대부분의 AI 디자인 도구는 여러분이 쓰는 모든 토큰에 슬그머니 마진을 붙입니다. OpenDesign은 정반대 입장을 취합니다 — 자신의 모델 키를 가져와 공급자에게 직접 결제하고, 추론이 어디에서 실행되는지에 대한 통제권을 온전히 유지하세요. BYOK 레이어가 실제로 어떻게 작동하는지 살펴봅니다."
     bodyHtml: |
       <p>2026년에 호스팅형 AI 디자인 제품을 써봤다면, 청구서가 슬금슬금 올라가는 것을 아마 눈치챘을 것입니다. 좌석당 요금 위에 구독료가 얹히고, 그 위에 아무도 공개하지 않는 추론 마진이 또 한 겹 쌓입니다. 그 계산은 일부러 불투명하게 만들어진 것입니다.</p>
-      <p>Open Design은 추론을 실행하지 않습니다. 우리는 토큰에 마진을 붙이지 않습니다. 전체 워크플로는 <strong>자신의 키 가져오기(BYOK)</strong>를 중심으로 설계되어 있습니다 — daemon을 OpenAI 호환 엔드포인트 어디로든 가리키고, 자신의 API 키를 붙여넣으면 끝입니다.</p>
-      <p>이 글에서는 우리가 왜 그런 선택을 했는지, 내부에서 어떻게 작동하는지, 그리고 그것이 일상 워크플로에서 실제로 무엇을 바꾸는지 설명합니다. 그 뒤에 깔린 더 큰 철학적 논의가 궁금하다면, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">우리가 Open Design을 제품이 아닌 스킬 레이어로 만든 이유</a>가 짝이 되는 글입니다 — 이 글은 직접 손으로 해보는 버전입니다.</p>
+      <p>OpenDesign은 추론을 실행하지 않습니다. 우리는 토큰에 마진을 붙이지 않습니다. 전체 워크플로는 <strong>자신의 키 가져오기(BYOK)</strong>를 중심으로 설계되어 있습니다 — daemon을 OpenAI 호환 엔드포인트 어디로든 가리키고, 자신의 API 키를 붙여넣으면 끝입니다.</p>
+      <p>이 글에서는 우리가 왜 그런 선택을 했는지, 내부에서 어떻게 작동하는지, 그리고 그것이 일상 워크플로에서 실제로 무엇을 바꾸는지 설명합니다. 그 뒤에 깔린 더 큰 철학적 논의가 궁금하다면, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">우리가 OpenDesign을 제품이 아닌 스킬 레이어로 만든 이유</a>가 짝이 되는 글입니다 — 이 글은 직접 손으로 해보는 버전입니다.</p>
       <h2>여기서 “BYOK”가 정말로 의미하는 것</h2>
       <p>AI 도구 업계에는 BYOK에 대한 두 가지 정의가 떠돌고 있는데, 둘은 같은 것이 아닙니다:</p>
       <ul>
       <li><strong>표면적 BYOK</strong> — 도구가 키를 붙여넣게 해주지만, 추론은 여전히 자기네 서버를 거쳐 라우팅하고, 여러분의 프롬프트를 로그에 남기며, 속도 제한을 적용할 수 있습니다.</li>
       <li><strong>진짜 BYOK</strong> — 도구가 여러분의 머신(또는 인프라)에서 모델 공급자를 직접 호출합니다. 여러분의 프롬프트는 결코 벤더의 서버에 닿지 않습니다. 벤더는 마진을 가져가지 않습니다.</li>
       </ul>
-      <p>Open Design은 두 번째 종류입니다. daemon은 여러분이 구성한 엔드포인트로, 여러분의 키로, 여러분의 머신에서 HTTP 호출을 합니다. 우리는 프록시하지 않습니다. 우리는 로그를 남기지 않습니다. 우리는 여러분의 프롬프트를 보지 않습니다.</p>
+      <p>OpenDesign은 두 번째 종류입니다. daemon은 여러분이 구성한 엔드포인트로, 여러분의 키로, 여러분의 머신에서 HTTP 호출을 합니다. 우리는 프록시하지 않습니다. 우리는 로그를 남기지 않습니다. 우리는 여러분의 프롬프트를 보지 않습니다.</p>
       <h3>호출이 실제로 가는 곳</h3>
-      <p>daemon이 작업을 집어 들면, 프롬프트를 구성합니다 — 그 작업에 해당하는 <code>SKILL.md</code>와 <code>DESIGN.md</code> 파일을 끌어옵니다 — 그런 다음 여러분이 설정한 base URL로 단 한 번의 HTTP 요청을 보냅니다. 응답은 여러분의 머신으로 스트리밍되어 돌아오고, 에이전트는 산출물을 디스크에 기록합니다. 그것이 루프의 전부입니다. 경로 안에 Open Design 서버는 없습니다. 여러분의 스킬을 발견하는 그 동일한 daemon이 네트워크 호출도 소유합니다. 그렇기 때문에 “이건 어디에서 실행되나요?”가 영업 대화가 아니라 하나의 설정이 됩니다.</p>
+      <p>daemon이 작업을 집어 들면, 프롬프트를 구성합니다 — 그 작업에 해당하는 <code>SKILL.md</code>와 <code>DESIGN.md</code> 파일을 끌어옵니다 — 그런 다음 여러분이 설정한 base URL로 단 한 번의 HTTP 요청을 보냅니다. 응답은 여러분의 머신으로 스트리밍되어 돌아오고, 에이전트는 산출물을 디스크에 기록합니다. 그것이 루프의 전부입니다. 경로 안에 OpenDesign 서버는 없습니다. 여러분의 스킬을 발견하는 그 동일한 daemon이 네트워크 호출도 소유합니다. 그렇기 때문에 “이건 어디에서 실행되나요?”가 영업 대화가 아니라 하나의 설정이 됩니다.</p>
       <h2>OpenAI 호환 어댑터</h2>
       <p>2026년 대부분의 AI 추론 엔드포인트는 OpenAI Chat Completions API를 말합니다. 우리는 그것을 최소공통분모 프로토콜로 사용합니다. 여러분의 공급자가 그것을 말한다면(거의 모두가 그렇습니다), 기본으로 지원됩니다 — 플러그인도, 기다려야 할 공급자별 통합도 없습니다.</p>
       <h3>가리킬 수 있는 공급자들</h3>
@@ -490,7 +490,7 @@ i18n:
       <h2>프라이버시와 컴플라이언스</h2>
       <p>BYOK가 중요한 두 번째 이유가 있습니다: <strong>프롬프트에는 여러분 고객의 브랜드가 담겨 있습니다.</strong></p>
       <p>호스팅형 추론은 브랜드 문서, 미발표 제품명, 내부 가격, 출시 전 크리에이티브를 제3자의 서버를 거쳐 라우팅한다는 뜻입니다. 대부분의 회사는 그에 대해 나름의 입장이 있습니다. 일부는 그에 관한 계약을 두고 있습니다.</p>
-      <p>BYOK에서는 프롬프트 왕복이 여러분의 노트북과, 여러분이 이미 검증한(혹은 자체 호스팅한) 모델 공급자 사이에서만 일어납니다. Open Design은 그 경로 안에 없습니다. 우리에게는 소환장을 받을 로그도, 유출될 침해 표면도, 해명할 감사 공백도 없습니다.</p>
+      <p>BYOK에서는 프롬프트 왕복이 여러분의 노트북과, 여러분이 이미 검증한(혹은 자체 호스팅한) 모델 공급자 사이에서만 일어납니다. OpenDesign은 그 경로 안에 없습니다. 우리에게는 소환장을 받을 로그도, 유출될 침해 표면도, 해명할 감사 공백도 없습니다.</p>
       <h3>“로그 없음”이 실제로 가져다주는 것</h3>
       <p>에이전시 작업, 규제 산업, 또는 출시 전 모든 것에 있어서 이것은 버텨낼 수 있는 유일한 입장입니다. 보안 검토에서 “우리 브랜드 자산이 어디로 가나요?”라고 물으면, 답은 “우리 계약 안의 모델 공급자로, 그 외 어디로도 가지 않습니다”입니다 — “우리가 통제하지 못하는 벤더 대시보드로”가 아닙니다. Ollama나 vLLM 엔드포인트를 자체 호스팅하면 더욱 조여집니다: 바이트가 여러분의 네트워크를 아예 떠나지 않습니다. 이는 <a href="/blog/byok-reality-check-5-things-that-break/">BYOK 현실 점검</a>에서 탐구한 것과 같은 트레이드오프이며, 그 글은 거친 부분이 여전히 어디에 있는지에 대해 솔직합니다 — 로컬 모델과 프런티어 모델은 취향 면에서 서로 교체 가능하지 않으며, 프롬프트 인젝션 표면은 여러분 스스로 소유하게 됩니다.</p>
       <h2>프로젝트 도중에 공급자를 전환하는 방법</h2>
@@ -501,7 +501,7 @@ i18n:
       <li><strong>민감한 콘텐츠</strong> — 고객 기밀 프롬프트에는 로컬 Ollama 모델로 교체</li>
       <li><strong>최종 마감</strong> — 사용 가능한 가장 강력한 모델(Opus, GPT-5 Pro)에 한 패스를 투입</li>
       </ul>
-      <p>Open Design에서 전환은 <code>.env.local</code>의 두 줄을 편집하는 일입니다. 마이그레이션도, 다시 온보딩하는 것도, 플랜 업그레이드도 없습니다.</p>
+      <p>OpenDesign에서 전환은 <code>.env.local</code>의 두 줄을 편집하는 일입니다. 마이그레이션도, 다시 온보딩하는 것도, 플랜 업그레이드도 없습니다.</p>
       <h3>하나의 브리프를 위한 실제 라우팅 예시</h3>
       <p>구체적으로, 하나의 랜딩 페이지 브리프는 이렇게 진행될 수 있습니다:</p>
       <pre class="astro-code open-design-editorial" style="background-color:#f7f1de;color:#15140f; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span># draft + first iterations — cheap and fast</span></span>
@@ -517,24 +517,24 @@ i18n:
       <p>그것이 BYOK 이야기의 전부입니다. 특별한 등급도, 업그레이드 흐름도, 우리와의 청구 관계도 없습니다. 여러분은 모델 공급자에게 결제하고, 키를 직접 보관하며, 프롬프트를 직접 지킵니다. 우리는 레이어를 제공합니다.</p>
       <h2>관련 읽을거리</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">우리가 Open Design을 제품이 아닌 스킬 레이어로 만든 이유</a> — 호스팅형 앱 대신 얇은 레이어를 출시한 데 깔린 베팅</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">우리가 OpenDesign을 제품이 아닌 스킬 레이어로 만든 이유</a> — 호스팅형 앱 대신 얇은 레이어를 출시한 데 깔린 베팅</li>
       <li><a href="/blog/byok-reality-check-5-things-that-break/">BYOK 현실 점검: 깨지는 5가지</a> — 자신의 키를 가져올 때의 솔직한 트레이드오프와 거친 부분들</li>
-      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">스킬 31개, 시스템 72개: Open Design 라이브러리가 작동하는 방식</a> — 어떤 모델을 돌리든 변하지 않는 <code>SKILL.md</code> / <code>DESIGN.md</code> 파일들</li>
+      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">스킬 31개, 시스템 72개: OpenDesign 라이브러리가 작동하는 방식</a> — 어떤 모델을 돌리든 변하지 않는 <code>SKILL.md</code> / <code>DESIGN.md</code> 파일들</li>
       </ul>
   de:
     title: "BYOK-Design-Workflow: Claude, Codex oder Qwen mit deinem eigenen Key betreiben"
-    summary: "Die meisten KI-Design-Tools schlagen still und leise eine Marge auf jeden Token auf, den du ausgibst. Open Design vertritt die gegenteilige Haltung — bring deinen eigenen Modell-Key mit, zahle direkt beim Anbieter und behalte die volle Kontrolle darüber, wo die Inferenz läuft. So funktioniert die BYOK-Ebene wirklich."
+    summary: "Die meisten KI-Design-Tools schlagen still und leise eine Marge auf jeden Token auf, den du ausgibst. OpenDesign vertritt die gegenteilige Haltung — bring deinen eigenen Modell-Key mit, zahle direkt beim Anbieter und behalte die volle Kontrolle darüber, wo die Inferenz läuft. So funktioniert die BYOK-Ebene wirklich."
     bodyHtml: |
       <p>Wenn du 2026 ein gehostetes KI-Design-Produkt genutzt hast, ist dir wahrscheinlich aufgefallen, dass die Rechnung schleichend steigt. Ein Abo obendrauf auf eine Pro-Platz-Gebühr, geschichtet über einen Inferenz-Aufschlag, den niemand veröffentlicht. Die Rechnung ist absichtlich undurchsichtig.</p>
-      <p>Open Design führt keine Inferenz aus. Wir haben keine Marge auf Tokens. Der gesamte Workflow ist um <strong>Bring-your-own-Key (BYOK)</strong> herum gebaut — du richtest den daemon auf einen beliebigen OpenAI-kompatiblen Endpunkt, fügst deinen eigenen API-Key ein, und das war's.</p>
-      <p>Dieser Beitrag erklärt, warum wir diese Entscheidung getroffen haben, wie sie unter der Haube funktioniert und was sie in deinem Arbeitsalltag tatsächlich verändert. Wenn du das größere philosophische Argument dahinter willst, ist <a href="/blog/why-we-built-open-design-as-a-skill-layer/">warum wir Open Design als Skill-Layer gebaut haben, nicht als Produkt</a> das begleitende Stück — dieses hier ist die praktische Version.</p>
+      <p>OpenDesign führt keine Inferenz aus. Wir haben keine Marge auf Tokens. Der gesamte Workflow ist um <strong>Bring-your-own-Key (BYOK)</strong> herum gebaut — du richtest den daemon auf einen beliebigen OpenAI-kompatiblen Endpunkt, fügst deinen eigenen API-Key ein, und das war's.</p>
+      <p>Dieser Beitrag erklärt, warum wir diese Entscheidung getroffen haben, wie sie unter der Haube funktioniert und was sie in deinem Arbeitsalltag tatsächlich verändert. Wenn du das größere philosophische Argument dahinter willst, ist <a href="/blog/why-we-built-open-design-as-a-skill-layer/">warum wir OpenDesign als Skill-Layer gebaut haben, nicht als Produkt</a> das begleitende Stück — dieses hier ist die praktische Version.</p>
       <h2>Was „BYOK“ hier wirklich bedeutet</h2>
       <p>Im Bereich der KI-Tools kursieren zwei Definitionen von BYOK, und sie sind nicht dasselbe:</p>
       <ul>
       <li><strong>Oberflächliches BYOK</strong> — das Tool lässt dich einen Key einfügen, leitet die Inferenz aber weiterhin über seine eigenen Server, protokolliert deine Prompts und wendet möglicherweise Rate Limits an.</li>
       <li><strong>Echtes BYOK</strong> — das Tool ruft den Modellanbieter direkt von deiner Maschine (oder deiner Infrastruktur) aus auf. Deine Prompts berühren nie die Server des Anbieters. Der Anbieter nimmt keine Marge.</li>
       </ul>
-      <p>Open Design ist die zweite Art. Der daemon macht HTTP-Aufrufe an den von dir konfigurierten Endpunkt, mit deinem Key, von deiner Maschine aus. Wir proxyen nicht. Wir protokollieren nicht. Wir sehen deine Prompts nicht.</p>
+      <p>OpenDesign ist die zweite Art. Der daemon macht HTTP-Aufrufe an den von dir konfigurierten Endpunkt, mit deinem Key, von deiner Maschine aus. Wir proxyen nicht. Wir protokollieren nicht. Wir sehen deine Prompts nicht.</p>
       <h3>Wohin der Aufruf tatsächlich geht</h3>
       <p>Wenn der daemon einen Job aufnimmt, stellt er den Prompt zusammen — er zieht die für die Aufgabe relevanten <code>SKILL.md</code>- und <code>DESIGN.md</code>-Dateien heran — und macht dann eine einzige HTTP-Anfrage an die von dir gesetzte Basis-URL. Die Antwort streamt zurück zu deiner Maschine, der Agent schreibt das Artefakt auf die Festplatte, und das ist die gesamte Schleife. Es gibt keinen Open-Design-Server im Pfad. Derselbe daemon, der deine Skills entdeckt, ist auch für den Netzwerkaufruf zuständig — deshalb ist „Wo läuft das?“ eine Einstellung und kein Verkaufsgespräch.</p>
       <h2>Der OpenAI-kompatible Adapter</h2>
@@ -573,7 +573,7 @@ i18n:
       <h2>Datenschutz und Compliance</h2>
       <p>Es gibt einen zweiten Grund, warum BYOK zählt: <strong>die Prompts enthalten die Marke deines Kunden.</strong></p>
       <p>Gehostete Inferenz bedeutet, Markendokumente, noch nicht angekündigte Produktnamen, interne Preise und Pre-Launch-Kreatives durch die Server eines Dritten zu leiten. Die meisten Unternehmen haben dazu eine Meinung. Manche haben dazu einen Vertrag.</p>
-      <p>Mit BYOK findet der Prompt-Round-Trip zwischen deinem Laptop und dem Modellanbieter statt, den du bereits geprüft (oder selbst gehostet) hast. Open Design ist nicht im Loop. Wir haben kein Log, das vorgeladen werden könnte, keine Angriffsfläche, von der etwas durchsickern könnte, keine Audit-Lücke, die wir erklären müssten.</p>
+      <p>Mit BYOK findet der Prompt-Round-Trip zwischen deinem Laptop und dem Modellanbieter statt, den du bereits geprüft (oder selbst gehostet) hast. OpenDesign ist nicht im Loop. Wir haben kein Log, das vorgeladen werden könnte, keine Angriffsfläche, von der etwas durchsickern könnte, keine Audit-Lücke, die wir erklären müssten.</p>
       <h3>Was „kein Log“ in der Praxis bringt</h3>
       <p>Für Agenturarbeit, regulierte Branchen oder alles Pre-Launch ist das die einzige Haltung, die standhält. Wenn ein Security-Review fragt „Wohin gehen unsere Markenassets?“, lautet die Antwort „zum Modellanbieter in unserem Vertrag, und sonst nirgendwohin“ — nicht „in ein Anbieter-Dashboard, das wir nicht kontrollieren“. Das Selbst-Hosten eines Ollama- oder vLLM-Endpunkts zieht es weiter an: Die Bytes verlassen dein Netzwerk überhaupt nicht. Dies ist derselbe Trade-off, der in <a href="/blog/byok-reality-check-5-things-that-break/">dem BYOK-Reality-Check</a> untersucht wird, der ehrlich darüber ist, wo die rauen Kanten noch sind — lokale Modelle und Frontier-Modelle sind im Geschmack nicht austauschbar, und die Prompt-Injection-Fläche gehört dir selbst.</p>
       <h2>Wie man mitten im Projekt den Anbieter wechselt</h2>
@@ -584,7 +584,7 @@ i18n:
       <li><strong>Sensible Inhalte</strong> — wechsle zu einem lokalen Ollama-Modell für mandantenvertrauliche Prompts</li>
       <li><strong>Letzter Feinschliff</strong> — verbrenne einen Durchlauf auf dem stärksten verfügbaren Modell (Opus, GPT-5 Pro)</li>
       </ul>
-      <p>In Open Design bedeutet ein Wechsel, zwei Zeilen in <code>.env.local</code> zu bearbeiten. Es gibt keine Migration, kein erneutes Onboarding, kein Plan-Upgrade.</p>
+      <p>In OpenDesign bedeutet ein Wechsel, zwei Zeilen in <code>.env.local</code> zu bearbeiten. Es gibt keine Migration, kein erneutes Onboarding, kein Plan-Upgrade.</p>
       <h3>Ein durchgespieltes Routing für ein Briefing</h3>
       <p>Konkret könnte ein einzelnes Landing-Page-Briefing so ablaufen:</p>
       <pre class="astro-code open-design-editorial" style="background-color:#f7f1de;color:#15140f; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span># draft + first iterations — cheap and fast</span></span>
@@ -600,26 +600,26 @@ i18n:
       <p>Das ist die gesamte BYOK-Geschichte. Es gibt keine spezielle Stufe, keinen Upgrade-Flow, keine Abrechnungsbeziehung mit uns. Du zahlst den Modellanbieter, du behältst deine Keys, du behältst deine Prompts. Wir liefern die Ebene.</p>
       <h2>Weiterführende Lektüre</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Warum wir Open Design als Skill-Layer gebaut haben, nicht als Produkt</a> — die Wette dahinter, eine dünne Ebene auszuliefern statt einer gehosteten App</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Warum wir OpenDesign als Skill-Layer gebaut haben, nicht als Produkt</a> — die Wette dahinter, eine dünne Ebene auszuliefern statt einer gehosteten App</li>
       <li><a href="/blog/byok-reality-check-5-things-that-break/">Der BYOK-Reality-Check: 5 Dinge, die kaputtgehen</a> — die ehrlichen Trade-offs und rauen Kanten, wenn man seinen eigenen Key mitbringt</li>
       <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 Skills, 72 Systeme: wie die Open-Design-Bibliothek funktioniert</a> — die <code>SKILL.md</code>-/<code>DESIGN.md</code>-Dateien, die konstant bleiben, egal welches Modell du betreibst</li>
       </ul>
   fr:
     title: "Workflow de design BYOK : faites tourner Claude, Codex ou Qwen sur votre propre clé"
-    summary: "La plupart des outils de design IA ajoutent discrètement une marge sur chaque token que vous dépensez. Open Design adopte la position inverse — apportez la clé de votre propre modèle, payez directement le fournisseur et gardez le contrôle total de l'endroit où s'exécute l'inférence. Voici comment fonctionne réellement la couche BYOK."
+    summary: "La plupart des outils de design IA ajoutent discrètement une marge sur chaque token que vous dépensez. OpenDesign adopte la position inverse — apportez la clé de votre propre modèle, payez directement le fournisseur et gardez le contrôle total de l'endroit où s'exécute l'inférence. Voici comment fonctionne réellement la couche BYOK."
     bodyHtml: |
       <p>Si vous avez utilisé un produit de design IA hébergé en 2026, vous avez probablement remarqué la facture qui grimpe. Un abonnement par-dessus une facturation par siège, le tout superposé à une majoration d'inférence que personne ne publie. Le calcul est opaque, et c'est voulu.</p>
-      <p>Open Design n'exécute pas d'inférence. Nous n'avons aucune marge sur les tokens. L'ensemble du workflow est construit autour du <strong>bring-your-own-key (BYOK)</strong> — vous pointez le daemon vers n'importe quel endpoint compatible OpenAI, vous collez votre propre clé API, et c'est terminé.</p>
-      <p>Cet article explique pourquoi nous avons fait ce choix, comment cela fonctionne en coulisses, et ce que cela change réellement dans votre workflow au quotidien. Si vous voulez l'argument philosophique plus large derrière tout ça, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">pourquoi nous avons conçu Open Design comme une couche de skills</a> en est le pendant — celui-ci est la version pratique.</p>
+      <p>OpenDesign n'exécute pas d'inférence. Nous n'avons aucune marge sur les tokens. L'ensemble du workflow est construit autour du <strong>bring-your-own-key (BYOK)</strong> — vous pointez le daemon vers n'importe quel endpoint compatible OpenAI, vous collez votre propre clé API, et c'est terminé.</p>
+      <p>Cet article explique pourquoi nous avons fait ce choix, comment cela fonctionne en coulisses, et ce que cela change réellement dans votre workflow au quotidien. Si vous voulez l'argument philosophique plus large derrière tout ça, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">pourquoi nous avons conçu OpenDesign comme une couche de skills</a> en est le pendant — celui-ci est la version pratique.</p>
       <h2>Ce que « BYOK » signifie vraiment ici</h2>
       <p>Il y a deux définitions de BYOK qui circulent dans l'univers de l'outillage IA, et ce ne sont pas la même chose :</p>
       <ul>
       <li><strong>BYOK de surface</strong> — l'outil vous laisse coller une clé, mais achemine quand même l'inférence via ses serveurs, journalise vos prompts et peut appliquer des limites de débit.</li>
       <li><strong>BYOK réel</strong> — l'outil appelle directement le fournisseur du modèle depuis votre machine (ou votre infrastructure). Vos prompts ne touchent jamais les serveurs du fournisseur. Le fournisseur ne prend aucune marge.</li>
       </ul>
-      <p>Open Design est du second type. Le daemon effectue des appels HTTP vers l'endpoint que vous configurez, avec votre clé, depuis votre machine. Nous ne faisons pas de proxy. Nous ne journalisons pas. Nous ne voyons pas vos prompts.</p>
+      <p>OpenDesign est du second type. Le daemon effectue des appels HTTP vers l'endpoint que vous configurez, avec votre clé, depuis votre machine. Nous ne faisons pas de proxy. Nous ne journalisons pas. Nous ne voyons pas vos prompts.</p>
       <h3>Où part réellement l'appel</h3>
-      <p>Lorsque le daemon prend en charge une tâche, il compose le prompt — en récupérant les fichiers <code>SKILL.md</code> et <code>DESIGN.md</code> pertinents pour la tâche — puis effectue une unique requête HTTP vers la base URL que vous avez définie. La réponse est renvoyée en streaming vers votre machine, l'agent écrit l'artefact sur le disque, et voilà toute la boucle. Il n'y a aucun serveur Open Design sur le chemin. Le même daemon qui découvre vos skills possède aussi l'appel réseau, c'est pourquoi « où cela s'exécute-t-il ? » est un paramètre et non une conversation commerciale.</p>
+      <p>Lorsque le daemon prend en charge une tâche, il compose le prompt — en récupérant les fichiers <code>SKILL.md</code> et <code>DESIGN.md</code> pertinents pour la tâche — puis effectue une unique requête HTTP vers la base URL que vous avez définie. La réponse est renvoyée en streaming vers votre machine, l'agent écrit l'artefact sur le disque, et voilà toute la boucle. Il n'y a aucun serveur OpenDesign sur le chemin. Le même daemon qui découvre vos skills possède aussi l'appel réseau, c'est pourquoi « où cela s'exécute-t-il ? » est un paramètre et non une conversation commerciale.</p>
       <h2>L'adaptateur compatible OpenAI</h2>
       <p>La plupart des endpoints d'inférence IA en 2026 parlent l'API OpenAI Chat Completions. Nous l'utilisons comme protocole plus petit dénominateur commun. Si votre fournisseur la parle (et presque tous le font), vous êtes pris en charge par défaut — aucun plugin, aucune intégration par fournisseur à attendre.</p>
       <h3>Fournisseurs vers lesquels vous pouvez le pointer</h3>
@@ -742,7 +742,7 @@ i18n:
       <h2>Confidentialité et conformité</h2>
       <p>Il y a une seconde raison pour laquelle le BYOK compte : <strong>les prompts contiennent la marque de votre client.</strong></p>
       <p>L'inférence hébergée signifie faire transiter des documents de marque, des noms de produits non annoncés, des tarifs internes et de la création avant lancement par les serveurs d'un tiers. La plupart des entreprises ont un avis là-dessus. Certaines ont un contrat à ce sujet.</p>
-      <p>Avec le BYOK, l'aller-retour du prompt se fait entre votre ordinateur portable et le fournisseur du modèle que vous avez déjà validé (ou auto-hébergé). Open Design n'est pas dans la boucle. Nous n'avons aucun journal à assigner, aucune surface de fuite à exposer, aucun trou d'audit à expliquer.</p>
+      <p>Avec le BYOK, l'aller-retour du prompt se fait entre votre ordinateur portable et le fournisseur du modèle que vous avez déjà validé (ou auto-hébergé). OpenDesign n'est pas dans la boucle. Nous n'avons aucun journal à assigner, aucune surface de fuite à exposer, aucun trou d'audit à expliquer.</p>
       <h3>Ce que « pas de journal » vous apporte en pratique</h3>
       <p>Pour le travail d'agence, les secteurs réglementés ou tout ce qui précède un lancement, c'est la seule position qui tienne. Si une revue de sécurité demande « où vont nos actifs de marque ? », la réponse est « vers le fournisseur du modèle prévu dans notre contrat, et nulle part ailleurs » — pas « vers le tableau de bord d'un fournisseur que nous ne contrôlons pas ». Auto-héberger un endpoint Ollama ou vLLM resserre encore les choses : les octets ne quittent jamais votre réseau. C'est le même arbitrage exploré dans <a href="/blog/byok-reality-check-5-things-that-break/">le bilan de réalité du BYOK</a>, qui est honnête sur les aspérités qui subsistent — les modèles locaux et les modèles de pointe ne sont pas interchangeables sur le goût, et vous êtes propriétaire de la surface d'injection de prompts.</p>
       <h2>Comment changer de fournisseur en cours de projet</h2>
@@ -753,7 +753,7 @@ i18n:
       <li><strong>Contenu sensible</strong> — basculez vers un modèle Ollama local pour les prompts confidentiels du client</li>
       <li><strong>Peaufinage final</strong> — consacrez une passe au modèle le plus puissant disponible (Opus, GPT-5 Pro)</li>
       </ul>
-      <p>Dans Open Design, changer revient à modifier deux lignes dans <code>.env.local</code>. Aucune migration, aucun ré-onboarding, aucune montée en gamme de forfait.</p>
+      <p>Dans OpenDesign, changer revient à modifier deux lignes dans <code>.env.local</code>. Aucune migration, aucun ré-onboarding, aucune montée en gamme de forfait.</p>
       <h3>Un routage détaillé pour un brief</h3>
       <p>Concrètement, un seul brief de landing-page pourrait se dérouler ainsi :</p>
       <pre class="astro-code open-design-editorial" style="background-color:#f7f1de;color:#15140f; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span># draft + first iterations — cheap and fast</span></span>
@@ -769,26 +769,26 @@ i18n:
       <p>Voilà toute l'histoire du BYOK. Aucun palier spécial, aucun parcours de mise à niveau, aucune relation de facturation avec nous. Vous payez le fournisseur du modèle, vous gardez vos clés, vous gardez vos prompts. Nous fournissons la couche.</p>
       <h2>Lectures associées</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Pourquoi nous avons conçu Open Design comme une couche de skills, pas un produit</a> — le pari derrière le fait de livrer une couche fine plutôt qu'une application hébergée</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Pourquoi nous avons conçu OpenDesign comme une couche de skills, pas un produit</a> — le pari derrière le fait de livrer une couche fine plutôt qu'une application hébergée</li>
       <li><a href="/blog/byok-reality-check-5-things-that-break/">Le bilan de réalité du BYOK : 5 choses qui cassent</a> — les compromis honnêtes et les aspérités du fait d'apporter sa propre clé</li>
-      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 skills, 72 systems : comment fonctionne la bibliothèque Open Design</a> — les fichiers <code>SKILL.md</code> / <code>DESIGN.md</code> qui restent constants quel que soit le modèle que vous exécutez</li>
+      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 skills, 72 systems : comment fonctionne la bibliothèque OpenDesign</a> — les fichiers <code>SKILL.md</code> / <code>DESIGN.md</code> qui restent constants quel que soit le modèle que vous exécutez</li>
       </ul>
   ru:
     title: "Рабочий процесс дизайна по модели BYOK: запускайте Claude, Codex или Qwen на собственном ключе"
-    summary: "Большинство ИИ-инструментов для дизайна незаметно добавляют наценку к каждому потраченному вами токену. Open Design занимает противоположную позицию — используйте собственный ключ модели, платите провайдеру напрямую и сохраняйте полный контроль над тем, где выполняется инференс. Вот как на самом деле работает слой BYOK."
+    summary: "Большинство ИИ-инструментов для дизайна незаметно добавляют наценку к каждому потраченному вами токену. OpenDesign занимает противоположную позицию — используйте собственный ключ модели, платите провайдеру напрямую и сохраняйте полный контроль над тем, где выполняется инференс. Вот как на самом деле работает слой BYOK."
     bodyHtml: |
       <p>Если вы пользовались каким-либо облачным ИI-продуктом для дизайна в 2026 году, вы наверняка заметили, что счёт постепенно растёт. Подписка поверх платы за каждое рабочее место, а сверху ещё и наценка за инференс, которую никто не публикует. Расчёты непрозрачны намеренно.</p>
-      <p>Open Design не выполняет инференс. У нас нет наценки на токены. Весь рабочий процесс построен вокруг принципа <strong>bring-your-own-key (BYOK)</strong> — вы направляете daemon на любой совместимый с OpenAI эндпоинт, вставляете собственный API-ключ, и на этом всё.</p>
-      <p>В этой статье объясняется, почему мы сделали такой выбор, как это работает под капотом и что это на самом деле меняет в вашей повседневной работе. Если вас интересует более широкий философский аргумент, стоящий за этим, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">почему мы построили Open Design как слой навыков, а не как продукт</a> — это сопутствующая статья, а эта — её практическая версия.</p>
+      <p>OpenDesign не выполняет инференс. У нас нет наценки на токены. Весь рабочий процесс построен вокруг принципа <strong>bring-your-own-key (BYOK)</strong> — вы направляете daemon на любой совместимый с OpenAI эндпоинт, вставляете собственный API-ключ, и на этом всё.</p>
+      <p>В этой статье объясняется, почему мы сделали такой выбор, как это работает под капотом и что это на самом деле меняет в вашей повседневной работе. Если вас интересует более широкий философский аргумент, стоящий за этим, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">почему мы построили OpenDesign как слой навыков, а не как продукт</a> — это сопутствующая статья, а эта — её практическая версия.</p>
       <h2>Что на самом деле здесь означает «BYOK»</h2>
       <p>В сфере ИИ-инструментов ходят два определения BYOK, и это не одно и то же:</p>
       <ul>
       <li><strong>Поверхностный BYOK</strong> — инструмент позволяет вставить ключ, но по-прежнему маршрутизирует инференс через свои серверы, логирует ваши промпты и может применять ограничения по частоте запросов.</li>
       <li><strong>Настоящий BYOK</strong> — инструмент обращается к провайдеру модели напрямую с вашей машины (или из вашей инфраструктуры). Ваши промпты никогда не попадают на серверы вендора. Вендор не берёт наценку.</li>
       </ul>
-      <p>Open Design относится ко второму типу. Daemon выполняет HTTP-вызовы к тому эндпоинту, который вы настроили, с вашим ключом, с вашей машины. Мы не проксируем. Мы не логируем. Мы не видим ваши промпты.</p>
+      <p>OpenDesign относится ко второму типу. Daemon выполняет HTTP-вызовы к тому эндпоинту, который вы настроили, с вашим ключом, с вашей машины. Мы не проксируем. Мы не логируем. Мы не видим ваши промпты.</p>
       <h3>Куда на самом деле уходит вызов</h3>
-      <p>Когда daemon берёт задачу в работу, он формирует промпт — подтягивая релевантные файлы <code>SKILL.md</code> и <code>DESIGN.md</code> для этой задачи — а затем выполняет единственный HTTP-запрос к заданному вами base URL. Ответ потоком возвращается на вашу машину, агент записывает артефакт на диск — и в этом весь цикл. На этом пути нет сервера Open Design. Тот же daemon, который обнаруживает ваши навыки, владеет и сетевым вызовом, поэтому вопрос «а где это выполняется?» — это настройка, а не разговор с отделом продаж.</p>
+      <p>Когда daemon берёт задачу в работу, он формирует промпт — подтягивая релевантные файлы <code>SKILL.md</code> и <code>DESIGN.md</code> для этой задачи — а затем выполняет единственный HTTP-запрос к заданному вами base URL. Ответ потоком возвращается на вашу машину, агент записывает артефакт на диск — и в этом весь цикл. На этом пути нет сервера OpenDesign. Тот же daemon, который обнаруживает ваши навыки, владеет и сетевым вызовом, поэтому вопрос «а где это выполняется?» — это настройка, а не разговор с отделом продаж.</p>
       <h2>Адаптер, совместимый с OpenAI</h2>
       <p>Большинство эндпоинтов ИИ-инференса в 2026 году говорят на языке OpenAI Chat Completions API. Мы используем его как протокол наименьшего общего знаменателя. Если ваш провайдер его поддерживает (а почти все поддерживают), вы поддерживаетесь по умолчанию — никаких плагинов, никакой интеграции под конкретного провайдера, которую нужно ждать.</p>
       <h3>Провайдеры, на которые можно его направить</h3>
@@ -913,7 +913,7 @@ i18n:
       <h2>Приватность и комплаенс</h2>
       <p>Есть и вторая причина, по которой BYOK важен: <strong>промпты содержат бренд вашего клиента.</strong></p>
       <p>Облачный инференс означает маршрутизацию брендовых документов, ещё не анонсированных названий продуктов, внутренних цен и креативов до запуска через серверы третьей стороны. У большинства компаний есть своё мнение об этом. У некоторых есть на этот счёт контракт.</p>
-      <p>При BYOK обмен данными по промпту происходит между вашим ноутбуком и провайдером модели, которого вы уже проверили (или развернули у себя). Open Design в этом не участвует. У нас нет лога, который можно затребовать по повестке, нет поверхности для утечки данных, нет аудиторского пробела, который пришлось бы объяснять.</p>
+      <p>При BYOK обмен данными по промпту происходит между вашим ноутбуком и провайдером модели, которого вы уже проверили (или развернули у себя). OpenDesign в этом не участвует. У нас нет лога, который можно затребовать по повестке, нет поверхности для утечки данных, нет аудиторского пробела, который пришлось бы объяснять.</p>
       <h3>Что на практике даёт «отсутствие логов»</h3>
       <p>Для агентской работы, регулируемых отраслей или чего угодно до запуска это единственная позиция, которая выдерживает критику. Если в ходе проверки безопасности спрашивают «куда уходят наши брендовые активы?», ответ — «провайдеру модели, указанному в нашем контракте, и больше никуда», а не «в дашборд вендора, который мы не контролируем». Самостоятельное размещение эндпоинта Ollama или vLLM усиливает это ещё больше: байты вообще не покидают вашу сеть. Это тот же компромисс, который рассматривается в <a href="/blog/byok-reality-check-5-things-that-break/">честной проверке реальности BYOK</a>, где откровенно говорится о том, где всё ещё есть шероховатости — локальные модели и фронтирные модели не взаимозаменяемы по вкусу, и поверхность для prompt-инъекций вы контролируете сами.</p>
       <h2>Как переключать провайдеров посреди проекта</h2>
@@ -924,7 +924,7 @@ i18n:
       <li><strong>Чувствительный контент</strong> — перейдите на локальную модель Ollama для конфиденциальных клиентских промптов</li>
       <li><strong>Финальная шлифовка</strong> — потратьте один проход на самую сильную доступную модель (Opus, GPT-5 Pro)</li>
       </ul>
-      <p>В Open Design переключение — это редактирование двух строк в <code>.env.local</code>. Нет миграции, нет повторного онбординга, нет апгрейда тарифа.</p>
+      <p>В OpenDesign переключение — это редактирование двух строк в <code>.env.local</code>. Нет миграции, нет повторного онбординга, нет апгрейда тарифа.</p>
       <h3>Готовая маршрутизация для одного брифа</h3>
       <p>Конкретно: один бриф на лендинг мог бы выполняться так:</p>
       <pre class="astro-code open-design-editorial" style="background-color:#f7f1de;color:#15140f; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span># draft + first iterations — cheap and fast</span></span>
@@ -940,26 +940,26 @@ i18n:
       <p>Это вся история BYOK. Нет особого уровня, нет процесса апгрейда, нет биллинговых отношений с нами. Вы платите провайдеру модели, вы сохраняете свои ключи, вы сохраняете свои промпты. Мы предоставляем слой.</p>
       <h2>Дополнительное чтение</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Почему мы построили Open Design как слой навыков, а не как продукт</a> — ставка, стоящая за решением выпустить тонкий слой вместо облачного приложения</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Почему мы построили OpenDesign как слой навыков, а не как продукт</a> — ставка, стоящая за решением выпустить тонкий слой вместо облачного приложения</li>
       <li><a href="/blog/byok-reality-check-5-things-that-break/">Проверка реальности BYOK: 5 вещей, которые ломаются</a> — честные компромиссы и шероховатости использования собственного ключа</li>
-      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 навык, 72 системы: как работает библиотека Open Design</a> — файлы <code>SKILL.md</code> / <code>DESIGN.md</code>, которые остаются неизменными независимо от того, какую модель вы запускаете</li>
+      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 навык, 72 системы: как работает библиотека OpenDesign</a> — файлы <code>SKILL.md</code> / <code>DESIGN.md</code>, которые остаются неизменными независимо от того, какую модель вы запускаете</li>
       </ul>
   es:
     title: "Flujo de diseño BYOK: ejecuta Claude, Codex o Qwen con tu propia clave"
-    summary: "La mayoría de las herramientas de diseño con IA añaden discretamente un margen a cada token que gastas. Open Design adopta la postura opuesta: trae tu propia clave de modelo, paga directamente al proveedor y mantén el control total de dónde se ejecuta la inferencia. Así funciona realmente la capa BYOK."
+    summary: "La mayoría de las herramientas de diseño con IA añaden discretamente un margen a cada token que gastas. OpenDesign adopta la postura opuesta: trae tu propia clave de modelo, paga directamente al proveedor y mantén el control total de dónde se ejecuta la inferencia. Así funciona realmente la capa BYOK."
     bodyHtml: |
       <p>Si has usado un producto de diseño con IA alojado en 2026, probablemente hayas notado que la factura va subiendo. Una suscripción sobre un cargo por puesto, superpuesto a un margen de inferencia que nadie publica. Las cuentas son opacas a propósito.</p>
-      <p>Open Design no ejecuta inferencia. No tenemos un margen sobre los tokens. Todo el flujo de trabajo está construido en torno a <strong>bring-your-own-key (BYOK)</strong>: apuntas el daemon a cualquier endpoint compatible con OpenAI, pegas tu propia clave de API y listo.</p>
-      <p>Este artículo explica por qué tomamos esa decisión, cómo funciona internamente y qué cambia realmente en tu flujo de trabajo diario. Si quieres el argumento filosófico más amplio detrás de esto, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">por qué construimos Open Design como una capa de skills, no como un producto</a> es la pieza complementaria; esta es la versión práctica.</p>
+      <p>OpenDesign no ejecuta inferencia. No tenemos un margen sobre los tokens. Todo el flujo de trabajo está construido en torno a <strong>bring-your-own-key (BYOK)</strong>: apuntas el daemon a cualquier endpoint compatible con OpenAI, pegas tu propia clave de API y listo.</p>
+      <p>Este artículo explica por qué tomamos esa decisión, cómo funciona internamente y qué cambia realmente en tu flujo de trabajo diario. Si quieres el argumento filosófico más amplio detrás de esto, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">por qué construimos OpenDesign como una capa de skills, no como un producto</a> es la pieza complementaria; esta es la versión práctica.</p>
       <h2>Qué significa realmente «BYOK» aquí</h2>
       <p>Hay dos definiciones de BYOK dando vueltas en el espacio de las herramientas de IA, y no son lo mismo:</p>
       <ul>
       <li><strong>BYOK superficial</strong>: la herramienta te deja pegar una clave, pero sigue enrutando la inferencia a través de sus servidores, registra tus prompts y puede aplicar límites de tasa.</li>
       <li><strong>BYOK real</strong>: la herramienta llama al proveedor del modelo directamente desde tu máquina (o tu infraestructura). Tus prompts nunca tocan los servidores del proveedor de la herramienta. El proveedor no se queda ningún margen.</li>
       </ul>
-      <p>Open Design es del segundo tipo. El daemon hace llamadas HTTP a cualquier endpoint que configures, con tu clave, desde tu máquina. No hacemos de proxy. No registramos nada. No vemos tus prompts.</p>
+      <p>OpenDesign es del segundo tipo. El daemon hace llamadas HTTP a cualquier endpoint que configures, con tu clave, desde tu máquina. No hacemos de proxy. No registramos nada. No vemos tus prompts.</p>
       <h3>A dónde va realmente la llamada</h3>
-      <p>Cuando el daemon recoge un trabajo, compone el prompt —incorporando los archivos <code>SKILL.md</code> y <code>DESIGN.md</code> relevantes para la tarea— y luego hace una única solicitud HTTP a la base URL que hayas configurado. La respuesta vuelve en streaming a tu máquina, el agente escribe el artefacto en disco, y ese es todo el ciclo. No hay ningún servidor de Open Design en la ruta. El mismo daemon que descubre tus skills también es dueño de la llamada de red, por eso «¿dónde se ejecuta esto?» es un ajuste y no una conversación de ventas.</p>
+      <p>Cuando el daemon recoge un trabajo, compone el prompt —incorporando los archivos <code>SKILL.md</code> y <code>DESIGN.md</code> relevantes para la tarea— y luego hace una única solicitud HTTP a la base URL que hayas configurado. La respuesta vuelve en streaming a tu máquina, el agente escribe el artefacto en disco, y ese es todo el ciclo. No hay ningún servidor de OpenDesign en la ruta. El mismo daemon que descubre tus skills también es dueño de la llamada de red, por eso «¿dónde se ejecuta esto?» es un ajuste y no una conversación de ventas.</p>
       <h2>El adaptador compatible con OpenAI</h2>
       <p>La mayoría de los endpoints de inferencia de IA en 2026 hablan la API OpenAI Chat Completions. La usamos como el protocolo de mínimo común denominador. Si tu proveedor la habla (y casi todos lo hacen), tienes soporte por defecto: sin plugin, sin integración por proveedor que esperar.</p>
       <h3>Proveedores a los que puedes apuntarlo</h3>
@@ -1082,7 +1082,7 @@ i18n:
       <h2>Privacidad y cumplimiento</h2>
       <p>Hay una segunda razón por la que BYOK importa: <strong>los prompts contienen la marca de tu cliente.</strong></p>
       <p>La inferencia alojada significa enrutar documentos de marca, nombres de producto aún no anunciados, precios internos y creatividades previas al lanzamiento a través de los servidores de un tercero. La mayoría de las empresas tienen una opinión al respecto. Algunas tienen un contrato sobre ello.</p>
-      <p>Con BYOK, el viaje de ida y vuelta del prompt es entre tu portátil y el proveedor del modelo que ya has verificado (o autoalojado). Open Design no está en el bucle. No tenemos ningún registro que pueda ser citado judicialmente, ninguna superficie de brecha de la que filtrar, ningún hueco de auditoría que explicar.</p>
+      <p>Con BYOK, el viaje de ida y vuelta del prompt es entre tu portátil y el proveedor del modelo que ya has verificado (o autoalojado). OpenDesign no está en el bucle. No tenemos ningún registro que pueda ser citado judicialmente, ninguna superficie de brecha de la que filtrar, ningún hueco de auditoría que explicar.</p>
       <h3>Qué te aporta «sin registro» en la práctica</h3>
       <p>Para el trabajo de agencia, las industrias reguladas o cualquier cosa previa al lanzamiento, esta es la única postura que se sostiene. Si una revisión de seguridad pregunta «¿a dónde van nuestros activos de marca?», la respuesta es «al proveedor del modelo de nuestro contrato, y a ningún otro sitio», no «a un panel de un proveedor que no controlamos». Autoalojar un endpoint de Ollama o vLLM lo aprieta aún más: los bytes nunca salen de tu red en absoluto. Este es el mismo compromiso que se explora en <a href="/blog/byok-reality-check-5-things-that-break/">el examen de realidad de BYOK</a>, que es honesto sobre dónde siguen estando las aristas: los modelos locales y los modelos de frontera no son intercambiables en cuanto a criterio, y la superficie de inyección de prompts la asumes tú.</p>
       <h2>Cómo cambiar de proveedor a mitad de proyecto</h2>
@@ -1093,7 +1093,7 @@ i18n:
       <li><strong>Contenido sensible</strong>: pásate a un modelo local de Ollama para prompts confidenciales del cliente</li>
       <li><strong>Pulido final</strong>: gasta una pasada en el modelo más potente disponible (Opus, GPT-5 Pro)</li>
       </ul>
-      <p>En Open Design, cambiar es editar dos líneas en <code>.env.local</code>. No hay migración, ni reincorporación, ni mejora de plan.</p>
+      <p>En OpenDesign, cambiar es editar dos líneas en <code>.env.local</code>. No hay migración, ni reincorporación, ni mejora de plan.</p>
       <h3>Un enrutamiento trabajado para un brief</h3>
       <p>Concretamente, un único brief de landing page podría desarrollarse así:</p>
       <pre class="astro-code open-design-editorial" style="background-color:#f7f1de;color:#15140f; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span># draft + first iterations — cheap and fast</span></span>
@@ -1109,26 +1109,26 @@ i18n:
       <p>Esa es toda la historia de BYOK. No hay ningún nivel especial, ningún flujo de mejora, ninguna relación de facturación con nosotros. Pagas al proveedor del modelo, conservas tus claves, conservas tus prompts. Nosotros proporcionamos la capa.</p>
       <h2>Lecturas relacionadas</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Por qué construimos Open Design como una capa de skills, no como un producto</a>: la apuesta detrás de enviar una capa fina en lugar de una app alojada</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Por qué construimos OpenDesign como una capa de skills, no como un producto</a>: la apuesta detrás de enviar una capa fina en lugar de una app alojada</li>
       <li><a href="/blog/byok-reality-check-5-things-that-break/">El examen de realidad de BYOK: 5 cosas que se rompen</a>: los compromisos honestos y las aristas de traer tu propia clave</li>
-      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 skills, 72 sistemas: cómo funciona la biblioteca de Open Design</a>: los archivos <code>SKILL.md</code> / <code>DESIGN.md</code> que permanecen constantes sin importar qué modelo ejecutes</li>
+      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 skills, 72 sistemas: cómo funciona la biblioteca de OpenDesign</a>: los archivos <code>SKILL.md</code> / <code>DESIGN.md</code> que permanecen constantes sin importar qué modelo ejecutes</li>
       </ul>
   pt-br:
     title: "Fluxo de design BYOK: rode Claude, Codex ou Qwen com sua própria chave"
-    summary: "A maioria das ferramentas de design com IA adiciona discretamente uma margem a cada token que você gasta. O Open Design adota a postura oposta — traga a chave do seu próprio modelo, pague o provedor diretamente e mantenha controle total sobre onde a inferência roda. Veja como a camada BYOK funciona de verdade."
+    summary: "A maioria das ferramentas de design com IA adiciona discretamente uma margem a cada token que você gasta. O OpenDesign adota a postura oposta — traga a chave do seu próprio modelo, pague o provedor diretamente e mantenha controle total sobre onde a inferência roda. Veja como a camada BYOK funciona de verdade."
     bodyHtml: |
       <p>Se você usou algum produto de design com IA hospedado em 2026, provavelmente notou a conta subindo aos poucos. Uma assinatura em cima de uma cobrança por assento, sobreposta a uma margem de inferência que ninguém divulga. A conta é opaca de propósito.</p>
-      <p>O Open Design não roda inferência. Não temos margem sobre tokens. Todo o fluxo de trabalho é construído em torno de <strong>bring-your-own-key (BYOK)</strong> — você aponta o daemon para qualquer endpoint compatível com OpenAI, cola sua própria API key e pronto.</p>
-      <p>Este post explica por que fizemos essa escolha, como ela funciona por baixo dos panos e o que ela realmente muda no seu dia a dia. Se você quer o argumento filosófico mais amplo por trás disso, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">por que construímos o Open Design como uma camada de skills, não um produto</a> é o texto complementar — este aqui é a versão prática.</p>
+      <p>O OpenDesign não roda inferência. Não temos margem sobre tokens. Todo o fluxo de trabalho é construído em torno de <strong>bring-your-own-key (BYOK)</strong> — você aponta o daemon para qualquer endpoint compatível com OpenAI, cola sua própria API key e pronto.</p>
+      <p>Este post explica por que fizemos essa escolha, como ela funciona por baixo dos panos e o que ela realmente muda no seu dia a dia. Se você quer o argumento filosófico mais amplo por trás disso, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">por que construímos o OpenDesign como uma camada de skills, não um produto</a> é o texto complementar — este aqui é a versão prática.</p>
       <h2>O que “BYOK” realmente significa aqui</h2>
       <p>Existem duas definições de BYOK circulando pelo espaço de ferramentas de IA, e elas não são a mesma coisa:</p>
       <ul>
       <li><strong>BYOK de fachada</strong> — a ferramenta deixa você colar uma chave, mas ainda roteia a inferência pelos servidores dela, registra seus prompts e pode aplicar limites de taxa.</li>
       <li><strong>BYOK de verdade</strong> — a ferramenta chama o provedor do modelo diretamente da sua máquina (ou da sua infraestrutura). Seus prompts nunca tocam os servidores do fornecedor. O fornecedor não tira margem.</li>
       </ul>
-      <p>O Open Design é do segundo tipo. O daemon faz chamadas HTTP para o endpoint que você configurar, com a sua chave, a partir da sua máquina. Não fazemos proxy. Não registramos nada. Não vemos seus prompts.</p>
+      <p>O OpenDesign é do segundo tipo. O daemon faz chamadas HTTP para o endpoint que você configurar, com a sua chave, a partir da sua máquina. Não fazemos proxy. Não registramos nada. Não vemos seus prompts.</p>
       <h3>Para onde a chamada realmente vai</h3>
-      <p>Quando o daemon pega um job, ele compõe o prompt — reunindo os arquivos <code>SKILL.md</code> e <code>DESIGN.md</code> relevantes para a tarefa — e então faz uma única requisição HTTP para a base URL que você definiu. A resposta volta em streaming para a sua máquina, o agente grava o artefato em disco, e esse é o ciclo inteiro. Não há nenhum servidor do Open Design no caminho. O mesmo daemon que descobre suas skills também é dono da chamada de rede, e é por isso que “onde isso roda?” é uma configuração, não uma conversa de vendas.</p>
+      <p>Quando o daemon pega um job, ele compõe o prompt — reunindo os arquivos <code>SKILL.md</code> e <code>DESIGN.md</code> relevantes para a tarefa — e então faz uma única requisição HTTP para a base URL que você definiu. A resposta volta em streaming para a sua máquina, o agente grava o artefato em disco, e esse é o ciclo inteiro. Não há nenhum servidor do OpenDesign no caminho. O mesmo daemon que descobre suas skills também é dono da chamada de rede, e é por isso que “onde isso roda?” é uma configuração, não uma conversa de vendas.</p>
       <h2>O adaptador compatível com OpenAI</h2>
       <p>A maioria dos endpoints de inferência de IA em 2026 fala a API OpenAI Chat Completions. Usamos isso como o protocolo de menor denominador comum. Se o seu provedor a fala (e quase todos falam), você já é suportado por padrão — sem plugin, sem integração por provedor para esperar.</p>
       <h3>Provedores para os quais você pode apontá-lo</h3>
@@ -1251,7 +1251,7 @@ i18n:
       <h2>Privacidade e conformidade</h2>
       <p>Há um segundo motivo pelo qual o BYOK importa: <strong>os prompts contêm a marca do seu cliente.</strong></p>
       <p>Inferência hospedada significa rotear documentos de marca, nomes de produtos não anunciados, preços internos e criações pré-lançamento pelos servidores de um terceiro. A maioria das empresas tem uma opinião sobre isso. Algumas têm um contrato sobre isso.</p>
-      <p>Com BYOK, a ida e volta do prompt é entre o seu laptop e o provedor de modelo que você já avaliou (ou auto-hospedou). O Open Design não está no circuito. Não temos log para intimar, nenhuma superfície de violação para vazar, nenhuma lacuna de auditoria para explicar.</p>
+      <p>Com BYOK, a ida e volta do prompt é entre o seu laptop e o provedor de modelo que você já avaliou (ou auto-hospedou). O OpenDesign não está no circuito. Não temos log para intimar, nenhuma superfície de violação para vazar, nenhuma lacuna de auditoria para explicar.</p>
       <h3>O que “sem log” compra na prática</h3>
       <p>Para trabalho de agência, setores regulados ou qualquer coisa pré-lançamento, esta é a única postura que se sustenta. Se uma revisão de segurança perguntar “para onde vão nossos ativos de marca?”, a resposta é “para o provedor de modelo no nosso contrato, e para mais lugar nenhum” — não “para o dashboard de um fornecedor que não controlamos.” Auto-hospedar um endpoint Ollama ou vLLM aperta isso ainda mais: os bytes nunca saem da sua rede. Esse é o mesmo trade-off explorado no <a href="/blog/byok-reality-check-5-things-that-break/">teste de realidade do BYOK</a>, que é honesto sobre onde as arestas ainda estão — modelos locais e modelos de fronteira não são intercambiáveis em bom gosto, e você é dono da superfície de prompt injection por conta própria.</p>
       <h2>Como trocar de provedor no meio do projeto</h2>
@@ -1262,7 +1262,7 @@ i18n:
       <li><strong>Conteúdo sensível</strong> — troque para um modelo Ollama local para prompts confidenciais do cliente</li>
       <li><strong>Polimento final</strong> — gaste uma passada no modelo mais forte disponível (Opus, GPT-5 Pro)</li>
       </ul>
-      <p>No Open Design, trocar é editar duas linhas no <code>.env.local</code>. Não há migração, nenhum reonboarding, nenhum upgrade de plano.</p>
+      <p>No OpenDesign, trocar é editar duas linhas no <code>.env.local</code>. Não há migração, nenhum reonboarding, nenhum upgrade de plano.</p>
       <h3>Um roteamento trabalhado para um briefing</h3>
       <p>Concretamente, um único briefing de landing-page poderia rodar assim:</p>
       <pre class="astro-code open-design-editorial" style="background-color:#f7f1de;color:#15140f; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span># draft + first iterations — cheap and fast</span></span>
@@ -1278,26 +1278,26 @@ i18n:
       <p>Essa é toda a história do BYOK. Não há nível especial, nenhum fluxo de upgrade, nenhuma relação de faturamento conosco. Você paga o provedor do modelo, você mantém suas chaves, você mantém seus prompts. Nós fornecemos a camada.</p>
       <h2>Leitura relacionada</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Por que construímos o Open Design como uma camada de skills, não um produto</a> — a aposta por trás de entregar uma camada fina em vez de um app hospedado</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Por que construímos o OpenDesign como uma camada de skills, não um produto</a> — a aposta por trás de entregar uma camada fina em vez de um app hospedado</li>
       <li><a href="/blog/byok-reality-check-5-things-that-break/">O teste de realidade do BYOK: 5 coisas que quebram</a> — os trade-offs honestos e as arestas de trazer sua própria chave</li>
-      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 skills, 72 sistemas: como funciona a biblioteca do Open Design</a> — os arquivos <code>SKILL.md</code> / <code>DESIGN.md</code> que permanecem constantes não importa qual modelo você rode</li>
+      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 skills, 72 sistemas: como funciona a biblioteca do OpenDesign</a> — os arquivos <code>SKILL.md</code> / <code>DESIGN.md</code> que permanecem constantes não importa qual modelo você rode</li>
       </ul>
   it:
     title: "Flusso di lavoro di design BYOK: usa Claude, Codex o Qwen con la tua chiave"
-    summary: "La maggior parte degli strumenti di design AI aggiunge in silenzio un margine a ogni token che spendi. Open Design adotta la posizione opposta: porta la chiave del tuo modello, paga direttamente il provider e mantieni il pieno controllo su dove gira l'inferenza. Ecco come funziona davvero il livello BYOK."
+    summary: "La maggior parte degli strumenti di design AI aggiunge in silenzio un margine a ogni token che spendi. OpenDesign adotta la posizione opposta: porta la chiave del tuo modello, paga direttamente il provider e mantieni il pieno controllo su dove gira l'inferenza. Ecco come funziona davvero il livello BYOK."
     bodyHtml: |
       <p>Se hai usato un prodotto di design AI ospitato nel 2026, probabilmente hai notato la bolletta che lievita. Un abbonamento sopra un costo per postazione, stratificato sopra un ricarico sull'inferenza che nessuno pubblica. La matematica è opaca di proposito.</p>
-      <p>Open Design non esegue inferenza. Non abbiamo un margine sui token. L'intero flusso di lavoro è costruito attorno al <strong>bring-your-own-key (BYOK)</strong>: punti il daemon a qualsiasi endpoint compatibile con OpenAI, incolli la tua API key e hai finito.</p>
-      <p>Questo articolo spiega perché abbiamo fatto questa scelta, come funziona sotto il cofano e cosa cambia davvero nel tuo flusso di lavoro quotidiano. Se vuoi l'argomentazione filosofica più ampia che ci sta dietro, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">perché abbiamo costruito Open Design come un livello di skill, non come un prodotto</a> è il pezzo complementare: questo è la versione pratica.</p>
+      <p>OpenDesign non esegue inferenza. Non abbiamo un margine sui token. L'intero flusso di lavoro è costruito attorno al <strong>bring-your-own-key (BYOK)</strong>: punti il daemon a qualsiasi endpoint compatibile con OpenAI, incolli la tua API key e hai finito.</p>
+      <p>Questo articolo spiega perché abbiamo fatto questa scelta, come funziona sotto il cofano e cosa cambia davvero nel tuo flusso di lavoro quotidiano. Se vuoi l'argomentazione filosofica più ampia che ci sta dietro, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">perché abbiamo costruito OpenDesign come un livello di skill, non come un prodotto</a> è il pezzo complementare: questo è la versione pratica.</p>
       <h2>Cosa significa davvero "BYOK" qui</h2>
       <p>Ci sono due definizioni di BYOK che circolano nel mondo degli strumenti AI, e non sono la stessa cosa:</p>
       <ul>
       <li><strong>BYOK di superficie</strong>: lo strumento ti permette di incollare una chiave, ma instrada comunque l'inferenza attraverso i propri server, registra i tuoi prompt e può applicare limiti di frequenza.</li>
       <li><strong>BYOK reale</strong>: lo strumento chiama il provider del modello direttamente dalla tua macchina (o dalla tua infrastruttura). I tuoi prompt non toccano mai i server del fornitore. Il fornitore non prende alcun margine.</li>
       </ul>
-      <p>Open Design è il secondo tipo. Il daemon effettua chiamate HTTP a qualunque endpoint configuri, con la tua chiave, dalla tua macchina. Non facciamo da proxy. Non registriamo nulla. Non vediamo i tuoi prompt.</p>
+      <p>OpenDesign è il secondo tipo. Il daemon effettua chiamate HTTP a qualunque endpoint configuri, con la tua chiave, dalla tua macchina. Non facciamo da proxy. Non registriamo nulla. Non vediamo i tuoi prompt.</p>
       <h3>Dove va davvero la chiamata</h3>
-      <p>Quando il daemon prende un job, compone il prompt — recuperando i file <code>SKILL.md</code> e <code>DESIGN.md</code> rilevanti per l'attività — e poi effettua una singola richiesta HTTP al base URL che hai impostato. La risposta torna in streaming alla tua macchina, l'agente scrive l'artefatto su disco, e questo è l'intero ciclo. Non c'è alcun server Open Design nel percorso. Lo stesso daemon che scopre le tue skill possiede anche la chiamata di rete, ed è per questo che "dove gira questo?" è un'impostazione e non una trattativa commerciale.</p>
+      <p>Quando il daemon prende un job, compone il prompt — recuperando i file <code>SKILL.md</code> e <code>DESIGN.md</code> rilevanti per l'attività — e poi effettua una singola richiesta HTTP al base URL che hai impostato. La risposta torna in streaming alla tua macchina, l'agente scrive l'artefatto su disco, e questo è l'intero ciclo. Non c'è alcun server OpenDesign nel percorso. Lo stesso daemon che scopre le tue skill possiede anche la chiamata di rete, ed è per questo che "dove gira questo?" è un'impostazione e non una trattativa commerciale.</p>
       <h2>L'adattatore compatibile con OpenAI</h2>
       <p>La maggior parte degli endpoint di inferenza AI nel 2026 parla l'API OpenAI Chat Completions. La usiamo come protocollo minimo comune denominatore. Se il tuo provider la parla (e quasi tutti lo fanno), sei supportato per impostazione predefinita: nessun plugin, nessuna integrazione per provider da aspettare.</p>
       <h3>Provider a cui puoi puntarlo</h3>
@@ -1342,7 +1342,7 @@ i18n:
       <h2>Privacy e conformità</h2>
       <p>C'è una seconda ragione per cui BYOK conta: <strong>i prompt contengono il brand del tuo cliente.</strong></p>
       <p>L'inferenza ospitata significa instradare documenti di brand, nomi di prodotti non ancora annunciati, prezzi interni e creatività pre-lancio attraverso i server di una terza parte. La maggior parte delle aziende ha un'opinione al riguardo. Alcune hanno un contratto al riguardo.</p>
-      <p>Con BYOK, il viaggio di andata e ritorno del prompt è tra il tuo laptop e il provider del modello che hai già verificato (o ospitato in proprio). Open Design non è nel percorso. Non abbiamo alcun log da citare in giudizio, nessuna superficie di violazione da cui far trapelare dati, nessuna lacuna di audit da spiegare.</p>
+      <p>Con BYOK, il viaggio di andata e ritorno del prompt è tra il tuo laptop e il provider del modello che hai già verificato (o ospitato in proprio). OpenDesign non è nel percorso. Non abbiamo alcun log da citare in giudizio, nessuna superficie di violazione da cui far trapelare dati, nessuna lacuna di audit da spiegare.</p>
       <h3>Cosa ti dà in pratica il "nessun log"</h3>
       <p>Per il lavoro di agenzia, i settori regolamentati o qualsiasi cosa pre-lancio, questa è l'unica posizione che regge. Se una revisione di sicurezza chiede "dove vanno i nostri asset di brand?", la risposta è "al provider del modello nel nostro contratto, e da nessun'altra parte", non "a una dashboard di un fornitore che non controlliamo". Ospitare in proprio un endpoint Ollama o vLLM stringe ulteriormente: i byte non lasciano mai affatto la tua rete. Questo è lo stesso compromesso esplorato in <a href="/blog/byok-reality-check-5-things-that-break/">la verifica della realtà di BYOK</a>, che è onesto su dove ci sono ancora gli spigoli grezzi: i modelli locali e i modelli di frontiera non sono intercambiabili sul gusto, e la superficie di prompt injection è tua da gestire.</p>
       <h2>Come cambiare provider a metà progetto</h2>
@@ -1353,7 +1353,7 @@ i18n:
       <li><strong>Contenuti sensibili</strong>: passa a un modello Ollama locale per i prompt riservati al cliente</li>
       <li><strong>Rifinitura finale</strong>: brucia un passaggio sul modello più forte disponibile (Opus, GPT-5 Pro)</li>
       </ul>
-      <p>In Open Design, cambiare significa modificare due righe in <code>.env.local</code>. Non c'è migrazione, nessun nuovo onboarding, nessun upgrade di piano.</p>
+      <p>In OpenDesign, cambiare significa modificare due righe in <code>.env.local</code>. Non c'è migrazione, nessun nuovo onboarding, nessun upgrade di piano.</p>
       <h3>Un instradamento concreto per un singolo brief</h3>
       <p>Concretamente, un singolo brief di landing page potrebbe svolgersi così:</p>
       <pre class="astro-code open-design-editorial" style="background-color:#f7f1de;color:#15140f; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span># draft + first iterations — cheap and fast</span></span>
@@ -1369,26 +1369,26 @@ i18n:
       <p>Questa è l'intera storia del BYOK. Non c'è un livello speciale, nessun flusso di upgrade, nessuna relazione di fatturazione con noi. Paghi il provider del modello, conservi le tue chiavi, conservi i tuoi prompt. Noi forniamo il livello.</p>
       <h2>Letture correlate</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Perché abbiamo costruito Open Design come un livello di skill, non come un prodotto</a>: la scommessa dietro il rilasciare un livello sottile anziché un'app ospitata</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Perché abbiamo costruito OpenDesign come un livello di skill, non come un prodotto</a>: la scommessa dietro il rilasciare un livello sottile anziché un'app ospitata</li>
       <li><a href="/blog/byok-reality-check-5-things-that-break/">La verifica della realtà di BYOK: 5 cose che si rompono</a>: i compromessi onesti e gli spigoli grezzi del portare la tua chiave</li>
-      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 skill, 72 sistemi: come funziona la libreria di Open Design</a>: i file <code>SKILL.md</code> / <code>DESIGN.md</code> che restano costanti indipendentemente dal modello che esegui</li>
+      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 skill, 72 sistemi: come funziona la libreria di OpenDesign</a>: i file <code>SKILL.md</code> / <code>DESIGN.md</code> che restano costanti indipendentemente dal modello che esegui</li>
       </ul>
   vi:
     title: "Quy trình thiết kế BYOK: chạy Claude, Codex hay Qwen bằng key của riêng bạn"
-    summary: "Hầu hết các công cụ thiết kế AI đều âm thầm cộng thêm một khoản chênh lệch vào mỗi token bạn tiêu. Open Design chọn lập trường ngược lại — mang theo key model của riêng bạn, trả tiền trực tiếp cho nhà cung cấp, và giữ toàn quyền kiểm soát nơi suy luận chạy. Đây là cách lớp BYOK thực sự hoạt động."
+    summary: "Hầu hết các công cụ thiết kế AI đều âm thầm cộng thêm một khoản chênh lệch vào mỗi token bạn tiêu. OpenDesign chọn lập trường ngược lại — mang theo key model của riêng bạn, trả tiền trực tiếp cho nhà cung cấp, và giữ toàn quyền kiểm soát nơi suy luận chạy. Đây là cách lớp BYOK thực sự hoạt động."
     bodyHtml: |
       <p>Nếu bạn đã dùng một sản phẩm thiết kế AI được host trong năm 2026, có lẽ bạn đã nhận ra hóa đơn cứ tăng dần. Một gói thuê bao chồng lên phí tính theo từng chỗ ngồi, lại chồng tiếp lên một khoản markup suy luận mà chẳng ai công bố. Phép toán cố tình mờ ám.</p>
-      <p>Open Design không chạy suy luận. Chúng tôi không lấy chênh lệch trên token. Toàn bộ quy trình được xây dựng quanh <strong>bring-your-own-key (BYOK)</strong> — bạn trỏ daemon tới bất kỳ endpoint tương thích OpenAI nào, dán API key của riêng bạn vào, thế là xong.</p>
-      <p>Bài viết này giải thích vì sao chúng tôi chọn cách đó, nó hoạt động ra sao bên dưới, và nó thực sự thay đổi điều gì trong quy trình hằng ngày của bạn. Nếu bạn muốn lập luận triết lý lớn hơn đằng sau nó, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">vì sao chúng tôi xây Open Design như một lớp skill, không phải một sản phẩm</a> là bài đồng hành — còn bài này là phiên bản thực hành.</p>
+      <p>OpenDesign không chạy suy luận. Chúng tôi không lấy chênh lệch trên token. Toàn bộ quy trình được xây dựng quanh <strong>bring-your-own-key (BYOK)</strong> — bạn trỏ daemon tới bất kỳ endpoint tương thích OpenAI nào, dán API key của riêng bạn vào, thế là xong.</p>
+      <p>Bài viết này giải thích vì sao chúng tôi chọn cách đó, nó hoạt động ra sao bên dưới, và nó thực sự thay đổi điều gì trong quy trình hằng ngày của bạn. Nếu bạn muốn lập luận triết lý lớn hơn đằng sau nó, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">vì sao chúng tôi xây OpenDesign như một lớp skill, không phải một sản phẩm</a> là bài đồng hành — còn bài này là phiên bản thực hành.</p>
       <h2>“BYOK” thực sự nghĩa là gì ở đây</h2>
       <p>Có hai định nghĩa về BYOK đang lan truyền trong không gian công cụ AI, và chúng không phải là một:</p>
       <ul>
       <li><strong>BYOK bề mặt</strong> — công cụ cho bạn dán key, nhưng vẫn định tuyến suy luận qua máy chủ của họ, ghi log prompt của bạn, và có thể áp giới hạn tốc độ.</li>
       <li><strong>BYOK thật</strong> — công cụ gọi thẳng tới nhà cung cấp model từ máy của bạn (hoặc hạ tầng của bạn). Prompt của bạn không bao giờ chạm tới máy chủ của nhà cung cấp công cụ. Nhà cung cấp công cụ không lấy chênh lệch nào.</li>
       </ul>
-      <p>Open Design thuộc loại thứ hai. Daemon thực hiện các lệnh gọi HTTP tới bất kỳ endpoint nào bạn cấu hình, bằng key của bạn, từ máy của bạn. Chúng tôi không làm proxy. Chúng tôi không ghi log. Chúng tôi không thấy prompt của bạn.</p>
+      <p>OpenDesign thuộc loại thứ hai. Daemon thực hiện các lệnh gọi HTTP tới bất kỳ endpoint nào bạn cấu hình, bằng key của bạn, từ máy của bạn. Chúng tôi không làm proxy. Chúng tôi không ghi log. Chúng tôi không thấy prompt của bạn.</p>
       <h3>Lệnh gọi thực sự đi về đâu</h3>
-      <p>Khi daemon nhận một tác vụ, nó soạn prompt — kéo vào các tệp <code>SKILL.md</code> và <code>DESIGN.md</code> liên quan tới tác vụ — rồi thực hiện một lệnh gọi HTTP duy nhất tới base URL bạn đã đặt. Phản hồi truyền ngược về máy của bạn, agent ghi artifact xuống đĩa, và đó là toàn bộ vòng lặp. Không có máy chủ Open Design nào trên đường đi. Cùng một daemon khám phá các skill của bạn cũng sở hữu lệnh gọi mạng, đó là lý do “cái này chạy ở đâu?” là một thiết lập chứ không phải một cuộc trò chuyện bán hàng.</p>
+      <p>Khi daemon nhận một tác vụ, nó soạn prompt — kéo vào các tệp <code>SKILL.md</code> và <code>DESIGN.md</code> liên quan tới tác vụ — rồi thực hiện một lệnh gọi HTTP duy nhất tới base URL bạn đã đặt. Phản hồi truyền ngược về máy của bạn, agent ghi artifact xuống đĩa, và đó là toàn bộ vòng lặp. Không có máy chủ OpenDesign nào trên đường đi. Cùng một daemon khám phá các skill của bạn cũng sở hữu lệnh gọi mạng, đó là lý do “cái này chạy ở đâu?” là một thiết lập chứ không phải một cuộc trò chuyện bán hàng.</p>
       <h2>Bộ chuyển đổi tương thích OpenAI</h2>
       <p>Hầu hết các endpoint suy luận AI trong năm 2026 đều nói chuyện bằng OpenAI Chat Completions API. Chúng tôi dùng nó làm giao thức mẫu số chung thấp nhất. Nếu nhà cung cấp của bạn nói được nó (và gần như tất cả đều nói được), bạn được hỗ trợ mặc định — không plugin, không phải chờ tích hợp riêng cho từng nhà cung cấp.</p>
       <h3>Các nhà cung cấp bạn có thể trỏ tới</h3>
@@ -1511,7 +1511,7 @@ i18n:
       <h2>Quyền riêng tư và tuân thủ</h2>
       <p>Còn một lý do thứ hai khiến BYOK quan trọng: <strong>các prompt chứa thương hiệu của khách hàng bạn.</strong></p>
       <p>Suy luận được host nghĩa là định tuyến tài liệu thương hiệu, tên sản phẩm chưa công bố, bảng giá nội bộ và sáng tạo trước ra mắt qua máy chủ của một bên thứ ba. Hầu hết công ty đều có quan điểm về chuyện đó. Một số có hợp đồng về chuyện đó.</p>
-      <p>Với BYOK, vòng đi-về của prompt là giữa laptop của bạn và nhà cung cấp model bạn đã thẩm định (hoặc tự host). Open Design không nằm trong vòng lặp. Chúng tôi không có log nào để bị triệu tập, không có bề mặt vi phạm nào để rò rỉ, không có lỗ hổng kiểm toán nào phải giải trình.</p>
+      <p>Với BYOK, vòng đi-về của prompt là giữa laptop của bạn và nhà cung cấp model bạn đã thẩm định (hoặc tự host). OpenDesign không nằm trong vòng lặp. Chúng tôi không có log nào để bị triệu tập, không có bề mặt vi phạm nào để rò rỉ, không có lỗ hổng kiểm toán nào phải giải trình.</p>
       <h3>“Không log” mang lại gì trong thực tế</h3>
       <p>Với công việc agency, các ngành chịu quản lý, hay bất cứ thứ gì trước ra mắt, đây là lập trường duy nhất trụ vững. Nếu một cuộc rà soát bảo mật hỏi “tài sản thương hiệu của chúng tôi đi đâu?”, câu trả lời là “tới nhà cung cấp model trong hợp đồng của chúng tôi, và không đi đâu khác” — chứ không phải “tới một dashboard của nhà cung cấp mà chúng tôi không kiểm soát.” Tự host một endpoint Ollama hay vLLM còn siết chặt hơn: các byte không bao giờ rời khỏi mạng của bạn. Đây cũng chính là sự đánh đổi được khám phá trong <a href="/blog/byok-reality-check-5-things-that-break/">bài kiểm tra thực tế BYOK</a>, vốn thành thật về chỗ vẫn còn gồ ghề — model cục bộ và model tiên phong không thể hoán đổi cho nhau về mặt gu thẩm mỹ, và bạn tự sở hữu bề mặt prompt-injection.</p>
       <h2>Cách chuyển nhà cung cấp giữa chừng dự án</h2>
@@ -1522,7 +1522,7 @@ i18n:
       <li><strong>Nội dung nhạy cảm</strong> — đổi sang một model Ollama cục bộ cho các prompt bảo mật cho khách hàng</li>
       <li><strong>Hoàn thiện cuối</strong> — đốt một lượt trên model mạnh nhất hiện có (Opus, GPT-5 Pro)</li>
       </ul>
-      <p>Trong Open Design, việc chuyển đổi là sửa hai dòng trong <code>.env.local</code>. Không có di chuyển, không có onboarding lại, không có nâng cấp gói.</p>
+      <p>Trong OpenDesign, việc chuyển đổi là sửa hai dòng trong <code>.env.local</code>. Không có di chuyển, không có onboarding lại, không có nâng cấp gói.</p>
       <h3>Một định tuyến đã chạy thử cho một brief</h3>
       <p>Cụ thể, một brief landing-page đơn lẻ có thể chạy như thế này:</p>
       <pre class="astro-code open-design-editorial" style="background-color:#f7f1de;color:#15140f; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span># draft + first iterations — cheap and fast</span></span>
@@ -1538,26 +1538,26 @@ i18n:
       <p>Đó là toàn bộ câu chuyện BYOK. Không có bậc đặc biệt, không có luồng nâng cấp, không có mối quan hệ thanh toán nào với chúng tôi. Bạn trả tiền cho nhà cung cấp model, bạn giữ key của mình, bạn giữ prompt của mình. Chúng tôi cung cấp lớp ở giữa.</p>
       <h2>Đọc thêm</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Vì sao chúng tôi xây Open Design như một lớp skill, không phải một sản phẩm</a> — canh bạc đằng sau việc ship một lớp mỏng thay vì một ứng dụng được host</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Vì sao chúng tôi xây OpenDesign như một lớp skill, không phải một sản phẩm</a> — canh bạc đằng sau việc ship một lớp mỏng thay vì một ứng dụng được host</li>
       <li><a href="/blog/byok-reality-check-5-things-that-break/">Kiểm tra thực tế BYOK: 5 thứ dễ hỏng</a> — những đánh đổi thành thật và các chỗ gồ ghề của việc mang theo key của riêng bạn</li>
-      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 skill, 72 system: thư viện Open Design hoạt động ra sao</a> — các tệp <code>SKILL.md</code> / <code>DESIGN.md</code> giữ nguyên bất kể bạn chạy model nào</li>
+      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 skill, 72 system: thư viện OpenDesign hoạt động ra sao</a> — các tệp <code>SKILL.md</code> / <code>DESIGN.md</code> giữ nguyên bất kể bạn chạy model nào</li>
       </ul>
   pl:
     title: "Workflow projektowy BYOK: uruchom Claude, Codex lub Qwen na własnym kluczu"
-    summary: "Większość narzędzi do projektowania z AI po cichu dolicza marżę do każdego wydanego tokena. Open Design przyjmuje odwrotne stanowisko — przynieś własny klucz do modelu, płać dostawcy bezpośrednio i zachowaj pełną kontrolę nad tym, gdzie działa wnioskowanie. Oto jak naprawdę działa warstwa BYOK."
+    summary: "Większość narzędzi do projektowania z AI po cichu dolicza marżę do każdego wydanego tokena. OpenDesign przyjmuje odwrotne stanowisko — przynieś własny klucz do modelu, płać dostawcy bezpośrednio i zachowaj pełną kontrolę nad tym, gdzie działa wnioskowanie. Oto jak naprawdę działa warstwa BYOK."
     bodyHtml: |
       <p>Jeśli korzystałeś z hostowanego produktu projektowego z AI w 2026 roku, prawdopodobnie zauważyłeś, że rachunek rośnie. Subskrypcja na wierzchu opłaty za stanowisko, nałożona na narzut za wnioskowanie, którego nikt nie publikuje. Ta matematyka jest nieprzejrzysta celowo.</p>
-      <p>Open Design nie uruchamia wnioskowania. Nie mamy marży na tokenach. Cały workflow jest zbudowany wokół zasady <strong>bring-your-own-key (BYOK)</strong> — wskazujesz daemon dowolnemu endpointowi zgodnemu z OpenAI, wklejasz własny klucz API i gotowe.</p>
-      <p>Ten wpis wyjaśnia, dlaczego dokonaliśmy tego wyboru, jak to działa pod maską i co tak naprawdę zmienia w Twoim codziennym workflow. Jeśli chcesz poznać szerszy argument filozoficzny stojący za tym, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">dlaczego zbudowaliśmy Open Design jako warstwę umiejętności, a nie produkt</a> to tekst towarzyszący — ten jest wersją praktyczną.</p>
+      <p>OpenDesign nie uruchamia wnioskowania. Nie mamy marży na tokenach. Cały workflow jest zbudowany wokół zasady <strong>bring-your-own-key (BYOK)</strong> — wskazujesz daemon dowolnemu endpointowi zgodnemu z OpenAI, wklejasz własny klucz API i gotowe.</p>
+      <p>Ten wpis wyjaśnia, dlaczego dokonaliśmy tego wyboru, jak to działa pod maską i co tak naprawdę zmienia w Twoim codziennym workflow. Jeśli chcesz poznać szerszy argument filozoficzny stojący za tym, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">dlaczego zbudowaliśmy OpenDesign jako warstwę umiejętności, a nie produkt</a> to tekst towarzyszący — ten jest wersją praktyczną.</p>
       <h2>Co tak naprawdę oznacza tutaj „BYOK”</h2>
       <p>W przestrzeni narzędzi AI krążą dwie definicje BYOK i nie są one tym samym:</p>
       <ul>
       <li><strong>Powierzchowny BYOK</strong> — narzędzie pozwala wkleić klucz, ale wciąż kieruje wnioskowanie przez swoje serwery, loguje Twoje prompty i może stosować limity przepustowości.</li>
       <li><strong>Prawdziwy BYOK</strong> — narzędzie wywołuje dostawcę modelu bezpośrednio z Twojej maszyny (lub Twojej infrastruktury). Twoje prompty nigdy nie trafiają na serwery dostawcy. Dostawca nie pobiera marży.</li>
       </ul>
-      <p>Open Design jest tym drugim rodzajem. Daemon wykonuje wywołania HTTP do dowolnego skonfigurowanego endpointu, z Twoim kluczem, z Twojej maszyny. Nie pośredniczymy. Nie logujemy. Nie widzimy Twoich promptów.</p>
+      <p>OpenDesign jest tym drugim rodzajem. Daemon wykonuje wywołania HTTP do dowolnego skonfigurowanego endpointu, z Twoim kluczem, z Twojej maszyny. Nie pośredniczymy. Nie logujemy. Nie widzimy Twoich promptów.</p>
       <h3>Gdzie naprawdę trafia wywołanie</h3>
-      <p>Gdy daemon podejmuje zadanie, komponuje prompt — wciągając odpowiednie pliki <code>SKILL.md</code> i <code>DESIGN.md</code> dla danego zadania — a następnie wykonuje pojedyncze żądanie HTTP do ustawionego przez Ciebie base URL. Odpowiedź strumieniuje z powrotem na Twoją maszynę, agent zapisuje artefakt na dysk i to cała pętla. Na tej ścieżce nie ma żadnego serwera Open Design. Ten sam daemon, który odkrywa Twoje umiejętności, jest też właścicielem wywołania sieciowego, dlatego „gdzie to działa?” jest ustawieniem, a nie rozmową handlową.</p>
+      <p>Gdy daemon podejmuje zadanie, komponuje prompt — wciągając odpowiednie pliki <code>SKILL.md</code> i <code>DESIGN.md</code> dla danego zadania — a następnie wykonuje pojedyncze żądanie HTTP do ustawionego przez Ciebie base URL. Odpowiedź strumieniuje z powrotem na Twoją maszynę, agent zapisuje artefakt na dysk i to cała pętla. Na tej ścieżce nie ma żadnego serwera OpenDesign. Ten sam daemon, który odkrywa Twoje umiejętności, jest też właścicielem wywołania sieciowego, dlatego „gdzie to działa?” jest ustawieniem, a nie rozmową handlową.</p>
       <h2>Adapter zgodny z OpenAI</h2>
       <p>Większość endpointów wnioskowania AI w 2026 roku mówi w API OpenAI Chat Completions. Używamy go jako protokołu o najmniejszym wspólnym mianowniku. Jeśli Twój dostawca nim mówi (a niemal wszyscy mówią), jesteś obsługiwany domyślnie — żadnej wtyczki, żadnej integracji per dostawca, na którą trzeba czekać.</p>
       <h3>Dostawcy, których możesz wskazać</h3>
@@ -1680,7 +1680,7 @@ i18n:
       <h2>Prywatność i zgodność</h2>
       <p>Jest drugi powód, dla którego BYOK ma znaczenie: <strong>prompty zawierają markę Twojego klienta.</strong></p>
       <p>Hostowane wnioskowanie oznacza przekazywanie dokumentów marki, nieogłoszonych nazw produktów, wewnętrznych cen i kreacji sprzed premiery przez serwery strony trzeciej. Większość firm ma na ten temat zdanie. Niektóre mają na to umowę.</p>
-      <p>Przy BYOK podróż promptu w obie strony odbywa się między Twoim laptopem a dostawcą modelu, którego już sprawdziłeś (lub hostujesz samodzielnie). Open Design nie bierze w tym udziału. Nie mamy żadnego logu do wezwania sądowego, żadnej powierzchni naruszenia, z której coś by wyciekło, żadnej luki audytowej do wyjaśnienia.</p>
+      <p>Przy BYOK podróż promptu w obie strony odbywa się między Twoim laptopem a dostawcą modelu, którego już sprawdziłeś (lub hostujesz samodzielnie). OpenDesign nie bierze w tym udziału. Nie mamy żadnego logu do wezwania sądowego, żadnej powierzchni naruszenia, z której coś by wyciekło, żadnej luki audytowej do wyjaśnienia.</p>
       <h3>Co w praktyce daje Ci „brak logów”</h3>
       <p>Dla pracy agencyjnej, branż regulowanych lub czegokolwiek sprzed premiery to jedyne stanowisko, które się broni. Jeśli przegląd bezpieczeństwa pyta „dokąd trafiają nasze zasoby marki?”, odpowiedź brzmi „do dostawcy modelu w naszej umowie i nigdzie indziej” — a nie „do dashboardu dostawcy, którego nie kontrolujemy”. Samodzielne hostowanie endpointu Ollama lub vLLM zacieśnia to jeszcze bardziej: bajty w ogóle nie opuszczają Twojej sieci. To ten sam kompromis omawiany w <a href="/blog/byok-reality-check-5-things-that-break/">teście rzeczywistości BYOK</a>, który uczciwie mówi, gdzie wciąż są chropowate krawędzie — modele lokalne i czołowe nie są wymienne pod względem gustu, a powierzchnię prompt injection posiadasz sam.</p>
       <h2>Jak zmienić dostawcę w trakcie projektu</h2>
@@ -1691,7 +1691,7 @@ i18n:
       <li><strong>Wrażliwe treści</strong> — zamień na lokalny model Ollama dla promptów poufnych dla klienta</li>
       <li><strong>Finalne dopracowanie</strong> — spal jeden przebieg na najmocniejszym dostępnym modelu (Opus, GPT-5 Pro)</li>
       </ul>
-      <p>W Open Design przełączenie to edycja dwóch linii w <code>.env.local</code>. Nie ma migracji, ponownego wdrażania ani aktualizacji planu.</p>
+      <p>W OpenDesign przełączenie to edycja dwóch linii w <code>.env.local</code>. Nie ma migracji, ponownego wdrażania ani aktualizacji planu.</p>
       <h3>Rozpisany routing dla jednego briefu</h3>
       <p>Konkretnie, pojedynczy brief landing page'a mógłby przebiegać tak:</p>
       <pre class="astro-code open-design-editorial" style="background-color:#f7f1de;color:#15140f; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span># draft + first iterations — cheap and fast</span></span>
@@ -1707,26 +1707,26 @@ i18n:
       <p>To cała historia BYOK. Nie ma specjalnego poziomu, procesu aktualizacji ani relacji rozliczeniowej z nami. Płacisz dostawcy modelu, zachowujesz swoje klucze, zachowujesz swoje prompty. My dostarczamy warstwę.</p>
       <h2>Powiązane lektury</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Dlaczego zbudowaliśmy Open Design jako warstwę umiejętności, a nie produkt</a> — zakład stojący za dostarczeniem cienkiej warstwy zamiast hostowanej aplikacji</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Dlaczego zbudowaliśmy OpenDesign jako warstwę umiejętności, a nie produkt</a> — zakład stojący za dostarczeniem cienkiej warstwy zamiast hostowanej aplikacji</li>
       <li><a href="/blog/byok-reality-check-5-things-that-break/">Test rzeczywistości BYOK: 5 rzeczy, które się psują</a> — uczciwe kompromisy i chropowate krawędzie przynoszenia własnego klucza</li>
-      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 umiejętności, 72 systemy: jak działa biblioteka Open Design</a> — pliki <code>SKILL.md</code> / <code>DESIGN.md</code>, które pozostają stałe niezależnie od tego, który model uruchamiasz</li>
+      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 umiejętności, 72 systemy: jak działa biblioteka OpenDesign</a> — pliki <code>SKILL.md</code> / <code>DESIGN.md</code>, które pozostają stałe niezależnie od tego, który model uruchamiasz</li>
       </ul>
   id:
     title: "Alur kerja desain BYOK: jalankan Claude, Codex, atau Qwen dengan key Anda sendiri"
-    summary: "Sebagian besar tool desain AI diam-diam menambahkan margin pada setiap token yang Anda keluarkan. Open Design mengambil sikap sebaliknya — bawa key model Anda sendiri, bayar langsung ke penyedia, dan pertahankan kontrol penuh atas tempat inferensi berjalan. Berikut cara kerja lapisan BYOK yang sebenarnya."
+    summary: "Sebagian besar tool desain AI diam-diam menambahkan margin pada setiap token yang Anda keluarkan. OpenDesign mengambil sikap sebaliknya — bawa key model Anda sendiri, bayar langsung ke penyedia, dan pertahankan kontrol penuh atas tempat inferensi berjalan. Berikut cara kerja lapisan BYOK yang sebenarnya."
     bodyHtml: |
       <p>Jika Anda pernah memakai produk desain AI berbasis hosting pada tahun 2026, Anda mungkin sudah menyadari tagihan yang terus merangkak naik. Langganan di atas biaya per kursi, ditumpuk lagi di atas markup inferensi yang tidak pernah dipublikasikan siapa pun. Matematikanya sengaja dibuat tidak transparan.</p>
-      <p>Open Design tidak menjalankan inferensi. Kami tidak mengambil margin atas token. Seluruh alur kerja dibangun di sekitar <strong>bring-your-own-key (BYOK)</strong> — Anda mengarahkan daemon ke endpoint apa pun yang kompatibel dengan OpenAI, menempelkan API key Anda sendiri, dan selesai.</p>
-      <p>Tulisan ini menjelaskan mengapa kami membuat pilihan itu, bagaimana cara kerjanya di balik layar, dan apa yang sebenarnya berubah dalam alur kerja sehari-hari Anda. Jika Anda ingin argumen filosofis yang lebih besar di baliknya, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">mengapa kami membangun Open Design sebagai lapisan skill, bukan sebagai produk</a> adalah tulisan pendampingnya — yang ini adalah versi praktiknya.</p>
+      <p>OpenDesign tidak menjalankan inferensi. Kami tidak mengambil margin atas token. Seluruh alur kerja dibangun di sekitar <strong>bring-your-own-key (BYOK)</strong> — Anda mengarahkan daemon ke endpoint apa pun yang kompatibel dengan OpenAI, menempelkan API key Anda sendiri, dan selesai.</p>
+      <p>Tulisan ini menjelaskan mengapa kami membuat pilihan itu, bagaimana cara kerjanya di balik layar, dan apa yang sebenarnya berubah dalam alur kerja sehari-hari Anda. Jika Anda ingin argumen filosofis yang lebih besar di baliknya, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">mengapa kami membangun OpenDesign sebagai lapisan skill, bukan sebagai produk</a> adalah tulisan pendampingnya — yang ini adalah versi praktiknya.</p>
       <h2>Apa arti “BYOK” yang sebenarnya di sini</h2>
       <p>Ada dua definisi BYOK yang beredar di ruang tooling AI, dan keduanya bukan hal yang sama:</p>
       <ul>
       <li><strong>BYOK permukaan</strong> — tool mengizinkan Anda menempelkan key, tetapi tetap merutekan inferensi melalui server mereka, mencatat prompt Anda, dan mungkin menerapkan batas laju.</li>
       <li><strong>BYOK sejati</strong> — tool memanggil penyedia model secara langsung dari mesin Anda (atau infrastruktur Anda). Prompt Anda tidak pernah menyentuh server vendor. Vendor tidak mengambil margin.</li>
       </ul>
-      <p>Open Design adalah jenis yang kedua. Daemon melakukan panggilan HTTP ke endpoint mana pun yang Anda konfigurasikan, dengan key Anda, dari mesin Anda. Kami tidak menjadi proxy. Kami tidak mencatat. Kami tidak melihat prompt Anda.</p>
+      <p>OpenDesign adalah jenis yang kedua. Daemon melakukan panggilan HTTP ke endpoint mana pun yang Anda konfigurasikan, dengan key Anda, dari mesin Anda. Kami tidak menjadi proxy. Kami tidak mencatat. Kami tidak melihat prompt Anda.</p>
       <h3>Ke mana panggilan itu sebenarnya pergi</h3>
-      <p>Ketika daemon mengambil sebuah job, ia menyusun prompt — menarik file <code>SKILL.md</code> dan <code>DESIGN.md</code> yang relevan untuk tugas tersebut — lalu melakukan satu permintaan HTTP ke base URL yang Anda atur. Respons mengalir kembali ke mesin Anda, agent menulis artefak ke disk, dan itulah keseluruhan loop-nya. Tidak ada server Open Design di jalurnya. Daemon yang sama yang menemukan skill Anda juga yang memiliki panggilan jaringan tersebut, itulah sebabnya “di mana ini berjalan?” adalah sebuah pengaturan dan bukan percakapan penjualan.</p>
+      <p>Ketika daemon mengambil sebuah job, ia menyusun prompt — menarik file <code>SKILL.md</code> dan <code>DESIGN.md</code> yang relevan untuk tugas tersebut — lalu melakukan satu permintaan HTTP ke base URL yang Anda atur. Respons mengalir kembali ke mesin Anda, agent menulis artefak ke disk, dan itulah keseluruhan loop-nya. Tidak ada server OpenDesign di jalurnya. Daemon yang sama yang menemukan skill Anda juga yang memiliki panggilan jaringan tersebut, itulah sebabnya “di mana ini berjalan?” adalah sebuah pengaturan dan bukan percakapan penjualan.</p>
       <h2>Adapter yang kompatibel dengan OpenAI</h2>
       <p>Sebagian besar endpoint inferensi AI pada tahun 2026 berbicara dengan OpenAI Chat Completions API. Kami menggunakannya sebagai protokol penyebut terkecil yang sama. Jika penyedia Anda berbicara dengannya (dan hampir semuanya begitu), Anda didukung secara default — tanpa plugin, tanpa integrasi per-penyedia yang harus ditunggu.</p>
       <h3>Penyedia yang bisa Anda arahkan</h3>
@@ -1849,7 +1849,7 @@ i18n:
       <h2>Privasi dan kepatuhan</h2>
       <p>Ada alasan kedua mengapa BYOK penting: <strong>prompt berisi merek klien Anda.</strong></p>
       <p>Inferensi berbasis hosting berarti merutekan dokumen merek, nama produk yang belum diumumkan, harga internal, dan kreatif pra-peluncuran melalui server pihak ketiga. Sebagian besar perusahaan punya pendapat soal itu. Sebagian punya kontrak soal itu.</p>
-      <p>Dengan BYOK, perjalanan bolak-balik prompt terjadi antara laptop Anda dan penyedia model yang sudah Anda periksa (atau yang Anda host sendiri). Open Design tidak berada dalam loop. Kami tidak punya log untuk dipanggil pengadilan, tidak punya permukaan kebocoran untuk membocorkan, tidak punya celah audit untuk dijelaskan.</p>
+      <p>Dengan BYOK, perjalanan bolak-balik prompt terjadi antara laptop Anda dan penyedia model yang sudah Anda periksa (atau yang Anda host sendiri). OpenDesign tidak berada dalam loop. Kami tidak punya log untuk dipanggil pengadilan, tidak punya permukaan kebocoran untuk membocorkan, tidak punya celah audit untuk dijelaskan.</p>
       <h3>Apa yang dibeli oleh “tanpa log” dalam praktiknya</h3>
       <p>Untuk pekerjaan agensi, industri yang teregulasi, atau apa pun yang pra-peluncuran, ini adalah satu-satunya sikap yang bertahan. Jika sebuah tinjauan keamanan bertanya “ke mana aset merek kami pergi?”, jawabannya adalah “ke penyedia model dalam kontrak kami, dan tidak ke tempat lain” — bukan “ke dasbor vendor yang tidak kami kendalikan.” Meng-host sendiri endpoint Ollama atau vLLM mengencangkannya lebih jauh: byte-nya sama sekali tidak pernah meninggalkan jaringan Anda. Ini adalah trade-off yang sama yang dibahas dalam <a href="/blog/byok-reality-check-5-things-that-break/">pemeriksaan realitas BYOK</a>, yang jujur tentang di mana sisi kasarnya masih berada — model lokal dan model frontier tidak dapat dipertukarkan dalam hal selera, dan Anda memiliki sendiri permukaan injeksi prompt.</p>
       <h2>Cara berpindah penyedia di tengah proyek</h2>
@@ -1860,7 +1860,7 @@ i18n:
       <li><strong>Konten sensitif</strong> — beralih ke model Ollama lokal untuk prompt yang rahasia bagi klien</li>
       <li><strong>Pemolesan akhir</strong> — habiskan satu lintasan pada model terkuat yang tersedia (Opus, GPT-5 Pro)</li>
       </ul>
-      <p>Di Open Design, beralih berarti mengedit dua baris di <code>.env.local</code>. Tidak ada migrasi, tidak ada onboarding ulang, tidak ada upgrade paket.</p>
+      <p>Di OpenDesign, beralih berarti mengedit dua baris di <code>.env.local</code>. Tidak ada migrasi, tidak ada onboarding ulang, tidak ada upgrade paket.</p>
       <h3>Contoh perutean nyata untuk satu brief</h3>
       <p>Secara konkret, satu brief landing-page mungkin berjalan seperti ini:</p>
       <pre class="astro-code open-design-editorial" style="background-color:#f7f1de;color:#15140f; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span># draft + first iterations — cheap and fast</span></span>
@@ -1876,26 +1876,26 @@ i18n:
       <p>Itulah keseluruhan cerita BYOK. Tidak ada tingkatan khusus, tidak ada alur upgrade, tidak ada hubungan penagihan dengan kami. Anda membayar penyedia model, Anda menyimpan key Anda, Anda menyimpan prompt Anda. Kami menyediakan lapisannya.</p>
       <h2>Bacaan terkait</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Mengapa kami membangun Open Design sebagai lapisan skill, bukan sebagai produk</a> — taruhan di balik pengiriman lapisan tipis alih-alih aplikasi berbasis hosting</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Mengapa kami membangun OpenDesign sebagai lapisan skill, bukan sebagai produk</a> — taruhan di balik pengiriman lapisan tipis alih-alih aplikasi berbasis hosting</li>
       <li><a href="/blog/byok-reality-check-5-things-that-break/">Pemeriksaan realitas BYOK: 5 hal yang rusak</a> — trade-off jujur dan sisi-sisi kasar dari membawa key Anda sendiri</li>
-      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 skill, 72 sistem: cara kerja pustaka Open Design</a> — file <code>SKILL.md</code> / <code>DESIGN.md</code> yang tetap konstan tidak peduli model mana yang Anda jalankan</li>
+      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 skill, 72 sistem: cara kerja pustaka OpenDesign</a> — file <code>SKILL.md</code> / <code>DESIGN.md</code> yang tetap konstan tidak peduli model mana yang Anda jalankan</li>
       </ul>
   nl:
     title: "BYOK-ontwerpworkflow: draai Claude, Codex of Qwen op je eigen sleutel"
-    summary: "De meeste AI-ontwerptools tellen stilletjes een marge op bij elk token dat je uitgeeft. Open Design neemt het tegenovergestelde standpunt in — breng je eigen modelsleutel mee, betaal de provider rechtstreeks en houd volledige controle over waar inferentie draait. Zo werkt de BYOK-laag echt."
+    summary: "De meeste AI-ontwerptools tellen stilletjes een marge op bij elk token dat je uitgeeft. OpenDesign neemt het tegenovergestelde standpunt in — breng je eigen modelsleutel mee, betaal de provider rechtstreeks en houd volledige controle over waar inferentie draait. Zo werkt de BYOK-laag echt."
     bodyHtml: |
       <p>Als je in 2026 een gehost AI-ontwerpproduct hebt gebruikt, is het je waarschijnlijk opgevallen dat de rekening steeds hoger wordt. Een abonnement bovenop een tarief per stoel, gestapeld op een inferentie-opslag die niemand publiceert. De rekensom is opzettelijk ondoorzichtig.</p>
-      <p>Open Design draait geen inferentie. We hebben geen marge op tokens. De hele workflow is opgebouwd rond <strong>bring-your-own-key (BYOK)</strong> — je richt de daemon op elk OpenAI-compatibel endpoint, plakt je eigen API-sleutel en je bent klaar.</p>
-      <p>Dit bericht legt uit waarom we die keuze hebben gemaakt, hoe het onder de motorkap werkt en wat het daadwerkelijk verandert in je dagelijkse workflow. Als je het grotere filosofische argument erachter wilt, dan is <a href="/blog/why-we-built-open-design-as-a-skill-layer/">waarom we Open Design als een skill-laag bouwden, niet als een product</a> het bijbehorende stuk — dit is de praktische versie.</p>
+      <p>OpenDesign draait geen inferentie. We hebben geen marge op tokens. De hele workflow is opgebouwd rond <strong>bring-your-own-key (BYOK)</strong> — je richt de daemon op elk OpenAI-compatibel endpoint, plakt je eigen API-sleutel en je bent klaar.</p>
+      <p>Dit bericht legt uit waarom we die keuze hebben gemaakt, hoe het onder de motorkap werkt en wat het daadwerkelijk verandert in je dagelijkse workflow. Als je het grotere filosofische argument erachter wilt, dan is <a href="/blog/why-we-built-open-design-as-a-skill-layer/">waarom we OpenDesign als een skill-laag bouwden, niet als een product</a> het bijbehorende stuk — dit is de praktische versie.</p>
       <h2>Wat “BYOK” hier echt betekent</h2>
       <p>Er zijn twee definities van BYOK die rondzweven in de wereld van AI-tooling, en ze zijn niet hetzelfde:</p>
       <ul>
       <li><strong>Oppervlakkige BYOK</strong> — de tool laat je een sleutel plakken, maar routeert inferentie nog steeds via hun servers, logt je prompts en past mogelijk rate limits toe.</li>
       <li><strong>Echte BYOK</strong> — de tool roept de modelprovider rechtstreeks aan vanaf jouw machine (of jouw infrastructuur). Je prompts raken nooit de servers van de leverancier. De leverancier neemt geen marge.</li>
       </ul>
-      <p>Open Design is de tweede soort. De daemon maakt HTTP-aanroepen naar het endpoint dat jij configureert, met jouw sleutel, vanaf jouw machine. Wij proxyen niet. Wij loggen niet. Wij zien je prompts niet.</p>
+      <p>OpenDesign is de tweede soort. De daemon maakt HTTP-aanroepen naar het endpoint dat jij configureert, met jouw sleutel, vanaf jouw machine. Wij proxyen niet. Wij loggen niet. Wij zien je prompts niet.</p>
       <h3>Waar de aanroep daadwerkelijk heen gaat</h3>
-      <p>Wanneer de daemon een taak oppakt, stelt hij de prompt samen — door de relevante <code>SKILL.md</code>- en <code>DESIGN.md</code>-bestanden voor de taak op te halen — en doet vervolgens één HTTP-verzoek naar de base-URL die jij instelt. De respons stroomt terug naar jouw machine, de agent schrijft het artefact naar schijf, en dat is de hele lus. Er staat geen Open Design-server in het pad. Dezelfde daemon die je skills ontdekt, beheert ook de netwerkaanroep, en daarom is “waar draait dit?” een instelling en geen verkoopgesprek.</p>
+      <p>Wanneer de daemon een taak oppakt, stelt hij de prompt samen — door de relevante <code>SKILL.md</code>- en <code>DESIGN.md</code>-bestanden voor de taak op te halen — en doet vervolgens één HTTP-verzoek naar de base-URL die jij instelt. De respons stroomt terug naar jouw machine, de agent schrijft het artefact naar schijf, en dat is de hele lus. Er staat geen OpenDesign-server in het pad. Dezelfde daemon die je skills ontdekt, beheert ook de netwerkaanroep, en daarom is “waar draait dit?” een instelling en geen verkoopgesprek.</p>
       <h2>De OpenAI-compatibele adapter</h2>
       <p>De meeste AI-inferentie-endpoints in 2026 spreken de OpenAI Chat Completions API. We gebruiken dat als het laagste-gemene-deler-protocol. Als jouw provider het spreekt (en bijna allemaal doen ze dat), word je standaard ondersteund — geen plugin, geen integratie per provider om op te wachten.</p>
       <h3>Providers waar je het op kunt richten</h3>
@@ -2022,7 +2022,7 @@ i18n:
       <h2>Privacy en compliance</h2>
       <p>Er is een tweede reden waarom BYOK belangrijk is: <strong>de prompts bevatten het merk van je klant.</strong></p>
       <p>Gehoste inferentie betekent dat je merkdocumenten, niet-aangekondigde productnamen, interne prijzen en pre-launch-creatief door de servers van een derde partij routeert. De meeste bedrijven hebben daar een mening over. Sommige hebben er een contract over.</p>
-      <p>Met BYOK is de heen-en-terugreis van de prompt tussen jouw laptop en de modelprovider die je al hebt gescreend (of zelf hebt gehost). Open Design zit niet in de lus. We hebben geen log om te dagvaarden, geen aanvalsoppervlak voor datalekken, geen auditgat om uit te leggen.</p>
+      <p>Met BYOK is de heen-en-terugreis van de prompt tussen jouw laptop en de modelprovider die je al hebt gescreend (of zelf hebt gehost). OpenDesign zit niet in de lus. We hebben geen log om te dagvaarden, geen aanvalsoppervlak voor datalekken, geen auditgat om uit te leggen.</p>
       <h3>Wat “geen log” je in de praktijk oplevert</h3>
       <p>Voor bureauwerk, gereguleerde sectoren of alles wat pre-launch is, is dit het enige standpunt dat standhoudt. Als een beveiligingsreview vraagt “waar gaan onze merkmiddelen heen?”, dan is het antwoord “naar de modelprovider in ons contract, en nergens anders” — niet “naar een leveranciersdashboard waar we geen controle over hebben.” Het zelf hosten van een Ollama- of vLLM-endpoint maakt het nog strakker: de bytes verlaten je netwerk helemaal niet. Dit is dezelfde afweging die wordt onderzocht in <a href="/blog/byok-reality-check-5-things-that-break/">de BYOK-realiteitscheck</a>, die eerlijk is over waar de ruwe randjes nog zitten — lokale modellen en frontier-modellen zijn niet onderling verwisselbaar wat smaak betreft, en je bezit het prompt-injectie-oppervlak zelf.</p>
       <h2>Hoe je halverwege een project van provider wisselt</h2>
@@ -2033,7 +2033,7 @@ i18n:
       <li><strong>Gevoelige inhoud</strong> — wissel naar een lokaal Ollama-model voor client-vertrouwelijke prompts</li>
       <li><strong>Laatste afwerking</strong> — besteed één pass aan het sterkste beschikbare model (Opus, GPT-5 Pro)</li>
       </ul>
-      <p>In Open Design is wisselen het bewerken van twee regels in <code>.env.local</code>. Er is geen migratie, geen heronboarding, geen plan-upgrade.</p>
+      <p>In OpenDesign is wisselen het bewerken van twee regels in <code>.env.local</code>. Er is geen migratie, geen heronboarding, geen plan-upgrade.</p>
       <h3>Een uitgewerkte routing voor één briefing</h3>
       <p>Concreet zou een enkele landingspagina-briefing er zo uit kunnen zien:</p>
       <pre class="astro-code open-design-editorial" style="background-color:#f7f1de;color:#15140f; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span># draft + first iterations — cheap and fast</span></span>
@@ -2049,26 +2049,26 @@ i18n:
       <p>Dat is het hele BYOK-verhaal. Er is geen speciaal niveau, geen upgrade-flow, geen facturatierelatie met ons. Je betaalt de modelprovider, je houdt je sleutels, je houdt je prompts. Wij leveren de laag.</p>
       <h2>Gerelateerde lectuur</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Waarom we Open Design als een skill-laag bouwden, niet als een product</a> — de gok achter het leveren van een dunne laag in plaats van een gehoste app</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Waarom we OpenDesign als een skill-laag bouwden, niet als een product</a> — de gok achter het leveren van een dunne laag in plaats van een gehoste app</li>
       <li><a href="/blog/byok-reality-check-5-things-that-break/">De BYOK-realiteitscheck: 5 dingen die stukgaan</a> — de eerlijke afwegingen en ruwe randjes van het meebrengen van je eigen sleutel</li>
-      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 skills, 72 systemen: hoe de Open Design-bibliotheek werkt</a> — de <code>SKILL.md</code>- / <code>DESIGN.md</code>-bestanden die constant blijven, ongeacht welk model je draait</li>
+      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 skills, 72 systemen: hoe de OpenDesign-bibliotheek werkt</a> — de <code>SKILL.md</code>- / <code>DESIGN.md</code>-bestanden die constant blijven, ongeacht welk model je draait</li>
       </ul>
   ar:
     title: "سير عمل التصميم بنظام BYOK: شغّل Claude أو Codex أو Qwen على مفتاحك الخاص"
-    summary: "معظم أدوات التصميم بالذكاء الاصطناعي تضيف بهدوء هامش ربح على كل رمز (token) تنفقه. يتخذ Open Design الموقف المعاكس — أحضر مفتاح نموذجك الخاص، وادفع للمزوّد مباشرة، واحتفظ بالتحكم الكامل في مكان تشغيل الاستدلال. وإليك كيف تعمل طبقة BYOK فعليًا."
+    summary: "معظم أدوات التصميم بالذكاء الاصطناعي تضيف بهدوء هامش ربح على كل رمز (token) تنفقه. يتخذ OpenDesign الموقف المعاكس — أحضر مفتاح نموذجك الخاص، وادفع للمزوّد مباشرة، واحتفظ بالتحكم الكامل في مكان تشغيل الاستدلال. وإليك كيف تعمل طبقة BYOK فعليًا."
     bodyHtml: |
       <p>إذا كنت قد استخدمت منتج تصميم بالذكاء الاصطناعي مُستضافًا في عام 2026، فلا بد أنك لاحظت الفاتورة وهي تتسلل نحو الأعلى. اشتراك فوق رسوم لكل مقعد، مُكدّسة فوق هامش استدلال لا يُعلنه أحد. الحسابات غامضة عن قصد.</p>
-      <p>لا يُشغّل Open Design الاستدلال. ليس لدينا هامش ربح على الرموز (tokens). سير العمل بأكمله مبني حول مبدأ <strong>أحضر مفتاحك الخاص (BYOK)</strong> — تُوجّه الـ daemon إلى أي نقطة نهاية متوافقة مع OpenAI، وتلصق مفتاح API الخاص بك، وانتهى الأمر.</p>
-      <p>تشرح هذه المقالة لماذا اتخذنا هذا الخيار، وكيف يعمل تحت الغطاء، وما الذي يغيّره فعليًا في سير عملك اليومي. وإذا أردت الحجة الفلسفية الأكبر وراءه، فإن مقالة <a href="/blog/why-we-built-open-design-as-a-skill-layer/">لماذا بنينا Open Design كطبقة مهارات لا كمنتج</a> هي القطعة المُرافقة — وهذه هي النسخة العملية التطبيقية.</p>
+      <p>لا يُشغّل OpenDesign الاستدلال. ليس لدينا هامش ربح على الرموز (tokens). سير العمل بأكمله مبني حول مبدأ <strong>أحضر مفتاحك الخاص (BYOK)</strong> — تُوجّه الـ daemon إلى أي نقطة نهاية متوافقة مع OpenAI، وتلصق مفتاح API الخاص بك، وانتهى الأمر.</p>
+      <p>تشرح هذه المقالة لماذا اتخذنا هذا الخيار، وكيف يعمل تحت الغطاء، وما الذي يغيّره فعليًا في سير عملك اليومي. وإذا أردت الحجة الفلسفية الأكبر وراءه، فإن مقالة <a href="/blog/why-we-built-open-design-as-a-skill-layer/">لماذا بنينا OpenDesign كطبقة مهارات لا كمنتج</a> هي القطعة المُرافقة — وهذه هي النسخة العملية التطبيقية.</p>
       <h2>ما الذي يعنيه «BYOK» حقًا هنا</h2>
       <p>هناك تعريفان لـ BYOK يدوران في فضاء أدوات الذكاء الاصطناعي، وهما ليسا الشيء نفسه:</p>
       <ul>
       <li><strong>BYOK السطحي</strong> — تتيح لك الأداة لصق مفتاح، لكنها لا تزال توجّه الاستدلال عبر خوادمها، وتُسجّل مُحثّاتك (prompts)، وقد تطبّق حدودًا على المعدّل.</li>
       <li><strong>BYOK الحقيقي</strong> — تستدعي الأداة مزوّد النموذج مباشرة من جهازك (أو بنيتك التحتية). مُحثّاتك لا تلمس خوادم المورّد أبدًا. ولا يأخذ المورّد أي هامش ربح.</li>
       </ul>
-      <p>Open Design من النوع الثاني. تُجري الـ daemon استدعاءات HTTP إلى أي نقطة نهاية تُعدّها، بمفتاحك، من جهازك. نحن لا نعمل كوكيل (proxy). ولا نُسجّل. ولا نرى مُحثّاتك.</p>
+      <p>OpenDesign من النوع الثاني. تُجري الـ daemon استدعاءات HTTP إلى أي نقطة نهاية تُعدّها، بمفتاحك، من جهازك. نحن لا نعمل كوكيل (proxy). ولا نُسجّل. ولا نرى مُحثّاتك.</p>
       <h3>إلى أين يذهب الاستدعاء فعليًا</h3>
-      <p>عندما تلتقط الـ daemon مهمة، فإنها تُؤلّف المُحثّ — مُستحضرةً ملفات <code>SKILL.md</code> و<code>DESIGN.md</code> ذات الصلة بالمهمة — ثم تُجري طلب HTTP واحدًا إلى عنوان URL الأساسي الذي ضبطته. ترتد الاستجابة كتدفّق إلى جهازك، ويكتب العميل المُخرَج (artifact) إلى القرص، وهذه هي الحلقة بأكملها. لا يوجد خادم Open Design في المسار. الـ daemon نفسها التي تكتشف مهاراتك تمتلك أيضًا استدعاء الشبكة، ولهذا فإن «أين يُشغَّل هذا؟» إعداد وليس محادثة مبيعات.</p>
+      <p>عندما تلتقط الـ daemon مهمة، فإنها تُؤلّف المُحثّ — مُستحضرةً ملفات <code>SKILL.md</code> و<code>DESIGN.md</code> ذات الصلة بالمهمة — ثم تُجري طلب HTTP واحدًا إلى عنوان URL الأساسي الذي ضبطته. ترتد الاستجابة كتدفّق إلى جهازك، ويكتب العميل المُخرَج (artifact) إلى القرص، وهذه هي الحلقة بأكملها. لا يوجد خادم OpenDesign في المسار. الـ daemon نفسها التي تكتشف مهاراتك تمتلك أيضًا استدعاء الشبكة، ولهذا فإن «أين يُشغَّل هذا؟» إعداد وليس محادثة مبيعات.</p>
       <h2>المُحوّل المتوافق مع OpenAI</h2>
       <p>معظم نقاط نهاية الاستدلال بالذكاء الاصطناعي في عام 2026 تتحدث بلغة واجهة OpenAI Chat Completions API. نستخدم ذلك كبروتوكول القاسم المشترك الأدنى. إذا كان مزوّدك يتحدث بها (وكلهم تقريبًا يفعلون)، فأنت مدعوم افتراضيًا — لا إضافة (plugin)، ولا تكامل خاص بكل مزوّد عليك انتظاره.</p>
       <h3>المزوّدون الذين يمكنك توجيهها إليهم</h3>
@@ -2105,7 +2105,7 @@ i18n:
       <h2>الخصوصية والامتثال</h2>
       <p>هناك سبب ثانٍ لأهمية BYOK: <strong>المُحثّات تحتوي على علامة عميلك التجارية.</strong></p>
       <p>الاستدلال المُستضاف يعني توجيه مستندات العلامة التجارية، وأسماء منتجات لم تُعلن بعد، والتسعير الداخلي، والأعمال الإبداعية قبل الإطلاق عبر خوادم طرف ثالث. لدى معظم الشركات رأي في ذلك. ولدى بعضها عقد بشأنه.</p>
-      <p>مع BYOK، تكون رحلة المُحثّ ذهابًا وإيابًا بين حاسوبك المحمول ومزوّد النموذج الذي سبق أن دقّقت فيه (أو استضفته ذاتيًا). Open Design ليس في الحلقة. ليس لدينا سجلّ يُستدعى قضائيًا، ولا سطح اختراق يتسرّب منه، ولا فجوة تدقيق نُفسّرها.</p>
+      <p>مع BYOK، تكون رحلة المُحثّ ذهابًا وإيابًا بين حاسوبك المحمول ومزوّد النموذج الذي سبق أن دقّقت فيه (أو استضفته ذاتيًا). OpenDesign ليس في الحلقة. ليس لدينا سجلّ يُستدعى قضائيًا، ولا سطح اختراق يتسرّب منه، ولا فجوة تدقيق نُفسّرها.</p>
       <h3>ماذا يشتري لك «لا سجلّ» عمليًا</h3>
       <p>لعمل الوكالات، أو الصناعات المُنظّمة، أو أي شيء قبل الإطلاق، هذا هو الموقف الوحيد الذي يصمد. إذا سألت مراجعة أمنية «إلى أين تذهب أصول علامتنا التجارية؟»، فالجواب هو «إلى مزوّد النموذج في عقدنا، ولا مكان آخر» — لا «إلى لوحة تحكّم مورّد لا نتحكّم بها». استضافة نقطة نهاية Ollama أو vLLM ذاتيًا تُحكِم الأمر أكثر: البايتات لا تغادر شبكتك على الإطلاق. هذه هي المفاضلة نفسها التي تستكشفها <a href="/blog/byok-reality-check-5-things-that-break/">مراجعة الواقع لـ BYOK</a>، وهي صريحة بشأن أين لا تزال الحواف الخشنة — النماذج المحلية والنماذج الرائدة ليست قابلة للتبادل من حيث الذوق، وأنت تمتلك سطح حقن المُحثّات بنفسك.</p>
       <h2>كيف تبدّل المزوّدين في منتصف المشروع</h2>
@@ -2116,7 +2116,7 @@ i18n:
       <li><strong>المحتوى الحسّاس</strong> — بدّل إلى نموذج Ollama محلي للمُحثّات السرّية الخاصة بالعميل</li>
       <li><strong>الصقل النهائي</strong> — أنفق تمريرة واحدة على أقوى نموذج متاح (Opus، GPT-5 Pro)</li>
       </ul>
-      <p>في Open Design، التبديل هو تحرير سطرين في <code>.env.local</code>. لا ترحيل، ولا إعادة تأهيل، ولا ترقية خطة.</p>
+      <p>في OpenDesign، التبديل هو تحرير سطرين في <code>.env.local</code>. لا ترحيل، ولا إعادة تأهيل، ولا ترقية خطة.</p>
       <h3>توجيه عملي لملخّص واحد</h3>
       <p>على نحو ملموس، قد يجري ملخّص صفحة هبوط واحدة هكذا:</p>
       <pre class="astro-code open-design-editorial" style="background-color:#f7f1de;color:#15140f; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span># draft + first iterations — cheap and fast</span></span>
@@ -2132,26 +2132,26 @@ i18n:
       <p>هذه هي قصة BYOK بأكملها. لا طبقة خاصة، ولا تدفّق ترقية، ولا علاقة فوترة معنا. تدفع لمزوّد النموذج، وتحتفظ بمفاتيحك، وتحتفظ بمُحثّاتك. ونحن نوفّر الطبقة.</p>
       <h2>قراءات ذات صلة</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">لماذا بنينا Open Design كطبقة مهارات لا كمنتج</a> — الرهان وراء شحن طبقة رفيعة بدلًا من تطبيق مُستضاف</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">لماذا بنينا OpenDesign كطبقة مهارات لا كمنتج</a> — الرهان وراء شحن طبقة رفيعة بدلًا من تطبيق مُستضاف</li>
       <li><a href="/blog/byok-reality-check-5-things-that-break/">مراجعة الواقع لـ BYOK: 5 أشياء تتعطّل</a> — المفاضلات الصريحة والحواف الخشنة لإحضار مفتاحك الخاص</li>
-      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 مهارة، 72 نظامًا: كيف تعمل مكتبة Open Design</a> — ملفات <code>SKILL.md</code> / <code>DESIGN.md</code> التي تبقى ثابتة بغضّ النظر عن النموذج الذي تُشغّله</li>
+      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 مهارة، 72 نظامًا: كيف تعمل مكتبة OpenDesign</a> — ملفات <code>SKILL.md</code> / <code>DESIGN.md</code> التي تبقى ثابتة بغضّ النظر عن النموذج الذي تُشغّله</li>
       </ul>
   tr:
     title: "BYOK tasarım iş akışı: Claude, Codex veya Qwen'i kendi anahtarınızla çalıştırın"
-    summary: "Çoğu yapay zeka tasarım aracı, harcadığınız her token'a sessizce bir kâr payı ekler. Open Design ise tam tersi bir tutum sergiler — kendi model anahtarınızı getirin, doğrudan sağlayıcıya ödeme yapın ve çıkarımın nerede çalıştığı üzerinde tam kontrolü elinizde tutun. İşte BYOK katmanının gerçekte nasıl çalıştığı."
+    summary: "Çoğu yapay zeka tasarım aracı, harcadığınız her token'a sessizce bir kâr payı ekler. OpenDesign ise tam tersi bir tutum sergiler — kendi model anahtarınızı getirin, doğrudan sağlayıcıya ödeme yapın ve çıkarımın nerede çalıştığı üzerinde tam kontrolü elinizde tutun. İşte BYOK katmanının gerçekte nasıl çalıştığı."
     bodyHtml: |
       <p>2026'da barındırılan bir yapay zeka tasarım ürünü kullandıysanız, faturanın yavaşça arttığını muhtemelen fark etmişsinizdir. Koltuk başına ücretin üzerine bir abonelik, onun da üzerine kimsenin açıklamadığı bir çıkarım kâr marjı. Hesap, bilerek belirsizdir.</p>
-      <p>Open Design çıkarım çalıştırmaz. Token'lar üzerinde bir kâr marjımız yok. Tüm iş akışı <strong>bring-your-own-key (BYOK)</strong> etrafında kuruludur — daemon'u OpenAI uyumlu herhangi bir uç noktaya yöneltir, kendi API anahtarınızı yapıştırır ve işiniz biter.</p>
-      <p>Bu yazı, bu tercihi neden yaptığımızı, perde arkasında nasıl çalıştığını ve günlük iş akışınızda gerçekte neyi değiştirdiğini açıklıyor. Bunun arkasındaki daha geniş felsefi argümanı isterseniz, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">Open Design'ı neden bir ürün değil, bir beceri katmanı olarak inşa ettik</a> tamamlayıcı yazıdır — bu ise uygulamaya dönük versiyonudur.</p>
+      <p>OpenDesign çıkarım çalıştırmaz. Token'lar üzerinde bir kâr marjımız yok. Tüm iş akışı <strong>bring-your-own-key (BYOK)</strong> etrafında kuruludur — daemon'u OpenAI uyumlu herhangi bir uç noktaya yöneltir, kendi API anahtarınızı yapıştırır ve işiniz biter.</p>
+      <p>Bu yazı, bu tercihi neden yaptığımızı, perde arkasında nasıl çalıştığını ve günlük iş akışınızda gerçekte neyi değiştirdiğini açıklıyor. Bunun arkasındaki daha geniş felsefi argümanı isterseniz, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">OpenDesign'ı neden bir ürün değil, bir beceri katmanı olarak inşa ettik</a> tamamlayıcı yazıdır — bu ise uygulamaya dönük versiyonudur.</p>
       <h2>"BYOK" burada gerçekte ne anlama geliyor</h2>
       <p>Yapay zeka araç ekosisteminde dolaşan BYOK'un iki tanımı var ve bunlar aynı şey değil:</p>
       <ul>
       <li><strong>Yüzeysel BYOK</strong> — araç bir anahtar yapıştırmanıza izin verir, ancak çıkarımı yine kendi sunucuları üzerinden yönlendirir, istemlerinizi kaydeder ve hız sınırları uygulayabilir.</li>
       <li><strong>Gerçek BYOK</strong> — araç, model sağlayıcısını doğrudan kendi makinenizden (veya altyapınızdan) çağırır. İstemleriniz hiçbir zaman tedarikçinin sunucularına dokunmaz. Tedarikçi hiçbir kâr marjı almaz.</li>
       </ul>
-      <p>Open Design ikinci türdendir. Daemon, yapılandırdığınız uç noktaya, kendi anahtarınızla, kendi makinenizden HTTP çağrıları yapar. Proxy yapmayız. Kayıt tutmayız. İstemlerinizi görmeyiz.</p>
+      <p>OpenDesign ikinci türdendir. Daemon, yapılandırdığınız uç noktaya, kendi anahtarınızla, kendi makinenizden HTTP çağrıları yapar. Proxy yapmayız. Kayıt tutmayız. İstemlerinizi görmeyiz.</p>
       <h3>Çağrı gerçekte nereye gidiyor</h3>
-      <p>Daemon bir işi aldığında, istemi oluşturur — görev için ilgili <code>SKILL.md</code> ve <code>DESIGN.md</code> dosyalarını çeker — ardından ayarladığınız base URL'e tek bir HTTP isteği yapar. Yanıt makinenize akış halinde geri döner, ajan eseri diske yazar ve tüm döngü bundan ibarettir. Yolda hiçbir Open Design sunucusu yoktur. Becerilerinizi keşfeden aynı daemon ağ çağrısının da sahibidir; bu yüzden "bu nerede çalışıyor?" sorusu bir satış görüşmesi değil, bir ayardır.</p>
+      <p>Daemon bir işi aldığında, istemi oluşturur — görev için ilgili <code>SKILL.md</code> ve <code>DESIGN.md</code> dosyalarını çeker — ardından ayarladığınız base URL'e tek bir HTTP isteği yapar. Yanıt makinenize akış halinde geri döner, ajan eseri diske yazar ve tüm döngü bundan ibarettir. Yolda hiçbir OpenDesign sunucusu yoktur. Becerilerinizi keşfeden aynı daemon ağ çağrısının da sahibidir; bu yüzden "bu nerede çalışıyor?" sorusu bir satış görüşmesi değil, bir ayardır.</p>
       <h2>OpenAI uyumlu adaptör</h2>
       <p>2026'daki çoğu yapay zeka çıkarım uç noktası OpenAI Chat Completions API'sini konuşur. Biz bunu en düşük ortak payda protokolü olarak kullanırız. Sağlayıcınız bunu konuşuyorsa (ki neredeyse hepsi konuşur), varsayılan olarak desteklenirsiniz — eklenti yok, beklenecek sağlayıcıya özel entegrasyon yok.</p>
       <h3>Yönlendirebileceğiniz sağlayıcılar</h3>
@@ -2276,7 +2276,7 @@ i18n:
       <h2>Gizlilik ve uyumluluk</h2>
       <p>BYOK'un önemli olmasının ikinci bir nedeni var: <strong>istemler müşterinizin markasını içerir.</strong></p>
       <p>Barındırılan çıkarım, marka belgelerini, henüz duyurulmamış ürün adlarını, dahili fiyatlandırmayı ve lansman öncesi yaratıcı çalışmaları üçüncü bir tarafın sunucuları üzerinden yönlendirmek demektir. Çoğu şirketin bu konuda bir görüşü vardır. Bazılarının ise bir sözleşmesi.</p>
-      <p>BYOK ile istem gidiş-dönüşü, dizüstü bilgisayarınız ile zaten incelediğiniz (veya kendiniz barındırdığınız) model sağlayıcısı arasındadır. Open Design devrede değildir. Mahkeme celbi çıkarılacak bir kaydımız, sızdıracak bir ihlal yüzeyimiz, açıklayacak bir denetim boşluğumuz yoktur.</p>
+      <p>BYOK ile istem gidiş-dönüşü, dizüstü bilgisayarınız ile zaten incelediğiniz (veya kendiniz barındırdığınız) model sağlayıcısı arasındadır. OpenDesign devrede değildir. Mahkeme celbi çıkarılacak bir kaydımız, sızdıracak bir ihlal yüzeyimiz, açıklayacak bir denetim boşluğumuz yoktur.</p>
       <h3>"Kayıt tutmamanın" pratikte size sağladığı şey</h3>
       <p>Ajans işleri, düzenlemeye tabi sektörler veya lansman öncesi herhangi bir şey için ayakta kalabilen tek tutum budur. Bir güvenlik incelemesi "marka varlıklarımız nereye gidiyor?" diye sorarsa, yanıt "sözleşmemizdeki model sağlayıcısına, başka hiçbir yere değil" olur — "kontrol etmediğimiz bir tedarikçi panosuna" değil. Bir Ollama veya vLLM uç noktasını kendiniz barındırmak bunu daha da sıkılaştırır: baytlar ağınızdan hiç çıkmaz. Bu, <a href="/blog/byok-reality-check-5-things-that-break/">BYOK gerçeklik kontrolünde</a> incelenen aynı ödünleşimdir ve o yazı, pürüzlerin hâlâ nerede olduğu konusunda dürüsttür — yerel modeller ve öncü modeller zevk açısından birbirinin yerine geçemez ve istem enjeksiyonu yüzeyinin sahibi sizsinizdir.</p>
       <h2>Proje ortasında sağlayıcı değiştirme</h2>
@@ -2287,7 +2287,7 @@ i18n:
       <li><strong>Hassas içerik</strong> — müşteri gizliliği gerektiren istemler için yerel bir Ollama modeline geçin</li>
       <li><strong>Son rötuş</strong> — mevcut en güçlü modelde bir geçiş harcayın (Opus, GPT-5 Pro)</li>
       </ul>
-      <p>Open Design'da geçiş yapmak, <code>.env.local</code> içindeki iki satırı düzenlemektir. Geçiş süreci yok, yeniden katılım yok, plan yükseltmesi yok.</p>
+      <p>OpenDesign'da geçiş yapmak, <code>.env.local</code> içindeki iki satırı düzenlemektir. Geçiş süreci yok, yeniden katılım yok, plan yükseltmesi yok.</p>
       <h3>Tek bir brief için işlenmiş bir yönlendirme</h3>
       <p>Somut olarak, tek bir açılış sayfası brief'i şöyle işleyebilir:</p>
       <pre class="astro-code open-design-editorial" style="background-color:#f7f1de;color:#15140f; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span># draft + first iterations — cheap and fast</span></span>
@@ -2303,26 +2303,26 @@ i18n:
       <p>Tüm BYOK hikayesi bundan ibaret. Özel bir kademe, yükseltme akışı, bizimle bir faturalandırma ilişkisi yok. Model sağlayıcısına ödersiniz, anahtarlarınızı saklarsınız, istemlerinizi saklarsınız. Biz katmanı sağlarız.</p>
       <h2>İlgili okumalar</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Open Design'ı neden bir ürün değil, bir beceri katmanı olarak inşa ettik</a> — barındırılan bir uygulama yerine ince bir katman sunma bahsi</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">OpenDesign'ı neden bir ürün değil, bir beceri katmanı olarak inşa ettik</a> — barındırılan bir uygulama yerine ince bir katman sunma bahsi</li>
       <li><a href="/blog/byok-reality-check-5-things-that-break/">BYOK gerçeklik kontrolü: bozulan 5 şey</a> — kendi anahtarınızı getirmenin dürüst ödünleşimleri ve pürüzleri</li>
-      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 beceri, 72 sistem: Open Design kütüphanesi nasıl çalışır</a> — hangi modeli çalıştırırsanız çalıştırın sabit kalan <code>SKILL.md</code> / <code>DESIGN.md</code> dosyaları</li>
+      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 beceri, 72 sistem: OpenDesign kütüphanesi nasıl çalışır</a> — hangi modeli çalıştırırsanız çalıştırın sabit kalan <code>SKILL.md</code> / <code>DESIGN.md</code> dosyaları</li>
       </ul>
   uk:
     title: "BYOK-робочий процес дизайну: запускайте Claude, Codex чи Qwen на власному ключі"
-    summary: "Більшість AI-інструментів для дизайну тихо додають націнку до кожного витраченого токена. Open Design дотримується протилежної позиції — приносьте власний ключ моделі, платіть провайдеру напряму та зберігайте повний контроль над тим, де виконується інференс. Ось як насправді працює рівень BYOK."
+    summary: "Більшість AI-інструментів для дизайну тихо додають націнку до кожного витраченого токена. OpenDesign дотримується протилежної позиції — приносьте власний ключ моделі, платіть провайдеру напряму та зберігайте повний контроль над тим, де виконується інференс. Ось як насправді працює рівень BYOK."
     bodyHtml: |
       <p>Якщо ви користувалися хмарним AI-продуктом для дизайну у 2026 році, ви, ймовірно, помітили, що рахунок повзе вгору. Підписка поверх плати за кожне місце, накладена поверх націнки на інференс, яку ніхто не публікує. Ця математика непрозора навмисно.</p>
-      <p>Open Design не виконує інференс. У нас немає націнки на токени. Увесь робочий процес побудований навколо <strong>принципу «приноси власний ключ» (BYOK)</strong> — ви спрямовуєте daemon на будь-яку сумісну з OpenAI кінцеву точку, вставляєте власний API-ключ, і все готово.</p>
-      <p>Цей допис пояснює, чому ми зробили такий вибір, як це працює під капотом і що це насправді змінює у вашій щоденній роботі. Якщо вам потрібен ширший філософський аргумент за цим, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">чому ми побудували Open Design як рівень навичок, а не продукт</a> — це супутній матеріал, а цей є практичною версією.</p>
+      <p>OpenDesign не виконує інференс. У нас немає націнки на токени. Увесь робочий процес побудований навколо <strong>принципу «приноси власний ключ» (BYOK)</strong> — ви спрямовуєте daemon на будь-яку сумісну з OpenAI кінцеву точку, вставляєте власний API-ключ, і все готово.</p>
+      <p>Цей допис пояснює, чому ми зробили такий вибір, як це працює під капотом і що це насправді змінює у вашій щоденній роботі. Якщо вам потрібен ширший філософський аргумент за цим, <a href="/blog/why-we-built-open-design-as-a-skill-layer/">чому ми побудували OpenDesign як рівень навичок, а не продукт</a> — це супутній матеріал, а цей є практичною версією.</p>
       <h2>Що насправді означає «BYOK» тут</h2>
       <p>У просторі AI-інструментів циркулюють два визначення BYOK, і це не одне й те саме:</p>
       <ul>
       <li><strong>Поверхневий BYOK</strong> — інструмент дозволяє вставити ключ, але все одно маршрутизує інференс через свої сервери, логує ваші запити та може застосовувати обмеження за швидкістю.</li>
       <li><strong>Справжній BYOK</strong> — інструмент звертається до провайдера моделі напряму з вашої машини (або вашої інфраструктури). Ваші запити ніколи не торкаються серверів вендора. Вендор не бере жодної націнки.</li>
       </ul>
-      <p>Open Design належить до другого типу. Daemon робить HTTP-виклики до тієї кінцевої точки, яку ви налаштуєте, з вашим ключем, з вашої машини. Ми не проксуємо. Ми не логуємо. Ми не бачимо ваших запитів.</p>
+      <p>OpenDesign належить до другого типу. Daemon робить HTTP-виклики до тієї кінцевої точки, яку ви налаштуєте, з вашим ключем, з вашої машини. Ми не проксуємо. Ми не логуємо. Ми не бачимо ваших запитів.</p>
       <h3>Куди насправді йде виклик</h3>
-      <p>Коли daemon бере завдання, він складає запит — підтягуючи відповідні файли <code>SKILL.md</code> та <code>DESIGN.md</code> для цього завдання — а потім робить єдиний HTTP-запит до базової URL-адреси, яку ви задали. Відповідь стримиться назад на вашу машину, агент записує артефакт на диск, і це весь цикл. На цьому шляху немає сервера Open Design. Той самий daemon, який виявляє ваші навички, також володіє мережевим викликом — саме тому «де це виконується?» є налаштуванням, а не темою для розмови з відділом продажів.</p>
+      <p>Коли daemon бере завдання, він складає запит — підтягуючи відповідні файли <code>SKILL.md</code> та <code>DESIGN.md</code> для цього завдання — а потім робить єдиний HTTP-запит до базової URL-адреси, яку ви задали. Відповідь стримиться назад на вашу машину, агент записує артефакт на диск, і це весь цикл. На цьому шляху немає сервера OpenDesign. Той самий daemon, який виявляє ваші навички, також володіє мережевим викликом — саме тому «де це виконується?» є налаштуванням, а не темою для розмови з відділом продажів.</p>
       <h2>Сумісний з OpenAI адаптер</h2>
       <p>Більшість кінцевих точок AI-інференсу у 2026 році розмовляють мовою OpenAI Chat Completions API. Ми використовуємо це як протокол найменшого спільного знаменника. Якщо ваш провайдер ним володіє (а майже всі володіють), ви підтримані за замовчуванням — жодного плагіна, жодної інтеграції під конкретного провайдера, на яку доводиться чекати.</p>
       <h3>Провайдери, на яких можна його налаштувати</h3>
@@ -2445,7 +2445,7 @@ i18n:
       <h2>Приватність і відповідність вимогам</h2>
       <p>Є й друга причина, чому BYOK має значення: <strong>запити містять бренд вашого клієнта.</strong></p>
       <p>Хмарний інференс означає маршрутизацію брендових документів, неоголошених назв продуктів, внутрішнього ціноутворення та дозапускового креативу через сервери третьої сторони. Більшість компаній мають свою думку щодо цього. Дехто має щодо цього контракт.</p>
-      <p>З BYOK обмін запитами туди-назад відбувається між вашим ноутбуком і провайдером моделі, якого ви вже перевірили (або розгорнули самостійно). Open Design не бере в цьому участі. У нас немає логу, який можна вимагати за повісткою, немає поверхні для витоку даних, немає аудиторської прогалини, яку треба пояснювати.</p>
+      <p>З BYOK обмін запитами туди-назад відбувається між вашим ноутбуком і провайдером моделі, якого ви вже перевірили (або розгорнули самостійно). OpenDesign не бере в цьому участі. У нас немає логу, який можна вимагати за повісткою, немає поверхні для витоку даних, немає аудиторської прогалини, яку треба пояснювати.</p>
       <h3>Що «жодного логу» дає на практиці</h3>
       <p>Для агентської роботи, регульованих галузей чи будь-чого дозапускового це єдина позиція, яка витримує перевірку. Якщо аудит безпеки запитує «куди потрапляють наші брендові активи?», відповідь — «до провайдера моделі за нашим контрактом, і більше нікуди», а не «до панелі вендора, яку ми не контролюємо». Самостійне розгортання кінцевої точки Ollama чи vLLM посилює це ще більше: байти взагалі не залишають вашу мережу. Це той самий компроміс, що розглядається в <a href="/blog/byok-reality-check-5-things-that-break/">перевірці реальності BYOK</a>, де чесно описано, де ще лишаються гострі кути — локальні моделі та передові моделі не взаємозамінні за смаком, а поверхня для prompt-injection належить вам самим.</p>
       <h2>Як перемкнути провайдерів посеред проєкту</h2>
@@ -2456,7 +2456,7 @@ i18n:
       <li><strong>Чутливий вміст</strong> — перейдіть на локальну модель Ollama для конфіденційних для клієнта запитів</li>
       <li><strong>Фінальне доопрацювання</strong> — спаліть один прохід на найсильнішій доступній моделі (Opus, GPT-5 Pro)</li>
       </ul>
-      <p>В Open Design перемикання — це редагування двох рядків у <code>.env.local</code>. Жодної міграції, жодного повторного онбордингу, жодного апгрейду плану.</p>
+      <p>В OpenDesign перемикання — це редагування двох рядків у <code>.env.local</code>. Жодної міграції, жодного повторного онбордингу, жодного апгрейду плану.</p>
       <h3>Опрацьована маршрутизація для одного брифу</h3>
       <p>Конкретно, окремий бриф для лендингу міг би проходити так:</p>
       <pre class="astro-code open-design-editorial" style="background-color:#f7f1de;color:#15140f; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span># draft + first iterations — cheap and fast</span></span>
@@ -2472,17 +2472,17 @@ i18n:
       <p>Це вся історія BYOK. Немає жодного особливого рівня, жодного процесу апгрейду, жодних білінгових відносин з нами. Ви платите провайдеру моделі, ви зберігаєте свої ключі, ви зберігаєте свої запити. Ми надаємо рівень.</p>
       <h2>Пов’язане для читання</h2>
       <ul>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Чому ми побудували Open Design як рівень навичок, а не продукт</a> — ставка за рішенням постачати тонкий рівень замість хмарного застосунку</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Чому ми побудували OpenDesign як рівень навичок, а не продукт</a> — ставка за рішенням постачати тонкий рівень замість хмарного застосунку</li>
       <li><a href="/blog/byok-reality-check-5-things-that-break/">Перевірка реальності BYOK: 5 речей, які ламаються</a> — чесні компроміси та гострі кути використання власного ключа</li>
-      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 навичка, 72 системи: як працює бібліотека Open Design</a> — файли <code>SKILL.md</code> / <code>DESIGN.md</code>, що лишаються незмінними незалежно від того, яку модель ви запускаєте</li>
+      <li><a href="/blog/31-skills-72-systems-how-the-library-works/">31 навичка, 72 системи: як працює бібліотека OpenDesign</a> — файли <code>SKILL.md</code> / <code>DESIGN.md</code>, що лишаються незмінними незалежно від того, яку модель ви запускаєте</li>
       </ul>
 ---
 
 If you've used a hosted AI design product in 2026, you've probably noticed the bill creeping up. A subscription on top of a per-seat charge, layered on top of an inference markup that nobody publishes. The math is opaque on purpose.
 
-Open Design doesn't run inference. We don't have a margin on tokens. The entire workflow is built around **bring-your-own-key (BYOK)** — you point the daemon at any OpenAI-compatible endpoint, paste your own API key, and you're done.
+OpenDesign doesn't run inference. We don't have a margin on tokens. The entire workflow is built around **bring-your-own-key (BYOK)** — you point the daemon at any OpenAI-compatible endpoint, paste your own API key, and you're done.
 
-This post explains why we made that choice, how it works under the hood, and what it actually changes in your day-to-day workflow. If you want the bigger philosophical argument behind it, [why we built Open Design as a skill layer, not a product](/blog/why-we-built-open-design-as-a-skill-layer/) is the companion piece — this one is the hands-on version.
+This post explains why we made that choice, how it works under the hood, and what it actually changes in your day-to-day workflow. If you want the bigger philosophical argument behind it, [why we built OpenDesign as a skill layer, not a product](/blog/why-we-built-open-design-as-a-skill-layer/) is the companion piece — this one is the hands-on version.
 
 ## What "BYOK" really means here
 
@@ -2491,11 +2491,11 @@ There are two definitions of BYOK floating around the AI tooling space, and they
 - **Surface BYOK** — the tool lets you paste a key, but still routes inference through their servers, logs your prompts, and may apply rate limits.
 - **Real BYOK** — the tool calls the model provider directly from your machine (or your infrastructure). Your prompts never touch the vendor's servers. The vendor takes no margin.
 
-Open Design is the second kind. The daemon makes HTTP calls to whichever endpoint you configure, with your key, from your machine. We don't proxy. We don't log. We don't see your prompts.
+OpenDesign is the second kind. The daemon makes HTTP calls to whichever endpoint you configure, with your key, from your machine. We don't proxy. We don't log. We don't see your prompts.
 
 ### Where the call actually goes
 
-When the daemon picks up a job, it composes the prompt — pulling in the relevant `SKILL.md` and `DESIGN.md` files for the task — and then makes a single HTTP request to the base URL you set. The response streams back to your machine, the agent writes the artifact to disk, and that's the whole loop. There is no Open Design server in the path. The same daemon that discovers your skills also owns the network call, which is why "where does this run?" is a setting and not a sales conversation.
+When the daemon picks up a job, it composes the prompt — pulling in the relevant `SKILL.md` and `DESIGN.md` files for the task — and then makes a single HTTP request to the base URL you set. The response streams back to your machine, the agent writes the artifact to disk, and that's the whole loop. There is no OpenDesign server in the path. The same daemon that discovers your skills also owns the network call, which is why "where does this run?" is a setting and not a sales conversation.
 
 ## The OpenAI-compatible adapter
 
@@ -2576,7 +2576,7 @@ There's a second reason BYOK matters: **the prompts contain your client's brand.
 
 Hosted inference means routing brand documents, unannounced product names, internal pricing, and pre-launch creative through a third party's servers. Most companies have an opinion about that. Some have a contract about it.
 
-With BYOK, the prompt round-trip is between your laptop and the model provider you've already vetted (or self-hosted). Open Design is not in the loop. We have no log to subpoena, no breach surface to leak from, no audit gap to explain.
+With BYOK, the prompt round-trip is between your laptop and the model provider you've already vetted (or self-hosted). OpenDesign is not in the loop. We have no log to subpoena, no breach surface to leak from, no audit gap to explain.
 
 ### What "no log" buys you in practice
 
@@ -2591,7 +2591,7 @@ One of the underrated benefits of BYOK is provider arbitrage during a project:
 - **Sensitive content** — swap to a local Ollama model for client-confidential prompts
 - **Final polish** — burn one pass on the strongest model available (Opus, GPT-5 Pro)
 
-In Open Design, switching is editing two lines in `.env.local`. There's no migration, no re-onboarding, no plan upgrade.
+In OpenDesign, switching is editing two lines in `.env.local`. There's no migration, no re-onboarding, no plan upgrade.
 
 ### A worked routing for one brief
 
@@ -2619,6 +2619,6 @@ That's the entire BYOK story. There's no special tier, no upgrade flow, no billi
 
 ## Related reading
 
-- [Why we built Open Design as a skill layer, not a product](/blog/why-we-built-open-design-as-a-skill-layer/) — the bet behind shipping a thin layer instead of a hosted app
+- [Why we built OpenDesign as a skill layer, not a product](/blog/why-we-built-open-design-as-a-skill-layer/) — the bet behind shipping a thin layer instead of a hosted app
 - [The BYOK reality check: 5 things that break](/blog/byok-reality-check-5-things-that-break/) — the honest trade-offs and rough edges of bringing your own key
-- [31 skills, 72 systems: how the Open Design library works](/blog/31-skills-72-systems-how-the-library-works/) — the `SKILL.md` / `DESIGN.md` files that stay constant no matter which model you run
+- [31 skills, 72 systems: how the OpenDesign library works](/blog/31-skills-72-systems-how-the-library-works/) — the `SKILL.md` / `DESIGN.md` files that stay constant no matter which model you run

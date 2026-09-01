@@ -104,12 +104,12 @@ jobs:
             echo "::warning title=Blog indexing not fully configured::GSC auth is missing; sitemap submission, URL Inspection, Search Analytics, and status rendering will be skipped."
           fi
           if [ "$bot" != "true" ]; then
-            echo "::warning title=Blog indexing status PR disabled::Open Design bot secrets are missing; status PR creation will be skipped."
+            echo "::warning title=Blog indexing status PR disabled::OpenDesign bot secrets are missing; status PR creation will be skipped."
           fi
           {
             echo "### Blog indexing configuration"
             echo "- GSC auth configured: \`$gsc\`"
-            echo "- Open Design bot configured: \`$bot\`"
+            echo "- OpenDesign bot configured: \`$bot\`"
             if [ "$gsc" != "true" ]; then
               echo ""
               echo "GSC-dependent sitemap submission and URL Inspection steps will be skipped."
@@ -248,7 +248,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-      - name: Generate Open Design bot token
+      - name: Generate OpenDesign bot token
         if: steps.detect.outputs.count != '0' && steps.config.outputs.gsc == 'true' && steps.config.outputs.bot == 'true'
         id: open-design-bot-token
         uses: actions/create-github-app-token@v3.2.0

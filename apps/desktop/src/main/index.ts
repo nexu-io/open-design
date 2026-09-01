@@ -15,10 +15,12 @@ import {
   type DesktopEvalInput,
   type DesktopExportArtifactInput,
   type DesktopExportPdfInput,
+  type DesktopRenderFramesInput,
   type DesktopRenderSlidesInput,
   type DesktopScreenshotInput,
   type DesktopStatusSnapshot,
   type DesktopUpdateStatusSnapshot,
+  type DaemonStatusSnapshot,
   type DesktopUpdateInput,
   type RegisterDesktopAuthResult,
   type SidecarStamp,
@@ -144,7 +146,7 @@ export function applyOsLocaleSwitch(electronApp: Electron.App): string {
 
 /**
  * Lift Chromium's hardcoded 6-connections-per-origin socket cap for the
- * loopback hosts every Open Design renderer talks to (directly in dev,
+ * loopback hosts every OpenDesign renderer talks to (directly in dev,
  * through the od:// proxy's main-process net.fetch when packaged).
  *
  * Long-lived SSE streams pin pool slots, and once the pool saturates,
@@ -250,25 +252,52 @@ function createWebDiscovery(runtime: SidecarRuntimeContext<SidecarStamp>): () =>
   };
 }
 
-// Resolve the daemon base URL the same way app-config reads/writes do: an
-// explicit daemon URL, else the web URL (which proxies `/api/*` to the daemon),
-// else sidecar web discovery. Shared by app-config menu actions and the
-// diagnostics export so they all target the same daemon. Throws when none is
-// available.
+function createDaemonDiscovery(runtime: SidecarRuntimeContext<SidecarStamp>): () => Promise<string | null> {
+  return async () => {
+    const daemonIpc = resolveAppIpcPath({
+      app: APP_KEYS.DAEMON,
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      namespace: runtime.namespace,
+    });
+    const daemon = await requestJsonIpc<DaemonStatusSnapshot>(
+      daemonIpc,
+      { type: SIDECAR_MESSAGES.STATUS },
+      { timeoutMs: 600 },
+    ).catch(() => null);
+    return daemon?.url ?? null;
+  };
+}
+
+type BaseUrlDiscovery = () => Promise<string | null | undefined>;
+
+export async function resolveFirstAvailableBaseUrl(
+  discoveries: readonly BaseUrlDiscovery[],
+): Promise<string> {
+  for (const discover of discoveries) {
+    try {
+      const baseUrl = await discover();
+      if (baseUrl?.trim()) return baseUrl;
+    } catch {
+      // One sidecar may be starting or temporarily busy. Keep walking the
+      // ordered fallbacks instead of turning that transient into a menu error.
+    }
+  }
+  throw new Error("daemon URL is unavailable");
+}
+
+// Resolve the daemon base URL from explicit wiring or either sidecar. Prefer
+// the direct daemon before the web `/api/*` proxy so a compiling web renderer
+// cannot make native app-config actions temporarily unavailable.
 function resolveDaemonBaseUrl(
   runtime: SidecarRuntimeContext<SidecarStamp>,
   options: Pick<DesktopMainOptions, "discoverDaemonUrl" | "discoverWebUrl">,
 ): () => Promise<string> {
-  return async () => {
-    const baseUrl =
-      (await options.discoverDaemonUrl?.()) ??
-      (await options.discoverWebUrl?.()) ??
-      (await createWebDiscovery(runtime)());
-    if (!baseUrl) {
-      throw new Error("daemon URL is unavailable");
-    }
-    return baseUrl;
-  };
+  return () => resolveFirstAvailableBaseUrl([
+    ...(options.discoverDaemonUrl ? [options.discoverDaemonUrl] : []),
+    createDaemonDiscovery(runtime),
+    ...(options.discoverWebUrl ? [options.discoverWebUrl] : []),
+    createWebDiscovery(runtime),
+  ]);
 }
 
 export function normalizeAmrEnvironmentProfile(profile: unknown): AmrEnvironmentProfile {
@@ -836,6 +865,7 @@ export async function runDesktopMain(
     const update = await snapshotUpdateForStatus();
     if (activeDesktop == null) {
       return {
+        capabilities: { frameRenderer: true },
         pid: process.pid,
         state: "idle",
         updatedAt: new Date().toISOString(),
@@ -844,7 +874,11 @@ export async function runDesktopMain(
         ...update,
       };
     }
-    return { ...activeDesktop.status(), ...update };
+    return {
+      ...activeDesktop.status(),
+      capabilities: { frameRenderer: true },
+      ...update,
+    };
   }
 
   async function shutdown(): Promise<void> {
@@ -908,6 +942,8 @@ export async function runDesktopMain(
             return await activeDesktop.click(request.input as DesktopClickInput);
           case SIDECAR_MESSAGES.EXPORT_PDF:
             return await activeDesktop.exportPdf(request.input as DesktopExportPdfInput);
+          case SIDECAR_MESSAGES.RENDER_FRAMES:
+            return await activeDesktop.renderFrames(request.input as DesktopRenderFramesInput);
           case SIDECAR_MESSAGES.RENDER_SLIDES:
             return await activeDesktop.renderSlides(request.input as DesktopRenderSlidesInput);
           case SIDECAR_MESSAGES.EXPORT_ARTIFACT:

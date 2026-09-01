@@ -63,17 +63,6 @@ beforeAll(async () => {
     const current = controlKey === 'e2e-skill-resource-member-key'
       ? TEAM_A_MEMBER
       : TEAM_A;
-    if (req.url === '/api/v1/workspaces/current' && req.method === 'GET') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({
-        ...current,
-        billingState: 'active',
-        planId: 'team_plus',
-        providerMode: 'platform_credits',
-        seatSummary: { seatLimit: 5, usedSeats: 2 },
-      }));
-      return;
-    }
     if (req.url === '/api/v1/workspaces' && req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({

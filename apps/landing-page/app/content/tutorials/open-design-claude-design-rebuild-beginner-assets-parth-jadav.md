@@ -1,7 +1,7 @@
 ---
 title: 'Claude’s NEW Design Update is INSANE! 🤯 (Get it for FREE)'
 youtubeId: _wx5co2vv_U
-summary: 'Build a brand design system once, then spin one source into five on-brand assets — a slide deck, an infographic, a social carousel, an animated video, and a landing page — with zero manual pixel-pushing. Then do the whole hub-and-spoke workflow for free in Open Design on your existing ChatGPT or Gemini subscription. Based on Parth Jadav''s walkthrough.'
+summary: 'Build a brand design system once, then spin one source into five on-brand assets — a slide deck, an infographic, a social carousel, an animated video, and a landing page — with zero manual pixel-pushing. Then do the whole hub-and-spoke workflow for free in OpenDesign on your existing ChatGPT or Gemini subscription. Based on Parth Jadav''s walkthrough.'
 date: 2026-07-01
 category: Demo
 durationSeconds: 398
@@ -9,14 +9,14 @@ author: 'Parth  Jadav'
 official: false
 ---
 
-The single most frustrating part of AI content creation is making the output actually look like *your* brand instead of the generic dark "an algorithm made this" default. Parth Jadav's [walkthrough](https://www.youtube.com/watch?v=_wx5co2vv_U) fixes that with a **hub-and-spoke** workflow: build your brand rules once, then generate five different on-brand assets from a single source — no manual design work. This written version follows his flow and shows how to run the whole thing for free in Open Design. Watch above, or read on.
+The single most frustrating part of AI content creation is making the output actually look like *your* brand instead of the generic dark "an algorithm made this" default. Parth Jadav's [walkthrough](https://www.youtube.com/watch?v=_wx5co2vv_U) fixes that with a **hub-and-spoke** workflow: build your brand rules once, then generate five different on-brand assets from a single source — no manual design work. This written version follows his flow and shows how to run the whole thing for free in OpenDesign. Watch above, or read on.
 
-![The Open Design workspace.](/tutorials/open-design-claude-design-rebuild-beginner-assets-parth-jadav/01-workspace.webp)
+![The OpenDesign workspace.](/tutorials/open-design-claude-design-rebuild-beginner-assets-parth-jadav/01-workspace.webp)
 *One workspace, one design system, many branded assets.*
 
-## What is Open Design?
+## What is OpenDesign?
 
-Open Design is an open-source, local-first, agent-native design platform — a free alternative to Claude Design. Its key difference is the engine: instead of keeping you inside one vendor's paid limits, it lets you **bring your own AI** — Gemini or ChatGPT — so the same automation costs you nothing extra beyond a subscription you already have.
+OpenDesign is an open-source, local-first, agent-native design platform — a free alternative to Claude Design. Its key difference is the engine: instead of keeping you inside one vendor's paid limits, it lets you **bring your own AI** — Gemini or ChatGPT — so the same automation costs you nothing extra beyond a subscription you already have.
 
 - **Open source, Apache-2.0**, runs on your machine.
 - **Bring your own engine** via a local CLI bridge (Codex CLI), so you are not stacking another monthly bill.
@@ -42,7 +42,7 @@ Think of the design system as your brand's DNA: colors, fonts, spacing, even the
 
 Now the magic trick. Take that generic 23-slide deck and type a single sentence: **"convert the whole deck to our design system."** The moody default vanishes and every slide instantly adopts your exact colors and fonts — zero manual editing. Because the brand rules are now hardwired into the agent, you can scale from here.
 
-![Building a slide deck in Open Design.](/tutorials/open-design-claude-design-rebuild-beginner-assets-parth-jadav/slide-deck-creator.webp)
+![Building a slide deck in OpenDesign.](/tutorials/open-design-claude-design-rebuild-beginner-assets-parth-jadav/slide-deck-creator.webp)
 *A 23-slide deck, restyled to your brand with a single "convert to our design system" command.*
 
 ## The five spokes, from one source
@@ -60,12 +60,12 @@ With the design system attached like an invisible layer, one source spins out in
 
 When it is time to ship the page for real, exporting your design system first means the agent stops burning tokens redesigning from scratch — it grabs your pre-approved building blocks and pushes the design into a website builder or into your coding agent.
 
-## Do the whole thing for free in Open Design
+## Do the whole thing for free in OpenDesign
 
-Everything above assumes you are paying for Claude. Open Design runs the **identical** hub-and-spoke automation for free. Two things make that work:
+Everything above assumes you are paying for Claude. OpenDesign runs the **identical** hub-and-spoke automation for free. Two things make that work:
 
-- **Bring your own engine.** Route an existing ChatGPT or Gemini subscription into Open Design through the **Codex CLI** bridge. The extra cost to run it is exactly zero.
-- **Clone your brand DNA — don't rebuild it.** You do not start over. In Claude Design, export your design system as a **ZIP**; in Open Design, import that ZIP. Your colors, fonts, and whole vibe come across, and you are generating new spokes immediately.
+- **Bring your own engine.** Route an existing ChatGPT or Gemini subscription into OpenDesign through the **Codex CLI** bridge. The extra cost to run it is exactly zero.
+- **Clone your brand DNA — don't rebuild it.** You do not start over. In Claude Design, export your design system as a **ZIP**; in OpenDesign, import that ZIP. Your colors, fonts, and whole vibe come across, and you are generating new spokes immediately.
 
 ## Verdict
 
@@ -77,8 +77,8 @@ The takeaway is a real shift in how the work happens: the friction of keeping ev
 
 **How do I set up a design system?** Give the AI your brand name and a one-line mission, upload a screenshot of your colors and fonts, and it produces a reusable rulebook in about five minutes.
 
-**Is Open Design free?** Yes — it is open source and runs on your own engine. Connect an existing ChatGPT or Gemini subscription via the Codex CLI and there is no extra per-token bill.
+**Is OpenDesign free?** Yes — it is open source and runs on your own engine. Connect an existing ChatGPT or Gemini subscription via the Codex CLI and there is no extra per-token bill.
 
-**Can I move my brand from Claude Design?** Yes. Export your design system as a ZIP from Claude Design and import it into Open Design; your colors, fonts, and components carry over.
+**Can I move my brand from Claude Design?** Yes. Export your design system as a ZIP from Claude Design and import it into OpenDesign; your colors, fonts, and components carry over.
 
 **Can it make video, not just static assets?** Yes. Ask for an animated launch video and the engine produces HTML/CSS kinetic text that inherits your brand type and colors.

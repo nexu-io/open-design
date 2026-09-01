@@ -37,7 +37,8 @@ export interface TeamPricingContent {
   perSeatMonth: string;
   monthlyTotal: string;
   yearlyTotal: string;
-  checkout: string;
+  monthlyCheckout: string;
+  yearlyCheckout: string;
   teamFeatures: string[];
   enterpriseTitle: string;
   enterpriseTagline: string;
@@ -46,12 +47,12 @@ export interface TeamPricingContent {
 }
 
 const EN: TeamPricingContent = {
-  metaTitle: 'Pricing — Open Design',
+  metaTitle: 'Pricing — OpenDesign',
   metaDescription:
-    'Compare Open Design Creator and Team plans, including model credits, per-seat collaboration, annual savings, and Enterprise support.',
+    'Compare OpenDesign Creator and Team plans, including model credits, per-seat collaboration, annual savings, and Enterprise support.',
   breadcrumbLabel: 'Pricing',
   audienceTabsLabel: 'Plan audience',
-  creatorTab: 'Creator',
+  creatorTab: 'Individual',
   teamTab: 'Team',
   billingIntervalLabel: 'Billing interval',
   teamTitle: 'Team',
@@ -65,9 +66,10 @@ const EN: TeamPricingContent = {
   increaseSeats: 'Increase seats',
   minSeatsNote: 'Team plans require at least {count} seats.',
   perSeatMonth: '/ seat / month',
-  monthlyTotal: 'First month only {amount}',
-  yearlyTotal: 'First year only {amount}',
-  checkout: 'Upgrade team',
+  monthlyTotal: '{amount} / month for your team',
+  yearlyTotal: '{amount} billed for the first year',
+  monthlyCheckout: 'Upgrade team · {amount}/month',
+  yearlyCheckout: 'Upgrade team · {amount}/year',
   teamFeatures: [
     'Share and manage projects, design systems, and plugins as a team',
     'Everyone can view and comment; only the project creator can edit',
@@ -90,13 +92,13 @@ const EN: TeamPricingContent = {
 };
 
 const ZH: TeamPricingContent = {
-  metaTitle: '价格方案 — Open Design',
+  metaTitle: '价格方案 — OpenDesign',
   metaDescription:
-    '比较 Open Design 创作会员与团队版方案，了解模型额度、按席位协作、年付优惠和企业支持。',
+    '比较 OpenDesign 创作会员与团队版方案，了解模型额度、按席位协作、年付优惠和企业支持。',
   breadcrumbLabel: '价格方案',
   audienceTabsLabel: '方案类型',
-  creatorTab: '创作会员',
-  teamTab: '团队版会员',
+  creatorTab: '个人',
+  teamTab: '团队',
   billingIntervalLabel: '计费周期',
   teamTitle: '团队版',
   teamTagline: '为设计团队打造 · 按席位协作',
@@ -109,9 +111,10 @@ const ZH: TeamPricingContent = {
   increaseSeats: '增加席位',
   minSeatsNote: '团队版最少需要 {count} 个席位。',
   perSeatMonth: '/ 席 / 月',
-  monthlyTotal: '首月仅需 {amount}',
-  yearlyTotal: '首年仅需 {amount}',
-  checkout: '升级团队版',
+  monthlyTotal: '团队合计 {amount} / 月',
+  yearlyTotal: '首年应付 {amount}',
+  monthlyCheckout: '升级团队版 · {amount}/月',
+  yearlyCheckout: '升级团队版 · {amount}/年',
   teamFeatures: [
     '项目、设计系统与插件，团队统一共享与管理',
     '成员均可查看和评论项目，仅项目创建者可以编辑',
@@ -134,15 +137,15 @@ const ZH: TeamPricingContent = {
 };
 
 const JA: TeamPricingContent = {
-  metaTitle: '料金プラン — Open Design',
+  metaTitle: '料金プラン — OpenDesign',
   metaDescription:
-    'Open Design のクリエイター向けプランと Team プランを比較。モデルクレジット、席単位の共同作業、年払い割引、Enterprise サポートを確認できます。',
+    'OpenDesign のクリエイター向けプランと Team プランを比較。モデルクレジット、席単位の共同作業、年払い割引、Enterprise サポートを確認できます。',
   breadcrumbLabel: '料金プラン',
   audienceTabsLabel: 'プラン対象',
   creatorTab: 'クリエイター',
-  teamTab: 'Team',
+  teamTab: 'チーム',
   billingIntervalLabel: '請求サイクル',
-  teamTitle: 'Team',
+  teamTitle: 'チーム',
   teamTagline: 'デザインチーム向け · 席単位の共同作業',
   recommended: 'おすすめ',
   creditLabel: '1 席あたりの月間モデルクレジット',
@@ -153,9 +156,10 @@ const JA: TeamPricingContent = {
   increaseSeats: '席数を増やす',
   minSeatsNote: 'Team プランは最低 {count} 席から利用できます。',
   perSeatMonth: '/ 席 / 月',
-  monthlyTotal: '初月は {amount} のみ',
-  yearlyTotal: '初年度は {amount} のみ',
-  checkout: 'Team にアップグレード',
+  monthlyTotal: 'チーム合計 月額 {amount}',
+  yearlyTotal: '初年度の請求額 {amount}',
+  monthlyCheckout: 'Team にアップグレード · 月額 {amount}',
+  yearlyCheckout: 'Team にアップグレード · 年額 {amount}',
   teamFeatures: [
     'プロジェクト、Design Systems、プラグインをチームで共有・管理',
     '全員が閲覧とコメント可能。編集はプロジェクト作成者のみ',
@@ -178,15 +182,15 @@ const JA: TeamPricingContent = {
 };
 
 const KO: TeamPricingContent = {
-  metaTitle: '요금제 — Open Design',
+  metaTitle: '요금제 — OpenDesign',
   metaDescription:
-    'Open Design 크리에이터 및 Team 요금제의 모델 크레딧, 좌석 기반 협업, 연간 할인과 Enterprise 지원을 비교하세요.',
+    'OpenDesign 크리에이터 및 Team 요금제의 모델 크레딧, 좌석 기반 협업, 연간 할인과 Enterprise 지원을 비교하세요.',
   breadcrumbLabel: '요금제',
   audienceTabsLabel: '요금제 대상',
   creatorTab: '크리에이터',
-  teamTab: 'Team',
+  teamTab: '팀',
   billingIntervalLabel: '결제 주기',
-  teamTitle: 'Team',
+  teamTitle: '팀',
   teamTagline: '디자인 팀을 위한 좌석 기반 협업',
   recommended: '추천',
   creditLabel: '좌석당 월간 모델 크레딧',
@@ -197,9 +201,10 @@ const KO: TeamPricingContent = {
   increaseSeats: '좌석 늘리기',
   minSeatsNote: 'Team 요금제는 최소 {count}개 좌석이 필요합니다.',
   perSeatMonth: '/ 좌석 / 월',
-  monthlyTotal: '첫 달은 {amount}',
-  yearlyTotal: '첫해는 {amount}',
-  checkout: 'Team으로 업그레이드',
+  monthlyTotal: '팀 합계 월 {amount}',
+  yearlyTotal: '첫해 청구 금액 {amount}',
+  monthlyCheckout: 'Team으로 업그레이드 · 월 {amount}',
+  yearlyCheckout: 'Team으로 업그레이드 · 연 {amount}',
   teamFeatures: [
     '프로젝트, Design Systems, 플러그인을 팀에서 공유하고 관리',
     '모든 구성원이 보고 댓글을 달 수 있으며 편집은 프로젝트 생성자만 가능',
@@ -222,9 +227,9 @@ const KO: TeamPricingContent = {
 };
 
 const DE: TeamPricingContent = {
-  metaTitle: 'Preise — Open Design',
+  metaTitle: 'Preise — OpenDesign',
   metaDescription:
-    'Vergleiche Open Design Creator- und Team-Pläne mit Modellguthaben, Zusammenarbeit pro Sitz, Jahresrabatten und Enterprise-Support.',
+    'Vergleiche OpenDesign Creator- und Team-Pläne mit Modellguthaben, Zusammenarbeit pro Sitz, Jahresrabatten und Enterprise-Support.',
   breadcrumbLabel: 'Preise',
   audienceTabsLabel: 'Planzielgruppe',
   creatorTab: 'Creator',
@@ -241,9 +246,10 @@ const DE: TeamPricingContent = {
   increaseSeats: 'Sitz hinzufügen',
   minSeatsNote: 'Team-Pläne erfordern mindestens {count} Sitze.',
   perSeatMonth: '/ Sitz / Monat',
-  monthlyTotal: 'Im ersten Monat nur {amount}',
-  yearlyTotal: 'Im ersten Jahr nur {amount}',
-  checkout: 'Auf Team upgraden',
+  monthlyTotal: 'Teamgesamtpreis {amount} / Monat',
+  yearlyTotal: 'Im ersten Jahr werden {amount} berechnet',
+  monthlyCheckout: 'Auf Team upgraden · {amount}/Monat',
+  yearlyCheckout: 'Auf Team upgraden · {amount}/Jahr',
   teamFeatures: [
     'Projekte, Design Systems und Plugins gemeinsam teilen und verwalten',
     'Alle können ansehen und kommentieren; nur Ersteller bearbeiten ihr Projekt',
@@ -266,9 +272,9 @@ const DE: TeamPricingContent = {
 };
 
 const FR: TeamPricingContent = {
-  metaTitle: 'Tarifs — Open Design',
+  metaTitle: 'Tarifs — OpenDesign',
   metaDescription:
-    'Comparez les offres Creator et Team d’Open Design : crédits modèles, collaboration par siège, réductions annuelles et support Enterprise.',
+    'Comparez les offres Creator et Team d’OpenDesign : crédits modèles, collaboration par siège, réductions annuelles et support Enterprise.',
   breadcrumbLabel: 'Tarifs',
   audienceTabsLabel: 'Public de l’offre',
   creatorTab: 'Créateur',
@@ -285,9 +291,10 @@ const FR: TeamPricingContent = {
   increaseSeats: 'Ajouter un siège',
   minSeatsNote: 'Les offres Team nécessitent au moins {count} sièges.',
   perSeatMonth: '/ siège / mois',
-  monthlyTotal: 'Premier mois à seulement {amount}',
-  yearlyTotal: 'Première année à seulement {amount}',
-  checkout: 'Passer à Team',
+  monthlyTotal: 'Total équipe : {amount} / mois',
+  yearlyTotal: '{amount} facturés la première année',
+  monthlyCheckout: 'Passer à Team · {amount}/mois',
+  yearlyCheckout: 'Passer à Team · {amount}/an',
   teamFeatures: [
     'Partager et gérer en équipe projets, Design Systems et plugins',
     'Tous peuvent consulter et commenter ; seul le créateur du projet le modifie',
@@ -310,9 +317,9 @@ const FR: TeamPricingContent = {
 };
 
 const RU: TeamPricingContent = {
-  metaTitle: 'Тарифы — Open Design',
+  metaTitle: 'Тарифы — OpenDesign',
   metaDescription:
-    'Сравните тарифы Open Design для авторов и команд: кредиты моделей, совместная работа по местам, годовые скидки и поддержка Enterprise.',
+    'Сравните тарифы OpenDesign для авторов и команд: кредиты моделей, совместная работа по местам, годовые скидки и поддержка Enterprise.',
   breadcrumbLabel: 'Тарифы',
   audienceTabsLabel: 'Тип тарифа',
   creatorTab: 'Для авторов',
@@ -329,9 +336,10 @@ const RU: TeamPricingContent = {
   increaseSeats: 'Увеличить число мест',
   minSeatsNote: 'Для командного тарифа нужно минимум {count} места.',
   perSeatMonth: '/ место / месяц',
-  monthlyTotal: 'Первый месяц — всего {amount}',
-  yearlyTotal: 'Первый год — всего {amount}',
-  checkout: 'Перейти на Team',
+  monthlyTotal: '{amount} / месяц для команды',
+  yearlyTotal: '{amount} за первый год',
+  monthlyCheckout: 'Перейти на Team · {amount}/месяц',
+  yearlyCheckout: 'Перейти на Team · {amount}/год',
   teamFeatures: [
     'Общие проекты, Design Systems и плагины с управлением для команды',
     'Все могут смотреть и комментировать; редактирует только создатель проекта',
@@ -354,9 +362,9 @@ const RU: TeamPricingContent = {
 };
 
 const ES: TeamPricingContent = {
-  metaTitle: 'Precios — Open Design',
+  metaTitle: 'Precios — OpenDesign',
   metaDescription:
-    'Compara los planes Creator y Team de Open Design: créditos de modelos, colaboración por asiento, ahorro anual y soporte Enterprise.',
+    'Compara los planes Creator y Team de OpenDesign: créditos de modelos, colaboración por asiento, ahorro anual y soporte Enterprise.',
   breadcrumbLabel: 'Precios',
   audienceTabsLabel: 'Público del plan',
   creatorTab: 'Creadores',
@@ -373,9 +381,10 @@ const ES: TeamPricingContent = {
   increaseSeats: 'Añadir un asiento',
   minSeatsNote: 'Los planes Team requieren al menos {count} asientos.',
   perSeatMonth: '/ asiento / mes',
-  monthlyTotal: 'Primer mes por solo {amount}',
-  yearlyTotal: 'Primer año por solo {amount}',
-  checkout: 'Mejorar a Team',
+  monthlyTotal: '{amount} / mes para tu equipo',
+  yearlyTotal: '{amount} facturados el primer año',
+  monthlyCheckout: 'Mejorar a Team · {amount}/mes',
+  yearlyCheckout: 'Mejorar a Team · {amount}/año',
   teamFeatures: [
     'Compartir y gestionar proyectos, Design Systems y plugins en equipo',
     'Todos pueden ver y comentar; solo el creador del proyecto puede editarlo',
@@ -398,9 +407,9 @@ const ES: TeamPricingContent = {
 };
 
 const PT_BR: TeamPricingContent = {
-  metaTitle: 'Preços — Open Design',
+  metaTitle: 'Preços — OpenDesign',
   metaDescription:
-    'Compare os planos Creator e Team do Open Design, com créditos de modelos, colaboração por assento, economia anual e suporte Enterprise.',
+    'Compare os planos Creator e Team do OpenDesign, com créditos de modelos, colaboração por assento, economia anual e suporte Enterprise.',
   breadcrumbLabel: 'Preços',
   audienceTabsLabel: 'Público do plano',
   creatorTab: 'Criadores',
@@ -417,9 +426,10 @@ const PT_BR: TeamPricingContent = {
   increaseSeats: 'Aumentar assentos',
   minSeatsNote: 'Os planos Team exigem pelo menos {count} assentos.',
   perSeatMonth: '/ assento / mês',
-  monthlyTotal: 'Primeiro mês por apenas {amount}',
-  yearlyTotal: 'Primeiro ano por apenas {amount}',
-  checkout: 'Fazer upgrade para Team',
+  monthlyTotal: '{amount} / mês para sua equipe',
+  yearlyTotal: '{amount} cobrados no primeiro ano',
+  monthlyCheckout: 'Fazer upgrade para Team · {amount}/mês',
+  yearlyCheckout: 'Fazer upgrade para Team · {amount}/ano',
   teamFeatures: [
     'Compartilhe e gerencie projetos, Design Systems e plugins em equipe',
     'Todos podem ver e comentar; apenas o criador do projeto pode editar',
@@ -442,9 +452,9 @@ const PT_BR: TeamPricingContent = {
 };
 
 const IT: TeamPricingContent = {
-  metaTitle: 'Prezzi — Open Design',
+  metaTitle: 'Prezzi — OpenDesign',
   metaDescription:
-    'Confronta i piani Creator e Team di Open Design: crediti modello, collaborazione per postazione, risparmio annuale e supporto Enterprise.',
+    'Confronta i piani Creator e Team di OpenDesign: crediti modello, collaborazione per postazione, risparmio annuale e supporto Enterprise.',
   breadcrumbLabel: 'Prezzi',
   audienceTabsLabel: 'Destinatari del piano',
   creatorTab: 'Creator',
@@ -461,9 +471,10 @@ const IT: TeamPricingContent = {
   increaseSeats: 'Aumenta le postazioni',
   minSeatsNote: 'I piani Team richiedono almeno {count} postazioni.',
   perSeatMonth: '/ postazione / mese',
-  monthlyTotal: 'Primo mese a soli {amount}',
-  yearlyTotal: 'Primo anno a soli {amount}',
-  checkout: 'Passa a Team',
+  monthlyTotal: '{amount} / mese per il tuo team',
+  yearlyTotal: '{amount} fatturati il primo anno',
+  monthlyCheckout: 'Passa a Team · {amount}/mese',
+  yearlyCheckout: 'Passa a Team · {amount}/anno',
   teamFeatures: [
     'Condividi e gestisci progetti, Design Systems e plugin come team',
     'Tutti possono vedere e commentare; modifica solo chi crea il progetto',
@@ -486,9 +497,9 @@ const IT: TeamPricingContent = {
 };
 
 const TR: TeamPricingContent = {
-  metaTitle: 'Fiyatlandırma — Open Design',
+  metaTitle: 'Fiyatlandırma — OpenDesign',
   metaDescription:
-    'Open Design Creator ve Team planlarını; model kredileri, koltuk başına iş birliği, yıllık tasarruf ve Enterprise desteğiyle karşılaştırın.',
+    'OpenDesign Creator ve Team planlarını; model kredileri, koltuk başına iş birliği, yıllık tasarruf ve Enterprise desteğiyle karşılaştırın.',
   breadcrumbLabel: 'Fiyatlandırma',
   audienceTabsLabel: 'Plan hedefi',
   creatorTab: 'İçerik üretici',
@@ -505,9 +516,10 @@ const TR: TeamPricingContent = {
   increaseSeats: 'Koltuk sayısını artır',
   minSeatsNote: 'Team planları en az {count} koltuk gerektirir.',
   perSeatMonth: '/ koltuk / ay',
-  monthlyTotal: 'İlk ay yalnızca {amount}',
-  yearlyTotal: 'İlk yıl yalnızca {amount}',
-  checkout: 'Team’e yükselt',
+  monthlyTotal: 'Ekibiniz için aylık {amount}',
+  yearlyTotal: 'İlk yıl için {amount} faturalandırılır',
+  monthlyCheckout: 'Team’e yükselt · {amount}/ay',
+  yearlyCheckout: 'Team’e yükselt · {amount}/yıl',
   teamFeatures: [
     'Projeleri, Design Systems öğelerini ve eklentileri ekipçe paylaşın ve yönetin',
     'Herkes görüntüleyip yorum yapabilir; yalnızca proje sahibi düzenleyebilir',

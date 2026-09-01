@@ -3,9 +3,9 @@ name: ib-pitch-book
 en_name: "Write an Investor Pitch Book like a Growth-Equity Analyst"
 zh_name: "像成长股权分析师一样写投资 Pitch Book"
 description: |
-  Open Design's investor pitch book: market map, moat, unit economics, and the ask — analyst-grade and diligence-ready. Built as a decision-grade fundraising pitch deck for growth-equity investors.
+  OpenDesign's investor pitch book: market map, moat, unit economics, and the ask — analyst-grade and diligence-ready. Built as a decision-grade fundraising pitch deck for growth-equity investors.
 en_description: |
-  Open Design's investor pitch book: market map, moat, unit economics, and the ask — analyst-grade and diligence-ready. Built as a decision-grade fundraising pitch deck for growth-equity investors.
+  OpenDesign's investor pitch book: market map, moat, unit economics, and the ask — analyst-grade and diligence-ready. Built as a decision-grade fundraising pitch deck for growth-equity investors.
 zh_description: |
   像成长股权分析师一样写投资 Pitch Book——一份可商业交付的融资路演 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -40,7 +40,7 @@ od:
   speaker_notes: true
   category: "fundraising-pitch"
   scenario: "finance"
-  example_prompt: "Create \"Write an Investor Pitch Book like a Growth-Equity Analyst\" as a decision-grade Fundraising pitch deck in this template's own visual system. Subject: Open Design's investor pitch book: market map, moat, unit economics, and the ask — analyst-grade and diligence-ready. Audience: growth-equity investors. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would an investor know why this is venture-scale and urgent."
+  example_prompt: "Create \"Write an Investor Pitch Book like a Growth-Equity Analyst\" as a decision-grade Fundraising pitch deck in this template's own visual system. Subject: OpenDesign's investor pitch book: market map, moat, unit economics, and the ask — analyst-grade and diligence-ready. Audience: growth-equity investors. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would an investor know why this is venture-scale and urgent."
 ---
 
 # IB Pitch Book
@@ -49,7 +49,7 @@ End-to-end **investment-banking-style** pitch materials for a **strategic
 alternatives** conversation (coverage & advisory). This is the workflow shape
 of Anthropic's **Pitch Agent** from
 [`financial-services`](https://github.com/anthropics/financial-services),
-repackaged as an Open Design `deck` skill.
+repackaged as an OpenDesign `deck` skill.
 
 ## When to use
 
@@ -148,10 +148,10 @@ Default **10-slide** spine unless the brief says otherwise:
 
 ### Step 3 — Export
 
-Follow Open Design's deck export path for the active session (HTML / PDF /
+Follow OpenDesign's deck export path for the active session (HTML / PDF /
 PPTX per daemon capabilities).
 
-## Relationship to Open Design financial skills
+## Relationship to OpenDesign financial skills
 
 - **`dcf-valuation`** produces a Markdown valuation memo — complementary; this
   deck embeds DCF **summary** slides, not the full memo file.
@@ -162,4 +162,4 @@ PPTX per daemon capabilities).
 
 See **`references/attribution.md`**. Source workflow and naming derive from
 Anthropic's Apache-2.0 **financial-services** repository; this skill file is an
-original adaptation for Open Design.
+original adaptation for OpenDesign.

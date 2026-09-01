@@ -4,7 +4,7 @@
  */
 import type { TrackingOnboardingFirstLoopStep, TrackingOnboardingProductType, TrackingOnboardingRole, TrackingOnboardingUseCase } from './onboarding.js';
 import type { TrackingRunRecoveryActionType } from './result-events.js';
-import type { TrackingArtifactKind, TrackingCampaignId, TrackingCampaignUserState, TrackingNewProjectTab, TrackingProjectKind } from './shared-enums.js';
+import type { TrackingArtifactKind, TrackingCampaignDeliveryMode, TrackingCampaignId, TrackingCampaignUserState, TrackingNewProjectTab, TrackingProjectKind } from './shared-enums.js';
 import type { DesignSystemsPresetBrandPickerSurfaceViewProps } from './ui-click.js';
 import type { WorkspaceSurfaceViewProps } from './workspace.js';
 // ---- surface_view --------------------------------------------------------
@@ -44,10 +44,21 @@ export interface DeepSeekCampaignModalSurfaceViewProps {
   user_state: TrackingCampaignUserState;
 }
 
+export interface GoPlanSunsetModalSurfaceViewProps {
+  page_name: 'home';
+  area: 'go_plan_sunset_modal';
+  element: 'modal';
+  campaign_id: 'go_plan_sunset_202608';
+  announcement_version: '2026_08_25';
+  delivery_mode: TrackingCampaignDeliveryMode;
+  current_plan_id: string;
+  locale: string;
+}
+
 export interface DeepSeekCampaignBadgeSurfaceViewProps {
   page_name: 'home';
   area: 'campaign_badge';
-  element: 'deepseek_v4_flash';
+  element: 'deepseek_v4_flash' | 'deepseek_v4_pro';
   campaign_id: TrackingCampaignId;
   user_state: TrackingCampaignUserState;
 }
@@ -55,7 +66,7 @@ export interface DeepSeekCampaignBadgeSurfaceViewProps {
 export interface DeepSeekCampaignModelBenefitSurfaceViewProps {
   page_name: 'home';
   area: 'execution_settings_popover';
-  element: 'deepseek_v4_flash_benefit';
+  element: 'deepseek_v4_flash_benefit' | 'deepseek_v4_pro_benefit';
   campaign_id: TrackingCampaignId;
   user_state: TrackingCampaignUserState;
   model_id: string;
@@ -228,6 +239,8 @@ export interface FileVersionModalSurfaceViewProps {
   entry_from: 'toolbar' | 'more_menu';
   artifact_id: string;
   artifact_kind: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind;
 }
 
 // Fires once when an HTML artifact is recognized as a slide deck and the
@@ -241,6 +254,8 @@ export interface DeckViewerSurfaceViewProps {
   area: 'deck_viewer';
   artifact_id: string;
   artifact_kind: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind;
   slide_count?: number;
 }
 
@@ -272,6 +287,7 @@ export type SurfaceViewProps =
   | RunStartBlockedSurfaceViewProps
   | PreviewRunStatusSurfaceViewProps
   | DeepSeekCampaignModalSurfaceViewProps
+  | GoPlanSunsetModalSurfaceViewProps
   | DeepSeekCampaignBadgeSurfaceViewProps
   | DeepSeekCampaignModelBenefitSurfaceViewProps
   | HomeRecommendationSurfaceViewProps

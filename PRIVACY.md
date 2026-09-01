@@ -1,15 +1,15 @@
 # Privacy
 
-This page describes what data the Open Design desktop and web app collects,
+This page describes what data the OpenDesign desktop and web app collects,
 when it collects it, and how you stay in control. It documents the behavior
 shipped in the app — the same controls live under **Settings → Privacy**.
 
-Open Design is **local-first**. Your projects, generated files, and BYOK API
+OpenDesign is **local-first**. Your projects, generated files, and BYOK API
 keys stay on your machine. Local project/file workflows remain available when
 telemetry services are unreachable; model-backed features still depend on the
 runtime or provider you choose.
 
-Open Design has two telemetry classes:
+OpenDesign has two telemetry classes:
 
 - **Product analytics and quality traces** are on by default and can be
   disabled or narrowed under **Settings → Privacy**.
@@ -84,7 +84,7 @@ normal analytics client loads are not lost; daemon and packaged-startup events
 have equivalent direct safety paths.
 
 When metrics and content sharing are both enabled, detailed run-quality traces
-are sent through the Open Design telemetry relay to
+are sent through the OpenDesign telemetry relay to
 [Langfuse](https://langfuse.com). Maintainer smoke-test configurations may use
 direct Langfuse credentials instead. Public client/relay configuration does
 not expose the team's private write credentials.
@@ -112,11 +112,11 @@ under the applicable retention policy.
 
 The API keys you configure for coding agents and model providers are stored
 locally and used by the local app/daemon to call the provider you selected.
-They are not telemetry fields and are never sent to the Open Design team.
+They are not telemetry fields and are never sent to the OpenDesign team.
 
-## Open Design AMR
+## OpenDesign AMR
 
-“Open Design AMR” is Open Design’s official, first-party model service. Because
+“OpenDesign AMR” is OpenDesign’s official, first-party model service. Because
 the two are part of the same product family operated by the same team, we may
 share information between them as needed to provide, connect, and improve the
 combined experience — for example, to recognize that you arrived from Open

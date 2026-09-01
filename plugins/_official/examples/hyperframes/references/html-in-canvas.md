@@ -12,7 +12,7 @@ The HTML-in-Canvas API (`drawElementImage`) lets you capture live, rendered DOM 
 >
 > HyperFrames enables this flag automatically during rendering (`--enable-features=CanvasDrawElement`), so rendered videos work without manual setup. The flag is only needed for live preview in the Studio.
 
-When this skill runs inside Open Design, the daemon shells out to `npx hyperframes render`, which inherits the auto-enable. You do **not** need to add browser flags or pass extra CLI args from the agent.
+When this skill runs inside OpenDesign, the daemon invokes its pinned HyperFrames runtime, which inherits the auto-enable. You do **not** need to add browser flags or pass extra CLI args from the agent.
 
 ## How it works
 
@@ -118,29 +118,34 @@ When a HyperFrames timeline drives the underlying HTML (counter ticks, scroll an
 Install all HTML-in-Canvas blocks at once:
 
 ```bash
-npx hyperframes add html-in-canvas
+"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" add html-in-canvas
 ```
 
 Or install individually:
 
 | Block | Description | Install |
 |-------|-------------|---------|
-| Liquid Glass | Voronoi glass fracture with parallax reveal | `npx hyperframes add vfx-liquid-glass` |
-| iPhone & MacBook | Real 3D GLTF devices with live HTML screens | `npx hyperframes add vfx-iphone-device` |
-| Text Cursor | Dramatic text reveal with chromatic shadows | `npx hyperframes add vfx-text-cursor` |
-| Portal | Dimension breach with volumetric light | `npx hyperframes add vfx-portal` |
-| Shatter | HTML shatters into glass fragments | `npx hyperframes add vfx-shatter` |
-| Magnetic | Magnetic field particle visualization | `npx hyperframes add vfx-magnetic` |
-| Liquid Background | Organic liquid simulation | `npx hyperframes add vfx-liquid-background` |
+| Liquid Glass | Voronoi glass fracture with parallax reveal | `"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" add vfx-liquid-glass` |
+| iPhone & MacBook | Real 3D GLTF devices with live HTML screens | `"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" add vfx-iphone-device` |
+| Text Cursor | Dramatic text reveal with chromatic shadows | `"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" add vfx-text-cursor` |
+| Portal | Dimension breach with volumetric light | `"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" add vfx-portal` |
+| Shatter | HTML shatters into glass fragments | `"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" add vfx-shatter` |
+| Magnetic | Magnetic field particle visualization | `"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" add vfx-magnetic` |
+| Liquid Background | Organic liquid simulation | `"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" add vfx-liquid-background` |
 
 Block reference pages live at `https://hyperframes.heygen.com/catalog/blocks/<name>`.
 
 ## Rendering
 
-HyperFrames enables the Chrome flag automatically during rendering. No special configuration needed:
+HyperFrames enables the Chrome flag automatically during rendering. Inside Open Design, dispatch through the daemon rather than running the Chrome-bound CLI from the agent shell:
 
 ```bash
-npx hyperframes render --output my-video.mp4
+"$OD_NODE_BIN" "$OD_BIN" media generate \
+  --project "$OD_PROJECT_ID" \
+  --surface video \
+  --model hyperframes-html \
+  --composition-dir "$COMP_REL" \
+  --output my-video.mp4
 ```
 
-For Docker renders, the flag is also enabled automatically inside the container. Inside Open Design, the daemon's `npx hyperframes render` call (`apps/daemon/src/media/index.ts`) inherits the same default — you don't need to thread anything through.
+For Docker renders, the flag is also enabled automatically inside the container. OpenDesign's daemon-managed render inherits the same default — you don't need to thread anything through.

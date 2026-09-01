@@ -12,6 +12,10 @@
 //   PREVIOUS_COMMIT       changelog baseline (last published build); empty on cold start
 //   CHANGELOG_FILE        path to a file holding `git log` output (one commit per line)
 //   BUILD_STATE           build result (success | ...) — drives header color
+//   RELEASE_STATE         complete | partial; partial means artifacts exist but channel latest was not promoted
+//   RELEASE_NOTE          optional operator-facing explanation for a partial release
+//   MAC_ARM64_SMOKE_RESULT macOS arm64 packaged smoke outcome (success | failure | skipped)
+//   WIN_X64_SMOKE_RESULT  Windows x64 packaged smoke outcome (success | failure | skipped)
 //   STREAM_LABEL          human label for the trigger (e.g. "release 分支推送" / "每日定时")
 //   REPO                  owner/name
 //   RUN_URL               link back to the GitHub Actions run
@@ -48,9 +52,20 @@ const commit = optional("COMMIT");
 const previousCommit = optional("PREVIOUS_COMMIT");
 const changelogFile = optional("CHANGELOG_FILE");
 const buildState = optional("BUILD_STATE", "success");
+const releaseState = optional("RELEASE_STATE", "complete");
+const releaseNote = optional("RELEASE_NOTE");
 const streamLabel = optional("STREAM_LABEL", "构建");
 const repo = optional("REPO");
 const runUrl = optional("RUN_URL");
+
+const smokeFailures = buildState === "success"
+  ? [
+      { failureText: "macOS arm64 smoke 失败", result: optional("MAC_ARM64_SMOKE_RESULT") },
+      { failureText: "Windows x64 smoke 失败", result: optional("WIN_X64_SMOKE_RESULT") },
+    ]
+      .filter((entry) => entry.result === "failure")
+      .map((entry) => entry.failureText)
+  : [];
 
 const MAX_CHANGELOG_LINES = 30;
 
@@ -122,6 +137,25 @@ function buildCard(): FeishuCard {
   fields.push({ is_short: true, text: { tag: "lark_md", content: `**触发**\n${streamLabel}` } });
 
   const elements: FeishuElement[] = [{ tag: "div", fields }];
+  if (smokeFailures.length > 0) {
+    elements.push({
+      tag: "div",
+      text: {
+        tag: "lark_md",
+        content: `**Smoke 告警**\n${smokeFailures.map((failure) => `- ${failure}`).join("\n")}\n\n产物已继续发布，可通过下方链接下载。`,
+      },
+    });
+  }
+  if (releaseState === "partial") {
+    const detail = releaseNote.length > 0 ? `\n\n${releaseNote}` : "";
+    elements.push({
+      tag: "div",
+      text: {
+        tag: "lark_md",
+        content: `**渠道状态**\n产物已发布并可下载，但未更新 ${channelLabel} latest。${detail}`,
+      },
+    });
+  }
   elements.push({
     tag: "div",
     text: { tag: "lark_md", content: `**自上个 ${channelLabel} 新增提交**\n${changelogMarkdown()}` },
@@ -143,8 +177,15 @@ function buildCard(): FeishuCard {
   return {
     config: { wide_screen_mode: true },
     header: {
-      template: headerTemplate(),
-      title: { tag: "plain_text", content: `🚀 Open Design ${channelLabel} ${version}` },
+      template: smokeFailures.length > 0 || releaseState === "partial" ? "orange" : headerTemplate(),
+      title: {
+        tag: "plain_text",
+        content: releaseState === "partial"
+          ? `⚠️ Open Design ${channelLabel} ${version} · 未更新 ${channelLabel} latest`
+          : smokeFailures.length > 0
+          ? `⚠️ Open Design ${channelLabel} ${version} · ${smokeFailures.join("、")}`
+          : `🚀 Open Design ${channelLabel} ${version}`,
+      },
     },
     elements,
   };

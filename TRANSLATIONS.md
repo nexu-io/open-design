@@ -1,6 +1,6 @@
 # Translation Guide
 
-> **Quick start for contributors:** This guide helps you add a new language translation to Open Design in ~2 hours instead of ~8 hours. Follow the checklist, avoid common mistakes, and ship your PR with confidence.
+> **Quick start for contributors:** This guide helps you add a new language translation to OpenDesign in ~2 hours instead of ~8 hours. Follow the checklist, avoid common mistakes, and ship your PR with confidence.
 
 For general contribution flow, see [CONTRIBUTING.md](CONTRIBUTING.md). The "Localization maintenance" section there documents the boundary between translated surfaces and agent-facing source material. This file covers **how** to add and maintain a locale across the surfaces contributors touch most often: UI chrome, root READMEs, core docs, and display metadata.
 
@@ -31,13 +31,13 @@ cp README.md docs/i18n/README.sv.md
 
 **What to translate:**
 - ✅ All text, headings, descriptions
-- ✅ Alt text: `alt="Open Design banner"`
+- ✅ Alt text: `alt="OpenDesign banner"`
 - ✅ Link text: `[Quickstart](../../QUICKSTART.md)` → `[Snabbstart](QUICKSTART.sv.md)` (paths are relative to `docs/i18n/`: link a translated core doc as a sibling filename, or fall back to the English target at `../../QUICKSTART.md`)
 
 **What NOT to translate:**
 - ❌ Code snippets, commands, file paths
 - ❌ URLs, GitHub usernames, repo names
-- ❌ Brand names: "Open Design", "Claude Code"
+- ❌ Brand names: "OpenDesign", "Claude Code"
 - ❌ Technical terms: CLI, API, BYOK, daemon
 
 ### Step 3: Update ALL Language Switchers (Critical!)
@@ -95,7 +95,7 @@ pnpm i18n:check
 
 ## 📋 Supported Languages
 
-Open Design currently supports **19 languages** across different surfaces:
+OpenDesign currently supports **19 languages** across different surfaces:
 
 | Language             | Code    | README | UI Dict | Core Docs | Status |
 | -------------------- | ------- | ------ | ------- | --------- | ------ |
@@ -238,7 +238,7 @@ The `LOCALES` array in [`apps/web/src/i18n/types.ts`](apps/web/src/i18n/types.ts
 
 **What to translate:**
 - ✅ All prose text, headings, descriptions
-- ✅ Alt text in images: `alt="Open Design banner"` → `alt="Banner di Open Design"`
+- ✅ Alt text in images: `alt="OpenDesign banner"` → `alt="Banner di OpenDesign"`
 - ✅ Badge labels where appropriate: `discord-join` → `discord-unisciti`
 - ✅ Code comments in examples (if instructional)
 - ✅ Link text: `[Quickstart](../../QUICKSTART.md)` → `[Snabbstart](QUICKSTART.sv.md)` (sibling translation in `docs/i18n/` if it exists; otherwise keep the English target `../../QUICKSTART.md`)
@@ -247,14 +247,14 @@ The `LOCALES` array in [`apps/web/src/i18n/types.ts`](apps/web/src/i18n/types.ts
 - ❌ Code snippets (commands, file paths, variable names)
 - ❌ URLs and domain names
 - ❌ GitHub usernames and repository names
-- ❌ Brand names: "Open Design", "Claude Code", "Anthropic", "Vercel"
+- ❌ Brand names: "OpenDesign", "Claude Code", "Anthropic", "Vercel"
 - ❌ Technical terms with no standard translation: CLI, API, SDK, BYOK, daemon, sidecar, monorepo, artifact, iframe
 - ❌ Command output (keep terminal output in English as it appears in actual software)
 
 **Terminology guidelines:**
 - Use the English term with a brief explanation in parentheses on first use if no standard translation exists:
   ```
-  Open Design è un'alternativa open-source (codice aperto) a Claude Design.
+  OpenDesign è un'alternativa open-source (codice aperto) a Claude Design.
   ```
 - For regional variants (zh-CN vs zh-TW, pt-BR vs pt-PT), choose the most widely understood variant for your target audience
 - See [Regional terminology](#regional-terminology) section for specific glossaries
@@ -291,7 +291,7 @@ Some badges in the README can be localized by changing the badge URL:
 Translations follow the conventions of the target region's tech writing community. Maintainers trust contributors to make idiomatic choices and will not gate-keep on style.
 
 **Technical terms to keep in English:**
-- Open Design, Claude Code, Claude Design
+- OpenDesign, Claude Code, Claude Design
 - Skills, Design Systems
 - BYOK (Bring Your Own Key)
 - CLI, API, SDK
@@ -322,7 +322,7 @@ runtime nouns that are clearer in English:
 
 | English source | French usage |
 | -------------- | ------------ |
-| Open Design | Open Design |
+| OpenDesign | OpenDesign |
 | Claude Code, Codex, Cursor, Gemini, OpenCode | Claude Code, Codex, Cursor, Gemini, OpenCode |
 | CLI, API, SDK, MCP, HTTP, REST, SSE, JSONL | CLI, API, SDK, MCP, HTTP, REST, SSE, JSONL |
 | BYOK | BYOK |
@@ -376,10 +376,10 @@ when a natural French equivalent exists:
 
 #### Context-Sensitive Choices
 
-- `Skill` stays `Skill` when it names the Open Design/Claude skill format.
+- `Skill` stays `Skill` when it names the OpenDesign/Claude skill format.
   Translate only generic prose such as "ability" or "capability" as
   `capacité`.
-- `fork` stays `fork` when it names the Open Design conversation-fork feature
+- `fork` stays `fork` when it names the OpenDesign conversation-fork feature
   or related product/CLI wording. Translate Git branches as `branche`, but do
   not rewrite the product action itself as a branch.
 - `Design System` may stay `Design System` when referring to the product
@@ -388,7 +388,7 @@ when a natural French equivalent exists:
 - `Craft` stays `Craft` when it refers to the repository's `craft/` extension
   point or the matching UI label. Do not translate that feature name as a
   generic polish/finishing pass.
-- `SOTA Harness` and `Harness` stay in English when they name the Open Design
+- `SOTA Harness` and `Harness` stay in English when they name the OpenDesign
   product/runtime harness concept or matching marketing label.
 - Motion-design jargon such as `motion`, `timing`, `easing`, `fallback`, and
   `timeline` may stay in English for compact UI labels or agent-workflow
@@ -491,7 +491,7 @@ If a contributor wants neutral or Latin American Spanish, propose a separate loc
 
 **Example:**
 ```markdown
-Open Design هو البديل مفتوح المصدر لـ Claude Design
+OpenDesign هو البديل مفتوح المصدر لـ Claude Design
 ```
 
 ### Other Languages
@@ -579,7 +579,7 @@ feat(i18n): add [Language] translation
 
 ```markdown
 ## Summary
-Adds [Language] translation for Open Design documentation.
+Adds [Language] translation for OpenDesign documentation.
 
 ## Translation Scope
 - [x] docs/i18n/README.[lang].md
@@ -723,7 +723,7 @@ Web server running at http://localhost:17573
 **A:** Use the English term with a brief explanation in parentheses on first use:
 
 ```markdown
-Open Design è un'alternativa open-source (codice aperto) a Claude Design.
+OpenDesign è un'alternativa open-source (codice aperto) a Claude Design.
 ```
 
 After the first use, you can use just the English term.
@@ -736,7 +736,7 @@ After the first use, you can use just the English term.
 
 ```markdown
 <!-- README: Arabic text flows RTL automatically -->
-Open Design هو البديل مفتوح المصدر لـ Claude Design
+OpenDesign هو البديل مفتوح المصدر لـ Claude Design
 
 <!-- Code blocks stay LTR -->
 ```bash
@@ -833,11 +833,11 @@ These remain deferred despite the repository now carrying 19 UI locales; crossin
 
 Thank you to all our translation contributors! 🌍
 
-Every translation makes Open Design accessible to more developers worldwide.
+Every translation makes OpenDesign accessible to more developers worldwide.
 
 **Current contributors:**
 - See [Contributors](https://github.com/nexu-io/open-design/graphs/contributors) for the full list
 
 ---
 
-**Ready to contribute?** Pick a language, follow the [Quick Start](#-quick-start-adding-your-language-in-5-steps), and submit your PR. We can't wait to see Open Design in your language! 🚀
+**Ready to contribute?** Pick a language, follow the [Quick Start](#-quick-start-adding-your-language-in-5-steps), and submit your PR. We can't wait to see OpenDesign in your language! 🚀

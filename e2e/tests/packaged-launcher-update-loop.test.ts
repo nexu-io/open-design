@@ -9,6 +9,8 @@ import { describe, expect, it } from "vitest";
 const LAUNCHER_SCHEMA_VERSION = 1;
 const PACKAGED_SOURCE = "packaged";
 const UPDATE_DOWNLOADED = "downloaded";
+const HISTORICAL_OUTER_RELAY_URL = "https://relay.outer.example/v1";
+const PAYLOAD_RELAY_URL = "https://relay.payload.example/v2";
 
 type PackagedConfigLike = {
   amrProfile: null;
@@ -21,7 +23,7 @@ type PackagedConfigLike = {
   posthogHost: null;
   posthogKey: null;
   resourceRoot: string;
-  telemetryRelayUrl: null;
+  telemetryRelayUrl: string | null;
   webOutputMode: "server";
   webSidecarEntry: null;
   webStandaloneRoot: null;
@@ -49,7 +51,16 @@ type DesktopUpdaterModule = {
 };
 
 type PackagedPaths = {
+  cacheRoot: string;
+  dataRoot: string;
+  desktopLogsRoot: string;
+  electronSessionDataRoot: string;
+  electronUserDataRoot: string;
   installationRoot: string;
+  logsRoot: string;
+  namespaceRoot: string;
+  resourceRoot: string;
+  runtimeRoot: string;
   updateRoot: string;
 };
 
@@ -59,8 +70,20 @@ type PackagedPathsModule = {
 
 type PackagedLauncherRuntime = {
   config: {
+    amrProfile: string | null;
     appVersion: string | null;
+    daemonCliEntry: string | null;
+    daemonSidecarEntry: string | null;
+    nodeCommand: string | null;
+    posthogHost: string | null;
+    posthogKey: string | null;
     resourceRoot: string;
+    telemetryRelayUrl: string | null;
+    velaWebUrl: string | null;
+    velaWebUrls?: Record<string, string>;
+    webOutputMode: "server" | "standalone";
+    webSidecarEntry: string | null;
+    webStandaloneRoot: string | null;
   };
   installedLaunchPath: string | null;
   launcherPaths: {
@@ -69,6 +92,7 @@ type PackagedLauncherRuntime = {
     runtimePath: string;
     stateRoot: string;
   };
+  paths: PackagedPaths;
   selection: {
     pointer?: { generation: number; version: string };
     reason: string;
@@ -76,6 +100,39 @@ type PackagedLauncherRuntime = {
   };
   source: string;
   targetVersion: string | null;
+};
+
+type PackagedSidecarsModule = {
+  startPackagedSidecars: (
+    runtime: {
+      app: "desktop";
+      base: string;
+      ipc: string;
+      mode: "runtime";
+      namespace: string;
+      source: "packaged";
+    },
+    paths: PackagedPaths,
+    options: {
+      appVersion: string | null;
+      amrProfile: string | null;
+      daemonCliEntry: string | null;
+      daemonSidecarEntry: string | null;
+      electronNodeCommand: string | null;
+      mcpBootstrapArgs: readonly string[];
+      mcpBootstrapCommand: string | null;
+      nodeCommand: string | null;
+      posthogHost: string | null;
+      posthogKey: string | null;
+      requireDesktopAuth: boolean;
+      telemetryRelayUrl: string | null;
+      velaWebUrl: string | null;
+      velaWebUrls?: Record<string, string>;
+      webOutputMode: "server" | "standalone";
+      webSidecarEntry: string | null;
+      webStandaloneRoot: string | null;
+    },
+  ) => Promise<{ close(): Promise<void> }>;
 };
 
 type PackagedLauncherRuntimeModule = {
@@ -123,6 +180,62 @@ async function loadPackagedLauncherRuntimeModule(): Promise<PackagedLauncherRunt
   return await import(new URL("../../apps/packaged/src/launcher-runtime.ts", import.meta.url).href) as PackagedLauncherRuntimeModule;
 }
 
+async function loadPackagedSidecarsModule(): Promise<PackagedSidecarsModule> {
+  return await import(new URL("../../apps/packaged/src/sidecars.ts", import.meta.url).href) as PackagedSidecarsModule;
+}
+
+const FAKE_SIDECAR_SOURCE = String.raw`
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
+import { dirname, join } from "node:path";
+
+const appArgument = process.argv.find((argument) => argument.startsWith("--od-stamp-app="));
+const app = appArgument == null ? null : appArgument.slice("--od-stamp-app=".length);
+const socketPath = process.env.OD_SIDECAR_IPC_PATH;
+if (app == null || socketPath == null) throw new Error("missing sidecar identity");
+if (app === "daemon") {
+  const dataRoot = process.env.OD_DATA_DIR;
+  if (dataRoot == null) throw new Error("missing daemon data root");
+  await mkdir(dataRoot, { recursive: true });
+  await writeFile(
+    join(dataRoot, "captured-daemon-env.json"),
+    JSON.stringify({ telemetryRelayUrl: process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL ?? null }),
+  );
+}
+if (!socketPath.startsWith("\\\\.\\pipe\\")) {
+  await mkdir(dirname(socketPath), { recursive: true });
+  await rm(socketPath, { force: true });
+}
+const server = createServer((socket) => {
+  let buffer = "";
+  socket.on("data", (chunk) => {
+    buffer += chunk.toString("utf8");
+    const newline = buffer.indexOf("\n");
+    if (newline < 0) return;
+    const request = JSON.parse(buffer.slice(0, newline));
+    const shutdown = request.type === "shutdown";
+    const result = request.type === "status"
+      ? {
+          pid: process.pid,
+          state: "running",
+          updatedAt: new Date().toISOString(),
+          url: app === "daemon" ? "http://127.0.0.1:43101" : "http://127.0.0.1:43102",
+        }
+      : { accepted: true };
+    socket.end(JSON.stringify({ ok: true, result }) + "\n", () => {
+      if (shutdown) server.close(() => process.exit(0));
+    });
+  });
+});
+await new Promise((resolve, reject) => {
+  server.once("error", reject);
+  server.listen(socketPath, resolve);
+});
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.on(signal, () => server.close(() => process.exit(0)));
+}
+`;
+
 function fakePackagedConfig(root: string, testCase: PlatformCase): PackagedConfigLike {
   return {
     amrProfile: null,
@@ -135,7 +248,7 @@ function fakePackagedConfig(root: string, testCase: PlatformCase): PackagedConfi
     posthogHost: null,
     posthogKey: null,
     resourceRoot: join(root, "installed", "resources", "open-design"),
-    telemetryRelayUrl: null,
+    telemetryRelayUrl: HISTORICAL_OUTER_RELAY_URL,
     webOutputMode: "server",
     webSidecarEntry: null,
     webStandaloneRoot: null,
@@ -224,14 +337,15 @@ async function writeExtractedWindowsPayload(destinationRoot: string, testCase: P
   await mkdir(join(destinationRoot, "payload", "resources", "prebundled", "web"), { recursive: true });
   await writeFile(join(destinationRoot, "payload", executableName), "");
   await writeFile(join(destinationRoot, "payload", "resources", "open-design", "bin", "node.exe"), "");
-  await writeFile(join(destinationRoot, "payload", "resources", "prebundled", "daemon", "daemon-sidecar.mjs"), "");
-  await writeFile(join(destinationRoot, "payload", "resources", "prebundled", "web", "web-sidecar.mjs"), "");
+  await writeFile(join(destinationRoot, "payload", "resources", "prebundled", "daemon", "daemon-sidecar.mjs"), FAKE_SIDECAR_SOURCE);
+  await writeFile(join(destinationRoot, "payload", "resources", "prebundled", "web", "web-sidecar.mjs"), FAKE_SIDECAR_SOURCE);
   await writeFile(
     join(destinationRoot, "payload", "resources", "open-design-config.json"),
     `${JSON.stringify({
       appVersion: testCase.promotedVersion,
       daemonSidecarEntryRelative: "prebundled/daemon/daemon-sidecar.mjs",
       nodeCommandRelative: "open-design/bin/node.exe",
+      telemetryRelayUrl: PAYLOAD_RELAY_URL,
       webOutputMode: "standalone",
       webSidecarEntryRelative: "prebundled/web/web-sidecar.mjs",
     })}\n`,
@@ -259,14 +373,15 @@ async function writeExtractedMacPayload(destinationRoot: string, testCase: Platf
   await mkdir(join(destinationRoot, "payload", appBundleName, "Contents", "MacOS"), { recursive: true });
   await writeFile(join(destinationRoot, "payload", appBundleName, "Contents", "MacOS", testCase.productName), "");
   await writeFile(join(resourcesRoot, "open-design", "bin", "node"), "");
-  await writeFile(join(resourcesRoot, "prebundled", "daemon", "daemon-sidecar.mjs"), "");
-  await writeFile(join(resourcesRoot, "prebundled", "web", "web-sidecar.mjs"), "");
+  await writeFile(join(resourcesRoot, "prebundled", "daemon", "daemon-sidecar.mjs"), FAKE_SIDECAR_SOURCE);
+  await writeFile(join(resourcesRoot, "prebundled", "web", "web-sidecar.mjs"), FAKE_SIDECAR_SOURCE);
   await writeFile(
     join(resourcesRoot, "open-design-config.json"),
     `${JSON.stringify({
       appVersion: testCase.promotedVersion,
       daemonSidecarEntryRelative: "prebundled/daemon/daemon-sidecar.mjs",
       nodeCommandRelative: "open-design/bin/node",
+      telemetryRelayUrl: PAYLOAD_RELAY_URL,
       webOutputMode: "standalone",
       webSidecarEntryRelative: "prebundled/web/web-sidecar.mjs",
     })}\n`,
@@ -357,6 +472,7 @@ describe("packaged launcher payload update loop", () => {
       const { createDesktopUpdater, DESKTOP_UPDATE_ENV } = await loadDesktopUpdaterModule();
       const { resolvePackagedNamespacePaths } = await loadPackagedPathsModule();
       const { confirmPackagedLauncherRuntime, resolvePackagedLauncherRuntime } = await loadPackagedLauncherRuntimeModule();
+      const { startPackagedSidecars } = await loadPackagedSidecarsModule();
       const config = fakePackagedConfig(root, testCase);
       const paths = resolvePackagedNamespacePaths(config);
       const initialRuntime = await resolvePackagedLauncherRuntime(config, paths);
@@ -435,6 +551,45 @@ describe("packaged launcher payload update loop", () => {
       expect(promoted.targetVersion).toBe(testCase.promotedVersion);
       expect(promoted.config.appVersion).toBe(testCase.promotedVersion);
       expect(promoted.config.resourceRoot).toBe(testCase.expectedResourceRoot(paths.installationRoot, config.namespace));
+      expect(promoted.config.telemetryRelayUrl).toBe(PAYLOAD_RELAY_URL);
+      const sidecarNamespace = `payload-relay-${process.pid}-${Date.now()}`;
+      const sidecars = await startPackagedSidecars({
+        app: "desktop",
+        base: promoted.paths.runtimeRoot,
+        ipc: join(promoted.paths.runtimeRoot, "desktop.sock"),
+        mode: "runtime",
+        namespace: sidecarNamespace,
+        source: "packaged",
+      }, promoted.paths, {
+        appVersion: promoted.config.appVersion,
+        amrProfile: promoted.config.amrProfile,
+        daemonCliEntry: promoted.config.daemonCliEntry,
+        daemonSidecarEntry: promoted.config.daemonSidecarEntry,
+        electronNodeCommand: null,
+        mcpBootstrapArgs: [],
+        mcpBootstrapCommand: null,
+        // The synthetic payload contains fixture files, not a platform Node
+        // binary. Use the test process's Node while preserving the real
+        // startPackagedSidecars -> spawnSidecarChild environment path.
+        nodeCommand: process.execPath,
+        posthogHost: promoted.config.posthogHost,
+        posthogKey: promoted.config.posthogKey,
+        requireDesktopAuth: true,
+        telemetryRelayUrl: promoted.config.telemetryRelayUrl,
+        velaWebUrl: promoted.config.velaWebUrl,
+        ...(promoted.config.velaWebUrls == null ? {} : { velaWebUrls: promoted.config.velaWebUrls }),
+        webOutputMode: promoted.config.webOutputMode,
+        webSidecarEntry: promoted.config.webSidecarEntry,
+        webStandaloneRoot: promoted.config.webStandaloneRoot,
+      });
+      try {
+        const daemonEnv = JSON.parse(
+          await readFile(join(promoted.paths.dataRoot, "captured-daemon-env.json"), "utf8"),
+        ) as { telemetryRelayUrl: string | null };
+        expect(daemonEnv.telemetryRelayUrl).toBe(PAYLOAD_RELAY_URL);
+      } finally {
+        await sidecars.close();
+      }
       expect(JSON.parse(await readFile(promoted.launcherPaths.attemptsPath, "utf8"))).toMatchObject({
         generation: 1,
         version: testCase.promotedVersion,
