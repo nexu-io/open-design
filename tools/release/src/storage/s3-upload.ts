@@ -23,6 +23,23 @@ type GetObjectOptions = StorageConfig & {
   objectKey: string;
 };
 
+/**
+ * R2/S3 If-Match requires a strong quoted ETag. GET may return an unquoted
+ * validator or a weak `W/"..."` value; either form 412s on PUT.
+ */
+export function strongQuotedEtag(etag: string): string {
+  const trimmed = etag.trim();
+  if (trimmed.length === 0) {
+    throw new Error("storage object ETag is empty");
+  }
+  const strong = trimmed.replace(/^W\//i, "").trim();
+  const unquoted = strong.replace(/^"+|"+$/g, "");
+  if (unquoted.length === 0) {
+    throw new Error("storage object ETag is empty after removing quotes");
+  }
+  return `"${unquoted}"`;
+}
+
 function hmac(key: Buffer | string, value: string): Buffer {
   return createHmac("sha256", key).update(value, "utf8").digest();
 }
@@ -130,6 +147,10 @@ export async function putStorageObjectWithStatus(options: PutObjectOptions): Pro
   const body = options.body == null ? readFileSync(options.bodyPath ?? "") : Buffer.from(options.body);
   const payloadHash = hash(body);
   const { canonicalUri, url } = objectUrl(options, options.objectKey);
+  const requestHeaders = { ...(options.headers ?? {}) };
+  if (requestHeaders["if-match"] != null && requestHeaders["if-match"].length > 0) {
+    requestHeaders["if-match"] = strongQuotedEtag(requestHeaders["if-match"]);
+  }
   // x-amz-date is filled in per attempt inside signedFetchWithRetry so the
   // signature never goes stale across a backoff; keep the key present here so it
   // is part of the signed header set.
@@ -139,7 +160,7 @@ export async function putStorageObjectWithStatus(options: PutObjectOptions): Pro
     host: url.host,
     "x-amz-content-sha256": payloadHash,
     "x-amz-date": "",
-    ...(options.headers ?? {}),
+    ...requestHeaders,
   };
   if (options.sessionToken != null && options.sessionToken.length > 0) {
     headers["x-amz-security-token"] = options.sessionToken;
