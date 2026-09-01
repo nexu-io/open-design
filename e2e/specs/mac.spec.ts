@@ -18,6 +18,7 @@ import {
   packagedHomeFirstRunSnapshotExpression,
   packagedHomeFirstRunSubmitExpression,
   type PackagedHomeFirstRunResult,
+  waitForPackagedHomeFirstRunSetup,
 } from '@/vitest/packaged-home-first-run';
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
 import {
@@ -441,14 +442,17 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(start.source).toBe('installed');
       await waitForHealthyDesktop();
 
-      const setup = await runToolsPackJson<MacInspectResult>('inspect', [
-        '--expr',
-        packagedHomeFirstRunExpression(),
-      ]);
-      if (setup.eval?.ok !== true) {
-        throw new Error(`packaged first Home run setup failed: ${formatUnknown(setup.eval)}`);
-      }
-      expect(setup.eval.value).toMatchObject({
+      const setup = await waitForPackagedHomeFirstRunSetup(async () => {
+        const inspect = await runToolsPackJson<MacInspectResult>('inspect', [
+          '--expr',
+          packagedHomeFirstRunExpression(),
+        ]);
+        if (inspect.eval?.ok !== true) {
+          throw new Error(`packaged first Home run setup failed: ${formatUnknown(inspect.eval)}`);
+        }
+        return inspect.eval.value;
+      });
+      expect(setup).toMatchObject({
         inputTextBeforeSubmit: PACKAGED_HOME_FIRST_RUN_PROMPT,
         submitClicked: false,
       });
