@@ -22,9 +22,11 @@ import {
   setSplashStage,
 } from "@open-design/desktop/main";
 import { readProcessStamp } from "@open-design/platform";
+import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { app, dialog } from "electron";
 
+import { isAgentToolInvocation } from "./agent-tool-invocation.js";
 import { readPackagedConfig } from "./config.js";
 import {
   claimPackagedDownloadAttribution,
@@ -121,6 +123,20 @@ async function main(): Promise<void> {
   if (headlessRequest.headless) {
     const { runPackagedHeadless } = await import("./headless-runtime.js");
     await runPackagedHeadless(config, headlessRequest);
+    return;
+  }
+
+  // Agent tool invocations of this binary (argv[1] = bundled daemon CLI entry)
+  // must execute as Node against the daemon, not boot the desktop into the
+  // single-instance gate. Re-spawn in Electron-as-Node mode (same pattern as
+  // the packaged sidecar spawn env) with inherited stdio and exit code.
+  if (isAgentToolInvocation(process.argv, { daemonCliEntry: config.daemonCliEntry })) {
+    const child = spawn(process.execPath, process.argv.slice(1), {
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+      stdio: "inherit",
+      windowsHide: true,
+    });
+    child.on("exit", (code) => app.exit(code ?? 0));
     return;
   }
 

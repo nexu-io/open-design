@@ -276,6 +276,46 @@ describe("inspectExistingDesktopForLauncher", () => {
     }
   });
 
+  it("focuses instead of restarting when the existing desktop reports a visible window", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-launcher-inspect-visible-"));
+    const requests: unknown[] = [];
+    try {
+      const paths = fakePaths(root);
+
+      const result = await inspectExistingDesktopForLauncher("release-beta-win", {
+        paths,
+        requestIpc: (async (ipcPath: string, message: unknown) => {
+          requests.push(message);
+          if ((message as { type?: string }).type === SIDECAR_MESSAGES.STATUS) {
+            if (ipcPath.includes("daemon") || ipcPath.includes("web")) {
+              return { pid: 2345, state: "running", updatedAt: new Date().toISOString(), url: "http://127.0.0.1:1234" };
+            }
+            return {
+              pid: 1234,
+              state: "running",
+              update: { currentVersion: "0.16.0-beta.1" },
+              updatedAt: new Date().toISOString(),
+              windowVisible: true,
+            };
+          }
+          return { accepted: true };
+        }) as typeof import("@open-design/sidecar").requestJsonIpc,
+      });
+
+      expect(result).toEqual({ action: "exit", reason: "existing-focused" });
+      expect(requests).toEqual([
+        { type: SIDECAR_MESSAGES.STATUS },
+        { type: SIDECAR_MESSAGES.STATUS },
+        { type: SIDECAR_MESSAGES.STATUS },
+        { type: SIDECAR_MESSAGES.SHOW },
+      ]);
+      const log = await readFile(join(root, "logs", "launcher", "after-quit.log"), "utf8");
+      expect(log).toContain("inspect-found-existing namespace=release-beta-win focus=accepted");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("continues when inspect cannot reach desktop", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-launcher-inspect-failed-"));
     try {
