@@ -34,7 +34,6 @@ import {
   type AmrEntryAttribution,
 } from '../analytics/amr-attribution';
 import { amrPlansUrlForProfile } from '../runtime/amr-guidance';
-import { codingPlanModelDecision } from '../runtime/amr-unlimited-models';
 import { getResolvedDeviceId } from '../analytics/client';
 import {
   trackDeepSeekCampaignModelBenefitSurfaceView,
@@ -189,30 +188,11 @@ export function InlineModelSwitcher({
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
-  // Both flags are reserved presentation branches with no trigger wired yet:
-  // `campaignRestricted` (已暂停 badge) is reserved for the backend
-  // usage-limit signal — no trigger wired yet — and `campaignNeedsUpgrade`
-  // (升级可用 badge) is reserved for a real unpaid-audience signal reaching
-  // this component. Until those land, every campaign badge renders the paid
-  // state.
-  const campaignRestricted = false;
+  // This flag is a reserved presentation branch with no trigger wired yet.
+  // It remains available for a real unpaid-audience signal reaching this
+  // component without surfacing an unlimited-use claim in the model picker.
   const campaignNeedsUpgrade = false;
   const campaignVisibility = useDeepSeekV4FlashCampaignVisibility();
-  const campaignModelBadge = campaignRestricted
-    ? t('campaign.deepseekV4Flash.restricted.modelBadge')
-    : campaignNeedsUpgrade
-      ? t('campaign.deepseekV4Flash.unpaid.modelBadge')
-      : t('campaign.deepseekV4Flash.paid.modelBadge');
-  const campaignModelTooltip = campaignRestricted
-    ? t('campaign.deepseekV4Flash.restricted.tooltip')
-    : campaignNeedsUpgrade
-      ? t('campaign.deepseekV4Flash.unpaid.tooltip')
-      : t('campaign.deepseekV4Flash.ruleSummary');
-  const campaignBadgeStateClass = campaignRestricted
-    ? ' is-restricted'
-    : campaignNeedsUpgrade
-      ? ' is-unpaid'
-      : '';
   // recvqfYKutwWlQ: gate the AMR upgrade entry on billing permission below,
   // not just plan tier — a team member without `canManageBilling` (owner-only)
   // can't act on an upgrade even when the tier itself is upgradeable.
@@ -739,55 +719,6 @@ export function InlineModelSwitcher({
     && config.mode === 'daemon'
     && currentAgent?.id === 'amr';
 
-  const unlimitedBadgeForModel = useCallback(
-    (
-      modelId: string | null | undefined,
-    ): { label: string; tooltip: string | null; stateClass: string } | null => {
-      // Same guard the campaign uses: in BYOK mode the visible model is billed
-      // by the user's own provider, and the dormant AMR selection must not
-      // leak an entitlement claim onto it.
-      if (config.mode !== 'daemon' || currentAgent?.id !== 'amr') return null;
-      if (
-        deepSeekCampaignVisibleForCurrentExecution
-        && isDeepSeekV4FlashCampaignModel(modelId)
-      ) {
-        return {
-          label: campaignModelBadge,
-          tooltip: campaignModelTooltip,
-          stateClass: campaignBadgeStateClass,
-        };
-      }
-      if (
-        workspaceContextLoading
-        || workspaceContext?.workspaceType !== 'personal'
-      ) return null;
-      if (
-        codingPlanModelDecision(amrWalletSnapshot?.codingPlanModels, modelId)
-        !== true
-      ) return null;
-      // Badge text only — the campaign's rule-summary tooltip is campaign copy
-      // and there is no product-written line for the plan case, so this branch
-      // carries no tooltip rather than an invented one.
-      return {
-        label: t('inlineSwitcher.unlimitedBadge'),
-        tooltip: null,
-        stateClass: '',
-      };
-    },
-    [
-      campaignBadgeStateClass,
-      campaignModelBadge,
-      campaignModelTooltip,
-      config.mode,
-      currentAgent?.id,
-      deepSeekCampaignVisibleForCurrentExecution,
-      amrWalletSnapshot?.codingPlanModels,
-      workspaceContext?.workspaceType,
-      workspaceContextLoading,
-      t,
-    ],
-  );
-
   useEffect(() => {
     if (!currentAgentId || !normalizedCurrentModelId) return;
     const nextChoice: {
@@ -1138,8 +1069,6 @@ export function InlineModelSwitcher({
           : t('inlineSwitcher.modelDefault')
       : config.model.trim() || t('inlineSwitcher.modelDefault');
 
-  const chipUnlimitedBadge = unlimitedBadgeForModel(currentModelId);
-
   // Compact home chip surfaces the selected model name + a connection-status
   // dot; label/tooltip fall back to the agent name. In CLI mode the agent's
   // `available` flag is the connection signal (reachable on PATH); API/BYOK is
@@ -1229,21 +1158,6 @@ export function InlineModelSwitcher({
               aria-hidden="true"
             />
             <span className="inline-switcher__chip-model-name">{chipModel}</span>
-            {chipUnlimitedBadge ? (
-              <span
-                className={
-                  'inline-switcher__campaign-badge'
-                  + (chipUnlimitedBadge.tooltip ? ' od-tooltip' : '')
-                  + chipUnlimitedBadge.stateClass
-                }
-                data-tooltip={chipUnlimitedBadge.tooltip ?? undefined}
-                data-tooltip-placement={chipUnlimitedBadge.tooltip ? 'top' : undefined}
-                aria-label={chipUnlimitedBadge.tooltip ?? undefined}
-                data-testid="inline-model-switcher-chip-unlimited-badge"
-              >
-                {chipUnlimitedBadge.label}
-              </span>
-            ) : null}
           </>
         ) : (
           <>
@@ -1462,7 +1376,6 @@ export function InlineModelSwitcher({
                     // A model above the caller's plan is shown, but honestly:
                     // disabled with the reason the settings picker already uses,
                     // never as a normal row whose click gets reverted.
-                    const unlimitedBadge = unlimitedBadgeForModel(m.id);
                     const lockedHint = selectable
                       ? null
                       : t('settings.amrModelUpgradeHint');
@@ -1522,21 +1435,6 @@ export function InlineModelSwitcher({
                           <span className="inline-switcher__agent-name">
                             {m.label}
                           </span>
-                          {unlimitedBadge ? (
-                            <span
-                              className={
-                                'inline-switcher__campaign-badge'
-                                + (unlimitedBadge.tooltip ? ' od-tooltip' : '')
-                                + unlimitedBadge.stateClass
-                              }
-                              data-tooltip={unlimitedBadge.tooltip ?? undefined}
-                              data-tooltip-placement={unlimitedBadge.tooltip ? 'top' : undefined}
-                              aria-label={unlimitedBadge.tooltip ?? undefined}
-                              data-testid={`inline-model-switcher-unlimited-badge-${m.id}`}
-                            >
-                              {unlimitedBadge.label}
-                            </span>
-                          ) : null}
                           {lockedHint ? (
                             <span
                               className="inline-switcher__agent-lock"

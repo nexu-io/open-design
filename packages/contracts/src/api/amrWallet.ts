@@ -26,12 +26,6 @@ export interface AmrWalletSnapshot {
   profile: string;
   user: AmrWalletSnapshotUser | null;
   balanceUsd: string | null;
-  /**
-   * Vela-authoritative Coding Plan model names for the signed-in Personal
-   * membership. `null` means the entitlement read was unavailable; an empty
-   * array is an authoritative answer that no model is included.
-   */
-  codingPlanModels?: string[] | null;
   updatedAt: string | null;
   fetchedAt: string;
   stale: boolean;
