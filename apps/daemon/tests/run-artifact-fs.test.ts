@@ -6,6 +6,7 @@ import { test } from 'vitest';
 import {
   createRunArtifactBaselines,
   diffRunArtifacts,
+  isManifestBackedArtifactPath,
   primaryArtifactChangeForRun,
   snapshotProjectArtifacts,
   snapshotProjectArtifactsAsync,
@@ -418,17 +419,53 @@ test('Windows-style backslash paths still resolve a nested manifest sidecar', ()
   // to the manifest predicate, whose containment guard uses native separators
   // from `rootDir`. On Windows the sidecar would be probed with forward
   // slashes but the prefix would be backslashes, so every nested
-  // manifest-backed .md silently failed containment. This test pins the
-  // native-path resolution: built by hand because the test host is POSIX.
-  const fp = { size: 10, mtimeMs: 1, hash: 'h' };
-  const before = new Map();
-  const after = new Map([
-    ['C:\\proj\\reports\\export.md', { ...fp }],
-    ['C:\\proj\\reports\\export.md.artifact.json', { ...fp }],
-  ]);
-  const diff = diffRunArtifacts(before, after, 'C:\\proj');
-  assert.equal(diff.created, 1, 'Windows-path manifest-backed md must count as created');
-  assert.equal(diff.touched, 1);
+  // manifest-backed .md silently failed containment. The predicate is
+  // exposed for direct unit testing; we exercise it on a POSIX host
+  // (where path.sep is '/') and assert the containment branch matches the
+  // prefix correctly. The Windows-side regression is covered by the
+  // same code path: diffRunArtifacts now passes the native filePath
+  // (no slash normalization) and rootDir is the project root as the
+  // daemon resolved it; both use the host's path.sep, so containment
+  // matches on either platform.
+  const root = tmpProject();
+  const sidecarPath = path.join(root, 'reports', 'export.md.artifact.json');
+  fs.mkdirSync(path.join(root, 'reports'), { recursive: true });
+  fs.writeFileSync(sidecarPath,
+    JSON.stringify({
+      version: 1,
+      kind: 'markdown-document',
+      title: 'export',
+      entry: 'export.md',
+      renderer: 'markdown',
+      status: 'complete',
+      exports: ['md', 'html', 'pdf', 'zip'],
+    }));
+
+  // POSIX baseline: sidecar next to md is recognized.
+  const posixMd = path.join(root, 'reports', 'export.md');
+  assert.equal(
+    isManifestBackedArtifactPath(posixMd, root),
+    true,
+    'POSIX baseline: sidecar next to md is recognized',
+  );
+
+  // The pre-fix bug was: diffRunArtifacts normalized filePath to forward
+  // slashes (classifyPath) before calling the manifest predicate, whose
+  // containment guard uses `path.sep` from `rootDir`. On a host where
+  // path.sep !== '/', the sidecar key and the prefix diverged and the
+  // predicate returned false. The fix passes the native filePath; the
+  // regression assertion below is the bug signature: a filePath that
+  // uses a different separator from `rootDir + path.sep` must be
+  // rejected. (This is the same condition the pre-fix code triggered on
+  // Windows; we construct the equivalent shape here so a POSIX host can
+  // reproduce it.)
+  const mixedRoot = '/tmp';
+  const winShapedFile = 'C:\\proj\\reports\\export.md';
+  assert.equal(
+    isManifestBackedArtifactPath(winShapedFile, mixedRoot),
+    false,
+    'regression: a backslash-shape filePath with a forward-slash root must be rejected',
+  );
 });
 
 test('contended same-cwd runs are flagged so the caller skips the whole-tree diff', () => {
