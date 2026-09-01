@@ -182,6 +182,146 @@ test('an md-only delivery reports files_written while artifact_count stays 0', (
   assert.equal(editDiff.filesWritten, 1);
 });
 
+test('a manifest-backed markdown artifact counts as created/modified (fixes #7579)', () => {
+  // An export-only run that delivers `fitcv-design-system-export.md` next to
+  // a valid `.artifact.json` sidecar used to report `artifactCount: 0` and
+  // `validation: no_artifact`, because the markdown extension is not in
+  // `ARTIFACT_EXTENSIONS`. With the manifest-backed check, a `.md` (or
+  // `.docx`) file with a sidecar counts as an artifact and edits roll into
+  // the `modified` bucket.
+  const root = tmpProject();
+  const before = snapshotProjectArtifacts(root);
+
+  const mdPath = path.join(root, 'fitcv-design-system-export.md');
+  fs.writeFileSync(mdPath, '# export v1\n');
+  fs.writeFileSync(
+    path.join(mdPath + '.artifact.json'),
+    JSON.stringify({
+      version: 1,
+      kind: 'markdown-document',
+      title: 'fitcv export',
+      entry: 'fitcv-design-system-export.md',
+      renderer: 'markdown',
+      status: 'complete',
+      exports: ['md', 'html', 'pdf', 'zip'],
+    }),
+  );
+
+  const afterCreate = snapshotProjectArtifacts(root);
+  const createDiff = diffRunArtifacts(before, afterCreate, root);
+  assert.equal(createDiff.created, 1, 'manifest-backed md counts as created');
+  assert.equal(createDiff.touched, 1);
+  assert.deepEqual(createDiff.touchedPaths, [mdPath]);
+  // Both the md and its sidecar are written during the run, so filesWritten
+  // reflects both writes (the sidecar is not itself an artifact, but it is a
+  // real filesystem write that happened during the run).
+  assert.equal(createDiff.filesWritten, 2);
+
+  // A later run that only EDITS the markdown still records the write.
+  fs.writeFileSync(mdPath, '# export v2 — refined tokens');
+  const afterEdit = snapshotProjectArtifacts(root);
+  const editDiff = diffRunArtifacts(afterCreate, afterEdit, root);
+  assert.equal(editDiff.modified, 1);
+  assert.equal(editDiff.touched, 1);
+});
+
+test('markdown without a manifest sidecar is still filesWritten only (no artifact_count)', () => {
+  // Backwards-compat: a `.md` deliverable without a sidecar must not
+  // suddenly start counting as an artifact. Issue #7579 explicitly says the
+  // predicate should be manifest-aware, not extension-aware.
+  const root = tmpProject();
+  const before = snapshotProjectArtifacts(root);
+
+  fs.writeFileSync(path.join(root, 'PROMPTS.md'), '# nine premium backgrounds');
+  const after = snapshotProjectArtifacts(root);
+  const diff = diffRunArtifacts(before, after, root);
+
+  assert.equal(diff.touched, 0, 'manifest-less md must not count as artifact');
+  assert.equal(diff.filesWritten, 1);
+});
+
+test('a malformed manifest sidecar does not promote its markdown to an artifact', () => {
+  // The sidecar exists, so a naive "file with sibling `.artifact.json` is
+  // manifest-backed" check would mark the `.md` as an artifact. The
+  // canonical `parsePersistedManifest` validator must reject non-version-1
+  // / missing-renderer / missing-exports / unknown-kind manifests.
+  const root = tmpProject();
+  const mdPath = path.join(root, 'broken-export.md');
+  fs.writeFileSync(mdPath, '# broken');
+  fs.writeFileSync(mdPath + '.artifact.json', '{"version": 2, "kind": "markdown-document"}');
+  const before = snapshotProjectArtifacts(root);
+
+  fs.writeFileSync(mdPath, '# broken — revised');
+  const after = snapshotProjectArtifacts(root);
+  const diff = diffRunArtifacts(before, after, root);
+
+  assert.equal(diff.touched, 0, 'invalid manifest must not turn md into an artifact');
+  assert.equal(diff.filesWritten, 1);
+});
+
+test('a manifest-backed markdown in a nested directory still counts as an artifact (fixes #7579)', () => {
+  // First-pass review caught `path.basename(filePath)` discarding the
+  // directory: `reports/export.md` would probe `<root>/export.md.artifact.json`
+  // instead of `<root>/reports/export.md.artifact.json`. The fix derives the
+  // sidecar from the artifact's native absolute path; this test pins that
+  // behaviour so a future refactor cannot regress it.
+  const root = tmpProject();
+  fs.mkdirSync(path.join(root, 'reports'), { recursive: true });
+  const before = snapshotProjectArtifacts(root);
+
+  const mdPath = path.join(root, 'reports', 'export.md');
+  fs.writeFileSync(mdPath, '# nested export\n');
+  fs.writeFileSync(
+    mdPath + '.artifact.json',
+    JSON.stringify({
+      version: 1,
+      kind: 'markdown-document',
+      title: 'nested export',
+      entry: 'export.md',
+      renderer: 'markdown',
+      status: 'complete',
+      exports: ['md', 'html', 'pdf', 'zip'],
+    }),
+  );
+
+  const after = snapshotProjectArtifacts(root);
+  const diff = diffRunArtifacts(before, after, root);
+
+  assert.equal(diff.created, 1, 'nested manifest-backed md counts as created');
+  assert.equal(diff.touched, 1);
+  assert.deepEqual(diff.touchedPaths, [mdPath]);
+});
+
+test('an unknown-kind manifest does not promote its markdown to an artifact', () => {
+  // The canonical `parsePersistedManifest` rejects unknown `kind` values;
+  // issue #7579's "only valid manifest-backed files" requirement means a
+  // sidecar with `{ version: 1, kind: "junk", entry: "x.md" }` must not
+  // contribute to artifact analytics.
+  const root = tmpProject();
+  const mdPath = path.join(root, 'junk-export.md');
+  fs.writeFileSync(mdPath, '# junk');
+  fs.writeFileSync(
+    mdPath + '.artifact.json',
+    JSON.stringify({
+      version: 1,
+      kind: 'junk',
+      title: 'junk',
+      entry: 'junk-export.md',
+      renderer: 'markdown',
+      status: 'complete',
+      exports: ['md'],
+    }),
+  );
+  const before = snapshotProjectArtifacts(root);
+
+  fs.writeFileSync(mdPath, '# junk — revised');
+  const after = snapshotProjectArtifacts(root);
+  const diff = diffRunArtifacts(before, after, root);
+
+  assert.equal(diff.touched, 0, 'unknown kind must not promote md to artifact');
+  assert.equal(diff.filesWritten, 1);
+});
+
 test('a same-size rewrite with a preserved mtime is still detected (content hash)', () => {
   // The pathological edit: equal byte length AND the timestamp reset to its
   // original value. size + mtime alone cannot tell this apart, so the content
