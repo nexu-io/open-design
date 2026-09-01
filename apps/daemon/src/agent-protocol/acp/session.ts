@@ -13,6 +13,7 @@ import {
   createToolCallTextSuppressor,
   type ArtifactTextSuppressor,
 } from '../../artifacts/text-suppression.js';
+import { redactSecrets } from '../../redact.js';
 import { createJsonLineStream } from '../core/index.js';
 import type { JsonRpcId, JsonObject, TimerHandle, AcpChildProcess } from './types.js';
 import {
@@ -21,6 +22,7 @@ import {
   ACP_ARTIFACT_ECHO_START_RE,
   ACP_RAW_EVENT_SHAPE_DIAGNOSTIC_LIMIT,
   AMR_STDERR_RETRY_TAIL_LIMIT,
+  ACP_STDERR_DIAGNOSTIC_TAIL_LIMIT,
 } from './constants.js';
 import { errorMessage, asObject, extractAcpUpdateText, extractAcpStatusDetail } from './json.js';
 import {
@@ -61,6 +63,7 @@ import {
 import { buildAcpSessionNewParams, buildPromptBlocks, type AcpMcpServerInput } from './session-params.js';
 import { withholdStdioMcpServersForBuild } from './stdio-mcp.js';
 import { createVelaChildEvidenceConsumer } from '../../runtimes/vela-child-evidence.js';
+import { withAcpEmissionProvenance, type AcpEmissionMeta } from './emission-provenance.js';
 
 const NON_DISPLAYABLE_ACP_SESSION_UPDATES = new Set([
   'usage_update',
@@ -82,9 +85,7 @@ const NON_DISPLAYABLE_ACP_SESSION_UPDATES = new Set([
  * exclude these; consumers that build the transcript still want them, which is
  * why the pair is emitted rather than dropped.
  */
-export interface AcpEmissionMeta {
-  hostSynthesized?: boolean;
-}
+export type { AcpEmissionMeta } from './emission-provenance.js';
 
 /**
  * Options for `attachAcpSession`. All fields except `child`, `prompt`, and
@@ -217,7 +218,8 @@ export function attachAcpSession({
   let rawAcpShapeDiagnosticCount = 0;
   let artifactSuppressionDiagnosticCount = 0;
   let velaChildRejectionDiagnosticCount = 0;
-  let amrStderrRetryTail = '';
+  let acpStderrTail = '';
+  let currentStage = 'initialize';
   let finished = false;
   let fatal = false;
   let aborted = false;
@@ -312,7 +314,7 @@ export function attachAcpSession({
     // ids (paths, tokens, JWTs) never leak into Langfuse span ids or
     // metadata.toolCallId.
     const telemetryToolCallId = acpTelemetryToolCallId(toolCallId);
-    send('agent', {
+    send('agent', withAcpEmissionProvenance({
       type: 'tool_use',
       id: telemetryToolCallId,
       name: st.name,
@@ -320,15 +322,15 @@ export function attachAcpSession({
       // Wall-clock start of the first ACP frame for this toolCallId so analytics
       // can compute real duration even though tool_use is emitted at terminal.
       startedAt: st.firstSeenAt,
-    }, meta);
-    send('agent', {
+    }, meta), meta);
+    send('agent', withAcpEmissionProvenance({
       type: 'tool_result',
       toolUseId: telemetryToolCallId,
       // Bash/execute stdout can dump private files (cat .env). Langfuse only
       // lexically masks Bash, so redact before the canonical transcript ships.
       content: acpSafeToolResultContent(st.name, st.resultContent),
       isError,
-    }, meta);
+    }, meta), meta);
     // Concrete only on terminal tool_result for a real (non-think) tool.
     emittedConcreteToolEvent = true;
   };
@@ -450,6 +452,7 @@ export function attachAcpSession({
   };
 
   const writeRpc = (id: JsonRpcId, method: string, params: unknown, timeoutLabel: string) => {
+    currentStage = timeoutLabel;
     resetStageTimer(timeoutLabel);
     try {
       sendRpc(stdin, id, method, params);
@@ -1187,18 +1190,38 @@ export function attachAcpSession({
   stdout.on('data', (chunk: string) => parser.feed(chunk));
   child.stderr?.setEncoding('utf8');
   child.stderr?.on('data', (chunk: string) => {
-    if (!modelUnavailableErrorCode || finished) return;
-    amrStderrRetryTail = `${amrStderrRetryTail}${String(chunk)}`.slice(
+    if (finished) return;
+    acpStderrTail = `${acpStderrTail}${String(chunk)}`.slice(
       -AMR_STDERR_RETRY_TAIL_LIMIT,
     );
-    const promotedPayload = promotedAmrStderrPayload(amrStderrRetryTail);
+    if (!modelUnavailableErrorCode) return;
+    const promotedPayload = promotedAmrStderrPayload(acpStderrTail);
     if (promotedPayload) failWithPayload(promotedPayload);
   });
   child.on('close', (code, signal) => {
     clearStageTimer();
     parser.flush();
     if (!finished && !aborted && !fatal) {
-      fail(`ACP session exited before completion (code=${code ?? 'null'}, signal=${signal ?? 'none'})`);
+      const stderrTail = redactSecrets(
+        acpStderrTail
+          .replace(/\u001B\[[0-?]*[ -/]*[@-~]/gu, '')
+          .replace(/\r\n?/gu, '\n')
+          .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu, ''),
+      )
+        .trim()
+        .slice(-ACP_STDERR_DIAGNOSTIC_TAIL_LIMIT);
+      fail(
+        `ACP session exited before completion (code=${code ?? 'null'}, signal=${signal ?? 'none'})`,
+        {
+          details: {
+            kind: 'acp_child_exit',
+            phase: currentStage,
+            exit_code: code,
+            signal,
+            ...(stderrTail ? { stderr_tail: stderrTail } : {}),
+          },
+        },
+      );
     }
   });
   child.on('error', (err: Error) => fail(err.message));

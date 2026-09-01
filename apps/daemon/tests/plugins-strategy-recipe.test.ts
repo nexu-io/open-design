@@ -100,6 +100,72 @@ afterAll(() => {
 });
 
 describe('OD Next V2 request recipe wiring', () => {
+  it('injects the canonical Deck Protocol v1 framework for the real PPT profile', async () => {
+    const binding = createBundledStrategyBindingV2({ plugin, taskType: 'ppt' });
+    const pptSnapshot = {
+      ...applyPlugin({
+        plugin,
+        inputs: {},
+        registry: EMPTY_REGISTRY,
+        internalStrategyBinding: binding,
+      }).result.appliedPlugin,
+      snapshotId: 'snapshot-daemon-ppt-recipe',
+    };
+    const recipe = await resolveRecipe({ activeSnapshot: pptSnapshot });
+    expect(recipe).not.toBeNull();
+    if (!recipe) throw new Error('expected OD Next PPT recipe');
+
+    const prompt = composeSystemPrompt({ odNextStrategyRecipe: recipe });
+    expect(prompt.match(/^## Task Skill —/gm)).toHaveLength(1);
+    expect(prompt).toContain('OD Deck Protocol v1');
+    expect(prompt).toContain('data-od-deck-protocol="1"');
+    expect(prompt).toContain("type: 'od:deck-ready'");
+    expect(prompt).toContain("type: 'od:slide-state'");
+  });
+
+  it('preserves a selected legacy PPT scaffold without injecting Deck Protocol v1', async () => {
+    const binding = createBundledStrategyBindingV2({ plugin, taskType: 'ppt' });
+    const pptSnapshot = {
+      ...applyPlugin({
+        plugin,
+        inputs: {},
+        registry: EMPTY_REGISTRY,
+        internalStrategyBinding: binding,
+      }).result.appliedPlugin,
+      snapshotId: 'snapshot-daemon-legacy-ppt-recipe',
+    };
+    const recipe = await resolveRecipe({ activeSnapshot: pptSnapshot });
+    expect(recipe).not.toBeNull();
+    if (!recipe) throw new Error('expected OD Next PPT recipe');
+
+    const prompt = composeSystemPrompt({
+      odNextStrategyRecipe: recipe,
+      deckFrameworkMode: 'legacy_compatible',
+    });
+    expect(prompt).toContain('selected or existing scaffold compatibility');
+    expect(prompt).toContain('assets/template.html');
+    expect(prompt).not.toContain('data-od-deck-protocol="1"');
+    expect(prompt).not.toContain("type: 'od:deck-ready'");
+    expect(prompt).not.toContain("type: 'od:slide-state'");
+  });
+
+  it('injects the deck framework when a prototype conversation explicitly asks for PPT', async () => {
+    const recipe = await resolveRecipe();
+    expect(recipe).not.toBeNull();
+    if (!recipe) throw new Error('expected OD Next prototype recipe');
+
+    expect(composeSystemPrompt({ odNextStrategyRecipe: recipe }))
+      .not.toContain('data-od-deck-protocol="1"');
+    const prompt = composeSystemPrompt({
+      odNextStrategyRecipe: recipe,
+      freeformDeckSignal: true,
+    });
+    expect(prompt).toContain('OD Deck Protocol v1');
+    expect(prompt).toContain('data-od-deck-protocol="1"');
+    expect(prompt).toContain("type: 'od:deck-ready'");
+    expect(prompt).toContain("type: 'od:slide-state'");
+  });
+
   it('composes the real package and atom bodies as one planning/Build-only golden', async () => {
     const recipe = await resolveRecipe();
     expect(recipe).not.toBeNull();

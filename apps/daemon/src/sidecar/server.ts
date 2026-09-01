@@ -11,8 +11,11 @@ import {
   type DesktopExportArtifactResult,
   type DesktopExportPdfInput,
   type DesktopExportPdfResult,
+  type DesktopRenderFramesInput,
+  type DesktopRenderFramesResult,
   type DesktopRenderSlidesInput,
   type DesktopRenderSlidesResult,
+  type DesktopStatusSnapshot,
   type MintImportTokenResult,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
@@ -112,6 +115,39 @@ export async function startDaemonSidecar(
       return await requestJsonIpc<DesktopExportPdfResult>(
         desktopIpc,
         { input, type: SIDECAR_MESSAGES.EXPORT_PDF },
+        { timeoutMs: 600_000 },
+      );
+    },
+    desktopFrameRenderer: async (input: DesktopRenderFramesInput): Promise<DesktopRenderFramesResult> => {
+      const desktopIpc = resolveAppIpcPath({
+        app: APP_KEYS.DESKTOP,
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        namespace: runtime.namespace,
+      });
+      let status: DesktopStatusSnapshot;
+      try {
+        status = await requestJsonIpc<DesktopStatusSnapshot>(
+          desktopIpc,
+          { type: SIDECAR_MESSAGES.STATUS },
+          { timeoutMs: 5_000 },
+        );
+      } catch {
+        return {
+          ok: false,
+          error: "Open Design desktop is not running. Open or upgrade the desktop client before rendering HyperFrames video.",
+          errorCode: "FRAME_RENDERER_NOT_READY",
+        };
+      }
+      if (status.state !== "running" || status.capabilities?.frameRenderer !== true) {
+        return {
+          ok: false,
+          error: "This Open Design desktop version does not support HyperFrames rendering. Upgrade the desktop client and try again.",
+          errorCode: "FRAME_RENDERER_NOT_READY",
+        };
+      }
+      return await requestJsonIpc<DesktopRenderFramesResult>(
+        desktopIpc,
+        { input, type: SIDECAR_MESSAGES.RENDER_FRAMES },
         { timeoutMs: 600_000 },
       );
     },

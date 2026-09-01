@@ -110,7 +110,7 @@ import {
   buildOdNextTaskConfigurationV1,
   createOdNextTaskInputSnapshot,
   OdNextTaskInputSnapshotError,
-  removeOdNextTaskInputSnapshot,
+  removeOdNextTaskInputSnapshotBestEffort,
   type OdNextTaskInputSnapshotDescriptor,
 } from '../strategies/od-next/task-input-snapshot.js';
 import {
@@ -874,10 +874,46 @@ function toOdNativeEvent(record: RunEventRecord): OdNativeEvent | null {
   return { kind: record.event, ...toJsonRecord(record.data) } as OdNativeEvent;
 }
 
+export function sendStructuredRunCreateFailure(
+  res: ApiResponse,
+  sendApiError: RegisterRunRoutesDeps['http']['sendApiError'],
+  error: unknown,
+  requestId: string = randomUUID(),
+): Response<unknown> | void {
+  const rawCode = (error as NodeJS.ErrnoException)?.code;
+  const code = typeof rawCode === 'string' && /^[A-Z0-9_]+$/.test(rawCode)
+    ? rawCode
+    : 'UNKNOWN';
+  console.error(`[runs] preparation failed request=${requestId} code=${code}`);
+  return sendApiError(
+    res,
+    500,
+    'INTERNAL_ERROR',
+    'Run preparation failed.',
+    { requestId },
+  );
+}
+
+export function registerRunCreateRoute(
+  app: Express,
+  handleRunCreate: (req: ApiRequest, res: ApiResponse) => Promise<unknown>,
+  sendApiError: RegisterRunRoutesDeps['http']['sendApiError'],
+): void {
+  app.post('/api/runs', async (req: ApiRequest, res: ApiResponse) => {
+    try {
+      return await handleRunCreate(req, res);
+    } catch (error) {
+      if (res.headersSent) throw error;
+      return sendStructuredRunCreateFailure(res, sendApiError, error);
+    }
+  });
+}
+
 export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
   const { db, design } = ctx;
   const { createSseResponse, sendApiError } = ctx.http;
   const { BUNDLED_PLUGINS_DIR, PROJECTS_DIR, RUNTIME_DATA_DIR } = ctx.paths;
+  const taskInputSnapshotsRoot = path.join(RUNTIME_DATA_DIR, 'od-next-task-inputs');
   const { detectAgents, getAgentDef } = ctx.agents;
   const { startChatRun } = ctx.chat;
   const prepareOdNextInitialPromptBundle = ctx.chat.prepareOdNextInitialPromptBundle
@@ -1495,7 +1531,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     }
   }
 
-  app.post('/api/runs', async (req: ApiRequest, res: ApiResponse) => {
+  const handleRunCreate = async (req: ApiRequest, res: ApiResponse) => {
     if (ctx.lifecycle.isDaemonShuttingDown()) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
@@ -2643,7 +2679,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           mode: 'unresolved',
         });
         createdTaskInputSnapshot = createOdNextTaskInputSnapshot({
-          snapshotsRoot: path.join(RUNTIME_DATA_DIR, 'od-next-task-inputs'),
+          snapshotsRoot: taskInputSnapshotsRoot,
           taskExecutionId,
           taskConfiguration,
           projectRoot,
@@ -2674,7 +2710,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         });
         preparedPromptBundleText = preparedPrompt.text;
       } catch (error) {
-        removeOdNextTaskInputSnapshot(createdTaskInputSnapshot);
+        removeOdNextTaskInputSnapshotBestEffort(
+          createdTaskInputSnapshot,
+          taskInputSnapshotsRoot,
+          'initial-bundle',
+        );
         createdTaskInputSnapshot = null;
         preparedPromptBundleText = null;
         frozenSkillPackage = undefined;
@@ -2774,7 +2814,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         },
       });
     } catch (error) {
-      removeOdNextTaskInputSnapshot(createdTaskInputSnapshot);
+      removeOdNextTaskInputSnapshotBestEffort(
+        createdTaskInputSnapshot,
+        taskInputSnapshotsRoot,
+        'run-claim',
+      );
       createdTaskInputSnapshot = null;
       if (error instanceof AutomaticOdNextPreparationError) {
         preparedPromptBundleText = null;
@@ -2813,7 +2857,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       }
     }
     if (preparedRun.kind !== 'ready') {
-      removeOdNextTaskInputSnapshot(createdTaskInputSnapshot);
+      removeOdNextTaskInputSnapshotBestEffort(
+        createdTaskInputSnapshot,
+        taskInputSnapshotsRoot,
+        'non-ready',
+      );
       if (
         resolvedSnapshot?.created === true
         && resolvedSnapshot.snapshot.pluginId === 'od-next-strategy'
@@ -3029,7 +3077,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       },
       () => startChatRun(executionMeta, run),
     );
-  });
+  };
+
+  registerRunCreateRoute(app, handleRunCreate, sendApiError);
 
   app.get('/api/runs', async (req: ApiRequest, res: ApiResponse) => {
     const { projectId, conversationId, status } = req.query;

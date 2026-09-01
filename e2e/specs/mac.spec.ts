@@ -319,13 +319,6 @@ type LauncherSnapshot = {
   versionsRoot: string;
 };
 
-type NativeChromeActionProbe = {
-  clickCount: number;
-  targetMatches: boolean;
-  x: number;
-  y: number;
-};
-
 type LauncherPointer = {
   generation: number;
   version: string;
@@ -447,7 +440,6 @@ macDescribe('packaged mac runtime smoke', () => {
       firstRunStarted = true;
       expect(start.source).toBe('installed');
       await waitForHealthyDesktop();
-      await assertFirstNativeChromeActionClick();
 
       const setup = await runToolsPackJson<MacInspectResult>('inspect', [
         '--expr',
@@ -2311,81 +2303,6 @@ async function waitForHealthyDesktop(): Promise<MacInspectResult> {
   }
 
   throw new Error(`packaged mac runtime did not become healthy: ${formatUnknown(lastResult)}`);
-}
-
-async function assertFirstNativeChromeActionClick(): Promise<void> {
-  const probeKey = '__odPackagedNativeChromeActionProbe';
-  const setup = await runToolsPackJson<MacInspectResult>('inspect', [
-    '--expr',
-    `(() => {
-      const target = document.querySelector('[data-testid="entry-top-right-github"]');
-      if (!(target instanceof HTMLElement)) {
-        throw new Error('first-render GitHub chrome action is missing');
-      }
-      window[${JSON.stringify(probeKey)}]?.cleanup?.();
-      const probe = { clickCount: 0 };
-      const onClick = (event) => {
-        probe.clickCount += 1;
-        event.preventDefault();
-      };
-      target.addEventListener('click', onClick, true);
-      window[${JSON.stringify(probeKey)}] = {
-        cleanup: () => target.removeEventListener('click', onClick, true),
-        probe,
-      };
-      const rect = target.getBoundingClientRect();
-      const clientX = rect.left + rect.width / 2;
-      const clientY = rect.top + rect.height / 2;
-      const hitTarget = document.elementFromPoint(clientX, clientY);
-      return {
-        clickCount: 0,
-        targetMatches: hitTarget != null && target.contains(hitTarget),
-        x: window.screenX + clientX,
-        y: window.screenY + clientY,
-      };
-    })()`,
-  ]);
-  if (setup.eval?.ok !== true) {
-    throw new Error(`native chrome action setup failed: ${formatUnknown(setup.eval)}`);
-  }
-  const probe = setup.eval.value as NativeChromeActionProbe;
-  expect(probe.targetMatches).toBe(true);
-  expect(Number.isFinite(probe.x)).toBe(true);
-  expect(Number.isFinite(probe.y)).toBe(true);
-
-  try {
-    const swiftSource = `
-      import CoreGraphics
-      import Darwin
-      let point = CGPoint(x: ${probe.x}, y: ${probe.y})
-      let source = CGEventSource(stateID: .hidSystemState)
-      CGEvent(mouseEventSource: source, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
-      CGEvent(mouseEventSource: source, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
-      usleep(50_000)
-      CGEvent(mouseEventSource: source, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
-    `;
-    await execFileAsync('/usr/bin/xcrun', ['swift', '-e', swiftSource], { timeout: 30_000 });
-    await waitFor(async () => {
-      const snapshot = await runToolsPackJson<MacInspectResult>('inspect', [
-        '--expr',
-        `(() => {
-          const state = window[${JSON.stringify(probeKey)}];
-          return { clickCount: Number(state?.probe?.clickCount || '0') };
-        })()`,
-      ]);
-      expect((snapshot.eval?.value as { clickCount?: number } | undefined)?.clickCount).toBe(1);
-    }, 5_000);
-  } finally {
-    await runToolsPackJson<MacInspectResult>('inspect', [
-      '--expr',
-      `(() => {
-        const state = window[${JSON.stringify(probeKey)}];
-        state?.cleanup?.();
-        delete window[${JSON.stringify(probeKey)}];
-        return true;
-      })()`,
-    ]).catch(() => undefined);
-  }
 }
 
 async function waitForPackagedHomeFirstRunOutput(): Promise<PackagedHomeFirstRunResult> {

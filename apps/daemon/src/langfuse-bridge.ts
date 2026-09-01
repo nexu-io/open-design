@@ -22,7 +22,6 @@ import type { OdNextRolloutDecision, SafeRunQualityV1 } from '@open-design/contr
 import { agentCliEnvForAgent, readAppConfig, type TelemetryPrefs } from './app-config.js';
 import type { AppVersionInfo } from './app-version.js';
 import { listMessages } from './db.js';
-import { normalizeOpenDesignTelemetryRelayUrl } from './integrations/telemetry-relay.js';
 import {
   deriveLangfuseDeliveryState,
   buildSafeRunQualityProjectionV1,
@@ -68,6 +67,7 @@ import {
   type RunFailureClassification,
 } from './run-failure-classification.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
+import { runAdmissionEvidenceForRun } from './runtimes/run-lifecycle-analytics.js';
 import { buildTraceObjectManifests } from './trace-object-manifest.js';
 import type { TraceArtifactObjectSource, TraceObjectUploadManifests } from './trace-object-manifest.js';
 import { getDetectedRuntimeVersions } from './runtimes/detection.js';
@@ -242,56 +242,6 @@ function mergeTraceSafeManifests(
     artifactManifest,
     ...(inputTextSnapshotManifest ? { inputTextSnapshotManifest } : {}),
     completeness: deriveManifestCompleteness(entries, selectedFallbackUnavailable),
-  };
-}
-
-function inferObjectRegistrationRelayUrl(env: NodeJS.ProcessEnv = process.env): string | null {
-  const objectRelayUrl = env.OPEN_DESIGN_OBJECT_RELAY_URL?.trim();
-  if (!objectRelayUrl) {
-    const telemetryRelayUrl = env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim();
-    return telemetryRelayUrl
-      ? normalizeOpenDesignTelemetryRelayUrl(telemetryRelayUrl)
-      : null;
-  }
-  const normalizedObjectRelayUrl = normalizeOpenDesignTelemetryRelayUrl(
-    objectRelayUrl,
-  );
-  try {
-    const url = new URL(normalizedObjectRelayUrl);
-    url.pathname = url.pathname.replace(/\/api\/objects\/batch\/?$/, '/api/langfuse');
-    return url.toString().replace(/\/+$/, '');
-  } catch {
-    return normalizedObjectRelayUrl
-      .replace(/\/api\/objects\/batch\/?$/, '/api/langfuse')
-      .replace(/\/+$/, '');
-  }
-}
-
-function parsePositiveInt(value: string | undefined, fallback: number): number {
-  if (value === undefined) return fallback;
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function parseNonNegativeInt(value: string | undefined, fallback: number): number {
-  if (value === undefined) return fallback;
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
-}
-
-function objectRegistrationTelemetryConfig(
-  env: NodeJS.ProcessEnv = process.env,
-): Extract<TelemetrySinkConfig, { kind: 'relay' }> | null {
-  const relayUrl = inferObjectRegistrationRelayUrl(env);
-  if (!relayUrl) return null;
-  return {
-    kind: 'relay',
-    relayUrl,
-    timeoutMs: parsePositiveInt(
-      env.OPEN_DESIGN_OBJECT_RELAY_TIMEOUT_MS ?? env.OPEN_DESIGN_TELEMETRY_TIMEOUT_MS,
-      20_000,
-    ),
-    retries: parseNonNegativeInt(env.OPEN_DESIGN_TELEMETRY_RETRIES, 1),
   };
 }
 
@@ -1116,6 +1066,7 @@ export async function buildSafeRunQualityProjectionFromDaemon(
     cancelOrigin: run.cancelOrigin ?? null,
     terminalTrigger: run.terminalTrigger ?? null,
     events: run.events,
+    admissionEvidence: runAdmissionEvidenceForRun(run),
   });
   // Terminal process evidence. The single-Run trace reported the stderr and
   // stdout tails only for a non-succeeded Run, and always reported the derived
@@ -1236,6 +1187,7 @@ export async function reportRunCompletedFromDaemon(
       cancelOrigin: run.cancelOrigin ?? null,
       terminalTrigger: run.terminalTrigger ?? null,
       events: run.events,
+      admissionEvidence: runAdmissionEvidenceForRun(run),
     });
     const timings = summarizeRunTimingAnalytics({
       runCreatedAt: run.createdAt,
@@ -1362,26 +1314,21 @@ export async function reportRunCompletedFromDaemon(
     let uploadedManifests: TraceObjectUploadManifests | undefined;
     let finalObjectManifests = registrationManifests;
 
-    if (registrationManifests) {
-      // Authenticated runs register object authority through Vela's signed
-      // service path. Anonymous/direct runs retain the legacy relay boundary.
-      // The authority worker handles registration_only without writing a
-      // content-free Langfuse trace.
-      const registrationTelemetryConfig = finalTelemetryConfig?.kind === 'vela'
-        ? finalTelemetryConfig
-        : objectRegistrationTelemetryConfig();
-      if (registrationTelemetryConfig) {
-        await reportRunCompleted(
-          buildContext(mergeTraceSafeManifests(manifests, registrationManifests)),
-          {
-            config: registrationTelemetryConfig,
-            deliveryPurpose: 'object-registration',
-            ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
-          },
-        );
-        uploadedManifests = await buildTraceObjectManifests(objectManifestOptions);
-        finalObjectManifests = uploadedManifests ?? registrationManifests;
-      }
+    if (registrationManifests && finalTelemetryConfig?.kind === 'vela') {
+      // Only Vela's signed service path can establish object authority. An
+      // anonymous relay/direct client must not create a content-free Langfuse
+      // registration trace or obtain upload permission from self-reported
+      // object metadata.
+      await reportRunCompleted(
+        buildContext(mergeTraceSafeManifests(manifests, registrationManifests)),
+        {
+          config: finalTelemetryConfig,
+          deliveryPurpose: 'object-registration',
+          ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
+        },
+      );
+      uploadedManifests = await buildTraceObjectManifests(objectManifestOptions);
+      finalObjectManifests = uploadedManifests ?? registrationManifests;
     }
 
     const finalManifests = mergeTraceSafeManifests(manifests, finalObjectManifests);

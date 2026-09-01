@@ -10,8 +10,8 @@
  *   - Headroom-style sticky header (hide on scroll down, reveal on up)
  *   - Live GitHub stars + latest release version injection
  *   - Live Wire contributors row (replaces the static fallback)
- *   - IntersectionObserver-driven `data-reveal` choreography (without
- *     this every section sits at `opacity: 0` and the page looks blank)
+ *   - IntersectionObserver-driven `data-reveal` choreography, progressively
+ *     enhanced so content stays visible when JavaScript is unavailable
  *
  * Inlining this script in only one of the entry points causes the
  * "blank landing page" bug on localized homepages, so we centralize it
@@ -300,17 +300,25 @@
       return;
     }
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          entry.target.dataset.revealed = 'true';
-          observer.unobserve(entry.target);
-        }
-      },
-      { threshold: 0.12, rootMargin: '0px 0px -8% 0px' },
-    );
+    let observer;
+    try {
+      observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            entry.target.dataset.revealed = 'true';
+            observer.unobserve(entry.target);
+          }
+        },
+        { threshold: 0.12, rootMargin: '0px 0px -8% 0px' },
+      );
 
-    for (const el of elements) observer.observe(el);
+      for (const el of elements) observer.observe(el);
+      document.documentElement.classList.add('reveal-ready');
+    } catch (error) {
+      observer?.disconnect();
+      document.documentElement.classList.remove('reveal-ready');
+      console.error('Reveal animation initialization failed', error);
+    }
   })();
 </script>

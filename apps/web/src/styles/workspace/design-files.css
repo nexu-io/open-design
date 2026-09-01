@@ -22,9 +22,6 @@
   -webkit-backdrop-filter: var(--scrim-backdrop);
   backdrop-filter: var(--scrim-backdrop);
 }
-.paste-text-dialog-backdrop.modal-backdrop {
-  z-index: 2000;
-}
 .df-main {
   position: relative;
   display: flex;

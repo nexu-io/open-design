@@ -25,6 +25,10 @@ import {
   prependAfterDoctype,
 } from '@open-design/contracts/runtime/html-injection-points';
 import {
+  PREVIEW_RUNTIME_STATE_LIMITS,
+  PREVIEW_RUNTIME_STATE_VERSION,
+} from '@open-design/contracts/runtime/preview-runtime-state';
+import {
   automaticStrategyTaskProfileForProjectMetadata,
   defaultScenarioPluginIdForProjectMetadata,
   type ChatSessionMode,
@@ -760,6 +764,47 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     try { return window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/"/g, '\\\\"'); }
     catch (_) { return String(value); }
   }
+  function previewHtmlFileForLink(link){
+    if (!link || link.hasAttribute('download')) return null;
+    var target = String(link.getAttribute('target') || '').toLowerCase();
+    if (target && target !== '_self') return null;
+    var href = link.getAttribute('href');
+    if (!href || href.charAt(0) === '#') return null;
+    try {
+      var baseUrl = new URL(document.baseURI || location.href);
+      var nextUrl = new URL(href, baseUrl);
+      if (nextUrl.origin !== baseUrl.origin) return null;
+      var fileRoot = null;
+      var projectMarker = '/api/projects/';
+      var projectIndex = baseUrl.pathname.indexOf(projectMarker);
+      if (projectIndex < 0) return null;
+      var projectIdStart = projectIndex + projectMarker.length;
+      var routeMarkerStart = baseUrl.pathname.indexOf('/', projectIdStart);
+      if (routeMarkerStart < 0 || routeMarkerStart === projectIdStart) return null;
+      var rawMarker = '/raw/';
+      if (baseUrl.pathname.slice(routeMarkerStart, routeMarkerStart + rawMarker.length) === rawMarker) {
+        fileRoot = baseUrl.pathname.slice(0, routeMarkerStart + rawMarker.length);
+      } else {
+        var previewMarker = '/preview/';
+        if (baseUrl.pathname.slice(routeMarkerStart, routeMarkerStart + previewMarker.length) !== previewMarker) return null;
+        var scopeStart = routeMarkerStart + previewMarker.length;
+        var scopeEnd = baseUrl.pathname.indexOf('/', scopeStart);
+        if (scopeEnd < 0 || scopeEnd === scopeStart) return null;
+        fileRoot = baseUrl.pathname.slice(0, scopeEnd + 1);
+      }
+      if (nextUrl.pathname.indexOf(fileRoot) !== 0) return null;
+      var fileName = decodeURIComponent(nextUrl.pathname.slice(fileRoot.length));
+      if (
+        !fileName ||
+        fileName.charAt(0) === '/' ||
+        fileName.split('/').some(function(part){ return !part || part === '.' || part === '..'; }) ||
+        !/\\.html?$/i.test(fileName)
+      ) return null;
+      return { fileName: fileName, search: nextUrl.search || '', hash: nextUrl.hash || '' };
+    } catch (_) {
+      return null;
+    }
+  }
   function ensureStyle(){
     if (document.querySelector('style[data-od-url-selection-style]')) return;
     var style = document.createElement('style');
@@ -1004,8 +1049,8 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     });
   }
   // The host switches a plain URL preview to a bridge-enabled srcDoc when
-  // Manual Edit opens. Capture only mutable UI state so the second document
-  // can show the same app page without copying or evaluating artifact code.
+  // Manual Edit opens. Capture the rendered body as a frozen DOM handoff so
+  // stateful regions outside conventional #app/#root containers are not lost.
   function runtimeStateAttributeAllowed(name){
     return name === 'class' ||
       name === 'style' ||
@@ -1017,10 +1062,13 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   function runtimeStateAttributes(el){
     var attrs = Object.create(null);
     if (!el || !el.attributes) return attrs;
-    for (var i = 0; i < el.attributes.length; i++) {
+    for (var i = 0; i < el.attributes.length && Object.keys(attrs).length < ${PREVIEW_RUNTIME_STATE_LIMITS.maxAttributes}; i++) {
       var attr = el.attributes[i];
       if (!attr || !runtimeStateAttributeAllowed(attr.name)) continue;
-      attrs[attr.name] = String(attr.value || '');
+      var attrName = String(attr.name || '');
+      var attrValue = String(attr.value || '');
+      if (attrName.length > ${PREVIEW_RUNTIME_STATE_LIMITS.maxAttributeNameLength} || attrValue.length > ${PREVIEW_RUNTIME_STATE_LIMITS.maxAttributeValueLength}) continue;
+      attrs[attrName] = attrValue;
     }
     return attrs;
   }
@@ -1029,41 +1077,119 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     var node = el;
     while (node && node !== document.body) {
       var parent = node.parentElement;
-      if (!parent) return null;
+      if (!parent || path.length >= ${PREVIEW_RUNTIME_STATE_LIMITS.maxPathLength}) return null;
       var index = Array.prototype.indexOf.call(parent.children, node);
-      if (index < 0) return null;
+      if (index < 0 || index > ${PREVIEW_RUNTIME_STATE_LIMITS.maxPathIndex}) return null;
       path.unshift(index);
       node = parent;
     }
     return node === document.body ? path : null;
   }
+  function runtimeStateRoots(){
+    if (!document.body) return [];
+    var roots = [];
+    var canonical = document.body.querySelectorAll('#app, #root, [data-reactroot]');
+    for (var c = 0; c < canonical.length && roots.length < ${PREVIEW_RUNTIME_STATE_LIMITS.maxRoots}; c++) {
+      roots.push(canonical[c]);
+    }
+    // Stateful overlays and detail panes are often siblings of #app/#root.
+    // Capture the outermost identified sibling roots as well; otherwise the
+    // attribute pass can restore an open/hidden state while leaving that pane's
+    // dynamic body at its source placeholder. Never select an ancestor or
+    // descendant of a canonical root, so framework-owned trees keep their
+    // existing single snapshot boundary.
+    var identified = document.body.querySelectorAll('[id]');
+    for (var i = 0; i < identified.length && roots.length < ${PREVIEW_RUNTIME_STATE_LIMITS.maxRoots}; i++) {
+      var candidate = identified[i];
+      var overlaps = false;
+      for (var r = 0; r < roots.length; r++) {
+        if (roots[r].contains(candidate) || candidate.contains(roots[r])) {
+          overlaps = true;
+          break;
+        }
+      }
+      if (!overlaps) roots.push(candidate);
+    }
+    return roots;
+  }
+  function captureRuntimeBodyHtml(){
+    if (!document.body || !document.body.cloneNode) return null;
+    try {
+      var clone = document.body.cloneNode(true);
+      var liveControls = document.body.querySelectorAll('input, textarea, option');
+      var clonedControls = clone.querySelectorAll('input, textarea, option');
+      var controlCount = Math.min(liveControls.length, clonedControls.length);
+      for (var controlIndex = 0; controlIndex < controlCount; controlIndex++) {
+        var liveControl = liveControls[controlIndex];
+        var clonedControl = clonedControls[controlIndex];
+        var controlTag = String(liveControl.tagName || '').toLowerCase();
+        if (controlTag === 'textarea') {
+          clonedControl.textContent = String(liveControl.value == null ? '' : liveControl.value);
+        } else if (controlTag === 'option') {
+          if (liveControl.selected) clonedControl.setAttribute('selected', '');
+          else clonedControl.removeAttribute('selected');
+        } else {
+          clonedControl.setAttribute('value', String(liveControl.value == null ? '' : liveControl.value));
+          if (liveControl.type === 'checkbox' || liveControl.type === 'radio') {
+            if (liveControl.checked) clonedControl.setAttribute('checked', '');
+            else clonedControl.removeAttribute('checked');
+          }
+        }
+      }
+      // Host bridges belong to the URL browsing context. Keeping their script
+      // elements in the frozen body is unnecessary (innerHTML scripts are
+      // inert) and leaks transport-only nodes into Manual Edit's DOM paths.
+      var cloneScripts = clone.querySelectorAll('script');
+      for (var scriptIndex = cloneScripts.length - 1; scriptIndex >= 0; scriptIndex--) {
+        var scriptNode = cloneScripts[scriptIndex];
+        var scriptAttrs = scriptNode.attributes || [];
+        var hostScript = false;
+        for (var scriptAttrIndex = 0; scriptAttrIndex < scriptAttrs.length; scriptAttrIndex++) {
+          var scriptAttrName = String(scriptAttrs[scriptAttrIndex].name || '');
+          if (scriptAttrName.indexOf('data-od-url-') === 0 && /-bridge$/.test(scriptAttrName)) {
+            hostScript = true;
+            break;
+          }
+        }
+        if (hostScript) scriptNode.remove();
+      }
+      var html = String(clone.innerHTML || '');
+      return html.length <= ${PREVIEW_RUNTIME_STATE_LIMITS.maxBodyHtmlLength} ? html : null;
+    } catch (_) {
+      return null;
+    }
+  }
   function captureRuntimeState(){
     var entries = [];
     var roots = [];
     var rootHtmlLength = 0;
-    var runtimeRoots = document.body
-      ? document.body.querySelectorAll('#app, #root, [data-reactroot]')
-      : [];
-    for (var rootIndex = 0; rootIndex < runtimeRoots.length && roots.length < 64; rootIndex++) {
-      var root = runtimeRoots[rootIndex];
-      var rootTag = String(root.tagName || '').toLowerCase();
-      var rootPath = runtimeStatePath(root);
-      if (!rootPath) continue;
-      var rootHtml = String(root.innerHTML || '');
-      if (rootHtmlLength + rootHtml.length > 2097152) break;
-      var rootEntry = {
-        path: rootPath,
-        tag: rootTag,
-        html: rootHtml
-      };
-      if (root.id) rootEntry.id = String(root.id);
-      var rootOdId = root.getAttribute && root.getAttribute('data-od-id');
-      if (rootOdId) rootEntry.odId = String(rootOdId);
-      roots.push(rootEntry);
-      rootHtmlLength += rootHtml.length;
+    var bodyHtml = captureRuntimeBodyHtml();
+    // Keep the old bounded root capture only as an oversize/DOM-clone
+    // fallback. Normal Edit entry carries exactly one copy of the rendered
+    // markup instead of duplicating the entire body plus its app roots.
+    if (bodyHtml === null) {
+      var runtimeRoots = runtimeStateRoots();
+      for (var rootIndex = 0; rootIndex < runtimeRoots.length && roots.length < ${PREVIEW_RUNTIME_STATE_LIMITS.maxRoots}; rootIndex++) {
+        var root = runtimeRoots[rootIndex];
+        var rootTag = String(root.tagName || '').toLowerCase();
+        var rootPath = runtimeStatePath(root);
+        if (!rootPath) continue;
+        var rootHtml = String(root.innerHTML || '');
+        if (rootHtmlLength + rootHtml.length > ${PREVIEW_RUNTIME_STATE_LIMITS.maxRootHtmlLength}) break;
+        var rootEntry = {
+          path: rootPath,
+          tag: rootTag,
+          html: rootHtml
+        };
+        if (root.id && String(root.id).length <= ${PREVIEW_RUNTIME_STATE_LIMITS.maxIdentityLength}) rootEntry.id = String(root.id);
+        var rootOdId = root.getAttribute && root.getAttribute('data-od-id');
+        if (rootOdId && String(rootOdId).length <= ${PREVIEW_RUNTIME_STATE_LIMITS.maxIdentityLength}) rootEntry.odId = String(rootOdId);
+        roots.push(rootEntry);
+        rootHtmlLength += rootHtml.length;
+      }
     }
     var nodes = document.body ? document.body.querySelectorAll('*') : [];
-    var count = Math.min(nodes.length, 3500);
+    var count = Math.min(nodes.length, ${PREVIEW_RUNTIME_STATE_LIMITS.maxElements});
     for (var i = 0; i < count; i++) {
       var el = nodes[i];
       var path = runtimeStatePath(el);
@@ -1073,12 +1199,13 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
         tag: String(el.tagName || '').toLowerCase(),
         attrs: runtimeStateAttributes(el)
       };
-      if (el.id) entry.id = String(el.id);
+      if (el.id && String(el.id).length <= ${PREVIEW_RUNTIME_STATE_LIMITS.maxIdentityLength}) entry.id = String(el.id);
       var odId = el.getAttribute && el.getAttribute('data-od-id');
-      if (odId) entry.odId = String(odId);
+      if (odId && String(odId).length <= ${PREVIEW_RUNTIME_STATE_LIMITS.maxIdentityLength}) entry.odId = String(odId);
       var tag = entry.tag;
       if (tag === 'input' || tag === 'textarea' || tag === 'select') {
-        entry.value = String(el.value == null ? '' : el.value);
+        var value = String(el.value == null ? '' : el.value);
+        if (value.length <= ${PREVIEW_RUNTIME_STATE_LIMITS.maxValueLength}) entry.value = value;
       }
       if (tag === 'input' && (el.type === 'checkbox' || el.type === 'radio')) {
         entry.checked = !!el.checked;
@@ -1089,8 +1216,9 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
       entries.push(entry);
     }
     return {
-      version: 1,
-      hash: String(window.location.hash || ''),
+      version: ${PREVIEW_RUNTIME_STATE_VERSION},
+      hash: String(window.location.hash || '').slice(0, ${PREVIEW_RUNTIME_STATE_LIMITS.maxHashLength}),
+      bodyHtml: bodyHtml,
       roots: roots,
       htmlAttrs: runtimeStateAttributes(document.documentElement),
       bodyAttrs: runtimeStateAttributes(document.body),
@@ -1156,6 +1284,23 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     }
     hoveredId = null;
     window.parent.postMessage({ type: 'od:comment-leave' }, '*');
+  }, true);
+  // Keep same-project HTML navigation in the workspace even on the canonical
+  // URL transport. Otherwise leaving Manual Edit makes a link replace the
+  // iframe document while the workspace tab still points at the old file.
+  document.addEventListener('click', function(ev){
+    if (commentEnabled || ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+    var origin = ev.target;
+    var link = origin && origin.closest ? origin.closest('a[href]') : null;
+    var destination = previewHtmlFileForLink(link);
+    if (!destination) return;
+    ev.preventDefault();
+    window.parent.postMessage({
+      type: 'od:preview-open-file',
+      fileName: destination.fileName,
+      search: destination.search,
+      hash: destination.hash
+    }, '*');
   }, true);
   document.addEventListener('click', function(ev){
     if (!commentEnabled || mode !== 'picker') return;

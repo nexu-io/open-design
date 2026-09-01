@@ -673,25 +673,33 @@ function renderWire(i: EditorialCollageInputs): string {
 const REVEAL_AND_NAV_SCRIPT = `
 <script>
   /*
-   * Scroll-reveal observer — mirrors apps/landing-page/app/_components/reveal-root.tsx.
+   * Scroll-reveal observer — mirrors the landing-page homepage enhancer.
    * Watches every [data-reveal] element and flips data-revealed='true'
    * when it first enters the viewport, triggering the CSS transition.
    */
   (function () {
     var elements = document.querySelectorAll('[data-reveal]:not([data-revealed])');
     if (!elements.length) return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || !('IntersectionObserver' in window)) {
       for (var i = 0; i < elements.length; i++) elements[i].dataset.revealed = 'true';
       return;
     }
-    var observer = new IntersectionObserver(function (entries) {
-      for (var i = 0; i < entries.length; i++) {
-        if (!entries[i].isIntersecting) continue;
-        entries[i].target.dataset.revealed = 'true';
-        observer.unobserve(entries[i].target);
-      }
-    }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
-    for (var j = 0; j < elements.length; j++) observer.observe(elements[j]);
+    var observer;
+    try {
+      observer = new IntersectionObserver(function (entries) {
+        for (var i = 0; i < entries.length; i++) {
+          if (!entries[i].isIntersecting) continue;
+          entries[i].target.dataset.revealed = 'true';
+          observer.unobserve(entries[i].target);
+        }
+      }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+      for (var j = 0; j < elements.length; j++) observer.observe(elements[j]);
+      document.documentElement.classList.add('reveal-ready');
+    } catch (error) {
+      if (observer) observer.disconnect();
+      document.documentElement.classList.remove('reveal-ready');
+      console.error('Reveal animation initialization failed', error);
+    }
   })();
 
   /*

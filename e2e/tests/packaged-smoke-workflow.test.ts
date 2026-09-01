@@ -52,7 +52,6 @@ const rerunInfraCancelScriptPath = join(workspaceRoot, ".github", "scripts", "re
 const bakePluginPreviewsWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews.yml");
 const bakePluginPreviewsPrWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews-pr.yml");
 const dockerImageWorkflowPath = join(workspaceRoot, ".github", "workflows", "docker-image.yml");
-const flakePath = join(workspaceRoot, "flake.nix");
 const backportAutomergeWorkflowPath = join(workspaceRoot, ".github", "workflows", "backport-automerge.yml");
 const bakePreviewsAutomergeWorkflowPath = join(
   workspaceRoot,
@@ -1394,15 +1393,13 @@ process.stdin.on("end", () => {
       run_ui_p0: true,
       run_preflight: true,
     });
-    // Packaging (nix / docker) is no longer part of core scopes / Validate workspace.
+    // Docker packaging is not part of core scopes / Validate workspace.
     for (const plan of await Promise.all([
       runScopesPrint("merge_group", {}),
       runScopesPrint("workflow_dispatch", { inputs: {} }),
       runScopesPrint("pull_request", { pull_request: { number: 1 } }, ["apps/web/src/app/page.tsx"]),
     ])) {
-      expect(plan).not.toHaveProperty("run_nix_validation");
       expect(plan).not.toHaveProperty("run_docker_build");
-      expect(plan).not.toHaveProperty("nix_validation_required");
       expect(plan).not.toHaveProperty("docker_validation_required");
     }
   });
@@ -1553,15 +1550,12 @@ process.stdin.on("end", () => {
     });
   }, T.medium);
 
-  it("[P2] keeps packaging (nix/docker) off the core Validate workspace gate", async () => {
+  it("[P2] keeps Docker packaging off the core Validate workspace gate", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     const validate = sectionBetween(workflow, "  validate:", "  runtime_summary:");
 
-    expect(workflow).not.toContain("nix_validation:");
     expect(workflow).not.toContain("docker_pr:");
-    expect(validate).not.toContain("nix_validation");
     expect(validate).not.toContain("docker_pr");
-    expect(validate).not.toContain("run_nix_validation");
     expect(validate).not.toContain("run_docker_build");
     expect(validate).toContain("Check workspace validation jobs");
 
@@ -1641,16 +1635,6 @@ process.stdin.on("end", () => {
       plan: { result: "success", outputs: { run: JSON.stringify(run) } },
       e2e_vitest: { result: "failure" },
     })).resolves.toBe(false);
-  });
-
-  it("[P1] includes launcher protocol in the Nix daemon workspace build", async () => {
-    const flake = await readFile(flakePath, "utf8");
-    const daemonWorkspaces = sectionBetween(flake, "      daemonWorkspacePaths = [", "      ];");
-
-    expect(daemonWorkspaces).toContain('"packages/launcher-proto"');
-    expect(daemonWorkspaces.indexOf('"packages/launcher-proto"')).toBeLessThan(
-      daemonWorkspaces.indexOf('"apps/daemon"'),
-    );
   });
 
   it("[P2] routes trusted Linux CI through the Nexu runner fleet", async () => {
@@ -2044,7 +2028,7 @@ process.stdin.on("end", () => {
     ]);
 
     // Core ci still produces comment + report handoffs (needs-validation, visual).
-    // Packaging hash autofix left core ci with nix — no ci-produced autofix handoffs for now.
+    // No current core-ci producer emits autofix handoffs.
     expect(ciWorkflow).toContain("handoff.py dir comment");
     expect(ciWorkflow).toContain("handoff.py dir report");
     expect(ciWorkflow).toContain("convergence.py handoff");
@@ -2053,7 +2037,6 @@ process.stdin.on("end", () => {
     expect(ciWorkflow).toContain("handoff-convergence-");
     expect(ciWorkflow).not.toContain("handoff.py dir autofix");
     expect(ciWorkflow).not.toContain("handoff-autofix-");
-    expect(ciWorkflow).not.toContain("nix-hash-autofix");
     expect(ciWorkflow).not.toContain("visual-pr-comment");
     expect(commentWorkflow).toContain("artifact-pattern comment");
     expect(commentWorkflow).toContain("merge-multiple: false");
@@ -2089,7 +2072,6 @@ process.stdin.on("end", () => {
     for (const workflow of [commentWorkflow, autofixWorkflow]) {
       expect(workflow).toContain("python3 .github/scripts/handoff.py self-check");
       expect(workflow).toContain("github.event.workflow_run.event == 'pull_request'");
-      expect(workflow).not.toContain("nix/pnpm-deps.nix");
       expect(workflow).not.toContain("visual-report");
     }
     expect(reportWorkflow).toContain("python3 .github/scripts/handoff.py self-check");

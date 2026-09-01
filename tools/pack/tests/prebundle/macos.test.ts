@@ -77,6 +77,7 @@ describe("mac standalone prebundle policy", () => {
     expect(MAC_PREBUNDLE_ESBUILD_TARGET).toBe("node24");
     expect(MAC_PREBUNDLE_POLICIES.packagedMain.externals).toEqual(["electron"]);
     expect(MAC_PREBUNDLE_POLICIES.daemonCli.externals).toEqual([
+      "@ffmpeg-installer/ffmpeg",
       "better-sqlite3",
       "blake3-wasm",
       "fsevents",
@@ -84,6 +85,7 @@ describe("mac standalone prebundle policy", () => {
       "node-pty",
     ]);
     expect(MAC_PREBUNDLE_POLICIES.daemonSidecar.externals).toEqual([
+      "@ffmpeg-installer/ffmpeg",
       "better-sqlite3",
       "blake3-wasm",
       "fsevents",
@@ -96,6 +98,7 @@ describe("mac standalone prebundle policy", () => {
     // electron-builder's collector drops the module from the shipped app and
     // the daemon dies at boot with ERR_MODULE_NOT_FOUND (issue #4638).
     expect(MAC_PREBUNDLE_RUNTIME_DEPENDENCIES).toEqual({
+      "@ffmpeg-installer/ffmpeg": "1.1.0",
       "better-sqlite3": "12.10.0",
       "blake3-wasm": "2.1.5",
       "hyperframes": "0.8.1",

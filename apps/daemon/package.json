@@ -35,6 +35,7 @@
   },
   "dependencies": {
     "@babel/parser": "7.29.3",
+    "@ffmpeg-installer/ffmpeg": "1.1.0",
     "@modelcontextprotocol/sdk": "1.29.0",
     "@open-design/agui-adapter": "workspace:*",
     "@open-design/contracts": "workspace:*",
