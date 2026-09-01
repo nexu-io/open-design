@@ -1,0 +1,33 @@
+{
+  "candidateId": "e37e8d47-f9cc-4275-aa44-cfb4681b5665",
+  "projectId": "b83194cc-c9bf-4319-80b1-95d74beb67be",
+  "runId": "3c0a93c0-7b39-41f4-8310-7f032f0b6aac",
+  "conversationId": "03d8e354-b31d-4340-857b-e4a0e6aed0b0",
+  "provenance": {
+    "summary": "Detected from CLONE_AUDIT.md, plugin-source/clone-audit-mti1zvqj/references/source-1-CLONE_AUDIT.md, plugin-source/clone-audit-mti1zvqj/SKILL.md after a successful run.",
+    "detectedAt": 1788230200205
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "CLONE_AUDIT.md",
+      "label": "CLONE_AUDIT.md",
+      "size": 45701,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/clone-audit-mti1zvqj/references/source-1-CLONE_AUDIT.md",
+      "label": "plugin-source/clone-audit-mti1zvqj/references/source-1-CLONE_AUDIT.md",
+      "size": 45701,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/clone-audit-mti1zvqj/SKILL.md",
+      "label": "plugin-source/clone-audit-mti1zvqj/SKILL.md",
+      "size": 45795,
+      "copied": true
+    }
+  ]
+}
