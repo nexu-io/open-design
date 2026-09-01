@@ -1,0 +1,502 @@
+# Clone Audit
+
+- Project: /Users/eliecasimir/Library/Application Support/Open Design/namespaces/release-stable/data/projects/b83194cc-c9bf-4319-80b1-95d74beb67be
+- Scanned files: 20
+- Findings: 699
+
+## 保真度硬伤（字体 / 图片 / 颜色）
+- :0 · palette mismatch: body backgroundColor · `original computed rgb(20, 22, 26) (rgb 20,22,26) not found anywhere in clone css/html — copy the exact value from recon, do not eyeball`
+
+## 追踪脚本 / 统计像素
+- .od-skills/web-clone-a5a9cd5828/SKILL.md:157 · Google Tag Manager · `googletagmanager`
+- mirror-manifest.json:21 · Google Tag Manager · `googletagmanager`
+- mirror-manifest.json:21 · Google Tag Manager · `GTM-K4ZNG9SF`
+- mirror-manifest.json:81 · Google Tag Manager · `googletagmanager`
+- mirror-manifest.json:81 · Google Tag Manager · `googletagmanager`
+- mirror-manifest.json:87 · Google Tag Manager · `googletagmanager`
+- mirror-manifest.json:87 · Google Tag Manager · `googletagmanager`
+- mirror-manifest.json:93 · Google Tag Manager · `googletagmanager`
+- mirror-manifest.json:93 · Google Tag Manager · `googletagmanager`
+- mirror-manifest.json:99 · Google Tag Manager · `googletagmanager`
+- mirror-manifest.json:99 · Google Tag Manager · `googletagmanager`
+- mirror-manifest.json:105 · Google Tag Manager · `googletagmanager`
+- mirror-manifest.json:117 · Google Tag Manager · `googletagmanager`
+- mirror-manifest.json:129 · Google Tag Manager · `googletagmanager`
+- mirror-manifest.json:129 · Google Tag Manager · `googletagmanager`
+- mirror-manifest.json:189 · Google Tag Manager · `googletagmanager`
+- mirror-manifest.json:189 · Google Tag Manager · `googletagmanager`
+- mirror-manifest.json:207 · Google Tag Manager · `googletagmanager`
+- mirror-manifest.json:207 · Google Tag Manager · `googletagmanager`
+- mirror-manifest.json:81 · Google Analytics / gtag · `gtag(`
+- mirror-manifest.json:81 · Google Analytics / gtag · `gtag(`
+- mirror-manifest.json:81 · Google Analytics / gtag · `gtag(`
+- mirror-manifest.json:87 · Google Analytics / gtag · `gtag(`
+- mirror-manifest.json:87 · Google Analytics / gtag · `gtag(`
+- mirror-manifest.json:87 · Google Analytics / gtag · `gtag(`
+- mirror-manifest.json:93 · Google Analytics / gtag · `gtag(`
+- mirror-manifest.json:93 · Google Analytics / gtag · `gtag(`
+- mirror-manifest.json:93 · Google Analytics / gtag · `gtag(`
+- mirror-manifest.json:99 · Google Analytics / gtag · `gtag(`
+- mirror-manifest.json:99 · Google Analytics / gtag · `gtag(`
+- mirror-manifest.json:99 · Google Analytics / gtag · `gtag(`
+- mirror-manifest.json:129 · Google Analytics / gtag · `gtag(`
+- mirror-manifest.json:129 · Google Analytics / gtag · `gtag(`
+- mirror-manifest.json:129 · Google Analytics / gtag · `gtag(`
+- mirror-manifest.json:189 · Google Analytics / gtag · `gtag(`
+- mirror-manifest.json:189 · Google Analytics / gtag · `gtag(`
+- mirror-manifest.json:189 · Google Analytics / gtag · `gtag(`
+- mirror-manifest.json:207 · Google Analytics / gtag · `gtag(`
+- mirror-manifest.json:207 · Google Analytics / gtag · `gtag(`
+- mirror-manifest.json:207 · Google Analytics / gtag · `gtag(`
+- site/assets/index-Du2xdisQ.js:10 · Google Analytics / gtag · `gtag(`
+- site/assets/index-Du2xdisQ.js:10 · Google Analytics / gtag · `gtag(`
+- site/assets/index-Du2xdisQ.js:10 · Google Analytics / gtag · `gtag(`
+- site/assets/index-Du2xdisQ.js:10 · Google Analytics / gtag · `gtag(`
+- site/assets/index-Du2xdisQ.js:10 · Google Analytics / gtag · `gtag(`
+- site/assets/index-Du2xdisQ.js:10 · Google Analytics / gtag · `gtag(`
+- site/assets/index-Du2xdisQ.js:10 · Google Analytics / gtag · `gtag(`
+- site/assets/index-Du2xdisQ.js:10 · Google Analytics / gtag · `gtag(`
+- site/assets/index-Du2xdisQ.js:10 · Google Analytics / gtag · `gtag(`
+- site/assets/index-Du2xdisQ.js:10 · Google Analytics / gtag · `gtag(`
+- site/assets/index-Du2xdisQ.js:10 · Google Analytics / gtag · `gtag(`
+- site/assets/index-Du2xdisQ.js:10 · Google Analytics / gtag · `gtag(`
+- site/assets/index-Du2xdisQ.js:10 · Google Analytics / gtag · `gtag(`
+- site/assets/index-Du2xdisQ.js:56 · Google Analytics / gtag · `gtag(`
+- site/assets/index-Du2xdisQ.js:56 · Google Analytics / gtag · `GA(`
+- site/assets/index-Du2xdisQ.js:56 · Google Analytics / gtag · `GA(`
+- site/assets/index-Du2xdisQ.js:10 · Hotjar / Clarity · `hj(`
+- site/assets/index-Du2xdisQ.js:10 · Hotjar / Clarity · `hj(`
+- site/assets/index-Du2xdisQ.js:10 · Hotjar / Clarity · `hj(`
+- site/assets/index-Du2xdisQ.js:10 · Hotjar / Clarity · `hj(`
+- site/assets/index-Du2xdisQ.js:10 · Hotjar / Clarity · `Hj(`
+- site/assets/index-Du2xdisQ.js:10 · Hotjar / Clarity · `Hj(`
+- site/assets/index-Du2xdisQ.js:10 · Hotjar / Clarity · `Hj(`
+- site/assets/index-Du2xdisQ.js:56 · Hotjar / Clarity · `hJ(`
+- site/assets/index-Du2xdisQ.js:56 · Hotjar / Clarity · `hJ(`
+- third-party.json:3 · Google Tag Manager · `googletagmanager`
+
+## 原站品牌残留
+- site/assets/index-Du2xdisQ.js:10 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:50 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:50 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:55 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:55 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:55 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:55 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:56 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:64 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:67 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:76 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:76 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:76 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:79 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:89 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:89 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:92 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:102 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:105 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:115 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:118 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:128 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:135 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:139 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:139 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:139 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- site/assets/index-Du2xdisQ.js:143 · brand residue: FlowMax Pros · `FlowMax Pros`
+- 还有 189 条未展开
+
+## 日文残留
+- 未发现
+
+## TODO / 占位内容
+- .od-skills/web-clone-a5a9cd5828/SKILL.md:267 · TODO / placeholder content · `TODO`
+- .od-skills/web-clone-a5a9cd5828/SKILL.md:282 · TODO / placeholder content · `TODO`
+- .od-skills/web-clone-a5a9cd5828/references/deliverables.md:137 · TODO / placeholder content · `TODO`
+- .od-skills/web-clone-a5a9cd5828/references/design-dna.md:41 · TODO / placeholder content · `TODO`
+- site/assets/index-Du2xdisQ.js:143 · TODO / placeholder content · `todo`
+- site/assets/index-Du2xdisQ.js:143 · TODO / placeholder content · `Todo`
+- site/assets/index-Du2xdisQ.js:143 · TODO / placeholder content · `Todo`
+- site/assets/index-Du2xdisQ.js:143 · TODO / placeholder content · `Todo`
+
+## 外部依赖 / 外链风险
+- .od-skills/web-clone-a5a9cd5828/SKILL.md:64 · external URL · `https://raw.githubusercontent.com/`
+- .od-skills/web-clone-a5a9cd5828/SKILL.md:173 · external URL · `http://127.0.0.1:`
+- .od-skills/web-clone-a5a9cd5828/SKILL.md:178 · external URL · `http://127.0.0.1:`
+- .od-skills/web-clone-a5a9cd5828/SKILL.md:185 · external URL · `http://127.0.0.1:`
+- .od-skills/web-clone-a5a9cd5828/references/design-dna.md:7 · external URL · `https://github.com/zanwei/design-dna`
+- .od-skills/web-clone-a5a9cd5828/references/effect-extraction.md:6 · external URL · `https://github.com/lixiaolin94/skills`
+- .od-skills/web-clone-a5a9cd5828/references/marbles-case.md:3 · external URL · `https://chiuhans111.github.io/marbles/`
+- .od-skills/web-clone-a5a9cd5828/references/static-mirror.md:38 · external URL · `https://use.typekit.net/`
+- .od-skills/web-clone-a5a9cd5828/references/static-mirror.md:49 · external URL · `https://use.typekit.net/`
+- .od-skills/web-clone-a5a9cd5828/references/static-mirror.md:51 · external URL · `https://use\.typekit\.net/`
+- assets-src/css/flowmaxpros.com/index-B9b6BLNK-0c9ee711dd.css:1 · external URL · `https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&display=swap`
+- assets-src/css/flowmaxpros.com/index-B9b6BLNK-0c9ee711dd.css:1 · external URL · `https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap`
+- assets-src/css/flowmaxpros.com/index-B9b6BLNK-0c9ee711dd.css:1 · external URL · `https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap`
+- assets-src/fonts/fonts.css:1 · external URL · `https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&display=swap`
+- assets-src/fonts/fonts.css:7 · external URL · `https://fonts.gstatic.com/s/geistmono/v6/or3yQ6H-1_WfwkMZI_qYPLs1a-t7PU0AbeE9KZ5T.ttf`
+- assets-src/fonts/fonts.css:14 · external URL · `https://fonts.gstatic.com/s/geistmono/v6/or3yQ6H-1_WfwkMZI_qYPLs1a-t7PU0AbeG9KJ5T.ttf`
+- assets-src/fonts/fonts.css:21 · external URL · `https://fonts.gstatic.com/s/geistmono/v6/or3yQ6H-1_WfwkMZI_qYPLs1a-t7PU0AbeFjKJ5T.ttf`
+- assets-src/fonts/fonts.css:28 · external URL · `https://fonts.gstatic.com/s/geistmono/v6/or3yQ6H-1_WfwkMZI_qYPLs1a-t7PU0AbeE9KJ5T.ttf`
+- assets-src/fonts/fonts.css:35 · external URL · `https://fonts.gstatic.com/s/geistmono/v6/or3yQ6H-1_WfwkMZI_qYPLs1a-t7PU0AbeEPKJ5T.ttf`
+- assets-src/fonts/fonts.css:42 · external URL · `https://fonts.gstatic.com/s/geistmono/v6/or3yQ6H-1_WfwkMZI_qYPLs1a-t7PU0AbeHjL55T.ttf`
+- assets-src/fonts/fonts.css:49 · external URL · `https://fonts.gstatic.com/s/geistmono/v6/or3yQ6H-1_WfwkMZI_qYPLs1a-t7PU0AbeHaL55T.ttf`
+- assets-src/fonts/fonts.css:56 · external URL · `https://fonts.gstatic.com/s/geistmono/v6/or3yQ6H-1_WfwkMZI_qYPLs1a-t7PU0AbeG9L55T.ttf`
+- assets-src/fonts/fonts.css:63 · external URL · `https://fonts.gstatic.com/s/geistmono/v6/or3yQ6H-1_WfwkMZI_qYPLs1a-t7PU0AbeGUL55T.ttf`
+- assets-src/fonts/fonts.css:67 · external URL · `https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap`
+- assets-src/fonts/fonts.css:73 · external URL · `https://fonts.gstatic.com/s/playfairdisplay/v40/nuFRD-vYSZviVYUb_rj3ij__anPXDTnCjmHKM4nYO7KN_qiTbtY.ttf`
+- assets-src/fonts/fonts.css:80 · external URL · `https://fonts.gstatic.com/s/playfairdisplay/v40/nuFRD-vYSZviVYUb_rj3ij__anPXDTnCjmHKM4nYO7KN_pqTbtY.ttf`
+- assets-src/fonts/fonts.css:87 · external URL · `https://fonts.gstatic.com/s/playfairdisplay/v40/nuFRD-vYSZviVYUb_rj3ij__anPXDTnCjmHKM4nYO7KN_naUbtY.ttf`
+- assets-src/fonts/fonts.css:94 · external URL · `https://fonts.gstatic.com/s/playfairdisplay/v40/nuFRD-vYSZviVYUb_rj3ij__anPXDTnCjmHKM4nYO7KN_k-UbtY.ttf`
+- assets-src/fonts/fonts.css:101 · external URL · `https://fonts.gstatic.com/s/playfairdisplay/v40/nuFRD-vYSZviVYUb_rj3ij__anPXDTnCjmHKM4nYO7KN_iiUbtY.ttf`
+- assets-src/fonts/fonts.css:108 · external URL · `https://fonts.gstatic.com/s/playfairdisplay/v40/nuFRD-vYSZviVYUb_rj3ij__anPXDTnCjmHKM4nYO7KN_gGUbtY.ttf`
+- assets-src/fonts/fonts.css:115 · external URL · `https://fonts.gstatic.com/s/playfairdisplay/v40/nuFvD-vYSZviVYUb_rj3ij__anPXJzDwcbmjWBN2PKdFvUDQ.ttf`
+- assets-src/fonts/fonts.css:122 · external URL · `https://fonts.gstatic.com/s/playfairdisplay/v40/nuFvD-vYSZviVYUb_rj3ij__anPXJzDwcbmjWBN2PKd3vUDQ.ttf`
+- assets-src/fonts/fonts.css:129 · external URL · `https://fonts.gstatic.com/s/playfairdisplay/v40/nuFvD-vYSZviVYUb_rj3ij__anPXJzDwcbmjWBN2PKebukDQ.ttf`
+- assets-src/fonts/fonts.css:136 · external URL · `https://fonts.gstatic.com/s/playfairdisplay/v40/nuFvD-vYSZviVYUb_rj3ij__anPXJzDwcbmjWBN2PKeiukDQ.ttf`
+- assets-src/fonts/fonts.css:143 · external URL · `https://fonts.gstatic.com/s/playfairdisplay/v40/nuFvD-vYSZviVYUb_rj3ij__anPXJzDwcbmjWBN2PKfFukDQ.ttf`
+- assets-src/fonts/fonts.css:150 · external URL · `https://fonts.gstatic.com/s/playfairdisplay/v40/nuFvD-vYSZviVYUb_rj3ij__anPXJzDwcbmjWBN2PKfsukDQ.ttf`
+- assets-src/fonts/fonts.css:154 · external URL · `https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap`
+- assets-src/fonts/fonts.css:160 · external URL · `https://fonts.gstatic.com/s/geist/v5/gyBhhwUxId8gMGYQMKR3pzfaWI_RnOI4nQ.ttf`
+- assets-src/fonts/fonts.css:167 · external URL · `https://fonts.gstatic.com/s/geist/v5/gyBhhwUxId8gMGYQMKR3pzfaWI_RHOM4nQ.ttf`
+- assets-src/fonts/fonts.css:174 · external URL · `https://fonts.gstatic.com/s/geist/v5/gyBhhwUxId8gMGYQMKR3pzfaWI_RwuM4nQ.ttf`
+- assets-src/fonts/fonts.css:181 · external URL · `https://fonts.gstatic.com/s/geist/v5/gyBhhwUxId8gMGYQMKR3pzfaWI_RnOM4nQ.ttf`
+- assets-src/fonts/fonts.css:188 · external URL · `https://fonts.gstatic.com/s/geist/v5/gyBhhwUxId8gMGYQMKR3pzfaWI_RruM4nQ.ttf`
+- assets-src/fonts/fonts.css:195 · external URL · `https://fonts.gstatic.com/s/geist/v5/gyBhhwUxId8gMGYQMKR3pzfaWI_RQuQ4nQ.ttf`
+- assets-src/fonts/fonts.css:202 · external URL · `https://fonts.gstatic.com/s/geist/v5/gyBhhwUxId8gMGYQMKR3pzfaWI_Re-Q4nQ.ttf`
+- assets-src/fonts/fonts.css:209 · external URL · `https://fonts.gstatic.com/s/geist/v5/gyBhhwUxId8gMGYQMKR3pzfaWI_RHOQ4nQ.ttf`
+- assets-src/fonts/fonts.css:216 · external URL · `https://fonts.gstatic.com/s/geist/v5/gyBhhwUxId8gMGYQMKR3pzfaWI_RNeQ4nQ.ttf`
+- mirror-manifest.json:3 · external URL · `https://flowmaxpros.com/`
+- mirror-manifest.json:9 · external URL · `https://flowmaxpros.com/assets/index-B9b6BLNK.css`
+- mirror-manifest.json:15 · external URL · `https://flowmaxpros.com/manifest.json`
+- mirror-manifest.json:21 · external URL · `https://www.googletagmanager.com/gtm.js?id=GTM-K4ZNG9SF`
+- mirror-manifest.json:27 · external URL · `https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap`
+- mirror-manifest.json:33 · external URL · `https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap`
+- mirror-manifest.json:39 · external URL · `https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&display=swap`
+- mirror-manifest.json:45 · external URL · `https://flowmaxpros.com/assets/index-Du2xdisQ.js`
+- mirror-manifest.json:51 · external URL · `https://fonts.gstatic.com/s/geistmono/v6/or3nQ6H-1_WfwkMZI_qYFrcdmhHkjko.woff2`
+- mirror-manifest.json:57 · external URL · `https://flowmaxpros.com/api/events/track`
+- mirror-manifest.json:63 · external URL · `https://flowmaxpros.com/assets/image_1756431480658-DugYn817.png`
+- mirror-manifest.json:69 · external URL · `https://fonts.gstatic.com/s/geist/v5/gyByhwUxId8gMEwcGFWNOITd.woff2`
+- mirror-manifest.json:75 · external URL · `https://fonts.gstatic.com/s/playfairdisplay/v40/nuFiD-vYSZviVYUb_rj3ij__anPXDTzYgEM86xQ.woff2`
+- mirror-manifest.json:81 · external URL · `https://www.googletagmanager.com/gtag/js?id=%3C!--%20Google%20tag%20(gtag.js`
+- mirror-manifest.json:81 · external URL · `https://www.googletagmanager.com/gtag/js?id=G-WEDSF6C46K%22%3E%3C/script%3E%20%3Cscript%3E%20%20%20window.dataLayer%20=%20window.dataLayer%20||%20[];%20%20%20fu`
+- mirror-manifest.json:87 · external URL · `https://www.googletagmanager.com/a?id=%3C!--%20Google%20tag%20(gtag.js`
+- mirror-manifest.json:87 · external URL · `https://www.googletagmanager.com/gtag/js?id=G-WEDSF6C46K%22%3E%3C/script%3E%20%3Cscript%3E%20%20%20window.dataLayer%20=%20window.dataLayer%20||%20[];%20%20%20fu`
+- mirror-manifest.json:93 · external URL · `https://www.googletagmanager.com/a?id=%3C!--%20Google%20tag%20(gtag.js`
+- mirror-manifest.json:93 · external URL · `https://www.googletagmanager.com/gtag/js?id=G-WEDSF6C46K%22%3E%3C/script%3E%20%3Cscript%3E%20%20%20window.dataLayer%20=%20window.dataLayer%20||%20[];%20%20%20fu`
+- mirror-manifest.json:99 · external URL · `https://www.googletagmanager.com/a?id=%3C!--%20Google%20tag%20(gtag.js`
+- mirror-manifest.json:99 · external URL · `https://www.googletagmanager.com/gtag/js?id=G-WEDSF6C46K%22%3E%3C/script%3E%20%3Cscript%3E%20%20%20window.dataLayer%20=%20window.dataLayer%20||%20[];%20%20%20fu`
+- mirror-manifest.json:105 · external URL · `https://www.googletagmanager.com/gtag/js?id=AW-17522364571&cx=c&gtm=4e68s1`
+- mirror-manifest.json:111 · external URL · `https://ad.doubleclick.net/ccm/s/collect?auid=551230779.1788228046&gtm=45be68s1v9228657299za200zb9228667264zd9228667264xec&fmt=8`
+- mirror-manifest.json:117 · external URL · `https://www.google.com/ccm/collect?rcb=14&frm=0&apvc=1&auid=551230779.1788228046&dt=FlowMax%20Pros%20CRM%20%E2%80%93%20Launch%20Automations%20in%202%20Hours%20(`
+- mirror-manifest.json:123 · external URL · `https://www.google.com/rmkt/collect/17522364571/?random=1788228046060&cv=11&fst=1788228046060&fmt=8&bg=ffffff&guid=ON&async=1&en=gtag.config&gtm=45be68s1v922865`
+- mirror-manifest.json:129 · external URL · `https://www.googletagmanager.com/a?id=%3C!--%20Google%20tag%20(gtag.js`
+- mirror-manifest.json:129 · external URL · `https://www.googletagmanager.com/gtag/js?id=G-WEDSF6C46K%22%3E%3C/script%3E%20%3Cscript%3E%20%20%20window.dataLayer%20=%20window.dataLayer%20||%20[];%20%20%20fu`
+- mirror-manifest.json:135 · external URL · `https://js.stripe.com/dahlia/stripe.js`
+- mirror-manifest.json:141 · external URL · `https://js.stripe.com/v3/controller-with-preconnect-ed630623e01ce93a378c74202e02b072.html`
+- mirror-manifest.json:147 · external URL · `https://analytics.google.com/g/collect?v=2&tid=G-WEDSF6C46K&gtm=45be68s1v9228657299za200zb9228667264zd9228667264&_p=1788228042516&_gaz=1&gcd=13l3l3l3l1l1&npa=0&`
+- mirror-manifest.json:153 · external URL · `https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17522364571/?random=1788228046060&cv=11&fst=1788228046060&bg=ffffff&guid=ON&async=1&en=gtag.con`
+- mirror-manifest.json:159 · external URL · `https://www.google.com/pagead/1p-user-list/17522364571/?random=1788228046060&cv=11&fst=1788228000000&bg=ffffff&guid=ON&async=1&en=gtag.config&gtm=45be68s1v92286`
+- mirror-manifest.json:165 · external URL · `https://stats.g.doubleclick.net/g/collect?v=2&tid=G-WEDSF6C46K&cid=1650316295.1788228046&gtm=45be68s1v9228657299za200zb9228667264zd9228667264&rcb=14&aip=1&dma=0`
+- mirror-manifest.json:171 · external URL · `https://flowmaxpros.com/favicon.ico`
+- mirror-manifest.json:177 · external URL · `https://flowmaxpros.com/icon-192.png`
+- mirror-manifest.json:183 · external URL · `https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html`
+- mirror-manifest.json:189 · external URL · `https://www.googletagmanager.com/a?id=%3C!--%20Google%20tag%20(gtag.js`
+- mirror-manifest.json:189 · external URL · `https://www.googletagmanager.com/gtag/js?id=G-WEDSF6C46K%22%3E%3C/script%3E%20%3Cscript%3E%20%20%20window.dataLayer%20=%20window.dataLayer%20||%20[];%20%20%20fu`
+- mirror-manifest.json:195 · external URL · `https://js.stripe.com/v3/fingerprinted/js/trusted-types-checker-e80b3cae3b1db2e27d3062d4e7b03473.js`
+- mirror-manifest.json:201 · external URL · `https://analytics.google.com/g/collect?v=2&tid=G-WEDSF6C46K&gtm=45be68s1v9228657299za200zb9228667264zd9228667264&_p=1788228042516&_gaz=1&gcd=13l3l3l3l1l1&npa=0&`
+- mirror-manifest.json:207 · external URL · `https://www.googletagmanager.com/a?id=%3C!--%20Google%20tag%20(gtag.js`
+- mirror-manifest.json:207 · external URL · `https://www.googletagmanager.com/gtag/js?id=G-WEDSF6C46K%22%3E%3C/script%3E%20%3Cscript%3E%20%20%20window.dataLayer%20=%20window.dataLayer%20||%20[];%20%20%20fu`
+- site/assets/index-Du2xdisQ.js:2 · external URL · `https://react.dev/errors/`
+- site/assets/index-Du2xdisQ.js:2 · external URL · `https://react.dev/errors/`
+- site/assets/index-Du2xdisQ.js:10 · external URL · `https://redux.js.org/Errors?code=${s}`
+- site/assets/index-Du2xdisQ.js:10 · external URL · `https://bit.ly/3cXEKWf'`
+- site/assets/index-Du2xdisQ.js:10 · external URL · `https://redux-toolkit.js.org/Errors?code=${s}`
+- site/assets/index-Du2xdisQ.js:10 · external URL · `https://tracking.offline.local/gtag/js?id=G-WEDSF6C46K`
+- site/assets/index-Du2xdisQ.js:10 · external URL · `https://tracking.offline.local/gtag/js?id=${s}',document.head.appendChild(t`
+- site/assets/index-Du2xdisQ.js:10 · external URL · `https://tracking.offline.local/gtag/js?id=G-WEDSF6C46K`
+- site/assets/index-Du2xdisQ.js:50 · external URL · `https://flowmaxpros.com/pricing?ref=${o}',w=(`
+- site/assets/index-Du2xdisQ.js:50 · external URL · `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(j`
+- site/assets/index-Du2xdisQ.js:50 · external URL · `https://twitter.com/intent/tweet?text=I%20use%20FlowMax%20Pros%20for%20my%20CRM%20automation.%20Try%20it%3A&url=${encodeURIComponent(j`
+- site/assets/index-Du2xdisQ.js:55 · external URL · `http://fb.me/use-check-prop-types`
+- site/assets/index-Du2xdisQ.js:56 · external URL · `https://stripe.com/docs/stripe-js/react#elements-props-stripe`
+- site/assets/index-Du2xdisQ.js:56 · external URL · `https://stripe.com/docs/stripe-js/react`
+- site/assets/index-Du2xdisQ.js:56 · external URL · `https://js.stripe.com`
+- site/assets/index-Du2xdisQ.js:56 · external URL · `https://docs.stripe.com/sdks/stripejs-versioning`
+- site/assets/index-Du2xdisQ.js:56 · external URL · `https://flowmaxpros.com`
+- site/assets/index-Du2xdisQ.js:56 · external URL · `https://flowmaxpros.com/checkout`
+- site/assets/index-Du2xdisQ.js:56 · external URL · `https://flowmaxpros.com/checkout`
+- site/assets/index-Du2xdisQ.js:56 · external URL · `https://flowmaxpros.com/subscribe`
+- site/assets/index-Du2xdisQ.js:56 · external URL · `https://flowmaxpros.com/subscribe`
+- site/assets/index-Du2xdisQ.js:56 · external URL · `https://flowmaxpros.com/pricing-comparison`
+- site/assets/index-Du2xdisQ.js:56 · external URL · `https://flowmaxpros.com/pricing-comparison`
+- site/assets/index-Du2xdisQ.js:56 · external URL · `https://flowmaxpros.com/pricing?ref=${u}'`
+- site/assets/index-Du2xdisQ.js:56 · external URL · `https://flowmaxpros.com/pricing?ref=${u}',className:`
+- site/assets/index-Du2xdisQ.js:56 · external URL · `https://flowmaxpros.com/pricing`
+- site/assets/index-Du2xdisQ.js:56 · external URL · `https://flowmaxpros.com/pricing`
+- site/assets/index-Du2xdisQ.js:56 · external URL · `https://flowmaxpros.com/features`
+- site/assets/index-Du2xdisQ.js:56 · external URL · `https://flowmaxpros.com/features`
+- site/assets/index-Du2xdisQ.js:56 · external URL · `https://flowmaxpros.com/`
+- site/assets/index-Du2xdisQ.js:56 · external URL · `https://flowmaxpros.com/basic-landing`
+- site/assets/index-Du2xdisQ.js:56 · external URL · `https://gsap.com`
+- site/assets/index-Du2xdisQ.js:64 · external URL · `https://flowmaxpros.com`
+- site/assets/index-Du2xdisQ.js:64 · external URL · `https://flowmaxpros.com`
+- site/assets/index-Du2xdisQ.js:64 · external URL · `https://flowmaxpros.com/fr`
+- site/assets/index-Du2xdisQ.js:64 · external URL · `https://flowmaxpros.com/fr`
+- site/assets/index-Du2xdisQ.js:128 · external URL · `https://flowmaxpros.com/tiktok-marketing`
+- site/assets/index-Du2xdisQ.js:128 · external URL · `https://flowmaxpros.com/tiktok-marketing`
+- site/assets/index-Du2xdisQ.js:128 · external URL · `https://flowmaxpros.com/video-production`
+- site/assets/index-Du2xdisQ.js:128 · external URL · `https://flowmaxpros.com/video-production`
+- site/assets/index-Du2xdisQ.js:128 · external URL · `https://flowmaxpros.com/demo-dashboard`
+- site/assets/index-Du2xdisQ.js:128 · external URL · `https://flowmaxpros.com/demo-dashboard`
+- site/assets/index-Du2xdisQ.js:128 · external URL · `https://flowmaxpros.com/`
+- site/assets/index-Du2xdisQ.js:128 · external URL · `https://flowmaxpros.com/sales-landing`
+- site/assets/index-Du2xdisQ.js:128 · external URL · `https://flowmaxpros.com/automation-builder`
+- site/assets/index-Du2xdisQ.js:128 · external URL · `https://flowmaxpros.com/automation-builder`
+- site/assets/index-Du2xdisQ.js:128 · external URL · `https://flowmaxpros.com/voice-command-center`
+- site/assets/index-Du2xdisQ.js:128 · external URL · `https://flowmaxpros.com/voice-command-center`
+- site/assets/index-Du2xdisQ.js:128 · external URL · `https://flowmaxpros.com/enterprise-security`
+- site/assets/index-Du2xdisQ.js:128 · external URL · `https://flowmaxpros.com/enterprise-security`
+- site/assets/index-Du2xdisQ.js:128 · external URL · `https://www.youtube.com/embed/${r.youtubeId}?autoplay=1&rel=0',className:`
+- site/assets/index-Du2xdisQ.js:128 · external URL · `https://flowmaxpros.com/tutorials`
+- site/assets/index-Du2xdisQ.js:128 · external URL · `https://flowmaxpros.com/tutorials`
+- site/assets/index-Du2xdisQ.js:139 · external URL · `https://flowmaxpros.com/multi-channel-orchestration`
+- site/assets/index-Du2xdisQ.js:139 · external URL · `https://flowmaxpros.com/multi-channel-orchestration`
+- site/assets/index-Du2xdisQ.js:139 · external URL · `https://flowmaxpros.com/sms-campaigns`
+- site/assets/index-Du2xdisQ.js:139 · external URL · `https://flowmaxpros.com/sms-campaigns`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/academy`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/academy`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://www.youtube.com/embed/${a.videoId}?autoplay=1&rel=0',className:`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/training-course`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/training-course`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/case-studies`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/case-studies`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/enterprise`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/enterprise`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://schema.org`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/dental-crm`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/dental`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/med-spa-crm`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/medspa`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/agency-crm`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/agency`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/coaching-crm`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/coaching`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/dental-crm`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/dental-crm`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/med-spa-crm`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/med-spa-crm`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/agency-crm`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/agency-crm`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/coaching-crm`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/coaching-crm`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/partnerships`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/partnerships`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/help`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/help`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://schema.org`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://schema.org`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://schema.org`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://schema.org`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://schema.org`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/ar`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/ar`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/es`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/es`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/de`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/de`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/integrations`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/integrations`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/tutoriels`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/tutoriels`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/tutoriales`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/tutoriales`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/arabic-tutorials`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com/arabic-tutorials`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://schema.org`
+- site/assets/index-Du2xdisQ.js:143 · external URL · `https://flowmaxpros.com`
+- 还有 35 条未展开
+
+## 结论
+- 需要处理上面的残留项后再声明可部署。
+
+## Provenance
+
+Formalized by OpenDesign from candidate 522e8c8c-dcc3-459d-bd89-643f98abd1c9.

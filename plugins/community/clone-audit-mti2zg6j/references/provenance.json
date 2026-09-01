@@ -1,0 +1,61 @@
+{
+  "candidateId": "522e8c8c-dcc3-459d-bd89-643f98abd1c9",
+  "projectId": "b83194cc-c9bf-4319-80b1-95d74beb67be",
+  "runId": "c19f852f-999c-4c6b-8a8f-6419cf6dea98",
+  "conversationId": "03d8e354-b31d-4340-857b-e4a0e6aed0b0",
+  "provenance": {
+    "summary": "Detected from CLONE_AUDIT.md, plugin-source/clone-audit-mti1zvqj/references/source-1-CLONE_AUDIT.md, plugin-source/clone-audit-mti1zvqj/SKILL.md, plugin-source/clone-audit-mti2ed7g/references/source-3-SKILL.md, plugin-source/clone-audit-mti2ed7g/references/source-2-source-1-CLONE_AUDIT.md, plugin-source/clone-audit-mti2ed7g/references/source-1-CLONE_AUDIT.md, plugin-source/clone-audit-mti2ed7g/SKILL.md after a successful run.",
+    "detectedAt": 1788231256910
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "CLONE_AUDIT.md",
+      "label": "CLONE_AUDIT.md",
+      "size": 45701,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/clone-audit-mti1zvqj/references/source-1-CLONE_AUDIT.md",
+      "label": "plugin-source/clone-audit-mti1zvqj/references/source-1-CLONE_AUDIT.md",
+      "size": 45701,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/clone-audit-mti1zvqj/SKILL.md",
+      "label": "plugin-source/clone-audit-mti1zvqj/SKILL.md",
+      "size": 45795,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/clone-audit-mti2ed7g/references/source-3-SKILL.md",
+      "label": "plugin-source/clone-audit-mti2ed7g/references/source-3-SKILL.md",
+      "size": 45795,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/clone-audit-mti2ed7g/references/source-2-source-1-CLONE_AUDIT.md",
+      "label": "plugin-source/clone-audit-mti2ed7g/references/source-2-source-1-CLONE_AUDIT.md",
+      "size": 45701,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/clone-audit-mti2ed7g/references/source-1-CLONE_AUDIT.md",
+      "label": "plugin-source/clone-audit-mti2ed7g/references/source-1-CLONE_AUDIT.md",
+      "size": 45701,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/clone-audit-mti2ed7g/SKILL.md",
+      "label": "plugin-source/clone-audit-mti2ed7g/SKILL.md",
+      "size": 45795,
+      "copied": true
+    }
+  ]
+}
