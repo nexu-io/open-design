@@ -216,12 +216,17 @@ export async function validateRunDeliverable(
       }),
     );
     if (!touched.has(entryFile)) {
-      // Export-only tasks: the prototype entry is intentionally untouched, but
-      // a touched artifact with a complete explicit manifest should be accepted
-      // as the deliverable entry instead of rejecting the run. The candidate
-      // must be touched in this run, carry a persisted (non-inferred) manifest
-      // bound to the file's own path, and have a status of `complete`.
-      const exportCandidate = files.find((file) => {
+      // Export-only tasks: the declared entry is intentionally left stale, but a
+      // touched artifact with a complete explicit manifest is a valid deliverable
+      // regardless of the project's declared kind. The candidate must (a) be
+      // touched in this run, (b) carry a persisted (non-inferred) manifest, (c)
+      // have status `complete`, and (d) its manifest must be bound to the file's
+      // own path. Unlike the declared-entry path, no project-kind compatibility
+      // check is applied — a complete manifest is the deliverable's own contract.
+      // When multiple candidates qualify the first readable one wins; this
+      // matches the declared-entry strategy of always taking the single
+      // compatible file rather than presenting a disambiguation UI.
+      const exportCandidates = files.filter((file) => {
         const candidatePath = filePath(file);
         const manifest = file.artifactManifest;
         if (!manifest || manifest.status !== 'complete') return false;
@@ -231,49 +236,40 @@ export async function validateRunDeliverable(
         if (manifest.metadata?.inferred === true) return false;
         return touched.has(candidatePath);
       });
-      if (exportCandidate) {
-        const exportEntryFile = filePath(exportCandidate);
-        // Resolve the artifact's kind for the type check. The manifest's
-        // ArtifactKind (e.g. 'markdown-document') maps to a different namespace
-        // than ProjectFileKind (e.g. 'document'); cast to string to handle the
-        // cross-namespace comparison and map to the right bucket.
-        const mk = exportCandidate.artifactKind as string | undefined;
-        const exportArtifactKind: ProjectFileKind =
+
+      for (const candidate of exportCandidates) {
+        const candidatePath = filePath(candidate);
+        const manifest = candidate.artifactManifest!;
+        // Map the manifest's ArtifactKind namespace to ProjectFileKind so the
+        // result field carries the user-meaningful value.
+        const mk = manifest.kind as string | undefined;
+        const candidateArtifactKind: ProjectFileKind =
           mk === 'markdown-document' ? 'document'
           : mk === 'pptx-presentation' ? 'presentation'
           : mk === 'xlsx-document' ? 'spreadsheet'
-          : exportCandidate.kind;
-        const exportFacts = {
-          entryFile: exportEntryFile,
-          artifactKind: exportArtifactKind,
-        };
-        if (!matchesAcceptedKinds(acceptedKinds, exportArtifactKind)) {
-          return {
-            valid: false,
-            validation: 'type_mismatch',
-            ...exportFacts,
-          };
-        }
+          : candidate.kind;
+
         try {
-          const target = path.resolve(projectRoot, exportEntryFile);
+          const target = path.resolve(projectRoot, candidatePath);
           const relative = path.relative(projectRoot, target);
           if (relative.startsWith('..') || path.isAbsolute(relative)) {
-            return { valid: false, validation: 'entry_unreadable', ...exportFacts };
+            continue;
           }
           const stat = await fs.stat(target);
           if (!stat.isFile()) {
-            return { valid: false, validation: 'entry_unreadable', ...exportFacts };
+            continue;
           }
           const handle = await fs.open(target, 'r');
           await handle.close();
+          return {
+            valid: true,
+            validation: 'valid',
+            entryFile: candidatePath,
+            artifactKind: candidateArtifactKind,
+          };
         } catch {
-          return { valid: false, validation: 'entry_unreadable', ...exportFacts };
+          continue;
         }
-        return {
-          valid: true,
-          validation: 'valid',
-          ...exportFacts,
-        };
       }
       return {
         valid: false,

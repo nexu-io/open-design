@@ -212,15 +212,10 @@ describe('run deliverable validation', () => {
 
   describe('export-only artifact validation', () => {
     it('accepts a touched export artifact with a complete manifest when the declared entry is stale', async () => {
-      // Regression: nexu-io/open-design#7580. With the manifest's
-      // `kind` honored (markdown-document → document), a Markdown
-      // export is accepted as the deliverable for a `brand` project
-      // (which accepts `document` alongside `html` and `pdf`).
-      // Without the manifest-kind mapping the candidate falls back to
-      // its file-extension kind (`text` for .md), which `brand` does
-      // not accept, so the run reports `validation: type_mismatch`
-      // and `entry_not_touched` despite a valid, complete export
-      // manifest.
+      // Regression: nexu-io/open-design#7580. The export-only fallback bypasses
+      // the project-kind compatibility gate — a complete explicit manifest is
+      // its own contract. A brand project with a stale HTML entry and a touched,
+      // complete Markdown export should therefore report `valid`.
       const fixture = await projectFixture({
         'fitcv-brand-style-guide.html': '<!doctype html><title>Stale brand</title>',
         'fitcv-design-system-export.md': '# Design System Export',
@@ -246,9 +241,9 @@ describe('run deliverable validation', () => {
           artifactCount: 1,
           touchedPaths: ['fitcv-design-system-export.md'],
           projectMetadata: {
-            // brand is the only project kind that accepts `document`
-            // alongside `html` and `pdf`, so a markdown export carrying
-            // a markdown-document manifest passes the type check.
+            // brand is shown here; the key guarantee is that the project kind
+            // is irrelevant for export candidates — a complete manifest is valid
+            // on any project kind.
             kind: 'brand',
             entryFile: 'fitcv-brand-style-guide.html',
           },
@@ -261,11 +256,12 @@ describe('run deliverable validation', () => {
       });
     });
 
-    it('rejects a markdown export on a prototype project (kind: prototype)', async () => {
-      // Companion to the brand test above: prototype projects accept
-      // only `html`. A markdown export is not a valid deliverable for
-      // them regardless of manifest kind, so the run correctly fails
-      // with type_mismatch.
+    it('accepts a touched markdown export on a prototype project (project kind is irrelevant)', async () => {
+      // Companion to the brand test above: the export-only path ignores
+      // `acceptedDeliverableKinds`. A complete, explicit markdown-document
+      // manifest is valid on a prototype project too — the manifest is
+      // the deliverable's own contract, not a subordination to the
+      // project's Home surface.
       const fixture = await projectFixture({
         'index.html': '<!doctype html><title>Stale prototype</title>',
         'export.md': '# Export',
@@ -293,9 +289,49 @@ describe('run deliverable validation', () => {
           },
         }),
       ).resolves.toMatchObject({
-        valid: false,
-        validation: 'type_mismatch',
+        valid: true,
+        validation: 'valid',
         entryFile: 'export.md',
+        artifactKind: 'document',
+      });
+    });
+
+    it('selects the first readable export candidate among multiple compatible ones', async () => {
+      // Multiple touched export candidates: the loop returns the first readable
+      // one. ListFiles order is deterministic for the same fixture, so the
+      // alphabetically-first candidate (export-a.md) wins.
+      const fixture = await projectFixture({
+        'index.html': '<!doctype html><title>Stale</title>',
+        'export-b.md': '# Export B',
+        'export-b.md.artifact.json': JSON.stringify({
+          version: 1, kind: 'markdown-document', title: 'export-b.md',
+          entry: 'export-b.md', renderer: 'markdown', status: 'complete',
+          exports: ['md'], metadata: {},
+        }),
+        'export-a.md': '# Export A',
+        'export-a.md.artifact.json': JSON.stringify({
+          version: 1, kind: 'markdown-document', title: 'export-a.md',
+          entry: 'export-a.md', renderer: 'markdown', status: 'complete',
+          exports: ['md'], metadata: {},
+        }),
+      });
+
+      await expect(
+        validateRunDeliverable({
+          ...fixture,
+          runStatus: 'succeeded',
+          artifactCount: 2,
+          touchedPaths: ['export-a.md', 'export-b.md'],
+          projectMetadata: {
+            kind: 'prototype',
+            entryFile: 'index.html',
+          },
+        }),
+      ).resolves.toMatchObject({
+        valid: true,
+        validation: 'valid',
+        // Files are listed alphabetically; export-a.md wins as the first match.
+        entryFile: 'export-a.md',
         artifactKind: 'document',
       });
     });
@@ -428,21 +464,20 @@ describe('run deliverable validation', () => {
       });
     });
 
-    it('rejects when the manifest kind does not map to the project-accepted kinds', async () => {
-      // The mapping only handles the common export kinds (markdown-document,
-      // pptx-presentation, xlsx-document). For every other manifest kind we
-      // fall back to the file-extension heuristic, which still gates on
-      // `acceptedKinds` — a `code-snippet` manifest on a `.md` file is
-      // `text` (file-extension) which `prototype` does not accept, so the
-      // export still fails with `type_mismatch`.
+    it('maps unknown manifest kinds to file-extension kind in the result artifactKind field', async () => {
+      // The manifest-kind → ProjectFileKind mapping only handles the common export
+      // kinds. For other valid manifest kinds (in ALLOWED_KINDS but not mapped)
+      // the result's `artifactKind` falls back to the file-extension kind, while
+      // the validation itself still succeeds — export candidates bypass
+      // acceptedKinds entirely.
       const fixture = await projectFixture({
         'index.html': '<!doctype html><title>Stale</title>',
         'export.md': '#',
         'export.md.artifact.json': JSON.stringify({
           version: 1,
-          // code-snippet IS in the manifest ALLOWED_KINDS so it parses, but
-          // it is not a recognized export kind → falls back to file kind
-          // (`text` for .md), which prototype does not accept.
+          // code-snippet is in ALLOWED_KINDS but not in our mapping → falls back
+          // to file-extension kind. The manifest still validates and the
+          // export is accepted; only the reported artifactKind differs.
           kind: 'code-snippet',
           title: 'export.md',
           entry: 'export.md',
@@ -465,9 +500,10 @@ describe('run deliverable validation', () => {
           },
         }),
       ).resolves.toMatchObject({
-        valid: false,
-        validation: 'type_mismatch',
+        valid: true,
+        validation: 'valid',
         entryFile: 'export.md',
+        // Falls back to file-extension kind since 'code-snippet' is not mapped.
         artifactKind: 'text',
       });
     });
