@@ -74,6 +74,13 @@ export function wellKnownUserToolchainBins(
   if (vpHome) {
     dirs.push(join(vpHome, "bin"));
   }
+  // The official DeepSeek Harness installer keeps its user-managed runtime
+  // under DSH_HOME (default: ~/.dsh). GUI launches do not source shell
+  // startup files, so the dsh shim inside that runtime must be searched even
+  // when neither the nvm-managed wrapper nor PATH is available. DSH_BIN
+  // remains the explicit per-runtime override.
+  const dshHome = resolveUserScopedHome(env.DSH_HOME, home) || join(home, ".dsh");
+  dirs.push(join(dshHome, "runtime", "node_modules", ".bin"));
   // The user's *explicit* npm prefix outranks every conventional
   // location below — including `~/.local/bin`. The env var is the
   // user's current npm configuration, so a binary installed via
