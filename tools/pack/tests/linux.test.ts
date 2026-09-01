@@ -27,12 +27,15 @@ vi.mock("@open-design/sidecar", async (importOriginal) => {
 
 import type { ToolPackConfig } from "@/config/index.js";
 import {
+  assertLinuxAppImageSize,
   buildDockerArgs,
   cleanupPackedLinuxNamespace,
   createLinuxDesktopLaunchEnv,
   inspectPackedLinuxApp,
+  LINUX_APPIMAGE_MAX_BYTES,
   LINUX_APPIMAGE_EXECUTABLE_ARGS,
   matchesAppImageProcess,
+  pruneLinuxOnnxRuntime,
   renderDesktopTemplate,
   renderLinuxAppImageAppRun,
   renderLinuxPackagedMainEntry,
@@ -656,6 +659,77 @@ describe("resolveProductionInstallCommand", () => {
       args: ["install", "--prod", "--no-lockfile", "--config.node-linker=hoisted"],
     });
     expect(resolved.command).not.toBe("npm");
+  });
+});
+
+describe("Linux CPU-only ONNX packaging", () => {
+  it("removes GPU providers while preserving the CPU runtime", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-onnx-prune-"));
+    const napiRoot = join(root, "node_modules", "onnxruntime-node", "bin", "napi-v3");
+    const runtimeRoot = join(napiRoot, "linux", "x64");
+    const armRuntimeRoot = join(napiRoot, "linux", "arm64");
+    const retainedFiles = [
+      "libonnxruntime.so.1",
+      "libonnxruntime.so.1.21.1",
+      "libonnxruntime_providers_shared.so",
+      "onnxruntime_binding.node",
+    ];
+    const removedFiles = [
+      "libonnxruntime_providers_cuda.so",
+      "libonnxruntime_providers_tensorrt.so",
+    ];
+
+    try {
+      await mkdir(runtimeRoot, { recursive: true });
+      await mkdir(armRuntimeRoot, { recursive: true });
+      await mkdir(join(napiRoot, "darwin", "x64"), { recursive: true });
+      await mkdir(join(napiRoot, "win32", "x64"), { recursive: true });
+      await Promise.all([...retainedFiles, ...removedFiles].map((fileName) => writeFile(join(runtimeRoot, fileName), fileName)));
+      await Promise.all([
+        writeFile(join(armRuntimeRoot, "libonnxruntime.so.1"), "runtime"),
+        writeFile(join(armRuntimeRoot, "onnxruntime_binding.node"), "binding"),
+      ]);
+
+      await pruneLinuxOnnxRuntime(root, "x64");
+
+      for (const fileName of retainedFiles) {
+        expect(await pathExists(join(runtimeRoot, fileName))).toBe(true);
+      }
+      for (const fileName of removedFiles) {
+        expect(await pathExists(join(runtimeRoot, fileName))).toBe(false);
+      }
+      expect(await pathExists(armRuntimeRoot)).toBe(false);
+      expect(await pathExists(join(napiRoot, "darwin"))).toBe(false);
+      expect(await pathExists(join(napiRoot, "win32"))).toBe(false);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("fails closed when the CPU runtime is incomplete", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-onnx-incomplete-"));
+    const runtimeRoot = join(root, "node_modules", "onnxruntime-node", "bin", "napi-v3", "linux", "x64");
+
+    try {
+      await mkdir(runtimeRoot, { recursive: true });
+      await writeFile(join(runtimeRoot, "onnxruntime_binding.node"), "binding");
+
+      await expect(pruneLinuxOnnxRuntime(root, "x64")).rejects.toThrow("CPU ONNX runtime library is missing");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("Linux AppImage size budget", () => {
+  it("accepts an artifact at the Stage 1 size limit", () => {
+    expect(() => assertLinuxAppImageSize(LINUX_APPIMAGE_MAX_BYTES, "/tmp/Open Design.AppImage")).not.toThrow();
+  });
+
+  it("rejects an artifact over the Stage 1 size limit", () => {
+    expect(() => assertLinuxAppImageSize(LINUX_APPIMAGE_MAX_BYTES + 1, "/tmp/Open Design.AppImage")).toThrow(
+      `exceeds ${LINUX_APPIMAGE_MAX_BYTES} byte size budget`,
+    );
   });
 });
 

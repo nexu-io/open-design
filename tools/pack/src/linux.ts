@@ -46,6 +46,12 @@ const CONTAINER_PNPM_PATH = "/tmp/pnpm";
 const CONTAINER_PNPM_HOME = "/tmp/pnpm-home";
 const CONTAINER_NODE_VERSION = "24.14.1";
 const CONTAINER_TOOLS_PACK_CLI_PATH = "tools/pack/bin/tools-pack.mjs";
+const LINUX_GPU_ONNX_PROVIDER_FILES = [
+  "libonnxruntime_providers_cuda.so",
+  "libonnxruntime_providers_tensorrt.so",
+] as const;
+
+export const LINUX_APPIMAGE_MAX_BYTES = 525_000_000;
 
 export const INTERNAL_PACKAGES = [
   { directory: "packages/release", name: "@open-design/release" },
@@ -456,6 +462,74 @@ async function runProductionInstall(appRoot: string): Promise<void> {
   });
 }
 
+export async function pruneLinuxOnnxRuntime(
+  appRoot: string,
+  architecture = process.arch,
+): Promise<string[]> {
+  const runtimeRoot = join(
+    appRoot,
+    "node_modules",
+    "onnxruntime-node",
+    "bin",
+    "napi-v3",
+  );
+  const linuxRuntimeRoot = join(runtimeRoot, "linux");
+  const targetRuntimeDirectory = join(linuxRuntimeRoot, architecture);
+  if (!(await pathExists(targetRuntimeDirectory))) {
+    throw new Error(`Linux ONNX runtime not found after production install: ${targetRuntimeDirectory}`);
+  }
+  const removed: string[] = [];
+
+  for (const platformName of ["darwin", "win32"]) {
+    const platformPath = join(runtimeRoot, platformName);
+    if (await pathExists(platformPath)) {
+      await rm(platformPath, { recursive: true });
+      removed.push(platformPath);
+    }
+  }
+  const architectureEntries = await readdir(linuxRuntimeRoot, { withFileTypes: true });
+  for (const architectureEntry of architectureEntries) {
+    if (!architectureEntry.isDirectory()) continue;
+    const runtimeDirectory = join(linuxRuntimeRoot, architectureEntry.name);
+    if (architectureEntry.name !== architecture) {
+      await rm(runtimeDirectory, { recursive: true });
+      removed.push(runtimeDirectory);
+    }
+  }
+
+  for (const fileName of LINUX_GPU_ONNX_PROVIDER_FILES) {
+    const filePath = join(targetRuntimeDirectory, fileName);
+    if (await pathExists(filePath)) {
+      await rm(filePath);
+      removed.push(filePath);
+    }
+  }
+
+  const remainingFiles = await readdir(targetRuntimeDirectory);
+  if (!remainingFiles.includes("onnxruntime_binding.node")) {
+    throw new Error(
+      `CPU ONNX runtime is incomplete after Linux packaging prune: ${join(targetRuntimeDirectory, "onnxruntime_binding.node")}`,
+    );
+  }
+  if (!remainingFiles.some((fileName) => fileName.startsWith("libonnxruntime.so."))) {
+    throw new Error(`CPU ONNX runtime library is missing after Linux packaging prune: ${targetRuntimeDirectory}`);
+  }
+  for (const fileName of LINUX_GPU_ONNX_PROVIDER_FILES) {
+    if (remainingFiles.includes(fileName)) {
+      throw new Error(`GPU ONNX provider remains in CPU-only Linux package: ${join(targetRuntimeDirectory, fileName)}`);
+    }
+  }
+  return removed;
+}
+
+export function assertLinuxAppImageSize(bytes: number, appImagePath: string): void {
+  if (bytes > LINUX_APPIMAGE_MAX_BYTES) {
+    throw new Error(
+      `Linux AppImage exceeds ${LINUX_APPIMAGE_MAX_BYTES} byte size budget: ${appImagePath} is ${bytes} bytes`,
+    );
+  }
+}
+
 async function readPackagedVersion(config: ToolPackConfig): Promise<string> {
   return readRuntimeAppVersion(config);
 }
@@ -608,6 +682,7 @@ async function writeAssembledApp(
   );
 
   await runProductionInstall(paths.assembledAppRoot);
+  await pruneLinuxOnnxRuntime(paths.assembledAppRoot);
 }
 
 async function writeLinuxAppImageAppRun(paths: LinuxPaths): Promise<void> {
@@ -754,6 +829,9 @@ export async function packLinux(config: ToolPackConfig): Promise<LinuxPackResult
   await runElectronBuilderLinux(config, paths);
 
   const appImagePath = config.to === "dir" ? null : await findBuiltAppImage(paths);
+  if (appImagePath != null) {
+    assertLinuxAppImageSize((await stat(appImagePath)).size, appImagePath);
+  }
   return {
     appImagePath,
     outputRoot: paths.appBuilderOutputRoot,
