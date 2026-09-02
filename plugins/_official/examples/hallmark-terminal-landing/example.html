@@ -1,0 +1,624 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shipcast — deploys you can read from the terminal</title>
+  <meta name="description" content="Push a build, watch every stage stream into your terminal, and roll back with one command. No dashboard hop, no YAML archaeology." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Geist:wght@400;500;600&display=swap" />
+  <style>
+    /* Terminal-mono developer-tool landing · Workbench macrostructure
+     * theme: Midnight · accent: phosphor-cyan · CSS-art pipeline panel (sticky-pinned) */
+
+    :root {
+      --color-paper: oklch(15% 0.012 240);
+      --color-paper-2: oklch(19% 0.014 240);
+      --color-paper-3: oklch(23% 0.014 240);
+      --color-rule: oklch(30% 0.012 240);
+      --color-ink: oklch(94% 0.010 240);
+      --color-ink-soft: oklch(70% 0.012 240);
+      --color-ink-muted: oklch(55% 0.012 240);
+      --color-accent: oklch(82% 0.18 200);
+      --color-accent-dim: oklch(58% 0.13 200);
+      --color-warn: oklch(78% 0.16 50);
+      --color-error: oklch(68% 0.20 30);
+
+      --font-display: "Geist Mono", "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+      --font-body: "Geist", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+      --space-3xs: 0.25rem;
+      --space-2xs: 0.5rem;
+      --space-xs: 0.75rem;
+      --space-sm: 1rem;
+      --space-md: 1.5rem;
+      --space-lg: 2rem;
+      --space-xl: 3rem;
+      --space-2xl: 4.5rem;
+      --space-3xl: 6.5rem;
+      --space-4xl: 9rem;
+
+      --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+      --dur-micro: 100ms;
+      --dur-short: 200ms;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { overflow-x: clip; }
+
+    body {
+      margin: 0;
+      background: var(--color-paper);
+      color: var(--color-ink);
+      font-family: var(--font-body);
+      font-size: 0.9375rem;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page { max-width: 80rem; margin: 0 auto; padding: 0 var(--space-lg); }
+
+    /* Masthead */
+    .masthead {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: var(--space-md) 0;
+      border-block-end: 1px solid var(--color-rule);
+      font-family: var(--font-display);
+      font-size: 0.8125rem;
+      letter-spacing: 0.04em;
+      color: var(--color-ink-soft);
+    }
+
+    .masthead__brand { color: var(--color-ink); font-weight: 500; }
+    .masthead__brand .dot {
+      display: inline-block;
+      width: 0.55ch;
+      height: 0.55ch;
+      background: var(--color-accent);
+      border-radius: 50%;
+      margin-inline-end: 0.5ch;
+      vertical-align: 0.1em;
+    }
+
+    .masthead__nav { display: flex; gap: var(--space-md); }
+    .masthead__nav a {
+      color: var(--color-ink-soft);
+      text-decoration: none;
+      transition: color var(--dur-micro) var(--ease-out);
+    }
+    .masthead__nav a:hover, .masthead__nav a:focus-visible { color: var(--color-ink); }
+    .masthead__nav a:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+
+    /* Hero */
+    .hero {
+      padding: var(--space-3xl) 0 var(--space-2xl);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-2xl);
+      align-items: end;
+      border-block-end: 1px solid var(--color-rule);
+    }
+
+    .hero__copy { max-width: 36rem; }
+
+    .hero__eyebrow {
+      font-family: var(--font-display);
+      font-size: 0.75rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--color-accent);
+      margin: 0 0 var(--space-md);
+    }
+
+    .hero__head {
+      font-family: var(--font-display);
+      font-size: clamp(2rem, 4.5vw, 3.75rem);
+      font-weight: 500;
+      line-height: 1.05;
+      letter-spacing: -0.025em;
+      margin: 0 0 var(--space-md);
+      color: var(--color-ink);
+    }
+
+    .hero__head em {
+      font-style: normal;
+      color: var(--color-accent);
+    }
+
+    .hero__sub {
+      font-size: 1.0625rem;
+      line-height: 1.5;
+      color: var(--color-ink-soft);
+      margin: 0 0 var(--space-lg);
+      max-width: 56ch;
+    }
+
+    .hero__cta { display: flex; gap: var(--space-sm); flex-wrap: wrap; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5ch;
+      padding: var(--space-sm) var(--space-md);
+      font-family: var(--font-display);
+      font-size: 0.875rem;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      text-decoration: none;
+      border: 1px solid var(--color-rule);
+      background: transparent;
+      color: var(--color-ink);
+      cursor: pointer;
+      line-height: 1;
+      transition: background var(--dur-micro) var(--ease-out),
+                  border-color var(--dur-micro) var(--ease-out),
+                  color var(--dur-micro) var(--ease-out);
+    }
+    .btn--primary {
+      background: var(--color-accent);
+      color: var(--color-paper);
+      border-color: var(--color-accent);
+    }
+    .btn--primary:hover, .btn--primary:focus-visible {
+      background: var(--color-ink);
+      border-color: var(--color-ink);
+    }
+    .btn:hover, .btn:focus-visible { border-color: var(--color-accent); color: var(--color-accent); }
+    .btn--primary:hover, .btn--primary:focus-visible { color: var(--color-paper); }
+    .btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+
+    /* Hero — sample pipeline card on the right */
+    .hero__panel {
+      background: var(--color-paper-2);
+      border: 1px solid var(--color-rule);
+      border-radius: 6px;
+      padding: var(--space-md);
+      font-family: var(--font-display);
+      font-size: 0.75rem;
+      line-height: 1.5;
+    }
+
+    .hero__panel-head {
+      display: flex; justify-content: space-between;
+      color: var(--color-ink-soft);
+      letter-spacing: 0.04em;
+      border-block-end: 1px solid var(--color-rule);
+      padding-block-end: var(--space-2xs);
+      margin-block-end: var(--space-sm);
+    }
+
+    .trace { display: grid; gap: 4px; }
+    .span {
+      display: grid;
+      grid-template-columns: 14ch 1fr 6ch;
+      gap: var(--space-2xs);
+      align-items: center;
+    }
+    .span__label { color: var(--color-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .span__bar {
+      height: 8px;
+      background: var(--color-paper-3);
+      position: relative;
+      border-radius: 1px;
+      overflow: hidden;
+    }
+    .span__fill {
+      position: absolute;
+      inset: 0;
+      background: var(--color-accent);
+      border-radius: 1px;
+    }
+    .span--err .span__fill { background: var(--color-error); }
+    .span--warn .span__fill { background: var(--color-warn); }
+    .span__time { font-variant-numeric: tabular-nums; color: var(--color-ink-soft); text-align: end; }
+
+    /* Workbench — sticky steps + pinned panel */
+    .workbench {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+      gap: var(--space-2xl);
+      padding: var(--space-3xl) 0;
+      border-block-end: 1px solid var(--color-rule);
+    }
+
+    .steps { display: grid; gap: var(--space-3xl); }
+
+    .step {
+      border-inline-start: 2px solid var(--color-rule);
+      padding-inline-start: var(--space-lg);
+      position: relative;
+    }
+
+    .step::before {
+      content: "";
+      position: absolute;
+      inset-inline-start: -2px;
+      inset-block-start: 0;
+      width: 2px;
+      height: 0;
+      background: var(--color-accent);
+      transition: height var(--dur-short) var(--ease-out);
+    }
+
+    .step:hover::before, .step:focus-within::before { height: 100%; }
+
+    .step__num {
+      font-family: var(--font-display);
+      font-size: 0.75rem;
+      letter-spacing: 0.12em;
+      color: var(--color-accent);
+      text-transform: uppercase;
+      margin-block-end: var(--space-sm);
+    }
+
+    .step__head {
+      font-family: var(--font-display);
+      font-size: clamp(1.5rem, 2.5vw, 2rem);
+      font-weight: 500;
+      letter-spacing: -0.015em;
+      line-height: 1.1;
+      color: var(--color-ink);
+      margin: 0 0 var(--space-md);
+    }
+
+    .step__body {
+      font-size: 1rem;
+      line-height: 1.6;
+      color: var(--color-ink-soft);
+      margin: 0 0 var(--space-md);
+      max-width: 48ch;
+    }
+
+    .step__body strong { color: var(--color-ink); font-weight: 500; }
+
+    .step__code {
+      background: var(--color-paper-2);
+      border: 1px solid var(--color-rule);
+      border-radius: 4px;
+      padding: var(--space-sm) var(--space-md);
+      font-family: var(--font-display);
+      font-size: 0.8125rem;
+      line-height: 1.6;
+      color: var(--color-ink);
+      overflow-x: auto;
+    }
+
+    .step__code .k { color: var(--color-accent); }
+    .step__code .c { color: var(--color-ink-muted); }
+    .step__code .s { color: var(--color-warn); }
+
+    .pinned {
+      position: sticky;
+      top: var(--space-xl);
+      height: fit-content;
+      background: var(--color-paper-2);
+      border: 1px solid var(--color-rule);
+      border-radius: 6px;
+      padding: var(--space-lg);
+    }
+
+    .pinned__head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--font-display);
+      font-size: 0.75rem;
+      letter-spacing: 0.06em;
+      color: var(--color-ink-soft);
+      border-block-end: 1px solid var(--color-rule);
+      padding-block-end: var(--space-sm);
+      margin-block-end: var(--space-md);
+    }
+
+    .pinned__chip {
+      font-family: var(--font-display);
+      font-size: 0.6875rem;
+      letter-spacing: 0.08em;
+      padding: 2px 6px;
+      border: 1px solid var(--color-accent);
+      color: var(--color-accent);
+      border-radius: 2px;
+    }
+
+    .pinned__body { display: grid; gap: 4px; font-family: var(--font-display); font-size: 0.75rem; }
+
+    .pinned__why {
+      margin-block-start: var(--space-md);
+      padding-block-start: var(--space-md);
+      border-block-start: 1px solid var(--color-rule);
+      font-family: var(--font-body);
+      font-size: 0.875rem;
+      color: var(--color-ink-soft);
+      line-height: 1.5;
+    }
+
+    .pinned__why strong { color: var(--color-accent); font-weight: 500; }
+
+    /* Targets strip */
+    .integrations {
+      padding: var(--space-2xl) 0;
+      border-block-end: 1px solid var(--color-rule);
+    }
+
+    .integrations__head {
+      font-family: var(--font-display);
+      font-size: 0.75rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--color-ink-soft);
+      margin: 0 0 var(--space-lg);
+    }
+
+    .integrations__grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: var(--space-md);
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .integrations__grid li {
+      font-family: var(--font-display);
+      font-size: 0.875rem;
+      color: var(--color-ink);
+      border: 1px solid var(--color-rule);
+      border-radius: 4px;
+      padding: var(--space-sm);
+      text-align: center;
+    }
+
+    /* Pricing */
+    .pricing {
+      padding: var(--space-3xl) 0;
+      border-block-end: 1px solid var(--color-rule);
+    }
+
+    .pricing__head {
+      font-family: var(--font-display);
+      font-size: 0.75rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--color-ink-soft);
+      margin: 0 0 var(--space-2xl);
+    }
+
+    .tiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-md); }
+
+    .tier {
+      border: 1px solid var(--color-rule);
+      border-radius: 6px;
+      padding: var(--space-lg);
+      background: var(--color-paper-2);
+    }
+
+    .tier--feature { border-color: var(--color-accent); }
+
+    .tier__name {
+      font-family: var(--font-display);
+      font-size: 0.875rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--color-ink);
+      margin: 0 0 var(--space-sm);
+    }
+
+    .tier__price {
+      font-family: var(--font-display);
+      font-size: 2rem;
+      font-weight: 500;
+      color: var(--color-ink);
+      line-height: 1;
+      margin: 0 0 var(--space-md);
+    }
+
+    .tier__price .per {
+      font-size: 0.875rem;
+      color: var(--color-ink-soft);
+      font-weight: 400;
+    }
+
+    .tier__list {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 var(--space-md);
+      display: grid;
+      gap: var(--space-2xs);
+      font-size: 0.875rem;
+      color: var(--color-ink-soft);
+    }
+
+    .tier__list li::before {
+      content: "—";
+      color: var(--color-accent);
+      margin-inline-end: 0.5ch;
+    }
+
+    /* Colophon */
+    .colophon {
+      padding: var(--space-md) 0;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--space-sm);
+      font-family: var(--font-display);
+      font-size: 0.75rem;
+      letter-spacing: 0.06em;
+      color: var(--color-ink-soft);
+    }
+
+    .colophon a { color: var(--color-ink-soft); text-decoration: none; transition: color var(--dur-micro) var(--ease-out); }
+    .colophon a:hover, .colophon a:focus-visible { color: var(--color-accent); }
+    .colophon a:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+
+    @media (max-width: 56rem) {
+      .hero { grid-template-columns: 1fr; }
+      .workbench { grid-template-columns: 1fr; }
+      .pinned { position: static; }
+      .tiers { grid-template-columns: 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .step::before { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="masthead">
+      <span class="masthead__brand"><span class="dot"></span>shipcast · v1.2</span>
+      <nav class="masthead__nav">
+        <a href="#walkthrough">Walkthrough</a>
+        <a href="#targets">Targets</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#">Docs</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <div class="hero__copy">
+        <p class="hero__eyebrow">For backend &amp; platform teams</p>
+        <h1 class="hero__head">Deploys you can <em>read.</em></h1>
+        <p class="hero__sub">
+          Push a build. Watch every stage stream into your terminal as it happens — build, test,
+          bundle, activate. When something breaks, the failing stage tells you why in plain text.
+          No dashboard hop, no YAML archaeology.
+        </p>
+        <div class="hero__cta">
+          <a class="btn btn--primary" href="#">Install the CLI <span aria-hidden="true">→</span></a>
+          <a class="btn" href="#">Read the docs</a>
+        </div>
+      </div>
+      <aside class="hero__panel" aria-label="Sample deploy preview">
+        <div class="hero__panel-head"><span>deploy · f81c20d</span><span>92s</span></div>
+        <div class="trace">
+          <div class="span"><span class="span__label">release.main</span><span class="span__bar"><span class="span__fill" style="width:100%"></span></span><span class="span__time">92s</span></div>
+          <div class="span"><span class="span__label">↳ build.image</span><span class="span__bar"><span class="span__fill" style="width:38%"></span></span><span class="span__time">35s</span></div>
+          <div class="span"><span class="span__label">↳ test.suite</span><span class="span__bar"><span class="span__fill" style="width:30%"></span></span><span class="span__time">28s</span></div>
+          <div class="span span--warn"><span class="span__label">&nbsp;&nbsp;↳ warm</span><span class="span__bar"><span class="span__fill" style="width:18%"></span></span><span class="span__time">17s</span></div>
+          <div class="span"><span class="span__label">↳ activate</span><span class="span__bar"><span class="span__fill" style="width:13%"></span></span><span class="span__time">12s</span></div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="workbench" id="walkthrough">
+      <div class="steps">
+        <article class="step">
+          <p class="step__num">step 01 · ship</p>
+          <h2 class="step__head">Ship from the prompt, not a pipeline page.</h2>
+          <p class="step__body">
+            One command takes the current commit, builds it in a clean sandbox, and streams every
+            stage back to your terminal. The deploy is the unit of work — not a run ID buried
+            three tabs deep in a CI console.
+          </p>
+          <div class="step__code"><span class="c"># ship the current branch</span><br/><span class="k">$</span> shipcast up --env production</div>
+        </article>
+
+        <article class="step">
+          <p class="step__num">step 02 · watch</p>
+          <h2 class="step__head">Watch health, not log soup.</h2>
+          <p class="step__body">
+            After activation, Shipcast tails <strong>error rate, latency, and saturation against the
+            release before it</strong>. If the new release drifts past your thresholds, the watch
+            command says exactly which check tripped and when.
+          </p>
+          <div class="step__code"><span class="c"># compare against the last release</span><br/><span class="k">$</span> shipcast watch --baseline previous</div>
+        </article>
+
+        <article class="step">
+          <p class="step__num">step 03 · undo</p>
+          <h2 class="step__head">Roll back with one word.</h2>
+          <p class="step__body">
+            Every release keeps its <strong>full artifact and config snapshot</strong>. Rolling back
+            re-activates the previous snapshot in seconds — no rebuild, no re-test, no waiting on a
+            queue while production burns.
+          </p>
+          <div class="step__code"><span class="c"># back to the last healthy release</span><br/><span class="k">$</span> shipcast rollback <span class="s">"stable"</span></div>
+        </article>
+      </div>
+
+      <aside class="pinned" aria-label="Pinned deploy panel">
+        <header class="pinned__head">
+          <span>deploy · f81c20d</span>
+          <span class="pinned__chip">LIVE</span>
+        </header>
+        <div class="pinned__body">
+          <div class="span"><span class="span__label">release.main</span><span class="span__bar"><span class="span__fill" style="width:100%"></span></span><span class="span__time">92s</span></div>
+          <div class="span"><span class="span__label">↳ build.image</span><span class="span__bar"><span class="span__fill" style="width:38%"></span></span><span class="span__time">35s</span></div>
+          <div class="span"><span class="span__label">↳ test.suite</span><span class="span__bar"><span class="span__fill" style="width:30%"></span></span><span class="span__time">28s</span></div>
+          <div class="span span--warn"><span class="span__label">&nbsp;&nbsp;↳ warm</span><span class="span__bar"><span class="span__fill" style="width:18%"></span></span><span class="span__time">17s</span></div>
+          <div class="span"><span class="span__label">↳ activate</span><span class="span__bar"><span class="span__fill" style="width:13%"></span></span><span class="span__time">12s</span></div>
+        </div>
+        <p class="pinned__why">
+          <strong>STATUS:</strong> release f81c20d activated at 14:02 UTC across 6 regions.
+          Error rate and p95 latency are tracking the previous release within thresholds.
+          Cache warm ran long (17s) — consider pre-seeding the manifest. Rollback point saved.
+        </p>
+      </aside>
+    </section>
+
+    <section class="integrations" id="targets">
+      <h2 class="integrations__head">Deploys</h2>
+      <ul class="integrations__grid">
+        <li>Containers</li>
+        <li>Static sites</li>
+        <li>Edge workers</li>
+        <li>Serverless</li>
+        <li>Cron jobs</li>
+        <li>Preview envs</li>
+        <li>Monorepos</li>
+        <li>Sidecars</li>
+      </ul>
+    </section>
+
+    <section class="pricing" id="pricing">
+      <h2 class="pricing__head">Pricing</h2>
+      <div class="tiers">
+        <article class="tier">
+          <h3 class="tier__name">Solo</h3>
+          <p class="tier__price">$0 <span class="per">forever</span></p>
+          <ul class="tier__list">
+            <li>100 deploys / month</li>
+            <li>2 environments</li>
+            <li>Single project</li>
+            <li>Community forum</li>
+          </ul>
+          <a class="btn" href="#">Start free</a>
+        </article>
+        <article class="tier tier--feature">
+          <h3 class="tier__name">Team</h3>
+          <p class="tier__price">$120 <span class="per">/ month</span></p>
+          <ul class="tier__list">
+            <li>Unlimited deploys</li>
+            <li>10 environments</li>
+            <li>Release health watch</li>
+            <li>Instant rollback</li>
+            <li>Deploy audit log</li>
+          </ul>
+          <a class="btn btn--primary" href="#">14-day trial</a>
+        </article>
+        <article class="tier">
+          <h3 class="tier__name">Fleet</h3>
+          <p class="tier__price">Custom</p>
+          <ul class="tier__list">
+            <li>Self-hosted runners</li>
+            <li>Unlimited environments</li>
+            <li>SSO &amp; audit export</li>
+            <li>Region pinning</li>
+            <li>Priority support</li>
+          </ul>
+          <a class="btn" href="#">Talk to us</a>
+        </article>
+      </div>
+    </section>
+
+    <footer class="colophon">
+      <span>Shipcast · v1.2 · built by people who page themselves</span>
+      <span><a href="#">docs</a> · <a href="#">changelog</a> · <a href="#">status</a> · <a href="#">source</a></span>
+    </footer>
+  </main>
+</body>
+</html>

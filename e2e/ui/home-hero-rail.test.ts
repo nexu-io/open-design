@@ -195,21 +195,21 @@ const HOME_PLUGINS = [
     },
   },
   {
-    id: 'example-live-dashboard',
-    title: 'Live Dashboard',
+    id: 'example-trading-analysis-dashboard-template',
+    title: 'Trading Analysis Dashboard',
     version: '0.1.0',
     trust: 'bundled',
     sourceKind: 'bundled',
-    source: '/tmp/live-dashboard',
-    fsPath: '/tmp/live-dashboard',
+    source: '/tmp/trading-analysis-dashboard',
+    fsPath: '/tmp/trading-analysis-dashboard',
     capabilitiesGranted: ['prompt:inject'],
     installedAt: 0,
     updatedAt: 0,
     manifest: {
-      name: 'example-live-dashboard',
-      title: 'Live Dashboard',
+      name: 'example-trading-analysis-dashboard-template',
+      title: 'Trading Analysis Dashboard',
       version: '0.1.0',
-      description: 'Notion-style team dashboard rendered as a Live Artifact.',
+      description: 'Trading analysis team dashboard rendered as a Live Artifact.',
       tags: ['live-dashboard', 'team-workspace-dashboard'],
       od: {
         kind: 'scenario',
@@ -218,7 +218,7 @@ const HOME_PLUGINS = [
         scenario: 'operation',
         surface: 'web',
         useCase: {
-          query: 'Build a Notion-style team dashboard with live KPIs.',
+          query: 'Build a trading analysis team dashboard with live KPIs.',
         },
         inputs: [
           { name: 'workspace_name', type: 'string', required: true },
@@ -343,8 +343,8 @@ const APPLY_RESPONSES: Record<string, unknown> = {
     },
     projectMetadata: {},
   },
-  'example-live-dashboard': {
-    query: 'Build a Notion-style team dashboard with live KPIs.',
+  'example-trading-analysis-dashboard-template': {
+    query: 'Build a trading analysis team dashboard with live KPIs.',
     contextItems: [],
     inputs: [],
     assets: [],
@@ -354,7 +354,7 @@ const APPLY_RESPONSES: Record<string, unknown> = {
     capabilitiesRequired: ['prompt:inject'],
     appliedPlugin: {
       snapshotId: 'snap-live-dashboard',
-      pluginId: 'example-live-dashboard',
+      pluginId: 'example-trading-analysis-dashboard-template',
       pluginVersion: '0.1.0',
       manifestSourceDigest: 'a'.repeat(64),
       inputs: {
@@ -1859,7 +1859,7 @@ test('[P1] live dashboard preset sends the active workspace name to plugin apply
   await expect(page.getByTestId('workspace-switcher')).toContainText('Personal Workspace');
 
   await pickHomeTemplate(page, 'live-artifact');
-  await usePreset(page, 'example-live-dashboard');
+  await usePreset(page, 'example-trading-analysis-dashboard-template');
   await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
 
   // The preset is already bound to Personal. Switching the request-local tab
@@ -1871,7 +1871,7 @@ test('[P1] live dashboard preset sends the active workspace name to plugin apply
 
   const applyRequestPromise = page.waitForRequest((request) =>
     request.method() === 'POST'
-      && request.url().includes('/api/plugins/example-live-dashboard/apply'),
+      && request.url().includes('/api/plugins/example-trading-analysis-dashboard-template/apply'),
   );
   await page.getByTestId('home-hero-submit').click();
 

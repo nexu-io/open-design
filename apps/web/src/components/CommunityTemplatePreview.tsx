@@ -25,6 +25,7 @@ import {
   buildSubcategoryCatalog,
   extractCategories,
   extractSubcategories,
+  isCapabilitySkillPlugin,
 } from './plugins-home/facets';
 import { localizePluginTitle } from './plugins-home/localization';
 import { examplePresetSeedPrompt } from './plugins-home/presetSeedPrompt';
@@ -133,6 +134,9 @@ export function buildCommunityTemplates(
   }
 
   const entries = plugins.flatMap((record, index) => {
+    // Capability skills (workflow explainers, not visual templates) never
+    // render as Community cards — same exclusion as the plugins home grid.
+    if (isCapabilitySkillPlugin(record)) return [];
     const categorySlug = extractCategories(record)[0];
     if (!categorySlug) return [];
     const type = FACET_CATEGORY_TYPE[categorySlug];

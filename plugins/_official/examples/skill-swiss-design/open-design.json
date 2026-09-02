@@ -1,0 +1,84 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-skill-swiss-design",
+  "title": "Swiss Editorial Grid",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-25T11:36:48Z",
+  "description": "Swiss International Style editorial page: rigorous 12-column grid, grotesque typography with light-weight display headings, stone-neutral palette with a single Swiss-red accent, opacity-based hierarchy, uppercase tracked captions, and generous whitespace. Use when the brief mentions \"swiss design\", \"international style\", \"grid system\", \"helvetica\", \"editorial layout\", \"modernist\", \"magazine homepage\". Based on zeke's swiss-design skill.",
+  "license": "MIT",
+  "author": {
+    "name": "zeke",
+    "url": "https://github.com/zeke"
+  },
+  "homepage": "https://github.com/zeke/swiss-design-skill",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "design",
+    "editorial",
+    "swiss",
+    "grid",
+    "magazine",
+    "typography"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "brand",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Design a Swiss-style editorial homepage for a design journal, strict grid, one red accent, grotesque type."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Swiss Editorial Grid"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

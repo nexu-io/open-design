@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LOUD! Studio — We Make Brands Impossible to Ignore</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wght@0,500;0,700;0,900;1,900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --yellow: #FFEB3B;
+    --red: #FF5252;
+    --blue: #2196F3;
+    --teal: #4ECDC4;
+    --paper: #FDF6E3;
+    --ink: #000000;
+    --bw: 3px;
+    --shadow: 5px 5px 0px var(--ink);
+    --shadow-lg: 8px 8px 0px var(--ink);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    overflow-x: hidden;
+  }
+  .mono { font-family: 'Space Mono', 'Courier New', monospace; }
+
+  /* ---------- nav ---------- */
+  nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 40px;
+    border-bottom: var(--bw) solid var(--ink);
+    background: var(--paper);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .logo {
+    font-weight: 900; font-size: 26px; letter-spacing: -1px;
+    background: var(--yellow);
+    border: var(--bw) solid var(--ink);
+    box-shadow: 4px 4px 0 var(--ink);
+    padding: 6px 14px;
+    transform: rotate(-2deg);
+  }
+  .nav-links { display: flex; gap: 8px; align-items: center; }
+  .nav-links a {
+    text-decoration: none; color: var(--ink);
+    font-weight: 700; font-size: 15px;
+    padding: 9px 16px; border: var(--bw) solid transparent;
+    transition: none;
+  }
+  .nav-links a:hover { border-color: var(--ink); background: var(--teal); box-shadow: 3px 3px 0 var(--ink); }
+  .nav-cta {
+    background: var(--red); color: var(--ink);
+    border: var(--bw) solid var(--ink) !important;
+    box-shadow: 4px 4px 0 var(--ink);
+    margin-left: 10px;
+  }
+  .nav-cta:hover { background: var(--red) !important; transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--ink) !important; }
+
+  /* ---------- hero ---------- */
+  .hero {
+    padding: 70px 40px 60px;
+    max-width: 1200px; margin: 0 auto;
+    position: relative;
+  }
+  .hero h1 {
+    font-size: clamp(56px, 7.5vw, 96px);
+    font-weight: 900; line-height: .95; letter-spacing: -3px;
+    text-transform: uppercase;
+    max-width: 900px;
+  }
+  .hl-yellow, .hl-blue {
+    display: inline-block;
+    border: var(--bw) solid var(--ink);
+    padding: 0 14px 6px;
+    box-shadow: 6px 6px 0 var(--ink);
+  }
+  .hl-yellow { background: var(--yellow); transform: rotate(-1.5deg); }
+  .hl-blue { background: var(--blue); color: #fff; transform: rotate(1deg); }
+  .hero-sub {
+    margin-top: 34px; max-width: 540px;
+    font-size: 19px; font-weight: 500; line-height: 1.55;
+  }
+  .hero-btns { margin-top: 34px; display: flex; gap: 18px; flex-wrap: wrap; }
+  .btn {
+    font-family: inherit; font-weight: 900; font-size: 17px; text-transform: uppercase; letter-spacing: .5px;
+    border: var(--bw) solid var(--ink);
+    box-shadow: var(--shadow);
+    padding: 16px 30px;
+    cursor: pointer;
+    background: var(--yellow);
+  }
+  .btn:hover { transform: translate(3px, 3px); box-shadow: 2px 2px 0 var(--ink); }
+  .btn:active { transform: translate(5px, 5px); box-shadow: 0 0 0 var(--ink); }
+  .btn-alt { background: #fff; }
+  .sticker {
+    position: absolute; right: 60px; top: 60px;
+    width: 128px; height: 128px; border-radius: 50%;
+    background: var(--red); color: #fff;
+    border: var(--bw) solid var(--ink);
+    box-shadow: var(--shadow);
+    display: grid; place-items: center; text-align: center;
+    font-weight: 900; font-size: 15px; line-height: 1.15; text-transform: uppercase;
+    transform: rotate(12deg);
+    animation: wobble 4s ease-in-out infinite;
+  }
+  @keyframes wobble { 0%,100% { transform: rotate(12deg);} 50% { transform: rotate(6deg);} }
+  @media (prefers-reduced-motion: reduce) { .sticker { animation: none; } }
+
+  /* marquee strip */
+  .strip {
+    border-top: var(--bw) solid var(--ink);
+    border-bottom: var(--bw) solid var(--ink);
+    background: var(--blue); color: #fff;
+    padding: 12px 0;
+    font-weight: 900; font-size: 18px; text-transform: uppercase; letter-spacing: 1px;
+    white-space: nowrap; overflow: hidden;
+  }
+  .strip span { display: inline-block; padding: 0 18px; }
+
+  /* ---------- work ---------- */
+  section { max-width: 1200px; margin: 0 auto; padding: 64px 40px; }
+  .sec-head { display: flex; align-items: center; gap: 20px; margin-bottom: 36px; }
+  .sec-head h2 {
+    font-size: 42px; font-weight: 900; text-transform: uppercase; letter-spacing: -1.5px;
+  }
+  .sec-count {
+    font-family: 'Space Mono', monospace; font-weight: 700; font-size: 14px;
+    background: var(--ink); color: var(--yellow); padding: 5px 12px;
+  }
+  .work-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; }
+  .w-card {
+    border: var(--bw) solid var(--ink);
+    background: #fff;
+    box-shadow: var(--shadow);
+  }
+  .w-card:hover { transform: translate(-3px, -3px); box-shadow: var(--shadow-lg); }
+  .w-thumb {
+    height: 170px; border-bottom: var(--bw) solid var(--ink);
+    display: grid; place-items: center; font-size: 54px;
+  }
+  .w1 .w-thumb { background: var(--yellow); }
+  .w2 .w-thumb { background: var(--teal); }
+  .w3 .w-thumb { background: var(--red); }
+  .w-body { padding: 20px; }
+  .w-tag {
+    font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1px;
+    border: 2px solid var(--ink); padding: 3px 8px; display: inline-block; margin-bottom: 12px;
+  }
+  .w-body h3 { font-size: 21px; font-weight: 900; margin-bottom: 8px; }
+  .w-body p { font-size: 14.5px; line-height: 1.5; font-weight: 500; }
+
+  /* ---------- services ---------- */
+  .services { background: var(--yellow); border-top: var(--bw) solid var(--ink); border-bottom: var(--bw) solid var(--ink); max-width: none; }
+  .services-inner { max-width: 1200px; margin: 0 auto; }
+  .svc-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; }
+  .svc {
+    background: var(--paper); border: var(--bw) solid var(--ink);
+    box-shadow: var(--shadow); padding: 22px;
+  }
+  .svc:hover { background: #fff; transform: translate(-2px,-2px); box-shadow: 7px 7px 0 var(--ink); }
+  .svc-num { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 13px; margin-bottom: 14px; }
+  .svc h3 { font-size: 19px; font-weight: 900; text-transform: uppercase; margin-bottom: 8px; }
+  .svc p { font-size: 13.5px; font-weight: 500; line-height: 1.5; }
+
+  /* ---------- footer cta ---------- */
+  .cta { text-align: center; padding: 80px 40px; }
+  .cta h2 { font-size: 54px; font-weight: 900; text-transform: uppercase; letter-spacing: -2px; line-height: 1; }
+  .cta h2 em { font-style: italic; color: var(--red); }
+  .cta p { margin: 18px auto 32px; font-size: 18px; font-weight: 500; max-width: 480px; }
+  footer {
+    border-top: var(--bw) solid var(--ink);
+    background: var(--ink); color: var(--paper);
+    padding: 22px 40px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700;
+  }
+  footer a { color: var(--yellow); text-decoration: none; }
+  footer a:hover { background: var(--yellow); color: var(--ink); }
+</style>
+</head>
+<body>
+  <nav>
+    <div class="logo">LOUD!*</div>
+    <div class="nav-links">
+      <a href="#work">Work</a>
+      <a href="#services">Services</a>
+      <a href="#">About</a>
+      <a href="#" class="nav-cta">Start a project ➜</a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="sticker">EST.<br>2021<br>★★★</div>
+    <h1>We make <span class="hl-yellow">brands</span> impossible to <span class="hl-blue">ignore.</span></h1>
+    <p class="hero-sub">LOUD! is a six-person creative studio in Rotterdam. We do identities, campaigns and websites for companies that would rather be argued about than scrolled past.</p>
+    <div class="hero-btns">
+      <button class="btn">See the work ↓</button>
+      <button class="btn btn-alt">Book a call</button>
+    </div>
+  </header>
+
+  <div class="strip" aria-hidden="true">
+    <span>BRANDING</span><span>✦</span><span>CAMPAIGNS</span><span>✦</span><span>WEB DESIGN</span><span>✦</span><span>PACKAGING</span><span>✦</span><span>MOTION</span><span>✦</span><span>BRANDING</span><span>✦</span><span>CAMPAIGNS</span><span>✦</span><span>WEB DESIGN</span><span>✦</span><span>PACKAGING</span>
+  </div>
+
+  <section id="work">
+    <div class="sec-head">
+      <h2>Selected Work</h2>
+      <span class="sec-count mono">2023 → 2026</span>
+    </div>
+    <div class="work-grid">
+      <article class="w-card w1">
+        <div class="w-thumb">🥤</div>
+        <div class="w-body">
+          <span class="w-tag">Brand identity</span>
+          <h3>Fizzbomb Soda Co.</h3>
+          <p>A screaming-citrus rebrand that took a sleepy regional soda from shelf filler to sold-out in four markets.</p>
+        </div>
+      </article>
+      <article class="w-card w2">
+        <div class="w-thumb">🎧</div>
+        <div class="w-body">
+          <span class="w-tag">Campaign + web</span>
+          <h3>Static Radio Festival</h3>
+          <p>Poster system, ticket site and a lineup reveal that crashed the venue's Wi-Fi. Twice. On purpose-ish.</p>
+        </div>
+      </article>
+      <article class="w-card w3">
+        <div class="w-thumb">🧦</div>
+        <div class="w-body">
+          <span class="w-tag">Packaging</span>
+          <h3>Oddsock Apparel</h3>
+          <p>Mismatched-by-design sock packaging so shouty that retailers asked us to please tone it down. We did not.</p>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section class="services" id="services">
+    <div class="services-inner">
+      <div class="sec-head">
+        <h2>What we do</h2>
+        <span class="sec-count mono">04 things, done loudly</span>
+      </div>
+      <div class="svc-grid">
+        <div class="svc">
+          <div class="svc-num">(01)</div>
+          <h3>Branding</h3>
+          <p>Naming, logos, voice. The full personality transplant, minus the anesthesia.</p>
+        </div>
+        <div class="svc">
+          <div class="svc-num">(02)</div>
+          <h3>Web design</h3>
+          <p>Sites that load fast, read loud and convert visitors before they can blink.</p>
+        </div>
+        <div class="svc">
+          <div class="svc-num">(03)</div>
+          <h3>Campaigns</h3>
+          <p>Out-of-home, social, guerrilla. If a bus stop can carry it, we will shout from it.</p>
+        </div>
+        <div class="svc">
+          <div class="svc-num">(04)</div>
+          <h3>Motion</h3>
+          <p>Snappy title cards and idents with more energy than a double espresso.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta">
+    <h2>Got a boring brand?<br><em>Bring it here.</em></h2>
+    <p>Tell us what keeps your marketing team up at night. First call is free, opinions included.</p>
+    <button class="btn">hello@loudstudio.example ➜</button>
+  </section>
+
+  <footer>
+    <span>© 2026 LOUD! Studio BV — Rotterdam, NL</span>
+    <span><a href="#">Instagram</a> · <a href="#">Dribbble</a> · <a href="#">Are.na</a></span>
+  </footer>
+</body>
+</html>

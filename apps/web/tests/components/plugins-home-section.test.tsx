@@ -299,14 +299,23 @@ describe('PluginsHomeSection (category bar)', () => {
     fireEvent.click(screen.getByTestId('plugins-home-pill-category-live-artifact'));
 
     // Order is now usage/sink-driven (OPEND-449); assert grouping membership.
+    // Membership is curated by id (CURATED_LIVE_ARTIFACT_PLUGIN_IDS):
+    // `example-live-dashboard` is no longer curated, so it is NOT here.
     expect(pluginIds().sort()).toEqual([
       'example-live-artifact',
-      'example-live-dashboard',
       'example-social-media-matrix-tracker-template',
       'example-trading-analysis-dashboard-template',
       'image-template-notion-team-dashboard-live-artifact',
     ]);
     expect(screen.queryByTestId('plugins-home-row-subcategory-live-artifact')).toBeNull();
+
+    // The uncurated live-dashboard-tagged plugin rides its rendering mode.
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-prototype'));
+    expect(pluginIds().sort()).toEqual([
+      'example-live-dashboard',
+      'prototype-app',
+      'prototype-dashboard',
+    ]);
   });
 
   it('keeps sparse subcategories as real filters without adding contribution cards', () => {

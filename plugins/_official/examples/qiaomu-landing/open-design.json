@@ -1,0 +1,84 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-qiaomu-landing",
+  "title": "AI SaaS Landing Page",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-25T11:36:48Z",
+  "description": "Dark Linear-style SaaS landing page for an AI meeting-notes product: split hero with a layered high-fidelity product mockup (window shell, floating cards, animated waveform), feature grid, three-tier pricing, testimonials, and CTA footer. Use when the brief mentions \"landing page\", \"marketing page\", \"SaaS homepage\", \"product website\". Based on joeseesun's qiaomu-design.",
+  "license": "MIT",
+  "author": {
+    "name": "joeseesun (乔木)",
+    "url": "https://github.com/joeseesun"
+  },
+  "homepage": "https://github.com/joeseesun/qiaomu-design",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "landing",
+    "landing-page",
+    "marketing-page",
+    "saas",
+    "hero",
+    "dark"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a dark landing page for an AI meeting-notes SaaS — split hero with product mockup, feature grid, pricing tiers, and testimonials."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "AI SaaS Landing Page"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

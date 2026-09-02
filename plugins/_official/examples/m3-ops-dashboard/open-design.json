@@ -1,0 +1,82 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-m3-ops-dashboard",
+  "title": "Material 3 Ops Dashboard",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-26T03:54:52Z",
+  "description": "Material Design 3 team operations dashboard on the baseline purple scheme: navigation rail with active-pill destinations, tonal surface-container layering instead of shadows, service status cards with an error-container degraded state, incident timeline, and inline-SVG resource usage rings. Use when the brief mentions \"material design\", \"MD3\", \"admin dashboard\", \"ops console\", \"monitoring dashboard\". Original work following CWTI Ltd's material-3-skill rules.",
+  "license": "MIT",
+  "author": {
+    "name": "CWTI Ltd (hamen)",
+    "url": "https://github.com/hamen"
+  },
+  "homepage": "https://github.com/hamen/material-3-skill",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "dashboard",
+    "monitoring",
+    "material",
+    "admin"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "operations",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a Material Design 3 operations dashboard — navigation rail, tonal service status cards, incident timeline, and resource usage rings."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Material 3 Ops Dashboard"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

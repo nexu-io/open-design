@@ -65,12 +65,9 @@ export const PLACEHOLDER_SCENARIO_DEFS: ReadonlyArray<PlaceholderScenarioDef> = 
   { id: 'loading-animation', textKey: 'homeHero.carousel.loadingAnimation', chipId: 'hyperframes' },
   { id: 'team-update-slides', textKey: 'homeHero.carousel.teamUpdateSlides', chipId: 'deck' },
   { id: 'orders-dashboard', textKey: 'homeHero.carousel.ordersDashboard', chipId: 'prototype' },
-  {
-    id: 'product-detail',
-    textKey: 'homeHero.carousel.productDetail',
-    chipId: 'prototype',
-    prototypeSubtypeId: 'wireframe',
-  },
+  // The wireframe scene retired with the four-type prototype taxonomy; its
+  // lines keep their lo-fi copy but rotate at the parent Prototype level.
+  { id: 'product-detail', textKey: 'homeHero.carousel.productDetail', chipId: 'prototype' },
   { id: 'case-study', textKey: 'homeHero.carousel.caseStudy', chipId: 'document' },
   { id: 'landing-intro', textKey: 'homeHero.carousel.landingIntro', chipId: 'prototype' },
   { id: 'pitch-deck', textKey: 'homeHero.carousel.pitchDeck', chipId: 'deck' },
@@ -78,14 +75,9 @@ export const PLACEHOLDER_SCENARIO_DEFS: ReadonlyArray<PlaceholderScenarioDef> = 
     id: 'app-idea',
     textKey: 'homeHero.carousel.appIdea',
     chipId: 'prototype',
-    prototypeSubtypeId: 'mobile',
+    prototypeSubtypeId: 'mobile-apps',
   },
-  {
-    id: 'landing-layout',
-    textKey: 'homeHero.carousel.landingLayout',
-    chipId: 'prototype',
-    prototypeSubtypeId: 'wireframe',
-  },
+  { id: 'landing-layout', textKey: 'homeHero.carousel.landingLayout', chipId: 'prototype' },
 ];
 
 export interface BuildPlaceholderScenariosInput {

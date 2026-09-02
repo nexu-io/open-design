@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Heliostat · Fleet overview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* domain tokens: a solar farm at dusk */
+    --night:#101214;        /* canvas: field after sundown */
+    --array:#1A1D20;        /* level 1: panel housings (+7%) */
+    --housing:#1F2327;      /* level 2: raised cards (+9%) */
+    --console:#25292E;      /* level 3: popover/active (+12%) */
+    --inset:#0B0D0E;        /* inputs sit below the canvas */
+    --ink:rgba(236,238,240,.95);
+    --ink-2:rgba(236,238,240,.64);
+    --ink-3:rgba(236,238,240,.38);
+    --edge:rgba(255,255,255,.07);
+    --edge-soft:rgba(255,255,255,.045);
+    --edge-strong:rgba(255,255,255,.12);
+    --dawn:#F2A93B;         /* the one accent: first light */
+    --leaf:#57C785;         /* nominal */
+    --ember:#E8695A;        /* fault */
+    --haze:#8FB4D9;         /* info, used only in the curve fill */
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{color-scheme:dark;}
+  body{
+    background:var(--night);color:var(--ink);
+    font-family:'Geist','Segoe UI',system-ui,sans-serif;
+    font-size:13.5px;line-height:1.5;-webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;text-decoration:none;}
+  .mono{font-family:'Geist Mono',ui-monospace,monospace;}
+  .tn{font-variant-numeric:tabular-nums;}
+
+  .shell{display:grid;grid-template-columns:216px 1fr;min-height:100vh;}
+
+  /* sidebar: same canvas, border only */
+  aside{border-right:1px solid var(--edge);padding:18px 12px;display:flex;flex-direction:column;gap:2px;}
+  .brand{display:flex;align-items:center;gap:9px;padding:4px 10px 18px;}
+  .brand i{
+    width:18px;height:18px;border-radius:50%;display:inline-block;
+    background:conic-gradient(var(--dawn) 0 25%,transparent 25% 50%,var(--dawn) 50% 75%,transparent 75%);
+    border:1.5px solid var(--dawn);
+  }
+  .brand b{font-size:14px;font-weight:600;letter-spacing:-.01em;}
+  .nav-sec{font-size:10.5px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);padding:14px 10px 6px;}
+  .nav a{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:6px 10px;border-radius:6px;color:var(--ink-2);font-weight:500;font-size:13px;
+    transition:background .12s ease,color .12s ease;
+  }
+  .nav a:hover{background:var(--array);color:var(--ink);}
+  .nav a.active{background:var(--housing);color:var(--ink);}
+  .nav a .pip{
+    font-size:10.5px;color:var(--ink-3);background:var(--array);
+    border:1px solid var(--edge-soft);border-radius:999px;padding:0 7px;line-height:16px;
+  }
+  .nav a.active .pip{color:var(--dawn);border-color:rgba(242,169,59,.3);}
+  aside .foot{margin-top:auto;padding:10px;display:flex;gap:10px;align-items:center;border-top:1px solid var(--edge-soft);}
+  .avatar{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#3B4754,#232B33);border:1px solid var(--edge);}
+  aside .foot .who b{display:block;font-size:12.5px;font-weight:500;}
+  aside .foot .who span{font-size:11px;color:var(--ink-3);}
+
+  /* topbar */
+  .top{
+    display:flex;align-items:center;justify-content:space-between;gap:16px;
+    padding:14px 28px;border-bottom:1px solid var(--edge);
+  }
+  .crumb{font-size:13px;color:var(--ink-3);}
+  .crumb b{color:var(--ink);font-weight:500;}
+  .search{
+    display:flex;align-items:center;gap:8px;flex:0 1 320px;
+    background:var(--inset);border:1px solid var(--edge-soft);border-radius:7px;
+    padding:6px 10px;color:var(--ink-3);font-size:12.5px;
+    transition:border-color .15s ease;
+  }
+  .search:focus-within{border-color:var(--edge-strong);}
+  .search input{
+    background:transparent;border:0;outline:0;color:var(--ink);flex:1;font:inherit;
+  }
+  .search kbd{font-family:'Geist Mono',monospace;font-size:10px;border:1px solid var(--edge);border-radius:4px;padding:1px 5px;color:var(--ink-3);}
+  .top .actions{display:flex;gap:10px;align-items:center;}
+  .btn{
+    height:30px;padding:0 13px;border-radius:7px;font-size:12.5px;font-weight:500;
+    display:inline-flex;align-items:center;gap:6px;cursor:pointer;border:1px solid transparent;
+    transition:background .12s ease,border-color .12s ease;font-family:inherit;
+  }
+  .btn.primary{background:var(--dawn);color:#1A1205;font-weight:600;}
+  .btn.primary:hover{background:#F7BA5C;}
+  .btn.ghost{background:transparent;color:var(--ink-2);border-color:var(--edge);}
+  .btn.ghost:hover{border-color:var(--edge-strong);color:var(--ink);}
+  .btn:focus-visible{outline:2px solid var(--dawn);outline-offset:2px;}
+
+  main{padding:24px 28px 40px;max-width:1200px;}
+  .page-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:20px;}
+  .page-head h1{font-size:18px;font-weight:600;letter-spacing:-.015em;}
+  .page-head .asof{font-size:12px;color:var(--ink-3);}
+
+  .grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:14px;}
+
+  .card{
+    background:var(--array);border:1px solid var(--edge-soft);border-radius:10px;padding:18px 20px;
+  }
+
+  /* focal card */
+  .focal{display:flex;flex-direction:column;}
+  .focal .curve{flex:1;display:flex;flex-direction:column;}
+  .focal .curve svg{flex:1;min-height:150px;height:auto;}
+  .focal .lbl{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);}
+  .focal .hero{display:flex;align-items:baseline;gap:12px;margin-top:8px;}
+  .focal .hero .v{
+    font-size:40px;font-weight:600;letter-spacing:-.03em;line-height:1;
+  }
+  .focal .hero .u{font-size:15px;color:var(--ink-2);font-weight:500;}
+  .focal .hero .delta{
+    font-size:12px;font-weight:500;color:var(--leaf);
+    background:rgba(87,199,133,.09);border:1px solid rgba(87,199,133,.22);
+    border-radius:999px;padding:2px 9px;
+  }
+  .focal .sub{font-size:12.5px;color:var(--ink-3);margin-top:6px;}
+  .curve{margin-top:16px;}
+  .curve svg{display:block;width:100%;height:150px;}
+  .curve-meta{
+    display:flex;justify-content:space-between;margin-top:8px;
+    font-size:11px;color:var(--ink-3);
+  }
+
+  /* right column */
+  .stack{display:flex;flex-direction:column;gap:14px;}
+  .kv{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-top:1px solid var(--edge-soft);}
+  .kv:first-of-type{border-top:0;padding-top:2px;}
+  .kv .k{font-size:12.5px;color:var(--ink-2);font-weight:500;}
+  .kv .v{font-size:13px;font-weight:600;}
+  .kv .v small{color:var(--ink-3);font-weight:400;font-size:11px;margin-left:4px;}
+  .card h2{font-size:13px;font-weight:600;margin-bottom:10px;letter-spacing:-.005em;}
+  .card h2 span{color:var(--ink-3);font-weight:400;font-size:12px;}
+
+  .alert{
+    display:grid;grid-template-columns:8px 1fr auto;gap:10px;align-items:start;
+    padding:9px 0;border-top:1px solid var(--edge-soft);font-size:12.5px;
+  }
+  .alert:first-of-type{border-top:0;}
+  .alert .dot{width:8px;height:8px;border-radius:50%;margin-top:5px;}
+  .alert .dot.err{background:var(--ember);}
+  .alert .dot.warn{background:var(--dawn);}
+  .alert b{font-weight:500;display:block;}
+  .alert span{color:var(--ink-3);font-size:11.5px;}
+  .alert .when{color:var(--ink-3);font-size:11px;white-space:nowrap;}
+
+  /* sites table */
+  .sites{margin-top:14px;}
+  .sites .card{padding:0;overflow:hidden;}
+  .sites header{
+    display:flex;justify-content:space-between;align-items:center;padding:14px 20px;
+    border-bottom:1px solid var(--edge-soft);
+  }
+  .sites h2{margin:0;}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  th{
+    text-align:left;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;
+    color:var(--ink-3);padding:9px 20px;border-bottom:1px solid var(--edge-soft);
+  }
+  td{padding:11px 20px;border-bottom:1px solid var(--edge-soft);vertical-align:middle;}
+  tr:last-child td{border-bottom:0;}
+  tbody tr{transition:background .12s ease;}
+  tbody tr:hover{background:var(--housing);}
+  td .site{font-weight:500;}
+  td .region{color:var(--ink-3);font-size:11px;display:block;}
+  .state{display:inline-flex;align-items:center;gap:7px;font-weight:500;}
+  .state i{width:7px;height:7px;border-radius:50%;}
+  .state.ok i{background:var(--leaf);}
+  .state.ok{color:var(--leaf);}
+  .state.curtailed i{background:var(--dawn);}
+  .state.curtailed{color:var(--dawn);}
+  .state.fault i{background:var(--ember);}
+  .state.fault{color:var(--ember);}
+  td.num{text-align:right;font-family:'Geist Mono',monospace;font-size:12px;}
+  td .spark svg{display:block;}
+  th.num{text-align:right;}
+
+  @media (max-width:960px){
+    .shell{grid-template-columns:1fr;}
+    aside{display:none;}
+    .grid{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <aside>
+    <div class="brand"><i></i><b>Heliostat</b></div>
+    <div class="nav-sec">Operate</div>
+    <nav class="nav">
+      <a href="#" class="active">Fleet overview <span class="pip tn">live</span></a>
+      <a href="#">Sites <span class="pip tn">24</span></a>
+      <a href="#">Alerts <span class="pip tn">3</span></a>
+      <a href="#">Work orders</a>
+    </nav>
+    <div class="nav-sec">Analyze</div>
+    <nav class="nav">
+      <a href="#">Generation</a>
+      <a href="#">Forecast vs actual</a>
+      <a href="#">Grid exports</a>
+    </nav>
+    <div class="nav-sec">Configure</div>
+    <nav class="nav">
+      <a href="#">Inverters</a>
+      <a href="#">Tariffs</a>
+      <a href="#">Team</a>
+    </nav>
+    <div class="foot">
+      <span class="avatar"></span>
+      <span class="who"><b>Ines Marlow</b><span>Duty operator</span></span>
+    </div>
+  </aside>
+
+  <div>
+    <div class="top">
+      <span class="crumb">Andalusia fleet / <b>Overview</b></span>
+      <label class="search">
+        <span>⌕</span>
+        <input placeholder="Search sites, inverters, tickets" aria-label="Search">
+        <kbd>⌘K</kbd>
+      </label>
+      <div class="actions">
+        <button class="btn ghost">Export</button>
+        <button class="btn primary">New work order</button>
+      </div>
+    </div>
+
+    <main>
+      <div class="page-head">
+        <h1>Fleet overview</h1>
+        <span class="asof tn">Updated 14:02:41 CEST · irradiance 812 W/m²</span>
+      </div>
+
+      <div class="grid">
+        <section class="card focal">
+          <span class="lbl">Fleet output · now</span>
+          <div class="hero">
+            <span class="v tn">418.6</span>
+            <span class="u">MW</span>
+            <span class="delta tn">+6.2% vs forecast</span>
+          </div>
+          <p class="sub">24 sites · 96.4% of nameplate available · next cloud front reaches Córdoba in 40 min</p>
+          <div class="curve" aria-label="Generation curve, last 24 hours">
+            <svg viewBox="0 0 720 150" preserveAspectRatio="none" role="img">
+              <defs>
+                <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="#F2A93B" stop-opacity=".28"/>
+                  <stop offset="1" stop-color="#F2A93B" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <g stroke="rgba(255,255,255,.05)" stroke-width="1">
+                <line x1="0" y1="37" x2="720" y2="37"/>
+                <line x1="0" y1="75" x2="720" y2="75"/>
+                <line x1="0" y1="113" x2="720" y2="113"/>
+              </g>
+              <path d="M0,148 L60,146 L120,138 L180,112 L240,74 L300,46 L360,30 L420,24 L480,34 L500,52 L520,38 L580,44 L640,68 L680,92 L720,104 L720,150 L0,150 Z" fill="url(#fill)"/>
+              <path d="M0,148 L60,146 L120,138 L180,112 L240,74 L300,46 L360,30 L420,24 L480,34 L500,52 L520,38 L580,44 L640,68 L680,92 L720,104" fill="none" stroke="#F2A93B" stroke-width="2"/>
+              <path d="M0,149 L60,147 L120,140 L180,118 L240,84 L300,58 L360,44 L420,40 L480,47 L540,55 L600,74 L660,96 L720,110" fill="none" stroke="#8FB4D9" stroke-width="1.5" stroke-dasharray="3 4" opacity=".55"/>
+              <circle cx="420" cy="24" r="3.5" fill="#F2A93B"/>
+            </svg>
+          </div>
+          <div class="curve-meta tn">
+            <span>06:00</span><span>09:00</span><span>12:00 · peak 442.8 MW</span><span>15:00</span><span>18:00</span>
+          </div>
+        </section>
+
+        <div class="stack">
+          <section class="card">
+            <h2>Today <span>· vs P50 forecast</span></h2>
+            <div class="kv"><span class="k">Energy delivered</span><span class="v tn">2.84 GWh<small>102% of plan</small></span></div>
+            <div class="kv"><span class="k">Grid curtailment</span><span class="v tn">31 MWh<small>1.1%</small></span></div>
+            <div class="kv"><span class="k">Performance ratio</span><span class="v tn">0.87<small>fleet median</small></span></div>
+            <div class="kv"><span class="k">Revenue captured</span><span class="v tn">€196,420<small>day-ahead</small></span></div>
+          </section>
+
+          <section class="card">
+            <h2>Open alerts <span>· 3</span></h2>
+            <div class="alert">
+              <span class="dot err"></span>
+              <div><b>String 14-C underperforming 18%</b><span>Almodóvar II · inverter INV-07</span></div>
+              <span class="when tn">12 min</span>
+            </div>
+            <div class="alert">
+              <span class="dot warn"></span>
+              <div><b>Tracker stuck at 41° azimuth</b><span>Écija Norte · row 112</span></div>
+              <span class="when tn">1 h</span>
+            </div>
+            <div class="alert">
+              <span class="dot warn"></span>
+              <div><b>Comms flapping on gateway GW-3</b><span>Palma del Río · 4 dropouts/h</span></div>
+              <span class="when tn">3 h</span>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <section class="sites">
+        <div class="card">
+          <header>
+            <h2>Sites <span>· sorted by deviation from forecast</span></h2>
+            <button class="btn ghost" style="height:26px;font-size:11.5px">All 24 sites</button>
+          </header>
+          <table>
+            <thead>
+              <tr>
+                <th>Site</th>
+                <th>Status</th>
+                <th class="num">Output</th>
+                <th class="num">vs forecast</th>
+                <th>Last 6 h</th>
+                <th class="num">PR</th>
+              </tr>
+            </thead>
+            <tbody class="tn">
+              <tr>
+                <td><span class="site">Almodóvar II</span><span class="region">Córdoba · 68 MWp</span></td>
+                <td><span class="state fault"><i></i>Fault</span></td>
+                <td class="num">49.1 MW</td>
+                <td class="num" style="color:var(--ember)">−7.4%</td>
+                <td><span class="spark"><svg width="96" height="22" viewBox="0 0 96 22"><path d="M0,18 L16,12 L32,8 L48,6 L64,10 L80,16 L96,17" fill="none" stroke="rgba(232,105,90,.8)" stroke-width="1.5"/></svg></span></td>
+                <td class="num">0.79</td>
+              </tr>
+              <tr>
+                <td><span class="site">Écija Norte</span><span class="region">Sevilla · 54 MWp</span></td>
+                <td><span class="state curtailed"><i></i>Curtailed</span></td>
+                <td class="num">38.7 MW</td>
+                <td class="num" style="color:var(--ink-2)">−2.1%</td>
+                <td><span class="spark"><svg width="96" height="22" viewBox="0 0 96 22"><path d="M0,16 L16,10 L32,6 L48,9 L64,9 L80,12 L96,11" fill="none" stroke="rgba(242,169,59,.8)" stroke-width="1.5"/></svg></span></td>
+                <td class="num">0.86</td>
+              </tr>
+              <tr>
+                <td><span class="site">Palma del Río</span><span class="region">Córdoba · 92 MWp</span></td>
+                <td><span class="state ok"><i></i>Nominal</span></td>
+                <td class="num">81.3 MW</td>
+                <td class="num" style="color:var(--leaf)">+4.8%</td>
+                <td><span class="spark"><svg width="96" height="22" viewBox="0 0 96 22"><path d="M0,19 L16,14 L32,9 L48,5 L64,4 L80,6 L96,8" fill="none" stroke="rgba(87,199,133,.8)" stroke-width="1.5"/></svg></span></td>
+                <td class="num">0.91</td>
+              </tr>
+              <tr>
+                <td><span class="site">Sierra Baja</span><span class="region">Granada · 41 MWp</span></td>
+                <td><span class="state ok"><i></i>Nominal</span></td>
+                <td class="num">36.9 MW</td>
+                <td class="num" style="color:var(--leaf)">+5.5%</td>
+                <td><span class="spark"><svg width="96" height="22" viewBox="0 0 96 22"><path d="M0,18 L16,15 L32,10 L48,7 L64,5 L80,5 L96,7" fill="none" stroke="rgba(87,199,133,.8)" stroke-width="1.5"/></svg></span></td>
+                <td class="num">0.90</td>
+              </tr>
+              <tr>
+                <td><span class="site">Vega del Guadiana</span><span class="region">Badajoz · 77 MWp</span></td>
+                <td><span class="state ok"><i></i>Nominal</span></td>
+                <td class="num">70.2 MW</td>
+                <td class="num" style="color:var(--leaf)">+8.9%</td>
+                <td><span class="spark"><svg width="96" height="22" viewBox="0 0 96 22"><path d="M0,20 L16,16 L32,11 L48,6 L64,3 L80,4 L96,5" fill="none" stroke="rgba(87,199,133,.8)" stroke-width="1.5"/></svg></span></td>
+                <td class="num">0.93</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+</body>
+</html>

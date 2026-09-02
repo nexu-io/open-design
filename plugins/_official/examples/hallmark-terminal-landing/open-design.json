@@ -1,0 +1,83 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-hallmark-terminal-landing",
+  "title": "Terminal Dev-Tool Landing",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-26T03:53:21Z",
+  "description": "Terminal-mono developer-tool landing page: midnight blue-black ground, phosphor-cyan accent, split hero with a CSS-art deploy-pipeline panel, sticky CLI walkthrough steps with shell commands, integrations strip, and three pricing tiers. Use when the brief mentions \"developer tool\", \"CLI landing\", \"terminal style\", \"dark devtools page\". Based on Nutlope's hallmark.",
+  "license": "MIT",
+  "author": {
+    "name": "Hallmark contributors (Together AI)",
+    "url": "https://github.com/Nutlope"
+  },
+  "homepage": "https://github.com/Nutlope/hallmark",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "landing",
+    "landing-page",
+    "terminal",
+    "developer",
+    "dark"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a dark terminal-style landing page for a CLI deployment tool — mono type, pipeline panel in the hero, step-by-step command walkthrough, and pricing tiers."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Terminal Dev-Tool Landing"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

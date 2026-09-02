@@ -1,0 +1,84 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-style-claymorphism",
+  "title": "Claymorphism Style",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-25T11:36:48Z",
+  "description": "Claymorphism style showroom: soft 3D clay-like cards with chunky white borders (3-4px), double shadows (inner + outer), big 16-24px radii, pastel peach / baby blue / mint / lilac palette, bouncy press animations and a CSS-drawn mascot, shown as a kids learning-app home screen. Use when the brief mentions \"claymorphism\", \"clay UI\", \"soft 3D\", \"toy-like\", \"playful app\", \"kids app\". Based on nextlevelbuilder's UI UX Pro Max style library.",
+  "license": "MIT",
+  "author": {
+    "name": "nextlevelbuilder",
+    "url": "https://github.com/nextlevelbuilder"
+  },
+  "homepage": "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "app-ui",
+    "design",
+    "claymorphism",
+    "kids",
+    "education",
+    "mobile-apps"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "product",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Design a claymorphism home screen for a children's learning app, with soft 3D pastel cards, a mascot and progress bars."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Claymorphism Style"
+        }
+      ]
+    },
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

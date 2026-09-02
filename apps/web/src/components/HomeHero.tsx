@@ -87,7 +87,7 @@ import { readHomeGuideStage, writeHomeGuideStage } from './home-hero/firstRunGui
 import { curatedPluginPriorityForChip } from './plugins-home/curatedPriority';
 import { comparePluginGalleryOrder } from './plugins-home/pluginPopularity';
 import { sortByVisualAppeal } from './plugins-home/visualScore';
-import { applyFacetSelection } from './plugins-home/facets';
+import { applyFacetSelection, isCapabilitySkillPlugin } from './plugins-home/facets';
 import { notifyCompletionFeedbackGesture } from '../utils/notifications';
 import { inferPluginPreview } from './plugins-home/preview';
 import { pluginSubfacetLabel } from './plugins-home/subfacetLabel';
@@ -756,17 +756,15 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   // deck/image plugin that merely carries a "brand" tag is not pulled in.
   const filteredExamplePlugins = useMemo(() => {
     if (!selectedSubcategory || !isSubChipParent(activeChipId)) return activeExamplePlugins;
-    // Mobile shares the existing Apps facet. Wireframe is a generation
-    // constraint rather than a plugin taxonomy, so keep the Prototype starter
-    // pool visible while the selected action carries its lo-fi metadata.
-    const facetSubcategory =
-      activeChipId === 'prototype' && selectedSubcategory === 'mobile'
-        ? 'app-prototypes'
-        : activeChipId === 'prototype' && selectedSubcategory === 'wireframe'
-          ? null
-          : selectedSubcategory;
+    // The four prototype scenes ARE facet slugs, so no aliasing is needed
+    // anymore (the retired 'mobile'/'wireframe' scene ids fold earlier via
+    // legacyPrototypeSceneForChipId).
+    const facetSubcategory = selectedSubcategory;
     if (!facetSubcategory) return activeExamplePlugins;
-    const pool = pluginOptions.filter((plugin) => plugin.manifest?.od?.kind !== 'atom');
+    const pool = pluginOptions.filter(
+      (plugin) =>
+        plugin.manifest?.od?.kind !== 'atom' && !isCapabilitySkillPlugin(plugin),
+    );
     return sortByVisualAppeal(
       applyFacetSelection(pool, { category: activeChipId, subcategory: facetSubcategory }),
     );

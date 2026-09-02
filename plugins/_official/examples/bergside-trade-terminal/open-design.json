@@ -1,0 +1,83 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-bergside-trade-terminal",
+  "title": "Trading Terminal Dashboard",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-26T03:54:38Z",
+  "description": "Dark cyber-terminal trading dashboard in the Matrix style: Space Mono throughout, near-black blue surfaces, dense three-column layout with watchlist and red/green sparklines, hand-drawn SVG price chart, open-orders blotter, order book with depth bars, and a live trade tape. One green interaction accent. Use when the brief mentions \"trading terminal\", \"crypto dashboard\", \"order book\", \"market data\", \"exchange UI\". Original page following the Matrix style of bergside/awesome-design-skills.",
+  "license": "MIT",
+  "author": {
+    "name": "Bergside",
+    "url": "https://github.com/bergside"
+  },
+  "homepage": "https://github.com/bergside/awesome-design-skills",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "dashboard",
+    "trading",
+    "terminal",
+    "dark",
+    "data"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "operations",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a dark terminal-style trading dashboard — watchlist with sparklines, live price chart, open orders, order book with depth bars, and a recent-trades tape in monospace type."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Trading Terminal Dashboard"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

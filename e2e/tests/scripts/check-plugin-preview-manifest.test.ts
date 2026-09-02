@@ -33,15 +33,15 @@ function flatEntry(id: string, hash: string = HASH_A): Record<string, unknown> {
 test("accepts directory-layout and legacy flat-layout entries", () => {
   const manifest = manifestWith({
     "example-video-hyperframes": dirEntry("example-video-hyperframes"),
-    "example-invoice": flatEntry("example-invoice", HASH_B),
+    "example-kanban-board": flatEntry("example-kanban-board", HASH_B),
   });
-  const ids = new Set(["example-video-hyperframes", "example-invoice"]);
+  const ids = new Set(["example-video-hyperframes", "example-kanban-board"]);
   assert.deepEqual(validatePreviewManifest(manifest, ids), []);
 });
 
 test("flags an orphan entry whose plugin no longer ships", () => {
   const manifest = manifestWith({ "example-luxury-botanical": flatEntry("example-luxury-botanical") });
-  const violations = validatePreviewManifest(manifest, new Set(["example-invoice"]));
+  const violations = validatePreviewManifest(manifest, new Set(["example-kanban-board"]));
   assert.equal(violations.length, 1);
   assert.match(violations[0]!, /example-luxury-botanical: no such plugin ships/);
 });
@@ -60,9 +60,9 @@ test("flags clip keys that belong to a different plugin id", () => {
 
 test("flags a key whose embedded fingerprint disagrees with the recorded hash", () => {
   const manifest = manifestWith({
-    "example-invoice": { ...flatEntry("example-invoice", HASH_A), hash: HASH_B },
+    "example-kanban-board": { ...flatEntry("example-kanban-board", HASH_A), hash: HASH_B },
   });
-  const violations = validatePreviewManifest(manifest, new Set(["example-invoice"]));
+  const violations = validatePreviewManifest(manifest, new Set(["example-kanban-board"]));
   assert.equal(violations.length, 2); // video + poster both carry the old hash
   assert.match(violations[0]!, /does not carry the recorded hash/);
 });

@@ -1,0 +1,83 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-hallmark-artisan-landing",
+  "title": "Artisan Local-Business Page",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-26T03:49:08Z",
+  "description": "Warm-paper serif editorial page for a local artisan business: almanac-style centered masthead over a double rule, two-column ruled catalogue with hand-drawn line-art SVG icons, italic descriptions, tabular prices, and a double-rule framed Visit plate. Use when the brief mentions \"bakery\", \"coffee shop\", \"local business\", \"menu page\", \"artisan\", \"editorial print style\". Based on Nutlope's hallmark.",
+  "license": "MIT",
+  "author": {
+    "name": "Hallmark contributors (Together AI)",
+    "url": "https://github.com/Nutlope"
+  },
+  "homepage": "https://github.com/Nutlope/hallmark",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "landing",
+    "landing-page",
+    "editorial",
+    "serif",
+    "local-business"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a warm serif editorial page for a local coffee roasting studio — almanac masthead, two-column menu catalogue with line-art icons and prices, and a visit section."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Artisan Local-Business Page"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

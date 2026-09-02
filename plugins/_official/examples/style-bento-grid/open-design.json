@@ -1,0 +1,83 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-style-bento-grid",
+  "title": "Bento Grid Style",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-25T11:36:48Z",
+  "description": "Bento Box grid style showroom: Apple-style modular card grid with varied spans (1x1 / 2x1 / 2x2), 24px rounded corners, neutral #F5F5F7 base with one brand accent, soft shadows and hover scale 1.02, shown as a product feature-overview page. Use when the brief mentions \"bento\", \"bento grid\", \"feature grid\", \"Apple-style cards\", \"modular tiles\". Based on nextlevelbuilder's UI UX Pro Max style library.",
+  "license": "MIT",
+  "author": {
+    "name": "nextlevelbuilder",
+    "url": "https://github.com/nextlevelbuilder"
+  },
+  "homepage": "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "landing",
+    "bento",
+    "feature-grid",
+    "apple-style",
+    "web-landing"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Make a product features overview page as a bento grid, Apple-style cards with mixed sizes, stats and a testimonial."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Bento Grid Style"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

@@ -21,6 +21,7 @@ vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
 });
 
 import { HomeView } from '../../src/components/HomeView';
+import { findChip } from '../../src/components/home-hero/chips';
 import { requestHomeChip } from '../../src/runtime/home-intent';
 import {
   createPluginAuthoringHandoff,
@@ -1115,7 +1116,7 @@ describe('HomeView prompt handoff', () => {
 
   it.each([
     {
-      subtype: 'mobile',
+      subtype: 'mobile-apps',
       prompt: 'Design a mobile checkout flow.',
       metadata: {
         kind: 'prototype',
@@ -1124,9 +1125,11 @@ describe('HomeView prompt handoff', () => {
       },
     },
     {
-      subtype: 'wireframe',
-      prompt: 'Sketch a low-fidelity account setup flow.',
-      metadata: { kind: 'prototype', fidelity: 'wireframe' },
+      // A scene that narrows only the example rail stamps nothing beyond the
+      // parent's kind.
+      subtype: 'web-landing',
+      prompt: 'Lay out a SaaS landing page.',
+      metadata: { kind: 'prototype' },
     },
   ])('routes $subtype to the automatic OD Next Prototype route while preserving its project metadata', async ({
     subtype,
@@ -1177,8 +1180,8 @@ describe('HomeView prompt handoff', () => {
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
     // A nested Prototype scene refines WHAT to build, never WHETHER the parent
-    // route applies: 移动应用 / 线框图 enter OD Next exactly as 原型 does, and
-    // their distinguishing metadata rides along into the bundle.
+    // route applies: Mobile apps / Landing pages enter OD Next exactly as 原型
+    // does, and their distinguishing metadata rides along into the bundle.
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
       pluginId: null,
       automaticStrategyTaskProfile: 'prototype',
@@ -1204,15 +1207,16 @@ describe('HomeView prompt handoff', () => {
   it.each([
     {
       legacyChipId: 'mobile',
+      sceneSlug: 'mobile-apps',
       metadata: {
         kind: 'prototype',
         platform: 'auto',
         platformTargets: ['mobile-ios', 'mobile-android'],
       },
     },
-    { legacyChipId: 'wireframe', metadata: { kind: 'prototype', fidelity: 'wireframe' } },
   ])('selects the nested scene when a queued intent still names the retired $legacyChipId chip id', async ({
     legacyChipId,
+    sceneSlug,
     metadata,
   }) => {
     // `requestHomeChip` takes a bare string from another surface, so a caller
@@ -1252,7 +1256,7 @@ describe('HomeView prompt handoff', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
-      expect(screen.getByTestId(`home-hero-subtype-${legacyChipId}`).getAttribute('aria-selected'))
+      expect(screen.getByTestId(`home-hero-subtype-${sceneSlug}`).getAttribute('aria-selected'))
         .toBe('true');
     });
 
@@ -1267,6 +1271,66 @@ describe('HomeView prompt handoff', () => {
       projectKind: 'prototype',
     });
     expect(submittedLegacy.projectMetadata).toEqual(metadata);
+  });
+
+  it("lands a queued intent naming the retired 'wireframe' chip id on its legacy-only scene", async () => {
+    // 'wireframe' is not one of the four rail types, but persisted intents
+    // predating the taxonomy still carry it. The hand-off must fold onto
+    // prototype with the wireframe-fidelity refinement — not fail the
+    // HOME_HERO_CHIPS lookup and silently drop the queued intent.
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/apply-local')) {
+        return new Response(JSON.stringify(WEB_PROTOTYPE_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await screen.findByTestId('home-hero-input');
+    await clearActiveTypeChip();
+    await clickHomeShortcut('wireframe');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
+    });
+    // The legacy scene refines the brief without occupying a rail slot.
+    expect(screen.queryByTestId('home-hero-subtype-wireframe')).toBeNull();
+    expect(findChip('wireframe')).toBeUndefined();
+
+    await setPromptAndSettle('Greybox the checkout flow.');
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    const [submittedWireframe] = onSubmit.mock.calls[0] as [Record<string, unknown>];
+    expect(submittedWireframe).toMatchObject({
+      pluginId: null,
+      automaticStrategyTaskProfile: 'prototype',
+      projectKind: 'prototype',
+    });
+    expect(submittedWireframe.projectMetadata).toEqual({
+      kind: 'prototype',
+      fidelity: 'wireframe',
+    });
   });
 
   it('keeps a Slide deck second-level scene on its own ppt route', async () => {
@@ -1666,9 +1730,15 @@ describe('HomeView prompt handoff', () => {
   });
 
   it.each([
-    { subtype: 'wireframe', metadata: { kind: 'prototype', fidelity: 'wireframe' } },
     {
-      subtype: 'mobile',
+      // A scene that narrows only the example rail: no refinement to stamp.
+      subtype: 'web-landing',
+      facetTag: 'landing',
+      metadata: { kind: 'prototype' },
+    },
+    {
+      subtype: 'mobile-apps',
+      facetTag: 'mobile',
       metadata: {
         kind: 'prototype',
         platform: 'auto',
@@ -1677,11 +1747,18 @@ describe('HomeView prompt handoff', () => {
     },
   ])('carries an example card under the $subtype Prototype scene on the automatic OD Next route', async ({
     subtype,
+    facetTag,
     metadata,
   }) => {
+    // Tag the faceted seed so the Community taxonomy places it in the scene
+    // under test (the example rail only shows plugins of the selected scene).
+    const facetedPlugin = {
+      ...FACETED_WEB_PROTOTYPE_PLUGIN,
+      manifest: { ...FACETED_WEB_PROTOTYPE_PLUGIN.manifest, tags: [facetTag] },
+    };
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
-        return new Response(JSON.stringify({ plugins: [FACETED_WEB_PROTOTYPE_PLUGIN] }), {
+        return new Response(JSON.stringify({ plugins: [facetedPlugin] }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });

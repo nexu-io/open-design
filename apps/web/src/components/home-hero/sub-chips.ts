@@ -50,12 +50,10 @@ const PARENT_IDS: readonly SubChipParentId[] = ['prototype', 'deck'];
 // added facet still renders a pill rather than crashing.
 const SUBCATEGORY_ICONS: Record<string, IconName> = {
   // prototype
-  'business-dashboards': 'grid',
-  'app-prototypes': 'blocks',
-  'landing-marketing': 'globe',
-  'developer-tools': 'terminal',
-  'docs-reports': 'file',
-  'brand-design': 'palette',
+  'web-landing': 'globe',
+  'web-tools': 'blocks',
+  'mobile-apps': 'smartphone',
+  dashboards: 'grid',
   // deck — the 15 commercial "品类" scenes (slug === commercial category id)
   'fundraising-pitch': 'present',
   'corporate-strategy': 'kanban',
@@ -76,16 +74,28 @@ const SUBCATEGORY_ICONS: Record<string, IconName> = {
 const DEFAULT_SUBCATEGORY_ICON: IconName = 'blocks';
 
 const PROTOTYPE_SUB_CHIPS: readonly HomeHeroSubChip[] = [
-  { slug: 'landing-marketing', label: 'Landing / marketing', icon: 'globe' },
-  { slug: 'business-dashboards', label: 'Dashboards', icon: 'grid' },
+  // The prototype rail is curated around exactly four artifact types
+  // (2026-08 curation decision) — keep this list in lockstep with the
+  // prototype SUBCATEGORIES in `plugins-home/facets.ts`.
+  { slug: 'web-landing', label: 'Landing pages', icon: 'globe' },
+  { slug: 'web-tools', label: 'Web tools', icon: 'blocks' },
   {
-    slug: 'mobile',
-    label: 'Mobile app',
+    slug: 'mobile-apps',
+    label: 'Mobile apps',
     icon: 'smartphone',
     // Frames the screens for handheld viewports; the Prototype task profile
     // already carries mobile guidance down to touch reach and breakpoints.
     projectMetadata: { platform: 'auto', platformTargets: ['mobile-ios', 'mobile-android'] },
   },
+  { slug: 'dashboards', label: 'Dashboards', icon: 'grid' },
+];
+
+// Scenes that no longer appear in the curated four-type rail but must keep
+// resolving for state that outlives a release: persisted composer drafts and
+// queued cross-surface intents can still name them. `subChipsForChip` renders
+// the rail from PROTOTYPE_SUB_CHIPS alone, so these stay invisible in the UI
+// while their refinement (e.g. wireframe fidelity) survives a restore.
+const LEGACY_ONLY_PROTOTYPE_SUB_CHIPS: readonly HomeHeroSubChip[] = [
   {
     slug: 'wireframe',
     label: 'Wireframe',
@@ -95,15 +105,15 @@ const PROTOTYPE_SUB_CHIPS: readonly HomeHeroSubChip[] = [
     // and interaction-state requirements for exactly this fidelity.
     projectMetadata: { fidelity: 'wireframe' },
   },
-  { slug: 'app-prototypes', label: 'Apps', icon: 'blocks' },
-  { slug: 'developer-tools', label: 'Developer tools', icon: 'terminal' },
-  { slug: 'brand-design', label: 'Brand / design', icon: 'palette' },
-  { slug: 'docs-reports', label: 'Docs / reports', icon: 'file' },
 ];
 
 export function prototypeSubChipForSlug(slug: string | null): HomeHeroSubChip | null {
   if (!slug) return null;
-  return PROTOTYPE_SUB_CHIPS.find((item) => item.slug === slug) ?? null;
+  return (
+    PROTOTYPE_SUB_CHIPS.find((item) => item.slug === slug) ??
+    LEGACY_ONLY_PROTOTYPE_SUB_CHIPS.find((item) => item.slug === slug) ??
+    null
+  );
 }
 
 export function isSubChipParent(chipId: string | null): chipId is SubChipParentId {
@@ -121,7 +131,10 @@ export function isSubChipParent(chipId: string | null): chipId is SubChipParentI
  * shipped as a chip has no legacy id to fold.
  */
 const LEGACY_TASK_TYPE_CHIP_SCENE_SLUGS: Readonly<Record<string, string>> = {
-  mobile: 'mobile',
+  // 'mobile' folds onto the mobile-apps scene of the four-type prototype
+  // taxonomy; 'wireframe' folds onto its legacy-only scene, which keeps the
+  // wireframe-fidelity refinement without occupying a slot in the rail.
+  mobile: 'mobile-apps',
   wireframe: 'wireframe',
 };
 

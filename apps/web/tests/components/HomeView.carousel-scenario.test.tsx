@@ -3,11 +3,12 @@
 // One-click create from the placeholder carousel with a second-level Prototype
 // scene selected.
 //
-// Picking a scene narrows the carousel to that scene's own curated lines, and
-// Send on an empty composer creates from the showing line. The scene is a
-// metadata refinement of Prototype rather than a template of its own, so this
-// create must carry the scene's platform targets / lo-fi fidelity AND stay on
-// the Prototype OD Next route — the same result as typing a prompt by hand.
+// Two contracts, one per scene flavor: mobile-apps curates a line of its own
+// ('app-idea'), so selecting it narrows the carousel to that line and Send
+// carries the scene's mobile refinement into the create. web-landing curates
+// none, so it keeps the parent's lines showing and a create made from a
+// parent line binds bare Prototype (the line's own scope) — the same result
+// as typing that brief by hand with only the task type picked.
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -131,31 +132,33 @@ describe('HomeView one-click create from a scene-specific carousel line', () => 
   afterEach(() => {
     carouselMock.targetScenarioId = null;
     carouselMock.reportedScenarioId = null;
-    vi.unstubAllGlobals();
     cleanup();
-    window.localStorage.clear();
-    window.sessionStorage.clear();
+    // jsdom teardown in this file can drop the storage globals before the
+    // last afterEach runs; clearing is best-effort hygiene, not an assertion.
+    window.localStorage?.clear();
+    window.sessionStorage?.clear();
+    vi.unstubAllGlobals();
   });
 
   it.each([
     {
       scenarioId: 'app-idea',
-      scene: 'mobile',
-      metadata: {
+      scene: 'mobile-apps',
+      expectedMetadata: {
         kind: 'prototype',
         platform: 'auto',
         platformTargets: ['mobile-ios', 'mobile-android'],
       },
     },
     {
-      scenarioId: 'product-detail',
-      scene: 'wireframe',
-      metadata: { kind: 'prototype', fidelity: 'wireframe' },
+      scenarioId: 'signup-flow',
+      scene: 'web-landing',
+      expectedMetadata: { kind: 'prototype' },
     },
-  ])('creates on the Prototype route with the $scene refinement intact', async ({
+  ])('creates from the showing line on the Prototype route with the $scene scene selected', async ({
     scenarioId,
     scene,
-    metadata,
+    expectedMetadata,
   }) => {
     carouselMock.targetScenarioId = scenarioId;
     vi.stubGlobal('fetch', fetchMock());
@@ -179,8 +182,9 @@ describe('HomeView one-click create from a scene-specific carousel line', () => 
         .toBe('true');
     });
 
-    // The scene's own line is now what the carousel offers, so Send lights up
-    // on a composer the user never typed into.
+    // mobile-apps narrows to its own curated line; web-landing curates none
+    // and keeps the parent's. Either way Send lights up on a composer the
+    // user never typed into.
     const submit = await screen.findByTestId('home-hero-submit');
     await waitFor(() => expect((submit as HTMLButtonElement).disabled).toBe(false));
     expect(carouselMock.reportedScenarioId).toBe(scenarioId);
@@ -193,6 +197,8 @@ describe('HomeView one-click create from a scene-specific carousel line', () => 
       automaticStrategyTaskProfile: 'prototype',
       projectKind: 'prototype',
     });
-    expect(submitted.projectMetadata).toEqual(metadata);
+    // A line binds its own scope: a scene-scoped line carries the scene's
+    // refinement; a parent line stays bare even with a scene selected.
+    expect(submitted.projectMetadata).toEqual(expectedMetadata);
   });
 });

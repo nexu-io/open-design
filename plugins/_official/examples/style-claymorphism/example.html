@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sprout — Learning that feels like playtime</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --peach: #FDBCB4;
+    --baby-blue: #ADD8E6;
+    --mint: #98FF98;
+    --lilac: #E6E6FA;
+    --cream: #FFF7EF;
+    --ink: #4A3B57;
+    --ink-soft: #8A7A99;
+    --radius: 22px;
+    --bw: 4px;
+    --clay-shadow: inset -3px -4px 10px rgba(120, 80, 60, 0.18), inset 3px 4px 10px rgba(255, 255, 255, 0.85), 6px 8px 16px rgba(120, 90, 140, 0.18);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Baloo 2', 'Comic Sans MS', 'Segoe UI', sans-serif;
+    background: linear-gradient(160deg, #FDEFE4 0%, #F3EEFB 55%, #E8F7F0 100%);
+    color: var(--ink);
+    min-height: 100vh;
+  }
+  /* soft background blobs */
+  .blob { position: fixed; border-radius: 50%; filter: blur(50px); opacity: .5; z-index: 0; }
+  .b1 { width: 380px; height: 380px; background: var(--peach); top: -100px; right: -60px; }
+  .b2 { width: 320px; height: 320px; background: var(--baby-blue); bottom: -80px; left: -70px; }
+  .b3 { width: 260px; height: 260px; background: var(--lilac); top: 40%; left: 42%; }
+
+  .app { position: relative; z-index: 1; max-width: 1120px; margin: 0 auto; padding: 30px 32px 60px; }
+
+  .clay {
+    background: var(--cream);
+    border: var(--bw) solid #FFFFFF;
+    border-radius: var(--radius);
+    box-shadow: var(--clay-shadow);
+  }
+
+  /* top bar */
+  .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+  .brand { display: flex; align-items: center; gap: 12px; font-size: 26px; font-weight: 800; }
+  .brand-icon {
+    width: 52px; height: 52px; border-radius: 18px;
+    background: var(--mint);
+    border: var(--bw) solid #fff;
+    box-shadow: var(--clay-shadow);
+    display: grid; place-items: center; font-size: 26px;
+  }
+  .top-right { display: flex; gap: 14px; align-items: center; }
+  .chip {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 18px; font-weight: 700; font-size: 15px;
+    border-radius: 999px;
+  }
+  .chip.streak { background: var(--peach); }
+  .chip.stars { background: var(--lilac); }
+  .avatar-clay {
+    width: 52px; height: 52px; border-radius: 50%;
+    background: var(--baby-blue);
+    border: var(--bw) solid #fff;
+    box-shadow: var(--clay-shadow);
+    display: grid; place-items: center; font-size: 24px;
+  }
+
+  /* hero */
+  .hero { display: grid; grid-template-columns: 1.4fr 1fr; gap: 24px; margin-bottom: 26px; }
+  .hero-card { padding: 34px 38px; display: flex; flex-direction: column; justify-content: center; background: var(--lilac); }
+  .hero-card h1 { font-size: 38px; font-weight: 800; line-height: 1.12; margin-bottom: 10px; }
+  .hero-card p { font-size: 17px; color: var(--ink-soft); font-weight: 600; margin-bottom: 24px; }
+  .btn {
+    font-family: inherit; font-weight: 800; font-size: 17px;
+    color: var(--ink);
+    background: var(--mint);
+    border: var(--bw) solid #fff;
+    border-radius: 999px;
+    box-shadow: var(--clay-shadow);
+    padding: 15px 30px;
+    cursor: pointer;
+    align-self: flex-start;
+    transition: transform .2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow .2s ease-out;
+  }
+  .btn:hover { transform: translateY(-3px) scale(1.03); }
+  .btn:active {
+    transform: translateY(2px) scale(.98);
+    box-shadow: inset 3px 4px 10px rgba(120, 80, 60, 0.22), inset -3px -4px 10px rgba(255,255,255,.7), 2px 3px 8px rgba(120, 90, 140, 0.15);
+  }
+
+  /* mascot drawn in CSS */
+  .mascot-card { padding: 24px; display: grid; place-items: center; background: var(--baby-blue); }
+  .mascot { position: relative; width: 170px; height: 190px; animation: bob 3.4s ease-in-out infinite; }
+  @keyframes bob { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-10px);} }
+  @media (prefers-reduced-motion: reduce) { .mascot { animation: none; } }
+  .m-body {
+    position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+    width: 150px; height: 130px; border-radius: 50% 50% 46% 46%;
+    background: var(--mint);
+    border: var(--bw) solid #fff;
+    box-shadow: var(--clay-shadow);
+  }
+  .m-leaf {
+    position: absolute; top: 4px; left: 50%;
+    width: 46px; height: 58px;
+    background: var(--mint);
+    border: var(--bw) solid #fff;
+    border-radius: 0 70% 0 70%;
+    transform: translateX(-50%) rotate(-14deg);
+    box-shadow: var(--clay-shadow);
+  }
+  .m-eye { position: absolute; top: 108px; width: 18px; height: 24px; border-radius: 50%; background: var(--ink); }
+  .m-eye.l { left: 48px; } .m-eye.r { right: 48px; }
+  .m-eye::after { content: ""; position: absolute; top: 4px; left: 4px; width: 7px; height: 8px; border-radius: 50%; background: #fff; }
+  .m-cheek { position: absolute; top: 128px; width: 16px; height: 10px; border-radius: 50%; background: var(--peach); }
+  .m-cheek.l { left: 32px; } .m-cheek.r { right: 32px; }
+  .m-smile {
+    position: absolute; top: 132px; left: 50%; transform: translateX(-50%);
+    width: 30px; height: 16px;
+    border: 4px solid var(--ink); border-top: none;
+    border-radius: 0 0 20px 20px;
+  }
+  .mascot-say { margin-top: 16px; font-weight: 700; font-size: 15.5px; color: var(--ink); text-align: center; }
+
+  /* section title */
+  h2.sec { font-size: 24px; font-weight: 800; margin: 6px 4px 16px; }
+  h2.sec span { font-size: 15px; color: var(--ink-soft); font-weight: 700; margin-left: 8px; }
+
+  /* lesson cards */
+  .lessons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-bottom: 30px; }
+  .lesson { padding: 24px; cursor: pointer; transition: transform .25s cubic-bezier(0.34, 1.56, 0.64, 1); }
+  .lesson:hover { transform: translateY(-6px) rotate(-1deg) scale(1.02); }
+  .lesson-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+  .lesson-icon {
+    width: 62px; height: 62px; border-radius: 20px;
+    border: var(--bw) solid #fff;
+    box-shadow: var(--clay-shadow);
+    display: grid; place-items: center; font-size: 30px;
+  }
+  .ic-peach { background: var(--peach); }
+  .ic-blue { background: var(--baby-blue); }
+  .ic-lilac { background: var(--lilac); }
+  .badge {
+    font-size: 12.5px; font-weight: 800; padding: 6px 12px; border-radius: 999px;
+    background: var(--mint);
+  }
+  .badge.locked { background: #EFE8E0; color: var(--ink-soft); }
+  .lesson h3 { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+  .lesson p { font-size: 14.5px; font-weight: 600; color: var(--ink-soft); margin-bottom: 16px; }
+  .bar {
+    height: 18px; border-radius: 999px; background: #F1E7DC;
+    box-shadow: inset 2px 3px 6px rgba(120, 80, 60, 0.15);
+    overflow: hidden;
+  }
+  .bar > i {
+    display: block; height: 100%; border-radius: 999px;
+    box-shadow: inset -2px -3px 5px rgba(120,80,60,.15), inset 2px 3px 5px rgba(255,255,255,.7);
+  }
+  .f-peach { background: var(--peach); width: 80%; }
+  .f-blue { background: var(--baby-blue); width: 45%; }
+  .f-lilac { background: var(--lilac); width: 10%; }
+  .bar-label { margin-top: 8px; font-size: 13px; font-weight: 700; color: var(--ink-soft); }
+
+  /* bottom row: weekly garden + nav */
+  .bottom { display: grid; grid-template-columns: 1.4fr 1fr; gap: 24px; align-items: start; }
+  .garden { padding: 26px 30px; background: var(--peach); }
+  .garden h3 { font-size: 20px; font-weight: 800; margin-bottom: 16px; }
+  .week { display: flex; gap: 14px; }
+  .day { flex: 1; text-align: center; }
+  .pot {
+    width: 100%; aspect-ratio: 1; border-radius: 18px;
+    background: var(--cream); border: var(--bw) solid #fff;
+    box-shadow: var(--clay-shadow);
+    display: grid; place-items: center; font-size: 26px;
+    margin-bottom: 8px;
+    transition: transform .2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .day:hover .pot { transform: scale(1.1) rotate(3deg); }
+  .day span { font-size: 13px; font-weight: 800; color: var(--ink); }
+  .day.empty .pot { opacity: .55; font-size: 18px; color: var(--ink-soft); }
+
+  .navcard { padding: 18px; display: flex; justify-content: space-around; background: var(--cream); }
+  .nav-b {
+    width: 76px; padding: 12px 0 10px; text-align: center; border-radius: 18px; cursor: pointer;
+    font-size: 12.5px; font-weight: 800; color: var(--ink-soft);
+    transition: transform .2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .nav-b em { display: block; font-style: normal; font-size: 24px; margin-bottom: 4px; }
+  .nav-b:hover { transform: translateY(-4px); }
+  .nav-b.on {
+    background: var(--lilac); color: var(--ink);
+    border: 3px solid #fff;
+    box-shadow: var(--clay-shadow);
+  }
+</style>
+</head>
+<body>
+  <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+
+  <div class="app">
+    <div class="topbar">
+      <div class="brand"><span class="brand-icon">🌱</span> Sprout</div>
+      <div class="top-right">
+        <div class="chip streak clay">🔥 6-day streak</div>
+        <div class="chip stars clay">⭐ 248</div>
+        <div class="avatar-clay">🦊</div>
+      </div>
+    </div>
+
+    <div class="hero">
+      <div class="hero-card clay">
+        <h1>Good morning, Mila!<br>Ready to grow today?</h1>
+        <p>You're 2 lessons away from your Word Wizard badge. Pip believes in you!</p>
+        <button class="btn">▶ Continue learning</button>
+      </div>
+      <div class="mascot-card clay">
+        <div>
+          <div class="mascot">
+            <div class="m-leaf"></div>
+            <div class="m-body"></div>
+            <div class="m-eye l"></div><div class="m-eye r"></div>
+            <div class="m-cheek l"></div><div class="m-cheek r"></div>
+            <div class="m-smile"></div>
+          </div>
+          <div class="mascot-say">"Let's water your brain!" — Pip</div>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="sec">Today's adventures <span>3 quests</span></h2>
+    <div class="lessons">
+      <div class="lesson clay">
+        <div class="lesson-top">
+          <div class="lesson-icon ic-peach">🔤</div>
+          <span class="badge">In progress</span>
+        </div>
+        <h3>Rhyme Time</h3>
+        <p>Match 12 rhyming word pairs</p>
+        <div class="bar"><i class="f-peach"></i></div>
+        <div class="bar-label">8 of 10 done · almost there!</div>
+      </div>
+      <div class="lesson clay">
+        <div class="lesson-top">
+          <div class="lesson-icon ic-blue">🔢</div>
+          <span class="badge">New</span>
+        </div>
+        <h3>Counting Safari</h3>
+        <p>Count the animals up to 50</p>
+        <div class="bar"><i class="f-blue"></i></div>
+        <div class="bar-label">Level 2 of 4</div>
+      </div>
+      <div class="lesson clay">
+        <div class="lesson-top">
+          <div class="lesson-icon ic-lilac">🎨</div>
+          <span class="badge locked">🔒 Unlocks at ⭐300</span>
+        </div>
+        <h3>Color Lab</h3>
+        <p>Mix paints, discover new colors</p>
+        <div class="bar"><i class="f-lilac"></i></div>
+        <div class="bar-label">Sneak peek available</div>
+      </div>
+    </div>
+
+    <div class="bottom">
+      <div class="garden clay">
+        <h3>🌼 Your learning garden this week</h3>
+        <div class="week">
+          <div class="day"><div class="pot">🌷</div><span>Mon</span></div>
+          <div class="day"><div class="pot">🌻</div><span>Tue</span></div>
+          <div class="day"><div class="pot">🌵</div><span>Wed</span></div>
+          <div class="day"><div class="pot">🌸</div><span>Thu</span></div>
+          <div class="day"><div class="pot">🌱</div><span>Fri</span></div>
+          <div class="day empty"><div class="pot">+</div><span>Sat</span></div>
+          <div class="day empty"><div class="pot">+</div><span>Sun</span></div>
+        </div>
+      </div>
+      <div class="navcard clay">
+        <div class="nav-b on"><em>🏠</em>Home</div>
+        <div class="nav-b"><em>🗺️</em>Quests</div>
+        <div class="nav-b"><em>🏆</em>Badges</div>
+        <div class="nav-b"><em>👨‍👩‍👧</em>Family</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

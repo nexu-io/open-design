@@ -1,0 +1,83 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-skill-compact-landing",
+  "title": "Compact Premium Landing",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-25T11:36:48Z",
+  "description": "Compact, premium micro-SaaS landing page: narrow measure (420-720px), quiet typography, tiny tactile controls with press feedback, a product-native signature artifact (live data specimen) instead of decorative heroes, clear CTA hierarchy in the first viewport, and zero-layout-shift motion. Use when the brief mentions \"compact landing\", \"developer tool page\", \"micro-saas\", \"package demo\", \"docs intro\", \"small polished landing\", \"clear CTA\". Based on Danilaa1's compact-landing skill.",
+  "license": "MIT",
+  "author": {
+    "name": "Danilaa1",
+    "url": "https://github.com/Danilaa1"
+  },
+  "homepage": "https://github.com/Danilaa1/compact-landing-skill",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "landing",
+    "landing-page",
+    "saas",
+    "developer-tool",
+    "compact"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a compact premium landing page for a webhook delivery tool, narrow column, quiet type, one clear CTA."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Compact Premium Landing"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

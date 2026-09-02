@@ -253,12 +253,10 @@ const DECK_SUBCATEGORIES: readonly SubcategoryDef[] = DECK_COMMERCIAL_ORDER.map(
 // natural `SUBCATEGORIES` order behind the explicitly-ordered ones.
 const SUBCATEGORY_DISPLAY_ORDER: Record<string, readonly string[]> = {
   prototype: [
-    'landing-marketing',
-    'brand-design',
-    'business-dashboards',
-    'app-prototypes',
-    'developer-tools',
-    'docs-reports',
+    'web-landing',
+    'web-tools',
+    'mobile-apps',
+    'dashboards',
   ],
   // Deck order is the commercial-priority order declared above.
   deck: DECK_COMMERCIAL_ORDER,
@@ -286,56 +284,78 @@ function orderSubcategoriesForDisplay(parent: string, options: FacetOption[]): F
 // NOTE: array order here is matching precedence (see SUBCATEGORY_DISPLAY_ORDER
 // above), NOT the on-screen order. Keep it stable.
 const SUBCATEGORIES: readonly SubcategoryDef[] = [
+  // The prototype gallery is curated around exactly four artifact types
+  // (2026-08 curation decision): web landing pages, web tool pages, mobile
+  // app screens, and dashboards. Order here is MATCHING precedence
+  // (specific -> broad, so a dashboard tagged "app" stays a dashboard);
+  // on-screen order comes from SUBCATEGORY_DISPLAY_ORDER above.
   {
     parent: 'prototype',
-    slug: 'business-dashboards',
+    slug: 'dashboards',
     label: 'Dashboards',
-    starterPrompt: 'Create an OpenDesign prototype plugin for business systems, admin panels, or analytics dashboards.',
+    starterPrompt: 'Create an OpenDesign prototype plugin for analytics dashboards, admin panels, or monitoring consoles.',
     test: byAnySlug(
       'dashboard',
+      'dashboards',
       'admin-panel',
       'analytics',
-      'control-panel',
-      'team-dashboard',
-      'live-dashboard',
-      'refreshable-dashboard',
-      'ops-dashboard',
-      'github-dashboard',
-      'social-media-dashboard',
+      'kpi',
+      'metrics',
+      'monitoring',
       'data',
       'chart',
     ),
   },
   {
     parent: 'prototype',
-    slug: 'app-prototypes',
-    label: 'Apps',
-    starterPrompt: 'Create an OpenDesign prototype plugin for multi-screen apps, onboarding, or task-productivity flows.',
+    slug: 'mobile-apps',
+    label: 'Mobile apps',
+    starterPrompt: 'Create an OpenDesign prototype plugin for mobile app screens, onboarding flows, or handheld UI.',
     test: byAnySlug(
       'mobile',
-      'app',
       'mobile-app',
+      'mobile-apps',
+      'ios',
       'ios-app',
+      'android',
       'android-app',
       'phone-screen',
-      'app-ui',
-      'app-mockup',
       'app-onboarding',
-      'onboarding',
-      'signup',
-      'task',
       'habit-tracker',
       'dating-app',
     ),
   },
   {
     parent: 'prototype',
-    slug: 'landing-marketing',
-    label: 'Landing / marketing',
-    starterPrompt: 'Create an OpenDesign prototype plugin for landing pages, marketing sites, pricing pages, or campaign pages.',
+    slug: 'web-tools',
+    label: 'Web tools',
+    starterPrompt: 'Create an OpenDesign prototype plugin for web tool pages: settings, wizards, boards, editors, or SaaS app screens.',
+    test: byAnySlug(
+      'web-tool',
+      'web-tools',
+      'tool',
+      'app',
+      'app-ui',
+      'settings',
+      'wizard',
+      'kanban',
+      'task-board',
+      'task',
+      'workspace',
+      'onboarding',
+      'signup',
+      'form',
+    ),
+  },
+  {
+    parent: 'prototype',
+    slug: 'web-landing',
+    label: 'Landing pages',
+    starterPrompt: 'Create an OpenDesign prototype plugin for landing pages, marketing sites, portfolios, or editorial web pages.',
     test: byAnySlug(
       'landing',
       'landing-page',
+      'web-landing',
       'saas-landing',
       'marketing-page',
       'product-landing',
@@ -343,68 +363,15 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
       'pricing-page',
       'waitlist-page',
       'coming-soon-page',
-      'email-template',
-      'newsletter',
-      'lead-magnet',
-      'e-guide',
-      'poster',
-      'social-carousel',
-    ),
-  },
-  {
-    parent: 'prototype',
-    slug: 'developer-tools',
-    label: 'Developer tools',
-    starterPrompt: 'Create an OpenDesign prototype plugin for developer tools, engineering workflows, docs, or code collaboration.',
-    test: byAnySlug(
-      'engineering',
-      'docs',
-      'documentation',
-      'api-reference',
-      'runbook',
-      'ops-doc',
-      'sre-doc',
-      'github',
-      'linear',
-      'issue',
-    ),
-  },
-  {
-    parent: 'prototype',
-    slug: 'docs-reports',
-    label: 'Docs / reports',
-    starterPrompt: 'Create an OpenDesign prototype plugin for reports, documents, case studies, specs, invoices, or resumes.',
-    test: byAnySlug(
-      'report',
-      'financial-report',
-      'finance-report',
-      'case-report',
-      'clinical-case',
-      'case-study',
-      'guide',
-      'tutorial',
-      'pm-spec',
-      'prd',
-      'spec',
-      'invoice',
-      'resume',
-      'cv',
-    ),
-  },
-  {
-    parent: 'prototype',
-    slug: 'brand-design',
-    label: 'Brand / design',
-    starterPrompt: 'Create an OpenDesign prototype plugin for brand pages, visual exploration, design reviews, or mockups.',
-    test: byAnySlug(
-      'design',
-      'design-review',
-      'design-audit',
-      'critique',
-      'mockup',
-      'wireframe',
-      'visual',
+      'portfolio',
+      'editorial',
+      'magazine',
+      'gallery',
+      'blog',
       'brand',
+      'design',
+      'visual',
+      'creative',
     ),
   },
   // Deck scenes are the 15 commercial "品类" buckets (generated above), keyed by
@@ -601,6 +568,28 @@ export function applyFacetSelection(
   const inCategory = plugins.filter((p) => extractCategories(p).includes(want));
   if (!selection.subcategory) return inCategory;
   return inCategory.filter((p) => extractSubcategories(p, want).includes(selection.subcategory!));
+}
+
+// Capability skills are functional workflows (clone a site from a URL, run an
+// audit, …) that users reach through the composer's mode picker, not visual
+// templates. Their example page is a workflow explainer, so rendering them as
+// gallery cards reads like a broken/blank template next to real previews.
+// Excluded from the template galleries (plugins home + Community grid) while
+// the plugin itself stays installed, runnable, and bound to its Home chip.
+const CAPABILITY_SKILL_PLUGIN_IDS: ReadonlySet<string> = new Set([
+  'example-web-clone',
+  // Workflow capability with no visual example page; renders as a blank
+  // fallback tile if it reaches the grid. Stays reachable from its entry
+  // surfaces, exactly like Website Clone above.
+  'od-web-effect-extractor',
+  // Powered-preview seed behind the Home "WebGL experience" chip. Kept out
+  // of the curated four-type grid (2026-08 curation decision) while the chip
+  // stays bound to its shader/3D generation contract.
+  'example-webgl-experience',
+]);
+
+export function isCapabilitySkillPlugin(record: InstalledPluginRecord): boolean {
+  return CAPABILITY_SKILL_PLUGIN_IDS.has(record.id);
 }
 
 export function isFeaturedPlugin(record: InstalledPluginRecord): boolean {

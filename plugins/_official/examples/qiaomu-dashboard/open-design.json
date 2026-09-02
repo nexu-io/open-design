@@ -1,0 +1,84 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-qiaomu-dashboard",
+  "title": "E-commerce Ops Dashboard",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-25T11:36:48Z",
+  "description": "Dark cold-grey e-commerce operations dashboard: fixed sidebar navigation, KPI stat cards with delta badges, hand-tuned pure-SVG bar and donut charts, channel breakdown, and a dense recent-orders table with status pills. Use when the brief mentions \"dashboard\", \"analytics\", \"admin panel\", \"data overview\". Based on joeseesun's qiaomu-design.",
+  "license": "MIT",
+  "author": {
+    "name": "joeseesun (乔木)",
+    "url": "https://github.com/joeseesun"
+  },
+  "homepage": "https://github.com/joeseesun/qiaomu-design",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "dashboard",
+    "analytics",
+    "admin",
+    "charts",
+    "data-table",
+    "dark"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "operations",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Make an operations dashboard for an e-commerce team — KPI cards, weekly sales bar chart, category donut, and a recent orders table."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "E-commerce Ops Dashboard"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

@@ -1548,12 +1548,10 @@ export interface Dict {
   'pluginsHome.facet.publicLink': string;
   'pluginsHome.facet.githubPr': string;
   'pluginsHome.facet.githubGist': string;
-  'pluginsHome.subfacet.business-dashboards': string;
-  'pluginsHome.subfacet.app-prototypes': string;
-  'pluginsHome.subfacet.landing-marketing': string;
-  'pluginsHome.subfacet.developer-tools': string;
-  'pluginsHome.subfacet.docs-reports': string;
-  'pluginsHome.subfacet.brand-design': string;
+  'pluginsHome.subfacet.web-landing': string;
+  'pluginsHome.subfacet.web-tools': string;
+  'pluginsHome.subfacet.mobile-apps': string;
+  'pluginsHome.subfacet.dashboards': string;
   'pluginsHome.subfacet.pitch-business': string;
   'pluginsHome.subfacet.course-training': string;
   'pluginsHome.subfacet.reports-briefings': string;

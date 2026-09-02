@@ -210,7 +210,7 @@ describe('CommunityView catalogue source', () => {
     // shared plugins-home taxonomy. Asserted before the tab walk below, which
     // leaves a different facet active.
     expect(renderedCards().map((card) => card.querySelector('.community-template-card__foot span')?.textContent))
-      .toEqual(['Prototype · Landing / marketing']);
+      .toEqual(['Prototype · Landing pages']);
 
     expect(readFacetCardCounts()).toEqual([1, 2, 1]);
   });
@@ -248,7 +248,7 @@ describe('CommunityView catalogue source', () => {
     const pills = Array.from(
       document.querySelectorAll('.community-template-view__subtabs button'),
     ).map((button) => button.textContent?.trim());
-    expect(pills).toEqual(['All', 'Landing / marketing']);
+    expect(pills).toEqual(['All', 'Landing pages']);
 
     fireEvent.click(readFacets().find((facet) => facet.label === 'Slides')!.tab);
     fireEvent.click(screen.getByRole('button', { name: 'B2B sales' }));

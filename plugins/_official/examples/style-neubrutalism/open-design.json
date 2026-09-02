@@ -1,0 +1,83 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-style-neubrutalism",
+  "title": "Neubrutalism Style",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-25T11:36:48Z",
+  "description": "Neubrutalism style showroom: hard 3px black borders, offset 5px hard shadows, flat pop colors (yellow / red / blue), sharp corners, shouty black typography and zero gradients, shown as a creative-studio landing page. Use when the brief mentions \"neubrutalism\", \"neo-brutalist\", \"brutalist web\", \"bold borders\", \"hard shadow\", \"Gen Z brand\". Based on nextlevelbuilder's UI UX Pro Max style library.",
+  "license": "MIT",
+  "author": {
+    "name": "nextlevelbuilder",
+    "url": "https://github.com/nextlevelbuilder"
+  },
+  "homepage": "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "landing",
+    "design",
+    "neubrutalism",
+    "brutalist",
+    "creative-studio"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a neubrutalist landing page for a creative studio, with thick black borders, hard offset shadows and loud pop colors."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Neubrutalism Style"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

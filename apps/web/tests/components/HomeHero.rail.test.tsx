@@ -179,15 +179,15 @@ describe('HomeHero intent rail', () => {
   it('does not reserve an empty active-context row for a hidden chip-bound plugin', () => {
     renderHero({
       activeChipId: 'prototype',
-      activePrototypeSubtypeId: 'wireframe',
-      activePluginTitle: 'Wireframe',
+      activePrototypeSubtypeId: 'mobile-apps',
+      activePluginTitle: 'Mobile App',
       showActivePluginChip: false,
       contextItemCount: 3,
     });
 
     expect(document.querySelector('.home-hero__active')).toBeNull();
     expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
-    expect(screen.getByTestId('home-hero-subtype-wireframe').getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('home-hero-subtype-mobile-apps').getAttribute('aria-selected')).toBe('true');
   });
 
   it('offers no clear affordance for the active creation chip', () => {
@@ -467,9 +467,10 @@ describe('HomeHero intent rail', () => {
     presets = screen.getAllByTestId('home-hero-plugin-preset');
     // Order within a facet is now usage/sink-driven (OPEND-449); this test is
     // about which presets route into Live Artifact, so assert membership only.
+    // Live Artifact membership is curated by id (CURATED_LIVE_ARTIFACT_PLUGIN_IDS):
+    // the uncurated `example-live-dashboard` stays with its rendering mode.
     expect(presets.map((preset) => preset.getAttribute('data-plugin-id')).sort()).toEqual([
       'example-live-artifact',
-      'example-live-dashboard',
       'example-social-media-matrix-tracker-template',
       'example-trading-analysis-dashboard-template',
       'image-template-notion-team-dashboard-live-artifact',

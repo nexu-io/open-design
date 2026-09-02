@@ -1,0 +1,84 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-style-retro-futurism",
+  "title": "Retro-Futurism Style",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-25T11:36:48Z",
+  "description": "Retro-futurism (synthwave / cyberpunk) style showroom: deep black #1A1A2E base, neon blue / hot pink / cyan glow via text-shadow and box-shadow, CRT scanline overlay, glitch keyframes, striped retro sun over a perspective grid floor, monospace + Orbitron type, shown as a synthwave music-festival promo page. Use when the brief mentions \"synthwave\", \"retro-futurism\", \"cyberpunk\", \"vaporwave\", \"80s neon\", \"outrun\", \"CRT\". Based on nextlevelbuilder's UI UX Pro Max style library.",
+  "license": "MIT",
+  "author": {
+    "name": "nextlevelbuilder",
+    "url": "https://github.com/nextlevelbuilder"
+  },
+  "homepage": "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "landing",
+    "creative",
+    "retro",
+    "synthwave",
+    "cyberpunk",
+    "neon"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "brand",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Make a synthwave music festival promo page with neon glow, a retro sun, CRT scanlines and a glitching title."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Retro-Futurism Style"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

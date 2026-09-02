@@ -1,0 +1,84 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-qiaomu-portfolio",
+  "title": "Designer Portfolio",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-25T11:36:48Z",
+  "description": "Warm off-black personal portfolio for an independent product designer: serif display hero with amber accent, hand-crafted CSS/SVG portrait illustration, editorial two-column project grid, about section, and contact block. Use when the brief mentions \"portfolio\", \"personal site\", \"designer website\", \"showcase\". Based on joeseesun's qiaomu-design.",
+  "license": "MIT",
+  "author": {
+    "name": "joeseesun (乔木)",
+    "url": "https://github.com/joeseesun"
+  },
+  "homepage": "https://github.com/joeseesun/qiaomu-design",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "portfolio",
+    "design",
+    "visual",
+    "personal-site",
+    "editorial",
+    "dark"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "brand",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Design a personal portfolio site for an independent product designer — editorial hero, selected work grid, about, and contact."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Designer Portfolio"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

@@ -175,22 +175,22 @@ const DEFAULT_PLUGINS: SeedFixture[] = [
       'Run the bundled pitch-deck plugin for a seed-stage AI design product and produce the HTML slide artifact.',
   },
   {
-    skillId: 'dashboard',
+    skillId: 'kanban-board',
     sourceKind: 'default-plugin',
-    pluginId: 'example-dashboard',
+    pluginId: 'example-kanban-board',
     kind: 'prototype',
-    name: 'Default plugin — analytics dashboard',
+    name: 'Default plugin — kanban board',
     pendingPrompt:
-      'Run the bundled dashboard plugin for a product analytics control panel with KPIs and a weekly trend chart.',
+      'Run the bundled kanban board plugin for a sprint task board with backlog, in-progress, and done columns.',
   },
   {
-    skillId: 'social-carousel',
+    skillId: 'open-design-landing',
     sourceKind: 'default-plugin',
-    pluginId: 'example-social-carousel',
+    pluginId: 'example-open-design-landing',
     kind: 'prototype',
-    name: 'Default plugin — social carousel',
+    name: 'Default plugin — editorial landing',
     pendingPrompt:
-      'Run the bundled social carousel plugin for a three-card product launch announcement.',
+      'Run the bundled OpenDesign landing plugin for a single-page editorial product launch page.',
   },
 ];
 

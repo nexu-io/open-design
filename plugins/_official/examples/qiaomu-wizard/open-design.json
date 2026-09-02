@@ -1,0 +1,84 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-qiaomu-wizard",
+  "title": "Booking Wizard",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-25T11:36:48Z",
+  "description": "Light warm-paper multi-step flight booking wizard: numbered step indicator, selectable flight cards, passenger form with inline validation, payment review, and an animated success state. Use when the brief mentions \"wizard\", \"multi-step form\", \"booking flow\", \"checkout\", \"onboarding steps\". Based on joeseesun's qiaomu-design.",
+  "license": "MIT",
+  "author": {
+    "name": "joeseesun (乔木)",
+    "url": "https://github.com/joeseesun"
+  },
+  "homepage": "https://github.com/joeseesun/qiaomu-design",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "app",
+    "wizard",
+    "onboarding",
+    "multi-step",
+    "form",
+    "booking"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "product",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a three-step flight booking wizard — pick a flight, enter passenger details with validation, confirm payment, then show a success state."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Booking Wizard"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

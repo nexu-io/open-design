@@ -152,20 +152,18 @@ export const PLUGIN_SUBCATEGORIES: readonly PluginSubcategoryDef[] = [
  * Curated live-artifact ids. Mirrors `CURATED_LIVE_ARTIFACT_PLUGIN_IDS`
  * in `apps/web/src/components/plugins-home/curatedPriority.ts`.
  *
- * We accept both forms — the manifest `name` (`example-live-dashboard`,
+ * We accept both forms — the manifest `name` (`example-live-artifact`,
  * what bundled-plugin records carry) and the bare folder slug
- * (`live-dashboard`, what legacy SkillRecord/TemplateRecord carry) —
+ * (`live-artifact`, what legacy SkillRecord/TemplateRecord carry) —
  * so a single set works for both data sources.
  */
 const LIVE_ARTIFACT_SLUGS: ReadonlySet<string> = new Set([
   // Bundled-plugin manifest ids.
-  'example-live-dashboard',
   'example-live-artifact',
   'example-social-media-matrix-tracker-template',
   'example-trading-analysis-dashboard-template',
   'image-template-notion-team-dashboard-live-artifact',
   // Bare folder slugs (used by SkillRecord / TemplateRecord adapters).
-  'live-dashboard',
   'live-artifact',
   'social-media-matrix-tracker-template',
   'trading-analysis-dashboard-template',

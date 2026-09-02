@@ -1,0 +1,77 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-huashu-ios-tiled-prototype",
+  "title": "iOS Tiled Prototype",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-25T11:36:48Z",
+  "description": "Mobile-app prototype delivered as a tiled overview: 4-6 iPhone frames side by side on a warm paper stage, each primary screen labeled in italic serif, with Dynamic Island frames, one warm accent color, and high product-information density on every screen. Use when the brief mentions \"app prototype\", \"iOS mockup\", \"mobile app\", \"app screens overview\", \"iPhone frames\". Based on alchaincyf's huashu-design.",
+  "license": "MIT",
+  "author": {
+    "name": "alchaincyf (花叔)",
+    "url": "https://github.com/alchaincyf"
+  },
+  "homepage": "https://github.com/alchaincyf/huashu-design",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "app",
+    "app-ui",
+    "ios",
+    "mobile",
+    "mockup"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "product",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Prototype my focus-timer iOS app as 4 iPhone screens side by side: today view, live session, insights, settings."
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

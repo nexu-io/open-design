@@ -1,0 +1,77 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-huashu-white-gallery",
+  "title": "White Gallery",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-25T11:36:48Z",
+  "description": "Kenya-Hara-inspired white gallery page: near-white ground, hairline dividers, wide-tracked micro labels, serif italic titles, and a masonry curation grid where the exhibited works supply all the color while the UI recedes. Use when the brief mentions \"gallery\", \"portfolio\", \"curated collection\", \"minimal shop\", \"Japanese minimalism\", \"exhibition\", \"moodboard\". Based on alchaincyf's huashu-design.",
+  "license": "MIT",
+  "author": {
+    "name": "alchaincyf (花叔)",
+    "url": "https://github.com/alchaincyf"
+  },
+  "homepage": "https://github.com/alchaincyf/huashu-design",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "design",
+    "visual",
+    "gallery",
+    "portfolio",
+    "minimal"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "brand",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Make a quiet, museum-like gallery page for my studio's poster collection where the works carry all the color."
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

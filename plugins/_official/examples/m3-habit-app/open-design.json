@@ -1,0 +1,82 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-m3-habit-app",
+  "title": "Material 3 Habit Tracker",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-26T03:50:30Z",
+  "description": "Material Design 3 (Material You) mobile habit-tracker home screen in a centered 420px phone frame: green tonal-seed scheme, top app bar, primary-container streak card with a 7-day dot row, habit list with M3 checkboxes and tonal icon tiles, floating action button, and pill-style bottom navigation bar. Use when the brief mentions \"android app\", \"material you\", \"MD3 mobile\", \"habit tracker\", \"daily checklist app\". Original work following CWTI Ltd's material-3-skill rules.",
+  "license": "MIT",
+  "author": {
+    "name": "CWTI Ltd (hamen)",
+    "url": "https://github.com/hamen"
+  },
+  "homepage": "https://github.com/hamen/material-3-skill",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "mobile-app",
+    "mobile",
+    "android",
+    "habit-tracker"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "personal",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Design a Material 3 Android habit-tracker home screen — streak card, habit checklist, FAB, and bottom navigation in a phone frame."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Material 3 Habit Tracker"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

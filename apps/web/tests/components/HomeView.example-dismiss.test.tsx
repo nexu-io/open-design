@@ -71,19 +71,19 @@ const CHIP_DEFAULTS = [
   pluginRecord('od-media-generation', 'Media generation', [], {}),
 ];
 
-// One official example card per task type under test. `example-social-carousel`
-// is the reported card: `od.mode: 'prototype'` + the `social-carousel` tag put
-// it in 原型's 落地页 / 营销 scene.
+// One official example card per task type under test. `example-qiaomu-landing`
+// is the reported-shape card: `od.mode: 'prototype'` + the `landing-page` tag
+// put it in 原型's Landing pages (web-landing) scene.
 const EXAMPLE_CARDS = [
-  pluginRecord('example-social-carousel', 'Social Carousel', ['prototype', 'marketing', 'social-carousel'], {
+  pluginRecord('example-qiaomu-landing', 'Qiaomu Landing', ['prototype', 'landing', 'landing-page'], {
     mode: 'prototype',
-    scenario: 'marketing',
   }),
   pluginRecord('example-mobile-app', 'Mobile App', ['prototype', 'mobile', 'app-ui'], { mode: 'prototype' }),
   pluginRecord('example-pitch-deck', 'Pitch Deck', ['deck'], { mode: 'deck', category: 'fundraising-pitch' }),
   pluginRecord('example-frame-glitch-title', 'Glitch Title', ['hyperframes'], { mode: 'video' }),
   pluginRecord('example-eng-runbook', 'Eng Runbook', ['document', 'runbook'], { mode: 'document' }),
-  pluginRecord('example-live-dashboard', 'Live Dashboard', ['live-artifact'], { mode: 'prototype' }),
+  // Live Artifact membership is curated by id (CURATED_LIVE_ARTIFACT_PLUGIN_IDS).
+  pluginRecord('example-trading-analysis-dashboard-template', 'Trading Analysis Dashboard', ['live-artifacts'], { mode: 'template' }),
   pluginRecord('example-image-template', 'Image Template', ['image', 'image-template'], { mode: 'image' }),
 ];
 
@@ -204,18 +204,19 @@ const DISMISS_CASES: DismissCase[] = [
   {
     name: '原型, no scene',
     chipId: 'prototype',
-    cardId: 'example-social-carousel',
+    cardId: 'example-qiaomu-landing',
     automaticStrategyTaskProfile: 'prototype',
     projectKind: 'prototype',
     projectMetadata: { kind: 'prototype' },
     pluginId: null,
   },
   {
-    // The reported combination.
-    name: '原型 + 落地页 / 营销',
+    // The reported combination: a scene that only narrows the example rail
+    // and stamps no metadata of its own.
+    name: '原型 + Landing pages',
     chipId: 'prototype',
-    scene: 'landing-marketing',
-    cardId: 'example-social-carousel',
+    scene: 'web-landing',
+    cardId: 'example-qiaomu-landing',
     automaticStrategyTaskProfile: 'prototype',
     projectKind: 'prototype',
     projectMetadata: { kind: 'prototype' },
@@ -223,9 +224,9 @@ const DISMISS_CASES: DismissCase[] = [
   },
   {
     // A scene that stamps its own refinement must keep it through the dismiss.
-    name: '原型 + 移动应用',
+    name: '原型 + Mobile apps',
     chipId: 'prototype',
-    scene: 'mobile',
+    scene: 'mobile-apps',
     cardId: 'example-mobile-app',
     automaticStrategyTaskProfile: 'prototype',
     projectKind: 'prototype',
@@ -234,16 +235,6 @@ const DISMISS_CASES: DismissCase[] = [
       platform: 'auto',
       platformTargets: ['mobile-ios', 'mobile-android'],
     },
-    pluginId: null,
-  },
-  {
-    name: '原型 + 线框图',
-    chipId: 'prototype',
-    scene: 'wireframe',
-    cardId: 'example-social-carousel',
-    automaticStrategyTaskProfile: 'prototype',
-    projectKind: 'prototype',
-    projectMetadata: { kind: 'prototype', fidelity: 'wireframe' },
     pluginId: null,
   },
   {
@@ -299,7 +290,7 @@ const DISMISS_CASES: DismissCase[] = [
   {
     name: 'Live artifact (no OD Next route)',
     chipId: 'live-artifact',
-    cardId: 'example-live-dashboard',
+    cardId: 'example-trading-analysis-dashboard-template',
     automaticStrategyTaskProfile: null,
     projectKind: 'prototype',
     projectMetadata: { kind: 'prototype', intent: 'live-artifact', fidelity: 'high-fidelity' },
@@ -379,17 +370,17 @@ describe('HomeView — dismissing a picked example card', () => {
 
     const mounted = renderHome(onSubmit);
     await pickHomeTemplate('prototype');
-    const scene = await screen.findByTestId('home-hero-subtype-landing-marketing');
+    const scene = await screen.findByTestId('home-hero-subtype-web-landing');
     fireEvent.click(scene);
     await waitFor(() => expect(scene.getAttribute('aria-selected')).toBe('true'));
-    await pickExampleCard('example-social-carousel');
+    await pickExampleCard('example-qiaomu-landing');
     const seededPrompt = homeHeroPromptText();
 
     mounted.unmount();
     renderHome(onSubmit);
     await waitFor(() => expect(homeHeroPromptText()).toBe(seededPrompt));
     expect((await screen.findByTestId('home-hero-active-plugin')).textContent)
-      .toContain('Social Carousel');
+      .toContain('Qiaomu Landing');
 
     const payload = await submitAndRead(onSubmit);
     expect(payload).toMatchObject({
@@ -397,8 +388,8 @@ describe('HomeView — dismissing a picked example card', () => {
       automaticStrategyTaskProfile: 'prototype',
       appliedPluginSnapshotId: null,
       exampleReference: {
-        pluginId: 'example-social-carousel',
-        source: '/tmp/example-social-carousel',
+        pluginId: 'example-qiaomu-landing',
+        source: '/tmp/example-qiaomu-landing',
       },
       projectKind: 'prototype',
     });

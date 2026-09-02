@@ -53,8 +53,8 @@ describe('extractCategories', () => {
     expect(
       extractCategories(
         fixture({
-          id: 'example-live-dashboard',
-          tags: ['live-dashboard'],
+          id: 'example-live-artifact',
+          tags: ['live-artifact'],
           od: { mode: 'prototype' },
         }),
       ),
@@ -77,6 +77,18 @@ describe('extractCategories', () => {
         }),
       ),
     ).toEqual(['live-artifact']);
+    // Membership is curated by id (CURATED_LIVE_ARTIFACT_PLUGIN_IDS), not by
+    // tag: an uncurated plugin keeps its rendering-mode category even when it
+    // carries live-dashboard-ish tags.
+    expect(
+      extractCategories(
+        fixture({
+          id: 'example-live-dashboard',
+          tags: ['live-dashboard'],
+          od: { mode: 'prototype' },
+        }),
+      ),
+    ).toEqual(['prototype']);
   });
 
   it('splits HyperFrames from the broader video mode', () => {
@@ -103,13 +115,15 @@ describe('extractCategories', () => {
 });
 
 describe('extractSubcategories', () => {
-  it('maps prototype templates to prompt-taxonomy scene buckets', () => {
-    expect(extractSubcategories(fixture({ id: 'dashboard', tags: ['dashboard'], od: { mode: 'prototype' } }))).toEqual(['business-dashboards']);
-    expect(extractSubcategories(fixture({ id: 'app', tags: ['mobile-app'], od: { mode: 'prototype' } }))).toEqual(['app-prototypes']);
-    expect(extractSubcategories(fixture({ id: 'landing', tags: ['saas-landing'], od: { mode: 'prototype' } }))).toEqual(['landing-marketing']);
-    expect(extractSubcategories(fixture({ id: 'dev', tags: ['engineering'], od: { mode: 'prototype' } }))).toEqual(['developer-tools']);
-    expect(extractSubcategories(fixture({ id: 'clinical', tags: ['case-report'], od: { mode: 'prototype' } }))).toEqual(['docs-reports']);
-    expect(extractSubcategories(fixture({ id: 'brand', tags: ['wireframe'], od: { mode: 'prototype' } }))).toEqual(['brand-design']);
+  it('maps prototype templates to the four curated artifact-type buckets', () => {
+    expect(extractSubcategories(fixture({ id: 'dashboard', tags: ['dashboard'], od: { mode: 'prototype' } }))).toEqual(['dashboards']);
+    expect(extractSubcategories(fixture({ id: 'app', tags: ['mobile-app'], od: { mode: 'prototype' } }))).toEqual(['mobile-apps']);
+    expect(extractSubcategories(fixture({ id: 'landing', tags: ['saas-landing'], od: { mode: 'prototype' } }))).toEqual(['web-landing']);
+    expect(extractSubcategories(fixture({ id: 'tool', tags: ['kanban'], od: { mode: 'prototype' } }))).toEqual(['web-tools']);
+    expect(extractSubcategories(fixture({ id: 'portfolio', tags: ['portfolio'], od: { mode: 'prototype' } }))).toEqual(['web-landing']);
+    // A prototype whose tags match none of the four artifact types lands in
+    // no bucket (it still shows under the bare Prototype tab).
+    expect(extractSubcategories(fixture({ id: 'dev', tags: ['engineering'], od: { mode: 'prototype' } }))).toEqual([]);
   });
 
   // Deck scenes are the 15 commercial "品类" buckets, resolved from the plugin's
@@ -144,24 +158,25 @@ describe('extractSubcategories', () => {
     expect(extractSubcategories(fixture({ id: 'cinema', tags: ['cinematic'], od: { mode: 'video' } }))).toEqual(['cinematic-story']);
   });
 
-  // Regression: the prototype/image/video rail display order
-  // (SUBCATEGORY_DISPLAY_ORDER) must NOT change which bucket an overlapping-tag
-  // plugin lands in. Bucketing is decided by SUBCATEGORIES matching precedence,
-  // which stays stable even though Brand / design renders first in the rails.
+  // Regression: the prototype rail display order (SUBCATEGORY_DISPLAY_ORDER
+  // renders Landing pages first) must NOT change which bucket an
+  // overlapping-tag plugin lands in. Bucketing is decided by SUBCATEGORIES
+  // matching precedence (dashboards → mobile-apps → web-tools → web-landing),
+  // which stays stable.
   // (Decks are exempt: their bucket is the single resolved commercial category.)
   it('keeps bucket membership stable for overlapping-tag plugins regardless of display order', () => {
-    // `dashboard` + `design`: stays in Dashboards (not Brand / design).
+    // `dashboard` + `design`: stays in Dashboards (not Landing pages).
     expect(
       extractSubcategories(fixture({ id: 'dash-glass', tags: ['dashboard', 'design'], od: { mode: 'prototype' } })),
-    ).toEqual(['business-dashboards']);
-    // mobile app + `design`: stays in Apps (not Brand / design).
+    ).toEqual(['dashboards']);
+    // mobile app + `app`: stays in Mobile apps (not Web tools).
     expect(
-      extractSubcategories(fixture({ id: 'mobile', tags: ['mobile-app', 'design'], od: { mode: 'prototype' } })),
-    ).toEqual(['app-prototypes']);
-    // landing + `brand`: stays in Landing / marketing (not Brand / design).
+      extractSubcategories(fixture({ id: 'mobile', tags: ['mobile-app', 'app'], od: { mode: 'prototype' } })),
+    ).toEqual(['mobile-apps']);
+    // kanban tool + `landing`: stays in Web tools (not Landing pages).
     expect(
-      extractSubcategories(fixture({ id: 'landing-brand', tags: ['saas-landing', 'brand'], od: { mode: 'prototype' } })),
-    ).toEqual(['landing-marketing']);
+      extractSubcategories(fixture({ id: 'tool-landing', tags: ['kanban', 'landing'], od: { mode: 'prototype' } })),
+    ).toEqual(['web-tools']);
   });
 
   it('keeps Live Artifact, HyperFrames, and Audio flat with no second-level buckets', () => {
@@ -204,12 +219,10 @@ describe('buildFacetCatalog', () => {
     // Display order (SUBCATEGORY_DISPLAY_ORDER) — distinct from the matching
     // precedence encoded by the SUBCATEGORIES array order.
     expect((catalog.subcategory.prototype ?? []).map((o) => o.slug)).toEqual([
-      'landing-marketing',
-      'brand-design',
-      'business-dashboards',
-      'app-prototypes',
-      'developer-tools',
-      'docs-reports',
+      'web-landing',
+      'web-tools',
+      'mobile-apps',
+      'dashboards',
     ]);
     // Deck scenes: the 15 commercial "品类" buckets in commercial-priority order.
     expect((catalog.subcategory.deck ?? []).map((o) => o.slug)).toEqual([
@@ -294,10 +307,10 @@ describe('applyFacetSelection', () => {
 
   it('filters by the selected scene bucket inside the selected artifact kind', () => {
     expect(
-      applyFacetSelection(plugins, { category: 'prototype', subcategory: 'business-dashboards' }).map((p) => p.id),
+      applyFacetSelection(plugins, { category: 'prototype', subcategory: 'dashboards' }).map((p) => p.id),
     ).toEqual(['prototype-dashboard']);
     expect(
-      applyFacetSelection(plugins, { category: 'prototype', subcategory: 'app-prototypes' }).map((p) => p.id),
+      applyFacetSelection(plugins, { category: 'prototype', subcategory: 'mobile-apps' }).map((p) => p.id),
     ).toEqual(['prototype-app']);
     // Deck scene bucket = the plugin's resolved commercial category.
     expect(

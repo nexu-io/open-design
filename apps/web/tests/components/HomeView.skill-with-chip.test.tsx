@@ -245,7 +245,7 @@ describe('HomeView — @-mentioning a Skill on top of a picked task type', () =>
     expect(payload.skillId).toBe(PROTOTYPE_SKILL.id);
   });
 
-  it('keeps the 原型 + 移动应用 scene refinement when a deck-mode Skill is mentioned', async () => {
+  it('keeps the 原型 + Mobile apps scene refinement when a deck-mode Skill is mentioned', async () => {
     stubFetch();
     stubAnimationFrame();
     const onSubmit = submitSpy();
@@ -253,7 +253,7 @@ describe('HomeView — @-mentioning a Skill on top of a picked task type', () =>
 
     // 1. Task type, then its second-level scene.
     await pickHomeTemplate('prototype');
-    const scene = await screen.findByTestId('home-hero-subtype-mobile');
+    const scene = await screen.findByTestId('home-hero-subtype-mobile-apps');
     fireEvent.click(scene);
     await waitFor(() => expect(scene.getAttribute('aria-selected')).toBe('true'));
 

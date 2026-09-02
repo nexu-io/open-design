@@ -19,12 +19,10 @@ export function pluginSubfacetLabel(
   // dict the card chip uses so the filter row and the tag read identically.
   if (isCommercialCategoryId(slug)) return commercialCategoryLabel(slug, t);
   switch (slug) {
-    case 'business-dashboards': return t('pluginsHome.subfacet.business-dashboards');
-    case 'app-prototypes': return t('pluginsHome.subfacet.app-prototypes');
-    case 'landing-marketing': return t('pluginsHome.subfacet.landing-marketing');
-    case 'developer-tools': return t('pluginsHome.subfacet.developer-tools');
-    case 'docs-reports': return t('pluginsHome.subfacet.docs-reports');
-    case 'brand-design': return t('pluginsHome.subfacet.brand-design');
+    case 'web-landing': return t('pluginsHome.subfacet.web-landing');
+    case 'web-tools': return t('pluginsHome.subfacet.web-tools');
+    case 'mobile-apps': return t('pluginsHome.subfacet.mobile-apps');
+    case 'dashboards': return t('pluginsHome.subfacet.dashboards');
     case 'pitch-business': return t('pluginsHome.subfacet.pitch-business');
     case 'course-training': return t('pluginsHome.subfacet.course-training');
     case 'reports-briefings': return t('pluginsHome.subfacet.reports-briefings');

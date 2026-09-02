@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0f0e0c">
+<title>June Park · Independent Product Designer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Display serif for headings + mono for numerals; body text on the system stack -->
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ─── RESET ─── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  /* DNA donor: Notion (warm base + hairline borders + layered micro-shadows) */
+  /* Borrowed from Framer: tight display tracking / glass button opacity / screenshot framing */
+  --bg:         #0f0e0c;   /* warm off-black base */
+  --surface:    #191714;   /* card surface */
+  --surface2:   #222019;   /* hover-raised surface */
+  --border:     rgba(255,255,255,.07);   /* Framer: hairline white border */
+  --border-vis: rgba(255,255,255,.11);
+  --text-1:     rgba(255,255,255,.88);  /* P-5 body on dark >= .85 */
+  --text-2:     rgba(255,255,255,.62);  /* P-5 secondary >= .60 */
+  --text-3:     rgba(255,255,255,.38);
+  --accent:     #d4a853;   /* warm amber accent - saturation < 80% */
+  --accent-dim: rgba(212,168,83,.14);
+  --radius:     3px;       /* one radius for the whole page */
+  --ease-out:   cubic-bezier(0.23, 1, 0.32, 1);
+  --max-prose:  640px;     /* locked line length */
+}
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text-1);
+  /* System stack for body; display faces handled at the heading layer */
+  font-family: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  font-size: 16px;
+  line-height: 1.75;    /* P-5 line height >= 1.7 */
+  -webkit-font-smoothing: antialiased;
+}
+/* Ambient layer - page noise <= 3%, does not intrude on body copy */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.022'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+  pointer-events: none; z-index: 0; opacity: .6;
+}
+/* ::selection */
+::selection { background: rgba(212,168,83,.28); color: #fff; }
+/* focus ring - brand color */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+/* scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 2px; }
+
+/* ─── LAYOUT HELPERS ─── */
+.wrapper {
+  max-width: 1100px; margin: 0 auto; padding: 0 32px;
+  position: relative; z-index: 1;
+}
+.prose {
+  max-width: var(--max-prose);
+}
+
+/* ════════════════════════
+   NAV
+════════════════════════ */
+.nav {
+  position: sticky; top: 0; z-index: 100;
+  border-bottom: 1px solid var(--border);
+  background: rgba(15,14,12,.9);
+  backdrop-filter: blur(12px);
+}
+.nav-inner {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 0;
+}
+.nav-logo {
+  font-family: 'DM Serif Display', Georgia, serif;
+  font-size: 20px; font-weight: 400;
+  color: var(--text-1); letter-spacing: -0.01em;
+  text-decoration: none;
+}
+.nav-links {
+  display: flex; align-items: center; gap: 28px;
+  list-style: none;
+}
+.nav-links a {
+  font-size: 14px; font-weight: 500; color: var(--text-2);
+  text-decoration: none;
+  transition: color 0.15s var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .nav-links a:hover { color: var(--text-1); }
+}
+.nav-cta {
+  font-size: 14px; font-weight: 600;
+  background: var(--accent-dim);
+  border: 1px solid rgba(212,168,83,.3);
+  color: var(--accent);
+  padding: 7px 18px; border-radius: var(--radius);
+  text-decoration: none;
+  transition: all 0.15s var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .nav-cta:hover {
+    background: rgba(212,168,83,.22);
+    border-color: rgba(212,168,83,.5);
+  }
+}
+.nav-cta:active { transform: scale(0.97); }
+
+/* ════════════════════════
+   HERO
+════════════════════════ */
+.hero {
+  padding: 100px 0 80px;
+  border-bottom: 1px solid var(--border);
+}
+.hero-inner {
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  gap: 64px; align-items: center;
+}
+/* Left copy */
+.hero-left {}
+.hero-eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 20px;
+  display: flex; align-items: center; gap: 8px;
+}
+.hero-eyebrow::before {
+  content: '';
+  display: inline-block; width: 20px; height: 1px;
+  background: var(--accent); opacity: .6;
+}
+.hero-name {
+  font-family: 'DM Serif Display', Georgia, serif;
+  font-size: clamp(42px, 5vw, 64px); font-weight: 400;
+  color: var(--text-1); letter-spacing: -0.02em; line-height: 1.05;
+  margin-bottom: 24px; text-wrap: balance;
+}
+.hero-desc {
+  font-size: 17px; line-height: 1.8;
+  color: var(--text-2);
+  max-width: var(--max-prose);
+  margin-bottom: 36px;
+}
+.hero-stats {
+  display: flex; gap: 40px; margin-bottom: 40px;
+}
+.stat-item {}
+.stat-num {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 28px; font-weight: 700; color: var(--text-1);
+  letter-spacing: -0.03em; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.stat-label {
+  font-size: 13px; color: var(--text-3); margin-top: 4px;
+}
+.hero-actions {
+  display: flex; gap: 12px; flex-wrap: wrap;
+}
+.btn-primary {
+  background: var(--accent);
+  color: #0f0e0c;
+  padding: 12px 28px; border-radius: var(--radius);
+  font-size: 15px; font-weight: 600;
+  text-decoration: none; border: none; cursor: pointer;
+  transition: all 0.15s var(--ease-out);
+  white-space: nowrap;
+}
+@media (hover: hover) and (pointer: fine) {
+  .btn-primary:hover { filter: brightness(1.08); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(212,168,83,.3); }
+}
+.btn-primary:active { transform: scale(0.97); }
+.btn-secondary {
+  background: rgba(255,255,255,.04);
+  color: var(--text-1);
+  padding: 12px 28px; border-radius: var(--radius);
+  font-size: 15px; font-weight: 500;
+  text-decoration: none; border: 1px solid var(--border-vis); cursor: pointer;
+  transition: all 0.15s var(--ease-out);
+  white-space: nowrap;
+}
+@media (hover: hover) and (pointer: fine) {
+  .btn-secondary:hover { background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.18); }
+}
+.btn-secondary:active { transform: scale(0.97); }
+
+/* Right photo - crafted portrait */
+.hero-photo-col {
+  position: relative;
+}
+.hero-photo-frame {
+  position: relative;
+  /* Composition with posture: slight rotation */
+  transform: rotate(1.5deg);
+}
+.hero-photo-frame::before {
+  /* Decorative frame line - signature move */
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border: 1px solid rgba(212,168,83,.2);
+  border-radius: var(--radius);
+  transform: rotate(-3deg);
+  z-index: 0;
+}
+.photo-box {
+  position: relative; z-index: 1;
+  width: 100%; aspect-ratio: 3/4;
+  background: #1e1b15;
+  border: 1px solid var(--border-vis);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow:
+    rgba(0,0,0,.5) 0px 24px 64px,
+    rgba(0,0,0,.3) 0px 8px 24px;
+}
+/* CSS portrait art - stylized high-fidelity placeholder */
+.photo-bg {
+  position: absolute; inset: 0;
+  background: linear-gradient(160deg, #2a2118 0%, #1a150f 60%, #0f0c09 100%);
+}
+/* Figure silhouette + light layer */
+.photo-figure {
+  position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: 75%;
+}
+.photo-silhouette {
+  width: 100%;
+  /* Simple CSS-drawn silhouette */
+}
+.photo-light {
+  position: absolute; top: 0; right: 0;
+  width: 60%; height: 50%;
+  background: radial-gradient(circle at 70% 30%, rgba(212,168,83,.12) 0%, transparent 60%);
+}
+.photo-grain {
+  position: absolute; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.055'/%3E%3C/svg%3E");
+  background-size: 128px; pointer-events: none;
+}
+
+/* SVG figure */
+.photo-person {
+  position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: 65%; height: 85%;
+}
+
+/* Badge on the photo - editorial detail */
+.photo-badge {
+  position: absolute; bottom: 20px; left: 20px;
+  background: rgba(15,14,12,.85);
+  border: 1px solid var(--border-vis);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  backdrop-filter: blur(8px);
+}
+.photo-badge-name {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 14px; font-weight: 600;
+  color: var(--text-1); line-height: 1.2;
+}
+.photo-badge-role {
+  font-size: 12px; color: var(--text-3); margin-top: 2px;
+}
+
+/* Availability badge - breathing status dot */
+.availability-badge {
+  position: absolute; top: 20px; right: 20px;
+  background: rgba(15,14,12,.85);
+  border: 1px solid rgba(34,197,94,.25);
+  border-radius: 40px; padding: 6px 12px;
+  display: flex; align-items: center; gap: 7px;
+  backdrop-filter: blur(8px);
+}
+.avail-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 0 rgba(34,197,94,.5);
+  animation: breathe 2.4s ease-in-out infinite;
+}
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,.5); }
+  50% { box-shadow: 0 0 0 5px rgba(34,197,94,0); }
+}
+.avail-text {
+  font-size: 11px; font-weight: 500;
+  color: rgba(34,197,94,.85);
+  white-space: nowrap;
+}
+
+/* ════════════════════════
+   SECTION LABEL
+════════════════════════ */
+.section-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--text-3); margin-bottom: 12px;
+}
+.section-title {
+  font-family: 'DM Serif Display', Georgia, serif;
+  font-size: clamp(28px, 3.5vw, 40px); font-weight: 400;
+  color: var(--text-1); letter-spacing: -0.02em; line-height: 1.15;
+  text-wrap: balance;
+}
+.section-subtitle {
+  font-size: 16px; line-height: 1.8;
+  color: var(--text-2);
+  max-width: var(--max-prose); margin-top: 12px;
+}
+
+/* ════════════════════════
+   WORK
+════════════════════════ */
+.work-section {
+  padding: 96px 0;
+  border-bottom: 1px solid var(--border);
+}
+.work-header { margin-bottom: 56px; }
+.work-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+/* Large card */
+.project-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  position: relative;
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease-out), transform 0.2s var(--ease-out);
+  text-decoration: none; color: inherit;
+  display: block;
+}
+@media (hover: hover) and (pointer: fine) {
+  .project-card:hover {
+    border-color: var(--border-vis);
+    transform: translateY(-3px);
+    box-shadow: rgba(0,0,0,.4) 0px 16px 48px;
+  }
+  .project-card:hover .card-arrow { transform: translate(3px, -3px); }
+}
+.card-cover {
+  width: 100%; height: 240px;
+  position: relative; overflow: hidden;
+}
+.card-cover-inner {
+  position: absolute; inset: 0;
+  transition: transform 0.4s var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .project-card:hover .card-cover-inner { transform: scale(1.03); }
+}
+/* Distinct cover per project */
+.cover-finance {
+  background: linear-gradient(135deg, #1a2a3a 0%, #0d1a26 100%);
+  display: flex; align-items: center; justify-content: center;
+}
+.cover-health {
+  background: linear-gradient(135deg, #1a2420 0%, #0d1a16 100%);
+  display: flex; align-items: center; justify-content: center;
+}
+.cover-edu {
+  background: linear-gradient(135deg, #2a1e10 0%, #1a1208 100%);
+  display: flex; align-items: center; justify-content: center;
+}
+.cover-brand {
+  background: linear-gradient(135deg, #1e1a2a 0%, #120d1a 100%);
+  display: flex; align-items: center; justify-content: center;
+}
+/* Mini UI sketch inside the cover */
+.mini-ui {
+  width: 76%; transform: rotate(-2deg);
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 2px; padding: 12px;
+}
+.mini-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+}
+.mini-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.mini-bar {
+  height: 5px; border-radius: 2px;
+  background: rgba(255,255,255,.12);
+}
+.mini-bar-accent {
+  height: 5px; border-radius: 2px;
+}
+.mini-circle-row {
+  display: flex; gap: 6px;
+}
+.mini-circle {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08);
+}
+
+.card-body { padding: 24px; }
+.card-tags {
+  display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap;
+}
+.tag {
+  font-size: 11px; font-weight: 500;
+  padding: 3px 9px; border-radius: 40px;
+  background: rgba(255,255,255,.05);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+}
+.card-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 18px; font-weight: 600;
+  color: var(--text-1); line-height: 1.3; margin-bottom: 8px;
+  letter-spacing: -0.01em;
+}
+.card-desc {
+  font-size: 14px; line-height: 1.75; color: var(--text-2);
+  max-width: 400px;
+}
+.card-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 18px; padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.card-metric {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.card-arrow {
+  color: var(--text-3);
+  transition: transform 0.2s var(--ease-out);
+}
+
+/* ════════════════════════
+   ABOUT
+════════════════════════ */
+.about-section {
+  padding: 96px 0;
+  border-bottom: 1px solid var(--border);
+}
+.about-inner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 80px; align-items: start;
+}
+.about-left .section-label { margin-bottom: 12px; }
+.about-body {
+  font-size: 16px; line-height: 1.82;
+  color: var(--text-2);
+  max-width: var(--max-prose);
+  margin-top: 20px;
+}
+.about-body p + p { margin-top: 1em; }
+.skill-list {
+  margin-top: 36px; display: flex; flex-direction: column; gap: 0;
+}
+.skill-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+.skill-item:last-child { border-bottom: 1px solid var(--border); }
+.skill-name {
+  font-size: 14px; font-weight: 500; color: var(--text-1);
+}
+.skill-bar-wrap {
+  display: flex; align-items: center; gap: 10px;
+}
+.skill-bar {
+  width: 100px; height: 2px;
+  background: rgba(255,255,255,.08); border-radius: 1px;
+  position: relative;
+}
+.skill-fill {
+  position: absolute; top: 0; left: 0; height: 100%;
+  background: var(--accent); border-radius: 1px;
+}
+.skill-pct {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+/* Right-side timeline */
+.timeline { padding-top: 8px; }
+.timeline-item {
+  position: relative; padding-left: 24px; padding-bottom: 32px;
+}
+.timeline-item::before {
+  content: '';
+  position: absolute; left: 0; top: 7px;
+  width: 1px; bottom: 0;
+  background: var(--border);
+}
+.timeline-item:last-child::before { display: none; }
+.timeline-item::after {
+  content: '';
+  position: absolute; left: -4px; top: 6px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--bg);
+  border: 2px solid rgba(255,255,255,.2);
+}
+.timeline-year {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--accent); margin-bottom: 6px;
+}
+.timeline-role {
+  font-size: 15px; font-weight: 600; color: var(--text-1); margin-bottom: 4px;
+}
+.timeline-company {
+  font-size: 13px; color: var(--text-2); margin-bottom: 8px;
+}
+.timeline-desc {
+  font-size: 14px; line-height: 1.7; color: var(--text-3);
+}
+
+/* ════════════════════════
+   CONTACT / FOOTER
+════════════════════════ */
+.contact-section {
+  padding: 96px 0 80px;
+}
+.contact-inner {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 64px; align-items: start;
+}
+.contact-left {}
+.contact-title {
+  font-family: 'DM Serif Display', Georgia, serif;
+  font-size: clamp(32px, 4vw, 52px); font-weight: 400;
+  color: var(--text-1); letter-spacing: -0.02em; line-height: 1.1;
+  margin-bottom: 20px; text-wrap: balance;
+}
+.contact-body {
+  font-size: 16px; line-height: 1.8;
+  color: var(--text-2); max-width: 460px; margin-bottom: 36px;
+}
+.contact-links {
+  display: flex; flex-direction: column; gap: 12px;
+}
+.contact-link {
+  display: flex; align-items: center; gap: 12px;
+  font-size: 15px; font-weight: 500;
+  color: var(--text-2); text-decoration: none;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: all 0.15s var(--ease-out);
+  max-width: 300px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .contact-link:hover {
+    border-color: var(--border-vis);
+    color: var(--text-1);
+    background: var(--surface2);
+  }
+}
+.contact-right {
+  display: flex; flex-direction: column; gap: 12px;
+  padding-top: 8px;
+}
+.social-link {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 14px; color: var(--text-3); text-decoration: none;
+  transition: color 0.15s var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .social-link:hover { color: var(--text-1); }
+}
+.footer-line {
+  padding: 24px 0;
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.footer-copy {
+  font-size: 13px; color: var(--text-3);
+}
+/* Easter-egg small print */
+.footer-egg {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: rgba(255,255,255,.18);
+  transition: color 0.2s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .footer-egg:hover { color: var(--accent); }
+}
+
+/* ─── RESPONSIVE ─── */
+@media (max-width: 860px) {
+  .hero-inner { grid-template-columns: 1fr; }
+  .hero-photo-col { display: none; }
+  .work-grid { grid-template-columns: 1fr; }
+  .about-inner { grid-template-columns: 1fr; gap: 48px; }
+  .contact-inner { grid-template-columns: 1fr; gap: 40px; }
+  .contact-right { flex-direction: row; flex-wrap: wrap; }
+  .nav-links { display: none; }
+  .wrapper { padding: 0 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .avail-dot { animation: none !important; box-shadow: 0 0 0 3px rgba(34,197,94,.3); }
+  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── NAV ── -->
+<nav class="nav">
+  <div class="wrapper">
+    <div class="nav-inner">
+      <a href="#" class="nav-logo">June Park</a>
+      <ul class="nav-links">
+        <li><a href="#work">Work</a></li>
+        <li><a href="#about">About</a></li>
+        <li><a href="#contact" class="nav-cta">Start a project</a></li>
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- ── HERO ── -->
+<section class="hero">
+  <div class="wrapper">
+    <div class="hero-inner">
+      <div class="hero-left">
+        <div class="hero-eyebrow">Independent product designer · Lisbon</div>
+        <h1 class="hero-name">One designer,<br>a studio's worth of output</h1>
+        <p class="hero-desc">
+          I design B2B and consumer products from first definition to final polish.
+          My production pipeline runs on OpenDesign, an open source agent-native workspace, so prototypes, decks, and imagery arrive in hours and I spend my time on judgment.
+        </p>
+        <div class="hero-stats">
+          <div class="stat-item">
+            <div class="stat-num">7</div>
+            <div class="stat-label">Years designing</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-num">23</div>
+            <div class="stat-label">Projects shipped</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-num">4</div>
+            <div class="stat-label">Retainer clients</div>
+          </div>
+        </div>
+        <div class="hero-actions">
+          <a href="#work" class="btn-primary">View work</a>
+          <a href="#contact" class="btn-secondary">Start a project</a>
+        </div>
+      </div>
+
+      <!-- Portrait - crafted CSS composition -->
+      <div class="hero-photo-col">
+        <div class="hero-photo-frame">
+          <div class="photo-box">
+            <div class="photo-bg"></div>
+            <div class="photo-light"></div>
+            <!-- SVG portrait -->
+            <svg class="photo-person" viewBox="0 0 200 340" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <!-- Torso -->
+              <rect x="70" y="120" width="60" height="180" rx="8" fill="rgba(255,255,255,0.06)"/>
+              <!-- Head -->
+              <ellipse cx="100" cy="90" rx="36" ry="42" fill="rgba(210,180,140,0.18)"/>
+              <!-- Neck -->
+              <rect x="90" y="126" width="20" height="20" rx="4" fill="rgba(210,180,140,0.14)"/>
+              <!-- Collar / shirt detail -->
+              <path d="M72 148 L100 134 L128 148 L132 160 L68 160 Z" fill="rgba(255,255,255,0.05)"/>
+              <!-- Hair -->
+              <ellipse cx="100" cy="68" rx="33" ry="22" fill="rgba(80,60,40,0.55)"/>
+              <!-- Light layer -->
+              <ellipse cx="112" cy="82" rx="14" ry="18" fill="rgba(212,168,83,0.08)"/>
+              <!-- Shadow -->
+              <ellipse cx="100" cy="295" rx="42" ry="6" fill="rgba(0,0,0,0.4)"/>
+            </svg>
+            <div class="photo-grain"></div>
+
+            <!-- Card on the photo -->
+            <div class="photo-badge">
+              <div class="photo-badge-name">June Park</div>
+              <div class="photo-badge-role">Product Designer</div>
+            </div>
+            <div class="availability-badge">
+              <div class="avail-dot"></div>
+              <span class="avail-text">Open for new projects</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── WORK ── -->
+<section class="work-section" id="work">
+  <div class="wrapper">
+    <div class="work-header">
+      <p class="section-label">Selected work</p>
+      <h2 class="section-title">Recent projects</h2>
+      <p class="section-subtitle">Representative engagements from the past two years, each one built with OpenDesign in the loop. I join at the strategy stage, not at the handoff.</p>
+    </div>
+
+    <div class="work-grid">
+      <!-- Project 1 -->
+      <a class="project-card" href="#" aria-label="View the Vega wealth advisory case study">
+        <div class="card-cover">
+          <div class="card-cover-inner cover-finance">
+            <div class="mini-ui">
+              <div class="mini-row">
+                <div class="mini-dot" style="background:#4a9eff;"></div>
+                <div class="mini-bar" style="width:80%;"></div>
+              </div>
+              <div class="mini-row">
+                <div class="mini-dot" style="background:rgba(255,255,255,.2);"></div>
+                <div class="mini-bar" style="width:55%;"></div>
+              </div>
+              <div class="mini-bar-accent" style="width:100%;height:6px;background:linear-gradient(90deg,#4a9eff,rgba(74,158,255,.3));border-radius:2px;margin-top:8px;"></div>
+              <div class="mini-circle-row" style="margin-top:10px;">
+                <div class="mini-circle"></div>
+                <div class="mini-circle"></div>
+                <div class="mini-circle" style="background:rgba(74,158,255,.12);border-color:rgba(74,158,255,.25);"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-tags">
+            <span class="tag">Product strategy</span>
+            <span class="tag">Interface design</span>
+            <span class="tag">Fintech</span>
+          </div>
+          <h3 class="card-title">Vega · Wealth advisory platform</h3>
+          <p class="card-desc">Rebuilt the advisor workspace, folding five scattered data views into one. Every flow was prototyped with OpenDesign before a line of production code.</p>
+          <div class="card-footer">
+            <span class="card-metric">Retention +34%</span>
+            <svg class="card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg>
+          </div>
+        </div>
+      </a>
+
+      <!-- Project 2 -->
+      <a class="project-card" href="#" aria-label="View the Kale chronic care case study">
+        <div class="card-cover">
+          <div class="card-cover-inner cover-health">
+            <div class="mini-ui" style="transform:rotate(2deg);">
+              <div style="display:flex;gap:8px;margin-bottom:8px;">
+                <div style="flex:1;height:32px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.2);border-radius:2px;"></div>
+                <div style="flex:1;height:32px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:2px;"></div>
+              </div>
+              <div class="mini-bar-accent" style="width:70%;height:4px;background:linear-gradient(90deg,#22c55e,rgba(34,197,94,.3));border-radius:2px;margin-bottom:6px;"></div>
+              <div class="mini-bar" style="width:100%;margin-bottom:4px;"></div>
+              <div class="mini-bar" style="width:85%;"></div>
+            </div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-tags">
+            <span class="tag">Mobile</span>
+            <span class="tag">User research</span>
+            <span class="tag">Health tech</span>
+          </div>
+          <h3 class="card-title">Kale · Chronic care companion</h3>
+          <p class="card-desc">A daily tracking app that turns clinical data into everyday decisions. Agent-built prototypes from OpenDesign let us test with patients weekly instead of monthly.</p>
+          <div class="card-footer">
+            <span class="card-metric">DAU +2.7×</span>
+            <svg class="card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg>
+          </div>
+        </div>
+      </a>
+
+      <!-- Project 3 -->
+      <a class="project-card" href="#" aria-label="View the Papyrus learning platform case study">
+        <div class="card-cover">
+          <div class="card-cover-inner cover-edu">
+            <div class="mini-ui" style="transform:rotate(-1.5deg);">
+              <div class="mini-bar-accent" style="width:60%;height:8px;background:linear-gradient(90deg,#d4a853,rgba(212,168,83,.3));border-radius:2px;margin-bottom:8px;"></div>
+              <div class="mini-bar" style="width:100%;margin-bottom:4px;height:3px;"></div>
+              <div class="mini-bar" style="width:90%;margin-bottom:4px;height:3px;"></div>
+              <div class="mini-bar" style="width:75%;margin-bottom:8px;height:3px;"></div>
+              <div style="display:flex;gap:6px;">
+                <div class="mini-dot" style="background:rgba(212,168,83,.5);"></div>
+                <div class="mini-dot" style="background:rgba(255,255,255,.2);"></div>
+                <div class="mini-dot" style="background:rgba(255,255,255,.1);"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-tags">
+            <span class="tag">Learning experience</span>
+            <span class="tag">Systems design</span>
+            <span class="tag">Ed tech</span>
+          </div>
+          <h3 class="card-title">Papyrus · Professional learning platform</h3>
+          <p class="card-desc">A content system for adults learning on the job, designed to keep deep learning coherent across fragmented time. The stakeholder deck was generated with OpenDesign.</p>
+          <div class="card-footer">
+            <span class="card-metric">Completion 58%→81%</span>
+            <svg class="card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg>
+          </div>
+        </div>
+      </a>
+
+      <!-- Project 4 -->
+      <a class="project-card" href="#" aria-label="View the Morse design system case study">
+        <div class="card-cover">
+          <div class="card-cover-inner cover-brand">
+            <div class="mini-ui" style="transform:rotate(1deg);">
+              <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,rgba(148,130,255,.3),rgba(148,130,255,.08));border:1px solid rgba(148,130,255,.25);margin-bottom:8px;"></div>
+              <div class="mini-bar-accent" style="width:80%;height:4px;background:linear-gradient(90deg,rgba(148,130,255,.7),rgba(148,130,255,.2));border-radius:2px;margin-bottom:4px;"></div>
+              <div class="mini-bar" style="width:60%;height:3px;"></div>
+            </div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-tags">
+            <span class="tag">Brand systems</span>
+            <span class="tag">Design language</span>
+          </div>
+          <h3 class="card-title">Morse · Design system build</h3>
+          <p class="card-desc">A ground-up design system for a 300-person software company. The tokens now live in a design system file that OpenDesign agents apply to every new artifact.</p>
+          <div class="card-footer">
+            <span class="card-metric">Dev velocity +40%</span>
+            <svg class="card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg>
+          </div>
+        </div>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ── ABOUT ── -->
+<section class="about-section" id="about">
+  <div class="wrapper">
+    <div class="about-inner">
+      <div class="about-left">
+        <p class="section-label">About</p>
+        <h2 class="section-title">The brief is mine.<br>The busywork is the agent's.</h2>
+        <div class="about-body">
+          <p>I went independent in 2019, not to escape teams but to work closer to the decision. No middle layer between me and the client means faster calls and cleaner execution.</p>
+          <p>Most product problems are strategy problems wearing a design costume, so my work starts with defining what to solve. For the production itself I direct OpenDesign agents: they draft the prototypes, decks, and imagery on my own API keys, and I edit until it is right.</p>
+        </div>
+
+        <div class="skill-list" aria-label="Core skills">
+          <div class="skill-item">
+            <span class="skill-name">Product strategy / UX research</span>
+            <div class="skill-bar-wrap">
+              <div class="skill-bar"><div class="skill-fill" style="width:92%;"></div></div>
+              <span class="skill-pct">92%</span>
+            </div>
+          </div>
+          <div class="skill-item">
+            <span class="skill-name">Interface and interaction design</span>
+            <div class="skill-bar-wrap">
+              <div class="skill-bar"><div class="skill-fill" style="width:97%;"></div></div>
+              <span class="skill-pct">97%</span>
+            </div>
+          </div>
+          <div class="skill-item">
+            <span class="skill-name">Design systems</span>
+            <div class="skill-bar-wrap">
+              <div class="skill-bar"><div class="skill-fill" style="width:85%;"></div></div>
+              <span class="skill-pct">85%</span>
+            </div>
+          </div>
+          <div class="skill-item">
+            <span class="skill-name">Agent-driven prototyping (OpenDesign)</span>
+            <div class="skill-bar-wrap">
+              <div class="skill-bar"><div class="skill-fill" style="width:78%;"></div></div>
+              <span class="skill-pct">78%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="timeline" aria-label="Work history">
+        <div class="timeline-item">
+          <div class="timeline-year">2022 — Present</div>
+          <div class="timeline-role">Independent design consultant</div>
+          <div class="timeline-company">Self-employed · Lisbon / remote</div>
+          <div class="timeline-desc">Strategy-to-delivery engagements for fintech, education, and health teams, with OpenDesign running the production pipeline.</div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-year">2019 — 2022</div>
+          <div class="timeline-role">Senior product designer</div>
+          <div class="timeline-company">B2B data platform · Berlin</div>
+          <div class="timeline-desc">Owned the core product experience and built the company's first design system from zero.</div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-year">2017 — 2019</div>
+          <div class="timeline-role">Product designer</div>
+          <div class="timeline-company">Consumer learning app · London</div>
+          <div class="timeline-desc">Zero-to-one feature design and the research practice for an education product.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CONTACT ── -->
+<section class="contact-section" id="contact">
+  <div class="wrapper">
+    <div class="contact-inner">
+      <div class="contact-left">
+        <h2 class="contact-title">Have a project in mind?</h2>
+        <p class="contact-body">
+          Taking on new engagements from Q3. Whether it is a zero-to-one product definition
+          or an experience upgrade for something already live, the first conversation costs nothing.
+        </p>
+        <div class="contact-links">
+          <a class="contact-link" href="mailto:hello@junepark.studio">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            hello@junepark.studio
+          </a>
+          <a class="contact-link" href="#">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            Download CV (PDF)
+          </a>
+        </div>
+      </div>
+      <div class="contact-right">
+        <a class="social-link" href="#">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+          LinkedIn
+        </a>
+        <a class="social-link" href="#">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0 0 22 12.017C22 6.484 17.522 2 12 2z"/></svg>
+          GitHub
+        </a>
+        <a class="social-link" href="#">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"/></svg>
+          Twitter / X
+        </a>
+      </div>
+    </div>
+
+    <footer class="footer-line">
+      <span class="footer-copy">© 2026 June Park · Independent design consultant</span>
+      <span class="footer-egg" title="The agents draft. The taste is mine.">Directed by a human, produced with agents</span>
+    </footer>
+  </div>
+</section>
+
+<script>
+/* Scroll fade-in */
+(function() {
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.style.opacity = '1';
+        e.target.style.transform = 'translateY(0)';
+        observer.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.08 });
+
+  document.querySelectorAll('.project-card, .timeline-item, .skill-item').forEach(el => {
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(16px)';
+    el.style.transition = 'opacity 0.45s cubic-bezier(0.23,1,0.32,1), transform 0.45s cubic-bezier(0.23,1,0.32,1)';
+    observer.observe(el);
+  });
+
+  /* stagger cards */
+  document.querySelectorAll('.project-card').forEach((el, i) => {
+    el.style.transitionDelay = (i * 60) + 'ms';
+  });
+})();
+</script>
+</body>
+</html>

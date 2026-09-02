@@ -1,0 +1,85 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-promax-pet-app",
+  "title": "Pet Care Mobile App",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-26T03:49:34Z",
+  "description": "Warm, playful pet-care companion app home screen: claymorphic cards with chunky offset shadows on a cream canvas, a circular pet avatar hero with daily stats, a three-up quick-action grid, a timestamped activity feed, and a fixed bottom tab bar. Rounded Fredoka display type over Nunito body, orange-forward palette. Use when the brief mentions \"mobile app\", \"pet app\", \"companion app\", \"cute app home screen\", \"habit tracker\".",
+  "license": "MIT",
+  "author": {
+    "name": "nextlevelbuilder",
+    "url": "https://github.com/nextlevelbuilder"
+  },
+  "homepage": "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "mobile-app",
+    "mobile",
+    "ios",
+    "personal",
+    "pet",
+    "playful",
+    "clay"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "personal",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Design a cute pet-care mobile app home screen with a pet profile hero card, daily quick actions, an activity timeline, and a bottom tab bar."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Pet Care Mobile App"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

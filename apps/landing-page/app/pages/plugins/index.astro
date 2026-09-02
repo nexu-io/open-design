@@ -50,7 +50,8 @@ const cleanTagsOf = (rec: BundledPluginRecord) =>
   (rec.tags ?? []).filter((t) => TAG_ALLOWLIST.includes(t));
 const hasPreview = (p: BundledPluginRecord) => Boolean(p.previewPoster || p.previewVideo);
 // Low-quality entries pulled from the hub's explore grid (by manifest id).
-const EXCLUDE_IDS = new Set(['example-data-report']);
+// (Empty since the 2026-08 curation pass removed the last excluded plugin.)
+const EXCLUDE_IDS = new Set<string>();
 
 const exploreItems = [...templatesSet]
   .filter((p) => !EXCLUDE_IDS.has(p.manifestId))

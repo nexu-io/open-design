@@ -1,0 +1,84 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-skill-brutalist",
+  "title": "Industrial Brutalist Terminal",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-25T11:36:48Z",
+  "description": "Raw mechanical landing page in the industrial-brutalist / tactical-terminal style: dark CRT substrate, monospace telemetry, massive clamped uppercase headers, hazard-red accent, visible 1px grid compartments, ASCII framing marks, and scanline texture. Use when the brief mentions \"brutalist\", \"terminal\", \"industrial\", \"tactical\", \"CRT\", \"monospace UI\", \"developer tool landing\", \"blueprint aesthetic\". Based on Leonxlnx's brutalist-skill.",
+  "license": "MIT",
+  "author": {
+    "name": "Leonxlnx",
+    "url": "https://github.com/Leonxlnx"
+  },
+  "homepage": "https://github.com/Leonxlnx/taste-skill/tree/main/skills/brutalist-skill",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "landing",
+    "brutalist",
+    "terminal",
+    "developer-tool",
+    "dark-mode",
+    "monospace"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Make a brutalist terminal-style landing page for a deploy orchestration CLI, dark CRT look with red accents."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Industrial Brutalist Terminal"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

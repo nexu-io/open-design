@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TORQUE // DEPLOYMENT CONTROL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0A0A;
+    --panel:#121212;
+    --fg:#EAEAEA;
+    --dim:rgba(234,234,234,.55);
+    --ghost:rgba(234,234,234,.3);
+    --line:rgba(234,234,234,.18);
+    --red:#FF2A2A;
+    --green:#4AF626;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{color-scheme:dark;}
+  body{
+    background:var(--bg);
+    color:var(--fg);
+    font-family:'JetBrains Mono','IBM Plex Mono',ui-monospace,monospace;
+    font-size:13px;
+    line-height:1.5;
+    overflow-x:hidden;
+  }
+  body::after{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:99;
+    background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(0,0,0,.14) 2px 4px);
+  }
+  a{color:inherit;text-decoration:none;}
+  .mono-cap{font-size:11px;letter-spacing:.09em;text-transform:uppercase;}
+  .heavy{
+    font-family:'Archivo Black','Arial Black',Impact,sans-serif;
+    text-transform:uppercase;letter-spacing:-0.03em;line-height:.88;
+  }
+
+  /* top strip */
+  .strip{
+    display:flex;justify-content:space-between;align-items:center;
+    border-bottom:2px solid var(--fg);
+    padding:14px 24px;
+  }
+  .strip .id{display:flex;gap:24px;align-items:center;}
+  .strip .brand{font-weight:700;letter-spacing:.09em;}
+  .strip .brand b{color:var(--red);}
+  .strip nav{display:flex;gap:28px;}
+  .strip nav a{color:var(--dim);letter-spacing:.09em;font-size:11px;text-transform:uppercase;transition:color .1s linear;}
+  .strip nav a:hover{color:var(--red);}
+  .status{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:11px;letter-spacing:.09em;}
+  .status i{
+    width:8px;height:8px;background:var(--green);display:inline-block;
+    animation:blink 1.6s steps(2,start) infinite;
+  }
+  @keyframes blink{50%{opacity:.25;}}
+
+  /* hero */
+  .hero{padding:72px 24px 56px;border-bottom:1px solid var(--line);position:relative;}
+  .hero .coords{
+    display:flex;justify-content:space-between;color:var(--ghost);
+    font-size:11px;letter-spacing:.09em;margin-bottom:40px;text-transform:uppercase;
+  }
+  h1{
+    font-size:clamp(3.4rem,10.5vw,9.2rem);
+    max-width:100%;
+  }
+  h1 .red{color:var(--red);}
+  h1 .outline{
+    color:transparent;-webkit-text-stroke:2px var(--fg);
+  }
+  .hero .sub{
+    margin-top:36px;display:grid;grid-template-columns:minmax(0,52ch) 1fr;gap:32px;align-items:end;
+  }
+  .hero .sub p{color:var(--dim);font-size:13px;}
+  .hero .sub p b{color:var(--fg);font-weight:700;}
+  .cta-row{display:flex;gap:1px;background:var(--fg);border:2px solid var(--fg);width:max-content;margin-top:28px;}
+  .cta-row a{
+    padding:14px 26px;background:var(--bg);font-size:12px;letter-spacing:.09em;text-transform:uppercase;
+    transition:background .1s linear,color .1s linear;
+  }
+  .cta-row a.primary{background:var(--red);color:#0A0A0A;font-weight:700;}
+  .cta-row a.primary:hover{background:var(--fg);}
+  .cta-row a:not(.primary):hover{background:var(--fg);color:var(--bg);}
+  .hero .cross{position:absolute;color:var(--ghost);font-size:14px;}
+  .cross.c1{top:20px;left:50%;}
+  .cross.c2{bottom:20px;right:36px;}
+
+  /* telemetry stats */
+  .stats{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
+    border-bottom:1px solid var(--line);
+  }
+  .stat{background:var(--bg);padding:24px;transition:background .1s linear;}
+  .stat:hover{background:var(--panel);}
+  .stat .k{color:var(--ghost);font-size:10px;letter-spacing:.1em;text-transform:uppercase;}
+  .stat .v{
+    font-family:'Archivo Black','Arial Black',sans-serif;
+    font-size:clamp(1.6rem,3vw,2.6rem);margin-top:10px;letter-spacing:-0.02em;
+    font-variant-numeric:tabular-nums;
+  }
+  .stat .v span{color:var(--red);}
+  .stat .u{color:var(--dim);font-size:11px;margin-top:6px;letter-spacing:.09em;}
+
+  /* terminal */
+  .term-zone{padding:64px 24px;border-bottom:1px solid var(--line);}
+  .zone-head{
+    display:flex;justify-content:space-between;align-items:baseline;margin-bottom:24px;
+    color:var(--dim);font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+  }
+  .zone-head .h{color:var(--fg);font-weight:700;}
+  .term{
+    border:2px solid var(--fg);background:#0D0D0D;max-width:880px;
+  }
+  .term-bar{
+    display:flex;justify-content:space-between;border-bottom:2px solid var(--fg);
+    padding:10px 16px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);
+  }
+  .term-bar .dot{color:var(--red);}
+  .term pre{
+    padding:20px 16px;font-family:inherit;font-size:12.5px;line-height:1.75;overflow-x:auto;
+  }
+  .term .p{color:var(--ghost);}
+  .term .cmd{color:var(--fg);font-weight:700;}
+  .term .ok{color:var(--green);}
+  .term .warn{color:var(--red);}
+  .term .dim{color:var(--dim);}
+  .caret{
+    display:inline-block;width:8px;height:14px;background:var(--fg);vertical-align:-2px;
+    animation:blink 1s steps(2,start) infinite;
+  }
+
+  /* capabilities grid */
+  .caps{
+    display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--line);
+    border-bottom:2px solid var(--fg);
+  }
+  .cap-cell{background:var(--bg);padding:36px 28px;position:relative;transition:background .1s linear;}
+  .cap-cell:hover{background:var(--panel);}
+  .cap-cell:hover .cap-no{color:var(--red);}
+  .cap-no{color:var(--ghost);font-size:11px;letter-spacing:.1em;transition:color .1s linear;}
+  .cap-cell h3{
+    font-family:'Archivo Black','Arial Black',sans-serif;text-transform:uppercase;
+    font-size:1.35rem;letter-spacing:-0.01em;margin:14px 0 12px;
+  }
+  .cap-cell p{color:var(--dim);max-width:46ch;font-size:12.5px;}
+  .cap-cell .tag{
+    position:absolute;top:36px;right:28px;color:var(--ghost);font-size:10px;letter-spacing:.1em;
+  }
+
+  /* manifest / footer */
+  .manifest{padding:56px 24px;display:grid;grid-template-columns:1fr 1fr;gap:32px;border-bottom:1px solid var(--line);}
+  .manifest .big{
+    font-family:'Archivo Black','Arial Black',sans-serif;text-transform:uppercase;
+    font-size:clamp(1.8rem,4vw,3.4rem);letter-spacing:-0.02em;line-height:.95;
+  }
+  .manifest .big em{font-style:normal;color:var(--red);}
+  .manifest ul{list-style:none;color:var(--dim);font-size:12px;display:flex;flex-direction:column;gap:10px;}
+  .manifest ul b{color:var(--fg);}
+  footer{
+    display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;
+    padding:16px 24px;color:var(--ghost);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  }
+  footer a{color:var(--dim);}
+  footer a:hover{color:var(--red);}
+
+  @media (max-width:860px){
+    .stats{grid-template-columns:repeat(2,1fr);}
+    .caps{grid-template-columns:1fr;}
+    .hero .sub{grid-template-columns:1fr;}
+    .manifest{grid-template-columns:1fr;}
+    .strip nav{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<div class="strip">
+  <div class="id">
+    <span class="brand mono-cap">[ TORQUE<b>®</b> ]</span>
+    <span class="mono-cap" style="color:var(--ghost)">REV 2.6 // UNIT D-01</span>
+  </div>
+  <nav>
+    <a href="#">/// Systems</a>
+    <a href="#">/// Docs</a>
+    <a href="#">/// Registry</a>
+    <a href="#">/// Source</a>
+  </nav>
+  <span class="status"><i></i> ALL REGIONS NOMINAL</span>
+</div>
+
+<section class="hero">
+  <span class="cross c1">+</span>
+  <span class="cross c2">+</span>
+  <div class="coords">
+    <span>&gt;&gt;&gt; DEPLOYMENT CONTROL SYSTEM</span>
+    <span>LAT 47.3769 / LON 8.5417</span>
+  </div>
+  <h1 class="heavy">SHIP<br><span class="outline">HEAVY</span><br>MACHINES<span class="red">.</span></h1>
+  <div class="sub">
+    <div>
+      <p>
+        TORQUE is a deploy orchestrator built like plant equipment:
+        <b>declarative rollout plans, mechanical health gates, instant reversal.</b>
+        No dashboards begging for attention. One binary, one manifest, zero ceremony.
+      </p>
+      <div class="cta-row">
+        <a class="primary" href="#">Install v2.6</a>
+        <a href="#">Read the manual</a>
+      </div>
+    </div>
+    <ul style="list-style:none;color:var(--ghost);font-size:11px;letter-spacing:.09em;text-transform:uppercase;text-align:right;display:flex;flex-direction:column;gap:8px;">
+      <li>BIN SIZE / 9.4 MB</li>
+      <li>DEPS / 0</li>
+      <li>LICENSE / APACHE-2.0</li>
+      <li>PLATFORMS / LINUX · DARWIN</li>
+    </ul>
+  </div>
+</section>
+
+<section class="stats">
+  <div class="stat">
+    <div class="k">[ THROUGHPUT ]</div>
+    <div class="v">41,208</div>
+    <div class="u">DEPLOYS EXECUTED / DAY</div>
+  </div>
+  <div class="stat">
+    <div class="k">[ ROLLOUT P50 ]</div>
+    <div class="v">38<span>s</span></div>
+    <div class="u">MANIFEST TO FULL FLEET</div>
+  </div>
+  <div class="stat">
+    <div class="k">[ REVERSAL ]</div>
+    <div class="v">1.9<span>s</span></div>
+    <div class="u">PANIC TO PREVIOUS REV</div>
+  </div>
+  <div class="stat">
+    <div class="k">[ COVERAGE ]</div>
+    <div class="v">14</div>
+    <div class="u">REGIONS UNDER CONTROL</div>
+  </div>
+</section>
+
+<section class="term-zone">
+  <div class="zone-head">
+    <span class="h">[ 01 // FIELD SESSION ]</span>
+    <span>CAPTURED 2026-08-21T04:12:07Z</span>
+  </div>
+  <div class="term">
+    <div class="term-bar">
+      <span><span class="dot">●</span> OPERATOR CONSOLE // TTY-4</span>
+      <span>80×24 · PHOSPHOR P1</span>
+    </div>
+    <pre><span class="p">ops@rig-04:~/payments$</span> <span class="cmd">torque ship --plan canary.toml</span>
+<span class="dim">torque 2.6.0 // reading plan: canary.toml</span>
+<span class="dim">plan: 3 stages · 14 regions · gate: p99&lt;180ms, err&lt;0.1%</span>
+<span class="ok">STAGE 1/3</span>  canary      2 units    <span class="ok">[ PASS ]</span>  p99 141ms  err 0.00%
+<span class="ok">STAGE 2/3</span>  quarter     96 units   <span class="ok">[ PASS ]</span>  p99 149ms  err 0.02%
+<span class="warn">STAGE 3/3</span>  fleet       388 units  <span class="warn">[ HOLD ]</span>  gate breach: err 0.14%
+<span class="dim">auto-reversal engaged · fleet pinned to rev 88f2c01 · 1.87s</span>
+<span class="p">ops@rig-04:~/payments$</span> <span class="cmd">torque blame --last</span>
+<span class="dim">breach origin: eu-central-1 / unit 217 / OOM in worker pool</span>
+<span class="p">ops@rig-04:~/payments$</span> <span class="caret"></span></pre>
+  </div>
+</section>
+
+<section class="caps">
+  <div class="cap-cell">
+    <span class="cap-no">[ 02.1 ]</span>
+    <span class="tag">PLANS</span>
+    <h3>Declarative rollout plans</h3>
+    <p>Stages, gates, and blast radius live in one TOML manifest, versioned next to the code it ships. The plan is the paperwork.</p>
+  </div>
+  <div class="cap-cell">
+    <span class="cap-no">[ 02.2 ]</span>
+    <span class="tag">GATES</span>
+    <h3>Mechanical health gates</h3>
+    <p>Latency, error rate, and saturation thresholds are checked at every stage boundary. A breach halts the line. No human vibes involved.</p>
+  </div>
+  <div class="cap-cell">
+    <span class="cap-no">[ 02.3 ]</span>
+    <span class="tag">REVERSAL</span>
+    <h3>Sub-second reversal</h3>
+    <p>Every rollout keeps the previous revision warm. One command, or one failed gate, and the fleet snaps back before your pager fires.</p>
+  </div>
+  <div class="cap-cell">
+    <span class="cap-no">[ 02.4 ]</span>
+    <span class="tag">AUDIT</span>
+    <h3>Flight-recorder audit log</h3>
+    <p>Append-only, signed, grep-able. Every stage, gate reading, and operator override is on the record, forever. Compliance reads it raw.</p>
+  </div>
+</section>
+
+<section class="manifest">
+  <div class="big">DEPLOYMENT IS<br>A <em>MECHANICAL</em><br>PROCESS™</div>
+  <ul>
+    <li><b>&gt;&gt;&gt; INSTALL:</b> curl -fsSL torque.sh/install | sh</li>
+    <li><b>&gt;&gt;&gt; VERIFY:</b> torque doctor</li>
+    <li><b>&gt;&gt;&gt; FIRST SHIP:</b> torque init &amp;&amp; torque ship</li>
+    <li style="margin-top:12px;color:var(--ghost)">NO ACCOUNT. NO TELEMETRY PHONED HOME. THE BINARY WORKS FOR YOU.</li>
+  </ul>
+</section>
+
+<footer>
+  <span>© 2026 TORQUE INDUSTRIAL SYSTEMS</span>
+  <span><a href="#">CHANGELOG</a> · <a href="#">SECURITY.TXT</a> · <a href="#">STATUS</a></span>
+  <span>BUILT ON SCHEDULE // UNIT D-01</span>
+</footer>
+
+</body>
+</html>

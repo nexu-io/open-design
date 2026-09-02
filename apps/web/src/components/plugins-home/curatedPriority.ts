@@ -9,51 +9,36 @@ import type { InstalledPluginRecord } from '@open-design/contracts';
 const CURATED_PROTOTYPE_PLUGIN_IDS = [
   'example-open-design-landing',
   'example-kanban-board',
-  'example-social-carousel',
-  'example-blog-post',
-  'example-doc-kami-parchment',
 ] as const;
 
-// Wireframe scenario: lo-fi / sketch explorations across distinct styles —
-// hand-drawn sketch, crisp greybox/blueprint, a multi-screen mobile flow, and
-// an annotated/redline landing wireframe. The chip's tag-matching surfaces any
-// other lo-fi templates behind these.
-const CURATED_WIREFRAME_PLUGIN_IDS = [
-  'example-wireframe-sketch',
-  'example-wireframe-greybox',
-  'example-wireframe-mobile-flow',
-  'example-wireframe-annotated',
-] as const;
+// Wireframe scenario: the previous lo-fi / sketch template batch
+// (sketch, greybox, mobile-flow, annotated) was pruned from
+// plugins/_official and is pending a rebuild, so there is currently no
+// curated ordering here. The chip stays functional: its tag-matching
+// (`pluginMatchesExampleChip`) still surfaces any lo-fi templates that
+// ship, and every consumer treats an empty curated list as "no curated
+// boost" rather than an error.
+const CURATED_WIREFRAME_PLUGIN_IDS = [] as const;
 
 // Mobile scenario: real native-app prototype mockups (iOS / Android phone
 // screens), so the carousel reads as "this is what a mobile result looks
 // like" rather than generic web prototypes.
 const CURATED_MOBILE_PLUGIN_IDS = [
   'example-mobile-app',
-  'example-mobile-onboarding',
   'example-gamified-app',
-  'example-mockup-device-3d',
 ] as const;
 
-// Document scenario: polished, print-ready documents — resumes, reports,
-// invoices, papers, briefs — chosen for visual quality.
+// Document scenario: polished, print-ready documents chosen for visual
+// quality. Most of the previous document template batch (resume, report,
+// invoice, magazine, …) was pruned from plugins/_official and is pending
+// a rebuild; the survivors below keep their curated slots and the chip's
+// tag-matching surfaces everything else.
 const CURATED_DOCUMENT_PLUGIN_IDS = [
-  'example-resume-modern',
-  'example-doc-kami-parchment',
-  'example-data-report',
-  'example-finance-report',
-  'example-invoice',
-  'example-clinical-case-report',
   'example-hps-academic-paper',
-  'example-digital-eguide',
-  'example-article-magazine',
-  'example-meeting-notes',
   'example-design-brief',
-  'example-pm-spec',
 ] as const;
 
 export const CURATED_LIVE_ARTIFACT_PLUGIN_IDS = [
-  'example-live-dashboard',
   'image-template-notion-team-dashboard-live-artifact',
   'example-social-media-matrix-tracker-template',
   'example-trading-analysis-dashboard-template',

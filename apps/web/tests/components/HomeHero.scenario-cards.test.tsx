@@ -127,10 +127,14 @@ describe('HomeHero scenario cards', () => {
       pluginId: 'example-web-prototype',
       projectKind: 'prototype',
     });
-    // Wireframe reuses the web-prototype seed at lo-fi fidelity.
+    // Mobile apps reuses the web-prototype seed with mobile platform targets.
     expect(
-      prototypeSceneProjectMetadata(prototypeChip, prototypeSubChipForSlug('wireframe')),
-    ).toEqual({ kind: 'prototype', fidelity: 'wireframe' });
+      prototypeSceneProjectMetadata(prototypeChip, prototypeSubChipForSlug('mobile-apps')),
+    ).toEqual({
+      kind: 'prototype',
+      platform: 'auto',
+      platformTargets: ['mobile-ios', 'mobile-android'],
+    });
     expect(findChip('document')?.action).toMatchObject({
       pluginId: 'od-new-generation',
       projectKind: 'other',
@@ -159,7 +163,7 @@ describe('HomeHero scenario cards', () => {
     placeholderCarouselMock.reportScenario = true;
     renderHero({
       activeChipId: 'prototype',
-      activePrototypeSubtypeId: 'mobile',
+      activePrototypeSubtypeId: 'mobile-apps',
     });
 
     await waitFor(() => {

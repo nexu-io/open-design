@@ -1,0 +1,83 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-style-glassmorphism",
+  "title": "Glassmorphism Style",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-25T11:36:48Z",
+  "description": "Glassmorphism style showroom: frosted-glass panels (backdrop blur 10-20px), translucent white surfaces over a vibrant gradient background, 1px light borders, light-source reflections and layered z-depth, shown as a music-app interface. Use when the brief mentions \"glassmorphism\", \"frosted glass\", \"glass card\", \"translucent UI\", \"blur background\". Based on nextlevelbuilder's UI UX Pro Max style library.",
+  "license": "MIT",
+  "author": {
+    "name": "nextlevelbuilder",
+    "url": "https://github.com/nextlevelbuilder"
+  },
+  "homepage": "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "app-ui",
+    "design",
+    "glassmorphism",
+    "frosted-glass",
+    "music-app"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "product",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Design a music streaming app home screen in a glassmorphism style, with frosted glass cards over a vibrant gradient background."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Glassmorphism Style"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-skill-minimalist",
+  "title": "Editorial Minimalist Product Page",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-25T11:36:48Z",
+  "description": "Premium document-style minimal product page: warm monochrome palette (bone white, charcoal ink), editorial serif hero over a clean sans body, bento feature grid with 1px hairline borders, muted pastel tags, kbd keystroke chips, faux-OS window chrome, and near-invisible shadows. Use when the brief mentions \"minimal\", \"editorial\", \"notion-style\", \"clean product page\", \"monochrome\", \"quiet design\", \"document style\". Based on Leonxlnx's minimalist-skill.",
+  "license": "MIT",
+  "author": {
+    "name": "Leonxlnx",
+    "url": "https://github.com/Leonxlnx"
+  },
+  "homepage": "https://github.com/Leonxlnx/taste-skill/tree/main/skills/minimalist-skill",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "landing",
+    "minimal",
+    "editorial",
+    "monochrome",
+    "product-page",
+    "bento"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "marketing",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Design a quiet editorial-minimal product page for a research notes app, serif hero, bento grid, no gradients."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Editorial Minimalist Product Page"
+        }
+      ]
+    },
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

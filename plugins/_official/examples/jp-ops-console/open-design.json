@@ -1,0 +1,82 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-jp-ops-console",
+  "title": "Ops Console Settings",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-26T03:51:49Z",
+  "description": "Restrained light SaaS ops console settings page: 260px sidebar with grouped navigation and an active-card link, topbar with save-draft and apply actions, three KPI cards, a notification-settings form with visible help and error rows, and a job-status table with pill badges — all on a 12-column grid with one soft-blue accent. Use when the brief mentions \"settings page\", \"admin console\", \"internal tool\", \"workflow settings\", \"back office UI\". Based on hirokaji's jp-ui-contracts sample.",
+  "license": "MIT",
+  "author": {
+    "name": "hirokaji",
+    "url": "https://github.com/hirokaji"
+  },
+  "homepage": "https://github.com/hirokaji/jp-ui-contracts",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "app-ui",
+    "settings",
+    "console",
+    "saas"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "product",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a calm SaaS admin settings console — sidebar navigation, KPI cards, a notification settings form, and a job status table."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Ops Console Settings"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

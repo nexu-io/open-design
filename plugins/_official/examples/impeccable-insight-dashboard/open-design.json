@@ -1,0 +1,82 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-impeccable-insight-dashboard",
+  "title": "Product Insight Dashboard",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-26T03:48:52Z",
+  "description": "Light editorial product-analytics dashboard: warm paper neutrals, Fraunces serif display voice, one deep-teal accent, hairline-separated KPI band, hand-drawn SVG trend chart with prior-period comparison, channel table with share bars, and a written insights rail. Use when the brief mentions \"analytics dashboard\", \"KPI report\", \"product metrics\", \"executive readout\". Original page following the published design rules of pbakaus/impeccable.",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Paul Bakaus",
+    "url": "https://github.com/pbakaus"
+  },
+  "homepage": "https://github.com/pbakaus/impeccable",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "dashboard",
+    "analytics",
+    "kpi",
+    "light"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "operations",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a light, editorial product-analytics dashboard — KPI band, weekly-active-users trend chart with a prior-period comparison, signups-by-channel table, and a written insights column."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Product Insight Dashboard"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

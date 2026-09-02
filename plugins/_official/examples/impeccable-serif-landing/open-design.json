@@ -1,0 +1,83 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-impeccable-serif-landing",
+  "title": "Warm Serif SaaS Landing",
+  "version": "0.1.0",
+  "publishedAt": "2026-08-26T03:50:53Z",
+  "description": "Warm cream SaaS landing page: oversized Fraunces serif hero with one italic accent word on a cream-to-peach gradient, sticky blurred nav with pill CTA, italic serif logo strip, three rounded feature cards with line-art icons, and a dark inverted CTA band. Use when the brief mentions \"SaaS landing\", \"warm palette\", \"serif hero\", \"editorial marketing page\". Based on pbakaus's impeccable.",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Paul Bakaus",
+    "url": "https://github.com/pbakaus"
+  },
+  "homepage": "https://github.com/pbakaus/impeccable",
+  "tags": [
+    "example",
+    "prototype",
+    "web",
+    "landing",
+    "landing-page",
+    "saas",
+    "serif",
+    "hero"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a warm cream SaaS landing page for a team knowledge-base product — huge serif hero with an italic accent word, pill buttons, feature cards, and a dark CTA band."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Warm Serif SaaS Landing"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

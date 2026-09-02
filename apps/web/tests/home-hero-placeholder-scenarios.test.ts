@@ -26,19 +26,6 @@ describe('PLACEHOLDER_SCENARIO_DEFS bindings', () => {
     }
   });
 
-  it('binds a scene-specific scenario to a real second-level scene of its chip', () => {
-    // A scene is a refinement of its parent chip, not a template of its own, so
-    // a scenario names the parent AND the scene under it — never a scene alone.
-    for (const def of PLACEHOLDER_SCENARIO_DEFS) {
-      if (!def.prototypeSubtypeId) continue;
-      expect(def.chipId, `scenario "${def.id}"`).toBe('prototype');
-      expect(
-        subChipsForChip(def.chipId, []).map((sub) => sub.slug),
-        `scene "${def.prototypeSubtypeId}" for scenario "${def.id}"`,
-      ).toContain(def.prototypeSubtypeId);
-    }
-  });
-
   it('only binds create templates that actually render a carousel', () => {
     // These are the templates with hand-curated carousel lines. Other templates
     // can still render a carousel through prompt-example or label fallbacks.
@@ -58,15 +45,20 @@ describe('PLACEHOLDER_SCENARIO_DEFS bindings', () => {
     }
   });
 
-  it('keeps a curated carousel for each Prototype scene that had one as a chip', () => {
-    // Mobile app and Wireframe were first-level chips with their own lines;
-    // selecting the scene must still narrow to exactly those lines.
-    for (const slug of ['mobile', 'wireframe']) {
+  it('binds every scene-scoped line to a live prototype scene', () => {
+    // The retired 'mobile' / 'wireframe' scene ids must not linger in the
+    // table: 'mobile' folded onto the mobile-apps scene, and the wireframe
+    // lines rotate at the parent Prototype level (their lo-fi framing lives
+    // in the copy, not in a scene binding).
+    const liveScenes = new Set(subChipsForChip('prototype', []).map((sub) => sub.slug));
+    for (const def of PLACEHOLDER_SCENARIO_DEFS) {
+      if (!def.prototypeSubtypeId) continue;
+      // A scene is a refinement of its parent chip, so a scene-scoped line
+      // always names the prototype parent alongside the scene.
+      expect(def.chipId, `scenario "${def.id}"`).toBe('prototype');
       expect(
-        PLACEHOLDER_SCENARIO_DEFS.some(
-          (d) => d.chipId === 'prototype' && d.prototypeSubtypeId === slug,
-        ),
-        `scene "${slug}" has no scenario`,
+        liveScenes.has(def.prototypeSubtypeId),
+        `scenario "${def.id}" binds retired scene "${def.prototypeSubtypeId}"`,
       ).toBe(true);
     }
   });
@@ -96,16 +88,24 @@ describe('buildPlaceholderScenarios', () => {
   it('shows a task type its own lines and never another scene’s', () => {
     // Selecting 原型 alone must not start suggesting mobile-app or wireframe
     // lines: those belong to scenes the user has not chosen.
-    expect(idsFor('prototype')).toEqual(['signup-flow', 'orders-dashboard', 'landing-intro']);
+    expect(idsFor('prototype')).toEqual([
+      'signup-flow',
+      'orders-dashboard',
+      'product-detail',
+      'landing-intro',
+      'landing-layout',
+    ]);
   });
 
-  it('narrows to a scene’s own lines once that scene is selected', () => {
-    expect(idsFor('prototype', 'mobile')).toEqual(['app-idea']);
-    expect(idsFor('prototype', 'wireframe')).toEqual(['product-detail', 'landing-layout']);
+  it('narrows to a scene’s own lines once a scene with curated lines is selected', () => {
+    // mobile-apps is the one live scene that curates a line of its own.
+    expect(idsFor('prototype', 'mobile-apps')).toEqual(['app-idea']);
   });
 
   it('keeps the parent’s lines for a scene that curates none of its own', () => {
-    expect(idsFor('prototype', 'app-prototypes')).toEqual(idsFor('prototype'));
+    expect(idsFor('prototype', 'web-landing')).toEqual(idsFor('prototype'));
+    expect(idsFor('prototype', 'dashboards')).toEqual(idsFor('prototype'));
+    expect(idsFor('prototype', 'web-tools')).toEqual(idsFor('prototype'));
   });
 
   it('carries the scene a line belongs to so an empty-composer send can bind it', () => {
@@ -118,7 +118,7 @@ describe('buildPlaceholderScenarios', () => {
     });
     expect(rotation.find((scenario) => scenario.id === 'app-idea')).toMatchObject({
       chipId: 'prototype',
-      prototypeSubtypeId: 'mobile',
+      prototypeSubtypeId: 'mobile-apps',
     });
     expect(rotation.find((scenario) => scenario.id === 'signup-flow')?.prototypeSubtypeId)
       .toBeUndefined();

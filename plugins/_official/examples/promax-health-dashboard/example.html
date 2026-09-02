@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CareLens - Healthcare Analytics Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #3B82F6;
+      --secondary: #60A5FA;
+      --accent: #F97316;
+      --surface: #F8FAFC;
+      --text: #1E293B;
+      --success: #10B981;
+      --warning: #F59E0B;
+      --danger: #EF4444;
+      --violet: #8B5CF6;
+      --slate-50: #F8FAFC;
+      --slate-100: #F1F5F9;
+      --slate-200: #E2E8F0;
+      --slate-400: #94A3B8;
+      --slate-500: #64748B;
+      --slate-600: #475569;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Fira Sans', -apple-system, 'Segoe UI', sans-serif;
+      background: var(--slate-100);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+    .mono { font-family: 'Fira Code', 'SF Mono', Menlo, monospace; }
+    .layout { display: flex; min-height: 100vh; }
+
+    /* Sidebar */
+    .sidebar {
+      width: 256px;
+      background: #fff;
+      border-right: 1px solid var(--slate-200);
+      position: fixed;
+      height: 100%;
+      z-index: 5;
+    }
+    .brand {
+      padding: 24px;
+      border-bottom: 1px solid var(--slate-100);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 1.25rem;
+      color: var(--primary);
+    }
+    .brand svg { width: 32px; height: 32px; }
+    .nav { padding: 16px; list-style: none; }
+    .nav li + li { margin-top: 4px; }
+    .nav a {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      color: var(--slate-600);
+      text-decoration: none;
+      font-size: 0.95rem;
+      transition: background 0.2s;
+    }
+    .nav a:hover { background: var(--slate-50); }
+    .nav a.active {
+      background: rgba(59, 130, 246, 0.1);
+      color: var(--primary);
+      font-weight: 500;
+    }
+    .nav svg { width: 20px; height: 20px; flex-shrink: 0; }
+
+    /* Main */
+    .main { flex: 1; margin-left: 256px; padding: 32px; }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 32px;
+    }
+    .topbar h2 { font-size: 1.5rem; font-weight: 700; }
+    .topbar .sub { color: var(--slate-500); font-size: 0.875rem; margin-top: 2px; }
+    .topbar-right { display: flex; align-items: center; gap: 16px; }
+    .search { position: relative; }
+    .search input {
+      width: 256px;
+      padding: 10px 16px 10px 40px;
+      border-radius: 8px;
+      border: 1px solid var(--slate-200);
+      background: #fff;
+      font-size: 0.875rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .search input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+    }
+    .search svg {
+      width: 20px; height: 20px;
+      color: var(--slate-400);
+      position: absolute;
+      left: 12px; top: 50%;
+      transform: translateY(-50%);
+    }
+    .bell {
+      position: relative;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--slate-200);
+      background: #fff;
+      cursor: pointer;
+      line-height: 0;
+    }
+    .bell:hover { background: var(--slate-50); }
+    .bell svg { width: 20px; height: 20px; color: var(--slate-600); }
+    .bell .badge {
+      position: absolute;
+      top: -4px; right: -4px;
+      width: 16px; height: 16px;
+      background: var(--danger);
+      border-radius: 50%;
+      color: #fff;
+      font-size: 0.7rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .profile {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding-left: 16px;
+      border-left: 1px solid var(--slate-200);
+    }
+    .avatar {
+      width: 40px; height: 40px;
+      background: rgba(59, 130, 246, 0.2);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--primary);
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    .profile .name { font-weight: 500; font-size: 0.875rem; }
+    .profile .role { font-size: 0.75rem; color: var(--slate-400); }
+
+    /* KPI cards */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+      margin-bottom: 32px;
+    }
+    .kpi {
+      background: #fff;
+      padding: 24px;
+      border-radius: 12px;
+      border: 1px solid var(--slate-100);
+      transition: box-shadow 0.3s;
+      cursor: pointer;
+    }
+    .kpi:hover { box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1); }
+    .kpi-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .kpi-icon {
+      width: 48px; height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .kpi-icon svg { width: 24px; height: 24px; }
+    .tint-primary { background: rgba(59, 130, 246, 0.1); color: var(--primary); }
+    .tint-success { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+    .tint-warning { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
+    .tint-accent  { background: rgba(249, 115, 22, 0.1); color: var(--accent); }
+    .delta { font-size: 0.875rem; font-weight: 500; display: flex; align-items: center; gap: 4px; }
+    .delta svg { width: 16px; height: 16px; }
+    .delta.up { color: var(--success); }
+    .delta.down { color: var(--danger); }
+    .kpi-value { font-size: 1.875rem; font-weight: 700; margin-bottom: 4px; }
+    .kpi-label { color: var(--slate-500); font-size: 0.875rem; }
+
+    /* Panels */
+    .charts-row {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 24px;
+      margin-bottom: 32px;
+    }
+    .panel {
+      background: #fff;
+      border-radius: 12px;
+      border: 1px solid var(--slate-100);
+    }
+    .panel-pad { padding: 24px; }
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+    .panel h3 { font-size: 1.125rem; font-weight: 600; }
+    .range-tabs { display: flex; gap: 8px; }
+    .range-tabs button {
+      padding: 6px 12px;
+      font-size: 0.875rem;
+      font-family: inherit;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
+      color: var(--slate-500);
+      cursor: pointer;
+    }
+    .range-tabs button:hover { background: var(--slate-50); }
+    .range-tabs button.active { background: var(--primary); color: #fff; }
+    .chart-box { height: 256px; }
+    .chart-box svg { width: 100%; height: 100%; display: block; }
+    .legend {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 8px 20px;
+      margin-top: 12px;
+      font-size: 0.8rem;
+      color: var(--slate-600);
+    }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+    /* Table */
+    .bottom-row {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 24px;
+    }
+    .table-head {
+      padding: 24px;
+      border-bottom: 1px solid var(--slate-100);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .table-head a {
+      color: var(--primary);
+      font-size: 0.875rem;
+      font-weight: 500;
+      text-decoration: none;
+    }
+    .table-head a:hover { opacity: 0.8; }
+    table { width: 100%; border-collapse: collapse; }
+    thead tr { text-align: left; font-size: 0.875rem; color: var(--slate-500); border-bottom: 1px solid var(--slate-100); }
+    th { padding: 16px 24px; font-weight: 500; }
+    td { padding: 16px 24px; font-size: 0.95rem; }
+    tbody tr { border-bottom: 1px solid var(--slate-50); cursor: pointer; transition: background 0.2s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: rgba(248, 250, 252, 0.5); }
+    .person { display: flex; align-items: center; gap: 12px; }
+    .person .avatar { font-size: 0.85rem; }
+    .person .p-name { font-weight: 500; }
+    .person .p-mail { font-size: 0.8rem; color: var(--slate-400); }
+    .id-cell { font-family: 'Fira Code', monospace; font-size: 0.85rem; color: var(--slate-600); }
+    .dept { color: var(--slate-600); }
+    .date { color: var(--slate-500); }
+    .pill {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+    .pill.ok { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+    .pill.warn { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
+    .pill.info { background: rgba(59, 130, 246, 0.1); color: var(--primary); }
+
+    /* Appointments */
+    .appts { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .appt {
+      padding: 16px;
+      border-radius: 8px;
+      background: var(--slate-50);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .appt:hover { background: var(--slate-100); }
+    .appt-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .appt-top strong { font-weight: 500; font-size: 0.95rem; }
+    .time-chip {
+      font-size: 0.75rem;
+      padding: 3px 8px;
+      border-radius: 4px;
+    }
+    .time-chip.blue { background: rgba(59, 130, 246, 0.1); color: var(--primary); }
+    .time-chip.red { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
+    .time-chip.amber { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
+    .time-chip.green { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+    .appt p { font-size: 0.85rem; color: var(--slate-500); }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+        </svg>
+        CareLens
+      </div>
+      <ul class="nav">
+        <li>
+          <a href="#" class="active">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+            Dashboard
+          </a>
+        </li>
+        <li>
+          <a href="#">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+            Patients
+          </a>
+        </li>
+        <li>
+          <a href="#">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            Appointments
+          </a>
+        </li>
+        <li>
+          <a href="#">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            Analytics
+          </a>
+        </li>
+        <li>
+          <a href="#">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            Settings
+          </a>
+        </li>
+      </ul>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h2>Clinic Operations Overview</h2>
+          <p class="sub">Live view of admissions, capacity, and care team activity</p>
+        </div>
+        <div class="topbar-right">
+          <div class="search">
+            <input type="text" placeholder="Find a patient record..." aria-label="Find a patient record">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </div>
+          <button class="bell" aria-label="Notifications">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+            <span class="badge">2</span>
+          </button>
+          <div class="profile">
+            <div class="avatar">EV</div>
+            <div>
+              <div class="name">Dr. Elena Vasquez</div>
+              <div class="role">Chief of Medicine</div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div class="kpi-grid">
+        <div class="kpi">
+          <div class="kpi-top">
+            <div class="kpi-icon tint-primary">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </div>
+            <span class="delta up">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+              9%
+            </span>
+          </div>
+          <div class="kpi-value mono">3,412</div>
+          <div class="kpi-label">Active Patients</div>
+        </div>
+
+        <div class="kpi">
+          <div class="kpi-top">
+            <div class="kpi-icon tint-success">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <span class="delta up">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+              6%
+            </span>
+          </div>
+          <div class="kpi-value mono">91.7%</div>
+          <div class="kpi-label">Treatment Success</div>
+        </div>
+
+        <div class="kpi">
+          <div class="kpi-top">
+            <div class="kpi-icon tint-warning">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <span class="delta down">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+              4%
+            </span>
+          </div>
+          <div class="kpi-value mono">18 min</div>
+          <div class="kpi-label">Median Wait Time</div>
+        </div>
+
+        <div class="kpi">
+          <div class="kpi-top">
+            <div class="kpi-icon tint-accent">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+            </div>
+            <span class="delta up">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+              3%
+            </span>
+          </div>
+          <div class="kpi-value mono">126</div>
+          <div class="kpi-label">Open Beds</div>
+        </div>
+      </div>
+
+      <div class="charts-row">
+        <div class="panel panel-pad">
+          <div class="panel-head">
+            <h3>Admissions vs. Discharges</h3>
+            <div class="range-tabs">
+              <button class="active">Weekly</button>
+              <button>Monthly</button>
+              <button>Yearly</button>
+            </div>
+          </div>
+          <div class="chart-box">
+            <svg viewBox="0 0 640 240" preserveAspectRatio="none" role="img" aria-label="Line chart of weekly admissions and discharges">
+              <g stroke="rgba(0,0,0,0.05)" stroke-width="1">
+                <line x1="20" y1="20" x2="620" y2="20"/>
+                <line x1="20" y1="70" x2="620" y2="70"/>
+                <line x1="20" y1="120" x2="620" y2="120"/>
+                <line x1="20" y1="170" x2="620" y2="170"/>
+                <line x1="20" y1="220" x2="620" y2="220"/>
+              </g>
+              <path d="M20,100 C70,100 70,80 120,80 C170,80 170,117 220,117 C270,117 270,50 320,50 C370,50 370,90 420,90 C470,90 470,132 520,132 C570,132 570,107 620,107 L620,220 L20,220 Z" fill="rgba(59,130,246,0.1)"/>
+              <path d="M20,100 C70,100 70,80 120,80 C170,80 170,117 220,117 C270,117 270,50 320,50 C370,50 370,90 420,90 C470,90 470,132 520,132 C570,132 570,107 620,107" fill="none" stroke="#3B82F6" stroke-width="2.5"/>
+              <path d="M20,120 C70,120 70,100 120,100 C170,100 170,107 220,107 C270,107 270,70 320,70 C370,70 370,83 420,83 C470,83 470,145 520,145 C570,145 570,125 620,125 L620,220 L20,220 Z" fill="rgba(16,185,129,0.1)"/>
+              <path d="M20,120 C70,120 70,100 120,100 C170,100 170,107 220,107 C270,107 270,70 320,70 C370,70 370,83 420,83 C470,83 470,145 520,145 C570,145 570,125 620,125" fill="none" stroke="#10B981" stroke-width="2.5"/>
+              <g fill="#3B82F6" stroke="#fff" stroke-width="2">
+                <circle cx="20" cy="100" r="5"/><circle cx="120" cy="80" r="5"/><circle cx="220" cy="117" r="5"/><circle cx="320" cy="50" r="5"/><circle cx="420" cy="90" r="5"/><circle cx="520" cy="132" r="5"/><circle cx="620" cy="107" r="5"/>
+              </g>
+              <g fill="#10B981" stroke="#fff" stroke-width="2">
+                <circle cx="20" cy="120" r="5"/><circle cx="120" cy="100" r="5"/><circle cx="220" cy="107" r="5"/><circle cx="320" cy="70" r="5"/><circle cx="420" cy="83" r="5"/><circle cx="520" cy="145" r="5"/><circle cx="620" cy="125" r="5"/>
+              </g>
+              <g fill="#64748B" font-size="12" font-family="Fira Sans, sans-serif" text-anchor="middle">
+                <text x="20" y="238">Mon</text><text x="120" y="238">Tue</text><text x="220" y="238">Wed</text><text x="320" y="238">Thu</text><text x="420" y="238">Fri</text><text x="520" y="238">Sat</text><text x="620" y="238">Sun</text>
+              </g>
+            </svg>
+          </div>
+          <div class="legend">
+            <span><i class="dot" style="background:#3B82F6"></i>Admissions</span>
+            <span><i class="dot" style="background:#10B981"></i>Discharges</span>
+          </div>
+        </div>
+
+        <div class="panel panel-pad">
+          <div class="panel-head" style="margin-bottom:16px">
+            <h3>Caseload by Department</h3>
+          </div>
+          <div class="chart-box" style="height:200px; display:flex; justify-content:center;">
+            <svg viewBox="0 0 200 200" role="img" aria-label="Donut chart of caseload share by department">
+              <g transform="rotate(-90 100 100)">
+                <circle cx="100" cy="100" r="70" fill="none" stroke="#3B82F6" stroke-width="26" stroke-dasharray="131.9 439.8" stroke-dashoffset="0"/>
+                <circle cx="100" cy="100" r="70" fill="none" stroke="#10B981" stroke-width="26" stroke-dasharray="88.0 439.8" stroke-dashoffset="-131.9"/>
+                <circle cx="100" cy="100" r="70" fill="none" stroke="#F97316" stroke-width="26" stroke-dasharray="83.6 439.8" stroke-dashoffset="-219.9"/>
+                <circle cx="100" cy="100" r="70" fill="none" stroke="#8B5CF6" stroke-width="26" stroke-dasharray="61.6 439.8" stroke-dashoffset="-303.5"/>
+                <circle cx="100" cy="100" r="70" fill="none" stroke="#94A3B8" stroke-width="26" stroke-dasharray="74.7 439.8" stroke-dashoffset="-365.1"/>
+              </g>
+              <text x="100" y="94" text-anchor="middle" font-size="26" font-weight="700" font-family="Fira Code, monospace" fill="#1E293B">3.4k</text>
+              <text x="100" y="116" text-anchor="middle" font-size="11" font-family="Fira Sans, sans-serif" fill="#64748B">cases</text>
+            </svg>
+          </div>
+          <div class="legend">
+            <span><i class="dot" style="background:#3B82F6"></i>Cardiology</span>
+            <span><i class="dot" style="background:#10B981"></i>Neurology</span>
+            <span><i class="dot" style="background:#F97316"></i>Orthopedics</span>
+            <span><i class="dot" style="background:#8B5CF6"></i>Pediatrics</span>
+            <span><i class="dot" style="background:#94A3B8"></i>Other</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="bottom-row">
+        <div class="panel">
+          <div class="table-head">
+            <h3>Latest Admissions</h3>
+            <a href="#">View All</a>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Patient</th>
+                <th>Record</th>
+                <th>Department</th>
+                <th>Status</th>
+                <th>Admitted</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <div class="person">
+                    <div class="avatar" style="background:rgba(59,130,246,0.1);color:#3B82F6">MO</div>
+                    <div>
+                      <div class="p-name">Marcus Okafor</div>
+                      <div class="p-mail">m.okafor@mailbox.com</div>
+                    </div>
+                  </div>
+                </td>
+                <td class="id-cell">#RC-3412</td>
+                <td class="dept">Cardiology</td>
+                <td><span class="pill ok">Discharged</span></td>
+                <td class="date">Aug 24, 2026</td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="person">
+                    <div class="avatar" style="background:rgba(96,165,250,0.1);color:#60A5FA">PN</div>
+                    <div>
+                      <div class="p-name">Priya Nair</div>
+                      <div class="p-mail">priya.n@mailbox.com</div>
+                    </div>
+                  </div>
+                </td>
+                <td class="id-cell">#RC-3411</td>
+                <td class="dept">Neurology</td>
+                <td><span class="pill warn">In Care</span></td>
+                <td class="date">Aug 23, 2026</td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="person">
+                    <div class="avatar" style="background:rgba(249,115,22,0.1);color:#F97316">TK</div>
+                    <div>
+                      <div class="p-name">Tomas Keller</div>
+                      <div class="p-mail">t.keller@mailbox.com</div>
+                    </div>
+                  </div>
+                </td>
+                <td class="id-cell">#RC-3410</td>
+                <td class="dept">Orthopedics</td>
+                <td><span class="pill info">Scheduled</span></td>
+                <td class="date">Aug 22, 2026</td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="person">
+                    <div class="avatar" style="background:rgba(16,185,129,0.1);color:#10B981">AH</div>
+                    <div>
+                      <div class="p-name">Amara Haddad</div>
+                      <div class="p-mail">a.haddad@mailbox.com</div>
+                    </div>
+                  </div>
+                </td>
+                <td class="id-cell">#RC-3409</td>
+                <td class="dept">Pediatrics</td>
+                <td><span class="pill ok">Discharged</span></td>
+                <td class="date">Aug 21, 2026</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="panel">
+          <div class="table-head">
+            <h3>Today's Schedule</h3>
+          </div>
+          <div class="appts">
+            <div class="appt">
+              <div class="appt-top">
+                <strong>Annual Physical - N. Petrov</strong>
+                <span class="time-chip blue">8:30 AM</span>
+              </div>
+              <p>Routine wellness screening</p>
+            </div>
+            <div class="appt">
+              <div class="appt-top">
+                <strong>Surgery - I. Fontaine</strong>
+                <span class="time-chip red">11:00 AM</span>
+              </div>
+              <p>Hip replacement, OR 3</p>
+            </div>
+            <div class="appt">
+              <div class="appt-top">
+                <strong>Follow-up - S. Whitfield</strong>
+                <span class="time-chip amber">1:45 PM</span>
+              </div>
+              <p>Post-op cardiac review</p>
+            </div>
+            <div class="appt">
+              <div class="appt-top">
+                <strong>Lab Review - K. Osei</strong>
+                <span class="time-chip green">4:00 PM</span>
+              </div>
+              <p>Quarterly bloodwork results</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

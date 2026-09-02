@@ -100,3 +100,21 @@ One sentence before describing what's there. Stop after `</artifact>`.
 - **Numerics in mono** via `.num` class.
 - **Display in serif** via `var(--font-display)`.
 - **No external images** — use `.ph-img` placeholders.
+
+## Template fidelity (hard constraint)
+
+The bundled `example.html` in this folder is the ground truth for this
+template, not loose inspiration. Before generating, read `example.html`
+and reproduce its visual system:
+
+1. Reuse its layout skeleton, section order, spacing rhythm, typography
+   stack, color tokens, and signature components as-is.
+2. Swap only CONTENT for the user's brief: copy, data, imagery subjects,
+   brand name. Structure, hierarchy, and visual language stay.
+3. Keep the same fonts (or the closest available), the same accent-color
+   discipline, and the same interaction details (hover states, motion).
+4. Output copy follows the language of the user's brief, but the result
+   must remain recognizably this template when placed side-by-side with
+   `example.html`.
+5. If the brief conflicts with the template, make the smallest deviation
+   that satisfies the brief. Never redesign from scratch.

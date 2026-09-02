@@ -17,6 +17,7 @@ import {
   applyFacetSelection,
   buildFacetCatalog,
   filterByQuery,
+  isCapabilitySkillPlugin,
   resolveDefaultSelection,
   type FacetCatalog,
   type FacetSelection,
@@ -104,7 +105,9 @@ export function usePluginFacets({
   const visiblePlugins = useMemo(
     () =>
       sortByVisualAppeal(
-        plugins.filter((p) => p.manifest?.od?.kind !== 'atom'),
+        plugins.filter(
+          (p) => p.manifest?.od?.kind !== 'atom' && !isCapabilitySkillPlugin(p),
+        ),
       ),
     [plugins],
   );
