@@ -2388,6 +2388,58 @@ describe('streamViaDaemon', () => {
     }
   });
 
+  // OPEND-2565. A blocked verdict used to render one fixed English sentence no
+  // matter what stopped the turn, so an explanation the agent had already
+  // written for the user — in their own language — was replaced by "the
+  // strategy task could not continue". Prefer the recorded explanation; the
+  // generic sentence stays the fallback for a machine gate that left none
+  // (pinned by the `it.each` above, whose projection carries no blockedContext).
+  it('shows what the gate recorded about a blocked task instead of a fixed sentence', async () => {
+    const handlers = createDaemonHandlers();
+    const halted = '本轮已无第二次澄清机会，因此任务暂时阻塞。';
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-blocked' });
+      if (url === '/api/runs/run-blocked/events') {
+        return sseResponse(`event: end\ndata: ${JSON.stringify({
+          code: 0,
+          status: 'succeeded',
+          strategyTask: {
+            taskExecutionId: 'task-blocked',
+            strategy: {
+              id: 'od-next-strategy',
+              version: '2.0.0',
+              packageHash: 'a'.repeat(64),
+              snapshotId: 'snapshot-1',
+            },
+            inputStage: 'clarification',
+            outcome: 'blocked',
+            route: 'full_plan',
+            executionMode: 'simple',
+            activeRunId: 'run-blocked',
+            terminal: true,
+            blockedContext: {
+              reasonCodes: ['od_next_agent_declared_block'],
+              visibleText: halted,
+            },
+          },
+        })}\n\n`);
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: '111' }],
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: halted }),
+    );
+  });
+
   it('reattaches to an existing daemon run after the last stored event id', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn()
