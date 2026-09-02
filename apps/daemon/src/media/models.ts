@@ -198,6 +198,8 @@ export const VIDEO_MODELS: MediaModel[] = [
 
 export const AUDIO_MODELS_BY_KIND: Record<AudioKind, MediaModel[]> = {
   music: [
+    { id: 'minimax-music-3.0', label: 'music-3.0', hint: 'MiniMax · music generation', provider: 'minimax', caps: ['music'], default: true },
+    { id: 'minimax-music-2.6', label: 'music-2.6', hint: 'MiniMax · music generation', provider: 'minimax', caps: ['music'] },
     { id: 'suno-v5', label: 'suno-v5', hint: 'Suno · default', provider: 'suno', caps: ['music'], default: true },
     { id: 'suno-v4-5', label: 'suno-v4.5', hint: 'Suno', provider: 'suno', caps: ['music'] },
     { id: 'udio-v2', label: 'udio-v2', hint: 'Udio', provider: 'udio', caps: ['music'] },
