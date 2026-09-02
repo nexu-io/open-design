@@ -440,7 +440,7 @@ describe("managed download package", () => {
     }
   });
 
-  it.each<[string]>(["DS_Store", "Thumbs.db", "desktop.ini", ".localized"])(
+  it.each<[string]>([[".DS_Store"], ["Thumbs.db"], ["desktop.ini"], [".localized"]])(
     "claims a fresh managed base that contains only the OS-managed artifact %s",
     async (artifactName: string) => {
       const root = tmpRoot("os-artifact-fresh-claim");
