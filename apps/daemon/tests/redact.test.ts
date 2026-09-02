@@ -144,6 +144,24 @@ describe('redactSecrets', () => {
     );
   });
 
+  it('does NOT partially redact UUIDs that happen to contain a phone-shaped digit run', () => {
+    // Regression: the earlier (?<!\d)/(?!\d) lookarounds still allowed
+    // the '1440424-8224' run inside an alpha-prefixed UUID to match as a
+    // phone number, which then corrupted receipt.runId values in the
+    // AMR outbox. The boundary is now non-word/non-hyphen on both sides.
+    const uuid = 'a1440424-8224-46a7-b867-9581e61c7da7';
+    expect(redactSecrets(uuid)).toBe(uuid);
+    expect(redactSecrets(`{"runId":"${uuid}"}`)).toBe(`{"runId":"${uuid}"}`);
+    // Same shape, no alpha prefix — the trailing '-46a7' continuation is
+    // also non-word, but we still treat the run as embedded in a UUID
+    // because phone boundaries now reject the '->digit' continuation.
+    const digitUuid = '1440424-8224-46a7-b867-9581e61c7da7';
+    expect(redactSecrets(digitUuid)).toBe(digitUuid);
+    expect(redactSecrets(`receipt id ${digitUuid} done`)).toBe(
+      `receipt id ${digitUuid} done`,
+    );
+  });
+
   it('redacts a Luhn-valid credit-card number', () => {
     // 4111-1111-1111-1111 is a canonical Visa test number that satisfies Luhn.
     expect(redactSecrets('paid with 4111 1111 1111 1111 thanks')).toBe(

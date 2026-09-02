@@ -91,12 +91,12 @@ const PATTERNS: readonly Pattern[] = [
 
   // Phone numbers. Tight US-leaning shape; a global PII detector would
   // need a real lib. We keep this so US-based test prompts ('call me at
-  // (415) 555-...') don't ship. Note: no leading \b — '(' isn't a word
-  // char, so a starting boundary would refuse to match `(415)`. We
-  // require a non-digit (or start of string) before the run instead.
+  // (415) 555-...') don't ship. We require a non-word/non-hyphen boundary
+  // on both sides so embedded digit sequences inside UUIDs (e.g.
+  // '1440424-8224-...' inside a receipt.runId) are not partially redacted.
   {
     name: 'phone',
-    regex: /(?<!\d)(?:\+?\d{1,3}[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}(?!\d)/g,
+    regex: /(?<![\w-])(?:\+?\d{1,3}[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}(?![\w-])/g,
   },
 ];
 

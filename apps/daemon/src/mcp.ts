@@ -14,6 +14,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
+  ListResourceTemplatesRequestSchema,
   ListResourcesRequestSchema,
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
@@ -1020,6 +1021,17 @@ export async function _listMcpResources(
   return { resources };
 }
 
+export async function _listMcpResourceTemplates(
+  _daemonTarget: ReturnType<typeof createMcpDaemonTarget>,
+): Promise<{ resourceTemplates: Array<{ uriTemplate: string; name: string; description: string; mimeType?: string }> }> {
+  // OpenDesign currently exposes no resource templates (parameterized
+  // resource URIs). Returning an empty list satisfies clients that eagerly
+  // enumerate every method implied by the advertised `resources` capability,
+  // preventing `-32601 Method not found` errors during capability discovery.
+  // See #7014.
+  return { resourceTemplates: [] };
+}
+
 /** Handler body for MCP `resources/read`. Exported so tests can call it
  * directly without a real server. Mirrors the inline logic in
  * `runMcpStdio` to keep the test harness cheap. */
@@ -1923,6 +1935,10 @@ export async function runMcpStdio(options: RunMcpOptions): Promise<void> {
 
   server.setRequestHandler(ListResourcesRequestSchema, withMcpActivity(async () => {
     return await _listMcpResources(daemonTarget);
+  }));
+
+  server.setRequestHandler(ListResourceTemplatesRequestSchema, withMcpActivity(async () => {
+    return await _listMcpResourceTemplates(daemonTarget);
   }));
 
   server.setRequestHandler(ReadResourceRequestSchema, withMcpActivity(async (req) => {
