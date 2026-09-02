@@ -2388,15 +2388,16 @@ describe('streamViaDaemon', () => {
     }
   });
 
-  // OPEND-2565. A blocked verdict used to render one fixed English sentence no
-  // matter what stopped the turn, so an explanation the agent had already
-  // written for the user — in their own language — was replaced by "the
-  // strategy task could not continue". Prefer the recorded explanation; the
-  // generic sentence stays the fallback for a machine gate that left none
-  // (pinned by the `it.each` above, whose projection carries no blockedContext).
-  it('shows what the gate recorded about a blocked task instead of a fixed sentence', async () => {
+  // OPEND-2565. A block the agent already explained is not a failure to report:
+  // asked for a prototype with nothing to build on, the agent answers in the
+  // chat and that reply is the turn's outcome. Raising a run error on top of it
+  // restated the same sentence inside a red "task execution failed" card, so a
+  // turn that had simply asked for more detail read as a crash. A machine gate
+  // that left no text still errors — pinned by the `it.each` above, whose
+  // projection carries no blockedContext.
+  it('leaves a blocked task to its own explanation instead of raising a run error', async () => {
     const handlers = createDaemonHandlers();
-    const halted = '本轮已无第二次澄清机会，因此任务暂时阻塞。';
+    const onRunStatus = vi.fn();
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/runs') return jsonResponse({ runId: 'run-blocked' });
@@ -2420,7 +2421,7 @@ describe('streamViaDaemon', () => {
             terminal: true,
             blockedContext: {
               reasonCodes: ['od_next_agent_declared_block'],
-              visibleText: halted,
+              visibleText: '由于原型需求被跳过，本轮无法形成可执行方案。',
             },
           },
         })}\n\n`);
@@ -2430,14 +2431,14 @@ describe('streamViaDaemon', () => {
 
     await streamViaDaemon({
       agentId: 'mock',
-      history: [{ id: '1', role: 'user', content: '111' }],
+      history: [{ id: '1', role: 'user', content: '你好' }],
       signal: new AbortController().signal,
       handlers,
+      onRunStatus,
     });
 
-    expect(handlers.onError).toHaveBeenCalledWith(
-      expect.objectContaining({ message: halted }),
-    );
+    expect(handlers.onError).not.toHaveBeenCalled();
+    expect(onRunStatus).toHaveBeenLastCalledWith('succeeded');
   });
 
   it('reattaches to an existing daemon run after the last stored event id', async () => {
