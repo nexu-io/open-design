@@ -23,29 +23,103 @@ for the post-deploy indexing architecture.
 
 | Slug | Verdict | Coverage state | Last Google crawl | Last inspected | 7d impressions | 7d clicks | 7d CTR | 28d avg position |
 |---|---|---|---|---|---|---|---|---|
-| 31-skills-72-systems-how-the-library-works | neutral | Discovered - currently not indexed | — | 2026-05-20 | 0 | 0 | 0.0% | — |
-| byok-design-workflow-claude-codex-qwen | neutral | Discovered - currently not indexed | — | 2026-05-20 | 0 | 0 | 0.0% | — |
-| byok-reality-check-5-things-that-break | neutral | Discovered - currently not indexed | — | 2026-05-21 | 0 | 0 | 0.0% | — |
-| layout-layer-canvas-used-to-hide | indexed | Submitted and indexed | 2026-05-19 | 2026-05-21 | 0 | 0 | 0.0% | — |
-| open-source-alternative-to-claude-design | indexed | Submitted and indexed | 2026-05-15 | 2026-05-21 | 107 | 4 | 3.7% | 7.9 |
-| port-figma-workflow-open-design-plugin | indexed | Submitted and indexed | 2026-05-19 | 2026-05-21 | 0 | 0 | 0.0% | — |
-| why-we-built-open-design-as-a-skill-layer | neutral | Discovered - currently not indexed | — | 2026-05-20 | 0 | 0 | 0.0% | — |
+| 31-skills-72-systems-how-the-library-works | indexed | Submitted and indexed | 2026-08-03 | 2026-08-19 | 10 | 0 | 0.0% | 4.9 |
+| ai-design-agents | indexed | Submitted and indexed | 2026-08-13 | 2026-08-19 | 727 | 17 | 2.3% | 8.2 |
+| ai-prototyping-tools | indexed | Submitted and indexed | 2026-08-10 | 2026-08-19 | 531 | 1 | 0.2% | 15.6 |
+| best-ai-design-tools | indexed | Submitted and indexed | 2026-07-23 | 2026-08-19 | 2,381 | 18 | 0.8% | 6.8 |
+| bolt-new-alternatives | indexed | Submitted and indexed | 2026-07-21 | 2026-08-19 | 449 | 3 | 0.7% | 19.5 |
+| byok-design-workflow-claude-codex-qwen | indexed | Submitted and indexed | 2026-08-16 | 2026-08-19 | 156 | 1 | 0.6% | 6.2 |
+| byok-reality-check-5-things-that-break | indexed | Submitted and indexed | 2026-08-16 | 2026-08-19 | 52 | 0 | 0.0% | 5.3 |
+| claude-ppt-skills | indexed | Submitted and indexed | 2026-08-08 | 2026-08-19 | 4,345 | 179 | 4.1% | 7.3 |
+| codex-ppt-skill | indexed | Submitted and indexed | 2026-08-08 | 2026-08-19 | 1,421 | 81 | 5.7% | 5.3 |
+| dashiai-ppt-skill | indexed | Submitted and indexed | 2026-08-09 | 2026-08-19 | 60 | 3 | 5.0% | 5.7 |
+| design-to-code-tools | indexed | Submitted and indexed | 2026-08-15 | 2026-08-19 | 339 | 0 | 0.0% | 8.2 |
+| figma-alternative-open-design | indexed | Submitted and indexed | 2026-08-12 | 2026-08-19 | 525 | 11 | 2.1% | 11.0 |
+| figma-alternatives | indexed | Submitted and indexed | 2026-08-14 | 2026-08-19 | 1,194 | 17 | 1.4% | 12.8 |
+| frontend-slides | indexed | Submitted and indexed | 2026-07-29 | 2026-08-19 | 1,225 | 31 | 2.5% | 4.7 |
+| guizang-ppt-skill | indexed | Submitted and indexed | 2026-08-17 | 2026-08-19 | 486 | 10 | 2.1% | 3.7 |
+| how-to-use-claude-code-for-frontend-design | indexed | Submitted and indexed | 2026-08-10 | 2026-08-19 | 2,204 | 39 | 1.8% | 7.6 |
+| layout-layer-canvas-used-to-hide | indexed | Submitted and indexed | 2026-08-07 | 2026-08-19 | 11 | 0 | 0.0% | 8.9 |
+| lovable-alternatives | indexed | Submitted and indexed | 2026-08-14 | 2026-08-19 | 216 | 8 | 3.7% | 7.9 |
+| marp | indexed | Submitted and indexed | 2026-07-15 | 2026-07-24 | 39,522 | 14 | 0.0% | 8.5 |
+| open-design-0-10-0-all-in-one-workspace | indexed | Submitted and indexed | 2026-08-07 | 2026-08-19 | 29 | 0 | 0.0% | 8.3 |
+| open-design-0-11-0-the-bazaar | indexed | Submitted and indexed | 2026-07-21 | 2026-08-19 | 23 | 0 | 0.0% | 9.1 |
+| open-design-0-12-0-brand-backed-design-system | indexed | Submitted and indexed | 2026-07-24 | 2026-08-19 | 56 | 0 | 0.0% | 8.3 |
+| open-design-0-13-0-stay-in-flow | indexed | Submitted and indexed | 2026-07-22 | 2026-08-19 | 37 | 0 | 0.0% | 6.6 |
+| open-design-0-14-0-inspiration-time-machine | indexed | Submitted and indexed | 2026-07-26 | 2026-08-19 | 6 | 0 | 0.0% | 5.8 |
+| open-design-0-15-0-cost-less-ship-faster | indexed | Submitted and indexed | 2026-07-26 | 2026-08-19 | 31 | 0 | 0.0% | 5.8 |
+| open-design-0-15-1 | indexed | Submitted and indexed | 2026-08-08 | 2026-08-19 | 16 | 0 | 0.0% | 5.4 |
+| open-design-0-16-0-reliable-delivery | indexed | Submitted and indexed | 2026-07-31 | 2026-08-19 | 27 | 1 | 3.7% | 5.7 |
+| open-design-0-17-0-open-design-for-codex | indexed | Submitted and indexed | 2026-08-10 | 2026-08-19 | 329 | 7 | 2.1% | 7.3 |
+| open-design-0-18-0-design-team-workspace-codex | indexed | Submitted and indexed | 2026-08-10 | 2026-08-19 | 290 | 3 | 1.0% | 6.1 |
+| open-design-0-19-1-design-with-deepseek-harness | indexed | Submitted and indexed | 2026-08-14 | 2026-08-19 | 322 | 6 | 1.9% | 7.3 |
+| open-design-0-8-0-everything-is-a-plugin | indexed | Submitted and indexed | 2026-08-17 | 2026-08-19 | 349 | 1 | 0.3% | 10.1 |
+| open-design-0-9-0-design-for-everyone | indexed | Submitted and indexed | 2026-08-13 | 2026-08-19 | 778 | 5 | 0.6% | 7.1 |
+| open-design-osaka-kyoto-meetup | indexed | Submitted and indexed | 2026-08-08 | 2026-08-19 | 16 | 0 | 0.0% | 8.8 |
+| open-design-shanghai-ai-workshop | indexed | Submitted and indexed | 2026-08-08 | 2026-08-19 | 10 | 0 | 0.0% | 5.9 |
+| open-source-alternative-to-claude-design | indexed | Submitted and indexed | 2026-08-19 | 2026-08-19 | 1,081 | 45 | 4.2% | 5.3 |
+| port-figma-workflow-open-design-plugin | indexed | Submitted and indexed | 2026-08-01 | 2026-08-19 | 20 | 0 | 0.0% | 9.9 |
+| ppt-master | indexed | Submitted and indexed | 2026-08-17 | 2026-08-19 | 2,056 | 15 | 0.7% | 6.8 |
+| reveal-js | indexed | Submitted and indexed | 2026-07-17 | 2026-07-24 | 1,550 | 5 | 0.3% | 6.3 |
+| slidev | indexed | Submitted and indexed | 2026-07-16 | 2026-07-24 | 8,734 | 8 | 0.1% | 5.4 |
+| v0-alternatives | indexed | Submitted and indexed | 2026-08-09 | 2026-08-19 | 185 | 0 | 0.0% | 18.1 |
+| vibe-design-tools | indexed | Submitted and indexed | 2026-08-13 | 2026-08-19 | 69 | 2 | 2.9% | 12.7 |
+| vibe-design-vs-vibe-coding | indexed | Submitted and indexed | 2026-08-16 | 2026-08-19 | 133 | 2 | 1.5% | 20.1 |
+| vibe-design-with-stitch | indexed | Submitted and indexed | 2026-08-17 | 2026-08-19 | 15 | 0 | 0.0% | 11.9 |
+| what-is-vibe-design | indexed | Submitted and indexed | 2026-08-17 | 2026-08-19 | 41 | 0 | 0.0% | 8.3 |
+| why-we-built-open-design-as-a-skill-layer | indexed | Submitted and indexed | 2026-07-26 | 2026-08-19 | 25 | 0 | 0.0% | 5.2 |
 
 ## Recent inspections
 
 | Inspected | Slug | Verdict | Coverage state | Canonical |
 |---|---|---|---|---|
-| 2026-05-21 | open-source-alternative-to-claude-design | indexed | Submitted and indexed | https://open-design.ai/blog/open-source-alternative-to-claude-design/ |
-| 2026-05-21 | byok-reality-check-5-things-that-break | neutral | Discovered - currently not indexed | — |
-| 2026-05-21 | port-figma-workflow-open-design-plugin | indexed | Submitted and indexed | https://open-design.ai/blog/port-figma-workflow-open-design-plugin/ |
-| 2026-05-21 | layout-layer-canvas-used-to-hide | indexed | Submitted and indexed | https://open-design.ai/blog/layout-layer-canvas-used-to-hide/ |
-| 2026-05-20 | why-we-built-open-design-as-a-skill-layer | neutral | Discovered - currently not indexed | — |
-| 2026-05-20 | byok-design-workflow-claude-codex-qwen | neutral | Discovered - currently not indexed | — |
-| 2026-05-20 | 31-skills-72-systems-how-the-library-works | neutral | Discovered - currently not indexed | — |
-| 2026-05-19 | why-we-built-open-design-as-a-skill-layer | neutral | Discovered - currently not indexed | — |
-| 2026-05-19 | port-figma-workflow-open-design-plugin | indexed | Submitted and indexed | https://open-design.ai/blog/port-figma-workflow-open-design-plugin/ |
-| 2026-05-19 | open-source-alternative-to-claude-design | indexed | Submitted and indexed | https://open-design.ai/blog/open-source-alternative-to-claude-design/ |
-| 2026-05-19 | layout-layer-canvas-used-to-hide | indexed | Submitted and indexed | https://open-design.ai/blog/layout-layer-canvas-used-to-hide/ |
-| 2026-05-19 | byok-reality-check-5-things-that-break | neutral | Discovered - currently not indexed | — |
-| 2026-05-19 | byok-design-workflow-claude-codex-qwen | neutral | Discovered - currently not indexed | — |
-| 2026-05-19 | 31-skills-72-systems-how-the-library-works | neutral | URL is unknown to Google | — |
+| 2026-08-19 | why-we-built-open-design-as-a-skill-layer | indexed | Submitted and indexed | https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/ |
+| 2026-08-19 | what-is-vibe-design | indexed | Submitted and indexed | https://open-design.ai/blog/what-is-vibe-design/ |
+| 2026-08-19 | vibe-design-with-stitch | indexed | Submitted and indexed | https://open-design.ai/blog/vibe-design-with-stitch/ |
+| 2026-08-19 | vibe-design-vs-vibe-coding | indexed | Submitted and indexed | https://open-design.ai/blog/vibe-design-vs-vibe-coding/ |
+| 2026-08-19 | vibe-design-tools | indexed | Submitted and indexed | https://open-design.ai/blog/vibe-design-tools/ |
+| 2026-08-19 | v0-alternatives | indexed | Submitted and indexed | https://open-design.ai/blog/v0-alternatives/ |
+| 2026-08-19 | ppt-master | indexed | Submitted and indexed | https://open-design.ai/blog/ppt-master/ |
+| 2026-08-19 | port-figma-workflow-open-design-plugin | indexed | Submitted and indexed | https://open-design.ai/blog/port-figma-workflow-open-design-plugin/ |
+| 2026-08-19 | open-source-alternative-to-claude-design | indexed | Submitted and indexed | https://open-design.ai/blog/open-source-alternative-to-claude-design/ |
+| 2026-08-19 | open-design-shanghai-ai-workshop | indexed | Submitted and indexed | https://open-design.ai/blog/open-design-shanghai-ai-workshop/ |
+| 2026-08-19 | open-design-osaka-kyoto-meetup | indexed | Submitted and indexed | https://open-design.ai/blog/open-design-osaka-kyoto-meetup/ |
+| 2026-08-19 | open-design-0-9-0-design-for-everyone | indexed | Submitted and indexed | https://open-design.ai/blog/open-design-0-9-0-design-for-everyone/ |
+| 2026-08-19 | open-design-0-8-0-everything-is-a-plugin | indexed | Submitted and indexed | https://open-design.ai/blog/open-design-0-8-0-everything-is-a-plugin/ |
+| 2026-08-19 | open-design-0-19-1-design-with-deepseek-harness | indexed | Submitted and indexed | https://open-design.ai/blog/open-design-0-19-1-design-with-deepseek-harness/ |
+| 2026-08-19 | open-design-0-18-0-design-team-workspace-codex | indexed | Submitted and indexed | https://open-design.ai/blog/open-design-0-18-0-design-team-workspace-codex/ |
+| 2026-08-19 | open-design-0-17-0-open-design-for-codex | indexed | Submitted and indexed | https://open-design.ai/blog/open-design-0-17-0-open-design-for-codex/ |
+| 2026-08-19 | open-design-0-16-0-reliable-delivery | indexed | Submitted and indexed | https://open-design.ai/blog/open-design-0-16-0-reliable-delivery/ |
+| 2026-08-19 | open-design-0-15-1 | indexed | Submitted and indexed | https://open-design.ai/blog/open-design-0-15-1/ |
+| 2026-08-19 | open-design-0-15-0-cost-less-ship-faster | indexed | Submitted and indexed | https://open-design.ai/blog/open-design-0-15-0-cost-less-ship-faster/ |
+| 2026-08-19 | open-design-0-14-0-inspiration-time-machine | indexed | Submitted and indexed | https://open-design.ai/blog/open-design-0-14-0-inspiration-time-machine/ |
+| 2026-08-19 | open-design-0-13-0-stay-in-flow | indexed | Submitted and indexed | https://open-design.ai/blog/open-design-0-13-0-stay-in-flow/ |
+| 2026-08-19 | open-design-0-12-0-brand-backed-design-system | indexed | Submitted and indexed | https://open-design.ai/blog/open-design-0-12-0-brand-backed-design-system/ |
+| 2026-08-19 | open-design-0-11-0-the-bazaar | indexed | Submitted and indexed | https://open-design.ai/blog/open-design-0-11-0-the-bazaar/ |
+| 2026-08-19 | open-design-0-10-0-all-in-one-workspace | indexed | Submitted and indexed | https://open-design.ai/blog/open-design-0-10-0-all-in-one-workspace/ |
+| 2026-08-19 | lovable-alternatives | indexed | Submitted and indexed | https://open-design.ai/blog/lovable-alternatives/ |
+| 2026-08-19 | layout-layer-canvas-used-to-hide | indexed | Submitted and indexed | https://open-design.ai/blog/layout-layer-canvas-used-to-hide/ |
+| 2026-08-19 | how-to-use-claude-code-for-frontend-design | indexed | Submitted and indexed | https://open-design.ai/blog/how-to-use-claude-code-for-frontend-design/ |
+| 2026-08-19 | guizang-ppt-skill | indexed | Submitted and indexed | https://open-design.ai/blog/guizang-ppt-skill/ |
+| 2026-08-19 | frontend-slides | indexed | Submitted and indexed | https://open-design.ai/blog/frontend-slides/ |
+| 2026-08-19 | figma-alternatives | indexed | Submitted and indexed | https://open-design.ai/blog/figma-alternatives/ |
+| 2026-08-19 | figma-alternative-open-design | indexed | Submitted and indexed | https://open-design.ai/blog/figma-alternative-open-design/ |
+| 2026-08-19 | design-to-code-tools | indexed | Submitted and indexed | https://open-design.ai/blog/design-to-code-tools/ |
+| 2026-08-19 | dashiai-ppt-skill | indexed | Submitted and indexed | https://open-design.ai/blog/dashiai-ppt-skill/ |
+| 2026-08-19 | codex-ppt-skill | indexed | Submitted and indexed | https://open-design.ai/blog/codex-ppt-skill/ |
+| 2026-08-19 | claude-ppt-skills | indexed | Submitted and indexed | https://open-design.ai/blog/claude-ppt-skills/ |
+| 2026-08-19 | byok-reality-check-5-things-that-break | indexed | Submitted and indexed | https://open-design.ai/blog/byok-reality-check-5-things-that-break/ |
+| 2026-08-19 | byok-design-workflow-claude-codex-qwen | indexed | Submitted and indexed | https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/ |
+| 2026-08-19 | bolt-new-alternatives | indexed | Submitted and indexed | https://open-design.ai/blog/bolt-new-alternatives/ |
+| 2026-08-19 | best-ai-design-tools | indexed | Submitted and indexed | https://open-design.ai/blog/best-ai-design-tools/ |
+| 2026-08-19 | ai-prototyping-tools | indexed | Submitted and indexed | https://open-design.ai/blog/ai-prototyping-tools/ |
+| 2026-08-19 | ai-design-agents | indexed | Submitted and indexed | https://open-design.ai/blog/ai-design-agents/ |
+| 2026-08-19 | 31-skills-72-systems-how-the-library-works | indexed | Submitted and indexed | https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/ |
+| 2026-08-14 | open-design-0-19-1-design-with-deepseek-harness | neutral | URL is unknown to Google | — |
+| 2026-08-10 | open-design-0-18-0-design-team-workspace-codex | neutral | URL is unknown to Google | — |
+| 2026-08-10 | open-design-0-17-0-open-design-for-codex | neutral | URL is unknown to Google | — |
+| 2026-07-30 | open-design-0-9-0-design-for-everyone | indexed | Submitted and indexed | https://open-design.ai/blog/open-design-0-9-0-design-for-everyone/ |
+| 2026-07-30 | open-design-0-8-0-everything-is-a-plugin | indexed | Submitted and indexed | https://open-design.ai/blog/open-design-0-8-0-everything-is-a-plugin/ |
+| 2026-07-30 | open-design-0-15-1 | indexed | Submitted and indexed | https://open-design.ai/blog/open-design-0-15-1/ |
+| 2026-07-30 | open-design-0-15-0-cost-less-ship-faster | indexed | Submitted and indexed | https://open-design.ai/blog/open-design-0-15-0-cost-less-ship-faster/ |
+| 2026-07-30 | open-design-0-14-0-inspiration-time-machine | indexed | Submitted and indexed | https://open-design.ai/blog/open-design-0-14-0-inspiration-time-machine/ |

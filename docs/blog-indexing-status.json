@@ -2,49 +2,58 @@
   "latest": {
     "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/": {
       "url": "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/",
-      "inspectedAt": "2026-05-20T03:03:52.390Z",
-      "result": {
-        "verdict": "NEUTRAL",
-        "coverageState": "Discovered - currently not indexed",
-        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
-        "indexingState": "INDEXING_STATE_UNSPECIFIED",
-        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
-        "isIndexed": false
-      }
-    },
-    "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/": {
-      "url": "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/",
-      "inspectedAt": "2026-05-20T03:03:58.782Z",
-      "result": {
-        "verdict": "NEUTRAL",
-        "coverageState": "Discovered - currently not indexed",
-        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
-        "indexingState": "INDEXING_STATE_UNSPECIFIED",
-        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
-        "isIndexed": false
-      }
-    },
-    "https://open-design.ai/blog/byok-reality-check-5-things-that-break/": {
-      "url": "https://open-design.ai/blog/byok-reality-check-5-things-that-break/",
-      "inspectedAt": "2026-05-21T03:04:29.361Z",
-      "result": {
-        "verdict": "NEUTRAL",
-        "coverageState": "Discovered - currently not indexed",
-        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
-        "indexingState": "INDEXING_STATE_UNSPECIFIED",
-        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
-        "isIndexed": false
-      }
-    },
-    "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/": {
-      "url": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
-      "inspectedAt": "2026-05-21T03:04:16.961Z",
+      "inspectedAt": "2026-08-19T05:25:42.136Z",
       "result": {
         "verdict": "PASS",
         "coverageState": "Submitted and indexed",
         "pageFetchState": "SUCCESSFUL",
         "indexingState": "INDEXING_ALLOWED",
-        "lastCrawlTime": "2026-05-19T09:20:42Z",
+        "lastCrawlTime": "2026-08-03T11:36:51Z",
+        "googleCanonical": "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/",
+        "userCanonical": "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/": {
+      "url": "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/",
+      "inspectedAt": "2026-08-19T05:26:13.450Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-16T21:35:37Z",
+        "googleCanonical": "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/",
+        "userCanonical": "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/byok-reality-check-5-things-that-break/": {
+      "url": "https://open-design.ai/blog/byok-reality-check-5-things-that-break/",
+      "inspectedAt": "2026-08-19T05:26:19.539Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-16T21:33:14Z",
+        "googleCanonical": "https://open-design.ai/blog/byok-reality-check-5-things-that-break/",
+        "userCanonical": "https://open-design.ai/blog/byok-reality-check-5-things-that-break/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/": {
+      "url": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
+      "inspectedAt": "2026-08-19T05:27:23.956Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-07T00:43:01Z",
         "googleCanonical": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
         "userCanonical": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
         "robotsTxtState": "ALLOWED",
@@ -53,13 +62,13 @@
     },
     "https://open-design.ai/blog/open-source-alternative-to-claude-design/": {
       "url": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
-      "inspectedAt": "2026-05-21T03:04:35.481Z",
+      "inspectedAt": "2026-08-19T05:29:20.432Z",
       "result": {
         "verdict": "PASS",
         "coverageState": "Submitted and indexed",
         "pageFetchState": "SUCCESSFUL",
         "indexingState": "INDEXING_ALLOWED",
-        "lastCrawlTime": "2026-05-15T12:22:17Z",
+        "lastCrawlTime": "2026-08-19T01:28:10Z",
         "googleCanonical": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
         "userCanonical": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
         "robotsTxtState": "ALLOWED",
@@ -68,13 +77,13 @@
     },
     "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/": {
       "url": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
-      "inspectedAt": "2026-05-21T03:04:23.233Z",
+      "inspectedAt": "2026-08-19T05:29:26.519Z",
       "result": {
         "verdict": "PASS",
         "coverageState": "Submitted and indexed",
         "pageFetchState": "SUCCESSFUL",
         "indexingState": "INDEXING_ALLOWED",
-        "lastCrawlTime": "2026-05-19T09:20:41Z",
+        "lastCrawlTime": "2026-08-01T16:07:27Z",
         "googleCanonical": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
         "userCanonical": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
         "robotsTxtState": "ALLOWED",
@@ -83,54 +92,705 @@
     },
     "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/": {
       "url": "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/",
-      "inspectedAt": "2026-05-20T03:04:04.911Z",
+      "inspectedAt": "2026-08-19T05:30:09.379Z",
       "result": {
-        "verdict": "NEUTRAL",
-        "coverageState": "Discovered - currently not indexed",
-        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
-        "indexingState": "INDEXING_STATE_UNSPECIFIED",
-        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
-        "isIndexed": false
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-26T07:32:19Z",
+        "googleCanonical": "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/",
+        "userCanonical": "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/ai-design-agents/": {
+      "url": "https://open-design.ai/blog/ai-design-agents/",
+      "inspectedAt": "2026-08-19T05:25:48.679Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-13T20:21:00Z",
+        "googleCanonical": "https://open-design.ai/blog/ai-design-agents/",
+        "userCanonical": "https://open-design.ai/blog/ai-design-agents/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/ai-prototyping-tools/": {
+      "url": "https://open-design.ai/blog/ai-prototyping-tools/",
+      "inspectedAt": "2026-08-19T05:25:55.074Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-10T14:55:10Z",
+        "googleCanonical": "https://open-design.ai/blog/ai-prototyping-tools/",
+        "userCanonical": "https://open-design.ai/blog/ai-prototyping-tools/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/best-ai-design-tools/": {
+      "url": "https://open-design.ai/blog/best-ai-design-tools/",
+      "inspectedAt": "2026-08-19T05:26:01.197Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-23T18:54:06Z",
+        "googleCanonical": "https://open-design.ai/blog/best-ai-design-tools/",
+        "userCanonical": "https://open-design.ai/blog/best-ai-design-tools/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/bolt-new-alternatives/": {
+      "url": "https://open-design.ai/blog/bolt-new-alternatives/",
+      "inspectedAt": "2026-08-19T05:26:07.326Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-21T10:28:52Z",
+        "googleCanonical": "https://open-design.ai/blog/bolt-new-alternatives/",
+        "userCanonical": "https://open-design.ai/blog/bolt-new-alternatives/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/claude-ppt-skills/": {
+      "url": "https://open-design.ai/blog/claude-ppt-skills/",
+      "inspectedAt": "2026-08-19T05:26:25.697Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-08T18:47:30Z",
+        "googleCanonical": "https://open-design.ai/blog/claude-ppt-skills/",
+        "userCanonical": "https://open-design.ai/blog/claude-ppt-skills/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/codex-ppt-skill/": {
+      "url": "https://open-design.ai/blog/codex-ppt-skill/",
+      "inspectedAt": "2026-08-19T05:26:31.816Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-08T07:54:39Z",
+        "googleCanonical": "https://open-design.ai/blog/codex-ppt-skill/",
+        "userCanonical": "https://open-design.ai/blog/codex-ppt-skill/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/dashiai-ppt-skill/": {
+      "url": "https://open-design.ai/blog/dashiai-ppt-skill/",
+      "inspectedAt": "2026-08-19T05:26:37.927Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-09T14:39:20Z",
+        "googleCanonical": "https://open-design.ai/blog/dashiai-ppt-skill/",
+        "userCanonical": "https://open-design.ai/blog/dashiai-ppt-skill/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/design-to-code-tools/": {
+      "url": "https://open-design.ai/blog/design-to-code-tools/",
+      "inspectedAt": "2026-08-19T05:26:44.032Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-15T06:06:30Z",
+        "googleCanonical": "https://open-design.ai/blog/design-to-code-tools/",
+        "userCanonical": "https://open-design.ai/blog/design-to-code-tools/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/figma-alternative-open-design/": {
+      "url": "https://open-design.ai/blog/figma-alternative-open-design/",
+      "inspectedAt": "2026-08-19T05:26:50.150Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-12T01:48:54Z",
+        "googleCanonical": "https://open-design.ai/blog/figma-alternative-open-design/",
+        "userCanonical": "https://open-design.ai/blog/figma-alternative-open-design/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/figma-alternatives/": {
+      "url": "https://open-design.ai/blog/figma-alternatives/",
+      "inspectedAt": "2026-08-19T05:26:56.307Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-14T05:54:03Z",
+        "googleCanonical": "https://open-design.ai/blog/figma-alternatives/",
+        "userCanonical": "https://open-design.ai/blog/figma-alternatives/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/frontend-slides/": {
+      "url": "https://open-design.ai/blog/frontend-slides/",
+      "inspectedAt": "2026-08-19T05:27:02.432Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-29T02:20:58Z",
+        "googleCanonical": "https://open-design.ai/blog/frontend-slides/",
+        "userCanonical": "https://open-design.ai/blog/frontend-slides/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/guizang-ppt-skill/": {
+      "url": "https://open-design.ai/blog/guizang-ppt-skill/",
+      "inspectedAt": "2026-08-19T05:27:08.592Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-17T02:43:37Z",
+        "googleCanonical": "https://open-design.ai/blog/guizang-ppt-skill/",
+        "userCanonical": "https://open-design.ai/blog/guizang-ppt-skill/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/how-to-use-claude-code-for-frontend-design/": {
+      "url": "https://open-design.ai/blog/how-to-use-claude-code-for-frontend-design/",
+      "inspectedAt": "2026-08-19T05:27:14.841Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-10T14:36:48Z",
+        "googleCanonical": "https://open-design.ai/blog/how-to-use-claude-code-for-frontend-design/",
+        "userCanonical": "https://open-design.ai/blog/how-to-use-claude-code-for-frontend-design/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/lovable-alternatives/": {
+      "url": "https://open-design.ai/blog/lovable-alternatives/",
+      "inspectedAt": "2026-08-19T05:27:33.260Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-14T10:49:57Z",
+        "googleCanonical": "https://open-design.ai/blog/lovable-alternatives/",
+        "userCanonical": "https://open-design.ai/blog/lovable-alternatives/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/marp/": {
+      "url": "https://open-design.ai/blog/marp/",
+      "inspectedAt": "2026-07-24T02:35:27.889Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-15T08:59:14Z",
+        "googleCanonical": "https://open-design.ai/blog/marp/",
+        "userCanonical": "https://open-design.ai/blog/marp/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-10-0-all-in-one-workspace/": {
+      "url": "https://open-design.ai/blog/open-design-0-10-0-all-in-one-workspace/",
+      "inspectedAt": "2026-08-19T05:27:39.376Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-07T18:08:56Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-10-0-all-in-one-workspace/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-10-0-all-in-one-workspace/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-11-0-the-bazaar/": {
+      "url": "https://open-design.ai/blog/open-design-0-11-0-the-bazaar/",
+      "inspectedAt": "2026-08-19T05:27:48.490Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-21T17:06:27Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-11-0-the-bazaar/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-11-0-the-bazaar/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-12-0-brand-backed-design-system/": {
+      "url": "https://open-design.ai/blog/open-design-0-12-0-brand-backed-design-system/",
+      "inspectedAt": "2026-08-19T05:27:57.602Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-24T03:45:49Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-12-0-brand-backed-design-system/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-12-0-brand-backed-design-system/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-13-0-stay-in-flow/": {
+      "url": "https://open-design.ai/blog/open-design-0-13-0-stay-in-flow/",
+      "inspectedAt": "2026-08-19T05:28:05.165Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-22T11:52:32Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-13-0-stay-in-flow/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-13-0-stay-in-flow/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-14-0-inspiration-time-machine/": {
+      "url": "https://open-design.ai/blog/open-design-0-14-0-inspiration-time-machine/",
+      "inspectedAt": "2026-08-19T05:28:11.312Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-26T04:16:51Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-14-0-inspiration-time-machine/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-14-0-inspiration-time-machine/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-15-0-cost-less-ship-faster/": {
+      "url": "https://open-design.ai/blog/open-design-0-15-0-cost-less-ship-faster/",
+      "inspectedAt": "2026-08-19T05:28:17.419Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-26T04:09:17Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-15-0-cost-less-ship-faster/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-15-0-cost-less-ship-faster/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-15-1/": {
+      "url": "https://open-design.ai/blog/open-design-0-15-1/",
+      "inspectedAt": "2026-08-19T05:28:23.534Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-08T12:59:55Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-15-1/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-15-1/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-9-0-design-for-everyone/": {
+      "url": "https://open-design.ai/blog/open-design-0-9-0-design-for-everyone/",
+      "inspectedAt": "2026-08-19T05:29:01.826Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-13T21:10:49Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-9-0-design-for-everyone/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-9-0-design-for-everyone/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/open-design-osaka-kyoto-meetup/": {
+      "url": "https://open-design.ai/blog/open-design-osaka-kyoto-meetup/",
+      "inspectedAt": "2026-08-19T05:29:08.058Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-08T19:16:09Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-osaka-kyoto-meetup/",
+        "userCanonical": "https://open-design.ai/blog/open-design-osaka-kyoto-meetup/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/open-design-shanghai-ai-workshop/": {
+      "url": "https://open-design.ai/blog/open-design-shanghai-ai-workshop/",
+      "inspectedAt": "2026-08-19T05:29:14.174Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-08T21:20:15Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-shanghai-ai-workshop/",
+        "userCanonical": "https://open-design.ai/blog/open-design-shanghai-ai-workshop/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/ppt-master/": {
+      "url": "https://open-design.ai/blog/ppt-master/",
+      "inspectedAt": "2026-08-19T05:29:32.635Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-17T16:37:41Z",
+        "googleCanonical": "https://open-design.ai/blog/ppt-master/",
+        "userCanonical": "https://open-design.ai/blog/ppt-master/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/reveal-js/": {
+      "url": "https://open-design.ai/blog/reveal-js/",
+      "inspectedAt": "2026-07-24T02:36:42.020Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-17T11:40:56Z",
+        "googleCanonical": "https://open-design.ai/blog/reveal-js/",
+        "userCanonical": "https://open-design.ai/blog/reveal-js/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/slidev/": {
+      "url": "https://open-design.ai/blog/slidev/",
+      "inspectedAt": "2026-07-24T02:36:48.180Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-16T07:12:53Z",
+        "googleCanonical": "https://open-design.ai/blog/slidev/",
+        "userCanonical": "https://open-design.ai/blog/slidev/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/v0-alternatives/": {
+      "url": "https://open-design.ai/blog/v0-alternatives/",
+      "inspectedAt": "2026-08-19T05:29:38.762Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-09T00:03:01Z",
+        "googleCanonical": "https://open-design.ai/blog/v0-alternatives/",
+        "userCanonical": "https://open-design.ai/blog/v0-alternatives/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/vibe-design-tools/": {
+      "url": "https://open-design.ai/blog/vibe-design-tools/",
+      "inspectedAt": "2026-08-19T05:29:44.864Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-13T14:43:09Z",
+        "googleCanonical": "https://open-design.ai/blog/vibe-design-tools/",
+        "userCanonical": "https://open-design.ai/blog/vibe-design-tools/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/vibe-design-vs-vibe-coding/": {
+      "url": "https://open-design.ai/blog/vibe-design-vs-vibe-coding/",
+      "inspectedAt": "2026-08-19T05:29:51.004Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-16T07:26:21Z",
+        "googleCanonical": "https://open-design.ai/blog/vibe-design-vs-vibe-coding/",
+        "userCanonical": "https://open-design.ai/blog/vibe-design-vs-vibe-coding/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/vibe-design-with-stitch/": {
+      "url": "https://open-design.ai/blog/vibe-design-with-stitch/",
+      "inspectedAt": "2026-08-19T05:29:57.139Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-17T06:27:23Z",
+        "googleCanonical": "https://open-design.ai/blog/vibe-design-with-stitch/",
+        "userCanonical": "https://open-design.ai/blog/vibe-design-with-stitch/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/what-is-vibe-design/": {
+      "url": "https://open-design.ai/blog/what-is-vibe-design/",
+      "inspectedAt": "2026-08-19T05:30:03.252Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-17T13:26:51Z",
+        "googleCanonical": "https://open-design.ai/blog/what-is-vibe-design/",
+        "userCanonical": "https://open-design.ai/blog/what-is-vibe-design/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-8-0-everything-is-a-plugin/": {
+      "url": "https://open-design.ai/blog/open-design-0-8-0-everything-is-a-plugin/",
+      "inspectedAt": "2026-08-19T05:28:55.563Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-17T20:00:06Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-8-0-everything-is-a-plugin/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-8-0-everything-is-a-plugin/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-16-0-reliable-delivery/": {
+      "url": "https://open-design.ai/blog/open-design-0-16-0-reliable-delivery/",
+      "inspectedAt": "2026-08-19T05:28:29.688Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-31T04:04:31Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-16-0-reliable-delivery/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-16-0-reliable-delivery/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-17-0-open-design-for-codex/": {
+      "url": "https://open-design.ai/blog/open-design-0-17-0-open-design-for-codex/",
+      "inspectedAt": "2026-08-19T05:28:35.809Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-10T19:24:39Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-17-0-open-design-for-codex/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-17-0-open-design-for-codex/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-18-0-design-team-workspace-codex/": {
+      "url": "https://open-design.ai/blog/open-design-0-18-0-design-team-workspace-codex/",
+      "inspectedAt": "2026-08-19T05:28:41.913Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-10T07:47:34Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-18-0-design-team-workspace-codex/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-18-0-design-team-workspace-codex/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-19-1-design-with-deepseek-harness/": {
+      "url": "https://open-design.ai/blog/open-design-0-19-1-design-with-deepseek-harness/",
+      "inspectedAt": "2026-08-19T05:28:49.471Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-14T15:43:07Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-19-1-design-with-deepseek-harness/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-19-1-design-with-deepseek-harness/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
       }
     }
   },
   "history": [
     {
-      "url": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
-      "inspectedAt": "2026-05-21T03:04:35.481Z",
+      "url": "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/",
+      "inspectedAt": "2026-08-19T05:30:09.379Z",
       "result": {
         "verdict": "PASS",
         "coverageState": "Submitted and indexed",
         "pageFetchState": "SUCCESSFUL",
         "indexingState": "INDEXING_ALLOWED",
-        "lastCrawlTime": "2026-05-15T12:22:17Z",
-        "googleCanonical": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
-        "userCanonical": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
+        "lastCrawlTime": "2026-07-26T07:32:19Z",
+        "googleCanonical": "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/",
+        "userCanonical": "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/",
         "robotsTxtState": "ALLOWED",
         "isIndexed": true
       }
     },
     {
-      "url": "https://open-design.ai/blog/byok-reality-check-5-things-that-break/",
-      "inspectedAt": "2026-05-21T03:04:29.361Z",
-      "result": {
-        "verdict": "NEUTRAL",
-        "coverageState": "Discovered - currently not indexed",
-        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
-        "indexingState": "INDEXING_STATE_UNSPECIFIED",
-        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
-        "isIndexed": false
-      }
-    },
-    {
-      "url": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
-      "inspectedAt": "2026-05-21T03:04:23.233Z",
+      "url": "https://open-design.ai/blog/what-is-vibe-design/",
+      "inspectedAt": "2026-08-19T05:30:03.252Z",
       "result": {
         "verdict": "PASS",
         "coverageState": "Submitted and indexed",
         "pageFetchState": "SUCCESSFUL",
         "indexingState": "INDEXING_ALLOWED",
-        "lastCrawlTime": "2026-05-19T09:20:41Z",
+        "lastCrawlTime": "2026-08-17T13:26:51Z",
+        "googleCanonical": "https://open-design.ai/blog/what-is-vibe-design/",
+        "userCanonical": "https://open-design.ai/blog/what-is-vibe-design/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/vibe-design-with-stitch/",
+      "inspectedAt": "2026-08-19T05:29:57.139Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-17T06:27:23Z",
+        "googleCanonical": "https://open-design.ai/blog/vibe-design-with-stitch/",
+        "userCanonical": "https://open-design.ai/blog/vibe-design-with-stitch/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/vibe-design-vs-vibe-coding/",
+      "inspectedAt": "2026-08-19T05:29:51.004Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-16T07:26:21Z",
+        "googleCanonical": "https://open-design.ai/blog/vibe-design-vs-vibe-coding/",
+        "userCanonical": "https://open-design.ai/blog/vibe-design-vs-vibe-coding/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/vibe-design-tools/",
+      "inspectedAt": "2026-08-19T05:29:44.864Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-13T14:43:09Z",
+        "googleCanonical": "https://open-design.ai/blog/vibe-design-tools/",
+        "userCanonical": "https://open-design.ai/blog/vibe-design-tools/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/v0-alternatives/",
+      "inspectedAt": "2026-08-19T05:29:38.762Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-09T00:03:01Z",
+        "googleCanonical": "https://open-design.ai/blog/v0-alternatives/",
+        "userCanonical": "https://open-design.ai/blog/v0-alternatives/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/ppt-master/",
+      "inspectedAt": "2026-08-19T05:29:32.635Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-17T16:37:41Z",
+        "googleCanonical": "https://open-design.ai/blog/ppt-master/",
+        "userCanonical": "https://open-design.ai/blog/ppt-master/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
+      "inspectedAt": "2026-08-19T05:29:26.519Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-01T16:07:27Z",
         "googleCanonical": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
         "userCanonical": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
         "robotsTxtState": "ALLOWED",
@@ -138,92 +798,14 @@
       }
     },
     {
-      "url": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
-      "inspectedAt": "2026-05-21T03:04:16.961Z",
-      "result": {
-        "verdict": "PASS",
-        "coverageState": "Submitted and indexed",
-        "pageFetchState": "SUCCESSFUL",
-        "indexingState": "INDEXING_ALLOWED",
-        "lastCrawlTime": "2026-05-19T09:20:42Z",
-        "googleCanonical": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
-        "userCanonical": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
-        "robotsTxtState": "ALLOWED",
-        "isIndexed": true
-      }
-    },
-    {
-      "url": "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/",
-      "inspectedAt": "2026-05-20T03:04:04.911Z",
-      "result": {
-        "verdict": "NEUTRAL",
-        "coverageState": "Discovered - currently not indexed",
-        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
-        "indexingState": "INDEXING_STATE_UNSPECIFIED",
-        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
-        "isIndexed": false
-      }
-    },
-    {
-      "url": "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/",
-      "inspectedAt": "2026-05-20T03:03:58.782Z",
-      "result": {
-        "verdict": "NEUTRAL",
-        "coverageState": "Discovered - currently not indexed",
-        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
-        "indexingState": "INDEXING_STATE_UNSPECIFIED",
-        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
-        "isIndexed": false
-      }
-    },
-    {
-      "url": "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/",
-      "inspectedAt": "2026-05-20T03:03:52.390Z",
-      "result": {
-        "verdict": "NEUTRAL",
-        "coverageState": "Discovered - currently not indexed",
-        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
-        "indexingState": "INDEXING_STATE_UNSPECIFIED",
-        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
-        "isIndexed": false
-      }
-    },
-    {
-      "url": "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/",
-      "inspectedAt": "2026-05-19T10:12:21.077Z",
-      "result": {
-        "verdict": "NEUTRAL",
-        "coverageState": "Discovered - currently not indexed",
-        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
-        "indexingState": "INDEXING_STATE_UNSPECIFIED",
-        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
-        "isIndexed": false
-      }
-    },
-    {
-      "url": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
-      "inspectedAt": "2026-05-19T10:12:14.760Z",
-      "result": {
-        "verdict": "PASS",
-        "coverageState": "Submitted and indexed",
-        "pageFetchState": "SUCCESSFUL",
-        "indexingState": "INDEXING_ALLOWED",
-        "lastCrawlTime": "2026-05-19T09:20:41Z",
-        "googleCanonical": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
-        "userCanonical": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
-        "robotsTxtState": "ALLOWED",
-        "isIndexed": true
-      }
-    },
-    {
       "url": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
-      "inspectedAt": "2026-05-19T10:12:08.472Z",
+      "inspectedAt": "2026-08-19T05:29:20.432Z",
       "result": {
         "verdict": "PASS",
         "coverageState": "Submitted and indexed",
         "pageFetchState": "SUCCESSFUL",
         "indexingState": "INDEXING_ALLOWED",
-        "lastCrawlTime": "2026-05-15T12:22:17Z",
+        "lastCrawlTime": "2026-08-19T01:28:10Z",
         "googleCanonical": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
         "userCanonical": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
         "robotsTxtState": "ALLOWED",
@@ -231,14 +813,254 @@
       }
     },
     {
-      "url": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
-      "inspectedAt": "2026-05-19T10:12:02.175Z",
+      "url": "https://open-design.ai/blog/open-design-shanghai-ai-workshop/",
+      "inspectedAt": "2026-08-19T05:29:14.174Z",
       "result": {
         "verdict": "PASS",
         "coverageState": "Submitted and indexed",
         "pageFetchState": "SUCCESSFUL",
         "indexingState": "INDEXING_ALLOWED",
-        "lastCrawlTime": "2026-05-19T09:20:42Z",
+        "lastCrawlTime": "2026-08-08T21:20:15Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-shanghai-ai-workshop/",
+        "userCanonical": "https://open-design.ai/blog/open-design-shanghai-ai-workshop/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-design-osaka-kyoto-meetup/",
+      "inspectedAt": "2026-08-19T05:29:08.058Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-08T19:16:09Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-osaka-kyoto-meetup/",
+        "userCanonical": "https://open-design.ai/blog/open-design-osaka-kyoto-meetup/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-design-0-9-0-design-for-everyone/",
+      "inspectedAt": "2026-08-19T05:29:01.826Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-13T21:10:49Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-9-0-design-for-everyone/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-9-0-design-for-everyone/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-design-0-8-0-everything-is-a-plugin/",
+      "inspectedAt": "2026-08-19T05:28:55.563Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-17T20:00:06Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-8-0-everything-is-a-plugin/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-8-0-everything-is-a-plugin/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-design-0-19-1-design-with-deepseek-harness/",
+      "inspectedAt": "2026-08-19T05:28:49.471Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-14T15:43:07Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-19-1-design-with-deepseek-harness/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-19-1-design-with-deepseek-harness/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-design-0-18-0-design-team-workspace-codex/",
+      "inspectedAt": "2026-08-19T05:28:41.913Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-10T07:47:34Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-18-0-design-team-workspace-codex/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-18-0-design-team-workspace-codex/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-design-0-17-0-open-design-for-codex/",
+      "inspectedAt": "2026-08-19T05:28:35.809Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-10T19:24:39Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-17-0-open-design-for-codex/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-17-0-open-design-for-codex/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-design-0-16-0-reliable-delivery/",
+      "inspectedAt": "2026-08-19T05:28:29.688Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-31T04:04:31Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-16-0-reliable-delivery/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-16-0-reliable-delivery/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-design-0-15-1/",
+      "inspectedAt": "2026-08-19T05:28:23.534Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-08T12:59:55Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-15-1/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-15-1/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-design-0-15-0-cost-less-ship-faster/",
+      "inspectedAt": "2026-08-19T05:28:17.419Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-26T04:09:17Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-15-0-cost-less-ship-faster/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-15-0-cost-less-ship-faster/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-design-0-14-0-inspiration-time-machine/",
+      "inspectedAt": "2026-08-19T05:28:11.312Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-26T04:16:51Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-14-0-inspiration-time-machine/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-14-0-inspiration-time-machine/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-design-0-13-0-stay-in-flow/",
+      "inspectedAt": "2026-08-19T05:28:05.165Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-22T11:52:32Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-13-0-stay-in-flow/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-13-0-stay-in-flow/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-design-0-12-0-brand-backed-design-system/",
+      "inspectedAt": "2026-08-19T05:27:57.602Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-24T03:45:49Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-12-0-brand-backed-design-system/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-12-0-brand-backed-design-system/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-design-0-11-0-the-bazaar/",
+      "inspectedAt": "2026-08-19T05:27:48.490Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-21T17:06:27Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-11-0-the-bazaar/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-11-0-the-bazaar/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-design-0-10-0-all-in-one-workspace/",
+      "inspectedAt": "2026-08-19T05:27:39.376Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-07T18:08:56Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-10-0-all-in-one-workspace/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-10-0-all-in-one-workspace/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/lovable-alternatives/",
+      "inspectedAt": "2026-08-19T05:27:33.260Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-14T10:49:57Z",
+        "googleCanonical": "https://open-design.ai/blog/lovable-alternatives/",
+        "userCanonical": "https://open-design.ai/blog/lovable-alternatives/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
+      "inspectedAt": "2026-08-19T05:27:23.956Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-07T00:43:01Z",
         "googleCanonical": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
         "userCanonical": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
         "robotsTxtState": "ALLOWED",
@@ -246,32 +1068,248 @@
       }
     },
     {
-      "url": "https://open-design.ai/blog/byok-reality-check-5-things-that-break/",
-      "inspectedAt": "2026-05-19T10:11:55.870Z",
+      "url": "https://open-design.ai/blog/how-to-use-claude-code-for-frontend-design/",
+      "inspectedAt": "2026-08-19T05:27:14.841Z",
       "result": {
-        "verdict": "NEUTRAL",
-        "coverageState": "Discovered - currently not indexed",
-        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
-        "indexingState": "INDEXING_STATE_UNSPECIFIED",
-        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
-        "isIndexed": false
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-10T14:36:48Z",
+        "googleCanonical": "https://open-design.ai/blog/how-to-use-claude-code-for-frontend-design/",
+        "userCanonical": "https://open-design.ai/blog/how-to-use-claude-code-for-frontend-design/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/guizang-ppt-skill/",
+      "inspectedAt": "2026-08-19T05:27:08.592Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-17T02:43:37Z",
+        "googleCanonical": "https://open-design.ai/blog/guizang-ppt-skill/",
+        "userCanonical": "https://open-design.ai/blog/guizang-ppt-skill/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/frontend-slides/",
+      "inspectedAt": "2026-08-19T05:27:02.432Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-29T02:20:58Z",
+        "googleCanonical": "https://open-design.ai/blog/frontend-slides/",
+        "userCanonical": "https://open-design.ai/blog/frontend-slides/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/figma-alternatives/",
+      "inspectedAt": "2026-08-19T05:26:56.307Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-14T05:54:03Z",
+        "googleCanonical": "https://open-design.ai/blog/figma-alternatives/",
+        "userCanonical": "https://open-design.ai/blog/figma-alternatives/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/figma-alternative-open-design/",
+      "inspectedAt": "2026-08-19T05:26:50.150Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-12T01:48:54Z",
+        "googleCanonical": "https://open-design.ai/blog/figma-alternative-open-design/",
+        "userCanonical": "https://open-design.ai/blog/figma-alternative-open-design/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/design-to-code-tools/",
+      "inspectedAt": "2026-08-19T05:26:44.032Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-15T06:06:30Z",
+        "googleCanonical": "https://open-design.ai/blog/design-to-code-tools/",
+        "userCanonical": "https://open-design.ai/blog/design-to-code-tools/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/dashiai-ppt-skill/",
+      "inspectedAt": "2026-08-19T05:26:37.927Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-09T14:39:20Z",
+        "googleCanonical": "https://open-design.ai/blog/dashiai-ppt-skill/",
+        "userCanonical": "https://open-design.ai/blog/dashiai-ppt-skill/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/codex-ppt-skill/",
+      "inspectedAt": "2026-08-19T05:26:31.816Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-08T07:54:39Z",
+        "googleCanonical": "https://open-design.ai/blog/codex-ppt-skill/",
+        "userCanonical": "https://open-design.ai/blog/codex-ppt-skill/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/claude-ppt-skills/",
+      "inspectedAt": "2026-08-19T05:26:25.697Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-08T18:47:30Z",
+        "googleCanonical": "https://open-design.ai/blog/claude-ppt-skills/",
+        "userCanonical": "https://open-design.ai/blog/claude-ppt-skills/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/byok-reality-check-5-things-that-break/",
+      "inspectedAt": "2026-08-19T05:26:19.539Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-16T21:33:14Z",
+        "googleCanonical": "https://open-design.ai/blog/byok-reality-check-5-things-that-break/",
+        "userCanonical": "https://open-design.ai/blog/byok-reality-check-5-things-that-break/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
       }
     },
     {
       "url": "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/",
-      "inspectedAt": "2026-05-19T10:11:49.516Z",
+      "inspectedAt": "2026-08-19T05:26:13.450Z",
       "result": {
-        "verdict": "NEUTRAL",
-        "coverageState": "Discovered - currently not indexed",
-        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
-        "indexingState": "INDEXING_STATE_UNSPECIFIED",
-        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
-        "isIndexed": false
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-16T21:35:37Z",
+        "googleCanonical": "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/",
+        "userCanonical": "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/bolt-new-alternatives/",
+      "inspectedAt": "2026-08-19T05:26:07.326Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-21T10:28:52Z",
+        "googleCanonical": "https://open-design.ai/blog/bolt-new-alternatives/",
+        "userCanonical": "https://open-design.ai/blog/bolt-new-alternatives/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/best-ai-design-tools/",
+      "inspectedAt": "2026-08-19T05:26:01.197Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-23T18:54:06Z",
+        "googleCanonical": "https://open-design.ai/blog/best-ai-design-tools/",
+        "userCanonical": "https://open-design.ai/blog/best-ai-design-tools/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/ai-prototyping-tools/",
+      "inspectedAt": "2026-08-19T05:25:55.074Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-10T14:55:10Z",
+        "googleCanonical": "https://open-design.ai/blog/ai-prototyping-tools/",
+        "userCanonical": "https://open-design.ai/blog/ai-prototyping-tools/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/ai-design-agents/",
+      "inspectedAt": "2026-08-19T05:25:48.679Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-13T20:21:00Z",
+        "googleCanonical": "https://open-design.ai/blog/ai-design-agents/",
+        "userCanonical": "https://open-design.ai/blog/ai-design-agents/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
       }
     },
     {
       "url": "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/",
-      "inspectedAt": "2026-05-19T10:11:43.001Z",
+      "inspectedAt": "2026-08-19T05:25:42.136Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-08-03T11:36:51Z",
+        "googleCanonical": "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/",
+        "userCanonical": "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-design-0-19-1-design-with-deepseek-harness/",
+      "inspectedAt": "2026-08-14T13:11:18.758Z",
       "result": {
         "verdict": "NEUTRAL",
         "coverageState": "URL is unknown to Google",
@@ -280,175 +1318,1186 @@
         "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
         "isIndexed": false
       }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-design-0-18-0-design-team-workspace-codex/",
+      "inspectedAt": "2026-08-10T02:43:38.687Z",
+      "result": {
+        "verdict": "NEUTRAL",
+        "coverageState": "URL is unknown to Google",
+        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
+        "indexingState": "INDEXING_STATE_UNSPECIFIED",
+        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
+        "isIndexed": false
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-design-0-17-0-open-design-for-codex/",
+      "inspectedAt": "2026-08-10T02:43:32.202Z",
+      "result": {
+        "verdict": "NEUTRAL",
+        "coverageState": "URL is unknown to Google",
+        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
+        "indexingState": "INDEXING_STATE_UNSPECIFIED",
+        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
+        "isIndexed": false
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-design-0-9-0-design-for-everyone/",
+      "inspectedAt": "2026-07-30T04:45:15.499Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-24T08:31:26Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-9-0-design-for-everyone/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-9-0-design-for-everyone/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-design-0-8-0-everything-is-a-plugin/",
+      "inspectedAt": "2026-07-30T04:45:09.310Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-27T20:19:57Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-8-0-everything-is-a-plugin/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-8-0-everything-is-a-plugin/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-design-0-15-1/",
+      "inspectedAt": "2026-07-30T04:45:03.034Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-21T02:21:00Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-15-1/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-15-1/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-design-0-15-0-cost-less-ship-faster/",
+      "inspectedAt": "2026-07-30T04:44:56.803Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-26T04:09:17Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-15-0-cost-less-ship-faster/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-15-0-cost-less-ship-faster/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-design-0-14-0-inspiration-time-machine/",
+      "inspectedAt": "2026-07-30T04:44:50.475Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-07-26T04:16:51Z",
+        "googleCanonical": "https://open-design.ai/blog/open-design-0-14-0-inspiration-time-machine/",
+        "userCanonical": "https://open-design.ai/blog/open-design-0-14-0-inspiration-time-machine/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
     }
   ],
   "performance": {
     "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/": {
       "7": {
         "url": "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/",
-        "queriedAt": "2026-05-20T03:04:12.017Z",
+        "queriedAt": "2026-08-19T05:30:16.350Z",
         "windowDays": 7,
-        "startDate": "2026-05-12",
-        "endDate": "2026-05-18",
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
         "clicks": 0,
-        "impressions": 0,
+        "impressions": 10,
         "ctr": 0,
-        "position": 0
+        "position": 4
       },
       "28": {
         "url": "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/",
-        "queriedAt": "2026-05-20T03:04:12.131Z",
+        "queriedAt": "2026-08-19T05:30:16.478Z",
         "windowDays": 28,
-        "startDate": "2026-04-21",
-        "endDate": "2026-05-18",
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
         "clicks": 0,
-        "impressions": 0,
+        "impressions": 35,
         "ctr": 0,
-        "position": 0
+        "position": 4.857142857142858
       }
     },
     "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/": {
       "7": {
         "url": "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/",
-        "queriedAt": "2026-05-20T03:04:12.241Z",
+        "queriedAt": "2026-08-19T05:30:17.408Z",
         "windowDays": 7,
-        "startDate": "2026-05-12",
-        "endDate": "2026-05-18",
-        "clicks": 0,
-        "impressions": 0,
-        "ctr": 0,
-        "position": 0
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 1,
+        "impressions": 156,
+        "ctr": 0.00641025641025641,
+        "position": 6.237179487179487
       },
       "28": {
         "url": "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/",
-        "queriedAt": "2026-05-20T03:04:12.348Z",
+        "queriedAt": "2026-08-19T05:30:17.515Z",
         "windowDays": 28,
-        "startDate": "2026-04-21",
-        "endDate": "2026-05-18",
-        "clicks": 0,
-        "impressions": 0,
-        "ctr": 0,
-        "position": 0
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 11,
+        "impressions": 768,
+        "ctr": 0.014322916666666666,
+        "position": 6.177083333333333
       }
     },
     "https://open-design.ai/blog/byok-reality-check-5-things-that-break/": {
       "7": {
         "url": "https://open-design.ai/blog/byok-reality-check-5-things-that-break/",
-        "queriedAt": "2026-05-21T03:04:42.848Z",
+        "queriedAt": "2026-08-19T05:30:17.607Z",
         "windowDays": 7,
-        "startDate": "2026-05-13",
-        "endDate": "2026-05-19",
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
         "clicks": 0,
-        "impressions": 0,
+        "impressions": 52,
         "ctr": 0,
-        "position": 0
+        "position": 5.538461538461538
       },
       "28": {
         "url": "https://open-design.ai/blog/byok-reality-check-5-things-that-break/",
-        "queriedAt": "2026-05-21T03:04:42.929Z",
+        "queriedAt": "2026-08-19T05:30:17.696Z",
         "windowDays": 28,
-        "startDate": "2026-04-22",
-        "endDate": "2026-05-19",
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
         "clicks": 0,
-        "impressions": 0,
+        "impressions": 154,
         "ctr": 0,
-        "position": 0
+        "position": 5.337662337662338
       }
     },
     "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/": {
       "7": {
         "url": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
-        "queriedAt": "2026-05-21T03:04:42.455Z",
+        "queriedAt": "2026-08-19T05:30:19.446Z",
         "windowDays": 7,
-        "startDate": "2026-05-13",
-        "endDate": "2026-05-19",
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
         "clicks": 0,
-        "impressions": 0,
+        "impressions": 11,
         "ctr": 0,
-        "position": 0
+        "position": 16.909090909090907
       },
       "28": {
         "url": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
-        "queriedAt": "2026-05-21T03:04:42.571Z",
+        "queriedAt": "2026-08-19T05:30:19.547Z",
         "windowDays": 28,
-        "startDate": "2026-04-22",
-        "endDate": "2026-05-19",
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
         "clicks": 0,
-        "impressions": 0,
+        "impressions": 57,
         "ctr": 0,
-        "position": 0
+        "position": 8.929824561403509
       }
     },
     "https://open-design.ai/blog/open-source-alternative-to-claude-design/": {
       "7": {
         "url": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
-        "queriedAt": "2026-05-21T03:04:43.015Z",
+        "queriedAt": "2026-08-19T05:30:22.185Z",
         "windowDays": 7,
-        "startDate": "2026-05-13",
-        "endDate": "2026-05-19",
-        "clicks": 4,
-        "impressions": 107,
-        "ctr": 0.037383177570093455,
-        "position": 7.94392523364486
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 45,
+        "impressions": 1081,
+        "ctr": 0.041628122109158186,
+        "position": 6.161887141535615
       },
       "28": {
         "url": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
-        "queriedAt": "2026-05-21T03:04:43.089Z",
+        "queriedAt": "2026-08-19T05:30:22.270Z",
         "windowDays": 28,
-        "startDate": "2026-04-22",
-        "endDate": "2026-05-19",
-        "clicks": 4,
-        "impressions": 107,
-        "ctr": 0.037383177570093455,
-        "position": 7.94392523364486
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 258,
+        "impressions": 6465,
+        "ctr": 0.03990719257540603,
+        "position": 5.2547563805104405
       }
     },
     "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/": {
       "7": {
         "url": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
-        "queriedAt": "2026-05-21T03:04:42.666Z",
+        "queriedAt": "2026-08-19T05:30:22.337Z",
         "windowDays": 7,
-        "startDate": "2026-05-13",
-        "endDate": "2026-05-19",
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
         "clicks": 0,
-        "impressions": 0,
+        "impressions": 20,
         "ctr": 0,
-        "position": 0
+        "position": 6.8
       },
       "28": {
         "url": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
-        "queriedAt": "2026-05-21T03:04:42.755Z",
+        "queriedAt": "2026-08-19T05:30:22.422Z",
         "windowDays": 28,
-        "startDate": "2026-04-22",
-        "endDate": "2026-05-19",
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
         "clicks": 0,
-        "impressions": 0,
+        "impressions": 82,
         "ctr": 0,
-        "position": 0
+        "position": 9.939024390243903
       }
     },
     "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/": {
       "7": {
         "url": "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/",
-        "queriedAt": "2026-05-20T03:04:12.457Z",
+        "queriedAt": "2026-08-19T05:30:23.413Z",
         "windowDays": 7,
-        "startDate": "2026-05-12",
-        "endDate": "2026-05-18",
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
         "clicks": 0,
-        "impressions": 0,
+        "impressions": 25,
         "ctr": 0,
-        "position": 0
+        "position": 5.16
       },
       "28": {
         "url": "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/",
-        "queriedAt": "2026-05-20T03:04:12.540Z",
+        "queriedAt": "2026-08-19T05:30:23.501Z",
         "windowDays": 28,
-        "startDate": "2026-04-21",
-        "endDate": "2026-05-18",
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
         "clicks": 0,
-        "impressions": 0,
+        "impressions": 103,
         "ctr": 0,
-        "position": 0
+        "position": 5.184466019417476
+      }
+    },
+    "https://open-design.ai/blog/ai-design-agents/": {
+      "7": {
+        "url": "https://open-design.ai/blog/ai-design-agents/",
+        "queriedAt": "2026-08-19T05:30:16.579Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 17,
+        "impressions": 727,
+        "ctr": 0.023383768913342505,
+        "position": 8.441540577716644
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/ai-design-agents/",
+        "queriedAt": "2026-08-19T05:30:16.688Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 96,
+        "impressions": 3198,
+        "ctr": 0.0300187617260788,
+        "position": 8.196998123827392
+      }
+    },
+    "https://open-design.ai/blog/ai-prototyping-tools/": {
+      "7": {
+        "url": "https://open-design.ai/blog/ai-prototyping-tools/",
+        "queriedAt": "2026-08-19T05:30:16.784Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 1,
+        "impressions": 531,
+        "ctr": 0.0018832391713747645,
+        "position": 20.943502824858758
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/ai-prototyping-tools/",
+        "queriedAt": "2026-08-19T05:30:16.884Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 10,
+        "impressions": 2914,
+        "ctr": 0.0034317089910775567,
+        "position": 15.607069320521619
+      }
+    },
+    "https://open-design.ai/blog/best-ai-design-tools/": {
+      "7": {
+        "url": "https://open-design.ai/blog/best-ai-design-tools/",
+        "queriedAt": "2026-08-19T05:30:17.002Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 18,
+        "impressions": 2381,
+        "ctr": 0.007559848803023939,
+        "position": 6.982360352792944
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/best-ai-design-tools/",
+        "queriedAt": "2026-08-19T05:30:17.097Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 90,
+        "impressions": 9931,
+        "ctr": 0.00906253146712315,
+        "position": 6.794985399254858
+      }
+    },
+    "https://open-design.ai/blog/bolt-new-alternatives/": {
+      "7": {
+        "url": "https://open-design.ai/blog/bolt-new-alternatives/",
+        "queriedAt": "2026-08-19T05:30:17.192Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 3,
+        "impressions": 449,
+        "ctr": 0.0066815144766146995,
+        "position": 20.616926503340757
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/bolt-new-alternatives/",
+        "queriedAt": "2026-08-19T05:30:17.311Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 7,
+        "impressions": 1828,
+        "ctr": 0.0038293216630196935,
+        "position": 19.52352297592998
+      }
+    },
+    "https://open-design.ai/blog/claude-ppt-skills/": {
+      "7": {
+        "url": "https://open-design.ai/blog/claude-ppt-skills/",
+        "queriedAt": "2026-08-19T05:30:17.775Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 179,
+        "impressions": 4345,
+        "ctr": 0.041196777905638665,
+        "position": 7.814499424626007
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/claude-ppt-skills/",
+        "queriedAt": "2026-08-19T05:30:17.870Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 1260,
+        "impressions": 28583,
+        "ctr": 0.04408214673057412,
+        "position": 7.347094426757163
+      }
+    },
+    "https://open-design.ai/blog/codex-ppt-skill/": {
+      "7": {
+        "url": "https://open-design.ai/blog/codex-ppt-skill/",
+        "queriedAt": "2026-08-19T05:30:17.959Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 81,
+        "impressions": 1421,
+        "ctr": 0.05700211118930331,
+        "position": 5.730471498944405
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/codex-ppt-skill/",
+        "queriedAt": "2026-08-19T05:30:18.051Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 370,
+        "impressions": 5470,
+        "ctr": 0.06764168190127971,
+        "position": 5.3212065813528335
+      }
+    },
+    "https://open-design.ai/blog/dashiai-ppt-skill/": {
+      "7": {
+        "url": "https://open-design.ai/blog/dashiai-ppt-skill/",
+        "queriedAt": "2026-08-19T05:30:18.122Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 3,
+        "impressions": 60,
+        "ctr": 0.05,
+        "position": 5.433333333333334
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/dashiai-ppt-skill/",
+        "queriedAt": "2026-08-19T05:30:18.223Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 19,
+        "impressions": 343,
+        "ctr": 0.05539358600583091,
+        "position": 5.650145772594752
+      }
+    },
+    "https://open-design.ai/blog/design-to-code-tools/": {
+      "7": {
+        "url": "https://open-design.ai/blog/design-to-code-tools/",
+        "queriedAt": "2026-08-19T05:30:18.314Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 0,
+        "impressions": 339,
+        "ctr": 0,
+        "position": 11.1976401179941
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/design-to-code-tools/",
+        "queriedAt": "2026-08-19T05:30:18.419Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 8,
+        "impressions": 1529,
+        "ctr": 0.005232177894048398,
+        "position": 8.215827338129497
+      }
+    },
+    "https://open-design.ai/blog/figma-alternative-open-design/": {
+      "7": {
+        "url": "https://open-design.ai/blog/figma-alternative-open-design/",
+        "queriedAt": "2026-08-19T05:30:18.518Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 11,
+        "impressions": 525,
+        "ctr": 0.02095238095238095,
+        "position": 11.674285714285714
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/figma-alternative-open-design/",
+        "queriedAt": "2026-08-19T05:30:18.615Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 43,
+        "impressions": 2219,
+        "ctr": 0.019378098242451555,
+        "position": 11.037854889589905
+      }
+    },
+    "https://open-design.ai/blog/figma-alternatives/": {
+      "7": {
+        "url": "https://open-design.ai/blog/figma-alternatives/",
+        "queriedAt": "2026-08-19T05:30:18.695Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 17,
+        "impressions": 1194,
+        "ctr": 0.01423785594639866,
+        "position": 14.279731993299832
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/figma-alternatives/",
+        "queriedAt": "2026-08-19T05:30:18.804Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 73,
+        "impressions": 4444,
+        "ctr": 0.01642664266426643,
+        "position": 12.83933393339334
+      }
+    },
+    "https://open-design.ai/blog/frontend-slides/": {
+      "7": {
+        "url": "https://open-design.ai/blog/frontend-slides/",
+        "queriedAt": "2026-08-19T05:30:18.908Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 31,
+        "impressions": 1225,
+        "ctr": 0.025306122448979593,
+        "position": 4.8310204081632655
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/frontend-slides/",
+        "queriedAt": "2026-08-19T05:30:19.005Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 102,
+        "impressions": 4637,
+        "ctr": 0.021996980806555964,
+        "position": 4.680181151606642
+      }
+    },
+    "https://open-design.ai/blog/guizang-ppt-skill/": {
+      "7": {
+        "url": "https://open-design.ai/blog/guizang-ppt-skill/",
+        "queriedAt": "2026-08-19T05:30:19.107Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 10,
+        "impressions": 486,
+        "ctr": 0.0205761316872428,
+        "position": 3.6152263374485596
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/guizang-ppt-skill/",
+        "queriedAt": "2026-08-19T05:30:19.208Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 27,
+        "impressions": 1976,
+        "ctr": 0.013663967611336033,
+        "position": 3.7419028340080973
+      }
+    },
+    "https://open-design.ai/blog/how-to-use-claude-code-for-frontend-design/": {
+      "7": {
+        "url": "https://open-design.ai/blog/how-to-use-claude-code-for-frontend-design/",
+        "queriedAt": "2026-08-19T05:30:19.284Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 39,
+        "impressions": 2204,
+        "ctr": 0.017695099818511795,
+        "position": 7.998185117967332
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/how-to-use-claude-code-for-frontend-design/",
+        "queriedAt": "2026-08-19T05:30:19.379Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 177,
+        "impressions": 8076,
+        "ctr": 0.021916790490341752,
+        "position": 7.642644873699852
+      }
+    },
+    "https://open-design.ai/blog/lovable-alternatives/": {
+      "7": {
+        "url": "https://open-design.ai/blog/lovable-alternatives/",
+        "queriedAt": "2026-08-19T05:30:19.622Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 8,
+        "impressions": 216,
+        "ctr": 0.037037037037037035,
+        "position": 8.037037037037038
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/lovable-alternatives/",
+        "queriedAt": "2026-08-19T05:30:19.724Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 63,
+        "impressions": 3427,
+        "ctr": 0.018383425736796032,
+        "position": 7.881820834549169
+      }
+    },
+    "https://open-design.ai/blog/marp/": {
+      "7": {
+        "url": "https://open-design.ai/blog/marp/",
+        "queriedAt": "2026-07-24T02:38:22.805Z",
+        "windowDays": 7,
+        "startDate": "2026-07-16",
+        "endDate": "2026-07-22",
+        "clicks": 14,
+        "impressions": 39522,
+        "ctr": 0.00035423308537017357,
+        "position": 8.474672334396033
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/marp/",
+        "queriedAt": "2026-07-24T02:38:23.166Z",
+        "windowDays": 28,
+        "startDate": "2026-06-25",
+        "endDate": "2026-07-22",
+        "clicks": 16,
+        "impressions": 42752,
+        "ctr": 0.00037425149700598805,
+        "position": 8.45223615269461
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-10-0-all-in-one-workspace/": {
+      "7": {
+        "url": "https://open-design.ai/blog/open-design-0-10-0-all-in-one-workspace/",
+        "queriedAt": "2026-08-19T05:30:19.796Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 0,
+        "impressions": 29,
+        "ctr": 0,
+        "position": 8.482758620689655
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/open-design-0-10-0-all-in-one-workspace/",
+        "queriedAt": "2026-08-19T05:30:19.886Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 0,
+        "impressions": 123,
+        "ctr": 0,
+        "position": 8.34959349593496
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-11-0-the-bazaar/": {
+      "7": {
+        "url": "https://open-design.ai/blog/open-design-0-11-0-the-bazaar/",
+        "queriedAt": "2026-08-19T05:30:19.964Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 0,
+        "impressions": 23,
+        "ctr": 0,
+        "position": 7.956521739130435
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/open-design-0-11-0-the-bazaar/",
+        "queriedAt": "2026-08-19T05:30:20.047Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 0,
+        "impressions": 62,
+        "ctr": 0,
+        "position": 9.096774193548388
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-12-0-brand-backed-design-system/": {
+      "7": {
+        "url": "https://open-design.ai/blog/open-design-0-12-0-brand-backed-design-system/",
+        "queriedAt": "2026-08-19T05:30:20.110Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 0,
+        "impressions": 56,
+        "ctr": 0,
+        "position": 8.910714285714285
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/open-design-0-12-0-brand-backed-design-system/",
+        "queriedAt": "2026-08-19T05:30:20.203Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 0,
+        "impressions": 239,
+        "ctr": 0,
+        "position": 8.255230125523013
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-13-0-stay-in-flow/": {
+      "7": {
+        "url": "https://open-design.ai/blog/open-design-0-13-0-stay-in-flow/",
+        "queriedAt": "2026-08-19T05:30:20.280Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 0,
+        "impressions": 37,
+        "ctr": 0,
+        "position": 3.4594594594594597
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/open-design-0-13-0-stay-in-flow/",
+        "queriedAt": "2026-08-19T05:30:20.373Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 1,
+        "impressions": 257,
+        "ctr": 0.0038910505836575876,
+        "position": 6.634241245136187
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-14-0-inspiration-time-machine/": {
+      "7": {
+        "url": "https://open-design.ai/blog/open-design-0-14-0-inspiration-time-machine/",
+        "queriedAt": "2026-08-19T05:30:20.446Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 0,
+        "impressions": 6,
+        "ctr": 0,
+        "position": 7.666666666666667
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/open-design-0-14-0-inspiration-time-machine/",
+        "queriedAt": "2026-08-19T05:30:20.525Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 3,
+        "impressions": 64,
+        "ctr": 0.046875,
+        "position": 5.75
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-15-0-cost-less-ship-faster/": {
+      "7": {
+        "url": "https://open-design.ai/blog/open-design-0-15-0-cost-less-ship-faster/",
+        "queriedAt": "2026-08-19T05:30:20.659Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 0,
+        "impressions": 31,
+        "ctr": 0,
+        "position": 6.387096774193548
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/open-design-0-15-0-cost-less-ship-faster/",
+        "queriedAt": "2026-08-19T05:30:20.747Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 2,
+        "impressions": 127,
+        "ctr": 0.015748031496062992,
+        "position": 5.771653543307087
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-15-1/": {
+      "7": {
+        "url": "https://open-design.ai/blog/open-design-0-15-1/",
+        "queriedAt": "2026-08-19T05:30:20.817Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 0,
+        "impressions": 16,
+        "ctr": 0,
+        "position": 4.25
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/open-design-0-15-1/",
+        "queriedAt": "2026-08-19T05:30:20.892Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 1,
+        "impressions": 114,
+        "ctr": 0.008771929824561403,
+        "position": 5.368421052631579
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-9-0-design-for-everyone/": {
+      "7": {
+        "url": "https://open-design.ai/blog/open-design-0-9-0-design-for-everyone/",
+        "queriedAt": "2026-08-19T05:30:21.725Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 5,
+        "impressions": 778,
+        "ctr": 0.006426735218508998,
+        "position": 7.827763496143959
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/open-design-0-9-0-design-for-everyone/",
+        "queriedAt": "2026-08-19T05:30:21.803Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 12,
+        "impressions": 2553,
+        "ctr": 0.004700352526439483,
+        "position": 7.1229925577751665
+      }
+    },
+    "https://open-design.ai/blog/open-design-osaka-kyoto-meetup/": {
+      "7": {
+        "url": "https://open-design.ai/blog/open-design-osaka-kyoto-meetup/",
+        "queriedAt": "2026-08-19T05:30:21.876Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 0,
+        "impressions": 16,
+        "ctr": 0,
+        "position": 7.3125
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/open-design-osaka-kyoto-meetup/",
+        "queriedAt": "2026-08-19T05:30:21.963Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 0,
+        "impressions": 45,
+        "ctr": 0,
+        "position": 8.8
+      }
+    },
+    "https://open-design.ai/blog/open-design-shanghai-ai-workshop/": {
+      "7": {
+        "url": "https://open-design.ai/blog/open-design-shanghai-ai-workshop/",
+        "queriedAt": "2026-08-19T05:30:22.028Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 0,
+        "impressions": 10,
+        "ctr": 0,
+        "position": 8
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/open-design-shanghai-ai-workshop/",
+        "queriedAt": "2026-08-19T05:30:22.108Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 1,
+        "impressions": 57,
+        "ctr": 0.017543859649122806,
+        "position": 5.912280701754386
+      }
+    },
+    "https://open-design.ai/blog/ppt-master/": {
+      "7": {
+        "url": "https://open-design.ai/blog/ppt-master/",
+        "queriedAt": "2026-08-19T05:30:22.483Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 15,
+        "impressions": 2056,
+        "ctr": 0.007295719844357977,
+        "position": 6.876459143968872
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/ppt-master/",
+        "queriedAt": "2026-08-19T05:30:22.564Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 42,
+        "impressions": 6111,
+        "ctr": 0.006872852233676976,
+        "position": 6.780396007200131
+      }
+    },
+    "https://open-design.ai/blog/reveal-js/": {
+      "7": {
+        "url": "https://open-design.ai/blog/reveal-js/",
+        "queriedAt": "2026-07-24T02:38:27.373Z",
+        "windowDays": 7,
+        "startDate": "2026-07-16",
+        "endDate": "2026-07-22",
+        "clicks": 5,
+        "impressions": 1550,
+        "ctr": 0.0032258064516129032,
+        "position": 6.301935483870968
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/reveal-js/",
+        "queriedAt": "2026-07-24T02:38:27.482Z",
+        "windowDays": 28,
+        "startDate": "2026-06-25",
+        "endDate": "2026-07-22",
+        "clicks": 5,
+        "impressions": 1610,
+        "ctr": 0.003105590062111801,
+        "position": 6.288819875776397
+      }
+    },
+    "https://open-design.ai/blog/slidev/": {
+      "7": {
+        "url": "https://open-design.ai/blog/slidev/",
+        "queriedAt": "2026-07-24T02:38:27.677Z",
+        "windowDays": 7,
+        "startDate": "2026-07-16",
+        "endDate": "2026-07-22",
+        "clicks": 8,
+        "impressions": 8734,
+        "ctr": 0.0009159606136936112,
+        "position": 5.363292878406228
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/slidev/",
+        "queriedAt": "2026-07-24T02:38:27.780Z",
+        "windowDays": 28,
+        "startDate": "2026-06-25",
+        "endDate": "2026-07-22",
+        "clicks": 8,
+        "impressions": 8824,
+        "ctr": 0.0009066183136899365,
+        "position": 5.368087035358114
+      }
+    },
+    "https://open-design.ai/blog/v0-alternatives/": {
+      "7": {
+        "url": "https://open-design.ai/blog/v0-alternatives/",
+        "queriedAt": "2026-08-19T05:30:22.632Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 0,
+        "impressions": 185,
+        "ctr": 0,
+        "position": 35.31351351351351
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/v0-alternatives/",
+        "queriedAt": "2026-08-19T05:30:22.721Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 4,
+        "impressions": 980,
+        "ctr": 0.004081632653061225,
+        "position": 18.055102040816326
+      }
+    },
+    "https://open-design.ai/blog/vibe-design-tools/": {
+      "7": {
+        "url": "https://open-design.ai/blog/vibe-design-tools/",
+        "queriedAt": "2026-08-19T05:30:22.796Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 2,
+        "impressions": 69,
+        "ctr": 0.028985507246376812,
+        "position": 11.46376811594203
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/vibe-design-tools/",
+        "queriedAt": "2026-08-19T05:30:22.877Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 10,
+        "impressions": 346,
+        "ctr": 0.028901734104046242,
+        "position": 12.690751445086706
+      }
+    },
+    "https://open-design.ai/blog/vibe-design-vs-vibe-coding/": {
+      "7": {
+        "url": "https://open-design.ai/blog/vibe-design-vs-vibe-coding/",
+        "queriedAt": "2026-08-19T05:30:22.948Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 2,
+        "impressions": 133,
+        "ctr": 0.015037593984962405,
+        "position": 20.007518796992482
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/vibe-design-vs-vibe-coding/",
+        "queriedAt": "2026-08-19T05:30:23.025Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 7,
+        "impressions": 512,
+        "ctr": 0.013671875,
+        "position": 20.111328125
+      }
+    },
+    "https://open-design.ai/blog/vibe-design-with-stitch/": {
+      "7": {
+        "url": "https://open-design.ai/blog/vibe-design-with-stitch/",
+        "queriedAt": "2026-08-19T05:30:23.103Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 0,
+        "impressions": 15,
+        "ctr": 0,
+        "position": 19
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/vibe-design-with-stitch/",
+        "queriedAt": "2026-08-19T05:30:23.191Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 0,
+        "impressions": 119,
+        "ctr": 0,
+        "position": 11.915966386554622
+      }
+    },
+    "https://open-design.ai/blog/what-is-vibe-design/": {
+      "7": {
+        "url": "https://open-design.ai/blog/what-is-vibe-design/",
+        "queriedAt": "2026-08-19T05:30:23.260Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 0,
+        "impressions": 41,
+        "ctr": 0,
+        "position": 11.365853658536585
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/what-is-vibe-design/",
+        "queriedAt": "2026-08-19T05:30:23.344Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 3,
+        "impressions": 474,
+        "ctr": 0.006329113924050633,
+        "position": 8.320675105485233
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-8-0-everything-is-a-plugin/": {
+      "7": {
+        "url": "https://open-design.ai/blog/open-design-0-8-0-everything-is-a-plugin/",
+        "queriedAt": "2026-08-19T05:30:21.573Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 1,
+        "impressions": 349,
+        "ctr": 0.0028653295128939827,
+        "position": 13.103151862464184
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/open-design-0-8-0-everything-is-a-plugin/",
+        "queriedAt": "2026-08-19T05:30:21.660Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 11,
+        "impressions": 1413,
+        "ctr": 0.00778485491861288,
+        "position": 10.088464260438784
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-16-0-reliable-delivery/": {
+      "7": {
+        "url": "https://open-design.ai/blog/open-design-0-16-0-reliable-delivery/",
+        "queriedAt": "2026-08-19T05:30:20.952Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 1,
+        "impressions": 27,
+        "ctr": 0.037037037037037035,
+        "position": 5.555555555555555
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/open-design-0-16-0-reliable-delivery/",
+        "queriedAt": "2026-08-19T05:30:21.043Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 1,
+        "impressions": 135,
+        "ctr": 0.007407407407407408,
+        "position": 5.688888888888889
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-17-0-open-design-for-codex/": {
+      "7": {
+        "url": "https://open-design.ai/blog/open-design-0-17-0-open-design-for-codex/",
+        "queriedAt": "2026-08-19T05:30:21.123Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 7,
+        "impressions": 329,
+        "ctr": 0.02127659574468085,
+        "position": 7.054711246200608
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/open-design-0-17-0-open-design-for-codex/",
+        "queriedAt": "2026-08-19T05:30:21.205Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 7,
+        "impressions": 382,
+        "ctr": 0.01832460732984293,
+        "position": 7.2591623036649215
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-18-0-design-team-workspace-codex/": {
+      "7": {
+        "url": "https://open-design.ai/blog/open-design-0-18-0-design-team-workspace-codex/",
+        "queriedAt": "2026-08-19T05:30:21.276Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 3,
+        "impressions": 290,
+        "ctr": 0.010344827586206896,
+        "position": 6.006896551724138
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/open-design-0-18-0-design-team-workspace-codex/",
+        "queriedAt": "2026-08-19T05:30:21.355Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 4,
+        "impressions": 328,
+        "ctr": 0.012195121951219513,
+        "position": 6.109756097560975
+      }
+    },
+    "https://open-design.ai/blog/open-design-0-19-1-design-with-deepseek-harness/": {
+      "7": {
+        "url": "https://open-design.ai/blog/open-design-0-19-1-design-with-deepseek-harness/",
+        "queriedAt": "2026-08-19T05:30:21.417Z",
+        "windowDays": 7,
+        "startDate": "2026-08-11",
+        "endDate": "2026-08-17",
+        "clicks": 6,
+        "impressions": 322,
+        "ctr": 0.018633540372670808,
+        "position": 7.267080745341615
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/open-design-0-19-1-design-with-deepseek-harness/",
+        "queriedAt": "2026-08-19T05:30:21.506Z",
+        "windowDays": 28,
+        "startDate": "2026-07-21",
+        "endDate": "2026-08-17",
+        "clicks": 6,
+        "impressions": 322,
+        "ctr": 0.018633540372670808,
+        "position": 7.267080745341615
       }
     }
   },
@@ -459,6 +2508,44 @@
     "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/": "2026-05-19T10:12:02.175Z",
     "https://open-design.ai/blog/open-source-alternative-to-claude-design/": "2026-05-19T10:12:08.472Z",
     "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/": "2026-05-19T10:12:14.760Z",
-    "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/": "2026-05-19T10:12:21.077Z"
+    "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/": "2026-05-19T10:12:21.077Z",
+    "https://open-design.ai/blog/ai-design-agents/": "2026-07-23T11:46:34.826Z",
+    "https://open-design.ai/blog/ai-prototyping-tools/": "2026-07-23T11:46:41.112Z",
+    "https://open-design.ai/blog/best-ai-design-tools/": "2026-07-23T11:46:47.473Z",
+    "https://open-design.ai/blog/bolt-new-alternatives/": "2026-07-23T11:46:54.008Z",
+    "https://open-design.ai/blog/claude-ppt-skills/": "2026-07-23T11:47:00.252Z",
+    "https://open-design.ai/blog/codex-ppt-skill/": "2026-07-23T11:47:06.505Z",
+    "https://open-design.ai/blog/dashiai-ppt-skill/": "2026-07-23T11:47:12.695Z",
+    "https://open-design.ai/blog/design-to-code-tools/": "2026-07-23T11:47:18.839Z",
+    "https://open-design.ai/blog/figma-alternative-open-design/": "2026-07-23T11:47:25.045Z",
+    "https://open-design.ai/blog/figma-alternatives/": "2026-07-23T11:47:31.245Z",
+    "https://open-design.ai/blog/frontend-slides/": "2026-07-23T11:47:37.546Z",
+    "https://open-design.ai/blog/guizang-ppt-skill/": "2026-07-23T11:47:43.785Z",
+    "https://open-design.ai/blog/how-to-use-claude-code-for-frontend-design/": "2026-07-23T11:47:50.036Z",
+    "https://open-design.ai/blog/lovable-alternatives/": "2026-07-23T11:47:56.175Z",
+    "https://open-design.ai/blog/marp/": "2026-07-23T11:48:02.455Z",
+    "https://open-design.ai/blog/open-design-0-10-0-all-in-one-workspace/": "2026-07-23T11:48:08.642Z",
+    "https://open-design.ai/blog/open-design-0-11-0-the-bazaar/": "2026-07-23T11:48:14.824Z",
+    "https://open-design.ai/blog/open-design-0-12-0-brand-backed-design-system/": "2026-07-23T11:48:21.091Z",
+    "https://open-design.ai/blog/open-design-0-13-0-stay-in-flow/": "2026-07-23T11:48:27.229Z",
+    "https://open-design.ai/blog/open-design-0-14-0-inspiration-time-machine/": "2026-07-23T11:48:33.355Z",
+    "https://open-design.ai/blog/open-design-0-15-0-cost-less-ship-faster/": "2026-07-23T11:48:39.505Z",
+    "https://open-design.ai/blog/open-design-0-15-1/": "2026-07-23T11:48:45.656Z",
+    "https://open-design.ai/blog/open-design-0-9-0-design-for-everyone/": "2026-07-23T11:48:52.302Z",
+    "https://open-design.ai/blog/open-design-osaka-kyoto-meetup/": "2026-07-23T11:48:58.483Z",
+    "https://open-design.ai/blog/open-design-shanghai-ai-workshop/": "2026-07-23T11:49:04.663Z",
+    "https://open-design.ai/blog/ppt-master/": "2026-07-23T11:49:11.056Z",
+    "https://open-design.ai/blog/reveal-js/": "2026-07-23T11:49:17.265Z",
+    "https://open-design.ai/blog/slidev/": "2026-07-23T11:49:23.492Z",
+    "https://open-design.ai/blog/v0-alternatives/": "2026-07-23T11:49:29.685Z",
+    "https://open-design.ai/blog/vibe-design-tools/": "2026-07-23T11:49:36.074Z",
+    "https://open-design.ai/blog/vibe-design-vs-vibe-coding/": "2026-07-23T11:49:42.519Z",
+    "https://open-design.ai/blog/vibe-design-with-stitch/": "2026-07-23T11:49:48.671Z",
+    "https://open-design.ai/blog/what-is-vibe-design/": "2026-07-23T11:49:55.066Z",
+    "https://open-design.ai/blog/open-design-0-8-0-everything-is-a-plugin/": "2026-07-23T11:50:27.038Z",
+    "https://open-design.ai/blog/open-design-0-16-0-reliable-delivery/": "2026-07-30T04:44:19.022Z",
+    "https://open-design.ai/blog/open-design-0-17-0-open-design-for-codex/": "2026-08-10T02:43:32.202Z",
+    "https://open-design.ai/blog/open-design-0-18-0-design-team-workspace-codex/": "2026-08-10T02:43:38.687Z",
+    "https://open-design.ai/blog/open-design-0-19-1-design-with-deepseek-harness/": "2026-08-14T13:11:18.758Z"
   }
 }
