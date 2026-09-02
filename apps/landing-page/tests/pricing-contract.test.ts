@@ -621,6 +621,47 @@ describe("pricing contract", () => {
     assert.doesNotMatch(page, /限时抢购/);
   });
 
+  it("uses localized view-more FAQ copy while routing the footer to the refund policy", async () => {
+    const [page, pricingExtras] = await Promise.all([
+      readFile(PRICING_PAGE_PATH, "utf8"),
+      import("../app/_lib/pricing-extras-content.ts"),
+    ]);
+    const getMoreFaqLabel = (
+      pricingExtras as Record<string, unknown>
+    ).getMoreFaqLabel;
+
+    assert.equal(typeof getMoreFaqLabel, "function");
+    assert.equal(
+      (getMoreFaqLabel as (locale: string) => string)("zh"),
+      "查看更多常见问题",
+    );
+    assert.equal(
+      (getMoreFaqLabel as (locale: string) => string)("en"),
+      "View more frequently asked questions",
+    );
+    assert.match(
+      page,
+      /<a class="pr-faq-more" href=\{refundPolicyHref\}>\{moreFaqLabel\}<\/a>/,
+    );
+  });
+
+  it("removes the refund FAQ item and uses the bottom link as the localized policy entry", async () => {
+    const [page, pricingExtras] = await Promise.all([
+      readFile(PRICING_PAGE_PATH, "utf8"),
+      import("../app/_lib/pricing-extras-content.ts"),
+    ]);
+    const getFaqs = (pricingExtras as Record<string, unknown>).getFaqs as (
+      locale: string,
+    ) => Array<{ q: string; a: string; refundPolicyCta?: string }>;
+
+    assert.equal(getFaqs("zh").some((faq) => faq.refundPolicyCta), false);
+    assert.equal(getFaqs("en").some((faq) => faq.refundPolicyCta), false);
+    assert.doesNotMatch(getFaqs("zh").map((faq) => faq.q).join(" "), /怎么申请退款/);
+    assert.doesNotMatch(getFaqs("en").map((faq) => faq.q).join(" "), /How do refunds work/i);
+    assert.doesNotMatch(getFaqs("zh").map((faq) => faq.a).join(" "), /年付.*不支持退款/);
+    assert.doesNotMatch(page, /class="pr-faq-policy"/);
+  });
+
   it("does not expose a campaign review preview backdoor", async () => {
     const page = await readFile(PRICING_PAGE_PATH, "utf8");
 

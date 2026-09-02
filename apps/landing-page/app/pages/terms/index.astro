@@ -6,8 +6,12 @@
  * OpenDesign Cloud.
  */
 import Layout from '../../_components/sub-page-layout.astro';
+import { localeFromPath, localizedHref } from '../../i18n';
 
-const updated = 'July 6, 2026';
+const updated = 'August 27, 2026';
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+const refundPolicyHref = locale === 'zh' ? href('/refund-policy/') : '/refund-policy/';
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'WebPage',
@@ -52,7 +56,7 @@ const jsonLd = {
 
     <h2>7. Wallet, recharge, and billing</h2>
     <p>Wallet credits are only for OpenDesign-supported model calls and related services. They are not cash and, unless required by law or stated in page rules, cannot be withdrawn or transferred.</p>
-    <p>Recharge, discounts, invoices, refunds, taxes, and disputes are governed by checkout pages, order records, campaign rules, and applicable law. OpenDesign may calculate charges based on model, tokens, media tasks, route, success status, pricing tables, and provider cost.</p>
+    <p>Recharge, discounts, invoices, refunds, taxes, and disputes are governed by checkout pages, order records, campaign rules, the <a href={refundPolicyHref}>OpenDesign Refund Policy</a>, and applicable law. OpenDesign may calculate charges based on model, tokens, media tasks, route, success status, pricing tables, and provider cost.</p>
 
     <h2>8. Limits, suspension, and termination</h2>
     <p>OpenDesign may apply limits to accounts, API keys, request rates, balances, models, endpoints, or risk behavior. OpenDesign may suspend, restrict, or terminate service for non-payment, abuse, legal risk, provider failure, security incidents, breach of terms, or regulatory requirements.</p>

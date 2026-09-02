@@ -1,0 +1,131 @@
+---
+import Layout from '../../_components/sub-page-layout.astro';
+import { getRefundPolicyContent } from '../../_lib/refund-policy-content';
+import { LANDING_LOCALES, getLocaleDefinition, localeFromPath } from '../../i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const copy = getRefundPolicyContent(locale);
+const localeMeta = getLocaleDefinition(locale);
+const canonical = new URL(Astro.url.pathname, Astro.site).toString();
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  name: copy.title,
+  description: copy.metaDescription,
+  inLanguage: localeMeta.htmlLang,
+  url: canonical,
+  isPartOf: { '@type': 'WebSite', name: 'OpenDesign', url: Astro.site?.toString() },
+};
+---
+
+<Layout
+  title={copy.metaTitle}
+  description={copy.metaDescription}
+  jsonLd={jsonLd}
+  availableLocaleCodes={LANDING_LOCALES.map((item) => item.code)}
+  suppressLocaleAutoRedirect
+>
+  <article class="refund-policy" lang={localeMeta.htmlLang}>
+    <header class="refund-header">
+      <h1>{copy.title}</h1>
+    </header>
+
+    <div class="refund-preamble">
+      {copy.preamble.map((paragraph) => <p>{paragraph}</p>)}
+    </div>
+
+    {copy.sections.map((section, index) => (
+      <section class="refund-section">
+        <h2>{index + 1}. {section.title}</h2>
+        {section.intro && (
+          <p class="refund-section-copy refund-section-intro">
+            <span>{section.intro}</span>
+            {section.inlineItemCount && section.items.slice(0, section.inlineItemCount).map((item) => (
+              <>
+                {' '}<strong class="refund-inline-lead">{item.lead}</strong>
+                {item.detail && <> {' '}<span>{item.detail}</span></>}
+              </>
+            ))}
+          </p>
+        )}
+        <ul>
+          {section.items.slice(section.inlineItemCount ?? 0).map((item) => (
+            <li>
+              <strong>{item.lead}</strong>
+              {item.detail && <span>{item.detail}</span>}
+            </li>
+          ))}
+        </ul>
+        {section.closing && <p class="refund-section-copy refund-section-closing">{section.closing}</p>}
+      </section>
+    ))}
+
+  </article>
+
+  <style>
+    .refund-policy {
+      max-width: 960px;
+      color: var(--ink, #262626);
+    }
+    .refund-header { padding-bottom: 20px; }
+    .refund-preamble {
+      color: var(--ink-soft, #5a5a5a);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .refund-preamble p { margin: 0 0 10px; }
+    .refund-header h1 {
+      margin: 0;
+      font-size: clamp(32px, 4vw, 40px);
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+    }
+    .refund-section {
+      padding: 16px 0 12px;
+    }
+    .refund-section h2 {
+      margin: 0 0 8px;
+      font-size: 18px;
+      line-height: 1.35;
+      letter-spacing: -0.01em;
+    }
+    .refund-section ul {
+      margin: 0;
+      padding-left: 1.3em;
+    }
+    .refund-section-copy {
+      margin: 0 0 10px;
+      color: var(--ink-soft, #5a5a5a);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .refund-inline-lead {
+      color: var(--ink, #262626);
+      font-weight: 700;
+    }
+    .refund-section-closing { margin-top: 10px; }
+    .refund-section li {
+      margin: 0 0 6px;
+      padding-left: 0.2em;
+      color: var(--ink-soft, #5a5a5a);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .refund-section li::marker { color: #888; }
+    .refund-section li strong {
+      display: inline;
+      color: var(--ink, #262626);
+      font-size: 14px;
+      line-height: inherit;
+    }
+    .refund-section li strong::after { content: " "; }
+    .refund-section li span { display: inline; }
+    @media (max-width: 640px) {
+      .refund-header { padding-bottom: 18px; }
+      .refund-header h1 { font-size: 30px; }
+      .refund-section { padding: 15px 0 11px; }
+      .refund-section li,
+      .refund-section li strong { font-size: 14px; }
+    }
+  </style>
+</Layout>

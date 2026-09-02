@@ -1,5 +1,6 @@
 ---
 import type { HeaderProps } from './header';
+import type { LandingLocaleCode } from '../i18n';
 import {
   DEFAULT_LOCALE,
   getCommonCopy,
@@ -19,12 +20,19 @@ interface Props {
   locale?: string;
   /** Pages with no per-locale variant: every language option keeps the canonical URL. */
   localeCanonicalOnly?: boolean;
+  /** Genuine translations available for this route. */
+  availableLocaleCodes?: readonly LandingLocaleCode[];
 }
 
-const { locale: rawLocale = DEFAULT_LOCALE, localeCanonicalOnly = false } = Astro.props as Props;
+const {
+  locale: rawLocale = DEFAULT_LOCALE,
+  localeCanonicalOnly = false,
+  availableLocaleCodes,
+} = Astro.props as Props;
 const locale = isLandingLocale(rawLocale) ? rawLocale : DEFAULT_LOCALE;
 const localeSwitcher = getHeaderLocaleSwitcher(locale, Astro.url.pathname, {
   canonicalOnly: localeCanonicalOnly,
+  availableLocaleCodes,
 });
 const localeLabel = getLocaleDefinition(locale).label;
 const copy = getCommonCopy(locale).header;
