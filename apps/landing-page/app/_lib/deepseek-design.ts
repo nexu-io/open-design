@@ -266,7 +266,7 @@ export const DEEPSEEK_SKILLS: readonly DeepseekSkill[] = [
     repo: 'ysr666/dsh-vision-router',
     install: {
       kind: 'installer',
-      command: 'npx @deepseek-ai/dsh plugin --profile web add dsh-vision-router',
+      command: 'npx @deepseek-ai/dsh plugin --profile web add dsh-vision-router@latest',
     },
     license: MIT,
     upstreamDescription:
