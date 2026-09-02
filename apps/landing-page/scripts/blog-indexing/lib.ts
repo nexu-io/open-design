@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 export const SITE = 'https://open-design.ai';
 export const GSC_SITE_URL = 'sc-domain:open-design.ai';
 export const SITEMAP_URL = `${SITE}/sitemap-index.xml`;
-export const SITEMAP_CHILD_URL = `${SITE}/sitemap-0.xml`;
+export const SITEMAP_BLOG_CHILD_PREFIX = `${SITE}/sitemap-blog-`;
 export const INDEXNOW_KEY = '96b0928121e24fd7b4ef85ae0f8bf1d8';
 export const INDEXNOW_KEY_LOCATION = `${SITE}/${INDEXNOW_KEY}.txt`;
 
@@ -127,6 +127,13 @@ export interface BlogIndexingState {
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Extract absolute `<loc>` values from a sitemap index or URL-set document. */
+export function extractSitemapLocations(xml: string): string[] {
+  return Array.from(xml.matchAll(/<loc>([^<]+)<\/loc>/g)).map((match) =>
+    match[1]!.trim(),
+  );
 }
 
 /**

@@ -376,6 +376,7 @@ const TRANSIENT_ACP_PERSISTED_STATUS_LABELS = new Set([
   'tool_call',
   'tool_call_update',
   'session_update',
+  'opencode_compaction',
 ]);
 
 export function daemonAgentPayloadToPersistedAgentEvent(data: unknown): PersistedAgentEvent | null {

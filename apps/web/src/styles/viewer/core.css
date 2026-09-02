@@ -1304,6 +1304,22 @@
   visibility: hidden;
   pointer-events: none;
 }
+/* Manual Edit hands ownership between the canonical URL document and its
+   bridge-enabled srcDoc twin. Keep the outgoing frame painted until the
+   incoming frame reports its exact document revision ready. `opacity: 0`
+   still lets Chromium lay out and paint the standby document, unlike
+   `visibility: hidden`, which previously stranded reveal animations. */
+.artifact-preview-transport-stack iframe[data-od-handoff-visible='true'] {
+  visibility: visible;
+  pointer-events: none;
+  z-index: 1;
+}
+.artifact-preview-transport-stack iframe[data-od-handoff-pending='true'] {
+  visibility: visible;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2;
+}
 /* First-ever URL-load of an artifact: the iframe's own navigation can queue
    behind heavy same-origin traffic (e.g. drafts-grid cover iframes), which
    otherwise reads as a dead white pane. Sits above both transport iframes

@@ -1809,18 +1809,26 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
           return;
         }
 
-        const observer = new IntersectionObserver(
-          (entries) => {
-            for (const entry of entries) {
-              if (!entry.isIntersecting) continue;
-              entry.target.dataset.revealed = 'true';
-              observer.unobserve(entry.target);
-            }
-          },
-          { threshold: 0.12, rootMargin: '0px 0px -8% 0px' },
-        );
+        let observer;
+        try {
+          observer = new IntersectionObserver(
+            (entries) => {
+              for (const entry of entries) {
+                if (!entry.isIntersecting) continue;
+                entry.target.dataset.revealed = 'true';
+                observer.unobserve(entry.target);
+              }
+            },
+            { threshold: 0.12, rootMargin: '0px 0px -8% 0px' },
+          );
 
-        for (const el of elements) observer.observe(el);
+          for (const el of elements) observer.observe(el);
+          document.documentElement.classList.add('reveal-ready');
+        } catch (error) {
+          observer?.disconnect();
+          document.documentElement.classList.remove('reveal-ready');
+          console.error('Reveal animation initialization failed', error);
+        }
       })();
     </script>
     <script is:inline>

@@ -200,11 +200,34 @@ function extractModelMetadata(item: unknown): ModelMetadata | null {
   const metadata = isRecord(item.metadata) ? item.metadata : item;
   const cost = parseModelCost(metadata.cost);
   const capability = parseModelCapability(metadata.capability);
-  if (!cost && !capability) return null;
+  const contextWindowTokens = firstPositiveInteger([
+    metadata.contextWindowTokens,
+    metadata.context_window_tokens,
+    item.contextWindowTokens,
+    item.context_window_tokens,
+    item.contextLength,
+    item.context_length,
+  ]);
+  if (!cost && !capability && !contextWindowTokens) return null;
   return {
     ...(cost ? { cost } : {}),
     ...(capability ? { capability } : {}),
+    ...(contextWindowTokens ? { contextWindowTokens } : {}),
   };
+}
+
+function firstPositiveInteger(values: unknown[]): number | null {
+  for (const value of values) {
+    if (
+      typeof value === 'number' &&
+      Number.isSafeInteger(value) &&
+      value > 0 &&
+      value <= 1_000_000_000
+    ) {
+      return value;
+    }
+  }
+  return null;
 }
 
 function withPriceDerivedCostMetadata(

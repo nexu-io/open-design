@@ -2,7 +2,6 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
-import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 
 import {
   createAgentRuntimeEnv,
@@ -49,6 +48,21 @@ describe('agent runtime tool environment', () => {
       OD_NODE_BIN: '/opt/open-design/bin/node',
       OD_TOOL_TOKEN: 'fresh-token',
     });
+  });
+
+  it('merges an opaque environment supplied by the runtime integration seam', () => {
+    const inheritedEnvironment = vi.fn(() => ({ OD_OPAQUE_CLIENT_CAPABILITY: 'capability' }));
+    const baseEnv = { PATH: '/bin' };
+    const env = createAgentRuntimeEnv(
+      baseEnv,
+      'http://127.0.0.1:7456',
+      null,
+      '/opt/open-design/bin/node',
+      inheritedEnvironment,
+    );
+
+    expect(inheritedEnvironment).toHaveBeenCalledWith(baseEnv);
+    expect(env.OD_OPAQUE_CLIENT_CAPABILITY).toBe('capability');
   });
 
   it('prepends node binary directory to PATH when not already present', () => {
@@ -253,33 +267,6 @@ describe('agent runtime tool environment', () => {
     expect(env.HTTP_PROXY).toBe('http://127.0.0.1:9');
     expect(env.NO_PROXY).toBe('');
     expect(env.no_proxy).toBeUndefined();
-  });
-
-  it('passes the daemon sidecar IPC path from the explicit base env into agent wrapper sessions', () => {
-    const env = createAgentRuntimeEnv(
-      { PATH: '/bin', [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/daemon.sock' },
-      'http://127.0.0.1:7456',
-      null,
-      '/opt/open-design/bin/node',
-    );
-
-    expect(env[SIDECAR_ENV.IPC_PATH]).toBe('/tmp/open-design/ipc/daemon.sock');
-  });
-
-  it('does not pull the daemon sidecar IPC path from ambient process state', () => {
-    vi.stubEnv(SIDECAR_ENV.IPC_PATH, '/tmp/open-design/ipc/stale.sock');
-    try {
-      const env = createAgentRuntimeEnv(
-        { PATH: '/bin' },
-        'http://127.0.0.1:7456',
-        null,
-        '/opt/open-design/bin/node',
-      );
-
-      expect(env[SIDECAR_ENV.IPC_PATH]).toBeUndefined();
-    } finally {
-      vi.unstubAllEnvs();
-    }
   });
 
   it('describes daemon URL and token availability without exposing the token', () => {

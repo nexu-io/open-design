@@ -1,13 +1,15 @@
 // The version our one-line DeepSeek Harness installer hands the user and the
 // versions the daemon stands behind live in two places that cannot import each
-// other: `apps/landing-page/public/install-dsh.*` and the agent def in
-// `apps/daemon`. They drifted once already — the installers were moved to
-// `0.1.0-rc.8` while the def still named `0.1.0-rc.6` as the only supported
-// version, so following our own instructions produced an "untested version"
-// warning in Settings on a clean install.
+// other: `tools/release/resources/dsh-bootstrap/install-dsh.*` (canonical
+// product source) and the agent def in `apps/daemon`. They drifted once already
+// — the installers were moved to `0.1.0-rc.8` while the def still named
+// `0.1.0-rc.6` as the only supported version, so following our own instructions
+// produced an "untested version" warning in Settings on a clean install.
 //
 // This guard pins the two together across the app boundary: bumping an
 // installer without teaching the daemon to accept what it installs fails here.
+// Landing still ships byte-identical copies under `apps/landing-page/public/`
+// until extraction; identity is frozen in tools/release tests.
 
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -16,8 +18,8 @@ import { describe, expect, it } from 'vitest';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 
-const INSTALL_SH = `${repoRoot}apps/landing-page/public/install-dsh.sh`;
-const INSTALL_PS1 = `${repoRoot}apps/landing-page/public/install-dsh.ps1`;
+const INSTALL_SH = `${repoRoot}tools/release/resources/dsh-bootstrap/install-dsh.sh`;
+const INSTALL_PS1 = `${repoRoot}tools/release/resources/dsh-bootstrap/install-dsh.ps1`;
 const AGENT_DEF = `${repoRoot}apps/daemon/src/runtimes/defs/deepseek-harness.ts`;
 const PEER_MANIFEST = `${repoRoot}packages/dsh-runtime/package.json`;
 

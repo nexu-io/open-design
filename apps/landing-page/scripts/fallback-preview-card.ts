@@ -217,10 +217,9 @@ function pickSlugFontSize(slug: string): number {
 }
 
 /**
- * Render the fallback card as a self-contained HTML document. Keep all
- * fonts loaded over the wire (Playwright will await `document.fonts.ready`
- * before snapshotting) so the screenshot matches what a visitor sees on
- * the live site. No build-time font baking.
+ * Render the fallback card as a self-contained HTML document. It deliberately
+ * uses only local system font families so preview generation never depends on
+ * mutable network resources.
  */
 export function renderFallbackCard(meta: SkillCardMeta, indexInCatalog: number): string {
   const indexStr = String(indexInCatalog).padStart(3, '0');
@@ -235,9 +234,6 @@ export function renderFallbackCard(meta: SkillCardMeta, indexInCatalog: number):
 <head>
 <meta charset="utf-8" />
 <title>${escapeHtml(meta.slug)} preview card</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=Inter:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
 <style>
   :root {
     --paper-warm: #efe7d2;
@@ -252,7 +248,7 @@ export function renderFallbackCard(meta: SkillCardMeta, indexInCatalog: number):
     margin: 0;
     background: var(--paper-warm);
     color: var(--ink);
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: system-ui, sans-serif;
     width: ${VIEWPORT.width}px;
     height: ${VIEWPORT.height}px;
     overflow: hidden;
@@ -280,7 +276,7 @@ export function renderFallbackCard(meta: SkillCardMeta, indexInCatalog: number):
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: monospace;
     font-size: 14px;
     letter-spacing: 0.16em;
     text-transform: uppercase;
@@ -298,7 +294,7 @@ export function renderFallbackCard(meta: SkillCardMeta, indexInCatalog: number):
     margin-top: 56px;
   }
   .slug {
-    font-family: 'Playfair Display', 'Georgia', serif;
+    font-family: Georgia, serif;
     font-weight: 700;
     font-size: ${slugFontSize}px;
     line-height: 0.95;
@@ -310,7 +306,7 @@ export function renderFallbackCard(meta: SkillCardMeta, indexInCatalog: number):
   .desc {
     margin-top: 40px;
     max-width: 920px;
-    font-family: 'Playfair Display', serif;
+    font-family: Georgia, serif;
     font-style: italic;
     font-weight: 500;
     font-size: 32px;
@@ -333,7 +329,7 @@ export function renderFallbackCard(meta: SkillCardMeta, indexInCatalog: number):
     flex-wrap: wrap;
   }
   .chip {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: monospace;
     font-size: 14px;
     letter-spacing: 0.08em;
     padding: 8px 16px;
@@ -343,7 +339,7 @@ export function renderFallbackCard(meta: SkillCardMeta, indexInCatalog: number):
     background: rgba(255, 255, 255, 0.3);
   }
   .attribution {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: monospace;
     font-size: 14px;
     color: var(--ink-mute);
     text-align: right;

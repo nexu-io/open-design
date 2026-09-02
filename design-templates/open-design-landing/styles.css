@@ -1852,28 +1852,33 @@ footer {
 
 /* ---------- scroll-reveal motion ----------
  *
- * Driven by `app/_components/reveal-root.tsx`. Elements with
- * `data-reveal` start hidden + offset; the observer sets
- * `data-revealed='true'` once they enter the viewport, triggering
- * the transition.
+ * Content is visible by default. Once the observer is successfully bound,
+ * `.reveal-ready` opts unrevealed elements into the hidden start state. If
+ * JavaScript is disabled or setup fails, the complete page remains visible.
  *
  * Uses `translate` / `scale` longhand properties (not `transform`) so
  * that elements like `.work-card` keep their static `transform: rotate()`
  * intact while still translating in.
  */
 [data-reveal] {
-  opacity: 0;
-  translate: 0 28px;
+  opacity: 1;
+  translate: 0 0;
+  scale: 1;
   transition:
     opacity 900ms cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay, 0ms),
     translate 900ms cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay, 0ms),
     scale 900ms cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay, 0ms);
+  will-change: auto;
+}
+.reveal-ready [data-reveal]:not([data-revealed='true']) {
+  opacity: 0;
+  translate: 0 28px;
   will-change: opacity, translate, scale;
 }
-[data-reveal='left'] { translate: -36px 0; }
-[data-reveal='right'] { translate: 36px 0; }
-[data-reveal='scale'] { translate: 0 0; scale: 0.96; }
-[data-reveal='rise-lg'] { translate: 0 64px; scale: 0.985; }
+.reveal-ready [data-reveal='left']:not([data-revealed='true']) { translate: -36px 0; }
+.reveal-ready [data-reveal='right']:not([data-revealed='true']) { translate: 36px 0; }
+.reveal-ready [data-reveal='scale']:not([data-revealed='true']) { translate: 0 0; scale: 0.96; }
+.reveal-ready [data-reveal='rise-lg']:not([data-revealed='true']) { translate: 0 64px; scale: 0.985; }
 [data-reveal][data-revealed='true'] {
   opacity: 1;
   translate: 0 0;

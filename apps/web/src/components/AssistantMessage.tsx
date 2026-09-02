@@ -4312,6 +4312,11 @@ function buildBlocks(events: AgentEvent[]): Block[] {
         ev.label === "requesting" ||
         ev.label === "thinking" ||
         ev.label === "empty_response" ||
+        // Vela emits OpenCode's compaction lifecycle as internal observability.
+        // Older transcripts persisted it as a generic status before the ACP
+        // adapter classified it as a diagnostic, so suppress that legacy label
+        // during history replay as well as on the live path.
+        ev.label === "opencode_compaction" ||
         // Transient ACP tool-call markers (#4618). On the live SSE path the
         // daemon normalizes these to `running` (TRANSIENT_ACP_STATUS_LABELS in
         // providers/daemon.ts), which is already skipped above; the persisted-

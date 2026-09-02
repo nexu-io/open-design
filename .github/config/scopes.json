@@ -40,6 +40,15 @@
       "exclude": ["match://daemon-doc"]
     },
     "daemon-doc": { "exact": ["docs/agent-adapters.md"] },
+    "dsh-bootstrap-identity": {
+      "prefixes": ["tools/release/resources/dsh-bootstrap/"],
+      "exact": [
+        "apps/landing-page/public/install-dsh.sh",
+        "apps/landing-page/public/install-dsh.ps1",
+        "apps/landing-page/public/install-dsh.cmd",
+        "e2e/tests/dsh-bootstrap-source-identity.test.ts"
+      ]
+    },
     "packaged-leaf": {
       "prefixes": [
         "apps/desktop/src/", "apps/desktop/tests/", "apps/packaged/src/", "apps/packaged/tests/",
@@ -69,13 +78,12 @@
       "exclude": ["match://daemon-runtime-definition", "prefix://apps/daemon/src/sidecar/"]
     },
     "medium-exempt": {
-      "prefixes": ["nix/"],
       "exact": [
-        ".gitignore", ".editorconfig", "flake.nix", "flake.lock",
+        ".gitignore", ".editorconfig",
         ".github/workflows/landing-page-ci.yml", ".github/workflows/landing-page-staging.yml",
         ".github/workflows/landing-page-production.yml", ".github/workflows/blog-indexing-on-deploy.yml",
         ".github/workflows/autofix.atom.yml", ".github/workflows/comment.atom.yml",
-        ".github/workflows/report.atom.yml", ".github/workflows/docker-image.yml", ".github/workflows/nix.yml"
+        ".github/workflows/report.atom.yml", ".github/workflows/docker-image.yml"
       ],
       "regexes": ["\\.(?:md|mdx|txt)$"],
       "exclude": ["match://certain-surface"]
@@ -122,6 +130,11 @@
       "id": "runtime-content",
       "match": { "prefixes": ["scripts/", "assets/", "skills/", "prompt-templates/", "design-systems/", "design-templates/", "craft/"] },
       "effects": ["daemon_tests_required", "web_tests_required"], "confidence": "medium"
+    },
+    {
+      "id": "dsh-bootstrap-installer-identity",
+      "match": { "include": ["match://dsh-bootstrap-identity"] },
+      "effects": ["web_tests_required"], "confidence": "medium"
     },
     {
       "id": "script-contract-tests", "match": { "prefixes": ["e2e/tests/scripts/"] },

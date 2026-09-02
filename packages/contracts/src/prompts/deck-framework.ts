@@ -59,9 +59,10 @@ export const DECK_SKELETON_HTML = `<!doctype html>
        Contract this framework provides:
          - 1920×1080 fixed canvas, scaled to fit the viewport
          - Only .slide.active is visible at a time
-         - Prev/next + counter rendered outside the scaled stage
+         - Programmatic prev/next + counter elements kept outside the scaled
+           stage but hidden by default so the host can render the UI chrome
          - OD Deck Protocol v1 absolute navigation + slide-state events
-         - Keyboard (← → space PgUp PgDn Home End), click, and stored
+         - Keyboard (← → space PgUp PgDn Home End R), half-slide click, and stored
            position survive iframe focus quirks
          - "Save as PDF" produces a multi-page vertical PDF, one slide
            per page, by toggling every slide visible under @media print
@@ -120,14 +121,15 @@ export const DECK_SKELETON_HTML = `<!doctype html>
        specific. The hide rule above still wins for inactive slides. */
     :where(.slide.active) { display: flex; flex-direction: column; }
 
-    /* Chrome — counter + prev/next live outside the scaled stage so they
-       don't shrink with it. Do not relocate them inside .deck-stage. */
+    /* Programmatic chrome — counter + prev/next live outside the scaled
+       stage so the host bridge can read/update them, but they stay hidden
+       in preview, presentation, fullscreen, and new-tab modes. */
     .deck-counter {
       position: fixed;
       bottom: 22px;
       left: 50%;
       transform: translateX(-50%);
-      display: inline-flex;
+      display: none;
       align-items: center;
       gap: 4px;
       background: rgba(10, 14, 26, 0.92);
@@ -171,6 +173,7 @@ export const DECK_SKELETON_HTML = `<!doctype html>
       text-transform: uppercase;
       z-index: 999;
       pointer-events: none;
+      display: none;
     }
 
     /* Print / PDF stitching — every slide stacks top-to-bottom, one per
@@ -243,7 +246,7 @@ export const DECK_SKELETON_HTML = `<!doctype html>
     <span class="deck-count"><span id="deck-cur">01</span> <span class="total">/ <span id="deck-total">01</span></span></span>
     <button type="button" id="deck-next" aria-label="Next slide">›</button>
   </nav>
-  <div class="deck-hint">← / → · space</div>
+  <div class="deck-hint">← / → · space · R reset</div>
 
   <script>
     (function () {
@@ -295,9 +298,10 @@ ${DECK_PROTOCOL_V1_INLINE_RUNTIME}
         if (e.__odDeckKeyHandled) return;
         var t = e.target;
         if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+        if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
         if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.__odDeckKeyHandled = true; e.preventDefault(); go(idx + 1); }
         else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.__odDeckKeyHandled = true; e.preventDefault(); go(idx - 1); }
-        else if (e.key === 'Home') { e.__odDeckKeyHandled = true; e.preventDefault(); go(0); }
+        else if (e.key === 'Home' || String(e.key).toLowerCase() === 'r') { e.__odDeckKeyHandled = true; e.preventDefault(); go(0); }
         else if (e.key === 'End') { e.__odDeckKeyHandled = true; e.preventDefault(); go(slides.length - 1); }
       }
       // Capture phase + listen on both targets — inside the OD iframe,
@@ -307,6 +311,29 @@ ${DECK_PROTOCOL_V1_INLINE_RUNTIME}
       document.addEventListener('keydown', onKey, true);
       if (prev) prev.addEventListener('click', function () { go(idx - 1); });
       if (next) next.addEventListener('click', function () { go(idx + 1); });
+      document.addEventListener('click', function (e) {
+        if (e.defaultPrevented) return;
+        if (e.button !== undefined && e.button !== 0) return;
+        if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+        var t = e.target;
+        while (t && t !== document.body && t !== document.documentElement) {
+          var tag = String(t.tagName || '').toUpperCase();
+          if (
+            tag === 'A' ||
+            tag === 'BUTTON' ||
+            tag === 'INPUT' ||
+            tag === 'TEXTAREA' ||
+            tag === 'SELECT' ||
+            t.isContentEditable ||
+            t.getAttribute('role') === 'button' ||
+            t.getAttribute('role') === 'link'
+          ) return;
+          t = t.parentElement;
+        }
+        focusDeck();
+        if (e.clientX < window.innerWidth / 2) go(idx - 1);
+        else go(idx + 1);
+      }, true);
 
       // Auto-focus body so arrow keys work without an initial click.
       document.body.setAttribute('tabindex', '-1');
@@ -331,15 +358,18 @@ ${DECK_PROTOCOL_V1_INLINE_RUNTIME}
 </body>
 </html>`;
 
-export const DECK_FRAMEWORK_DIRECTIVE = `# Slide deck — fixed framework (this is non-negotiable for deck mode)
+export type DeckFrameworkHandoffProfile = 'filesystem' | 'text_artifact';
+export type DeckFrameworkMode = 'canonical' | 'legacy_compatible';
 
-Decks regress when each turn re-authors the scale-to-fit logic, the keyboard handler, the slide visibility toggle, the counter, and the print rules. The user has hit this enough times that we now ship a **fixed framework**: 1920×1080 canvas, scale-to-fit, OD Deck Protocol v1 absolute navigation + state events, prev/next + counter, capture-phase keyboard, click-anywhere focus, localStorage position restore, and a print stylesheet that emits a multi-page vertical PDF on Save-as-PDF — all baked in.
+const DECK_FRAMEWORK_BODY = `# Slide deck — fixed framework (this is non-negotiable for deck mode)
+
+Decks regress when each turn re-authors the scale-to-fit logic, the keyboard handler, the slide visibility toggle, the counter, and the print rules. The user has hit this enough times that we now ship a **fixed framework**: 1920×1080 canvas, scale-to-fit, OD Deck Protocol v1 absolute navigation + state events, hidden programmatic prev/next + counter, capture-phase keyboard with R reset-to-first-slide, half-slide click navigation, localStorage position restore, and a print stylesheet that emits a multi-page vertical PDF on Save-as-PDF — all baked in.
 
 **You do not write any of that. You do not modify any of that.** Your job is to fill content slots only.
 
 ## Workflow — copy framework first, then fill content
 
-When the user asks for slides, your TodoWrite plan **must** start with "copy the deck framework verbatim" before any content step. The intended order is:
+When the user asks for slides, your plan **must** start with "copy the deck framework verbatim" before any content step. The intended order is:
 
 \`\`\`
 1.  Bind the active direction's palette + fonts to :root in the framework
@@ -348,14 +378,14 @@ When the user asks for slides, your TodoWrite plan **must** start with "copy the
 4.  Add per-deck classes inside the second <style> block
 5.  Replace each <section class="slide"> SLOT with real content
 6.  Self-check (no rewriting framework chrome / @media print / nav script)
-7.  Emit single <artifact>
+7.  Complete the active execution profile's final handoff exactly as described after the canonical skeleton
 \`\`\`
 
 If you find yourself writing \`<style>\` rules for \`.deck-shell\`, \`.deck-stage\`, \`.slide\`, \`.canvas\`, \`fit()\`, \`@media print\`, or a keyboard handler — STOP. The framework already has them. Re-read this directive, then keep going from "fill SLOT content".
 
 ## The contract
 
-When you start a new deck, your output is a single semantically named HTML file built from the canonical skeleton below. **Copy the skeleton verbatim**, including its first \`<style>\` block, the \`.deck-shell\` / \`.deck-stage\` / \`.deck-counter\` / \`.deck-hint\` chrome, and the entire trailing \`<script>\`. Do not name every deck \`index.html\`; use \`index.html\` only if the user is editing an existing \`index.html\` deck or a fixed runtime convention requires that path.
+When you start a new deck, your output is a single semantically named HTML file built from the canonical skeleton below. **Copy the skeleton verbatim**, including its first \`<style>\` block, the \`.deck-shell\` / \`.deck-stage\` / hidden \`.deck-counter\` / \`.deck-hint\` programmatic chrome, and the entire trailing \`<script>\`. Do not name every deck \`index.html\`; use \`index.html\` only if the user is editing an existing \`index.html\` deck or a fixed runtime convention requires that path.
 
 You may edit only inside slots marked \`SLOT:\`:
 - \`SLOT: deck title\` — the \`<title>\` element.
@@ -372,7 +402,7 @@ These are the failure patterns we just spent days debugging. Each one looks "equ
 - ❌ Don't use \`transform-origin: center center\` on the stage. The framework uses \`top left\` plus an explicit translate so scaled content lands at the same place every render.
 - ❌ Don't use \`document.addEventListener('keydown', …)\` alone. Inside an iframe, focus is sometimes on window. The framework adds capture-phase listeners on **both** targets — replacing this with a single listener silently swallows arrow keys.
 - ❌ Don't replace the localStorage key, the slide-visibility toggle (\`.slide.active\`), or the counter element IDs (\`#deck-cur\`, \`#deck-total\`, \`#deck-prev\`, \`#deck-next\`). The framework reads them by ID.
-- ❌ Don't put the prev/next buttons or the counter **inside** \`.deck-stage\`. They must live outside the scaled element so they stay legible at any viewport size.
+- ❌ Don't put the prev/next buttons or the counter **inside** \`.deck-stage\`. They must live outside the scaled element so the host bridge can manage slides without scaling or clipping the control surface.
 - ❌ Don't redefine \`.slide\`, \`.slide.active\`, or \`.slide:not(.active)\` directly. The framework owns the visibility toggle through those exact selectors. If you want a non-flex layout on a slide, **add a variant class to the same \`<section class="slide …">\` element** (e.g. \`.s-cold\`, \`.s-magazine\`) and declare \`display: grid\` / \`display: block\` on the variant. The framework's active default is wrapped in \`:where(...)\` so it has zero specificity — your variant always wins for the active slide. Variant classes do NOT need to be more specific than \`.slide.active\`. (The inactive-hide rule still wins because it uses \`:not(.active) { display: none !important; }\`.)
 - ❌ Don't strip or "tidy" the \`@media print\` block. It is how Share → PDF stitches every slide into a multi-page document. Without it, PDF export collapses to a single screenshot.
 
@@ -491,7 +521,7 @@ Rules — same weight as the density rules above:
 - ❌ Don't pass \`var(--fg)\` strings into \`themeVariables\` — Mermaid needs literal colors.
 - ❌ Don't hand-recolor a single label to "fix" contrast; theme the whole diagram.
 
-## Pre-emit self-check — run this BEFORE writing the \`<artifact>\` tag
+## Pre-handoff self-check — run this BEFORE the final handoff
 
 For every \`<section class="slide">\`, mentally render at 1920×1080 and answer:
 
@@ -503,7 +533,7 @@ For every \`<section class="slide">\`, mentally render at 1920×1080 and answer:
 - [ ] Are bar lengths computed from \`--v\` / \`--max\` so proportions match the data? (Mentally spot-check two bars.)
 - [ ] If the slide embeds a Mermaid diagram: is \`mermaid.initialize\` themed to the slide background (dark background → \`dark\`/\`base\` theme), leaving no dark-on-dark labels?
 
-If any answer is "no", redesign the slide BEFORE emitting. Decks that overflow are the most common single failure mode reported by users; the user has rejected one before and will reject one again.
+If any answer is "no", redesign the slide BEFORE handoff. Decks that overflow are the most common single failure mode reported by users; the user has rejected one before and will reject one again.
 
 ## Prefer the simple-deck skill's layout vocabulary when reachable
 
@@ -517,3 +547,43 @@ ${DECK_SKELETON_HTML}
 
 When the brief is "make me a deck", your output is this skeleton with theme tokens tuned, per-deck classes added, and \`<section class="slide">\` blocks filled in — nothing more, nothing less. Skill-specific guidance (typography, theme presets, layout vocabulary) layers *on top of* this framework, not in place of it.
 `;
+
+const DECK_FILESYSTEM_HANDOFF = `## Final handoff — filesystem
+
+Write or edit the semantically named deck HTML file with the runtime's native file tools. After the file is complete and the self-check passes, summarize the written or changed deck file in a short ordinary assistant message. Do not emit the deck source in an \`<artifact>\` block; the saved project file is the canonical deliverable.`;
+
+const DECK_TEXT_ARTIFACT_HANDOFF = `## Final handoff — text artifact
+
+This execution profile has no file tools. After the deck is complete and the self-check passes, the final ordinary assistant response MUST contain exactly one \`<artifact type="text/html">...</artifact>\` block with the complete \`<!doctype html>\` deck document. Do not merely summarize a file or claim that a file was written: the artifact block itself is the canonical deliverable.`;
+
+const LEGACY_DECK_COMPATIBILITY_BODY = `# Slide deck — selected or existing scaffold compatibility
+
+This deck already has a source-of-truth scaffold: either the user selected a legacy deck seed or the project contains an existing HTML deck. Preserve that scaffold and follow its owning Skill/template instructions. If the selected Skill requires \`assets/template.html\`, copy and fill that seed; if a deck HTML file already exists, edit it in place and preserve its filename.
+
+Do not replace the selected/existing scaffold with Open Design's canonical skeleton. Do not rewrite its navigation runtime, add a second navigation runtime, or copy OD Deck Protocol v1 markers into a legacy seed. The host viewer's compatibility bridge owns navigation for legacy deck shapes. If the existing scaffold already implements OD Deck Protocol v1, preserve it as-is.
+
+Keep the selected scaffold's slide structure, styling contract, keyboard behavior, and print rules intact while changing only the deck-specific content and the slots its Skill allows.`;
+
+function renderDeckHandoff(profile: DeckFrameworkHandoffProfile): string {
+  return profile === 'text_artifact'
+    ? DECK_TEXT_ARTIFACT_HANDOFF
+    : DECK_FILESYSTEM_HANDOFF;
+}
+
+export function renderDeckFrameworkDirective(
+  profile: DeckFrameworkHandoffProfile,
+): string {
+  return `${DECK_FRAMEWORK_BODY}\n\n${renderDeckHandoff(profile)}`;
+}
+
+export function renderLegacyDeckCompatibilityDirective(
+  profile: DeckFrameworkHandoffProfile,
+): string {
+  return `${LEGACY_DECK_COMPATIBILITY_BODY}\n\n${renderDeckHandoff(profile)}`;
+}
+
+/**
+ * Backward-compatible filesystem form for callers that run native agents.
+ * API/BYOK callers must use renderDeckFrameworkDirective('text_artifact').
+ */
+export const DECK_FRAMEWORK_DIRECTIVE = renderDeckFrameworkDirective('filesystem');

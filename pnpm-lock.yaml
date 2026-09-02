@@ -78,6 +78,9 @@ importers:
       '@babel/parser':
         specifier: 7.29.3
         version: 7.29.3
+      '@ffmpeg-installer/ffmpeg':
+        specifier: 1.1.0
+        version: 1.1.0
       '@modelcontextprotocol/sdk':
         specifier: 1.29.0
         version: 1.29.0(zod@4.4.2)
@@ -470,6 +473,12 @@ importers:
       '@open-design/release':
         specifier: workspace:*
         version: link:../packages/release
+      '@open-design/sidecar':
+        specifier: workspace:*
+        version: link:../packages/sidecar
+      '@open-design/sidecar-proto':
+        specifier: workspace:*
+        version: link:../packages/sidecar-proto
       '@playwright/test':
         specifier: 1.60.0
         version: 1.60.0
@@ -779,6 +788,10 @@ importers:
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
 
   packages/sidecar:
+    dependencies:
+      '@open-design/platform':
+        specifier: workspace:*
+        version: link:../platform
     devDependencies:
       '@types/node':
         specifier: 24.12.2
@@ -930,8 +943,8 @@ importers:
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
     optionalDependencies:
       '@powerformer/vela-cli':
-        specifier: 0.0.33
-        version: 0.0.33
+        specifier: 0.0.35
+        version: 0.0.35
 
   tools/release:
     dependencies:
@@ -944,6 +957,9 @@ importers:
       cac:
         specifier: 6.7.14
         version: 6.7.14
+      sharp:
+        specifier: 0.35.3
+        version: 0.35.3(@types/node@24.12.2)
       yaml:
         specifier: 2.9.0
         version: 2.9.0
@@ -963,6 +979,10 @@ importers:
       vitest:
         specifier: 4.1.6
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
+    optionalDependencies:
+      playwright:
+        specifier: 1.60.0
+        version: 1.60.0
 
   tools/serve:
     dependencies:
@@ -2705,33 +2725,33 @@ packages:
   '@posthog/types@1.374.2':
     resolution: {integrity: sha512-ZghQSFMi+HFJNPvPjBoyY/jWQ+q6mSQVtWQxOHMSbBidUZjsyYbxYxBFbHy2qWLNe4mEpX+Wqir2Q4I/4AVvJQ==}
 
-  '@powerformer/vela-cli-darwin-arm64@0.0.33':
-    resolution: {integrity: sha512-94BxQyh00an5Cvkrg3PbrtsciH2qPnB910fk4Hqmduai3GrTyWZHNjYdkRfiNgf7qZvheSSm4wmQPhJgwrUC1A==}
+  '@powerformer/vela-cli-darwin-arm64@0.0.35':
+    resolution: {integrity: sha512-XmjZXzmrtwXIHfYucsz8mJTk5L2QxfBpgi6eab0XC1GAoC6qMjM4qRwR9Xry05ZoH5p1RuAnCqNhNrTNGxVCeg==}
     cpu: [arm64]
     os: [darwin]
 
-  '@powerformer/vela-cli-darwin-x64@0.0.33':
-    resolution: {integrity: sha512-t29x7b2yc/PBROLAr0FyDPcqhbBXINeLfQorAQr7ij4lkmFFqSmWrEAh/um7xOADzPUYjCUko/UWLeEHKMXbiA==}
+  '@powerformer/vela-cli-darwin-x64@0.0.35':
+    resolution: {integrity: sha512-nhBJxu0pmsaCyN9gw1YtWv0DWyDhRZ/tEiC1TSBmyDJcM6TKlJqfrO2q1O9iYidYDyN34/eW9L2nUNksJKYvBQ==}
     cpu: [x64]
     os: [darwin]
 
-  '@powerformer/vela-cli-linux-arm64@0.0.33':
-    resolution: {integrity: sha512-+DHifD5ylfjfsaWCo0NuPwl+D0lxkOs+apDCaxrj4EkSABkzjryrh2yIBncopZbz3GmDw+43AKNfTyDx6yr4fg==}
+  '@powerformer/vela-cli-linux-arm64@0.0.35':
+    resolution: {integrity: sha512-xqLyWwj3oDNKNYw+NI9Sh84vUKuEb/05gBxCQwxK98DWJgcdn3X0tkK29Z2Jdz8k9jBqm1yYJIFis3OrKWaRvw==}
     cpu: [arm64]
     os: [linux]
 
-  '@powerformer/vela-cli-linux-x64@0.0.33':
-    resolution: {integrity: sha512-uBAeeTUEUaLMe5DtO1RjfiH7egvljfUJoUEkGOqle2O83wX2zulXkQzDhh+br5EvKsZo9RtSHzCcsiRPaNeo/g==}
+  '@powerformer/vela-cli-linux-x64@0.0.35':
+    resolution: {integrity: sha512-5ZBfweh6qF9rUTqvUdW9yAq4o5n8YoQ3TwFhxmy2M6DRZE0LFhhkWfz2EciRaw1nj5GmFtGH2HGDRkPOKLrfIw==}
     cpu: [x64]
     os: [linux]
 
-  '@powerformer/vela-cli-win32-x64@0.0.33':
-    resolution: {integrity: sha512-J2pHEpQ2LeTW0zgkJ/XEa9mpZh3NJKia0r28P/d+KGKpSozcJecE5+/NUfArThNnRUKi8NxPSEqs9PWdrz3BCg==}
+  '@powerformer/vela-cli-win32-x64@0.0.35':
+    resolution: {integrity: sha512-k/BwOaCMhC8J39YckQX5OEaHQzCeSc3rr07xkc/XaALL0dlPYmdzQY7ViWCQGhHY8x96d3KS9oF3cS5/UrJaTw==}
     cpu: [x64]
     os: [win32]
 
-  '@powerformer/vela-cli@0.0.33':
-    resolution: {integrity: sha512-ypqsOqRpj/DxO8WAvM89eeWJOsOMb+bRloZb4JNW3QTNX5TmDmA61H3wM9wX0vCd95JAmPg3mxJH6xrWnKVCcg==}
+  '@powerformer/vela-cli@0.0.35':
+    resolution: {integrity: sha512-10wYoZdjAXtWAetxeJpYV5kwsa6LPdM3br0+RH4tMi+u7xS3hCHQJJ0dfCxD4LMxsc5DNfbvFX6KSWnYlvLRiQ==}
     hasBin: true
 
   '@preact/signals-core@1.14.2':
@@ -9198,28 +9218,28 @@ snapshots:
 
   '@posthog/types@1.374.2': {}
 
-  '@powerformer/vela-cli-darwin-arm64@0.0.33':
+  '@powerformer/vela-cli-darwin-arm64@0.0.35':
     optional: true
 
-  '@powerformer/vela-cli-darwin-x64@0.0.33':
+  '@powerformer/vela-cli-darwin-x64@0.0.35':
     optional: true
 
-  '@powerformer/vela-cli-linux-arm64@0.0.33':
+  '@powerformer/vela-cli-linux-arm64@0.0.35':
     optional: true
 
-  '@powerformer/vela-cli-linux-x64@0.0.33':
+  '@powerformer/vela-cli-linux-x64@0.0.35':
     optional: true
 
-  '@powerformer/vela-cli-win32-x64@0.0.33':
+  '@powerformer/vela-cli-win32-x64@0.0.35':
     optional: true
 
-  '@powerformer/vela-cli@0.0.33':
+  '@powerformer/vela-cli@0.0.35':
     optionalDependencies:
-      '@powerformer/vela-cli-darwin-arm64': 0.0.33
-      '@powerformer/vela-cli-darwin-x64': 0.0.33
-      '@powerformer/vela-cli-linux-arm64': 0.0.33
-      '@powerformer/vela-cli-linux-x64': 0.0.33
-      '@powerformer/vela-cli-win32-x64': 0.0.33
+      '@powerformer/vela-cli-darwin-arm64': 0.0.35
+      '@powerformer/vela-cli-darwin-x64': 0.0.35
+      '@powerformer/vela-cli-linux-arm64': 0.0.35
+      '@powerformer/vela-cli-linux-x64': 0.0.35
+      '@powerformer/vela-cli-win32-x64': 0.0.35
     optional: true
 
   '@preact/signals-core@1.14.2': {}
@@ -13735,6 +13755,39 @@ snapshots:
       '@img/sharp-win32-x64': 0.35.3
       '@types/node': 20.19.39
 
+  sharp@0.35.3(@types/node@24.12.2):
+    dependencies:
+      '@img/colour': 1.1.0
+      detect-libc: 2.1.2
+      semver: 7.8.5
+    optionalDependencies:
+      '@img/sharp-darwin-arm64': 0.35.3
+      '@img/sharp-darwin-x64': 0.35.3
+      '@img/sharp-freebsd-wasm32': 0.35.3
+      '@img/sharp-libvips-darwin-arm64': 1.3.2
+      '@img/sharp-libvips-darwin-x64': 1.3.2
+      '@img/sharp-libvips-linux-arm': 1.3.2
+      '@img/sharp-libvips-linux-arm64': 1.3.2
+      '@img/sharp-libvips-linux-ppc64': 1.3.2
+      '@img/sharp-libvips-linux-riscv64': 1.3.2
+      '@img/sharp-libvips-linux-s390x': 1.3.2
+      '@img/sharp-libvips-linux-x64': 1.3.2
+      '@img/sharp-libvips-linuxmusl-arm64': 1.3.2
+      '@img/sharp-libvips-linuxmusl-x64': 1.3.2
+      '@img/sharp-linux-arm': 0.35.3
+      '@img/sharp-linux-arm64': 0.35.3
+      '@img/sharp-linux-ppc64': 0.35.3
+      '@img/sharp-linux-riscv64': 0.35.3
+      '@img/sharp-linux-s390x': 0.35.3
+      '@img/sharp-linux-x64': 0.35.3
+      '@img/sharp-linuxmusl-arm64': 0.35.3
+      '@img/sharp-linuxmusl-x64': 0.35.3
+      '@img/sharp-webcontainers-wasm32': 0.35.3
+      '@img/sharp-win32-arm64': 0.35.3
+      '@img/sharp-win32-ia32': 0.35.3
+      '@img/sharp-win32-x64': 0.35.3
+      '@types/node': 24.12.2
+
   shebang-command@2.0.0:
     dependencies:
       shebang-regex: 3.0.0
@@ -14086,7 +14139,7 @@ snapshots:
 
   typescript-auto-import-cache@0.3.6:
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.5
 
   typescript@5.9.3: {}
 

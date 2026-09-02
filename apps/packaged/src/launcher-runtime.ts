@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { access, lstat, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { access, lstat, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
 
 import {
@@ -229,9 +229,15 @@ async function resolvePayloadDesktopExecutable(
   return executablePath;
 }
 
-function sameExecutablePath(left: string, right: string): boolean {
-  const normalizedLeft = resolve(left);
-  const normalizedRight = resolve(right);
+async function canonicalExecutablePath(path: string): Promise<string> {
+  return await realpath(path).catch(() => resolve(path));
+}
+
+export async function sameExecutablePath(left: string, right: string): Promise<boolean> {
+  const [normalizedLeft, normalizedRight] = await Promise.all([
+    canonicalExecutablePath(left),
+    canonicalExecutablePath(right),
+  ]);
   return process.platform === "win32"
     ? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
     : normalizedLeft === normalizedRight;
@@ -476,7 +482,7 @@ export async function resolvePackagedLauncherRuntime(
     descriptor.active.generation === handoff.target.generation &&
     attempted?.version === handoff.target.version &&
     attempted.generation === handoff.target.generation &&
-    sameExecutablePath(currentExecutablePath, handoff.payloadExecutablePath)
+    await sameExecutablePath(currentExecutablePath, handoff.payloadExecutablePath)
     ? handoff.target
     : null;
   const selection = selectLauncherRuntimeTarget({
@@ -501,16 +507,16 @@ export async function resolvePackagedLauncherRuntime(
     });
     const payloadConfig = await resolvePayloadConfig(config, versionPaths, channel);
     if (payloadConfig != null) {
-      const payloadDesktopProcess = sameExecutablePath(
+      const payloadDesktopProcess = await sameExecutablePath(
         currentExecutablePath,
         payloadConfig.desktopExecutablePath,
       );
       if (
         selection.reason === "active-resume" &&
-        (handoff == null || !payloadDesktopProcess || !sameExecutablePath(
+        (handoff == null || !payloadDesktopProcess || !(await sameExecutablePath(
           handoff.payloadExecutablePath,
           payloadConfig.desktopExecutablePath,
-        ))
+        )))
       ) {
         return await resolvePackagedLauncherRuntime(config, paths, {
           currentExecutablePath,
@@ -541,7 +547,7 @@ export async function resolvePackagedLauncherRuntime(
       // must keep the stable launch path the launcher persisted.
       const installedLaunchPath = !payloadDesktopProcess
         && (persistedInstall == null
-          || !sameExecutablePath(persistedInstall.launchPath, currentPackageLaunchPath))
+          || !(await sameExecutablePath(persistedInstall.launchPath, currentPackageLaunchPath)))
         ? (await writeLauncherInstallDescriptor(
           launcherPaths,
           channel,

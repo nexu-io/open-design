@@ -1480,16 +1480,13 @@ describe('ProjectView conversation run isolation', () => {
     );
   });
 
-  it('hard-blocks the AMR send and shows the balance dialog when the wallet is empty', async () => {
+  it('lets Vela decide a selected Personal model when the wallet is empty', async () => {
     conversationAMessages = [];
-    // Both the cached read and the refresh confirmation report an empty
-    // wallet, so the send must be hard-blocked before any run spawns.
     fetchAmrWalletSnapshot.mockResolvedValue({
       status: 'available',
       profile: 'prod',
       user: null,
       balanceUsd: '0',
-      codingPlanModels: [],
       updatedAt: null,
       fetchedAt: '2026-07-02T00:00:00.000Z',
       stale: false,
@@ -1515,18 +1512,17 @@ describe('ProjectView conversation run isolation', () => {
 
     fireEvent.click(screen.getByTestId('send-message'));
 
-    await waitFor(() => expect(screen.getByTestId('amr-balance-dialog')).toBeTruthy());
-    expect(streamViaDaemon).not.toHaveBeenCalled();
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
   });
 
-  it('soft-warns on a low AMR wallet and proceeds with the same send on confirmation', async () => {
+  it('does not guess whether a selected Personal model is metered at low balance', async () => {
     conversationAMessages = [];
     fetchAmrWalletSnapshot.mockResolvedValue({
       status: 'available',
       profile: 'prod',
       user: { id: 'u-paid', plan: 'plus' },
       balanceUsd: '1.20',
-      codingPlanModels: [],
       updatedAt: null,
       fetchedAt: '2026-07-02T00:00:00.000Z',
       stale: false,
@@ -1552,13 +1548,8 @@ describe('ProjectView conversation run isolation', () => {
 
     fireEvent.click(screen.getByTestId('send-message'));
 
-    // The reminder holds the send: no run yet.
-    await waitFor(() => expect(screen.getByTestId('amr-low-balance-dialog')).toBeTruthy());
-    expect(streamViaDaemon).not.toHaveBeenCalled();
-
-    // "Start anyway" resolves the pending send — the run starts without a re-submit.
-    fireEvent.click(screen.getByTestId('amr-low-balance-dialog-proceed'));
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('amr-low-balance-dialog')).toBeNull();
     expect(streamViaDaemon).toHaveBeenCalledWith(
       expect.objectContaining({ agentId: 'amr' }),
     );

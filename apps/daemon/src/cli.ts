@@ -15,8 +15,8 @@ import { parseDesignSystemRenameArgs } from './design-systems/rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
-import { requestJsonIpc } from '@open-design/sidecar';
-import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
+import { SidecarFactory } from '@open-design/sidecar';
+import { APP_KEYS, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
 import { EXPORT_FORMATS, EXPORT_IMAGE_FORMATS } from '@open-design/contracts';
 import type { ArtifactLintFinding, LintArtifactCliResultEnvelope, LintArtifactResponse, LintFailOn } from '@open-design/contracts';
 import { buildExportCliRequestBody, buildExportCliResultEnvelope, resolveExportCliDeckMode } from './export-cli-request.js';
@@ -1727,7 +1727,7 @@ Output is JSON only on stdout:
 Flags:
   --query        Required search query.
   --max-sources  Optional source cap. Defaults to 5, clamped to Tavily's max.
-  --daemon-url   Local daemon URL. Defaults to OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456.`);
+  --daemon-url   Local daemon URL. Defaults to OD_DAEMON_URL, inherited sidecar discovery, or http://127.0.0.1:7456.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -2363,7 +2363,7 @@ every iteration.
 
 Options:
   --daemon-url <url>   OpenDesign daemon HTTP base URL. Resolution
-                       order: this flag, OD_DAEMON_URL, OD_SIDECAR_IPC_PATH,
+                       order: this flag, OD_DAEMON_URL, inherited sidecar status,
                        then http://127.0.0.1:7456. Each new MCP spawn
                        discovers the live daemon URL at startup, so
                        MCP client configs stay valid across daemon
@@ -3238,7 +3238,7 @@ async function runMarketplace(args) {
                                                               Update the marketplace trust tier.
 
 Common options:
-  --daemon-url <url>   OpenDesign daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
+  --daemon-url <url>   OpenDesign daemon HTTP base (default OD_DAEMON_URL, inherited sidecar discovery, or http://127.0.0.1:7456).
   --json               Emit raw JSON (suitable for scripts).`);
     process.exit(args.length === 0 ? 2 : 0);
   }
@@ -6134,7 +6134,7 @@ function printUiHelp() {
                                                      Pre-answer a surface so the run never broadcasts it.
 
 Common options:
-  --daemon-url <url>   OpenDesign daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
+  --daemon-url <url>   OpenDesign daemon HTTP base (default OD_DAEMON_URL, inherited sidecar discovery, or http://127.0.0.1:7456).
   --workspace <id>     Explicit Workspace id for a bound project or run.
   --workspace-member <id>
                        Explicit Workspace member id for a bound project or run.
@@ -6192,7 +6192,7 @@ function printPluginHelp() {
   od plugin whoami [--host github.com]     Show the gh account used for publishing.
 
 Common options:
-  --daemon-url <url>   OpenDesign daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
+  --daemon-url <url>   OpenDesign daemon HTTP base (default OD_DAEMON_URL, inherited sidecar discovery, or http://127.0.0.1:7456).
   --json               Emit raw JSON (suitable for scripts) instead of human-readable output.
 
 Installs support local folders, github:owner/repo refs, HTTPS .tgz archives,
@@ -8437,15 +8437,11 @@ async function readStdinUtf8() {
 }
 
 async function mintCliImportToken(baseDir) {
-  const socketPath = process.env[SIDECAR_ENV.IPC_PATH];
-  if (typeof socketPath !== 'string' || socketPath.length === 0) return null;
+  const client = SidecarFactory.connectInherited();
+  if (client == null) return null;
   let result;
   try {
-    result = await requestJsonIpc(
-      socketPath,
-      { type: SIDECAR_MESSAGES.MINT_IMPORT_TOKEN, input: { baseDir } },
-      { timeoutMs: 800 },
-    );
+    result = await client.invoke(APP_KEYS.DAEMON, SIDECAR_MESSAGES.MINT_IMPORT_TOKEN, { baseDir }, { timeoutMs: 800 });
   } catch {
     return null;
   }

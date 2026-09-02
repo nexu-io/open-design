@@ -1,23 +1,5 @@
-/** Coding Plan model membership comes from Vela, never from a local tier table. */
-
 function normalize(value: string | null | undefined): string {
   return value?.trim().toLowerCase() ?? '';
-}
-
-/**
- * Whether Vela's authoritative Coding Plan model list includes this model.
- * `null` means the list itself is unavailable and callers must choose their
- * own fail-open/fail-closed presentation behavior.
- */
-export function codingPlanModelDecision(
-  modelIds: readonly string[] | null | undefined,
-  modelId: string | null | undefined,
-): boolean | null {
-  const normalized = normalize(modelId);
-  if (!normalized) return false;
-  if (!Array.isArray(modelIds)) return null;
-  const slug = normalized.slice(normalized.lastIndexOf('/') + 1);
-  return modelIds.some((candidate) => normalize(candidate) === slug);
 }
 
 export type PlanUnlimitedTier = 'go' | 'plus' | 'pro' | 'max';

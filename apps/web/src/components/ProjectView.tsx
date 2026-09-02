@@ -1493,6 +1493,26 @@ function workspaceContextItemsEqual(
   return a.every((item, index) => workspaceContextItemEqual(item, b[index] ?? null));
 }
 
+function projectFileContentSnapshotsEqual(
+  a: ProjectFile[],
+  b: ProjectFile[],
+): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  const byPath = new Map(a.map((file) => [file.path ?? file.name, file]));
+  return b.every((file) => {
+    const previous = byPath.get(file.path ?? file.name);
+    return previous != null
+      && previous.name === file.name
+      && previous.path === file.path
+      && previous.type === file.type
+      && previous.size === file.size
+      && previous.mtime === file.mtime
+      && previous.kind === file.kind
+      && previous.mime === file.mime;
+  });
+}
+
 function appendLiveArtifactEventItem(
   prev: LiveArtifactEventItem[],
   event: LiveArtifactEventItem['event'],
@@ -3983,6 +4003,37 @@ export function ProjectView({
     // hub-push pattern below, just triggered by the LOCAL watcher instead.
     collabCheckStatusNow();
   }, [collabCheckStatusNow, project.id]);
+  const reconcileFilesWhenProjectEventsBecomeReady = useCallback(async () => {
+    // The initial file snapshot and the project-event stream are established
+    // independently. Re-read once after the stream handshake to close the
+    // gap, but do not publish a preview invalidation merely because the
+    // handshake completed: changing the iframe URL would abort a perfectly
+    // good first navigation and load the same document twice.
+    const hadAcceptedSnapshot = projectFilesGenerationRef.current > 0;
+    const previousFiles = projectFilesRef.current;
+    invalidateProjectFilesCache(
+      project.id,
+      projectRunWorkspaceContextRef.current,
+    );
+    const nextFiles = await refreshProjectFiles({ fresh: true });
+    collabCheckStatusNow();
+    if (
+      !hadAcceptedSnapshot
+      || projectFileContentSnapshotsEqual(previousFiles, nextFiles)
+    ) {
+      return;
+    }
+    // A real snapshot change landed in the pre-handshake gap. Route it
+    // through the normal refresh witness so the preview and DESIGN.md state
+    // catch up exactly as they do for a live `file-changed` event.
+    bumpFilesRefresh();
+    setDesignMdRefreshKey((n) => n + 1);
+  }, [
+    bumpFilesRefresh,
+    collabCheckStatusNow,
+    project.id,
+    refreshProjectFiles,
+  ]);
   const coalescedFileChangedRefresh = useCoalescedCallback(
     refreshFilesAndDesignMd,
     { wait: 80, maxWait: 250 },
@@ -4160,7 +4211,7 @@ export function ProjectView({
     // for comments this also redeems a daemon-side dirty mark left by a hub
     // event that arrived in the pre-handshake gap.
     onReady: () => {
-      refreshFilesAndDesignMd();
+      void reconcileFilesWhenProjectEventsBecomeReady();
       void refreshPreviewCommentsRef.current?.();
     },
   }, projectRunWorkspaceContext);
