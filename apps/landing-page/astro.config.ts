@@ -1,8 +1,10 @@
 import sitemap, { type SitemapItem } from '@astrojs/sitemap';
 import { appendFileSync, readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import type { AstroIntegration, AstroUserConfig } from 'astro';
 import { defineConfig } from 'astro/config';
+import { applyMissingFallbackTranslations } from './scripts/apply-missing-fallback-translations';
 import {
   DEFAULT_LOCALE,
   LANDING_LOCALES,
@@ -142,6 +144,16 @@ const noindexHeaders: AstroIntegration = {
   },
 };
 
+const missingFallbackTranslations: AstroIntegration = {
+  name: 'missing-fallback-translations',
+  hooks: {
+    'astro:build:done': async ({ dir }) => {
+      const result = await applyMissingFallbackTranslations(fileURLToPath(dir));
+      console.log(`[localization] applied ${result.patches} reviewed patches across ${result.pages} locale pages`);
+    },
+  },
+};
+
 const sitemapLocales = Object.fromEntries(
   LANDING_LOCALES.map((locale) => [locale.code, locale.htmlLang]),
 );
@@ -253,6 +265,7 @@ export default defineConfig({
   },
   integrations: [
     noindexHeaders,
+    missingFallbackTranslations,
     sitemap({
       // Current route groups remain comfortably below Cloudflare Pages' 25 MiB
       // per-file upload ceiling. A generous limit keeps each route group in one
