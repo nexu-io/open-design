@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ompAgentDef } from '../../src/runtimes/defs/omp.js';
 import { DEFAULT_MODEL_OPTION } from '../../src/runtimes/defs/shared.js';
+import { installMetaForAgent } from '../../src/runtimes/metadata.js';
 
 describe('omp buildArgs', () => {
   it('runs RPC mode with the pi-rpc capture session dir', () => {
@@ -63,5 +64,11 @@ describe('omp definition metadata', () => {
   it('offers omp thinking levels including max', () => {
     const ids = ompAgentDef.reasoningOptions.map((option) => option.id);
     expect(ids).toEqual(expect.arrayContaining(['default', 'off', 'high', 'xhigh', 'max']));
+  });
+
+  it('exposes official install and docs metadata for unavailable-agent discovery', () => {
+    const meta = installMetaForAgent('omp');
+    expect(meta.installUrl).toBe('https://omp.sh/');
+    expect(meta.docsUrl).toBe('https://github.com/can1357/oh-my-pi');
   });
 });
