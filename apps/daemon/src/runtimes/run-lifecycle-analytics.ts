@@ -8,6 +8,8 @@ import {
   isArtifactPath,
   isDesignSystemFile,
   isPreviewModulePath,
+  isWriteOrEditToolName,
+  normalizeToolName,
   readToolResultId,
   readToolResultIsError,
   readToolUseId,
@@ -157,7 +159,7 @@ export interface RunSideEffectLedger {
   // (non-write) tool_result finds nothing pending and is dropped, keeping this
   // map bounded by the small number of outstanding artifact writes rather than
   // by the run's total tool_result count.
-  pendingWritePathById: Map<string, string>;
+  pendingWritePathById: Map<string, { path: string; toolName?: string } | string>;
 }
 
 export function createRunSideEffectLedger(): RunSideEffectLedger {
@@ -178,10 +180,21 @@ export function foldEventIntoRunSideEffectLedger(
   ledger: RunSideEffectLedger,
   record: { event?: unknown; data?: unknown },
 ) {
-  const event = record?.event;
-  const data = isRecord(record?.data) ? record.data : null;
+  const event = typeof record?.event === 'string' ? record.event : '';
+  const data = record?.data as
+    | {
+        type?: unknown;
+        delta?: unknown;
+        name?: unknown;
+        input?: unknown;
+        id?: unknown;
+        tool_use_id?: unknown;
+        is_error?: unknown;
+      }
+    | null
+    | undefined;
   if (event === 'stdout') {
-    const chunk = data?.chunk;
+    const chunk = (data as any)?.chunk;
     if (typeof chunk === 'string' ? chunk.length > 0 : chunk !== undefined) {
       ledger.userVisibleOutputSeen = true;
     }
@@ -199,22 +212,25 @@ export function foldEventIntoRunSideEffectLedger(
     ledger.toolCallSeen = true;
     if (event !== 'agent') return;
     if (typeof data.name !== 'string') return;
-    if (!WRITE_OR_EDIT_TOOL_NAMES.has(data.name)) return;
+    if (!isWriteOrEditToolName(data.name)) return;
     const path = extractToolFilePath(data.input);
     const id = readToolUseId(data);
     if (!path || !id) return;
-    ledger.pendingWritePathById.set(id, path);
+    ledger.pendingWritePathById.set(id, { path, toolName: data.name });
   } else if (data.type === 'tool_result' && event === 'agent') {
     const id = readToolResultId(data);
     if (!id) return;
-    const path = ledger.pendingWritePathById.get(id);
+    const pending = ledger.pendingWritePathById.get(id);
     // Non-write tool_result (Read/Bash/Grep/…): nothing pending, drop it — this
     // is what keeps the ledger bounded on long tool-heavy runs.
-    if (path === undefined) return;
+    if (pending === undefined) return;
     ledger.pendingWritePathById.delete(id);
     if (readToolResultIsError(data)) return; // a failed write does not count
+    const path = typeof pending === 'string' ? pending : pending.path;
+    const toolName = typeof pending === 'string' ? '' : (pending.toolName ?? '');
     ledger.writtenFilePaths.add(path);
-    if (isArtifactPath(path) || path.endsWith('.artifact.json')) {
+    const isExplicitArtifact = normalizeToolName(toolName) === 'create_artifact';
+    if (isArtifactPath(path) || path.endsWith('.artifact.json') || isExplicitArtifact) {
       const target = path.endsWith('.artifact.json') ? path.slice(0, -'.artifact.json'.length) : path;
       ledger.artifactPaths.add(target);
     }

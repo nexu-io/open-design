@@ -423,12 +423,12 @@ describe('run deliverable validation', () => {
         }),
       });
 
-      // Simulate ledger tracking create_artifact tool-use with { name: 'design-export.md' }
+      // Simulate ledger tracking MCP-qualified mcp__open-design__create_artifact tool-use with { name: 'design-export.md' }
       const ledger = createRunSideEffectLedger();
       recordRunSideEffectEvent(ledger, 'agent', {
         type: 'tool_use',
         id: 'tool-call-1',
-        name: 'create_artifact',
+        name: 'mcp__open-design__create_artifact',
         input: { name: 'design-export.md' },
       });
       recordRunSideEffectEvent(ledger, 'agent', {
