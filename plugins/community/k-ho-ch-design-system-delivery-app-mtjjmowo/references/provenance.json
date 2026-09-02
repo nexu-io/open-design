@@ -1,0 +1,19 @@
+{
+  "candidateId": "e978d9c7-5867-4a24-8738-dcdc6dbb4e98",
+  "projectId": "b0dab683-d36e-4d3c-8a93-290872df0ef0",
+  "runId": "900737a7-46d3-45c3-bf59-76f53d968b79",
+  "conversationId": "e572f149-af63-4ba5-9039-c5d68f21cdd8",
+  "provenance": {
+    "summary": "Detected from design-system-plan.md after a successful run.",
+    "detectedAt": 1788320107454
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "design-system-plan.md",
+      "label": "design-system-plan.md",
+      "size": 13836,
+      "copied": true
+    }
+  ]
+}

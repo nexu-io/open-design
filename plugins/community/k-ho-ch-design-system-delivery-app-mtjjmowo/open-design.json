@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "k-ho-ch-design-system-delivery-app-mtjjmowo",
+  "title": "Kế hoạch Design System — Delivery App",
+  "version": "0.1.0",
+  "description": "Xây một design system mobile-first từ UI giao hàng trong `image.png`, đủ rõ để đội thiết kế và kỹ thuật tái tạo nhất quán các luồng đặt giao, theo dõi tài xế và lịch sử đơn. Tài liệu này là đặc tả trước khi dựng prototyp",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
