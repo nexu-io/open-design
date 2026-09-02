@@ -73,6 +73,21 @@ describe('native session recovery metadata', () => {
       continuation: 'session-file-resume',
       handle: { present: false, kind: 'session-file-path' },
     });
+    const omp = initialNativeSessionRecoveryMetadata({
+      agent: { id: 'omp' },
+      supportsSessionResume: true,
+      isResuming: false,
+      resumeSessionId: null,
+      invalidationReason: null,
+      updatedAt: 250,
+    });
+    expect(omp).toMatchObject({
+      agentId: 'omp',
+      state: 'no_recoverable_session',
+      acquisition: 'session-file-discovered',
+      continuation: 'session-file-resume',
+      handle: { present: false, kind: 'session-file-path' },
+    });
     expect(acp).toMatchObject({
       agentId: 'amr',
       state: 'resume_attempted',

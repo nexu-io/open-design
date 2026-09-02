@@ -143,7 +143,7 @@ definitions currently group by transport as follows:
 | `copilot-stream-json` | `copilot` |
 | `qoder-stream-json` | `qoder` |
 | `acp-json-rpc` | `amr` (Vela), `devin`, `hermes`, `kimi`, `kiro`, `kilo`, `reasonix`, `trae-cli`, `vibe` |
-| `pi-rpc` | `pi` |
+| `pi-rpc` | `pi`, `omp` |
 | `dsh-profile-jsonl` | `deepseek-harness` |
 | `plain` | `aider`, `antigravity`, `atomcode`, `deepseek`, `grok-build`, `qwen` |
 
@@ -332,6 +332,15 @@ the active-run staging implementation is in
   with the conversation.
 - Extension UI: auto-resolved. pi's RPC protocol can request user dialogs (`select`, `confirm`, `input`, `editor`) and fire-and-forget notifications (`setStatus`, `setWidget`, `notify`, `setTitle`, `set_editor_text`). Dialog methods are auto-approved (confirm → true, select → first option) and fire-and-forget methods are silently consumed because the web UI has no surface for them.
 - **Gotcha:** pi's RPC `prompt` response is asynchronous — `success: true` only means the prompt was accepted, not that the agent finished. Agent failures after acceptance surface through the normal event stream (`extension_error`, `auto_retry_end` with `success: false`) and the empty-output guard.
+- OMP: the `omp` CLI is a pi-protocol runtime that reuses this same
+  `pi-rpc` transport (§3 table) behind its own `defs/omp.ts` definition.
+  Differences: omp takes a native repeatable `--add-dir` for external roots
+  instead of `--append-system-prompt`; it accepts `--thinking` levels
+  including `max`; it has no `--list-models` TSV (the picker falls back to
+  provider hints and omp fuzzy-matches whatever `--model` receives); and the
+  daemon passes `--session-dir <cwd>/.pi/sessions` so omp's flat
+  `<uuid>.jsonl` session files land where the capture scan above already
+  looks, keeping conversational resume identical to pi.
 
 ### 5.11 DeepSeek TUI
 
