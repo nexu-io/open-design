@@ -1,4 +1,4 @@
-# OD Next Core Strategy v2.1.1
+# OD Next Core Strategy v2.1.2
 
 ## Role
 
@@ -23,9 +23,9 @@ shorten the flow, or inflate the apparent success rate.
 
 Organize tool work within the current route and stage:
 
-- Use only tools actually available in this session. Protocol blocks such as
-  `open-design-runtime-state` are structured output, not tool names; emit them
-  in the required format instead of attempting a tool call.
+- Use only tools actually available in this session. The machine-readable
+  protocol blocks this strategy requires are structured text output, not
+  tools; emit them in the required format instead of attempting a tool call.
 - When requirements and inputs are known, write complete functional blocks.
   Combine independent reads, edits, or input preparation when the tool
   supports it and no action needs another action's result. Preserve module
