@@ -7155,7 +7155,10 @@ export function localizedHref(
 export function getHeaderLocaleSwitcher(
   locale: LandingLocaleCode,
   pathname = '/',
-  opts: { canonicalOnly?: boolean } = {},
+  opts: {
+    canonicalOnly?: boolean;
+    availableLocaleCodes?: readonly LandingLocaleCode[];
+  } = {},
 ): {
   label: string;
   prefix: string;
@@ -7178,7 +7181,10 @@ export function getHeaderLocaleSwitcher(
     label: topbar.languageSwitcherLabel,
     prefix: topbar.languageSwitcherPrefix ?? 'Lang',
     shortLabel: localeDef.shortLabel,
-    options: LANDING_LOCALES.map((entry) => ({
+    options: LANDING_LOCALES.filter(
+      (entry) =>
+        !opts.availableLocaleCodes || opts.availableLocaleCodes.includes(entry.code),
+    ).map((entry) => ({
       code: entry.code,
       href: opts.canonicalOnly ? canonicalPath : localePath(entry.code, pathname),
       htmlLang: entry.htmlLang,

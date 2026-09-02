@@ -29,7 +29,7 @@ import TemplateCardAutoplay from './template-card-autoplay.astro';
 import SiteFooter from './site-footer.astro';
 import { ogDefaultImage } from '../image-assets';
 import {
-  LANDING_LOCALES,
+  type LandingLocaleCode,
   alternateLinksForPath,
   getHeaderLocaleSwitcher,
   getLocaleDefinition,
@@ -72,6 +72,8 @@ export interface Props {
   mainClassName?: string;
   /** Opt into the signed-in Cloud account menu for this route only. */
   showHeaderAccount?: boolean;
+  /** Genuine translations available for this route; limits hreflang and language menus. */
+  availableLocaleCodes?: readonly LandingLocaleCode[];
 }
 
 const {
@@ -85,6 +87,7 @@ const {
   suppressLocaleAutoRedirect = false,
   mainClassName = 'sub-main container',
   showHeaderAccount = false,
+  availableLocaleCodes,
 } = Astro.props;
 // Clamp the meta/OG/Twitter description to a search-friendly length (the full
 // string still flows into JSON-LD untouched).
@@ -97,9 +100,12 @@ const canonical = new URL(Astro.url.pathname, Astro.site).toString();
 // search engines dangling targets. `altEntries[0]` is the default-locale
 // (stripped) path, so x-default stays correct for localized pages too.
 const altEntries = alternateLinksForPath(Astro.url.pathname);
+const availableAltEntries = availableLocaleCodes
+  ? altEntries.filter((entry) => availableLocaleCodes.includes(entry.locale.code))
+  : altEntries;
 const alternateLinks = localeCanonicalOnly
   ? []
-  : altEntries.map((entry) => ({
+  : availableAltEntries.map((entry) => ({
       ...entry,
       href: new URL(entry.hrefPath, Astro.site).toString(),
     }));
@@ -121,6 +127,7 @@ const headerHtml = renderToStaticMarkup(
     locale,
     localeSwitcher: getHeaderLocaleSwitcher(locale, Astro.url.pathname, {
       canonicalOnly: localeCanonicalOnly,
+      availableLocaleCodes,
     }),
     showAccount: showHeaderAccount,
   }) as ReturnType<typeof createElement>,
@@ -161,8 +168,8 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
     <meta property="og:url" content={canonical} />
     <meta property="og:image" content={og} />
     <meta property="og:locale" content={localeDef.ogLocale} />
-    {LANDING_LOCALES.filter((entry) => entry.code !== locale).map((entry) => (
-      <meta property="og:locale:alternate" content={entry.ogLocale} />
+    {availableAltEntries.filter((entry) => entry.locale.code !== locale).map((entry) => (
+      <meta property="og:locale:alternate" content={entry.locale.ogLocale} />
     ))}
 
     <meta name="twitter:card" content="summary_large_image" />
@@ -186,7 +193,12 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
         <slot />
       </main>
 
-      <SiteFooter counts={counts} locale={locale} localeCanonicalOnly={localeCanonicalOnly} />
+      <SiteFooter
+        counts={counts}
+        locale={locale}
+        localeCanonicalOnly={localeCanonicalOnly}
+        availableLocaleCodes={availableLocaleCodes}
+      />
     </div>
 
     <HeaderEnhancer />

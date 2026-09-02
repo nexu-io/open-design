@@ -141,7 +141,8 @@ describe("pricing contract", () => {
       plans,
       /\.discount-corner-badge\s*\{[^}]*border:\s*0;/s,
     );
-    assert.match(plans, /<div class="plan-model-modules">/);
+    assert.match(plans, /tier !== 'free' && <div class="plan-model-modules">/);
+    assert.doesNotMatch(plans, /\.plan-go/);
     assert.match(
       plans,
       /\.plan-max \.plan-model-module li\.model-with-status em\.unlimited,[\s\S]*?background:\s*rgba\(120, 234, 87, 0\.14\);/,
@@ -199,7 +200,7 @@ describe("pricing contract", () => {
     );
     assert.match(
       individualPlans,
-      /<span>\{tierCopy\[tier\]\.ctaLabel\}<\/span>/,
+      /<span>\{tier === 'free' \? currentPlanLabel : tierCopy\[tier\]\.ctaLabel\}<\/span>/,
     );
     assert.doesNotMatch(individualPlans, /ctaLabel\} · \{L\.(?:monthly|yearly)\}/);
     assert.match(
@@ -365,7 +366,7 @@ describe("pricing contract", () => {
     }
   });
 
-  it("keeps the sold-out Go card instead of a Free entry card", async () => {
+  it("renders the permanent Free entry before the three paid plans", async () => {
     const [page, individualPlans] = await Promise.all([
       readFile(PRICING_PAGE_PATH, "utf8"),
       readFile(PRICING_INDIVIDUAL_PATH, "utf8"),
@@ -374,28 +375,25 @@ describe("pricing contract", () => {
     assert.match(page, /<PricingIndividualPlans \/>/);
     assert.doesNotMatch(page, /\{false && \(/);
     assert.doesNotMatch(page, /<section class="pr-grid"/);
-    assert.match(individualPlans, /tier:\s*'go' as const/);
+    assert.match(individualPlans, /tier:\s*'free' as const/);
+    assert.match(individualPlans, /logo:\s*'\/pricing\/plan-free\.svg'/);
+    assert.match(individualPlans, /content\.free/);
+    assert.match(individualPlans, /L\.freeForever/);
+    assert.match(individualPlans, /getCurrentPlanLabel\(locale\)/);
+    assert.doesNotMatch(individualPlans, /tier:\s*'go' as const/);
     assert.match(individualPlans, /data-pricing-cta\s+data-tier=\{tier\}/);
-    assert.match(individualPlans, /go:\s*content\.go/);
-    assert.match(individualPlans, /GO_PLAN_SOLD_OUT/);
     assert.match(individualPlans, /`plan-\$\{tier\}`/);
-    assert.match(
-      individualPlans,
-      /\.plan-model-module\.unavailable-model-module\s*\{[^}]*background:\s*#f1f2ee;/,
+    assert.match(page, /name:\s*'OpenDesign Free'/);
+    assert.match(page, /price:\s*'0'/);
+    assert.doesNotMatch(page, /name:\s*'OpenDesign Go'/);
+    assert.equal(
+      getPricingContent("zh").free.tagline,
+      "配置自己的 Agent 或 BYOK，免费使用",
     );
-    assert.doesNotMatch(
-      individualPlans,
-      /\.plan-(?:go|free) \.plan-model-module\.unavailable-model-module/,
-    );
-    assert.doesNotMatch(individualPlans, /\.plan-free /);
-    assert.match(
-      individualPlans,
-      /tier !== 'go' && <em class="multimodal-status">\{fillTemplate\(P\.upToResolution/,
-    );
-    assert.match(page, /name:\s*'OpenDesign Go'/);
-    assert.match(page, /price:\s*String\(GO_PLAN\.monthly\.priceUsd\)/);
-    assert.match(individualPlans, /DeepSeek V4 Flash/);
-    assert.match(individualPlans, /GLM-5\.1/);
+    assert.deepEqual(getPricingContent("zh").free.features, [
+      "BYOK 自带密钥，支持本地 Coding Agent",
+      "社区支持",
+    ]);
   });
 
   it("renders the live Personal comparison from localized pricing content", async () => {
@@ -520,7 +518,7 @@ describe("pricing contract", () => {
     );
     assert.match(
       individualPlans,
-      /\{tier === 'go' \? P\.flagshipModels : fillTemplate\(P\.flagshipModelCount, \{ count: String\(flagship\.length\) \}\)\}/,
+      /\{fillTemplate\(P\.flagshipModelCount, \{ count: String\(flagship\.length\) \}\)\}/,
     );
     assert.doesNotMatch(individualPlans, /\} · \$\{P\.flagshipModels\}/);
   });
@@ -619,6 +617,51 @@ describe("pricing contract", () => {
     assert.doesNotMatch(page, /权益生效后连续 7 天/);
     assert.doesNotMatch(page, /2026-08-22T00:00:00\+08:00/);
     assert.doesNotMatch(page, /限时抢购/);
+  });
+
+  it("links the pricing FAQ to the localized standalone FAQ page", async () => {
+    const [page, pricingExtras] = await Promise.all([
+      readFile(PRICING_PAGE_PATH, "utf8"),
+      import("../app/_lib/pricing-extras-content.ts"),
+    ]);
+    const getMoreFaqLabel = (
+      pricingExtras as Record<string, unknown>
+    ).getMoreFaqLabel;
+
+    assert.equal(typeof getMoreFaqLabel, "function");
+    assert.equal(
+      (getMoreFaqLabel as (locale: string) => string)("zh"),
+      "查看更多常见问题",
+    );
+    assert.match(
+      page,
+      /<a class="pr-faq-more" href=\{href\('\/faq\/'\)\}>\{moreFaqLabel\}<\/a>/,
+    );
+  });
+
+  it("links the refund answer to the localized refund policy without the old no-refund copy", async () => {
+    const [page, pricingExtras] = await Promise.all([
+      readFile(PRICING_PAGE_PATH, "utf8"),
+      import("../app/_lib/pricing-extras-content.ts"),
+    ]);
+    const getFaqs = (pricingExtras as Record<string, unknown>).getFaqs as (
+      locale: string,
+    ) => Array<{ q: string; a: string; refundPolicyCta?: string }>;
+    const zhRefund = getFaqs("zh").find((faq) => faq.q.includes("退款"));
+    const enRefund = getFaqs("en").find((faq) => /refund/i.test(faq.q));
+
+    assert.ok(zhRefund);
+    assert.match(zhRefund.a, /付款成功后 7 个自然日内/);
+    assert.match(zhRefund.a, /付费权益.*未使用/);
+    assert.equal(zhRefund.refundPolicyCta, "查看完整退款政策");
+    assert.ok(enRefund);
+    assert.match(enRefund.a, /7 calendar days/i);
+    assert.doesNotMatch(`${zhRefund.a} ${enRefund.a}`, /暂不支持退款|currently non-refundable/i);
+    assert.doesNotMatch(getFaqs("zh").map((faq) => faq.a).join(" "), /年付.*不支持退款/);
+    assert.match(
+      page,
+      /<a class="pr-faq-policy" href=\{refundPolicyHref\}>\{faq\.refundPolicyCta\}<\/a>/,
+    );
   });
 
   it("does not expose a campaign review preview backdoor", async () => {

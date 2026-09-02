@@ -1,7 +1,5 @@
 ---
 import {
-  GO_PLAN,
-  GO_PLAN_SOLD_OUT,
   PRICING_SNAPSHOT,
   formatUsd,
   type PlanTierConfig,
@@ -9,6 +7,7 @@ import {
 import {
   CREDIT_BONUS_PCT,
   fillTemplate,
+  getCurrentPlanLabel,
   getPricingContent,
   type PlanTierId,
 } from '../_lib/pricing-content';
@@ -17,6 +16,7 @@ import { localeFromPath } from '../i18n';
 
 const locale = localeFromPath(Astro.url.pathname);
 const content = getPricingContent(locale);
+const currentPlanLabel = getCurrentPlanLabel(locale);
 const L = content.labels;
 const P = content.personal;
 const tiers = PRICING_SNAPSHOT.tiers;
@@ -24,7 +24,7 @@ const catalogCounts = await getCatalogCounts(locale);
 const skillsCount = catalogCounts.skills.toLocaleString('en-US');
 const systemsCount = catalogCounts.systems.toLocaleString('en-US');
 
-type TierId = 'go' | PlanTierId;
+type TierId = 'free' | PlanTierId;
 interface ModelItem {
   name: string;
   icon: string;
@@ -90,11 +90,11 @@ const renderCatalogLabel = (label: string) => fillTemplate(label, {
 const apiKeyBenefit = renderCatalogLabel(P.bringYourOwnApiKey);
 
 const tierCopy = {
-  go: content.go,
+  free: content.free,
   ...content.plans,
 };
 const tierTaglines: Record<TierId, string> = {
-  go: content.go.tagline,
+  free: content.free.tagline,
   plus: content.plans.plus.tagline,
   pro: content.plans.pro.tagline,
   max: content.plans.max.tagline,
@@ -114,13 +114,7 @@ const paidTierBenefits = (tier: PlanTierId) => {
   ].map(renderCatalogLabel);
 };
 const tierBenefits: Record<TierId, string[]> = {
-  go: [
-    content.go.allowance,
-    P.goConcurrency,
-    fillTemplate(P.customDomains, { count: '5' }),
-    ...content.go.features,
-    ...content.plans.plus.features.slice(1),
-  ].map(renderCatalogLabel),
+  free: [content.free.concurrency, ...content.free.features].map(renderCatalogLabel),
   plus: paidTierBenefits('plus'),
   pro: paidTierBenefits('pro'),
   max: paidTierBenefits('max'),
@@ -165,45 +159,29 @@ function individualView(tier: PlanTierConfig) {
   };
 }
 
-const goYearlyEquivalent = Math.round(GO_PLAN.yearly.priceUsd / 12);
-const goMonthlyDiscount = Math.round(
-  (1 - GO_PLAN.monthly.introPriceUsd / GO_PLAN.monthly.priceUsd) * 100,
-);
-const goYearlyDiscount = Math.round(
-  (1 - goYearlyEquivalent / GO_PLAN.monthly.priceUsd) * 100,
-);
-const goYearlySave = GO_PLAN.monthly.priceUsd * 12 - GO_PLAN.yearly.priceUsd;
-const goView = {
+const freeView = {
   monthly: {
-    amount: formatUsd(GO_PLAN.monthly.introPriceUsd).replace('$', ''),
-    strike: formatUsd(GO_PLAN.monthly.priceUsd),
-    discount: goMonthlyDiscount,
-    saving: compactSavings(
-      GO_PLAN.monthly.priceUsd - GO_PLAN.monthly.introPriceUsd,
-      'monthly',
-    ),
-    billed: fillTemplate(L.monthlyRenewal, {
-      amountUsd: formatUsd(GO_PLAN.monthly.priceUsd),
-    }),
+    amount: '0',
+    strike: null,
+    discount: null,
+    saving: null,
+    billed: L.freeForever,
   },
   yearly: {
-    amount: formatUsd(goYearlyEquivalent).replace('$', ''),
-    strike: formatUsd(GO_PLAN.monthly.priceUsd),
-    discount: goYearlyDiscount,
-    saving: compactSavings(goYearlySave, 'yearly'),
-    billed: fillTemplate(L.yearlySubline, {
-      totalUsd: compactBillingTotal(GO_PLAN.yearly.priceUsd),
-      savingsUsd: formatUsd(goYearlySave),
-    }),
+    amount: '0',
+    strike: null,
+    discount: null,
+    saving: null,
+    billed: L.freeForever,
   },
 };
 
 const cardData = [
   {
-    tier: 'go' as const,
-    logo: null,
-    view: goView,
-    regularMonthlyPrice: GO_PLAN.monthly.priceUsd,
+    tier: 'free' as const,
+    logo: '/pricing/plan-free.svg',
+    view: freeView,
+    regularMonthlyPrice: 0,
   },
   ...tiers.map((tier) => ({
     tier: tier.tier as PlanTierId,
@@ -227,7 +205,7 @@ const cardData = [
         const popular = cardPopularModels;
         const flagship = tier === 'plus' ? plusFlagshipModels : flagshipModels;
         const imageResolution = tier === 'plus' ? '1K' : tier === 'pro' ? '2K' : '4K';
-        const bonusPct = tier === 'go' ? null : CREDIT_BONUS_PCT[tier];
+        const bonusPct = tier === 'free' ? null : CREDIT_BONUS_PCT[tier];
         return (
           <article class:list={['pricing-card', 'decision-card', 'compact-tier-card', `plan-${tier}`, { 'new-plan-card recommended': tier === 'pro' || tier === 'max' }]} data-tier={tier}>
             {tier === 'pro' && <div class="new-plan-ribbon"><span>{P.mostPopular}</span></div>}
@@ -236,19 +214,15 @@ const cardData = [
             <header class="plan-top">
               <div class="plan-title-row">
                 <div class="plan-name-with-status">
-                  {logo ? (
-                    <img class="plan-wordmark-image" src={logo} alt={tier.charAt(0).toUpperCase() + tier.slice(1)} />
-                  ) : (
-                    <svg class="plan-wordmark-image plan-go-wordmark" viewBox="0 0 88 49" role="img" aria-label="Go">
-                      <path d="M1 2.5h63c12 0 21.5 9.8 21.5 22S76 46.5 64 46.5H1" />
-                      <path d="M29 17c-2.4-3.6-6.4-5.5-11.4-5.5C8.8 11.5 2 17 2 24.5s6.8 13 15.6 13c5.7 0 10-2.3 12.3-6.5v-7H17.5" />
-                      <ellipse cx="50.5" cy="24.5" rx="12.5" ry="13" />
-                    </svg>
-                  )}
+                  <img class="plan-wordmark-image" src={logo} alt={tier.charAt(0).toUpperCase() + tier.slice(1)} />
                 </div>
                 <div class="plan-badges">
-                  <span class="discount-corner-badge" data-when="monthly" data-intro-only>{fillTemplate(L.firstMonthTag, { pct: String(view.monthly.discount) })}</span>
-                  <span class="discount-corner-badge" data-when="yearly">{fillTemplate(L.yearlyDiscountTag, { pct: String(view.yearly.discount) })}</span>
+                  {view.monthly.discount != null && (
+                    <span class="discount-corner-badge" data-when="monthly" data-intro-only>{fillTemplate(L.firstMonthTag, { pct: String(view.monthly.discount) })}</span>
+                  )}
+                  {view.yearly.discount != null && (
+                    <span class="discount-corner-badge" data-when="yearly">{fillTemplate(L.yearlyDiscountTag, { pct: String(view.yearly.discount) })}</span>
+                  )}
                 </div>
               </div>
               <p>{tierTaglines[tier]}</p>
@@ -260,17 +234,17 @@ const cardData = [
                 data-monthly-price
                 data-intro-price={view.monthly.amount}
                 data-regular-price={formatUsd(regularMonthlyPrice).replace('$', '')}
-              >{view.monthly.amount}</strong><small>{L.perMonth}</small><del data-intro-only>{view.monthly.strike}</del>
+              >{view.monthly.amount}</strong><small>{L.perMonth}</small>{view.monthly.strike != null && <del data-intro-only>{view.monthly.strike}</del>}
             </div>
-            <div class="compact-price-detail" data-when="monthly" data-intro-only>
-              <span class="price-savings-note">{fillTemplate(P.saveAmount, { amount: view.monthly.saving })}</span>
+            <div class:list={['compact-price-detail', { 'free-price-detail': tier === 'free' }]} data-when="monthly" data-intro-only>
+              {view.monthly.saving != null && <span class="price-savings-note">{fillTemplate(P.saveAmount, { amount: view.monthly.saving })}</span>}
               <small>{view.monthly.billed}</small>
             </div>
             <div class="price" data-when="yearly">
-              <span>$</span><strong class="rolling-price-number">{view.yearly.amount}</strong><small>{L.perMonth}</small><del>{view.yearly.strike}</del>
+              <span>$</span><strong class="rolling-price-number">{view.yearly.amount}</strong><small>{L.perMonth}</small>{view.yearly.strike != null && <del>{view.yearly.strike}</del>}
             </div>
-            <div class="compact-price-detail" data-when="yearly">
-              <span class="price-savings-note">{fillTemplate(P.saveAmount, { amount: view.yearly.saving })}</span>
+            <div class:list={['compact-price-detail', { 'free-price-detail': tier === 'free' }]} data-when="yearly">
+              {view.yearly.saving != null && <span class="price-savings-note">{fillTemplate(P.saveAmount, { amount: view.yearly.saving })}</span>}
               <small>{view.yearly.billed}</small>
             </div>
 
@@ -279,16 +253,16 @@ const cardData = [
               data-pricing-cta
               data-tier={tier}
               data-plan-name={tier.charAt(0).toUpperCase() + tier.slice(1)}
-              data-default-label={tierCopy[tier].ctaLabel}
-              aria-disabled={tier === 'go' && GO_PLAN_SOLD_OUT ? 'true' : undefined}
-              tabindex={tier === 'go' && GO_PLAN_SOLD_OUT ? -1 : undefined}
-              data-subscription-disabled={tier === 'go' && GO_PLAN_SOLD_OUT ? '' : undefined}
+              data-default-label={tier === 'free' ? currentPlanLabel : tierCopy[tier].ctaLabel}
+              aria-disabled={tier === 'free' ? 'true' : undefined}
+              tabindex={tier === 'free' ? -1 : undefined}
+              data-subscription-disabled={tier === 'free' ? '' : undefined}
             >
-              <span>{tierCopy[tier].ctaLabel}</span>
+              <span>{tier === 'free' ? currentPlanLabel : tierCopy[tier].ctaLabel}</span>
             </a>
 
             <div class="plan-feature-details">
-              <div class="plan-model-modules">
+              {tier !== 'free' && <div class="plan-model-modules">
                 <section class:list={['plan-model-module', 'popular-model-module', { 'recommended-model-module': tier === 'pro' || tier === 'max' }]} data-model-module>
                   <header>
                     <h4>{P.popularModels}</h4>
@@ -309,10 +283,9 @@ const cardData = [
                   </button>
                 </section>
 
-                <section class:list={['plan-model-module', { 'unavailable-model-module': tier === 'go', 'recommended-model-module': tier === 'pro' || tier === 'max' }]} data-model-module>
+                <section class:list={['plan-model-module', { 'recommended-model-module': tier === 'pro' || tier === 'max' }]} data-model-module>
                   <header>
-                    <h4>{tier === 'go' ? P.flagshipModels : fillTemplate(P.flagshipModelCount, { count: String(flagship.length) })}</h4>
-                    {tier === 'go' && <span>{P.noAccess}</span>}
+                    <h4>{fillTemplate(P.flagshipModelCount, { count: String(flagship.length) })}</h4>
                   </header>
                   <ul>
                     {flagship.map((model) => (
@@ -326,19 +299,19 @@ const cardData = [
                   </button>
                 </section>
 
-                <section class:list={['plan-model-module', 'multimodal-model-module', { 'unavailable-model-module': tier === 'go', 'recommended-model-module': tier === 'pro' || tier === 'max' }]}>
-                  <header><h4>{P.imageModels}</h4><span>{tier === 'go' ? P.noAccess : fillTemplate(P.modelCount, { count: '3' })}</span></header>
+                <section class:list={['plan-model-module', 'multimodal-model-module', { 'recommended-model-module': tier === 'pro' || tier === 'max' }]}>
+                  <header><h4>{P.imageModels}</h4><span>{fillTemplate(P.modelCount, { count: '3' })}</span></header>
                   <ul>
                     {imageModels.map((model) => (
                       <li class="model-with-status">
                         <span class:list={['model-logo', model.iconClass]}><img src={model.icon} alt="" loading="lazy" /></span>
                         <span>{model.name}</span>
-                        {tier !== 'go' && <em class="multimodal-status">{fillTemplate(P.upToResolution, { resolution: imageResolution })}</em>}
+                        <em class="multimodal-status">{fillTemplate(P.upToResolution, { resolution: imageResolution })}</em>
                       </li>
                     ))}
                   </ul>
                 </section>
-              </div>
+              </div>}
 
               <ul class="plan-benefit-list">
                 {tierBenefits[tier].map((benefit, index) => (
@@ -517,15 +490,6 @@ const cardData = [
     height: 30px;
     object-fit: contain;
     object-position: left center;
-  }
-
-  .plan-go-wordmark {
-    width: 54px;
-    fill: none;
-    stroke: #202020;
-    stroke-width: 5;
-    stroke-linecap: round;
-    stroke-linejoin: round;
   }
 
   .plan-max .plan-wordmark-image {

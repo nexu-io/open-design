@@ -212,19 +212,19 @@ function flattened(requests: BridgeRequest[]): BridgeEvent[] {
 }
 
 describe('authenticated Pricing compatibility browser wiring', { concurrency: false }, () => {
-  it('shows Go as sold out for a signed-out visitor', async (t) => {
+  it('shows Free as the disabled current plan for a signed-out visitor', async (t) => {
     const { page } = await openPricing({
       browserLocale: 'zh-CN',
       signedIn: false,
       targetHref: '/zh/pricing/',
     });
     t.after(() => page.context().close());
-    const go = page.locator('[data-pricing-cta][data-tier="go"]');
-    await go.waitFor();
+    const free = page.locator('[data-pricing-cta][data-tier="free"]');
+    await free.waitFor();
 
-    assert.equal((await go.textContent())?.trim(), '已停售');
-    assert.equal(await go.getAttribute('aria-disabled'), 'true');
-    assert.equal(await go.getAttribute('href'), null);
+    assert.equal((await free.textContent())?.trim(), '当前套餐');
+    assert.equal(await free.getAttribute('aria-disabled'), 'true');
+    assert.equal(await free.getAttribute('href'), null);
     assert.equal(
       await page.locator('[data-pricing-root]').getAttribute(
         'data-personal-pricing-context-resolved',
@@ -248,7 +248,7 @@ describe('authenticated Pricing compatibility browser wiring', { concurrency: fa
       targetHref: '/zh/pricing/',
     });
     t.after(() => page.context().close());
-    await page.locator('[data-pricing-cta][data-tier="go"]').waitFor();
+    await page.locator('[data-pricing-cta][data-tier="free"]').waitFor();
 
     assert.equal(
       await page.locator('[data-pricing-root]').getAttribute('data-interval'),
@@ -267,14 +267,14 @@ describe('authenticated Pricing compatibility browser wiring', { concurrency: fa
       targetHref: '/zh/pricing/',
     });
     t.after(() => page.context().close());
-    await page.locator('[data-pricing-cta][data-tier="go"]').waitFor();
+    await page.locator('[data-pricing-cta][data-tier="free"]').waitFor();
     await page.locator('[data-interval-btn="monthly"]').click();
 
     const prices = await page.locator(
-      '.pricing-card:not([data-tier="go"]) [data-monthly-price]',
+      '.pricing-card:not([data-tier="free"]) [data-monthly-price]',
     ).allTextContents();
     const originalPrices = await page.locator(
-      '.pricing-card:not([data-tier="go"]) .price[data-when="monthly"] del',
+      '.pricing-card:not([data-tier="free"]) .price[data-when="monthly"] del',
     ).allTextContents();
 
     assert.deepEqual(prices.map((price) => price.trim()), ['16', '70', '120']);
@@ -291,7 +291,7 @@ describe('authenticated Pricing compatibility browser wiring', { concurrency: fa
       targetHref: '/zh/pricing/',
     });
     t.after(() => page.context().close());
-    await page.locator('[data-pricing-cta][data-tier="go"]').waitFor();
+    await page.locator('[data-pricing-cta][data-tier="free"]').waitFor();
     await page.locator('[data-interval-btn="yearly"]').click();
 
     const states = await page.locator('[data-pricing-cta]').evaluateAll((ctas) =>
@@ -302,7 +302,7 @@ describe('authenticated Pricing compatibility browser wiring', { concurrency: fa
       })),
     );
     assert.deepEqual(states, [
-      { tier: 'go', text: '已停售', disabled: 'true' },
+      { tier: 'free', text: '当前套餐', disabled: 'true' },
       { tier: 'plus', text: '升级 Plus', disabled: null },
       { tier: 'pro', text: '升级 Pro', disabled: null },
       { tier: 'max', text: '升级 Max', disabled: null },
@@ -317,7 +317,7 @@ describe('authenticated Pricing compatibility browser wiring', { concurrency: fa
       targetHref: '/zh/pricing/',
     });
     t.after(() => page.context().close());
-    await page.locator('[data-pricing-cta][data-tier="go"]').waitFor();
+    await page.locator('[data-pricing-cta][data-tier="free"]').waitFor();
     await page.waitForTimeout(300);
 
     assert.equal(
@@ -334,7 +334,7 @@ describe('authenticated Pricing compatibility browser wiring', { concurrency: fa
       })),
     );
     assert.deepEqual(states, [
-      { tier: 'go', text: '已停售', disabled: 'true' },
+      { tier: 'free', text: '当前套餐', disabled: 'true' },
       { tier: 'plus', text: '升级 Plus', disabled: null },
       { tier: 'pro', text: '升级 Pro', disabled: null },
       { tier: 'max', text: '升级 Max', disabled: null },
@@ -365,7 +365,7 @@ describe('authenticated Pricing compatibility browser wiring', { concurrency: fa
       })),
     );
     assert.deepEqual(states, [
-      { tier: 'go', text: '已停售', disabled: 'true' },
+      { tier: 'free', text: '降级至 Free', disabled: 'true' },
       { tier: 'plus', text: '当前套餐', disabled: 'true' },
       { tier: 'pro', text: '升级 Pro', disabled: null },
       { tier: 'max', text: '升级 Max', disabled: null },
@@ -393,7 +393,7 @@ describe('authenticated Pricing compatibility browser wiring', { concurrency: fa
       })),
     );
     assert.deepEqual(states, [
-      { tier: 'go', text: '已停售', disabled: 'true' },
+      { tier: 'free', text: '降级至 Free', disabled: 'true' },
       { tier: 'plus', text: '订阅', disabled: 'true' },
       { tier: 'pro', text: '当前套餐', disabled: 'true' },
       { tier: 'max', text: '升级 Max', disabled: null },

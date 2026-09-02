@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   loadPersonalPricingContext,
+  resolveFreePlanAction,
   resolvePersonalPlanAction,
 } from '../app/_lib/pricing-current-plan.ts';
 
@@ -60,6 +61,41 @@ test('does not treat a retained tier from a canceled entitlement as a current su
 
   assert.equal(context?.current, null);
   assert.equal(context?.checkoutAllowed, true);
+});
+
+test('marks Free as current for an authenticated account without a paid subscription', () => {
+  assert.deepEqual(
+    resolveFreePlanAction({
+      current: null,
+      checkoutAllowed: true,
+      firstMonthIntroEligible: true,
+      cancelAtPeriodEnd: false,
+      pendingChange: null,
+      billingPortalAvailable: false,
+    }),
+    { kind: 'current', enabled: false },
+  );
+});
+
+test('keeps Free marked as current before subscription identity is available', () => {
+  assert.deepEqual(resolveFreePlanAction(null), {
+    kind: 'current',
+    enabled: false,
+  });
+});
+
+test('does not offer Free as a downgrade from a paid subscription', () => {
+  assert.deepEqual(
+    resolveFreePlanAction({
+      current: { tier: 'pro', interval: 'monthly' },
+      checkoutAllowed: true,
+      firstMonthIntroEligible: false,
+      cancelAtPeriodEnd: false,
+      pendingChange: null,
+      billingPortalAvailable: true,
+    }),
+    { kind: 'downgrade_unavailable', enabled: false },
+  );
 });
 
 test('keeps a same-tier monthly-to-yearly change actionable', () => {

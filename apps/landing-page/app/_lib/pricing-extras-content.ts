@@ -12,6 +12,8 @@ import { TRIAL_CREDIT_PROMO_ENABLED } from './pricing-content';
 export interface FaqItem {
   q: string;
   a: string;
+  /** Link label shown only on the refund item. */
+  refundPolicyCta?: string;
   cancelCta?: string;
   /** Entry only exists while the signup trial-credit promo is live; dropped
    * from the rendered FAQ while `TRIAL_CREDIT_PROMO_ENABLED` is false. */
@@ -33,7 +35,7 @@ const FAQ_EN: FaqItem[] =
     { q: "What is BYOK? Do all plans support it?", a: "BYOK means Bring Your Own Key: add your own Anthropic, OpenAI, Google, or other provider API key and call provider models directly. BYOK does not consume OpenDesign balance and is available on every plan, including Free." },
     { q: "How are credits and charges handled after a plan change?", a: "This release supports upgrades only: moving to a higher tier or switching monthly to yearly. Upgrades take effect immediately, grant the new benefits, and only charge the prorated difference (your current plan's unused time is credited — you don't pay the full new-plan price). Self-service downgrades (lower tier, or yearly to monthly) are not available and that entry is disabled; to downgrade, please contact support." },
     { q: "Can I cancel a subscription anytime?", a: "Yes. Canceling stops renewal but does not end current benefits immediately. The paid period remains usable until it ends, then the account returns to Free. Yearly cancellations keep benefits through the current yearly period and do not trigger a refund.", cancelCta: "Cancel subscription" },
-    { q: "How do refunds work?", a: "Subscription fees are currently non-refundable. You can cancel your subscription at any time — after canceling, you keep full access for the rest of the current billing period, and we won't charge you anything once it ends." },
+    { q: "How do refunds work?", a: "You may request a full refund within 7 calendar days of a successful subscription payment, provided the paid benefits from that purchase have not been used. Payment problems and mandatory legal rights are reviewed separately.", refundPolicyCta: "View the full refund policy" },
   ];
 
 const FAQ_ZH: FaqItem[] =
@@ -47,8 +49,8 @@ const FAQ_ZH: FaqItem[] =
     { q: "自动充值是怎么工作的？", a: "授权后由你设定每月充值上限（这是唯一需要你设置的值）。当账户 OpenDesign 余额不足时，系统会自动补充额度并从你绑定的支付方式扣款，单个自然月内的累计自动充值金额不会超过你设定的上限；触发时机与每次充值金额由系统自动管理。可随时在钱包中调整上限或关闭，关闭后不再自动扣款。" },
     { q: "BYOK 是什么？所有套餐都支持吗？", a: "BYOK（Bring Your Own Key）是指填入你自己的 Anthropic、OpenAI、Google 等厂商 API Key，直接调用原厂模型，不消耗 OpenDesign 余额、也不受套餐模型列表限制。所有套餐（包括 Free）均支持 BYOK。" },
     { q: "升级或降级套餐后，额度和扣费怎么处理？", a: "本期仅支持「升级」：提升套餐档位、或由月付转年付，升级立即生效并下发新套餐权益、仅需补差价（按当前套餐未用时长抵扣后的差额计费，无需支付新套餐全价）。降级（降低档位或由年付转月付）暂不支持自助操作，相关入口会置灰；如需降级，请联系人工客服处理。" },
-    { q: "可以随时取消订阅吗？", a: "可以。取消订阅表示取消续订，不会立即终止当前权益。当前已付费周期内仍可正常使用，到期后不再续费、不再扣款，账户自动回到 Free。年付取消后权益保留到当前年度周期结束，不支持退款或立即回收权益。", cancelCta: "取消订阅" },
-    { q: "怎么申请退款？", a: "订阅费用暂不支持退款。你可以随时取消订阅——取消后当前账期内仍可正常使用，到期后我们不会再向你收取任何费用。" },
+    { q: "可以随时取消订阅吗？", a: "可以。取消订阅表示取消续订，不会立即终止当前权益。当前已付费周期内仍可正常使用，到期后不再续费、不再扣款，账户自动回到 Free。取消订阅不会自动触发退款；符合条件时需按退款政策另行申请。", cancelCta: "取消订阅" },
+    { q: "怎么申请退款？", a: "付款成功后 7 个自然日内，且本笔订单对应的付费权益尚未使用，可申请全额退款。异常扣款及适用法律规定的权利会单独核查。", refundPolicyCta: "查看完整退款政策" },
   ];
 
 const FAQ_ZH_TW: FaqItem[] =
@@ -63,7 +65,7 @@ const FAQ_ZH_TW: FaqItem[] =
     { q: "BYOK 是什麼？所有套餐都支援嗎？", a: "BYOK 指 Bring Your Own Key：填入自己的 Anthropic、OpenAI、Google 等廠商 API Key，直接調用原廠模型。BYOK 不消耗 OpenDesign 餘額，所有套餐（含 Free）都支援。" },
     { q: "變更套餐後，額度和扣費如何處理？", a: "本期僅支援升級：提升套餐檔位，或從月付改為年付。升級會立即生效、發放新權益，且僅需補差價（按當前套餐未用時長抵扣後的差額計費，無需支付新套餐全價）。降級（降低檔位或由年付改月付）暫不支援自助操作，相關入口會置灰；如需降級，請聯絡人工客服處理。" },
     { q: "可以隨時取消訂閱嗎？", a: "可以。取消訂閱代表停止續費，不會立即終止當前權益。已付費週期仍可使用，到期後帳戶回到 Free。年付取消後權益保留到當前年付週期結束，不會自動退款。", cancelCta: "取消訂閱" },
-    { q: "退款如何處理？", a: "訂閱費用暫不支援退款。你可以隨時取消訂閱——取消後當前帳期內仍可正常使用，到期後我們不會再向你收取任何費用。" },
+    { q: "退款如何處理？", a: "付款成功後 7 個自然日內，且本筆訂單對應的付費權益尚未使用，可申請全額退款。異常扣款及適用法律規定的權利會另行核查。", refundPolicyCta: "查看完整退款政策" },
   ];
 
 const FAQ_PT_BR: FaqItem[] =
@@ -78,7 +80,7 @@ const FAQ_PT_BR: FaqItem[] =
     { q: "O que é BYOK? Todos os planos suportam?", a: "BYOK significa Bring Your Own Key: use sua chave Anthropic, OpenAI, Google ou de outro provedor para chamar modelos diretamente. BYOK não consome saldo OpenDesign e está disponível em todos os planos." },
     { q: "Como créditos e cobranças funcionam após mudar de plano?", a: "Esta versão aceita apenas upgrades: subir de nível ou trocar mensal por anual. Upgrades entram em vigor imediatamente, liberam os novos benefícios e cobram apenas a diferença proporcional (o tempo não usado do plano atual é creditado — você não paga o preço cheio do novo plano). O downgrade (nível inferior ou anual para mensal) não está disponível como autoatendimento e fica desativado; para fazer downgrade, fale com o suporte." },
     { q: "Posso cancelar a assinatura a qualquer momento?", a: "Sim. Cancelar interrompe a renovação, mas não encerra os benefícios atuais imediatamente. O período pago continua utilizável até terminar; depois a conta volta ao Free. Cancelamentos anuais mantêm benefícios até o fim do período anual.", cancelCta: "Cancelar assinatura" },
-    { q: "Como funcionam reembolsos?", a: "As tarifas de assinatura não são reembolsáveis no momento. Você pode cancelar a assinatura a qualquer momento — após o cancelamento, o acesso continua normal até o fim do período de cobrança atual e, depois disso, não cobraremos mais nada." },
+    { q: "Como funcionam reembolsos?", a: "Você pode solicitar um reembolso integral em até 7 dias corridos após o pagamento da assinatura, desde que nenhum benefício pago dessa compra tenha sido usado. Problemas de cobrança e direitos legais obrigatórios são analisados separadamente.", refundPolicyCta: "Ver a política de reembolso completa" },
   ];
 
 const FAQ_ES: FaqItem[] =
@@ -93,7 +95,7 @@ const FAQ_ES: FaqItem[] =
     { q: "¿Qué es BYOK? ¿Todos los planes lo admiten?", a: "BYOK significa Bring Your Own Key: usa tu propia clave de Anthropic, OpenAI, Google u otro proveedor para llamar modelos directamente. BYOK no consume saldo OpenDesign y está disponible en todos los planes." },
     { q: "¿Cómo se gestionan créditos y cargos al cambiar de plan?", a: "Esta versión solo admite upgrades: subir de nivel o pasar de mensual a anual. Los upgrades se aplican inmediatamente, conceden los nuevos beneficios y cobran solo la diferencia prorrateada (se acredita el tiempo no usado de tu plan actual — no pagas el precio completo del nuevo plan). El downgrade (nivel inferior o anual a mensual) no está disponible como autoservicio y queda desactivado; para bajar de plan, contacta con soporte." },
     { q: "¿Puedo cancelar la suscripción cuando quiera?", a: "Sí. Cancelar detiene la renovación, pero no corta los beneficios actuales de inmediato. El período pagado sigue disponible hasta terminar; después la cuenta vuelve a Free. Las cancelaciones anuales mantienen beneficios hasta el final del período anual.", cancelCta: "Cancelar suscripción" },
-    { q: "¿Cómo funcionan los reembolsos?", a: "Las cuotas de suscripción no son reembolsables por el momento. Puedes cancelar la suscripción cuando quieras: tras cancelar, mantienes el acceso normal durante el período de facturación actual y, una vez termine, no te cobraremos nada más." },
+    { q: "¿Cómo funcionan los reembolsos?", a: "Puedes solicitar un reembolso completo dentro de los 7 días naturales posteriores al pago de la suscripción, siempre que no hayas usado los beneficios de pago de esa compra. Los problemas de cobro y los derechos legales obligatorios se revisan por separado.", refundPolicyCta: "Ver la política de reembolso completa" },
   ];
 
 const FAQ_RU: FaqItem[] =
@@ -108,7 +110,7 @@ const FAQ_RU: FaqItem[] =
     { q: "Что такое BYOK? Все планы это поддерживают?", a: "BYOK означает Bring Your Own Key: добавьте собственный ключ Anthropic, OpenAI, Google или другого провайдера и вызывайте модели напрямую. BYOK не расходует баланс OpenDesign и доступен во всех планах." },
     { q: "Как обрабатываются кредиты и платежи после смены плана?", a: "В этой версии доступны только повышения: переход на более высокий уровень или с месячной оплаты на годовую. Повышения применяются сразу, выдают новые преимущества и списывают только пропорциональную разницу (неиспользованное время текущего плана засчитывается — полная цена нового плана не взимается). Понижение (более низкий уровень или с годовой оплаты на месячную) недоступно в самообслуживании, и эта кнопка отключена; чтобы понизить план, обратитесь в поддержку." },
     { q: "Можно ли отменить подписку в любое время?", a: "Да. Отмена останавливает продление, но не прекращает текущие преимущества сразу. Оплаченный период остается доступным до конца, затем аккаунт возвращается на Free. При годовой отмене преимущества сохраняются до конца текущего годового периода.", cancelCta: "Отменить подписку" },
-    { q: "Как работают возвраты?", a: "Плата за подписку в настоящее время не возвращается. Вы можете отменить подписку в любой момент — после отмены доступ сохраняется до конца текущего расчетного периода, после чего мы больше ничего не списываем." },
+    { q: "Как работают возвраты?", a: "Полный возврат можно запросить в течение 7 календарных дней после оплаты подписки, если платные возможности этой покупки не использовались. Ошибки списания и обязательные права по закону рассматриваются отдельно.", refundPolicyCta: "Открыть полную политику возврата" },
   ];
 
 const FAQ_FR: FaqItem[] =
@@ -123,7 +125,7 @@ const FAQ_FR: FaqItem[] =
     { q: "Qu'est-ce que BYOK ? Tous les plans le prennent-ils en charge ?", a: "BYOK signifie Bring Your Own Key : ajoutez votre propre clé Anthropic, OpenAI, Google ou autre fournisseur pour appeler les modèles directement. BYOK ne consomme pas le solde OpenDesign et est disponible sur tous les plans." },
     { q: "Comment les crédits et frais sont-ils gérés après un changement de plan ?", a: "Cette version prend seulement en charge les upgrades : niveau supérieur ou passage de mensuel à annuel. Ils prennent effet immédiatement, accordent les nouveaux avantages et facturent seulement la différence au prorata (le temps non utilisé de votre plan actuel est crédité — vous ne payez pas le prix complet du nouveau plan). Le downgrade (niveau inférieur ou annuel vers mensuel) n'est pas disponible en libre-service et ce bouton est désactivé ; pour rétrograder, contactez le support." },
     { q: "Puis-je annuler l'abonnement à tout moment ?", a: "Oui. L'annulation arrête le renouvellement, sans couper immédiatement les avantages actuels. La période payée reste utilisable jusqu'à sa fin, puis le compte revient à Free. Les annulations annuelles conservent les avantages jusqu'à la fin de la période annuelle.", cancelCta: "Annuler l'abonnement" },
-    { q: "Comment fonctionnent les remboursements ?", a: "Les frais d'abonnement ne sont pas remboursables pour le moment. Vous pouvez annuler votre abonnement à tout moment — après l'annulation, vous conservez l'accès normal jusqu'à la fin de la période de facturation en cours, après quoi nous ne vous facturerons plus rien." },
+    { q: "Comment fonctionnent les remboursements ?", a: "Vous pouvez demander un remboursement intégral dans les 7 jours calendaires suivant le paiement de l'abonnement, à condition de n'avoir utilisé aucun avantage payant lié à cet achat. Les erreurs de paiement et les droits légaux obligatoires sont examinés séparément.", refundPolicyCta: "Voir la politique de remboursement complète" },
   ];
 
 const FAQ_KO: FaqItem[] =
@@ -138,7 +140,7 @@ const FAQ_KO: FaqItem[] =
     { q: "BYOK란 무엇인가요? 모든 플랜에서 지원하나요?", a: "BYOK는 Bring Your Own Key의 약자로, Anthropic, OpenAI, Google 등 제공자의 API 키를 직접 추가해 모델을 호출하는 방식입니다. BYOK는 OpenDesign 잔액을 사용하지 않으며 모든 플랜에서 지원됩니다." },
     { q: "플랜 변경 후 크레딧과 요금은 어떻게 처리되나요?", a: "이번 릴리스에서는 업그레이드만 지원합니다. 더 높은 티어로 이동하거나 월간에서 연간 결제로 전환할 수 있습니다. 업그레이드는 즉시 적용되고 새 혜택을 지급하며 차액만 청구합니다(현재 플랜의 미사용 기간이 차감되어 새 플랜 전액을 내지 않습니다). 다운그레이드(낮은 티어 또는 연간에서 월간 전환)는 셀프서비스로 지원되지 않으며 해당 버튼은 비활성화됩니다. 다운그레이드가 필요하면 고객지원에 문의하세요." },
     { q: "구독을 언제든 취소할 수 있나요?", a: "네. 취소하면 갱신이 중단되지만 현재 혜택이 즉시 종료되지는 않습니다. 결제된 기간은 끝날 때까지 사용할 수 있고 이후 계정은 Free로 돌아갑니다. 연간 구독 취소 시 혜택은 현재 연간 기간 종료까지 유지됩니다.", cancelCta: "구독 취소" },
-    { q: "환불은 어떻게 처리되나요?", a: "구독 요금은 현재 환불이 지원되지 않습니다. 구독은 언제든지 취소할 수 있으며, 취소 후에도 현재 결제 주기 동안은 정상적으로 이용할 수 있습니다. 주기가 끝나면 더 이상 어떤 요금도 청구하지 않습니다." },
+    { q: "환불은 어떻게 처리되나요?", a: "구독 결제 후 7일 이내이고 해당 구매의 유료 혜택을 사용하지 않았다면 전액 환불을 요청할 수 있습니다. 결제 오류와 법률상 강행 권리는 별도로 검토합니다.", refundPolicyCta: "전체 환불 정책 보기" },
   ];
 
 const FAQ_DE: FaqItem[] =
@@ -153,7 +155,7 @@ const FAQ_DE: FaqItem[] =
     { q: "Was ist BYOK? Unterstützen alle Pläne das?", a: "BYOK bedeutet Bring Your Own Key: Du fügst deinen eigenen API-Schlüssel von Anthropic, OpenAI, Google oder anderen Anbietern hinzu und rufst Modelle direkt auf. BYOK verbraucht kein OpenDesign Guthaben und ist in allen Plänen verfügbar." },
     { q: "Wie werden Credits und Gebühren nach einem Planwechsel behandelt?", a: "Diese Version unterstützt nur Upgrades: Wechsel auf eine höhere Stufe oder von monatlich zu jährlich. Upgrades gelten sofort, gewähren die neuen Vorteile und berechnen nur die anteilige Differenz (die ungenutzte Zeit deines aktuellen Plans wird angerechnet – du zahlst nicht den vollen Preis des neuen Plans). Ein Downgrade (niedrigere Stufe oder jährlich zu monatlich) ist nicht im Self-Service verfügbar und diese Schaltfläche ist deaktiviert; für ein Downgrade wende dich an den Support." },
     { q: "Kann ich jederzeit kündigen?", a: "Ja. Kündigen stoppt die Verlängerung, beendet aktuelle Vorteile aber nicht sofort. Der bezahlte Zeitraum bleibt bis zum Ende nutzbar, danach kehrt das Konto zu Free zurück. Bei Jahresplänen bleiben Vorteile bis zum Ende der aktuellen Jahresperiode erhalten.", cancelCta: "Abo kündigen" },
-    { q: "Wie funktionieren Rückerstattungen?", a: "Abonnementgebühren sind derzeit nicht erstattungsfähig. Du kannst dein Abo jederzeit kündigen – nach der Kündigung bleibt der Zugang für den laufenden Abrechnungszeitraum bestehen, danach berechnen wir dir nichts mehr." },
+    { q: "Wie funktionieren Rückerstattungen?", a: "Du kannst innerhalb von 7 Kalendertagen nach erfolgreicher Abonnementzahlung eine vollständige Rückerstattung beantragen, sofern die bezahlten Leistungen dieses Kaufs nicht genutzt wurden. Abrechnungsfehler und zwingende gesetzliche Rechte werden separat geprüft.", refundPolicyCta: "Vollständige Rückerstattungsrichtlinie ansehen" },
   ];
 
 const FAQ_JA: FaqItem[] =
@@ -168,7 +170,7 @@ const FAQ_JA: FaqItem[] =
     { q: "BYOK とは何ですか？すべてのプランで使えますか？", a: "BYOK は Bring Your Own Key の略で、自分の Anthropic、OpenAI、Google などの API キーを追加してモデルを直接呼び出す方式です。BYOK は OpenDesign 残高を消費せず、すべてのプランで利用できます。" },
     { q: "プラン変更後、クレジットと請求はどう処理されますか？", a: "このリリースではアップグレードのみ対応します。上位ティアへの移行、または月額から年額への変更です。アップグレードは即時反映され、新しい特典を付与し、差額のみを請求します（現在のプランの未使用期間が差し引かれ、新プランの満額は請求されません）。ダウングレード（下位ティア、または年額から月額）はセルフサービスでは利用できず、その操作は無効化されています。ダウングレードが必要な場合はサポートへお問い合わせください。" },
     { q: "サブスクリプションはいつでもキャンセルできますか？", a: "はい。キャンセルすると更新は停止しますが、現在の特典はすぐには終了しません。支払い済み期間は終了まで利用でき、その後アカウントは Free に戻ります。年額キャンセルの場合、特典は現在の年額期間終了まで維持されます。", cancelCta: "サブスクをキャンセル" },
-    { q: "返金はどのように扱われますか？", a: "サブスクリプション料金は現在返金に対応していません。サブスクリプションはいつでもキャンセルできます。キャンセル後も現在の請求期間中は通常どおり利用でき、期間終了後は一切請求いたしません。" },
+    { q: "返金はどのように扱われますか？", a: "サブスクリプションの支払いから7暦日以内で、その購入に含まれる有料特典を使用していない場合、全額返金を申請できます。決済上の問題および法令上の強行的な権利は別途確認します。", refundPolicyCta: "返金ポリシー全文を見る" },
   ];
 
 const FAQ_BY_LOCALE: Partial<Record<LandingLocaleCode, FaqItem[]>> = {
@@ -212,6 +214,23 @@ export function getFaqTitle(locale: LandingLocaleCode): string {
   return FAQ_TITLE_BY_LOCALE[locale] ?? FAQ_TITLE_BY_LOCALE.en!;
 }
 
+const MORE_FAQ_LABEL_BY_LOCALE: Partial<Record<LandingLocaleCode, string>> = {
+  en: 'View more frequently asked questions',
+  zh: '查看更多常见问题',
+  'zh-tw': '查看更多常見問題',
+  ja: 'よくある質問をもっと見る',
+  ko: '자주 묻는 질문 더 보기',
+  de: 'Weitere häufig gestellte Fragen',
+  fr: 'Voir plus de questions fréquentes',
+  ru: 'Посмотреть больше часто задаваемых вопросов',
+  es: 'Ver más preguntas frecuentes',
+  'pt-br': 'Ver mais perguntas frequentes',
+};
+
+/** Localized link label for the standalone FAQ page, falling back to English. */
+export function getMoreFaqLabel(locale: LandingLocaleCode): string {
+  return MORE_FAQ_LABEL_BY_LOCALE[locale] ?? MORE_FAQ_LABEL_BY_LOCALE.en!;
+}
 
 export interface LeadFormCopy {
   title: string;

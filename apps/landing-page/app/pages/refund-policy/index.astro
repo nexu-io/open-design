@@ -1,0 +1,138 @@
+---
+import Layout from '../../_components/sub-page-layout.astro';
+import { getRefundPolicyContent } from '../../_lib/refund-policy-content';
+import { localeFromPath } from '../../i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const copy = getRefundPolicyContent(locale);
+const contentLocale = locale === 'zh' ? 'zh' : 'en';
+const canonical = new URL(Astro.url.pathname, Astro.site).toString();
+const supportSubject = locale === 'zh' ? 'OpenDesign 退款申请' : 'OpenDesign refund request';
+const supportHref = `mailto:support@open-design.ai?subject=${encodeURIComponent(supportSubject)}`;
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  name: copy.title,
+  description: copy.metaDescription,
+  inLanguage: contentLocale === 'zh' ? 'zh-CN' : 'en',
+  url: canonical,
+  isPartOf: { '@type': 'WebSite', name: 'OpenDesign', url: Astro.site?.toString() },
+};
+---
+
+<Layout
+  title={copy.metaTitle}
+  description={copy.metaDescription}
+  jsonLd={jsonLd}
+  availableLocaleCodes={['en', 'zh']}
+  suppressLocaleAutoRedirect
+>
+  <article class="refund-policy" lang={contentLocale === 'zh' ? 'zh-CN' : 'en'}>
+    <header class="refund-header">
+      <h1>{copy.title}</h1>
+    </header>
+
+    {copy.sections.map((section, index) => (
+      <section class="refund-section">
+        <h2>{index + 1}. {section.title}</h2>
+        <ul>
+          {section.items.map((item) => (
+            <li>
+              <strong>{item.lead}</strong>
+              {item.detail && <span>{item.detail}</span>}
+            </li>
+          ))}
+        </ul>
+        {section.note && <p class="refund-note"><strong>{contentLocale === 'zh' ? '注意：' : 'Note: '}</strong>{section.note}</p>}
+      </section>
+    ))}
+
+    <footer class="refund-footer">
+      <p>{copy.contact} <a href={supportHref} data-refund-support-link data-refund-locale={contentLocale}>{copy.contactCta}</a></p>
+    </footer>
+  </article>
+
+  <script is:inline>
+    document.querySelector('[data-refund-support-link]')?.addEventListener('click', (event) => {
+      const link = event.currentTarget;
+      window.__odTrack?.('ui_click', {
+        page_name: 'refund_policy',
+        area: 'footer',
+        element: 'support_email',
+        locale: link?.getAttribute('data-refund-locale') || 'en',
+      });
+    });
+  </script>
+
+  <style>
+    .refund-policy {
+      max-width: 960px;
+      color: var(--ink, #262626);
+    }
+    .refund-header { padding-bottom: 20px; }
+    .refund-header h1 {
+      margin: 0;
+      font-size: clamp(32px, 4vw, 40px);
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+    }
+    .refund-section {
+      padding: 16px 0 12px;
+    }
+    .refund-section h2 {
+      margin: 0 0 8px;
+      font-size: 18px;
+      line-height: 1.35;
+      letter-spacing: -0.01em;
+    }
+    .refund-section ul {
+      margin: 0;
+      padding-left: 1.3em;
+    }
+    .refund-section li {
+      margin: 0 0 6px;
+      padding-left: 0.2em;
+      color: var(--ink-soft, #5a5a5a);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .refund-section li::marker { color: #888; }
+    .refund-section li strong {
+      display: inline;
+      color: var(--ink, #262626);
+      font-size: 14px;
+      line-height: inherit;
+    }
+    .refund-section li strong::after { content: " "; }
+    .refund-section li span { display: inline; }
+    .refund-note {
+      margin: 10px 0 2px;
+      padding: 5px 0 5px 12px;
+      border-left: 3px solid rgba(38, 38, 38, 0.14);
+      color: var(--ink-soft, #555);
+      font-size: 13px;
+      font-style: italic;
+      line-height: 1.45;
+    }
+    .refund-footer {
+      padding: 16px 0 4px;
+      border-top: 1px solid var(--line, rgba(38, 38, 38, 0.15));
+      color: var(--ink-soft, #555);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .refund-footer p { margin: 0 0 8px; }
+    .refund-footer a {
+      color: #1677ff;
+      font-weight: 600;
+      text-underline-offset: 3px;
+    }
+    @media (max-width: 640px) {
+      .refund-header { padding-bottom: 18px; }
+      .refund-header h1 { font-size: 30px; }
+      .refund-section { padding: 15px 0 11px; }
+      .refund-section li,
+      .refund-section li strong { font-size: 14px; }
+    }
+  </style>
+</Layout>

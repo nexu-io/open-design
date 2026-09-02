@@ -4,8 +4,7 @@
  *
  * Card LAYOUT + COPY mirror the vela subscription modal (`pricing-plans.tsx`).
  * Plus/Pro/Max and Team NUMBERS come from `PRICING_SNAPSHOT` at build time.
- * Go's confirmed launch prices come from the colocated `GO_PLAN` source shared
- * with SEO metadata. The localized TEXT comes from
+ * The localized TEXT comes from
  * app/_lib/pricing-content.ts and app/_lib/pricing-team-content.ts.
  */
 import Layout from '../../_components/sub-page-layout.astro';
@@ -15,7 +14,6 @@ import {
   CLOUD_CONSOLE_BASE_PARAM,
   CLOUD_CONSOLE_URL,
   DEFAULT_CLOUD_CONSOLE_BASE_URL,
-  GO_PLAN,
   HOSTED_CLOUD_CONSOLE_DOMAINS,
   PRICING_SNAPSHOT,
   cloudSubscribeUrl,
@@ -34,6 +32,7 @@ import EnterpriseLeadForm from '../../_components/enterprise-lead-form.astro';
 import {
   getFaqs,
   getFaqTitle,
+  getMoreFaqLabel,
   getEnterprise,
 } from '../../_lib/pricing-extras-content';
 import { localeFromPath, localizedHref } from '../../i18n';
@@ -41,6 +40,7 @@ import { DEEPSEEK_V4_PRO_CAMPAIGN } from '../../_lib/deepseek-v4-pro-campaign';
 
 const locale = localeFromPath(Astro.url.pathname);
 const href = (path: string) => localizedHref(path, locale);
+const refundPolicyHref = locale === 'zh' ? href('/refund-policy/') : '/refund-policy/';
 const content = getPricingContent(locale);
 const planActionLabels = getPricingPlanActionLabels(locale);
 const teamContent = getTeamPricingContent(locale);
@@ -60,6 +60,7 @@ const footnoteHtml = fillTemplate(L.footnote, {
 
 const faqs = getFaqs(locale);
 const faqTitle = getFaqTitle(locale);
+const moreFaqLabel = getMoreFaqLabel(locale);
 const enterprise = getEnterprise(locale);
 const LF = enterprise.leadForm;
 
@@ -130,8 +131,8 @@ const jsonLd = [
     offers: [
       {
         '@type': 'Offer',
-        name: 'OpenDesign Go',
-        price: String(GO_PLAN.monthly.priceUsd),
+        name: 'OpenDesign Free',
+        price: '0',
         priceCurrency: 'USD',
         url: CLOUD_CONSOLE_URL,
       },
@@ -445,10 +446,16 @@ const jsonLd = [
         {faqs.map((faq) => (
           <details class="pr-faq-item">
             <summary class="pr-faq-q">{faq.q}</summary>
-            <div class="pr-faq-a">{faq.a}</div>
+            <div class="pr-faq-a">
+              <span>{faq.a}</span>
+              {faq.refundPolicyCta && (
+                <a class="pr-faq-policy" href={refundPolicyHref}>{faq.refundPolicyCta}</a>
+              )}
+            </div>
           </details>
         ))}
       </div>
+      <a class="pr-faq-more" href={href('/faq/')}>{moreFaqLabel}</a>
     </section>
   </article>
 
@@ -1079,6 +1086,7 @@ const jsonLd = [
   <script>
     import {
       loadPersonalPricingContext,
+      resolveFreePlanAction,
       resolvePersonalPlanAction,
     } from '../../_lib/pricing-current-plan';
     import type {
@@ -1139,9 +1147,23 @@ const jsonLd = [
         );
         for (const cta of pricingRoot.querySelectorAll('[data-pricing-cta]')) {
           const tier = cta.getAttribute('data-tier') || '';
-          if (!personalTiers.has(tier)) continue;
           const label = cta.querySelector(':scope > span');
           const plan = cta.getAttribute('data-plan-name') || tier;
+          if (tier === 'free') {
+            const action = resolveFreePlanAction(pricingContext);
+            const text = action.kind === 'current'
+              ? actionLabels.current
+              : action.kind === 'downgrade_unavailable'
+                ? fillActionLabel(actionLabels.downgrade, { plan })
+                : cta.getAttribute('data-default-label') || plan;
+            if (label) label.textContent = text;
+            cta.setAttribute('data-subscription-disabled', '');
+            cta.setAttribute('aria-disabled', 'true');
+            cta.setAttribute('tabindex', '-1');
+            cta.removeAttribute('href');
+            continue;
+          }
+          if (!personalTiers.has(tier)) continue;
           const action = resolvePersonalPlanAction(pricingContext, {
             tier: tier as PersonalPlanTier,
             interval,
@@ -1937,6 +1959,35 @@ const jsonLd = [
     font-size: 0.88rem;
     line-height: 1.65;
     color: var(--ink-soft, #555);
+  }
+  .pr-faq-policy {
+    display: block;
+    width: fit-content;
+    margin-top: 10px;
+    color: var(--ink, #262626);
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+  .pr-faq-policy:focus-visible {
+    border-radius: 3px;
+    outline: 2px solid var(--ink);
+    outline-offset: 4px;
+  }
+  .pr-faq-more {
+    display: table;
+    margin: 22px auto 0;
+    color: var(--ink-soft, #555);
+    font-size: 0.88rem;
+    font-weight: 600;
+    text-underline-offset: 4px;
+    transition: color 160ms;
+  }
+  .pr-faq-more:hover { color: var(--ink); }
+  .pr-faq-more:focus-visible {
+    border-radius: 3px;
+    outline: 2px solid var(--ink);
+    outline-offset: 4px;
   }
 
   /* ---- Team-plan lead-capture modal ---- */
