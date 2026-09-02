@@ -243,4 +243,11 @@ mislabelled photograph.
 - Open and inspect every generated image before it enters the layout.
 - Never let a generated image assert a number, rating, or certification.
 - Run `od lint` and `references/checklist.md` before handoff.
-- Do not emit an `<artifact>` tag.
+- Handoff follows the execution context. With filesystem tools, write
+  the page into the project and close with the normal file summary — no
+  `<artifact>` tag. In text-artifact runs (no filesystem tools), the
+  generation commands above cannot run: build the page with the
+  manifest's image slots as styled placeholders, say which slots still
+  need the filesystem workflow, and return the completed canonical HTML
+  in a single `<artifact type="text/html">` tag — that block is the only
+  delivery path those runs have.
