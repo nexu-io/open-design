@@ -17,6 +17,17 @@ interface ImportMeta {
 interface Window {
   // Defined by posthog-analytics.astro; no-op shim until PostHog loads.
   __odTrack?: (name: string, props?: Record<string, unknown>) => void;
+  // Strictly validated first-touch attribution exposed by the Pricing bridge
+  // for the later Checkout handoff.
+  __odPricingBridgeAttribution?: {
+    sourceProduct: 'open_design';
+    entryId: string;
+    sourceDetail: string;
+    entryOccurredAt: string;
+    campaignId?: string;
+    conversionSource?: string;
+    odDeviceId?: string;
+  };
   // QA-only handle exposed by the engagement download prompt.
   __odDownloadPrompt?: { show: (trigger?: string) => boolean };
   __odRecordCampaignEntry?: (sourceDetail: string, campaignId?: string) => {
@@ -32,4 +43,8 @@ interface Window {
     href: string,
     attribution?: ReturnType<NonNullable<Window['__odRecordCampaignEntry']>>,
   ) => string;
+  __odPreparePricingEntry?: Window['__odRecordCampaignEntry'];
+  __odCommitPricingEntry?: (
+    attribution: ReturnType<NonNullable<Window['__odRecordCampaignEntry']>>,
+  ) => ReturnType<NonNullable<Window['__odRecordCampaignEntry']>>;
 }

@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   PERSONAL_PRICING_TIERS,
   postPricingBridgeEvents,
+  resolvePricingBridgeAttribution,
   resolvePricingBridgeSource,
   type PricingBridgeEvent,
 } from '../app/_lib/pricing-analytics-bridge.ts';
@@ -96,6 +97,7 @@ test('source resolver ignores unrelated handoff state but rejects source overrid
     od_locale: 'en',
     cloud_console_base: 'https://open-design.ai/cloud/',
     od_entry_id: 'not-forwarded',
+    od_entry_source: 'home_balance_gate_upgrade',
   });
   assert.equal(
     resolvePricingBridgeSource({
@@ -111,7 +113,6 @@ test('source resolver ignores unrelated handoff state but rejects source overrid
     ['workspaceTab', 'dashboard'],
     ['pricing_source', 'wallet'],
     ['source', 'workspace_dashboard'],
-    ['od_entry_source', 'workspace_dashboard'],
     ['sourceSurface', 'unknown'],
   ]) {
     assert.equal(
@@ -121,6 +122,91 @@ test('source resolver ignores unrelated handoff state but rejects source overrid
       }),
       null,
       `${key}=${value}`,
+    );
+  }
+});
+
+test('attribution resolver preserves a complete trusted Vela handoff', () => {
+  assert.deepEqual(
+    resolvePricingBridgeAttribution(new URLSearchParams({
+      od_origin: 'open_design',
+      od_entry_id: 'od-amr-entry-1',
+      od_entry_source: 'home_balance_gate_upgrade',
+      od_entry_at: '2026-08-25T12:00:00.000Z',
+      od_campaign_id: 'go_plan_sunset_202608',
+      od_conversion_source: 'go_plan_sunset_modal',
+      od_device_id: 'device-1',
+    })),
+    {
+      sourceProduct: 'open_design',
+      entryId: 'od-amr-entry-1',
+      sourceDetail: 'home_balance_gate_upgrade',
+      entryOccurredAt: '2026-08-25T12:00:00.000Z',
+      campaignId: 'go_plan_sunset_202608',
+      conversionSource: 'go_plan_sunset_modal',
+      odDeviceId: 'device-1',
+    },
+  );
+});
+
+test('attribution resolver restores the complete Go first touch persisted by Vela Dashboard', () => {
+  assert.deepEqual(
+    resolvePricingBridgeAttribution(
+      new URLSearchParams({
+        od_locale: 'zh',
+        cloud_console_base: 'https://open-design.ai/cloud/',
+      }),
+      JSON.stringify({
+        sourceProduct: 'open_design',
+        entryId: 'od-amr-go-sunset-1',
+        sourceDetail: 'go_plan_sunset_modal',
+        entryOccurredAt: '2026-08-25T12:00:00.000Z',
+        campaignId: 'go_plan_sunset_202608',
+        conversionSource: 'go_plan_sunset_modal',
+        email: 'must-not-leave@example.com',
+      }),
+      new Date('2026-08-26T12:00:00.000Z'),
+    ),
+    {
+      sourceProduct: 'open_design',
+      entryId: 'od-amr-go-sunset-1',
+      sourceDetail: 'go_plan_sunset_modal',
+      entryOccurredAt: '2026-08-25T12:00:00.000Z',
+      campaignId: 'go_plan_sunset_202608',
+      conversionSource: 'go_plan_sunset_modal',
+    },
+  );
+});
+
+test('attribution resolver rejects partial, malicious, and expired Vela storage', () => {
+  const now = new Date('2026-08-26T12:00:00.000Z');
+  const base = {
+    sourceProduct: 'open_design',
+    entryId: 'od-amr-go-sunset-1',
+    sourceDetail: 'go_plan_sunset_modal',
+    entryOccurredAt: '2026-08-25T12:00:00.000Z',
+    campaignId: 'go_plan_sunset_202608',
+    conversionSource: 'go_plan_sunset_modal',
+  };
+
+  for (const persistedState of [
+    '{not-json',
+    JSON.stringify({ ...base, entryId: undefined }),
+    JSON.stringify({ ...base, sourceProduct: 'attacker' }),
+    JSON.stringify({ ...base, sourceDetail: 'workspace_dashboard' }),
+    JSON.stringify({
+      ...base,
+      entryOccurredAt: '2026-08-18T11:59:59.999Z',
+    }),
+  ]) {
+    assert.equal(
+      resolvePricingBridgeAttribution(
+        new URLSearchParams(),
+        persistedState,
+        now,
+      ),
+      null,
+      persistedState,
     );
   }
 });
@@ -183,6 +269,15 @@ test('transport posts only the reduced authenticated bridge body', async () => {
     apiOrigin: 'https://amr-api.open-design.ai/',
     sourceSurface: 'dashboard',
     sessionId: 'pricing-session-1',
+    attribution: {
+      sourceProduct: 'open_design',
+      entryId: 'od-amr-entry-1',
+      sourceDetail: 'home_balance_gate_upgrade',
+      entryOccurredAt: eventTime,
+      campaignId: 'go_plan_sunset_202608',
+      conversionSource: 'go_plan_sunset_modal',
+      odDeviceId: 'device-1',
+    },
     events: [eventWithForbiddenFields, clickEvent, ...enterpriseClickEvents],
     fetcher: async (input, init) => {
       capturedUrl = String(input);
@@ -207,6 +302,15 @@ test('transport posts only the reduced authenticated bridge body', async () => {
   assert.deepEqual(JSON.parse(String(capturedInit?.body)), {
     sourceSurface: 'dashboard',
     sessionId: 'pricing-session-1',
+    attribution: {
+      sourceProduct: 'open_design',
+      entryId: 'od-amr-entry-1',
+      sourceDetail: 'home_balance_gate_upgrade',
+      entryOccurredAt: eventTime,
+      campaignId: 'go_plan_sunset_202608',
+      conversionSource: 'go_plan_sunset_modal',
+      odDeviceId: 'device-1',
+    },
     events: [exposureEvent, clickEvent, ...enterpriseClickEvents],
   });
 });

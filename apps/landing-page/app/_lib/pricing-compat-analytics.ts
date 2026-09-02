@@ -2,6 +2,7 @@ import {
   PERSONAL_PRICING_TIERS,
   postPricingBridgeEvents,
   type PlanExposureInput,
+  type PricingBridgeAttribution,
   type PricingBridgeEvent,
   type PricingBridgeSource,
   type PricingClickInput,
@@ -47,6 +48,7 @@ type PricingCompatibilityOptions = {
   postEvents?: CompatibilityTransport;
   now?: () => Date;
   createEventId?: () => string;
+  attribution?: PricingBridgeAttribution;
 };
 
 let fallbackEventSequence = 0;
@@ -94,6 +96,7 @@ export function createPricingCompatibilityAnalytics({
   postEvents = postPricingBridgeEvents,
   now = () => new Date(),
   createEventId = defaultEventId,
+  attribution,
 }: PricingCompatibilityOptions) {
   let context: ResolvedPricingContext | null = null;
   let lastExposureSignature: string | null = null;
@@ -115,6 +118,7 @@ export function createPricingCompatibilityAnalytics({
         apiOrigin,
         sourceSurface: context.sourceSurface,
         sessionId,
+        attribution,
         events: bridgeEvents,
       })).catch(() => undefined);
     } catch {

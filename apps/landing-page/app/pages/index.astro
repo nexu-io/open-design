@@ -364,10 +364,17 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
           }
         } catch {}
         let impressionTracked = false;
+        let campaignEntry;
         const updateCampaignVisibility = () => {
           const now = Date.now();
           const active = now >= startAt && now < endAt;
           const visible = active && !dismissed;
+          if (visible && campaignLink && !campaignEntry) {
+            campaignEntry = window.__odPreparePricingEntry?.('landing_home_banner', 'deepseek_v4_pro');
+            if (campaignEntry && window.__odAttributedUrl) {
+              campaignLink.href = window.__odAttributedUrl(campaignLink.href, campaignEntry);
+            }
+          }
           if (banner) banner.hidden = !visible;
           document.documentElement.classList.toggle('home-campaign-banner-active', visible);
           if (!active || !countdown) return active;
@@ -391,7 +398,9 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
         campaignLink?.addEventListener('click', (event) => {
           const eligible = Date.now() >= startAt && Date.now() < endAt;
           const attribution = eligible
-            ? window.__odRecordCampaignEntry?.('landing_home_banner', 'deepseek_v4_pro')
+            ? campaignEntry && window.__odCommitPricingEntry
+              ? window.__odCommitPricingEntry(campaignEntry)
+              : window.__odRecordCampaignEntry?.('landing_home_banner', 'deepseek_v4_pro')
             : undefined;
           window.__odTrack?.('ui_click', {
             page_name: 'landing_home',
@@ -402,8 +411,7 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
             ...(attribution || {}),
           });
           if (attribution && window.__odAttributedUrl) {
-            event.preventDefault();
-            window.location.href = window.__odAttributedUrl(campaignLink.href, attribution);
+            campaignLink.href = window.__odAttributedUrl(campaignLink.href, attribution);
           }
         });
         close?.addEventListener('click', () => {

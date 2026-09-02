@@ -574,10 +574,8 @@ const jsonLd = [
         if (!billingPlanUrl) throw new Error('Cloud Console Pricing handoff is unavailable.');
         const target = new URL(billingPlanUrl);
         if (inboundWorkspaceId) target.searchParams.set('workspaceId', inboundWorkspaceId);
-        // od_campaign_id is intentionally NOT forwarded from the inbound URL:
-        // campaign membership is re-decided by campaignEligible on this click and
-        // written only through __odAttributedUrl so a closed window cannot
-        // inherit a desktop-badge campaign id into Cloud checkout.
+        // Acquisition campaign and device are forwarded only from the validated
+        // entry below, independently of current offer eligibility.
         for (const key of [
           'od_origin',
           'od_entry_id',
@@ -585,6 +583,8 @@ const jsonLd = [
           'od_entry_at',
           'od_conversion_source',
           'od_device_id',
+          'subscription_attribution_source',
+          'subscription_attribution_id',
         ]) {
           const value = inboundParams.get(key);
           if (value) target.searchParams.set(key, value);
@@ -611,6 +611,10 @@ const jsonLd = [
       };
       const syncCtas = () => {
         const interval = root.getAttribute('data-interval') === 'monthly' ? 'monthly' : 'yearly';
+        const attributedDestination = (href, team) => {
+          const attribution = window.__odRecordCampaignEntry?.(team ? 'landing_pricing_team_plan' : 'landing_pricing_personal_plan');
+          return attribution && window.__odAttributedUrl ? window.__odAttributedUrl(href, attribution) : href;
+        };
         for (const cta of root.querySelectorAll('[data-pricing-cta]')) {
           if (!cloudConsoleHandoffValid) {
             cta.setAttribute('data-subscription-disabled', '');
@@ -634,7 +638,7 @@ const jsonLd = [
               root.querySelector('[data-team-seats]')?.textContent || '',
             );
             if (!selectedTier || !Number.isSafeInteger(selectedSeats)) {
-              cta.setAttribute('href', scopedBillingPlanUrl());
+              cta.setAttribute('href', attributedDestination(scopedBillingPlanUrl(), true));
               continue;
             }
             const target = new URL(scopedBillingPlanUrl());
@@ -646,7 +650,7 @@ const jsonLd = [
               String(Math.max(selectedTier.minSeats, selectedSeats)),
             );
             target.searchParams.set('checkout', 'auto');
-            cta.setAttribute('href', target.toString());
+            cta.setAttribute('href', attributedDestination(target.toString(), true));
             continue;
           }
           const target = new URL(scopedBillingPlanUrl());
@@ -654,7 +658,7 @@ const jsonLd = [
           target.searchParams.set('plan', tier);
           target.searchParams.set('interval', interval);
           target.searchParams.set('checkout', 'auto');
-          cta.setAttribute('href', target.toString());
+          cta.setAttribute('href', attributedDestination(target.toString(), false));
         }
       };
       syncCtas();
@@ -699,6 +703,14 @@ const jsonLd = [
           });
         }
         trackCampaignBenefit(audience);
+        // Public, anonymous-inclusive exposure. Keep this separate from the
+        // authenticated legacy subscription bridge to avoid changing its cohort.
+        track('surface_view', {
+          area: audience === 'team' ? 'pricing_team_plan' : 'pricing_personal_plan',
+          element: 'plan_view',
+          audience,
+          interval: root.getAttribute('data-interval') || 'yearly',
+        });
         root.dispatchEvent(new CustomEvent('pricing:audience-changed', {
           detail: { audience },
         }));
@@ -723,8 +735,7 @@ const jsonLd = [
         });
       }
       const requestedAudience = new URLSearchParams(window.location.search).get('audience');
-      if (requestedAudience === 'team') activateAudience('team', false);
-      else trackCampaignBenefit('creator');
+      activateAudience(requestedAudience === 'team' ? 'team' : 'creator', false);
 
       // Campaign impressions must fire when the surfaces become visible, which
       // happens either on load (window already open) or mid-session when the
@@ -954,8 +965,8 @@ const jsonLd = [
       });
       updateTeamPlan();
 
-      // CTA analytics + cross-product payment attribution. A new entry id is
-      // minted at this conversion click, not at campaign impression.
+      // hrefs already carry the impression entry for native new-tab navigation.
+      // This handler records intent without replacing browser link behavior.
       root.addEventListener('click', (event) => {
         const cta = event.target && event.target.closest && event.target.closest('[data-pricing-cta]');
         if (!cta) return;
@@ -965,9 +976,7 @@ const jsonLd = [
         }
         try {
           const audience = root.getAttribute('data-audience') || 'creator';
-          // Outside the activity window the CTA still records od_entry_*
-          // attribution, but must not stamp the campaign — clicks outside
-          // the window may not count toward it.
+          // Preserve acquisition campaign; offer eligibility is separate.
           const attribution = window.__odRecordCampaignEntry?.(
             audience === 'team' ? 'landing_pricing_team_plan' : 'landing_pricing_personal_plan',
             campaignEligible ? 'deepseek_v4_pro' : undefined,
@@ -986,9 +995,8 @@ const jsonLd = [
           if (typeof window.__odTrack === 'function') window.__odTrack('ui_click', props);
           else if (window.posthog && window.posthog.capture) window.posthog.capture('ui_click', props);
           if (attribution && window.__odAttributedUrl) {
-            event.preventDefault();
             const destination = cta.getAttribute('href') || scopedBillingPlanUrl();
-            window.location.href = window.__odAttributedUrl(destination, attribution);
+            cta.setAttribute('href', window.__odAttributedUrl(destination, attribution));
           }
         } catch (e) {}
       });
@@ -1228,6 +1236,8 @@ const jsonLd = [
       createPricingCompatibilityAnalytics,
     } from '../../_lib/pricing-compat-analytics';
     import {
+      PRICING_BRIDGE_ATTRIBUTION_STORAGE_KEY,
+      resolvePricingBridgeAttribution,
       resolvePricingBridgeSource,
     } from '../../_lib/pricing-analytics-bridge';
     import type {
@@ -1240,6 +1250,19 @@ const jsonLd = [
       search: new URLSearchParams(window.location.search),
       referrer: document.referrer,
     });
+    let persistedAttribution: string | null = null;
+    try {
+      persistedAttribution = window.localStorage.getItem(
+        PRICING_BRIDGE_ATTRIBUTION_STORAGE_KEY,
+      );
+    } catch {
+      // Storage access is best effort and must not block Pricing.
+    }
+    const attribution = window.__odPricingBridgeAttribution ?? resolvePricingBridgeAttribution(
+      new URLSearchParams(window.location.search),
+      persistedAttribution,
+    );
+    window.__odPricingBridgeAttribution = attribution ?? undefined;
     if (compatibilityRoot && sourceSurface) {
       const apiOrigin = compatibilityRoot.getAttribute('data-billing-api-origin') || '';
       const sessionId = typeof globalThis.crypto?.randomUUID === 'function'
@@ -1248,6 +1271,7 @@ const jsonLd = [
       const compatibility = createPricingCompatibilityAnalytics({
         apiOrigin,
         sessionId,
+        attribution: attribution ?? undefined,
       });
       const readAudience = () =>
         compatibilityRoot.getAttribute('data-audience') === 'team'

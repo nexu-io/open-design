@@ -9,6 +9,19 @@ import {
 
 export type PricingBridgeSource = 'wallet' | 'dashboard';
 
+export type PricingBridgeAttribution = {
+  sourceProduct: 'open_design';
+  entryId: string;
+  sourceDetail: string;
+  entryOccurredAt: string;
+  campaignId?: string;
+  conversionSource?: string;
+  odDeviceId?: string;
+};
+
+export const PRICING_BRIDGE_ATTRIBUTION_STORAGE_KEY =
+  'amr.openDesignAttribution.v1';
+
 export type PlanExposureInput = {
   planId: PlanTier;
   billingInterval: BillingInterval;
@@ -104,7 +117,6 @@ const sourceOverrideKeys = [
   'pricingSource',
   'pricing_source',
   'source',
-  'od_entry_source',
 ] as const;
 
 const sourceByPath: Readonly<Record<string, PricingBridgeSource>> = {
@@ -161,13 +173,80 @@ export function resolvePricingBridgeSource(input: {
 const idMaxLength = 128;
 const maxEventsPerRequest = 8;
 const transportTimeoutMs = 3_000;
+const pricingAttributionTtlMs = 7 * 24 * 60 * 60 * 1_000;
 const usdAmountPattern = /^(?:0|[1-9][0-9]{0,8})\.[0-9]{2}$/u;
 // Mirrors Zod 3.25 `z.string().datetime()` used by Vela: real calendar date,
 // UTC Z suffix, optional seconds, and arbitrary fractional-second precision.
-const velaDateTimePattern = new RegExp(
+export const velaDateTimePattern = new RegExp(
   '^((\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-((0[13578]|1[02])-(0[1-9]|[12]\\d|3[01])|(0[469]|11)-(0[1-9]|[12]\\d|30)|(02)-(0[1-9]|1\\d|2[0-8])))T([01]\\d|2[0-3]):[0-5]\\d(:[0-5]\\d(\\.\\d+)?)?Z$',
   'u',
 );
+
+// Mirrors the Vela pricing bridge allowlists. This app cannot import Vela or
+// product-runtime contracts, so the public handoff is validated at this
+// standalone boundary before it reaches Vela's stricter server schema.
+export const pricingAttributionSourceDetails = new Set([
+  'onboarding_amr_card',
+  'onboarding_amr_sign_in_continue',
+  'inline_model_switcher_amr_row',
+  'settings_amr_agent_card',
+  'settings_amr_authorize',
+  'settings_cloud_callout',
+  'settings_amr_console',
+  'settings_amr_install',
+  'avatar_amr_console',
+  'settings_config_failure_amr',
+  'chat_preflight_amr_hint',
+  'chat_preflight_amr_continue',
+  'chat_error_authorize_retry',
+  'chat_error_recharge',
+  'chat_error_upgrade',
+  'chat_balance_gate_upgrade',
+  'home_balance_gate_upgrade',
+  'chat_low_balance_warn_recharge',
+  'home_low_balance_warn_recharge',
+  'chat_balance_gate_sign_in',
+  'home_balance_gate_sign_in',
+  'chat_error_switch_retry_card',
+  'generation_preview_authorize_retry',
+  'generation_preview_recharge',
+  'generation_preview_switch_retry_card',
+  'artifact_success_upgrade',
+  'home_artifact_upgrade',
+  'settings_amr_upgrade',
+  'inline_amr_upgrade',
+  'avatar_amr_upgrade',
+  'avatar_amr_agent_card',
+  'handoff_amr_website',
+  'go_plan_sunset_modal',
+  'deepseek_unpaid_modal',
+  'deepseek_workbench_badge',
+  'deepseek_model_switcher_upgrade',
+  'landing_home_banner',
+  'landing_pricing_personal_plan',
+  'landing_pricing_team_plan',
+  'landing_pricing_header',
+  'landing_pricing_footer',
+  'landing_pricing_content',
+  'landing_pricing_referral',
+  'landing_pricing_unattributed',
+  'cloud_dashboard_plan',
+  'cloud_dashboard_upgrade',
+  'cloud_dashboard_autotopup',
+  'cloud_wallet_plan',
+  'cloud_trial_welcome',
+  'cloud_balance_insufficient',
+  'cloud_summary_upgrade',
+  'cloud_summary_manage',
+  'cloud_usage_guide',
+  'cloud_navigation_pricing',
+  'cloud_subscription_redirect',
+  'cloud_team_plan',
+  'cloud_team_upgrade',
+  'cloud_team_seats',
+]);
+
+const pricingAttributionConversionSources = pricingAttributionSourceDetails;
 
 function isBoundedId(value: unknown): value is string {
   return (
@@ -176,6 +255,109 @@ function isBoundedId(value: unknown): value is string {
     value.length <= idMaxLength &&
     value.trim() === value
   );
+}
+
+function optionalBoundedParam(
+  search: URLSearchParams,
+  key: string,
+): string | undefined {
+  const value = search.get(key);
+  return isBoundedId(value) ? value : undefined;
+}
+
+/** Preserve a complete first-touch tuple; partial or untrusted state is ignored. */
+export function resolvePricingBridgeAttribution(
+  search: URLSearchParams,
+  persistedState?: string | null,
+  now: Date = new Date(),
+): PricingBridgeAttribution | null {
+  if (search.get('od_origin') === 'open_design') {
+    const entryId = optionalBoundedParam(search, 'od_entry_id');
+    const sourceDetail = optionalBoundedParam(search, 'od_entry_source');
+    const entryOccurredAt = search.get('od_entry_at');
+    if (
+      entryId &&
+      sourceDetail &&
+      pricingAttributionSourceDetails.has(sourceDetail) &&
+      entryOccurredAt &&
+      velaDateTimePattern.test(entryOccurredAt)
+    ) {
+      const campaignId = optionalBoundedParam(search, 'od_campaign_id');
+      const rawConversionSource = optionalBoundedParam(
+        search,
+        'od_conversion_source',
+      );
+      const conversionSource = rawConversionSource &&
+        pricingAttributionConversionSources.has(rawConversionSource)
+        ? rawConversionSource
+        : undefined;
+      const odDeviceId = optionalBoundedParam(search, 'od_device_id');
+      return {
+        sourceProduct: 'open_design',
+        entryId,
+        sourceDetail,
+        entryOccurredAt,
+        ...(campaignId ? { campaignId } : {}),
+        ...(conversionSource ? { conversionSource } : {}),
+        ...(odDeviceId ? { odDeviceId } : {}),
+      };
+    }
+  }
+
+  if (!persistedState) return null;
+  try {
+    const attribution = sanitizedAttribution(JSON.parse(persistedState));
+    if (!attribution) return null;
+    const occurredAt = Date.parse(attribution.entryOccurredAt);
+    if (now.getTime() - occurredAt > pricingAttributionTtlMs) return null;
+    return attribution;
+  } catch {
+    return null;
+  }
+}
+
+function sanitizedAttribution(
+  value: unknown,
+): PricingBridgeAttribution | null {
+  if (!value || typeof value !== 'object') return null;
+  const input = value as Record<string, unknown>;
+  if (
+    input.sourceProduct !== 'open_design' ||
+    !isBoundedId(input.entryId) ||
+    !isBoundedId(input.sourceDetail) ||
+    !pricingAttributionSourceDetails.has(input.sourceDetail) ||
+    typeof input.entryOccurredAt !== 'string' ||
+    !velaDateTimePattern.test(input.entryOccurredAt)
+  ) {
+    return null;
+  }
+  if (
+    input.campaignId !== undefined &&
+    !isBoundedId(input.campaignId)
+  ) {
+    return null;
+  }
+  if (
+    input.conversionSource !== undefined &&
+    (!isBoundedId(input.conversionSource) ||
+      !pricingAttributionConversionSources.has(input.conversionSource))
+  ) {
+    return null;
+  }
+  if (input.odDeviceId !== undefined && !isBoundedId(input.odDeviceId)) {
+    return null;
+  }
+  return {
+    sourceProduct: 'open_design',
+    entryId: input.entryId,
+    sourceDetail: input.sourceDetail,
+    entryOccurredAt: input.entryOccurredAt,
+    ...(input.campaignId ? { campaignId: input.campaignId } : {}),
+    ...(input.conversionSource
+      ? { conversionSource: input.conversionSource }
+      : {}),
+    ...(input.odDeviceId ? { odDeviceId: input.odDeviceId } : {}),
+  };
 }
 
 function isPlanTier(value: unknown): value is PlanTier {
@@ -375,6 +557,7 @@ export async function postPricingBridgeEvents(input: {
   apiOrigin: string;
   sourceSurface: PricingBridgeSource;
   sessionId: string;
+  attribution?: PricingBridgeAttribution;
   events: readonly PricingBridgeEvent[];
   fetcher?: typeof fetch;
 }): Promise<boolean> {
@@ -401,6 +584,10 @@ export async function postPricingBridgeEvents(input: {
       eventIds.add(sanitized.eventId);
       events.push(sanitized);
     }
+    const attribution = input.attribution === undefined
+      ? null
+      : sanitizedAttribution(input.attribution);
+    if (input.attribution !== undefined && !attribution) return false;
 
     const abortController = new AbortController();
     timeout = setTimeout(
@@ -420,6 +607,7 @@ export async function postPricingBridgeEvents(input: {
         body: JSON.stringify({
           sourceSurface: input.sourceSurface,
           sessionId: input.sessionId,
+          ...(attribution ? { attribution } : {}),
           events,
         }),
         signal: abortController.signal,
