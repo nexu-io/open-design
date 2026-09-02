@@ -567,7 +567,7 @@ function materializeGroup(
   for (const [name, child] of Object.entries(local)) {
     if (name.startsWith('$') || !isRecord(child) || isTokenNode(child)) continue;
     const materializedChild = materializeGroup(child, [...path, name], document, diagnostics, active);
-    if (materializedChild !== undefined) local[name] = materializedChild;
+    if (materializedChild !== undefined) defineJsonProperty(local, name, materializedChild);
   }
 
   let output = local;
@@ -615,9 +615,9 @@ function mergeGroups(inherited: JsonRecord, local: JsonRecord): JsonRecord {
       && !isTokenNode(inheritedValue)
       && !isTokenNode(localValue)
     ) {
-      output[key] = mergeGroups(inheritedValue, localValue);
+      defineJsonProperty(output, key, mergeGroups(inheritedValue, localValue));
     } else {
-      output[key] = cloneJson(localValue);
+      defineJsonProperty(output, key, cloneJson(localValue));
     }
   }
   return output;
@@ -984,9 +984,20 @@ function resolveNestedReferences(
       [...diagnosticPath, key],
       activePointers,
     );
-    if (resolved !== undefined) output[key] = resolved;
+    if (resolved !== undefined) defineJsonProperty(output, key, resolved);
   }
   return output;
+}
+
+function defineJsonProperty(record: JsonRecord, key: string, value: DtcgJsonValue): void {
+  // Plain assignment would trigger the legacy __proto__ setter for a
+  // schema-valid group or token named "__proto__" and silently drop the key.
+  Object.defineProperty(record, key, {
+    value,
+    enumerable: true,
+    writable: true,
+    configurable: true,
+  });
 }
 
 function resolveJsonPointerValue(

@@ -450,16 +450,38 @@ describe('DTCG Format 2025.10 codec', () => {
     }
     expectInvalid({ bad: token('fontFamily', [1, 2]) }, 'invalid-value');
   });
-});
 
-function token(type: string, value: unknown): Record<string, unknown> {
-  return { $type: type, $value: value };
-}
+  it('preserves schema-valid __proto__ groups and tokens through $extends merges and serialization', () => {
+    // An object literal would mutate the prototype instead of creating an own
+    // property, so the document is built through JSON.parse.
+    const input = JSON.parse(`{
+      "base": { "__proto__": { "x": { "$type": "number", "$value": 1 } } },
+      "derived": { "$extends": "{base}" },
+      "top": { "__proto__": { "$type": "number", "$value": 2 } }
+    }`);
 
-function dimension(value: number, unit: 'px' | 'rem'): { value: number; unit: 'px' | 'rem' } {
-  return { value, unit };
-}
+    const result = expectValid(input);
+    const inherited = findToken(result, '#/derived/__proto__/x');
+    expect(inherited).toMatchObject({ value: 1, sourcePointer: '#/base/__proto__/x' });
+    expect(findToken(result, '#/top/__proto__')).toMatchObject({ value: 2, sourcePointer: '#/top/__proto__' });
+    expect(Object.prototype.hasOwnProperty.call(result.document.base, '__proto__')).toBe(true);
+    expect(Object.prototype.hasOwnProperty.call(result.document.top, '__proto__')).toBe(true);
+    expect(Object.getPrototypeOf(result.document)).toBe(Object.prototype);
 
+    const serialized = serializeDtcgFormat2025_10(result.document);
+    const reparsed = JSON.parse(serialized) as {
+      base: { __proto__: unknown } & Record<string, unknown>;
+      top: { __proto__: unknown } & Record<string, unknown>;
+      derived: Record<string, unknown>;
+    };
+    expect(Object.prototype.hasOwnProperty.call(reparsed.base, '__proto__')).toBe(true);
+    expect(Object.prototype.hasOwnProperty.call(reparsed.top, '__proto__')).toBe(true);
+    expect(reparsed.base.__proto__).toEqual({ x: token('number', 1) });
+    expect(reparsed.top.__proto__).toEqual(token('number', 2));
+    // Serialization preserves source references: the derived group keeps its
+    // $extends instead of writing the materialized merge into the document.
+    expect(reparsed.derived).toEqual({ $extends: '{base}' });
+  });
 function color(alpha?: number): Record<string, unknown> {
   return {
     colorSpace: 'srgb',
