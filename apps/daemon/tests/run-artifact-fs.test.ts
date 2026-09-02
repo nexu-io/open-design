@@ -419,17 +419,15 @@ test('Windows-style backslash paths still resolve a nested manifest sidecar', ()
   // to the manifest predicate, whose containment guard uses native separators
   // from `rootDir`. On Windows the sidecar would be probed with forward
   // slashes but the prefix would be backslashes, so every nested
-  // manifest-backed .md silently failed containment. The predicate is
-  // exposed for direct unit testing; we exercise it on a POSIX host
-  // (where path.sep is '/') and assert the containment branch matches the
-  // prefix correctly. The Windows-side regression is covered by the
-  // same code path: diffRunArtifacts now passes the native filePath
-  // (no slash normalization) and rootDir is the project root as the
-  // daemon resolved it; both use the host's path.sep, so containment
-  // matches on either platform.
+  // manifest-backed .md silently failed containment.
+  //
+  // The predicate now accepts an injected `pathModule` so this regression
+  // can call through it with `path.win32` on a POSIX host and verify the
+  // native-path containment branch. We exercise both the positive (matched
+  // sidecar) and negative (mixed-separator) shapes against `path.win32`.
   const root = tmpProject();
-  const sidecarPath = path.join(root, 'reports', 'export.md.artifact.json');
-  fs.mkdirSync(path.join(root, 'reports'), { recursive: true });
+  const sidecarPath = path.win32.join(root, 'reports', 'export.md.artifact.json');
+  fs.mkdirSync(path.win32.join(root, 'reports'), { recursive: true });
   fs.writeFileSync(sidecarPath,
     JSON.stringify({
       version: 1,
@@ -441,7 +439,7 @@ test('Windows-style backslash paths still resolve a nested manifest sidecar', ()
       exports: ['md', 'html', 'pdf', 'zip'],
     }));
 
-  // POSIX baseline: sidecar next to md is recognized.
+  // POSIX baseline: sidecar next to md is recognized using host `path`.
   const posixMd = path.join(root, 'reports', 'export.md');
   assert.equal(
     isManifestBackedArtifactPath(posixMd, root),
@@ -449,22 +447,30 @@ test('Windows-style backslash paths still resolve a nested manifest sidecar', ()
     'POSIX baseline: sidecar next to md is recognized',
   );
 
-  // The pre-fix bug was: diffRunArtifacts normalized filePath to forward
-  // slashes (classifyPath) before calling the manifest predicate, whose
-  // containment guard uses `path.sep` from `rootDir`. On a host where
-  // path.sep !== '/', the sidecar key and the prefix diverged and the
-  // predicate returned false. The fix passes the native filePath; the
-  // regression assertion below is the bug signature: a filePath that
-  // uses a different separator from `rootDir + path.sep` must be
-  // rejected. (This is the same condition the pre-fix code triggered on
-  // Windows; we construct the equivalent shape here so a POSIX host can
-  // reproduce it.)
-  const mixedRoot = '/tmp';
-  const winShapedFile = 'C:\\proj\\reports\\export.md';
+  // Windows acceptance: with path.win32, the backslash-shaped root and
+  // backslash-shaped filePath match the same separator, so containment
+  // accepts and the sidecar is read. On a POSIX host this is the exact
+  // shape Windows produces; before the fix the predicate would have
+  // normalized filePath to forward slashes and the containment check
+  // would have rejected every valid sidecar.
+  const winRoot = path.win32.join(root, 'reports');
+  const winFile = path.win32.join(winRoot, 'export.md');
   assert.equal(
-    isManifestBackedArtifactPath(winShapedFile, mixedRoot),
+    isManifestBackedArtifactPath(winFile, winRoot, { pathModule: path.win32, fsModule: fs }),
+    true,
+    'Windows acceptance: path.win32 containment + sidecar read succeeds',
+  );
+
+  // Windows rejection: a backslash filePath against a forward-slash rootDir
+  // (or vice versa) must be rejected — the same shape that the pre-fix code
+  // produced when `diffRunArtifacts` passed `classifyPath` (forward slashes)
+  // alongside a native `rootDir` (backslashes) on Windows.
+  const mixedRoot = '/tmp';
+  const winShapedFile = path.win32.join('C:\\proj', 'reports', 'export.md');
+  assert.equal(
+    isManifestBackedArtifactPath(winShapedFile, mixedRoot, { pathModule: path.win32 }),
     false,
-    'regression: a backslash-shape filePath with a forward-slash root must be rejected',
+    'regression: mixed-separator pathModule/filePath/root must be rejected',
   );
 });
 

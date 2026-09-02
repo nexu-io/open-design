@@ -49,21 +49,28 @@ export const ARTIFACT_MANIFEST_SUFFIX = '.artifact.json';
 // artifact. Anything `parsePersistedManifest` rejects is treated as a
 // non-artifact — which matches the lifecycle validator's `no_artifact`
 // semantics.
-export function isManifestBackedArtifactPath(filePath: string, rootDir: string): boolean {
+export function isManifestBackedArtifactPath(
+  filePath: string,
+  rootDir: string,
+  options: { pathModule?: typeof path; fsModule?: typeof fs } = {},
+): boolean {
   if (!isManifestBackedExtension(filePath)) return false;
+  const pathModule = options.pathModule ?? path;
+  const fsModule = options.fsModule ?? fs;
   const sidecarPath = `${filePath}${ARTIFACT_MANIFEST_SUFFIX}`;
   // Containment guard: keep a future caller that passes a free-form
   // `filePath` from escaping the project tree. Snapshot keys always
   // satisfy this invariant; the guard is defense-in-depth.
-  const rootWithSep = rootDir.endsWith(path.sep) ? rootDir : `${rootDir}${path.sep}`;
+  const sep = pathModule.sep;
+  const rootWithSep = rootDir.endsWith(sep) ? rootDir : `${rootDir}${sep}`;
   if (!sidecarPath.startsWith(rootWithSep)) return false;
   let raw: string;
   try {
-    raw = fs.readFileSync(sidecarPath, 'utf8');
+    raw = fsModule.readFileSync(sidecarPath, 'utf8');
   } catch {
     return false;
   }
-  return parsePersistedManifest(raw, path.basename(filePath)) !== null;
+  return parsePersistedManifest(raw, pathModule.basename(filePath)) !== null;
 }
 
 // A file worth fingerprinting for run-finish bookkeeping: a user-facing
