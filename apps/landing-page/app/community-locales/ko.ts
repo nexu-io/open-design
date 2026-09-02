@@ -230,6 +230,7 @@ const ko: DeepPartial<CommunityCopy> = {
         '쿠알라룸푸르, 말레이시아',
         '일본',
         '중국',
+        '홍콩',
       ],
     },
   },

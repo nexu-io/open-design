@@ -230,6 +230,7 @@ const ptBr: DeepPartial<CommunityCopy> = {
         'Kuala Lumpur, Malásia',
         'Japão',
         'China',
+        'Hong Kong',
       ],
     },
   },

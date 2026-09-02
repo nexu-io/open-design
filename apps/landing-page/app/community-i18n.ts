@@ -184,19 +184,30 @@ export const GLYPH = {
 
 export interface AmbassadorData {
   name: string;
-  avatar: string;
+  nameZh?: string;
+  place: string;
+  placeZh: string;
+  avatar?: string;
+  avatarAlt?: string;
+  initials?: string;
   socials: RosterSocial[];
+  storySlug?: string;
 }
 
-/** Ambassador roster. `place` (city/country) is localized by index in `ambassadors.places`. */
+/** Ambassador roster. The Feishu tracker is the source of truth for formal ambassador status. */
 export const AMBASSADORS: readonly AmbassadorData[] = [
   {
     name: 'Josh',
+    place: 'Sunshine Coast, Australia',
+    placeZh: '澳大利亚，阳光海岸',
     avatar: '/community/ambassadors/assets/josh.jpg',
+    storySlug: 'josh',
     socials: [{ type: 'x', href: 'https://x.com/Josh_is_regen', glyph: '', label: 'Josh on X' }],
   },
   {
     name: 'Captain Awesome',
+    place: 'Kuala Lumpur, Malaysia',
+    placeZh: '马来西亚，吉隆坡',
     avatar: '/community/ambassadors/assets/captain-awesome.jpg',
     socials: [
       { type: 'github', href: 'https://github.com/emmagine79', glyph: '', label: 'Captain Awesome on GitHub' },
@@ -206,13 +217,127 @@ export const AMBASSADORS: readonly AmbassadorData[] = [
   },
   {
     name: 'CATMAN',
+    place: 'Japan',
+    placeZh: '日本',
     avatar: '/community/ambassadors/assets/catman.jpg',
+    storySlug: 'catman',
     socials: [{ type: 'x', href: 'https://x.com/catmangox', glyph: '', label: 'CATMAN on X' }],
   },
   {
     name: 'Haili',
+    nameZh: '沧海九粟 / 海立老师',
+    place: 'China',
+    placeZh: '中国',
     avatar: '/community/ambassadors/assets/haili.png',
     socials: [{ type: 'bilibili', href: 'https://space.bilibili.com/28357052', glyph: '', label: 'Haili on Bilibili' }],
+  },
+  {
+    name: 'Heatherm Huang',
+    place: 'Hong Kong',
+    placeZh: '香港',
+    avatar: '/community/ambassadors/assets/heatherm-huang.jpg',
+    storySlug: 'heatherm-huang',
+    socials: [
+      {
+        type: 'website',
+        href: 'https://www.polyu.edu.hk/kteo/entrepreneurship/community/mentors/mentors/eirs/heatherm-huang/',
+        glyph: '',
+        label: 'Heatherm Huang at The Hong Kong Polytechnic University',
+      },
+    ],
+  },
+  {
+    name: 'Abhijeet Kakade',
+    place: 'Nashik, India',
+    placeZh: '印度，纳西克',
+    avatar: 'https://github.com/abhijeetkakade1234.png',
+    socials: [
+      {
+        type: 'website',
+        href: 'https://abhijeetkakade.in/',
+        glyph: '',
+        label: 'Abhijeet Kakade website',
+      },
+      {
+        type: 'github',
+        href: 'https://github.com/abhijeetkakade1234',
+        glyph: '',
+        label: 'Abhijeet Kakade on GitHub',
+      },
+      {
+        type: 'x',
+        href: 'https://x.com/AbhijeetKakade0',
+        glyph: '',
+        label: 'Abhijeet Kakade on X',
+      },
+    ],
+  },
+  {
+    name: 'ALTLIER',
+    place: 'Tokyo, Japan',
+    placeZh: '日本，东京',
+    avatar: '/community/ambassadors/assets/altlier.jpg',
+    avatarAlt: 'Yudai Ishida’s public X profile image',
+    socials: [
+      {
+        type: 'x',
+        href: 'https://x.com/MaturiCrypto',
+        glyph: '',
+        label: 'Yudai Ishida on X',
+      },
+      {
+        type: 'website',
+        href: 'https://jp.linkedin.com/in/yudai-ishida',
+        glyph: '',
+        label: 'Yudai Ishida on LinkedIn',
+      },
+    ],
+  },
+  {
+    name: 'Nagendhra',
+    place: 'New York, USA',
+    placeZh: '美国，纽约',
+    avatar: '/community/ambassadors/assets/nagendhra-madishetti.jpg',
+    socials: [
+      {
+        type: 'github',
+        href: 'https://github.com/Nagendhra-Madishetti',
+        glyph: '',
+        label: 'Nagendhra Madishetti on GitHub',
+      },
+      {
+        type: 'website',
+        href: 'https://in.linkedin.com/in/nagendhramadishetti',
+        glyph: '',
+        label: 'Nagendhra Madishetti on LinkedIn',
+      },
+    ],
+  },
+  {
+    name: 'Dennis',
+    place: 'California, USA',
+    placeZh: '美国，加利福尼亚',
+    avatar: '/community/ambassadors/assets/dennis-rongo.webp',
+    socials: [
+      {
+        type: 'x',
+        href: 'https://x.com/codingmenace',
+        glyph: '',
+        label: 'Dennis Rongo on X',
+      },
+      {
+        type: 'youtube',
+        href: 'https://www.youtube.com/@codingmenace',
+        glyph: '',
+        label: 'Dennis Rongo on YouTube',
+      },
+      {
+        type: 'github',
+        href: 'https://github.com/dennisrongo',
+        glyph: '',
+        label: 'Dennis Rongo on GitHub',
+      },
+    ],
   },
 ] as const;
 
@@ -352,6 +477,7 @@ export interface CommunityCopy {
       kicker: string;
       h2: string; // inline: <em>
       intro: string;
+      storyCta: string;
       /** Aligned by index to `AMBASSADORS`. */
       places: string[];
     };
@@ -600,11 +726,13 @@ const EN: CommunityCopy = {
       h2: 'Meet the <em>ambassadors</em>.',
       intro:
         'Local organizers, creators, and community builders helping OpenDesign reach more designers and teams.',
+      storyCta: 'Read story',
       places: [
         'Sunshine Coast, Australia',
         'Kuala Lumpur, Malaysia',
         'Japan',
         'China',
+        'Hong Kong',
       ],
     },
   },

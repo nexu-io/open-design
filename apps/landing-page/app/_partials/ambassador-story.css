@@ -1,0 +1,51 @@
+.ambassador-v4 { background: var(--paper); }
+.ambassador-v4 .v4hero { padding-top: 132px; }
+.ambassador-v4 .v4hero::before { background-position: center 42%; }
+.ambassador-v4.catman-story .v4hero::before {
+  background-image: linear-gradient(180deg, rgba(250,250,250,.7), rgba(250,250,250,.95) 66%, var(--paper)), url(/stories/open-design-osaka-kyoto-meetup-cover.webp);
+}
+.ambassador-v4.josh-story .v4hero::before {
+  background-image: linear-gradient(180deg, rgba(250,250,250,.78), rgba(250,250,250,.96) 66%, var(--paper)), url(/lab-stage-art.webp);
+}
+.ambassador-v4.heatherm-story .v4hero::before {
+  background-image: linear-gradient(180deg, rgba(250,250,250,.72), rgba(250,250,250,.95) 66%, var(--paper)), url(/stories/open-design-hong-kong-workshop-cover.webp);
+}
+.ambassador-v4 .ambassador-snap .v4snap-logo { width: 62px; height: 62px; border-radius: 14px; }
+.ambassador-v4 .v4statstrip .ambassador-product-name { font-size: clamp(22px, 2.35vw, 30px); line-height: 1.08; letter-spacing: -.025em; }
+.ambassador-v4 .ambassador-snap .v4snap-desc a,
+.ambassador-v4 .v4in p a { color: inherit; text-decoration-color: var(--coral); text-underline-offset: 3px; }
+.ambassador-v4 .ambassador-wide { max-width: 920px; }
+.ambassador-v4 .ambassador-wide img { aspect-ratio: 16 / 9; object-fit: cover; border: 1px solid var(--line); background: #fff; }
+.ambassador-v4 .ambassador-wide figcaption,
+.ambassador-v4 .ambassador-portrait figcaption {
+  margin-top: 14px; font-family: var(--mono); font-size: 12.5px; line-height: 1.5; color: var(--ink-faint); letter-spacing: .02em;
+}
+.ambassador-v4 .ambassador-portrait { max-width: 460px; }
+.ambassador-v4 .ambassador-portrait img { aspect-ratio: 4 / 5; object-fit: cover; object-position: center top; border: 1px solid var(--line); background: #fff; }
+.ambassador-v4 .ambassador-proof-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 34px; }
+.ambassador-v4 .ambassador-proof {
+  min-height: 190px; padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.62); box-shadow: 0 28px 54px -42px rgba(20,20,30,.5);
+}
+.ambassador-v4 .ambassador-proof .num { display: block; margin-bottom: 22px; font-family: var(--mono); color: var(--coral); font-size: 12px; letter-spacing: .12em; }
+.ambassador-v4 .ambassador-proof h3 { margin: 0 0 10px; font-size: 18px; line-height: 1.25; }
+.ambassador-v4 .ambassador-proof p { margin: 0; font-size: 15px; line-height: 1.6; color: var(--ink-soft); }
+.ambassador-v4 .ambassador-path { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 28px 0 4px; }
+.ambassador-v4 .ambassador-path span { display: inline-flex; min-height: 38px; align-items: center; padding: 0 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); font-family: var(--mono); font-size: 12px; color: var(--ink-soft); }
+.ambassador-v4 .ambassador-path i { color: var(--olive); font-style: normal; }
+.ambassador-v4 .ambassador-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 34px; }
+.ambassador-v4 .ambassador-pair figure { margin: 0; }
+.ambassador-v4 .ambassador-pair img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border: 1px solid var(--line); border-radius: var(--spacing-8); box-shadow: 0 34px 70px -34px rgba(20,20,30,.55); }
+.ambassador-v4 .ambassador-pair figcaption { margin-top: 12px; font-family: var(--mono); font-size: 12.5px; line-height: 1.45; color: var(--ink-faint); }
+.ambassador-v4 .ambassador-note { max-width: 780px; padding: 26px 28px; border-left: 3px solid var(--coral); background: var(--coral-tint); }
+.ambassador-v4 .ambassador-note p { margin: 0; font-size: 17px; line-height: 1.65; color: var(--ink-soft); }
+.ambassador-v4 .ambassador-source { margin-top: 24px; font-family: var(--mono); font-size: 12px; color: var(--ink-faint); }
+.ambassador-v4 .ambassador-source a { color: inherit; text-underline-offset: 3px; }
+.ambassador-v4 .ambassador-final::before { background-position: center 42%; }
+.ambassador-v4.catman-story .ambassador-final::before { background-image: linear-gradient(rgba(16,16,18,.84),rgba(16,16,18,.92)),url(/stories/open-design-osaka-kyoto-meetup-cover.webp); }
+.ambassador-v4.heatherm-story .ambassador-final::before { background-image: linear-gradient(rgba(16,16,18,.84),rgba(16,16,18,.92)),url(/stories/open-design-hong-kong-workshop-cover.webp); }
+@media (max-width: 820px) {
+  .ambassador-v4 .v4hero { padding-top: 108px; }
+  .ambassador-v4 .ambassador-proof-grid,
+  .ambassador-v4 .ambassador-pair { grid-template-columns: 1fr; }
+  .ambassador-v4 .ambassador-proof { min-height: 0; }
+}

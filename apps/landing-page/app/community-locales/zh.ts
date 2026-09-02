@@ -225,11 +225,13 @@ const zh: DeepPartial<CommunityCopy> = {
       h2: '认识这些<em>大使</em>。',
       intro:
         '本地组织者、创作者和社区建设者，帮助 OpenDesign 触及更多设计师与团队。',
+      storyCta: '阅读故事',
       places: [
         '澳大利亚，阳光海岸',
         '马来西亚，吉隆坡',
         '日本',
         '中国',
+        '香港',
       ],
     },
   },
