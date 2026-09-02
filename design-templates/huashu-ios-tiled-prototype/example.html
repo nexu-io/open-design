@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ember · iOS Prototype Overview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --rust: #B4552D;
+    --paper: #F4F1EC;
+    --ink: #1C1917;
+    --card: #FFFFFF;
+    --mute: #8B8680;
+  }
+  body {
+    background: var(--paper);
+    font-family: "Inter", -apple-system, "Helvetica Neue", sans-serif;
+    color: var(--ink);
+  }
+  .stage { max-width: 1240px; margin: 0 auto; padding: 44px 24px 60px; }
+  .stage-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 36px; }
+  .stage-head h1 { font-family: "Newsreader", Georgia, serif; font-weight: 500; font-size: 30px; letter-spacing: -.01em; }
+  .stage-head h1 b { color: var(--rust); font-weight: 500; }
+  .stage-head .meta { font-size: 12px; color: var(--mute); }
+  .row { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; justify-content: center; }
+  .slot .label {
+    font-family: "Newsreader", Georgia, serif; font-style: italic;
+    font-size: 14px; color: var(--mute); margin: 0 0 10px 6px;
+  }
+
+  /* ---- iPhone frame ---- */
+  .phone {
+    width: 272px; height: 588px; background: #000; border-radius: 44px;
+    padding: 7px; box-shadow: 0 22px 44px rgba(28,25,23,.18), 0 2px 6px rgba(28,25,23,.12);
+  }
+  .screen {
+    position: relative; width: 100%; height: 100%;
+    border-radius: 38px; overflow: hidden; background: #FBFAF7;
+    display: flex; flex-direction: column;
+  }
+  .island {
+    position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+    width: 86px; height: 25px; background: #000; border-radius: 13px; z-index: 9;
+  }
+  .statusbar {
+    height: 40px; flex: none; display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 22px 0; font-size: 11px; font-weight: 600; z-index: 8;
+  }
+  .sb-icons { display: flex; gap: 4px; align-items: center; }
+  .sb-icons .bars { display: flex; gap: 1.5px; align-items: flex-end; height: 9px; }
+  .sb-icons .bars i { width: 2.5px; background: currentColor; border-radius: 1px; display: block; }
+  .batt { width: 20px; height: 10px; border: 1px solid currentColor; border-radius: 3px; padding: 1px; opacity: .9; }
+  .batt i { display: block; height: 100%; width: 70%; background: currentColor; border-radius: 1px; }
+  .homebar {
+    position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%);
+    width: 94px; height: 4px; border-radius: 2px; background: rgba(0,0,0,.28); z-index: 9;
+  }
+  .dark .homebar { background: rgba(255,255,255,.4); }
+  .body { flex: 1; overflow: hidden; padding: 6px 16px 0; }
+
+  .tabbar {
+    flex: none; height: 58px; border-top: 1px solid rgba(28,25,23,.07);
+    display: flex; align-items: center; justify-content: space-around;
+    padding: 0 8px 12px; background: rgba(251,250,247,.96);
+  }
+  .tabbar span { font-size: 9.5px; font-weight: 600; color: #B3ADA6; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; }
+  .tabbar span::before { content: ""; width: 20px; height: 20px; border-radius: 6px; background: currentColor; opacity: .55; }
+  .tabbar span.on { color: var(--rust); }
+  .dark .tabbar { background: rgba(18,16,15,.96); border-top-color: rgba(255,255,255,.08); }
+  .dark .tabbar span { color: #5A5550; }
+  .dark .tabbar span.on { color: #E8956B; }
+
+  /* ---- shared content bits ---- */
+  .h-row { display: flex; justify-content: space-between; align-items: baseline; margin: 10px 2px 12px; }
+  .h-row h2 { font-family: "Newsreader", Georgia, serif; font-weight: 500; font-size: 24px; }
+  .h-row .date { font-size: 10px; color: var(--mute); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+  .ai-card {
+    background: linear-gradient(135deg, #FDF3EC, #F9E7DB);
+    border: 1px solid #EFD7C6; border-radius: 14px; padding: 12px 13px; margin-bottom: 12px;
+  }
+  .ai-card .tag { font-size: 9px; font-weight: 700; letter-spacing: .1em; color: var(--rust); text-transform: uppercase; margin-bottom: 5px; }
+  .ai-card p { font-size: 12px; line-height: 1.45; }
+  .ai-card p b { font-weight: 600; }
+  .task {
+    background: var(--card); border: 1px solid rgba(28,25,23,.06); border-radius: 12px;
+    padding: 11px 12px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; cursor: pointer;
+  }
+  .task .ring { width: 18px; height: 18px; border: 2px solid #D8D2CA; border-radius: 50%; flex: none; }
+  .task.done .ring { border-color: var(--rust); background: var(--rust); }
+  .task .t { flex: 1; }
+  .task .t .name { font-size: 12.5px; font-weight: 500; }
+  .task.done .t .name { text-decoration: line-through; color: var(--mute); }
+  .task .t .sub { font-size: 10px; color: var(--mute); margin-top: 2px; }
+  .task .est { font-size: 10px; font-weight: 600; color: var(--rust); background: #F8EAE1; padding: 3px 7px; border-radius: 8px; }
+
+  /* screen 2: focus (dark) */
+  .dark .screen-bg { background: #14110F; }
+  .dark .body { color: #F0EBE4; }
+  .dark .statusbar { color: #F0EBE4; }
+  .timer-wrap { display: flex; flex-direction: column; align-items: center; padding-top: 16px; }
+  .timer-label { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #9C948B; margin-bottom: 14px; }
+  .dial { position: relative; width: 168px; height: 168px; margin-bottom: 16px; }
+  .dial svg { transform: rotate(-90deg); }
+  .dial .time { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .dial .time b { font-size: 34px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .dial .time span { font-size: 10px; color: #9C948B; margin-top: 2px; }
+  .focus-task { font-family: "Newsreader", Georgia, serif; font-style: italic; font-size: 15px; text-align: center; margin-bottom: 14px; }
+  .shield {
+    background: #1F1B18; border: 1px solid #2C2723; border-radius: 12px;
+    padding: 10px 12px; width: 100%; font-size: 11px; line-height: 1.5; color: #C9C2B9;
+  }
+  .shield b { color: #E8956B; font-weight: 600; }
+  .shield .row2 { display: flex; justify-content: space-between; margin-top: 6px; font-size: 10px; color: #9C948B; }
+
+  /* screen 3: insights */
+  .stat-row { display: flex; gap: 8px; margin-bottom: 12px; }
+  .stat-card { flex: 1; background: var(--card); border: 1px solid rgba(28,25,23,.06); border-radius: 12px; padding: 10px; }
+  .stat-card .v { font-size: 20px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .stat-card .v small { font-size: 11px; font-weight: 600; color: var(--rust); }
+  .stat-card .k { font-size: 9.5px; color: var(--mute); margin-top: 2px; }
+  .chart-card { background: var(--card); border: 1px solid rgba(28,25,23,.06); border-radius: 14px; padding: 13px; margin-bottom: 12px; }
+  .chart-card .cap { font-size: 11px; font-weight: 600; margin-bottom: 10px; display: flex; justify-content: space-between; }
+  .chart-card .cap i { font-style: normal; color: var(--rust); }
+  .bars7 { display: flex; align-items: flex-end; gap: 7px; height: 84px; }
+  .bars7 div { flex: 1; background: #EDE4DA; border-radius: 5px 5px 2px 2px; position: relative; }
+  .bars7 div.hot { background: var(--rust); }
+  .bars7 div span { position: absolute; bottom: -16px; left: 0; right: 0; text-align: center; font-size: 8.5px; color: var(--mute); }
+  .note-line { font-size: 11px; line-height: 1.5; color: #55504A; background: #F6EFE7; border-radius: 10px; padding: 9px 11px; }
+  .note-line b { color: var(--rust); font-weight: 600; }
+
+  /* screen 4: settings */
+  .profile { display: flex; align-items: center; gap: 11px; margin: 8px 2px 14px; }
+  .avatar { width: 44px; height: 44px; border-radius: 50%; background: radial-gradient(circle at 30% 30%, #D98D5F, #B4552D); flex: none; }
+  .profile .n { font-size: 14px; font-weight: 600; }
+  .profile .e { font-size: 10.5px; color: var(--mute); margin-top: 1px; }
+  .group-label { font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); margin: 12px 4px 6px; }
+  .setting-group { background: var(--card); border: 1px solid rgba(28,25,23,.06); border-radius: 13px; overflow: hidden; }
+  .setting { display: flex; align-items: center; justify-content: space-between; padding: 11px 13px; border-bottom: 1px solid rgba(28,25,23,.05); cursor: pointer; }
+  .setting:last-child { border-bottom: 0; }
+  .setting .s-name { font-size: 12.5px; font-weight: 500; }
+  .setting .s-sub { font-size: 9.5px; color: var(--mute); margin-top: 1px; }
+  .toggle { width: 40px; height: 24px; border-radius: 12px; background: #E2DBD2; position: relative; flex: none; }
+  .toggle.on { background: var(--rust); }
+  .toggle i { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+  .toggle.on i { left: 18px; }
+  .chev { color: #C6BFB6; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="stage">
+
+  <div class="stage-head">
+    <h1><b>Ember</b>, the focus timer that reads your calendar</h1>
+    <div class="meta">Prototype v0.3 · 4 primary screens · iPhone 15 Pro</div>
+  </div>
+
+  <div class="row">
+
+    <!-- Screen 1: Today -->
+    <div class="slot">
+      <p class="label">Today · plan &amp; task queue</p>
+      <div class="phone"><div class="screen">
+        <div class="island"></div>
+        <div class="statusbar"><span>9:41</span>
+          <span class="sb-icons"><span class="bars"><i style="height:3px"></i><i style="height:5px"></i><i style="height:7px"></i><i style="height:9px"></i></span><span class="batt"><i></i></span></span>
+        </div>
+        <div class="body">
+          <div class="h-row"><h2>Today</h2><span class="date">Tue · Aug 25</span></div>
+          <div class="ai-card">
+            <div class="tag">Ember noticed</div>
+            <p>Your calendar is clear <b>9:00–11:30</b>. You average <b>92% completion</b> in that window, so two deep blocks are queued below.</p>
+          </div>
+          <div class="task done"><span class="ring"></span><div class="t"><div class="name">Review PR #482</div><div class="sub">Finished 8:47 · 12 min under estimate</div></div><span class="est">25m</span></div>
+          <div class="task"><span class="ring"></span><div class="t"><div class="name">Draft pricing page copy</div><div class="sub">Deep block 1 · linked: pricing.fig</div></div><span class="est">50m</span></div>
+          <div class="task"><span class="ring"></span><div class="t"><div class="name">Q3 metrics narrative</div><div class="sub">Deep block 2 · doc opens on start</div></div><span class="est">50m</span></div>
+          <div class="task"><span class="ring"></span><div class="t"><div class="name">Inbox sweep</div><div class="sub">Shallow · auto-slotted after lunch</div></div><span class="est">15m</span></div>
+        </div>
+        <div class="tabbar"><span class="on">Today</span><span>Focus</span><span>Insights</span><span>Settings</span></div>
+        <div class="homebar"></div>
+      </div></div>
+    </div>
+
+    <!-- Screen 2: Focus (dark) -->
+    <div class="slot">
+      <p class="label">Focus · live session</p>
+      <div class="phone"><div class="screen dark screen-bg" style="background:#14110F">
+        <div class="island"></div>
+        <div class="statusbar"><span>9:58</span>
+          <span class="sb-icons"><span class="bars"><i style="height:3px"></i><i style="height:5px"></i><i style="height:7px"></i><i style="height:9px"></i></span><span class="batt"><i></i></span></span>
+        </div>
+        <div class="body">
+          <div class="timer-wrap">
+            <div class="timer-label">Deep block 1 of 2</div>
+            <div class="dial">
+              <svg width="168" height="168" viewBox="0 0 168 168">
+                <circle cx="84" cy="84" r="76" fill="none" stroke="#2A2521" stroke-width="7"/>
+                <circle cx="84" cy="84" r="76" fill="none" stroke="#B4552D" stroke-width="7" stroke-linecap="round" stroke-dasharray="477.5" stroke-dashoffset="167"/>
+              </svg>
+              <div class="time"><b>32:41</b><span>of 50:00</span></div>
+            </div>
+            <div class="focus-task">“Draft pricing page copy”</div>
+            <div class="shield">
+              <b>Shield on.</b> Slack &amp; Mail muted. 2 pings deflected, both summarized for after the block.
+              <div class="row2"><span>Auto-reply: “deep work til 10:30”</span><span>End early ⌃E</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="tabbar"><span>Today</span><span class="on">Focus</span><span>Insights</span><span>Settings</span></div>
+        <div class="homebar"></div>
+      </div></div>
+    </div>
+
+    <!-- Screen 3: Insights -->
+    <div class="slot">
+      <p class="label">Insights · weekly rhythm</p>
+      <div class="phone"><div class="screen">
+        <div class="island"></div>
+        <div class="statusbar"><span>9:41</span>
+          <span class="sb-icons"><span class="bars"><i style="height:3px"></i><i style="height:5px"></i><i style="height:7px"></i><i style="height:9px"></i></span><span class="batt"><i></i></span></span>
+        </div>
+        <div class="body">
+          <div class="h-row"><h2>Insights</h2><span class="date">Week 34</span></div>
+          <div class="stat-row">
+            <div class="stat-card"><div class="v">14.2<small>h</small></div><div class="k">Deep work</div></div>
+            <div class="stat-card"><div class="v">89<small>%</small></div><div class="k">Est. accuracy</div></div>
+            <div class="stat-card"><div class="v">12<small>d</small></div><div class="k">Streak</div></div>
+          </div>
+          <div class="chart-card">
+            <div class="cap"><span>Focus hours / day</span><i>▲ 18% vs last wk</i></div>
+            <div class="bars7">
+              <div style="height:46%"><span>M</span></div>
+              <div style="height:64%"><span>T</span></div>
+              <div class="hot" style="height:92%"><span>W</span></div>
+              <div style="height:58%"><span>T</span></div>
+              <div style="height:71%"><span>F</span></div>
+              <div style="height:24%"><span>S</span></div>
+              <div style="height:12%"><span>S</span></div>
+            </div>
+            <div style="height:18px"></div>
+          </div>
+          <p class="note-line">Your longest unbroken stretch this week came <b>right after a calendar-clear morning</b>. Ember will propose protecting Wed mornings by default.</p>
+        </div>
+        <div class="tabbar"><span>Today</span><span>Focus</span><span class="on">Insights</span><span>Settings</span></div>
+        <div class="homebar"></div>
+      </div></div>
+    </div>
+
+    <!-- Screen 4: Settings -->
+    <div class="slot">
+      <p class="label">Settings · shield &amp; sources</p>
+      <div class="phone"><div class="screen">
+        <div class="island"></div>
+        <div class="statusbar"><span>9:41</span>
+          <span class="sb-icons"><span class="bars"><i style="height:3px"></i><i style="height:5px"></i><i style="height:7px"></i><i style="height:9px"></i></span><span class="batt"><i></i></span></span>
+        </div>
+        <div class="body">
+          <div class="h-row"><h2>Settings</h2></div>
+          <div class="profile"><span class="avatar"></span><div><div class="n">Ada Moreno</div><div class="e">ada@studiofern.co · Pro plan</div></div></div>
+          <div class="group-label">Focus shield</div>
+          <div class="setting-group">
+            <div class="setting"><div><div class="s-name">Mute notifications</div><div class="s-sub">Slack, Mail, iMessage during blocks</div></div><span class="toggle on"><i></i></span></div>
+            <div class="setting"><div><div class="s-name">Auto-reply</div><div class="s-sub">“deep work til {end}”</div></div><span class="toggle on"><i></i></span></div>
+            <div class="setting"><div><div class="s-name">Deflection digest</div><div class="s-sub">Summarize pings after each block</div></div><span class="toggle"><i></i></span></div>
+          </div>
+          <div class="group-label">Connected sources</div>
+          <div class="setting-group">
+            <div class="setting"><div><div class="s-name">Google Calendar</div><div class="s-sub">2 calendars · syncing</div></div><span class="chev">›</span></div>
+            <div class="setting"><div><div class="s-name">Linear</div><div class="s-sub">Auto-import estimates</div></div><span class="chev">›</span></div>
+          </div>
+        </div>
+        <div class="tabbar"><span>Today</span><span>Focus</span><span>Insights</span><span class="on">Settings</span></div>
+        <div class="homebar"></div>
+      </div></div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

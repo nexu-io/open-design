@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Briefing · Weekly reporting in 15 minutes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --page:#FCFCFA;
+    --band:#F4F4EF;
+    --ink:#17211B;
+    --muted:#5A665E;
+    --line:#E4E6E0;
+    --accent:#0B6E4F;
+    --accent-deep:#08573E;
+    --accent-tint:#E7F2EC;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{color-scheme:light;scroll-behavior:smooth;}
+  body{
+    background:var(--page);color:var(--ink);
+    font-family:'Manrope','Segoe UI',system-ui,sans-serif;
+    font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;text-decoration:none;}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 28px;}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    background:var(--accent);color:#fff;font-weight:700;font-size:15.5px;
+    border-radius:8px;padding:14px 28px;border:0;cursor:pointer;
+    transition:background .18s ease,transform .12s ease,box-shadow .18s ease;
+    box-shadow:0 1px 2px rgba(11,110,79,.3);
+  }
+  .btn:hover{background:var(--accent-deep);box-shadow:0 4px 14px rgba(11,110,79,.25);}
+  .btn:active{transform:scale(.98);}
+  .btn.sub{
+    background:transparent;color:var(--ink);border:1.5px solid var(--line);box-shadow:none;font-weight:600;
+  }
+  .btn.sub:hover{border-color:var(--muted);background:#fff;}
+  .reassure{font-size:13px;color:var(--muted);}
+
+  /* nav */
+  header{position:sticky;top:0;z-index:20;background:rgba(252,252,250,.9);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);}
+  .nav{display:flex;align-items:center;justify-content:space-between;height:68px;}
+  .logo{font-weight:800;font-size:19px;letter-spacing:-.02em;display:flex;align-items:center;gap:8px;}
+  .logo i{width:20px;height:20px;border-radius:6px;background:var(--accent);position:relative;}
+  .logo i::after{content:"";position:absolute;left:5px;top:9px;width:10px;height:2.5px;background:#fff;border-radius:2px;box-shadow:0 -3.5px 0 #fff,0 -7px 0 rgba(255,255,255,.55);}
+  .nav ul{display:flex;gap:28px;list-style:none;font-size:14.5px;font-weight:600;color:var(--muted);}
+  .nav ul a:hover{color:var(--ink);}
+  .nav .btn{padding:10px 20px;font-size:14px;}
+
+  /* hero */
+  .hero{padding:88px 0 72px;}
+  .hero-grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:56px;align-items:center;}
+  .pill{
+    display:inline-block;background:var(--accent-tint);color:var(--accent-deep);
+    font-size:12.5px;font-weight:700;letter-spacing:.02em;border-radius:999px;padding:5px 13px;
+  }
+  h1{
+    font-size:clamp(2.4rem,4.8vw,3.6rem);font-weight:800;letter-spacing:-.035em;line-height:1.06;
+    margin:20px 0 18px;text-wrap:balance;
+  }
+  h1 em{font-style:normal;color:var(--accent);}
+  .hero .sub{font-size:18px;color:var(--muted);max-width:46ch;}
+  .hero .cta{display:flex;gap:14px;align-items:center;margin:30px 0 10px;}
+  .proofline{display:flex;align-items:center;gap:12px;margin-top:22px;}
+  .faces{display:flex;}
+  .faces span{
+    width:30px;height:30px;border-radius:50%;border:2px solid var(--page);margin-left:-8px;
+    background:linear-gradient(135deg,#A9C2B4,#5F7A6C);
+  }
+  .faces span:first-child{margin-left:0;background:linear-gradient(135deg,#D6C6A8,#8A7A57);}
+  .faces span:nth-child(3){background:linear-gradient(135deg,#B9B3D6,#6D648F);}
+  .proofline b{font-size:13.5px;font-weight:700;}
+  .proofline small{display:block;font-size:12.5px;color:var(--muted);font-weight:500;}
+
+  /* hero mock */
+  .mock{
+    background:#fff;border:1px solid var(--line);border-radius:14px;
+    box-shadow:0 24px 60px -24px rgba(23,33,27,.18);overflow:hidden;
+    transform:rotate(.6deg);
+  }
+  .mock .head{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--line);}
+  .mock .head b{font-size:13.5px;font-weight:700;}
+  .mock .head span{font-size:11.5px;color:var(--muted);background:var(--band);border-radius:999px;padding:3px 10px;font-weight:600;}
+  .mock .body{padding:18px;display:grid;gap:12px;}
+  .mrow{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .mcard{border:1px solid var(--line);border-radius:10px;padding:14px;}
+  .mcard .k{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+  .mcard .v{font-size:24px;font-weight:800;letter-spacing:-.02em;margin-top:4px;font-variant-numeric:tabular-nums;}
+  .mcard .d{font-size:12px;font-weight:700;color:var(--accent);}
+  .mbars{border:1px solid var(--line);border-radius:10px;padding:14px;}
+  .mbars .k{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
+  .bar{display:grid;grid-template-columns:64px 1fr 34px;gap:10px;align-items:center;font-size:11.5px;color:var(--muted);margin-top:7px;font-weight:600;}
+  .bar .track{height:8px;border-radius:4px;background:var(--band);overflow:hidden;}
+  .bar .track{display:block;}
+  .bar .fill{display:block;height:100%;border-radius:4px;background:var(--accent);opacity:.85;}
+  .msend{display:flex;justify-content:space-between;align-items:center;background:var(--accent-tint);border-radius:10px;padding:12px 14px;}
+  .msend span{font-size:12.5px;font-weight:700;color:var(--accent-deep);}
+  .msend .go{background:var(--accent);color:#fff;font-size:12px;font-weight:700;border-radius:6px;padding:7px 14px;}
+
+  /* logo band */
+  .band{background:var(--band);border-block:1px solid var(--line);padding:26px 0;}
+  .band .row{display:flex;justify-content:space-between;align-items:center;gap:24px;flex-wrap:wrap;}
+  .band .cap{font-size:12.5px;font-weight:700;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;}
+  .band .logos{display:flex;gap:36px;flex-wrap:wrap;font-weight:800;font-size:15px;color:#9AA39C;letter-spacing:-.01em;}
+
+  /* sections */
+  section.block{padding:88px 0;}
+  .kicker{font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);}
+  h2{font-size:clamp(1.7rem,3vw,2.3rem);font-weight:800;letter-spacing:-.028em;line-height:1.12;margin:12px 0 14px;text-wrap:balance;}
+  .block .lead{color:var(--muted);font-size:17px;max-width:56ch;}
+
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;}
+  .pain{list-style:none;margin-top:22px;display:grid;gap:12px;}
+  .pain li{display:flex;gap:12px;font-size:15.5px;color:var(--muted);}
+  .pain li b{color:var(--ink);font-weight:700;}
+  .pain .x{color:#B3543F;font-weight:800;}
+  .pain .c{color:var(--accent);font-weight:800;}
+
+  .benefits{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:44px;}
+  .benefit{border:1px solid var(--line);border-radius:12px;background:#fff;padding:26px;transition:border-color .2s ease,box-shadow .2s ease;}
+  .benefit:hover{border-color:var(--accent);box-shadow:0 10px 30px -18px rgba(11,110,79,.35);}
+  .benefit .stat{font-size:30px;font-weight:800;letter-spacing:-.03em;color:var(--accent);font-variant-numeric:tabular-nums;}
+  .benefit h3{font-size:16.5px;font-weight:700;margin:10px 0 8px;letter-spacing:-.01em;}
+  .benefit p{font-size:14px;color:var(--muted);}
+
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:44px;counter-reset:step;}
+  .step{position:relative;padding:26px;border-radius:12px;background:var(--band);border:1px solid var(--line);}
+  .step .n{
+    width:32px;height:32px;border-radius:50%;background:var(--ink);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;
+  }
+  .step h3{font-size:16.5px;font-weight:700;margin:14px 0 8px;}
+  .step p{font-size:14px;color:var(--muted);}
+  .step code{background:#fff;border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:12.5px;}
+
+  .quotes{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:44px;}
+  .quote{border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:10px;background:#fff;padding:24px 26px;}
+  .quote p{font-size:15.5px;line-height:1.6;}
+  .quote p b{background:var(--accent-tint);}
+  .quote footer{margin-top:16px;display:flex;gap:12px;align-items:center;}
+  .quote .face{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#C9BDA1,#7E7255);}
+  .quote .face.f2{background:linear-gradient(135deg,#A9BFD3,#54718A);}
+  .quote cite{font-style:normal;font-size:13.5px;font-weight:700;}
+  .quote cite small{display:block;font-weight:500;color:var(--muted);}
+
+  /* faq */
+  .faq-wrap{max-width:680px;margin:44px auto 0;}
+  details{border-bottom:1px solid var(--line);}
+  details:first-of-type{border-top:1px solid var(--line);}
+  summary{
+    list-style:none;cursor:pointer;padding:18px 4px;font-weight:700;font-size:15.5px;
+    display:flex;justify-content:space-between;gap:16px;align-items:center;transition:color .15s ease;
+  }
+  summary:hover{color:var(--accent-deep);}
+  summary::-webkit-details-marker{display:none;}
+  summary::after{content:"+";font-size:19px;font-weight:600;color:var(--muted);}
+  details[open] summary::after{content:"−";}
+  details p{padding:0 4px 20px;color:var(--muted);font-size:15px;max-width:60ch;}
+
+  /* final cta */
+  .final{background:var(--ink);color:#fff;padding:88px 0;}
+  .final .inner{text-align:center;max-width:640px;margin:0 auto;}
+  .final h2{color:#fff;}
+  .final p{color:rgba(255,255,255,.7);font-size:16.5px;}
+  .final .cta{display:flex;gap:14px;justify-content:center;margin:30px 0 14px;}
+  .final .btn.sub{color:#fff;border-color:rgba(255,255,255,.28);}
+  .final .btn.sub:hover{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.5);}
+  .risk{display:flex;gap:22px;justify-content:center;font-size:13px;color:rgba(255,255,255,.65);flex-wrap:wrap;}
+  .risk span::before{content:"✓";color:#5FBF97;font-weight:800;margin-right:7px;}
+
+  .site-foot{padding:30px 0;font-size:13px;color:var(--muted);}
+  .site-foot .row{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+  .site-foot a:hover{color:var(--ink);}
+
+  @media (max-width:900px){
+    .hero-grid,.split,.quotes{grid-template-columns:1fr;}
+    .benefits,.steps{grid-template-columns:1fr;}
+    .nav ul{display:none;}
+    .mock{transform:none;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="logo" href="#"><i></i>Briefing</a>
+    <ul>
+      <li><a href="#how">How it works</a></li>
+      <li><a href="#proof">Customers</a></li>
+      <li><a href="#faq">FAQ</a></li>
+      <li><a href="#">Pricing</a></li>
+    </ul>
+    <a class="btn" href="#cta">Start free trial</a>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="pill">For operations and RevOps teams</span>
+      <h1>Cut weekly reporting from 4 hours to <em>15 minutes</em></h1>
+      <p class="sub">
+        Briefing pulls your numbers from Salesforce, Stripe, and Sheets, drafts the narrative,
+        and delivers a board-ready weekly report your leadership actually reads.
+      </p>
+      <div class="cta">
+        <a class="btn" href="#cta">Start free trial</a>
+        <a class="btn sub" href="#how">See a sample report</a>
+      </div>
+      <span class="reassure">14 days free · No credit card · Set up in one afternoon</span>
+      <div class="proofline">
+        <div class="faces"><span></span><span></span><span></span></div>
+        <div>
+          <b>2,300+ teams send their Monday report with Briefing</b>
+          <small>Average setup to first report: 41 minutes</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="mock" aria-hidden="true">
+      <div class="head"><b>Weekly Business Review · W34</b><span>Drafted 8:00 AM</span></div>
+      <div class="body">
+        <div class="mrow">
+          <div class="mcard"><div class="k">New ARR</div><div class="v">$412k</div><div class="d">↑ 18% WoW</div></div>
+          <div class="mcard"><div class="k">Net retention</div><div class="v">117%</div><div class="d">↑ 2 pts</div></div>
+        </div>
+        <div class="mbars">
+          <div class="k">Pipeline by segment</div>
+          <div class="bar"><span>Enterprise</span><span class="track"><span class="fill" style="width:82%"></span></span><span>82%</span></div>
+          <div class="bar"><span>Mid-market</span><span class="track"><span class="fill" style="width:64%;opacity:.6"></span></span><span>64%</span></div>
+          <div class="bar"><span>SMB</span><span class="track"><span class="fill" style="width:41%;opacity:.4"></span></span><span>41%</span></div>
+        </div>
+        <div class="msend"><span>Narrative drafted · 6 insights flagged</span><span class="go">Send to leadership</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="band">
+  <div class="wrap row">
+    <span class="cap">Trusted by teams at</span>
+    <div class="logos">
+      <span>Northwind</span><span>Lumafield&nbsp;Co</span><span>Parcelo</span><span>Kestrel&nbsp;Health</span><span>Ridgeline</span>
+    </div>
+  </div>
+</div>
+
+<section class="block">
+  <div class="wrap split">
+    <div>
+      <span class="kicker">The problem</span>
+      <h2>Your Monday morning is a copy-paste ritual</h2>
+      <p class="lead">
+        Every week, someone senior spends half a day rebuilding the same report:
+        exporting CSVs, fixing charts, guessing at the story. Then leadership skims it in 90 seconds.
+      </p>
+    </div>
+    <ul class="pain">
+      <li><span class="x">✕</span><span><b>4+ hours weekly</b> lost to exports, pivot tables, and screenshot charts</span></li>
+      <li><span class="x">✕</span><span><b>Numbers disagree</b> because three tools computed "revenue" three ways</span></li>
+      <li><span class="x">✕</span><span><b>The "why" is missing</b>, so every report triggers a thread of follow-up questions</span></li>
+      <li><span class="c">✓</span><span><b>Briefing automates all three:</b> one metrics layer, one narrative draft, one send</span></li>
+    </ul>
+  </div>
+</section>
+
+<section class="block" style="padding-top:0">
+  <div class="wrap">
+    <span class="kicker">What you get</span>
+    <h2>Outcomes, not another dashboard</h2>
+    <div class="benefits">
+      <div class="benefit">
+        <div class="stat">15 min</div>
+        <h3>From draft to sent</h3>
+        <p>Briefing drafts the full report at 8:00 AM. You review, tweak one paragraph, and send. That is the whole job now.</p>
+      </div>
+      <div class="benefit">
+        <div class="stat">1 source</div>
+        <h3>Numbers that agree</h3>
+        <p>Metrics are defined once, in one place. Sales, finance, and the board see the same revenue figure, every week.</p>
+      </div>
+      <div class="benefit">
+        <div class="stat">3×</div>
+        <h3>More of it gets read</h3>
+        <p>Reports lead with what changed and why. Teams on Briefing see triple the open-and-read-through rate of their old PDF.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="how" style="padding-top:0">
+  <div class="wrap">
+    <span class="kicker">How it works</span>
+    <h2>Three steps, one afternoon</h2>
+    <div class="steps">
+      <div class="step">
+        <span class="n">1</span>
+        <h3>Connect your sources</h3>
+        <p>OAuth into Salesforce, Stripe, HubSpot, or paste a Sheet. Read-only, <code>SOC 2</code> audited, nothing leaves your warehouse.</p>
+      </div>
+      <div class="step">
+        <span class="n">2</span>
+        <h3>Approve the metric layer</h3>
+        <p>Briefing proposes definitions for ARR, churn, and pipeline. Your team edits them once; they are locked from then on.</p>
+      </div>
+      <div class="step">
+        <span class="n">3</span>
+        <h3>Get your Monday draft</h3>
+        <p>Every week: charts rebuilt, anomalies flagged, narrative drafted in your tone. You press send, or let it send itself.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="proof" style="background:var(--band);border-block:1px solid var(--line)">
+  <div class="wrap">
+    <span class="kicker">Proof</span>
+    <h2>Teams who got their Mondays back</h2>
+    <div class="quotes">
+      <div class="quote">
+        <p>&ldquo;We went from a 4-hour Sunday-night scramble to a <b>12-minute review over coffee</b>. Our CFO noticed the difference in week one.&rdquo;</p>
+        <footer>
+          <span class="face"></span>
+          <cite>Priya Raman<small>VP Operations, Parcelo</small></cite>
+        </footer>
+      </div>
+      <div class="quote">
+        <p>&ldquo;The narrative drafts are the killer feature. Board members reply to the report now, because it finally <b>explains the why, not just the what</b>.&rdquo;</p>
+        <footer>
+          <span class="face f2"></span>
+          <cite>Daniel Okafor<small>COO, Kestrel Health</small></cite>
+        </footer>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="faq">
+  <div class="wrap">
+    <div style="text-align:center">
+      <span class="kicker">FAQ</span>
+      <h2>The questions your team will ask</h2>
+    </div>
+    <div class="faq-wrap">
+      <details open>
+        <summary>How long does setup actually take?</summary>
+        <p>Median time from signup to first generated report is 41 minutes. The only human step is approving the metric definitions Briefing proposes.</p>
+      </details>
+      <details>
+        <summary>Where does our data live?</summary>
+        <p>Connections are read-only and queries run against your systems; Briefing stores computed metrics and reports, never raw customer records. SOC 2 Type II report available on request.</p>
+      </details>
+      <details>
+        <summary>Can we edit the drafted narrative?</summary>
+        <p>Always. The draft is a starting point in your tone of voice. Most teams change one or two sentences; every edit teaches the next draft.</p>
+      </details>
+      <details>
+        <summary>What if our metrics are messy?</summary>
+        <p>That is the normal starting state. The one-time metric review surfaces every conflicting definition, and teams tell us that meeting alone was worth the trial.</p>
+      </details>
+      <details>
+        <summary>What happens after the trial?</summary>
+        <p>Plans start at $99/month per workspace. If you do not continue, your report archive exports to PDF and Markdown, and connections are revoked automatically.</p>
+      </details>
+      <details>
+        <summary>Can we cancel anytime?</summary>
+        <p>Yes, in one click from settings, effective immediately, with a prorated refund on annual plans. No retention phone call.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section class="final" id="cta">
+  <div class="wrap inner">
+    <h2>Send next Monday's report in 15 minutes</h2>
+    <p>Connect a source today and Briefing drafts your first weekly report this week.</p>
+    <div class="cta">
+      <a class="btn" href="#">Start free trial</a>
+      <a class="btn sub" href="#">Book a 20-min demo</a>
+    </div>
+    <div class="risk">
+      <span>14 days free</span>
+      <span>No credit card</span>
+      <span>Cancel anytime</span>
+      <span>Prorated refunds</span>
+    </div>
+  </div>
+</section>
+
+<footer class="site-foot">
+  <div class="wrap row">
+    <span>© 2026 Briefing Labs, Inc.</span>
+    <span><a href="#">Security</a> · <a href="#">Privacy</a> · <a href="#">Terms</a> · <a href="#">Status</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TOKONOMA · Curated Graphic Works</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&family=Cormorant+Garamond:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --paper: #FAFAFA;
+    --ink: #0A0A0A;
+    --hairline: #ECECEA;
+    --mute: #8A8A86;
+  }
+  body {
+    font-family: "Inter", -apple-system, "Helvetica Neue", sans-serif;
+    font-weight: 300;
+    background: var(--paper);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
+
+  header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 34px 0 30px;
+  }
+  .wordmark {
+    font-size: 13px; font-weight: 500; letter-spacing: .42em; text-transform: uppercase;
+  }
+  nav { display: flex; gap: 36px; }
+  nav a {
+    font-size: 11px; letter-spacing: .22em; text-transform: uppercase;
+    color: var(--mute); text-decoration: none; transition: color .25s ease;
+  }
+  nav a:hover, nav a.on { color: var(--ink); }
+
+  .intro {
+    padding: 66px 0 78px; border-top: 1px solid var(--hairline);
+    display: grid; grid-template-columns: 1fr 1fr;
+  }
+  .intro h1 {
+    font-family: "Cormorant Garamond", Georgia, serif;
+    font-weight: 400; font-size: 46px; line-height: 1.18; letter-spacing: .01em;
+  }
+  .intro h1 em { font-style: italic; }
+  .intro .side {
+    align-self: end; justify-self: end; max-width: 300px;
+    font-size: 12.5px; line-height: 1.85; color: var(--mute);
+  }
+  .intro .side b { color: var(--ink); font-weight: 400; }
+
+  .filter-row {
+    display: flex; gap: 28px; align-items: baseline;
+    padding: 0 0 26px; border-bottom: 1px solid var(--hairline);
+  }
+  .filter-row span.count { margin-left: auto; font-size: 11px; letter-spacing: .18em; color: var(--mute); }
+  .filter-row a {
+    font-size: 11px; letter-spacing: .2em; text-transform: uppercase;
+    color: var(--mute); text-decoration: none;
+  }
+  .filter-row a.on { color: var(--ink); border-bottom: 1px solid var(--ink); padding-bottom: 3px; }
+  .filter-row a:hover { color: var(--ink); }
+
+  /* masonry */
+  .board { columns: 3; column-gap: 54px; padding: 58px 0 30px; }
+  .work { break-inside: avoid; margin-bottom: 76px; display: block; text-decoration: none; color: inherit; }
+  .plate {
+    background: #FFFFFF; border: 1px solid var(--hairline);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .35s ease, box-shadow .35s ease;
+  }
+  .work:hover .plate { transform: translateY(-4px); box-shadow: 0 18px 40px rgba(10,10,10,.06); }
+  .plate svg { display: block; width: 100%; height: auto; }
+  .caption { padding: 16px 2px 0; display: flex; justify-content: space-between; align-items: baseline; }
+  .caption .t { font-size: 13px; font-weight: 400; letter-spacing: .02em; }
+  .caption .t i { font-family: "Cormorant Garamond", Georgia, serif; font-size: 15px; }
+  .caption .m { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); }
+  .sub { font-size: 11.5px; color: var(--mute); margin-top: 5px; letter-spacing: .03em; }
+
+  footer {
+    border-top: 1px solid var(--hairline);
+    padding: 30px 0 56px;
+    display: flex; justify-content: space-between;
+    font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--mute);
+  }
+  footer a { color: var(--mute); text-decoration: none; }
+  footer a:hover { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="wordmark">Tokonoma</div>
+    <nav>
+      <a href="#" class="on">Collection</a>
+      <a href="#">Editions</a>
+      <a href="#">Studios</a>
+      <a href="#">Journal</a>
+      <a href="#">Visit</a>
+    </nav>
+  </header>
+
+  <section class="intro">
+    <h1>Objects of quiet<br>attention, chosen<br><em>one at a time.</em></h1>
+    <p class="side">Tokonoma is a rotating shelf of <b>thirty-six graphic works</b>: posters, studies, and printed matter from independent studios. Nothing is sponsored. Everything is numbered. When an edition sells through, its place stays empty for a season.</p>
+  </section>
+
+  <div class="filter-row">
+    <a href="#" class="on">All</a>
+    <a href="#">Poster</a>
+    <a href="#">Study</a>
+    <a href="#">Type Specimen</a>
+    <a href="#">Photobook</a>
+    <span class="count">36 works · Season 09</span>
+  </div>
+
+  <section class="board">
+
+    <a class="work" href="#">
+      <div class="plate">
+        <svg viewBox="0 0 300 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Red circle poster">
+          <rect width="300" height="400" fill="#FFFFFF"/>
+          <circle cx="150" cy="168" r="86" fill="#C33D2E"/>
+          <rect x="52" y="304" width="196" height="2" fill="#0A0A0A"/>
+          <text x="52" y="336" font-family="Inter, sans-serif" font-size="13" letter-spacing="4" fill="#0A0A0A">HINOMARU STUDY</text>
+        </svg>
+      </div>
+      <div class="caption"><span class="t"><i>Hinomaru Study</i></span><span class="m">Poster</span></div>
+      <div class="sub">Atelier Kumo, Kyoto · Edition of 50 · ¥18,000</div>
+    </a>
+
+    <a class="work" href="#">
+      <div class="plate">
+        <svg viewBox="0 0 300 340" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Blue gradient bars">
+          <rect width="300" height="340" fill="#F4F6F8"/>
+          <rect x="46" y="52" width="30" height="236" fill="#123A63"/>
+          <rect x="90" y="52" width="30" height="236" fill="#2C5A88"/>
+          <rect x="134" y="52" width="30" height="236" fill="#5581A8"/>
+          <rect x="178" y="52" width="30" height="236" fill="#8FAcC6"/>
+          <rect x="222" y="52" width="30" height="236" fill="#C6D4E0"/>
+        </svg>
+      </div>
+      <div class="caption"><span class="t"><i>Tide Table, Five Hours</i></span><span class="m">Study</span></div>
+      <div class="sub">Meridian Press, Lisbon · Edition of 120 · €90</div>
+    </a>
+
+    <a class="work" href="#">
+      <div class="plate">
+        <svg viewBox="0 0 300 420" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Type specimen Aa">
+          <rect width="300" height="420" fill="#0A0A0A"/>
+          <text x="150" y="235" text-anchor="middle" font-family="Cormorant Garamond, Georgia, serif" font-size="170" fill="#FAFAFA">Aa</text>
+          <text x="150" y="330" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" letter-spacing="6" fill="#8A8A86">SERIF NO. 4 · 1892 REVIVAL</text>
+        </svg>
+      </div>
+      <div class="caption"><span class="t"><i>Serif No. 4</i></span><span class="m">Type Specimen</span></div>
+      <div class="sub">Foundry Osso, Milan · Open edition · €40</div>
+    </a>
+
+    <a class="work" href="#">
+      <div class="plate">
+        <svg viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Green quarter arcs">
+          <rect width="300" height="300" fill="#FFFFFF"/>
+          <path d="M 0 300 A 300 300 0 0 1 300 0 L 300 300 Z" fill="#1E5941"/>
+          <path d="M 90 300 A 210 210 0 0 1 300 90 L 300 300 Z" fill="#3D7A5C"/>
+          <path d="M 180 300 A 120 120 0 0 1 300 180 L 300 300 Z" fill="#8FB8A2"/>
+        </svg>
+      </div>
+      <div class="caption"><span class="t"><i>Moss Garden I</i></span><span class="m">Poster</span></div>
+      <div class="sub">Atelier Kumo, Kyoto · Edition of 50 · ¥16,000</div>
+    </a>
+
+    <a class="work" href="#">
+      <div class="plate">
+        <svg viewBox="0 0 300 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ochre sun over line horizon">
+          <rect width="300" height="380" fill="#F6F1E7"/>
+          <circle cx="150" cy="150" r="64" fill="#C98A2D"/>
+          <g stroke="#0A0A0A" stroke-width="1.5">
+            <line x1="40" y1="252" x2="260" y2="252"/>
+            <line x1="52" y1="272" x2="248" y2="272"/>
+            <line x1="64" y1="292" x2="236" y2="292"/>
+            <line x1="76" y1="312" x2="224" y2="312"/>
+          </g>
+        </svg>
+      </div>
+      <div class="caption"><span class="t"><i>Low Sun, Later</i></span><span class="m">Poster</span></div>
+      <div class="sub">Studio Herbst, Berlin · Edition of 75 · €110</div>
+    </a>
+
+    <a class="work" href="#">
+      <div class="plate">
+        <svg viewBox="0 0 300 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Photobook cover with grey rectangle">
+          <rect width="300" height="360" fill="#E8E6E1"/>
+          <rect x="70" y="64" width="160" height="196" fill="#5E5C57"/>
+          <rect x="70" y="64" width="160" height="196" fill="none" stroke="#FAFAFA" stroke-width="1"/>
+          <text x="70" y="300" font-family="Inter, sans-serif" font-size="12" letter-spacing="3" fill="#0A0A0A">CONCRETE COAST</text>
+          <text x="70" y="318" font-family="Inter, sans-serif" font-size="9" letter-spacing="2" fill="#8A8A86">48 PLATES · DUOTONE</text>
+        </svg>
+      </div>
+      <div class="caption"><span class="t"><i>Concrete Coast</i></span><span class="m">Photobook</span></div>
+      <div class="sub">Meridian Press, Lisbon · Second printing · €65</div>
+    </a>
+
+    <a class="work" href="#">
+      <div class="plate">
+        <svg viewBox="0 0 300 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Indigo wave study">
+          <rect width="300" height="400" fill="#FFFFFF"/>
+          <g stroke="#2A3C6E" stroke-width="2" fill="none">
+            <path d="M 40 120 C 90 90, 130 150, 180 120 S 240 90, 260 120"/>
+            <path d="M 40 160 C 90 130, 130 190, 180 160 S 240 130, 260 160"/>
+            <path d="M 40 200 C 90 170, 130 230, 180 200 S 240 170, 260 200"/>
+            <path d="M 40 240 C 90 210, 130 270, 180 240 S 240 210, 260 240"/>
+          </g>
+          <circle cx="222" cy="96" r="18" fill="#C33D2E"/>
+          <text x="40" y="330" font-family="Inter, sans-serif" font-size="12" letter-spacing="4" fill="#0A0A0A">SETO INLAND SEA</text>
+        </svg>
+      </div>
+      <div class="caption"><span class="t"><i>Seto Inland Sea</i></span><span class="m">Study</span></div>
+      <div class="sub">Atelier Kumo, Kyoto · Edition of 40 · ¥21,000</div>
+    </a>
+
+    <a class="work" href="#">
+      <div class="plate">
+        <svg viewBox="0 0 300 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Grid of dots poster">
+          <rect width="300" height="360" fill="#F2F2EF"/>
+          <g fill="#1C1B19">
+            <circle cx="75" cy="80" r="5"/><circle cx="125" cy="80" r="5"/><circle cx="175" cy="80" r="5"/><circle cx="225" cy="80" r="5"/>
+            <circle cx="75" cy="130" r="5"/><circle cx="125" cy="130" r="9"/><circle cx="175" cy="130" r="5"/><circle cx="225" cy="130" r="5"/>
+            <circle cx="75" cy="180" r="5"/><circle cx="125" cy="180" r="5"/><circle cx="175" cy="180" r="14" fill="#C98A2D"/><circle cx="225" cy="180" r="5"/>
+            <circle cx="75" cy="230" r="5"/><circle cx="125" cy="230" r="5"/><circle cx="175" cy="230" r="5"/><circle cx="225" cy="230" r="5"/>
+          </g>
+          <text x="75" y="300" font-family="Inter, sans-serif" font-size="11" letter-spacing="5" fill="#8A8A86">ONE OF SIXTEEN</text>
+        </svg>
+      </div>
+      <div class="caption"><span class="t"><i>One of Sixteen</i></span><span class="m">Poster</span></div>
+      <div class="sub">Studio Herbst, Berlin · Edition of 100 · €80</div>
+    </a>
+
+  </section>
+
+  <footer>
+    <span>Tokonoma · Naka-ku, Yokohama</span>
+    <span><a href="#">Newsletter</a>&nbsp;&nbsp;·&nbsp;&nbsp;<a href="#">Shipping</a>&nbsp;&nbsp;·&nbsp;&nbsp;<a href="#">Instagram</a></span>
+  </footer>
+
+</div>
+</body>
+</html>

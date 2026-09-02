@@ -28,6 +28,13 @@ full split.
 1. Create `design-templates/<my-template>/SKILL.md` with `name`,
    `description`, `triggers`, and an explicit `od.mode` (one of
    `prototype`, `deck`, `template`, `image`, `video`, `audio`).
+   Also set `od.task_type` — the OD Next task profile this template
+   stacks on top of (one of `prototype`, `ppt`, `marketing`, `hyperframes`,
+   `image`, `document`). Exactly one parent per template; the free-text
+   router groups the skill index by this field, so a missing value keeps
+   the template out of agent-side discovery. Bilingual `zh_name`,
+   `zh_description`, and mixed zh/en `triggers` are what the router matches
+   against, so fill them in rather than leaving English only.
 2. Ship a baked `example.html` (and any side files) so the shared example and
    asset routes have preview content to serve.
 3. Optionally drop additional baked samples under `examples/<key>.html`

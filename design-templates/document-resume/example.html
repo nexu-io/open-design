@@ -1,0 +1,827 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Professional Resume Template - Evidence-Led Profile</title>
+  <style>
+    :root {
+      --paper: #fbfcff;
+      --ink: #252525;
+      --rule: #deded8;
+      --rail: #1d1d1d;
+      --lime: #a8ff45;
+      --font-display: 'Albert Sans', 'Inter', sans-serif;
+      --font-body: 'Inter', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #f2f4f7;
+      font-family: var(--font-body);
+      color: var(--ink);
+    }
+
+    /* Printable Page Container */
+    .page-container {
+      width: 210mm;
+      min-height: 270mm;
+      margin: 40px auto;
+      background: var(--paper);
+      box-shadow: 0 40px 80px -20px rgba(0,0,0,0.1);
+      display: flex;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Main Column */
+    .main-column {
+      flex: 1;
+      padding: 20px 42px 36px;
+      background: var(--paper);
+      z-index: 10;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .main-column::before {
+      content: "";
+      position: absolute;
+      inset: 110px -150px 370px 40px;
+      z-index: 0;
+      pointer-events: none;
+      opacity: 0.25;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 760 760'%3E%3Cg fill='none' stroke='%23a8ff45' stroke-width='1.25'%3E%3Ccircle cx='386' cy='380' r='296'/%3E%3Cellipse cx='386' cy='380' rx='188' ry='296'/%3E%3Cellipse cx='386' cy='380' rx='84' ry='296'/%3E%3Cpath d='M110 250 Q386 370 662 250'/%3E%3Cpath d='M90 380 Q386 490 682 380'/%3E%3Cpath d='M110 510 Q386 390 662 510'/%3E%3Cpath d='M176 150 316 95 472 108 595 196'/%3E%3Cpath d='M92 380 214 538 386 676 554 550 682 380'/%3E%3Cpath d='M176 610 306 662 462 650 595 564'/%3E%3Cpath d='M176 150 214 538 386 676 472 108 554 550 595 196'/%3E%3Cpath d='M316 95 306 662 462 650 472 108'/%3E%3C/g%3E%3Cg fill='%23a8ff45'%3E%3Ccircle cx='176' cy='150' r='2'/%3E%3Ccircle cx='472' cy='108' r='2'/%3E%3Ccircle cx='682' cy='380' r='2'/%3E%3Ccircle cx='554' cy='550' r='2'/%3E%3Ccircle cx='386' cy='676' r='2'/%3E%3Ccircle cx='214' cy='538' r='2'/%3E%3C/g%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-size: 560px 560px;
+      background-position: right center;
+    }
+
+    .main-column > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    .document-header {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding-bottom: 12px;
+      margin-bottom: 22px;
+      border-bottom: 1px solid var(--rule);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .document-name {
+      color: var(--ink);
+      white-space: nowrap;
+    }
+
+    .document-divider {
+      width: 1px;
+      height: 18px;
+      background: var(--rule);
+    }
+
+    .document-kind {
+      color: #666;
+    }
+
+    .identity-kicker {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 22px;
+      font-family: var(--font-display);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--ink);
+    }
+
+    .identity-kicker::before {
+      content: "";
+      width: 36px;
+      height: 2px;
+      background: var(--lime);
+    }
+
+    .identity-lockup {
+      position: relative;
+      top: -6px;
+      margin-bottom: -6px;
+    }
+
+    /* Right Rail */
+    .data-rail {
+      width: 240px;
+      background: var(--rail);
+      color: #fff;
+      padding: 20px 20px 60px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 40px;
+    }
+
+    /* Rail Grid Pattern Overlay */
+    .data-rail::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: 0.05;
+      pointer-events: none;
+      background-image:
+        linear-gradient(to right, #ffffff 1px, transparent 1px),
+        linear-gradient(to bottom, #ffffff 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+
+    .display-name {
+      font-family: var(--font-display);
+      font-weight: 900;
+      font-size: 64px;
+      line-height: 0.95;
+      letter-spacing: -0.04em;
+      text-transform: uppercase;
+      margin-bottom: 0;
+    }
+
+    .role-label {
+      font-family: var(--font-display);
+      font-size: 26px;
+      font-weight: 500;
+      text-transform: none;
+      letter-spacing: -0.02em;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .role-label::after {
+      content: none;
+    }
+
+    .section-title {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      margin-bottom: 10px;
+      color: var(--ink);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .section-rule {
+      height: 1px;
+      margin: 0 0 7px;
+      background: var(--rule);
+    }
+
+    .profile-section {
+      margin-top: -8px;
+      margin-bottom: 14px;
+    }
+
+    .profile-section .section-title {
+      margin-bottom: 10px;
+    }
+
+    .experience-section {
+      padding-top: 9px;
+      margin-bottom: 24px;
+    }
+
+    .work-section {
+      margin-bottom: 24px;
+    }
+
+    .rail-section-title {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: rgba(255,255,255,0.4);
+      height: 20px;
+      line-height: 20px;
+      margin-bottom: 22px;
+    }
+
+    .rail-kicker {
+      position: relative;
+      margin-bottom: -20px;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 500;
+      line-height: 20px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.68);
+      white-space: nowrap;
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--rule);
+      margin: 40px 0;
+    }
+
+    .lime-accent {
+      color: var(--lime);
+    }
+
+    .lime-marker {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: var(--lime);
+      border-radius: 1px;
+    }
+
+    .section-index {
+      color: #359b11;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .experience-bullet {
+      display: block;
+      flex: 0 0 5px;
+      width: 5px;
+      height: 5px;
+      margin-top: 0.5em;
+      background: var(--lime);
+    }
+
+    .experience-item {
+      position: relative;
+      margin-bottom: 16px;
+    }
+
+    .experience-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .experience-timeline {
+      position: relative;
+      padding-left: 24px;
+    }
+
+    .experience-timeline::before {
+      content: "";
+      position: absolute;
+      top: 6px;
+      bottom: 18px;
+      left: 4px;
+      width: 1px;
+      background: var(--rule);
+    }
+
+    .experience-item::before {
+      content: "";
+      position: absolute;
+      top: 6px;
+      left: -24px;
+      z-index: 1;
+      width: 8px;
+      height: 8px;
+      background: var(--lime);
+    }
+
+    .work-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      overflow: hidden;
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+    }
+
+    .work-card {
+      min-height: 64px;
+      padding: 13px 14px;
+      background: rgba(255,255,255,0.3);
+    }
+
+    .work-card:nth-child(odd) {
+      border-right: 1px solid var(--rule);
+    }
+
+    .work-card:nth-child(-n + 2) {
+      border-bottom: 1px solid var(--rule);
+    }
+
+    .experience-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 6px;
+    }
+
+    .job-title {
+      font-weight: 700;
+      font-size: 16px;
+    }
+
+    .company-name {
+      color: #666;
+      font-size: 12px;
+    }
+
+    .date-range {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: #888;
+    }
+
+    .portrait-frame {
+      position: relative;
+      width: 170px;
+      margin: 0;
+      padding: 0 8px 8px 0;
+    }
+
+    .portrait-frame::after {
+      content: "";
+      position: absolute;
+      top: 8px;
+      right: 0;
+      bottom: 0;
+      left: 8px;
+      z-index: 0;
+      background: var(--lime);
+      border-radius: 0 16px 16px 16px;
+    }
+
+    .portrait-placeholder {
+      width: 100%;
+      aspect-ratio: 1/1;
+      background: #2a2a2a;
+      border: 1px dashed rgba(255,255,255,0.1);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: rgba(255,255,255,0.3);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      gap: 8px;
+      overflow: hidden;
+      padding: 0;
+      position: relative;
+      z-index: 1;
+      border-radius: 16px;
+    }
+
+    .portrait-placeholder img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .impact-stat {
+      border-left: 2px solid var(--lime);
+      padding-left: 16px;
+      margin-bottom: 24px;
+    }
+
+    .impact-value {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 18px;
+      color: #fff;
+      line-height: 1.2;
+    }
+
+    .impact-label {
+      font-size: 11px;
+      color: rgba(255,255,255,0.5);
+      margin-top: 4px;
+    }
+
+    .metrics-grid {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-auto-rows: 100px;
+      height: 201px;
+    }
+
+    .metrics-grid::before {
+      content: "";
+      position: absolute;
+      top: -11px;
+      left: 0;
+      width: 100%;
+      height: 1px;
+      z-index: 0;
+      background: rgba(255,255,255,0.18);
+      box-shadow: 0 100px 0 rgba(255,255,255,0.18), 0 200px 0 rgba(255,255,255,0.18);
+      pointer-events: none;
+    }
+
+    .metrics-grid::after {
+      content: "";
+      position: absolute;
+      top: -11px;
+      bottom: 12px;
+      left: 100px;
+      width: 1px;
+      z-index: 0;
+      background: rgba(255,255,255,0.18);
+      pointer-events: none;
+    }
+
+    .metric-cell {
+      position: relative;
+      z-index: 1;
+      min-height: 100px;
+      padding: 20px;
+    }
+
+    .metric-value {
+      display: block;
+      color: #fff;
+      font-family: var(--font-display);
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1;
+    }
+
+    .metric-label {
+      display: block;
+      margin-top: 8px;
+      color: rgba(255,255,255,0.58);
+      font-size: 10px;
+      line-height: 1.35;
+    }
+
+    .operating-chart {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .donut {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 132px;
+      height: 132px;
+      border-radius: 50%;
+      background: conic-gradient(var(--lime) 0 42%, #f6f7f9 42% 75%, rgba(255,255,255,0.38) 75% 100%);
+    }
+
+    .donut-core {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 84px;
+      height: 84px;
+      border-radius: 50%;
+      background: var(--rail);
+      text-align: center;
+    }
+
+    .donut-value {
+      color: #fff;
+      font-family: var(--font-display);
+      font-size: 32px;
+      font-weight: 800;
+      line-height: 0.95;
+    }
+
+    .donut-label {
+      margin-top: 4px;
+      color: rgba(255,255,255,0.58);
+      font-family: var(--font-mono);
+      font-size: 7px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .profile-legend {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      width: 100%;
+      gap: 8px;
+    }
+
+    .profile-skill {
+      display: grid;
+      grid-template-columns: 7px minmax(0, 1fr);
+      grid-template-rows: auto auto;
+      align-items: start;
+      gap: 3px 5px;
+      color: rgba(255,255,255,0.88);
+      font-size: 8px;
+    }
+
+    .skill-swatch {
+      grid-column: 1;
+      grid-row: 1;
+      width: 7px;
+      height: 7px;
+      margin-top: 1px;
+      background: var(--lime);
+    }
+
+    .skill-swatch.is-light { background: #f6f7f9; }
+    .skill-swatch.is-muted { background: rgba(255,255,255,0.38); }
+
+    .profile-skill strong {
+      grid-column: 2;
+      grid-row: 2;
+      color: #fff;
+      font-family: var(--font-display);
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .profile-skill > span:not(.skill-swatch) {
+      grid-column: 2;
+      grid-row: 1;
+      white-space: nowrap;
+    }
+
+    .capability-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+      color: rgba(255,255,255,0.88);
+      font-family: var(--font-display);
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 20px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .capability-title::before {
+      content: "";
+      width: 24px;
+      height: 2px;
+      background: var(--lime);
+    }
+
+    .capability-list {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .capability-meta {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 7px;
+      color: rgba(255,255,255,0.9);
+      font-size: 12px;
+    }
+
+    .capability-score {
+      color: var(--lime);
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    .capability-track {
+      width: 100%;
+      height: 5px;
+      background: rgba(255,255,255,0.2);
+    }
+
+    .capability-fill {
+      display: block;
+      height: 100%;
+      background: var(--lime);
+    }
+
+    .philosophy-card {
+      position: relative;
+      border: 1px solid rgba(168,255,69,0.78);
+      padding: 14px 14px 12px;
+    }
+
+    .quote-mark {
+      color: var(--lime);
+      font-family: Georgia, serif;
+      font-size: 32px;
+      font-weight: 700;
+      line-height: 0.65;
+    }
+
+    .philosophy-copy {
+      margin: 14px 0 18px;
+      color: #fff;
+      font-size: 14px;
+      line-height: 1.38;
+    }
+
+    .philosophy-caption {
+      color: rgba(255,255,255,0.58);
+      font-family: var(--font-mono);
+      font-size: 8px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .skill-tag {
+      display: inline-block;
+      border: 1px solid rgba(255,255,255,0.2);
+      padding: 4px 10px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      margin: 0 4px 8px 0;
+      color: rgba(255,255,255,0.8);
+    }
+
+    .template-shell { min-height:100vh; display:flex; align-items:flex-start; justify-content:center; padding:0; }
+  .profile-copy { margin:0; color:#2f3338; font-size:15px; line-height:1.625; }
+  .company-name { margin-bottom:4px; }
+  .experience-list { margin:0; padding:0; color:#2f3338; font-size:14px; line-height:1.625; list-style:none; }
+  .experience-list li + li { margin-top:4px; }
+  .work-title { margin:0 0 4px; font-size:13px; font-weight:700; }
+  .work-copy { margin:0; color:#666; font-size:11px; line-height:1.375; }
+  .education-header { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px; }
+  .education-title { font-size:14px; font-weight:700; }
+  .education-copy { color:#666; font-size:13px; }
+  .philosophy-section { margin-top:auto; }
+  .portrait-fallback { display:grid; width:100%; height:100%; place-items:center; background:linear-gradient(135deg,#a8ff45 0 34%,#2a2a2a 34% 100%); color:#1d1d1d; font-family:var(--font-mono); font-size:48px; font-weight:700; letter-spacing:-.08em; }
+
+  @media print {
+      body {
+        background: none;
+      }
+      .page-container {
+        margin: 0;
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="template-shell" data-sd-id="1">
+    <div class="page-container" data-sd-id="2">
+
+      <!-- Main Column -->
+      <main class="main-column" data-sd-id="3">
+
+        <header data-sd-id="4">
+          <div class="document-header">
+            <span class="document-kind">Résumé / 2026</span>
+          </div>
+          <div class="identity-kicker">Product design · collaborative work</div>
+          <div class="identity-lockup">
+            <h1 class="display-name" data-sd-id="5">Elena Park</h1>
+            <div class="role-label" data-sd-id="6">Product Designer</div>
+          </div>
+        </header>
+
+        <section class="profile-section" data-sd-id="7">
+          <h2 class="section-title" data-sd-id="8"><span class="section-index" data-sd-id="9">01</span> Profile</h2>
+          <div class="section-rule"></div>
+          <p class="profile-copy" data-sd-id="10">
+            Product designer working at the intersection of complex workflows and human clarity. Elena turns ambiguous product problems into systems, interfaces, and prototypes that teams can test, build, and improve together.
+          </p>
+        </section>
+
+        <section class="experience-section" data-sd-id="12">
+          <h2 class="section-title" data-sd-id="13"><span class="section-index" data-sd-id="14">02</span> Professional Experience</h2>
+          <div class="section-rule"></div>
+          <div class="experience-timeline">
+
+          <div class="experience-item" data-sd-id="15">
+            <div class="experience-header" data-sd-id="16">
+              <span class="job-title" data-sd-id="17">Lead Product Designer</span>
+              <span class="date-range" data-sd-id="18">2023 — Present</span>
+            </div>
+            <div class="company-name" data-sd-id="19">Northline Systems · Berlin / Remote</div>
+            <ul class="experience-list" data-sd-id="20">
+              <li  data-sd-id="21">Set the product direction for a case-management platform, bringing intake, review, and handoff into one clear workflow.</li>
+              <li  data-sd-id="23">Partnered with engineering and research to ship onboarding from first workspace setup through a confident team handoff.</li>
+              <li  data-sd-id="25">Built interaction patterns and decision records that made complex states, permissions, and empty views easier to implement.</li>
+            </ul>
+          </div>
+
+          <div class="experience-item" data-sd-id="27">
+            <div class="experience-header" data-sd-id="28">
+              <span class="job-title" data-sd-id="29">Product Designer</span>
+              <span class="date-range" data-sd-id="30">2020 — 2023</span>
+            </div>
+            <div class="company-name" data-sd-id="31">Atelier Cloud · London, UK</div>
+            <ul class="experience-list" data-sd-id="32">
+              <li  data-sd-id="33">Designed collaboration tools for distributed teams, from early concepts and research synthesis to production-ready flows.</li>
+              <li  data-sd-id="35">Ran prototype sessions with customers and translated recurring friction into a focused, reusable product roadmap.</li>
+            </ul>
+          </div>
+
+          </div>
+        </section>
+
+        <section class="work-section" data-sd-id="37">
+          <h2 class="section-title" data-sd-id="38"><span class="section-index" data-sd-id="39">03</span> Selected Outputs</h2>
+          <div class="work-grid" data-sd-id="40">
+            <div class="work-card" data-sd-id="41">
+              <h3 class="work-title" data-sd-id="42">Decision workbench</h3>
+              <p class="work-copy" data-sd-id="43">Intake, review & accountable next steps</p>
+            </div>
+            <div class="work-card" data-sd-id="44">
+              <h3 class="work-title" data-sd-id="45">Pattern library</h3>
+              <p class="work-copy" data-sd-id="46">Reusable interactions for product teams</p>
+            </div>
+            <div class="work-card" data-sd-id="100">
+              <h3 class="work-title" data-sd-id="101">Prototype</h3>
+              <p class="work-copy" data-sd-id="102">Testable workflows for real customer sessions</p>
+            </div>
+            <div class="work-card" data-sd-id="103">
+              <h3 class="work-title" data-sd-id="104">Design handoff</h3>
+              <p class="work-copy" data-sd-id="105">Build-ready context, states & decision notes</p>
+            </div>
+          </div>
+        </section>
+
+        <section data-sd-id="48">
+          <h2 class="section-title" data-sd-id="49"><span class="section-index" data-sd-id="50">04</span> Education</h2>
+          <div class="section-rule"></div>
+          <div class="education-header" data-sd-id="51">
+            <span class="education-title" data-sd-id="52">BDes, Interaction Design</span>
+            <span class="date-range" data-sd-id="53">2016 — 2020</span>
+          </div>
+          <div class="education-copy" data-sd-id="54">Independent study in systems thinking, service design, and digital product craft.</div>
+        </section>
+
+      </main>
+
+      <!-- Data Rail -->
+      <aside class="data-rail" data-sd-id="55">
+
+        <div class="rail-kicker">Candidate intelligence / 2026</div>
+
+        <section data-sd-id="56">
+          <div class="portrait-frame" data-sd-id="57">
+            <div class="portrait-placeholder" data-sd-id="58">
+              <div class="portrait-fallback" aria-label="Elena Park portrait placeholder">EP</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="metrics-section" data-sd-id="69">
+          <h3 class="rail-section-title" data-sd-id="70">Experience signals</h3>
+          <div class="metrics-grid">
+            <div class="metric-cell" data-sd-id="71"><span class="metric-value" data-sd-id="72">6+</span><span class="metric-label" data-sd-id="73">Years in product</span></div>
+            <div class="metric-cell" data-sd-id="74"><span class="metric-value" data-sd-id="75">14</span><span class="metric-label" data-sd-id="76">Shipped launches</span></div>
+            <div class="metric-cell" data-sd-id="89"><span class="metric-value" data-sd-id="90">2</span><span class="metric-label" data-sd-id="91">Product systems</span></div>
+            <div class="metric-cell" data-sd-id="92"><span class="metric-value" data-sd-id="93">18</span><span class="metric-label" data-sd-id="94">Research sessions</span></div>
+          </div>
+        </section>
+
+        <section data-sd-id="77">
+          <h3 class="capability-title" data-sd-id="78">Core capabilities</h3>
+          <div class="capability-list" data-sd-id="79">
+            <div class="capability-row" data-sd-id="80"><div class="capability-meta"><span>Product design</span><strong class="capability-score">96</strong></div><div class="capability-track"><span class="capability-fill" style="width:96%"></span></div></div>
+            <div class="capability-row" data-sd-id="81"><div class="capability-meta"><span>Design systems</span><strong class="capability-score">94</strong></div><div class="capability-track"><span class="capability-fill" style="width:94%"></span></div></div>
+            <div class="capability-row" data-sd-id="82"><div class="capability-meta"><span>Rapid prototyping</span><strong class="capability-score">91</strong></div><div class="capability-track"><span class="capability-fill" style="width:91%"></span></div></div>
+          </div>
+        </section>
+
+        <section class="philosophy-section" data-sd-id="95">
+          <div class="philosophy-card" data-sd-id="96">
+            <div class="quote-mark" data-sd-id="97">“</div>
+            <p class="philosophy-copy" data-sd-id="98">Good product design makes complex work feel obvious, without hiding the decisions that matter.</p>
+            <div class="philosophy-caption" data-sd-id="99">Personal design philosophy</div>
+          </div>
+        </section>
+
+      </aside>
+
+    </div>
+  </div>
+
+
+</body></html>

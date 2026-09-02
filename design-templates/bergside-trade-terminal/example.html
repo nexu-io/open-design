@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trading Terminal Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Matrix tokens: dark cyber-terminal, one green interaction accent */
+    --bg: #0b0c14;
+    --panel: #10121d;
+    --panel-2: #151827;
+    --line: #1e2233;
+    --line-strong: #2a2f45;
+    --text: #dfe4f2;
+    --text-dim: #8a91a8;
+    --text-faint: #565d75;
+    --accent: #2db58a;
+    --accent-dim: rgba(45, 181, 138, 0.14);
+    --up: #16a34a;
+    --up-dim: rgba(22, 163, 74, 0.12);
+    --down: #dc2626;
+    --down-dim: rgba(220, 38, 38, 0.12);
+    --warn: #d97706;
+    --mono: "Space Mono", "SFMono-Regular", "Menlo", "Consolas", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 13px; line-height: 1.45; }
+  ::selection { background: var(--accent); color: #06130e; }
+  .num { font-variant-numeric: tabular-nums; }
+  .up { color: var(--up); }
+  .down { color: var(--down); }
+
+  .terminal { display: grid; grid-template-rows: 48px 1fr; height: clamp(720px, 100vh, 940px); max-width: 1600px; margin: 0 auto; }
+
+  /* ---------- Top bar ---------- */
+  .topbar {
+    display: flex; align-items: center; gap: 20px;
+    padding: 0 16px; border-bottom: 1px solid var(--line-strong); background: var(--panel);
+  }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; letter-spacing: 0.04em; }
+  .brand svg { display: block; }
+  .brand small { color: var(--accent); font-weight: 400; font-size: 12px; }
+  .ticker { display: flex; gap: 20px; flex: 1; overflow: hidden; white-space: nowrap; font-size: 12px; }
+  .ticker span { color: var(--text-dim); }
+  .ticker b { color: var(--text); font-weight: 400; margin-left: 6px; }
+  .session { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 6px rgba(45,181,138,0.7); }
+
+  /* ---------- Main grid ---------- */
+  .main { display: grid; grid-template-columns: 292px 1fr 300px; min-height: 0; }
+  .col { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+  .col + .col { border-left: 1px solid var(--line-strong); }
+
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--text-dim); border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  .panel-head .tag { color: var(--accent); letter-spacing: 0.06em; }
+
+  /* ---------- Watchlist ---------- */
+  table { width: 100%; border-collapse: collapse; }
+  .watch th {
+    font-size: 10px; font-weight: 400; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-faint); text-align: right; padding: 6px 12px 6px 0; border-bottom: 1px solid var(--line);
+  }
+  .watch th:first-child { text-align: left; padding-left: 12px; }
+  .watch td { padding: 7px 12px 7px 0; border-bottom: 1px solid var(--line); text-align: right; font-size: 12px; }
+  .watch td:first-child { text-align: left; padding-left: 12px; color: var(--text); }
+  .watch td:first-child small { display: block; color: var(--text-faint); font-size: 10px; }
+  .watch tr:hover td { background: var(--panel-2); }
+  .watch tr.active td { background: var(--accent-dim); }
+  .watch tr.active td:first-child { box-shadow: inset 1px 0 0 var(--accent); }
+  .watch svg { display: block; margin-left: auto; }
+
+  /* ---------- Center: instrument ---------- */
+  .inst-head { display: flex; align-items: baseline; gap: 18px; padding: 12px 16px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .inst-head h1 { font-size: 16px; font-weight: 700; letter-spacing: 0.02em; }
+  .inst-head h1 small { color: var(--text-faint); font-weight: 400; font-size: 11px; margin-left: 8px; }
+  .last { font-size: 24px; font-weight: 700; color: var(--up); }
+  .chg { font-size: 13px; }
+  .stats { display: flex; gap: 16px; margin-left: auto; font-size: 11px; color: var(--text-dim); align-self: center; }
+  .stats b { color: var(--text); font-weight: 400; font-size: 11px; margin-left: 2px; }
+
+  .chart { padding: 10px 16px 0; }
+  .chart svg { display: block; width: 100%; height: auto; }
+  .ax { font: 10px var(--mono); fill: var(--text-faint); }
+  .gl { stroke: var(--line); stroke-width: 1; }
+
+  .tf { display: flex; gap: 4px; padding: 8px 16px; border-bottom: 1px solid var(--line); }
+  .tf button {
+    font: 11px var(--mono); color: var(--text-dim); background: none; border: 1px solid var(--line);
+    border-radius: 4px; padding: 3px 10px; cursor: pointer;
+  }
+  .tf button:hover { color: var(--text); border-color: var(--line-strong); }
+  .tf button.on { color: #06130e; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+  .tf .spacer { flex: 1; }
+  .tf .mode { color: var(--text-faint); font-size: 11px; align-self: center; }
+
+  /* ---------- Orders ---------- */
+  .orders { margin-top: auto; border-top: 1px solid var(--line-strong); }
+  .orders-table th {
+    font-size: 10px; font-weight: 400; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint);
+    text-align: right; padding: 6px 16px 6px 0; border-bottom: 1px solid var(--line);
+  }
+  .orders-table th:first-child { text-align: left; padding-left: 16px; }
+  .orders-table td { padding: 6px 16px 6px 0; border-bottom: 1px solid var(--line); text-align: right; font-size: 12px; }
+  .orders-table td:first-child { text-align: left; padding-left: 16px; }
+  .side-buy { color: var(--up); }
+  .side-sell { color: var(--down); }
+  .badge { display: inline-block; font-size: 10px; padding: 1px 8px; border-radius: 4px; }
+  .badge.open { color: var(--accent); background: var(--accent-dim); }
+  .badge.partial { color: var(--warn); background: rgba(217, 119, 6, 0.12); }
+  .cancel { color: var(--text-faint); text-decoration: none; }
+  .cancel:hover { color: var(--down); }
+
+  /* ---------- Order book ---------- */
+  .book td { padding: 3px 12px; font-size: 12px; text-align: right; }
+  .book td:first-child { text-align: left; }
+  .book .ask td:first-child { color: var(--down); }
+  .book .bid td:first-child { color: var(--up); }
+  .book .qty { color: var(--text); }
+  .book .sum { color: var(--text-faint); }
+  .spread td {
+    text-align: center; color: var(--text-dim); font-size: 11px; letter-spacing: 0.08em;
+    border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong);
+    padding: 5px 12px; background: var(--panel);
+  }
+  .spread b { color: var(--accent); font-weight: 700; }
+
+  .trades td { padding: 3px 12px; font-size: 11px; text-align: right; border-bottom: 1px solid var(--line); }
+  .trades td:first-child { text-align: left; color: var(--text-faint); }
+
+  /* ---------- Account footer (left rail) ---------- */
+  .account { margin-top: auto; border-top: 1px solid var(--line-strong); }
+  .account dl { display: grid; grid-template-columns: 1fr auto; row-gap: 6px; padding: 10px 12px 12px; font-size: 12px; }
+  .account dt { color: var(--text-dim); }
+  .account dd { text-align: right; }
+</style>
+</head>
+<body>
+<div class="terminal">
+
+  <header class="topbar">
+    <div class="brand">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1" y="1" width="14" height="14" rx="3" stroke="#2db58a" stroke-width="1.5"/><path d="M4.5 9.5l2.4-3 2 2.4 2.6-3.4" stroke="#2db58a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      VECTOR<small>/term v2.4</small>
+    </div>
+    <div class="ticker num" aria-label="Index ticker">
+      <span>BTC-USD<b class="up">67,412.50</b></span>
+      <span>ETH-USD<b class="up">3,286.10</b></span>
+      <span>SOL-USD<b class="down">142.36</b></span>
+      <span>NQ-FUT<b class="up">19,881.25</b></span>
+      <span>VIX<b class="down">13.42</b></span>
+      <span>DXY<b>104.18</b></span>
+    </div>
+    <div class="session num"><span class="dot" aria-hidden="true"></span>FEED LIVE &middot; 14:32:07 UTC</div>
+  </header>
+
+  <div class="main">
+
+    <!-- Watchlist -->
+    <section class="col" aria-label="Watchlist">
+      <div class="panel-head">Watchlist <span class="tag">9 PAIRS</span></div>
+      <table class="watch num">
+        <thead><tr><th scope="col">Pair</th><th scope="col">Last</th><th scope="col">24h</th><th scope="col">7d</th></tr></thead>
+        <tbody>
+          <tr class="active">
+            <td>BTC-USD<small>Bitcoin</small></td><td>67,412.50</td><td class="up">+2.41%</td>
+            <td><svg width="56" height="16" viewBox="0 0 56 16" aria-hidden="true"><polyline points="0,12 8,11 16,13 24,9 32,10 40,6 48,7 56,3" fill="none" stroke="#16a34a" stroke-width="1.5"/></svg></td>
+          </tr>
+          <tr>
+            <td>ETH-USD<small>Ethereum</small></td><td>3,286.10</td><td class="up">+1.87%</td>
+            <td><svg width="56" height="16" viewBox="0 0 56 16" aria-hidden="true"><polyline points="0,13 8,10 16,11 24,8 32,9 40,7 48,5 56,4" fill="none" stroke="#16a34a" stroke-width="1.5"/></svg></td>
+          </tr>
+          <tr>
+            <td>SOL-USD<small>Solana</small></td><td>142.36</td><td class="down">&minus;3.12%</td>
+            <td><svg width="56" height="16" viewBox="0 0 56 16" aria-hidden="true"><polyline points="0,4 8,6 16,5 24,8 32,7 40,11 48,10 56,13" fill="none" stroke="#dc2626" stroke-width="1.5"/></svg></td>
+          </tr>
+          <tr>
+            <td>AVAX-USD<small>Avalanche</small></td><td>38.94</td><td class="up">+0.66%</td>
+            <td><svg width="56" height="16" viewBox="0 0 56 16" aria-hidden="true"><polyline points="0,10 8,12 16,9 24,10 32,8 40,9 48,8 56,7" fill="none" stroke="#16a34a" stroke-width="1.5"/></svg></td>
+          </tr>
+          <tr>
+            <td>LINK-USD<small>Chainlink</small></td><td>17.82</td><td class="down">&minus;1.05%</td>
+            <td><svg width="56" height="16" viewBox="0 0 56 16" aria-hidden="true"><polyline points="0,6 8,7 16,5 24,8 32,9 40,8 48,11 56,10" fill="none" stroke="#dc2626" stroke-width="1.5"/></svg></td>
+          </tr>
+          <tr>
+            <td>NVDA<small>Nvidia Corp</small></td><td>121.44</td><td class="up">+3.58%</td>
+            <td><svg width="56" height="16" viewBox="0 0 56 16" aria-hidden="true"><polyline points="0,13 8,12 16,10 24,11 32,7 40,8 48,4 56,2" fill="none" stroke="#16a34a" stroke-width="1.5"/></svg></td>
+          </tr>
+          <tr>
+            <td>TSLA<small>Tesla Inc</small></td><td>238.71</td><td class="down">&minus;0.84%</td>
+            <td><svg width="56" height="16" viewBox="0 0 56 16" aria-hidden="true"><polyline points="0,7 8,9 16,8 24,10 32,9 40,11 48,9 56,10" fill="none" stroke="#dc2626" stroke-width="1.5"/></svg></td>
+          </tr>
+          <tr>
+            <td>SPY<small>S&amp;P 500 ETF</small></td><td>548.02</td><td class="up">+0.42%</td>
+            <td><svg width="56" height="16" viewBox="0 0 56 16" aria-hidden="true"><polyline points="0,11 8,10 16,10 24,9 32,9 40,8 48,8 56,7" fill="none" stroke="#16a34a" stroke-width="1.5"/></svg></td>
+          </tr>
+          <tr>
+            <td>EUR-USD<small>FX spot</small></td><td>1.0862</td><td class="down">&minus;0.18%</td>
+            <td><svg width="56" height="16" viewBox="0 0 56 16" aria-hidden="true"><polyline points="0,8 8,7 16,9 24,8 32,10 40,9 48,10 56,11" fill="none" stroke="#dc2626" stroke-width="1.5"/></svg></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="account">
+        <div class="panel-head">Account <span class="tag">MARGIN &middot; X3</span></div>
+        <dl class="num">
+          <dt>Equity</dt><dd>184,206.44 USD</dd>
+          <dt>Day P&amp;L</dt><dd class="up">+4,318.92 (+2.40%)</dd>
+          <dt>Open P&amp;L</dt><dd class="up">+11,507.13</dd>
+          <dt>Buying power</dt><dd>412,880.00 USD</dd>
+          <dt>Margin used</dt><dd>22.6%</dd>
+        </dl>
+      </div>
+    </section>
+
+    <!-- Instrument -->
+    <section class="col" aria-label="BTC-USD detail">
+      <div class="inst-head num">
+        <h1>BTC-USD<small>COINBASE SPOT</small></h1>
+        <span class="last">67,412.50</span>
+        <span class="chg up">+1,586.20 (+2.41%)</span>
+      </div>
+      <div class="tf">
+        <button type="button">5m</button>
+        <button type="button">15m</button>
+        <button type="button" class="on">1H</button>
+        <button type="button">4H</button>
+        <button type="button">1D</button>
+        <span class="spacer"></span>
+        <div class="stats num">
+          <span>O<b>65,826.30</b></span>
+          <span>H<b>67,955.00</b></span>
+          <span>L<b>65,410.75</b></span>
+          <span>VOL<b>28,441 BTC</b></span>
+        </div>
+      </div>
+      <div class="chart">
+        <svg viewBox="0 0 640 400" role="img" aria-label="One-hour price chart for BTC-USD rising from 65.4 to 67.4 thousand dollars">
+          <line class="gl" x1="0" y1="350" x2="596" y2="350"/>
+          <line class="gl" x1="0" y1="265" x2="596" y2="265"/>
+          <line class="gl" x1="0" y1="180" x2="596" y2="180"/>
+          <line class="gl" x1="0" y1="95" x2="596" y2="95"/>
+          <line class="gl" x1="0" y1="10" x2="596" y2="10"/>
+          <text class="ax num" x="602" y="353">65.5k</text>
+          <text class="ax num" x="602" y="268">66.0k</text>
+          <text class="ax num" x="602" y="183">66.5k</text>
+          <text class="ax num" x="602" y="98">67.0k</text>
+          <text class="ax num" x="602" y="13">67.5k</text>
+          <text class="ax num" x="0" y="376">10:00</text>
+          <text class="ax num" x="150" y="376">11:00</text>
+          <text class="ax num" x="300" y="376">12:00</text>
+          <text class="ax num" x="450" y="376">13:00</text>
+          <text class="ax num" x="575" y="376">14:00</text>
+          <path d="M0 326 L25 316 L50 330 L75 306 L100 313 L125 289 L150 296 L175 268 L200 279 L225 248 L250 258 L275 228 L300 241 L325 207 L350 217 L375 183 L400 197 L425 160 L450 173 L475 136 L500 149 L525 105 L550 119 L575 71 L596 61 L596 350 L0 350 Z"
+                fill="#2db58a" opacity="0.08"/>
+          <path d="M0 326 L25 316 L50 330 L75 306 L100 313 L125 289 L150 296 L175 268 L200 279 L225 248 L250 258 L275 228 L300 241 L325 207 L350 217 L375 183 L400 197 L425 160 L450 173 L475 136 L500 149 L525 105 L550 119 L575 71 L596 61"
+                fill="none" stroke="#2db58a" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+          <line x1="0" y1="61" x2="596" y2="61" stroke="#2db58a" stroke-width="1" stroke-dasharray="3 4" opacity="0.6"/>
+          <circle cx="596" cy="61" r="3.5" fill="#2db58a"/>
+          <text x="602" y="64" font-family="Space Mono, monospace" font-size="10" fill="#2db58a">67.4k</text>
+        </svg>
+      </div>
+      <div class="orders">
+        <div class="panel-head">Open orders <span class="tag num">4 WORKING</span></div>
+        <table class="orders-table num">
+          <thead>
+            <tr><th scope="col">Time</th><th scope="col">Pair</th><th scope="col">Side</th><th scope="col">Type</th><th scope="col">Price</th><th scope="col">Qty</th><th scope="col">Filled</th><th scope="col">Status</th><th scope="col"></th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>14:28:11</td><td>BTC-USD</td><td class="side-buy">BUY</td><td>LIMIT</td><td>66,850.00</td><td>0.7500</td><td>0.0000</td><td><span class="badge open">OPEN</span></td><td><a class="cancel" href="#cancel">&times;</a></td>
+            </tr>
+            <tr>
+              <td>14:19:47</td><td>ETH-USD</td><td class="side-buy">BUY</td><td>LIMIT</td><td>3,241.00</td><td>12.000</td><td>4.850</td><td><span class="badge partial">PARTIAL</span></td><td><a class="cancel" href="#cancel">&times;</a></td>
+            </tr>
+            <tr>
+              <td>13:52:03</td><td>SOL-USD</td><td class="side-sell">SELL</td><td>STOP</td><td>138.20</td><td>250.00</td><td>0.00</td><td><span class="badge open">OPEN</span></td><td><a class="cancel" href="#cancel">&times;</a></td>
+            </tr>
+            <tr>
+              <td>13:07:36</td><td>NVDA</td><td class="side-sell">SELL</td><td>LIMIT</td><td>126.00</td><td>400</td><td>0</td><td><span class="badge open">OPEN</span></td><td><a class="cancel" href="#cancel">&times;</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Order book + trades -->
+    <section class="col" aria-label="Order book and recent trades">
+      <div class="panel-head">Order book <span class="tag">BTC-USD &middot; 0.5 AGG</span></div>
+      <table class="book num">
+        <tbody>
+          <tr class="ask" style="background: linear-gradient(to left, var(--down-dim) 51%, transparent 51%)"><td>67,435.0</td><td class="qty">1.842</td><td class="sum">14.02</td></tr>
+          <tr class="ask" style="background: linear-gradient(to left, var(--down-dim) 44%, transparent 44%)"><td>67,430.0</td><td class="qty">2.610</td><td class="sum">12.18</td></tr>
+          <tr class="ask" style="background: linear-gradient(to left, var(--down-dim) 35%, transparent 35%)"><td>67,425.5</td><td class="qty">0.925</td><td class="sum">9.57</td></tr>
+          <tr class="ask" style="background: linear-gradient(to left, var(--down-dim) 32%, transparent 32%)"><td>67,422.0</td><td class="qty">3.108</td><td class="sum">8.64</td></tr>
+          <tr class="ask" style="background: linear-gradient(to left, var(--down-dim) 20%, transparent 20%)"><td>67,418.5</td><td class="qty">1.377</td><td class="sum">5.54</td></tr>
+          <tr class="ask" style="background: linear-gradient(to left, var(--down-dim) 15%, transparent 15%)"><td>67,415.0</td><td class="qty">2.264</td><td class="sum">4.16</td></tr>
+          <tr class="ask" style="background: linear-gradient(to left, var(--down-dim) 7%, transparent 7%)"><td>67,413.5</td><td class="qty">1.896</td><td class="sum">1.90</td></tr>
+          <tr class="spread"><td colspan="3">SPREAD <b>1.0</b> &middot; MID <b>67,413.00</b></td></tr>
+          <tr class="bid" style="background: linear-gradient(to left, var(--up-dim) 9%, transparent 9%)"><td>67,412.5</td><td class="qty">2.451</td><td class="sum">2.45</td></tr>
+          <tr class="bid" style="background: linear-gradient(to left, var(--up-dim) 24%, transparent 24%)"><td>67,410.0</td><td class="qty">4.120</td><td class="sum">6.57</td></tr>
+          <tr class="bid" style="background: linear-gradient(to left, var(--up-dim) 35%, transparent 35%)"><td>67,406.5</td><td class="qty">3.014</td><td class="sum">9.59</td></tr>
+          <tr class="bid" style="background: linear-gradient(to left, var(--up-dim) 55%, transparent 55%)"><td>67,402.0</td><td class="qty">5.560</td><td class="sum">15.15</td></tr>
+          <tr class="bid" style="background: linear-gradient(to left, var(--up-dim) 63%, transparent 63%)"><td>67,398.5</td><td class="qty">2.208</td><td class="sum">17.35</td></tr>
+          <tr class="bid" style="background: linear-gradient(to left, var(--up-dim) 77%, transparent 77%)"><td>67,395.0</td><td class="qty">3.742</td><td class="sum">21.10</td></tr>
+          <tr class="bid" style="background: linear-gradient(to left, var(--up-dim) 100%, transparent 100%)"><td>67,390.5</td><td class="qty">6.315</td><td class="sum">27.41</td></tr>
+        </tbody>
+      </table>
+      <div class="panel-head">Recent trades <span class="tag">TAPE</span></div>
+      <table class="trades num">
+        <tbody>
+          <tr><td>14:32:05</td><td class="up">67,412.5</td><td>0.184</td></tr>
+          <tr><td>14:32:04</td><td class="up">67,412.5</td><td>0.062</td></tr>
+          <tr><td>14:32:02</td><td class="down">67,411.0</td><td>0.510</td></tr>
+          <tr><td>14:31:58</td><td class="up">67,413.5</td><td>1.204</td></tr>
+          <tr><td>14:31:55</td><td class="down">67,409.5</td><td>0.088</td></tr>
+          <tr><td>14:31:51</td><td class="up">67,414.0</td><td>0.352</td></tr>
+          <tr><td>14:31:47</td><td class="down">67,408.0</td><td>0.775</td></tr>
+          <tr><td>14:31:44</td><td class="up">67,410.5</td><td>0.126</td></tr>
+          <tr><td>14:31:40</td><td class="up">67,411.0</td><td>0.293</td></tr>
+          <tr><td>14:31:36</td><td class="down">67,406.5</td><td>0.941</td></tr>
+          <tr><td>14:31:33</td><td class="up">67,409.0</td><td>0.057</td></tr>
+          <tr><td>14:31:29</td><td class="down">67,405.5</td><td>0.418</td></tr>
+          <tr><td>14:31:24</td><td class="up">67,407.0</td><td>0.660</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+  </div>
+</div>
+</body>
+</html>

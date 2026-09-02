@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aurely — Frosted Sound</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --blur-amount: 15px;
+    --glass-bg: rgba(255, 255, 255, 0.15);
+    --glass-bg-soft: rgba(255, 255, 255, 0.10);
+    --glass-bg-strong: rgba(255, 255, 255, 0.25);
+    --glass-border: rgba(255, 255, 255, 0.2);
+    --text-hi: #ffffff;
+    --text-mid: rgba(255, 255, 255, 0.78);
+    --text-low: rgba(255, 255, 255, 0.55);
+    --accent-blue: #0080FF;
+    --accent-purple: #8B00FF;
+    --accent-pink: #FF1493;
+    --accent-teal: #20B2AA;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: var(--text-hi);
+    background: linear-gradient(135deg, #3a0ca3 0%, #7209b7 30%, #b5179e 60%, #4361ee 100%);
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+  }
+  /* vibrant background orbs that the glass blurs against */
+  .orb { position: fixed; border-radius: 50%; filter: blur(60px); z-index: 0; }
+  .orb-1 { width: 480px; height: 480px; background: var(--accent-pink); opacity: .55; top: -120px; left: 44%; }
+  .orb-2 { width: 420px; height: 420px; background: var(--accent-blue); opacity: .5; bottom: -80px; left: -100px; }
+  .orb-3 { width: 360px; height: 360px; background: var(--accent-teal); opacity: .45; bottom: 10%; right: -80px; }
+  .orb-4 { width: 300px; height: 300px; background: var(--accent-purple); opacity: .6; top: 30%; left: 18%; }
+
+  .shell {
+    position: relative; z-index: 1;
+    max-width: 1220px; margin: 0 auto;
+    padding: 28px 30px 130px;
+    display: grid; grid-template-columns: 230px 1fr; gap: 24px;
+  }
+
+  /* ---------- glass primitives ---------- */
+  .glass {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(var(--blur-amount));
+    backdrop-filter: blur(var(--blur-amount));
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    box-shadow: 0 8px 32px rgba(10, 5, 40, 0.25);
+    position: relative;
+    overflow: hidden;
+  }
+  /* light-source reflection sweep */
+  .glass::before {
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(115deg, rgba(255,255,255,0.30) 0%, rgba(255,255,255,0.06) 28%, rgba(255,255,255,0) 55%);
+    pointer-events: none;
+  }
+
+  /* ---------- sidebar ---------- */
+  .sidebar { padding: 24px 18px; height: fit-content; position: sticky; top: 28px; }
+  .logo { display: flex; align-items: center; gap: 10px; margin-bottom: 30px; }
+  .logo-mark {
+    width: 38px; height: 38px; border-radius: 12px;
+    background: rgba(255,255,255,0.22);
+    border: 1px solid var(--glass-border);
+    display: grid; place-items: center; font-size: 18px;
+  }
+  .logo-name { font-weight: 700; font-size: 20px; letter-spacing: .5px; }
+  .nav-label { font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: var(--text-low); margin: 18px 8px 8px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 11px;
+    padding: 10px 12px; border-radius: 12px;
+    color: var(--text-mid); font-size: 14.5px; font-weight: 500;
+    cursor: pointer; border: 1px solid transparent;
+    transition: background .2s ease, color .2s ease, border-color .2s ease;
+  }
+  .nav-item:hover { background: rgba(255,255,255,0.12); color: var(--text-hi); }
+  .nav-item.active {
+    background: var(--glass-bg-strong);
+    border-color: var(--glass-border);
+    color: var(--text-hi);
+  }
+  .nav-ico { width: 20px; text-align: center; }
+
+  /* ---------- main ---------- */
+  .main { min-width: 0; }
+  .topbar { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+  .search {
+    flex: 1; display: flex; align-items: center; gap: 10px;
+    padding: 12px 18px; border-radius: 14px;
+    color: var(--text-low); font-size: 14px;
+  }
+  .pill {
+    padding: 11px 18px; border-radius: 14px; font-size: 13.5px; font-weight: 600;
+    color: var(--text-mid); cursor: pointer; white-space: nowrap;
+    transition: background .2s ease, transform .2s ease;
+  }
+  .pill:hover { background: var(--glass-bg-strong); transform: translateY(-1px); color: var(--text-hi); }
+  .avatar {
+    width: 42px; height: 42px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent-teal), var(--accent-blue));
+    border: 1px solid var(--glass-border);
+    display: grid; place-items: center; font-weight: 700; font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  /* hero */
+  .hero { padding: 30px 34px; margin-bottom: 24px; display: grid; grid-template-columns: 1fr 300px; gap: 24px; align-items: center; }
+  .hero-tag {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 12px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--text-mid);
+    background: var(--glass-bg-soft); border: 1px solid var(--glass-border);
+    padding: 6px 13px; border-radius: 999px; margin-bottom: 14px;
+  }
+  .hero h1 { font-size: 40px; font-weight: 700; line-height: 1.12; margin-bottom: 10px; }
+  .hero p { color: var(--text-mid); font-size: 15.5px; line-height: 1.6; max-width: 460px; margin-bottom: 22px; }
+  .btn-row { display: flex; gap: 12px; }
+  .btn {
+    padding: 13px 26px; border-radius: 14px; font-size: 14.5px; font-weight: 600;
+    cursor: pointer; border: 1px solid var(--glass-border);
+    font-family: inherit;
+    transition: transform .2s ease, box-shadow .2s ease, background .2s ease;
+  }
+  .btn-primary {
+    background: rgba(255,255,255,0.9); color: #4c1d95;
+    box-shadow: 0 6px 24px rgba(255,255,255,0.25);
+  }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(255,255,255,0.35); }
+  .btn-ghost { background: var(--glass-bg-soft); color: var(--text-hi); }
+  .btn-ghost:hover { background: var(--glass-bg-strong); transform: translateY(-2px); }
+
+  /* vinyl artwork drawn in CSS */
+  .artwork { display: grid; place-items: center; }
+  .vinyl {
+    width: 230px; height: 230px; border-radius: 50%;
+    background:
+      radial-gradient(circle at center, #efe6ff 0 17%, transparent 17.5%),
+      repeating-radial-gradient(circle at center, rgba(255,255,255,0.16) 0 2px, rgba(0,0,0,0.28) 2px 5px);
+    background-color: rgba(20, 8, 46, 0.7);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 18px 50px rgba(10, 5, 40, 0.45), inset 0 0 40px rgba(139, 0, 255, 0.35);
+    position: relative;
+    animation: spin 14s linear infinite;
+  }
+  .vinyl::after {
+    content: ""; position: absolute; top: 50%; left: 50%;
+    width: 14px; height: 14px; border-radius: 50%;
+    transform: translate(-50%, -50%);
+    background: #4c1d95;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .vinyl { animation: none; }
+    * { transition-duration: .01ms !important; }
+  }
+
+  /* section heads */
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 4px 4px 14px; }
+  .section-head h2 { font-size: 19px; font-weight: 600; }
+  .section-head a { color: var(--text-low); font-size: 13px; text-decoration: none; transition: color .2s; }
+  .section-head a:hover { color: var(--text-hi); }
+
+  /* playlist cards */
+  .card-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 26px; }
+  .p-card { padding: 16px; cursor: pointer; transition: transform .25s ease, background .25s ease; }
+  .p-card:hover { transform: translateY(-4px); background: var(--glass-bg-strong); }
+  .p-cover {
+    height: 120px; border-radius: 13px; margin-bottom: 13px;
+    border: 1px solid var(--glass-border);
+    display: grid; place-items: center; font-size: 34px;
+  }
+  .c1 { background: linear-gradient(135deg, rgba(0,128,255,.75), rgba(32,178,170,.75)); }
+  .c2 { background: linear-gradient(135deg, rgba(255,20,147,.75), rgba(139,0,255,.75)); }
+  .c3 { background: linear-gradient(135deg, rgba(32,178,170,.75), rgba(139,0,255,.7)); }
+  .c4 { background: linear-gradient(135deg, rgba(255,20,147,.7), rgba(0,128,255,.7)); }
+  .p-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 3px; }
+  .p-card span { font-size: 12.5px; color: var(--text-low); }
+
+  /* queue list */
+  .queue { padding: 10px 12px; }
+  .track {
+    display: grid; grid-template-columns: 34px 44px 1fr auto auto; gap: 14px; align-items: center;
+    padding: 11px 14px; border-radius: 14px;
+    transition: background .2s ease;
+    cursor: pointer;
+  }
+  .track:hover { background: rgba(255,255,255,0.12); }
+  .track.playing { background: var(--glass-bg-strong); border: 1px solid var(--glass-border); }
+  .t-num { color: var(--text-low); font-size: 13px; text-align: center; }
+  .t-art { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--glass-border); display: grid; place-items: center; font-size: 18px; }
+  .t-name { font-size: 14.5px; font-weight: 600; }
+  .t-artist { font-size: 12.5px; color: var(--text-low); margin-top: 2px; }
+  .t-len { font-size: 13px; color: var(--text-low); font-variant-numeric: tabular-nums; }
+  .eq { display: flex; gap: 3px; align-items: flex-end; height: 16px; }
+  .eq i { width: 3px; background: var(--text-hi); border-radius: 2px; animation: eq 1s ease-in-out infinite; }
+  .eq i:nth-child(1) { height: 60%; animation-delay: 0s; }
+  .eq i:nth-child(2) { height: 100%; animation-delay: .2s; }
+  .eq i:nth-child(3) { height: 40%; animation-delay: .4s; }
+  @keyframes eq { 0%,100% { transform: scaleY(.4);} 50% { transform: scaleY(1);} }
+
+  /* player bar */
+  .player {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+    width: min(1160px, calc(100% - 60px));
+    z-index: 5;
+    display: grid; grid-template-columns: 260px 1fr 200px; align-items: center; gap: 20px;
+    padding: 14px 22px; border-radius: 22px;
+    background: rgba(255,255,255,0.18);
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.25);
+    box-shadow: 0 16px 48px rgba(10,5,40,.4);
+  }
+  .now { display: flex; align-items: center; gap: 13px; min-width: 0; }
+  .now .t-art { flex-shrink: 0; }
+  .controls { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .ctl-btns { display: flex; align-items: center; gap: 22px; }
+  .ctl { color: var(--text-mid); cursor: pointer; font-size: 15px; transition: color .2s, transform .2s; }
+  .ctl:hover { color: var(--text-hi); transform: scale(1.12); }
+  .play-btn {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: rgba(255,255,255,0.92); color: #4c1d95;
+    display: grid; place-items: center; font-size: 15px; cursor: pointer;
+    box-shadow: 0 4px 18px rgba(255,255,255,.3);
+    transition: transform .2s ease;
+  }
+  .play-btn:hover { transform: scale(1.08); }
+  .prog { width: 100%; display: flex; align-items: center; gap: 10px; font-size: 11.5px; color: var(--text-low); font-variant-numeric: tabular-nums; }
+  .bar { flex: 1; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.22); overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 64%; border-radius: 3px; background: linear-gradient(90deg, var(--accent-teal), #7dd3fc, #ffffff); }
+  .vol { display: flex; align-items: center; gap: 10px; justify-content: flex-end; color: var(--text-mid); }
+  .vol .bar { max-width: 110px; }
+  .vol .bar > i { width: 78%; }
+</style>
+</head>
+<body>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+  <div class="orb orb-4"></div>
+
+  <div class="shell">
+    <aside class="sidebar glass">
+      <div class="logo">
+        <div class="logo-mark">◍</div>
+        <div class="logo-name">Aurely</div>
+      </div>
+      <div class="nav-label">Menu</div>
+      <div class="nav-item active"><span class="nav-ico">⌂</span> Home</div>
+      <div class="nav-item"><span class="nav-ico">◎</span> Explore</div>
+      <div class="nav-item"><span class="nav-ico">♫</span> Radio</div>
+      <div class="nav-label">Library</div>
+      <div class="nav-item"><span class="nav-ico">♥</span> Liked Songs</div>
+      <div class="nav-item"><span class="nav-ico">≣</span> Playlists</div>
+      <div class="nav-item"><span class="nav-ico">↓</span> Downloads</div>
+      <div class="nav-label">Social</div>
+      <div class="nav-item"><span class="nav-ico">◔</span> Friend Activity</div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="search glass"><span>⌕</span> Search artists, tracks, moods…</div>
+        <div class="pill glass">Upgrade</div>
+        <div class="avatar">MK</div>
+      </div>
+
+      <section class="hero glass">
+        <div>
+          <span class="hero-tag">● Editor's Mix · Updated Friday</span>
+          <h1>Neon Horizons,<br>Vol. 04</h1>
+          <p>Two hours of shimmering synth-pop and late-night electronica, hand-picked by the Aurely curation desk. Best served after midnight.</p>
+          <div class="btn-row">
+            <button class="btn btn-primary">▶ Play mix</button>
+            <button class="btn btn-ghost">+ Save to library</button>
+          </div>
+        </div>
+        <div class="artwork"><div class="vinyl"></div></div>
+      </section>
+
+      <div class="section-head">
+        <h2>Made for you</h2>
+        <a href="#">Show all →</a>
+      </div>
+      <section class="card-row">
+        <div class="p-card glass">
+          <div class="p-cover c1">🌊</div>
+          <h3>Deep Focus</h3><span>48 tracks · 3 hr 12 min</span>
+        </div>
+        <div class="p-card glass">
+          <div class="p-cover c2">🌆</div>
+          <h3>City Dusk</h3><span>32 tracks · 2 hr 05 min</span>
+        </div>
+        <div class="p-card glass">
+          <div class="p-cover c3">🪐</div>
+          <h3>Orbit Ambient</h3><span>26 tracks · 1 hr 58 min</span>
+        </div>
+        <div class="p-card glass">
+          <div class="p-cover c4">⚡</div>
+          <h3>Voltage Run</h3><span>40 tracks · 2 hr 44 min</span>
+        </div>
+      </section>
+
+      <div class="section-head">
+        <h2>Up next</h2>
+        <a href="#">Clear queue</a>
+      </div>
+      <section class="queue glass">
+        <div class="track playing">
+          <div class="eq"><i></i><i></i><i></i></div>
+          <div class="t-art c2">✦</div>
+          <div><div class="t-name">Glasshouse Hearts</div><div class="t-artist">Mirror Motel</div></div>
+          <div></div>
+          <div class="t-len">3:47</div>
+        </div>
+        <div class="track">
+          <div class="t-num">2</div>
+          <div class="t-art c1">❆</div>
+          <div><div class="t-name">Cold Lavender</div><div class="t-artist">Iris Nakamura</div></div>
+          <div></div>
+          <div class="t-len">4:12</div>
+        </div>
+        <div class="track">
+          <div class="t-num">3</div>
+          <div class="t-art c3">☾</div>
+          <div><div class="t-name">Half Past Never</div><div class="t-artist">The Lumen District</div></div>
+          <div></div>
+          <div class="t-len">2:58</div>
+        </div>
+        <div class="track">
+          <div class="t-num">4</div>
+          <div class="t-art c4">✧</div>
+          <div><div class="t-name">Peripheral Blue</div><div class="t-artist">Sofia Reyes-Held</div></div>
+          <div></div>
+          <div class="t-len">5:03</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <footer class="player">
+    <div class="now">
+      <div class="t-art c2">✦</div>
+      <div>
+        <div class="t-name">Glasshouse Hearts</div>
+        <div class="t-artist">Mirror Motel · Neon Horizons Vol. 04</div>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="ctl-btns">
+        <span class="ctl">⇋</span>
+        <span class="ctl">⏮</span>
+        <span class="play-btn">❚❚</span>
+        <span class="ctl">⏭</span>
+        <span class="ctl">∞</span>
+      </div>
+      <div class="prog"><span>2:24</span><div class="bar"><i></i></div><span>3:47</span></div>
+    </div>
+    <div class="vol"><span>♪</span><div class="bar"><i></i></div></div>
+  </footer>
+</body>
+</html>

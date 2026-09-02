@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fieldnote — Everything your research team needs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --page-bg: #F5F5F7;
+    --card-bg: #FFFFFF;
+    --card-radius: 24px;
+    --grid-gap: 16px;
+    --shadow: 0 4px 6px rgba(0,0,0,0.05);
+    --shadow-hover: 0 12px 28px rgba(0,0,0,0.09);
+    --ink: #1D1D1F;
+    --ink-2: #6E6E73;
+    --accent: #0071E3;
+    --accent-soft: #EAF3FF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+    background: var(--page-bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1140px; margin: 0 auto; padding: 0 32px 90px; }
+
+  /* nav */
+  nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 22px 0; margin-bottom: 48px;
+  }
+  .logo { display: flex; align-items: center; gap: 9px; font-weight: 800; font-size: 19px; letter-spacing: -0.4px; }
+  .logo-dot {
+    width: 28px; height: 28px; border-radius: 9px;
+    background: var(--accent);
+    display: grid; place-items: center; color: #fff; font-size: 14px; font-weight: 700;
+  }
+  .nav-r { display: flex; align-items: center; gap: 26px; }
+  .nav-r a { color: var(--ink-2); text-decoration: none; font-size: 14.5px; font-weight: 500; transition: color .2s; }
+  .nav-r a:hover { color: var(--ink); }
+  .nav-btn {
+    background: var(--ink); color: #fff !important;
+    padding: 9px 18px; border-radius: 999px; font-weight: 600 !important;
+    transition: transform .2s ease, background .2s ease;
+  }
+  .nav-btn:hover { background: #000; transform: scale(1.03); }
+
+  /* header */
+  header.masthead { text-align: center; margin-bottom: 52px; }
+  .eyebrow { color: var(--accent); font-weight: 700; font-size: 14px; letter-spacing: .3px; margin-bottom: 14px; }
+  header.masthead h1 {
+    font-size: clamp(38px, 4.6vw, 56px); font-weight: 800; letter-spacing: -1.8px; line-height: 1.05;
+  }
+  header.masthead p { color: var(--ink-2); font-size: 18px; margin-top: 16px; font-weight: 500; }
+
+  /* bento grid */
+  .bento {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-auto-rows: 200px;
+    gap: var(--grid-gap);
+  }
+  .card {
+    background: var(--card-bg);
+    border-radius: var(--card-radius);
+    box-shadow: var(--shadow);
+    padding: 28px;
+    overflow: hidden; position: relative;
+    display: flex; flex-direction: column;
+    transition: transform .3s cubic-bezier(.2,.8,.2,1), box-shadow .3s ease;
+  }
+  .card:hover { transform: scale(1.02); box-shadow: var(--shadow-hover); z-index: 2; }
+  .span-2x2 { grid-column: span 2; grid-row: span 2; }
+  .span-2x1 { grid-column: span 2; }
+  .span-1x2 { grid-row: span 2; }
+
+  .kicker { font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: var(--accent); margin-bottom: 10px; }
+  .card h3 { font-size: 21px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 8px; }
+  .card p { font-size: 14.5px; line-height: 1.55; color: var(--ink-2); font-weight: 500; }
+
+  /* hero card visual: fake doc UI */
+  .hero-card h3 { font-size: 28px; letter-spacing: -0.8px; }
+  .doc-mock {
+    margin-top: auto; background: var(--page-bg); border-radius: 16px;
+    padding: 18px 20px; border: 1px solid #E8E8ED;
+  }
+  .doc-line { height: 9px; border-radius: 5px; background: #E2E2E7; margin-bottom: 9px; }
+  .doc-line.w60 { width: 60%; }
+  .doc-line.w85 { width: 85%; }
+  .doc-line.hl { background: var(--accent-soft); border: 1px solid #C9E2FF; width: 74%; height: 20px; display: flex; align-items: center; padding: 0 8px; }
+  .doc-line.hl::after { content: "✦ AI summary ready"; font-size: 10.5px; color: var(--accent); font-weight: 600; }
+
+  /* stat cards */
+  .stat-num { font-size: 46px; font-weight: 800; letter-spacing: -2px; margin-top: auto; }
+  .stat-num small { font-size: 20px; font-weight: 700; color: var(--accent); }
+  .stat-sub { color: var(--ink-2); font-size: 13.5px; font-weight: 500; margin-top: 4px; }
+
+  /* dark card */
+  .card-dark { background: var(--ink); color: #fff; }
+  .card-dark h3 { color: #fff; }
+  .card-dark p { color: rgba(255,255,255,.65); }
+  .card-dark .kicker { color: #6FB9FF; }
+  .lock-badge {
+    margin-top: auto; align-self: flex-start;
+    background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 999px; padding: 8px 14px; font-size: 12.5px; font-weight: 600;
+  }
+
+  /* accent card */
+  .card-accent { background: var(--accent); color: #fff; justify-content: space-between; }
+  .card-accent h3 { color: #fff; font-size: 24px; }
+  .card-accent p { color: rgba(255,255,255,.85); }
+  .card-accent .arrow {
+    align-self: flex-end;
+    width: 42px; height: 42px; border-radius: 50%;
+    background: #fff; color: var(--accent);
+    display: grid; place-items: center; font-size: 18px; font-weight: 700;
+    transition: transform .25s ease;
+  }
+  .card-accent:hover .arrow { transform: translateX(4px); }
+
+  /* integrations */
+  .int-grid { margin-top: auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .int-chip {
+    aspect-ratio: 1; border-radius: 13px; background: var(--page-bg);
+    border: 1px solid #E8E8ED;
+    display: grid; place-items: center; font-size: 20px;
+    transition: transform .2s ease;
+  }
+  .card:hover .int-chip { transform: translateY(-2px); }
+
+  /* search card mock */
+  .search-mock {
+    margin-top: auto; display: flex; align-items: center; gap: 9px;
+    background: var(--page-bg); border: 1px solid #E8E8ED;
+    border-radius: 12px; padding: 11px 14px;
+    font-size: 13.5px; color: var(--ink-2); font-weight: 500;
+  }
+  .kbd {
+    margin-left: auto; font-size: 11px; font-weight: 600; color: var(--ink-2);
+    background: #fff; border: 1px solid #E2E2E7; border-radius: 6px; padding: 2px 7px;
+    box-shadow: 0 1px 0 #E2E2E7;
+  }
+
+  /* quote card */
+  .quote { font-size: 17px; line-height: 1.5; font-weight: 600; letter-spacing: -0.2px; }
+  .quote-by { margin-top: auto; display: flex; align-items: center; gap: 11px; }
+  .q-ava {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: linear-gradient(135deg, #FFD8A8, #FF9F68);
+    display: grid; place-items: center; font-size: 13px; font-weight: 700; color: #7C3A00;
+  }
+  .q-name { font-size: 13px; font-weight: 700; }
+  .q-role { font-size: 12px; color: var(--ink-2); font-weight: 500; }
+
+  /* sparkline */
+  .spark { margin-top: auto; }
+  .spark svg { width: 100%; height: 56px; display: block; }
+
+  footer { text-align: center; margin-top: 56px; color: var(--ink-2); font-size: 13.5px; font-weight: 500; }
+  footer strong { color: var(--ink); }
+
+  @media (prefers-reduced-motion: reduce) { * { transition-duration: .01ms !important; } }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <nav>
+      <div class="logo"><span class="logo-dot">F</span> Fieldnote</div>
+      <div class="nav-r">
+        <a href="#">Product</a>
+        <a href="#">Customers</a>
+        <a href="#">Pricing</a>
+        <a href="#" class="nav-btn">Start free</a>
+      </div>
+    </nav>
+
+    <header class="masthead">
+      <div class="eyebrow">One workspace. Every study.</div>
+      <h1>Everything your research team<br>needs, in one place.</h1>
+      <p>Fieldnote turns interviews, notes and data into shareable insight, without the tab chaos.</p>
+    </header>
+
+    <main class="bento">
+      <article class="card span-2x2 hero-card">
+        <div class="kicker">AI Synthesis</div>
+        <h3>From 40 interviews to one insight report, overnight.</h3>
+        <p>Drop in raw transcripts and Fieldnote clusters themes, pulls representative quotes and drafts the summary your stakeholders actually read.</p>
+        <div class="doc-mock">
+          <div class="doc-line hl"></div>
+          <div class="doc-line w85"></div>
+          <div class="doc-line w60"></div>
+          <div class="doc-line w85"></div>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="kicker">Recall</div>
+        <h3>Ask your archive</h3>
+        <div class="search-mock">⌕ "pricing objections, Q2 studies" <span class="kbd">⌘K</span></div>
+      </article>
+
+      <article class="card span-1x2 card-dark">
+        <div class="kicker">Security</div>
+        <h3>Consent-aware by default</h3>
+        <p>PII redaction on ingest, region-pinned storage, and per-study access walls. Compliance stops being a spreadsheet.</p>
+        <span class="lock-badge">🔒 SOC 2 Type II · GDPR</span>
+      </article>
+
+      <article class="card">
+        <div class="kicker">Velocity</div>
+        <h3>Time to first insight</h3>
+        <div class="stat-num">4.2<small>days faster</small></div>
+        <div class="stat-sub">median across 312 customer teams</div>
+      </article>
+
+      <article class="card span-2x1">
+        <div class="kicker">Integrations</div>
+        <h3>Plays nicely with your stack</h3>
+        <div class="int-grid">
+          <div class="int-chip">📄</div>
+          <div class="int-chip">🎥</div>
+          <div class="int-chip">💬</div>
+          <div class="int-chip">📊</div>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="kicker">Adoption</div>
+        <h3>Weekly active readers</h3>
+        <div class="spark">
+          <svg viewBox="0 0 200 56" preserveAspectRatio="none" aria-hidden="true">
+            <polyline points="0,48 25,44 50,45 75,36 100,30 125,32 150,18 175,14 200,6"
+              fill="none" stroke="#0071E3" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="200" cy="6" r="4" fill="#0071E3"/>
+          </svg>
+        </div>
+        <div class="stat-sub">+38% this quarter</div>
+      </article>
+
+      <article class="card span-2x1">
+        <p class="quote">"Our exec team quotes Fieldnote reports in planning meetings now. That never happened with our old wiki."</p>
+        <div class="quote-by">
+          <div class="q-ava">PT</div>
+          <div>
+            <div class="q-name">Priya Thakkar</div>
+            <div class="q-role">Head of UX Research, Cardline</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card card-accent">
+        <div>
+          <h3>Try Fieldnote free</h3>
+          <p>14 days, unlimited studies.</p>
+        </div>
+        <span class="arrow">→</span>
+      </article>
+    </main>
+
+    <footer>Trusted by research teams at <strong>Cardline</strong>, <strong>Hoverlane</strong>, <strong>Mapmill</strong> and 300+ more.</footer>
+  </div>
+</body>
+</html>
