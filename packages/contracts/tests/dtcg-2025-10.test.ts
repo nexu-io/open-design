@@ -482,6 +482,7 @@ describe('DTCG Format 2025.10 codec', () => {
     // $extends instead of writing the materialized merge into the document.
     expect(reparsed.derived).toEqual({ $extends: '{base}' });
   });
+
   it('rejects curly-brace references at pointer-only value positions', () => {
     const base = token('color', color());
     const document = {
@@ -530,6 +531,7 @@ describe('DTCG Format 2025.10 codec', () => {
     );
     expectInvalid({ ...document, bad: token('cubicBezier', ['{base}', 0, 1, 1] as unknown as number[]) }, 'invalid-reference');
   });
+
   it('resolves allowed composite references while preserving literal-only positions', () => {
     const result = expectValid({
       base: token('color', color()),
@@ -596,6 +598,59 @@ describe('DTCG Format 2025.10 codec', () => {
       style: { dashArray: [dimension(2, 'px'), dimension(2, 'px')], lineCap: 'round' },
     });
   });
+
+  it('repeats odd dashArray values in resolved strokeStyle and border values while preserving the source', () => {
+    const result = expectValid({
+      one: token('strokeStyle', { dashArray: [dimension(2, 'px')], lineCap: 'round' }),
+      two: token('strokeStyle', { dashArray: [dimension(2, 'px'), dimension(4, 'px')], lineCap: 'round' }),
+      three: token('strokeStyle', {
+        dashArray: [dimension(1, 'px'), '{dash}', { $ref: '#/dash/$value' }],
+        lineCap: 'butt',
+      }),
+      dash: token('dimension', dimension(2, 'px')),
+      border: token('border', {
+        color: color(),
+        width: dimension(1, 'px'),
+        style: { dashArray: [dimension(3, 'px')], lineCap: 'square' },
+      }),
+    });
+
+    expect(findToken(result, '#/one').value).toEqual({ dashArray: [dimension(2, 'px'), dimension(2, 'px')], lineCap: 'round' });
+    expect(findToken(result, '#/two').value).toEqual({
+      dashArray: [dimension(2, 'px'), dimension(4, 'px')],
+      lineCap: 'round',
+    });
+    expect(findToken(result, '#/three').value).toEqual({
+      dashArray: [dimension(1, 'px'), dimension(2, 'px'), dimension(2, 'px'), dimension(1, 'px'), dimension(2, 'px'), dimension(2, 'px')],
+      lineCap: 'butt',
+    });
+    expect(findToken(result, '#/border').value).toMatchObject({
+      style: { dashArray: [dimension(3, 'px'), dimension(3, 'px')], lineCap: 'square' },
+    });
+
+    expect((result.document.one as { $value: unknown }).$value).toEqual({
+      dashArray: [dimension(2, 'px')],
+      lineCap: 'round',
+    });
+    expect((result.document.three as { $value: unknown }).$value).toEqual({
+      dashArray: [dimension(1, 'px'), '{dash}', { $ref: '#/dash/$value' }],
+      lineCap: 'butt',
+    });
+    expect((result.document.border as { $value: { style: unknown } }).$value.style).toEqual({
+      dashArray: [dimension(3, 'px')],
+      lineCap: 'square',
+    });
+  });
+});
+
+function token(type: string, value: unknown): Record<string, unknown> {
+  return { $type: type, $value: value };
+}
+
+function dimension(value: number, unit: 'px' | 'rem'): { value: number; unit: 'px' | 'rem' } {
+  return { value, unit };
+}
+
 function color(alpha?: number): Record<string, unknown> {
   return {
     colorSpace: 'srgb',

@@ -1095,9 +1095,9 @@ function validateAndNormalizeTypeValue(
     case 'number':
       return requireNumber(value, path, diagnostics) ? value : undefined;
     case 'strokeStyle':
-      return validateStrokeStyle(value, path, diagnostics) ? value : undefined;
+      return validateStrokeStyle(value, path, diagnostics);
     case 'border':
-      return validateBorder(value, path, diagnostics) ? value : undefined;
+      return validateBorder(value, path, diagnostics);
     case 'transition':
       return validateTransition(value, path, diagnostics) ? value : undefined;
     case 'shadow':
@@ -1236,13 +1236,16 @@ function validateCubicBezier(value: DtcgJsonValue, path: string[], diagnostics: 
   return validX;
 }
 
-function validateStrokeStyle(value: DtcgJsonValue, path: string[], diagnostics: DtcgDiagnostic[]): boolean {
+function validateStrokeStyle(value: DtcgJsonValue, path: string[], diagnostics: DtcgDiagnostic[]): DtcgJsonValue | undefined {
   if (typeof value === 'string') {
     const valid = STROKE_STYLE_KEYWORDS.has(value);
-    if (!valid) invalidValue(diagnostics, path, 'Unknown strokeStyle keyword.');
-    return valid;
+    if (!valid) {
+      invalidValue(diagnostics, path, 'Unknown strokeStyle keyword.');
+      return undefined;
+    }
+    return value;
   }
-  if (!requireRecord(value, path, diagnostics)) return false;
+  if (!requireRecord(value, path, diagnostics)) return undefined;
   let valid = exactKeys(value, ['dashArray', 'lineCap'], path, diagnostics);
   if (!Array.isArray(value.dashArray)) {
     invalidValue(diagnostics, [...path, 'dashArray'], 'strokeStyle dashArray must be an array.');
@@ -1256,16 +1259,30 @@ function validateStrokeStyle(value: DtcgJsonValue, path: string[], diagnostics: 
     invalidValue(diagnostics, [...path, 'lineCap'], 'strokeStyle lineCap must be round, butt, or square.');
     valid = false;
   }
-  return valid;
+  // Format 9.3.2: an odd number of dashArray values is repeated to yield an
+  // even number of values.
+  const sourceDashArray = value.dashArray as DtcgJsonValue;
+  const dashArray: DtcgJsonValue = Array.isArray(sourceDashArray)
+    ? sourceDashArray.length % 2 === 1 ? [...sourceDashArray, ...sourceDashArray] : sourceDashArray
+    : sourceDashArray;
+  return valid ? { ...value, dashArray } : undefined;
 }
 
-function validateBorder(value: DtcgJsonValue, path: string[], diagnostics: DtcgDiagnostic[]): boolean {
-  if (!requireRecord(value, path, diagnostics)) return false;
+function validateBorder(value: DtcgJsonValue, path: string[], diagnostics: DtcgDiagnostic[]): DtcgJsonValue | undefined {
+  if (!requireRecord(value, path, diagnostics)) return undefined;
   let valid = exactKeys(value, ['color', 'width', 'style'], path, diagnostics);
-  if (!validateColor(value.color as DtcgJsonValue, [...path, 'color'], diagnostics)) valid = false;
-  if (!validateDimension(value.width as DtcgJsonValue, [...path, 'width'], diagnostics)) valid = false;
-  if (!validateStrokeStyle(value.style as DtcgJsonValue, [...path, 'style'], diagnostics)) valid = false;
-  return valid;
+  const color: DtcgJsonValue | undefined = validateColor(value.color as DtcgJsonValue, [...path, 'color'], diagnostics)
+    ? (value.color as DtcgJsonValue)
+    : undefined;
+  if (color === undefined) valid = false;
+  const width: DtcgJsonValue | undefined = validateDimension(value.width as DtcgJsonValue, [...path, 'width'], diagnostics)
+    ? (value.width as DtcgJsonValue)
+    : undefined;
+  if (width === undefined) valid = false;
+  const style = validateStrokeStyle(value.style as DtcgJsonValue, [...path, 'style'], diagnostics);
+  if (style === undefined) valid = false;
+  if (!valid || color === undefined || width === undefined || style === undefined) return undefined;
+  return { color, width, style };
 }
 
 function validateTransition(value: DtcgJsonValue, path: string[], diagnostics: DtcgDiagnostic[]): boolean {
