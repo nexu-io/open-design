@@ -141,7 +141,8 @@ describe("pricing contract", () => {
       plans,
       /\.discount-corner-badge\s*\{[^}]*border:\s*0;/s,
     );
-    assert.match(plans, /<div class="plan-model-modules">/);
+    assert.match(plans, /tier !== 'free' && <div class="plan-model-modules">/);
+    assert.doesNotMatch(plans, /\.plan-go/);
     assert.match(
       plans,
       /\.plan-max \.plan-model-module li\.model-with-status em\.unlimited,[\s\S]*?background:\s*rgba\(120, 234, 87, 0\.14\);/,
@@ -199,7 +200,7 @@ describe("pricing contract", () => {
     );
     assert.match(
       individualPlans,
-      /<span>\{tierCopy\[tier\]\.ctaLabel\}<\/span>/,
+      /<span>\{tier === 'free' \? currentPlanLabel : tierCopy\[tier\]\.ctaLabel\}<\/span>/,
     );
     assert.doesNotMatch(individualPlans, /ctaLabel\} · \{L\.(?:monthly|yearly)\}/);
     assert.match(
@@ -365,7 +366,7 @@ describe("pricing contract", () => {
     }
   });
 
-  it("keeps the sold-out Go card instead of a Free entry card", async () => {
+  it("renders the permanent Free entry before the three paid plans", async () => {
     const [page, individualPlans] = await Promise.all([
       readFile(PRICING_PAGE_PATH, "utf8"),
       readFile(PRICING_INDIVIDUAL_PATH, "utf8"),
@@ -374,28 +375,25 @@ describe("pricing contract", () => {
     assert.match(page, /<PricingIndividualPlans \/>/);
     assert.doesNotMatch(page, /\{false && \(/);
     assert.doesNotMatch(page, /<section class="pr-grid"/);
-    assert.match(individualPlans, /tier:\s*'go' as const/);
+    assert.match(individualPlans, /tier:\s*'free' as const/);
+    assert.match(individualPlans, /logo:\s*'\/pricing\/plan-free\.svg'/);
+    assert.match(individualPlans, /content\.free/);
+    assert.match(individualPlans, /L\.freeForever/);
+    assert.match(individualPlans, /getCurrentPlanLabel\(locale\)/);
+    assert.doesNotMatch(individualPlans, /tier:\s*'go' as const/);
     assert.match(individualPlans, /data-pricing-cta\s+data-tier=\{tier\}/);
-    assert.match(individualPlans, /go:\s*content\.go/);
-    assert.match(individualPlans, /GO_PLAN_SOLD_OUT/);
     assert.match(individualPlans, /`plan-\$\{tier\}`/);
-    assert.match(
-      individualPlans,
-      /\.plan-model-module\.unavailable-model-module\s*\{[^}]*background:\s*#f1f2ee;/,
+    assert.match(page, /name:\s*'OpenDesign Free'/);
+    assert.match(page, /price:\s*'0'/);
+    assert.doesNotMatch(page, /name:\s*'OpenDesign Go'/);
+    assert.equal(
+      getPricingContent("zh").free.tagline,
+      "配置自己的 Agent 或 BYOK，免费使用",
     );
-    assert.doesNotMatch(
-      individualPlans,
-      /\.plan-(?:go|free) \.plan-model-module\.unavailable-model-module/,
-    );
-    assert.doesNotMatch(individualPlans, /\.plan-free /);
-    assert.match(
-      individualPlans,
-      /tier !== 'go' && <em class="multimodal-status">\{fillTemplate\(P\.upToResolution/,
-    );
-    assert.match(page, /name:\s*'OpenDesign Go'/);
-    assert.match(page, /price:\s*String\(GO_PLAN\.monthly\.priceUsd\)/);
-    assert.match(individualPlans, /DeepSeek V4 Flash/);
-    assert.match(individualPlans, /GLM-5\.1/);
+    assert.deepEqual(getPricingContent("zh").free.features, [
+      "BYOK 自带密钥，支持本地 Coding Agent",
+      "社区支持",
+    ]);
   });
 
   it("renders the live Personal comparison from localized pricing content", async () => {
@@ -520,7 +518,7 @@ describe("pricing contract", () => {
     );
     assert.match(
       individualPlans,
-      /\{tier === 'go' \? P\.flagshipModels : fillTemplate\(P\.flagshipModelCount, \{ count: String\(flagship\.length\) \}\)\}/,
+      /\{fillTemplate\(P\.flagshipModelCount, \{ count: String\(flagship\.length\) \}\)\}/,
     );
     assert.doesNotMatch(individualPlans, /\} · \$\{P\.flagshipModels\}/);
   });

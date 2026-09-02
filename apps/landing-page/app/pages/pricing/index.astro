@@ -4,8 +4,7 @@
  *
  * Card LAYOUT + COPY mirror the vela subscription modal (`pricing-plans.tsx`).
  * Plus/Pro/Max and Team NUMBERS come from `PRICING_SNAPSHOT` at build time.
- * Go's confirmed launch prices come from the colocated `GO_PLAN` source shared
- * with SEO metadata. The localized TEXT comes from
+ * The localized TEXT comes from
  * app/_lib/pricing-content.ts and app/_lib/pricing-team-content.ts.
  */
 import Layout from '../../_components/sub-page-layout.astro';
@@ -15,7 +14,6 @@ import {
   CLOUD_CONSOLE_BASE_PARAM,
   CLOUD_CONSOLE_URL,
   DEFAULT_CLOUD_CONSOLE_BASE_URL,
-  GO_PLAN,
   HOSTED_CLOUD_CONSOLE_DOMAINS,
   PRICING_SNAPSHOT,
   cloudSubscribeUrl,
@@ -130,8 +128,8 @@ const jsonLd = [
     offers: [
       {
         '@type': 'Offer',
-        name: 'OpenDesign Go',
-        price: String(GO_PLAN.monthly.priceUsd),
+        name: 'OpenDesign Free',
+        price: '0',
         priceCurrency: 'USD',
         url: CLOUD_CONSOLE_URL,
       },
@@ -1079,6 +1077,7 @@ const jsonLd = [
   <script>
     import {
       loadPersonalPricingContext,
+      resolveFreePlanAction,
       resolvePersonalPlanAction,
     } from '../../_lib/pricing-current-plan';
     import type {
@@ -1139,9 +1138,23 @@ const jsonLd = [
         );
         for (const cta of pricingRoot.querySelectorAll('[data-pricing-cta]')) {
           const tier = cta.getAttribute('data-tier') || '';
-          if (!personalTiers.has(tier)) continue;
           const label = cta.querySelector(':scope > span');
           const plan = cta.getAttribute('data-plan-name') || tier;
+          if (tier === 'free') {
+            const action = resolveFreePlanAction(pricingContext);
+            const text = action.kind === 'current'
+              ? actionLabels.current
+              : action.kind === 'downgrade_unavailable'
+                ? fillActionLabel(actionLabels.downgrade, { plan })
+                : cta.getAttribute('data-default-label') || plan;
+            if (label) label.textContent = text;
+            cta.setAttribute('data-subscription-disabled', '');
+            cta.setAttribute('aria-disabled', 'true');
+            cta.setAttribute('tabindex', '-1');
+            cta.removeAttribute('href');
+            continue;
+          }
+          if (!personalTiers.has(tier)) continue;
           const action = resolvePersonalPlanAction(pricingContext, {
             tier: tier as PersonalPlanTier,
             interval,

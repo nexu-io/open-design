@@ -80,7 +80,7 @@ describe('migrated Pricing compatibility analytics', () => {
     });
     testHarness.analytics.clickPlan({
       audience: 'creator',
-      planId: 'go',
+      planId: 'plus',
       interval: 'monthly',
       enabled: true,
     });
@@ -99,16 +99,16 @@ describe('migrated Pricing compatibility analytics', () => {
     const captured = exposures(testHarness);
     assert.deepEqual(
       captured.map((event) => event.payload.planId),
-      ['go', 'plus', 'pro', 'max'],
+      ['free', 'plus', 'pro', 'max'],
     );
     assert.deepEqual(captured[0], {
       kind: 'plan_exposure',
       eventId: 'event-1',
       eventTime: '2026-08-23T12:00:00.000Z',
       payload: {
-        planId: 'go',
+        planId: 'free',
         billingInterval: 'yearly',
-        priceUsd: '60.00',
+        priceUsd: '0.00',
         creditsGrantedUsd: '0.00',
         deployLimit: 0,
         introOfferApplied: false,
@@ -126,7 +126,7 @@ describe('migrated Pricing compatibility analytics', () => {
         event.payload.isRecommended,
       ]),
       [
-        ['go', '60.00', '0.00', 0, false],
+        ['free', '0.00', '0.00', 0, false],
         ['plus', '168.00', '20.00', 3, false],
         ['pro', '720.00', '120.00', 20, true],
         ['max', '1176.00', '300.00', 50, false],
@@ -134,6 +134,20 @@ describe('migrated Pricing compatibility analytics', () => {
     );
     assert.equal(testHarness.requests[0]?.sourceSurface, 'dashboard');
     assert.equal(testHarness.requests[0]?.sessionId, 'pricing-session-1');
+  });
+
+  it('never marks the permanent Free plan as using a monthly intro offer', () => {
+    const testHarness = harness();
+    resolve(testHarness, { firstMonthEligible: true });
+
+    testHarness.analytics.exposePlans({ audience: 'creator', interval: 'monthly' });
+
+    const freeExposure = exposures(testHarness).find(
+      (event) => event.payload.planId === 'free',
+    );
+    assert.equal(freeExposure?.payload.priceUsd, '0.00');
+    assert.equal(freeExposure?.payload.firstMonthEligible, true);
+    assert.equal(freeExposure?.payload.introOfferApplied, false);
   });
 
   it('preserves the legacy recommendation progression for every current plan exposure', () => {
@@ -226,7 +240,7 @@ describe('migrated Pricing compatibility analytics', () => {
       testHarness.requests[0]?.events.map((event) =>
         event.kind === 'pricing_click' ? event.payload.element : event.payload.planId,
       ),
-      ['change_interval', 'go', 'plus', 'pro', 'max'],
+      ['change_interval', 'free', 'plus', 'pro', 'max'],
     );
     assert.deepEqual(clicks(testHarness)[0]?.payload, {
       element: 'change_interval',
@@ -250,7 +264,7 @@ describe('migrated Pricing compatibility analytics', () => {
     assert.equal(clicks(testHarness).length, 0);
     assert.deepEqual(
       exposures(testHarness).map((event) => event.payload.planId),
-      ['go', 'plus', 'pro', 'max'],
+      ['free', 'plus', 'pro', 'max'],
     );
   });
 
@@ -260,7 +274,7 @@ describe('migrated Pricing compatibility analytics', () => {
 
     testHarness.analytics.clickPlan({
       audience: 'creator',
-      planId: 'go',
+      planId: 'plus',
       interval: 'monthly',
       enabled: true,
     });
@@ -281,10 +295,10 @@ describe('migrated Pricing compatibility analytics', () => {
         element: 'subscribe_now',
         currentPlanId: null,
         currentBillingInterval: null,
-        targetPlanId: 'go',
+        targetPlanId: 'plus',
         targetBillingInterval: 'monthly',
-        priceUsd: '5.00',
-        creditsGrantedUsd: '0.00',
+        priceUsd: '16.00',
+        creditsGrantedUsd: '20.00',
         introOfferApplied: true,
         isCurrentPlan: false,
         isRecommended: false,
@@ -306,13 +320,13 @@ describe('migrated Pricing compatibility analytics', () => {
 
   it('preserves the legacy recommendation progression for every current plan CTA', () => {
     const fixtures = [
-      { currentPlanId: null, expected: [false, false, true, false] },
-      { currentPlanId: 'go', expected: [false, false, true, false] },
-      { currentPlanId: 'plus', expected: [false, false, true, false] },
-      { currentPlanId: 'pro', expected: [false, false, false, true] },
-      { currentPlanId: 'max', expected: [false, false, false, false] },
+      { currentPlanId: null, expected: [false, true, false] },
+      { currentPlanId: 'go', expected: [false, true, false] },
+      { currentPlanId: 'plus', expected: [false, true, false] },
+      { currentPlanId: 'pro', expected: [false, false, true] },
+      { currentPlanId: 'max', expected: [false, false, false] },
     ] as const;
-    const planIds = ['go', 'plus', 'pro', 'max'] as const;
+    const planIds = ['plus', 'pro', 'max'] as const;
 
     for (const fixture of fixtures) {
       const testHarness = harness();
@@ -342,8 +356,8 @@ describe('migrated Pricing compatibility analytics', () => {
     resolve(testHarness);
 
     for (const input of [
-      { audience: 'creator' as const, planId: 'go', enabled: false },
-      { audience: 'team' as const, planId: 'go', enabled: true },
+      { audience: 'creator' as const, planId: 'free', enabled: false },
+      { audience: 'team' as const, planId: 'free', enabled: true },
       { audience: 'creator' as const, planId: 'team', enabled: true },
       { audience: 'creator' as const, planId: 'unknown', enabled: true },
     ]) {
@@ -358,7 +372,7 @@ describe('migrated Pricing compatibility analytics', () => {
     resolve(testHarness);
 
     testHarness.analytics.clickPlan({
-      planId: 'go',
+      planId: 'plus',
       interval: 'monthly',
       enabled: true,
     });

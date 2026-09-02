@@ -2,6 +2,8 @@ import {
   PERSONAL_PRICING_TIERS,
   postPricingBridgeEvents,
   type PlanExposureInput,
+  type PublicPlanTier,
+  type PublicPricingTierConfig,
   type PricingBridgeEvent,
   type PricingBridgeSource,
   type PricingClickInput,
@@ -9,7 +11,6 @@ import {
 import type {
   BillingInterval,
   PlanTier,
-  PlanTierConfig,
 } from './pricing';
 
 export type ResolvedPricingContext = {
@@ -43,7 +44,7 @@ type CompatibilityTransport = typeof postPricingBridgeEvents;
 type PricingCompatibilityOptions = {
   apiOrigin?: string;
   sessionId?: string;
-  tiers?: readonly PlanTierConfig[];
+  tiers?: readonly PublicPricingTierConfig[];
   postEvents?: CompatibilityTransport;
   now?: () => Date;
   createEventId?: () => string;
@@ -60,12 +61,12 @@ function defaultEventId(): string {
 }
 
 function personalPlanFacts(
-  tier: PlanTierConfig,
+  tier: PublicPricingTierConfig,
   interval: BillingInterval,
   firstMonthEligible: boolean,
 ) {
   const introOfferApplied =
-    firstMonthEligible && interval === 'monthly';
+    tier.tier !== 'free' && firstMonthEligible && interval === 'monthly';
   const priceUsd = interval === 'monthly'
     ? introOfferApplied
       ? tier.monthly.introPriceUsd
@@ -82,7 +83,7 @@ function personalPlanFacts(
   } as const;
 }
 
-function recommendedPlan(currentPlanId: PlanTier | null): PlanTier | null {
+function recommendedPlan(currentPlanId: PlanTier | null): PublicPlanTier | null {
   if (currentPlanId === 'max') return null;
   return currentPlanId === 'pro' ? 'max' : 'pro';
 }
@@ -193,7 +194,7 @@ export function createPricingCompatibilityAnalytics({
   const clickPlan = (input: PlanClickInput) => {
     if (!context || input.audience !== 'creator' || !input.enabled) return;
     const tier = tiers.find((candidate) => candidate.tier === input.planId);
-    if (!tier) return;
+    if (!tier || tier.tier === 'free') return;
 
     const facts = personalPlanFacts(
       tier,

@@ -41,6 +41,18 @@ export interface PersonalPlanAction {
   enabled: boolean;
 }
 
+export type FreePlanAction =
+  | { kind: 'current'; enabled: false }
+  | { kind: 'downgrade_unavailable'; enabled: false };
+
+export function resolveFreePlanAction(
+  context: PersonalPricingContext | null,
+): FreePlanAction {
+  if (!context) return { kind: 'current', enabled: false };
+  if (!context.current) return { kind: 'current', enabled: false };
+  return { kind: 'downgrade_unavailable', enabled: false };
+}
+
 type PricingFetch = (
   input: RequestInfo | URL,
   init?: RequestInit,

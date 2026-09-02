@@ -1,5 +1,4 @@
 import {
-  GO_PLAN,
   HOSTED_CLOUD_CONSOLE_DOMAINS,
   PRICING_SNAPSHOT,
   type BillingInterval,
@@ -8,9 +7,13 @@ import {
 } from './pricing';
 
 export type PricingBridgeSource = 'wallet' | 'dashboard';
+export type PublicPlanTier = 'free' | Exclude<PlanTier, 'go'>;
+export type PublicPricingTierConfig = Omit<PlanTierConfig, 'tier'> & {
+  tier: PublicPlanTier;
+};
 
 export type PlanExposureInput = {
-  planId: PlanTier;
+  planId: PublicPlanTier;
   billingInterval: BillingInterval;
   priceUsd: string;
   creditsGrantedUsd: string;
@@ -74,26 +77,36 @@ export type PricingBridgeEvent =
       payload: PricingClickInput;
     };
 
-const goTier: PlanTierConfig = {
-  tier: GO_PLAN.tier,
+const freeTier: PublicPricingTierConfig = {
+  tier: 'free',
   rank: 0,
   recommended: false,
   monthly: {
-    priceUsd: GO_PLAN.monthly.priceUsd,
-    introPriceUsd: GO_PLAN.monthly.introPriceUsd,
+    priceUsd: 0,
+    introPriceUsd: 0,
     grantUsd: 0,
   },
   yearly: {
-    priceUsd: GO_PLAN.yearly.priceUsd,
-    discountPct: 50,
+    priceUsd: 0,
+    discountPct: 0,
     grantUsd: 0,
   },
   deployLimit: 0,
 };
 
-export const PERSONAL_PRICING_TIERS: readonly PlanTierConfig[] = [
-  goTier,
-  ...PRICING_SNAPSHOT.tiers,
+const paidPublicTiers = PRICING_SNAPSHOT.tiers.map(
+  (tier): PublicPricingTierConfig => {
+    if (tier.tier === 'go') {
+      throw new Error('Public pricing snapshot must not contain the Go plan');
+    }
+
+    return { ...tier, tier: tier.tier };
+  },
+);
+
+export const PERSONAL_PRICING_TIERS: readonly PublicPricingTierConfig[] = [
+  freeTier,
+  ...paidPublicTiers,
 ];
 
 const sourceOverrideKeys = [
@@ -187,6 +200,15 @@ function isPlanTier(value: unknown): value is PlanTier {
   );
 }
 
+function isPublicPlanTier(value: unknown): value is PublicPlanTier {
+  return (
+    value === 'free' ||
+    value === 'plus' ||
+    value === 'pro' ||
+    value === 'max'
+  );
+}
+
 function isBillingInterval(value: unknown): value is BillingInterval {
   return value === 'monthly' || value === 'yearly';
 }
@@ -207,7 +229,7 @@ function sanitizedPlanPayload(value: unknown): PlanExposureInput | null {
   if (!value || typeof value !== 'object') return null;
   const payload = value as Record<string, unknown>;
   if (
-    !isPlanTier(payload.planId) ||
+    !isPublicPlanTier(payload.planId) ||
     !isBillingInterval(payload.billingInterval) ||
     !isUsdAmount(payload.priceUsd) ||
     !isUsdAmount(payload.creditsGrantedUsd) ||
