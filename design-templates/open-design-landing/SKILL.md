@@ -96,7 +96,7 @@ outputs:
   - path: <out>/index.html
     when: output_format in [standalone-html, both]
     description: Self-contained HTML with Atelier Zero CSS inlined.
-  - path: <out>/assets/*.png (or *.svg)
+  - path: <out>/assets/*.svg
     description: 16 collage assets, generated or placeholder per strategy.
   - path: <out>/nextjs/
     when: output_format in [nextjs-app, both]
@@ -202,10 +202,10 @@ Set `inputs.imagery.strategy` accordingly.
 npx tsx scripts/placeholder.ts <out>/assets/
 ```
 
-Writes 16 `.svg` files (with `.png` aliases for compatibility) into
+Writes 16 `.svg` files into
 `<out>/assets/`. Each placeholder shows the slot id, ratio, pixel
 dimensions, and the prompt hint from `image-manifest.json`. The
-composer's `<img src='./assets/hero.png'>` etc. just work.
+composer's `<img src='./assets/hero.svg'>` etc. just work.
 
 #### `generate` — gpt-image-2 mode
 
@@ -249,7 +249,7 @@ self-contained HTML file. The page includes:
 
 For deployable production output, **fork the `apps/landing-page/`**
 package: copy it into your workspace, align `app/page.tsx` with content
-from your `inputs.json`, and copy your `<out>/assets/*.png` into the
+from your `inputs.json`, and copy your `<out>/assets/*.svg` into the
 paths expected by `app/image-assets.ts` / R2 URLs. Build with
 `pnpm --filter @open-design/landing-page build` for a static `out/`
 export ready for any CDN.
