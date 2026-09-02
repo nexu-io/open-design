@@ -482,6 +482,120 @@ describe('DTCG Format 2025.10 codec', () => {
     // $extends instead of writing the materialized merge into the document.
     expect(reparsed.derived).toEqual({ $extends: '{base}' });
   });
+  it('rejects curly-brace references at pointer-only value positions', () => {
+    const base = token('color', color());
+    const document = {
+      base,
+      dim: token('dimension', dimension(4, 'px')),
+      family: token('fontFamily', ['Inter']),
+    };
+    expectInvalid({ ...document, bad: token('color', { ...color(), hex: '{base}' }) }, 'invalid-reference');
+    expectInvalid({ ...document, bad: token('color', { ...color(), colorSpace: '{base}' }) }, 'invalid-reference');
+    expectInvalid({ ...document, bad: token('color', { ...color(), components: ['{base}', 0.2, 0.3] }) }, 'invalid-reference');
+    expectInvalid({ ...document, bad: token('color', { ...color(), components: [0.1, '{base}', 0.3] }) }, 'invalid-reference');
+    expectInvalid({ ...document, bad: token('color', { ...color(), alpha: '{base}' }) }, 'invalid-reference');
+    expectInvalid({ ...document, bad: token('dimension', { value: 4, unit: '{base}' }) }, 'invalid-reference');
+    expectInvalid({ ...document, bad: token('dimension', { value: '{base}', unit: 'px' }) }, 'invalid-reference');
+    expectInvalid(
+      { ...document, bad: token('strokeStyle', { dashArray: [dimension(1, 'px')], lineCap: '{base}' }) },
+      'invalid-reference',
+    );
+    expectInvalid({ ...document, bad: token('fontFamily', ['{base}']) }, 'invalid-reference');
+    expectInvalid(
+      {
+        ...document,
+        bad: token('typography', {
+          fontFamily: ['{base}'],
+          fontSize: dimension(16, 'px'),
+          fontWeight: 500,
+          letterSpacing: dimension(0, 'px'),
+          lineHeight: 1.4,
+        }),
+      },
+      'invalid-reference',
+    );
+    expectInvalid(
+      {
+        ...document,
+        bad: token('shadow', {
+          color: color(),
+          offsetX: dimension(0, 'px'),
+          offsetY: dimension(2, 'px'),
+          blur: dimension(8, 'px'),
+          spread: dimension(0, 'px'),
+          inset: '{base}',
+        }),
+      },
+      'invalid-reference',
+    );
+    expectInvalid({ ...document, bad: token('cubicBezier', ['{base}', 0, 1, 1] as unknown as number[]) }, 'invalid-reference');
+  });
+  it('resolves allowed composite references while preserving literal-only positions', () => {
+    const result = expectValid({
+      base: token('color', color()),
+      tone: token('color', { ...color(), alpha: 0.5 }),
+      familySource: token('fontFamily', ['#1a334d']),
+      dim: token('dimension', dimension(4, 'px')),
+      dash: token('dimension', dimension(2, 'px')),
+      stroke: token('strokeStyle', { dashArray: [dimension(2, 'px')], lineCap: 'round' }),
+      border: token('border', {
+        color: '{base}',
+        width: '{dim}',
+        style: {
+          dashArray: [dimension(1, 'px'), '{dash}', { $ref: '#/dim/$value' }],
+          lineCap: 'round',
+        },
+      }),
+      colorCopy: token('color', { ...color(), hex: { $ref: '#/familySource/$value/0' } }),
+      spaceCopy: token('color', { ...color(), colorSpace: { $ref: '#/base/$value/colorSpace' } }),
+      componentCopy: token('color', { ...color(), components: [{ $ref: '#/tone/$value/alpha' }, 0.2, 0.3] }),
+      alphaCopy: token('color', { ...color(), alpha: { $ref: '#/tone/$value/alpha' } }),
+      typography: token('typography', {
+        fontFamily: [{ $ref: '#/familySource/$value/0' }],
+        fontSize: '{dim}',
+        fontWeight: '{weight}',
+        letterSpacing: { $ref: '#/dim/$value' },
+        lineHeight: { $ref: '#/lineHeight/$value' },
+      }),
+      weight: token('fontWeight', 500),
+      number: token('number', 0.4),
+      lineHeight: token('number', 1.4),
+      gradientPosition: token('number', 0.7),
+      gradientRef: token('gradient', [{ color: '{base}', position: '{gradientPosition}' }]),
+      strokeRef: token('border', { color: color(), width: dimension(1, 'px'), style: '{stroke}' }),
+    });
+
+    expect(findToken(result, '#/border').value).toEqual({
+      color: color(),
+      width: dimension(4, 'px'),
+      style: {
+        dashArray: [
+          dimension(1, 'px'),
+          dimension(2, 'px'),
+          dimension(4, 'px'),
+          dimension(1, 'px'),
+          dimension(2, 'px'),
+          dimension(4, 'px'),
+        ],
+        lineCap: 'round',
+      },
+    });
+    expect(findToken(result, '#/colorCopy').value).toMatchObject({ hex: '#1a334d' });
+    expect(findToken(result, '#/spaceCopy').value).toMatchObject({ colorSpace: 'srgb' });
+    expect(findToken(result, '#/componentCopy').value).toMatchObject({ components: [0.5, 0.2, 0.3] });
+    expect(findToken(result, '#/alphaCopy').value).toMatchObject({ alpha: 0.5 });
+    expect(findToken(result, '#/typography').value).toEqual({
+      fontFamily: ['#1a334d'],
+      fontSize: dimension(4, 'px'),
+      fontWeight: 500,
+      letterSpacing: dimension(4, 'px'),
+      lineHeight: 1.4,
+    });
+    expect(findToken(result, '#/gradientRef').value).toEqual([{ color: color(), position: 0.7 }]);
+    expect(findToken(result, '#/strokeRef').value).toMatchObject({
+      style: { dashArray: [dimension(2, 'px'), dimension(2, 'px')], lineCap: 'round' },
+    });
+  });
 function color(alpha?: number): Record<string, unknown> {
   return {
     colorSpace: 'srgb',

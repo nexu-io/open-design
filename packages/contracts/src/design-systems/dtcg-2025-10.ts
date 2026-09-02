@@ -803,25 +803,51 @@ function validateNestedReferenceTypes(
   const check = (type: DtcgTokenType, child: DtcgJsonValue | undefined, childPath: string[]) => {
     validateNestedReferenceTypes(type, child, entries, resolveToken, diagnostics, childPath);
   };
+  const checkPointerSyntax = (child: DtcgJsonValue | undefined, childPath: string[]) => {
+    if (typeof child === 'string' && looksLikeCurlyReference(child)) {
+      addDiagnostic(
+        diagnostics,
+        'error',
+        'invalid-reference',
+        childPath,
+        'Curly-brace references are not allowed at this value position; only JSON Pointer references are supported here.',
+      );
+    }
+  };
   switch (expectedType) {
     case 'color':
       if (isRecord(value)) {
+        checkPointerSyntax(value.colorSpace, [...path, 'colorSpace']);
         if (Array.isArray(value.components)) {
-          value.components.forEach((component, index) => check('number', component, [...path, 'components', String(index)]));
+          value.components.forEach((component, index) => {
+            checkPointerSyntax(component, [...path, 'components', String(index)]);
+          });
+        } else {
+          checkPointerSyntax(value.components, [...path, 'components']);
         }
-        check('number', value.alpha, [...path, 'alpha']);
+        checkPointerSyntax(value.alpha, [...path, 'alpha']);
+        checkPointerSyntax(value.hex, [...path, 'hex']);
       }
       break;
     case 'dimension':
     case 'duration':
-      if (isRecord(value)) check('number', value.value, [...path, 'value']);
+      if (isRecord(value)) {
+        checkPointerSyntax(value.value, [...path, 'value']);
+        checkPointerSyntax(value.unit, [...path, 'unit']);
+      }
       break;
     case 'cubicBezier':
-      if (Array.isArray(value)) value.forEach((coordinate, index) => check('number', coordinate, [...path, String(index)]));
+      if (Array.isArray(value)) {
+        value.forEach((coordinate, index) => checkPointerSyntax(coordinate, [...path, String(index)]));
+      }
       break;
     case 'strokeStyle':
-      if (isRecord(value) && Array.isArray(value.dashArray)) {
-        value.dashArray.forEach((dash, index) => check('dimension', dash, [...path, 'dashArray', String(index)]));
+      if (isRecord(value)) {
+        checkPointerSyntax(value.dashArray, [...path, 'dashArray']);
+        if (Array.isArray(value.dashArray)) {
+          value.dashArray.forEach((dash, index) => check('dimension', dash, [...path, 'dashArray', String(index)]));
+        }
+        checkPointerSyntax(value.lineCap, [...path, 'lineCap']);
       }
       break;
     case 'border':
@@ -850,6 +876,7 @@ function validateNestedReferenceTypes(
           check('dimension', shadow.offsetY, [...shadowPath, 'offsetY']);
           check('dimension', shadow.blur, [...shadowPath, 'blur']);
           check('dimension', shadow.spread, [...shadowPath, 'spread']);
+          checkPointerSyntax(shadow.inset, [...shadowPath, 'inset']);
         }
       });
       break;
@@ -868,7 +895,11 @@ function validateNestedReferenceTypes(
       break;
     case 'typography':
       if (isRecord(value)) {
-        check('fontFamily', value.fontFamily, [...path, 'fontFamily']);
+        if (Array.isArray(value.fontFamily)) {
+          value.fontFamily.forEach((family, index) => checkPointerSyntax(family, [...path, 'fontFamily', String(index)]));
+        } else {
+          check('fontFamily', value.fontFamily, [...path, 'fontFamily']);
+        }
         check('dimension', value.fontSize, [...path, 'fontSize']);
         check('fontWeight', value.fontWeight, [...path, 'fontWeight']);
         check('dimension', value.letterSpacing, [...path, 'letterSpacing']);
@@ -876,6 +907,10 @@ function validateNestedReferenceTypes(
       }
       break;
     case 'fontFamily':
+      if (Array.isArray(value)) {
+        value.forEach((family, index) => checkPointerSyntax(family, [...path, String(index)]));
+      }
+      break;
     case 'fontWeight':
     case 'number':
       break;
