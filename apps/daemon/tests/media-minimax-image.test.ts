@@ -14,6 +14,7 @@ describe('minimax music generation', () => {
   let projectRoot: string;
   let projectsRoot: string;
   const realFetch = globalThis.fetch;
+
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'od-minimax-music-'));
     projectRoot = path.join(root, 'project-root');
@@ -28,6 +29,13 @@ describe('minimax music generation', () => {
     delete process.env.OD_MINIMAX_API_KEY;
     await rm(root, { recursive: true, force: true });
   });
+
+  async function writeConfig(data: unknown) {
+    const file = path.join(projectRoot, '.od', 'media-config.json');
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, JSON.stringify(data), 'utf8');
+  }
+
   it('posts to music_generation and decodes hex audio', async () => {
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       expect(String(input)).toBe('https://api.minimax.io/v1/music_generation');
@@ -51,6 +59,76 @@ describe('minimax music generation', () => {
     expect(result.providerId).toBe('minimax');
     expect(result.name).toBe('music.mp3');
     expect((await readFile(path.join(projectsRoot, 'project-1', 'music.mp3'))).length).toBe(4);
+  });
+
+  it('uses the music endpoint when Settings persisted the legacy MiniMax base URL', async () => {
+    delete process.env.OD_MINIMAX_API_KEY;
+    await writeConfig({
+      providers: {
+        minimax: {
+          apiKey: 'minimax-test-key',
+          baseUrl: TEST_MINIMAX_TTS_BASE_URL,
+        },
+      },
+    });
+
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      expect(String(input)).toBe('https://api.minimax.io/v1/music_generation');
+      expect(init?.headers).toMatchObject({ authorization: 'Bearer minimax-test-key' });
+      return new Response(JSON.stringify({
+        base_resp: { status_code: 0 }, data: { status: 2, audio: '00010203' },
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(generateMedia({
+      projectRoot, projectsRoot, projectId: 'project-1', surface: 'audio',
+      audioKind: 'music', model: 'minimax-music-3.0',
+      prompt: 'A bright synthwave instrumental', output: 'music.mp3',
+    })).resolves.toMatchObject({ providerId: 'minimax' });
+  });
+
+  it('downloads successful URL audio responses', async () => {
+    const audioUrl = 'http://93.184.216.34/music.mp3';
+    const fetchMock = vi.fn(async (input: unknown) => {
+      if (String(input) === audioUrl) {
+        return new Response(new Uint8Array([0, 1, 2, 3]), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        base_resp: { status_code: 0 }, data: { status: 2, audio: audioUrl },
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(generateMedia({
+      projectRoot, projectsRoot, projectId: 'project-1', surface: 'audio',
+      audioKind: 'music', model: 'minimax-music-3.0',
+      prompt: 'A bright synthwave instrumental', output: 'music.mp3',
+    })).resolves.toMatchObject({ providerId: 'minimax' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect((await readFile(path.join(projectsRoot, 'project-1', 'music.mp3'))).length).toBe(4);
+  });
+
+  it('rejects failed URL audio responses before writing the body', async () => {
+    const audioUrl = 'http://93.184.216.34/music.mp3';
+    const fetchMock = vi.fn(async (input: unknown) => {
+      if (String(input) === audioUrl) {
+        return new Response('not found', { status: 404 });
+      }
+      return new Response(JSON.stringify({
+        base_resp: { status_code: 0 }, data: { status: 2, audio: audioUrl },
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(generateMedia({
+      projectRoot, projectsRoot, projectId: 'project-1', surface: 'audio',
+      audioKind: 'music', model: 'minimax-music-3.0',
+      prompt: 'A bright synthwave instrumental', output: 'music.mp3',
+    })).rejects.toThrow(/minimax music fetch 404/);
+    await expect(
+      readFile(path.join(projectsRoot, 'project-1', 'music.mp3')),
+    ).rejects.toThrow();
   });
 });
 

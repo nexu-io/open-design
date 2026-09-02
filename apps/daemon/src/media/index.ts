@@ -2729,6 +2729,14 @@ const MINIMAX_MUSIC_MODEL_MAP = {
   'minimax-music-2.6': 'music-2.6',
 } as Record<string, string>;
 
+/** Keep the shared Settings default for TTS from leaking into music requests. */
+function resolveMinimaxMusicBaseUrl(credentials: ProviderConfig): string {
+  const configuredBase = credentials.baseUrl?.trim().replace(/\/+$/, '') || '';
+  return !configuredBase || configuredBase === MINIMAX_DEFAULT_BASE_URL
+    ? MINIMAX_MUSIC_DEFAULT_BASE_URL
+    : configuredBase;
+}
+
 /** Generate music through MiniMax's synchronous music_generation endpoint. */
 async function renderMinimaxMusic(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
@@ -2736,7 +2744,7 @@ async function renderMinimaxMusic(ctx: MediaContext, credentials: ProviderConfig
       `no MiniMax API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set OD_MINIMAX_API_KEY`,
     );
   }
-  const configuredBase = (credentials.baseUrl || MINIMAX_MUSIC_DEFAULT_BASE_URL).replace(/\/+$/, '');
+  const configuredBase = resolveMinimaxMusicBaseUrl(credentials);
   const endpoint = configuredBase.endsWith('/music_generation')
     ? configuredBase
     : `${configuredBase}/music_generation`;
@@ -2792,6 +2800,9 @@ async function renderMinimaxMusic(ctx: MediaContext, credentials: ProviderConfig
   let bytes: Buffer;
   if (/^https?:\/\//i.test(audio)) {
     const audioResp = await assertAndFetchExternalAsset(audio, withMediaRequestInit(ctx));
+    if (!audioResp.ok) {
+      throw new Error(`minimax music fetch ${audioResp.status}`);
+    }
     bytes = Buffer.from(await audioResp.arrayBuffer());
   } else {
     bytes = Buffer.from(audio, 'hex');
