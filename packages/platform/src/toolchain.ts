@@ -114,8 +114,14 @@ export function wellKnownUserToolchainBins(
   if (process.platform === "win32") {
     dirs.push(join(home, "AppData", "Roaming", "npm"));
   }
+  // The official DeepSeek Harness installer keeps its user-managed runtime
+  // under DSH_HOME (default: ~/.dsh). Search its dsh shim as a conventional
+  // user-level location so an explicit npm prefix keeps its documented
+  // precedence; DSH_BIN remains the explicit per-runtime override.
+  const dshHome = resolveUserScopedHome(env.DSH_HOME, home) || join(home, ".dsh");
   dirs.push(
     join(home, ".local", "bin"),
+    join(dshHome, "runtime", "node_modules", ".bin"),
     join(home, ".vite-plus", "bin"),
     join(home, ".kimi-code", "bin"),
     join(home, ".opencode", "bin"),

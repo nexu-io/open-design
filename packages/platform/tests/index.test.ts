@@ -853,6 +853,37 @@ describe("wellKnownUserToolchainBins", () => {
     }
   });
 
+  it("includes the DeepSeek Harness runtime bin without outranking an npm prefix", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-dsh-"));
+    const customDshHome = mkdtempSync(join(tmpdir(), "wkutb-dsh-custom-"));
+    const npmPrefix = mkdtempSync(join(tmpdir(), "wkutb-dsh-prefix-"));
+    try {
+      const defaultRuntimeBin = join(home, ".dsh", "runtime", "node_modules", ".bin");
+      const customRuntimeBin = join(customDshHome, "runtime", "node_modules", ".bin");
+      const prefixBin = join(npmPrefix, "bin");
+
+      const defaultDirs = wellKnownUserToolchainBins({
+        home,
+        env: { NPM_CONFIG_PREFIX: npmPrefix },
+        includeSystemBins: false,
+      });
+      expect(defaultDirs).toContain(defaultRuntimeBin);
+      expect(defaultDirs.indexOf(prefixBin)).toBeLessThan(defaultDirs.indexOf(defaultRuntimeBin));
+
+      const customDirs = wellKnownUserToolchainBins({
+        home,
+        env: { DSH_HOME: customDshHome },
+        includeSystemBins: false,
+      });
+      expect(customDirs).toContain(customRuntimeBin);
+      expect(customDirs).not.toContain(defaultRuntimeBin);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(customDshHome, { recursive: true, force: true });
+      rmSync(npmPrefix, { recursive: true, force: true });
+    }
+  });
+
   it("appends $NPM_CONFIG_PREFIX/bin when set so corporate prefixes resolve", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-prefix-"));
     const customPrefix = mkdtempSync(join(tmpdir(), "wkutb-custom-"));
