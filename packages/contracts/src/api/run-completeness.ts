@@ -153,3 +153,20 @@ export function strategyTaskProvesDelivery(
 ): boolean {
   return strategyTask?.terminal === true && strategyTask.outcome === 'completed';
 }
+
+/**
+ * True when a strategy task's terminal verdict refutes a `succeeded` run
+ * classification. The mirror of `strategyTaskProvesDelivery`: any terminal
+ * outcome other than `completed` (a blocked or canceled task) means the task
+ * never delivered its work, so a clean agent process exit must not be allowed
+ * to persist the run as succeeded (#7564). Non-terminal outcomes (e.g. a
+ * clarification prompt still in flight) say nothing about delivery and are
+ * deliberately ignored here.
+ */
+export function strategyTaskVerdictRefutesSuccess(
+  strategyTask: { outcome?: unknown; terminal?: unknown } | null | undefined,
+): boolean {
+  return strategyTask?.terminal === true
+    && typeof strategyTask.outcome === 'string'
+    && strategyTask.outcome !== 'completed';
+}

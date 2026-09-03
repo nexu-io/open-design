@@ -2123,6 +2123,51 @@ describe('OD Next automatic production through the real server', () => {
     });
   });
 
+  it('fails the run when a terminal blocked strategy verdict meets a clean agent exit', async () => {
+    const fixture = await createFixture('repair');
+    // Replace the strategy fixture CLI with one that answers in plain prose:
+    // no machine blocks, no plan, no runtime state, exit 0.
+    const bin = path.join(binDir!, 'codex-prose-only');
+    await writeFile(bin, `#!/usr/bin/env node
+const argv = process.argv.slice(2);
+if (argv.includes('--version')) { console.log('codex-cli 0.147.0'); process.exit(0); }
+if (argv.includes('--help')) { console.log('Usage: codex exec [--sandbox MODE]'); process.exit(0); }
+console.log(JSON.stringify({ type: 'thread.started', thread_id: 'thread-prose-only' }));
+console.log(JSON.stringify({ type: 'turn.started' }));
+console.log(JSON.stringify({ type: 'item.completed', item: { id: 'answer', type: 'agent_message', text: 'I could not finish the prototype.' } }));
+console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1 } }));
+setTimeout(() => process.exit(0), 5);
+`);
+    await chmod(bin, 0o755);
+    const configResponse = await fetch(`${started!.url}/api/app-config`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'codex',
+        agentCliEnv: { codex: { CODEX_BIN: bin, CODEX_HOME: binDir! } },
+        telemetry: { metrics: false, content: false, artifactManifest: false },
+        privacyDecisionAt: Date.now(),
+      }),
+    });
+    expect(configResponse.status).toBe(200);
+
+    queueFixtureIds(fixture);
+    const created = await postRun(
+      started!.url,
+      createRunRequest(fixture, 'Update the existing operator header.'),
+    );
+    const terminal = await waitForRunTerminal(started!.url, created.runId as string);
+
+    expect(terminal.status).toBe('failed');
+    expect(terminal.errorCode).toBe('AGENT_EXECUTION_FAILED');
+    expect(terminal.error ?? '').toContain('od_next_protocol_runtime_state_missing');
+    expect(terminal.strategyTask).toMatchObject({
+      taskExecutionId: fixture.taskExecutionId,
+      outcome: 'blocked',
+      terminal: true,
+    });
+  });
+
   it('fails a mapped Run before live Skill staging when its frozen package row is missing', async () => {
     const fixture = await createFixture('repair');
     const body = createRunRequest(fixture, 'Do not fall back to a live Skill.');

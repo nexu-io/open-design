@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   eventsEndedWithUnfinishedWork,
   isTodoWriteToolName,
+  strategyTaskVerdictRefutesSuccess,
   todoSnapshotHasUnfinishedWork,
   todoStatusIsUnfinished,
 } from '../src/api/run-completeness';
@@ -59,6 +60,44 @@ describe('isTodoWriteToolName', () => {
     }
     expect(isTodoWriteToolName('Write')).toBe(false);
     expect(isTodoWriteToolName(undefined)).toBe(false);
+  });
+});
+
+describe('strategyTaskVerdictRefutesSuccess', () => {
+  it('is true for a terminal outcome other than completed', () => {
+    expect(
+      strategyTaskVerdictRefutesSuccess({ terminal: true, outcome: 'blocked' }),
+    ).toBe(true);
+    expect(
+      strategyTaskVerdictRefutesSuccess({ terminal: true, outcome: 'canceled' }),
+    ).toBe(true);
+  });
+
+  it('is false for a terminal completed outcome (proves delivery)', () => {
+    expect(
+      strategyTaskVerdictRefutesSuccess({ terminal: true, outcome: 'completed' }),
+    ).toBe(false);
+  });
+
+  it('is false for non-terminal outcomes', () => {
+    expect(
+      strategyTaskVerdictRefutesSuccess({
+        terminal: false,
+        outcome: 'clarification_required',
+      }),
+    ).toBe(false);
+    expect(
+      strategyTaskVerdictRefutesSuccess({ terminal: false, outcome: 'plan_ready' }),
+    ).toBe(false);
+  });
+
+  it('is false for missing or malformed strategy tasks', () => {
+    expect(strategyTaskVerdictRefutesSuccess(null)).toBe(false);
+    expect(strategyTaskVerdictRefutesSuccess(undefined)).toBe(false);
+    expect(
+      strategyTaskVerdictRefutesSuccess({ terminal: true, outcome: 42 }),
+    ).toBe(false);
+    expect(strategyTaskVerdictRefutesSuccess({ outcome: 'blocked' })).toBe(false);
   });
 });
 

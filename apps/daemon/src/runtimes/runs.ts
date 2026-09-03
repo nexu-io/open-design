@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { strategyTaskProvesDelivery, todoSnapshotHasUnfinishedWork } from '@open-design/contracts';
+import { strategyTaskProvesDelivery, strategyTaskVerdictRefutesSuccess, todoSnapshotHasUnfinishedWork } from '@open-design/contracts';
 import {
   collectProcessTreePids,
   listProcessSnapshots,
@@ -1326,9 +1326,16 @@ export function createChatRunService({
 
   const commitFinish = (run, status, code: number | null = null, signal: string | null = null) => {
     if (TERMINAL_RUN_STATUSES.has(run.status)) return;
-    if (beforeFinish) beforeFinish(run, status, code, signal);
+    // A terminal strategy verdict that is not `completed` (blocked/canceled task)
+    // outranks a clean agent process exit (#7564): the task never delivered, so the
+    // physical run must not be persisted (or projected) as succeeded.
+    const effectiveStatus =
+      status === 'succeeded' && strategyTaskVerdictRefutesSuccess(run.strategyTask)
+        ? 'failed'
+        : status;
+    if (beforeFinish) beforeFinish(run, effectiveStatus, code, signal);
     const terminalAt = Date.now();
-    run.status = status;
+    run.status = effectiveStatus;
     run.exitCode = code;
     run.signal = signal;
     run.updatedAt = terminalAt;
@@ -1352,7 +1359,7 @@ export function createChatRunService({
     // Commit the terminal Run snapshot before exposing its terminal event. The
     // optional outbox hook is local-only and synchronous by contract.
     persistState(run);
-    finalizeTerminalLocally(run, status, terminalAt);
+    finalizeTerminalLocally(run, effectiveStatus, terminalAt);
     // Release run-scoped resources the starter registered (e.g. the minted
     // tool-token grant + agent event-sink entries). This runs on EVERY
     // terminal path — including a startup throw that never reached the child
@@ -1370,7 +1377,7 @@ export function createChatRunService({
     emit(run, 'end', {
       code,
       signal,
-      status,
+      status: effectiveStatus,
       terminalAt,
       resumable: run.resumable ?? false,
       endedWithUnfinishedWork: run.endedWithUnfinishedWork,

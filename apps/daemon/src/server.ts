@@ -14287,7 +14287,10 @@ export async function startServer({
         const decodedAt = Date.now();
         if (emitTitleFilteredGuardedTextDelta(ev.delta)) {
           noteFirstTokenAt(decodedAt);
-          agentProducedOutput = true;
+          // A whitespace-only delta is not substantive output: a run whose entire
+          // response is blank must still hit the close-time empty-output guard
+          // (#7564) instead of being classified as a produced-output success.
+          if (ev.delta.trim().length > 0) agentProducedOutput = true;
         }
         return;
       }
@@ -15857,13 +15860,25 @@ export async function startServer({
           }
           run.strategyTask = projectStrategyTask(transition.result.task, run.id);
           if (transition.result.action === 'blocked') {
-            const signal = rolloutStopSignalForBlockedContinuation(
+            const rolloutSignal = rolloutStopSignalForBlockedContinuation(
               transition.result.reasonCodes,
             );
-            const stopMode = signal ? stopModeForOdNextSignal(signal) : null;
-            if (signal && stopMode) {
-              latchOdNextRolloutForRun(run, stopMode, signal);
+            const stopMode = rolloutSignal ? stopModeForOdNextSignal(rolloutSignal) : null;
+            if (rolloutSignal && stopMode) {
+              latchOdNextRolloutForRun(run, stopMode, rolloutSignal);
             }
+            // The strategy verdict is terminal for this task. A clean agent process exit
+            // must not publish a false success on top of it (#7564): surface the blocked
+            // reason codes as an explicit, actionable failure instead. Mirrors the
+            // blockAutomaticContinuation handling above.
+            if (!run.cancelRequested && !design.runs.isTerminal(run.status)) {
+              send('error', createSseErrorPayload(
+                'AGENT_EXECUTION_FAILED',
+                `OD Next task blocked: ${transition.result.reasonCodes.join(', ') || 'protocol violation'}. The run produced no usable deliverable; review the blocked reason and retry the task.`,
+                { retryable: false },
+              ));
+            }
+            return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
           }
           if (transition.start && transition.prepared?.kind === 'ready') {
             const nextRun = transition.prepared.run;
