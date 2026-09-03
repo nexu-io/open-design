@@ -21,6 +21,14 @@ export interface DesignDeliveryInput {
   traceObjectFileCount: number;
   /** Authoritative artifact count reported by the daemon at run finalization. */
   artifactCount?: number;
+  /**
+   * Count of project files that existed before the turn and are confirmed
+   * missing from the post-turn snapshot. Distinct from `producedFileCount`,
+   * which only includes files that survived the turn. Lets a Bash `rm`-only
+   * turn or an in-place Edit that deletes project files qualify as a real
+   * delivery even when the post-turn `producedFileCount` is zero — #7744.
+   */
+  confirmedDeletions?: number;
   persistenceSucceeded?: boolean;
   persistenceFailed?: boolean;
 }
@@ -80,6 +88,13 @@ function hasLiveArtifactDelivery(events: AgentEvent[] | undefined): boolean {
  * be downgraded to ARTIFACT_NOT_FOUND. The known cost: an agent that merely
  * claims completion without ever calling a write tool now passes as text; the
  * text itself makes that visible to the user.
+ *
+ * Turns that mutated files (Write / Edit / Delete / Bash rm) but produced
+ * zero new files are still deliveries — the mutation itself was the work.
+ * For example: an agent deleting stale scaffolding, renaming a file via
+ * Bash mv, or editing config in-place without adding new files. Skipping
+ * the mutation check for these cases incorrectly marks them as no_result
+ * even though the run accomplished its task.
  */
 export function resolveDesignDeliveryOutcome(
   input: DesignDeliveryInput,
@@ -94,13 +109,22 @@ export function resolveDesignDeliveryOutcome(
     input.producedFileCount > 0 ||
     input.traceObjectFileCount > 0 ||
     (input.artifactCount ?? 0) > 0 ||
+    (input.confirmedDeletions ?? 0) > 0 ||
     input.persistenceSucceeded ||
     hasLiveArtifactDelivery(input.events)
   ) {
     return 'delivered';
   }
   if (input.persistenceFailed) return 'delivery_failed';
-  if (!hasFileMutationToolUse(input.events) && input.content.trim().length > 0) {
+  // A zero-mutation, text-only turn is a report-only result (image
+  // analysis, audit-style reports). A mutation-only turn with no new files
+  // — e.g. Bash `rm stale.html` or an in-place Edit that doesn't add files —
+  // is a real project change. Treat those as delivered when the project
+  // file snapshot can confirm the deletion landed (a path existed pre-turn
+  // and is missing post-turn). When the snapshot cannot prove the mutation
+  // happened, fall through to `no_result` so the user can still retry.
+  const mutated = hasFileMutationToolUse(input.events);
+  if (!mutated && input.content.trim().length > 0) {
     return 'report_only';
   }
   return 'no_result';
