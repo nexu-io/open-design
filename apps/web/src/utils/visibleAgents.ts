@@ -18,9 +18,10 @@ export function availableVisibleAgentCount(agents: AgentInfo[]): number {
     .length;
 }
 
-export function deepSeekHarnessNeedsSetup(agent: AgentInfo): boolean {
+export function agentNeedsCompanionSetup(agent: AgentInfo): boolean {
+  // This diagnostic currently belongs only to the DSH compatibility probe;
+  // local profiles inheriting that adapter keep their own ids.
   return (
-    agent.id === 'deepseek-harness' &&
     !agent.available &&
     Boolean(agent.path) &&
     Boolean(

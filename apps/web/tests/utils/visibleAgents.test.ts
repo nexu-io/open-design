@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AgentInfo } from '../../src/types';
 import {
   availableVisibleAgentCount,
-  deepSeekHarnessNeedsSetup,
+  agentNeedsCompanionSetup,
   isVisibleLocalCliAgent,
 } from '../../src/utils/visibleAgents';
 
@@ -59,7 +59,7 @@ describe('isVisibleLocalCliAgent', () => {
   });
 });
 
-describe('deepSeekHarnessNeedsSetup', () => {
+describe('agentNeedsCompanionSetup', () => {
   // The picker renders an unavailable DSH only when detection reported the
   // path it found. Detection that drops the path leaves the row invisible,
   // which is exactly how a broken CLI disappears instead of offering a fix.
@@ -76,7 +76,8 @@ describe('deepSeekHarnessNeedsSetup', () => {
       diagnostics: [{ reason: 'runtime-profile-incompatible', severity: 'error', message: '' }],
     });
 
-    expect(deepSeekHarnessNeedsSetup(withPath)).toBe(true);
-    expect(deepSeekHarnessNeedsSetup(withoutPath)).toBe(false);
+    expect(agentNeedsCompanionSetup(withPath)).toBe(true);
+    expect(agentNeedsCompanionSetup({ ...withPath, id: 'local-dsh-profile' })).toBe(true);
+    expect(agentNeedsCompanionSetup(withoutPath)).toBe(false);
   });
 });

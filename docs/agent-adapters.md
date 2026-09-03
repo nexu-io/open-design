@@ -401,6 +401,11 @@ the active-run staging implementation is in
   confirmation installs the embedded component through the user's `dsh`,
   rescans, selects, and connection-tests it. Cancelling changes nothing. Only a
   missing `dsh` executable belongs in the installable-agent group.
+- A local agent profile may inherit `baseAgent: "deepseek-harness"` while
+  declaring its own id, name, binary, and `DSH_HOME`. It appears alongside the
+  shipped DeepSeek Harness adapter and uses the same setup dialog; companion
+  installation targets the selected profile's executable and environment, so
+  it does not modify another Harness installation.
 - Each OD run starts a fresh `dsh --profile open-design --stdio` process. The
   JSONL profile protocol creates a Harness session on the first turn and cold
   resumes that exact session on later turns. This is profile-stdio resume, not

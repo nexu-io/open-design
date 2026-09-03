@@ -31,11 +31,11 @@ import type { RuntimeAgentDef } from './types.js';
 /**
  * The agents this build ships, before anything a particular machine adds.
  *
- * `AGENT_DEFS` below appends whatever local profiles the user has declared, so
- * it answers "what can this machine run" — a different question from "what do
- * we ship", and the wrong list for anything that must hold everywhere. A local
- * profile id is required not to collide with one of these (see
- * `createLocalAgentDef`), so it is always an id we have never heard of.
+ * `currentAgentDefs()` below appends whatever local profiles the user has
+ * declared, so it answers "what can this machine run" — a different question
+ * from "what do we ship", and the wrong list for anything that must hold
+ * everywhere. A local profile id is required not to collide with one of these
+ * (see `createLocalAgentDef`), so it is always an id we have never heard of.
  */
 export const SHIPPED_AGENT_DEFS: RuntimeAgentDef[] = [
   amrAgentDef,
@@ -73,19 +73,26 @@ export function readLocalAgentProfileDefs(
   return readLocalAgentProfileDefsFromFile(baseDefs);
 }
 
-export const AGENT_DEFS: RuntimeAgentDef[] = [
-  ...SHIPPED_AGENT_DEFS,
-  ...readLocalAgentProfileDefs(SHIPPED_AGENT_DEFS),
-];
-
-const ids = new Set();
-for (const def of AGENT_DEFS) {
-  if (ids.has(def.id)) {
-    throw new Error(`Duplicate agent definition id: ${def.id}`);
+export function currentAgentDefs(): RuntimeAgentDef[] {
+  const defs = [
+    ...SHIPPED_AGENT_DEFS,
+    ...readLocalAgentProfileDefs(SHIPPED_AGENT_DEFS),
+  ];
+  const ids = new Set();
+  for (const def of defs) {
+    if (ids.has(def.id)) {
+      throw new Error(`Duplicate agent definition id: ${def.id}`);
+    }
+    ids.add(def.id);
   }
-  ids.add(def.id);
+  return defs;
 }
 
+// Backward-compatible startup snapshot for callers that only describe the
+// shipped registry. Runtime discovery uses currentAgentDefs() so Rescan also
+// sees local profiles created after the daemon started.
+export const AGENT_DEFS: RuntimeAgentDef[] = currentAgentDefs();
+
 export function getAgentDef(id: string): RuntimeAgentDef | null {
-  return AGENT_DEFS.find((a) => a.id === id) || null;
+  return currentAgentDefs().find((a) => a.id === id) || null;
 }

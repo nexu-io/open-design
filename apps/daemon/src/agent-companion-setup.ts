@@ -22,7 +22,7 @@ import {
 } from './runtimes/defs/deepseek-harness.js';
 
 const execFileAsync = promisify(execFile);
-const DSH_AGENT_ID = 'deepseek-harness';
+const DSH_RUNTIME_RESOURCE_ID = 'deepseek-harness';
 const DSH_RUNTIME_RESOURCE_DIRECTORY = path.join('agent-runtimes', 'deepseek-harness');
 const DSH_RUNTIME_PACKAGE_NAME = '@open-design/dsh-runtime';
 
@@ -37,6 +37,7 @@ type RuntimeManifest = {
 export class AgentCompanionSetupError extends Error {
   constructor(
     readonly code:
+      | 'AGENT_UNSUPPORTED'
       | 'AGENT_NOT_INSTALLED'
       | 'BUNDLED_COMPANION_INVALID'
       | 'COMPANION_INSTALL_FAILED'
@@ -78,7 +79,7 @@ async function materializeDevelopmentBundle(
       'This OpenDesign build does not contain the DeepSeek Harness connection component.',
     );
   }
-  const destination = path.join(runtimeDataDir, 'runtime-packages', DSH_AGENT_ID);
+  const destination = path.join(runtimeDataDir, 'runtime-packages', DSH_RUNTIME_RESOURCE_ID);
   await rm(destination, { force: true, recursive: true });
   await mkdir(destination, { recursive: true });
   await runPackageManager(['--filter', DSH_RUNTIME_PACKAGE_NAME, 'build'], projectRoot);
@@ -182,31 +183,38 @@ function commandFailureDetail(error: unknown): string | null {
   return parts.length > 0 ? parts.join(' ') : null;
 }
 
-let activeSetup: Promise<AgentCompanionSetupResponse> | null = null;
+const activeSetups = new Map<string, Promise<AgentCompanionSetupResponse>>();
+let setupQueue: Promise<void> = Promise.resolve();
 
-export function installDeepSeekHarnessCompanion(options: {
+export function installDshProfileCompanion(agentId: string, options: {
   projectRoot: string;
   resourceRoot: string;
   runtimeDataDir: string;
 }): Promise<AgentCompanionSetupResponse> {
-  if (activeSetup) return activeSetup;
-  activeSetup = installDeepSeekHarnessCompanionOnce(options).finally(() => {
-    activeSetup = null;
+  const active = activeSetups.get(agentId);
+  if (active) return active;
+  const setup = setupQueue.then(() => installDshProfileCompanionOnce(agentId, options)).finally(() => {
+    if (activeSetups.get(agentId) === setup) activeSetups.delete(agentId);
   });
-  return activeSetup;
+  setupQueue = setup.then(() => undefined, () => undefined);
+  activeSetups.set(agentId, setup);
+  return setup;
 }
 
-async function installDeepSeekHarnessCompanionOnce(options: {
+async function installDshProfileCompanionOnce(agentId: string, options: {
   projectRoot: string;
   resourceRoot: string;
   runtimeDataDir: string;
 }): Promise<AgentCompanionSetupResponse> {
-  const def = getAgentDef(DSH_AGENT_ID);
-  if (!def) {
-    throw new AgentCompanionSetupError('BUNDLED_COMPANION_INVALID', 'DeepSeek Harness runtime is not registered.');
+  const def = getAgentDef(agentId);
+  if (!def || def.streamFormat !== 'dsh-profile-jsonl') {
+    throw new AgentCompanionSetupError(
+      'AGENT_UNSUPPORTED',
+      'This agent has no OpenDesign connection component.',
+    );
   }
   const appConfig = await readAppConfig(options.runtimeDataDir);
-  const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, DSH_AGENT_ID);
+  const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, agentId);
   const before = await detectAgent(def, configuredEnv);
   const { bytes, manifest } = await resolveVerifiedBundle(options);
   if (before.available) {
@@ -217,11 +225,11 @@ async function installDeepSeekHarnessCompanionOnce(options: {
   if (!launch.launchPath) {
     throw new AgentCompanionSetupError(
       'AGENT_NOT_INSTALLED',
-      'DeepSeek Harness is not installed. Install the official dsh CLI, then scan again.',
+      `${def.name} is not installed. Install its CLI, then scan again.`,
     );
   }
   const childEnv = applyAgentLaunchEnv(
-    spawnEnvForAgent(DSH_AGENT_ID, process.env, configuredEnv),
+    spawnEnvForAgent(agentId, { ...process.env, ...(def.env || {}) }, configuredEnv),
     launch,
   );
   const profileWasPresent = hasOpenDesignProfile(childEnv);
@@ -234,12 +242,12 @@ async function installDeepSeekHarnessCompanionOnce(options: {
     );
   } catch (error) {
     console.error(
-      '[od] DeepSeek Harness connection component install failed',
+      '[od] DSH profile connection component install failed',
       commandFailureDetail(error) ?? 'no command diagnostics were available',
     );
     throw new AgentCompanionSetupError(
       'COMPANION_INSTALL_FAILED',
-      'DeepSeek Harness could not install the OpenDesign connection component. No agent selection was changed.',
+      `${def.name} could not install the OpenDesign connection component. No agent selection was changed.`,
     );
   }
 

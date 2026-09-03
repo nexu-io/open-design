@@ -531,11 +531,11 @@ async function runStrategy(args) {
 }
 
 function printAgentHelp() {
-  console.log(`Usage: od agent setup deepseek-harness [options]
+  console.log(`Usage: od agent setup <agent-id> [options]
 
-Install or repair OpenDesign's bundled connection component in the user's
-official DeepSeek Harness installation. The dsh CLI itself is not installed
-or upgraded by OpenDesign.
+Install or repair OpenDesign's bundled connection component for a selected
+DSH-compatible agent profile. The agent CLI itself is not installed or
+upgraded by OpenDesign.
 
 Options:
   --json                  Print a machine-readable result.
@@ -555,14 +555,15 @@ async function runAgent(args) {
     printAgentHelp();
     return;
   }
-  if (positional[0] !== 'setup' || positional[1] !== 'deepseek-harness') {
+  const agentId = positional[1];
+  if (positional[0] !== 'setup' || !agentId) {
     printAgentHelp();
     process.exit(2);
   }
   const base = await cliDaemonBaseUrl(flags);
   let response;
   try {
-    response = await fetch(`${base}/api/agents/deepseek-harness/companion/install`, {
+    response = await fetch(`${base}/api/agents/${encodeURIComponent(agentId)}/companion/install`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: '{}',
@@ -578,7 +579,7 @@ async function runAgent(args) {
     return;
   }
   const verb = result.action === 'already-compatible' ? 'already compatible' : result.action;
-  console.log(`DeepSeek Harness connection component ${verb} (${result.packageVersion}).`);
+  console.log(`Agent "${agentId}" connection component ${verb} (${result.packageVersion}).`);
 }
 
 const EXPORT_STRING_FLAGS = new Set([

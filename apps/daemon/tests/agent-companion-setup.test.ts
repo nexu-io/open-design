@@ -2,11 +2,11 @@ import { createHash } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   AgentCompanionSetupError,
-  installDeepSeekHarnessCompanion,
+  installDshProfileCompanion,
 } from '../src/agent-companion-setup.js';
 
 const roots: string[] = [];
@@ -14,6 +14,7 @@ const originalDshBin = process.env.DSH_BIN;
 const originalDshHome = process.env.DSH_HOME;
 const originalMode = process.env.OD_DSH_SETUP_FAKE_MODE;
 const originalAgentHome = process.env.OD_AGENT_HOME;
+const originalAgentProfilesConfig = process.env.OD_AGENT_PROFILES_CONFIG;
 const originalPath = process.env.PATH;
 
 afterEach(async () => {
@@ -25,6 +26,8 @@ afterEach(async () => {
   else process.env.OD_DSH_SETUP_FAKE_MODE = originalMode;
   if (originalAgentHome === undefined) delete process.env.OD_AGENT_HOME;
   else process.env.OD_AGENT_HOME = originalAgentHome;
+  if (originalAgentProfilesConfig === undefined) delete process.env.OD_AGENT_PROFILES_CONFIG;
+  else process.env.OD_AGENT_PROFILES_CONFIG = originalAgentProfilesConfig;
   if (originalPath === undefined) delete process.env.PATH;
   else process.env.PATH = originalPath;
   await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
@@ -59,7 +62,7 @@ async function fixture(options: { existingProfile?: boolean; validHash?: boolean
 
   const script = path.join(root, 'fake-dsh.mjs');
   await writeFile(script, `
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 const args = process.argv.slice(2);
 const home = process.env.DSH_HOME;
@@ -76,6 +79,18 @@ if (args[0] === '--version') {
   }
 } else if (args[0] === 'plugin' && args[1] === '--profile' && args[2] === 'open-design' && args[3] === 'add') {
   if (process.env.OD_DSH_SETUP_FAKE_MODE === 'install-fail') process.exit(7);
+  await mkdir(profileRoot, { recursive: true });
+  const installLock = path.join(profileRoot, '.install-lock');
+  let ownsInstallLock = false;
+  if (process.env.OD_DSH_SETUP_FAKE_MODE === 'detect-overlap') {
+    try {
+      await mkdir(installLock);
+      ownsInstallLock = true;
+    } catch {
+      await writeFile(path.join(profileRoot, '.install-overlap'), 'overlap', 'utf8');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
   if (process.env.OD_DSH_SETUP_FAKE_MODE === 'require-profile-bundle') {
     const [directory, filename, extra] = args[4].split('/');
     const digest = filename?.endsWith('.tgz') ? filename.slice(0, -4) : '';
@@ -84,12 +99,12 @@ if (args[0] === '--version') {
     const bundle = await readFile(path.join(profileRoot, args[4]), 'utf8');
     if (bundle !== 'fixture runtime package') process.exit(9);
   }
-  await mkdir(profileRoot, { recursive: true });
   let count = 0;
   try { count = Number(await readFile(${JSON.stringify(stateFile)}, 'utf8')); } catch {}
   await writeFile(${JSON.stringify(stateFile)}, String(count + 1), 'utf8');
   await writeFile(path.join(profileRoot, 'package.json'), '{}\\n', 'utf8');
   if (process.env.OD_DSH_SETUP_FAKE_MODE !== 'probe-fail') await writeFile(marker, 'ok', 'utf8');
+  if (ownsInstallLock) await rm(installLock, { recursive: true });
 } else {
   process.exitCode = 2;
 }
@@ -107,6 +122,8 @@ if (args[0] === '--version') {
   process.env.DSH_HOME = dshHome;
   delete process.env.OD_DSH_SETUP_FAKE_MODE;
   return {
+    carrier,
+    dshHome,
     options: { projectRoot: root, resourceRoot, runtimeDataDir },
     profileRoot: path.join(dshHome, 'profiles', 'open-design'),
     stateFile,
@@ -120,18 +137,18 @@ async function expectSetupError(promise: Promise<unknown>, code: AgentCompanionS
 describe('DeepSeek Harness companion setup', () => {
   it('installs into an empty profile and is idempotent', async () => {
     const test = await fixture();
-    const first = await installDeepSeekHarnessCompanion(test.options);
+    const first = await installDshProfileCompanion('deepseek-harness', test.options);
     expect(first).toMatchObject({ action: 'installed', ok: true, packageVersion: '0.1.0' });
     expect(first.agent.available).toBe(true);
 
-    const second = await installDeepSeekHarnessCompanion(test.options);
+    const second = await installDshProfileCompanion('deepseek-harness', test.options);
     expect(second).toMatchObject({ action: 'already-compatible', ok: true });
     await expect(readFile(test.stateFile, 'utf8')).resolves.toBe('1');
   });
 
   it('reports repaired only when a profile existed before setup', async () => {
     const test = await fixture({ existingProfile: true });
-    await expect(installDeepSeekHarnessCompanion(test.options)).resolves.toMatchObject({
+    await expect(installDshProfileCompanion('deepseek-harness', test.options)).resolves.toMatchObject({
       action: 'repaired',
       ok: true,
     });
@@ -140,7 +157,7 @@ describe('DeepSeek Harness companion setup', () => {
   it('rejects a corrupt bundled package before invoking dsh', async () => {
     const test = await fixture({ validHash: false });
     await expectSetupError(
-      installDeepSeekHarnessCompanion(test.options),
+      installDshProfileCompanion('deepseek-harness', test.options),
       'BUNDLED_COMPANION_INVALID',
     );
     await expect(readFile(test.stateFile, 'utf8')).rejects.toThrow();
@@ -152,24 +169,59 @@ describe('DeepSeek Harness companion setup', () => {
     process.env.OD_AGENT_HOME = path.join(path.dirname(test.stateFile), 'empty-agent-home');
     process.env.PATH = '';
     await expectSetupError(
-      installDeepSeekHarnessCompanion(test.options),
+      installDshProfileCompanion('deepseek-harness', test.options),
       'AGENT_NOT_INSTALLED',
     );
     await expect(readFile(test.stateFile, 'utf8')).rejects.toThrow();
+  });
+
+  it('rejects agents that do not use the DSH profile protocol', async () => {
+    const test = await fixture();
+    await expectSetupError(
+      installDshProfileCompanion('claude', test.options),
+      'AGENT_UNSUPPORTED',
+    );
+  });
+
+  it('installs for a local DSH profile using that profile\'s own environment', async () => {
+    const test = await fixture();
+    const profilesFile = path.join(path.dirname(test.dshHome), 'agents.local.json');
+    await writeFile(profilesFile, JSON.stringify({
+      agents: [{
+        id: 'local-dsh',
+        name: 'Local DSH',
+        baseAgent: 'deepseek-harness',
+        bin: 'dsh',
+        env: { DSH_HOME: test.dshHome },
+      }],
+    }), 'utf8');
+    process.env.OD_AGENT_PROFILES_CONFIG = profilesFile;
+    process.env.DSH_HOME = path.join(path.dirname(test.dshHome), 'unrelated-native-home');
+    process.env.PATH = [path.dirname(test.carrier), originalPath].filter(Boolean).join(path.delimiter);
+
+    vi.resetModules();
+    const { installDshProfileCompanion: installLocalCompanion } = await import(
+      '../src/agent-companion-setup.js'
+    );
+    await expect(installLocalCompanion('local-dsh', test.options)).resolves.toMatchObject({
+      action: 'installed',
+      ok: true,
+    });
+    await expect(readFile(test.stateFile, 'utf8')).resolves.toBe('1');
   });
 
   it('classifies install and post-install probe failures', async () => {
     const installFailure = await fixture();
     process.env.OD_DSH_SETUP_FAKE_MODE = 'install-fail';
     await expectSetupError(
-      installDeepSeekHarnessCompanion(installFailure.options),
+      installDshProfileCompanion('deepseek-harness', installFailure.options),
       'COMPANION_INSTALL_FAILED',
     );
 
     const probeFailure = await fixture();
     process.env.OD_DSH_SETUP_FAKE_MODE = 'probe-fail';
     await expectSetupError(
-      installDeepSeekHarnessCompanion(probeFailure.options),
+      installDshProfileCompanion('deepseek-harness', probeFailure.options),
       'COMPANION_STILL_INCOMPATIBLE',
     );
   });
@@ -178,7 +230,7 @@ describe('DeepSeek Harness companion setup', () => {
     const test = await fixture();
     process.env.OD_DSH_SETUP_FAKE_MODE = 'require-profile-bundle';
 
-    await expect(installDeepSeekHarnessCompanion(test.options)).resolves.toMatchObject({
+    await expect(installDshProfileCompanion('deepseek-harness', test.options)).resolves.toMatchObject({
       action: 'installed',
       ok: true,
     });
@@ -186,10 +238,39 @@ describe('DeepSeek Harness companion setup', () => {
 
   it('deduplicates concurrent setup requests', async () => {
     const test = await fixture();
-    const first = installDeepSeekHarnessCompanion(test.options);
-    const second = installDeepSeekHarnessCompanion(test.options);
+    const first = installDshProfileCompanion('deepseek-harness', test.options);
+    const second = installDshProfileCompanion('deepseek-harness', test.options);
     expect(second).toBe(first);
     await expect(first).resolves.toMatchObject({ action: 'installed', ok: true });
     await expect(readFile(test.stateFile, 'utf8')).resolves.toBe('1');
+  });
+
+  it('serializes different agents that share one DSH home', async () => {
+    const test = await fixture();
+    const profilesFile = path.join(path.dirname(test.dshHome), 'agents.local.json');
+    await writeFile(profilesFile, JSON.stringify({
+      agents: ['local-dsh-a', 'local-dsh-b'].map((id) => ({
+        id,
+        name: id,
+        baseAgent: 'deepseek-harness',
+        bin: 'dsh',
+        env: { DSH_HOME: test.dshHome },
+      })),
+    }), 'utf8');
+    process.env.OD_AGENT_PROFILES_CONFIG = profilesFile;
+    process.env.OD_DSH_SETUP_FAKE_MODE = 'detect-overlap';
+    process.env.PATH = [path.dirname(test.carrier), originalPath].filter(Boolean).join(path.delimiter);
+
+    vi.resetModules();
+    const { installDshProfileCompanion: installLocalCompanion } = await import(
+      '../src/agent-companion-setup.js'
+    );
+    const results = await Promise.all([
+      installLocalCompanion('local-dsh-a', test.options),
+      installLocalCompanion('local-dsh-b', test.options),
+    ]);
+
+    expect(results.map((result) => result.agent.id)).toEqual(['local-dsh-a', 'local-dsh-b']);
+    await expect(readFile(path.join(test.profileRoot, '.install-overlap'), 'utf8')).rejects.toThrow();
   });
 });

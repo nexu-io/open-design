@@ -113,7 +113,7 @@ import { UpdaterPopup } from './UpdaterPopup';
 import { WhatsNewPopup } from './WhatsNewPopup';
 import { DeepSeekHarnessSetupDialog } from './DeepSeekHarnessSetupDialog';
 import { AmrBalanceDialog } from './AmrBalanceDialog';
-import { installDeepSeekHarnessCompanion } from '../providers/agent-companion';
+import { installAgentCompanion } from '../providers/agent-companion';
 import { AmrLowBalanceDialog, type AmrLowBalanceDecision } from './AmrLowBalanceDialog';
 import {
   amrBalanceGateScopeForWorkspaceContext,
@@ -225,7 +225,7 @@ import { closeAmrActivationWindowBestEffort } from './AmrLoginPill';
 import { isMacPlatform } from '../utils/platform';
 import { smoothScrollToTop } from '../utils/smoothScrollToTop';
 import { summarizeProjectNameFromPrompt } from '../utils/projectName';
-import { deepSeekHarnessNeedsSetup } from '../utils/visibleAgents';
+import { agentNeedsCompanionSetup } from '../utils/visibleAgents';
 import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
 import {
   providerModelsCacheKey,
@@ -2107,7 +2107,11 @@ function OnboardingView({
     if (!amrLoginPending) setActivationHintClosed(false);
   }, [amrLoginPending]);
   const [visibleAgentIds, setVisibleAgentIds] = useState<string[]>([]);
-  const [dshSetup, setDshSetup] = useState<{ busy: boolean; error: string | null } | null>(null);
+  const [dshSetup, setDshSetup] = useState<{
+    agentId: string;
+    busy: boolean;
+    error: string | null;
+  } | null>(null);
   const [providerTestState, setProviderTestState] = useState<
     | { status: 'idle' }
     | { status: 'running'; inputKey: string }
@@ -2204,7 +2208,7 @@ function OnboardingView({
       ),
   ) ?? null;
   const candidateCliAgents = agents.filter(
-    (agent) => agent.id !== 'amr' && (agent.available || deepSeekHarnessNeedsSetup(agent)),
+    (agent) => agent.id !== 'amr' && (agent.available || agentNeedsCompanionSetup(agent)),
   );
   const visibleAgents = candidateCliAgents.filter((agent) => visibleAgentIds.includes(agent.id));
   const amrSignedIn = isAmrSessionAuthenticated(amrStatus);
@@ -3101,7 +3105,7 @@ function OnboardingView({
   async function scanCliAgents(options: { preferExisting?: boolean } = {}) {
     const scanToken = beginCliScan({ clearVisible: !options.preferExisting });
     const currentCandidateAgents = agents.filter(
-      (agent) => agent.id !== 'amr' && (agent.available || deepSeekHarnessNeedsSetup(agent)),
+      (agent) => agent.id !== 'amr' && (agent.available || agentNeedsCompanionSetup(agent)),
     );
     const currentAvailableAgents = currentCandidateAgents.filter((agent) => agent.available);
     if (options.preferExisting && currentCandidateAgents.length > 0) {
@@ -3127,7 +3131,7 @@ function OnboardingView({
       cliRefreshPendingTokenRef.current = null;
       const availableAgents = nextAgents.filter((agent) => agent.available && agent.id !== 'amr');
       const candidateAgents = nextAgents.filter(
-        (agent) => agent.id !== 'amr' && (agent.available || deepSeekHarnessNeedsSetup(agent)),
+        (agent) => agent.id !== 'amr' && (agent.available || agentNeedsCompanionSetup(agent)),
       );
       const selectedCliAgent = selectDefaultCliAgent(availableAgents);
       // Scan-result semantics: zero available CLIs is a `failed` outcome
@@ -3231,18 +3235,20 @@ function OnboardingView({
 
   async function confirmDshSetup() {
     if (dshSetup?.busy) return;
-    setDshSetup({ busy: true, error: null });
+    const agentId = dshSetup?.agentId;
+    if (!agentId) return;
+    setDshSetup({ agentId, busy: true, error: null });
     try {
-      await installDeepSeekHarnessCompanion();
+      await installAgentCompanion(agentId);
       const nextAgents = await onRefreshAgents();
       const installed = nextAgents.find(
-        (agent) => agent.id === 'deepseek-harness' && agent.available,
+        (agent) => agent.id === agentId && agent.available,
       );
       if (!installed) throw new Error(t('settings.dshSetupRequired'));
       showCliAgents(
         cliScanTokenRef.current,
         nextAgents.filter(
-          (agent) => agent.id !== 'amr' && (agent.available || deepSeekHarnessNeedsSetup(agent)),
+          (agent) => agent.id !== 'amr' && (agent.available || agentNeedsCompanionSetup(agent)),
         ),
         { stagger: false },
       );
@@ -3265,6 +3271,7 @@ function OnboardingView({
       setAgentTestState({ status: 'done', inputKey, result });
     } catch (error) {
       setDshSetup({
+        agentId,
         busy: false,
         error: error instanceof Error ? error.message : t('settings.dshSetupRequired'),
       });
@@ -3673,8 +3680,8 @@ function OnboardingView({
                   onRefresh={() => void scanCliAgents()}
                   onSelectAgent={(agentId) => {
                     const agent = visibleAgents.find((candidate) => candidate.id === agentId);
-                    if (agent && deepSeekHarnessNeedsSetup(agent)) {
-                      setDshSetup({ busy: false, error: null });
+                    if (agent && agentNeedsCompanionSetup(agent)) {
+                      setDshSetup({ agentId: agent.id, busy: false, error: null });
                       return;
                     }
                     onModeChange('daemon');

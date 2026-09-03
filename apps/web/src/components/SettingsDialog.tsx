@@ -58,11 +58,11 @@ import {
   formatVelaBalanceUsd,
   type VelaLoginStatus,
 } from '../providers/daemon';
-import { installDeepSeekHarnessCompanion } from '../providers/agent-companion';
+import { installAgentCompanion } from '../providers/agent-companion';
 import { amrProfileBadgeLabel } from '../runtime/amr-guidance';
 import {
   availableVisibleAgentCount,
-  deepSeekHarnessNeedsSetup,
+  agentNeedsCompanionSetup,
   isVisibleLocalCliAgent,
 } from '../utils/visibleAgents';
 import { ExportDiagnosticsRow } from './ExportDiagnosticsButton';
@@ -1687,7 +1687,11 @@ export function SettingsDialog({
   // authorize button — once the user has found it, the hint has done its job.
   const [amrCoachmarkDismissed, setAmrCoachmarkDismissed] = useState(false);
   const [agentRescanRunning, setAgentRescanRunning] = useState(false);
-  const [dshSetup, setDshSetup] = useState<{ busy: boolean; error: string | null } | null>(null);
+  const [dshSetup, setDshSetup] = useState<{
+    agentId: string;
+    busy: boolean;
+    error: string | null;
+  } | null>(null);
   const [agentRescanNotice, setAgentRescanNotice] =
     useState<RescanNotice | null>(null);
   const [agentTestState, setAgentTestState] = useState<TestState>({
@@ -2359,13 +2363,15 @@ export function SettingsDialog({
   };
   const handleConfirmDshSetup = async () => {
     if (dshSetup?.busy) return;
-    setDshSetup({ busy: true, error: null });
+    const agentId = dshSetup?.agentId;
+    if (!agentId) return;
+    setDshSetup({ agentId, busy: true, error: null });
     try {
-      await installDeepSeekHarnessCompanion();
+      await installAgentCompanion(agentId);
       const refreshed = await onRefreshAgents(agentRefreshOptionsForConfig(cfg));
       const nextAgents = Array.isArray(refreshed) ? refreshed : agents;
       const installed = nextAgents.find(
-        (agent) => agent.id === 'deepseek-harness' && agent.available,
+        (agent) => agent.id === agentId && agent.available,
       );
       if (!installed) throw new Error(t('settings.dshSetupRequired'));
       setCfg((current) => ({ ...current, agentId: installed.id, mode: 'daemon' }));
@@ -2382,6 +2388,7 @@ export function SettingsDialog({
       setAgentTestState({ status: 'done', result });
     } catch (error) {
       setDshSetup({
+        agentId,
         busy: false,
         error: error instanceof Error ? error.message : t('settings.dshSetupRequired'),
       });
@@ -3928,10 +3935,10 @@ export function SettingsDialog({
   const activeHeader = sectionHeader[activeSection];
   const visibleAgents = agents.filter(isVisibleLocalCliAgent);
   const installedAgents = orderAgentsWithOpenDesignFirst(
-    visibleAgents.filter((agent) => agent.available || deepSeekHarnessNeedsSetup(agent)),
+    visibleAgents.filter((agent) => agent.available || agentNeedsCompanionSetup(agent)),
   );
   const unavailableAgents = visibleAgents.filter(
-    (agent) => !agent.available && !deepSeekHarnessNeedsSetup(agent),
+    (agent) => !agent.available && !agentNeedsCompanionSetup(agent),
   );
   const initialAgentScanRunning = agentsLoading && agents.length === 0;
   const agentModelOptionLabel = (
@@ -4673,7 +4680,7 @@ export function SettingsDialog({
                     {installedAgents.length > 0 ? (
                       <div className="agent-grid agent-grid-installed">
                         {installedAgents.map((a) => {
-                          const needsSetup = deepSeekHarnessNeedsSetup(a);
+                          const needsSetup = agentNeedsCompanionSetup(a);
                           const active = !needsSetup && cfg.agentId === a.id;
                           const running =
                             active && agentTestState.status === 'running';
@@ -4845,7 +4852,7 @@ export function SettingsDialog({
                                       install_status: 'installed',
                                     });
                                     if (needsSetup) {
-                                      setDshSetup({ busy: false, error: null });
+                                      setDshSetup({ agentId: a.id, busy: false, error: null });
                                       return;
                                     }
                                     if (isAmrAgent) {

@@ -4,7 +4,11 @@ import {
 } from './helpers/test-helpers.js';
 import { codexNeedsDangerFullAccessSandbox } from '../../src/runtimes/defs/codex.js';
 import { isKnownServiceTier } from '../../src/runtimes/models.js';
-import { readLocalAgentProfileDefs } from '../../src/runtimes/registry.js';
+import {
+  currentAgentDefs,
+  getAgentDef,
+  readLocalAgentProfileDefs,
+} from '../../src/runtimes/registry.js';
 
 test('AGENT_DEFS ids are unique', () => {
   const ids = AGENT_DEFS.map((a) => a.id);
@@ -70,6 +74,36 @@ test('local agent profiles inherit a base adapter and can pin the default model'
 
       const explicitArgs = profile.buildArgs('', [], [], { model: 'zyb-gpt' });
       assert.equal(explicitArgs[explicitArgs.indexOf('--model') + 1], 'zyb-gpt');
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('local agent profiles become visible to rescan without restarting the daemon', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-local-agent-profiles-rescan-'));
+  try {
+    await withEnvSnapshot(['OD_AGENT_PROFILES_CONFIG'], async () => {
+      const config = join(dir, 'agents.local.json');
+      process.env.OD_AGENT_PROFILES_CONFIG = config;
+
+      assert.equal(currentAgentDefs().some((def) => def.id === 'late-agent'), false);
+      assert.equal(getAgentDef('late-agent'), null);
+
+      writeFileSync(
+        config,
+        JSON.stringify({
+          agents: [{ id: 'late-agent', baseAgent: 'deepseek-harness', bin: 'late-agent' }],
+        }),
+      );
+
+      assert.equal(currentAgentDefs().some((def) => def.id === 'late-agent'), true);
+      assert.equal(getAgentDef('late-agent')?.bin, 'late-agent');
+      assert.equal((await detectAgents()).some((agent) => agent.id === 'late-agent'), true);
+
+      writeFileSync(config, JSON.stringify({ agents: [] }));
+      assert.equal(currentAgentDefs().some((def) => def.id === 'late-agent'), false);
+      assert.equal(getAgentDef('late-agent'), null);
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });
