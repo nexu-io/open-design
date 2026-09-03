@@ -104,28 +104,63 @@ export function buildAcpSessionLoadParams(
   };
 }
 
+export type AcpResourceMimePolicy = 'generic-image' | 'kilo';
+
 export interface AcpPromptBlockOptions {
   imagePathFormat?: 'path' | 'file-url';
+  /**
+   * MIME lookup used when `imagePathFormat` is `file-url`. `generic-image`
+   * labels common image extensions (including AVIF/SVG). `kilo` is the
+   * measured @kilocode/cli 7.4.23 decoder: PNG/GIF/JPEG/WebP plus PDF as a
+   * binary resource. Unsupported Kilo files are omitted so they are not
+   * rewritten as `text/plain`.
+   */
+  resourceMimePolicy?: AcpResourceMimePolicy;
 }
 
-function imageMimeType(resourcePath: string): string | undefined {
-  switch (path.extname(resourcePath).toLowerCase()) {
-    case '.png':
-      return 'image/png';
-    case '.gif':
-      return 'image/gif';
-    case '.webp':
-      return 'image/webp';
-    case '.avif':
-      return 'image/avif';
-    case '.svg':
-      return 'image/svg+xml';
-    case '.jpg':
-    case '.jpeg':
-      return 'image/jpeg';
-    default:
-      return undefined;
+/**
+ * Formats Kilo's ACP `resource_link` adapter accepts with a real MIME type.
+ * Kilo 7.4.23 decodes PNG/GIF/JPEG/WebP images and reads PDF as binary;
+ * AVIF/SVG/BMP and other binaries become `text/plain` when mimeType is
+ * omitted, so they must not be advertised as images.
+ */
+export const KILO_ACP_RESOURCE_MIME_BY_EXT = {
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.pdf': 'application/pdf',
+} as const;
+
+const GENERIC_IMAGE_MIME_BY_EXT: Record<string, string> = {
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.avif': 'image/avif',
+  '.svg': 'image/svg+xml',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+};
+
+export function acpResourceMimeType(
+  resourcePath: string,
+  policy: AcpResourceMimePolicy = 'generic-image',
+): string | undefined {
+  const ext = path.extname(resourcePath).toLowerCase();
+  if (policy === 'kilo') {
+    return KILO_ACP_RESOURCE_MIME_BY_EXT[ext as keyof typeof KILO_ACP_RESOURCE_MIME_BY_EXT];
   }
+  return GENERIC_IMAGE_MIME_BY_EXT[ext];
+}
+
+export function isKiloAcpResourceSupported(resourcePath: string): boolean {
+  return acpResourceMimeType(resourcePath, 'kilo') !== undefined;
+}
+
+export function isKiloAcpImageResource(resourcePath: string): boolean {
+  const mimeType = acpResourceMimeType(resourcePath, 'kilo');
+  return typeof mimeType === 'string' && mimeType.startsWith('image/');
 }
 
 /**
@@ -145,12 +180,22 @@ function imageMimeType(resourcePath: string): string | undefined {
 export function buildPromptBlocks(
   prompt: string,
   resourcePaths: string[],
-  { imagePathFormat = 'path' }: AcpPromptBlockOptions = {},
+  {
+    imagePathFormat = 'path',
+    resourceMimePolicy = 'generic-image',
+  }: AcpPromptBlockOptions = {},
 ): Array<Record<string, string>> {
   const blocks: Array<Record<string, string>> = [{ type: 'text', text: prompt }];
   for (const resourcePath of resourcePaths) {
     if (typeof resourcePath !== 'string' || resourcePath.trim().length === 0) continue;
-    const mimeType = imagePathFormat === 'file-url' ? imageMimeType(resourcePath) : undefined;
+    const mimeType = imagePathFormat === 'file-url'
+      ? acpResourceMimeType(resourcePath, resourceMimePolicy)
+      : undefined;
+    // Kilo rewrites a resource_link without mimeType to text/plain. Skip
+    // unsupported binaries rather than send a link the decoder will mishandle.
+    if (imagePathFormat === 'file-url' && resourceMimePolicy === 'kilo' && !mimeType) {
+      continue;
+    }
     blocks.push({
       type: 'resource_link',
       uri: imagePathFormat === 'file-url'

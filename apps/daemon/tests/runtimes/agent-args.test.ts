@@ -11,6 +11,10 @@ import {
   rememberLiveModels,
 } from '../../src/runtimes/models.js';
 import { installMetaForAgent } from '../../src/runtimes/metadata.js';
+import {
+  isKiloMimeAwareVersion,
+  parseKiloCliVersion,
+} from '../../src/runtimes/defs/kilo.js';
 import type { TestAgentDef } from './helpers/test-helpers.js';
 
 // ---- Cursor Agent --trust capability (issue #4461) -------------------------
@@ -950,9 +954,27 @@ test('Kilo Code CLI declares its complete ACP integration contract', () => {
   assert.equal(kilo.supportsCustomModel, false);
   assert.equal(kilo.supportsImagePaths, true);
   assert.equal(kilo.acpImagePathFormat, 'file-url');
+  assert.equal(kilo.acpResourceMimePolicy, 'kilo');
+  assert.equal(kilo.versionPolicy?.requireVersion, true);
+  assert.deepEqual(kilo.versionPolicy?.supportedVersions, ['7.4.23']);
   assert.equal(kilo.mcpDiscovery, 'mature-acp');
   assert.equal(kilo.externalMcpInjection, 'acp-merge');
   assert.equal(kilo.acpMcpEnvFormat, 'array');
+});
+
+test('Kilo version policy accepts only MIME-aware 7.4.23+ releases', () => {
+  assert.equal(parseKiloCliVersion('7.4.23'), '7.4.23');
+  assert.equal(parseKiloCliVersion('kilocode v7.4.23'), '7.4.23');
+  assert.equal(isKiloMimeAwareVersion('7.4.23'), true);
+  assert.equal(isKiloMimeAwareVersion('7.4.24'), true);
+  assert.equal(isKiloMimeAwareVersion('7.5.0'), true);
+  assert.equal(isKiloMimeAwareVersion('8.0.0'), true);
+  assert.equal(isKiloMimeAwareVersion('7.4.22'), false);
+  assert.equal(isKiloMimeAwareVersion('7.0.30'), false);
+  assert.equal(kilo.versionPolicy?.supportedVersionPattern?.test('7.4.23'), true);
+  assert.equal(kilo.versionPolicy?.supportedVersionPattern?.test('7.4.22'), false);
+  assert.equal(kilo.versionPolicy?.supportedVersionPattern?.test('7.0.30'), false);
+  assert.equal(kilo.versionPolicy?.supportedVersionPattern?.test('7.5.0'), true);
 });
 
 test('Kilo Code CLI install metadata points to the current official docs', () => {

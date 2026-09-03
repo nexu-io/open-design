@@ -317,13 +317,15 @@ the active-run staging implementation is in
 
 ### 5.10 Kilo Code CLI
 
-- Install Kilo 7.0.30 or newer with `npm install -g @kilocode/cli`; 7.0.30 is
-  the earliest release independently listed in the official ACP registry. The package
-  supports macOS, Linux, and Windows on x64 and arm64 and installs both `kilo`
-  and `kilocode` command aliases. OpenDesign prefers `kilo` and detects
-  `kilocode` as a compatible fallback. On older x64 CPUs without AVX support,
-  use Kilo's platform-specific `-baseline` release archive instead of the
-  default binary.
+- Install Kilo **7.4.23 or newer** with `npm install -g @kilocode/cli`. 7.4.23
+  is the earliest MIME-aware ACP release this adapter validates: older builds
+  (including 7.0.30, the first ACP-registry listing) hard-code
+  `resource_link` mime as `text/plain` and ignore `mimeType`, so screenshots
+  fall back to Kilo's text/Read path. The package supports macOS, Linux, and
+  Windows on x64 and arm64 and installs both `kilo` and `kilocode` command
+  aliases. OpenDesign prefers `kilo` and detects `kilocode` as a compatible
+  fallback. On older x64 CPUs without AVX support, use Kilo's
+  platform-specific `-baseline` release archive instead of the default binary.
 - Invocation is `kilo acp`, using Kilo's native ACP v1 JSON-RPC server. This
   was validated against Kilo `7.4.23` and its tagged upstream implementation at
   `Kilo-Org/kilocode@40fa10e50a75c4887978d892520d1246515413bf`.
@@ -347,8 +349,12 @@ the active-run staging implementation is in
   reseeded with the full OpenDesign transcript only when the error is JSON-RPC
   `-32603` with `data.service === "session"`.
 - Image attachments are forwarded as ACP `resource_link` blocks using
-  absolute `file://` URLs. Bare filesystem paths are not equivalent in Kilo:
-  its ACP content adapter intentionally treats them as text.
+  absolute `file://` URLs with a Kilo-supported MIME type. Regular web chats
+  send composer files as project-root `attachments` (not `imagePaths`); the
+  daemon converts PNG/GIF/JPEG/WebP to image links and PDF to
+  `application/pdf`. AVIF, SVG, BMP, and other binaries stay text path hints
+  because Kilo's 7.4.23 decoder does not accept them. Bare filesystem paths
+  are not equivalent: Kilo's ACP content adapter treats those as text.
 - Both the OpenDesign live-artifacts MCP server and user-configured external
   MCP servers are merged into `session/new` and `session/load`; Kilo's own
   global/project MCP configuration remains untouched.

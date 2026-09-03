@@ -20,6 +20,11 @@ import {
   type OdNextExactInputStage,
   type OdNextLegacyTextContributorId,
 } from './od-next-exact-input.js';
+import {
+  isKiloAcpImageResource,
+  isKiloAcpResourceSupported,
+  type AcpResourceMimePolicy,
+} from '../agent-protocol/acp/session-params.js';
 
 export const MAX_CHAT_IMAGE_BYTES = 1024 * 1024;
 export const UPLOAD_DIR = path.join(os.tmpdir(), 'od-uploads');
@@ -979,4 +984,52 @@ export function excludeAcpImagePathsAlreadyDeliveredAsResources(
   if (resourcePaths.length === 0) return imagePaths;
   const delivered = new Set(resourcePaths);
   return imagePaths.filter((imagePath) => !delivered.has(imagePath));
+}
+
+export interface WebChatAcpAttachmentTransport {
+  imagePaths: string[];
+  resourcePaths: string[];
+}
+
+/**
+ * Regular web chats put composer files in `ChatRequest.attachments`
+ * (project-relative paths) and never send `imagePaths`. Agents that need
+ * native ACP `resource_link` transport must convert those project-root
+ * attachments through the same traversal + existence guard as
+ * `resolveSafeProjectAttachments`, then keep only formats the agent can
+ * ingest. Returns absolute paths so `file://` conversion is not cwd-relative
+ * to the daemon process.
+ */
+export function resolveWebChatAttachmentsForAcp(
+  cwd: string | null | undefined,
+  attachments: readonly string[] | null | undefined,
+  opts: {
+    enabled?: boolean;
+    mimePolicy?: AcpResourceMimePolicy;
+    pathImpl?: typeof path;
+    existsSync?: (path: string) => boolean;
+  } = {},
+): WebChatAcpAttachmentTransport {
+  if (opts.enabled === false) {
+    return { imagePaths: [], resourcePaths: [] };
+  }
+  const mimePolicy = opts.mimePolicy ?? 'generic-image';
+  const safe = resolveSafeProjectAttachments(cwd, attachments, opts);
+  if (!cwd || safe.length === 0) return { imagePaths: [], resourcePaths: [] };
+  const pathImpl = opts.pathImpl ?? path;
+  const root = pathImpl.resolve(cwd);
+  const imagePaths: string[] = [];
+  const resourcePaths: string[] = [];
+
+  for (const attachment of safe) {
+    const abs = pathImpl.resolve(root, attachment);
+    if (mimePolicy === 'kilo') {
+      if (isKiloAcpImageResource(abs)) imagePaths.push(abs);
+      else if (isKiloAcpResourceSupported(abs)) resourcePaths.push(abs);
+      continue;
+    }
+    imagePaths.push(abs);
+  }
+
+  return { imagePaths, resourcePaths };
 }

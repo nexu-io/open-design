@@ -193,6 +193,9 @@ export type RuntimeAgentDef = {
   // adapters accept the existing raw-path form, while Kilo follows the
   // protocol strictly and requires an absolute file:// URL.
   acpImagePathFormat?: 'path' | 'file-url';
+  // MIME matrix applied to ACP file-url resource links. `kilo` is the
+  // measured @kilocode/cli 7.4.23 decoder (PNG/GIF/JPEG/WebP + PDF).
+  acpResourceMimePolicy?: 'generic-image' | 'kilo';
   maxPromptArgBytes?: number;
   mcpDiscovery?: string;
   // How the daemon forwards the user's `.od/mcp-config.json` external MCP
@@ -347,6 +350,7 @@ export type DetectedAgent = Omit<
   | 'maxPromptArgBytes'
   | 'env'
   | 'acpImagePathFormat'
+  | 'acpResourceMimePolicy'
   | 'acpSessionIdIsDurable'
   // Runtime timeout fields are spawn-time-only hints consumed by chat-run
   // watchdogs. They are not part of the public `/api/agents`

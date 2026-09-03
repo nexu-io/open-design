@@ -65,6 +65,7 @@ import {
   buildAcpSessionNewParams,
   buildPromptBlocks,
   type AcpMcpServerInput,
+  type AcpResourceMimePolicy,
 } from './session-params.js';
 import { withholdStdioMcpServersForBuild } from './stdio-mcp.js';
 import { createVelaChildEvidenceConsumer } from '../../runtimes/vela-child-evidence.js';
@@ -118,6 +119,7 @@ export interface AttachAcpSessionOptions {
   /** Frozen non-image/image resources delivered as ACP resource_link blocks. */
   resourcePaths?: string[];
   imagePathFormat?: 'path' | 'file-url';
+  resourceMimePolicy?: AcpResourceMimePolicy;
   mcpServers?: AcpMcpServerInput[];
   // Passed through to buildAcpSessionNewParams — see AcpSessionOptions.
   envFormat?: 'array' | 'map';
@@ -199,6 +201,7 @@ export function attachAcpSession({
   imagePaths = [],
   resourcePaths = [],
   imagePathFormat = 'path',
+  resourceMimePolicy = 'generic-image',
   mcpServers,
   envFormat = 'array',
   stdioMcpRemovedInVersion,
@@ -782,7 +785,10 @@ export function attachAcpSession({
       'session/prompt',
       {
         sessionId,
-        prompt: buildPromptBlocks(prompt, [...resourcePaths, ...imagePaths], { imagePathFormat }),
+        prompt: buildPromptBlocks(prompt, [...resourcePaths, ...imagePaths], {
+          imagePathFormat,
+          resourceMimePolicy,
+        }),
       },
       'session/prompt',
     );

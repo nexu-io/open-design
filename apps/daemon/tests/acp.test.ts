@@ -520,6 +520,7 @@ test('attachAcpSession converts strict ACP image paths to file URLs for Kilo', (
     cwd: '/tmp/od-project',
     imagePaths: [imagePath],
     imagePathFormat: 'file-url',
+    resourceMimePolicy: 'kilo',
     send: () => {},
   });
 
@@ -537,6 +538,62 @@ test('attachAcpSession converts strict ACP image paths to file URLs for Kilo', (
         uri: pathToFileURL(imagePath).href,
         mimeType: 'image/png',
       },
+    ],
+  });
+});
+
+test('attachAcpSession applies the Kilo MIME matrix to every accepted extension', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+  const accepted = {
+    'shot.png': 'image/png',
+    'anim.gif': 'image/gif',
+    'photo.jpg': 'image/jpeg',
+    'photo.jpeg': 'image/jpeg',
+    'still.webp': 'image/webp',
+    'brief.pdf': 'application/pdf',
+  } as const;
+  const rejected = ['icon.svg', 'hdr.avif', 'scan.bmp', 'notes.txt'];
+  const projectRoot = path.resolve('/tmp/od-project');
+  const acceptedPaths = Object.keys(accepted).map((name) => path.join(projectRoot, name));
+  const rejectedPaths = rejected.map((name) => path.join(projectRoot, name));
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'use these attachments',
+    cwd: projectRoot,
+    imagePaths: acceptedPaths.filter((item) => !item.endsWith('.pdf')),
+    resourcePaths: [
+      ...acceptedPaths.filter((item) => item.endsWith('.pdf')),
+      ...rejectedPaths,
+    ],
+    imagePathFormat: 'file-url',
+    resourceMimePolicy: 'kilo',
+    send: () => {},
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+
+  const requests = parseRpcWrites(writes);
+  const promptRequest = requests.find((entry) => entry.method === 'session/prompt');
+  assert.deepEqual(promptRequest?.params, {
+    sessionId: 'session-1',
+    prompt: [
+      { type: 'text', text: 'use these attachments' },
+      {
+        type: 'resource_link',
+        uri: pathToFileURL(path.join(projectRoot, 'brief.pdf')).href,
+        mimeType: 'application/pdf',
+      },
+      ...(['shot.png', 'anim.gif', 'photo.jpg', 'photo.jpeg', 'still.webp'] as const).map(
+        (name) => ({
+          type: 'resource_link',
+          uri: pathToFileURL(path.join(projectRoot, name)).href,
+          mimeType: accepted[name],
+        }),
+      ),
     ],
   });
 });

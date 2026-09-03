@@ -744,6 +744,7 @@ function stripFns(
     compatibilityProbe,
     maxPromptArgBytes,
     acpImagePathFormat,
+    acpResourceMimePolicy,
     acpSessionIdIsDurable,
     env,
     inactivityTimeoutMs,
