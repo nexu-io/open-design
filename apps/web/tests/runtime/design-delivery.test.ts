@@ -109,6 +109,27 @@ describe('resolveDesignDeliveryOutcome', () => {
     ).toBe('no_result');
   });
 
+  // Regression: an errored Bash `rm` with a matching isError tool_result must
+  // NOT become `delivered` even when confirmedDeletions > 0 — the file
+  // absence could be an unrelated external deletion rather than an intentional
+  // agent action, and an errored command should remain retryable.
+  it('treats an errored mutation with confirmed deletions as no_result', () => {
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content: 'Attempted to remove stale file.',
+        events: [
+          { kind: 'tool_use', id: 'b-1', name: 'Bash', input: { command: 'rm stale.html && false' } },
+          { kind: 'tool_result', toolUseId: 'b-1', content: 'No such file or directory', isError: true },
+        ],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+        confirmedDeletions: 1,
+      }),
+    ).toBe('no_result');
+  });
+
   it('does not accept an empty answer as a report-only result', () => {
     expect(
       resolveDesignDeliveryOutcome({
