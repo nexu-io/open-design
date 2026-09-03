@@ -569,8 +569,10 @@ function renderMediaDispatchHint(
 function mediaDefaultsForRuntime(
   agentId: string | null | undefined,
   defaults?: ByokMediaDefaults,
+  mediaExecution?: MediaExecutionPolicy,
 ): ByokMediaDefaults | undefined {
   if (agentId !== 'amr') return defaults;
+  if ((mediaExecution?.allowedSurfaces?.length ?? 0) > 0) return defaults;
   return {
     ...defaults,
     imageModel: defaults?.imageModel?.trim() || 'vela/gpt-image-2',
@@ -934,6 +936,7 @@ export function composeSystemPrompt({
   const runtimeMediaDefaults = mediaDefaultsForRuntime(
     agentId,
     byokMediaDefaults,
+    mediaExecution,
   );
   // Media surfaces (image / video / audio) must be resolved BEFORE the head
   // is built: their generation contract, rather than the design charter's

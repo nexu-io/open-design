@@ -109,6 +109,97 @@ describe('NewProjectPanel media provider badges', () => {
     );
   });
 
+  it('prefers a configured Fal image model and persists it in project metadata', async () => {
+    const onCreate = vi.fn();
+    render(
+      <NewProjectPanel
+        skills={[]}
+        designSystems={[]}
+        defaultDesignSystemId={null}
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={onCreate}
+        mediaProviders={{
+          fal: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '1234',
+            baseUrl: 'https://fal.run',
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Image' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('model-picker-trigger').textContent).toContain('flux-pro-ultra');
+    });
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+    expect(screen.getByText('Fal.ai').closest('.ds-picker-group')?.textContent).toContain('Configured');
+
+    fireEvent.change(screen.getByTestId('new-project-name'), {
+      target: { value: 'Fal default image' },
+    });
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          kind: 'image',
+          imageModel: 'flux-pro-ultra',
+          imageAspect: '1:1',
+        }),
+      }),
+    );
+  });
+
+  it('preserves an explicit Cloud selection when Fal is configured', async () => {
+    const onCreate = vi.fn();
+    render(
+      <NewProjectPanel
+        skills={[]}
+        designSystems={[]}
+        defaultDesignSystemId={null}
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={onCreate}
+        mediaProviders={{
+          fal: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '1234',
+            baseUrl: 'https://fal.run',
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Image' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('model-picker-trigger').textContent).toContain('flux-pro-ultra');
+    });
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+    fireEvent.click(screen.getByTestId('model-picker-option-vela/gpt-image-2'));
+    expect(screen.getByTestId('model-picker-trigger').textContent).toContain('gpt-image-2 (Cloud)');
+
+    fireEvent.change(screen.getByTestId('new-project-name'), {
+      target: { value: 'Explicit Cloud image' },
+    });
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          imageModel: 'vela/gpt-image-2',
+        }),
+      }),
+    );
+  });
+
   it('does not treat OpenAI OAuth-only markers as usable image credentials', () => {
     render(
       <NewProjectPanel
@@ -139,7 +230,7 @@ describe('NewProjectPanel media provider badges', () => {
     expect(screen.queryByTestId('model-picker-option-gpt-image-2')).toBeNull();
   });
 
-  it('keeps the managed Vela default when another provider is configured', () => {
+  it('prefers a configured provider over the managed Vela default', async () => {
     const onCreate = vi.fn();
     render(
       <NewProjectPanel
@@ -163,6 +254,9 @@ describe('NewProjectPanel media provider badges', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
     fireEvent.click(screen.getByRole('tab', { name: 'Image' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('model-picker-trigger').textContent).toContain('seedream-3.0');
+    });
     fireEvent.change(screen.getByTestId('new-project-name'), {
       target: { value: 'Configured provider image' },
     });
@@ -171,7 +265,7 @@ describe('NewProjectPanel media provider badges', () => {
     expect(onCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         metadata: expect.objectContaining({
-          imageModel: 'vela/gpt-image-2',
+          imageModel: 'doubao-seedream-3-0-t2i-250415',
         }),
       }),
     );

@@ -184,6 +184,13 @@ function renderMediaPolicyScope(
   }
   if (Array.isArray(mediaExecution?.allowedModels) && mediaExecution.allowedModels.length > 0) {
     lines.push(`Allowed models for this run: ${fmtList(mediaExecution.allowedModels)}.`);
+  } else if (
+    mediaExecution?.mode !== 'disabled'
+    && mediaExecution?.allowedSurfaces?.includes('image')
+  ) {
+    lines.push(
+      'No image model is selected for this run. Do not infer or dispatch a fallback model. Ask the user to select a model from a configured provider before dispatching.',
+    );
   }
   return lines.length > 0 ? `\n\n${lines.join('\n')}` : '';
 }

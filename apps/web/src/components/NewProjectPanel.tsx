@@ -23,7 +23,10 @@ import { localizeSkillDescription, localizeSkillName } from '../i18n/content';
 import type { Dict } from '../i18n/types';
 import { fetchPromptTemplate, openFolderDialog } from '../providers/registry';
 import { isStoredMediaProviderEntryPresent } from '../state/config';
-import { isMediaProviderPickerReady } from '../media/provider-readiness';
+import {
+  isMediaProviderPickerReady,
+  preferredConfiguredMediaModel,
+} from '../media/provider-readiness';
 import type {
   AudioKind,
   DesignSystemSummary,
@@ -360,7 +363,12 @@ export function NewProjectPanel({
   // Blank card: create routes through the tab's default skill. A template id
   // routes the project through that design template's SKILL.md instead.
   const [startTemplateId, setStartTemplateId] = useState<string | null>(null);
-  const [imageModel, setImageModel] = useState(DEFAULT_IMAGE_MODEL);
+  const [imageModelOverride, setImageModelOverride] = useState<string | null>(null);
+  const imageModel = imageModelOverride ?? preferredConfiguredMediaModel(
+    supportedModels('image', IMAGE_MODELS),
+    mediaProviders,
+    DEFAULT_IMAGE_MODEL,
+  );
   const [imageAspect, setImageAspect] = useState<MediaAspect>('1:1');
   const [videoModel, setVideoModel] = useState(DEFAULT_VIDEO_MODEL);
   const [videoModelTouched, setVideoModelTouched] = useState(false);
@@ -569,7 +577,9 @@ export function NewProjectPanel({
     const m = pick?.summary.model;
     // Accept catalogued ids plus any live AIHubMix catalogue id (aihubmix-*),
     // which renders dynamically and won't appear in the static IMAGE_MODELS.
-    if (m && (IMAGE_MODELS.some((x) => x.id === m) || m.startsWith('aihubmix-'))) setImageModel(m);
+    if (m && (IMAGE_MODELS.some((x) => x.id === m) || m.startsWith('aihubmix-'))) {
+      setImageModelOverride(m);
+    }
     const a = pick?.summary.aspect;
     if (a && (MEDIA_ASPECTS as readonly string[]).includes(a)) {
       setImageAspect(a as MediaAspect);
@@ -590,6 +600,10 @@ export function NewProjectPanel({
   function handleVideoModel(id: string) {
     setVideoModel(id);
     setVideoModelTouched(true);
+  }
+
+  function handleImageModel(id: string) {
+    setImageModelOverride(id);
   }
 
   // The HyperFrames skill renders HTML compositions through a local
@@ -1063,7 +1077,7 @@ export function NewProjectPanel({
             imageModel={imageModel}
             imageAspect={imageAspect}
             mediaProviders={mediaProviders}
-            onImageModel={setImageModel}
+            onImageModel={handleImageModel}
             onImageAspect={setImageAspect}
           />
         ) : null}
@@ -2762,7 +2776,7 @@ function MediaProjectOptions(props:
 
 export function supportedModels(surface: 'image' | 'video' | 'audio', models: MediaModel[]): MediaModel[] {
   const supportedProviders: Record<'image' | 'video' | 'audio', Set<string>> = {
-    image: new Set(['vela', 'openai', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image', 'aihubmix', 'minimax']),
+    image: new Set(['vela', 'openai', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'fal', 'leonardo', 'custom-image', 'aihubmix', 'minimax']),
     video: new Set(['volcengine', 'hyperframes', 'grok', 'openrouter', 'imagerouter', 'aihubmix']),
     audio: new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine', 'aihubmix']),
   };

@@ -3,8 +3,24 @@ import type { MediaProviderCredentials } from '../types';
 import {
   findMediaModel,
   findProvider,
+  type MediaModel,
   type MediaProviderId,
 } from './models';
+
+export function preferredConfiguredMediaModel(
+  models: MediaModel[],
+  mediaProviders: Record<string, MediaProviderCredentials> | undefined,
+  fallback: string,
+): string {
+  if (!mediaProviders) return fallback;
+  for (const model of models) {
+    const provider = findProvider(model.provider);
+    if (!provider?.integrated || provider.credentialsRequired === false) continue;
+    if (!isMediaProviderPickerReady(provider.id, mediaProviders)) continue;
+    return model.id;
+  }
+  return fallback;
+}
 
 export function isMediaProviderPickerReady(
   providerId: MediaProviderId,
