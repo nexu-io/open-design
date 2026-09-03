@@ -1322,7 +1322,7 @@ async function wireOnboardingMocks(
       }, statusResponses);
       return;
     }
-    if (loginInFlight && await page.evaluate(() => (
+    if (loginInFlight && await safeEvaluate(() => (
       window.__amrOnboardingCompleteLogin === true
     ))) {
       loggedIn = true;
@@ -1335,7 +1335,7 @@ async function wireOnboardingMocks(
       (!loggedIn &&
         typeof options.delaySignedOutStatusMs === 'number' &&
         options.delaySignedOutStatusMs > 0 &&
-        (await page.evaluate(() => {
+        (await safeEvaluate(() => {
           if (!window.__amrOnboardingDelayNextSignedOutStatus) return false;
           window.__amrOnboardingDelayNextSignedOutStatus = false;
           return true;
@@ -1400,7 +1400,7 @@ async function wireOnboardingMocks(
       loggedIn = true;
       loginInFlight = false;
     }
-    await page.evaluate((calls) => {
+    await safeEvaluate((calls) => {
       window.__amrOnboardingLoginCalls = calls;
     }, loginCalls);
     await route.fulfill({
@@ -1418,7 +1418,7 @@ async function wireOnboardingMocks(
     expect(route.request().postDataJSON()).toEqual({ authAttemptId });
     cancelCalls += 1;
     loginInFlight = false;
-    await page.evaluate((calls) => {
+    await safeEvaluate((calls) => {
       window.__amrOnboardingCancelCalls = calls;
     }, cancelCalls);
     await route.fulfill({ json: { canceled: true, pids: [4242] } });
