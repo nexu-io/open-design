@@ -655,11 +655,11 @@ test('qwen args check promptViaStdin, base args, model args and exclude `-` sent
 // the real prompt as the `-p` argument.
 test('antigravity passes prompt via -p argument (print mode)', () => {
   assert.equal(antigravity.bin, 'agy');
-  assert.equal(antigravity.streamFormat, 'plain');
+  assert.equal(antigravity.streamFormat, 'antigravity-stream-json');
   assert.equal(antigravity.promptViaStdin, false);
 
   const args = antigravity.buildArgs('write hello world', [], [], {}, {});
-  assert.deepEqual(args, ['-p', 'write hello world']);
+  assert.deepEqual(args, ['--output-format', 'stream-json', '-p', 'write hello world']);
 
   const argsWithLog = antigravity.buildArgs('write hello world', [], [], {}, {
     agentLogFilePath: '/tmp/od-agy-test.log',
@@ -667,6 +667,8 @@ test('antigravity passes prompt via -p argument (print mode)', () => {
   assert.deepEqual(argsWithLog, [
     '--log-file',
     '/tmp/od-agy-test.log',
+    '--output-format',
+    'stream-json',
     '-p',
     'write hello world',
   ]);
@@ -677,6 +679,8 @@ test('antigravity passes prompt via -p argument (print mode)', () => {
     '/path/a',
     '--add-dir',
     '/path/b',
+    '--output-format',
+    'stream-json',
     '-p',
     'write hello world',
   ]);
@@ -699,6 +703,8 @@ test('antigravity passes prompt via -p argument (print mode)', () => {
       'Gemini 3.1 Pro (High)',
       '--log-file',
       '/tmp/od-agy-test.log',
+      '--output-format',
+      'stream-json',
       '-p',
       'hi',
     ]);
@@ -717,13 +723,13 @@ test('antigravity passes prompt via -p argument (print mode)', () => {
   const followUp = antigravity.buildArgs('next message', [], [], {}, {
     hasPriorAssistantTurn: true,
   });
-  assert.deepEqual(followUp, ['-p', 'next message']);
+  assert.deepEqual(followUp, ['--output-format', 'stream-json', '-p', 'next message']);
   assert.equal(followUp.includes('-c'), false);
 
   const firstTurn = antigravity.buildArgs('first', [], [], {}, {
     hasPriorAssistantTurn: false,
   });
-  assert.deepEqual(firstTurn, ['-p', 'first']);
+  assert.deepEqual(firstTurn, ['--output-format', 'stream-json', '-p', 'first']);
   assert.equal(antigravity.resumesSessionViaCli, undefined);
 
   assert.equal(antigravity.maxPromptArgBytes, undefined);
@@ -760,12 +766,19 @@ test('antigravity gates non-interactive permission bypass on the detected CLI ca
   assert.deepEqual(antigravity.capabilityFlags, {
     '--dangerously-skip-permissions': 'skipPermissions',
   });
-  assert.deepEqual(antigravity.buildArgs('', [], [], {}), ['-p', '']);
+  assert.deepEqual(antigravity.buildArgs('', [], [], {}), [
+    '--output-format',
+    'stream-json',
+    '-p',
+    '',
+  ]);
 
   agentCapabilities.set('antigravity', { skipPermissions: true });
   try {
     assert.deepEqual(antigravity.buildArgs('', [], [], {}), [
       '--dangerously-skip-permissions',
+      '--output-format',
+      'stream-json',
       '-p',
       '',
     ]);
@@ -781,7 +794,14 @@ test('antigravity keeps log argv order when permission bypass is unavailable', (
       antigravity.buildArgs('', [], [], {}, {
         agentLogFilePath: '/tmp/od-agy-test.log',
       }),
-      ['--log-file', '/tmp/od-agy-test.log', '-p', ''],
+      [
+        '--log-file',
+        '/tmp/od-agy-test.log',
+        '--output-format',
+        'stream-json',
+        '-p',
+        '',
+      ],
     );
   } finally {
     agentCapabilities.delete('antigravity');
@@ -799,6 +819,8 @@ test('antigravity places permission bypass after log args', () => {
         '--log-file',
         '/tmp/od-agy-test.log',
         '--dangerously-skip-permissions',
+        '--output-format',
+        'stream-json',
         '-p',
         '',
       ],

@@ -500,6 +500,7 @@ import {
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
+import { createAntigravityStreamHandler } from './runtimes/antigravity-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { importFigmaFromBytes } from './figma/figma-import.js';
 import { renderDesignSystemPreview } from './design-systems/preview.js';
@@ -14449,6 +14450,11 @@ export async function startServer({
       const qoder = createQoderStreamHandler(sendAgentEvent);
       child.stdout.on('data', (chunk) => qoder.feed(chunk));
       child.on('close', () => qoder.flush());
+    } else if (def.streamFormat === 'antigravity-stream-json') {
+      trackingSubstantiveOutput = true;
+      const agy = createAntigravityStreamHandler(sendAgentEvent);
+      child.stdout.on('data', (chunk) => agy.feed(chunk));
+      child.on('close', () => agy.flush());
     } else if (def.streamFormat === 'copilot-stream-json') {
       const copilot = createCopilotStreamHandler((ev) => {
         lastAgentEventPhase = summarizeAgentEventForInactivity(ev);

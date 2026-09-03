@@ -283,11 +283,12 @@ export const antigravityAgentDef = {
     if (agentCapabilities.get('antigravity')?.skipPermissions) {
       args.push(ANTIGRAVITY_SKIP_PERMISSIONS_FLAG);
     }
+    args.push('--output-format', 'stream-json');
     args.push('-p', prompt);
     return args;
   },
   promptViaStdin: false,
-  streamFormat: 'plain',
+  streamFormat: 'antigravity-stream-json',
   installUrl: 'https://antigravity.google/cli',
   docsUrl: 'https://antigravity.google/docs/cli-overview',
 } satisfies RuntimeAgentDef;
