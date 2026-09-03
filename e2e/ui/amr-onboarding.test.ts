@@ -1230,10 +1230,9 @@ async function wireOnboardingMocks(
    * the test — it is not a test assertion.  Swallow only the navigation-race
    * flavour of error; every other failure should still surface.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const safeEvaluate = async (fn: (...args: any[]) => void, ...args: any[]) => {
+  const safeEvaluate = async (fn: () => boolean | void): Promise<boolean | void> => {
     try {
-      await page.evaluate(fn, ...args);
+      return await page.evaluate(fn);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       if (
@@ -1241,7 +1240,7 @@ async function wireOnboardingMocks(
         message.includes('Target page, context or browser has been closed') ||
         message.includes('Cannot find context with specified id')
       ) {
-        return;
+        return undefined;
       }
       throw error;
     }
@@ -1304,9 +1303,9 @@ async function wireOnboardingMocks(
 
   await page.route('**/api/integrations/vela/status', async (route) => {
     statusCalls += 1;
-    await safeEvaluate((calls) => {
-      window.__amrOnboardingStatusCalls = calls;
-    }, statusCalls);
+    await safeEvaluate(() => {
+      window.__amrOnboardingStatusCalls = statusCalls;
+    });
     if (options.statusGate) {
       await options.statusGate;
     }
@@ -1317,9 +1316,9 @@ async function wireOnboardingMocks(
         body: JSON.stringify({ error: 'status unavailable' }),
       });
       statusResponses += 1;
-      await safeEvaluate((responses) => {
-        window.__amrOnboardingStatusResponses = responses;
-      }, statusResponses);
+      await safeEvaluate(() => {
+        window.__amrOnboardingStatusResponses = statusResponses;
+      });
       return;
     }
     if (loginInFlight && await safeEvaluate(() => (
@@ -1369,9 +1368,9 @@ async function wireOnboardingMocks(
           },
     });
     statusResponses += 1;
-    await safeEvaluate((responses) => {
-      window.__amrOnboardingStatusResponses = responses;
-    }, statusResponses);
+    await safeEvaluate(() => {
+      window.__amrOnboardingStatusResponses = statusResponses;
+    });
     if (shouldDelaySignedOutStatus) {
       await safeEvaluate(() => {
         window.__amrOnboardingSlowStatusResolved = true;
@@ -1400,9 +1399,9 @@ async function wireOnboardingMocks(
       loggedIn = true;
       loginInFlight = false;
     }
-    await safeEvaluate((calls) => {
-      window.__amrOnboardingLoginCalls = calls;
-    }, loginCalls);
+    await safeEvaluate(() => {
+      window.__amrOnboardingLoginCalls = loginCalls;
+    });
     await route.fulfill({
       status: 202,
       json: {
@@ -1418,9 +1417,9 @@ async function wireOnboardingMocks(
     expect(route.request().postDataJSON()).toEqual({ authAttemptId });
     cancelCalls += 1;
     loginInFlight = false;
-    await safeEvaluate((calls) => {
-      window.__amrOnboardingCancelCalls = calls;
-    }, cancelCalls);
+    await safeEvaluate(() => {
+      window.__amrOnboardingCancelCalls = cancelCalls;
+    });
     await route.fulfill({ json: { canceled: true, pids: [4242] } });
   });
 
