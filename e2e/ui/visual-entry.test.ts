@@ -83,6 +83,12 @@ test('[P2] captures the onboarding Local Agent CLI list surface', async ({ page 
   // column shares an alignment line.
   await expect(chips.first()).toBeVisible();
   expect(await chips.count()).toBeGreaterThan(1);
+  // The panel validates the selected agent on its own, so its status line is
+  // part of the surface being archived. Let that settle first, or the capture
+  // races the transient "testing" copy.
+  await expect(panel.locator('.onboarding-view__test-status.is-success')).toBeVisible({
+    timeout: T.medium,
+  });
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-onboarding-local-agent');
