@@ -24,7 +24,25 @@ function mainAppWindowOptions(): string {
   return blocks[0] ?? "";
 }
 
+function splashWindowOptions(): string {
+  const blocks = runtimeSource
+    .split("const splash = new BrowserWindow({")
+    .slice(1)
+    .map((block) => block.slice(0, block.indexOf("});")));
+  expect(blocks).toHaveLength(1);
+  return blocks[0] ?? "";
+}
+
 describe("desktop BrowserWindow chrome options", () => {
+  test("reveals the Windows splash explicitly after its first render", () => {
+    // Windows DWM can leave a frameless GPU-composited window without the
+    // visible style bit when it is constructed with `show: true`. Keep the
+    // splash initially hidden and show it only after Electron has painted it.
+    expect(splashWindowOptions()).toContain("show: false");
+    expect(runtimeSource).toContain('splash.once("ready-to-show", revealSplash);');
+    expect(runtimeSource).toContain('splash.webContents.once("did-finish-load", revealSplash);');
+  });
+
   test("hides Electron's native menu bar in the Windows/Linux app window", () => {
     expect(mainAppWindowOptions()).toContain("autoHideMenuBar: true");
   });
