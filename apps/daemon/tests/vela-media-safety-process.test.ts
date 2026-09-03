@@ -2,7 +2,10 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { runVelaCommand } from '../src/integrations/vela-command.js';
+import {
+  runVelaCommand,
+  velaCommandStderr,
+} from '../src/integrations/vela-command.js';
 import {
   VELA_SAFETY_REJECTION_CODE,
   VelaMediaError,
@@ -65,6 +68,17 @@ afterEach(() => {
 });
 
 describe('a real vela process that refuses and exits non-zero', () => {
+	it('preserves stderr separately from the exec error message', async () => {
+		const bin = writeFakeVela(
+			'#!/bin/sh\necho "Error: perform media request GET /api/v1/media/images/tasks/mit_process_timeout: operation timed out" >&2\nexit 1\n',
+		);
+		const thrown = await runVelaCommand(['image', 'gen'], {
+			env: { ...process.env, VELA_BIN: bin },
+		}).catch((error: unknown) => error);
+
+		expect(velaCommandStderr(thrown)).toContain('mit_process_timeout');
+	});
+
 	it('preserves an arbitrary provider code and safe message across the process boundary', async () => {
 		const providerTask = JSON.stringify({
 			task_id: 'mit_process_test',

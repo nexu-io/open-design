@@ -150,6 +150,9 @@ const CODEX_SHELL_ENVIRONMENT_INCLUDE_KEYS = [
   'OD_BIN',
   'OD_HYPERFRAMES_BIN',
   'OD_NODE_BIN',
+  // macOS packages use Electron Helper as OD_NODE_BIN. Preserve its Node mode
+  // when Codex applies this second environment filter to tool shell commands.
+  'ELECTRON_RUN_AS_NODE',
   'OD_DAEMON_URL',
   'OD_TOOL_TOKEN',
   'OD_DATA_DIR',

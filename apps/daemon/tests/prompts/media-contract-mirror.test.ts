@@ -13,11 +13,11 @@ import { describe, expect, it } from 'vitest';
 // content-safety refusal as a temporary outage. This test is the cheap guard
 // against a repeat. Delete it only by deleting one of the two copies.
 
-function templateBody(path: string): string {
+function templateBody(path: string, exportName = 'MEDIA_USER_REPLY_CONTRACT'): string {
   const source = readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8');
-  const marker = 'export const MEDIA_USER_REPLY_CONTRACT = `';
+  const marker = `export const ${exportName} = \``;
   const start = source.indexOf(marker);
-  if (start < 0) throw new Error(`MEDIA_USER_REPLY_CONTRACT not found in ${path}`);
+  if (start < 0) throw new Error(`${exportName} not found in ${path}`);
   let index = start + marker.length;
   // Scan for the terminating backtick, skipping escaped ones -- the body
   // itself contains \` around inline code, so a naive search truncates it.
@@ -36,6 +36,10 @@ describe('MEDIA_USER_REPLY_CONTRACT mirrors', () => {
   const daemonBody = templateBody('../../src/prompts/media-contract.ts');
   const contractsBody = templateBody(
     '../../../../packages/contracts/src/prompts/media-contract.ts',
+  );
+  const generationBody = templateBody(
+    '../../src/prompts/media-contract.ts',
+    'MEDIA_GENERATION_CONTRACT',
   );
 
   it('keeps the daemon copy and the contracts copy identical', () => {
@@ -66,5 +70,10 @@ describe('MEDIA_USER_REPLY_CONTRACT mirrors', () => {
     expect(daemonBody).toContain('错误代码：\\`{code}\\`');
     expect(normalized).toContain('structured dispatcher or provider error');
     expect(daemonBody).not.toContain('图片生成服务暂时不可用');
+  });
+
+  it('routes an unspecified image model through the managed Cloud default', () => {
+    expect(generationBody).toContain('otherwise use \\`vela/gpt-image-2\\`');
+    expect(generationBody).not.toContain('otherwise use \\`gpt-image-2\\`');
   });
 });

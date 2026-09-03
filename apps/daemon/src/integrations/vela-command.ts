@@ -43,6 +43,16 @@ function withCommandStdout(error: unknown, stdout: string): unknown {
   return error;
 }
 
+function withCommandStderr(error: unknown, stderr: string): unknown {
+  if (!stderr || typeof error !== 'object' || error === null) return error;
+  try {
+    (error as { stderr?: string }).stderr = stderr;
+  } catch {
+    // See withCommandStdout: diagnostics must never replace the real failure.
+  }
+  return error;
+}
+
 /**
  * Read the stdout captured by `withCommandStdout` off a rejected Vela command.
  * Returns an empty string when the failure carried none (a crash before any
@@ -52,6 +62,13 @@ export function velaCommandStdout(error: unknown): string {
   if (typeof error !== 'object' || error === null) return '';
   const stdout = (error as { stdout?: unknown }).stdout;
   return typeof stdout === 'string' ? stdout : '';
+}
+
+/** Read the exact stderr produced by a rejected Vela command. */
+export function velaCommandStderr(error: unknown): string {
+  if (typeof error !== 'object' || error === null) return '';
+  const stderr = (error as { stderr?: unknown }).stderr;
+  return typeof stderr === 'string' ? stderr : '';
 }
 
 export interface VelaCommandOptions {
@@ -312,8 +329,13 @@ export function runVelaCommand(
             // Diagnostics are observational and must never change transport.
           }
         }
-        if (error) settle({ error: withCommandStdout(error, stdout) });
-        else settle({ stdout });
+        if (error) {
+          settle({
+            error: withCommandStderr(withCommandStdout(error, stdout), stderr),
+          });
+        } else {
+          settle({ stdout });
+        }
       },
     );
     childPid = child.pid;
