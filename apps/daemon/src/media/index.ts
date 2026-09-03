@@ -353,6 +353,7 @@ function clampWithWarning(value: unknown, allowed: number[], flagName: string): 
 async function findActiveImageProvider(
   projectRoot: string,
   excludeProviders: string[] = [],
+  preferredCap: 't2i' | 'i2i' = 't2i',
 ): Promise<MediaModel | null> {
   const masked = await readMaskedConfig(projectRoot);
   const candidateProviders = [
@@ -369,8 +370,17 @@ async function findActiveImageProvider(
   for (const pid of candidateProviders) {
     if (excludeProviders.includes(pid)) continue;
     if (masked.providers[pid]?.configured) {
-      const model = IMAGE_MODELS.find((m) => m.provider === pid && m.caps.includes('t2i'));
+      const model = IMAGE_MODELS.find((m) => m.provider === pid && m.caps.includes(preferredCap));
       if (model) return model;
+    }
+  }
+  if (preferredCap !== 't2i') {
+    for (const pid of candidateProviders) {
+      if (excludeProviders.includes(pid)) continue;
+      if (masked.providers[pid]?.configured) {
+        const model = IMAGE_MODELS.find((m) => m.provider === pid && m.caps.includes('t2i'));
+        if (model) return model;
+      }
     }
   }
   return null;
@@ -659,7 +669,8 @@ export async function generateMedia(args: {
             err.message.includes('unauthorized')
           ));
         if (isAuthError) {
-          const fallbackModel = await findActiveImageProvider(projectRoot, ['vela']);
+          const preferredCap = ctx.imageRef || ctx.imageRefs?.length ? 'i2i' : 't2i';
+          const fallbackModel = await findActiveImageProvider(projectRoot, ['vela'], preferredCap);
           if (fallbackModel) {
             const fallbackCreds = await resolveProviderConfig(projectRoot, fallbackModel.provider);
             const fallbackCtx: MediaContext = {
@@ -707,7 +718,8 @@ export async function generateMedia(args: {
             err.message.includes('unauthorized')
           );
         if (isMissingCreds) {
-          const fallbackModel = await findActiveImageProvider(projectRoot, ['openai']);
+          const preferredCap = ctx.imageRef || ctx.imageRefs?.length ? 'i2i' : 't2i';
+          const fallbackModel = await findActiveImageProvider(projectRoot, ['openai'], preferredCap);
           if (fallbackModel) {
             const fallbackCreds = await resolveProviderConfig(projectRoot, fallbackModel.provider);
             const fallbackCtx: MediaContext = {
