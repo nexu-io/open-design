@@ -1219,6 +1219,34 @@ async function wireOnboardingMocks(
     ? '11111111-1111-4111-8111-111111111111'
     : null;
 
+  /**
+   * Route handlers are async but the Playwright route interceptor does not wait
+   * for a pending handler before the page navigates (e.g. page.reload()).
+   * If the handler calls page.evaluate() while the old document is being
+   * destroyed it throws:
+   *   "Execution context was destroyed, most likely because of a navigation"
+   *
+   * Instrumenting the test state from inside a route handler should not crash
+   * the test — it is not a test assertion.  Swallow only the navigation-race
+   * flavour of error; every other failure should still surface.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const safeEvaluate = async (fn: (...args: any[]) => void, ...args: any[]) => {
+    try {
+      await page.evaluate(fn, ...args);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (
+        message.includes('Execution context was destroyed') ||
+        message.includes('Target page, context or browser has been closed') ||
+        message.includes('Cannot find context with specified id')
+      ) {
+        return;
+      }
+      throw error;
+    }
+  };
+
   await page.route('**/api/health', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
   });
@@ -1276,7 +1304,7 @@ async function wireOnboardingMocks(
 
   await page.route('**/api/integrations/vela/status', async (route) => {
     statusCalls += 1;
-    await page.evaluate((calls) => {
+    await safeEvaluate((calls) => {
       window.__amrOnboardingStatusCalls = calls;
     }, statusCalls);
     if (options.statusGate) {
@@ -1289,7 +1317,7 @@ async function wireOnboardingMocks(
         body: JSON.stringify({ error: 'status unavailable' }),
       });
       statusResponses += 1;
-      await page.evaluate((responses) => {
+      await safeEvaluate((responses) => {
         window.__amrOnboardingStatusResponses = responses;
       }, statusResponses);
       return;
@@ -1341,11 +1369,11 @@ async function wireOnboardingMocks(
           },
     });
     statusResponses += 1;
-    await page.evaluate((responses) => {
+    await safeEvaluate((responses) => {
       window.__amrOnboardingStatusResponses = responses;
     }, statusResponses);
     if (shouldDelaySignedOutStatus) {
-      await page.evaluate(() => {
+      await safeEvaluate(() => {
         window.__amrOnboardingSlowStatusResolved = true;
       });
     }
