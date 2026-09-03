@@ -22,6 +22,8 @@ export interface DeliverableSyntaxDiagnostic {
 /** Persisted host-owned state. `attempt` counts model repair attempts. */
 export interface DeliverableSyntaxRepairState {
   schema: typeof DELIVERABLE_SYNTAX_REPAIR_SCHEMA;
+  /** Identifies which experiment owns the bounded model-repair attempts. */
+  mode?: 'agent_tool' | 'host_executor';
   attempt: number;
   maxAttempts: number;
   checker: DeliverableSyntaxChecker;

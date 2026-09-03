@@ -14,7 +14,7 @@ export type DeliverableSyntaxFinalizationOutcome =
     }
   | {
       action: 'fail';
-      validation: DeliverableSyntaxValidationEvidence;
+      validation: Extract<DeliverableSyntaxValidationEvidence, { status: 'repairable' }>;
       location: string;
     };
 
@@ -70,7 +70,12 @@ export async function finalizeDeliverableSyntax(input: {
   const first = syntax.diagnostics[0];
   return {
     action: 'fail',
-    validation,
+    // `validation` is constructed before the status branch, so TypeScript
+    // cannot retain its correlation with the now-narrowed `syntax` union.
+    validation: validation as Extract<
+      DeliverableSyntaxValidationEvidence,
+      { status: 'repairable' }
+    >,
     location: first
       ? `${first.file}:${first.line ?? '?'}:${first.column ?? '?'}`
       : input.entryFile,

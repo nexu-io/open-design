@@ -560,6 +560,14 @@ import { promptBudgetAnalyticsFromDiagnostic } from './run-diagnostics.js';
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
 import { validateRunDeliverable } from './run-deliverable-validation.js';
 import { finalizeDeliverableSyntax } from './artifacts/deliverable-syntax-finalization.js';
+import { checkDeliverableSyntax } from './artifacts/deliverable-syntax.js';
+import {
+  decideDeliverableSyntaxRepair,
+} from './artifacts/deliverable-syntax-repair.js';
+import {
+  buildHostManagedSyntaxRepairInvocation,
+  unexpectedHostSyntaxRepairPaths,
+} from './artifacts/deliverable-syntax-host-repair.js';
 import {
   POST_TOOL_RESUME_CONTINUATION_PROMPT,
   decidePostToolResumeRecovery,
@@ -1807,7 +1815,6 @@ export function createAgentRuntimeToolPrompt(
     '- On PowerShell use `& $env:OD_NODE_BIN $env:OD_BIN tools ...`; on cmd.exe use `"%OD_NODE_BIN%" "%OD_BIN%" tools ...`.',
     tokenLine,
     '- Prefer project wrapper commands through `OD_NODE_BIN` + `OD_BIN` over raw HTTP. The wrappers read these environment values automatically.',
-    '- Only when this run creates or updates a final Web deliverable, invoke `"$OD_NODE_BIN" "$OD_BIN" tools deliverable-syntax check --json` exactly once immediately after the final edit. Do not perform a self-review, manual validation, extra reads, or any other checks before this invocation. If it reports `pass`, stop immediately without further tool calls or edits. Only if it reports `repairable`, fix only the reported syntax location and invoke this same wrapper once more; allow at most 3 repair attempts. Do not run `node --check`, custom validation scripts, tests, or broader correctness reviews as part of this syntax gate. Skip the gate for planning/analysis turns and non-Web deliverables; stop without retrying on `skipped`, `incomplete`, or `exhausted`.',
   ].join('\n');
 }
 
@@ -10392,9 +10399,17 @@ export async function startServer({
       });
   };
 
+  // Internal-only handoff between physical invocations of one logical Run.
+  // A WeakMap makes this state impossible to inject through the public chat
+  // request body and ensures it disappears with the in-memory Run object.
+  const pendingHostSyntaxRepairs = new WeakMap();
+
   const startChatRun = async (chatBody, run) => {
     const lifecycle = createRunLifecycleTracer(run);
     lifecycle.mark('chat_run_started');
+    const hostSyntaxRepair = pendingHostSyntaxRepairs.get(run) ?? null;
+    pendingHostSyntaxRepairs.delete(run);
+    const isHostSyntaxRepair = hostSyntaxRepair !== null;
     const pendingNativeSessionContinue =
       run.nativeSessionContinuePending &&
       typeof run.nativeSessionContinuePending.sessionId === 'string'
@@ -10455,17 +10470,18 @@ export async function startServer({
       );
     }
     const persistedStrategyFinalText = strategyRunMapping?.finalText.text ?? null;
-    const isOdNextRequestStage = strategyRunMapping?.inputStage === 'request';
+    const isOdNextRequestStage = !isHostSyntaxRepair
+      && strategyRunMapping?.inputStage === 'request';
     const hasExplicitCurrentPrompt = Object.prototype.hasOwnProperty.call(
       chatBody,
       'currentPrompt',
     );
-    const strategyProtocol = strategyTaskAtStart
+    const strategyProtocol = strategyTaskAtStart && !isHostSyntaxRepair
       ? new OdNextMachineProtocolStream()
       : null;
     let strategyVisibleEmitted = '';
-    let strategyProtocolResult = null;
-    let strategyToolUseCount = 0;
+    let strategyProtocolResult = hostSyntaxRepair?.strategyProtocolResult ?? null;
+    let strategyToolUseCount = hostSyntaxRepair?.strategyToolUseCount ?? 0;
     let pendingStrategyContinuation = null;
     const {
       agentId,
@@ -10543,6 +10559,7 @@ export async function startServer({
     // is optional and only set when the chat body actually carried it.
     const telemetryPrompt = telemetryPromptFromRunRequest(message, currentPrompt);
     if (
+      !isHostSyntaxRepair &&
       !pendingNativeSessionContinue &&
       typeof telemetryPrompt === 'string'
     ) {
@@ -10640,6 +10657,7 @@ export async function startServer({
     // turn's prompt. Failures are swallowed — memory is best-effort and
     // must never block the agent run.
     if (
+      !isHostSyntaxRepair &&
       (run.retryAttemptCount ?? 0) === 0 &&
       typeof message === 'string' &&
       message.trim().length > 0
@@ -10698,9 +10716,42 @@ export async function startServer({
     }
     if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
 
+    if (isHostSyntaxRepair) {
+      if (!cwd) {
+        return failRun(
+          'AGENT_EXECUTION_FAILED',
+          'Host syntax repair requires a resolved project workspace.',
+        );
+      }
+      const currentCandidate = await checkDeliverableSyntax({
+        projectRoot: cwd,
+        entryFile: hostSyntaxRepair.entryFile,
+        relatedPaths: hostSyntaxRepair.relatedPaths,
+      });
+      if (
+        currentCandidate.status !== 'repairable'
+        || currentCandidate.candidateHash
+          !== hostSyntaxRepair.invocation.expectedCandidateHash
+      ) {
+        design.runs.emit(run, 'diagnostic', {
+          type: 'deliverable_syntax_repair_finished',
+          source: 'host_executor',
+          attempt: hostSyntaxRepair.invocation.repairState.attempt,
+          status: 'candidate_changed_before_executor',
+          expectedCandidateHash:
+            hostSyntaxRepair.invocation.expectedCandidateHash,
+          actualCandidateHash: currentCandidate.candidateHash,
+        });
+        return failRun(
+          'AGENT_EXECUTION_FAILED',
+          'The Web deliverable changed before Host syntax repair could start; the stale repair was not applied.',
+        );
+      }
+    }
+
     // Sanitise supplied image paths: must live under UPLOAD_DIR and stay
     // below the prompt-image safety cap.
-    if (run.odNextTaskInputSnapshot) {
+    if (run.odNextTaskInputSnapshot && !isHostSyntaxRepair) {
       if (
         strategyTaskAtStart
         && run.odNextTaskInputSnapshot.manifestSha256
@@ -10733,7 +10784,9 @@ export async function startServer({
       );
     }
     const { safeImages, oversizedImages, failedImages } =
-      resolveSafePromptImagePaths(odNextTaskInputSnapshot ? [] : imagePaths);
+      resolveSafePromptImagePaths(
+        isHostSyntaxRepair || odNextTaskInputSnapshot ? [] : imagePaths,
+      );
     if (oversizedImages.length > 0) {
       return failRun(
         'BAD_REQUEST',
@@ -10746,9 +10799,11 @@ export async function startServer({
         'Failed to read one or more image attachments.',
       );
     }
-    const transportSourceImages = odNextTaskInputSnapshot?.imagePaths ?? safeImages;
+    const transportSourceImages = isHostSyntaxRepair
+      ? []
+      : odNextTaskInputSnapshot?.imagePaths ?? safeImages;
     const amrStagedImages =
-      def.id === 'amr' && !odNextTaskInputSnapshot
+      !isHostSyntaxRepair && def.id === 'amr' && !odNextTaskInputSnapshot
         ? await stageAmrImagePaths(cwd ?? PROJECT_ROOT, safeImages, UPLOAD_DIR)
         : transportSourceImages;
 
@@ -10811,7 +10866,8 @@ export async function startServer({
     }
     const inactivityTimeoutMs = resolveChatRunInactivityTimeoutMs(def.inactivityTimeoutMs);
     const toolTokenTtlMs = resolveChatToolTokenTtlMs(inactivityTimeoutMs);
-    const toolTokenGrant = cwd && typeof projectId === 'string' && projectId
+    const toolTokenGrant = !isHostSyntaxRepair
+      && cwd && typeof projectId === 'string' && projectId
       ? toolTokenRegistry.mint({
           runId,
           projectId,
@@ -10952,7 +11008,7 @@ export async function startServer({
         ? latchConversationIntentSignals(db, run.conversationId, freshIntentSignals)
         : freshIntentSignals;
 
-    const promptContext = strategyTaskAtStart
+    const promptContext = strategyTaskAtStart || isHostSyntaxRepair
       ? {
           prompt: '',
           activeSkillDirs: [],
@@ -11037,7 +11093,7 @@ export async function startServer({
     // daemon and folded into the system prompt directly (see
     // `readDesignSystem`), so an agent never has to open them via the
     // filesystem.
-    if (cwd && strategyTaskAtStart?.frozenSkillPackage) {
+    if (cwd && strategyTaskAtStart?.frozenSkillPackage && !isHostSyntaxRepair) {
       await materializeFrozenSkillPackage({
         frozen: strategyTaskAtStart.frozenSkillPackage,
         cwd,
@@ -11048,7 +11104,12 @@ export async function startServer({
     // rule card's `.od-frames/<shell>.html` paths resolve even when no platform
     // was resolved up front. Fail-soft: a staging error costs the shells, not
     // the run.
-    if (cwd && strategyTaskAtStart && typeof run.appliedPluginSnapshotId === 'string') {
+    if (
+      cwd
+      && strategyTaskAtStart
+      && !isHostSyntaxRepair
+      && typeof run.appliedPluginSnapshotId === 'string'
+    ) {
       try {
         const staging = await materializeOdNextDeviceFrames({
           cwd,
@@ -11279,10 +11340,11 @@ export async function startServer({
     // keep working memory across turns. Decide once per run; reuse for the
     // prompt-composition skipTranscript choice, the buildArgs flags, and the
     // create-turn persistence below.
-    const agentSupportsSessionResume =
+    const agentSupportsSessionResume = !isHostSyntaxRepair && (
       runtimeResumesSessionById(def) ||
       def.streamFormat === 'pi-rpc' ||
-      def.resumesSessionViaAcpLoad === true;
+      def.resumesSessionViaAcpLoad === true
+    );
     // Capture-style adapters (codex) mint their OWN session id and report it on
     // the stream; the daemon captures it here and persists THAT as the resume
     // handle instead of `agentResumeCtx.newSessionId` (which such CLIs ignore).
@@ -11428,6 +11490,7 @@ export async function startServer({
       strategyTaskAtStart
       && strategyTaskAtStart.inputStage !== 'request'
       && !agentResumeCtx.isResuming
+      && !isHostSyntaxRepair
     ) {
       const blocked = blockAutomaticContinuation(db, { runId: run.id });
       if (blocked) run.strategyTask = projectStrategyTask(blocked, run.id);
@@ -11459,7 +11522,9 @@ export async function startServer({
     });
     publishNativeSessionRecoveryMetadata();
     const agentResumePromptPolicy = resolveAgentResumePromptPolicy(agentResumeCtx);
-    const userRequestPrompt = isOdNextRequestStage
+    const userRequestPrompt = isHostSyntaxRepair
+      ? hostSyntaxRepair.invocation.prompt
+      : isOdNextRequestStage
       ? resolveOdNextRequestUserPrompt({
           message,
           currentPrompt,
@@ -11482,7 +11547,9 @@ export async function startServer({
     // turns and changed-hash turns send the full block (byte-identical to the
     // previous behavior); non-resume agents have isResuming === false and so
     // always send the full block.
-    const stableInstructionFingerprint = (strategyTaskAtStart
+    const stableInstructionFingerprint = (isHostSyntaxRepair
+      ? []
+      : strategyTaskAtStart
       ? [daemonSystemPrompt, odNextStableContextPrompt, runtimeToolPrompt, systemPrompt]
       : [daemonSystemPrompt, runtimeToolPrompt, systemPrompt])
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
@@ -11513,7 +11580,7 @@ export async function startServer({
     });
     const currentStableSectionsJson = serializeStableSections(currentStableSections);
     const browserUsePromptGuard = renderBrowserUseUnavailablePrompt(run.browserUse ?? null);
-    const titleGenerationRequested =
+    const titleGenerationRequested = !isHostSyntaxRepair &&
       titleGeneration &&
       typeof titleGeneration === 'object' &&
       titleGeneration.enabled === true &&
@@ -11564,11 +11631,13 @@ export async function startServer({
       ? OD_NEXT_BUNDLE_ECHO_GUARD_V2
       : ECHO_GUARD;
     const includeStableForPayload = isOdNextRequestStage || includeStableInstructions;
-    const promptImagePaths = selectPromptImagePaths(
-      def.id,
-      transportSourceImages,
-      amrStagedImages,
-    );
+    const promptImagePaths = isHostSyntaxRepair
+      ? []
+      : selectPromptImagePaths(
+          def.id,
+          transportSourceImages,
+          amrStagedImages,
+        );
     const acpPromptImagePaths = odNextTaskInputSnapshot
       ? excludeAcpImagePathsAlreadyDeliveredAsResources(
           promptImagePaths,
@@ -11589,7 +11658,13 @@ export async function startServer({
           odNextTaskInputSnapshot?.requestInputText ?? '',
         ].filter(Boolean).join('\n\n---\n\n')
       : '';
-    const composedResult = strategyTaskAtStart
+    const composedResult = isHostSyntaxRepair
+      ? {
+          composedPrompt: hostSyntaxRepair.invocation.prompt,
+          clientInstructionPrompt: '',
+          instructionPrompt: '',
+        }
+      : strategyTaskAtStart
       ? {
           composedPrompt: persistedStrategyFinalText!,
           clientInstructionPrompt: '',
@@ -11790,6 +11865,16 @@ export async function startServer({
     const send = (event, data) => {
       if (event === 'agent' && data?.type === 'usage') {
         physicalSessionUsage.observe(event, data);
+      }
+      // The repair executor is an internal physical model invocation, not a
+      // second assistant turn. Keep usage/error evidence, but do not append its
+      // narration, status chatter, or tool transcript to the user's message.
+      if (
+        isHostSyntaxRepair
+        && event !== 'error'
+        && !(event === 'agent' && data?.type === 'usage')
+      ) {
+        return;
       }
       if (strategyProtocol && event === 'agent' && data?.type === 'tool_use') {
         strategyToolUseCount += 1;
@@ -12137,6 +12222,9 @@ export async function startServer({
       signal = null,
       { allowRetry = true } = {},
     ) => {
+      // Syntax repair already has its own candidate-hash + max-attempt loop.
+      // Do not stack the generic transport retry/session-resume loop on top.
+      allowRetry = allowRetry && !isHostSyntaxRepair;
       lifecycle.mark('finalize_start');
       flushRunMessageEvents(run);
       // Persist the transport-level close mechanism before classifying this
@@ -12954,7 +13042,7 @@ export async function startServer({
     }
 
     let persistDeliveredAgentSessionState = () => {};
-    if (runtimeResumesSessionById(def) && run.conversationId) {
+    if (!isHostSyntaxRepair && runtimeResumesSessionById(def) && run.conversationId) {
       let persisted = false;
       persistDeliveredAgentSessionState = () => {
         if (persisted) return;
@@ -13496,7 +13584,9 @@ export async function startServer({
           runId: run.id,
           conversationId: run.conversationId,
           runAttempt: openDesignAmrRunAttempt({
-            retryAttemptCount: run.retryAttemptCount,
+            retryAttemptCount:
+              (run.retryAttemptCount ?? 0)
+              + (hostSyntaxRepair?.invocation.repairState.attempt ?? 0),
             manualResumeAttemptCount: run.manualResumeAttemptCount,
           }),
           // Vela's workspace-credit isolation reads this env together with the
@@ -13707,6 +13797,7 @@ export async function startServer({
     // produced empty extractions that, near-identical across a build's re-fires,
     // caused the same turn to be re-analyzed dozens of times.
     child.on('close', () => {
+      if (isHostSyntaxRepair) return;
       const userMsg = typeof message === 'string' ? message : '';
       // Forward the chat agent id so memory-llm.pickProvider can
       // constrain its auto-pick to the chat protocol's family — keeps
@@ -15222,6 +15313,7 @@ export async function startServer({
       if (
         code === 0 &&
         !run.cancelRequested &&
+        !isHostSyntaxRepair &&
         trackingSubstantiveOutput &&
         !agentProducedOutput
       ) {
@@ -15236,6 +15328,7 @@ export async function startServer({
       if (
         code === 0 &&
         !run.cancelRequested &&
+        !isHostSyntaxRepair &&
         isPluginAuthoringRun(db, run, getSnapshot) &&
         !(await hasGeneratedPluginArtifacts(cwd)) &&
         !emittedRenderableQuestionForm(clarifyingQuestionText)
@@ -15260,6 +15353,7 @@ export async function startServer({
       if (
         code === 0 &&
         !run.cancelRequested &&
+        !isHostSyntaxRepair &&
         !trackingSubstantiveOutput &&
         childStdoutSeen
       ) {
@@ -15574,7 +15668,11 @@ export async function startServer({
       // The session path is discovered by attachPiRpcSession when it
       // processes agent_end; persist it under (conversationId, agentId) so
       // another conversation in the same cwd cannot inherit this history.
-      if (acpSession && typeof acpSession.getLastSessionPath === 'function') {
+      if (
+        !isHostSyntaxRepair
+        && acpSession
+        && typeof acpSession.getLastSessionPath === 'function'
+      ) {
         const sessionPath = acpSession.getLastSessionPath();
         if (status === 'succeeded' && def.streamFormat === 'pi-rpc') {
           persistCapturedAgentSession(db, {
@@ -15603,6 +15701,7 @@ export async function startServer({
       // (so a fresh session is opened next turn), mirroring the capture-style
       // adapters.
       if (
+        !isHostSyntaxRepair &&
         def.resumesSessionViaAcpLoad === true &&
         status === 'succeeded' &&
         acpSession &&
@@ -15675,11 +15774,12 @@ export async function startServer({
           ),
         );
         const strategyCompletionCandidate = Boolean(
-          strategyTaskAtStart
+          hostSyntaxRepair?.completionCandidate
+          || (strategyTaskAtStart
           && (
             strategyProtocolResult?.runtimeState?.outcome === 'completed'
             || mayInferDirectEditCompletion
-          ),
+          )),
         );
         let processTreeQuiescentForFinalization = true;
         if (strategyCompletionCandidate) {
@@ -15692,6 +15792,37 @@ export async function startServer({
             processTreeQuiescentForFinalization = termination?.quiescent === true;
           }
           await resolveRunArtifactOutcomeBeforeFinishAsync();
+          if (isHostSyntaxRepair) {
+            const repairTouchedPaths = Array.isArray(run.artifactPaths)
+              ? [...run.artifactPaths]
+              : [];
+            const unexpectedPaths = unexpectedHostSyntaxRepairPaths({
+              touchedPaths: repairTouchedPaths,
+              allowedPaths: hostSyntaxRepair.allowedPaths,
+            });
+            if (unexpectedPaths.length > 0) {
+              design.runs.emit(run, 'diagnostic', {
+                type: 'deliverable_syntax_repair_finished',
+                source: 'host_executor',
+                attempt: hostSyntaxRepair.invocation.repairState.attempt,
+                status: 'scope_violation',
+                unexpectedPaths,
+                durationMs: Math.max(0, Date.now() - hostSyntaxRepair.startedAt),
+              });
+              send('error', createSseErrorPayload(
+                'AGENT_EXECUTION_FAILED',
+                `Host syntax repair touched files outside the diagnosed scope: ${unexpectedPaths.join(', ')}`,
+                { retryable: false },
+              ));
+              finishStrategyAwarePhysicalRun('failed', 1, signal);
+              return;
+            }
+            run.artifactPaths = [...new Set([
+              ...hostSyntaxRepair.priorArtifactPaths,
+              ...repairTouchedPaths,
+            ])];
+            run.artifactCount = run.artifactPaths.length;
+          }
         }
         if (strategyCompletionCandidate) {
           const deliverable = await validateRunDeliverable({
@@ -15704,21 +15835,20 @@ export async function startServer({
           });
           design.runs.setDeliverableValidation?.(run, deliverable);
           deliverableValid = deliverable.valid;
-          // The in-turn syntax tool gives the agent a cheap repair loop while
-          // it still owns the model turn. Re-run the same read-only checker on
-          // the final filesystem state as a backstop: prompt non-compliance or
-          // a late edit must never turn a parse-broken Web artifact into a
-          // successful OD Next completion. This gate is scoped to canonical
-          // HTML delivery only; non-Web outputs and non-completion stages do
-          // not pay for it.
+          // Host-owned syntax gate. The normal path pays only for this
+          // deterministic parse check. A repairable result starts a fresh,
+          // short-context physical model invocation in the same project cwd;
+          // it never resumes or replays the original Agent session.
           if (deliverable.valid && typeof run.projectId === 'string') {
+            const syntaxProjectRoot = resolveProjectDir(
+              PROJECTS_DIR,
+              run.projectId,
+              projectRecord?.metadata,
+            );
+            const syntaxCheckStartedAt = Date.now();
             const syntaxFinalization = await finalizeDeliverableSyntax({
               artifactKind: deliverable.artifactKind,
-              projectRoot: resolveProjectDir(
-                PROJECTS_DIR,
-                run.projectId,
-                projectRecord?.metadata,
-              ),
+              projectRoot: syntaxProjectRoot,
               entryFile: deliverable.entryFile,
               relatedPaths:
                 run.artifactOutcome?.diff?.renderDependencyTouchedPaths ?? [],
@@ -15740,16 +15870,151 @@ export async function startServer({
                     syntaxFinalization.validation.candidateHash ?? null,
                   checkedFileCount:
                     syntaxFinalization.validation.checkedFiles?.length ?? 0,
+                  repairMode: run.deliverableSyntaxRepair?.mode ?? null,
+                  repairAttempt: run.deliverableSyntaxRepair?.attempt ?? 0,
+                  durationMs: Math.max(0, Date.now() - syntaxCheckStartedAt),
                 });
               }
               if (syntaxFinalization.action === 'fail') {
+                const previousHostState = run.deliverableSyntaxRepair?.mode === 'host_executor'
+                  ? run.deliverableSyntaxRepair
+                  : undefined;
+                const repairDecision = decideDeliverableSyntaxRepair({
+                  result: syntaxFinalization.validation,
+                  previous: previousHostState,
+                });
+                if (repairDecision.action === 'retry') {
+                  const repairState = {
+                    ...repairDecision.next,
+                    mode: 'host_executor' as const,
+                  };
+                  const invocation = await buildHostManagedSyntaxRepairInvocation({
+                    projectRoot: syntaxProjectRoot,
+                    result: syntaxFinalization.validation,
+                    repairState,
+                  });
+                  run.deliverableSyntaxRepair = repairState;
+                  run.deliverableSyntaxValidation = {
+                    ...syntaxFinalization.validation,
+                    repairState,
+                  };
+                  design.runs.emit(run, 'diagnostic', {
+                    type: 'deliverable_syntax_repair_started',
+                    source: 'host_executor',
+                    attempt: repairState.attempt,
+                    maxAttempts: repairState.maxAttempts,
+                    checker: repairState.checker,
+                    candidateHash: repairState.candidateHash,
+                    originalSessionResumed: false,
+                    promptMode: 'diagnostic_and_local_context',
+                  });
+                  const priorArtifactPaths = Array.isArray(run.artifactPaths)
+                    ? [...run.artifactPaths]
+                    : [];
+                  const syntaxRelatedPaths =
+                    run.artifactOutcome?.diff?.renderDependencyTouchedPaths ?? [];
+                  cleanupOdNextRunInputProjection();
+                  run.status = 'queued';
+                  run.updatedAt = Date.now();
+                  run.child = null;
+                  run.childPid = null;
+                  run.processGroupId = null;
+                  run.acpSession = null;
+                  run.exitCode = null;
+                  run.signal = null;
+                  run.error = null;
+                  run.errorCode = null;
+                  run.stdinOpen = false;
+                  run.turnCompletedCleanly = false;
+                  // The next physical invocation needs its own filesystem
+                  // baseline so the host can enforce the diagnosed-file scope.
+                  // Preserve the logical Run's earlier paths in the handoff
+                  // and rebuild the public union after that invocation exits.
+                  run.artifactOutcome = undefined;
+                  run.artifactPaths = [];
+                  run.artifactCount = 0;
+                  pendingHostSyntaxRepairs.set(run, {
+                    invocation,
+                    entryFile: deliverable.entryFile,
+                    relatedPaths: syntaxRelatedPaths,
+                    allowedPaths: [
+                      ...new Set(
+                        syntaxFinalization.validation.diagnostics.map(
+                          (diagnostic) => diagnostic.file.replaceAll('\\', '/'),
+                        ),
+                      ),
+                    ],
+                    priorArtifactPaths,
+                    strategyProtocolResult,
+                    strategyToolUseCount,
+                    completionCandidate: strategyCompletionCandidate,
+                    startedAt: Date.now(),
+                  });
+                  design.runs.persistState(run);
+                  queueMicrotask(() => {
+                    if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+                    void startChatRun(chatBody, run).catch((error) => {
+                      const message = error instanceof Error ? error.message : String(error);
+                      design.runs.emit(run, 'diagnostic', {
+                        type: 'deliverable_syntax_repair_finished',
+                        source: 'host_executor',
+                        attempt: repairState.attempt,
+                        status: 'executor_failed',
+                        message,
+                      });
+                      design.runs.fail(
+                        run,
+                        'AGENT_EXECUTION_FAILED',
+                        `Host syntax repair executor failed: ${message}`,
+                      );
+                    });
+                  });
+                  return;
+                }
+
+                if (repairDecision.action !== 'block') {
+                  throw new TypeError(
+                    'Repairable syntax validation produced an invalid accept decision.',
+                  );
+                }
+
+                const repairState = repairDecision.next
+                  ? { ...repairDecision.next, mode: 'host_executor' as const }
+                  : previousHostState;
+                if (repairState) run.deliverableSyntaxRepair = repairState;
+                run.deliverableSyntaxValidation = {
+                  ...syntaxFinalization.validation,
+                  ...(repairState ? { repairState } : {}),
+                };
+                design.runs.persistState(run);
+                design.runs.emit(run, 'diagnostic', {
+                  type: 'deliverable_syntax_repair_finished',
+                  source: 'host_executor',
+                  attempt: repairState?.attempt ?? 0,
+                  status: repairDecision.reason,
+                  candidateHash: syntaxFinalization.validation.candidateHash,
+                  durationMs: hostSyntaxRepair
+                    ? Math.max(0, Date.now() - hostSyntaxRepair.startedAt)
+                    : 0,
+                });
                 send('error', createSseErrorPayload(
                   'AGENT_EXECUTION_FAILED',
-                  `Final Web deliverable still has a syntax error at ${syntaxFinalization.location}. The bounded in-turn repair loop ended without a valid candidate.`,
+                  `Final Web deliverable still has a syntax error at ${syntaxFinalization.location}. Host-managed repair stopped: ${repairDecision.reason}.`,
                   { retryable: false },
                 ));
                 finishStrategyAwarePhysicalRun('failed', 1, signal);
                 return;
+              }
+
+              if (isHostSyntaxRepair) {
+                design.runs.emit(run, 'diagnostic', {
+                  type: 'deliverable_syntax_repair_finished',
+                  source: 'host_executor',
+                  attempt: run.deliverableSyntaxRepair?.attempt ?? 0,
+                  status: syntaxFinalization.validation.status,
+                  candidateHash: syntaxFinalization.validation.candidateHash ?? null,
+                  durationMs: Math.max(0, Date.now() - hostSyntaxRepair.startedAt),
+                });
               }
             }
           }
