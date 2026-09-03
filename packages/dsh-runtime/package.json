@@ -25,6 +25,10 @@
   "files": [
     "dist/*.js",
     "dist/types/**/*.d.ts",
+    "src/**/*",
+    "clean.ts",
+    "esbuild.config.ts",
+    "tsconfig.json",
     "cordis.patch.yml",
     "README.md"
   ],
@@ -37,7 +41,6 @@
     }
   },
   "scripts": {
-    "prepare": "pnpm run build",
     "build": "tsx ./clean.ts && tsx ./esbuild.config.ts && tsc -p tsconfig.json --emitDeclarationOnly",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
