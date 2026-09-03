@@ -6,13 +6,31 @@ import {
   collectProcessTreePids,
   processCommandExactlyRunsExecutable,
   stopProcesses,
+  type ProcessStampContract,
   type ProcessSnapshot,
   waitForProcessExit,
 } from "../src/index.js";
+import { parseWindowsProcessSnapshots, selectStampedProcessesAtInvocation } from "../src/process.js";
 
 function snapshot(pid: number, ppid: number, command = `pid-${pid}`): ProcessSnapshot {
   return { command, pid, ppid };
 }
+
+type TestStamp = { namespace: string };
+
+const stampContract: ProcessStampContract<TestStamp> = {
+  normalizeStamp(input) {
+    const namespace = (input as Partial<TestStamp>).namespace;
+    if (typeof namespace !== "string" || namespace.length === 0) throw new Error("invalid namespace");
+    return { namespace };
+  },
+  normalizeStampCriteria(input = {}) {
+    const namespace = (input as Partial<TestStamp>).namespace;
+    return namespace == null ? {} : { namespace };
+  },
+  stampFields: ["namespace"],
+  stampFlags: { namespace: "--test-namespace" },
+};
 
 describe("collectProcessTreePids", () => {
   it("returns an empty array when no roots are supplied", () => {
@@ -45,6 +63,66 @@ describe("collectProcessTreePids", () => {
   it("terminates on parent-child cycles instead of looping forever", () => {
     const processes = [snapshot(100, 200), snapshot(200, 100)];
     expect(collectProcessTreePids(processes, [100])).toEqual([200, 100]);
+  });
+});
+
+describe("selectStampedProcessesAtInvocation", () => {
+  const command = "node fixture.js --test-namespace=alpha";
+
+  it("keeps only matching Windows processes created before the invocation boundary", () => {
+    expect(selectStampedProcessesAtInvocation([
+      { command, pid: 100, ppid: 1, startedAtMs: 900 },
+      { command, pid: 200, ppid: 1, startedAtMs: 1_100 },
+      { command: "node unrelated.js", pid: 300, ppid: 1 },
+    ], { namespace: "alpha" }, stampContract, 1_000, "win32")).toEqual([
+      { command, pid: 100, ppid: 1, startedAtMs: 900 },
+    ]);
+  });
+
+  it("quick-fails when a matching Windows process has an ambiguous creation boundary", () => {
+    expect(() => selectStampedProcessesAtInvocation([
+      { command, pid: 100, ppid: 1 },
+    ], { namespace: "alpha" }, stampContract, 1_000, "win32")).toThrow(
+      "cannot establish process generation boundary for pid 100",
+    );
+
+    expect(() => selectStampedProcessesAtInvocation([
+      { command, pid: 200, ppid: 1, startedAtMs: 1_000 },
+    ], { namespace: "alpha" }, stampContract, 1_000, "win32")).toThrow(
+      "cannot establish process generation boundary for pid 200",
+    );
+  });
+
+  it("does not require Windows creation metadata from unrelated processes", () => {
+    expect(selectStampedProcessesAtInvocation([
+      { command: "node unrelated.js", pid: 300, ppid: 1 },
+    ], { namespace: "alpha" }, stampContract, 1_000, "win32")).toEqual([]);
+  });
+
+});
+
+describe("parseWindowsProcessSnapshots", () => {
+  it("retains the OS creation time used by the generation boundary", () => {
+    expect(parseWindowsProcessSnapshots(JSON.stringify({
+      CommandLine: "node fixture.js",
+      ParentProcessId: 10,
+      ProcessId: 20,
+      StartedAtMs: "1724490000123",
+    }))).toEqual([{
+      command: "node fixture.js",
+      pid: 20,
+      ppid: 10,
+      startedAtMs: 1_724_490_000_123,
+    }]);
+  });
+
+  it("leaves invalid creation metadata explicit for boundary quick-fail", () => {
+    expect(parseWindowsProcessSnapshots(JSON.stringify({
+      CommandLine: "node fixture.js",
+      ParentProcessId: 10,
+      ProcessId: 20,
+      StartedAtMs: null,
+    }))).toEqual([{ command: "node fixture.js", pid: 20, ppid: 10 }]);
   });
 });
 

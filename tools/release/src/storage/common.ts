@@ -63,9 +63,20 @@ export function contentType(name: string): string {
   if (name.endsWith(".yml") || name.endsWith(".yaml")) return "application/x-yaml; charset=utf-8";
   if (name.endsWith(".json")) return "application/json; charset=utf-8";
   if (name.endsWith(".html")) return "text/html; charset=utf-8";
+  if (name.endsWith(".css")) return "text/css; charset=utf-8";
+  if (name.endsWith(".js") || name.endsWith(".mjs")) return "text/javascript; charset=utf-8";
   if (name.endsWith(".md")) return "text/markdown; charset=utf-8";
   if (name.endsWith(".log") || name.endsWith(".txt")) return "text/plain; charset=utf-8";
   if (name.endsWith(".png")) return "image/png";
+  if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
+  if (name.endsWith(".svg")) return "image/svg+xml";
+  if (name.endsWith(".gif")) return "image/gif";
+  if (name.endsWith(".webp")) return "image/webp";
+  if (name.endsWith(".mp4")) return "video/mp4";
+  if (name.endsWith(".webm")) return "video/webm";
+  if (name.endsWith(".woff")) return "font/woff";
+  if (name.endsWith(".woff2")) return "font/woff2";
+  if (name.endsWith(".tar.zst") || name.endsWith(".zst")) return "application/zstd";
   if (name.endsWith(".xml")) return "application/xml; charset=utf-8";
   return "application/octet-stream";
 }

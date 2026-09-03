@@ -3,6 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { enterpriseUrl } from '../../src/components/enterpriseUrl';
 
 describe('enterpriseUrl', () => {
+  it('uses the deployed marketing origin in every environment', () => {
+    expect(enterpriseUrl('en')).toBe('https://open-design.ai/enterprise/');
+    expect(enterpriseUrl('zh-CN')).not.toContain('127.0.0.1');
+  });
+
   it('points active landing locales at their localized enterprise pages', () => {
     expect(enterpriseUrl('zh-CN')).toBe('https://open-design.ai/zh/enterprise/');
     expect(enterpriseUrl('ja')).toBe('https://open-design.ai/ja/enterprise/');

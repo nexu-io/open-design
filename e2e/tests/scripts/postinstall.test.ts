@@ -251,6 +251,7 @@ describe("postinstall script contract", () => {
     expect(targets.indexOf("packages/release")).toBeGreaterThanOrEqual(0);
     expect(targets.indexOf("packages/contracts")).toBeGreaterThanOrEqual(0);
     expect(targets.indexOf("packages/release")).toBeLessThan(targets.indexOf("packages/contracts"));
+
   });
 
   it("[P2] skips absent tsconfig targets in partial install contexts on the default path", () => {
@@ -270,7 +271,7 @@ describe("postinstall script contract", () => {
 
       const result = runFixturePostinstall(sandbox, { OPEN_DESIGN_POSTINSTALL_CONCURRENCY: "" });
       expect(result.status, String(result.stderr)).toBe(0);
-      expect(result.stdout).not.toContain("dependency-aware parallel build enabled");
+      expect(result.stdout).toContain("postinstall: dependency-aware parallel build enabled (concurrency=1)");
       expect(result.stdout).toContain("postinstall: skipping apps/daemon (no tsconfig.json in this context)");
 
       const events = readStubEvents(invocationLog);
@@ -307,6 +308,32 @@ describe("postinstall script contract", () => {
       expect(eventIndex(events, "done", "packages/release")).toBeLessThan(eventIndex(events, "start", "packages/contracts"));
       expect(eventIndex(events, "done", "packages/contracts")).toBeLessThan(eventIndex(events, "start", "packages/components"));
       expect(events.filter((event) => event.event === "start").map((event) => event.target)).toContain("packages/download");
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
+  it("[P2] rebuilds better-sqlite3 when the native addon cannot load", () => {
+    const sandbox = createSandbox();
+    try {
+      writeTarget(sandbox, "apps/daemon", { name: "@open-design/daemon", tsconfig: false });
+      const addonDirectory = join(sandbox, "apps/daemon/node_modules/better-sqlite3");
+      mkdirSync(addonDirectory, { recursive: true });
+      writeFileSync(join(addonDirectory, "package.json"), '{"name":"better-sqlite3","main":"index.cjs"}\n');
+      writeFileSync(
+        join(addonDirectory, "index.cjs"),
+        'const error = new Error("native ABI mismatch"); error.code = "ERR_DLOPEN_FAILED"; throw error;\n',
+      );
+      const invocationLog = writePnpmStub(sandbox);
+
+      const result = runFixturePostinstall(sandbox, {});
+      expect(result.status, String(result.stderr)).toBe(0);
+      expect(result.stdout).toContain("postinstall: rebuilding better-sqlite3");
+      expect(readStubEvents(invocationLog)).toContainEqual({
+        args: ["--filter", "@open-design/daemon", "rebuild", "better-sqlite3"],
+        event: "start",
+        target: "",
+      });
     } finally {
       rmSync(sandbox, { recursive: true, force: true });
     }

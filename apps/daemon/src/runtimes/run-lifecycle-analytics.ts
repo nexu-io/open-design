@@ -158,6 +158,26 @@ export interface RunSideEffectLedger {
   // map bounded by the small number of outstanding artifact writes rather than
   // by the run's total tool_result count.
   pendingWritePathById: Map<string, string>;
+  /** Terminal-attempt admission evidence, folded before event truncation. */
+  admissionEvidence: RunAdmissionEvidence;
+}
+
+export interface RunAdmissionEvidence {
+  attemptStarted: boolean;
+  acp: boolean;
+  promptSent: boolean;
+  executionEvidenceSeen: boolean;
+  terminalSeen: boolean;
+}
+
+function emptyRunAdmissionEvidence(): RunAdmissionEvidence {
+  return {
+    attemptStarted: false,
+    acp: false,
+    promptSent: false,
+    executionEvidenceSeen: false,
+    terminalSeen: false,
+  };
 }
 
 export function createRunSideEffectLedger(): RunSideEffectLedger {
@@ -171,13 +191,77 @@ export function createRunSideEffectLedger(): RunSideEffectLedger {
     designSystemFileWritten: false,
     previewModulePaths: new Set(),
     pendingWritePathById: new Map(),
+    admissionEvidence: emptyRunAdmissionEvidence(),
   };
+}
+
+function foldEventIntoRunAdmissionEvidence(
+  ledger: RunSideEffectLedger,
+  record: { event?: unknown; data?: unknown },
+): void {
+  const event = record.event;
+  const data = isRecord(record.data) ? record.data : null;
+  if (event === 'run_retry_attempted' || event === 'run_resume_attempted') {
+    ledger.admissionEvidence = emptyRunAdmissionEvidence();
+    return;
+  }
+  if (event === 'start') {
+    const acp = data?.agentId === 'amr' || data?.streamFormat === 'acp-json-rpc';
+    ledger.admissionEvidence = {
+      attemptStarted: true,
+      acp,
+      promptSent: !acp,
+      executionEvidenceSeen: false,
+      terminalSeen: false,
+    };
+    return;
+  }
+  const evidence = ledger.admissionEvidence;
+  if (!evidence.attemptStarted || evidence.terminalSeen) return;
+  if (event === 'error' || event === 'end') {
+    evidence.terminalSeen = true;
+    return;
+  }
+  if (data?.hostSynthesized === true) return;
+  if (event === 'stdout') {
+    if (evidence.promptSent && typeof data?.chunk === 'string' && data.chunk.length > 0) {
+      evidence.executionEvidenceSeen = true;
+    }
+    return;
+  }
+  if (event === 'live_artifact') {
+    if (evidence.promptSent) evidence.executionEvidenceSeen = true;
+    return;
+  }
+  if (event !== 'agent' || !data) return;
+  if (data.type === 'error') {
+    evidence.terminalSeen = true;
+    return;
+  }
+  if (data.type === 'status' && data.label === 'waiting_for_first_output') {
+    evidence.promptSent = true;
+    return;
+  }
+  if (!evidence.promptSent) return;
+  if ((data.type === 'text_delta' || data.type === 'thinking_delta')
+    && typeof data.delta === 'string' && data.delta.trim().length > 0) {
+    evidence.executionEvidenceSeen = true;
+  }
+  if (data.type === 'status'
+    && (data.label === 'tool_call' || data.label === 'tool_call_update')) {
+    evidence.executionEvidenceSeen = true;
+  }
+  if (data.type === 'artifact' || data.type === 'live_artifact') {
+    evidence.executionEvidenceSeen = true;
+  }
+  if (!evidence.acp && data.type === 'tool_use') evidence.executionEvidenceSeen = true;
 }
 
 export function foldEventIntoRunSideEffectLedger(
   ledger: RunSideEffectLedger,
   record: { event?: unknown; data?: unknown },
 ) {
+  foldEventIntoRunAdmissionEvidence(ledger, record);
   const event = record?.event;
   const data = isRecord(record?.data) ? record.data : null;
   if (event === 'stdout') {
@@ -249,6 +333,13 @@ export function runSideEffectsForRun(run: {
 }): RunRetrySideEffects {
   if (run?.sideEffectLedger) return sideEffectsFromLedger(run.sideEffectLedger);
   return scanRunEventsForRetrySideEffects(run?.events);
+}
+
+export function runAdmissionEvidenceForRun(run: {
+  sideEffectLedger?: RunSideEffectLedger;
+  events?: unknown;
+}): RunAdmissionEvidence | undefined {
+  return run.sideEffectLedger?.admissionEvidence;
 }
 
 // Distinct-artifact count that survives event-buffer truncation, with the same

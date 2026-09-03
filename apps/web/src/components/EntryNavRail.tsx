@@ -58,7 +58,7 @@ import { RemixIcon } from './RemixIcon';
 import { InviteDialog } from './InviteDialog';
 import { MessageCenter } from './MessageCenter';
 import type { EntrySettingsSection } from './EntrySettingsMenu';
-import { useI18n } from '../i18n';
+import { isRtlLocale, useI18n } from '../i18n';
 import { useDismissOnOutsideInteraction } from '../hooks/useDismissOnOutsideInteraction';
 import { ENTRY_RAIL_TOGGLE_EVENT } from './entryRailBridge';
 import {
@@ -1185,8 +1185,9 @@ export function WorkspaceTopRightAccountCluster({
  * Community/contact links pinned to the bottom of the nav rail.
  *
  * The row's first slot is the Discord invite for every locale (the Chinese
- * Feishu group entry was retired so there is one community to point at). X
- * and mail are locale-independent. Analytics keeps reporting these
+ * Feishu group entry was retired so there is one community to point at).
+ * All three labels are translated and surface through the shared
+ * `.od-tooltip` layer. Analytics keeps reporting these
  * under `area: 'account_menu'` so the existing funnel stays comparable across
  * the move out of that menu.
  */
@@ -1197,9 +1198,20 @@ function RailSocialRow({
   page: TrackingWorkspacePage;
   dimensions: ReturnType<typeof workspaceAnalyticsDimensions>;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const analytics = useAnalytics();
+  // The rail sits on the leading edge, so tooltips open away from it —
+  // right in LTR, left once RTL moves the whole rail to the right edge.
+  // Without the flip the bubble would be clamped against the viewport
+  // and land back on top of the icons it describes.
+  const tooltipPlacement = isRtlLocale(locale) ? 'left' : 'right';
+  // One string per link doubles as the accessible name and the hover
+  // tooltip: the bubble is the only place the icons say what they do, so
+  // the copy leads with the payoff (Discord hands out credits) rather
+  // than naming the destination.
   const communityLabel = t('entry.discordAria');
+  const xLabel = t('entry.xAria');
+  const mailLabel = t('entry.mailAria');
 
   function track(element: AccountMenuClickProps['element']) {
     trackAccountMenuClick(analytics.track, {
@@ -1213,31 +1225,34 @@ function RailSocialRow({
   return (
     <div className="entry-nav-rail__social" data-testid="entry-nav-rail-social">
       <a
-        className="entry-nav-rail__social-btn"
+        className="entry-nav-rail__social-btn od-tooltip"
         href={DISCORD_URL}
         {...externalLinkProps}
         aria-label={communityLabel}
-        title={communityLabel}
+        data-tooltip={communityLabel}
+        data-tooltip-placement={tooltipPlacement}
         data-testid="entry-nav-rail-discord"
         onClick={() => track('discord')}
       >
         <Icon name="discord" size={15} />
       </a>
       <a
-        className="entry-nav-rail__social-btn"
+        className="entry-nav-rail__social-btn od-tooltip"
         href={X_URL}
         {...externalLinkProps}
-        aria-label="@OpenDesignHQ"
-        title="@OpenDesignHQ"
+        aria-label={xLabel}
+        data-tooltip={xLabel}
+        data-tooltip-placement={tooltipPlacement}
         onClick={() => track('twitter')}
       >
         <span className="entry-nav-rail__menu-x" aria-hidden>X</span>
       </a>
       <a
-        className="entry-nav-rail__social-btn"
+        className="entry-nav-rail__social-btn od-tooltip"
         href={CONTACT_EMAIL_URL}
-        aria-label={t('entry.mailAria')}
-        title={t('entry.mailAria')}
+        aria-label={mailLabel}
+        data-tooltip={mailLabel}
+        data-tooltip-placement={tooltipPlacement}
         onClick={() => track('email')}
       >
         <Icon name="mail" size={15} />

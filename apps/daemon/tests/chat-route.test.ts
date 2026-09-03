@@ -1071,6 +1071,111 @@ child.on('exit', (code, signal) => {
     }
   });
 
+  it('persists exact AMR prompt budget context across new and resumed sessions', async () => {
+    const previousRuntimeKey = process.env.VELA_RUNTIME_KEY;
+    const previousLinkUrl = process.env.VELA_LINK_URL;
+    const previousPreset = process.env.FAKE_VELA_MODEL_PRESET_JSON;
+    const previousList = process.env.FAKE_VELA_MODEL_LIST_JSON;
+    const model = 'claude-observability-5';
+    try {
+      process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
+      process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
+      process.env.FAKE_VELA_MODEL_PRESET_JSON = JSON.stringify({
+        source: 'preset',
+        data: [{
+          id: model,
+          enabled: true,
+          default: true,
+          metadata: { contextWindowTokens: 200_000 },
+        }],
+      });
+      process.env.FAKE_VELA_MODEL_LIST_JSON = JSON.stringify({
+        source: 'remote',
+        data: [{
+          id: model,
+          enabled: true,
+          default: true,
+          metadata: { contextWindowTokens: 200_000 },
+        }],
+      });
+      const workspaceFixture =
+        await createPersonalWorkspaceBoundProjectFixture('AMR prompt budget fixture');
+      const conversationsResponse = await fetch(
+        `${baseUrl}/api/projects/${workspaceFixture.projectId}/conversations`,
+      );
+      const conversationsBody = await conversationsResponse.json() as {
+        conversations: Array<{ id: string }>;
+      };
+      const conversationId = conversationsBody.conversations[0]?.id;
+      expect(conversationId).toBeTruthy();
+
+      await withFakeAgent(
+        'vela',
+        `
+const { spawn } = require('node:child_process');
+const fixture = ${JSON.stringify(FAKE_VELA_FIXTURE)};
+const child = spawn(process.execPath, [fixture, ...process.argv.slice(2)], {
+  stdio: 'inherit',
+  env: process.env,
+});
+child.on('exit', (code, signal) => {
+  if (signal) process.kill(process.pid, signal);
+  process.exit(code ?? 0);
+});
+`,
+        async () => {
+          const runTurn = async (message: string) => {
+            const createResponse = await fetch(`${baseUrl}/api/runs`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...workspaceFixture.headers,
+              },
+              body: JSON.stringify({
+                agentId: 'amr',
+                projectId: workspaceFixture.projectId,
+                conversationId,
+                model,
+                message,
+                currentPrompt: message,
+              }),
+            });
+            expect(createResponse.status).toBe(202);
+            const { runId } = await createResponse.json() as { runId: string };
+            const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+            const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+            const statusBody = await waitForRunStatus(baseUrl, runId);
+            expect(statusBody.status).toBe('succeeded');
+            return eventsBody;
+          };
+
+          const first = await runTurn('first exact-frame turn');
+          expect(first).toContain('"name":"prompt_budget_v1"');
+          expect(first).toContain('"sessionMode":"new"');
+          expect(first).toContain('"contextWindowSource":"model_metadata"');
+          expect(first).toContain('"contextWindowTokens":200000');
+          expect(first).toContain('"priorSessionUsageSource":"unknown"');
+
+          const second = await runTurn('second resumed turn');
+          expect(second).toContain('"name":"prompt_budget_v1"');
+          expect(second).toContain('"sessionMode":"resume"');
+          expect(second).toContain('"contextWindowSource":"model_metadata"');
+          expect(second).toContain('"priorSessionUsageSource":"agent_session"');
+          expect(second).toContain('"priorSessionInputTokens":12');
+        },
+      );
+    } finally {
+      if (previousRuntimeKey == null) delete process.env.VELA_RUNTIME_KEY;
+      else process.env.VELA_RUNTIME_KEY = previousRuntimeKey;
+      if (previousLinkUrl == null) delete process.env.VELA_LINK_URL;
+      else process.env.VELA_LINK_URL = previousLinkUrl;
+      if (previousPreset == null) delete process.env.FAKE_VELA_MODEL_PRESET_JSON;
+      else process.env.FAKE_VELA_MODEL_PRESET_JSON = previousPreset;
+      if (previousList == null) delete process.env.FAKE_VELA_MODEL_LIST_JSON;
+      else process.env.FAKE_VELA_MODEL_LIST_JSON = previousList;
+    }
+  });
+
   it('keeps service tier overrides when /api/runs omits model but settings has one', async () => {
     if (!process.env.OD_DATA_DIR) {
       throw new Error('OD_DATA_DIR is required for service tier settings tests');

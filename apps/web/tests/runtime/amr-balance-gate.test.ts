@@ -186,10 +186,9 @@ describe('checkAmrBalanceGate', () => {
     await expect(checkAmrBalanceGate()).resolves.toEqual({ kind: 'allow' });
   });
 
-  it('allows a newly configured Coding Plan model from Vela without a client release', async () => {
+  it('allows a selected model without a client-side entitlement catalog', async () => {
     const empty = snapshot({
       balanceUsd: '0',
-      codingPlanModels: ['new-coding-plan-model'],
       user: { id: 'u1', email: 'user@example.com', plan: 'go' },
     });
     mockedFetch
@@ -205,10 +204,9 @@ describe('checkAmrBalanceGate', () => {
     ['plus', 'kimi-k2.7-code'],
     ['pro', 'glm-5.2'],
     ['max', 'minimax-m2.7'],
-  ])('does not soft-warn a %s unlimited model at low balance', async (plan, modelId) => {
+  ])('lets Vela decide a selected %s plan model at low balance', async (plan, modelId) => {
     const low = snapshot({
       balanceUsd: '1.20',
-      codingPlanModels: [modelId],
       user: { id: 'u1', email: 'user@example.com', plan },
     });
     mockedFetch.mockResolvedValueOnce(low);
@@ -219,17 +217,16 @@ describe('checkAmrBalanceGate', () => {
     expect(mockedFetch).toHaveBeenCalledTimes(1);
   });
 
-  it('still soft-warns when a low-balance Pro account selects MiniMax M2.7', async () => {
+  it('does not guess whether a selected Pro model is wallet-metered', async () => {
     const low = snapshot({
       balanceUsd: '1.20',
-      codingPlanModels: ['deepseek-v4-flash', 'glm-5.2'],
       user: { id: 'u1', email: 'user@example.com', plan: 'pro' },
     });
     mockedFetch.mockResolvedValueOnce(low);
 
     await expect(
       checkAmrBalanceGate(undefined, 'minimax-m2.7'),
-    ).resolves.toEqual({ kind: 'soft', snapshot: low });
+    ).resolves.toEqual({ kind: 'allow' });
   });
 
   it('skips the soft warning once the user opted out — but never the hard block', async () => {
@@ -266,10 +263,9 @@ describe('checkAmrBalanceGate', () => {
     ['plus', 'kimi-k2.7-code'],
     ['pro', 'glm-5.2'],
     ['max', 'glm-5.1'],
-  ])('allows a %s unlimited model with a fresh zero-dollar wallet', async (plan, modelId) => {
+  ])('lets Vela decide a selected %s model with a fresh zero-dollar wallet', async (plan, modelId) => {
     const planAccount = snapshot({
       balanceUsd: '0',
-      codingPlanModels: [modelId],
       user: { id: 'u1', email: 'user@example.com', plan },
     });
     mockedFetch
@@ -282,10 +278,9 @@ describe('checkAmrBalanceGate', () => {
     expect(mockedFetch).toHaveBeenNthCalledWith(2, { refresh: true });
   });
 
-  it('uses the live billing account when the fresh wallet omits the Go plan', async () => {
+  it('allows a selected model when the fresh wallet omits the plan', async () => {
     const emptyWallet = snapshot({
       balanceUsd: '0',
-      codingPlanModels: ['glm-5.2'],
     });
     mockedFetch
       .mockResolvedValueOnce({ ...emptyWallet, source: 'daemon_cache' })
@@ -303,10 +298,9 @@ describe('checkAmrBalanceGate', () => {
     ).resolves.toEqual({ kind: 'allow' });
   });
 
-  it('keeps the zero-dollar block for a model outside the current plan allowance', async () => {
+  it('does not infer plan exclusion for a selected model', async () => {
     const plusAccount = snapshot({
       balanceUsd: '0',
-      codingPlanModels: ['deepseek-v4-flash', 'kimi-k2.7-code'],
       user: { id: 'u1', email: 'user@example.com', plan: 'plus' },
     });
     mockedFetch
@@ -315,11 +309,7 @@ describe('checkAmrBalanceGate', () => {
 
     await expect(
       checkAmrBalanceGate(undefined, 'glm-5.1'),
-    ).resolves.toEqual({
-      kind: 'hard',
-      reason: 'insufficient',
-      snapshot: plusAccount,
-    });
+    ).resolves.toEqual({ kind: 'allow' });
   });
 
   it('hard-blocks a signed-out account after refresh confirmation', async () => {
@@ -480,10 +470,9 @@ describe('checkAmrBalanceGate', () => {
     })).resolves.toEqual({ kind: 'allow' });
   });
 
-  it('allows a personal Go workspace with a zero-dollar wallet', async () => {
+  it('lets Vela decide a selected model in a zero-dollar Personal workspace', async () => {
     mockedFetch.mockResolvedValue(snapshot({
       balanceUsd: '0',
-      codingPlanModels: ['deepseek-v4-pro'],
       user: { id: 'u1', email: 'user@example.com', plan: 'go' },
     }));
     vi.stubGlobal(
@@ -507,10 +496,9 @@ describe('checkAmrBalanceGate', () => {
     ).resolves.toEqual({ kind: 'allow' });
   });
 
-  it('does not soft-warn an unlimited model in a low-balance personal workspace', async () => {
+  it('lets Vela decide a selected model in a low-balance Personal workspace', async () => {
     mockedFetch.mockResolvedValue(snapshot({
       balanceUsd: '1.50',
-      codingPlanModels: ['glm-5.2'],
       user: { id: 'u1', email: 'user@example.com', plan: 'pro' },
     }));
     vi.stubGlobal(

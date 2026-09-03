@@ -1,4 +1,10 @@
 import { findRealTagOffset, HTML_TAG_PATTERNS } from './html-injection-points';
+import {
+  DECK_PROTOCOL_V1_CAPABILITIES,
+  DECK_PROTOCOL_VERSION,
+  DECK_READY_MESSAGE_TYPE,
+  DECK_STATE_MESSAGE_TYPE,
+} from './deck-protocol';
 
 const DECK_STAGE_OPEN_TAG_RE = /<deck-stage\b/i;
 const DECK_STAGE_FALLBACK_MARKER = 'data-od-deck-stage-fallback';
@@ -93,7 +99,22 @@ const DECK_STAGE_FALLBACK_SCRIPT = `<script data-od-deck-stage-fallback>(functio
 
   function postSlideState(active, count) {
     try {
-      window.parent.postMessage({ type: 'od:slide-state', active: active, count: count }, '*');
+      window.parent.postMessage({
+        type: ${JSON.stringify(DECK_STATE_MESSAGE_TYPE)},
+        protocolVersion: ${DECK_PROTOCOL_VERSION},
+        active: active,
+        count: count
+      }, '*');
+    } catch (_) {}
+  }
+
+  function postDeckReady() {
+    try {
+      window.parent.postMessage({
+        type: ${JSON.stringify(DECK_READY_MESSAGE_TYPE)},
+        protocolVersion: ${DECK_PROTOCOL_VERSION},
+        capabilities: ${JSON.stringify(DECK_PROTOCOL_V1_CAPABILITIES)}
+      }, '*');
     } catch (_) {}
   }
 
@@ -122,6 +143,7 @@ const DECK_STAGE_FALLBACK_SCRIPT = `<script data-od-deck-stage-fallback>(functio
 
     connectedCallback() {
       this._syncSize();
+      postDeckReady();
       this._refresh();
       window.addEventListener('message', this._onMessage);
       window.addEventListener('resize', this._onResize);
@@ -275,6 +297,7 @@ const DECK_STAGE_FALLBACK_SCRIPT = `<script data-od-deck-stage-fallback>(functio
     _onMessage(ev) {
       var data = ev && ev.data;
       if (!data || data.type !== 'od:slide') return;
+      if (data.protocolVersion != null && data.protocolVersion !== ${DECK_PROTOCOL_VERSION}) return;
       this.go(data.action, data.index);
     }
 

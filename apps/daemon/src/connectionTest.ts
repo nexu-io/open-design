@@ -897,6 +897,7 @@ export function isSmokeOkReply(text: unknown): boolean {
 }
 
 function isLikelyModelErrorText(text: string): boolean {
+  if (/no (?:available )?endpoints? found for\b/i.test(text)) return true;
   return (
     /model/i.test(text) &&
     /(not found|not exist|does not exist|unknown|invalid|unsupported|not supported|not have access|no access|issue with the selected model)/i.test(
@@ -1060,7 +1061,13 @@ function classifyProviderHttpFailure(
   detailText: string,
   secrets: string[],
 ): { kind: ConnectionTestKind; detail: string } {
-  const redactedDetail = redactSecrets(detailText.slice(0, 240), secrets);
+  let providerDetail = detailText;
+  try {
+    providerDetail = extractProviderErrorDetail(JSON.parse(detailText), detailText);
+  } catch {
+    // Keep non-JSON upstream bodies verbatim.
+  }
+  const redactedDetail = redactSecrets(providerDetail.slice(0, 240), secrets);
   const override = providerHttpErrorOverride(
     protocol,
     hostname,

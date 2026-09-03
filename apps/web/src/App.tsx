@@ -131,8 +131,9 @@ import {
   notifyWorkspaceContextRefresh,
   resolveBoundProjectWorkspaceContext,
   resolveCurrentWorkspaceContextReadWitness,
-  useWorkspaceBilling,
+  useWorkspaceBillingResponse,
   useWorkspaceContext,
+  workspaceBillingSummaryForContext,
   workspaceIdentityCacheKey,
   workspaceResourceReadContext,
 } from './collab/useWorkspaceContext';
@@ -874,7 +875,6 @@ function AppInner() {
       ? ['pending-account', workspaceAccountGeneration]
       : ['workspace-account', workspaceAccountGeneration, currentWorkspaceIdentity],
   );
-  const workspaceBilling = useWorkspaceBilling();
   const workspaceContextRef = useRef<WorkspaceCollabContext | null>(null);
   const workspaceContextStateRef = useRef(workspaceContextState);
   const projectRouteWorkspaceContextRef = useRef<WorkspaceCollabContext | null>(null);
@@ -1665,21 +1665,6 @@ function AppInner() {
     }, remainingMs);
     return () => window.clearTimeout(timeout);
   }, [amrAuthRetryContinuation, clearAmrAuthRetryContinuation]);
-  // The plan that gates free-tier surfaces (today: the post-generation artifact
-  // upsell). vela's login status is ACCOUNT-scoped, so a member whose plan is
-  // held by the team workspace reads `free` there and used to be shown the
-  // free-user banner; the workspace context's plan id is authoritative and
-  // wins. See resolvePlanTier for the full precedence rule.
-  const resolvedAmrPlan = resolvePlanTier({
-    billing: workspaceBilling,
-    context: workspaceContext,
-    accountPlan:
-      workspaceContextLoading || workspaceContext?.workspaceType === 'team'
-        ? null
-        : amrLoginStatus?.account?.plan?.trim()
-          || amrLoginStatus?.user?.plan?.trim()
-          || null,
-  });
   // Child surfaces report status snapshots, not login events. Deduplicate the
   // signed-in transition here: restarting the model poll for every Settings
   // snapshot updates `agents`, which makes Settings fetch status again and
@@ -4378,6 +4363,36 @@ function AppInner() {
     ? projectRouteWorkspaceContext.context
     : null;
   projectRouteWorkspaceContextRef.current = activeProjectWorkspaceContext;
+  // The post-generation upgrade gate belongs to the project that owns the
+  // conversation, not whichever Workspace the navigation shell currently
+  // selects. A bound project stays fail-closed until its exact membership and
+  // billing snapshot resolve; borrowing the ambient/account Free plan here is
+  // what interrupted paid Team members with the Free upsell.
+  const amrUpgradeWorkspaceContext = activeProject?.workspaceId
+    ? activeProjectWorkspaceContext
+    : workspaceContext;
+  const amrUpgradeWorkspaceContextLoading = activeProject?.workspaceId
+    ? activeProjectWorkspaceContext === null
+    : workspaceContextLoading;
+  const amrUpgradeBillingResponse = useWorkspaceBillingResponse({
+    context: amrUpgradeWorkspaceContext,
+    loading: amrUpgradeWorkspaceContextLoading,
+  });
+  const amrUpgradeBilling = workspaceBillingSummaryForContext(
+    amrUpgradeBillingResponse,
+    amrUpgradeWorkspaceContext,
+  );
+  const resolvedAmrPlan = resolvePlanTier({
+    billing: amrUpgradeBilling,
+    context: amrUpgradeWorkspaceContext,
+    accountPlan:
+      amrUpgradeWorkspaceContextLoading
+      || amrUpgradeWorkspaceContext?.workspaceType === 'team'
+        ? null
+        : amrLoginStatus?.account?.plan?.trim()
+          || amrLoginStatus?.user?.plan?.trim()
+          || null,
+  });
   useEffect(() => {
     const pending = amrAuthRetryContinuationRef.current;
     if (!pending) return;

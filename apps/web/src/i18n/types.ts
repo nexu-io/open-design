@@ -1127,6 +1127,7 @@ export interface Dict {
   'entry.discordAria': string;
   'entry.discordAriaWithOnline': string;
   'entry.discordOnlineLabel': string;
+  'entry.xAria': string;
   'entry.mailAria': string;
   'entry.accountSettings': string;
   'chat.collapsePane': string;
@@ -1156,7 +1157,6 @@ export interface Dict {
   'entry.useEverywhereTitle': string;
   'entry.useEverywhereAria': string;
   'entry.workspaceTeamsLabel': string;
-  'workspaceSwitcher.team': string;
   'workspaceSwitcher.invite': string;
   'workspaceSwitcher.createTeam': string;
   'workspaceSwitcher.draftsTooltip': string;
@@ -1166,42 +1166,6 @@ export interface Dict {
   'entry.billingTierFree': string;
   'entry.billingTierPro': string;
   'entry.billingFamilyCreator': string;
-  'entry.upgradeTitle': string;
-  'entry.upgradeCreditsExhaustedTitle': string;
-  'entry.upgradeAutoRechargeTitle': string;
-  'entry.upgradeDialogAria': string;
-  'entry.upgradeSubtitle': string;
-  'entry.upgradeCreditsExhaustedSubtitle': string;
-  'entry.upgradeAutoRechargeMemberSubtitle': string;
-  'entry.upgradeAutoRechargeTeamSubtitle': string;
-  'entry.upgradeScopeLabel': string;
-  'entry.upgradeScopeMember': string;
-  'entry.upgradeScopeTeam': string;
-  'entry.upgradePaymentHint': string;
-  'entry.upgradeManagePayment': string;
-  'entry.upgradeMonthlyLimit': string;
-  'entry.upgradeLimitCustom': string;
-  'entry.upgradeLimitUnlimited': string;
-  'entry.upgradeBillingCycleAria': string;
-  'entry.upgradeAnnual': string;
-  'entry.upgradeAnnualSave': string;
-  'entry.upgradeMonthly': string;
-  'entry.upgradePlanPlus': string;
-  'entry.upgradePlanPlusDesc': string;
-  'entry.upgradePlanPro': string;
-  'entry.upgradePlanProDesc': string;
-  'entry.upgradePlanMax': string;
-  'entry.upgradePlanMaxDesc': string;
-  'entry.upgradePlanTeam': string;
-  'entry.upgradePlanTeamDesc': string;
-  'entry.upgradePriceUnitMonth': string;
-  'entry.upgradePriceUnitSeat': string;
-  'entry.upgradeProrateAnnualPrefix': string;
-  'entry.upgradeProrateMonthlyPrefix': string;
-  'entry.upgradeProrateSuffix': string;
-  'entry.upgradeBack': string;
-  'entry.upgradeAutoRechargeSaved': string;
-  'entry.upgradeConfirm': string;
   'entry.creditsAria': string;
   'entry.creditsAriaWithBalance': string;
   'entry.creditsGrantTip': string;
@@ -1306,8 +1270,6 @@ export interface Dict {
   'homeHero.templatePicker.label': string;
   'homeHero.templatePicker.searchPlaceholder': string;
   'homeHero.templatePicker.projectTypes': string;
-  'homeHero.templatesScrollHint': string;
-  'homeHero.templatesCollapse': string;
   'homeHero.subtitlePrefix': string;
   'homeHero.placeholder': string;
   'homeHero.placeholderActive': string;
@@ -2237,13 +2199,6 @@ export interface Dict {
   'mcpClient.notForwardedToLabel': string;
   'mcpClient.forwardedAcpNote': string;
   'mcpClient.notForwardedNote': string;
-  // Bottom-of-rail help menu
-  'entry.helpAria': string;
-  'entry.helpMenuAria': string;
-  'entry.helpGetHelp': string;
-  'entry.helpSubmitFeature': string;
-  'entry.helpWhatsNew': string;
-  'entry.helpDownloadDesktop': string;
   // GitHub star pill in the top bar
   'entry.githubStarLabel': string;
   'entry.githubStarTitle': string;
@@ -2476,24 +2431,12 @@ export interface Dict {
   'newproj.deleteTemplateError': string;
 
   // Prompt templates
-  'promptTemplates.searchPlaceholder': string;
-  'promptTemplates.countLabel': string;
-  'promptTemplates.emptyImage': string;
-  'promptTemplates.emptyVideo': string;
   'promptTemplates.emptyNoMatch': string;
-  'promptTemplates.attributionFooter': string;
-  'promptTemplates.openPreviewTitle': string;
-  'promptTemplates.sourcePrefix': string;
   'promptTemplates.fetchError': string;
   'promptTemplates.promptLabel': string;
   'promptTemplates.copyPrompt': string;
   'promptTemplates.copyDone': string;
-  'promptTemplates.modelHint': string;
-  'promptTemplates.openSource': string;
-  'promptTemplates.openFullscreen': string;
-  'promptTemplates.closeFullscreen': string;
   'promptTemplates.allSources': string;
-  'promptTemplates.sourceFilterAria': string;
   'promptTemplates.retry': string;
 
   // Designs tab
@@ -3815,14 +3758,6 @@ export interface Dict {
   'quickSwitcher.navigate': string;
   'quickSwitcher.open': string;
   'quickSwitcher.close': string;
-  'pasteDialog.title': string;
-  'pasteDialog.hint': string;
-  'pasteDialog.fileNameLabel': string;
-  'pasteDialog.namePlaceholder': string;
-  'pasteDialog.contentLabel': string;
-  'pasteDialog.contentPlaceholder': string;
-  'pasteDialog.save': string;
-  'pasteDialog.cancel': string;
   'sketch.save': string;
   'sketch.cancel': string;
   'sketch.saving': string;
@@ -4309,27 +4244,7 @@ export interface Dict {
   'questionForm.skip': string;
   'questionForm.locked': string;
 
-  // Conversations dropdown
-  'conv.switch': string;
-  'conv.label': string;
-  'conv.heading': string;
-  'conv.new': string;
-  'conv.empty': string;
-  'conv.untitled': string;
-  'conv.renameTooltip': string;
-  'conv.delete': string;
-  'conv.deleteConfirm': string;
 
-  // Agent picker (legacy / alt)
-  'agentPicker.label': string;
-  'agentPicker.modeChoose': string;
-  'agentPicker.localCli': string;
-  'agentPicker.daemonOff': string;
-  'agentPicker.byok': string;
-  'agentPicker.selectAgent': string;
-  'agentPicker.noAgents': string;
-  'agentPicker.notInstalled': string;
-  'agentPicker.rescan': string;
 
   // Tool cards (assistant action cards)
   'tool.openInTab': string;

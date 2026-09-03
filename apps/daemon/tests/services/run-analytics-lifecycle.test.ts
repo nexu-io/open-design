@@ -12,6 +12,10 @@ import {
   createRunAnalyticsLifecycle,
   inheritedRunLineageHints,
 } from '../../src/services/run-analytics-lifecycle.js';
+import {
+  createRunSideEffectLedger,
+  foldEventIntoRunSideEffectLedger,
+} from '../../src/runtimes/run-lifecycle-analytics.js';
 
 type Captured = {
   eventName: string;
@@ -115,6 +119,57 @@ describe('run analytics lifecycle', () => {
     expect(h.completed).toEqual(['run-under-test']);
   });
 
+  it('publishes only bounded prompt budget facts on run_finished', async () => {
+    const h = harness();
+    h.lifecycle.install({
+      run: fakeRun({
+        agentId: 'amr',
+        events: [{
+          event: 'agent',
+          data: {
+            type: 'diagnostic',
+            name: 'prompt_budget_v1',
+            source: 'acp-json-rpc',
+            schemaVersion: 1,
+            frameBytes: 34_810,
+            promptBytes: 34_222,
+            promptTokenEstimate: 11_408,
+            tokenEstimateMethod: 'utf8_bytes_div_3_ceil_v1',
+            sessionMode: 'resume',
+            modelId: 'claude-opus-5',
+            contextWindowSource: 'model_metadata',
+            contextWindowTokens: 200_000,
+            priorSessionUsageSource: 'agent_session',
+            priorSessionInputTokens: 123_456,
+            prompt: 'PRIVATE_PROMPT_MUST_NOT_LEAK',
+            sessionId: 'PRIVATE_SESSION_MUST_NOT_LEAK',
+            path: '/PRIVATE_PATH_MUST_NOT_LEAK',
+          },
+        }],
+      }),
+      body: { agentId: 'amr' },
+      requestAnalyticsContext: CONTEXT as never,
+    });
+    await settled(h, 'run_created');
+    h.settle({ status: 'succeeded' });
+
+    const finished = await settled(h, 'run_finished');
+    expect(finished.properties).toMatchObject({
+      prompt_budget_version: 'prompt_budget_v1',
+      prompt_frame_bytes: 34_810,
+      prompt_bytes: 34_222,
+      prompt_token_estimate: 11_408,
+      prompt_token_estimate_method: 'utf8_bytes_div_3_ceil_v1',
+      prompt_session_mode: 'resume',
+      prompt_model_id: 'claude-opus-5',
+      prompt_context_window_source: 'model_metadata',
+      prompt_context_window_tokens: 200_000,
+      prompt_prior_session_usage_source: 'agent_session',
+      prompt_prior_session_input_tokens: 123_456,
+    });
+    expect(JSON.stringify(finished.properties)).not.toContain('PRIVATE_');
+  });
+
   it.each([
     ['canceled', 'cancelled'],
     ['failed', 'failed'],
@@ -135,6 +190,93 @@ describe('run analytics lifecycle', () => {
       // Dashboards keyed on error_code must never see a blank cell.
       expect(finished.properties.error_code).toBeTruthy();
     }
+  });
+
+  it('publishes current-attempt admission evidence with legacy failure fields intact', async () => {
+    const h = harness();
+    const message = '[code=model_limit_exceeded] model usage limit exceeded';
+    h.lifecycle.install({
+      run: fakeRun({ agentId: 'amr', events: [
+        { event: 'start', data: { model: 'example-chat-model', streamFormat: 'acp-json-rpc' } },
+        { event: 'agent', data: { type: 'status', label: 'waiting_for_first_output' } },
+        { event: 'agent', data: { type: 'text_delta', delta: 'Example output' } },
+        { event: 'error', data: { error: { code: 'RATE_LIMITED', message } } },
+      ] }),
+      body: { agentId: 'amr' }, requestAnalyticsContext: CONTEXT as never,
+    });
+    await settled(h, 'run_created');
+    h.settle({ status: 'failed', errorCode: 'RATE_LIMITED' });
+    const finished = await settled(h, 'run_finished');
+    expect(finished.properties).toMatchObject({
+      result: 'failed', error_code: 'RATE_LIMITED',
+      failure_category: 'rate_limit', failure_detail: 'model_window_limit',
+      classifier_version: 'run-failure-v3', policy_reason: 'model_window_limit',
+      admission_phase: 'during_execution', admission_status: 'admitted',
+    });
+    expect(h.recoveries.at(-1)?.properties).toMatchObject({ classifier_version: 'run-failure-v3', admission_status: 'admitted' });
+  });
+
+  it('preserves early AMR admission evidence beyond the event ring-buffer cap', async () => {
+    const h = harness();
+    const message = '[code=model_limit_exceeded] model usage limit exceeded';
+    const fullEvents = [
+      { event: 'start', data: { agentId: 'amr', model: 'example-chat-model', streamFormat: 'acp-json-rpc' } },
+      { event: 'agent', data: { type: 'status', label: 'waiting_for_first_output' } },
+      { event: 'agent', data: { type: 'text_delta', delta: 'Example output' } },
+      ...Array.from({ length: 2_001 }, (_, index) => ({
+        event: 'diagnostic', data: { index },
+      })),
+      { event: 'error', data: { message } },
+    ];
+    const sideEffectLedger = createRunSideEffectLedger();
+    for (const event of fullEvents) foldEventIntoRunSideEffectLedger(sideEffectLedger, event);
+    h.lifecycle.install({
+      run: fakeRun({
+        agentId: 'amr', sideEffectLedger, events: fullEvents.slice(-2_000),
+      }),
+      body: { agentId: 'amr' }, requestAnalyticsContext: CONTEXT as never,
+    });
+    await settled(h, 'run_created');
+    h.settle({ status: 'failed', errorCode: 'AGENT_EXECUTION_FAILED' });
+    const finished = await settled(h, 'run_finished');
+    expect(finished.properties).toMatchObject({
+      policy_reason: 'model_window_limit', admission_phase: 'during_execution',
+      admission_status: 'admitted',
+    });
+  });
+
+  it('does not count replayed non-AMR ACP history when the start is truncated', async () => {
+    const h = harness();
+    const message = '[code=model_limit_exceeded] model usage limit exceeded';
+    const fullEvents = [
+      { event: 'start', data: { agentId: 'hermes', model: 'example-chat-model', streamFormat: 'acp-json-rpc' } },
+      ...Array.from({ length: 10 }, (_, index) => ({
+        event: 'diagnostic', data: { index },
+      })),
+      { event: 'agent', data: { type: 'text_delta', delta: 'Replayed history' } },
+      { event: 'agent', data: { type: 'status', label: 'waiting_for_first_output' } },
+      { event: 'agent', data: { type: 'text_delta', delta: 'Host notice', hostSynthesized: true } },
+      ...Array.from({ length: 1_988 }, (_, index) => ({
+        event: 'diagnostic', data: { index },
+      })),
+      { event: 'error', data: { message } },
+      { event: 'agent', data: { type: 'text_delta', delta: 'Late activity' } },
+    ];
+    const sideEffectLedger = createRunSideEffectLedger();
+    for (const event of fullEvents) foldEventIntoRunSideEffectLedger(sideEffectLedger, event);
+    h.lifecycle.install({
+      run: fakeRun({
+        agentId: 'hermes', sideEffectLedger, events: fullEvents.slice(-2_000),
+      }),
+      body: { agentId: 'hermes' }, requestAnalyticsContext: CONTEXT as never,
+    });
+    await settled(h, 'run_created');
+    h.settle({ status: 'failed', errorCode: 'AGENT_EXECUTION_FAILED' });
+    const finished = await settled(h, 'run_finished');
+    expect(finished.properties).toMatchObject({
+      policy_reason: 'model_window_limit', admission_phase: 'unknown',
+      admission_status: 'unknown',
+    });
   });
 
   it('stays silent for a run nobody asked for', async () => {

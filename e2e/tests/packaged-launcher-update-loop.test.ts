@@ -185,55 +185,41 @@ async function loadPackagedSidecarsModule(): Promise<PackagedSidecarsModule> {
 }
 
 const FAKE_SIDECAR_SOURCE = String.raw`
-import { mkdir, rm, writeFile } from "node:fs/promises";
-import { createServer } from "node:net";
-import { dirname, join } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
-const appArgument = process.argv.find((argument) => argument.startsWith("--od-stamp-app="));
-const app = appArgument == null ? null : appArgument.slice("--od-stamp-app=".length);
-const socketPath = process.env.OD_SIDECAR_IPC_PATH;
-if (app == null || socketPath == null) throw new Error("missing sidecar identity");
-if (app === "daemon") {
-  const dataRoot = process.env.OD_DATA_DIR;
-  if (dataRoot == null) throw new Error("missing daemon data root");
-  await mkdir(dataRoot, { recursive: true });
-  await writeFile(
-    join(dataRoot, "captured-daemon-env.json"),
-    JSON.stringify({ telemetryRelayUrl: process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL ?? null }),
-  );
-}
-if (!socketPath.startsWith("\\\\.\\pipe\\")) {
-  await mkdir(dirname(socketPath), { recursive: true });
-  await rm(socketPath, { force: true });
-}
-const server = createServer((socket) => {
-  let buffer = "";
-  socket.on("data", (chunk) => {
-    buffer += chunk.toString("utf8");
-    const newline = buffer.indexOf("\n");
-    if (newline < 0) return;
-    const request = JSON.parse(buffer.slice(0, newline));
-    const shutdown = request.type === "shutdown";
-    const result = request.type === "status"
-      ? {
-          pid: process.pid,
-          state: "running",
-          updatedAt: new Date().toISOString(),
-          url: app === "daemon" ? "http://127.0.0.1:43101" : "http://127.0.0.1:43102",
-        }
-      : { accepted: true };
-    socket.end(JSON.stringify({ ok: true, result }) + "\n", () => {
-      if (shutdown) server.close(() => process.exit(0));
-    });
-  });
+import { SidecarFactory } from ${JSON.stringify(new URL("../../packages/sidecar/dist/index.mjs", import.meta.url).href)};
+
+const client = SidecarFactory.create({
+  handlers: {
+    "register-web-url": () => ({ accepted: true }),
+  },
+  lifecycle: {
+    async start(resources) {
+      const app = client.stamp.app;
+      if (app === "daemon") {
+        await mkdir(resources.dataRoot, { recursive: true });
+        await writeFile(
+          join(resources.dataRoot, "captured-daemon-env.json"),
+          JSON.stringify({ telemetryRelayUrl: process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL ?? null }),
+        );
+      }
+      return {
+        pid: process.pid,
+        state: "running",
+        updatedAt: new Date().toISOString(),
+        url: app === "daemon" ? "http://127.0.0.1:43101" : "http://127.0.0.1:43102",
+      };
+    },
+    status(runtime) {
+      return runtime;
+    },
+    async stop() {},
+  },
 });
-await new Promise((resolve, reject) => {
-  server.once("error", reject);
-  server.listen(socketPath, resolve);
-});
-for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => server.close(() => process.exit(0)));
-}
+
+await client.start();
+await client.waitUntilStopped();
 `;
 
 function fakePackagedConfig(root: string, testCase: PlatformCase): PackagedConfigLike {

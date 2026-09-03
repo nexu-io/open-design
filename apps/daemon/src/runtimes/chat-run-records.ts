@@ -21,7 +21,10 @@ import type {
   RunTelemetryTimestamps,
 } from '../run-analytics-observability.js';
 import type { RunArtifactDiff } from '../run-artifact-fs.js';
-import type { RunEventForDiagnostics } from '../run-diagnostics.js';
+import type {
+  RunDiagnosticsAnalytics,
+  RunEventForDiagnostics,
+} from '../run-diagnostics.js';
 import type { RunEventForFailureClassification } from '../run-failure-classification.js';
 import type { RunWorkspaceScope } from './project-amr-trace-env.js';
 import type { OdNextRolloutDecision } from '../strategies/od-next/rollout.js';
@@ -154,6 +157,8 @@ export interface ChatRun {
   sessionMode?: string | null;
   context?: Record<string, unknown> | null;
   events: RunEventRecord[];
+  /** Latest validated prompt-budget projection; unlike events, this is not a tail ring. */
+  promptBudgetDiagnostics?: Partial<RunDiagnosticsAnalytics> | null;
   clients: Set<SseClient>;
   analyticsContext?: AnalyticsContext;
   analyticsRecovery?: { context?: AnalyticsContext } | null;

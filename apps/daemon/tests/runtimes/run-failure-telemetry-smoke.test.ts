@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
-import path from 'node:path';
+import path, { delimiter } from 'node:path';
 import { register } from 'prom-client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -441,6 +441,47 @@ describe('run failure telemetry smoke', () => {
     }
   }, 60_000);
 
+  it('keeps buffered Antigravity output admitted before a non-zero policy failure', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-antigravity-admission-bin-'));
+    await writeFakeAntigravity(binDir);
+    process.env.PATH = `${binDir}${delimiter}${process.env.PATH ?? ''}`;
+    delete process.env.POSTHOG_KEY;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+
+    started = await startIsolatedServer();
+    await putConfig(started.url, {
+      telemetry: { metrics: false, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+    const run = await createAndWaitForRun(started.url, {
+      caseId: 'antigravity_buffered_policy_failure',
+      agentId: 'antigravity',
+      message: 'od-antigravity-buffered-policy-failure',
+    });
+    const events = await readCompletedRunEvents(run.eventsLogPath);
+    const stdoutIndex = events.findIndex((event) => event.event === 'stdout');
+    const errorIndex = events.findIndex((event) => event.event === 'error');
+    const errorCode = deriveRunErrorCode(run);
+
+    expect(run.status).toBe('failed');
+    expect(stdoutIndex).toBeGreaterThanOrEqual(0);
+    expect(errorIndex).toBeGreaterThan(stdoutIndex);
+    expect(classifyRunFailure({
+      result: runResultFromStatus(run.status),
+      status: run,
+      ...(errorCode ? { errorCode } : {}),
+      agentId: run.agentId,
+      events,
+    })).toMatchObject({
+      policy_reason: 'model_window_limit',
+      admission_phase: 'during_execution',
+      admission_status: 'admitted',
+    });
+  }, 60_000);
+
   it('reports the terminal Langfuse fallback for headerless run requests', async () => {
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-run-failure-fallback-bin-'));
     await writeFakeClaude(binDir, 'claude-terminal-failure', 'terminal fallback smoke failure');
@@ -549,6 +590,7 @@ function snapshotEnv(): Record<string, string | undefined> {
     POSTHOG_KEY: process.env.POSTHOG_KEY,
     OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS: process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS,
     OD_DATA_DIR: process.env.OD_DATA_DIR,
+    PATH: process.env.PATH,
   };
 }
 
@@ -620,6 +662,24 @@ if (process.argv.includes('--version')) {
 }
 console.log('DeepSeek fake should not be spawned for prompt-too-large smoke.');
 process.exit(0);
+`, 'utf8');
+  await chmod(bin, 0o755);
+}
+
+async function writeFakeAntigravity(dir: string): Promise<void> {
+  const bin = path.join(dir, 'agy');
+  await writeFile(bin, `#!/usr/bin/env node
+if (process.argv.includes('--version')) {
+  console.log('agy 1.107.0-smoke');
+  process.exit(0);
+}
+if (process.argv.includes('--help')) {
+  console.log('Usage: agy -p [--dangerously-skip-permissions]');
+  process.exit(0);
+}
+process.stdout.write('Example assistant output before the policy failure.\\n');
+process.stderr.write('[code=model_limit_exceeded] model usage limit exceeded\\n');
+process.exit(1);
 `, 'utf8');
   await chmod(bin, 0o755);
 }

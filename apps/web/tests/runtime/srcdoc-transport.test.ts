@@ -19,7 +19,18 @@ function extractShellScript(shellHtml: string): string {
   return match[1];
 }
 
+function extractActivationScript(srcDoc: string): string {
+  const match = srcDoc.match(
+    /<script\s+data-od-srcdoc-transport-activation>([\s\S]*?)<\/script>/,
+  );
+  if (!match || match[1] == null) {
+    throw new Error('srcDoc transport activation script not found');
+  }
+  return match[1];
+}
+
 interface RunShellResult {
+  documentWrites: string[];
   parentMessages: unknown[];
   runScheduledCallbacks: () => void;
   triggerMessage: (data: unknown) => void;
@@ -29,6 +40,7 @@ interface RunShellResult {
 function runShellInSandbox(shellHtml: string): RunShellResult {
   const script = extractShellScript(shellHtml);
   const parentMessages: unknown[] = [];
+  const documentWrites: string[] = [];
   const messageListeners: Array<(ev: { data: unknown }) => void> = [];
   const scheduledCallbacks: Array<() => void> = [];
   const intervalCallbacks = new Map<number, () => void>();
@@ -40,13 +52,17 @@ function runShellInSandbox(shellHtml: string): RunShellResult {
   };
   const documentMock = {
     open: vi.fn(),
-    write: vi.fn(),
+    write: vi.fn((chunk: string) => documentWrites.push(chunk)),
     close: vi.fn(),
   };
   const win = {
     parent: parentMock,
     addEventListener(_type: string, listener: (ev: { data: unknown }) => void) {
       messageListeners.push(listener);
+    },
+    removeEventListener(_type: string, listener: (ev: { data: unknown }) => void) {
+      const index = messageListeners.indexOf(listener);
+      if (index >= 0) messageListeners.splice(index, 1);
     },
   };
   const sandbox: Record<string, unknown> = {
@@ -67,6 +83,7 @@ function runShellInSandbox(shellHtml: string): RunShellResult {
   vm.createContext(sandbox);
   vm.runInContext(script, sandbox);
   return {
+    documentWrites,
     parentMessages,
     runScheduledCallbacks: () => {
       for (const callback of scheduledCallbacks.splice(0)) callback();
@@ -84,6 +101,13 @@ function runShellInSandbox(shellHtml: string): RunShellResult {
 }
 
 describe('buildLazySrcdocTransport (#2253)', () => {
+  it('can bootstrap a doctype-less artifact in quirks mode', () => {
+    const shell = buildLazySrcdocTransport({ quirksMode: true });
+
+    expect(shell.trimStart().startsWith('<!doctype')).toBe(false);
+    expect(shell.trimStart().startsWith('<html>')).toBe(true);
+  });
+
   it('posts od:srcdoc-transport-ready to parent on load', () => {
     const shell = buildLazySrcdocTransport();
     const { parentMessages } = runShellInSandbox(shell);
@@ -116,6 +140,15 @@ describe('buildLazySrcdocTransport (#2253)', () => {
     result.parentMessages.length = 0;
     result.runScheduledCallbacks();
     expect(result.parentMessages).toEqual([]);
+  });
+
+  it('consumes only the first activation so later generations get a fresh realm', () => {
+    const result = runShellInSandbox(buildLazySrcdocTransport());
+
+    result.triggerActivate('<html><body>first</body></html>', 'generation-1');
+    result.triggerActivate('<html><body>second</body></html>', 'generation-2');
+
+    expect(result.documentWrites).toEqual(['<html><body>first</body></html>']);
   });
 
   it('skips the ready post when window.parent equals window (top-level load)', () => {
@@ -238,6 +271,74 @@ describe('srcDoc transport activation witness', () => {
     expect(doc.indexOf('data-od-srcdoc-transport-activation')).toBeLessThan(
       doc.indexOf('src="slow-app.js"'),
     );
+  });
+
+  it('requests a fresh browsing context instead of rewriting an activated document', () => {
+    const doc = buildSrcdoc(
+      '<html><body><div id="shell">Shell</div><script>const ITEMS = [];</script></body></html>',
+      { transportActivationGeneration: 'generation-1' },
+    );
+    const script = extractActivationScript(doc);
+    const parentMessages: unknown[] = [];
+    const documentMock = {
+      body: { children: [] },
+      close: vi.fn(),
+      documentElement: null,
+      open: vi.fn(),
+      readyState: 'complete',
+      write: vi.fn(),
+    };
+    const win: Record<string, unknown> = {
+      addEventListener(_type: string, listener: (ev: { data: unknown }) => void) {
+        (win as { __listener: typeof listener }).__listener = listener;
+      },
+    };
+    win.parent = { postMessage: (message: unknown) => parentMessages.push(message) };
+    const sandbox: Record<string, unknown> = {
+      document: documentMock,
+      MutationObserver: undefined,
+      window: win,
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(script, sandbox);
+    parentMessages.length = 0;
+
+    const listener = (win as { __listener: (ev: { data: unknown }) => void }).__listener;
+    listener({
+      data: {
+        type: 'od:srcdoc-transport-activate',
+        html: '<html><body><script>const ITEMS = [];</script></body></html>',
+        generation: 'generation-2',
+      },
+    });
+
+    expect(documentMock.open).not.toHaveBeenCalled();
+    expect(documentMock.write).not.toHaveBeenCalled();
+    expect(documentMock.close).not.toHaveBeenCalled();
+    expect(parentMessages).toEqual([{
+      type: 'od:srcdoc-transport-reset-required',
+      generation: 'generation-2',
+    }]);
+  });
+
+  it('restores a complete frozen body while retaining manual-edit source annotations', () => {
+    const doc = buildSrcdoc(
+      '<html><body><main id="app"><p>Source</p></main></body></html>',
+      {
+        editBridge: true,
+        selectionBridge: true,
+        transportActivationGeneration: 'generation-1',
+      },
+    );
+
+    expect(doc).toContain("typeof state.bodyHtml === 'string'");
+    expect(doc).toContain('document.body.innerHTML = state.bodyHtml');
+    expect(doc).toContain('captureRuntimeStateAnnotations()');
+    expect(doc).toContain('restoreRuntimeStateAnnotations(sourceAnnotations)');
+    expect(doc).toContain('function runtimeStatePath(el){');
+    expect(doc).toContain("type: 'od:preview-runtime-state-restore-ready'");
+    expect(doc).toContain('data-od-selection-bridge');
+    expect(doc).toContain('var runtimeStateGeneration = "generation-1"');
   });
 });
 

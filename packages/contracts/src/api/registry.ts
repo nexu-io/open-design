@@ -5,6 +5,8 @@ export type ModelCapability = 'standard' | 'advanced' | 'best_quality';
 export interface ModelMetadata {
   cost?: ModelCost;
   capability?: ModelCapability;
+  /** Provider/catalog-declared total context window; observability only. */
+  contextWindowTokens?: number;
 }
 
 export interface AgentModelOption {

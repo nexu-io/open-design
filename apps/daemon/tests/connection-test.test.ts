@@ -1070,6 +1070,45 @@ describe('POST /api/test/connection provider mode', () => {
     expect(body.status).toBe(404);
   });
 
+  it('maps OpenRouter no-endpoints 404 responses to not_found_model', async () => {
+    vi.stubGlobal(
+      'fetch',
+      passThroughOrUpstream(() =>
+        jsonResponse(
+          {
+            error: {
+              message: 'No endpoints found for anthropic/claude-3.7-sonnet.',
+            },
+          },
+          { status: 404 },
+        ),
+      ),
+    );
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        apiKey: 'sk-or-test',
+        model: 'anthropic/claude-3.7-sonnet',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+
+    expect(body).toMatchObject({
+      ok: false,
+      kind: 'not_found_model',
+      status: 404,
+      model: 'anthropic/claude-3.7-sonnet',
+    });
+    expect(body.detail).toBe(
+      'No endpoints found for anthropic/claude-3.7-sonnet.',
+    );
+  });
+
   it('maps an ambiguous 404 to invalid_base_url', async () => {
     vi.stubGlobal(
       'fetch',
