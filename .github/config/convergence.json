@@ -87,6 +87,14 @@
       "packages/sidecar/",
       "packages/sidecar-proto/"
     ],
+    "windows-daemon-media-contract": [
+      "suite://workspace-install",
+      "apps/daemon/src/prompts/media-contract.ts",
+      "apps/daemon/tests/prompts/media-contract-mirror.test.ts",
+      "apps/daemon/tests/setup.ts",
+      "apps/daemon/vitest.config.ts",
+      "packages/contracts/src/prompts/media-contract.ts"
+    ],
     "e2e-runtime": [
       "suite://workspace-install",
       "apps/daemon/",
@@ -141,6 +149,12 @@
         },
         "windows_tools_pack_payload_tests": {
           "inputs": ["suite://windows-launcher-payload"],
+          "runnerClass": "windows_tools",
+          "products": "none",
+          "reusable": true
+        },
+        "windows_daemon_media_contract_tests": {
+          "inputs": ["suite://windows-daemon-media-contract"],
           "runnerClass": "windows_tools",
           "products": "none",
           "reusable": true

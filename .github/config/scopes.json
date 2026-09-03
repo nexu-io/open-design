@@ -2,6 +2,7 @@
   "schema": { "version": 1 },
   "effects": [
     "daemon_tests_required",
+    "windows_daemon_media_contract_tests_required",
     "web_tests_required",
     "tools_dev_tests_required",
     "tools_pack_tests_required",
@@ -71,6 +72,15 @@
       "exact": ["docs/agent-adapters.md"],
       "exclude": ["match://daemon-runtime-definition", "prefix://apps/daemon/src/sidecar/"]
     },
+    "windows-daemon-media-contract": {
+      "exact": [
+        "apps/daemon/src/prompts/media-contract.ts",
+        "apps/daemon/tests/prompts/media-contract-mirror.test.ts",
+        "apps/daemon/tests/setup.ts",
+        "apps/daemon/vitest.config.ts",
+        "packages/contracts/src/prompts/media-contract.ts"
+      ]
+    },
     "medium-exempt": {
       "exact": [
         ".gitignore", ".editorconfig",
@@ -104,6 +114,12 @@
       "id": "certain-daemon-core", "match": { "include": ["match://daemon-core"] },
       "effects": ["daemon_tests_required", "ui_critical_validation_required", "ui_p0_validation_required", "workspace_validation_required"],
       "confidence": "certain"
+    },
+    {
+      "id": "windows-daemon-media-contract",
+      "match": { "include": ["match://windows-daemon-media-contract"] },
+      "effects": ["windows_daemon_media_contract_tests_required"],
+      "confidence": "medium"
     },
     {
       "id": "daemon-sources",
@@ -173,10 +189,11 @@
     {
       "id": "workspace-manifests-and-ci",
       "match": {
-        "exact": ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", ".github/workflows/ci.yml", "e2e/package.json"],
+        "prefixes": [".github/actions/setup-workspace/"],
+        "exact": ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "scripts/postinstall.mjs", ".github/workflows/ci.yml", "e2e/package.json"],
         "regexes": ["^apps/[^/]+/package\\.json$", "^packages/[^/]+/package\\.json$", "^tools/[^/]+/package\\.json$"]
       },
-      "effects": ["daemon_tests_required", "web_tests_required", "tools_dev_tests_required", "tools_pack_tests_required", "windows_tools_pack_payload_tests_required"],
+      "effects": ["daemon_tests_required", "windows_daemon_media_contract_tests_required", "web_tests_required", "tools_dev_tests_required", "tools_pack_tests_required", "windows_tools_pack_payload_tests_required"],
       "confidence": "medium"
     },
     {

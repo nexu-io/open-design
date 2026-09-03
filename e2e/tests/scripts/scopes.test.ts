@@ -88,8 +88,62 @@ describe("workflow scope planner", () => {
       enabled: { windows_tools_pack_payload_tests: true },
     });
     expect(plan("pr", ["pnpm-lock.yaml"])).toMatchObject({
-      scopes: { windows_tools_pack_payload_tests_required: true },
-      enabled: { windows_tools_pack_payload_tests: true },
+      scopes: {
+        windows_daemon_media_contract_tests_required: true,
+        windows_tools_pack_payload_tests_required: true,
+      },
+      enabled: {
+        windows_daemon_media_contract_tests: true,
+        windows_tools_pack_payload_tests: true,
+      },
+    });
+    expect(plan("pr", [".github/actions/setup-workspace/action.yml"])).toMatchObject({
+      scopes: {
+        windows_daemon_media_contract_tests_required: true,
+        windows_tools_pack_payload_tests_required: true,
+      },
+      enabled: {
+        windows_daemon_media_contract_tests: true,
+        windows_tools_pack_payload_tests: true,
+      },
+    });
+    expect(plan("pr", ["scripts/postinstall.mjs"])).toMatchObject({
+      scopes: {
+        windows_daemon_media_contract_tests_required: true,
+        windows_tools_pack_payload_tests_required: true,
+      },
+      enabled: {
+        windows_daemon_media_contract_tests: true,
+        windows_tools_pack_payload_tests: true,
+      },
+    });
+    for (const file of [
+      "apps/daemon/src/prompts/media-contract.ts",
+      "apps/daemon/tests/prompts/media-contract-mirror.test.ts",
+      "apps/daemon/tests/setup.ts",
+      "apps/daemon/vitest.config.ts",
+      "packages/contracts/src/prompts/media-contract.ts",
+    ]) {
+      expect(plan("pr", [file]), file).toMatchObject({
+        scopes: { windows_daemon_media_contract_tests_required: true },
+        enabled: { windows_daemon_media_contract_tests: true },
+        trace: { ruleHits: { "windows-daemon-media-contract": 1 } },
+      });
+    }
+    for (const file of [
+      "apps/daemon/src/prompts/system.ts",
+      "packages/contracts/src/prompts/system.ts",
+    ]) {
+      expect(plan("pr", [file]), file).toMatchObject({
+        scopes: { windows_daemon_media_contract_tests_required: false },
+        enabled: { windows_daemon_media_contract_tests: false },
+      });
+    }
+    expect(plan("pr", [
+      "apps/daemon/src/prompts/media-contract.ts",
+      "apps/daemon/src/prompts/system.ts",
+    ])).toMatchObject({
+      enabled: { windows_daemon_media_contract_tests: true },
     });
     expect(plan("pr", ["docs/spec.md"])).toMatchObject({
       scopes: { workspace_validation_required: false },
@@ -169,17 +223,37 @@ describe("workflow scope planner", () => {
       enabled: { windows_tools_pack_payload_tests: true, workspace_unit_tests: true, e2e_vitest: false },
       trace: { escalations: [] },
     });
+    for (const file of [
+      "apps/daemon/src/prompts/media-contract.ts",
+      "apps/daemon/tests/setup.ts",
+      "apps/daemon/vitest.config.ts",
+    ]) {
+      expect(plan("merge-queue", [file]), file).toMatchObject({
+        enabled: { windows_daemon_media_contract_tests: true },
+        trace: { escalations: [{ reason: "below-threshold" }] },
+      });
+    }
     const medium = plan("merge-queue", ["apps/web/src/App.tsx"]);
     expect(medium.trace.escalations).toHaveLength(1);
     expect(Object.values(medium.scopes).filter((value) => typeof value === "boolean")).not.toContain(false);
 
     const unknown = plan("merge-queue", ["some-new-root/file.ts"]);
-    expect(unknown).toMatchObject({ enabled: { windows_tools_pack_payload_tests: true } });
+    expect(unknown).toMatchObject({
+      enabled: {
+        windows_tools_pack_payload_tests: true,
+        windows_daemon_media_contract_tests: true,
+      },
+    });
     expect(unknown.trace.escalations).toHaveLength(1);
   });
 
   test("keeps the Windows payload workload in forced-full plans", () => {
-    expect(plan("full")).toMatchObject({ enabled: { windows_tools_pack_payload_tests: true } });
+    expect(plan("full")).toMatchObject({
+      enabled: {
+        windows_tools_pack_payload_tests: true,
+        windows_daemon_media_contract_tests: true,
+      },
+    });
   });
 
   test("preserves the four-domain runtime-definition shadow candidate", () => {

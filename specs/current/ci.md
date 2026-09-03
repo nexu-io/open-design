@@ -382,6 +382,16 @@ merge-group validation. A representative full queue run spends about 20
 runner-minutes in the web, visual, and Windows jobs omitted by the planner; UI
 P0 remains the critical path.
 
+The PowerShell media-contract fixture is a separate Windows test set. Rule
+`windows-daemon-media-contract` maps the two rendered media contract sources,
+their executable mirror fixture, and its daemon test setup/configuration to
+`windows_daemon_media_contract_tests_required`. PR plans run that focused
+fixture on the Windows runner so its immediate and queued generate/wait cases
+exercise PowerShell argument transport, per-invocation redirect isolation, and
+cleanup. The route remains medium confidence: merge-queue evaluation therefore
+falls back to the full plan instead of treating this exact-file list as a
+complete certain-tier dependency closure.
+
 ### Daemon UI P0 capability shadow
 
 The `daemon-runtime-definition` capability is evidence-only. The applied

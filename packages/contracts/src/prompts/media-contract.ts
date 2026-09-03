@@ -74,7 +74,7 @@ write image/video/audio bytes by hand. Always call out to the dispatcher.
 The daemon injects these environment variables for agent sessions:
 
 - \`OD_NODE_BIN\` - absolute path to the Node-compatible runtime that started the daemon.
-- \`OD_BIN\` - absolute path to the OD CLI script. On POSIX shells run with \`"$OD_NODE_BIN" "$OD_BIN" ...\`.
+- \`OD_BIN\` - absolute path to the OD CLI script. On POSIX shells run with \`"$OD_NODE_BIN" "$OD_BIN" ...\`. **On Windows PowerShell do NOT use \`& $env:OD_NODE_BIN $env:OD_BIN ...\`** — that call operator silently drops stdout when \`OD_NODE_BIN\` is the packaged Electron executable. Use the \`System.Diagnostics.Process\` helper below instead.
 - \`OD_PROJECT_ID\` - active project id. Pass it as \`--project "$OD_PROJECT_ID"\`.
 - \`OD_PROJECT_DIR\` - active project files directory.
 - \`OD_DAEMON_URL\` - base URL of the local daemon.
@@ -100,6 +100,10 @@ Run media generation through the dispatcher:
   [--language <lang>]
 \`\`\`
 
+**Windows PowerShell only** — use the complete \`System.Diagnostics.Process\`
+generate/wait helper below because the \`&\` call operator loses stdout from the
+Electron-backed runtime. The helper also handles immediate completion.
+
 Always quote the prompt value. Never splice unquoted user text into the
 command line. The command returns JSON containing either a final
 \`file\` object or a \`taskId\` for long-running renders.
@@ -121,6 +125,96 @@ For long-running renders, continue with:
 
 \`\`\`bash
 "$OD_NODE_BIN" "$OD_BIN" media wait <taskId> --since <nextSince>
+\`\`\`
+
+**Windows PowerShell only** — preserve argument boundaries, redirect both process
+streams, and remove each invocation's temporary prompt files even when the command
+fails:
+
+\`\`\`powershell
+function ConvertTo-OdProcessArgument {
+  param([AllowEmptyString()][string]$Value)
+
+  if ($Value.Length -gt 0 -and $Value -notmatch '[\\s"]') { return $Value }
+  $escaped = $Value -replace '(\\\\*)"', '$1$1\\\"'
+  $escaped = $escaped -replace '(\\\\+)$', '$1$1'
+  return '"' + $escaped + '"'
+}
+
+function Invoke-OdMedia {
+  param(
+    [string[]]$ArgList,
+    [AllowNull()][string]$Prompt
+  )
+  $tempDirectory = Join-Path ([IO.Path]::GetTempPath()) ("od-media-" + [guid]::NewGuid().ToString("N"))
+  [void](New-Item -ItemType Directory -Path $tempDirectory -ErrorAction Stop)
+  $p = $null
+  try {
+    if ($PSBoundParameters.ContainsKey("Prompt")) {
+      $promptFile = Join-Path $tempDirectory "prompt.txt"
+      [IO.File]::WriteAllText($promptFile, $Prompt, [Text.UTF8Encoding]::new($false))
+      $ArgList += @("--prompt-file", $promptFile)
+    }
+    $arguments = ($ArgList | ForEach-Object { ConvertTo-OdProcessArgument $_ }) -join ' '
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $env:OD_NODE_BIN
+    $startInfo.Arguments = $arguments
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.StandardOutputEncoding = [Text.UTF8Encoding]::new($false)
+    $startInfo.StandardErrorEncoding = [Text.UTF8Encoding]::new($false)
+    $p = New-Object System.Diagnostics.Process
+    $p.StartInfo = $startInfo
+    [void]$p.Start()
+    $outputTask = $p.StandardOutput.ReadToEndAsync()
+    $errorTask = $p.StandardError.ReadToEndAsync()
+    $p.WaitForExit()
+    $output = $outputTask.Result
+    $diagnostics = $errorTask.Result
+    if ($diagnostics) {
+      $diagnosticBytes = [Text.UTF8Encoding]::new($false).GetBytes($diagnostics)
+      $standardError = [Console]::OpenStandardError()
+      $standardError.Write($diagnosticBytes, 0, $diagnosticBytes.Length)
+      $standardError.Flush()
+    }
+    return @{ Output = $output; ExitCode = $p.ExitCode }
+  } finally {
+    if ($null -ne $p) { $p.Dispose() }
+    Remove-Item -LiteralPath $tempDirectory -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+
+# Encode the complete prompt as single-line UTF-8 base64 before inserting it
+# here so arbitrary prompt text never becomes PowerShell source syntax.
+$promptBase64 = "<base64-encoded UTF-8 full prompt>"
+$prompt = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($promptBase64))
+$genArgs = @($env:OD_BIN, "media", "generate", "--project", $env:OD_PROJECT_ID, "--surface", "image", "--model", "gpt-image-2", "--output", "output.png")
+$gen = Invoke-OdMedia -ArgList $genArgs -Prompt $prompt
+if ($gen.ExitCode -ne 0) { throw $gen.Output }
+$last = ($gen.Output -split "\`n" | Where-Object { $_ -ne "" }) | Select-Object -Last 1
+$parsed = $last | ConvertFrom-Json
+$taskId = $parsed.taskId
+if ([string]::IsNullOrWhiteSpace([string]$taskId)) { $taskId = $null }
+$since = if ($null -ne $parsed.nextSince) { $parsed.nextSince } else { 0 }
+$finalResult = $last
+while ($null -ne $taskId) {
+  $waitArgs = @($env:OD_BIN, "media", "wait", $taskId, "--since", $since)
+  $wait = Invoke-OdMedia -ArgList $waitArgs
+  $finalResult = ($wait.Output -split "\`n" | Where-Object { $_ -ne "" }) | Select-Object -Last 1
+  $waitResult = $finalResult | ConvertFrom-Json
+  $since = if ($null -ne $waitResult.nextSince) { $waitResult.nextSince } else { $since }
+  if ($wait.ExitCode -eq 0) { $taskId = $null }
+  elseif ($wait.ExitCode -ne 2) { throw $wait.Output }
+}
+$previousOutputEncoding = [Console]::OutputEncoding
+try {
+  [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+  [Console]::Out.WriteLine($finalResult)
+} finally {
+  [Console]::OutputEncoding = $previousOutputEncoding
+}
 \`\`\`
 
 \`media wait\` exits \`0\` when done, \`2\` when still running, and \`5\`

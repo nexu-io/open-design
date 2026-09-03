@@ -214,7 +214,7 @@ prompt and the narration.
 The daemon spawns you with these env vars set (verify with \`echo\`):
 
 - \`OD_NODE_BIN\`    — absolute path to the Node-compatible runtime that started the daemon. Packaged desktop installs provide this even when the user has no system \`node\` on PATH.
-- \`OD_BIN\`         — absolute path to the OD CLI script. On POSIX shells run with \`"$OD_NODE_BIN" "$OD_BIN" …\`.
+- \`OD_BIN\`         — absolute path to the OD CLI script. On POSIX shells run with \`"$OD_NODE_BIN" "$OD_BIN" …\`. **On Windows PowerShell do NOT use \`& $env:OD_NODE_BIN $env:OD_BIN ...\`** — that call operator silently drops stdout when \`OD_NODE_BIN\` is the packaged Electron executable. Use the \`System.Diagnostics.Process\` helper below instead.
 - \`OD_PROJECT_ID\`  — the active project's id. Pass it as \`--project "$OD_PROJECT_ID"\`.
 - \`OD_PROJECT_DIR\` — the project's files folder (your cwd). Generated files land here.
 - \`OD_DAEMON_URL\`  — base URL of the local daemon, e.g. \`http://127.0.0.1:7456\`.
@@ -247,6 +247,12 @@ Run via your shell tool (Bash on Claude Code, exec on Codex/Gemini, etc.):
   [--voice <provider-voice-id>]     # audio:speech only; omit to use provider default
   [--language <lang>]               # audio:speech only; language boost (e.g. Chinese,Yue for Cantonese)
 \`\`\`
+
+**Windows PowerShell only** — the \`&\` call operator silently drops stdout when
+\`OD_NODE_BIN\` points to the packaged Electron executable. Use the complete
+\`System.Diagnostics.Process\` generate/wait helper under **All slow renders**
+below. It also handles renders that complete during the initial \`media generate\`
+call.
 
 Always quote the prompt value. Use \`--prompt "<full prompt>"\` (or the
 equivalent safe quoting for your shell) — never splice an unquoted user
@@ -416,6 +422,94 @@ waiting silently for a single multi-minute call.
 **Always write your shell invocation as the full generate+wait loop above**, even
 for image models. \`flux-pro-ultra\` routinely takes 60–180s; \`sora-2\` and
 \`veo-3-fal\` take longer. In the wait loop, exit 2 means "keep polling, not an error."
+
+**Windows PowerShell only** — use \`System.Diagnostics.Process\` with redirected streams for both \`media generate\` and \`media wait\`. The \`&\` call operator silently drops stdout when \`OD_NODE_BIN\` is the packaged Electron executable, so \`$result\` would be empty and the agent would never receive the \`taskId\` JSON.
+
+\`\`\`powershell
+function ConvertTo-OdProcessArgument {
+  param([AllowEmptyString()][string]$Value)
+
+  if ($Value.Length -gt 0 -and $Value -notmatch '[\\s"]') { return $Value }
+  $escaped = $Value -replace '(\\\\*)"', '$1$1\\\"'
+  $escaped = $escaped -replace '(\\\\+)$', '$1$1'
+  return '"' + $escaped + '"'
+}
+
+function Invoke-OdMedia {
+  param(
+    [string[]]$ArgList,
+    [AllowNull()][string]$Prompt
+  )
+  $tempDirectory = Join-Path ([IO.Path]::GetTempPath()) ("od-media-" + [guid]::NewGuid().ToString("N"))
+  [void](New-Item -ItemType Directory -Path $tempDirectory -ErrorAction Stop)
+  $p = $null
+  try {
+    if ($PSBoundParameters.ContainsKey("Prompt")) {
+      $promptFile = Join-Path $tempDirectory "prompt.txt"
+      [IO.File]::WriteAllText($promptFile, $Prompt, [Text.UTF8Encoding]::new($false))
+      $ArgList += @("--prompt-file", $promptFile)
+    }
+    $arguments = ($ArgList | ForEach-Object { ConvertTo-OdProcessArgument $_ }) -join ' '
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $env:OD_NODE_BIN
+    $startInfo.Arguments = $arguments
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.StandardOutputEncoding = [Text.UTF8Encoding]::new($false)
+    $startInfo.StandardErrorEncoding = [Text.UTF8Encoding]::new($false)
+    $p = New-Object System.Diagnostics.Process
+    $p.StartInfo = $startInfo
+    [void]$p.Start()
+    $outputTask = $p.StandardOutput.ReadToEndAsync()
+    $errorTask = $p.StandardError.ReadToEndAsync()
+    $p.WaitForExit()
+    $output = $outputTask.Result
+    $diagnostics = $errorTask.Result
+    if ($diagnostics) {
+      $diagnosticBytes = [Text.UTF8Encoding]::new($false).GetBytes($diagnostics)
+      $standardError = [Console]::OpenStandardError()
+      $standardError.Write($diagnosticBytes, 0, $diagnosticBytes.Length)
+      $standardError.Flush()
+    }
+    return @{ Output = $output; ExitCode = $p.ExitCode }
+  } finally {
+    if ($null -ne $p) { $p.Dispose() }
+    Remove-Item -LiteralPath $tempDirectory -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+
+# Encode the complete prompt as single-line UTF-8 base64 before inserting it
+# here so arbitrary prompt text never becomes PowerShell source syntax.
+$promptBase64 = "<base64-encoded UTF-8 full prompt>"
+$prompt = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($promptBase64))
+$genArgs = @($env:OD_BIN, "media", "generate", "--project", $env:OD_PROJECT_ID, "--surface", "image", "--model", "gpt-image-2", "--output", "output.png")
+$gen = Invoke-OdMedia -ArgList $genArgs -Prompt $prompt
+if ($gen.ExitCode -ne 0) { throw $gen.Output }
+$last = ($gen.Output -split "\`n" | Where-Object { $_ -ne "" }) | Select-Object -Last 1
+$parsed = $last | ConvertFrom-Json
+$taskId = $parsed.taskId
+if ([string]::IsNullOrWhiteSpace([string]$taskId)) { $taskId = $null }
+$since = if ($null -ne $parsed.nextSince) { $parsed.nextSince } else { 0 }
+$finalResult = $last
+while ($null -ne $taskId) {
+  $waitArgs = @($env:OD_BIN, "media", "wait", $taskId, "--since", $since)
+  $wait = Invoke-OdMedia -ArgList $waitArgs
+  $finalResult = ($wait.Output -split "\`n" | Where-Object { $_ -ne "" }) | Select-Object -Last 1
+  $waitResult = $finalResult | ConvertFrom-Json
+  $since = if ($null -ne $waitResult.nextSince) { $waitResult.nextSince } else { $since }
+  if ($wait.ExitCode -eq 0) { $taskId = $null }
+  elseif ($wait.ExitCode -ne 2) { throw $wait.Output }
+}
+$previousOutputEncoding = [Console]::OutputEncoding
+try {
+  [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+  [Console]::Out.WriteLine($finalResult)
+} finally {
+  [Console]::OutputEncoding = $previousOutputEncoding
+}
+\`\`\`
 
 A note on \`fetch failed\` to \`127.0.0.1\`. The OD daemon runs on
 loopback in the same machine that spawned you, so it is essentially

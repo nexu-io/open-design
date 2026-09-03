@@ -277,6 +277,7 @@ async function runScopesPrint(eventName: string, eventPayload: unknown, changedF
     run_preflight: value.enabled.preflight,
     run_ui_p0: value.enabled.ui_p0,
     run_web_workspace_tests: value.enabled.web_workspace_tests,
+    run_windows_daemon_media_contract_tests: value.enabled.windows_daemon_media_contract_tests,
     run_windows_tools_pack_payload_tests: value.enabled.windows_tools_pack_payload_tests,
     run_workspace_unit_tests: value.enabled.workspace_unit_tests,
   };
@@ -405,7 +406,7 @@ describe("packaged smoke workflow", () => {
 
   it("[P2] runs the independent Windows launcher payload test set", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
-    const job = sectionBetween(workflow, "  windows_tools_pack_payload_tests:", "  web_workspace_tests:");
+    const job = sectionBetween(workflow, "  windows_tools_pack_payload_tests:", "  windows_daemon_media_contract_tests:");
     const validate = sectionBetween(workflow, "  validate:", "          if [ -n \"$failures\" ]; then");
 
     expect(job).toContain("fromJSON(needs.runners.outputs.runs_on).windows_tools");
@@ -413,6 +414,21 @@ describe("packaged smoke workflow", () => {
     expect(job).toContain("fromJSON(needs.plan.outputs.run).windows_tools_pack_payload_tests");
     expect(job).toContain("pnpm --filter @open-design/tools-pack exec vitest run tests/launcher/windows/payload.test.ts");
     expect(validate).toContain("windows_tools_pack_payload_tests");
+  });
+
+  it("[P1] runs the executable daemon media contract fixture in a required Windows workload", async () => {
+    const workflow = await readFile(ciWorkflowPath, "utf8");
+    const job = sectionBetween(workflow, "  windows_daemon_media_contract_tests:", "  web_workspace_tests:");
+    const validate = sectionBetween(workflow, "  validate:", "          if [ -n \"$failures\" ]; then");
+
+    expect(job).toContain("fromJSON(needs.plan.outputs.run).windows_daemon_media_contract_tests");
+    expect(job).toContain("fromJSON(needs.runners.outputs.runs_on).windows_tools");
+    expect(job).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).windows_tools)");
+    expect(job).toContain(
+      "pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/prompts/media-contract-mirror.test.ts",
+    );
+    expect(job).not.toMatch(/\.github\/scripts\/(?:scopes|hash|runners)\.py/);
+    expect(validate).toContain("- windows_daemon_media_contract_tests");
   });
 
   it("[P2] limits manual blob guard checks to changed files against main", async () => {
@@ -557,7 +573,8 @@ describe("packaged smoke workflow", () => {
       ["  preflight:", "  workspace_unit_tests:"],
       ["  workspace_unit_tests:", "  daemon_unit_tests:"],
       ["  daemon_unit_tests:", "  windows_tools_pack_payload_tests:"],
-      ["  windows_tools_pack_payload_tests:", "  web_workspace_tests:"],
+      ["  windows_tools_pack_payload_tests:", "  windows_daemon_media_contract_tests:"],
+      ["  windows_daemon_media_contract_tests:", "  web_workspace_tests:"],
       ["  web_workspace_tests:", "  e2e_vitest:"],
       ["  e2e_vitest:", "  playwright_critical:"],
       ["  playwright_critical:", "  ui_p0:"],

@@ -387,6 +387,25 @@ jobs:
       - name: Windows launcher payload archive tests
         run: pnpm --filter @open-design/tools-pack exec vitest run tests/launcher/windows/payload.test.ts
 
+  windows_daemon_media_contract_tests:
+    name: Windows daemon media contract tests
+    needs: [plan, runners]
+    if: ${{ fromJSON(needs.plan.outputs.run).windows_daemon_media_contract_tests }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).windows_tools }}
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).windows_tools) }}
+
+      - name: Windows PowerShell media contract tests
+        run: pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/prompts/media-contract-mirror.test.ts
+
   web_workspace_tests:
     name: Web workspace tests (${{ matrix.shard }}/2)
     needs: [plan, runners]
@@ -953,6 +972,7 @@ jobs:
       - workspace_unit_tests
       - daemon_unit_tests
       - windows_tools_pack_payload_tests
+      - windows_daemon_media_contract_tests
       - web_workspace_tests
       - e2e_vitest
       - playwright_critical

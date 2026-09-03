@@ -268,8 +268,9 @@ app.whenReady().then(() => {
       const electronPath = join(desktopRoot, 'node_modules', 'electron', 'dist', electronRelativePath);
       const env: NodeJS.ProcessEnv = { ...process.env };
       delete env.ELECTRON_RUN_AS_NODE;
+      const electronArgs = [probeDir, '--no-sandbox', '--disable-gpu'];
       const command = process.platform === 'linux' ? 'xvfb-run' : electronPath;
-      const args = process.platform === 'linux' ? ['-a', electronPath, probeDir] : [probeDir];
+      const args = process.platform === 'linux' ? ['-a', electronPath, ...electronArgs] : electronArgs;
       const { stdout, stderr } = await execFileP(command, args, { env, timeout: 10_000 });
       const marker = stdout.split(/\r?\n/).find((line) => line.startsWith('OD_PNG_PAINT:'));
       if (!marker) throw new Error(`Electron paint probe returned no result: ${stdout || stderr}`);
