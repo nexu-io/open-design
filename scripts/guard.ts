@@ -137,6 +137,13 @@ const residualAllowedExactPaths = new Set([
   "tools/release/esbuild.config.mjs",
   "tools/serve/bin/tools-serve.mjs",
   "tools/serve/esbuild.config.mjs",
+  // Terminal distributions execute these native runtime entrypoints with the
+  // verified embedded Node after leaving the pnpm/TypeScript workspace.
+  "shells/terminal/runtime/fixture-lifecycle.mjs",
+  "shells/terminal/runtime/fixture-shell-updater.mjs",
+  "shells/terminal/runtime/fossil.mjs",
+  "shells/terminal/runtime/sidecar-bootstrap.mjs",
+  "shells/terminal/runtime/sidecar-host.mjs",
   "tools/pack/resources/mac/notarize.cjs",
   // electron-builder hook path; CJS compatibility entry used by tools-pack desktop builds.
   "tools/pack/resources/web-standalone-after-pack.cjs",
