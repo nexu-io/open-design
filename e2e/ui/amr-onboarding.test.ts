@@ -1230,9 +1230,14 @@ async function wireOnboardingMocks(
    * the test — it is not a test assertion.  Swallow only the navigation-race
    * flavour of error; every other failure should still surface.
    */
-  const safeEvaluate = async (fn: () => boolean | void): Promise<boolean | void> => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const safeEvaluate = async (fn: (...args: any[]) => unknown, ...args: any[]): Promise<unknown> => {
     try {
-      return await page.evaluate(fn);
+      // Playwright runs the function in the page VM. Forward each Node-side
+      // argument explicitly via page.evaluate(), because the page VM does not
+      // share Node closures and will throw ReferenceError on any local we
+      // would otherwise capture here.
+      return await page.evaluate(fn as never, ...args);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       if (
@@ -1303,9 +1308,9 @@ async function wireOnboardingMocks(
 
   await page.route('**/api/integrations/vela/status', async (route) => {
     statusCalls += 1;
-    await safeEvaluate(() => {
-      window.__amrOnboardingStatusCalls = statusCalls;
-    });
+    await safeEvaluate((calls) => {
+      window.__amrOnboardingStatusCalls = calls;
+    }, statusCalls);
     if (options.statusGate) {
       await options.statusGate;
     }
@@ -1316,9 +1321,9 @@ async function wireOnboardingMocks(
         body: JSON.stringify({ error: 'status unavailable' }),
       });
       statusResponses += 1;
-      await safeEvaluate(() => {
-        window.__amrOnboardingStatusResponses = statusResponses;
-      });
+      await safeEvaluate((responses) => {
+        window.__amrOnboardingStatusResponses = responses;
+      }, statusResponses);
       return;
     }
     if (loginInFlight && await safeEvaluate(() => (
@@ -1368,9 +1373,9 @@ async function wireOnboardingMocks(
           },
     });
     statusResponses += 1;
-    await safeEvaluate(() => {
-      window.__amrOnboardingStatusResponses = statusResponses;
-    });
+    await safeEvaluate((responses) => {
+      window.__amrOnboardingStatusResponses = responses;
+    }, statusResponses);
     if (shouldDelaySignedOutStatus) {
       await safeEvaluate(() => {
         window.__amrOnboardingSlowStatusResolved = true;
@@ -1399,9 +1404,9 @@ async function wireOnboardingMocks(
       loggedIn = true;
       loginInFlight = false;
     }
-    await safeEvaluate(() => {
-      window.__amrOnboardingLoginCalls = loginCalls;
-    });
+    await safeEvaluate((calls) => {
+      window.__amrOnboardingLoginCalls = calls;
+    }, loginCalls);
     await route.fulfill({
       status: 202,
       json: {
@@ -1417,9 +1422,9 @@ async function wireOnboardingMocks(
     expect(route.request().postDataJSON()).toEqual({ authAttemptId });
     cancelCalls += 1;
     loginInFlight = false;
-    await safeEvaluate(() => {
-      window.__amrOnboardingCancelCalls = cancelCalls;
-    });
+    await safeEvaluate((calls) => {
+      window.__amrOnboardingCancelCalls = calls;
+    }, cancelCalls);
     await route.fulfill({ json: { canceled: true, pids: [4242] } });
   });
 
