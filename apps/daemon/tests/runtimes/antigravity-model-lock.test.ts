@@ -3,8 +3,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   _resetAntigravityModelLockForTests,
   acquireAntigravityModelLock,
+  antigravityAgentDef,
+  parseAntigravityModels,
   waitForAgyToReadModel,
 } from '../../src/runtimes/defs/antigravity.js';
+import { DEFAULT_MODEL_OPTION } from '../../src/runtimes/defs/shared.js';
 
 afterEach(() => {
   _resetAntigravityModelLockForTests();
@@ -259,5 +262,33 @@ describe('waitForAgyToReadModel', () => {
     const elapsed = Date.now() - startedAt;
     expect(result).toBe(false);
     expect(elapsed).toBeLessThan(450);
+  });
+});
+
+describe('parseAntigravityModels and listModels', () => {
+  it('declares listModels subcommand in agent definition', () => {
+    expect(antigravityAgentDef.listModels).toBeDefined();
+    expect(antigravityAgentDef.listModels?.args).toEqual(['models']);
+    expect(antigravityAgentDef.listModels?.timeoutMs).toBe(5000);
+  });
+
+  it('parses tab-separated output from agy models correctly', () => {
+    const stdout = `Fetching available models...
+gemini-3.8-flash-high\tGemini 3.8 Flash (High)
+gemini-3.7-flash-high\tGemini 3.7 Flash (High)
+claude-sonnet-4-6\tClaude Sonnet 4.6 (Thinking)
+`;
+    const models = parseAntigravityModels(stdout);
+    expect(models).not.toBeNull();
+    expect(models).toHaveLength(4); // default + 3
+    expect(models![0]).toEqual(DEFAULT_MODEL_OPTION);
+    expect(models![1]).toEqual({ id: 'gemini-3.8-flash-high', label: 'Gemini 3.8 Flash (High)' });
+    expect(models![2]).toEqual({ id: 'gemini-3.7-flash-high', label: 'Gemini 3.7 Flash (High)' });
+    expect(models![3]).toEqual({ id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (Thinking)' });
+  });
+
+  it('returns null on empty or header-only stdout', () => {
+    expect(parseAntigravityModels('')).toBeNull();
+    expect(parseAntigravityModels('Fetching available models...\n')).toBeNull();
   });
 });

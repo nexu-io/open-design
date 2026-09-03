@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 
 import { DEFAULT_MODEL_OPTION } from './shared.js';
 import { agentCapabilities } from '../capabilities.js';
-import type { RuntimeAgentDef } from '../types.js';
+import type { RuntimeAgentDef, RuntimeModelOption } from '../types.js';
 
 const ANTIGRAVITY_SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
 
@@ -168,6 +168,36 @@ export async function waitForAgyToReadModel(
   }
   return false;
 }
+ 
+export function parseAntigravityModels(
+  stdout: string,
+): RuntimeModelOption[] | null {
+  const lines = String(stdout || '').split(/\r?\n/);
+  const out: RuntimeModelOption[] = [DEFAULT_MODEL_OPTION];
+  const seen = new Set<string>();
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line || line.startsWith('Fetching')) continue;
+    const parts = line.split('\t');
+    let id = '';
+    let label = '';
+    if (parts.length >= 2) {
+      id = parts[0]!.trim();
+      label = parts[1]!.trim();
+    } else {
+      const match = line.match(/^(\S+)\s+(.+)$/);
+      if (match) {
+        id = match[1]!.trim();
+        label = match[2]!.trim();
+      }
+    }
+    if (id && label && !seen.has(id)) {
+      seen.add(id);
+      out.push({ id, label });
+    }
+  }
+  return out.length > 1 ? out : null;
+}
 
 export const antigravityAgentDef = {
   id: 'antigravity',
@@ -177,6 +207,11 @@ export const antigravityAgentDef = {
   helpArgs: ['--help'],
   capabilityFlags: {
     [ANTIGRAVITY_SKIP_PERMISSIONS_FLAG]: 'skipPermissions',
+  },
+  listModels: {
+    args: ['models'],
+    parse: parseAntigravityModels,
+    timeoutMs: 5000,
   },
   fallbackModels: [
     DEFAULT_MODEL_OPTION,
