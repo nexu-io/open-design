@@ -272,11 +272,18 @@ async function fetchPublishedImageCapabilities(
   wireModel: string,
   runCommand: VelaCommandRunner,
 ): Promise<VelaPublishedImageCapabilities | null> {
-  const stdout = await runCommand(['media', 'models', '--json'], {
-    ...velaWorkspaceCommandOptions(input.workspaceId),
-    timeoutMs: VELA_MODELS_TIMEOUT_MS,
-  });
-  return parsePublishedProfiles(stdout, wireModel, edits);
+  try {
+    const stdout = await runCommand(['media', 'models', '--json'], {
+      ...velaWorkspaceCommandOptions(input.workspaceId),
+      timeoutMs: VELA_MODELS_TIMEOUT_MS,
+    });
+    return parsePublishedProfiles(stdout, wireModel, edits);
+  } catch (error) {
+    const providerError = velaMediaErrorFromFailure(error, 'media models');
+    if (providerError) throw providerError;
+    const msg = error instanceof Error ? error.message : String(error);
+    throw new VelaMediaError(msg, { code: 'UNAUTHORIZED', retryable: false });
+  }
 }
 
 /**

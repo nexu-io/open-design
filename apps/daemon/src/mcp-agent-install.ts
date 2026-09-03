@@ -277,7 +277,7 @@ export function planAgentInstall(
       return {
         kind: 'json',
         slug,
-        configPath: path.join(home, '.gemini', 'antigravity', 'mcp_config.json'),
+        configPath: path.join(home, '.gemini', 'antigravity-cli', 'mcp_config.json'),
         keyPath: ['mcpServers'],
         serverKey: serverName,
         entry: jsonEntry(spec),

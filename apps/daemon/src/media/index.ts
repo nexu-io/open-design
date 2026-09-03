@@ -400,7 +400,8 @@ export async function generateMedia(args: {
   // catalog so users can reach any model on fal without waiting for a
   // catalog entry. Surface comes from the caller; no cross-surface guard
   // is needed because the fal renderer reads ctx.surface directly.
-  let def = findMediaModel(model);
+  const aliasedModel = await resolveModelAlias(projectRoot, model);
+  let def = findMediaModel(aliasedModel) || findMediaModel(model);
   let isFalCustomPath = false;
   let isCatalogBypass = false;
   if (!def) {
