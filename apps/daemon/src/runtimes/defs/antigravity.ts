@@ -253,13 +253,19 @@ export const antigravityAgentDef = {
   buildArgs: (
     prompt,
     _imagePaths,
-    _extra = [],
+    extraAllowedDirs = [],
     options = {},
     runtimeContext = {},
   ) => {
     const args: string[] = [];
     if (options.model && options.model !== DEFAULT_MODEL_OPTION.id) {
       args.push('--model', options.model);
+    }
+    const dirs = (extraAllowedDirs || []).filter(
+      (dir) => typeof dir === 'string' && dir.trim(),
+    );
+    for (const dir of dirs) {
+      args.push('--add-dir', dir);
     }
     // Always opt into `--log-file` when the daemon supplied a path so
     // it can post-exit grep for the actual upstream failure shape

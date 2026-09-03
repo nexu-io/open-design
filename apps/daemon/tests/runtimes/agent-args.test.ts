@@ -671,6 +671,16 @@ test('antigravity passes prompt via -p argument (print mode)', () => {
     'write hello world',
   ]);
 
+  const argsWithDirs = antigravity.buildArgs('write hello world', [], ['/path/a', '', '  ', '/path/b'], {}, {});
+  assert.deepEqual(argsWithDirs, [
+    '--add-dir',
+    '/path/a',
+    '--add-dir',
+    '/path/b',
+    '-p',
+    'write hello world',
+  ]);
+
   // No `--model` flag exists upstream, so buildArgs argv must stay the
   // same regardless of which label the user picks.
   // Pass a temp antigravitySettingsPath so buildArgs does not touch the
