@@ -2043,11 +2043,28 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
       await flushStreamsAndExit(4);
     }
     let snap;
+    let rawText = '';
     try {
-      snap = await resp.json();
+      rawText = await resp.text();
+      if (!rawText || !rawText.trim()) {
+        console.error('wait returned empty response; still running — retrying');
+        await new Promise((r) => setTimeout(r, 200));
+        continue;
+      }
+      snap = JSON.parse(rawText);
     } catch {
-      console.error('daemon returned non-JSON for /wait');
-      await flushStreamsAndExit(4);
+      console.error('daemon returned non-JSON for /wait; still running — retrying');
+      await new Promise((r) => setTimeout(r, 200));
+      continue;
+    }
+    if (!snap || typeof snap !== 'object') {
+      console.error('wait returned empty/ambiguous result; still running — retrying');
+      await new Promise((r) => setTimeout(r, 200));
+      continue;
+    }
+    if (typeof snap.status !== 'string' || !snap.status.trim()) {
+      console.error('wait returned ambiguous status; still running — retrying');
+      snap.status = 'running';
     }
     lastSnapshot = snap;
     if (Array.isArray(snap.progress)) {

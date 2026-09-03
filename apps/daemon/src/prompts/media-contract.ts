@@ -413,6 +413,14 @@ both well within your shell tool's timeout. Progress lines stream to stderr as
 they arrive, so the user sees live status in chat throughout the loop instead of
 waiting silently for a single multi-minute call.
 
+**Empty or ambiguous poll results are not failures.** An empty stdout,
+whitespace-only, or non-JSON handoff from \`media wait\` is \`unknown\` — do NOT
+narrate failure. Re-run \`"$OD_NODE_BIN" "$OD_BIN" media wait <taskId> --since <n>\`
+with the same \`since\`. If the live poll stays ambiguous, recover via
+\`GET /api/projects/<projectId>/media/tasks?includeDone=true\` and only report
+\`failed\`/\`interrupted\` when \`status\` is explicitly that; treat \`done\` with a
+file as success even when earlier polls were empty.
+
 **Always write your shell invocation as the full generate+wait loop above**, even
 for image models. \`flux-pro-ultra\` routinely takes 60–180s; \`sora-2\` and
 \`veo-3-fal\` take longer. In the wait loop, exit 2 means "keep polling, not an error."

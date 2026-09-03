@@ -127,6 +127,12 @@ For long-running renders, continue with:
 when the provider task failed. Exit code \`2\` is not an error; keep polling
 with the returned \`nextSince\`.
 
+An empty, whitespace-only, or non-JSON response from \`media wait\` is not a
+failure — it is still running. Re-run \`media wait\` with the same \`--since\`
+value; if the live poll stays ambiguous, recover via
+\`GET /api/projects/:projectId/media/tasks?includeDone=true\` and only treat
+an explicit \`failed\` or \`interrupted\` status as failure.
+
 Do not emit \`<artifact>\` blocks for media. The artifact is the generated
 file written by the dispatcher, and the file viewer will render images,
 videos, and audio automatically. If generation fails, retain the actual
