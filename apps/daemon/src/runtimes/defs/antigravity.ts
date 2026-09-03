@@ -242,7 +242,7 @@ export const antigravityAgentDef = {
       args.push('--log-file', runtimeContext.agentLogFilePath);
     }
     // Daemon-managed print-mode runs have no interactive approval channel.
-    if (agentAgentSessionDeliveryService.get('antigravity')?.skipPermissions) {
+    if (agentCapabilities.get('antigravity')?.skipPermissions) {
       args.push(ANTIGRAVITY_SKIP_PERMISSIONS_FLAG);
     }
     args.push('-p', prompt);
