@@ -17,6 +17,9 @@ export function parseKiloCliVersion(raw: string): string | null {
  * mimeType field this adapter now sends.
  */
 export function isKiloMimeAwareVersion(version: string): boolean {
+  // SemVer prereleases of 7.4.23 (and any other line) rank below the matching
+  // release. This adapter only validates MIME-aware stable 7.4.23+ builds.
+  if (!/^\d+\.\d+\.\d+(?:\+[0-9A-Za-z.-]+)?$/.test(version)) return false;
   const match = /^(\d+)\.(\d+)\.(\d+)/.exec(version);
   if (!match) return false;
   const major = Number(match[1]);
@@ -42,8 +45,10 @@ export const kiloAgentDef = {
       supportedVersions: ['7.4.23'],
       // MIME-aware ACP resource_link support landed in 7.4.23. Accept that
       // patch line and later 7.x / 8+ releases without pinning every build.
+      // Only `+build` metadata is allowed: `7.4.23-beta.1` is SemVer-less
+      // than the documented floor and must stay untested.
       supportedVersionPattern:
-        /^(?:7\.(?:4\.(?:2[3-9]|[3-9]\d+|[1-9]\d{2,})|[5-9]\.\d+|\d{2,}\.\d+)|[8-9]\.\d+\.\d+|[1-9]\d+\.\d+\.\d+)(?:[-+].*)?$/,
+        /^(?:7\.(?:4\.(?:2[3-9]|[3-9]\d+|[1-9]\d{2,})|[5-9]\.\d+|\d{2,}\.\d+)|[8-9]\.\d+\.\d+|[1-9]\d+\.\d+\.\d+)(?:\+[0-9A-Za-z.-]+)?$/,
       requireVersion: true,
       parse: parseKiloCliVersion,
     },

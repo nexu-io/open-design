@@ -972,9 +972,15 @@ test('Kilo version policy accepts only MIME-aware 7.4.23+ releases', () => {
   assert.equal(isKiloMimeAwareVersion('7.4.22'), false);
   assert.equal(isKiloMimeAwareVersion('7.0.30'), false);
   assert.equal(kilo.versionPolicy?.supportedVersionPattern?.test('7.4.23'), true);
+  assert.equal(kilo.versionPolicy?.supportedVersionPattern?.test('7.4.23+build.1'), true);
   assert.equal(kilo.versionPolicy?.supportedVersionPattern?.test('7.4.22'), false);
   assert.equal(kilo.versionPolicy?.supportedVersionPattern?.test('7.0.30'), false);
   assert.equal(kilo.versionPolicy?.supportedVersionPattern?.test('7.5.0'), true);
+  assert.equal(kilo.versionPolicy?.supportedVersionPattern?.test('7.4.23-beta.1'), false);
+  assert.equal(kilo.versionPolicy?.supportedVersionPattern?.test('7.5.0-rc.1'), false);
+  assert.equal(isKiloMimeAwareVersion('7.4.23-beta.1'), false);
+  assert.equal(isKiloMimeAwareVersion('7.5.0-rc.1'), false);
+  assert.equal(isKiloMimeAwareVersion('7.4.23+build.1'), true);
 });
 
 test('Kilo Code CLI install metadata points to the current official docs', () => {
