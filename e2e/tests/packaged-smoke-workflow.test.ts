@@ -1310,6 +1310,11 @@ process.stdin.on("end", () => {
     // regressing any of them fails here instead of silently breaking auto-merge.
     const workflow = await readFile(bakePreviewsWorkflowPath, "utf8");
 
+    // This publisher needs canonical-repository R2 and release-bot credentials. Mirrors do not
+    // inherit those secrets, so their push/nightly runs must skip the trusted publisher instead
+    // of reaching the AWS CLI with empty bucket/endpoint arguments.
+    expect(workflow).toContain("if: github.repository == 'nexu-io/open-design'");
+
     // 1. The rolling PR is pushed with the release-bot App token, not GITHUB_TOKEN — a
     //    GITHUB_TOKEN-authored push triggers no CI, so the PR could never clear main's required
     //    `Validate workspace` check or the merge queue.
