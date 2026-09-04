@@ -81,6 +81,9 @@ export function createElectronFixtureStandaloneAuthorityFactory(
           binding,
           generation,
           updater,
+          async armShellInstallation({ install, request }) {
+            return await install(request);
+          },
           async start({ attachment }): Promise<StandaloneRuntimeHandle> {
             const started = await lifecycle.start(request.scope, generation, attachment, binding);
             if (started.instanceId == null) throw new Error("fixture lifecycle did not return an instance id");

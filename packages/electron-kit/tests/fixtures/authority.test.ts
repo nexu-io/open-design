@@ -33,6 +33,39 @@ describe("Electron Standalone authority boundary", () => {
       scope: { channel: manifest.channel, namespace: `authority-${process.pid}` },
       shell: manifest.shell,
     });
+    const install = vi.fn(async (request) => ({
+      schemaVersion: 1 as const,
+      state: "armed" as const,
+      installAttemptId: request.installAttemptId,
+      artifactPath: request.handoff.artifact.path,
+      artifactSha256: request.handoff.artifact.sha256,
+      helperPath: "/tmp/installer-helper.mjs",
+      resultPath: "/tmp/installer-result.json",
+      mode: "verify-only" as const,
+      parentPid: request.parentPid,
+    }));
+    const installation = {
+      handoff: {
+        interaction: "restart-and-install" as const,
+        releaseVersion: "0.1.1",
+        target: "darwin-arm64",
+        artifact: {
+          path: "/tmp/electron-installer.dmg",
+          sha256: "d".repeat(64),
+          size: 42,
+          mediaType: "application/x-apple-diskimage",
+        },
+        shell: { type: "electron", version: "0.1.1", buildHash: "e".repeat(64) },
+      },
+      installAttemptId: "install-1",
+      nodeExecutablePath: process.execPath,
+      parentPid: process.pid,
+      runtimeRoot: "/tmp/electron-runtime",
+      mode: "verify-only" as const,
+    };
+    await expect(prepared.armShellInstallation({ install, request: installation }))
+      .resolves.toMatchObject({ state: "armed", installAttemptId: "install-1" });
+    expect(install).toHaveBeenCalledWith(installation);
     const handle = await prepared.start({
       attachment: { id: "electron-authority-test", shell: manifest.shell },
       capabilities: {

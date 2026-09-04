@@ -448,12 +448,16 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
     updater: runtimePrepared.updater,
     async onHandoff(request) {
       if (definition.actions?.installUpdate == null) throw new Error("Electron Shell installer action is unavailable");
-      installerArming = Promise.resolve(definition.actions.installUpdate({
-        ...request,
-        nodeExecutablePath: runtimeCarrier.executablePath,
-        parentPid: process.pid,
-        runtimeRoot,
-      })).then(() => undefined);
+      const install = definition.actions.installUpdate;
+      installerArming = runtimePrepared.armShellInstallation({
+        request: {
+          ...request,
+          nodeExecutablePath: runtimeCarrier.executablePath,
+          parentPid: process.pid,
+          runtimeRoot,
+        },
+        install,
+      }).then(() => undefined);
       await installerArming;
       context.log?.write("installer.armed", { installAttemptId: request.installAttemptId });
       app.quit();

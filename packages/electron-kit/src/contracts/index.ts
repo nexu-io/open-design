@@ -103,6 +103,10 @@ export type ElectronStandalonePreparedRuntime = Readonly<{
   binding: StandaloneGenerationBinding;
   generation: GenerationRecord;
   updater: StandaloneShellUpdaterPort;
+  armShellInstallation(input: Readonly<{
+    request: ElectronInstallerHandoffRequest;
+    install(request: ElectronInstallerHandoffRequest): ElectronInstallerHandoffReceipt | Promise<ElectronInstallerHandoffReceipt>;
+  }>): Promise<ElectronInstallerHandoffReceipt>;
   start(input: Readonly<{
     attachment: StandaloneHandoffAttachment;
     capabilities: StandaloneShellCapabilityPort;
