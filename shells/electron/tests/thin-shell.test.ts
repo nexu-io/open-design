@@ -98,10 +98,10 @@ describe("Electron product shell", () => {
     }
   });
 
-  it("owns concrete preflight, warmup topology and placeholder readiness outside electron-kit", async () => {
+  it("owns concrete preflight, warmup topology and renderer readiness outside electron-kit", async () => {
     const [runtimeSource, rendererSource, preloadSource, kitRuntimeSource, kitPreflightSource] = await Promise.all([
       readFile(new URL("../config/runtime.json", import.meta.url), "utf8"),
-      readFile(new URL("../src/adapters/renderer/placeholder.ts", import.meta.url), "utf8"),
+      readFile(new URL("../src/adapters/renderer/renderer.ts", import.meta.url), "utf8"),
       readFile(new URL("../src/adapters/renderer/preload.ts", import.meta.url), "utf8"),
       readFile(new URL("../../../packages/electron-kit/src/runtime/index.ts", import.meta.url), "utf8"),
       readFile(new URL("../../../packages/electron-kit/src/runtime/startup/preflight/apply.ts", import.meta.url), "utf8"),
@@ -114,14 +114,14 @@ describe("Electron product shell", () => {
       "electron.ensure-carrier",
       "standalone.resolve",
       "standalone.await-ready",
-      "shell.placeholder-resource",
+      "shell.renderer-resource",
       "electron.mount-renderer",
     ]);
     expect(runtime.warmup).toMatchObject({ maxConcurrency: 4, totalTimeoutMs: 360000 });
     expect(runtimeSource).toContain('"failure": "required"');
-    expect(rendererSource).toContain("createPlaceholderRendererAdapter");
-    expect(rendererSource).toContain("let warmedHtml");
-    expect(rendererSource).not.toContain("let warmedPlaceholder");
+    expect(rendererSource).toContain("createElectronRendererAdapter");
+    expect(rendererSource).toContain("let warmedDocument");
+    expect(rendererSource).not.toContain("placeholder");
     expect(rendererSource).toContain("electronShell.acknowledgeMounted()");
     expect(rendererSource).not.toContain("executeJavaScript");
     expect(preloadSource).toContain("@open-design/electron-kit/renderer");
@@ -139,14 +139,14 @@ describe("Electron product shell", () => {
     const runtime = JSON.parse(await readFile(new URL("../config/runtime.json", import.meta.url), "utf8")) as {
       warmup: Parameters<typeof assertShellWarmupBindings>[0];
     };
-    const bindings = { "shell.placeholder-resource": () => undefined };
+    const bindings = { "shell.renderer-resource": () => undefined };
     expect(assertShellWarmupBindings(runtime.warmup, bindings)).toBe(bindings);
     expect(() => assertShellWarmupBindings(runtime.warmup, {}))
-      .toThrow(/declared=shell\.placeholder-resource bound=/u);
+      .toThrow(/declared=shell\.renderer-resource bound=/u);
     expect(() => assertShellWarmupBindings(runtime.warmup, {
       ...bindings,
       "shell.unused": () => undefined,
-    })).toThrow(/bound=shell\.placeholder-resource,shell\.unused/u);
+    })).toThrow(/bound=shell\.renderer-resource,shell\.unused/u);
   });
 
   it("keeps a Shell-local copy of the same official Node lock", async () => {

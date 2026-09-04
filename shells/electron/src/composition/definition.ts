@@ -12,7 +12,7 @@ import type {
 import type { ElectronMacRuntimePolicy } from "@open-design/electron-kit/macos";
 import type { ElectronWindowsLifecyclePolicy } from "@open-design/electron-kit/windows";
 
-import { createPlaceholderRendererAdapter } from "../adapters/renderer/placeholder.js";
+import { createElectronRendererAdapter } from "../adapters/renderer/renderer.js";
 import { createElectronStandaloneAuthorityFactory } from "../adapters/standalone/authority.js";
 import type { ElectronPhysicalResourceSetDeclaration } from "../adapters/standalone/physical-resources.js";
 import { createInstallerHandoffAdapter } from "../adapters/updater/installer.js";
@@ -22,14 +22,14 @@ import { assertShellWarmupBindings } from "./warmup-bindings.js";
 export function createElectronShellDefinition(installedManifest: ElectronShellManifest = manifest as ElectronShellManifest): ElectronShellDefinition {
   const shellManifest = installedManifest;
   const runtimeConfig = runtime as ElectronRuntimeConfig;
-  const placeholder = createPlaceholderRendererAdapter(shellManifest.window.title);
+  const renderer = createElectronRendererAdapter(shellManifest.window.title);
   return Object.freeze({
     manifest: shellManifest,
     mac: macRuntime as ElectronMacRuntimePolicy,
     preflight: runtimeConfig.preflight,
     warmup: runtimeConfig.warmup,
-    warmupExecutors: assertShellWarmupBindings(runtimeConfig.warmup, placeholder.warmupExecutors),
-    renderer: placeholder.renderer,
+    warmupExecutors: assertShellWarmupBindings(runtimeConfig.warmup, renderer.warmupExecutors),
+    renderer: renderer.renderer,
     actions: Object.freeze({
       observeCommitted: createWindowsCommittedObserver(
         shellManifest,

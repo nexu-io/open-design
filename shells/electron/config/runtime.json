@@ -44,8 +44,8 @@
         "timeoutMs": 30000
       },
       {
-        "id": "placeholder-resource",
-        "executor": "shell.placeholder-resource",
+        "id": "renderer-resource",
+        "executor": "shell.renderer-resource",
         "dependsOn": ["standalone-ready"],
         "blocking": true,
         "failure": "required",
@@ -53,11 +53,11 @@
         "timeoutMs": 5000
       },
       {
-        "id": "placeholder-renderer",
+        "id": "product-renderer",
         "executor": "electron.mount-renderer",
-        "dependsOn": ["placeholder-resource"],
+        "dependsOn": ["renderer-resource"],
         "blocking": true,
-        "label": "Opening the placeholder renderer…",
+        "label": "Opening the product renderer…",
         "timeoutMs": 20000
       }
     ]

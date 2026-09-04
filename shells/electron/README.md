@@ -5,7 +5,7 @@ the `od://` handler, ready-before preflight policy, concrete warmup topology, an
 `@open-design/electron-kit`. `config/runtime.json` owns both the ordered warmup
 declaration and finite locale/connection preflight selection; electron-kit owns
 only graph lifecycle, bounded concurrency, required/best-effort failure semantics,
-receipts, validation, and its public carrier/Standalone atoms. The placeholder resource
+receipts, validation, and its public carrier/Standalone atoms. The renderer resource
 prewarm node is a concrete Shell executor and the renderer consumes the warmed value.
 `src/main.ts` is only the process entry, `src/composition/definition.ts` is the
 single composition root, and `src/adapters/` contains concrete renderer, updater,
@@ -22,6 +22,12 @@ uses `app.setActivationPolicy`, `app.dock.show()` and `app.dock.hide()` only for
 the current process presentation. A user's “Keep in Dock” choice is persisted
 and matched to the stable bundle identity by macOS; neither the Shell nor
 electron-kit stores, infers, pins, or unpins that state.
+The renderer adapter fixes its main-frame identity at mount time, opens foreign
+HTTP(S) navigation in the system browser, limits child windows to the Shell's
+own protocol host plus Blob/about:blank, and admits embedded browsers only in a
+dedicated persistent partition with sandboxing and navigation revalidation.
+These are retained product security behaviors from the gold/current Desktop;
+renderer code cannot widen the allowlists or supply a preload path.
 Shell JSON and Shell code own product
 composition, while Sidecar owns private IPC, process identity, guarded physical
 lifetime, retirement, and terminal stop. electron-kit does not publish a
