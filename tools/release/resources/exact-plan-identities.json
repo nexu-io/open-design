@@ -127,12 +127,12 @@
     }
   },
   "identities": {
-    "electron.shell.build": {"schemaVersion": 1, "sourceSets": ["electron.shell.build"], "parameters": ["target"]},
-    "electron.shell.test": {"schemaVersion": 1, "sourceSets": ["electron.shell.test"], "parameters": ["target"]},
+    "electron.shell.build": {"schemaVersion": 1, "sourceSets": ["electron.shell.build"], "parameters": ["target", "acceptedShellBaseline"]},
+    "electron.shell.test": {"schemaVersion": 1, "sourceSets": ["electron.shell.test"], "parameters": ["target", "acceptedShellBaseline"]},
     "closure.build": {"schemaVersion": 1, "sourceSets": ["closure.build"], "parameters": ["target"]},
     "closure.test": {"schemaVersion": 1, "sourceSets": ["closure.test"], "parameters": ["target"]},
-    "electron.distribution": {"schemaVersion": 1, "sourceSets": ["electron.distribution"], "parameters": ["target"]},
-    "electron.acceptance.full": {"schemaVersion": 1, "sourceSets": ["electron.acceptance.full"], "parameters": ["target"]},
-    "closure.acceptance.hot": {"schemaVersion": 1, "sourceSets": ["closure.acceptance.hot"], "parameters": ["target"]}
+    "electron.distribution": {"schemaVersion": 1, "sourceSets": ["electron.distribution"], "parameters": ["target", "acceptedShellBaseline"]},
+    "electron.acceptance.full": {"schemaVersion": 1, "sourceSets": ["electron.acceptance.full"], "parameters": ["target", "acceptedShellBaseline"]},
+    "closure.acceptance.hot": {"schemaVersion": 1, "sourceSets": ["closure.acceptance.hot"], "parameters": ["target", "acceptedShellBaseline"]}
   }
 }

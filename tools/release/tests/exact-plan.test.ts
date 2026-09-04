@@ -10,6 +10,7 @@ import { parseContentIdentityRegistry, resolveContentIdentityDeclaration } from 
 import { createExactPlan, selectExactPlanActions, type ExactPlan } from "../src/exact/plan.js";
 
 const roots: string[] = [];
+const ACCEPTED_BASELINE = `sha256:${"a".repeat(64)}` as const;
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true })));
@@ -33,7 +34,13 @@ async function fixture(): Promise<{ registry: ReturnType<typeof parseContentIden
   }
   return {
     registry: parseContentIdentityRegistry({
-      identities: Object.fromEntries(ids.map((id) => [id, { parameters: ["target"], schemaVersion: 1, sourceSets: [id] }])),
+      identities: Object.fromEntries(ids.map((id) => [id, {
+        parameters: id.startsWith("electron.") || id === "closure.acceptance.hot"
+          ? ["target", "acceptedShellBaseline"]
+          : ["target"],
+        schemaVersion: 1,
+        sourceSets: [id],
+      }])),
       schemaVersion: 1,
       sourceSets: Object.fromEntries(ids.map((id) => [id, { paths: [id] }])),
     }),
@@ -62,9 +69,9 @@ describe("exact release plan", () => {
 
   it("uses hot acceptance for a Closure-only change while reusing the accepted Shell", async () => {
     const input = await fixture();
-    const before = await createExactPlan({ ...input, target: "darwin-arm64" });
+    const before = await createExactPlan({ ...input, acceptedShellBaseline: ACCEPTED_BASELINE, target: "darwin-arm64" });
     await writeFile(join(input.root, "closure.build", "input.txt"), "changed\n");
-    const after = await createExactPlan({ ...input, target: "darwin-arm64" });
+    const after = await createExactPlan({ ...input, acceptedShellBaseline: ACCEPTED_BASELINE, target: "darwin-arm64" });
     const actions = selectExactPlanActions(after, identities(before)).map(({ id }) => id);
 
     expect(actions).toEqual([
@@ -79,9 +86,9 @@ describe("exact release plan", () => {
 
   it("requires full installed acceptance when the Shell boundary changes", async () => {
     const input = await fixture();
-    const before = await createExactPlan({ ...input, target: "win32-x64" });
+    const before = await createExactPlan({ ...input, acceptedShellBaseline: ACCEPTED_BASELINE, target: "win32-x64" });
     await writeFile(join(input.root, "electron.shell.build", "input.txt"), "changed\n");
-    const after = await createExactPlan({ ...input, target: "win32-x64" });
+    const after = await createExactPlan({ ...input, acceptedShellBaseline: ACCEPTED_BASELINE, target: "win32-x64" });
     const actions = selectExactPlanActions(after, identities(before)).map(({ id }) => id);
 
     expect(actions).toEqual([
@@ -98,11 +105,26 @@ describe("exact release plan", () => {
 
   it("keeps activation explicit when every reusable result is available", async () => {
     const input = await fixture();
-    const plan = await createExactPlan({ ...input, target: "darwin-x64" });
+    const plan = await createExactPlan({ ...input, acceptedShellBaseline: ACCEPTED_BASELINE, target: "darwin-x64" });
     expect(selectExactPlanActions(plan, identities(plan)).map(({ id }) => id)).toEqual([
       "exact.compose",
       "exact.publish",
       "exact.activate",
     ]);
+  });
+
+  it("invalidates only Shell-bound work when its accepted baseline advances", async () => {
+    const input = await fixture();
+    const before = await createExactPlan({ ...input, acceptedShellBaseline: ACCEPTED_BASELINE, target: "darwin-arm64" });
+    const after = await createExactPlan({
+      ...input,
+      acceptedShellBaseline: `sha256:${"b".repeat(64)}`,
+      target: "darwin-arm64",
+    });
+    expect(after.nodes["closure.build"].identity).toBe(before.nodes["closure.build"].identity);
+    expect(after.nodes["closure.test"].identity).toBe(before.nodes["closure.test"].identity);
+    expect(after.nodes["electron.shell.build"].identity).not.toBe(before.nodes["electron.shell.build"].identity);
+    expect(after.nodes["electron.distribution"].identity).not.toBe(before.nodes["electron.distribution"].identity);
+    expect(after.nodes["electron.acceptance.full"].identity).not.toBe(before.nodes["electron.acceptance.full"].identity);
   });
 });

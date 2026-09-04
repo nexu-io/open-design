@@ -7,14 +7,18 @@ cli
   .option("--root <path>", "Repository root (auto-detected by default)")
   .option("--registry <path>", "Content identity registry", { default: "tools/release/resources/exact-plan-identities.json" })
   .option("--target <target>", "Exact target: darwin-arm64, darwin-x64, or win32-x64")
+  .option("--accepted-shell-baseline <digest>", "Accepted baseline identity carried by the Shell")
   .option("--available <path>", "JSON array of reusable identities")
   .option("--output <path>", "Plan receipt path", { default: ".tmp/release-exact/plan.json" })
-  .action(async (options: { available?: string; output: string; registry: string; root?: string; target?: string }) => {
+  .action(async (options: { acceptedShellBaseline?: string; available?: string; output: string; registry: string; root?: string; target?: string }) => {
     if (options.target !== "darwin-arm64" && options.target !== "darwin-x64" && options.target !== "win32-x64") {
       throw new Error("--target must be darwin-arm64, darwin-x64, or win32-x64");
     }
+    if (options.acceptedShellBaseline == null || !/^sha256:[a-f0-9]{64}$/u.test(options.acceptedShellBaseline)) {
+      throw new Error("--accepted-shell-baseline must be a sha256 digest");
+    }
     const { writeExactPlan } = await import("./exact/write-plan.ts");
-    await writeExactPlan({ ...options, target: options.target });
+    await writeExactPlan({ ...options, acceptedShellBaseline: options.acceptedShellBaseline as `sha256:${string}`, target: options.target });
   });
 
 cli

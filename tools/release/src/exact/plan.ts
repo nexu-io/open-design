@@ -28,6 +28,7 @@ export type ExactPlanNode = Readonly<{
 }>;
 
 export type ExactPlan = Readonly<{
+  acceptedShellBaseline: `sha256:${string}`;
   nodes: Readonly<Record<ExactPlanNodeId, ExactPlanNode>>;
   schemaVersion: typeof EXACT_PLAN_SCHEMA_VERSION;
   target: ExactTarget;
@@ -67,6 +68,7 @@ function compositeIdentity(id: ExactPlanNodeId, sourceIdentity: string, dependen
 }
 
 async function resolveNode(
+  acceptedShellBaseline: `sha256:${string}`,
   id: ExactPlanNodeId,
   root: string,
   target: ExactTarget,
@@ -74,13 +76,18 @@ async function resolveNode(
   nodes: Partial<Record<ExactPlanNodeId, ExactPlanNode>>,
 ): Promise<ExactPlanNode> {
   const resolved = resolveContentIdentityDeclaration(registry, id);
-  const unexpectedParameters = resolved.declaration.parameters.filter((parameter) => parameter !== "target");
+  const supportedParameters = new Set(["acceptedShellBaseline", "target"]);
+  const unexpectedParameters = resolved.declaration.parameters.filter((parameter) => !supportedParameters.has(parameter));
   if (unexpectedParameters.length > 0 || !resolved.declaration.parameters.includes("target")) {
-    throw new Error(`exact identity ${id} must declare only the target parameter`);
+    throw new Error(`exact identity ${id} has unsupported or incomplete parameters`);
   }
+  const parameters = Object.fromEntries(resolved.declaration.parameters.map((parameter) => [
+    parameter,
+    parameter === "target" ? target : acceptedShellBaseline,
+  ]));
   const source = await resolveContentIdentity({
     id,
-    parameters: { target },
+    parameters,
     root,
     schemaVersion: resolved.declaration.schemaVersion,
     sources: resolved.sources,
@@ -100,15 +107,18 @@ async function resolveNode(
 }
 
 export async function createExactPlan(input: Readonly<{
+  acceptedShellBaseline: `sha256:${string}`;
   registry: ContentIdentityRegistry;
   root: string;
   target: ExactTarget;
 }>): Promise<ExactPlan> {
+  if (!/^sha256:[a-f0-9]{64}$/u.test(input.acceptedShellBaseline)) throw new Error("accepted Shell baseline identity is invalid");
   const nodes: Partial<Record<ExactPlanNodeId, ExactPlanNode>> = {};
-  for (const id of NODE_ORDER) nodes[id] = await resolveNode(id, input.root, input.target, input.registry, nodes);
-  nodes["electron.acceptance.full"] = await resolveNode("electron.acceptance.full", input.root, input.target, input.registry, nodes);
-  nodes["closure.acceptance.hot"] = await resolveNode("closure.acceptance.hot", input.root, input.target, input.registry, nodes);
+  for (const id of NODE_ORDER) nodes[id] = await resolveNode(input.acceptedShellBaseline, id, input.root, input.target, input.registry, nodes);
+  nodes["electron.acceptance.full"] = await resolveNode(input.acceptedShellBaseline, "electron.acceptance.full", input.root, input.target, input.registry, nodes);
+  nodes["closure.acceptance.hot"] = await resolveNode(input.acceptedShellBaseline, "closure.acceptance.hot", input.root, input.target, input.registry, nodes);
   return Object.freeze({
+    acceptedShellBaseline: input.acceptedShellBaseline,
     nodes: Object.freeze(nodes as Record<ExactPlanNodeId, ExactPlanNode>),
     schemaVersion: EXACT_PLAN_SCHEMA_VERSION,
     target: input.target,
@@ -116,6 +126,7 @@ export async function createExactPlan(input: Readonly<{
 }
 
 export async function createExactPlanFromRegistryFile(input: Readonly<{
+  acceptedShellBaseline: `sha256:${string}`;
   registryPath: string;
   root: string;
   target: ExactTarget;
