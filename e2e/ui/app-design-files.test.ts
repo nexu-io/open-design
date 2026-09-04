@@ -363,23 +363,6 @@ async function waitForSingleSketchFile(page: Page, projectId: string): Promise<s
   return sketchName;
 }
 
-async function selectComposerSessionMode(page: Page, modeTitle: 'Ask mode' | 'Plan mode' | 'Design mode') {
-  // #5517 composer mode picker: Ask maps to the real `chat` session mode.
-  const modeId = modeTitle === 'Ask mode' ? 'chat' : modeTitle === 'Plan mode' ? 'plan' : 'design';
-  const modeName = modeTitle.replace(' mode', '');
-  const trigger = page.getByTestId('chat-composer').getByTestId('composer-mode-trigger');
-  await expect(trigger).toBeVisible();
-  await trigger.click();
-
-  const menu = page.getByTestId('composer-mode-menu');
-  await expect(menu).toBeVisible();
-  await expect(menu.getByTestId('composer-mode-menu-chat')).toBeVisible();
-  await expect(menu.getByTestId('composer-mode-menu-plan')).toBeVisible();
-  await expect(menu.getByTestId('composer-mode-menu-design')).toBeVisible();
-  await menu.getByTestId(`composer-mode-menu-${modeId}`).click();
-  await expect(trigger).toHaveAttribute('aria-label', `Mode: ${modeName}`);
-}
-
 async function openDesignFile(page: Page, fileName: string) {
   const fileTab = page.getByRole('tab', { name: new RegExp(fileName.replace(/\./g, '\\.'), 'i') });
   if (await fileTab.isVisible()) {
@@ -716,7 +699,7 @@ test('[P1] design files tab launcher creates a sketch and exposes editor menu ac
   await expect(page.getByTestId('sketch-menu-clear')).toBeDisabled();
 });
 
-test('[P1] plan mode selection and new Excalidraw sketch emit analytics dimensions', async ({ page }) => {
+test('[P1] new Excalidraw sketch emits analytics dimensions', async ({ page }) => {
   test.setTimeout(90_000);
   const analyticsBodies: string[] = [];
   await page.unroute('**/api/app-config').catch(() => {});
@@ -777,7 +760,10 @@ test('[P1] plan mode selection and new Excalidraw sketch emit analytics dimensio
   const projectId = await createProjectViaApi(page, 'Plan and sketch analytics');
   await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
-  await selectComposerSessionMode(page, 'Plan mode');
+  // The session-mode picker left the composer (#7635), so `session_mode_toggle`
+  // can no longer be produced from here; the sketch action is the analytics
+  // under test.
+  await expect(page.getByTestId('chat-composer').getByTestId('composer-mode-trigger')).toHaveCount(0);
   await openAllProjectFiles(page);
   await page.getByTestId('design-files-empty-new-sketch').click();
 
@@ -785,10 +771,9 @@ test('[P1] plan mode selection and new Excalidraw sketch emit analytics dimensio
   await expect(page.getByTestId('sketch-excalidraw-editor')).toBeVisible();
   await expectProjectFileToContain(page, projectId, sketchName, '"type": "excalidraw"');
 
-  await expect.poll(() => analyticsBodies.join('\n')).toContain('session_mode_toggle');
   await expect.poll(() => analyticsBodies.join('\n'), { timeout: T.medium }).toContain('new_sketch');
   const raw = analyticsBodies.join('\n');
-  expect(raw).toContain('"mode_after":"plan"');
+  expect(raw).not.toContain('session_mode_toggle');
   expect(raw).toContain(projectId);
 });
 
@@ -1140,6 +1125,14 @@ test('[P0] @critical HTML file list and previews stay stable across repeated swi
   await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
 
+  // Project restore asynchronously opens the newest HTML file. If Design
+  // Files is clicked while that restore is still committing, the late file
+  // selection wins and immediately switches the tab back, making the list
+  // assertion race startup instead of testing file stability. Let the restore
+  // own its initial selection, then enter Design Files as the user would.
+  await expect(page.getByRole('tab', { name: /stable-(?:alpha|beta)\.html/i })).toBeVisible();
+  await expect(page.locator('iframe[data-od-active="true"]')).toBeVisible();
+
   await openAllProjectFiles(page);
   const alphaRow = await revealDesignFileRow(page, 'stable-alpha.html');
   const betaRow = designFileRow(page, 'stable-beta.html');
@@ -1189,6 +1182,18 @@ test('[P0] @critical HTML file list and previews stay stable across repeated swi
   const alphaFrameHandle = await captureWarmFrame('stable-alpha.html');
 
   await openAllProjectFiles(page);
+  // #7007 regressed only when the active viewer had already cached the HTML
+  // source and Design Files mounted its thumbnail from that cache on the very
+  // first render. Exercise that exact browser path, not just the jsdom style
+  // contract: the thumbnail must start with the desktop layout viewport and
+  // immediately paint the cached document.
+  const warmAlphaRow = await revealDesignFileRow(page, 'stable-alpha.html');
+  const warmAlphaThumbnail = warmAlphaRow.locator('.df-card-thumb iframe');
+  await expect(warmAlphaThumbnail).toHaveCSS('width', '1200px');
+  await expect(warmAlphaThumbnail).toHaveCSS('height', '675px');
+  await expect(warmAlphaRow.frameLocator('.df-card-thumb iframe').getByRole('heading', {
+    name: 'Stable Alpha',
+  })).toBeVisible();
   await betaRow.getByRole('button').first().click();
   const betaTab = page.getByRole('tab', { name: /stable-beta\.html/i });
   const betaHeading = page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {

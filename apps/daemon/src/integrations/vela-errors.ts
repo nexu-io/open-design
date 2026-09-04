@@ -175,11 +175,13 @@ export function classifyAmrAccountFailure(text: string): AmrAccountFailure | nul
     value.includes('not logged in') ||
     value.includes('login missing') ||
     value.includes('sign in again') ||
+    value.includes('sign-in-again') ||
     value.includes('sign-in required') ||
     value.includes('signin required') ||
     value.includes('token has expired') ||
     value.includes('expired token') ||
     value.includes('invalid session') ||
+    value.includes('expired session') ||
     value.includes('session expired')
   ) {
     return {

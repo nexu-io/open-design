@@ -2,13 +2,24 @@ import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen, openNewProjectModal } from '@/playwright/rail';
 import { settingsSurface } from '@/playwright/amr';
 import { expectStableCount } from '@/playwright/assertions';
-import { openHomeTemplateMenu } from '@/playwright/home-hero';
+import {
+  HOME_TYPE_ROW_CHIP_IDS,
+  HOME_TYPE_ROW_MORE_CHIP_IDS,
+  homeTypeRow,
+  pickHomeTemplate,
+} from '@/playwright/home-hero';
 import type {
   WorkspaceCollabContext,
   WorkspaceDirectoryItem,
 } from '@open-design/contracts';
 import type { Page, Request } from '@playwright/test';
-import { applyStandardMocks, fulfillAgentsRoute, routeSuccessfulRuns, STORAGE_KEY } from '@/playwright/mock-factory';
+import {
+  applyStandardMocks,
+  fulfillAgentsRoute,
+  routeSignedOutVelaStatus,
+  routeSuccessfulRuns,
+  STORAGE_KEY,
+} from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 const LOCAL_CLI_LABEL = /Local CLI|Local coding agent|本机 CLI|本地 CLI/i;
 const STARTER_PLUGIN = makeStarterPlugin({
@@ -92,18 +103,23 @@ test('[P0] @critical entry chrome exposes the primary home creation surface and 
   await expect(page.getByTestId('home-hero-plus-trigger')).toBeVisible();
   // Empty input can still run the active placeholder-carousel suggestion.
   await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
-  await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
+  await expect(page.getByTestId('home-hero-type-pills')).toBeVisible();
   await expect(page.getByTestId('home-hero-design-system-picker')).toBeVisible();
   await expect(page.getByTestId('working-dir-picker')).toBeVisible();
-  // #5517 deleted the inline scenario rail (the "Start from a template… / …or
-  // create a blank project" row and its cards); the composer footer's Template
-  // picker owns every project type now.
-  const templateMenu = await openHomeTemplateMenu(page);
-  for (const id of ['prototype', 'live-artifact', 'deck', 'image', 'video', 'hyperframes', 'audio']) {
-    await expect(templateMenu.getByTestId(`home-hero-template-wedge-${id}`)).toBeVisible();
+  // The type row under the composer is a curated entry set (product,
+  // 2026-08-31): three inline pills plus two behind 更多.
+  const typeRow = homeTypeRow(page);
+  await expect(typeRow).toBeVisible();
+  for (const id of HOME_TYPE_ROW_CHIP_IDS) {
+    await expect(typeRow.getByTestId(`home-hero-type-pill-${id}`)).toBeVisible();
+  }
+  await page.getByTestId('home-hero-type-pills-more').click();
+  const overflow = page.getByTestId('home-hero-type-pills-popover');
+  for (const id of HOME_TYPE_ROW_MORE_CHIP_IDS) {
+    await expect(overflow.getByTestId(`home-hero-type-pill-${id}-more`)).toBeVisible();
   }
   await page.keyboard.press('Escape');
-  await expect(templateMenu).toHaveCount(0);
+  await expect(overflow).toHaveCount(0);
 
   // The pet picker rail was removed; pet adoption now lives in
   // Settings → Pet exclusively. Make sure no rail leaks back into the
@@ -119,6 +135,55 @@ test('[P0] @critical entry chrome exposes the primary home creation surface and 
   await expect(settingsDialog.getByTestId('settings-nav-execution')).toBeVisible();
   await expect(settingsDialog.getByRole('button', { name: /hide pet picker/i })).toHaveCount(0);
   await expect(settingsDialog.getByRole('button', { name: /show pet picker/i })).toHaveCount(0);
+});
+
+test('[P1] cold Home defers Automations reads until the route becomes active', async ({ page }) => {
+  const automationsPaths = [
+    '/api/automation-templates',
+    '/api/automation-proposals',
+    '/api/routines',
+  ] as const;
+  const counts = new Map<string, number>(automationsPaths.map((path) => [path, 0]));
+  const record = (request: Request) => {
+    if (request.method() !== 'GET') return;
+    const path = new URL(request.url()).pathname;
+    if (!counts.has(path)) return;
+    counts.set(path, (counts.get(path) ?? 0) + 1);
+  };
+  page.on('request', record);
+
+  try {
+    await gotoEntryHome(page);
+    await expectStableCount(
+      () => [...counts.values()].reduce((total, count) => total + count, 0),
+      0,
+      {
+        timeout: T.short,
+        message: 'the inactive Automations view must not spend its request budget on Home launch',
+      },
+    );
+
+    await page.goto('/automations', { waitUntil: 'domcontentloaded' });
+    await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
+    await expect(page.getByTestId('entry-view-tasks')).toHaveAttribute('data-active', 'true');
+    await expect(page.getByTestId('tasks-view')).toBeVisible();
+    await expect.poll(() => [...counts.values()].every((count) => count > 0)).toBe(true);
+    const activeRouteBudget = [...counts.values()].reduce((total, count) => total + count, 0);
+    // React's development StrictMode may replay the active view once. Keep the
+    // assertion on the product contract: zero reads while inactive, then one
+    // bounded mount pass (at most two requests per resource) when activated.
+    for (const [path, count] of counts) {
+      expect(count, `${path} should load when Automations becomes active`).toBeGreaterThanOrEqual(1);
+      expect(count, `${path} should stay within one StrictMode mount pass`).toBeLessThanOrEqual(2);
+    }
+    await expectStableCount(
+      () => [...counts.values()].reduce((total, count) => total + count, 0),
+      activeRouteBudget,
+      { timeout: T.short, message: 'active Automations reads must settle within one mount pass' },
+    );
+  } finally {
+    page.off('request', record);
+  }
 });
 
 test('[P0] @critical workspace selection remains isolated across two browser tabs', async ({ page, context }) => {
@@ -365,6 +430,7 @@ test('[P1] onboarding lands on the home composer without a recommended-start str
 });
 
 test('[P1] entry top navigation matches the current home tab structure', async ({ page }) => {
+  await routeSignedOutVelaStatus(page);
   await gotoEntryHome(page);
   await ensureRailOpen(page);
 
@@ -392,7 +458,7 @@ test('[P1] entry top navigation matches the current home tab structure', async (
   await expect(page.locator('.entry-nav-rail__footer').getByTestId('entry-settings-button')).toHaveCount(0);
   await expect(page.locator('.entry-nav-rail__footer').getByTestId('entry-nav-plugins')).toHaveCount(0);
 
-  await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
+  await expect(page.getByTestId('home-hero-type-pills')).toBeVisible();
   // Nothing is applied on a fresh Home: no plugin chip, no template-driven
   // footer options or presets.
   await expect(page.getByTestId('home-hero-active-plugin')).toHaveCount(0);
@@ -406,7 +472,7 @@ test('[P1] home view exposes the redesigned hero, recent projects, and starters'
 
   const home = page.getByTestId('entry-view-home');
   await expect(page.getByTestId('recent-projects-strip')).toBeVisible();
-  await expect(home.getByTestId('home-hero-template-picker')).toBeVisible();
+  await expect(home.getByTestId('home-hero-type-pills')).toBeVisible();
   await expect(page.getByTestId('home-hero')).toBeVisible();
   await expect(page.getByTestId('entry-nav-home')).toHaveAttribute('aria-current', 'page');
 
@@ -770,10 +836,9 @@ test('[P1] Settings About reads desktop updater status and runs a manual update 
     .toEqual(['check']);
 });
 
-// The entry help launcher (`entry-help-trigger` / `.entry-help-popover`, the X
-// + Discord community links) went away with the entry topbar in #5517 —
-// `EntryHelpMenu` is no longer rendered anywhere — and so did the topbar's
-// "Use everywhere" button. Its spec is gone; the Use-everywhere guide itself
+// The entry help launcher (the X + Discord community links) went away with the
+// entry topbar in #5517, as did the topbar's "Use everywhere" button. Its spec
+// is gone; the Use-everywhere guide itself
 // still lives on the Integrations view and is covered below.
 test('[P1] Settings About surfaces prerelease updater check failures with retry affordance', async ({ page }) => {
   await page.addInitScript(() => {
@@ -1054,7 +1119,8 @@ test('[P2] home topbar overlays close on outside click, Escape, and Settings ope
 // inside the Home composer footer and does not follow the user to secondary
 // entry pages. This spec now pins the rail's surviving destinations plus the
 // pill at its new, Home-only home.
-test('[P1] rail destinations navigate and Home keeps its composer execution pill', async ({ page }) => {
+test('[P0] signed-out Local setup can navigate the surviving rail destinations', async ({ page }) => {
+  await routeSignedOutVelaStatus(page);
   await routeDesignSystems(page);
   await gotoEntryHome(page);
 
@@ -1083,10 +1149,14 @@ test('[P1] rail destinations navigate and Home keeps its composer execution pill
   await expect(page.getByTestId('inline-model-switcher-popover')).toHaveCount(0);
 });
 
-test('[P0] @critical home composer delegates the default prototype scenario to daemon authority', async ({ page }) => {
+test('[P0] @critical home composer delegates the picked prototype scenario to daemon authority', async ({ page }) => {
   await gotoEntryHome(page);
 
-  await expect(page.getByTestId('composer-mode-trigger')).toHaveAttribute('aria-label', 'Mode: Design');
+  // The Home composer has no mode picker any more — every Home create runs in
+  // the default design mode (asserted on the request body below) — and it
+  // starts typeless (#7635), so the Prototype type is picked from the row.
+  await expect(page.getByTestId('composer-mode-trigger')).toHaveCount(0);
+  await pickHomeTemplate(page, 'prototype');
 
   const input = page.getByTestId('home-hero-input');
   const prompt =
@@ -1244,7 +1314,8 @@ test('[P0] @critical home hero input keeps Shift+Enter as a newline and submits 
   await expect(page).toHaveURL(/\/projects\//);
 });
 
-test('[P1] home hero @ mention picker opens and Enter applies the highlighted plugin', async ({ page }) => {
+test('[P0] signed-out Local setup can apply a plugin from the Home composer', async ({ page }) => {
+  await routeSignedOutVelaStatus(page);
   await page.route('**/api/plugins', async (route) => {
     await route.fulfill({
       json: {
@@ -1318,14 +1389,10 @@ test('[P0] @critical home hero attachment input stages files, enables submit, an
 
   const input = page.getByTestId('home-hero-file-input');
   const submit = page.getByTestId('home-hero-submit');
-  // Fresh Home locks submit until its default prototype route has resolved.
-  // Under the grouped CI pool that catalogue binding can outlive Playwright's
-  // default assertion timeout, so wait on the user-visible routed state before
-  // checking the attachment lifecycle rather than racing the seed effect.
-  await expect(page.getByTestId('home-hero-template-trigger')).toContainText(
-    /Prototype|原型/i,
-    { timeout: T.long },
-  );
+  // A fresh Home starts typeless (#7635): the type row under the composer is
+  // the settled state to wait on before checking the attachment lifecycle,
+  // and an empty composer already submits its carousel suggestion.
+  await expect(homeTypeRow(page)).toBeVisible({ timeout: T.long });
   await expect(submit).toBeEnabled({ timeout: T.long });
 
   await input.setInputFiles({

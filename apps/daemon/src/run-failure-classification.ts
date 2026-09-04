@@ -2,17 +2,29 @@ import type {
   TrackingRunCancelOrigin,
   TrackingRunFailureCategory,
   TrackingRunFailureDetail,
+  TrackingRunFailureDomain,
+  TrackingRunFailureMechanism,
   TrackingRunFailureStage,
   TrackingRunFailureUserAction,
+  TrackingRunEvidenceLevel,
+  TrackingRunAdmissionStatus,
+  TrackingRunAdmissionPhase,
+  TrackingRunPolicyReason,
+  TrackingRunRepairOwner,
   TrackingRunTerminalTrigger,
 } from '@open-design/contracts/analytics';
-import { isModelWindowLimitFailure } from '@open-design/contracts';
+import {
+  isMembershipConcurrencyLimitFailure,
+  isModelWindowLimitFailure,
+} from '@open-design/contracts';
 
 import { classifyAmrAccountFailure } from './integrations/vela-errors.js';
+import { runFailureEvidence } from './services/run-failure-evidence.js';
 import { summarizeRunToolProgress } from './run-diagnostics.js';
 import { isAcpHandshakeRpcErrorText } from './runtimes/acp-handshake-id.js';
 import { classifyAgentServiceFailure } from './runtimes/auth.js';
 import type { RunResult, RunStatusForAnalytics } from './run-result.js';
+import type { RunAdmissionEvidence } from './runtimes/run-lifecycle-analytics.js';
 
 export interface RunEventForFailureClassification {
   event: string;
@@ -29,12 +41,21 @@ export interface RunFailureClassificationInput {
   cancelOrigin?: TrackingRunCancelOrigin | null;
   terminalTrigger?: TrackingRunTerminalTrigger | null;
   events?: RunEventForFailureClassification[];
+  admissionEvidence?: RunAdmissionEvidence | undefined;
 }
 
 export interface RunFailureClassification {
   failure_category: TrackingRunFailureCategory;
   failure_detail: TrackingRunFailureDetail;
   failure_stage: TrackingRunFailureStage;
+  failure_mechanism?: TrackingRunFailureMechanism;
+  failure_domain?: TrackingRunFailureDomain;
+  evidence_level?: TrackingRunEvidenceLevel;
+  repair_owner?: TrackingRunRepairOwner;
+  admission_status?: TrackingRunAdmissionStatus;
+  admission_phase?: TrackingRunAdmissionPhase;
+  policy_reason?: TrackingRunPolicyReason;
+  classifier_version?: 'run-failure-v2' | 'run-failure-v3';
   retryable: boolean;
   user_action: TrackingRunFailureUserAction;
   /** Distinguishes an explicit user stop from lifecycle-driven cancellation. */
@@ -172,7 +193,18 @@ function collectFailureText(input: RunFailureClassificationInput): string {
 }
 
 function isHardQuotaText(text: string): boolean {
-  return /\b(session limit|usage limit|limit reached|quota|billing (?:hard )?limit|insufficient[ _-]?(?:quota|credit|credits|funds)|exceeded your current quota|out of credits|no payment method|requires more credits|can only afford)\b|DAILY_LIMIT_EXCEEDED|用户额度不足|额度不足|预扣费额度失败/i
+  // Standalone `\bquota\b` is intentionally absent: advisory phrases such as
+  // "checking quota" in the daemon's own empty-output fallback message would
+  // otherwise match, misclassifying a retryable empty_output run as a
+  // non-retryable hard quota exhaustion.  Specific exhaustion phrases are
+  // listed below instead.
+  //
+  // `quota reached` covers Antigravity's upstream log line:
+  //   RESOURCE_EXHAUSTED (code 429): Individual quota reached.
+  // `RESOURCE_EXHAUSTED` catches the same log when the phrase portion is
+  // truncated or arrives separately — it is the gRPC status code that
+  // Antigravity uses exclusively for per-model quota exhaustion.
+  return /\b(session limit|usage limit|limit reached|quota exceeded|quota reached|exceeded your current quota|billing (?:hard )?limit|insufficient[ _-]?(?:quota|credit|credits|funds)|out of credits|no payment method|requires more credits|can only afford)\b|DAILY_LIMIT_EXCEEDED|RESOURCE_EXHAUSTED|用户额度不足|额度不足|预扣费额度失败/i
     .test(text);
 }
 
@@ -231,6 +263,19 @@ function isCliNotInstalledText(text: string): boolean {
     .test(text);
 }
 
+function isBundledBinaryMissingText(text: string): boolean {
+  return /\bbundled (?:OpenCode|agent) binary (?:is )?missing\b/i.test(text);
+}
+
+function clientEnvironmentFailureDetail(text: string): TrackingRunFailureDetail | null {
+  if (/\b(Windows Application Control|AppLocker)\b/i.test(text)) return 'host_policy_block';
+  if (/\b(SQLite|WAL).*(?:I\/O|readonly|locked|corrupt|failed)\b/i.test(text)) return 'local_storage_failure';
+  if (/\b(certificate|CERT_|self[- ]signed|unable to verify)\b/i.test(text)) return 'certificate_failure';
+  if (/\b(unsupported proxy protocol|proxy configuration)\b/i.test(text)) return 'proxy_configuration';
+  if (/\b(ECONNREFUSED|ENETUNREACH|network unreachable|local connection failed)\b/i.test(text)) return 'network_configuration';
+  return null;
+}
+
 function isGitBashMissingText(text: string): boolean {
   return /\bClaude Code on Windows requires git-bash\b|\bCLAUDE_CODE_GIT_BASH_PATH\b|\bgit-bash\b/i
     .test(text);
@@ -246,6 +291,10 @@ function isAgentProtocolErrorText(text: string): boolean {
     /\bQoder run failed: (?:stop_sequence|end_turn)\b/i.test(text) ||
     /\bthread\/start failed\b/i.test(text) ||
     /\bfailed to parse request\b/i.test(text);
+}
+
+function isAcpFrameTooLargeText(text: string): boolean {
+  return /\bACP input line exceeds maximum size\b/i.test(text);
 }
 
 function isFabricatedRoleMarkerText(text: string): boolean {
@@ -665,11 +714,126 @@ function classification(
   failure_stage: TrackingRunFailureStage,
   retryable: boolean,
   user_action: TrackingRunFailureUserAction,
+  options: {
+    structuredProviderEvidence?: boolean;
+    evidenceLevel?: TrackingRunEvidenceLevel;
+  } = {},
 ): RunFailureClassification {
+  const policy = [
+    'hard_quota',
+    'model_window_limit',
+    'membership_concurrency_limit',
+    'workspace_credits_exhausted',
+    'amr_insufficient_balance',
+    'amr_tier_upgrade_required',
+  ].includes(failure_detail) || failure_category === 'entitlement_required';
+  const localModel = [
+    'cli_version_incompatible',
+    'local_model_not_loaded',
+  ].includes(failure_detail);
+  const clientRequest = [
+    'attachment_media_type_unsupported',
+    'tool_schema_invalid',
+    'prompt_tokenization_failed',
+    'provider_resource_not_found',
+  ].includes(failure_detail);
+  const transport = !options.structuredProviderEvidence && [
+    'stream_disconnected',
+    'network_error',
+  ].includes(failure_detail);
+  const provider = (failure_category === 'model_unavailable' && !localModel)
+    || (failure_category === 'upstream_unavailable' && !transport && !clientRequest)
+    || (failure_category === 'rate_limit' && !policy);
+  const environment = [
+    'auth_required', 'stale_profile', 'refresh_token_reused', 'missing_api_key',
+    'invalid_api_key', 'cli_not_installed', 'git_bash_missing',
+    'agent_config_invalid', 'cpu_unsupported', 'host_policy_block',
+    'local_storage_failure', 'certificate_failure', 'proxy_configuration',
+    'network_configuration',
+  ].includes(failure_detail) || localModel;
+  const product = [
+    'agent_protocol_error', 'acp_frame_too_large', 'bundled_binary_missing', 'empty_output', 'fabricated_role_marker',
+    'permission_request_not_found', 'plugin_artifact_missing',
+  ].includes(failure_detail) || clientRequest || failure_category === 'prompt_too_large';
+  const failure_mechanism: TrackingRunFailureMechanism = policy
+    ? 'policy_rejection'
+    : provider
+      ? 'provider_rejection'
+      : transport
+        ? 'transport_failure'
+      : failure_detail === 'acp_frame_too_large'
+        ? 'frame_too_large'
+        : failure_detail === 'agent_protocol_error'
+          ? 'protocol_violation'
+        : failure_category === 'empty_output'
+          ? 'empty_completion'
+          : failure_category === 'timeout'
+            ? failure_detail === 'inactivity_timeout'
+              ? 'stream_idle_timeout'
+              : failure_stage === 'post_tool_resume'
+                ? 'post_tool_resume_timeout'
+                : 'acp_response_deadline'
+          : failure_category === 'tool_error'
+              ? 'tool_execution_failure'
+              : failure_detail === 'interrupted'
+                ? 'unknown'
+              : failure_category === 'process_exit'
+                ? 'child_exit'
+                : 'unknown';
+  const failure_domain: TrackingRunFailureDomain = policy
+    ? 'policy_admission'
+    : provider
+      ? 'provider_control_plane'
+      : transport
+        ? 'cross_boundary'
+      : environment
+        ? 'client_environment'
+        : product
+          ? 'client_product'
+          : failure_category === 'timeout' || failure_category === 'process_exit'
+            ? 'cross_boundary'
+            : 'unknown';
+  const inferredEvidenceLevel: TrackingRunEvidenceLevel = failure_detail === 'membership_concurrency_limit'
+    ? 'structured_code'
+    : failure_detail === 'interrupted'
+      ? 'lifecycle_signal'
+    : transport
+      ? 'legacy_text'
+    : provider
+      ? options.structuredProviderEvidence ? 'structured_code' : 'legacy_text'
+      : failure_detail === 'agent_protocol_error' || failure_detail === 'acp_frame_too_large'
+        ? 'protocol_error'
+        : failure_category === 'timeout'
+          ? 'lifecycle_signal'
+            : failure_detail === 'bundled_binary_missing' || environment
+              ? 'stderr_fallback'
+              : ['fatal_rpc_error', 'stream_error', 'exit_nonzero'].includes(failure_detail)
+            ? 'close_reason'
+            : failure_detail === 'unknown'
+              ? 'unknown'
+              : 'legacy_text';
+  const evidence_level = options.evidenceLevel ?? inferredEvidenceLevel;
+  const repair_owner: TrackingRunRepairOwner = failure_domain === 'policy_admission'
+    ? 'policy_owner'
+    : failure_domain === 'provider_control_plane'
+      ? 'provider_owner'
+      : failure_domain === 'client_environment'
+        ? 'client_environment'
+        : failure_domain === 'client_product'
+          ? 'open_design'
+          : failure_domain === 'cross_boundary'
+            ? 'shared_boundary'
+            : 'unknown';
   return {
     failure_category,
     failure_detail,
     failure_stage,
+    failure_mechanism,
+    failure_domain,
+    evidence_level,
+    repair_owner,
+    admission_status: 'unknown',
+    classifier_version: 'run-failure-v3',
     retryable,
     user_action,
   };
@@ -685,13 +849,11 @@ function classifyRunFailureBase(
     return {
       // Preserve the legacy category/detail for dashboard compatibility.
       // `cancel_origin` is the authoritative SLO eligibility signal.
-      ...classification(
-        'user_cancel',
-        'user_cancelled',
-        inferFailureStageFromEvents(events, 'first_token_wait'),
-        false,
-        'none',
-      ),
+      failure_category: 'user_cancel',
+      failure_detail: 'user_cancelled',
+      failure_stage: inferFailureStageFromEvents(events, 'first_token_wait'),
+      retryable: false,
+      user_action: 'none',
       cancel_origin: cancelOrigin,
       terminal_trigger: cancelOrigin,
     };
@@ -700,11 +862,24 @@ function classifyRunFailureBase(
   const errorCode = normalizeCode(input.errorCode ?? input.status.errorCode);
   const text = collectFailureText({ ...input, events });
   const retryableHint = latestRetryable(events);
+  // Compute once; used both for the early empty_output guard below and for the
+  // fatal_rpc_error promotion later in this function.
+  const runtimeCloseReason = readRuntimeCloseReason(events);
   const amrFailure = classifyAmrAccountFailure(text);
   const byokOpenCodeProviderNotFound = isByokOpenCodeProviderNotFoundText(
     input.agentId,
     text,
   );
+
+  if (errorCode === 'DAEMON_RESTARTED') {
+    return classification(
+      'process_exit',
+      'interrupted',
+      'finalize',
+      true,
+      'retry',
+    );
+  }
 
   if (
     errorCode === 'AMR_INSUFFICIENT_BALANCE' ||
@@ -716,6 +891,9 @@ function classifyRunFailureBase(
       'session_init',
       false,
       'recharge',
+      errorCode === 'AMR_INSUFFICIENT_BALANCE'
+        ? { evidenceLevel: 'structured_code' }
+        : {},
     );
   }
 
@@ -729,6 +907,9 @@ function classifyRunFailureBase(
       'session_init',
       false,
       'upgrade',
+      errorCode === 'AMR_TIER_UPGRADE_REQUIRED'
+        ? { evidenceLevel: 'structured_code' }
+        : {},
     );
   }
 
@@ -744,6 +925,13 @@ function classifyRunFailureBase(
       'session_init',
       false,
       'login',
+      [
+        'AMR_AUTH_REQUIRED',
+        'AGENT_AUTH_REQUIRED',
+        'UNAUTHORIZED',
+      ].includes(errorCode ?? '')
+        ? { evidenceLevel: 'structured_code' }
+        : {},
     );
   }
 
@@ -755,6 +943,9 @@ function classifyRunFailureBase(
       'prompt_send',
       false,
       'reduce_context',
+      errorCode === 'AGENT_PROMPT_TOO_LARGE'
+        ? { evidenceLevel: 'structured_code' }
+        : {},
     );
   }
 
@@ -771,6 +962,7 @@ function classifyRunFailureBase(
         : 'model_select',
       false,
       'switch_model',
+      { structuredProviderEvidence: errorCode === 'AMR_MODEL_UNAVAILABLE' },
     );
   }
 
@@ -808,6 +1000,33 @@ function classifyRunFailureBase(
       'spawn',
       false,
       'install_cli',
+    );
+  }
+
+  if (isBundledBinaryMissingText(text)) {
+    return classification(
+      'process_exit',
+      'bundled_binary_missing',
+      'spawn',
+      false,
+      'none',
+    );
+  }
+
+  const serviceFailure = classifyAgentServiceFailure(text);
+  const environmentDetail = clientEnvironmentFailureDetail(text);
+  const hasStructuredServiceCode = [
+    'RATE_LIMITED',
+    'UPSTREAM_UNAVAILABLE',
+    'AGENT_CONNECTION_DROPPED',
+  ].includes(errorCode ?? '');
+  if (environmentDetail && !hasStructuredServiceCode) {
+    return classification(
+      'process_exit',
+      environmentDetail,
+      'spawn',
+      false,
+      'none',
     );
   }
 
@@ -851,6 +1070,16 @@ function classifyRunFailureBase(
     );
   }
 
+  if (isAcpFrameTooLargeText(text)) {
+    return classification(
+      'process_exit',
+      'acp_frame_too_large',
+      inferFailureStageFromEvents(events, 'child_close'),
+      false,
+      'none',
+    );
+  }
+
   // A protocol failure from AFTER the handshake: a session existed, so the run
   // may simply have hit a bad moment and the old transient treatment stands.
   // Handshake-numbered frames (ids 1 and 2) are deliberately NOT claimed here
@@ -869,7 +1098,6 @@ function classifyRunFailureBase(
     );
   }
 
-  const serviceFailure = classifyAgentServiceFailure(text);
   if (serviceFailure === 'AGENT_AUTH_REQUIRED' || isAuthDetailText(text)) {
     return classification(
       'auth',
@@ -877,6 +1105,20 @@ function classifyRunFailureBase(
       'session_init',
       false,
       'login',
+    );
+  }
+
+  // Vela reports a full membership concurrency policy through an ACP fatal
+  // envelope. Claim the named policy limit before fatal close promotion. Even
+  // when the envelope says retryable, an immediate automatic replay only hits
+  // the same occupied slots, so leave retry to the user after the reset time.
+  if (input.agentId === 'amr' && isMembershipConcurrencyLimitFailure(text)) {
+    return classification(
+      'rate_limit',
+      'membership_concurrency_limit',
+      'session_init',
+      false,
+      'none',
     );
   }
 
@@ -907,6 +1149,7 @@ function classifyRunFailureBase(
       'session_init',
       retryable,
       retryable ? 'retry' : workspaceCredits ? 'recharge' : 'none',
+      { structuredProviderEvidence: errorCode === 'RATE_LIMITED' },
     );
   }
 
@@ -917,6 +1160,9 @@ function classifyRunFailureBase(
     isUpstreamDetailText(text) ||
     byokOpenCodeProviderNotFound
   ) {
+    const structuredProviderEvidence =
+      errorCode === 'UPSTREAM_UNAVAILABLE' ||
+      errorCode === 'AGENT_CONNECTION_DROPPED';
     const upstreamClientError =
       byokOpenCodeProviderNotFound || isUpstreamClientErrorText(text);
     // A provider/SDK 4xx or request-shape rejection will deterministically fail
@@ -929,6 +1175,23 @@ function classifyRunFailureBase(
       inferFailureStageFromEvents(events, 'first_token_wait'),
       retryable,
       retryable ? 'retry' : 'none',
+      { structuredProviderEvidence },
+    );
+  }
+
+  // Prefer the structured rpc_close_reason=empty_output signal over text
+  // heuristics — but only after RATE_LIMITED, UPSTREAM_UNAVAILABLE, and other
+  // structured-code branches above have had a chance to claim the run. A child
+  // that exits cleanly after a provider rate-limit rejection may still carry
+  // rpc_close_reason=empty_output; the structured error code is the authoritative
+  // signal in that case, not the close reason.
+  if (runtimeCloseReason === 'empty_output') {
+    return classification(
+      'empty_output',
+      'empty_output',
+      inferFailureStageFromEvents(events, 'first_token_wait'),
+      retryableHint ?? true,
+      'retry',
     );
   }
 
@@ -1069,7 +1332,6 @@ function classifyRunFailureBase(
   // had a chance to claim auth, quota, upstream, prompt-size, and other known
   // failures. Unlike stream_error, fatal_rpc_error may have no structured SSE
   // error code at all, so it must also refine signal/unknown/exit fallbacks.
-  const runtimeCloseReason = readRuntimeCloseReason(events);
   if (
     runtimeCloseReason === 'fatal_rpc_error' &&
     (
@@ -1159,9 +1421,56 @@ export function classifyRunFailure(
   input: RunFailureClassificationInput,
 ): RunFailureClassification | undefined {
   const failure = classifyRunFailureBase(input);
-  if (!failure || !input.terminalTrigger) return failure;
+  if (!failure) return failure;
+  if (input.result === 'cancelled') {
+    return { ...failure, ...(input.terminalTrigger ? { terminal_trigger: input.terminalTrigger } : {}) };
+  }
+  const terminalTrigger = input.terminalTrigger ?? failure.terminal_trigger;
+  const failureText = collectFailureText({
+    ...input,
+    events: terminalAttemptEvents(input.events),
+  });
+  const failureMechanism = failure.failure_category === 'timeout'
+    ? /(?:readiness|ready) deadline[^\n]*(?:timed out|timeout|expired|failed)|(?:readiness failed|failed to become ready|did not become ready|never became ready)/i.test(failureText)
+      ? 'startup_readiness_timeout'
+      : terminalTrigger === 'first_output_deadline'
+        ? 'first_output_deadline'
+        : terminalTrigger === 'acp_stage_timeout'
+          ? failure.failure_stage === 'post_tool_resume'
+            ? 'post_tool_resume_timeout'
+            : failure.failure_stage === 'tool_execution' || failure.failure_stage === 'tool_outstanding'
+              ? 'tool_execution_failure'
+              : 'acp_response_deadline'
+          : terminalTrigger === 'inactivity_watchdog'
+            ? 'stream_idle_timeout'
+            : failure.failure_mechanism
+    : failure.failure_mechanism;
+  // A retry or manual resume can fail in preflight before appending its next start. The new
+  // causal fields must not reuse the preceding attempt in that interval;
+  // legacy classification/retry behavior intentionally remains unchanged.
+  let evidenceEvents = terminalAttemptEvents(input.events);
+  let pendingRetry = -1;
+  for (let index = evidenceEvents.length - 1; index >= 0; index -= 1) {
+    if (evidenceEvents[index]?.event === 'run_retry_attempted'
+      || evidenceEvents[index]?.event === 'run_resume_attempted') {
+      pendingRetry = index;
+      break;
+    }
+  }
+  if (pendingRetry >= 0) evidenceEvents = evidenceEvents.slice(pendingRetry + 1);
+  const evidenceFailure = pendingRetry >= 0
+    ? classifyRunFailureBase({ ...input, events: evidenceEvents }) ?? failure
+    : failure;
   return {
     ...failure,
-    terminal_trigger: input.terminalTrigger,
+    ...(failureMechanism ? { failure_mechanism: failureMechanism } : {}),
+    ...(pendingRetry >= 0 ? {
+      failure_mechanism: evidenceFailure.failure_mechanism,
+      failure_domain: evidenceFailure.failure_domain,
+      evidence_level: evidenceFailure.evidence_level,
+      repair_owner: evidenceFailure.repair_owner,
+    } : {}),
+    ...runFailureEvidence(input, evidenceFailure, evidenceEvents),
+    ...(terminalTrigger ? { terminal_trigger: terminalTrigger } : {}),
   };
 }

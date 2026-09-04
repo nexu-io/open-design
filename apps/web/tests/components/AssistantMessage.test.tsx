@@ -545,6 +545,27 @@ describe('AssistantMessage status badge updates (Bug A)', () => {
     expect(screen.getByText('compacting context')).toBeTruthy();
     expect(screen.getByText('Compacting conversation history after a context-length error')).toBeTruthy();
   });
+
+  it('suppresses legacy persisted OpenCode compaction lifecycle statuses', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          events: [
+            { kind: 'text', text: 'Visible answer' } as ChatMessage['events'][number],
+            {
+              kind: 'status',
+              label: 'opencode_compaction',
+            } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+      />,
+    );
+
+    expect(screen.getByText('Visible answer')).toBeTruthy();
+    expect(screen.queryByText('opencode_compaction')).toBeNull();
+  });
 });
 
 describe('AssistantMessage thinking blocks', () => {
@@ -642,8 +663,15 @@ describe('AssistantMessage question forms', () => {
       target: { value: 'Product evaluators' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Send answers' }));
+    // The trailing arguments carry the answer's occupancy: the form id (and,
+    // from ChatPane, the asking message's id) is what gives the answer a
+    // stable identity instead of a fresh one per send.
     expect(onSubmitQuestionForm).toHaveBeenCalledWith(
       expect.stringContaining('- Who is this for?: Product evaluators'),
+      undefined,
+      undefined,
+      undefined,
+      'discovery',
     );
     expect(screen.queryByText('Quick brief — 30 seconds')).toBeNull();
     expect(screen.queryByText('What are we making?')).toBeNull();
@@ -827,6 +855,8 @@ describe('AssistantMessage question forms', () => {
             },
           ],
         },
+        undefined,
+        'references',
       );
     });
   });
@@ -1005,6 +1035,8 @@ describe('AssistantMessage question forms', () => {
           expect.objectContaining({ path: 'uploads/brief.png' }),
         ],
         expect.any(Object),
+        undefined,
+        'references',
       );
     });
     expect(deleteProjectFileMock).toHaveBeenCalledTimes(1);

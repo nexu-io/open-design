@@ -13,6 +13,7 @@ import {
   parseStableSections,
   type StableSectionHashes,
 } from './prompts/stable-sections.js';
+import { scanRunEventsForUsageAnalytics } from './run-analytics-observability.js';
 
 type SqliteDb = Database.Database;
 
@@ -29,6 +30,8 @@ export interface AgentResumeContext {
   isResuming: boolean;
   /** Hash of the stable instruction block last sent on this session, or null. */
   storedStablePromptHash: string | null;
+  /** Last effective input usage reported for this exact resumed session. */
+  storedInputTokens: number | null;
   /**
    * Per-section digests behind `storedStablePromptHash`, for naming which input
    * drifted when the hash no longer matches. Diagnostic only — never an input
@@ -37,6 +40,45 @@ export interface AgentResumeContext {
   storedStableSections: StableSectionHashes | null;
   /** Set when a stored session existed but was rejected; see the type. */
   invalidationReason: ResumeInvalidationReason | null;
+}
+
+/**
+ * Tracks input usage for one physical agent session attempt. Logical Run
+ * retries retain their event history, so a different session needs a fresh
+ * tracker; only an exact-session continuation may seed the retained value.
+ */
+export function createPhysicalAgentSessionUsageTracker(
+  retainedInputTokens: number | null = null,
+): {
+  observe(event: string, data: unknown): void;
+  inputTokens(): number | null;
+} {
+  const usageEvents: Array<{ event: string; data: unknown }> = [];
+  const bounded = (value: unknown): number | null =>
+    typeof value === 'number' && Number.isSafeInteger(value) &&
+      value >= 0 && value <= 1_000_000_000
+      ? value
+      : null;
+  let latestInputTokens = bounded(retainedInputTokens);
+  return {
+    observe(event, data) {
+      if (
+        event !== 'agent' ||
+        !data ||
+        typeof data !== 'object' ||
+        Array.isArray(data) ||
+        (data as Record<string, unknown>).type !== 'usage'
+      ) {
+        return;
+      }
+      usageEvents.push({ event, data });
+      const usage = scanRunEventsForUsageAnalytics(usageEvents, null, 0);
+      latestInputTokens = bounded(
+        usage.input_tokens_effective ?? usage.input_tokens,
+      );
+    },
+    inputTokens: () => latestInputTokens,
+  };
 }
 
 export type CapturedAgentSessionResult = 'stored' | 'cleared' | 'skipped';
@@ -203,6 +245,7 @@ export function resolveAgentResumeContext(
     newSessionId: randomUUID(),
     isResuming: resumable,
     storedStablePromptHash: resumable ? (record?.stablePromptHash ?? null) : null,
+    storedInputTokens: resumable ? (record?.lastInputTokens ?? null) : null,
     storedStableSections: resumable ? parseStableSections(record?.stablePromptSections) : null,
     invalidationReason,
   };
@@ -231,6 +274,7 @@ export function persistCapturedAgentSession(
     model?: string | null;
     cwd?: string | null;
     lastMessageId?: string | null;
+    lastInputTokens?: number | null;
   },
 ): CapturedAgentSessionResult {
   if (!input.conversationId) return 'skipped';
@@ -244,6 +288,7 @@ export function persistCapturedAgentSession(
       model: input.model ?? null,
       cwd: input.cwd ?? null,
       lastMessageId: input.lastMessageId ?? null,
+      lastInputTokens: input.lastInputTokens ?? null,
     });
     return 'stored';
   }

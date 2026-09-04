@@ -437,6 +437,9 @@ describe('ProjectView conversation delete', () => {
 
     renderProjectView(vi.fn());
     await waitFor(() => expect(chatPaneProps.onSubmitQuestionForm).toBeDefined());
+    // The handler refuses (returns false) while the conversation is still
+    // settling, so gate on it actually being submittable — not just defined.
+    await waitFor(() => expect(chatPaneProps.questionFormSubmitDisabled).toBe(false));
 
     await act(async () => {
       await expect(chatPaneProps.onSubmitQuestionForm!(

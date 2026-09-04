@@ -37,11 +37,10 @@
   backdrop-filter: none;
   overflow: hidden;
 }
-/* The shell grid owns exactly two children: the tabs chrome and the body.
-   Pin each to its row so a stray extra shell child (e.g. an inline popover
-   anchor mounted at shell level — the floating account cluster renders its
-   MessageCenter anchor there) falls into a zero-height implicit row instead
-   of auto-placing into (and stealing) the 1fr body row. */
+/* The shell grid owns exactly two layout children: the tabs chrome and the
+   body. Pin each to its row so any non-layout shell child falls into a
+   zero-height implicit row instead of auto-placing into (and stealing) the
+   1fr body row. */
 .workspace-shell > .workspace-tabs-chrome {
   grid-row: 1;
 }
@@ -77,9 +76,17 @@
   border-bottom: 0;
   user-select: none;
   -webkit-app-region: drag;
-  overflow: hidden;
+  overflow: visible;
   position: relative;
   z-index: 120;
+}
+.workspace-chrome-account-actions {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin-left: auto;
+  margin-right: 12px;
+  -webkit-app-region: no-drag;
 }
 .workspace-tabs-chrome .workspace-tabs-traffic {
   margin-right: var(--app-chrome-traffic-margin);

@@ -91,7 +91,7 @@ async function main() {
     const cmd = (opts.positionals[0] || '').trim();
     if (cmd === 'login')  return runVelaLogin();
     if (cmd === 'models') return runVelaModels();
-    // Default: `agent run --runtime opencode` — fall through to the ACP
+    // Default: `agent run` — fall through to the ACP
     // server below with the vela-flavored protocol.
   }
 

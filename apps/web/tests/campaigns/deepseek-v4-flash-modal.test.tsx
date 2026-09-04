@@ -299,4 +299,20 @@ describe('campaign modal only interrupts the active home view', () => {
     rerender(<DeepSeekV4FlashCampaign audience="paid" active />);
     expect(screen.getByTestId(DIALOG)).toBeInTheDocument();
   });
+
+  it('yields the modal slot while a higher-priority announcement is pending', () => {
+    const { rerender } = render(
+      <DeepSeekV4FlashCampaign audience="paid" active />,
+    );
+    expect(screen.getByTestId(DIALOG)).toBeInTheDocument();
+
+    rerender(<DeepSeekV4FlashCampaign audience="unknown" active />);
+    expect(screen.queryByTestId(DIALOG)).toBeNull();
+    expect(window.localStorage.getItem(
+      'open-design:campaign-seen:deepseek-v4-dual-unlimited-2026',
+    )).toBeNull();
+
+    rerender(<DeepSeekV4FlashCampaign audience="paid" active />);
+    expect(screen.getByTestId(DIALOG)).toBeInTheDocument();
+  });
 });

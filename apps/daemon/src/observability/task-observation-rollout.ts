@@ -36,6 +36,7 @@ import {
   type RunTelemetryDeliveryStateV1,
   type RunTelemetryDeliveryResult,
 } from './delivery-state.js';
+import { normalizeTelemetryAppVersion } from '../app-version.js';
 import { buildStructuredMainRunObservationV1 } from './main-run-observation.js';
 import { getDetectedRuntimeVersions } from '../runtimes/detection.js';
 import { OD_NEXT_RUNTIME_PATH_DESCRIPTORS } from '../runtimes/od-next-capability-gate.js';
@@ -108,6 +109,13 @@ interface TaskRunLike {
   langfuseCompletedAt?: number;
   telemetryDelivery?: RunTelemetryDeliveryStateV1;
   strategyRolloutDecision?: OdNextRolloutDecision | null;
+  appVersionInfo?: {
+    version: string;
+    channel: string;
+    packaged: boolean;
+    platform?: string;
+    arch?: string;
+  } | null;
 }
 
 type PersistedDeliveryStatus =
@@ -204,6 +212,21 @@ const LOCAL_COMPATIBILITY_REASONS = new Set([
 function cleanContextValue(value: string | undefined): string | null {
   const normalized = value?.trim() ?? '';
   return CONTEXT_VALUE_RE.test(normalized) ? normalized : null;
+}
+
+function runAppVersionInfoForTask(
+  task: StrategyTaskExecutionRecord,
+  options: CreateTaskObservationRolloutServiceOptions,
+): { version: string; channel: string; packaged: boolean } | null {
+  for (const mapping of task.runs) {
+    const candidate = options.getRun(mapping.runId)?.appVersionInfo;
+    const version = normalizeTelemetryAppVersion(candidate?.version);
+    const channel = candidate?.channel?.trim();
+    if (version && channel && typeof candidate?.packaged === 'boolean') {
+      return { version, channel, packaged: candidate.packaged };
+    }
+  }
+  return null;
 }
 
 export function readTaskObservationRolloutConfig(
@@ -1209,17 +1232,19 @@ export function createTaskObservationRolloutService(
       aggregate = await taskAggregate(task, options, telemetry);
       recordAggregate(task.taskExecutionId, aggregate);
       sink = effectiveSink();
+      const appVersionInfo = runAppVersionInfoForTask(task, options)
+        ?? telemetry.appVersionInfo;
       exportContext = {
         environment: claim.row.environment,
         tag: claim.row.tag,
         ...(telemetry.installationId !== undefined
           ? { installationId: telemetry.installationId }
           : {}),
-        ...(telemetry.appVersionInfo
+        ...(appVersionInfo
           ? {
-              appVersion: telemetry.appVersionInfo.version,
-              appChannel: telemetry.appVersionInfo.channel,
-              packaged: telemetry.appVersionInfo.packaged,
+              appVersion: appVersionInfo.version,
+              appChannel: appVersionInfo.channel,
+              packaged: appVersionInfo.packaged,
             }
           : {}),
         clientType: task.runs

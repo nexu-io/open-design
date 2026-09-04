@@ -83,6 +83,8 @@ export interface ChatSseEndPayload {
   code: number | null;
   signal?: string | null;
   status?: 'succeeded' | 'failed' | 'canceled';
+  /** The immutable instant the Run entered its terminal status. */
+  terminalAt?: number;
   /** Authoritative count of artifact files created or modified by this run.
    *  Present when the daemon resolved the run's filesystem/tool-stream diff
    *  before publishing the terminal frame. */

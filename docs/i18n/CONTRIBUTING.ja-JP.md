@@ -214,7 +214,11 @@ export const fooAgentDef = {
 その他：
 
 - **ナレーションしない。** `// import the module`、`// loop through items` は不要。コードが明らかに読める場合、コメントはノイズです。コメントはコードで表現できない非自明な意図や制約のために残してください。
-- **TypeScript** は `apps/web/src/` 用。daemon（`apps/daemon/`）は型が重要な箇所で JSDoc 付きのプレーン ESM JavaScript です — そのまま維持してください。
+- **TypeScript-first。** `apps/web/src/` と `apps/daemon/src/` のコードを含め、
+  プロジェクト所有のエントリーポイント、モジュール、スクリプト、テスト、
+  レポーター、設定は TypeScript で記述してください。新しい `.js`、`.mjs`、
+  `.cjs` ファイルは、生成物、取り込んだサードパーティコード、または明示的に
+  文書化された互換性対応に限り使用でき、`pnpm guard` に合格しなければなりません。
 - **新しいトップレベル依存関係は追加しない**（PR の説明で得られるものと出荷バイト数について 1 段落の説明がない限り）。[`package.json`](../../package.json) の依存関係リストは意図的に小さく保っています。
 - **プッシュ前に `pnpm typecheck` を実行。** CI で実行されます。失敗すると「please fix」コメントが付きます。
 

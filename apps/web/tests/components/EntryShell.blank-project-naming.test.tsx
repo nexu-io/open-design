@@ -10,7 +10,7 @@
 // no-name create path (`handleCreateProjectFromDesignSystem`, the New Project
 // panel's blank pick), which already tag `nameSource: 'generated'`.
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import {
   buildWorkspacePermissions,
   buildWorkspaceSeatSummary,
@@ -293,9 +293,12 @@ describe('EntryShell team project content readiness', () => {
       onTeamProjectContentReady,
     });
 
-    const activeCard = await screen.findByRole('button', {
-      name: /Ready shared project/,
-    });
+    // Scoped to the project grid: the rail's 最近浏览过 list names the same
+    // projects, so an unscoped lookup matches the card AND its rail row.
+    const activeCard = await within(document.querySelector('main') as HTMLElement).findByRole(
+      'button',
+      { name: /Ready shared project/ },
+    );
     fireEvent.click(activeCard);
 
     await waitFor(() => {
@@ -440,7 +443,10 @@ describe('EntryShell team project content readiness', () => {
       onTeamProjectContentReady,
     });
 
-    expect(await screen.findByText('Ready shared project')).toBeTruthy();
+    // Scoped to the grid: the rail's 最近浏览过 list names the same project.
+    expect(
+      await within(document.querySelector('main') as HTMLElement).findByText('Ready shared project'),
+    ).toBeTruthy();
     expect(MockWorkspaceEventSource.instances).toHaveLength(1);
     act(() => {
       MockWorkspaceEventSource.instances[0]!.dispatch('team-project-content-ready', {
@@ -558,7 +564,10 @@ describe('EntryShell team project content readiness', () => {
       fresh: true,
     })).resolves.toEqual([]);
 
-    expect(await screen.findByText('Ready shared project')).toBeTruthy();
+    // Scoped to the grid: the rail's 最近浏览过 list names the same project.
+    expect(
+      await within(document.querySelector('main') as HTMLElement).findByText('Ready shared project'),
+    ).toBeTruthy();
     act(() => {
       MockWorkspaceEventSource.instances[0]!.dispatch('team-project-content-ready', {
         type: 'team-project-content-ready',
@@ -648,7 +657,10 @@ describe('EntryShell team project content readiness', () => {
       onTeamProjectContentReady,
     });
 
-    expect(await screen.findByText('Ready shared project')).toBeTruthy();
+    // Scoped to the grid: the rail's 最近浏览过 list names the same project.
+    expect(
+      await within(document.querySelector('main') as HTMLElement).findByText('Ready shared project'),
+    ).toBeTruthy();
     act(() => {
       MockWorkspaceEventSource.instances[0]!.dispatch('team-project-content-ready', {
         type: 'team-project-content-ready',
@@ -742,7 +754,10 @@ describe('EntryShell team project content readiness', () => {
         name: 'Ready shared project',
       }],
     }));
-    expect(await screen.findByText('Ready shared project')).toBeTruthy();
+    // Scoped to the grid: the rail's 最近浏览过 list names the same project.
+    expect(
+      await within(document.querySelector('main') as HTMLElement).findByText('Ready shared project'),
+    ).toBeTruthy();
     await waitFor(() => {
       expect(onTeamProjectContentReady).toHaveBeenCalledWith('shared-ready', 'ws-1', 'wm-1');
     });

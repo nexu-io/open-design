@@ -18,6 +18,7 @@ import {
   type CSSProperties,
   type Dispatch,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MutableRefObject,
   type ReactNode,
   type SetStateAction,
 } from 'react';
@@ -260,7 +261,10 @@ function writeStoredRailOpen(open: boolean): void {
 
 const ONBOARDING_DROPDOWN_OPEN_EVENT = 'open-design:onboarding-dropdown-open';
 
-type OnboardingAgentTestState =
+// Agent and provider validation share one shape: idle until an attempt starts,
+// then keyed by the inputs that attempt is proving, so a result that no longer
+// describes the current selection can be told apart from one that does.
+type OnboardingRuntimeTestState =
   | { status: 'idle' }
   | { status: 'running'; inputKey: string }
   | { status: 'done'; inputKey: string; result: ConnectionTestResponse };
@@ -279,6 +283,47 @@ type OnboardingAgentTestState =
 // `specs/current/plugin-driven-flow-plan.md`.
 const ONBOARDING_BYOK_AUTO_FETCH_DELAY_MS = 300;
 const ONBOARDING_BYOK_AUTO_TEST_DELAY_MS = 500;
+// Validating a local runtime spawns the agent CLI and waits for a real model
+// reply, so the debounce is long enough that browsing the agent strip does not
+// start one spawn per chip — only a selection the user rests on validates.
+export const ONBOARDING_LOCAL_AUTO_TEST_DELAY_MS = 500;
+
+type OnboardingInlineTestRun = {
+  inputKey: string;
+  controller: AbortController;
+  promise: Promise<ConnectionTestResponse | null>;
+};
+
+/**
+ * Start `run` for `inputKey`, or hand back the attempt already validating
+ * exactly those inputs.
+ *
+ * Onboarding validates the chosen runtime from two places: the background pass
+ * that starts as soon as a selection settles, and the Continue click that must
+ * not finish onboarding on an unproven runtime. Both have to resolve to ONE
+ * round trip — a Continue landing mid-flight joins the pass in progress rather
+ * than being swallowed or spawning the agent a second time.
+ *
+ * An attempt whose inputs the user has already moved past can only produce a
+ * result that gets discarded (see `continueAttemptStillCurrent`), so it is
+ * aborted instead of being left to hold the runtime and race the replacement's
+ * state writes. The daemon cancels the connection test with the request.
+ */
+function startOrJoinInlineTest(
+  ref: MutableRefObject<OnboardingInlineTestRun | null>,
+  inputKey: string,
+  run: (signal: AbortSignal) => Promise<ConnectionTestResponse | null>,
+): Promise<ConnectionTestResponse | null> {
+  const current = ref.current;
+  if (current?.inputKey === inputKey) return current.promise;
+  current?.controller.abort();
+  const controller = new AbortController();
+  const promise = run(controller.signal).finally(() => {
+    if (ref.current?.controller === controller) ref.current = null;
+  });
+  ref.current = { inputKey, controller, promise };
+  return promise;
+}
 
 type EntryCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   metadata?: CreateInput['metadata'];
@@ -658,6 +703,7 @@ export function EntryShell({
     workspaceBillingResponse,
     workspaceContext,
   );
+  const [goPlanSunsetMessagePending, setGoPlanSunsetMessagePending] = useState(false);
   const deepSeekCampaignVisibility = useDeepSeekV4FlashCampaignVisibility();
   // Same personal-vs-team accountPlan rule as App's `resolvedAmrPlan`.
   const deepSeekCampaignPlan = resolvePlanLabelTier({
@@ -668,7 +714,7 @@ export function EntryShell({
         ? null
         : amrAccountPlan?.trim() || null,
   });
-  const deepSeekV4FlashCampaignAudience = resolveDeepSeekV4FlashCampaignAudience({
+  const resolvedDeepSeekV4FlashCampaignAudience = resolveDeepSeekV4FlashCampaignAudience({
     // Subscription is the only campaign segmentation axis. In particular,
     // `resolvePlanLabelTier` turns the backend-confirmed unsubscribed state into
     // `free`; wallet balance / historical recharge never upgrades this audience.
@@ -676,6 +722,9 @@ export function EntryShell({
     loggedIn: amrLoggedIn,
     now: deepSeekCampaignVisibility.now,
   });
+  const deepSeekV4FlashCampaignAudience = goPlanSunsetMessagePending
+    ? 'unknown'
+    : resolvedDeepSeekV4FlashCampaignAudience;
   const topRightCampaignAudience =
     deepSeekV4FlashCampaignAudience === 'unknown'
       ? null
@@ -1629,6 +1678,7 @@ export function EntryShell({
                 page="home"
                 metricsConsent={config.telemetry?.metrics === true}
                 installationId={config.installationId}
+                loggedIn={amrLoggedIn}
               />
             ) : null
           }
@@ -1645,6 +1695,24 @@ export function EntryShell({
           // only a successful null context (or known local sign-out) may show
           // the sign-in card.
           footerNotice={accountFooterNotice}
+          /* Same catalog and same opener the 全部项目 grid uses below, so the
+             rail's 最近浏览过 list and that view's 最近浏览过 tab are two views of
+             ONE list rather than two sorts of two lists. */
+          recentProjects={projectSearchProjects}
+          onOpenRecentProject={handleOpenAllProjects}
+          /* Same handlers the projects grid drives its own row menu with, so a
+             rename or a delete from the rail lands in exactly one place. */
+          onRenameRecentProject={onRenameProject}
+          onDeleteRecentProject={onDeleteProject}
+          priorityAnnouncementActive={
+            view === 'home'
+            && goPlanSunsetMessagePending
+            && amrBalanceGateBlock == null
+            && amrLowBalanceWarn == null
+          }
+          onPriorityAnnouncementPendingChange={setGoPlanSunsetMessagePending}
+          priorityAnnouncementCurrentPlanId={deepSeekCampaignPlan}
+          priorityAnnouncementMetricsConsent={config.telemetry?.metrics === true}
         />
         {projectSearchOpen ? (
           <ProjectSearchModal
@@ -1661,7 +1729,7 @@ export function EntryShell({
               the workspace tabs bar (entryRailBridge), the updater popup host
               lives in the rail footer, and everything below is fixed-position
               or portalled so it occupies no layout space here. */}
-          <WhatsNewPopup active={view === 'home'} />
+          <WhatsNewPopup active={view === 'home' && !goPlanSunsetMessagePending} />
           {/* The campaign badge lives in EntryNavRail's top-right cluster so it
               stays beside the account module across every entry tab. */}
           {amrBalanceGateBlock ? (
@@ -1706,7 +1774,6 @@ export function EntryShell({
                 onDeleteProject={onDeleteProject}
                 onDuplicateProject={onDuplicateProject}
                 onRenameProject={onRenameProject}
-                onBrowseRegistry={() => changeView('plugins')}
                 onOpenIntegrations={() => openIntegrationTab('connectors')}
                 onOpenMcp={() => openIntegrationTab('mcp')}
                 onOpenNewProject={(tab) => {
@@ -1763,6 +1830,7 @@ export function EntryShell({
                 designTemplates={designTemplates}
                 connectors={connectors}
                 connectorsLoading={connectorsLoading}
+                isActive={view === 'tasks'}
               />
             </div>
             <div data-testid="entry-view-plugins" data-active={view === 'plugins' ? 'true' : 'false'} {...inactiveViewProps(view === 'plugins')}>
@@ -2067,6 +2135,7 @@ function OnboardingView({
   const analytics = useAnalytics();
   const [step, setStep] = useState(0);
   const [runtime, setRuntime] = useState<'amr' | 'local' | 'byok' | null>(null);
+  const [runtimeSetupEntry, setRuntimeSetupEntry] = useState<'cloud' | 'chooser'>('chooser');
   const [modelSource, setModelSource] = useState<'amr' | 'local' | 'byok'>('amr');
   const modelSourceOptionRefs = useRef<
     Record<'amr' | 'local' | 'byok', HTMLButtonElement | null>
@@ -2092,14 +2161,14 @@ function OnboardingView({
   }, [amrLoginPending]);
   const [visibleAgentIds, setVisibleAgentIds] = useState<string[]>([]);
   const [dshSetup, setDshSetup] = useState<{ busy: boolean; error: string | null } | null>(null);
-  const [providerTestState, setProviderTestState] = useState<
-    | { status: 'idle' }
-    | { status: 'running'; inputKey: string }
-    | { status: 'done'; inputKey: string; result: ConnectionTestResponse }
-  >({ status: 'idle' });
-  const [agentTestState, setAgentTestState] = useState<OnboardingAgentTestState>({
+  const [providerTestState, setProviderTestState] =
+    useState<OnboardingRuntimeTestState>({ status: 'idle' });
+  const [agentTestState, setAgentTestState] = useState<OnboardingRuntimeTestState>({
     status: 'idle',
   });
+  // True only while a Continue click is itself waiting on validation, never for
+  // the background pass — see `awaitRuntimeValidation`.
+  const [continuePending, setContinuePending] = useState(false);
   const [providerModelsState, setProviderModelsState] = useState<
     | { status: 'idle' }
     | { status: 'running'; inputKey: string }
@@ -2126,11 +2195,16 @@ function OnboardingView({
   } | null>(null);
   const cliRefreshPendingTokenRef = useRef<number | null>(null);
   const amrLoginPollCancelledRef = useRef(false);
+  const amrHydratedLoginPollStartedRef = useRef(false);
+  const onboardingMountedRef = useRef(true);
   const amrLoginStartPendingRef = useRef(false);
   const amrLoginCancelRequestedRef = useRef(false);
   const amrAuthAttemptIdRef = useRef<string | null>(null);
   const providerModelsAutoFetchKeyRef = useRef<string | null>(null);
   const providerAutoTestKeyRef = useRef<string | null>(null);
+  const agentAutoTestKeyRef = useRef<string | null>(null);
+  const agentTestRunRef = useRef<OnboardingInlineTestRun | null>(null);
+  const providerTestRunRef = useRef<OnboardingInlineTestRun | null>(null);
   const providerModelAutoSelectRef = useRef({
     model: config.model,
     providerModelsInputKey: '',
@@ -2190,6 +2264,7 @@ function OnboardingView({
   );
   const visibleAgents = candidateCliAgents.filter((agent) => visibleAgentIds.includes(agent.id));
   const amrSignedIn = isAmrSessionAuthenticated(amrStatus);
+  const amrLoginBusy = amrLoginPending || amrStatus?.loginInFlight === true;
   const selectedAgent = visibleAgents.find((agent) => agent.id === config.agentId) ?? null;
   const selectedAgentChoice = selectedAgent ? (config.agentModels?.[selectedAgent.id] ?? {}) : {};
   const normalizedSelectedAgentChoice = effectiveAgentModelChoice(selectedAgent, selectedAgentChoice) ?? selectedAgentChoice;
@@ -2209,13 +2284,18 @@ function OnboardingView({
   const canTestAgent = Boolean(selectedAgent) && daemonLive;
   const runtimeSetupStep = step === 2;
   const localRuntimeConfigured = selectedAgent?.available === true;
+  // A setup-required entry (DeepSeek Harness before its companion is installed)
+  // stays in the picker and can be the saved selection, but it is not something
+  // to prove on the user's behalf: the daemon resolves its binary and really
+  // does try to start the runtime, so the panel would answer with a failure
+  // while the same screen is still telling the user to finish installing it.
+  // Only a selection the step would actually let them continue on is worth
+  // spending an unprompted spawn on. Pressing Test stays their call.
+  const agentValidationWorthStarting = canTestAgent && localRuntimeConfigured;
   const byokRuntimeConfigured = canTestProvider;
   const connectStepRuntimeReady =
     (runtime === 'local' && localRuntimeConfigured) ||
     (runtime === 'byok' && byokRuntimeConfigured);
-  const connectStepTestRunning =
-    (runtime === 'local' && visibleAgentTestState.status === 'running') ||
-    (runtime === 'byok' && visibleProviderTestState.status === 'running');
   const connectStepBlocked = runtimeSetupStep && !connectStepRuntimeReady;
   // What the user is looking at RIGHT NOW. `handlePrimaryAction` awaits a
   // validation round trip before it persists anything, and its closure is
@@ -2232,6 +2312,10 @@ function OnboardingView({
     runtime,
     agentTestInputKey,
     providerTestInputKey,
+  };
+  const cloudLandingIntentStillCurrent = () => {
+    const intent = onboardingIntentRef.current;
+    return intent.step === 0 && intent.runtime === null;
   };
   const connectGateReason: 'no_runtime' | 'local_agent_unavailable' | 'byok_unverified' | null =
     !runtimeSetupStep
@@ -2262,7 +2346,9 @@ function OnboardingView({
         );
 
   useEffect(() => {
+    onboardingMountedRef.current = true;
     return () => {
+      onboardingMountedRef.current = false;
       amrLoginPollCancelledRef.current = true;
       agentRevealTimersRef.current.forEach((timer) => clearTimeout(timer));
       agentRevealTimersRef.current = [];
@@ -2307,6 +2393,12 @@ function OnboardingView({
       .then((next) => {
         if (!cancelled && next) {
           setAmrStatus(next);
+          if (next.authAttemptId) {
+            amrAuthAttemptIdRef.current = next.authAttemptId;
+          }
+          if (next.loginInFlight && cloudLandingIntentStillCurrent()) {
+            startHydratedAmrLoginPoll();
+          }
           onAmrLoginStatusChange?.(next);
         }
       })
@@ -2317,6 +2409,21 @@ function OnboardingView({
       cancelled = true;
     };
   }, [onAmrLoginStatusChange]);
+
+  useEffect(() => {
+    if (
+      step !== 0
+      || runtime !== null
+      || amrLoginPending
+      || amrStatus?.loginInFlight !== true
+    ) {
+      return;
+    }
+    // The mount status request may settle while a direct Local/BYOK setup is
+    // active. Returning to the Cloud landing must resume observation of that
+    // hydrated attempt instead of leaving its stale cancel state indefinitely.
+    startHydratedAmrLoginPoll();
+  }, [amrLoginPending, amrStatus?.loginInFlight, runtime, step]);
 
   useEffect(() => {
     if (
@@ -2344,7 +2451,7 @@ function OnboardingView({
   ]);
 
   useEffect(() => {
-    if (runtime === 'amr') return;
+    if (runtime === 'amr' || runtime === null) return;
     amrLoginPollCancelledRef.current = true;
     setAmrLoginPending(false);
     setAmrLoginCancelPending(false);
@@ -2534,6 +2641,38 @@ function OnboardingView({
     agentRevealTimersRef.current = [];
   }
 
+  /**
+   * Undo whichever runtime validation is still in flight.
+   *
+   * A validation is not free to abandon: proving a local runtime spawns a real
+   * agent CLI, and left alone that child occupies the daemon until its own
+   * timeout — so a user who opens the setup step, looks, and leaves would pay
+   * for a check nobody can consume. Aborting hands the child back immediately.
+   *
+   * Undoing means the bookkeeping too. An aborted run deliberately writes no
+   * result, so leaving `*AutoTestKeyRef` claiming these inputs were validated
+   * would strand the panel on a `running` state no run will ever finish, and
+   * the auto-validation effect would skip them for good on the way back in.
+   * A run that already finished is left alone — its result is still the truth
+   * about the current selection, and re-proving it would cost another spawn.
+   */
+  function abortRuntimeValidations(): void {
+    if (agentTestRunRef.current) {
+      agentTestRunRef.current.controller.abort();
+      agentTestRunRef.current = null;
+      agentAutoTestKeyRef.current = null;
+      setAgentTestState((current) => (current.status === 'running' ? { status: 'idle' } : current));
+    }
+    if (providerTestRunRef.current) {
+      providerTestRunRef.current.controller.abort();
+      providerTestRunRef.current = null;
+      providerAutoTestKeyRef.current = null;
+      setProviderTestState((current) => (
+        current.status === 'running' ? { status: 'idle' } : current
+      ));
+    }
+  }
+
   function selectDefaultCliAgent(availableAgents: AgentInfo[]): AgentInfo | null {
     const selectedAgent =
       availableAgents.find((agent) => agent.id === config.agentId) ?? availableAgents[0] ?? null;
@@ -2622,7 +2761,7 @@ function OnboardingView({
     emitOnboardingClick('back', 'back');
     clearAgentRevealTimers();
     setRuntime(null);
-    setStep(1);
+    setStep(runtimeSetupEntry === 'cloud' ? 0 : 1);
   }
 
   function completeStreamlinedOnboarding(
@@ -2644,6 +2783,28 @@ function OnboardingView({
       return;
     }
     setStep(1);
+  }
+
+  function startHydratedAmrLoginPoll(): void {
+    if (amrHydratedLoginPollStartedRef.current) return;
+    amrHydratedLoginPollStartedRef.current = true;
+    amrLoginPollCancelledRef.current = false;
+    setAmrLoginPending(true);
+    void pollAmrLoginCompletion()
+      .then((completed) => {
+        if (
+          completed
+          && onboardingMountedRef.current
+          && cloudLandingIntentStillCurrent()
+        ) {
+          continueAfterCloudSignIn();
+        }
+      })
+      .finally(() => {
+        if (onboardingMountedRef.current) {
+          setAmrLoginPending(false);
+        }
+      });
   }
 
   function handleModelSourceKeyDown(
@@ -2690,6 +2851,7 @@ function OnboardingView({
         runtime_type: 'local_cli',
       });
       setRuntime('local');
+      setRuntimeSetupEntry('chooser');
       void scanCliAgents({ preferExisting: true });
       setStep(2);
       return;
@@ -2697,6 +2859,7 @@ function OnboardingView({
 
     emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
     setRuntime('byok');
+    setRuntimeSetupEntry('chooser');
     setStep(2);
   }
   /**
@@ -2725,14 +2888,45 @@ function OnboardingView({
       : now.providerTestInputKey === startedInputKey;
   }
 
+  /**
+   * The already-validated result for what the user is looking at, or null when
+   * Continue still has to prove the runtime itself.
+   *
+   * The background pass usually has an answer waiting by the time Continue is
+   * pressed; taking it here is what keeps the click instant instead of paying
+   * for another agent spawn.
+   */
+  function settledRuntimeValidation(
+    state: OnboardingRuntimeTestState,
+  ): ConnectionTestResponse | null {
+    return state.status === 'done' && state.result.ok ? state.result : null;
+  }
+
+  /**
+   * Wait out a validation the user is actively blocked on, with the button
+   * showing it.
+   *
+   * A background pass runs on its own and must leave Continue pressable, so
+   * only the wait a click actually owns is allowed to make the button busy.
+   */
+  async function awaitRuntimeValidation(
+    validate: () => Promise<ConnectionTestResponse | null>,
+  ): Promise<ConnectionTestResponse | null> {
+    setContinuePending(true);
+    try {
+      return await validate();
+    } finally {
+      setContinuePending(false);
+    }
+  }
+
   async function handlePrimaryAction() {
-    if (connectStepBlocked || connectStepTestRunning) return;
+    if (connectStepBlocked || continuePending) return;
     if (runtime === 'local' && selectedAgent) {
       const startedInputKey = agentTestInputKey;
       const testResult =
-        visibleAgentTestState.status === 'done' && visibleAgentTestState.result.ok
-          ? visibleAgentTestState.result
-          : await testAgentInline();
+        settledRuntimeValidation(visibleAgentTestState)
+        ?? (await awaitRuntimeValidation(testAgentInline));
       if (!testResult?.ok) return;
       if (!continueAttemptStillCurrent('local', startedInputKey)) return;
       await onConfigPersist({
@@ -2747,9 +2941,8 @@ function OnboardingView({
     if (runtime === 'byok') {
       const startedInputKey = providerTestInputKey;
       const testResult =
-        visibleProviderTestState.status === 'done' && visibleProviderTestState.result.ok
-          ? visibleProviderTestState.result
-          : await testProviderInline();
+        settledRuntimeValidation(visibleProviderTestState)
+        ?? (await awaitRuntimeValidation(testProviderInline));
       if (!testResult?.ok) return;
       if (!continueAttemptStillCurrent('byok', startedInputKey)) return;
       await onConfigPersist({ ...config, mode: 'api' });
@@ -2763,7 +2956,7 @@ function OnboardingView({
   // chosen on the following screen so signing in never overwrites a restored
   // Local/BYOK configuration.
   async function handleCloudSignIn() {
-    if (amrLoginPending || amrLoginCancelPending) return;
+    if (amrLoginBusy || amrLoginCancelPending) return;
     const cardAttribution = recordAmrEntry(
       analytics.track,
       'onboarding_amr_card',
@@ -2785,7 +2978,7 @@ function OnboardingView({
   async function handleAmrSignInToContinue(
     attribution?: AmrEntryAttribution | null,
   ) {
-    if (amrLoginPending || amrLoginCancelPending) return;
+    if (amrLoginBusy || amrLoginCancelPending) return;
     amrLoginPollCancelledRef.current = false;
     amrLoginCancelRequestedRef.current = false;
     setAmrLoginError(null);
@@ -2907,7 +3100,7 @@ function OnboardingView({
   }
 
   async function handleCancelAmrLogin() {
-    if (!amrLoginPending || amrLoginCancelPending) return;
+    if (!amrLoginBusy || amrLoginCancelPending) return;
     const loginStartPending = amrLoginStartPendingRef.current;
     const authAttemptId = amrAuthAttemptIdRef.current;
     setAmrLoginError(null);
@@ -3003,7 +3196,14 @@ function OnboardingView({
             resolveAmrAuthTracking(analytics.track, 'timeout', 'login_timeout', {
               authAttemptId,
             });
-            void cancelVelaLogin(authAttemptId);
+            const cancelResult = await cancelVelaLogin(authAttemptId);
+            if (cancelResult.canceled === true) {
+              setAmrStatus((current) => (
+                current
+                  ? { ...current, loggedIn: false, loginInFlight: false, user: null }
+                  : current
+              ));
+            }
           }
           console.error('[amr-login] poll timed out waiting for a signed-in status', { nextStatus });
         } else {
@@ -3091,65 +3291,78 @@ function OnboardingView({
     }
   }
 
-  async function testProviderInline(): Promise<ConnectionTestResponse | null> {
-    if (!canTestProvider || providerTestState.status === 'running') return null;
+  function testProviderInline(): Promise<ConnectionTestResponse | null> {
+    if (!canTestProvider) return Promise.resolve(null);
     const inputKey = providerTestInputKey;
-    providerAutoTestKeyRef.current = inputKey;
-    setProviderTestState({ status: 'running', inputKey });
-    try {
-      const result = await testApiProvider({
-        protocol: apiProtocol,
-        baseUrl: config.baseUrl,
-        apiKey: config.apiKey,
-        model: config.model,
-        apiVersion:
-          apiProtocol === 'azure'
-            ? config.apiVersion?.trim() || undefined
-            : undefined,
-      });
-      setProviderTestState({ status: 'done', inputKey, result });
-      return result;
-    } catch (error) {
-      const result: ConnectionTestResponse = {
-        ok: false,
-        kind: 'unknown',
-        latencyMs: 0,
-        model: config.model,
-        detail: error instanceof Error ? error.message : 'Test request failed',
-      };
-      setProviderTestState({ status: 'done', inputKey, result });
-      return result;
-    }
+    const protocol = apiProtocol;
+    const baseUrl = config.baseUrl;
+    const apiKey = config.apiKey;
+    const model = config.model;
+    const apiVersion =
+      protocol === 'azure' ? config.apiVersion?.trim() || undefined : undefined;
+    return startOrJoinInlineTest(providerTestRunRef, inputKey, async (signal) => {
+      providerAutoTestKeyRef.current = inputKey;
+      setProviderTestState({ status: 'running', inputKey });
+      try {
+        const result = await testApiProvider(
+          { protocol, baseUrl, apiKey, model, apiVersion },
+          signal,
+        );
+        setProviderTestState({ status: 'done', inputKey, result });
+        return result;
+      } catch (error) {
+        // A superseded attempt leaves the state to the run that replaced it.
+        if (signal.aborted) return null;
+        const result: ConnectionTestResponse = {
+          ok: false,
+          kind: 'unknown',
+          latencyMs: 0,
+          model,
+          detail: error instanceof Error ? error.message : 'Test request failed',
+        };
+        setProviderTestState({ status: 'done', inputKey, result });
+        return result;
+      }
+    });
   }
 
-  async function testAgentInline(): Promise<ConnectionTestResponse | null> {
-    if (!selectedAgent || !canTestAgent || agentTestState.status === 'running') return null;
+  function testAgentInline(): Promise<ConnectionTestResponse | null> {
+    if (!selectedAgent || !canTestAgent) return Promise.resolve(null);
     const inputKey = agentTestInputKey;
     const agent = selectedAgent;
     const model = selectedAgentTestModel;
     const reasoning = selectedAgentTestReasoning;
-    setAgentTestState({ status: 'running', inputKey });
-    try {
-      const result = await testAgent({
-        agentId: agent.id,
-        model: model || undefined,
-        reasoning: reasoning || undefined,
-        agentCliEnv: config.agentCliEnv ?? {},
-      });
-      setAgentTestState({ status: 'done', inputKey, result });
-      return result;
-    } catch (error) {
-      const result: ConnectionTestResponse = {
-        ok: false,
-        kind: 'unknown',
-        latencyMs: 0,
-        model: model || 'default',
-        agentName: agent.name,
-        detail: error instanceof Error ? error.message : 'Test request failed',
-      };
-      setAgentTestState({ status: 'done', inputKey, result });
-      return result;
-    }
+    const agentCliEnv = config.agentCliEnv ?? {};
+    return startOrJoinInlineTest(agentTestRunRef, inputKey, async (signal) => {
+      agentAutoTestKeyRef.current = inputKey;
+      setAgentTestState({ status: 'running', inputKey });
+      try {
+        const result = await testAgent(
+          {
+            agentId: agent.id,
+            model: model || undefined,
+            reasoning: reasoning || undefined,
+            agentCliEnv,
+          },
+          signal,
+        );
+        setAgentTestState({ status: 'done', inputKey, result });
+        return result;
+      } catch (error) {
+        // A superseded attempt leaves the state to the run that replaced it.
+        if (signal.aborted) return null;
+        const result: ConnectionTestResponse = {
+          ok: false,
+          kind: 'unknown',
+          latencyMs: 0,
+          model: model || 'default',
+          agentName: agent.name,
+          detail: error instanceof Error ? error.message : 'Test request failed',
+        };
+        setAgentTestState({ status: 'done', inputKey, result });
+        return result;
+      }
+    });
   }
 
   async function confirmDshSetup() {
@@ -3177,15 +3390,32 @@ function OnboardingView({
       const effectiveChoice = effectiveAgentModelChoice(installed, choice) ?? choice;
       const model = effectiveChoice.model ?? defaultAgentModelId(installed) ?? '';
       const reasoning = choice.reasoning ?? '';
-      const inputKey = [installed.id, model, reasoning, JSON.stringify(config.agentCliEnv ?? {})].join('\n');
-      setAgentTestState({ status: 'running', inputKey });
-      const result = await testAgent({
-        agentId: installed.id,
-        model: model || undefined,
-        reasoning: reasoning || undefined,
-        agentCliEnv: config.agentCliEnv ?? {},
+      const agentCliEnv = config.agentCliEnv ?? {};
+      const inputKey = [installed.id, model, reasoning, JSON.stringify(agentCliEnv)].join('\n');
+      // Register the post-install validation the way the background pass does,
+      // so neither that pass nor Continue spawns the freshly installed
+      // companion a second time while this one is still proving it.
+      await startOrJoinInlineTest(agentTestRunRef, inputKey, async (signal) => {
+        agentAutoTestKeyRef.current = inputKey;
+        setAgentTestState({ status: 'running', inputKey });
+        try {
+          const result = await testAgent(
+            {
+              agentId: installed.id,
+              model: model || undefined,
+              reasoning: reasoning || undefined,
+              agentCliEnv,
+            },
+            signal,
+          );
+          setAgentTestState({ status: 'done', inputKey, result });
+          return result;
+        } catch (error) {
+          // A superseded attempt leaves the state to the run that replaced it.
+          if (signal.aborted) return null;
+          throw error;
+        }
       });
-      setAgentTestState({ status: 'done', inputKey, result });
     } catch (error) {
       setDshSetup({
         busy: false,
@@ -3259,29 +3489,73 @@ function OnboardingView({
     step,
   ]);
 
+  // No "already running" bail in either auto-validation effect below:
+  // `startOrJoinInlineTest` serializes the runs, so skipping while one is in
+  // flight would only leave the pass proving inputs the user has already moved
+  // off — an edited key would not start validating until the request it
+  // replaced finished running out its own seconds.
   useEffect(() => {
     if (runtime !== 'byok' || !runtimeSetupStep) return;
     if (!canTestProvider) return;
-    if (providerTestState.status === 'running') return;
     if (providerAutoTestKeyRef.current === providerTestInputKey) return;
     const timer = window.setTimeout(() => {
+      // Re-read at fire time: a manual Test press does not disturb this
+      // effect's inputs, so an armed debounce would otherwise spend a second
+      // request on inputs that were just validated by hand.
+      if (providerAutoTestKeyRef.current === providerTestInputKey) return;
       void testProviderInline();
     }, ONBOARDING_BYOK_AUTO_TEST_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, [
-    canTestProvider,
-    providerTestInputKey,
-    providerTestState.status,
-    runtime,
-    step,
-  ]);
+  }, [canTestProvider, providerTestInputKey, runtime, step]);
+
+  // Validate the local runtime as soon as the selection settles, the way BYOK
+  // already validates a settled provider. Continue cannot finish onboarding on
+  // an unproven runtime, and proving one costs a full agent spawn plus a model
+  // reply — seconds, not milliseconds. Charging that to the click is what makes
+  // Continue feel stuck; starting it here overlaps it with the time the user
+  // spends reading the panel and picking a model, so the click usually has an
+  // answer waiting for it.
+  useEffect(() => {
+    if (runtime !== 'local' || !runtimeSetupStep) return;
+    if (!agentValidationWorthStarting) return;
+    if (agentAutoTestKeyRef.current === agentTestInputKey) return;
+    const timer = window.setTimeout(() => {
+      // Re-read at fire time: a manual Test press does not disturb this
+      // effect's inputs, so an armed debounce would otherwise spend a second
+      // agent spawn on inputs that were just validated by hand.
+      if (agentAutoTestKeyRef.current === agentTestInputKey) return;
+      void testAgentInline();
+    }, ONBOARDING_LOCAL_AUTO_TEST_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [agentTestInputKey, agentValidationWorthStarting, runtime, step]);
+
+  // A validation only has a consumer while the setup step can still act on its
+  // verdict. Leaving the step (Back, a runtime switch, closing onboarding) ends
+  // that, and so does staying put while the inputs stop being testable at all —
+  // a cleared BYOK key or a daemon that went away leaves a request nothing can
+  // consume, exactly like walking out. Both release the runtime through the
+  // same cleanup, and React runs it on unmount too.
+  // Deliberately the wider `canTestAgent` rather than the narrower condition
+  // that governs starting: a run the user began by hand on a setup-required
+  // entry still has to be released when they leave. What may start on its own
+  // is a stricter question than what must be cleaned up.
+  const runtimeValidationConsumable =
+    runtimeSetupStep
+    && ((runtime === 'local' && canTestAgent) || (runtime === 'byok' && canTestProvider));
+
+  useEffect(() => {
+    if (!runtimeValidationConsumable) return;
+    return () => {
+      abortRuntimeValidations();
+    };
+  }, [runtime, runtimeValidationConsumable]);
 
   const primaryActionLabel = t('settings.onboardingContinue');
 
-  // Step 1 is identity only: every user signs into OpenDesign Cloud before
-  // choosing Hosted, Local, or BYOK on the next screen.
+  // Cloud remains the primary identity path. Local CLI and BYOK are independent
+  // direct setup paths; authenticated users keep the full source chooser.
   if (step === 0) {
-    const cloudBusy = amrLoginPending;
+    const cloudBusy = amrLoginBusy;
     const amrStatusResolving = !amrStatusResolved;
     return (
       <section
@@ -3374,7 +3648,42 @@ function OnboardingView({
               >
                 {t('settings.amrCancelSignIn')}
               </button>
-            ) : null}
+            ) : (
+              <div className="onboarding-cloud__alts">
+                <Button
+                  variant="subtle"
+                  className="onboarding-cloud__alt-btn"
+                  onClick={() => {
+                    emitOnboardingClick('local_coding_agent', 'select_runtime', {
+                      runtime_type: 'local_cli',
+                    });
+                    setRuntime('local');
+                    setRuntimeSetupEntry('cloud');
+                    void scanCliAgents({ preferExisting: true });
+                    setStep(2);
+                  }}
+                >
+                  <Icon name="robot" size={16} />
+                  {t('settings.onboardingLocalTitle')}
+                </Button>
+                <span className="onboarding-cloud__alts-or">
+                  {t('settings.onboardingCloudOr')}
+                </span>
+                <Button
+                  variant="subtle"
+                  className="onboarding-cloud__alt-btn"
+                  onClick={() => {
+                    emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
+                    setRuntime('byok');
+                    setRuntimeSetupEntry('cloud');
+                    setStep(2);
+                  }}
+                >
+                  <Icon name="key" size={16} />
+                  {t('settings.onboardingByokTitle')}
+                </Button>
+              </div>
+            )}
           </div>
           <footer className="onboarding-cloud__footer">
             <LanguageMenu placement="up" align="start" />
@@ -3633,12 +3942,14 @@ function OnboardingView({
               type="button"
               className={`onboarding-view__primary${connectGateTooltip ? ' od-tooltip' : ''}`}
               onClick={handlePrimaryAction}
-              disabled={amrLoginPending || amrLoginCancelPending || connectStepTestRunning}
+              disabled={amrLoginPending || amrLoginCancelPending || continuePending}
               aria-disabled={connectStepBlocked || undefined}
+              aria-busy={continuePending || undefined}
               data-tooltip={connectGateTooltip ?? undefined}
               data-tooltip-placement="top"
             >
-              <span>{primaryActionLabel}</span>
+              {continuePending ? <Icon name="spinner" size={15} className="icon-spin" /> : null}
+              <span>{continuePending ? t('settings.testRunning') : primaryActionLabel}</span>
             </button>
           </div>
         </div>
@@ -3682,7 +3993,7 @@ function OnboardingCliSetupPanel({
   onRefresh: () => void;
   onSelectAgent: (agentId: string) => void;
   onSelectModel: (model: string) => void;
-  testState: OnboardingAgentTestState;
+  testState: OnboardingRuntimeTestState;
   canTest: boolean;
   onTest: () => void;
 }) {

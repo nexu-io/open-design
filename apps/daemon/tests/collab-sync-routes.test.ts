@@ -1677,6 +1677,32 @@ describe('collab sync routes', () => {
     expect(status.body.publishedVersion).toBeNull();
   });
 
+  it('invalidates the team-project catalog on a sync-intent share and unshare', async () => {
+    // The display read behind `/api/workspace/projects/team` is served from a
+    // 3s SWR entry, so invalidation is part of the mutation contract now. The
+    // `/api/workspaces/:id/projects` move path already invalidates; this route
+    // — the one `od project share` and CollabDemoView drive — did not, so a
+    // catalog GET right after sharing could answer with the pre-share list
+    // until the freshness window expired or a hub event happened to arrive.
+    const invalidateTeamProjectCatalog = vi.fn();
+    const api = await startSyncServer(
+      fixedShareContextProvider(true),
+      { invalidateTeamProjectCatalog },
+    );
+
+    await api.json('/api/projects/p1/collab/sync-intent', {
+      method: 'POST',
+      body: { event: 'project_team_share_requested', projectId: 'p1' },
+    });
+    expect(invalidateTeamProjectCatalog).toHaveBeenCalledTimes(1);
+
+    await api.json('/api/projects/p1/collab/sync-intent', {
+      method: 'POST',
+      body: { event: 'project_team_unshare_requested', projectId: 'p1' },
+    });
+    expect(invalidateTeamProjectCatalog).toHaveBeenCalledTimes(2);
+  });
+
   it('accepts a visibility-changed intent as a no-op signal', async () => {
     const api = await startSyncServer();
     const res = await api.json('/api/projects/p1/collab/sync-intent', {

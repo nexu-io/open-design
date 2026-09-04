@@ -160,7 +160,12 @@ export function DeepSeekV4FlashCampaign({
       setModalOpen(false);
       return;
     }
-    if (audience === 'unknown') return;
+    if (audience === 'unknown') {
+      // A higher-priority Home announcement temporarily owns the modal slot.
+      // Close without spending this campaign so it can resume afterwards.
+      setModalOpen(false);
+      return;
+    }
     if (!hasSeenCampaign(activeCampaignId)) setModalOpen(true);
   }, [active, activeCampaignId, audience]);
 

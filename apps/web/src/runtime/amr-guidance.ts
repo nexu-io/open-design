@@ -5,6 +5,7 @@
 // without a circular dependency.
 import {
   isModelWindowLimitFailure,
+  readMembershipConcurrencyResetAt,
   readModelWindowResetAt,
 } from '@open-design/contracts';
 
@@ -187,6 +188,8 @@ export type RunFailureMessageKey =
   | 'chat.runError.rateLimitedMessage'
   | 'chat.runError.modelWindowLimitMessage'
   | 'chat.runError.modelWindowLimitMessageNoTime'
+  | 'chat.runError.membershipConcurrencyLimitMessage'
+  | 'chat.runError.membershipConcurrencyLimitMessageNoTime'
   | 'chat.runError.upstreamUnavailableMessage'
   | 'chat.runError.toolLoopMessage'
   | 'chat.runError.outputInvalidMessage'
@@ -214,6 +217,7 @@ export type RunFailureTitleKey =
   | 'chat.runError.title.signInRequired'
   | 'chat.runError.title.rateLimited'
   | 'chat.runError.title.modelWindowLimit'
+  | 'chat.runError.title.membershipConcurrencyLimit'
   | 'chat.amrBalanceGate.title'
   | 'chat.runError.title.cliMissing'
   | 'chat.runError.title.promptTooLarge'
@@ -540,6 +544,23 @@ export function resolveRunFailureUi(
       messageKey: retryAt
         ? 'chat.runError.modelWindowLimitMessage'
         : 'chat.runError.modelWindowLimitMessageNoTime',
+      ...(retryAt ? { messageVars: { retryAt } } : {}),
+      secondaryRetry: false,
+      showSwitchCard: false,
+    };
+  }
+  // Membership concurrency is a temporary policy gate carried inside an ACP
+  // fatal envelope. Keep the Retry button manual, name the wait explicitly,
+  // and preserve the upstream reset instant when one is present.
+  if (detail === 'membership_concurrency_limit') {
+    const parsed = readMembershipConcurrencyResetAt(rawMessage);
+    const retryAt = parsed && Number.isFinite(Date.parse(parsed)) ? parsed : null;
+    return {
+      primaryAction: 'retry',
+      titleKey: 'chat.runError.title.membershipConcurrencyLimit',
+      messageKey: retryAt
+        ? 'chat.runError.membershipConcurrencyLimitMessage'
+        : 'chat.runError.membershipConcurrencyLimitMessageNoTime',
       ...(retryAt ? { messageVars: { retryAt } } : {}),
       secondaryRetry: false,
       showSwitchCard: false,

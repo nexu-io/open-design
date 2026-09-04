@@ -1,6 +1,6 @@
 {
   "name": "@open-design/launcher-proto",
-  "version": "0.20.3",
+  "version": "0.21.1",
   "private": true,
   "type": "module",
   "main": "./dist/index.mjs",

@@ -36,6 +36,7 @@ describe('DeepSeek workbench campaign badge', () => {
           audience="unpaid"
           page="home"
           metricsConsent={false}
+          loggedIn
         />
       </I18nProvider>,
     );

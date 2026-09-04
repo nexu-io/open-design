@@ -34,6 +34,22 @@ test('[P2] captures the project workspace surface', async ({ page }) => {
   await captureVisual(page, 'visual-project-workspace');
 });
 
+test('[P1] keeps the project account action host anchored to the right edge', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await configureVisualPage(page);
+  await gotoVisualHome(page);
+  await gotoVisualWorkspace(page);
+
+  const accountActionsRect = await page
+    .getByTestId('workspace-chrome-account-actions')
+    .evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { left: rect.left, right: rect.right };
+    });
+  expect(accountActionsRect.left).toBeGreaterThan(1000);
+  expect(1280 - accountActionsRect.right).toBeLessThanOrEqual(24);
+});
+
 test('[P2] captures the workspace staged contexts surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
@@ -240,10 +256,11 @@ test('[P2] captures the topbar BYOK execution switcher surface', async ({ page }
   await gotoVisualHome(page);
 
   const chip = page.getByTestId('inline-model-switcher-chip');
-  // BYOK identity reads off the compact chip now: the link glyph stands in for
-  // an agent logo and the configured model name follows it. That is what the
+  // BYOK identity reads off the compact chip now: the selected model's brand
+  // mark leads (the link glyph is only the fallback for a vendor without one)
+  // and the configured model name follows it. That is what the
   // `aria-selected` mode tab used to prove.
-  await expect(chip.locator('.inline-switcher__byok-glyph')).toBeVisible();
+  await expect(chip.locator('.inline-switcher__chip-model-logo')).toBeVisible();
   await expect(chip).toHaveAttribute('aria-label', /gpt-4o/);
   await chip.click();
   const popover = page.getByTestId('inline-model-switcher-popover');

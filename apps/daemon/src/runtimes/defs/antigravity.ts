@@ -9,7 +9,10 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import { DEFAULT_MODEL_OPTION } from './shared.js';
+import { agentCapabilities } from '../capabilities.js';
 import type { RuntimeAgentDef } from '../types.js';
+
+const ANTIGRAVITY_SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
 
 // `agy` v1.0.3 still has no `--model` flag (upstream issue #35), but the
 // TUI's Switch-Model picker writes the choice to its settings.json, and
@@ -171,6 +174,10 @@ export const antigravityAgentDef = {
   name: 'Antigravity',
   bin: 'agy',
   versionArgs: ['--version'],
+  helpArgs: ['--help'],
+  capabilityFlags: {
+    [ANTIGRAVITY_SKIP_PERMISSIONS_FLAG]: 'skipPermissions',
+  },
   fallbackModels: [
     DEFAULT_MODEL_OPTION,
     { id: 'Gemini 3.1 Pro (High)', label: 'Gemini 3.1 Pro (High)' },
@@ -233,6 +240,10 @@ export const antigravityAgentDef = {
     // so diagnostics (model override / auth / quota) land in the log.
     if (runtimeContext.agentLogFilePath) {
       args.push('--log-file', runtimeContext.agentLogFilePath);
+    }
+    // Daemon-managed print-mode runs have no interactive approval channel.
+    if (agentCapabilities.get('antigravity')?.skipPermissions) {
+      args.push(ANTIGRAVITY_SKIP_PERMISSIONS_FLAG);
     }
     args.push('-p', prompt);
     return args;

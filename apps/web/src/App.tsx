@@ -131,8 +131,9 @@ import {
   notifyWorkspaceContextRefresh,
   resolveBoundProjectWorkspaceContext,
   resolveCurrentWorkspaceContextReadWitness,
-  useWorkspaceBilling,
+  useWorkspaceBillingResponse,
   useWorkspaceContext,
+  workspaceBillingSummaryForContext,
   workspaceIdentityCacheKey,
   workspaceResourceReadContext,
 } from './collab/useWorkspaceContext';
@@ -390,9 +391,10 @@ function clearStaleAmrModelChoiceOnProfileChange(
 }
 
 /**
- * Active Cloud sign-out is an account boundary. Remove every saved execution
- * choice that could leak account A's Hosted/Local/BYOK setup into account B,
- * while preserving unrelated product preferences and authored content.
+ * Active Cloud sign-out is an account boundary for Cloud-owned execution
+ * state. Local BYOK credentials and provider choices belong to this install,
+ * not the signed-in Cloud account, so keep them available when onboarding asks
+ * the user to choose an execution path again.
  */
 export function resetExecutionConfigAfterSignOut(config: AppConfig): AppConfig {
   return {
@@ -403,20 +405,6 @@ export function resetExecutionConfigAfterSignOut(config: AppConfig): AppConfig {
     agentModels: {},
     agentCliEnv: {},
     agentCliEnvIntent: {},
-    apiProtocol: DEFAULT_CONFIG.apiProtocol,
-    apiKey: DEFAULT_CONFIG.apiKey,
-    apiVersion: DEFAULT_CONFIG.apiVersion,
-    baseUrl: DEFAULT_CONFIG.baseUrl,
-    model: DEFAULT_CONFIG.model,
-    byokImageModel: DEFAULT_CONFIG.byokImageModel,
-    byokVideoModel: DEFAULT_CONFIG.byokVideoModel,
-    byokSpeechModel: DEFAULT_CONFIG.byokSpeechModel,
-    byokSpeechVoice: DEFAULT_CONFIG.byokSpeechVoice,
-    byokProviderConfigDrafts: {},
-    byokPendingProviderKey: undefined,
-    maxTokens: DEFAULT_CONFIG.maxTokens,
-    apiProviderBaseUrl: DEFAULT_CONFIG.apiProviderBaseUrl,
-    apiProtocolConfigs: {},
   };
 }
 
@@ -887,7 +875,6 @@ function AppInner() {
       ? ['pending-account', workspaceAccountGeneration]
       : ['workspace-account', workspaceAccountGeneration, currentWorkspaceIdentity],
   );
-  const workspaceBilling = useWorkspaceBilling();
   const workspaceContextRef = useRef<WorkspaceCollabContext | null>(null);
   const workspaceContextStateRef = useRef(workspaceContextState);
   const projectRouteWorkspaceContextRef = useRef<WorkspaceCollabContext | null>(null);
@@ -1678,21 +1665,6 @@ function AppInner() {
     }, remainingMs);
     return () => window.clearTimeout(timeout);
   }, [amrAuthRetryContinuation, clearAmrAuthRetryContinuation]);
-  // The plan that gates free-tier surfaces (today: the post-generation artifact
-  // upsell). vela's login status is ACCOUNT-scoped, so a member whose plan is
-  // held by the team workspace reads `free` there and used to be shown the
-  // free-user banner; the workspace context's plan id is authoritative and
-  // wins. See resolvePlanTier for the full precedence rule.
-  const resolvedAmrPlan = resolvePlanTier({
-    billing: workspaceBilling,
-    context: workspaceContext,
-    accountPlan:
-      workspaceContextLoading || workspaceContext?.workspaceType === 'team'
-        ? null
-        : amrLoginStatus?.account?.plan?.trim()
-          || amrLoginStatus?.user?.plan?.trim()
-          || null,
-  });
   // Child surfaces report status snapshots, not login events. Deduplicate the
   // signed-in transition here: restarting the model poll for every Settings
   // snapshot updates `agents`, which makes Settings fetch status again and
@@ -4391,6 +4363,36 @@ function AppInner() {
     ? projectRouteWorkspaceContext.context
     : null;
   projectRouteWorkspaceContextRef.current = activeProjectWorkspaceContext;
+  // The post-generation upgrade gate belongs to the project that owns the
+  // conversation, not whichever Workspace the navigation shell currently
+  // selects. A bound project stays fail-closed until its exact membership and
+  // billing snapshot resolve; borrowing the ambient/account Free plan here is
+  // what interrupted paid Team members with the Free upsell.
+  const amrUpgradeWorkspaceContext = activeProject?.workspaceId
+    ? activeProjectWorkspaceContext
+    : workspaceContext;
+  const amrUpgradeWorkspaceContextLoading = activeProject?.workspaceId
+    ? activeProjectWorkspaceContext === null
+    : workspaceContextLoading;
+  const amrUpgradeBillingResponse = useWorkspaceBillingResponse({
+    context: amrUpgradeWorkspaceContext,
+    loading: amrUpgradeWorkspaceContextLoading,
+  });
+  const amrUpgradeBilling = workspaceBillingSummaryForContext(
+    amrUpgradeBillingResponse,
+    amrUpgradeWorkspaceContext,
+  );
+  const resolvedAmrPlan = resolvePlanTier({
+    billing: amrUpgradeBilling,
+    context: amrUpgradeWorkspaceContext,
+    accountPlan:
+      amrUpgradeWorkspaceContextLoading
+      || amrUpgradeWorkspaceContext?.workspaceType === 'team'
+        ? null
+        : amrLoginStatus?.account?.plan?.trim()
+          || amrLoginStatus?.user?.plan?.trim()
+          || null,
+  });
   useEffect(() => {
     const pending = amrAuthRetryContinuationRef.current;
     if (!pending) return;
@@ -5428,8 +5430,8 @@ function AppInner() {
           onboardingCompleted={config.onboardingCompleted === true}
           identityScopeKey={workspaceTabsIdentityScopeKey}
         />
-        {/* Avatar + credits keep their home-view spot (the fixed top-right
-            corner over the tabs chrome) while a project tab is open, even
+        {/* Avatar + credits keep their home-view spot (the top-right actions
+            host inside the tabs chrome) while a project tab is open, even
             though EntryShell — the cluster's usual owner — is unmounted here.
             Home and the other entry views mount theirs through EntryNavRail;
             the routes are mutually exclusive, so exactly one is on screen. */}

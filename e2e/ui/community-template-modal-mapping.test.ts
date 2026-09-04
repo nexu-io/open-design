@@ -11,7 +11,7 @@
 
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
-import { applyStandardMocks } from '@/playwright/mock-factory';
+import { applyStandardMocks, routeSignedOutVelaStatus } from '@/playwright/mock-factory';
 import { ensureRailOpen } from '@/playwright/rail';
 import { T } from '@/timeouts';
 
@@ -126,15 +126,23 @@ async function gotoCommunity(page: Page) {
   await expect(page.locator('article.community-template-card').first()).toBeVisible();
 }
 
+async function openDeckCommunityCard(page: Page) {
+  await page.getByRole('button', { name: 'Slides', exact: true }).click();
+  const card = page.locator('article.community-template-card').first();
+  await expect(card.locator('.community-template-card__foot')).toContainText('Slides');
+  await card.click();
+}
+
 test.beforeEach(async ({ page }) => {
   await applyStandardMocks(page);
+  await routeSignedOutVelaStatus(page);
   await routeMappingFixtures(page);
 });
 
 test('[P1] community template card opens the full details modal (Use split + Share), not the lightweight preview', async ({ page }) => {
   await gotoCommunity(page);
 
-  await page.locator('article.community-template-card').first().click();
+  await openDeckCommunityCard(page);
 
   // Full modal chrome: Use split action (main face + caret), Share menu,
   // and the ds-modal shell — the lightweight footer-Remix preview must not
@@ -153,12 +161,12 @@ test('[P1] community template card opens the full details modal (Use split + Sha
   await page.keyboard.press('Escape');
 });
 
-test('[P1] community Use hands into Home and the active template chip opens the lightweight preview', async ({ page }) => {
+test('[P0] signed-out Local setup can use a Community template on Home', async ({ page }) => {
   await gotoCommunity(page);
 
   // Use from the community card's full modal routes the plugin as the Home
   // composer's active driver (EntryShell onUsePlugin hand-off).
-  await page.locator('article.community-template-card').first().click();
+  await openDeckCommunityCard(page);
   await page.getByTestId(`plugin-details-use-${DECK_PLUGIN.id}`).click();
   await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
 
@@ -182,10 +190,10 @@ test('[P1] community category tabs filter the current template catalog', async (
 
   const cards = page.locator('article.community-template-card');
   await expect(cards).toHaveCount(1);
-  await expect(cards.locator('.community-template-card__foot')).toContainText('Slides');
+  await expect(cards.locator('.community-template-card__foot')).toContainText('Prototype');
 
-  await page.getByRole('button', { name: 'Prototype', exact: true }).click();
+  await page.getByRole('button', { name: 'Slides', exact: true }).click();
 
   await expect(cards).toHaveCount(1);
-  await expect(cards.locator('.community-template-card__foot')).toContainText('Prototype');
+  await expect(cards.locator('.community-template-card__foot')).toContainText('Slides');
 });

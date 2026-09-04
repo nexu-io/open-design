@@ -15,8 +15,10 @@
  * names all three, because forgetting the third is the one that actually breaks
  * an install rather than merely warning about it:
  *
- *   1. `apps/landing-page/public/install-dsh.{sh,ps1}` — the version and the
- *      `--before` resolution window.
+ *   1. `tools/release/resources/dsh-bootstrap/install-dsh.{sh,ps1}` — the
+ *      version and the `--before` resolution window (canonical product source;
+ *      landing `public/install-dsh.*` copies must stay byte-identical until
+ *      extraction).
  *   2. `apps/daemon/src/runtimes/defs/deepseek-harness.ts` — the accepted
  *      release line.
  *   3. `packages/dsh-runtime/package.json` — the peer ranges. semver only lets a
@@ -38,7 +40,7 @@ const PACKAGE = "@deepseek-ai/dsh";
 const REGISTRY = "https://registry.npmjs.org";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..");
-const INSTALLER_SH = "apps/landing-page/public/install-dsh.sh";
+const INSTALLER_SH = "tools/release/resources/dsh-bootstrap/install-dsh.sh";
 const AGENT_DEF = "apps/daemon/src/runtimes/defs/deepseek-harness.ts";
 const PEER_MANIFEST = "packages/dsh-runtime/package.json";
 

@@ -25,7 +25,10 @@
 // personal_byok workspace still has full team features.
 
 import {
+  useCallback,
   useEffect,
+  useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -55,9 +58,12 @@ import { GITHUB_STARS_FALLBACK_LABEL, formatStars, useGithubStars } from './useG
 import { PlanWordmark, planBadgeTierForWorkspace } from './PlanWordmark';
 import { RemixIcon } from './RemixIcon';
 import { InviteDialog } from './InviteDialog';
+import { RailRecentRow } from './entry-nav-rail/RailRecentRow';
+import { useProjectRunSummaries } from '../hooks/useProjectRunStatuses';
 import { MessageCenter } from './MessageCenter';
 import type { EntrySettingsSection } from './EntrySettingsMenu';
-import { useI18n } from '../i18n';
+import type { Project } from '../types';
+import { isRtlLocale, useI18n } from '../i18n';
 import { useDismissOnOutsideInteraction } from '../hooks/useDismissOnOutsideInteraction';
 import { ENTRY_RAIL_TOGGLE_EVENT } from './entryRailBridge';
 import {
@@ -96,6 +102,7 @@ import {
   workspaceAnalyticsDimensions,
 } from '../analytics/workspace';
 import { WorkbenchCampaignBadge } from './WorkbenchCampaignBadge';
+import { workspaceChromeAccountActionsHost } from './workspaceChromeActions';
 
 const REPO_URL = 'https://github.com/nexu-io/open-design';
 const GITHUB_HELP_URL = `${REPO_URL}/issues/new`;
@@ -209,7 +216,7 @@ interface Props {
   newProjectDisabled?: boolean;
   /** When false the rail is collapsed (hidden off-canvas) on the entry view. */
   open: boolean;
-  /** Extra content for the floating top-right cluster, rendered LEFT of the
+  /** Extra content for the top-right chrome cluster, rendered LEFT of the
    *  account module (e.g. the DeepSeek campaign badge). */
   topRightSlot?: ReactNode;
   /** The one shared workspace context; null → local (no cloud identity) state. */
@@ -232,13 +239,30 @@ interface Props {
    * The update-ready host (`UpdaterPopup`), which renders nothing until the
    * updater reports a downloaded, unopened installer.
    *
-   * It is an independent control immediately after the floating credits/avatar
-   * capsule (`.entry-nav-rail__account-updater`). The footer stays as the
-   * fallback home for the signed-out shell, which has no account capsule.
+   * It is an independent control in the top-right chrome cluster
+   * (`.entry-nav-rail__account-updater`), immediately after the account capsule
+   * when one is present.
    */
   updaterSlot?: ReactNode;
   /** Optional notice shown above the footer controls. */
   footerNotice?: ReactNode;
+  /** Projects for the rail's 最近浏览过 section (per product: 在插件下边新增一个
+   *  类型). The SAME catalog and the SAME order 全部项目's 最近浏览过 tab shows —
+   *  EntryShell hands over the one it already feeds that grid, so the two can
+   *  never drift; this list only takes the head of it. Empty (or absent) hides
+   *  the section entirely. */
+  recentProjects?: Project[];
+  /** Row actions for the 最近浏览过 list's ⋮ menu. Omit either to drop its item. */
+  onRenameRecentProject?: (id: string, name: string) => void;
+  onDeleteRecentProject?: (id: string) => Promise<boolean | void> | boolean | void;
+  /** Opens one of those projects — the pull-first opener, so a shared project
+   *  that is not local yet still lands. */
+  onOpenRecentProject?: (id: string) => void | Promise<unknown>;
+  /** One-off targeted announcement coordination owned by the Home shell. */
+  priorityAnnouncementActive?: boolean;
+  onPriorityAnnouncementPendingChange?: (pending: boolean) => void;
+  priorityAnnouncementCurrentPlanId?: string | null;
+  priorityAnnouncementMetricsConsent?: boolean;
 }
 
 interface NavButtonProps {
@@ -288,6 +312,211 @@ function NavButton({
       <span className="entry-nav-rail__btn-icon" aria-hidden>{children}</span>
       <span className="entry-nav-rail__btn-label">{label}</span>
     </button>
+  );
+}
+
+/** How many of the recent projects the rail lists. The rail is navigation, not
+ *  a grid: past ~8 rows the section outgrows the destinations above it and the
+ *  whole rail starts to scroll. 全部项目 is one click away for the rest, and the
+ *  section's own footer row goes there. */
+const RAIL_RECENT_LIMIT = 8;
+
+/** Remembers the section's open/closed state across launches, next to the
+ *  rail's own `od.entry.railOpen`. A disclosure the user closed should stay
+ *  closed — re-opening it on every boot is the whole reason to have the
+ *  control. */
+const RECENT_SECTION_STORAGE_KEY = 'od.entry.railRecentOpen';
+
+function readStoredRecentOpen(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    // Default OPEN: the section is new and a collapsed-by-default disclosure
+    // reads as a missing feature.
+    return window.localStorage.getItem(RECENT_SECTION_STORAGE_KEY) !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Which finished run the user has already looked at, per project (per product:
+ * 点进去之后对号换回默认 icon).
+ *
+ * Invariant: a ✓ is acknowledged for ONE specific finished run — the value is
+ * that run's id — and a newer finished run is a new notice. Keyed on the run
+ * rather than the project so the acknowledgement stays correct even when the
+ * section was collapsed (and not polling) for the whole of the next run: on
+ * re-expanding, the newest terminal run's id no longer matches and the ✓ shows
+ * again. Only a project whose live status is `succeeded` consults this at all.
+ *
+ * Persisted next to the section's own open/closed flag: a reload re-reads the
+ * same runs feed and would otherwise re-raise every ✓ the user has already
+ * cleared.
+ */
+const RECENT_SEEN_DONE_STORAGE_KEY = 'od.entry.railRecentSeenDone';
+
+type AcknowledgedRuns = Readonly<Record<string, string>>;
+
+function readStoredSeenDone(): AcknowledgedRuns {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(RECENT_SEEN_DONE_STORAGE_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    // Anything but a plain object of run ids — including a bare list of
+    // project ids, which cannot say which run it meant — reads as "nothing
+    // acknowledged". The worst case is one ✓ the user has already seen, never a
+    // missing one.
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const acknowledged: Record<string, string> = {};
+    for (const [projectId, runId] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof runId === 'string' && runId) acknowledged[projectId] = runId;
+    }
+    return acknowledged;
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredSeenDone(acknowledged: AcknowledgedRuns): void {
+  try {
+    window.localStorage.setItem(RECENT_SEEN_DONE_STORAGE_KEY, JSON.stringify(acknowledged));
+  } catch {
+    // Private mode / storage disabled: the ✓ still clears for this session.
+  }
+}
+
+/**
+ * 最近浏览过 — a collapsible list of the projects the 全部项目 view's own
+ * 最近浏览过 tab would show, sitting under 插件 in the rail (per product).
+ *
+ * It takes the catalog EntryShell already feeds that grid and shows the head of
+ * it in the same order (most recently touched first), so the rail and the grid
+ * can never disagree about what "recent" means. Rows open the project through
+ * the same pull-first opener the grid uses.
+ */
+function RailRecentSection({
+  projects,
+  onOpen,
+  onRename,
+  onDelete,
+  workspaceContext,
+  label,
+}: {
+  projects: Project[];
+  onOpen?: (id: string) => void | Promise<unknown>;
+  onRename?: (id: string, name: string) => void;
+  onDelete?: (id: string) => Promise<boolean | void> | boolean | void;
+  workspaceContext?: WorkspaceCollabContext | null;
+  label: string;
+}) {
+  const [open, setOpen] = useState(readStoredRecentOpen);
+  const items = useMemo(
+    () => [...projects].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, RAIL_RECENT_LIMIT),
+    [projects],
+  );
+  // Run status for the rows' leading glyph. `Project.status` cannot serve it —
+  // it only arrives on the UNSCOPED project list, so it is absent for every
+  // workspace-bound project (see the hook's own note) — and this is the same
+  // feed the workspace tab dropdown reads, which is what keeps the two glyph
+  // columns telling one story.
+  // Only polled while the disclosure is open: it costs one request per listed
+  // project (≤ RAIL_RECENT_LIMIT), and a collapsed section shows no glyphs.
+  const runStatusProjectIds = useMemo(() => items.map((item) => item.id), [items]);
+  const runSummaryByProjectId = useProjectRunSummaries(runStatusProjectIds, {
+    enabled: open,
+    workspaceContext,
+  });
+  const [seenDone, setSeenDone] = useState<AcknowledgedRuns>(readStoredSeenDone);
+
+  // Opening a project is what spends its ✓ (per product): the finished run on
+  // screen is recorded as seen. Recorded only when there is actually one, so
+  // the store stays the list of notices the user has dismissed rather than of
+  // every project ever opened.
+  const openProject = useCallback(
+    (id: string) => {
+      const summary = runSummaryByProjectId.get(id);
+      if (summary?.status === 'succeeded' && summary.latestTerminalRunId) {
+        const runId = summary.latestTerminalRunId;
+        setSeenDone((prev) => {
+          if (prev[id] === runId) return prev;
+          const next = { ...prev, [id]: runId };
+          writeStoredSeenDone(next);
+          return next;
+        });
+      }
+      return onOpen?.(id);
+    },
+    [onOpen, runSummaryByProjectId],
+  );
+
+  function toggle() {
+    setOpen((wasOpen) => {
+      const next = !wasOpen;
+      try {
+        window.localStorage.setItem(RECENT_SECTION_STORAGE_KEY, String(next));
+      } catch {
+        // Private mode / storage disabled: the section still toggles, it just
+        // forgets. Never let a storage failure swallow the interaction.
+      }
+      return next;
+    });
+  }
+
+  // Nothing to list is not an empty state worth a row: a workspace with no
+  // projects yet should see the rail it had before this section existed.
+  if (items.length === 0) return null;
+
+  return (
+    <div className="entry-nav-rail__recent">
+      <button
+        type="button"
+        className="entry-nav-rail__recent-head"
+        onClick={toggle}
+        aria-expanded={open}
+        data-testid="entry-nav-recent-toggle"
+      >
+        {/* Title first, chevron trailing (per product: 展开和收起的按钮在最右侧).
+            DOM order follows the visual one rather than an `order` swap, so the
+            reading order matches too. */}
+        <span className="entry-nav-rail__recent-title">{label}</span>
+        <span className="entry-nav-rail__recent-chevron" aria-hidden>
+          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} />
+        </span>
+      </button>
+      {/* The canonical disclosure pair (index.css / composio.css): the outer
+          grid animates 0fr → 1fr, the inner box carries the clip. `hidden` on
+          the wrapper would skip the transition entirely. */}
+      <div className={`accordion-collapsible${open ? ' open' : ''}`}>
+        <div className="accordion-collapsible-inner">
+          <ul className="entry-nav-rail__recent-list">
+            {items.map((project) => {
+              const summary = runSummaryByProjectId.get(project.id);
+              const status = summary?.status;
+              // An acknowledged ✓ is DROPPED, not drawn quieter: the row goes
+              // back to its default chat mark (per product). Every other status
+              // is live and stays. Acknowledged means THIS finished run was
+              // seen; a newer one is a new notice.
+              const acknowledged =
+                status === 'succeeded'
+                && summary?.latestTerminalRunId !== undefined
+                && seenDone[project.id] === summary.latestTerminalRunId;
+              return (
+                <li key={project.id}>
+                  <RailRecentRow
+                    project={project}
+                    workspaceContext={workspaceContext}
+                    runStatus={acknowledged ? undefined : status}
+                    onOpen={openProject}
+                    onRename={onRename}
+                    onDelete={onDelete}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -533,10 +762,14 @@ interface EntryTopRightClusterProps {
   updaterSlot?: ReactNode;
   onOpenSettings?: (section?: EntrySettingsSection) => void;
   onSignedOut?: () => void | Promise<void>;
+  priorityAnnouncementActive?: boolean;
+  onPriorityAnnouncementPendingChange?: (pending: boolean) => void;
+  priorityAnnouncementCurrentPlanId?: string | null;
+  priorityAnnouncementMetricsConsent?: boolean;
 }
 
 /**
- * Top-right floating cluster (portaled to document.body): an optional leading
+ * Top-right chrome cluster: an optional leading
  * slot, the standalone credits pill, and the avatar account module with its
  * hover menu — one flex row riding the workbench top-right corner.
  *
@@ -557,10 +790,29 @@ export function EntryTopRightCluster({
   updaterSlot,
   onOpenSettings,
   onSignedOut,
+  priorityAnnouncementActive,
+  onPriorityAnnouncementPendingChange,
+  priorityAnnouncementCurrentPlanId,
+  priorityAnnouncementMetricsConsent,
 }: EntryTopRightClusterProps) {
   const { t } = useI18n();
   const analytics = useAnalytics();
   const workspaceDimensions = workspaceAnalyticsDimensions(context);
+  const [chromeActionsHost, setChromeActionsHost] = useState<HTMLElement | null>(
+    workspaceChromeAccountActionsHost,
+  );
+
+  // On the initial App render the tabs chrome and this cluster are committed
+  // in the same pass, so the host does not exist while this component renders.
+  // A layout effect finds it after the DOM commit and moves the controls before
+  // paint. Electron can then build its first draggable-region hit map with the
+  // no-drag controls as real descendants of the drag header.
+  useLayoutEffect(() => {
+    // Isolated component harnesses do not mount the application chrome. Keep
+    // those public component tests usable without re-creating the whole App;
+    // the real shell always supplies the dedicated host above.
+    setChromeActionsHost(workspaceChromeAccountActionsHost() ?? document.body);
+  }, []);
 
   const isTeam = Boolean(context) && context!.workspaceType === 'team';
   const permissions = context?.permissions;
@@ -613,6 +865,22 @@ export function EntryTopRightCluster({
   const [accountMenuMode, setAccountMenuMode] = useState<'closed' | 'hover' | 'pinned'>(
     'closed',
   );
+  const updaterSlotHostRef = useRef<HTMLDivElement | null>(null);
+  const [updaterControlVisible, setUpdaterControlVisible] = useState(false);
+  // ReactNode truthiness cannot tell whether UpdaterPopup rendered its control;
+  // observe the stable host so signed-out chrome follows actual rendered content.
+  useLayoutEffect(() => {
+    const host = updaterSlotHostRef.current;
+    if (!host) {
+      setUpdaterControlVisible(false);
+      return;
+    }
+    const syncVisibility = () => setUpdaterControlVisible(host.hasChildNodes());
+    syncVisibility();
+    const observer = new MutationObserver(syncVisibility);
+    observer.observe(host, { childList: true });
+    return () => observer.disconnect();
+  }, [chromeActionsHost, updaterSlot]);
   const accountOpen = accountMenuMode !== 'closed';
   const closeAccountMenu = () => setAccountMenuMode('closed');
   useEffect(() => {
@@ -754,28 +1022,34 @@ export function EntryTopRightCluster({
     });
   }
 
-  if ((!leadingSlot && !context) || typeof document === 'undefined') return null;
+  if (typeof document === 'undefined' || !chromeActionsHost) return null;
+  if (!leadingSlot && !context && !updaterSlot) return null;
+
+  const clusterVisible = Boolean(leadingSlot || context || updaterControlVisible);
+  const updaterHostVisible = Boolean(context || updaterControlVisible);
 
   return (
     <>
       {createPortal(
-        <div className="entry-top-right-cluster">
+        <div className={clusterVisible ? 'entry-top-right-cluster' : undefined}>
           {leadingSlot}
           {/* GitHub star chip: its own option in the cluster, right after the
               campaign badge (per product) — it used to live in the account
               menu's social row. */}
-          <a
-            className="entry-top-right-github"
-            href={REPO_URL}
-            {...externalLinkProps}
-            aria-label={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
-            title={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
-            data-testid="entry-top-right-github"
-            onClick={() => trackAccountAction('github')}
-          >
-            <Icon name="github-filled" size={14} />
-            <span>{githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)}</span>
-          </a>
+          {clusterVisible ? (
+            <a
+              className="entry-top-right-github"
+              href={REPO_URL}
+              {...externalLinkProps}
+              aria-label={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
+              title={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
+              data-testid="entry-top-right-github"
+              onClick={() => trackAccountAction('github')}
+            >
+              <Icon name="github-filled" size={14} />
+              <span>{githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)}</span>
+            </a>
+          ) : null}
           {/* One shared capsule for the account module (per product: 头像和积分
               合并成一个胶囊): credits segment on the left (same availability
               rule as the menu's billing card; clicking jumps to B's billing
@@ -1007,17 +1281,22 @@ export function EntryTopRightCluster({
               ) : null}
               </div>
               </div>
-              {/* Update-ready rocket: an independent control immediately after
-                  the credits/avatar capsule. The slot stays mounted so
-                  `:empty { display: none }` can remove it from cluster layout
-                  until an installer has downloaded. */}
-              <div className="entry-nav-rail__account-updater" data-testid="entry-nav-account-updater">
-                {updaterSlot}
-              </div>
             </>
           ) : null}
+          {/* Update-ready rocket: an independent top-right control. With an
+              account it follows the credits/avatar capsule; signed-out keeps
+              the same position without inventing an empty account shell. The
+              slot stays mounted so `:empty { display: none }` can remove it
+              until an installer has downloaded. */}
+          <div
+            ref={updaterSlotHostRef}
+            className={updaterHostVisible ? 'entry-nav-rail__account-updater' : undefined}
+            data-testid={updaterHostVisible ? 'entry-nav-account-updater' : undefined}
+          >
+            {updaterSlot}
+          </div>
         </div>,
-        document.body,
+        chromeActionsHost,
       )}
       {/* Panel + unread polling live here (outside the hover menu, which
           unmounts when closed); the 消息中心 menu row above just opens it.
@@ -1032,6 +1311,10 @@ export function EntryTopRightCluster({
           onOpenChange={setMessageCenterOpen}
           onUnreadCountChange={setMessageUnreadCount}
           onOpenNotificationSettings={onOpenSettings ? () => onOpenSettings('notifications') : undefined}
+          priorityAnnouncementActive={priorityAnnouncementActive}
+          onPriorityAnnouncementPendingChange={onPriorityAnnouncementPendingChange}
+          priorityAnnouncementCurrentPlanId={priorityAnnouncementCurrentPlanId}
+          priorityAnnouncementMetricsConsent={priorityAnnouncementMetricsConsent}
         />
       ) : null}
     </>
@@ -1110,6 +1393,7 @@ export function WorkspaceTopRightAccountCluster({
           page="project"
           metricsConsent={metricsConsent}
           installationId={installationId}
+          loggedIn={amrLoggedIn}
         />
       ) : null}
       updaterSlot={updaterSlot}
@@ -1123,8 +1407,9 @@ export function WorkspaceTopRightAccountCluster({
  * Community/contact links pinned to the bottom of the nav rail.
  *
  * The row's first slot is the Discord invite for every locale (the Chinese
- * Feishu group entry was retired so there is one community to point at). X
- * and mail are locale-independent. Analytics keeps reporting these
+ * Feishu group entry was retired so there is one community to point at).
+ * All three labels are translated and surface through the shared
+ * `.od-tooltip` layer. Analytics keeps reporting these
  * under `area: 'account_menu'` so the existing funnel stays comparable across
  * the move out of that menu.
  */
@@ -1135,9 +1420,20 @@ function RailSocialRow({
   page: TrackingWorkspacePage;
   dimensions: ReturnType<typeof workspaceAnalyticsDimensions>;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const analytics = useAnalytics();
+  // The rail sits on the leading edge, so tooltips open away from it —
+  // right in LTR, left once RTL moves the whole rail to the right edge.
+  // Without the flip the bubble would be clamped against the viewport
+  // and land back on top of the icons it describes.
+  const tooltipPlacement = isRtlLocale(locale) ? 'left' : 'right';
+  // One string per link doubles as the accessible name and the hover
+  // tooltip: the bubble is the only place the icons say what they do, so
+  // the copy leads with the payoff (Discord hands out credits) rather
+  // than naming the destination.
   const communityLabel = t('entry.discordAria');
+  const xLabel = t('entry.xAria');
+  const mailLabel = t('entry.mailAria');
 
   function track(element: AccountMenuClickProps['element']) {
     trackAccountMenuClick(analytics.track, {
@@ -1151,31 +1447,34 @@ function RailSocialRow({
   return (
     <div className="entry-nav-rail__social" data-testid="entry-nav-rail-social">
       <a
-        className="entry-nav-rail__social-btn"
+        className="entry-nav-rail__social-btn od-tooltip"
         href={DISCORD_URL}
         {...externalLinkProps}
         aria-label={communityLabel}
-        title={communityLabel}
+        data-tooltip={communityLabel}
+        data-tooltip-placement={tooltipPlacement}
         data-testid="entry-nav-rail-discord"
         onClick={() => track('discord')}
       >
         <Icon name="discord" size={15} />
       </a>
       <a
-        className="entry-nav-rail__social-btn"
+        className="entry-nav-rail__social-btn od-tooltip"
         href={X_URL}
         {...externalLinkProps}
-        aria-label="@OpenDesignHQ"
-        title="@OpenDesignHQ"
+        aria-label={xLabel}
+        data-tooltip={xLabel}
+        data-tooltip-placement={tooltipPlacement}
         onClick={() => track('twitter')}
       >
         <span className="entry-nav-rail__menu-x" aria-hidden>X</span>
       </a>
       <a
-        className="entry-nav-rail__social-btn"
+        className="entry-nav-rail__social-btn od-tooltip"
         href={CONTACT_EMAIL_URL}
-        aria-label={t('entry.mailAria')}
-        title={t('entry.mailAria')}
+        aria-label={mailLabel}
+        data-tooltip={mailLabel}
+        data-tooltip-placement={tooltipPlacement}
         onClick={() => track('email')}
       >
         <Icon name="mail" size={15} />
@@ -1199,6 +1498,14 @@ export function EntryNavRail({
   onSignedOut,
   updaterSlot,
   footerNotice,
+  recentProjects,
+  onOpenRecentProject,
+  onRenameRecentProject,
+  onDeleteRecentProject,
+  priorityAnnouncementActive,
+  onPriorityAnnouncementPendingChange,
+  priorityAnnouncementCurrentPlanId,
+  priorityAnnouncementMetricsConsent,
 }: Props) {
   const { t } = useI18n();
   const analytics = useAnalytics();
@@ -1219,13 +1526,6 @@ export function EntryNavRail({
   const canInviteMembers = Boolean(permissions?.canInviteMembers);
   const canAccessInviteFlow = canAccessWorkspaceInviteFlow(context);
   const workspaceSettingsUrl = context?.workspaceSettingsUrl?.trim() || null;
-
-  // The updater host has exactly one home on screen at a time. The floating
-  // account row is the preferred one; the footer only takes it when there is
-  // no cloud identity, because the whole account module is absent then.
-  // Deriving both from one expression is what keeps "exactly one" true — two
-  // independent renders would double the rocket.
-  const footerUpdaterSlot = context ? null : updaterSlot;
 
   // Message-center panel for the SIGNED-OUT shell only (its rail item under
   // 设置 is the one opener there). The signed-in panel — plus the unread badge
@@ -1730,6 +2030,17 @@ export function EntryNavRail({
             >
               <Icon name="puzzle" size={16} />
             </NavButton>
+            {/* 最近浏览过 sits under 插件 (per product) — the last thing in the
+                destination list, because it is a list of CONTENT rather than a
+                place to go. */}
+            <RailRecentSection
+              projects={recentProjects ?? []}
+              onOpen={onOpenRecentProject}
+              onRename={onRenameRecentProject}
+              onDelete={onDeleteRecentProject}
+              workspaceContext={context}
+              label={t('recentProjects.collectionRecent')}
+            />
             {/* Product decision (2026-07-20): 成员 and 数据大盘 leave the rail
                 entirely — both surfaces live in B's console and the rail should
                 not advertise them. Workspace 设置 stays, and still links OUT to
@@ -1825,15 +2136,10 @@ export function EntryNavRail({
         )}
       </div>
       {/* The footer always has the social row to show now, so it no longer
-          collapses to nothing. `footerUpdaterSlot` is only ever set in the
-          signed-out shell: with a cloud identity the updater host rides the
-          account row instead (see `updaterSlot`), so the footer must not
-          render a second host. */}
+          collapses to nothing. The updater has one shared home in the
+          top-right cluster for both signed-in and signed-out shells. */}
       <div className="entry-nav-rail__footer">
         {footerNotice}
-        {footerUpdaterSlot ? (
-          <div className="entry-rail-actions">{footerUpdaterSlot}</div>
-        ) : null}
         <RailSocialRow page={analyticsPage} dimensions={workspaceDimensions} />
       </div>
       </div>
@@ -1850,6 +2156,10 @@ export function EntryNavRail({
           onOpenChange={setMessageCenterOpen}
           onUnreadCountChange={setMessageUnreadCount}
           onOpenNotificationSettings={onOpenSettings ? () => onOpenSettings('notifications') : undefined}
+          priorityAnnouncementActive={priorityAnnouncementActive}
+          onPriorityAnnouncementPendingChange={onPriorityAnnouncementPendingChange}
+          priorityAnnouncementCurrentPlanId={priorityAnnouncementCurrentPlanId}
+          priorityAnnouncementMetricsConsent={priorityAnnouncementMetricsConsent}
         />
       )}
 
@@ -1868,9 +2178,9 @@ export function EntryNavRail({
             : undefined
         }
       />
-      {/* Top-right floating cluster: campaign badge (slot) + credits pill +
-          the account module, portaled to document.body so all ride the
-          workbench top-right corner in one flex row. Extracted so the project
+      {/* Top-right chrome cluster: campaign badge (slot) + credits pill +
+          the account module, mounted into the tabs chrome's no-drag actions
+          host so Electron includes it in the first native hit map. Extracted so the project
           route can mount the same cluster without the rail (see
           `EntryTopRightCluster`). */}
       <EntryTopRightCluster
@@ -1882,6 +2192,10 @@ export function EntryNavRail({
         updaterSlot={updaterSlot}
         onOpenSettings={onOpenSettings}
         onSignedOut={onSignedOut}
+        priorityAnnouncementActive={priorityAnnouncementActive}
+        onPriorityAnnouncementPendingChange={onPriorityAnnouncementPendingChange}
+        priorityAnnouncementCurrentPlanId={priorityAnnouncementCurrentPlanId}
+        priorityAnnouncementMetricsConsent={priorityAnnouncementMetricsConsent}
       />
     </nav>
   );

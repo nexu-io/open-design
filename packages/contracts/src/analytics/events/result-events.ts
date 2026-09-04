@@ -15,7 +15,7 @@ import type { ArtifactOriginEntrySurface, ArtifactOriginStatus } from '../../api
 import type { AgentDiagnosticReason, AgentDiagnosticSeverity } from '../../api/registry.js';
 import type { TrackingDesignSystemEditSurface, TrackingDesignSystemKind, TrackingDesignSystemLengthBucket, TrackingDesignSystemOrigin, TrackingDesignSystemRunEntryFrom } from './design-systems.js';
 import type { TrackingSettingsPage } from './event-names.js';
-import type { TrackingAmrOpenCodeErrorPhase, TrackingAmrOpenCodeLastEventType, TrackingAmrOpenCodeLastToolKind, TrackingAmrOpenCodeLastToolStatus, TrackingArtifactKind, TrackingArtifactWriteSource, TrackingArtifactWriteStatus, TrackingByokPreflightBlockReason, TrackingByokProviderId, TrackingCliProviderId, TrackingDesignSystemSource, TrackingExecutionMode, TrackingExportFormat, TrackingExportResult, TrackingFeedbackAction, TrackingFeedbackProviderId, TrackingFeedbackRating, TrackingFeedbackRatingWithNone, TrackingFeedbackReasonCode, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingFirstModelEventType, TrackingLangfuseDeliveryStatus, TrackingLangfuseDropReason, TrackingLangfuseReportResult, TrackingLangfuseReportSkipReason, TrackingProjectKind, TrackingProjectSource, TrackingPublishErrorCode, TrackingResult, TrackingRunCancelOrigin, TrackingRunCloseReason, TrackingRunDiagnosticSource, TrackingRunFailureCategory, TrackingRunFailureDetail, TrackingRunFailureStage, TrackingRunFailureUserAction, TrackingRunLifecyclePhase, TrackingRunPhaseTimingStatus, TrackingRunResult, TrackingRunRetryFinalResult, TrackingRunRetryStrategy, TrackingRunRetrySuppressedReason, TrackingRunTerminalTrigger, TrackingStderrLineCountBucket, TrackingTestResult, TrackingTokenCountSource } from './shared-enums.js';
+import type { TrackingAmrOpenCodeErrorPhase, TrackingAmrOpenCodeLastEventType, TrackingAmrOpenCodeLastToolKind, TrackingAmrOpenCodeLastToolStatus, TrackingArtifactKind, TrackingArtifactWriteSource, TrackingArtifactWriteStatus, TrackingByokPreflightBlockReason, TrackingByokProviderId, TrackingCliProviderId, TrackingDesignSystemSource, TrackingExecutionMode, TrackingExportFormat, TrackingExportResult, TrackingFeedbackAction, TrackingFeedbackProviderId, TrackingFeedbackRating, TrackingFeedbackRatingWithNone, TrackingFeedbackReasonCode, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingFirstModelEventType, TrackingHarness, TrackingLabsItemId, TrackingLabsOptOutReason, TrackingLabsSystemReason, TrackingLabsToggleSource, TrackingLangfuseDeliveryStatus, TrackingLangfuseDropReason, TrackingLangfuseReportResult, TrackingLangfuseReportSkipReason, TrackingProjectKind, TrackingProjectSource, TrackingPublishErrorCode, TrackingResult, TrackingRunAdmissionPhase, TrackingRunPolicyReason, TrackingRunAdmissionStatus, TrackingRunCancelOrigin, TrackingRunCloseReason, TrackingRunDiagnosticSource, TrackingRunEvidenceLevel, TrackingRunFailureCategory, TrackingRunFailureDetail, TrackingRunFailureDomain, TrackingRunFailureMechanism, TrackingRunFailureStage, TrackingRunFailureUserAction, TrackingRunLifecyclePhase, TrackingRunMatureUnfinishedState, TrackingRunPhaseTimingStatus, TrackingRunPosthogAcknowledgement, TrackingRunPosthogDeliveryStatus, TrackingRunPosthogErrorType, TrackingRunReconciliationIntegrity, TrackingRunRepairOwner, TrackingRunResult, TrackingRunRetryFinalResult, TrackingRunRetryStrategy, TrackingRunRetrySuppressedReason, TrackingRunTerminalIntegrity, TrackingRunTerminalPersistenceErrorType, TrackingRunTerminalPersistenceStatus, TrackingRunTerminalTrigger, TrackingRunTerminationOrigin, TrackingStderrLineCountBucket, TrackingTestResult, TrackingTokenCountSource } from './shared-enums.js';
 import type { ConversationForkAnalyticsContext, TrackingFileVersionSource, TrackingPluginImportSource, TrackingSessionMode, TrackingSettingsArea } from './ui-click.js';
 // ---- Result events -------------------------------------------------------
 
@@ -90,10 +90,49 @@ export interface SpeakerNotesSaveResultProps {
   edit_surface: 'preview' | 'presenter';
   artifact_id: string;
   artifact_kind: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind;
   slide_count?: number;
   has_content?: boolean;
   result: TrackingResult;
   error_code?: string;
+}
+
+export type TrackingArtifactEditAction = 'apply' | 'undo' | 'redo';
+
+export type TrackingArtifactEditKind =
+  | 'text'
+  | 'link'
+  | 'image'
+  | 'element_remove'
+  | 'token'
+  | 'style'
+  | 'attributes'
+  | 'html'
+  | 'source';
+
+// Terminal result for a direct Manual Edit mutation. The toolbar `edit` click
+// measures entry; this event measures whether a concrete file mutation was
+// actually persisted, including undo/redo. Content, selectors and filenames
+// are intentionally excluded.
+export interface ArtifactEditResultProps {
+  page_name: 'artifact';
+  area: 'manual_edit';
+  action: TrackingArtifactEditAction;
+  edit_kind: TrackingArtifactEditKind;
+  artifact_id: string;
+  artifact_kind: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind;
+  result: TrackingResult;
+  error_code?:
+    | 'edit_busy'
+    | 'source_unavailable'
+    | 'patch_invalid'
+    | 'source_conflict'
+    | 'save_failed'
+    | 'unknown';
+  duration_ms: number;
 }
 
 // Outcome of an actual import attempt from the plugin import modal. Fires
@@ -407,6 +446,25 @@ export interface RunCreatedProps extends RunTaskLineageProps {
   attempt_count?: number;
   generation_slo_window_ms?: number;
   recharge_wait_duration_ms?: number;
+  /**
+   * Which harness actually produced this run.
+   *
+   * The whole point of the Labs switch is a before/after comparison, and that
+   * comparison is only possible if every run says which side it is on. Read
+   * from the run's own rollout decision rather than the live setting, because
+   * the setting can change while the run is in flight.
+   */
+  harness?: TrackingHarness;
+  /**
+   * Why a run took the ordinary route while the user had the switch on.
+   *
+   * Answers the question a support thread cannot: "I enabled it and nothing
+   * changed." The switch can be on and still not apply — the project's task
+   * type, the selected agent, an explicitly chosen plugin, or an unverified
+   * runtime capability each route back. Omitted when `harness` is `od_next`,
+   * and when the user never opted in (there is nothing to explain).
+   */
+  harness_fallback_reason?: string;
 }
 
 export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
@@ -422,6 +480,34 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   /** v4 name; failure_detail remains during the compatibility window. */
   failure_reason?: TrackingRunFailureDetail;
   failure_stage?: TrackingRunFailureStage;
+  /** Versioned causal classification added alongside the legacy category/detail. */
+  failure_mechanism?: TrackingRunFailureMechanism;
+  failure_domain?: TrackingRunFailureDomain;
+  evidence_level?: TrackingRunEvidenceLevel;
+  repair_owner?: TrackingRunRepairOwner;
+  admission_status?: TrackingRunAdmissionStatus;
+  /** Independent of policy reason; never inferred from missing tokens. */
+  admission_phase?: TrackingRunAdmissionPhase;
+  policy_reason?: TrackingRunPolicyReason;
+  terminal_integrity?: TrackingRunTerminalIntegrity;
+  /** Current physical attempt within this Open Design Run. */
+  run_attempt?: number;
+  /** Vela-owned runtime generation UUID when explicitly reported back. */
+  runtime_generation_id?: string;
+  termination_origin?: TrackingRunTerminationOrigin;
+  terminal_persistence_status?: TrackingRunTerminalPersistenceStatus;
+  terminal_persistence_error_type?: TrackingRunTerminalPersistenceErrorType | null;
+  /** Local PostHog queue state; `queued` is not a remote ingestion ACK. */
+  posthog_delivery_status?: TrackingRunPosthogDeliveryStatus;
+  posthog_acknowledgement?: TrackingRunPosthogAcknowledgement;
+  posthog_delivery_attempt_count?: number;
+  posthog_error_type?: TrackingRunPosthogErrorType | null;
+  mature_unfinished_state?: TrackingRunMatureUnfinishedState;
+  reconciliation_generation?: string;
+  reconciliation_integrity?: TrackingRunReconciliationIntegrity;
+  duplicate_terminal_count?: number;
+  late_terminal_count?: number;
+  classifier_version?: 'run-failure-v2' | 'run-failure-v3';
   retryable?: boolean;
   /** v4 name; retryable remains during the compatibility window. */
   is_automatic_retry_eligible?: boolean;
@@ -445,6 +531,17 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   tool_call_seen?: boolean;
   artifact_write_seen?: boolean;
   live_artifact_seen?: boolean;
+  /** Bounded summary of Vela/OpenCode v1 tool-execution lifecycle diagnostics. */
+  tool_execution_lifecycle_seen?: boolean;
+  tool_execution_lifecycle_count_bucket?: '1' | '2_5' | '6_20' | 'gt_20';
+  tool_execution_trigger?: 'exit' | 'abort' | 'deadline' | 'mixed' | 'unknown';
+  tool_execution_terminal?: 'running' | 'returned' | 'failed' | 'interrupted' | 'mixed' | 'unknown';
+  tool_terminal_source?: 'tool_result' | 'tool_error' | 'processor_cleanup' | 'mixed' | 'unknown';
+  tool_kill_outcome?: 'none' | 'requested' | 'sent' | 'failed';
+  tool_child_close_seen?: boolean;
+  tool_stdout_close_seen?: boolean;
+  tool_stderr_close_seen?: boolean;
+  tool_execution_evidence_incomplete?: boolean;
   deliverable_valid?: boolean;
   deliverable_validation?: 'valid' | 'invalid';
   artifact_origin_status?: ArtifactOriginStatus;
@@ -622,6 +719,18 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   retry_original_failure_category?: TrackingRunFailureCategory;
   retry_original_failure_detail?: TrackingRunFailureDetail;
   retry_original_failure_stage?: TrackingRunFailureStage;
+  /** Exact, content-free ACP prompt frame measurement captured at the writer boundary. */
+  prompt_budget_version?: 'prompt_budget_v1';
+  prompt_frame_bytes?: number;
+  prompt_bytes?: number;
+  prompt_token_estimate?: number;
+  prompt_token_estimate_method?: 'utf8_bytes_div_3_ceil_v1';
+  prompt_session_mode?: 'new' | 'resume';
+  prompt_model_id?: string;
+  prompt_context_window_source?: 'model_metadata' | 'unknown';
+  prompt_context_window_tokens?: number;
+  prompt_prior_session_usage_source?: 'agent_session' | 'unknown';
+  prompt_prior_session_input_tokens?: number;
 }
 
 export interface LangfuseReportResultProps {
@@ -799,6 +908,7 @@ export interface SketchSaveResultProps {
   result: TrackingExportResult;
   error_code?: string;
   project_id: string;
+  project_kind: TrackingProjectKind;
 }
 
 // Fired when the user exports a sketch to a PNG from the sketch editor, which
@@ -812,6 +922,7 @@ export interface SketchExportResultProps {
   result: TrackingExportResult;
   error_code?: string;
   project_id: string;
+  project_kind: TrackingProjectKind;
 }
 
 export type TrackingDeployProvider = 'vercel' | 'cloudflare_pages';
@@ -994,6 +1105,32 @@ export interface AssistantFeedbackReasonSubmitProps
   extends AssistantFeedbackReasonResultBase {
   element: 'assistant_feedback_reason_submit';
   action: 'submit_feedback_reason';
+}
+
+/**
+ * One Labs experiment switch moved.
+ *
+ * Generic on purpose: the experiment is a property (`item_id`), not part of the
+ * event name, so a second experiment reuses this event and every existing
+ * PostHog query keeps working.
+ *
+ * Direction and reason ride on the same event because the dashboard reads them
+ * together — opt-out rate is `to: 'off'` split by `reason`. The reason panel
+ * appears *after* the switch moves, so an opt-out emits twice: once
+ * immediately without a reason, once more if the user gives one. Count
+ * opt-outs from the first, read reasons from the second.
+ */
+export interface LabsItemToggledProps {
+  item_id: TrackingLabsItemId;
+  to: 'on' | 'off';
+  source: TrackingLabsToggleSource;
+  /** Only when `source` is `system`. */
+  system_reason?: TrackingLabsSystemReason;
+  /** Only on the follow-up emit after an opt-out, once the user answers. */
+  reason?: TrackingLabsOptOutReason[];
+  has_custom_reason?: boolean;
+  /** Raw free text from the "other" field. Empty when unused. */
+  custom_reason?: string;
 }
 
 // SETTINGS view + result events (page=settings)

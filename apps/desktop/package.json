@@ -1,6 +1,6 @@
 {
   "name": "@open-design/desktop",
-  "version": "0.20.3",
+  "version": "0.21.1",
   "private": true,
   "type": "module",
   "main": "./dist/main/index.js",
@@ -19,6 +19,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
+    "@open-design/contracts": "workspace:*",
     "@open-design/diagnostics": "workspace:*",
     "@open-design/download": "workspace:*",
     "@open-design/host": "workspace:*",

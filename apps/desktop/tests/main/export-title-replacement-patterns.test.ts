@@ -88,6 +88,79 @@ function escapedTitle(title: string): string {
   return title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+/**
+ * A prototype whose script builds an HTML document string — the shape behind
+ * nexu-io/open-design#7410. Its authored `<head>`, `<title>` and `</head>`
+ * all come *before* the document's own, which is the only arrangement a
+ * first-match injector gets wrong.
+ */
+const AUTHORED = 'const doc = `<head><title>Slip</title></head><body>slip</body>`;';
+const SCRIPT_DOC = '<!doctype html><html><head>'
+  + `<script>${AUTHORED}<\/script><title>Old</title></head>`
+  + '<body><p>BODY MARKER</p></body></html>';
+
+/** A title whose own attribute holds a `</title>`, and text holding a prefix. */
+const TITLE_HAZARD = '<!doctype html><html><head>'
+  + '<title data-x="</title>">Old</title></head>'
+  + '<body><p>BODY MARKER</p></body></html>';
+
+describe('export injection points (#7410)', () => {
+  it('leaves a script that builds an HTML document string intact in PDF export', async () => {
+    rendererState.loadedUrls.length = 0;
+    const result = await exportPdfFromHtml({
+      baseHref: 'https://example.test/base/',
+      deck: true,
+      defaultFilename: 'out.pdf',
+      html: SCRIPT_DOC,
+      title: 'Export',
+    });
+    expect(result.ok).toBe(true);
+    const doc = lastLoadedDocument();
+    // The authored string survives; only the document's own title is replaced.
+    expect(doc).toContain(AUTHORED);
+    expect(doc).toContain('<title>Export</title>');
+    expect(doc).toContain('<p>BODY MARKER</p>');
+  }, 30_000);
+
+  it('replaces the whole title element when its attribute holds a `</title>`', async () => {
+    rendererState.loadedUrls.length = 0;
+    const result = await exportPdfFromHtml({
+      baseHref: undefined,
+      deck: false,
+      defaultFilename: 'out.pdf',
+      html: TITLE_HAZARD,
+      title: 'Export',
+    });
+    expect(result.ok).toBe(true);
+    const doc = lastLoadedDocument();
+    expect(doc).toContain('<title>Export</title>');
+    // No shrapnel from the original element left behind in <head>.
+    expect(doc).not.toContain('">Old</title>');
+    expect(doc).not.toContain('data-x=');
+    expect(doc).toContain('<p>BODY MARKER</p>');
+  }, 30_000);
+
+  it('leaves a script that builds an HTML document string intact in image export', async () => {
+    rendererState.loadedUrls.length = 0;
+    const result = await exportArtifact({
+      baseHref: 'https://example.test/base/',
+      deck: false,
+      format: 'image',
+      html: SCRIPT_DOC,
+      imageFormat: 'png',
+      title: 'Export',
+    } as const);
+    try {
+      expect(result.ok).toBe(true);
+      const doc = lastLoadedDocument();
+      expect(doc).toContain(AUTHORED);
+      expect(doc).toContain('<p>BODY MARKER</p>');
+    } finally {
+      if (result.path) await rm(dirname(result.path), { force: true, recursive: true });
+    }
+  }, 30_000);
+});
+
 describe('export title replacement-pattern safety (#6795)', () => {
   it('keeps replacement-pattern sequences verbatim in PDF export titles', async () => {
     for (const title of TITLES) {

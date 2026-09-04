@@ -266,6 +266,10 @@ function createRunsServiceStub() {
         requestFingerprint: meta.requestFingerprint,
         workspaceScope: meta.workspaceScope,
         odNextTaskInputSnapshot: meta.odNextTaskInputSnapshot ?? null,
+        // Mirrors the real store (`runtimes/runs.ts`), which persists the
+        // rollout decision onto the run. Without it a continuation's inherited
+        // decision would be invisible to assertions here.
+        strategyRolloutDecision: meta.strategyRolloutDecision ?? null,
         status: 'queued',
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -558,6 +562,92 @@ async function startServer(opts?: {
 }
 
 describe('POST /api/runs — workspace mutation gate', () => {
+  it.each(['/api/runs', '/api/chat'])(
+    'carries the source Run harness decision into a clarification continuation through %s',
+    async (route) => {
+      // The rollout is only evaluated on the branch that resolves a project,
+      // and a continuation does not take that branch. Before this was
+      // inherited, answering a clarification produced a Run with no decision
+      // at all — so `run_created` / `run_finished` / the recovery replay for
+      // every OD Next task that asked a question reported no harness, dropping
+      // exactly those runs from the comparison the dimension exists for.
+      const baseUrl = await startServer();
+      const snapshot = seedAwaitingClarificationTask();
+      const activeDecision = {
+        schemaVersion: 1 as const,
+        decisionClass: 'active' as const,
+        requestedMode: 'active' as const,
+        effectiveMode: 'active' as const,
+        taskType: 'prototype' as const,
+        assignmentBucket: 42,
+        eligible: true,
+        syntheticCanary: false,
+        reasonCodes: [],
+        primaryReasonCode: 'od_next_rollout_eligible',
+      };
+      runsServiceStub?.seed({
+        id: 'run-strategy-request',
+        projectId: PERSONAL_PROJECT,
+        conversationId: 'conversation-strategy',
+        assistantMessageId: 'assistant-strategy-request',
+        agentId: 'codex',
+        pluginId: 'od-next-strategy',
+        appliedPluginSnapshotId: snapshot.snapshotId,
+        strategyRolloutDecision: activeDecision,
+        status: 'succeeded',
+      });
+
+      const response = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          taskExecutionId: 'task-strategy-clarification',
+          projectId: PERSONAL_PROJECT,
+          conversationId: 'conversation-strategy',
+          agentId: 'codex',
+          userMessageId: 'user-strategy-answer',
+          assistantMessageId: 'assistant-strategy-answer',
+          clientRequestId: 'client-strategy-answer',
+          message: 'Desktop workspace',
+          currentPrompt: 'Desktop workspace',
+        }),
+      });
+      const responseText = await response.text();
+      expect(response.status, responseText).toBe(202);
+
+      expect(lastCreatedRun.strategyRolloutDecision).toMatchObject({
+        effectiveMode: 'active',
+        primaryReasonCode: 'od_next_rollout_eligible',
+      });
+    },
+  );
+
+  it('leaves a continuation undecided when its source Run never had a decision', async () => {
+    // Absent and "took the ordinary route" are different facts. A task that
+    // started before the strategy existed must not be back-filled into either
+    // arm of the comparison.
+    const baseUrl = await startServer();
+    seedAwaitingClarificationTask();
+
+    const response = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        taskExecutionId: 'task-strategy-clarification',
+        projectId: PERSONAL_PROJECT,
+        conversationId: 'conversation-strategy',
+        agentId: 'codex',
+        userMessageId: 'user-strategy-answer',
+        assistantMessageId: 'assistant-strategy-answer',
+        clientRequestId: 'client-strategy-answer',
+        message: 'Desktop workspace',
+        currentPrompt: 'Desktop workspace',
+      }),
+    });
+    expect(response.status, await response.text()).toBe(202);
+    expect(lastCreatedRun.strategyRolloutDecision).toBeNull();
+  });
+
   it.each(['/api/runs', '/api/chat'])(
     'atomically binds an explicit clarification handle through %s',
     async (route) => {

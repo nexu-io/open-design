@@ -2275,7 +2275,13 @@ describe("desktop updater", () => {
       expect(spawned).toHaveLength(1);
       expect(unref).toHaveBeenCalledTimes(1);
       expect(spawned[0]?.command).toBe(payloadLaunchPath);
-      expect(spawned[0]?.options).toEqual({ cwd: runtimeBase, detached: true, stdio: "ignore", windowsHide: true });
+      expect(spawned[0]?.options).toEqual(expect.objectContaining({
+        cwd: runtimeBase,
+        detached: true,
+        env: expect.any(Object),
+        stdio: "ignore",
+        windowsHide: true,
+      }));
       const args = spawned[0]?.args ?? [];
       expect(args).toEqual(expect.arrayContaining([
         LAUNCHER_AFTER_QUIT_FLAG,

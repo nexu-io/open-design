@@ -8,7 +8,7 @@ import type { DesignSystemApplyResultProps, DesignSystemCreateResultProps, Desig
 import type { OnboardingCompletedProps, OnboardingCompleteResultProps, OnboardingFirstGenerationCompletedProps, OnboardingFirstPromptSentProps, OnboardingPromptPrefilledProps, OnboardingRuntimeScanResultProps } from './onboarding.js';
 import type { PageViewProps } from './page-view.js';
 import type {
-  AgentDetectDiagnosticProps, ArtifactDeployResultProps, ArtifactExportResultProps, ArtifactPublishResultProps, AssistantFeedbackClickProps, AssistantFeedbackReasonClickProps, AssistantFeedbackReasonSubmitProps, AssistantFeedbackReasonViewProps, ByokPreflightBlockedProps, ContextLinkResultProps, ConversationForkResultProps, FeedbackSubmitResultProps, FileUploadResultProps, FileVersionRestoreResultProps, LangfuseReportResultProps, MediaGenerationResultProps, PackagedRuntimeFailedProps, PluginImportResultProps, PluginReplacementResultProps, ProjectCreateResultProps, RunCreatedProps, RunFinishedProps, RunRetryAttemptedProps, RunRetryFinishedProps, SettingsByokModelsFetchResultProps, SettingsByokTestResultProps, SettingsCliTestResultProps, SettingsConnectorAuthResultProps, SettingsViewProps, SketchExportResultProps, SketchSaveResultProps, SpeakerNotesSaveResultProps, UpdateApplyObservedProps, UpdateCheckResultProps, UpdateInstallResultProps } from './result-events.js';
+  AgentDetectDiagnosticProps, ArtifactDeployResultProps, ArtifactEditResultProps, ArtifactExportResultProps, ArtifactPublishResultProps, AssistantFeedbackClickProps, AssistantFeedbackReasonClickProps, AssistantFeedbackReasonSubmitProps, AssistantFeedbackReasonViewProps, ByokPreflightBlockedProps, ContextLinkResultProps, ConversationForkResultProps, FeedbackSubmitResultProps, FileUploadResultProps, FileVersionRestoreResultProps, LabsItemToggledProps, LangfuseReportResultProps, MediaGenerationResultProps, PackagedRuntimeFailedProps, PluginImportResultProps, PluginReplacementResultProps, ProjectCreateResultProps, RunCreatedProps, RunFinishedProps, RunRetryAttemptedProps, RunRetryFinishedProps, SettingsByokModelsFetchResultProps, SettingsByokTestResultProps, SettingsCliTestResultProps, SettingsConnectorAuthResultProps, SettingsViewProps, SketchExportResultProps, SketchSaveResultProps, SpeakerNotesSaveResultProps, UpdateApplyObservedProps, UpdateCheckResultProps, UpdateInstallResultProps } from './result-events.js';
 import type { SurfaceViewProps } from './surface-view.js';
 import type { AmrAuthResultProps, UiClickProps } from './ui-click.js';
 import type {
@@ -42,6 +42,7 @@ export type AnalyticsEventPayload =
   | { event: 'file_upload_result'; props: FileUploadResultProps }
   | { event: 'context_link_result'; props: ContextLinkResultProps }
   | { event: 'speaker_notes_save_result'; props: SpeakerNotesSaveResultProps }
+  | { event: 'artifact_edit_result'; props: ArtifactEditResultProps }
   | { event: 'artifact_export_result'; props: ArtifactExportResultProps }
   | { event: 'artifact_deploy_result'; props: ArtifactDeployResultProps }
   | { event: 'artifact_publish_result'; props: ArtifactPublishResultProps }
@@ -70,6 +71,7 @@ export type AnalyticsEventPayload =
       props: AssistantFeedbackReasonSubmitProps;
     }
   | { event: 'settings_view'; props: SettingsViewProps }
+  | { event: 'labs_item_toggled'; props: LabsItemToggledProps }
   | { event: 'settings_cli_test_result'; props: SettingsCliTestResultProps }
   | { event: 'settings_byok_test_result'; props: SettingsByokTestResultProps }
   | {

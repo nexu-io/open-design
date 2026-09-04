@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EntryNavRail, resetWorkspaceDirectoryCache } from '../../src/components/EntryNavRail';
 import { I18nProvider } from '../../src/i18n';
+import { WORKSPACE_CHROME_ACCOUNT_ACTIONS_ID } from '../../src/components/workspaceChromeActions';
 
 function teamContext(): WorkspaceCollabContext {
   return {
@@ -52,11 +53,19 @@ function stubFetch() {
   );
 }
 
+let chromeActionsHost: HTMLDivElement;
+
 beforeEach(() => {
   vi.useFakeTimers();
   localStorage.clear();
   resetWorkspaceDirectoryCache();
   stubFetch();
+  const chrome = document.createElement('header');
+  chrome.className = 'workspace-tabs-chrome';
+  chromeActionsHost = document.createElement('div');
+  chromeActionsHost.id = WORKSPACE_CHROME_ACCOUNT_ACTIONS_ID;
+  chrome.append(chromeActionsHost);
+  document.body.append(chrome);
 });
 
 afterEach(() => {
@@ -65,6 +74,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.useRealTimers();
+  document.querySelector('.workspace-tabs-chrome')?.remove();
 });
 
 async function advancePastHoverClose() {
@@ -74,6 +84,14 @@ async function advancePastHoverClose() {
 }
 
 describe('EntryNavRail account menu interaction state', () => {
+  it('mounts the first account controls inside the workspace chrome no-drag host', async () => {
+    renderRail();
+
+    await act(async () => {});
+    expect(screen.getByTestId('entry-nav-account').closest('#workspace-chrome-account-actions'))
+      .toBe(chromeActionsHost);
+  });
+
   it('pins a hover-open menu when the avatar is clicked', async () => {
     renderRail();
     const trigger = screen.getByTestId('entry-nav-account');

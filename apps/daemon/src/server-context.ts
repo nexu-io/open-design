@@ -186,7 +186,11 @@ export interface ServerContext {
   orbit: any;
   nativeDialogs: any;
   research: any;
-  mcp: any;
+  mcp: {
+    pendingAuth: any;
+    daemonUrlRef: { current: string };
+    inheritedEnvironment: (baseEnv?: NodeJS.ProcessEnv) => Record<string, string>;
+  };
   plugins: any;
   resources: ResourceDeps;
   routines: RoutineDeps;

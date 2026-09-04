@@ -27,7 +27,7 @@ Read `tools/pack/CACHE.md` before changing any build-cache node key, adding a ca
 
 - Keep cross-platform source responsibilities in named directories such as `cache/`, `config/`, `launcher/`, `resources/`, `updates/`, and `versioning/`; keep platform-owned behavior below `mac/` or `win/`. Mirror those responsibilities in `tests/` when a test set has the same ownership. A new root-level `src/*.ts` file is intentionally treated as unclassified by CI and pays the conservative Windows payload fallback until it is placed in an owned source unit.
 - Tests import source modules through the test-only `@/*` alias. Tests that intentionally inspect source text use the same alias with Vitest's `?raw` suffix; do not reintroduce directory-depth-dependent `../src/` imports or file URLs.
-- Do not hand-build `--od-stamp-*` args; use `createProcessStampArgs` with `OPEN_DESIGN_SIDECAR_CONTRACT`.
+- Do not hand-build stamp argv, IPC paths, or process matching; use `@open-design/sidecar` launch/discovery/invoke/stop atomics.
 - Do not use port numbers in data/log/runtime/cache path decisions. Namespace decides paths; ports are only transient transports.
 - Public release artifacts must use channel-specific app identity: stable uses `Open Design`, beta uses `Open Design Beta`, prerelease uses `Open Design Prerelease`, and preview uses `Open Design Preview`. Local tools-pack installs may still use namespace-scoped install paths only as a developer multi-instance validation convention.
 - Do not let namespace-named `.app` installs change data/log/runtime/cache path conventions.
@@ -49,7 +49,7 @@ Read this section before changing packaged auto-update behavior. The updater cro
 - `apps/web/src/components/UpdaterPopup.tsx` remains the ready-update surface in the left rail. `apps/web/src/components/UpdateDialog.tsx` owns the explicit macOS app-menu check flow. All visible copy and native menu labels must go through `apps/web/src/i18n`.
 - `packages/launcher-proto` owns launcher pointer, attempt, and desktop-handoff journal shapes plus payload selection. `runtime.json` together with `attempt.json` is the only payload-version state machine.
 - `apps/packaged/src/index.ts` delegates to the selected payload desktop before initializing the outer Electron runtime, then passes packaged `appVersion` and namespace-scoped `updateRoot` into desktop main only when the outer itself must run.
-- `apps/daemon/src/sidecar/payload-desktop-handoff.ts` is the isolated compatibility bridge for historical outers that cannot delegate. It rearms the selected payload with the real previous pointer, launches that payload's desktop after the old outer exits, and persists a small desktop-binding journal for later shortcut cold starts. The journal is not a second version selector.
+- `apps/daemon/src/sidecar/payload-desktop-handoff.ts` owns the historical-outer bridge. It uses the daemon's `SidecarFactory` client to confirm and shut down the exact outer desktop, then `spawnSidecar` to launch the payload generation while preserving the true previous launcher pointer across the `prepared` → `armed` → `confirmed` journal lifecycle.
 - `install.json` continues to identify the physically installed outer executable for recovery. Payload activation or handoff must not rewrite it to a versioned payload executable.
 - `tools/serve` owns deterministic local updater fixtures only. It must not contain product updater runtime logic.
 - `tools/pack` owns packaged build/install/start/inspect/logs/uninstall/cleanup and the platform installer harness, including Windows NSIS registry observation and cleanup.
@@ -136,7 +136,7 @@ C:\odtp-beta-release-fixed\out\win\namespaces\release-beta-win\builder\Open Desi
 - The native Windows File menu must not expose update actions. On macOS, the app menu exposes the state-aware update item and opens the renderer update dialog without making background checks intrusive.
 - The updater popup uses i18n strings and download progress must not flash to 100% before real bytes arrive.
 - Applying the payload update should quit and relaunch the exact executable under the prepared version's `payload` directory, then mark launcher `active` and `lastSuccessful` to that version and clear `attempt.json`.
-- A historical outer may first create a mixed generation. Its daemon-sidecar compatibility handoff must replace the historical desktop with the exact payload desktop executable, preserve the true previous pointer for recovery, and leave the handoff journal either absent or `confirmed`—never stranded in `prepared` or `armed`.
+- For a historical outer, the handoff must retain the true previous launcher pointer for fail-closed recovery and terminate with `desktop-handoff.json` absent or `confirmed`; `prepared` and `armed` are not successful terminal states.
 - After a full stop, launching the installed shortcut/outer again must still converge on the same active payload desktop and preserve daemon/API behavior, including a real PPTX export.
 - If the updater falls back to the installer path, clicking `Open installer` opens the real downloaded beta installer. Installing it should overwrite the same `Open Design-release-beta-win` registry key, not create a second beta key.
 

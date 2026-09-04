@@ -7,6 +7,17 @@
  * coordinator can reuse the same create -> claim -> start transaction without
  * calling the daemon through HTTP.
  */
+import type { RunAnalyticsFacts } from './run-analytics-lifecycle.js';
+
+/**
+ * `RunAnalyticsFacts` is a REQUIRED argument of `start` on purpose. Analytics
+ * used to be installed by whichever caller remembered to do it, and four
+ * daemon-internal Run creators silently reported nothing (OPEND-2365). Making
+ * the facts part of the start contract means a new caller has to state its
+ * analytics identity — including stating that it has none — instead of dropping
+ * the Run. The type is owned by the lifecycle so the choke point and the
+ * lifecycle cannot drift apart.
+ */
 export interface InternalRunCreateInput extends Record<string, unknown> {
   projectId?: string;
   conversationId?: string;
@@ -32,6 +43,10 @@ export interface InternalRunCreateInput extends Record<string, unknown> {
 export interface InternalPhysicalRun {
   id: string;
   status: string;
+}
+
+export interface InternalRunAnalyticsLifecycle<TRun> {
+  install(input: RunAnalyticsFacts & { run: TRun }): void;
 }
 
 export interface InternalRunRegistry<
@@ -86,7 +101,11 @@ export interface InternalRunCreationService<
   TRun extends InternalPhysicalRun,
 > {
   prepare(input: PrepareInternalRunInput<TMeta, TRun>): PreparedInternalRunResult<TRun>;
-  start(run: TRun, starter: (run: TRun) => Promise<unknown>): TRun;
+  start(
+    run: TRun,
+    analytics: RunAnalyticsFacts,
+    starter: (run: TRun) => Promise<unknown>,
+  ): TRun;
 }
 
 export function createInternalRunCreationService<
@@ -98,6 +117,13 @@ export function createInternalRunCreationService<
     run: TRun,
     options?: AssistantRunClaimOptions,
   ) => AssistantRunClaimResult;
+  /**
+   * Armed for every physical Run this service starts, whoever asked for it.
+   * Required: an optional dependency would let a future factory construct this
+   * service, satisfy the `.runs.start` guard, and still emit nothing. A harness
+   * that wants silence injects a no-op lifecycle and says so.
+   */
+  analyticsLifecycle: InternalRunAnalyticsLifecycle<TRun>;
 }): InternalRunCreationService<TMeta, TRun> {
   const isRunActive = (runId: string): boolean => {
     const existing = deps.runs.get(runId);
@@ -161,7 +187,11 @@ export function createInternalRunCreationService<
 
   return {
     prepare,
-    start(run, starter) {
+    start(run, analytics, starter) {
+      // Before the child is spawned: `run_created` describes a Run that has
+      // been accepted, and the terminal half must already be attached when the
+      // Run settles — including a Run that fails on its first tick.
+      deps.analyticsLifecycle.install({ ...analytics, run });
       return deps.runs.start(run, () => starter(run));
     },
   };

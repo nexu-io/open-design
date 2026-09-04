@@ -3,6 +3,11 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { strategyTaskProvesDelivery, todoSnapshotHasUnfinishedWork } from '@open-design/contracts';
+import {
+  collectProcessTreePids,
+  listProcessSnapshots,
+  stopProcesses,
+} from '@open-design/platform';
 import { normalizeMediaExecutionPolicyForRun } from '../media/policy.js';
 import {
   normalizeRunToolBundleForRun,
@@ -25,6 +30,14 @@ import {
   finalizeRunTelemetryDelivery,
   recordRunTelemetryDeliveryAttempt,
 } from '../observability/delivery-state.js';
+import {
+  beginPosthogTerminalDelivery,
+  finalizePosthogTerminalDelivery,
+  recordIgnoredTerminalClaim,
+  terminalLifecycleSnapshot,
+  terminalPersistenceErrorType,
+} from '../observability/run-terminal-lifecycle.js';
+import { normalizeTelemetryAppVersionInfo } from '../app-version.js';
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 
@@ -504,8 +517,10 @@ function atomicWriteJson(filePath, value) {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(tempPath, `${JSON.stringify(value)}\n`, { encoding: 'utf8', mode: 0o600 });
     fs.renameSync(tempPath, filePath);
-  } catch {
+    return { ok: true };
+  } catch (error) {
     try { fs.unlinkSync(tempPath); } catch { /* best-effort cleanup */ }
+    return { ok: false, errorType: terminalPersistenceErrorType(error) };
   }
 }
 
@@ -522,9 +537,11 @@ function durableRunState(run) {
       ? { strategyRolloutDecision: run.strategyRolloutDecision }
       : {}),
     agentId: run.agentId,
+    ...(run.appVersionInfo ? { appVersionInfo: run.appVersionInfo } : {}),
     status: run.status,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
+    terminalAt: run.terminalAt ?? null,
     exitCode: run.exitCode,
     signal: run.signal,
     error: run.error,
@@ -562,6 +579,12 @@ function durableRunState(run) {
     ...(run.externalPluginAnalytics
       ? { externalPluginAnalytics: run.externalPluginAnalytics }
       : {}),
+    ...(typeof run.cumulativeRetryAttemptCount === 'number'
+      ? { cumulativeRetryAttemptCount: run.cumulativeRetryAttemptCount }
+      : {}),
+    ...(typeof run.retryAttemptCount === 'number'
+      ? { retryAttemptCount: run.retryAttemptCount }
+      : {}),
     ...(typeof run.manualResumeAttemptCount === 'number'
       ? { manualResumeAttemptCount: run.manualResumeAttemptCount }
       : {}),
@@ -594,6 +617,7 @@ function durableRunState(run) {
       ? { langfuseCompletedAt: run.langfuseCompletedAt }
       : {}),
     ...(run.telemetryDelivery ? { telemetryDelivery: run.telemetryDelivery } : {}),
+    ...(run.terminalLifecycle ? { terminalLifecycle: run.terminalLifecycle } : {}),
   };
 }
 
@@ -669,18 +693,48 @@ export function createChatRunService({
   // hook here covers startup failures and daemon shutdown in addition to the
   // normal child-close path.
   beforeFinish = null,
+  // Optional synchronous terminal hook. It runs after the terminal state is
+  // durable but before the terminal SSE event is published, so local outbox
+  // writes share the exact terminal timestamp without delaying on delivery.
+  onTerminal = null,
+  // Snapshot the daemon version at Run creation so a later daemon version
+  // cannot rewrite this Run's terminal telemetry during restart recovery.
+  getAppVersionInfo = () => null,
+  // Test seam for deterministic storage-failure coverage. Production callers
+  // use the atomic writer above; the result carries only a bounded error type.
+  writeDurableState = atomicWriteJson,
 }) {
   const runs = new Map();
   const runIdsByClientRequestId = new Map();
   const runIdsByPluginWorkflowId = new Map();
 
+  const finalizeTerminalLocally = (run, status, terminalAt) => {
+    if (!onTerminal) return;
+    try {
+      onTerminal(run, status, terminalAt);
+    } catch (error) {
+      console.warn('[runs] terminal local finalizer failed', error);
+    }
+  };
+
+  const backfillDurableTerminal = (state) => {
+    if (!TERMINAL_RUN_STATUSES.has(state?.status)) return;
+    const terminalAt = Number.isFinite(state.terminalAt)
+      ? state.terminalAt
+      : state.updatedAt;
+    if (!Number.isFinite(terminalAt)) return;
+    finalizeTerminalLocally(state, state.status, terminalAt);
+  };
+
   if (runsLogDir) {
     try {
       for (const entry of fs.readdirSync(runsLogDir, { withFileTypes: true })) {
         if (!entry.isDirectory()) continue;
-        const state = readDurableRunState(path.join(runsLogDir, entry.name, 'state.json'));
+        const statePath = path.join(runsLogDir, entry.name, 'state.json');
+        const state = readDurableRunState(statePath);
+        if (!state) continue;
         if (
-          typeof state?.clientRequestId === 'string'
+          typeof state.clientRequestId === 'string'
           && state.clientRequestId
           && typeof state.id === 'string'
         ) {
@@ -708,12 +762,16 @@ export function createChatRunService({
     if (!state || state.id !== id) return null;
     const interruptedAfterRestart =
       interruptDurableRunAfterDaemonRestart(state);
-    if (interruptedAfterRestart) atomicWriteJson(statePath, state);
+    if (interruptedAfterRestart) writeDurableState(statePath, state);
+    backfillDurableTerminal(state);
     if (!TERMINAL_RUN_STATUSES.has(state.status)) return null;
     const eventsLogPath = path.join(runsLogDir, id, 'events.jsonl');
     const events = readDurableRunEvents(eventsLogPath);
-    if (interruptedAfterRestart) {
-      const timestamp = state.updatedAt;
+    if (
+      interruptedAfterRestart
+      || state.terminalRecoveryReason === 'daemon_restart'
+    ) {
+      const timestamp = state.terminalAt ?? state.updatedAt;
       const nextEventId =
         events.reduce((max, record) => Math.max(max, record.id), 0) + 1;
       events.push(
@@ -736,6 +794,7 @@ export function createChatRunService({
             code: 1,
             signal: null,
             status: 'failed',
+            terminalAt: timestamp,
             resumable: false,
             endedWithUnfinishedWork: Boolean(state.endedWithUnfinishedWork),
           },
@@ -780,6 +839,13 @@ export function createChatRunService({
   const create = (meta = {}) => {
     const now = Date.now();
     const id = randomUUID();
+    let appVersionInfo = null;
+    try {
+      appVersionInfo = normalizeTelemetryAppVersionInfo(getAppVersionInfo());
+    } catch {
+      // Version attribution is best-effort; missing is explicit in the
+      // durable state instead of persisting a placeholder release number.
+    }
     const run = {
       id,
       projectId: typeof meta.projectId === 'string' && meta.projectId ? meta.projectId : null,
@@ -797,6 +863,7 @@ export function createChatRunService({
           ? meta.strategyRolloutDecision
           : null,
       agentId: typeof meta.agentId === 'string' && meta.agentId ? meta.agentId : null,
+      appVersionInfo,
       projectMetadata:
         meta.projectMetadata && typeof meta.projectMetadata === 'object' && !Array.isArray(meta.projectMetadata)
           ? meta.projectMetadata
@@ -850,6 +917,7 @@ export function createChatRunService({
       status: 'queued',
       createdAt: now,
       updatedAt: now,
+      terminalAt: null,
       events: [],
       nextEventId: 1,
       clients: new Set(),
@@ -904,6 +972,7 @@ export function createChatRunService({
       // can't lazily re-open a stream nothing will ever close (FD leak).
       eventsLogClosed: false,
       cleanupGeneration: 0,
+      cumulativeRetryAttemptCount: 0,
       manualResumeAttemptCount: 0,
       rechargeWaitDurationMs: 0,
     };
@@ -928,7 +997,7 @@ export function createChatRunService({
         run.id,
       );
     }
-    if (run.statePath) atomicWriteJson(run.statePath, durableRunState(run));
+    if (run.statePath) writeDurableState(run.statePath, durableRunState(run));
     return run;
   };
 
@@ -960,7 +1029,51 @@ export function createChatRunService({
   };
 
   const persistState = (run) => {
-    if (run?.statePath) atomicWriteJson(run.statePath, durableRunState(run));
+    if (!run?.statePath) return { ok: false, errorType: 'storage_unavailable' };
+    return writeDurableState(run.statePath, durableRunState(run));
+  };
+
+  const persistTerminalState = (run, lifecycleEvidence = run.terminalLifecycle) => {
+    const priorTerminalPersistence = lifecycleEvidence?.terminalPersistence;
+    const terminalPersistence = run.statePath
+      ? { status: 'acknowledged', errorType: null }
+      : { status: 'unknown', errorType: null };
+    run.terminalLifecycle = terminalLifecycleSnapshot({
+      cumulativeRetryAttemptCount: run.cumulativeRetryAttemptCount,
+      retryAttemptCount: run.retryAttemptCount,
+      manualResumeAttemptCount: run.manualResumeAttemptCount,
+      runtimeGenerationId: run.runtimeGenerationId,
+      cancelOrigin: run.cancelOrigin ?? null,
+      terminalTrigger: run.terminalTrigger ?? null,
+      terminalIntegrity:
+        lifecycleEvidence?.terminalIntegrity ?? run.terminalIntegrity ?? 'canonical',
+      terminalPersistence,
+      posthogDelivery: lifecycleEvidence?.posthogDelivery,
+      duplicateTerminalCount: lifecycleEvidence?.duplicateTerminalCount,
+      lateTerminalCount: lifecycleEvidence?.lateTerminalCount,
+    });
+    if (!run.statePath) return { ok: false, errorType: 'storage_unavailable' };
+    const result = persistState(run);
+    if (!result.ok && priorTerminalPersistence?.status !== 'acknowledged') {
+      run.terminalLifecycle = terminalLifecycleSnapshot({
+        cumulativeRetryAttemptCount: run.cumulativeRetryAttemptCount,
+        retryAttemptCount: run.retryAttemptCount,
+        manualResumeAttemptCount: run.manualResumeAttemptCount,
+        runtimeGenerationId: run.runtimeGenerationId,
+        cancelOrigin: run.cancelOrigin ?? null,
+        terminalTrigger: run.terminalTrigger ?? null,
+        terminalIntegrity:
+          run.terminalLifecycle?.terminalIntegrity ?? run.terminalIntegrity ?? 'canonical',
+        posthogDelivery: run.terminalLifecycle?.posthogDelivery,
+        duplicateTerminalCount: run.terminalLifecycle?.duplicateTerminalCount,
+        lateTerminalCount: run.terminalLifecycle?.lateTerminalCount,
+        terminalPersistence: {
+          status: 'failed',
+          errorType: result.errorType ?? 'unknown',
+        },
+      });
+    }
+    return result;
   };
 
   const setAnalyticsRecovery = (run, recovery) => {
@@ -977,6 +1090,23 @@ export function createChatRunService({
     if (!run?.analyticsRecovery) return;
     run.analyticsRecovery.completedAt = Date.now();
     persistState(run);
+  };
+
+  const beginAnalyticsDelivery = (run) => {
+    if (!run?.terminalLifecycle) return null;
+    run.terminalLifecycle = beginPosthogTerminalDelivery(run.terminalLifecycle);
+    persistState(run);
+    return run.terminalLifecycle.posthogDelivery;
+  };
+
+  const finalizeAnalyticsDelivery = (run, delivery) => {
+    if (!run?.terminalLifecycle || !delivery) return null;
+    run.terminalLifecycle = finalizePosthogTerminalDelivery(
+      run.terminalLifecycle,
+      delivery,
+    );
+    persistState(run);
+    return run.terminalLifecycle.posthogDelivery;
   };
 
   const beginTelemetryDelivery = (run) => {
@@ -1067,6 +1197,7 @@ export function createChatRunService({
     run.cleanupGeneration = (run.cleanupGeneration ?? 0) + 1;
     run.status = 'queued';
     run.updatedAt = resumedAt;
+    run.terminalAt = null;
     run.exitCode = null;
     run.signal = null;
     run.error = null;
@@ -1080,6 +1211,8 @@ export function createChatRunService({
     run.terminalTrigger = null;
     run.runtimeFailureObservedBeforeCancellation = false;
     run.retryRestartTimer = null;
+    run.cumulativeRetryAttemptCount = (run.cumulativeRetryAttemptCount ?? 0)
+      + (run.retryAttemptCount ?? 0);
     run.retryAttemptCount = 0;
     run.retryFinalResult = undefined;
     run.retrySuppressedReason = undefined;
@@ -1101,6 +1234,9 @@ export function createChatRunService({
     run.stdinOpen = false;
     run.eventsLogStream = null;
     run.eventsLogClosed = false;
+    run.runtimeGenerationId = null;
+    run.terminalIntegrity = null;
+    run.terminalLifecycle = undefined;
     // A resumed attempt is a fresh execution, so it must not inherit the prior
     // attempt's lifecycle marks. Keeping them makes every phase boundary
     // measure from before the recharge pause, putting the wait time inside the
@@ -1158,14 +1294,20 @@ export function createChatRunService({
     }
   };
 
-  const emit = (run, event, data) => {
+  const emit = (run, event, data, timestamp = Date.now(), persistLifecycle = true) => {
+    // Once a terminal verdict is waiting only on process-tree quiescence, the
+    // attempt no longer owns transcript or error state. Shutdown bytes and
+    // duplicate child callbacks must not overwrite the classified verdict
+    // during that bounded window. The termination barrier itself may still
+    // publish `termination_failed` evidence before the final `end` event.
+    if (run.pendingTerminalFinish && event !== 'diagnostic') return null;
     if (event === 'error') {
       const details = extractErrorDetails(data);
       if (details.error) run.error = details.error;
       if (details.errorCode) run.errorCode = details.errorCode;
     }
     const id = run.nextEventId++;
-    const record = { id, event, data, timestamp: Date.now() };
+    const record = { id, event, data, timestamp };
     // Fold committed side effects BEFORE the ring buffer can drop this record,
     // so the finalization-time verdict survives truncation of run.events.
     if (onEventEmitted) {
@@ -1173,11 +1315,11 @@ export function createChatRunService({
     }
     run.events.push(record);
     if (run.events.length > maxEvents) run.events.splice(0, run.events.length - maxEvents);
-    run.updatedAt = Date.now();
+    run.updatedAt = timestamp;
     // State writes are synchronous so they survive process termination. Keep
     // them on lifecycle boundaries only: agent/text deltas can arrive many
     // times per second and are already streamed to events.jsonl.
-    if (event === 'start' || event === 'error' || event === 'end') persistState(run);
+    if (persistLifecycle && (event === 'start' || event === 'error' || event === 'end')) persistState(run);
     const stream = ensureLogStream(run);
     if (stream) {
       try {
@@ -1208,6 +1350,7 @@ export function createChatRunService({
     status: run.status,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
+    terminalAt: run.terminalAt ?? null,
     cancelRequested: !!run.cancelRequested,
     cancelOrigin: run.cancelOrigin ?? null,
     terminalTrigger: run.terminalTrigger ?? null,
@@ -1262,18 +1405,27 @@ export function createChatRunService({
       ? { deliverableArtifactKind: run.deliverableArtifactKind }
       : {}),
     ...(run.strategyTask ? { strategyTask: run.strategyTask } : {}),
+    ...(run.terminalLifecycle ? { terminalLifecycle: run.terminalLifecycle } : {}),
     ...(TERMINAL_RUN_STATUSES.has(run.status)
       ? { executionDiagnostics: buildExecutionDiagnostics(run) }
       : {}),
   });
 
-  const finish = (run, status, code: number | null = null, signal: string | null = null) => {
+  const commitFinish = (
+    run,
+    status,
+    code: number | null = null,
+    signal: string | null = null,
+    lifecycleEvidence = null,
+  ) => {
     if (TERMINAL_RUN_STATUSES.has(run.status)) return;
     if (beforeFinish) beforeFinish(run, status, code, signal);
+    const terminalAt = Date.now();
     run.status = status;
     run.exitCode = code;
     run.signal = signal;
-    run.updatedAt = Date.now();
+    run.updatedAt = terminalAt;
+    run.terminalAt = terminalAt;
     // Derive the work-completeness flag once, at the single terminal choke point,
     // from the signals the agent-event handler folded onto the run. Uses the
     // canonical predicate so it can never diverge from the web chat footer
@@ -1290,6 +1442,10 @@ export function createChatRunService({
       Boolean(run.truncatedMidTurn)
       || (!strategyTaskProvesDelivery(run.strategyTask)
         && todoSnapshotHasUnfinishedWork(run.lastTodoSnapshot));
+    // Commit the terminal Run snapshot before exposing its terminal event. The
+    // optional outbox hook is local-only and synchronous by contract.
+    persistTerminalState(run, lifecycleEvidence);
+    finalizeTerminalLocally(run, status, terminalAt);
     // Release run-scoped resources the starter registered (e.g. the minted
     // tool-token grant + agent event-sink entries). This runs on EVERY
     // terminal path — including a startup throw that never reached the child
@@ -1300,10 +1456,15 @@ export function createChatRunService({
       run.onFinalize = null;
       try { finalize(); } catch { /* best-effort */ }
     }
+    // Terminal finalizers can add artifact metadata after the authoritative
+    // terminal timestamp snapshot. Persist once more before publishing `end`
+    // so restart hydration sees the same artifact result as live clients.
+    persistTerminalState(run);
     emit(run, 'end', {
       code,
       signal,
       status,
+      terminalAt,
       resumable: run.resumable ?? false,
       endedWithUnfinishedWork: run.endedWithUnfinishedWork,
       ...(Number.isFinite(run.artifactCount) ? { artifactCount: run.artifactCount } : {}),
@@ -1311,7 +1472,7 @@ export function createChatRunService({
       failureCategory: run.failureCategory ?? null,
       failureDetail: run.failureDetail ?? null,
       ...(run.strategyTask ? { strategyTask: run.strategyTask } : {}),
-    });
+    }, terminalAt, false);
     for (const sse of run.clients) sse.end();
     run.clients.clear();
     for (const waiter of run.waiters) waiter(statusBody(run));
@@ -1323,6 +1484,59 @@ export function createChatRunService({
     // Any event emitted after this point must not lazily re-open the log.
     run.eventsLogClosed = true;
     scheduleCleanup(run);
+  };
+
+  // A run may reach its logical verdict before the attempt's complete process
+  // tree is quiet. Keep the public status/SSE/analytics terminal behind every
+  // registered teardown barrier: `run_finished` is a claim that this run can no
+  // longer produce model traffic, not merely that its direct child emitted
+  // `close`. The first verdict owns the terminal fields; duplicate close/error
+  // paths wait on the same pending finish instead of publishing twice.
+  const finish = (run, status, code: number | null = null, signal: string | null = null) => {
+    if (TERMINAL_RUN_STATUSES.has(run.status)) {
+      if (run.terminalLifecycle) {
+        const kind = run.status === status
+          && (run.exitCode ?? null) === code
+          && (run.signal ?? null) === signal
+          ? 'duplicate'
+          : 'late';
+        run.terminalLifecycle = recordIgnoredTerminalClaim(run.terminalLifecycle, kind);
+        persistState(run);
+      }
+      return;
+    }
+    if (run.pendingTerminalFinish) {
+      const pending = run.pendingTerminalFinish;
+      const kind = pending.status === status
+        && (pending.code ?? null) === code
+        && (pending.signal ?? null) === signal
+        ? 'duplicate'
+        : 'late';
+      pending.lifecycle = recordIgnoredTerminalClaim(pending.lifecycle, kind);
+      return;
+    }
+    if ((run.processTreeTerminationPending ?? 0) > 0) {
+      run.pendingTerminalFinish = {
+        status,
+        code,
+        signal,
+        lifecycle: terminalLifecycleSnapshot({
+          cumulativeRetryAttemptCount: run.cumulativeRetryAttemptCount,
+          retryAttemptCount: run.retryAttemptCount,
+          manualResumeAttemptCount: run.manualResumeAttemptCount,
+          runtimeGenerationId: run.runtimeGenerationId,
+          cancelOrigin: run.cancelOrigin ?? null,
+          terminalTrigger: run.terminalTrigger ?? null,
+          terminalIntegrity: run.terminalIntegrity ?? 'canonical',
+          terminalPersistence: {
+            status: 'unknown',
+            errorType: null,
+          },
+        }),
+      };
+      return;
+    }
+    commitFinish(run, status, code, signal);
   };
 
   const fail = (run, code, message, init = {}) => {
@@ -1401,20 +1615,6 @@ export function createChatRunService({
     });
   };
 
-  // A runtime error can be emitted while the child is still draining stdout.
-  // When that happened before cancellation, wait for `close` so server.ts's
-  // earlier close listener can classify and finalize the failure before the
-  // cancel route applies its canceled fallback. Ordinary cancellation keeps
-  // the faster exit-or-close behavior.
-  const waitForCanceledChildExit = (run, timeoutMs) => {
-    if (TERMINAL_RUN_STATUSES.has(run.status)) return Promise.resolve(true);
-    return waitForChildExit(
-      run.child,
-      timeoutMs,
-      { closeOnly: run.runtimeFailureObservedBeforeCancellation === true },
-    );
-  };
-
   const forceWaitMs = () => {
     const raw = Number(process.env.OD_CHAT_RUN_CANCEL_FORCE_WAIT_MS);
     return Number.isFinite(raw) && raw > 0 ? raw : 500;
@@ -1483,6 +1683,183 @@ export function createChatRunService({
     return true;
   };
 
+  const processGroupIsAlive = (processGroupId) => {
+    if (process.platform === 'win32' || !Number.isInteger(processGroupId)) return false;
+    try {
+      process.kill(-processGroupId, 0);
+      return true;
+    } catch (err) {
+      return err?.code !== 'ESRCH';
+    }
+  };
+
+  const waitForProcessGroupExit = async (processGroupId, timeoutMs) => {
+    const deadline = Date.now() + Math.max(0, timeoutMs);
+    while (Date.now() < deadline) {
+      if (!processGroupIsAlive(processGroupId)) return true;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    return !processGroupIsAlive(processGroupId);
+  };
+
+  /**
+   * Terminate one captured attempt's complete process ownership boundary and
+   * register it as a terminal-publication barrier on the logical run.
+   *
+   * POSIX agents are spawned as process-group leaders, so pgid signalling also
+   * catches descendants created after teardown starts. Windows has no matching
+   * group primitive here; reuse the platform package's process-tree snapshot +
+   * bounded SIGTERM/SIGKILL escalation while the direct child is still alive.
+   * The captured child/pgid key makes repeated verdict/close callbacks
+   * idempotent and prevents a retry generation from targeting its successor.
+   */
+  const terminateProcessTree = (run, child, processGroupId, {
+    gracefulWaitMs = 0,
+    termGraceMs = cancelGraceMs(),
+    killGraceMs = forceWaitMs(),
+    reason = 'run_terminal',
+  } = {}) => {
+    const key = child ?? processGroupId;
+    run.processTreeTerminations ??= new Map();
+    if (key != null && run.processTreeTerminations.has(key)) {
+      return run.processTreeTerminations.get(key);
+    }
+
+    run.processTreeTerminationPending = (run.processTreeTerminationPending ?? 0) + 1;
+    const task = (async () => {
+      if (process.platform !== 'win32' && Number.isInteger(processGroupId)) {
+        if (!processGroupIsAlive(processGroupId)) {
+          return { quiescent: true, forced: false, remainingPids: [] };
+        }
+        if (
+          gracefulWaitMs > 0
+          && await waitForProcessGroupExit(processGroupId, gracefulWaitMs)
+        ) {
+          return { quiescent: true, forced: false, remainingPids: [] };
+        }
+        if (gracefulWaitMs > 0) closeRunStdin(run);
+        signalProcessGroup(processGroupId, 'SIGTERM');
+        if (await waitForProcessGroupExit(processGroupId, termGraceMs)) {
+          return { quiescent: true, forced: false, remainingPids: [] };
+        }
+        signalProcessGroup(processGroupId, 'SIGKILL');
+        const quiescent = await waitForProcessGroupExit(processGroupId, killGraceMs);
+        return {
+          quiescent,
+          forced: true,
+          remainingPids: quiescent ? [] : [processGroupId],
+        };
+      }
+
+      if (!Number.isInteger(child?.pid)) {
+        if (
+          gracefulWaitMs > 0
+          && await waitForChildExit(child, gracefulWaitMs)
+        ) {
+          return { quiescent: true, forced: false, remainingPids: [] };
+        }
+        if (gracefulWaitMs > 0) closeRunStdin(run);
+        signalChildProcess(child, null, 'SIGTERM');
+        if (await waitForChildExit(child, termGraceMs)) {
+          return { quiescent: true, forced: false, remainingPids: [] };
+        }
+        signalChildProcess(child, null, 'SIGKILL');
+        const quiescent = await waitForChildExit(child, killGraceMs);
+        return {
+          quiescent,
+          forced: true,
+          remainingPids: [],
+        };
+      }
+
+      const initialSnapshots = await listProcessSnapshots();
+      let enumerationVerified = initialSnapshots.length > 0;
+      let childExitedDuringGrace = childHasExited(child);
+      if (gracefulWaitMs > 0) {
+        childExitedDuringGrace = await waitForChildExit(child, gracefulWaitMs);
+        if (!childExitedDuringGrace) closeRunStdin(run);
+      }
+      const refreshedSnapshots = await listProcessSnapshots();
+      enumerationVerified &&= refreshedSnapshots.length > 0;
+      const snapshots = [...initialSnapshots, ...refreshedSnapshots];
+      const pids = collectProcessTreePids(snapshots, [child.pid])
+        .filter((pid) => !childExitedDuringGrace || pid !== child.pid);
+      const terminationPids = pids.length > 0 || childExitedDuringGrace
+        ? pids
+        : [child.pid];
+      const result = await stopProcesses(terminationPids, { termGraceMs, killGraceMs });
+
+      const verificationSnapshots = await listProcessSnapshots();
+      enumerationVerified &&= verificationSnapshots.length > 0;
+      const livePids = new Set(verificationSnapshots.map((snapshot) => snapshot.pid));
+      let remainingPids = collectProcessTreePids(
+        [...snapshots, ...verificationSnapshots],
+        [child.pid, ...pids],
+      ).filter((pid) => livePids.has(pid));
+      let forcedPids = result.forcedPids;
+
+      // A wrapper may create one last descendant while handling SIGTERM. Reap
+      // anything the post-escalation verification newly attaches to the
+      // captured ownership tree, then verify once more before terminalizing.
+      if (enumerationVerified && remainingPids.length > 0) {
+        const followUp = await stopProcesses(remainingPids, {
+          termGraceMs: 0,
+          killGraceMs,
+        });
+        forcedPids = [...new Set([...forcedPids, ...followUp.forcedPids])];
+        const finalSnapshots = await listProcessSnapshots();
+        enumerationVerified &&= finalSnapshots.length > 0;
+        const finalLivePids = new Set(finalSnapshots.map((snapshot) => snapshot.pid));
+        remainingPids = collectProcessTreePids(
+          [...snapshots, ...verificationSnapshots, ...finalSnapshots],
+          [...pids, ...remainingPids],
+        ).filter((pid) => finalLivePids.has(pid));
+      }
+      return {
+        quiescent: enumerationVerified && remainingPids.length === 0,
+        forced: forcedPids.length > 0,
+        remainingPids,
+        ...(!enumerationVerified ? { error: 'process enumeration unavailable' } : {}),
+      };
+    })().catch((error) => ({
+      quiescent: false,
+      forced: false,
+      remainingPids: [],
+      error: error instanceof Error ? error.message : String(error),
+    })).then((result) => {
+      if (!result.quiescent) {
+        emit(run, 'diagnostic', {
+          type: 'termination_failed',
+          reason,
+          child_pid: child?.pid ?? null,
+          process_group_id: processGroupId ?? null,
+          remaining_pids: result.remainingPids,
+          ...(result.error ? { error: result.error } : {}),
+        });
+      }
+      return result;
+    }).finally(() => {
+      run.processTreeTerminationPending = Math.max(
+        0,
+        (run.processTreeTerminationPending ?? 1) - 1,
+      );
+      if (run.processTreeTerminationPending === 0 && run.pendingTerminalFinish) {
+        const pending = run.pendingTerminalFinish;
+        run.pendingTerminalFinish = null;
+        commitFinish(
+          run,
+          pending.status,
+          pending.code,
+          pending.signal,
+          pending.lifecycle,
+        );
+      }
+    });
+
+    if (key != null) run.processTreeTerminations.set(key, task);
+    return task;
+  };
+
   // Reap a torn-down attempt's whole process group: SIGTERM now, then SIGKILL any
   // survivors after the grace window. Both target the CAPTURED pgid passed in —
   // callers must snapshot run.processGroupId before a same-run retry overwrites
@@ -1544,37 +1921,46 @@ export function createChatRunService({
       return statusBody(run);
     }
 
+    const targetChild = run.child;
+    const targetProcessGroupId = run.processGroupId;
+
     // Prefer RPC-level abort for agents that support it (pi, ACP adapters).
     // If the adapter does not exit within its grace window, fall back to
     // process signals and finally SIGKILL the process group.
     if (run.acpSession?.abort) {
+      const graceMs = Number(process.env.PI_ABORT_GRACE_MS) || 3000;
       try {
         run.acpSession.abort();
       } catch {
         // Signal fallback below owns eventual process termination.
       }
-      const graceMs = Number(process.env.PI_ABORT_GRACE_MS) || 3000;
-      if (await waitForCanceledChildExit(run, graceMs)) {
-        return finishCanceledFromChildState(run, 'SIGTERM');
-      }
-      closeRunStdin(run);
-      killChild(run, 'SIGTERM');
-      if (await waitForCanceledChildExit(run, graceMs)) {
-        return finishCanceledFromChildState(run, 'SIGTERM');
-      }
-      killChild(run, 'SIGKILL');
-      await waitForCanceledChildExit(run, forceWaitMs());
-      return finishCanceledFromChildState(run, 'SIGKILL');
+      const termination = terminateProcessTree(
+        run,
+        targetChild,
+        targetProcessGroupId,
+        {
+          gracefulWaitMs: graceMs,
+          termGraceMs: graceMs,
+          killGraceMs: forceWaitMs(),
+          reason: 'run_cancel',
+        },
+      );
+      const terminationResult = await termination;
+      return finishCanceledFromChildState(run, terminationResult.forced ? 'SIGKILL' : 'SIGTERM');
     }
 
     closeRunStdin(run);
-    killChild(run, 'SIGTERM');
-    if (await waitForCanceledChildExit(run, cancelGraceMs())) {
-      return finishCanceledFromChildState(run, 'SIGTERM');
-    }
-    killChild(run, 'SIGKILL');
-    await waitForCanceledChildExit(run, forceWaitMs());
-    return finishCanceledFromChildState(run, 'SIGKILL');
+    const termination = await terminateProcessTree(
+      run,
+      targetChild,
+      targetProcessGroupId,
+      {
+        termGraceMs: cancelGraceMs(),
+        killGraceMs: forceWaitMs(),
+        reason: 'run_cancel',
+      },
+    );
+    return finishCanceledFromChildState(run, termination.forced ? 'SIGKILL' : 'SIGTERM');
   };
 
   const shutdownActive = async ({ graceMs = shutdownGraceMs } = {}) => {
@@ -1584,6 +1970,17 @@ export function createChatRunService({
       run.cancelOrigin = 'daemon_shutdown';
       run.updatedAt = Date.now();
       clearPendingRetryRestart(run);
+      const termination = terminateProcessTree(
+        run,
+        run.child,
+        run.processGroupId,
+        {
+          gracefulWaitMs: graceMs,
+          termGraceMs: graceMs,
+          killGraceMs: 500,
+          reason: 'daemon_shutdown',
+        },
+      );
       if (run.acpSession?.abort) {
         try {
           run.acpSession.abort();
@@ -1592,12 +1989,8 @@ export function createChatRunService({
         }
       }
       closeRunStdin(run);
-      killChild(run, 'SIGTERM');
-      finish(run, 'canceled', null, 'SIGTERM');
-      if (run.child && !(await waitForChildExit(run.child, graceMs))) {
-        killChild(run, 'SIGKILL');
-        await waitForChildExit(run.child, 500);
-      }
+      const terminationResult = await termination;
+      finish(run, 'canceled', null, terminationResult.forced ? 'SIGKILL' : 'SIGTERM');
     }));
   };
 
@@ -1669,6 +2062,8 @@ export function createChatRunService({
     emit,
     persistState,
     setAnalyticsRecovery,
+    beginAnalyticsDelivery,
+    finalizeAnalyticsDelivery,
     markAnalyticsCompleted,
     beginTelemetryDelivery,
     recordTelemetryDeliveryAttempt,
@@ -1680,6 +2075,7 @@ export function createChatRunService({
     drop,
     signalChild: killChild,
     reapProcessGroup,
+    terminateProcessTree,
     signalProcessGroup,
     statusBody,
     signalChildProcess,

@@ -18,6 +18,7 @@ import { eventsEndedWithUnfinishedWork } from '@open-design/contracts';
 import { migrateCollabSyncSnapshots } from './collab/sync-snapshot-store.js';
 import { migrateCommentRelayOutbox } from './collab/comment-relay-outbox.js';
 import { migratePublicFilePublications } from './collab/public-file-publication-store.js';
+import { migrateAmrTerminalReportOutbox } from './storage/amr-terminal-report-outbox.js';
 import {
   collapseWorkspaceProjectHomes,
   type WorkspaceProjectHomeRow,
@@ -201,6 +202,9 @@ function migrate(db: SqliteDb): void {
       model           TEXT,
       cwd             TEXT,
       last_message_id TEXT,
+      -- Last provider-reported effective input usage for this exact session.
+      -- Observability only: never used to admit, reject, compact, or roll over.
+      last_input_tokens INTEGER,
       updated_at      INTEGER NOT NULL,
       PRIMARY KEY (conversation_id, agent_id),
       FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
@@ -555,6 +559,9 @@ function migrate(db: SqliteDb): void {
   if (agentSessionCols.length > 0 && !agentSessionCols.some((c: DbRow) => c.name === 'last_message_id')) {
     db.exec(`ALTER TABLE agent_sessions ADD COLUMN last_message_id TEXT`);
   }
+  if (agentSessionCols.length > 0 && !agentSessionCols.some((c: DbRow) => c.name === 'last_input_tokens')) {
+    db.exec(`ALTER TABLE agent_sessions ADD COLUMN last_input_tokens INTEGER`);
+  }
   const tabsStateCols = db.prepare(`PRAGMA table_info(tabs_state)`).all() as DbRow[];
   if (tabsStateCols.length > 0 && !tabsStateCols.some((c: DbRow) => c.name === 'state_json')) {
     db.exec(`ALTER TABLE tabs_state ADD COLUMN state_json TEXT`);
@@ -568,6 +575,7 @@ function migrate(db: SqliteDb): void {
   migrateOdNextRolloutStore(db);
   migrateCollabSyncSnapshots(db);
   migrateCommentRelayOutbox(db);
+  migrateAmrTerminalReportOutbox(db);
   migratePublicFilePublications(db);
 }
 
@@ -2506,13 +2514,21 @@ export function upsertAgentSession(
     model?: string | null;
     cwd?: string | null;
     lastMessageId?: string | null;
+    lastInputTokens?: number | null;
   },
 ): void {
+  const lastInputTokens =
+    typeof input.lastInputTokens === 'number' &&
+    Number.isSafeInteger(input.lastInputTokens) &&
+    input.lastInputTokens >= 0 &&
+    input.lastInputTokens <= 1_000_000_000
+      ? input.lastInputTokens
+      : null;
   db.prepare(
     `INSERT INTO agent_sessions
        (conversation_id, agent_id, session_id, stable_prompt_hash, stable_prompt_sections,
-        model, cwd, last_message_id, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        model, cwd, last_message_id, last_input_tokens, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(conversation_id, agent_id)
        DO UPDATE SET session_id = excluded.session_id,
                      stable_prompt_hash = excluded.stable_prompt_hash,
@@ -2520,6 +2536,11 @@ export function upsertAgentSession(
                      model = excluded.model,
                      cwd = excluded.cwd,
                      last_message_id = excluded.last_message_id,
+                     last_input_tokens = CASE
+                       WHEN excluded.session_id = agent_sessions.session_id
+                         THEN COALESCE(excluded.last_input_tokens, agent_sessions.last_input_tokens)
+                       ELSE excluded.last_input_tokens
+                     END,
                      updated_at = excluded.updated_at`,
   ).run(
     input.conversationId,
@@ -2530,6 +2551,7 @@ export function upsertAgentSession(
     input.model ?? null,
     input.cwd ?? null,
     input.lastMessageId ?? null,
+    lastInputTokens,
     Date.now(),
   );
 }
@@ -2545,10 +2567,12 @@ export function getAgentSessionRecord(
   model: string | null;
   cwd: string | null;
   lastMessageId: string | null;
+  lastInputTokens: number | null;
 } | null {
   const row = db
     .prepare(
-      `SELECT session_id, stable_prompt_hash, stable_prompt_sections, model, cwd, last_message_id
+      `SELECT session_id, stable_prompt_hash, stable_prompt_sections, model, cwd, last_message_id,
+              last_input_tokens
          FROM agent_sessions
         WHERE conversation_id = ? AND agent_id = ?`,
     )
@@ -2563,6 +2587,13 @@ export function getAgentSessionRecord(
     model: typeof row.model === 'string' ? row.model : null,
     cwd: typeof row.cwd === 'string' ? row.cwd : null,
     lastMessageId: typeof row.last_message_id === 'string' ? row.last_message_id : null,
+    lastInputTokens:
+      typeof row.last_input_tokens === 'number' &&
+      Number.isSafeInteger(row.last_input_tokens) &&
+      row.last_input_tokens >= 0 &&
+      row.last_input_tokens <= 1_000_000_000
+        ? row.last_input_tokens
+        : null,
   };
 }
 
@@ -2760,6 +2791,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     .prepare(
       `SELECT position, run_id AS runId, run_status AS runStatus,
               content, events_json AS eventsJson,
+              task_analytics_json AS taskAnalyticsJson,
               ${eventBatchProjection} AS hasEventBatches
          FROM messages WHERE id = ?`,
     )
@@ -2784,6 +2816,17 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     const nextContent = preserveDaemonEventSnapshot
       ? existing.content ?? ''
       : m.content;
+    // A turn's recovery lineage is written once, by whoever owns the turn. A
+    // rewrite that carries no opinion about it — above all the run-create seed,
+    // which rebuilds this row from the request that won the claim — must not
+    // erase it, or an accepted answer loses the logical task it belongs to
+    // after a reload. An explicit null still clears it.
+    const nextTaskAnalyticsJson =
+      m.taskAnalytics === undefined
+        ? ((existing.taskAnalyticsJson as string | null) ?? null)
+        : m.taskAnalytics
+          ? JSON.stringify(m.taskAnalytics)
+          : null;
     db.prepare(
       `UPDATE messages
           SET role = ?, content = ?, agent_id = ?, agent_name = ?,
@@ -2817,7 +2860,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.preTurnFileNames ? JSON.stringify(m.preTurnFileNames) : null,
       normalizeMessageSessionModeForStorage(m.sessionMode),
       m.runContext ? JSON.stringify(m.runContext) : null,
-      m.taskAnalytics ? JSON.stringify(m.taskAnalytics) : null,
+      nextTaskAnalyticsJson,
       m.appliedPluginSnapshot ? JSON.stringify(m.appliedPluginSnapshot) : null,
       m.telemetryFinalized === true ? 1 : 0,
       now,

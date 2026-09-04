@@ -15,7 +15,9 @@ import {
   getProjectDetail,
   importClaudeDesignZip,
   importFolderProject,
+  deleteTemplate,
   invalidateWorkspaceProjectLists,
+  listTemplates,
   installGeneratedPluginFolder,
   installPluginSource,
   listPlugins,
@@ -30,7 +32,6 @@ import {
   pickLocalFolderPath,
   publishGeneratedPluginToGitHub,
   resolvedWorkspaceContextForWrite,
-  restoreProjectAutomaticScenario,
   startGeneratedPluginShareTask,
   uploadPluginFolder,
   waitGeneratedPluginShareTask,
@@ -1977,61 +1978,6 @@ describe('createPluginShareProject', () => {
   });
 });
 
-describe('restoreProjectAutomaticScenario', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it('sends the snapshot CAS and the current Workspace authority', async () => {
-    const payload = {
-      project: {
-        id: 'project/one',
-        name: 'Prototype',
-        skillId: null,
-        designSystemId: null,
-        createdAt: 1,
-        updatedAt: 2,
-        appliedPluginSnapshotId: 'snapshot-new',
-        metadata: { kind: 'prototype' },
-      },
-      scenarioBinding: {
-        schemaVersion: 1,
-        provenance: 'automatic_default',
-        pluginId: 'example-web-prototype',
-        snapshotId: 'snapshot-new',
-        taskProfile: 'prototype',
-        boundAt: 2,
-      },
-      changed: true,
-    };
-    const fetchMock = vi.fn<typeof fetch>(async () => new Response(
-      JSON.stringify(payload),
-      { status: 200, headers: { 'content-type': 'application/json' } },
-    ));
-    vi.stubGlobal('fetch', fetchMock);
-    const context = teamWorkspaceContext({
-      workspaceId: 'workspace-1',
-      workspaceMemberId: 'member-1',
-    });
-
-    await expect(restoreProjectAutomaticScenario(
-      'project/one',
-      'snapshot-old',
-      context,
-    )).resolves.toEqual(payload);
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/projects/project%2Fone/scenario/restore-automatic',
-      expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify({ expectedCurrentSnapshotId: 'snapshot-old' }),
-      }),
-    );
-    const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
-    expect(headers.get('x-od-workspace-id')).toBe('workspace-1');
-    expect(headers.get('x-od-workspace-member-id')).toBe('member-1');
-  });
-});
-
 describe('importFolderProject', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -2479,5 +2425,128 @@ describe('read-only project tabs cache', () => {
     expect(loaded.active).toBe('local.html');
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[1]?.method).toBeUndefined();
+  });
+});
+
+describe('listTemplates request coalescing', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((done) => { resolve = done; });
+    return { promise, resolve };
+  }
+
+  it('collapses concurrent template-list reads into a single request', async () => {
+    // Same launch-burst shape as the design-system catalog: App's one-shot
+    // bootstrap and the home-route effect both want the list on the same pass,
+    // and both must keep their own read — one settles the entry view, the other
+    // exists to pick up a template saved inside a project. On the wire they are
+    // one request, and on a cold Home load they land together.
+    const gate = deferred<Response>();
+    let reads = 0;
+    vi.stubGlobal('fetch', vi.fn(() => {
+      reads += 1;
+      return gate.promise;
+    }));
+
+    const inFlight = [listTemplates(), listTemplates(), listTemplates()];
+    await vi.waitFor(() => expect(reads).toBeGreaterThan(0));
+    expect(reads).toBe(1);
+
+    gate.resolve(new Response(
+      JSON.stringify({ templates: [{ id: 'tpl-1', name: 'Landing page' }] }),
+      { status: 200 },
+    ));
+    for (const read of inFlight) {
+      await expect(read).resolves.toEqual([
+        expect.objectContaining({ id: 'tpl-1' }),
+      ]);
+    }
+  });
+
+  it('re-reads the template list for a call issued after the previous settled', async () => {
+    // Single-flight only, never a shared settled answer: returning Home re-reads
+    // precisely so a template saved inside a project shows up, and the save
+    // handler awaits its own refresh. A cached list would hand both of them the
+    // list they were fired to replace.
+    let reads = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      reads += 1;
+      return new Response(
+        JSON.stringify({ templates: reads > 1 ? [{ id: 'tpl-new', name: 'Saved' }] : [] }),
+        { status: 200 },
+      );
+    }));
+
+    await expect(listTemplates()).resolves.toEqual([]);
+    await expect(listTemplates()).resolves.toEqual([
+      expect.objectContaining({ id: 'tpl-new' }),
+    ]);
+    expect(reads).toBe(2);
+  });
+
+  it('starts a fresh template read when a mutation lands mid-flight', async () => {
+    // Review catch. `ttl = 0` stops settled-result reuse but not in-flight
+    // joining, and the post-mutation refresh is exactly the caller that must
+    // never join: `handleDeleteTemplate` awaits `deleteTemplate` and then calls
+    // `refreshTemplates`. The daemon answers `/api/templates` from a synchronous
+    // `listTemplates(db)` snapshot, so a GET issued before the DELETE returns
+    // the row that was just deleted — and joining it would leave the deleted
+    // template on screen until something else happened to refetch.
+    const pending = deferred<Response>();
+    const urls: string[] = [];
+    let templateRows = [{ id: 'tpl-doomed', name: 'Doomed' }];
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      urls.push(`${init?.method ?? 'GET'} ${url}`);
+      if ((init?.method ?? 'GET') === 'DELETE') {
+        templateRows = [];
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      // The first GET is issued before the delete and answers the pre-delete
+      // snapshot; it stays pending across the mutation.
+      if (urls.filter((u) => u.startsWith('GET')).length === 1) return pending.promise;
+      return Promise.resolve(new Response(
+        JSON.stringify({ templates: templateRows }),
+        { status: 200 },
+      ));
+    }));
+
+    const inFlightBeforeMutation = listTemplates();
+    await expect(deleteTemplate('tpl-doomed')).resolves.toBe(true);
+
+    const afterMutation = listTemplates();
+    // Release the pre-delete GET. If the refresh joined it, it now resolves to
+    // the stale row instead of issuing its own read.
+    pending.resolve(new Response(
+      JSON.stringify({ templates: [{ id: 'tpl-doomed', name: 'Doomed' }] }),
+      { status: 200 },
+    ));
+
+    await expect(afterMutation).resolves.toEqual([]);
+    await expect(inFlightBeforeMutation).resolves.toEqual([
+      expect.objectContaining({ id: 'tpl-doomed' }),
+    ]);
+  });
+
+  it('lets the next caller retry instead of joining a failed read', async () => {
+    // Failures are never cached: a transient 500 must not leave the entry view
+    // with an empty template list until something else happens to refetch.
+    let reads = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      reads += 1;
+      return reads === 1
+        ? new Response('nope', { status: 500 })
+        : new Response(JSON.stringify({ templates: [{ id: 'tpl-2', name: 'Deck' }] }), { status: 200 });
+    }));
+
+    await expect(listTemplates()).resolves.toEqual([]);
+    await expect(listTemplates()).resolves.toEqual([
+      expect.objectContaining({ id: 'tpl-2' }),
+    ]);
+    expect(reads).toBe(2);
   });
 });

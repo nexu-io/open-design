@@ -6,7 +6,7 @@ import type { DesignSystemEnrichClickProps, TrackingDesignSystemEditSurface } fr
 import type { TrackingPageName, TrackingSettingsPage } from './event-names.js';
 import type { OnboardingClickProps, TrackingOnboardingFirstLoopStep, TrackingOnboardingProductType, TrackingOnboardingRole, TrackingOnboardingUseCase } from './onboarding.js';
 import type { TrackingRunRecoveryActionType } from './result-events.js';
-import type { TrackingAmrEntrySource, TrackingArtifactKind, TrackingByokProviderId, TrackingCampaignConversionSource, TrackingCampaignId, TrackingCampaignUserState, TrackingCliProviderId, TrackingExecutionMode, TrackingExportFormat, TrackingFeedbackProviderId, TrackingNewProjectTab, TrackingProjectKind, TrackingProjectSource } from './shared-enums.js';
+import type { TrackingAmrEntrySource, TrackingArtifactKind, TrackingByokProviderId, TrackingCampaignConversionSource, TrackingCampaignDeliveryMode, TrackingCampaignId, TrackingCampaignUserState, TrackingCliProviderId, TrackingExecutionMode, TrackingExportFormat, TrackingFeedbackProviderId, TrackingNewProjectTab, TrackingProjectKind, TrackingProjectSource } from './shared-enums.js';
 import type { AccountMenuClickProps, CommunityTemplateClickProps, EntryNavigationClickProps, ExtensionMarketplaceClickProps, ProjectCollectionClickProps, TrackingWorkspaceScope, WorkspaceInviteClickProps, WorkspaceSwitcherClickProps } from './workspace.js';
 // ---- ui_click ------------------------------------------------------------
 //
@@ -140,6 +140,12 @@ export interface HomeChatComposerClickProps {
     // "Recent folders" submenu.
     | 'working_dir_recent'
     | 'task_chip'
+    // The × the composer's type pill reveals on hover: clears the picked task
+    // type back to none (the pill then disappears; the entry point in the
+    // accessory row stays). Fires only once no sub-category is left to clear —
+    // that step sends `subcategory_chip` with `subcategory: 'all'` instead.
+    // `chip_id` is the type being cleared.
+    | 'task_chip_clear'
     // Sub-category filter pill under the task rail (全部 / Landing / Brand /
     // Dashboards / …). `subcategory` carries the picked slug; '全部' sends
     // `subcategory: 'all'`. `chip_id` is the parent task type.
@@ -969,6 +975,18 @@ export interface DeepSeekCampaignModalClickProps {
   user_state: TrackingCampaignUserState;
 }
 
+export interface GoPlanSunsetModalClickProps {
+  page_name: 'home';
+  area: 'go_plan_sunset_modal';
+  element: 'view_other_subscriptions' | 'acknowledge' | 'close';
+  close_method?: 'unknown';
+  campaign_id: 'go_plan_sunset_202608';
+  announcement_version: '2026_08_25';
+  delivery_mode: TrackingCampaignDeliveryMode;
+  current_plan_id: string;
+  locale: string;
+}
+
 export interface DeepSeekCampaignBadgeClickProps {
   page_name: 'home';
   area: 'campaign_badge';
@@ -1057,6 +1075,8 @@ export interface FileManagerClickProps {
     | 'previous'
     | 'next'
     | 'per_page_dropdown';
+  project_id: string;
+  project_kind: TrackingProjectKind;
 }
 
 // The workspace tab strip's "+" launcher — a command-palette popover for
@@ -1145,6 +1165,8 @@ export interface ArtifactToolbarClickProps {
     | 'versions';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind;
   // Which surface hosted the click. Reported for element=versions (the only
   // toolbar action that also lives in the overflow menu).
   entry_from?: 'toolbar' | 'more_menu';
@@ -1173,6 +1195,8 @@ export interface DrawToolbarClickProps {
   submit_action?: 'draft' | 'queue' | 'send';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind;
 }
 
 export interface TweaksPopoverClickProps {
@@ -1182,6 +1206,8 @@ export interface TweaksPopoverClickProps {
   variant_name?: string;
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind;
   status_before: 'on' | 'off';
   status_after: 'on' | 'off';
 }
@@ -1192,6 +1218,8 @@ export interface CommentPopoverClickProps {
   element: 'save_comment' | 'send_to_chat' | 'add_note';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind;
 }
 
 export interface ArtifactHeaderClickProps {
@@ -1209,6 +1237,8 @@ export interface ArtifactHeaderClickProps {
     | 'settings';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind;
 }
 
 // Canonical, bounded set of hand-off `target_id` values: the editor /
@@ -1281,6 +1311,8 @@ export interface HandoffClickProps {
   framework?: 'react' | 'vue' | 'svelte' | 'solid' | 'next' | 'vanilla';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind;
 }
 
 export interface PresentPopoverClickProps {
@@ -1322,6 +1354,8 @@ export interface DeckViewerClickProps {
     | 'speaker_notes_edit';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind;
   // Only for thumbnail_rail_toggle: which way the toggle went.
   action?: 'expand' | 'collapse';
   // Active slide index (0-based) at the moment of the interaction, and the
@@ -1379,6 +1413,8 @@ export interface FileVersionModalClickProps {
     | 'restore_cancel';
   artifact_id: string;
   artifact_kind: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind;
   // Provenance of the version the click targets (version_item: the clicked
   // version; restore*: the version being restored).
   version_source?: TrackingFileVersionSource;
@@ -1485,6 +1521,7 @@ export type TrackingSettingsArea =
   | 'design_systems'
   | 'project_locations'
   | 'privacy'
+  | 'labs'
   | 'about';
 
 export interface SettingsSidebarClickProps {
@@ -1687,6 +1724,7 @@ export type UiClickProps =
   | RunRecoveryActionClickProps
   | AmrEntryClickProps
   | DeepSeekCampaignModalClickProps
+  | GoPlanSunsetModalClickProps
   | DeepSeekCampaignBadgeClickProps
   | ChatPanelResourcesPopoverClickProps
   | ChatPanelMessageQueueClickProps

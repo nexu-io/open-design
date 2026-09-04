@@ -1043,7 +1043,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       const tStart = Date.now();
       const { input, title: resolvedTitle, defaultFilename } =
         await buildDeckRenderInput(renderOptions);
-      // The renderer call is a cross-process IPC (requestJsonIpc, 600s). A
+      // The renderer call crosses the sidecar client boundary (600s). A
       // missing desktop process, broken socket, or timeout is an upstream
       // renderer outage — surface it as 502 UPSTREAM_UNAVAILABLE (matching the
       // `!rendered.ok` branch below), not the outer 400 BAD_REQUEST which is for

@@ -42,6 +42,7 @@ export type AnalyticsEventName =
   | 'context_link_result'
   | 'speaker_notes_save_result'
   // Artifact
+  | 'artifact_edit_result'
   | 'artifact_export_result'
   | 'artifact_deploy_result'
   | 'artifact_publish_result'
@@ -65,6 +66,8 @@ export type AnalyticsEventName =
   | 'assistant_feedback_reason_submit'
   // Settings
   | 'settings_view'
+  // Labs experiment opt-in / opt-out (generic across experiments).
+  | 'labs_item_toggled'
   | 'settings_cli_test_result'
   | 'settings_byok_test_result'
   | 'settings_byok_models_fetch_result'

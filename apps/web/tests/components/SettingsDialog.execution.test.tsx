@@ -1288,6 +1288,73 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(errorStatus?.parentElement).toHaveClass('settings-autosave-layer');
   });
 
+  it('keeps a newer failed Labs save ahead of an older ordinary autosave', async () => {
+    const ordinarySave = deferred<void>();
+    const labsSave = deferred<void>();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/strategies/od-next/rollout') {
+        return new Response(JSON.stringify({
+          status: {
+            strategyId: 'od-next-strategy',
+            scope: 'daemon_instance',
+            requestedMode: 'off',
+            requestedModeSource: 'default',
+            effectiveMode: 'off',
+            latch: null,
+            revision: 0,
+            updatedAt: null,
+            lastEvent: null,
+            resetAllowed: false,
+          },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/app-config') {
+        await labsSave.promise;
+        return new Response('{}', { status: 500 });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const view = renderSettingsDialog();
+    view.onPersist.mockImplementationOnce(() => ordinarySave.promise);
+
+    fireEvent.change(screen.getByLabelText('API key'), {
+      target: { value: 'sk-ant-held' },
+    });
+    await waitFor(() => expect(view.onPersist).toHaveBeenCalledTimes(1));
+    expect(screen.getByText('Saving…')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Labs/i }));
+    const labsSwitch = await screen.findByTestId('labs-harness-switch');
+    await waitFor(() => expect(labsSwitch.getAttribute('aria-disabled')).toBe('false'));
+    fireEvent.click(labsSwitch);
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.filter(([input]) => input.toString() === '/api/app-config'))
+        .toHaveLength(1);
+    });
+
+    await act(async () => {
+      ordinarySave.resolve();
+      await ordinarySave.promise;
+      await Promise.resolve();
+    });
+    expect(screen.queryByText('All changes saved')).toBeNull();
+    expect(screen.getByText('Saving…')).toBeTruthy();
+
+    await act(async () => {
+      labsSave.resolve();
+      await labsSave.promise;
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Couldn’t save changes/i)).toBeTruthy();
+    });
+  });
+
   it('closes BYOK via the close button or backdrop', () => {
     const first = renderSettingsDialog();
 
@@ -3249,6 +3316,60 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     expect(screen.getByRole('button', { name: 'Test' })).toBeTruthy();
   });
 
+  it('shows the concrete model reported by a Local CLI connection test', async () => {
+    const claudeAgent: AgentInfo = {
+      id: 'claude',
+      name: 'Claude Code',
+      bin: 'claude',
+      available: true,
+      version: '2.1.220',
+      models: [
+        { id: 'default', label: 'Default' },
+        { id: 'opus', label: 'Opus (alias)' },
+      ],
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/test/connection') {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            kind: 'success',
+            latencyMs: 42,
+            model: 'opus',
+            resolvedModel: 'claude-opus-5',
+            agentName: 'Claude Code',
+            sample: 'ok',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    renderSettingsDialog(
+      {
+        mode: 'daemon',
+        agentId: 'claude',
+        agentModels: { claude: { model: 'opus' } },
+      },
+      { agents: [claudeAgent] },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }));
+
+    expect(
+      await screen.findByText(/Claude Code replied in 42 ms.*Model: claude-opus-5/i),
+    ).toBeTruthy();
+  });
+
   it('renders the AMR local agent without vela branding and with the Local CLI test action', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
@@ -3431,16 +3552,16 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
 
-    // Let both identity sources resolve before checking the action. The card
-    // describes the selected CLI login, so its account balance remains visible
-    // even though this team member cannot manage workspace billing.
+    // Let both identity sources resolve before checking the action. A Team
+    // card must not fall back to the member's personal account balance when
+    // the environment-scoped workspace wallet is unavailable.
     await waitFor(() => {
       expect(fetchMock.mock.calls.some(([i]) =>
         i.toString() === '/api/workspace/context')).toBe(true);
       expect(fetchMock.mock.calls.some(([i]) =>
         i.toString() === '/api/integrations/vela/status')).toBe(true);
     });
-    expect(screen.getByText('$10.00')).toBeTruthy();
+    expect(screen.queryByText('$10.00')).toBeNull();
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
@@ -3927,7 +4048,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     });
   });
 
-  it('keeps the feature-test CLI account balance independent from the selected workspace wallet', async () => {
+  it('keeps the Settings team balance aligned with the selected workspace wallet', async () => {
     const context = teamMemberWorkspaceContext({
       workspaceId: 'ws-team',
       workspaceMemberId: 'member-team',
@@ -4020,10 +4141,9 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
 
-    // This card describes the selected CLI login (email + profile + account
-    // plan), so its balance must come from that same feature-test account.
-    // The current workspace balance remains visible in the global workspace
-    // chrome and must not replace the account value here.
+    // The card keeps the selected CLI identity, but its Team badge and money
+    // must describe the same current environment + workspace as the global
+    // workspace chrome. Neither account-scoped source may replace that value.
     const amrCard = screen.getByTestId('settings-agent-card-amr');
     await waitFor(() => {
       expect(fetchMock.mock.calls.some(([input]) =>
@@ -4033,7 +4153,68 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(amrCard.querySelector('.agent-card-amr-balance-value')?.textContent).toBe('$18.79');
+    expect(amrCard.querySelector('.agent-card-amr-balance-value')?.textContent).toBe('$9.99');
+    expect(amrCard.textContent).not.toContain('$18.79');
+    expect(amrCard.textContent).not.toContain('$138.63');
+  });
+
+  it('does not flash a personal AMR balance while the Team workspace context is loading', async () => {
+    const pendingDirectory = deferred<Response>();
+    let walletCalls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/workspace/directory') return pendingDirectory.promise;
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: true,
+            profile: 'feature-test',
+            user: { id: 'user-1', email: 'signed-in@example.com' },
+            account: { plan: 'plus', balanceUsd: '18.7931' },
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/wallet') {
+        walletCalls += 1;
+        return new Response(
+          JSON.stringify({
+            status: 'available',
+            profile: 'feature-test',
+            user: { id: 'user-1', email: 'signed-in@example.com' },
+            balanceUsd: '138.63',
+            updatedAt: '2026-07-21T08:00:00.000Z',
+            fetchedAt: '2026-07-21T08:00:01.000Z',
+            stale: false,
+            source: 'vela_api',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'amr' },
+      { agents: [amrAgent] },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+
+    const amrCard = screen.getByTestId('settings-agent-card-amr');
+    expect(await within(amrCard).findByText('signed-in@example.com')).toBeTruthy();
+    expect(amrCard.querySelector('.agent-card-amr-balance-value')?.textContent).toBe('Loading…');
+    expect(amrCard.textContent).not.toContain('$18.79');
+    expect(amrCard.textContent).not.toContain('$138.63');
+    expect(walletCalls).toBe(0);
   });
 
   it('renders env-backed AMR login inside Settings without fabricating account details', async () => {

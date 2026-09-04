@@ -50,9 +50,10 @@ describe('recvpYC6eTaifb — home hero blank space above the title (empty worksp
     // The base (non-centered) tuned offset must stay untouched — this is an
     // override for the centered variant only, not a rewrite of the fold math.
     // 320a36ac1 retuned that base offset 240px → 96px (输入框整块上移，顶距
-    // 从 446 收到 300); what this case guards is that the centered variant
+    // 从 446 收到 300), and the entry refresh (#7635) lifted it to 116px under
+    // the plain headline; what this case guards is that the centered variant
     // still overrides whatever the base is, not the base number itself.
-    expect(ruleValue(baseHero, 'padding')).toBe('96px 0 var(--spacing-4)');
+    expect(ruleValue(baseHero, 'padding')).toBe('116px 0 var(--spacing-4)');
     // The centering itself (the other candidate cause) stays intact too.
     const centeredView = cssDeclarations(homeHeroCss, '.home-view--centered');
     expect(ruleValue(centeredView, 'justify-content')).toBe('center');
@@ -152,7 +153,11 @@ describe('OPEND-2148 — Settings autosave feedback obscures Local CLI controls'
 
     expect(ruleValue(feedbackLayer, 'position')).toBe('fixed');
     expect(ruleValue(feedbackLayer, 'left')).toBe('50%');
-    expect(ruleValue(feedbackLayer, 'bottom')).toBe('24px');
+    // The layer moved from the bottom of the viewport onto the app's top
+    // chrome row. What this ticket guarantees is that passive status keeps
+    // clear of the Local CLI controls in the panel's upper band and stays
+    // under the model picker — not the specific edge it hangs from.
+    expect(ruleValue(feedbackLayer, 'top')).toBe('0');
     expect(ruleValue(feedbackLayer, 'transform')).toBe('translateX(-50%)');
     const feedbackZIndex = Number(ruleValue(feedbackLayer, 'z-index'));
     expect(feedbackZIndex).toBeGreaterThan(1700);

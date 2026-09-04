@@ -26,6 +26,7 @@ vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
 });
 
 import { HomeView } from '../../src/components/HomeView';
+import { HOME_APPLY_TEMPLATE_EVENT } from '../../src/components/home-hero/chips';
 import type { DesignSystemSummary, PromptTemplateSummary } from '../../src/types';
 // HomeHero's prompt input migrated from a <textarea> + highlight overlay to the
 // same Lexical contenteditable the project composer uses. It still has
@@ -85,7 +86,30 @@ afterEach(() => {
 });
 
 describe('HomeView media composer options', () => {
-  it('shows the Home composer mode picker and still defaults to Design mode', async () => {
+  it('keeps the type tabs interactive while switching to Image', async () => {
+    const mediaApplyResponse = new Promise<Response>(() => undefined);
+    stubFetch({ mediaApplyResponse });
+    renderHome();
+
+    // Image lives behind the row's 更多 popover.
+    const more = await screen.findByTestId('home-hero-type-pills-more');
+    await waitFor(() => expect((more as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(more);
+    const imageTab = await screen.findByTestId('home-hero-type-pill-image-more');
+    expect((imageTab as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(imageTab);
+
+    // Picking retires the row; the composer pill names the type and its clear
+    // stays live while the media apply is still pending, so the choice is
+    // reversible at every moment.
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Image');
+    });
+    expect(screen.getByTestId('home-hero-template-clear')).toBeTruthy();
+  });
+
+  it('drops the Home composer mode picker and still submits in Design mode', async () => {
     stubFetch();
     const onSubmit = vi.fn();
     renderHome({ onSubmit });
@@ -96,8 +120,9 @@ describe('HomeView media composer options', () => {
     // the Design pill showing, so the mode the request will run in is stated on
     // screen rather than hidden behind a neutral glyph. The submitted payload
     // carries design either way.
-    expect(screen.getByTestId('composer-mode-trigger').getAttribute('aria-label')).toBe('Mode: Design');
-    expect(screen.getByTestId('composer-mode-clear')).toBeTruthy();
+    // The 「设计」 pill was removed from the Home composer footer; Home creates
+    // keep running in the app default — design — which the payload states.
+    expect(screen.queryByTestId('composer-mode-trigger')).toBeNull();
 
     await setHomePrompt('Create a clean loading animation');
     await submitHome();
@@ -552,7 +577,9 @@ describe('HomeView media composer options', () => {
     renderHome();
 
     await screen.findByTestId('home-hero-input');
-    expect((screen.getByTestId('home-hero-template-trigger') as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      (screen.getByTestId('home-hero-type-pill-deck') as HTMLButtonElement).disabled,
+    ).toBe(true);
     expect(fetchMock.mock.calls.some(([url]) => (
       typeof url === 'string' && url.includes('/api/plugins/od-media-generation/apply')
     ))).toBe(false);
@@ -563,6 +590,7 @@ describe('HomeView media composer options', () => {
       emptyWorkspaceDirectory: true,
       teamMediaPlugin: true,
     });
+    const onSubmit = vi.fn();
     workspaceContextMock.state = {
       context: null,
       resourceReadIdentity: null,
@@ -570,13 +598,12 @@ describe('HomeView media composer options', () => {
       identityChangePending: false,
       failure: undefined,
     };
-    renderHome();
+    renderHome({ onSubmit });
 
     await clickHomeRailChip('video');
-
-    await waitFor(() => {
-      expect(screen.getByTestId('home-hero-submit').getAttribute('aria-busy')).toBe('false');
-    });
+    await setHomePrompt('Create a launch teaser.');
+    await submitHome();
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     const apply = fetchMock.mock.calls.find(([url]) => (
       typeof url === 'string' && url.includes('/api/plugins/od-media-generation/apply')
     ));
@@ -584,11 +611,14 @@ describe('HomeView media composer options', () => {
     expect(new Headers(apply?.[1]?.headers).has('x-od-workspace-id')).toBe(false);
   });
 
-  it('preserves od-media-generation required inputs when applying media chips', async () => {
+  it('preserves od-media-generation required inputs when submitting media chips', async () => {
     const fetchMock = stubFetch();
-    renderHome();
+    const onSubmit = vi.fn();
+    renderHome({ onSubmit });
 
     await clickHomeRailChip('image');
+    await setHomePrompt('Create a campaign image.');
+    await submitHome();
 
     await waitFor(() => {
       expect(fetchMock.mock.calls.some(([url, init]) => (
@@ -605,7 +635,6 @@ describe('HomeView media composer options', () => {
       subject: 'a polished product concept',
       style: 'cinematic, high-quality, on-brand',
       aspect: '16:9',
-      ratio: '16:9',
     });
   });
 });
@@ -629,6 +658,7 @@ function stubFetch(options: {
   elevenLabsVoices?: Array<{ voiceId: string; name: string; category?: string }>;
   elevenLabsVoiceError?: string;
   emptyWorkspaceDirectory?: boolean;
+  mediaApplyResponse?: Promise<Response>;
   teamMediaPlugin?: boolean;
   workspaceDirectoryStatus?: number;
 } = {}) {
@@ -673,6 +703,7 @@ function stubFetch(options: {
         if (!inputs.subject) {
           return json({ error: 'missing_inputs', fields: ['subject'] }, 422);
         }
+        if (options.mediaApplyResponse) return options.mediaApplyResponse;
       }
       return json(applyResult(pluginId));
     }
@@ -707,18 +738,31 @@ async function openOption(name: string) {
 }
 
 async function clickHomeRailChip(id: string) {
-  // #5517 removed the inline template rail from Home: every scenario template
-  // is picked from the composer footer's radial Template picker. Wait until the
-  // trigger and the wedge are enabled first — plugins load asynchronously, so
-  // both are briefly disabled after mount.
-  const trigger = await screen.findByTestId('home-hero-template-trigger');
-  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false));
-  fireEvent.click(trigger);
-  const wedgeId = `home-hero-template-wedge-${id}`;
-  await waitFor(() =>
-    expect(screen.getByTestId(wedgeId).getAttribute('aria-disabled')).not.toBe('true'),
-  );
-  fireEvent.click(screen.getByTestId(wedgeId));
+  // A type already picked retires the row, and the pill has no menu — so
+  // switching means clearing back to the empty state first.
+  const clear = screen.queryByTestId('home-hero-template-clear');
+  if (clear) fireEvent.click(clear);
+  const lead = await screen.findByTestId('home-hero-type-pill-prototype');
+  await waitFor(() => expect((lead as HTMLButtonElement).disabled).toBe(false));
+  let pill = screen.queryByTestId(`home-hero-type-pill-${id}`);
+  if (!pill) {
+    // Types behind 更多 mount only while its popover is open.
+    fireEvent.click(screen.getByTestId('home-hero-type-pills-more'));
+    pill = screen.queryByTestId(`home-hero-type-pill-${id}-more`);
+  }
+  if (pill) {
+    fireEvent.click(pill);
+    return;
+  }
+  // Types outside the fixed row (media, HyperFrames, …) are reached the way
+  // the workspace tabs-bar hands one off: the apply-template window event,
+  // which HomeHero applies exactly as a row click.
+  fireEvent.keyDown(document, { key: 'Escape' });
+  await act(async () => {
+    window.dispatchEvent(
+      new CustomEvent(HOME_APPLY_TEMPLATE_EVENT, { detail: { chipId: id } }),
+    );
+  });
 }
 
 // Drive the Lexical editor and let the OnChange -> onPromptChange -> setPrompt

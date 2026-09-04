@@ -497,6 +497,36 @@ describe('resolveRunFailureUi', () => {
     expect(ui.messageVars?.retryAt).toBe('2026-08-12T06:34:47Z');
   });
 
+  it('explains an AMR membership concurrency limit and preserves its reset instant', () => {
+    const ui = resolveRunFailureUi(
+      'AGENT_EXECUTION_FAILED',
+      'membership_concurrency_limit',
+      'amr',
+      '[code=tier_limit_exceeded] membership concurrency limit exceeded: 3/2 resets 2026-08-25T10:42:00Z',
+    );
+    expect(ui).toMatchObject({
+      primaryAction: 'retry',
+      titleKey: 'chat.runError.title.membershipConcurrencyLimit',
+      messageKey: 'chat.runError.membershipConcurrencyLimitMessage',
+      messageVars: { retryAt: '2026-08-25T10:42:00Z' },
+      secondaryRetry: false,
+      showSwitchCard: false,
+    });
+  });
+
+  it('keeps membership concurrency guidance when no reset instant is readable', () => {
+    const ui = resolveRunFailureUi(
+      'AGENT_EXECUTION_FAILED',
+      'membership_concurrency_limit',
+      'amr',
+      '[code=tier_limit_exceeded] membership concurrency limit exceeded: 3/2',
+    );
+    expect(ui.messageKey).toBe(
+      'chat.runError.membershipConcurrencyLimitMessageNoTime',
+    );
+    expect(ui.messageVars?.retryAt).toBeUndefined();
+  });
+
   // Same classification without a readable instant (older CLI, or upstream
   // wording drift) must still get the localized copy — just the variant that
   // does not promise a time.
