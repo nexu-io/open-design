@@ -42,6 +42,7 @@ import {
   reconnectViewForConversation,
   settledSignalFromMessages,
 } from '../runtime/chat/reconnect-state';
+import { forkBoundaryMessageIndex } from '../runtime/chat/fork-boundary';
 import { normalizeCustomReason } from '@open-design/contracts/analytics';
 import {
   deletePreviewComment,
@@ -10985,7 +10986,15 @@ export function ProjectView({
       if (!activeConversationId || forkingMessageId || projectMutationReadOnly) return;
       const requestId = analytics.newRequestId();
       const startedAt = Date.now();
-      const forkIndex = messages.findIndex((message) => message.id === assistantMessage.id);
+      /*
+       * `assistantMessage` 是**渲染**出来的那一格 —— 一条 OD Next Full Plan 回合的
+       * 几个物理 run 被 `foldStrategyTaskTurns` 折成一条,折出来那条带的是头一个 run
+       * 的 id。分叉切的是转录,所以先把边界推回这条逻辑回合在转录里的最后一条。
+       * 见 `runtime/chat/fork-boundary.ts`。
+       */
+      const forkIndex = forkBoundaryMessageIndex(messages, assistantMessage.id);
+      const forkBoundaryMessage = forkIndex < 0 ? undefined : messages[forkIndex];
+      const forkAfterMessageId = forkBoundaryMessage?.id ?? assistantMessage.id;
       const forkContext = {
         page_name: 'chat_panel' as const,
         area: 'chat_panel' as const,
@@ -10999,7 +11008,7 @@ export function ProjectView({
         source_agent_id: assistantMessage.agentId ?? 'unknown',
         agent_provider_id: runAgentProviderId(assistantMessage.agentId ?? 'unknown'),
         session_mode: sessionModeToTracking(activeSessionMode),
-        fork_point: conversationForkPoint(messages, assistantMessage.id, forkIndex),
+        fork_point: conversationForkPoint(messages, forkAfterMessageId, forkIndex),
         seed_message_count: forkIndex < 0 ? null : forkIndex + 1,
         conversation_message_count: messages.length,
         messages_after_fork_count: forkIndex < 0 ? null : messages.length - forkIndex - 1,
@@ -11026,10 +11035,16 @@ export function ProjectView({
          */
         const fresh = await createConversation(project.id, undefined, {
           seedFromConversationId: activeConversationId,
-          forkAfterMessageId: assistantMessage.id,
+          forkAfterMessageId,
           sessionMode: activeSessionMode,
+          /*
+           * 兜底送的是**边界那条转录消息**,不是屏幕上那条折叠出来的 —— 折叠那条的正文
+           * 是几个 run 拼起来的,真走到兜底路径就会把同一段内容再塞一遍。
+           */
           forkFallbackMessage:
-            forkFallbackPredecessorMessageId === undefined ? undefined : assistantMessage,
+            forkFallbackPredecessorMessageId === undefined
+              ? undefined
+              : (forkBoundaryMessage ?? assistantMessage),
           forkFallbackPredecessorMessageId,
           workspaceContext: projectRunWorkspaceContext,
           throwOnError: true,
