@@ -7,39 +7,14 @@ import { validateElectronShellManifest, type ElectronShellManifest } from "@open
 import { buildElectronDistribution, loadElectronScene } from "@open-design/electron-kit/distribution";
 import { canonicalJson } from "@open-design/standalone";
 
-import { loadElectronStandaloneInstallation, type ElectronStandaloneTarget } from "../src/adapters/standalone/installation.ts";
-
-type Request = Readonly<{
-  schemaVersion: 1;
-  operation: "electron.distribution.build";
-  target: ElectronStandaloneTarget;
-  sceneDirectory: string;
-  sceneManifestSha256: string;
-  contentMetadataFile: string;
-  trustFile: string;
-  channelHeadUrl: string;
-  outputDirectory: string;
-}>;
+import { loadElectronStandaloneInstallation } from "../src/adapters/standalone/installation.ts";
+import { parseElectronExactDistributionRequest } from "./exact-adapter-contract.ts";
 
 function argument(name: string): string {
   const index = process.argv.indexOf(name);
   const value = index < 0 ? undefined : process.argv[index + 1];
   if (value == null || value.startsWith("--")) throw new Error(`${name} is required`);
   return resolve(value);
-}
-
-function parseRequest(value: unknown): Request {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error("Electron exact distribution request is invalid");
-  const input = value as Record<string, unknown>;
-  const expected = ["channelHeadUrl", "contentMetadataFile", "operation", "outputDirectory", "sceneDirectory", "sceneManifestSha256", "schemaVersion", "target", "trustFile"];
-  if (JSON.stringify(Object.keys(input).sort()) !== JSON.stringify(expected)) throw new Error("Electron exact distribution request fields are invalid");
-  if (input.schemaVersion !== 1 || input.operation !== "electron.distribution.build" || !["darwin-arm64", "darwin-x64", "win32-x64"].includes(input.target as string)) throw new Error("Electron exact distribution identity is invalid");
-  if (typeof input.sceneManifestSha256 !== "string" || !/^[a-f0-9]{64}$/u.test(input.sceneManifestSha256)) throw new Error("Electron exact scene digest is invalid");
-  if (typeof input.channelHeadUrl !== "string" || !/^https?:\/\/[^\s]+$/u.test(input.channelHeadUrl)) throw new Error("Electron exact channel head URL is invalid");
-  for (const field of ["sceneDirectory", "contentMetadataFile", "trustFile", "outputDirectory"] as const) {
-    if (typeof input[field] !== "string" || resolve(input[field]) !== input[field]) throw new Error(`Electron exact distribution ${field} must be absolute and normalized`);
-  }
-  return Object.freeze(input) as Request;
 }
 
 async function descriptor(path: string, file = basename(path)) {
@@ -49,7 +24,7 @@ async function descriptor(path: string, file = basename(path)) {
 
 const requestPath = argument("--request");
 const receiptPath = argument("--receipt");
-const input = parseRequest(JSON.parse(await readFile(requestPath, "utf8")));
+const input = parseElectronExactDistributionRequest(JSON.parse(await readFile(requestPath, "utf8")));
 const currentTarget = process.platform === "win32" ? `win32-${process.arch}` : `${process.platform}-${process.arch}`;
 if (currentTarget !== input.target) throw new Error(`Electron exact distribution target ${input.target} cannot build on ${currentTarget}`);
 const scene = await loadElectronScene(input.sceneDirectory, input.sceneManifestSha256);
