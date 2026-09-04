@@ -1,0 +1,237 @@
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+
+import {
+  bootstrapSidecarProcess,
+  readCurrentSidecarStamp,
+  SidecarClient,
+  SidecarFactory,
+} from "@open-design/sidecar";
+import {
+  FossilHandoffHost,
+  type StandaloneHandoffRequest,
+  type StandaloneRuntimeHandle,
+  type StandaloneRuntimeCommand,
+  type StandaloneShellCapabilityRequest,
+} from "@open-design/standalone";
+
+import {
+  ELECTRON_STANDALONE_CONTROL_ACTION,
+  validateElectronStandaloneControlRequest,
+} from "./control-contract.js";
+import { ElectronStandaloneHostLifecycle } from "./host-lifecycle.js";
+
+export const ELECTRON_STANDALONE_HOST_CONFIG_ENV = "OD_ELECTRON_STANDALONE_HOST_V1";
+
+type HostConfig = Readonly<{
+  schemaVersion: 1;
+  scope: Readonly<{ channel: string; namespace: string }>;
+  storeRoot: string;
+  runtimeRoot: string;
+  hostPath: string;
+}>;
+
+function readConfig(): HostConfig {
+  const serialized = process.env[ELECTRON_STANDALONE_HOST_CONFIG_ENV];
+  if (serialized == null) throw new Error(`${ELECTRON_STANDALONE_HOST_CONFIG_ENV} is required`);
+  const value = JSON.parse(serialized) as Partial<HostConfig>;
+  const keys = Object.keys(value).sort();
+  if (JSON.stringify(keys) !== JSON.stringify(["hostPath", "runtimeRoot", "schemaVersion", "scope", "storeRoot"])) throw new Error("Electron Standalone host configuration fields are invalid");
+  if (
+    value.schemaVersion !== 1
+    || value.scope == null
+    || !/^[a-z0-9]{1,12}$/u.test(value.scope.channel ?? "")
+    || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(value.scope.namespace ?? "")
+    || typeof value.storeRoot !== "string"
+    || typeof value.runtimeRoot !== "string"
+    || typeof value.hostPath !== "string"
+  ) throw new Error("Electron Standalone host configuration is invalid");
+  const storeRoot = resolve(value.storeRoot);
+  const runtimeRoot = resolve(value.runtimeRoot);
+  const hostPath = resolve(value.hostPath);
+  if (storeRoot !== value.storeRoot || runtimeRoot !== value.runtimeRoot || hostPath !== value.hostPath) throw new Error("Electron Standalone host paths must be absolute and normalized");
+  return Object.freeze({ schemaVersion: 1, scope: Object.freeze({ ...value.scope }), storeRoot, runtimeRoot, hostPath });
+}
+
+type PendingStart = Readonly<{
+  bindingDigest: string;
+  run(): Promise<Awaited<ReturnType<ElectronStandaloneHostLifecycle["start"]>>>;
+}>;
+
+class ElectronStandaloneHostRuntime {
+  readonly lifecycle: ElectronStandaloneHostLifecycle;
+  readonly #handoff: FossilHandoffHost;
+  readonly #handles = new Map<string, Readonly<{
+    attachment: StandaloneHandoffRequest["attachment"];
+    handle: StandaloneRuntimeHandle;
+  }>>();
+  readonly #pending = new Map<string, PendingStart>();
+
+  constructor(readonly config: HostConfig) {
+    this.lifecycle = new ElectronStandaloneHostLifecycle(config.scope);
+    this.#handoff = new FossilHandoffHost(async (binding) => {
+      const bytes = await readFile(binding.launcher.path);
+      if (createHash("sha256").update(bytes).digest("hex") !== binding.launcher.blobSha256) {
+        throw new Error("materialized Electron Standalone launcher failed its handoff binding");
+      }
+      const generation = await import(pathToFileURL(binding.launcher.path).href) as Record<string, unknown>;
+      if (typeof generation.createStandaloneGenerationBootloader !== "function") {
+        throw new Error("materialized Electron Standalone launcher lacks createStandaloneGenerationBootloader");
+      }
+      const createBootloader = generation.createStandaloneGenerationBootloader as (
+        start: (request: StandaloneHandoffRequest) => Promise<StandaloneRuntimeHandle>,
+      ) => (request: StandaloneHandoffRequest) => Promise<StandaloneRuntimeHandle>;
+      return createBootloader(async (request) => {
+        const pending = this.#pending.get(request.attachment.id);
+        if (pending == null || pending.bindingDigest !== request.binding.digest) throw new Error("Electron Standalone generation body escaped its pending start");
+        await pending.run();
+        return this.#bodyHandle(request);
+      });
+    });
+  }
+
+  async request(input: unknown): Promise<unknown> {
+    const request = validateElectronStandaloneControlRequest(input, this.config.scope);
+    if (request.operation === "lifecycle.status") return await this.lifecycle.status();
+    if (request.operation === "lifecycle.ready") return await this.lifecycle.awaitReady(request.readiness);
+    if (request.operation === "lifecycle.heartbeat") return await this.lifecycle.heartbeat(request.attachment, request.attachmentCapability);
+    if (request.operation === "lifecycle.release") {
+      const status = await this.lifecycle.release(request.attachmentId, request.attachmentCapability);
+      const active = this.#handles.get(request.attachmentId);
+      if (active != null) {
+        await active.handle.close();
+        this.#handles.delete(request.attachmentId);
+      }
+      return status;
+    }
+    if (request.operation === "lifecycle.stop") {
+      const status = await this.lifecycle.stop(request.fence);
+      await Promise.all([...this.#handles.values()].map(({ handle }) => handle.close().catch(() => undefined)));
+      this.#handles.clear();
+      return status;
+    }
+    if (request.operation === "lifecycle.start") return await this.#start(request);
+    if (request.operation === "runtime.invoke") {
+      const active = this.#handles.get(request.command.attachmentId);
+      if (active == null) throw new Error("Electron Standalone runtime attachment is unavailable");
+      await this.lifecycle.heartbeat(active.attachment, request.attachmentCapability);
+      return await active.handle.invoke(request.command);
+    }
+    throw new Error(`Electron Standalone host operation is not implemented: ${request.operation}`);
+  }
+
+  async #start(request: Extract<ReturnType<typeof validateElectronStandaloneControlRequest>, { operation: "lifecycle.start" }>) {
+    if (this.#pending.has(request.attachment.id)) throw new Error("Electron Standalone attachment already has a pending start");
+    let task: Promise<Awaited<ReturnType<ElectronStandaloneHostLifecycle["start"]>>> | null = null;
+    const pending: PendingStart = Object.freeze({
+      bindingDigest: request.binding.digest,
+      run: () => {
+        task ??= this.lifecycle.start(request.generation, request.attachment, request.binding, request.attachmentCapability);
+        return task;
+      },
+    });
+    this.#pending.set(request.attachment.id, pending);
+    try {
+      const handle = await this.#handoff.handoff({
+        binding: request.binding,
+        attachment: request.attachment,
+        capabilities: Object.freeze({
+          async invoke(capabilityRequest: StandaloneShellCapabilityRequest) {
+            return Object.freeze({
+              requestId: capabilityRequest.requestId,
+              attachmentId: capabilityRequest.attachmentId,
+              bindingDigest: capabilityRequest.bindingDigest,
+              outcome: "unsupported" as const,
+              error: Object.freeze({ code: "electron-capability-unavailable" }),
+            });
+          },
+        }),
+      });
+      const started = await pending.run();
+      const exact = await handle.readStatus();
+      if (exact.state !== "running" || exact.generationId !== request.generation.id || exact.bindingDigest !== request.binding.digest) {
+        throw new Error("Electron Standalone launcher did not acknowledge the exact Sidecar generation");
+      }
+      this.#handles.set(request.attachment.id, Object.freeze({ attachment: request.attachment, handle }));
+      return started;
+    } finally {
+      this.#pending.delete(request.attachment.id);
+    }
+  }
+
+  #bodyHandle(request: StandaloneHandoffRequest): StandaloneRuntimeHandle {
+    const project = async (state?: "stopped") => {
+      const status = await this.lifecycle.status();
+      return Object.freeze({
+        bindingDigest: request.binding.digest,
+        generationId: request.binding.generationId,
+        instanceId: status.instanceId ?? `stopped-${status.fence}`,
+        references: status.references,
+        state: state ?? status.state,
+      });
+    };
+    return Object.freeze({
+      readStatus: () => project(),
+      async invoke(command: StandaloneRuntimeCommand) {
+        return Object.freeze({ requestId: command.requestId, attachmentId: command.attachmentId, bindingDigest: request.binding.digest, outcome: "unsupported" as const, error: Object.freeze({ code: "electron-command-unavailable" }) });
+      },
+      close: () => project("stopped"),
+      async waitForTerminal() {
+        for (;;) {
+          const status = await project();
+          if (status.state !== "running") return status;
+          await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+        }
+      },
+    });
+  }
+}
+
+export async function runElectronStandaloneHost(): Promise<void> {
+  const config = readConfig();
+  const stamp = Object.freeze({ ...readCurrentSidecarStamp() });
+  if (stamp.channel !== config.scope.channel || stamp.namespace !== config.scope.namespace || stamp.source !== "standalone" || stamp.mode !== "runtime" || stamp.app !== "standalone") {
+    throw new Error("Electron Standalone host configuration differs from its Sidecar stamp");
+  }
+  const resources = Object.freeze({ dataRoot: config.storeRoot, ownerPid: null, port: 0, runtimeRoot: config.runtimeRoot });
+  if (await bootstrapSidecarProcess(stamp, resources, { args: [config.hostPath], command: process.execPath, cwd: process.cwd(), env: process.env })) return;
+  let runtime: ElectronStandaloneHostRuntime | null = null;
+  let client!: SidecarClient<ElectronStandaloneHostRuntime>;
+  client = SidecarFactory.create<ElectronStandaloneHostRuntime>({
+    handlers: {
+      [ELECTRON_STANDALONE_CONTROL_ACTION]: async (input) => {
+        if (runtime == null) throw new Error("Electron Standalone host runtime is unavailable");
+        return await runtime.request(input);
+      },
+    },
+    lifecycle: {
+      async start(sidecarResources) {
+        if (resolve(sidecarResources.dataRoot ?? "") !== config.storeRoot || resolve(sidecarResources.runtimeRoot) !== config.runtimeRoot) throw new Error("Electron Standalone host resources differ from its launch contract");
+        runtime = new ElectronStandaloneHostRuntime(config);
+        return runtime;
+      },
+      async status(active) {
+        return Object.freeze({
+          control: "ready",
+          generationPid: client.resources.pid,
+          hostPid: process.pid,
+          dataRoot: client.resources.dataRoot,
+          runtimeRoot: client.resources.runtimeRoot,
+          lifecycle: await active.lifecycle.status(),
+        });
+      },
+      async stop() { runtime = null; },
+    },
+  });
+  await client.start();
+  await client.waitUntilStopped();
+}
+
+if (process.env[ELECTRON_STANDALONE_HOST_CONFIG_ENV] != null) {
+  void runElectronStandaloneHost().catch((error) => {
+    console.error("[shell/electron] Standalone host failed", error);
+    process.exitCode = 1;
+  });
+}
