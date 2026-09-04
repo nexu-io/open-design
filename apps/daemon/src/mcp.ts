@@ -1251,6 +1251,15 @@ export class McpObservabilitySession {
     if (name === 'confirm_brief') {
       const inherited = briefStore.attributionForDraft(args.briefDraftId);
       if (inherited) {
+        if (
+          args.pluginWorkflowId !== undefined
+          && validatePluginWorkflowId(args.pluginWorkflowId)
+            !== inherited.pluginWorkflowId
+        ) {
+          throw pluginContractError(
+            'pluginWorkflowId does not match the brief draft',
+          );
+        }
         this.workflows.set(
           inherited.pluginWorkflowId,
           inherited.externalPluginContext,
