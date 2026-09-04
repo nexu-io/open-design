@@ -61,7 +61,10 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
           windowsLifecycle,
           windowsNsisIncludePath,
         }),
-        extraResources: [{ from: input.scene.sidecarPath, to: "fixture-sidecar.cjs" }],
+        extraResources: input.scene.authorityResources.map((resource) => ({
+          from: resource.path,
+          to: resource.name,
+        })),
       },
     });
   } finally {

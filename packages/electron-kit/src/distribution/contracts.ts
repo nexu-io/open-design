@@ -10,7 +10,12 @@ export type ElectronSceneReceipt = Readonly<{
   shellManifestPath: string;
   nodeCarrierLockPath: string;
   runtimeConfigPath: string;
-  sidecarPath: string;
+  authorityResources: readonly Readonly<{
+    name: string;
+    path: string;
+    sha256: string;
+    size: number;
+  }>[];
 }>;
 
 export type ElectronDistributionReceipt = Readonly<{

@@ -14,9 +14,9 @@ export function normalizeElectronDevArgv(argv: readonly string[]): string[] {
 }
 
 export async function devElectronShell(input: Readonly<{
+  authorityResources: readonly Readonly<{ name: string; path: string }>[];
   entryPath: string;
   manifestPath: string;
-  fixtureSidecarPath: string;
   nodeCarrierLockPath: string;
   projectRoot: string;
   rendererPreloadEntryPath: string;
@@ -25,10 +25,10 @@ export async function devElectronShell(input: Readonly<{
 }>): Promise<number> {
   const manifest = validateElectronShellManifest(JSON.parse(await readFile(input.manifestPath, "utf8")) as ElectronShellManifest);
   const scene = await assembleElectronScene({
+    authorityResources: input.authorityResources,
     entryPath: input.entryPath,
     manifestPath: input.manifestPath,
     outputRoot: join(input.projectRoot, ".tmp", "electron-kit", manifest.namespace, "scene"),
-    fixtureSidecarPath: input.fixtureSidecarPath,
     nodeCarrierLockPath: input.nodeCarrierLockPath,
     rendererPreloadEntryPath: input.rendererPreloadEntryPath,
     runtimeConfigPath: input.runtimeConfigPath,

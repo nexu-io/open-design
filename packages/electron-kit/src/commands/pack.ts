@@ -7,9 +7,9 @@ import { validateElectronDistributionPolicy, type ElectronDistributionPolicy } f
 import { validateElectronWindowsLifecyclePolicy, type ElectronWindowsLifecyclePolicy } from "../platform/windows/index.js";
 
 export async function packElectronShell(input: Readonly<{
+  authorityResources: readonly Readonly<{ name: string; path: string }>[];
   entryPath: string;
   manifestPath: string;
-  fixtureSidecarPath: string;
   nodeCarrierLockPath: string;
   distributionPath: string;
   runtimeConfigPath: string;
@@ -26,10 +26,10 @@ export async function packElectronShell(input: Readonly<{
     JSON.parse(await readFile(input.windowsLifecyclePath, "utf8")) as ElectronWindowsLifecyclePolicy,
   );
   const scene = await assembleElectronScene({
+    authorityResources: input.authorityResources,
     entryPath: input.entryPath,
     manifestPath: input.manifestPath,
     outputRoot: join(input.projectRoot, ".tmp", "electron-kit", manifest.namespace, "scene"),
-    fixtureSidecarPath: input.fixtureSidecarPath,
     nodeCarrierLockPath: input.nodeCarrierLockPath,
     rendererPreloadEntryPath: input.rendererPreloadEntryPath,
     runtimeConfigPath: input.runtimeConfigPath,

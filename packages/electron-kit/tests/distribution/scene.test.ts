@@ -18,7 +18,7 @@ describe("Electron scene", () => {
     roots.push(root);
     const paths = {
       entryPath: join(root, "main.ts"),
-      fixtureSidecarPath: join(root, "sidecar.cjs"),
+      authorityResourcePath: join(root, "sidecar.cjs"),
       rendererPreloadEntryPath: join(root, "renderer-preload.ts"),
       manifestPath: join(root, "shell.json"),
       nodeCarrierLockPath: join(root, "node-lock.json"),
@@ -27,7 +27,7 @@ describe("Electron scene", () => {
     };
     await Promise.all([
       writeFile(paths.entryPath, "export const foundation = true;\n", "utf8"),
-      writeFile(paths.fixtureSidecarPath, "module.exports = {};\n", "utf8"),
+      writeFile(paths.authorityResourcePath, "module.exports = {};\n", "utf8"),
       writeFile(paths.rendererPreloadEntryPath, "export const preload = true;\n", "utf8"),
       writeFile(paths.manifestPath, `${JSON.stringify({
         schemaVersion: 1,
@@ -58,7 +58,10 @@ describe("Electron scene", () => {
       })}\n`, "utf8"),
     ]);
 
-    const receipt = await assembleElectronScene(paths);
+    const receipt = await assembleElectronScene({
+      ...paths,
+      authorityResources: [{ name: "standalone-host.cjs", path: paths.authorityResourcePath }],
+    });
     const scene = await readFile(receipt.sceneManifestPath, "utf8");
     const packageManifest = JSON.parse(await readFile(join(paths.outputRoot, "package.json"), "utf8")) as Record<string, unknown>;
     expect(receipt.receiptPath).toBe(join(root, "build", "scene-receipt.json"));
@@ -75,5 +78,33 @@ describe("Electron scene", () => {
     });
     await expect(readFile(join(paths.outputRoot, "scene-receipt.json"), "utf8")).rejects.toThrow();
     expect(packageManifest.author).toBe("Example Company");
+    expect(receipt.authorityResources).toEqual([expect.objectContaining({
+      name: "standalone-host.cjs",
+      path: join(paths.outputRoot, "standalone-host.cjs"),
+      sha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+    })]);
+  });
+
+  it("rejects path-like, reserved and duplicate authority resource names", async () => {
+    const input = {
+      authorityResources: [] as { name: string; path: string }[],
+      entryPath: "/unused/main.ts",
+      manifestPath: "/unused/shell.json",
+      nodeCarrierLockPath: "/unused/node-lock.json",
+      outputRoot: "/unused/scene",
+      rendererPreloadEntryPath: "/unused/preload.ts",
+      runtimeConfigPath: "/unused/runtime.json",
+    };
+    for (const name of ["../host.cjs", "nested/host.cjs", "main.cjs"]) {
+      await expect(assembleElectronScene({ ...input, authorityResources: [{ name, path: "/unused/source" }] }))
+        .rejects.toThrow(/authority resource name/u);
+    }
+    await expect(assembleElectronScene({
+      ...input,
+      authorityResources: [
+        { name: "standalone-host.cjs", path: "/unused/one" },
+        { name: "standalone-host.cjs", path: "/unused/two" },
+      ],
+    })).rejects.toThrow(/authority resource name/u);
   });
 });

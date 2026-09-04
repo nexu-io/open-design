@@ -9,14 +9,25 @@ import { validateElectronRuntimeConfig, type ElectronRuntimeConfig } from "../ru
 import type { ElectronSceneReceipt } from "./contracts.js";
 
 export type AssembleElectronSceneInput = Readonly<{
+  authorityResources: readonly Readonly<{ name: string; path: string }>[];
   entryPath: string;
   manifestPath: string;
   outputRoot: string;
   rendererPreloadEntryPath: string;
-  fixtureSidecarPath: string;
   nodeCarrierLockPath: string;
   runtimeConfigPath: string;
 }>;
+
+const sceneResourceName = /^[a-z][a-z0-9.-]{0,127}$/u;
+const reservedSceneProducts = new Set([
+  "main.cjs",
+  "node-lock.json",
+  "package.json",
+  "renderer-mount-preload.cjs",
+  "runtime.json",
+  "scene.json",
+  "shell.json",
+]);
 
 async function describeSceneProduct(root: string, name: string): Promise<Readonly<{
   name: string;
@@ -33,6 +44,13 @@ async function describeSceneProduct(root: string, name: string): Promise<Readonl
 }
 
 export async function assembleElectronScene(input: AssembleElectronSceneInput): Promise<ElectronSceneReceipt> {
+  const authorityResourceNames = new Set<string>();
+  for (const resource of input.authorityResources) {
+    if (!sceneResourceName.test(resource.name) || reservedSceneProducts.has(resource.name) || authorityResourceNames.has(resource.name)) {
+      throw new Error(`invalid or duplicate Electron authority resource name: ${resource.name}`);
+    }
+    authorityResourceNames.add(resource.name);
+  }
   const manifest = validateElectronShellManifest(JSON.parse(await readFile(input.manifestPath, "utf8")) as ElectronShellManifest);
   const runtimeConfig = validateElectronRuntimeConfig(
     JSON.parse(await readFile(input.runtimeConfigPath, "utf8")) as ElectronRuntimeConfig,
@@ -50,7 +68,6 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
   await mkdir(input.outputRoot, { recursive: true });
   const mainPath = join(input.outputRoot, "main.cjs");
   const rendererPreloadPath = join(input.outputRoot, "renderer-mount-preload.cjs");
-  const sidecarPath = join(input.outputRoot, "fixture-sidecar.cjs");
   const nodeCarrierLockPath = join(input.outputRoot, "node-lock.json");
   const runtimeConfigPath = join(input.outputRoot, "runtime.json");
   await bundle({
@@ -62,7 +79,9 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     platform: "node",
     target: "node24",
   });
-  await copyFile(input.fixtureSidecarPath, sidecarPath);
+  await Promise.all(input.authorityResources.map(async (resource) => {
+    await copyFile(resource.path, join(input.outputRoot, resource.name));
+  }));
   await bundle({
     bundle: true,
     entryPoints: [input.rendererPreloadEntryPath],
@@ -87,15 +106,20 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
   }, null, 2)}\n`, "utf8");
 
   const sceneManifestPath = join(input.outputRoot, "scene.json");
-  const products = await Promise.all([
+  const productNames = [
     "main.cjs",
-    "fixture-sidecar.cjs",
     "node-lock.json",
     "renderer-mount-preload.cjs",
     "runtime.json",
     "shell.json",
     "package.json",
-  ].map((name) => describeSceneProduct(input.outputRoot, name)));
+    ...authorityResourceNames,
+  ].sort();
+  const products = await Promise.all(productNames.map((name) => describeSceneProduct(input.outputRoot, name)));
+  const authorityResources = products.filter(({ name }) => authorityResourceNames.has(name)).map((resource) => Object.freeze({
+    ...resource,
+    path: join(input.outputRoot, resource.name),
+  }));
   await writeFile(sceneManifestPath, `${JSON.stringify({
     schemaVersion: 1,
     operation: "electron.scene.build",
@@ -117,7 +141,7 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     shellManifestPath: packagedManifestPath,
     nodeCarrierLockPath,
     runtimeConfigPath,
-    sidecarPath,
+    authorityResources: Object.freeze(authorityResources),
   };
   await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
   return receipt;
