@@ -49,6 +49,8 @@ export class ElectronActivationAttempt {
     return new ElectronActivationAttempt(path, record);
   }
 
+  get attemptId(): string { return this.record.attemptId; }
+
   async commit(): Promise<void> {
     if (this.record.state !== "starting") throw new Error(`cannot commit Electron activation from ${this.record.state}`);
     this.record = { ...this.record, state: "running", committedAt: new Date().toISOString() };

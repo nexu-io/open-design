@@ -96,6 +96,10 @@ export function runElectronWarmupTopology(input: Readonly<{
   const unknown = topology.nodes.find((node) => input.executors[node.executor] == null);
   if (unknown != null) throw new Error(`unknown Electron warmup executor: ${unknown.executor}`);
   const controller = new AbortController();
+  const totalTimeout = topology.totalTimeoutMs == null
+    ? undefined
+    : setTimeout(() => controller.abort(new Error("Electron startup deadline exceeded")), topology.totalTimeoutMs);
+  totalTimeout?.unref();
   const scheduler = new ElectronWarmupScheduler(topology.maxConcurrency ?? topology.nodes.length);
   const promises = new Map<string, Promise<void>>();
   const receipts = new Map<string, ElectronWarmupNodeReceipt>(topology.nodes.map((node) => [node.id, {
@@ -147,6 +151,7 @@ export function runElectronWarmupTopology(input: Readonly<{
   const all = topology.nodes.map(execute);
   const ready = Promise.all(topology.nodes.filter((node) => node.blocking).map((node) => promises.get(node.id)!)).then(() => undefined);
   const settled = Promise.allSettled(all).then(() => undefined);
+  void settled.then(() => { if (totalTimeout != null) clearTimeout(totalTimeout); });
   return Object.freeze({
     ready,
     settled,
@@ -156,6 +161,7 @@ export function runElectronWarmupTopology(input: Readonly<{
     async dispose() {
       controller.abort(new Error("Electron warmup lifecycle disposed"));
       await settled;
+      if (totalTimeout != null) clearTimeout(totalTimeout);
     },
   });
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   ELECTRON_WARMUP_ATOMS,
@@ -17,6 +17,8 @@ const runtimeTopology: ElectronWarmupTopology = {
     { id: "renderer", executor: ELECTRON_WARMUP_ATOMS.MOUNT_RENDERER, dependsOn: ["ready"], blocking: true },
   ],
 };
+
+afterEach(() => vi.useRealTimers());
 
 describe("Electron warmup topology", () => {
   it("validates the required runtime atoms and their transitive order", () => {
@@ -125,6 +127,32 @@ describe("Electron warmup topology", () => {
     expect(run.snapshot().map(({ id, state }) => ({ id, state }))).toEqual([
       { id: "required", state: "failed" },
       { id: "downstream", state: "cancelled" },
+    ]);
+  });
+
+  it("cancels the complete startup graph at its total deadline", async () => {
+    vi.useFakeTimers();
+    const run = runElectronWarmupTopology({
+      topology: {
+        schemaVersion: 1,
+        totalTimeoutMs: 1_000,
+        nodes: [{ id: "blocked", executor: "shell.blocked", dependsOn: [], blocking: true }],
+      },
+      executors: {
+        "shell.blocked": ({ signal }) => new Promise<void>((resolve) => {
+          signal.addEventListener("abort", () => resolve(), { once: true });
+        }),
+      },
+    });
+    let rejected = false;
+    void run.ready.catch(() => { rejected = true; });
+    await vi.advanceTimersByTimeAsync(999);
+    expect(rejected).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(run.ready).rejects.toThrow("Electron startup deadline exceeded");
+    await run.settled;
+    expect(run.snapshot()).toEqual([
+      expect.objectContaining({ id: "blocked", state: "cancelled" }),
     ]);
   });
 });

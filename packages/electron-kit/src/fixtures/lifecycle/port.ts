@@ -9,6 +9,7 @@ import {
   type LifecycleReadiness,
   type LifecycleScope,
   type LifecycleStatus,
+  type StandaloneGenerationBinding,
   type StandaloneShellUpdaterPort,
   type StandaloneLifecycleTransitionResult,
   type SharedLifecycleState,
@@ -137,19 +138,25 @@ export class ElectronFixtureLifecyclePort implements LifecyclePort {
     this.readiness = null;
   }
 
-  async start(scope: LifecycleScope, generation: GenerationRecord, attachment: LifecycleAttachment): Promise<LifecycleStatus> {
+  async start(
+    scope: LifecycleScope,
+    generation: GenerationRecord,
+    attachment: LifecycleAttachment,
+    binding: StandaloneGenerationBinding,
+  ): Promise<LifecycleStatus> {
     if (this.child != null) throw new Error("fixture sidecar is already running");
     const heartbeatAt = new Date().toISOString();
     const instanceId = randomUUID();
     const state = SHARED_LIFECYCLE_ALGEBRA.reduce(this.state(scope), {
       type: "start",
       generationId: generation.id,
+      bindingDigest: binding.digest,
       instanceId,
       attachment,
       heartbeatAt,
       leaseExpiresAt: new Date(Date.parse(heartbeatAt) + 15_000).toISOString(),
     });
-    const readiness = { generationId: generation.id, instanceId, attachmentId: attachment.id };
+    const readiness = { generationId: generation.id, bindingDigest: binding.digest, instanceId, attachmentId: attachment.id };
     this.spawnSidecar(readiness);
     return this.commit(scope, state);
   }
@@ -182,7 +189,7 @@ export class ElectronFixtureLifecyclePort implements LifecyclePort {
   async beginTransition(
     scope: LifecycleScope,
     kind: "content-restart" | "shell-install",
-    options: Readonly<{ ownerAttachmentId?: string; ownerShellType?: string; force?: boolean }> = {},
+    options: Readonly<{ attemptId?: string; ownerAttachmentId?: string; ownerShellType?: string; force?: boolean }> = {},
   ): Promise<StandaloneLifecycleTransitionResult> {
     let state = this.state(scope);
     if (state.transition != null) {
@@ -193,9 +200,10 @@ export class ElectronFixtureLifecyclePort implements LifecyclePort {
       shellType: options.ownerShellType,
     });
     if (blockers.length > 0 && options.force !== true) return { state: "blocked", reason: "occupied", occupants: blockers };
-    const token = randomUUID();
+    const token = options.attemptId ?? randomUUID();
     const acquiredAt = new Date().toISOString();
     let fence = state.fence;
+    let phase: "reserved" | "stopped-sealed" = "reserved";
     let expiresAt = new Date(Date.parse(acquiredAt) + 30_000).toISOString();
     state = SHARED_LIFECYCLE_ALGEBRA.reduce(state, {
       type: "reserve-transition",
@@ -205,7 +213,9 @@ export class ElectronFixtureLifecyclePort implements LifecyclePort {
     return {
       state: "acquired",
       transition: {
+        attemptId: token,
         get fence() { return fence; },
+        get phase() { return phase; },
         get expiresAt() { return expiresAt; },
         heartbeatIntervalMs: 5_000,
         occupants: SHARED_LIFECYCLE_ALGEBRA.project(state, this.heartbeatIntervalMs).occupants,
@@ -220,10 +230,11 @@ export class ElectronFixtureLifecyclePort implements LifecyclePort {
           expiresAt = new Date(Date.now() + 30_000).toISOString();
           const stopped = SHARED_LIFECYCLE_ALGEBRA.reduce(this.state(scope), { type: "force-stop", token, fence, requestedAt: new Date().toISOString(), expiresAt });
           fence = stopped.fence;
+          phase = "stopped-sealed";
           this.commit(scope, stopped);
           await this.stopChild();
         },
-        completeStart: async (generation, attachment) => {
+        completeBoundStart: async (generation, attachment, binding) => {
           const heartbeatAt = new Date().toISOString();
           const instanceId = randomUUID();
           const running = SHARED_LIFECYCLE_ALGEBRA.reduce(this.state(scope), {
@@ -231,12 +242,13 @@ export class ElectronFixtureLifecyclePort implements LifecyclePort {
             token,
             fence,
             generationId: generation.id,
+            bindingDigest: binding.digest,
             instanceId,
             attachment,
             heartbeatAt,
             leaseExpiresAt: new Date(Date.parse(heartbeatAt) + 15_000).toISOString(),
           });
-          this.spawnSidecar({ generationId: generation.id, instanceId, attachmentId: attachment.id });
+          this.spawnSidecar({ generationId: generation.id, bindingDigest: binding.digest, instanceId, attachmentId: attachment.id });
           return this.commit(scope, running);
         },
       },

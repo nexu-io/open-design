@@ -104,7 +104,7 @@ describe("Electron product shell", () => {
       "shell.placeholder-resource",
       "electron.mount-renderer",
     ]);
-    expect(runtime.warmup).toMatchObject({ maxConcurrency: 4 });
+    expect(runtime.warmup).toMatchObject({ maxConcurrency: 4, totalTimeoutMs: 360000 });
     expect(runtimeSource).toContain('"failure": "required"');
     expect(rendererSource).toContain("createPlaceholderRendererAdapter");
     expect(rendererSource).toContain("let warmedHtml");

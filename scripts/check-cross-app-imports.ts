@@ -329,6 +329,7 @@ export async function loadAppDirectoryRegistry(
     try {
       manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { name?: unknown };
     } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
       const reason = error instanceof Error ? error.message : String(error);
       throw new Error(`Failed to load app package manifest at ${manifestPath}: ${reason}`);
     }

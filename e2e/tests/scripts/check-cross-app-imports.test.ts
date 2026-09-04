@@ -223,6 +223,20 @@ test("app registry loading fails loudly when an app manifest is malformed", asyn
   await rm(appsRoot, { force: true, recursive: true });
 });
 
+test("app registry loading ignores residual non-app cache directories", async () => {
+  const appsRoot = await mkdtemp(path.join(os.tmpdir(), "open-design-apps-"));
+  const cacheRoot = path.join(appsRoot, "removed-app", ".cache");
+  await mkdir(cacheRoot, { recursive: true });
+  await writeFile(path.join(cacheRoot, "generated.txt"), "ignored\n", "utf8");
+
+  await assert.doesNotReject(loadAppDirectoryRegistry(appsRoot));
+  assert.deepEqual(await loadAppDirectoryRegistry(appsRoot), {
+    packageNameByDirectory: new Map(),
+  });
+
+  await rm(appsRoot, { force: true, recursive: true });
+});
+
 test("app registry loading rejects parseable app manifests without a package name", async () => {
   const appsRoot = await mkdtemp(path.join(os.tmpdir(), "open-design-apps-"));
   const appRoot = path.join(appsRoot, "web");

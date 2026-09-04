@@ -3,8 +3,10 @@ import { join } from "node:path";
 
 import { BrowserWindow, app, dialog, protocol } from "electron";
 import {
+  createStandaloneGenerationBinding,
   StandaloneFeedbackEmitter,
   type GenerationRecord,
+  type StandaloneGenerationBinding,
   type LifecycleAttachment,
   type LifecycleScope,
   type LifecycleStatus,
@@ -18,9 +20,15 @@ import {
 } from "../contracts/index.js";
 import { ElectronActivationAttempt } from "./session/activation.js";
 import { ElectronRuntimeLog } from "./session/logging.js";
+import { prepareElectronNamespacePaths, resolveElectronSessionNamespace } from "./session/namespace-paths.js";
 import { attachElectronProcessErrorHandlers } from "./session/process-errors.js";
 import { completeElectronShutdown } from "./session/shutdown.js";
-import { claimElectronSingleInstanceLock, ElectronLaunchHandoffQueue } from "./session/single-instance.js";
+import {
+  claimElectronSingleInstanceLock,
+  ElectronLaunchHandoffQueue,
+  findElectronProtocolUrl,
+  parseElectronInstallerReplacementData,
+} from "./session/single-instance.js";
 import { observeElectronInstallerHandoff } from "./session/update-handoff.js";
 import { applyElectronMacRuntimePolicy } from "../platform/macos/index.js";
 import { ELECTRON_BOOTSTRAP_SCHEMA_VERSION, validateElectronBootstrapResult } from "./startup/bootstrap/contracts.js";
@@ -31,13 +39,16 @@ import {
   validateElectronRuntimeWarmupTopology,
 } from "./startup/warmup/index.js";
 import { applyElectronPreflight } from "./startup/preflight/index.js";
+import { ElectronStartupAttemptFence, type ElectronStartupSignal } from "./startup/attempt.js";
 import { focusElectronWindow, resolveElectronPresentationMode } from "./window/presentation.js";
 
 export * from "./session/logging.js";
+export * from "./session/namespace-paths.js";
 export * from "./session/process-errors.js";
 export * from "./session/shutdown.js";
 export * from "./session/single-instance.js";
 export * from "./session/update-handoff.js";
+export * from "./startup/attempt.js";
 export * from "./window/presentation.js";
 
 function splashHtml(title: string): string {
@@ -66,7 +77,11 @@ function requireWarmupState<T>(value: T | null, label: string): T {
   return value;
 }
 
-type ElectronRuntimeContext = { activation: ElectronActivationAttempt | null; log: ElectronRuntimeLog | null };
+type ElectronRuntimeContext = {
+  activation: ElectronActivationAttempt | null;
+  log: ElectronRuntimeLog | null;
+  startup: ElectronStartupAttemptFence | null;
+};
 
 async function resolveCarrierWithRecovery(input: Readonly<{
   lockPath: string;
@@ -99,16 +114,57 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
   const preflight = applyElectronPreflight(app, definition.preflight);
   const warmupTopology = validateElectronRuntimeWarmupTopology(definition.warmup);
   const presentation = resolveElectronPresentationMode({ explicitHeadless: definition.headless });
+  const sessionNamespace = resolveElectronSessionNamespace(manifest.namespace, presentation);
   app.setName(manifest.productName);
   protocol.registerSchemesAsPrivileged([{ scheme: manifest.protocol, privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
+  let rendererLease: ElectronRendererLease | null = null;
+  let splash: BrowserWindow | null = null;
+  const handoffs = new ElectronLaunchHandoffQueue(manifest.protocol);
+  const dispatch = (url: string) => { void Promise.resolve(definition.actions?.openDeepLink?.(url)); };
+  const initialDeepLink = findElectronProtocolUrl(manifest.protocol, process.argv);
+  if (initialDeepLink != null) handoffs.enqueue({ type: "deep-link", source: "initial-argv", url: initialDeepLink });
+  app.on("open-url", (event, url) => {
+    event.preventDefault();
+    if (rendererLease != null) {
+      focusElectronWindow(rendererLease.window, presentation, "deep-link");
+      if (findElectronProtocolUrl(manifest.protocol, [url]) != null) dispatch(url);
+      return;
+    }
+    if (handoffs.enqueue({ type: "deep-link", source: "mac-open-url", url })) focusElectronWindow(splash, presentation, "deep-link");
+  });
+  app.on("second-instance", (_event, argv, _workingDirectory, additionalData) => {
+    if (parseElectronInstallerReplacementData(additionalData) != null) return;
+    const link = findElectronProtocolUrl(manifest.protocol, argv);
+    if (rendererLease != null) {
+      focusElectronWindow(rendererLease.window, presentation, link == null ? "second-instance" : "deep-link");
+      if (link != null) dispatch(link);
+      return;
+    }
+    handoffs.enqueue(link == null
+      ? { type: "focus", source: "second-instance" }
+      : { type: "deep-link", source: "second-instance", url: link });
+    focusElectronWindow(splash, presentation, link == null ? "second-instance" : "deep-link");
+  });
+  app.on("activate", () => {
+    if (rendererLease != null) {
+      focusElectronWindow(rendererLease.window, presentation, "app-activate");
+      return;
+    }
+    handoffs.enqueue({ type: "focus", source: "app-activate" });
+    focusElectronWindow(splash, presentation, "app-activate");
+  });
+  const paths = await prepareElectronNamespacePaths(app, {
+    channel: manifest.channel,
+    namespace: sessionNamespace,
+  });
   if (!await claimElectronSingleInstanceLock(app)) { app.quit(); return; }
-  const runtimeRoot = join(app.getPath("userData"), "electron-kit", manifest.namespace);
+  const runtimeRoot = paths.runtimeRoot;
   context.log = new ElectronRuntimeLog(runtimeRoot);
   const processErrors = attachElectronProcessErrorHandlers((event) => {
     context.log?.write(`process.${event.source}.${event.classification}`, { error: event.error });
   });
   context.log.write("preflight.complete", {
-    namespace: manifest.namespace,
+    namespace: sessionNamespace,
     pid: process.pid,
     platform: process.platform,
     presentation,
@@ -116,31 +172,7 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
     preflight,
   });
   context.activation = await ElectronActivationAttempt.begin(runtimeRoot);
-
-  let rendererLease: ElectronRendererLease | null = null;
-  let splash: BrowserWindow | null = null;
-  const handoffs = new ElectronLaunchHandoffQueue(manifest.protocol);
-  const dispatch = (url: string) => { void Promise.resolve(definition.actions?.openDeepLink?.(url)); };
-  const initialDeepLink = process.argv.find((value) => value.startsWith(`${manifest.protocol}://`));
-  if (initialDeepLink != null) handoffs.enqueue([initialDeepLink]);
-  app.on("second-instance", (_event, argv) => {
-    const link = argv.find((value) => value.startsWith(`${manifest.protocol}://`));
-    if (rendererLease == null) {
-      handoffs.enqueue(argv);
-      focusElectronWindow(splash, presentation, link == null ? "second-instance" : "deep-link");
-      return;
-    }
-    focusElectronWindow(rendererLease.window, presentation, link == null ? "second-instance" : "deep-link");
-    if (link != null) dispatch(link);
-  });
-  app.on("activate", () => {
-    if (rendererLease == null) {
-      handoffs.enqueue([]);
-      focusElectronWindow(splash, presentation, "app-activate");
-      return;
-    }
-    focusElectronWindow(rendererLease.window, presentation, "app-activate");
-  });
+  context.startup = new ElectronStartupAttemptFence(context.activation.attemptId);
 
   await app.whenReady();
   await applyElectronMacRuntimePolicy({ app, platform: process.platform, policy: definition.mac, presentation });
@@ -155,12 +187,14 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
   const sidecarEntryPath = app.isPackaged
     ? join(process.resourcesPath, "fixture-sidecar.cjs")
     : join(app.getAppPath(), "fixture-sidecar.cjs");
-  const scope: LifecycleScope = { channel: manifest.channel, namespace: manifest.namespace };
+  const scope: LifecycleScope = { channel: manifest.channel, namespace: sessionNamespace };
   const attachment: LifecycleAttachment = { id: `electron-${process.pid}-${randomUUID()}`, shell: manifest.shell };
   let carrier: OfficialNodeCarrierReceipt | null = null;
   let ports: ElectronFixturePorts | null = null;
   let feedback: StandaloneFeedbackEmitter | null = null;
   let generation: GenerationRecord | null = null;
+  let generationBinding: StandaloneGenerationBinding | null = null;
+  let startupSignal: ElectronStartupSignal | null = null;
   let status: LifecycleStatus | null = null;
   let updaterRevisionAtStart: number | null = null;
   let readinessTimeoutMs: number | null = null;
@@ -191,18 +225,26 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
         feedback.emit({ phase: "generation-prepared", state: "begin" });
         const bootstrap = validateElectronBootstrapResult(bootstrapRequest, await ports.bootstrap.resolve(bootstrapRequest));
         generation = bootstrap.generation;
+        generationBinding = createStandaloneGenerationBinding(generation, scope);
+        startupSignal = context.startup!.bind(generationBinding.digest);
         readinessTimeoutMs = bootstrap.readinessTimeoutMs;
         feedback.emit({ phase: "generation-prepared", state: "complete", generationId: generation.id });
       },
       [ELECTRON_WARMUP_ATOMS.AWAIT_STANDALONE_READY]: async () => {
-        if (ports == null || feedback == null || generation == null || readinessTimeoutMs == null) {
+        if (ports == null || feedback == null || generation == null || generationBinding == null || readinessTimeoutMs == null) {
           throw new Error("Standalone resolution has not completed");
         }
         feedback.emit({ phase: "closure-starting", state: "begin", generationId: generation.id });
-        status = await ports.lifecycle.start(scope, generation, attachment);
+        status = await ports.lifecycle.start(scope, generation, attachment, generationBinding);
         if (status.instanceId == null) throw new Error("fixture lifecycle did not return an instance id");
-        const readiness = { generationId: generation.id, instanceId: status.instanceId, attachmentId: attachment.id };
+        const readiness = {
+          generationId: generation.id,
+          bindingDigest: generationBinding.digest,
+          instanceId: status.instanceId,
+          attachmentId: attachment.id,
+        };
         await withTimeout(ports.lifecycle.awaitReady(scope, readiness), readinessTimeoutMs, "Electron lifecycle readiness timed out");
+        context.startup!.advance(startupSignal!, "runtime-ready");
         feedback.emit({ phase: "closure-ready", state: "complete", generationId: generation.id });
       },
       [ELECTRON_WARMUP_ATOMS.MOUNT_RENDERER]: async () => {
@@ -222,6 +264,7 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
             },
             destroy() { if (!window.isDestroyed()) window.destroy(); },
           });
+          context.startup!.advance(startupSignal!, "renderer-mounted");
         } catch (error) {
           if (!window.isDestroyed()) window.destroy();
           throw error;
@@ -255,14 +298,21 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
   const remaining = presentation === "headless" ? 0 : 350 - (Date.now() - splashStartedAt);
   if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
   const pendingHandoffs = handoffs.drain();
-  focusElectronWindow(runtimeRendererLease.window, presentation, pendingHandoffs.focusRequested ? "second-instance" : "initial-reveal");
+  focusElectronWindow(
+    runtimeRendererLease.window,
+    presentation,
+    pendingHandoffs.length > 0 ? "second-instance" : "initial-reveal",
+  );
   if (splash != null && !splash.isDestroyed()) splash.destroy();
   await context.activation.commit();
+  context.startup.advance(startupSignal!, "committed");
   context.log.write("startup.committed", { generationId: runtimeGeneration.id, presentation });
   void Promise.resolve().then(() => definition.actions?.observeCommitted?.()).catch((error: unknown) => {
     context.log?.write("shell.commit-observer.failed", { error });
   });
-  for (const link of pendingHandoffs.deepLinks) dispatch(link);
+  for (const ingress of pendingHandoffs) {
+    if (ingress.type === "deep-link") dispatch(ingress.url);
+  }
 
   let heartbeatInFlight = Promise.resolve();
   const heartbeat = setInterval(() => {
@@ -335,9 +385,10 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
 }
 
 export async function runElectronShell(definition: ElectronShellDefinition): Promise<void> {
-  const context: ElectronRuntimeContext = { activation: null, log: null };
+  const context: ElectronRuntimeContext = { activation: null, log: null, startup: null };
   try { await runElectronShellSession(definition, context); }
   catch (error) {
+    context.startup?.cancel();
     await context.activation?.fail(error).catch(() => undefined);
     context.log?.write("startup.failed", { error });
     await context.log?.flush();

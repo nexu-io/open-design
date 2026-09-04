@@ -25,7 +25,7 @@ export function validateElectronBootstrapResult(request: ElectronBootstrapReques
   if (value.schemaVersion !== ELECTRON_BOOTSTRAP_SCHEMA_VERSION || value.correlationId !== request.correlationId) {
     throw new Error("Electron bootstrap result correlation mismatch");
   }
-  if (value.generation.schemaVersion !== 3 || !/^[a-f0-9]{64}$/u.test(value.generation.id)) throw new Error("Electron bootstrap returned an invalid generation");
+  if (value.generation.schemaVersion !== 4 || !/^[a-f0-9]{64}$/u.test(value.generation.id)) throw new Error("Electron bootstrap returned an invalid generation");
   if (value.generation.channel !== request.scope.channel || value.generation.releaseVersion !== request.releaseVersion) throw new Error("Electron bootstrap escaped its requested scope");
   if (!Number.isSafeInteger(value.readinessTimeoutMs) || value.readinessTimeoutMs < 100 || value.readinessTimeoutMs > 300_000) {
     throw new Error("Electron bootstrap returned an invalid readiness timeout");

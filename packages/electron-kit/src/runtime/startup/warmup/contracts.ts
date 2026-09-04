@@ -23,6 +23,7 @@ export type ElectronWarmupNode = Readonly<{
 export type ElectronWarmupTopology = Readonly<{
   schemaVersion: typeof ELECTRON_WARMUP_SCHEMA_VERSION;
   maxConcurrency?: number;
+  totalTimeoutMs?: number;
   nodes: readonly ElectronWarmupNode[];
 }>;
 
@@ -38,6 +39,10 @@ export function validateElectronWarmupTopology(value: ElectronWarmupTopology): E
   if (value.maxConcurrency != null
     && (!Number.isSafeInteger(value.maxConcurrency) || value.maxConcurrency < 1 || value.maxConcurrency > 32)) {
     throw new Error("Electron warmup topology has invalid concurrency");
+  }
+  if (value.totalTimeoutMs != null
+    && (!Number.isSafeInteger(value.totalTimeoutMs) || value.totalTimeoutMs < 100 || value.totalTimeoutMs > 600_000)) {
+    throw new Error("Electron warmup topology has invalid total timeout");
   }
   const ids = new Set<string>();
   for (const node of value.nodes) {

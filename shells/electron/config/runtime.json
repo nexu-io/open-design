@@ -17,6 +17,7 @@
   "warmup": {
     "schemaVersion": 1,
     "maxConcurrency": 4,
+    "totalTimeoutMs": 360000,
     "nodes": [
       {
         "id": "official-node",
