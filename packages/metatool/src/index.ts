@@ -3,6 +3,9 @@ import { lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { z } from "zod";
 
+export * from "./identity.ts";
+export * from "./identity-registry.ts";
+
 export type ToolBuildMetadataPolicy = {
   buildCommand: string;
   distEntries: string[];

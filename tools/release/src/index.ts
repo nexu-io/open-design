@@ -3,6 +3,21 @@ import { cac } from "cac";
 const cli = cac("tools-release");
 
 cli
+  .command("exact-plan", "Resolve exact release identities and actions")
+  .option("--root <path>", "Repository root (auto-detected by default)")
+  .option("--registry <path>", "Content identity registry", { default: "tools/release/resources/exact-plan-identities.json" })
+  .option("--target <target>", "Exact target: darwin-arm64, darwin-x64, or win32-x64")
+  .option("--available <path>", "JSON array of reusable identities")
+  .option("--output <path>", "Plan receipt path", { default: ".tmp/release-exact/plan.json" })
+  .action(async (options: { available?: string; output: string; registry: string; root?: string; target?: string }) => {
+    if (options.target !== "darwin-arm64" && options.target !== "darwin-x64" && options.target !== "win32-x64") {
+      throw new Error("--target must be darwin-arm64, darwin-x64, or win32-x64");
+    }
+    const { writeExactPlan } = await import("./exact/write-plan.ts");
+    await writeExactPlan({ ...options, target: options.target });
+  });
+
+cli
   .command("prepare <channel>", "Prepare release metadata outputs for a lane")
   .action(async (channel: string) => {
     if (channel === "beta") {

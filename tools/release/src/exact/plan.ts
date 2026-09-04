@@ -1,0 +1,142 @@
+import {
+  canonicalMetadataJson,
+  metadataDigest,
+  readContentIdentityRegistry,
+  resolveContentIdentity,
+  resolveContentIdentityDeclaration,
+  type ContentIdentityRegistry,
+} from "@open-design/metatool";
+
+export const EXACT_PLAN_SCHEMA_VERSION = 1 as const;
+
+export type ExactTarget = "darwin-arm64" | "darwin-x64" | "win32-x64";
+
+export type ExactPlanNodeId =
+  | "closure.acceptance.hot"
+  | "closure.build"
+  | "closure.test"
+  | "electron.acceptance.full"
+  | "electron.distribution"
+  | "electron.shell.build"
+  | "electron.shell.test";
+
+export type ExactPlanNode = Readonly<{
+  dependencies: readonly ExactPlanNodeId[];
+  identity: `sha256:${string}`;
+  sourceIdentity: `sha256:${string}`;
+  target: ExactTarget;
+}>;
+
+export type ExactPlan = Readonly<{
+  nodes: Readonly<Record<ExactPlanNodeId, ExactPlanNode>>;
+  schemaVersion: typeof EXACT_PLAN_SCHEMA_VERSION;
+  target: ExactTarget;
+}>;
+
+export type ExactPlanAction = Readonly<{
+  id: ExactPlanNodeId | "exact.activate" | "exact.compose" | "exact.publish";
+  reason: "identity-miss" | "release-finalization";
+}>;
+
+const NODE_DEPENDENCIES: Readonly<Record<ExactPlanNodeId, readonly ExactPlanNodeId[]>> = {
+  "closure.acceptance.hot": ["electron.distribution", "closure.build"],
+  "closure.build": [],
+  "closure.test": ["closure.build"],
+  "electron.acceptance.full": ["electron.distribution"],
+  "electron.distribution": ["electron.shell.build"],
+  "electron.shell.build": [],
+  "electron.shell.test": ["electron.shell.build"],
+};
+
+const NODE_ORDER = Object.freeze([
+  "electron.shell.build",
+  "electron.shell.test",
+  "closure.build",
+  "closure.test",
+  "electron.distribution",
+] satisfies ExactPlanNodeId[]);
+
+function compositeIdentity(id: ExactPlanNodeId, sourceIdentity: string, dependencies: readonly ExactPlanNode[], target: ExactTarget): `sha256:${string}` {
+  return metadataDigest(canonicalMetadataJson({
+    dependencies: dependencies.map((dependency) => dependency.identity),
+    id,
+    schemaVersion: EXACT_PLAN_SCHEMA_VERSION,
+    sourceIdentity,
+    target,
+  }));
+}
+
+async function resolveNode(
+  id: ExactPlanNodeId,
+  root: string,
+  target: ExactTarget,
+  registry: ContentIdentityRegistry,
+  nodes: Partial<Record<ExactPlanNodeId, ExactPlanNode>>,
+): Promise<ExactPlanNode> {
+  const resolved = resolveContentIdentityDeclaration(registry, id);
+  const unexpectedParameters = resolved.declaration.parameters.filter((parameter) => parameter !== "target");
+  if (unexpectedParameters.length > 0 || !resolved.declaration.parameters.includes("target")) {
+    throw new Error(`exact identity ${id} must declare only the target parameter`);
+  }
+  const source = await resolveContentIdentity({
+    id,
+    parameters: { target },
+    root,
+    schemaVersion: resolved.declaration.schemaVersion,
+    sources: resolved.sources,
+  });
+  const dependencies = NODE_DEPENDENCIES[id];
+  const dependencyNodes = dependencies.map((dependency) => {
+    const node = nodes[dependency];
+    if (node == null) throw new Error(`exact plan dependency ${dependency} must precede ${id}`);
+    return node;
+  });
+  return Object.freeze({
+    dependencies,
+    identity: compositeIdentity(id, source.digest, dependencyNodes, target),
+    sourceIdentity: source.digest,
+    target,
+  });
+}
+
+export async function createExactPlan(input: Readonly<{
+  registry: ContentIdentityRegistry;
+  root: string;
+  target: ExactTarget;
+}>): Promise<ExactPlan> {
+  const nodes: Partial<Record<ExactPlanNodeId, ExactPlanNode>> = {};
+  for (const id of NODE_ORDER) nodes[id] = await resolveNode(id, input.root, input.target, input.registry, nodes);
+  nodes["electron.acceptance.full"] = await resolveNode("electron.acceptance.full", input.root, input.target, input.registry, nodes);
+  nodes["closure.acceptance.hot"] = await resolveNode("closure.acceptance.hot", input.root, input.target, input.registry, nodes);
+  return Object.freeze({
+    nodes: Object.freeze(nodes as Record<ExactPlanNodeId, ExactPlanNode>),
+    schemaVersion: EXACT_PLAN_SCHEMA_VERSION,
+    target: input.target,
+  });
+}
+
+export async function createExactPlanFromRegistryFile(input: Readonly<{
+  registryPath: string;
+  root: string;
+  target: ExactTarget;
+}>): Promise<ExactPlan> {
+  return await createExactPlan({ ...input, registry: await readContentIdentityRegistry(input.registryPath) });
+}
+
+export function selectExactPlanActions(plan: ExactPlan, availableIdentities: ReadonlySet<string>): readonly ExactPlanAction[] {
+  const actions: ExactPlanAction[] = [];
+  for (const id of NODE_ORDER) {
+    if (!availableIdentities.has(plan.nodes[id].identity)) actions.push({ id, reason: "identity-miss" });
+  }
+  if (!availableIdentities.has(plan.nodes["electron.acceptance.full"].identity)) {
+    actions.push({ id: "electron.acceptance.full", reason: "identity-miss" });
+  } else if (!availableIdentities.has(plan.nodes["closure.acceptance.hot"].identity)) {
+    actions.push({ id: "closure.acceptance.hot", reason: "identity-miss" });
+  }
+  actions.push(
+    { id: "exact.compose", reason: "release-finalization" },
+    { id: "exact.publish", reason: "release-finalization" },
+    { id: "exact.activate", reason: "release-finalization" },
+  );
+  return Object.freeze(actions);
+}

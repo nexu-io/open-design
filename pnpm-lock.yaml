@@ -970,6 +970,9 @@ importers:
       '@open-design/launcher-proto':
         specifier: workspace:*
         version: link:../../packages/launcher-proto
+      '@open-design/metatool':
+        specifier: workspace:*
+        version: link:../../packages/metatool
       '@open-design/release':
         specifier: workspace:*
         version: link:../../packages/release

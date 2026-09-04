@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "defaults": {
+    "excludeDirectoryNames": [".next", ".tmp", "coverage", "dist", "node_modules", "out"]
+  },
+  "sourceSets": {
+    "electron.shell.build": {
+      "normalizePackageVersion": true,
+      "paths": [
+        ".node-version",
+        "package.json",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
+        "packages/electron-kit/package.json",
+        "packages/electron-kit/esbuild.config.mjs",
+        "packages/electron-kit/src",
+        "packages/electron-kit/resources",
+        "packages/contracts/package.json",
+        "packages/contracts/src",
+        "packages/download/package.json",
+        "packages/download/src",
+        "packages/platform/package.json",
+        "packages/platform/src",
+        "packages/release/package.json",
+        "packages/release/src",
+        "packages/sidecar/package.json",
+        "packages/sidecar/src",
+        "packages/standalone/package.json",
+        "packages/standalone/src",
+        "shells/electron/package.json",
+        "shells/electron/tsconfig.json",
+        "shells/electron/config",
+        "shells/electron/scripts",
+        "shells/electron/src"
+      ]
+    },
+    "electron.shell.test": {
+      "paths": [
+        "packages/electron-kit/tests",
+        "packages/electron-kit/tsconfig.tests.json",
+        "packages/electron-kit/vitest.config.ts",
+        "shells/electron/tests",
+        "shells/electron/tsconfig.tests.json",
+        "shells/electron/vitest.config.ts"
+      ]
+    },
+    "closure.build": {
+      "normalizePackageVersion": true,
+      "paths": [
+        ".node-version",
+        "package.json",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
+        "apps/closure/package.json",
+        "apps/closure/esbuild.config.ts",
+        "apps/closure/tsconfig.json",
+        "apps/closure/src",
+        "apps/daemon/package.json",
+        "apps/daemon/tsconfig.json",
+        "apps/daemon/src",
+        "apps/web/package.json",
+        "apps/web/next.config.ts",
+        "apps/web/tsconfig.json",
+        "apps/web/tsconfig.sidecar.json",
+        "apps/web/src",
+        "apps/web/app",
+        "packages/agui-adapter/package.json",
+        "packages/agui-adapter/src",
+        "packages/components/package.json",
+        "packages/components/src",
+        "packages/contracts/package.json",
+        "packages/contracts/src",
+        "packages/diagnostics/package.json",
+        "packages/diagnostics/src",
+        "packages/host/package.json",
+        "packages/host/src",
+        "packages/platform/package.json",
+        "packages/platform/src",
+        "packages/plugin-runtime/package.json",
+        "packages/plugin-runtime/src",
+        "packages/registry-protocol/package.json",
+        "packages/registry-protocol/src",
+        "packages/release/package.json",
+        "packages/release/src",
+        "packages/sidecar/package.json",
+        "packages/sidecar/src",
+        "packages/sidecar-proto/package.json",
+        "packages/sidecar-proto/src",
+        "packages/standalone/package.json",
+        "packages/standalone/src"
+      ]
+    },
+    "closure.test": {
+      "paths": [
+        "apps/closure/tests",
+        "apps/closure/tsconfig.tests.json",
+        "apps/daemon/tests",
+        "apps/daemon/tsconfig.tests.json",
+        "apps/daemon/vitest.config.ts",
+        "apps/web/tests",
+        "apps/web/vitest.config.ts"
+      ]
+    },
+    "electron.distribution": {
+      "paths": [
+        "shells/electron/config/platforms",
+        "shells/electron/scripts/exact-distribution.ts"
+      ]
+    },
+    "electron.acceptance.full": {
+      "paths": [
+        "e2e/lib/desktop",
+        "e2e/lib/vitest",
+        "e2e/scripts/release-smoke.ts",
+        "e2e/specs/mac.spec.ts",
+        "e2e/specs/win.spec.ts"
+      ]
+    },
+    "closure.acceptance.hot": {
+      "paths": [
+        "packages/standalone/src",
+        "shells/electron/tests/standalone-authority.test.ts",
+        "shells/electron/tests/standalone-host-lifecycle.test.ts",
+        "shells/terminal/tests/bootloader-handoff.test.ts",
+        "shells/terminal/tests/sidecar.test.ts"
+      ]
+    }
+  },
+  "identities": {
+    "electron.shell.build": {"schemaVersion": 1, "sourceSets": ["electron.shell.build"], "parameters": ["target"]},
+    "electron.shell.test": {"schemaVersion": 1, "sourceSets": ["electron.shell.test"], "parameters": ["target"]},
+    "closure.build": {"schemaVersion": 1, "sourceSets": ["closure.build"], "parameters": ["target"]},
+    "closure.test": {"schemaVersion": 1, "sourceSets": ["closure.test"], "parameters": ["target"]},
+    "electron.distribution": {"schemaVersion": 1, "sourceSets": ["electron.distribution"], "parameters": ["target"]},
+    "electron.acceptance.full": {"schemaVersion": 1, "sourceSets": ["electron.acceptance.full"], "parameters": ["target"]},
+    "closure.acceptance.hot": {"schemaVersion": 1, "sourceSets": ["closure.acceptance.hot"], "parameters": ["target"]}
+  }
+}
