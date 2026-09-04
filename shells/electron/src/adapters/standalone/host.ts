@@ -127,6 +127,15 @@ class ElectronStandaloneHostRuntime {
       await this.lifecycle.heartbeat(active.attachment, request.attachmentCapability);
       return await active.handle.invoke(request.command);
     }
+    if (request.operation === "transition.begin") return await this.lifecycle.beginTransition(request.kind, request.options);
+    if (request.operation === "transition.renew") return await this.lifecycle.renewTransition(request.token, request.fence);
+    if (request.operation === "transition.release") return await this.lifecycle.releaseTransition(request.token, request.fence);
+    if (request.operation === "transition.force-stop") {
+      const transition = await this.lifecycle.forceStopTransition(request.token, request.fence);
+      await Promise.all([...this.#handles.values()].map(({ handle }) => handle.close().catch(() => undefined)));
+      this.#handles.clear();
+      return transition;
+    }
     if (request.operation === "updater.read") return initialShellUpdaterSnapshot(request.shellType);
     if (request.operation === "updater.wait") {
       await new Promise((resolveWait) => setTimeout(resolveWait, request.timeoutMs));

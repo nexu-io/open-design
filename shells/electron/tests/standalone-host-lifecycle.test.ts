@@ -82,4 +82,28 @@ describe("Electron Standalone Sidecar-host lifecycle", () => {
       await rm(root, { force: true, recursive: true });
     }
   });
+
+  it("recovers and seals one transition through the durable ledger", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "electron-transition-ledger-"));
+    try {
+      const ledger = new ElectronStandaloneLifecycleLedger(root, scope);
+      const attachment = { id: "electron-1", shell };
+      const firstHost = new ElectronStandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000, transitionHeartbeatIntervalMs: 100, transitionLeaseDurationMs: 1_000, statePort: ledger });
+      await firstHost.start(generation, attachment, binding, null);
+      expect(await firstHost.beginTransition("shell-install", { attemptId: "install-1" })).toMatchObject({ state: "blocked", reason: "occupied" });
+      const acquired = await firstHost.beginTransition("shell-install", { attemptId: "install-1", force: true });
+      if (acquired.state !== "acquired") throw new Error("transition was not acquired");
+
+      const continuation = new ElectronStandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000, transitionHeartbeatIntervalMs: 100, transitionLeaseDurationMs: 1_000, statePort: ledger });
+      expect(await continuation.beginTransition("shell-install", { attemptId: "install-1", force: true })).toEqual(acquired);
+      const sealed = await continuation.forceStopTransition(acquired.transition.token, acquired.transition.fence);
+      expect(sealed).toMatchObject({ attemptId: "install-1", phase: "stopped-sealed", fence: 2 });
+      expect(await ledger.read()).toMatchObject({ state: "stopped", transition: { token: "install-1", phase: "stopped-sealed", fence: 2 } });
+      const restarted = await continuation.completeTransitionStart(sealed.token, sealed.fence, generation, attachment, binding);
+      expect(restarted.status).toMatchObject({ state: "running", references: 1 });
+      expect((await ledger.read())?.transition).toBeNull();
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 });
