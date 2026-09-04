@@ -216,6 +216,13 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
       if (!fs.existsSync(sceneDir)) {
         return sendApiError(res, 404, 'SCENE_NOT_FOUND', `scene directory not found: ${scenePath}`);
       }
+      // existsSync passes for a regular file too — without this check a
+      // file-valued scenePath reaches compileInWorker, whose source
+      // discovery calls readdirSync on it and turns a client input error
+      // into an opaque 500 INTERNAL_ERROR.
+      if (!fs.statSync(sceneDir).isDirectory()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', `scenePath is not a directory: ${scenePath}`);
+      }
 
       if (inFlight.has(sceneDir)) {
         // The refusal tells the caller what to DO, not just what happened: a

@@ -597,6 +597,20 @@ describe('POST /api/projects/:id/scene3d/compile', () => {
     expect(res.body.error.code).toBe('SCENE_NOT_FOUND');
   });
 
+  it('400s a scenePath that names a regular file instead of a directory', async () => {
+    const root = tempProjectsRoot();
+    fs.mkdirSync(path.join(root, 'proj1'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'proj1', 'build.py'), '# not a scene dir');
+    const api = await startServer({ projectsRoot: root });
+    const res = await api.req('/api/projects/proj1/scene3d/compile', {
+      method: 'POST',
+      body: { scenePath: 'build.py' },
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('BAD_REQUEST');
+    expect(res.body.error.message).toMatch(/not a directory/);
+  });
+
   it('reports a source-less scene as ok:false with S3D-E-101 rather than an HTTP error', async () => {
     const root = tempProjectsRoot();
     fs.mkdirSync(path.join(root, 'proj1'), { recursive: true });
