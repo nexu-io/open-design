@@ -1622,7 +1622,37 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
   inset: 0;
   z-index: 1050;
   overflow: hidden;
+  /* The letterbox ground is NOT painted here, on purpose. Promotion changes
+     this element's layout, and an opaque ground in the same rule composites
+     before the document has repainted into its new box — measured as a
+     ~350 ms black flash, with zero navigations and zero frame loads. Timing
+     the ground against that reflow only lowers the odds: two rAFs survived
+     eight runs and still flashed on a busier one. The ground therefore lives
+     on its own layer below, whose box never changes, so it can never be the
+     only thing painted in a frame. See runtime/presentation-backdrop.ts. */
+  background: transparent;
+}
+
+/*
+ * The letterbox ground for slides that do not fill the window.
+ *
+ * Its own fixed layer, mounted and unmounted with the presentation, sitting
+ * directly beneath the promoted preview. Because this box is constant, it is
+ * never mid-reflow while opaque: on the way in it fades up once the document
+ * has painted, and on the way out it leaves with the presentation.
+ */
+.present-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1049;
   background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.present-backdrop.is-present-settled {
+  opacity: 1;
 }
 .viewer .present-exit-btn {
   position: absolute;

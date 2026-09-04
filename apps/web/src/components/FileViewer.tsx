@@ -324,6 +324,10 @@ import { MANUAL_EDIT_STYLE_PROPS, type ManualEditBridgeMessage, type ManualEditH
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 import { shouldAdoptPersistedManualEditDocument } from '../runtime/manual-edit-document-latch';
 import {
+  PRESENTATION_BACKDROP_DELAY_MS,
+  presentationBackdropPhase,
+} from '../runtime/presentation-backdrop';
+import {
   decideDeckSlideReport,
   type DeckSlideIntent,
 } from '../runtime/deck-slide-intent';
@@ -14414,6 +14418,30 @@ function HtmlViewer({
     workspaceActive,
   ]);
 
+  // Hold the letterbox ground back until the promoted document has had a frame
+  // to paint into its new box; otherwise the ground composites first and the
+  // audience sees black.
+  const [presentPromotedAt, setPresentPromotedAt] = useState<number | null>(null);
+  const [presentBackdropSettled, setPresentBackdropSettled] = useState(false);
+  useEffect(() => {
+    if (!inTabPresent) {
+      setPresentPromotedAt(null);
+      setPresentBackdropSettled(false);
+      return;
+    }
+    const promotedAt = Date.now();
+    setPresentPromotedAt(promotedAt);
+    setPresentBackdropSettled(false);
+    const id = window.setTimeout(() => {
+      setPresentBackdropSettled(presentationBackdropPhase({
+        presenting: true,
+        promotedAtMs: promotedAt,
+        nowMs: Date.now(),
+      }) === 'settled');
+    }, PRESENTATION_BACKDROP_DELAY_MS);
+    return () => window.clearTimeout(id);
+  }, [inTabPresent]);
+
   // The Esc hint is a momentary confirmation, not a persistent chrome: fade it
   // out a few seconds after the presentation starts. (closeInTabPresentation
   // also clears it immediately when the user leaves.)
@@ -14572,6 +14600,14 @@ function HtmlViewer({
   }, [inTabPresent, presentFullscreenPending, workspaceActive]);
 
   function closeInTabPresentation() {
+    // Leaving is the mirror of entering: if the ground is still opaque when the
+    // layout returns to normal, the frame between the two is black. Dropping
+    // the ground and the layout in the same handler does NOT order them —
+    // React batches both into one commit, which is why the first attempt at
+    // this still measured a ~340 ms flash on exit. The ground has to be
+    // committed and painted before the layout changes, so the layout change
+    // waits two frames.
+    setPresentBackdropSettled(false);
     setInTabPresent(false);
     setPresentFullscreenPending(false);
     presentFullscreenRequestedRef.current = false;
@@ -18298,6 +18334,13 @@ function HtmlViewer({
         )}
       </div>
       {speakerNotesPanel}
+      {workspaceActive && inTabPresent && source && typeof document !== 'undefined' ? createPortal(
+        <div
+          className={`present-backdrop${presentBackdropSettled ? ' is-present-settled' : ''}`}
+          aria-hidden
+        />,
+        document.body,
+      ) : null}
       {workspaceActive && inTabPresent && source && typeof document !== 'undefined' ? createPortal(
         <div
           ref={presentOverlayRef}
