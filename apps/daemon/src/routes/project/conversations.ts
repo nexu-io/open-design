@@ -65,6 +65,66 @@ function settledForkVerdict(status: unknown): string | undefined {
   return typeof status === 'string' && TERMINAL_RUN_STATUSES.has(status) ? status : undefined;
 }
 
+/**
+ * The `done_key` a Run stamps on its own assistant row, if it has one.
+ *
+ * Each physical Run mints exactly one key (`mintRunDoneKey`, emitted as the
+ * `done_key` agent event before any model output), so the FIRST key in a row's
+ * event list is that row's Run identity. Later keys in the same list are not
+ * identity — they are the damage this guard exists to stop — which is why only
+ * the first one counts.
+ */
+function ownDoneKeyOfPersistedEvents(events: unknown): string | null {
+  if (!Array.isArray(events)) return null;
+  for (const event of events) {
+    if (
+      event
+      && typeof event === 'object'
+      && (event as Record<string, unknown>).kind === 'done_key'
+    ) {
+      const key = (event as Record<string, unknown>).key;
+      if (typeof key === 'string' && key) return key;
+    }
+  }
+  return null;
+}
+
+/**
+ * True when an incoming message payload carries the stream of a Run that
+ * already owns a DIFFERENT assistant row in this conversation.
+ *
+ * A daemon-backed assistant row holds the stream of exactly one physical Run.
+ * One logical OD Next turn, though, spans several Runs — the daemon gives each
+ * its own row (`odnext_assistant_<hash>` for an automatic continuation) while
+ * the client renders them as one turn and keeps appending the successor's
+ * stream into the message object already on screen, which is the PREDECESSOR's
+ * row. Persisting that folded copy stores the successor's answer twice, and a
+ * freshly opened project then renders the conclusion two times.
+ *
+ * The claim-keyed check above (`incoming.runId !== stored.runId`) misses this
+ * whenever the client sends the row's own `runId` — which is exactly what it
+ * holds after a conversation refresh hands the server's `runId` and terminal
+ * `runStatus` back to a message the stream is still writing into. So this test
+ * is keyed on the PAYLOAD instead: a sibling row's own `done_key` appearing in
+ * this row's events can only mean the client folded that sibling's Run in.
+ *
+ * Retries are unaffected: a re-driven attempt keeps the same Run — and
+ * therefore the same key — on the same row.
+ */
+function payloadCarriesAnotherRowsRunStream(
+  incomingEvents: unknown,
+  siblingRunDoneKeys: ReadonlySet<string>,
+): boolean {
+  if (!Array.isArray(incomingEvents) || siblingRunDoneKeys.size === 0) return false;
+  return incomingEvents.some((event) =>
+    event
+    && typeof event === 'object'
+    && (event as Record<string, unknown>).kind === 'done_key'
+    && typeof (event as Record<string, unknown>).key === 'string'
+    && siblingRunDoneKeys.has((event as Record<string, unknown>).key as string),
+  );
+}
+
 export function registerProjectConversationRoutes(app: Express, ctx: RegisterProjectConversationRoutesDeps): void {
   const { db, design } = ctx;
   const { sendApiError } = ctx.http;
@@ -403,11 +463,64 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
   // daemon never persisted events/status there, so the web is the legitimate
   // writer) and lets UI metadata (feedback, comment attachments, telemetry)
   // land on every PUT.
+  /**
+   * The `done_key` every OTHER assistant row in this conversation was recorded
+   * with — i.e. the Run identities this row must never be allowed to absorb.
+   * Only each sibling's FIRST key counts (see `ownDoneKeyOfPersistedEvents`),
+   * so an already-damaged sibling cannot re-export the key it absorbed.
+   */
+  const siblingRunDoneKeys = (
+    conversationId: string,
+    messageId: string,
+  ): ReadonlySet<string> => {
+    const rows = db
+      .prepare(
+        `SELECT events_json AS eventsJson
+           FROM messages
+          WHERE conversation_id = ?
+            AND role = 'assistant'
+            AND id <> ?
+            AND events_json IS NOT NULL
+            AND events_json LIKE '%"done_key"%'`,
+      )
+      .all(conversationId, messageId) as Array<{ eventsJson: string | null }>;
+    const keys = new Set<string>();
+    for (const row of rows) {
+      let parsed: unknown;
+      try {
+        parsed = row.eventsJson ? JSON.parse(row.eventsJson) : null;
+      } catch {
+        continue;
+      }
+      const key = ownDoneKeyOfPersistedEvents(parsed);
+      if (key) keys.add(key);
+    }
+    return keys;
+  };
+
   const mergeMessageWriteForDaemonBacked = (
     stored: ReturnType<typeof getMessage>,
     incoming: Record<string, unknown>,
+    foreignRunDoneKeys: ReadonlySet<string>,
   ): Record<string, unknown> => {
     if (!stored || stored.role !== 'assistant' || !stored.runId) return incoming;
+    // A payload that carries a sibling row's Run stream is a client-side fold of
+    // one logical task's several physical Runs, not a fresher view of this row.
+    // Keep the daemon's copy of every Run-owned field; client metadata still
+    // lands. See `payloadCarriesAnotherRowsRunStream`.
+    if (payloadCarriesAnotherRowsRunStream(incoming.events, foreignRunDoneKeys)) {
+      return {
+        ...incoming,
+        role: stored.role,
+        runId: stored.runId,
+        runStatus: stored.runStatus,
+        events: stored.events ?? [],
+        content: stored.content ?? '',
+        lastRunEventId: stored.lastRunEventId,
+        startedAt: stored.startedAt,
+        endedAt: stored.endedAt,
+      };
+    }
     // A delayed PUT from a superseded run generation (incoming.runId differs
     // from the stored, current run — e.g. an old attempt's snapshot landing
     // after a retry pinned run B) must not repopulate the current run's data.
@@ -654,7 +767,11 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       ? { ...m, events: compactAdjacentMessageAgentEvents(m.events) }
       : m;
     const saved = upsertMessage(db, req.params.cid, {
-      ...mergeMessageWriteForDaemonBacked(existing, normalizedMessage),
+      ...mergeMessageWriteForDaemonBacked(
+        existing,
+        normalizedMessage,
+        siblingRunDoneKeys(req.params.cid, req.params.mid),
+      ),
       id: req.params.mid,
     });
     // Bump the parent project's updatedAt so the project list re-orders.
