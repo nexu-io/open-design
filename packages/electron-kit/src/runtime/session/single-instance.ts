@@ -65,6 +65,7 @@ export function findElectronProtocolUrl(protocol: string, argv: readonly string[
 
 export class ElectronLaunchHandoffQueue {
   private readonly pending: ElectronLaunchIngress[] = [];
+  private accepting = true;
 
   constructor(private readonly protocol: string, private readonly capacity = 32) {
     if (!/^[a-z][a-z0-9.-]{1,127}$/u.test(protocol)) throw new Error("invalid Electron handoff protocol");
@@ -72,6 +73,7 @@ export class ElectronLaunchHandoffQueue {
   }
 
   enqueue(ingress: ElectronLaunchIngress): boolean {
+    if (!this.accepting) return false;
     if (ingress.type === "deep-link" && !isProtocolUrl(this.protocol, ingress.url)) return false;
     if (this.pending.length >= this.capacity) this.pending.shift();
     this.pending.push(structuredClone(ingress));
@@ -80,5 +82,10 @@ export class ElectronLaunchHandoffQueue {
 
   drain(): readonly ElectronLaunchIngress[] {
     return this.pending.splice(0);
+  }
+
+  cancel(): void {
+    this.accepting = false;
+    this.pending.splice(0);
   }
 }

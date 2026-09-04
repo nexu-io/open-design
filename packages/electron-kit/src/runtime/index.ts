@@ -36,10 +36,17 @@ import { ensureOfficialNodeCarrier, OfficialNodeCarrierError, type OfficialNodeC
 import {
   ELECTRON_WARMUP_ATOMS,
   runElectronWarmupTopology,
+  type ElectronWarmupRun,
   validateElectronRuntimeWarmupTopology,
 } from "./startup/warmup/index.js";
 import { applyElectronPreflight } from "./startup/preflight/index.js";
 import { ElectronStartupAttemptFence, type ElectronStartupSignal } from "./startup/attempt.js";
+import {
+  completeElectronStartupCancellation,
+  installElectronStartupQuitBarrier,
+  isElectronStartupCancelledError,
+  type ElectronStartupQuitBarrier,
+} from "./startup/cancellation.js";
 import { focusElectronWindow, resolveElectronPresentationMode } from "./window/presentation.js";
 
 export * from "./session/logging.js";
@@ -49,6 +56,7 @@ export * from "./session/shutdown.js";
 export * from "./session/single-instance.js";
 export * from "./session/update-handoff.js";
 export * from "./startup/attempt.js";
+export * from "./startup/cancellation.js";
 export * from "./window/presentation.js";
 
 function splashHtml(title: string): string {
@@ -81,6 +89,7 @@ type ElectronRuntimeContext = {
   activation: ElectronActivationAttempt | null;
   log: ElectronRuntimeLog | null;
   startup: ElectronStartupAttemptFence | null;
+  startupQuit: ElectronStartupQuitBarrier | null;
 };
 
 async function resolveCarrierWithRecovery(input: Readonly<{
@@ -120,11 +129,15 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
   let rendererLease: ElectronRendererLease | null = null;
   let splash: BrowserWindow | null = null;
   const handoffs = new ElectronLaunchHandoffQueue(manifest.protocol);
-  const dispatch = (url: string) => { void Promise.resolve(definition.actions?.openDeepLink?.(url)); };
+  const dispatch = (url: string) => {
+    if (context.startupQuit?.cancelled) return;
+    void Promise.resolve(definition.actions?.openDeepLink?.(url));
+  };
   const initialDeepLink = findElectronProtocolUrl(manifest.protocol, process.argv);
   if (initialDeepLink != null) handoffs.enqueue({ type: "deep-link", source: "initial-argv", url: initialDeepLink });
   app.on("open-url", (event, url) => {
     event.preventDefault();
+    if (context.startupQuit?.cancelled) return;
     if (rendererLease != null) {
       focusElectronWindow(rendererLease.window, presentation, "deep-link");
       if (findElectronProtocolUrl(manifest.protocol, [url]) != null) dispatch(url);
@@ -133,6 +146,7 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
     if (handoffs.enqueue({ type: "deep-link", source: "mac-open-url", url })) focusElectronWindow(splash, presentation, "deep-link");
   });
   app.on("second-instance", (_event, argv, _workingDirectory, additionalData) => {
+    if (context.startupQuit?.cancelled) return;
     if (parseElectronInstallerReplacementData(additionalData) != null) return;
     const link = findElectronProtocolUrl(manifest.protocol, argv);
     if (rendererLease != null) {
@@ -146,6 +160,7 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
     focusElectronWindow(splash, presentation, link == null ? "second-instance" : "deep-link");
   });
   app.on("activate", () => {
+    if (context.startupQuit?.cancelled) return;
     if (rendererLease != null) {
       focusElectronWindow(rendererLease.window, presentation, "app-activate");
       return;
@@ -171,18 +186,6 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
     runtimeRoot,
     preflight,
   });
-  context.activation = await ElectronActivationAttempt.begin(runtimeRoot);
-  context.startup = new ElectronStartupAttemptFence(context.activation.attemptId);
-
-  await app.whenReady();
-  await applyElectronMacRuntimePolicy({ app, platform: process.platform, policy: definition.mac, presentation });
-  const splashStartedAt = Date.now();
-  if (presentation === "interactive") {
-    splash = new BrowserWindow({ width: 520, height: 320, frame: false, resizable: false, show: true, webPreferences: { sandbox: true } });
-    await splash.loadURL(splashHtml(manifest.productName));
-  }
-  setSplashStage(splash, "Preparing…");
-
   const nodeLockPath = join(app.getAppPath(), "node-lock.json");
   const sidecarEntryPath = app.isPackaged
     ? join(process.resourcesPath, "fixture-sidecar.cjs")
@@ -198,7 +201,67 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
   let status: LifecycleStatus | null = null;
   let updaterRevisionAtStart: number | null = null;
   let readinessTimeoutMs: number | null = null;
-  const warmup = runElectronWarmupTopology({
+  let warmup: ElectronWarmupRun | null = null;
+  let lifecycleAcquisition: Promise<LifecycleStatus> | null = null;
+  let rendererMount: Promise<void> | null = null;
+  let activationAcquisition: Promise<ElectronActivationAttempt> | null = null;
+
+  context.startupQuit = installElectronStartupQuitBarrier({
+    app,
+    cancelAttempt() {
+      handoffs.cancel();
+      context.startup?.cancel();
+    },
+    async cleanup(error) {
+      try {
+        await completeElectronStartupCancellation({
+          async disposeWarmup() { await warmup?.dispose(); },
+          async settleRendererMount() { await rendererMount?.catch(() => undefined); },
+          async releaseRendererIntegration() { await rendererLease?.releaseIntegration(); },
+          async releaseStandaloneAttachment() {
+            await lifecycleAcquisition?.catch(() => undefined);
+            const startupPorts = ports;
+            if (startupPorts == null) return;
+            const current = await startupPorts.lifecycle.status(scope);
+            const ownsAttachment = current.occupants.some((occupant) => occupant.attachmentId === attachment.id);
+            const released = ownsAttachment ? await startupPorts.lifecycle.release(scope, attachment.id) : current;
+            if (released.references === 0 && released.state === "running") await startupPorts.lifecycle.stop(scope, released.fence);
+          },
+          async failActivation() {
+            const activation = await activationAcquisition?.catch(() => null);
+            await activation?.fail(error);
+          },
+          observe(failures) {
+            context.log?.write(failures.length === 0 ? "startup.cancelled" : "startup.cancellation.failed", { failures });
+          },
+          async flushObservation() { await context.log?.flush(); },
+          destroyWindows() {
+            for (const window of BrowserWindow.getAllWindows()) window.destroy();
+          },
+        });
+      } finally {
+        processErrors.dispose();
+      }
+    },
+    observeFailure(error) {
+      context.log?.write("startup.cancellation.failed", { error });
+      console.error("[electron-kit] startup cancellation failed", error);
+    },
+  });
+  activationAcquisition = ElectronActivationAttempt.begin(runtimeRoot);
+  context.activation = await context.startupQuit.guard(activationAcquisition);
+  context.startup = new ElectronStartupAttemptFence(context.activation.attemptId);
+
+  await context.startupQuit.guard(app.whenReady());
+  await context.startupQuit.guard(applyElectronMacRuntimePolicy({ app, platform: process.platform, policy: definition.mac, presentation }));
+  const splashStartedAt = Date.now();
+  if (presentation === "interactive") {
+    splash = new BrowserWindow({ width: 520, height: 320, frame: false, resizable: false, show: true, webPreferences: { sandbox: true } });
+    await context.startupQuit.guard(splash.loadURL(splashHtml(manifest.productName)));
+  }
+  setSplashStage(splash, "Preparing…");
+
+  warmup = runElectronWarmupTopology({
     topology: warmupTopology,
     executors: {
       ...definition.warmupExecutors,
@@ -235,7 +298,8 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
           throw new Error("Standalone resolution has not completed");
         }
         feedback.emit({ phase: "closure-starting", state: "begin", generationId: generation.id });
-        status = await ports.lifecycle.start(scope, generation, attachment, generationBinding);
+        lifecycleAcquisition = ports.lifecycle.start(scope, generation, attachment, generationBinding);
+        status = await lifecycleAcquisition;
         if (status.instanceId == null) throw new Error("fixture lifecycle did not return an instance id");
         const readiness = {
           generationId: generation.id,
@@ -248,31 +312,34 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
         feedback.emit({ phase: "closure-ready", state: "complete", generationId: generation.id });
       },
       [ELECTRON_WARMUP_ATOMS.MOUNT_RENDERER]: async () => {
-        const window = new BrowserWindow({
-          ...definition.renderer.windowOptions?.({ manifest, preflight, presentation }),
-          width: manifest.window.width,
-          height: manifest.window.height,
-          title: manifest.window.title,
-          show: false,
-        });
-        try {
-          const integration = await definition.renderer.mount({ manifest, preflight, presentation, window });
-          rendererLease = Object.freeze({
-            window,
-            releaseIntegration() {
-              return integration.dispose();
-            },
-            destroy() { if (!window.isDestroyed()) window.destroy(); },
+        rendererMount = (async () => {
+          const window = new BrowserWindow({
+            ...definition.renderer.windowOptions?.({ manifest, preflight, presentation }),
+            width: manifest.window.width,
+            height: manifest.window.height,
+            title: manifest.window.title,
+            show: false,
           });
-          context.startup!.advance(startupSignal!, "renderer-mounted");
-        } catch (error) {
-          if (!window.isDestroyed()) window.destroy();
-          throw error;
-        }
+          try {
+            const integration = await definition.renderer.mount({ manifest, preflight, presentation, window });
+            rendererLease = Object.freeze({
+              window,
+              releaseIntegration() {
+                return integration.dispose();
+              },
+              destroy() { if (!window.isDestroyed()) window.destroy(); },
+            });
+            context.startup!.advance(startupSignal!, "renderer-mounted");
+          } catch (error) {
+            if (!window.isDestroyed()) window.destroy();
+            throw error;
+          }
+        })();
+        await rendererMount;
       },
     },
     onEvent(event) {
-      if (event.state === "running") setSplashStage(splash, event.node.label ?? event.node.id);
+      if (!context.startupQuit?.cancelled && event.state === "running") setSplashStage(splash, event.node.label ?? event.node.id);
       context.log?.write("warmup.node", {
         blocking: event.node.blocking,
         error: event.error,
@@ -282,12 +349,13 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
       });
     },
   });
-  try { await warmup.ready; }
+  const startupWarmup = warmup;
+  try { await context.startupQuit.guard(startupWarmup.ready); }
   catch (error) {
-    await warmup.dispose();
+    if (!isElectronStartupCancelledError(error)) await startupWarmup.dispose();
     throw error;
   }
-  context.log.write("warmup.ready", { nodes: warmup.snapshot() });
+  context.log.write("warmup.ready", { nodes: startupWarmup.snapshot() });
   const runtimeCarrier = requireWarmupState(carrier as OfficialNodeCarrierReceipt | null, "the official Node carrier");
   const runtimePorts = requireWarmupState(ports as ElectronFixturePorts | null, "fixture Standalone ports");
   const runtimeGeneration = requireWarmupState(generation as GenerationRecord | null, "a Standalone generation");
@@ -296,7 +364,7 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
   const runtimeRendererLease = requireWarmupState(rendererLease as ElectronRendererLease | null, "a renderer lease");
   setSplashStage(splash, "Ready");
   const remaining = presentation === "headless" ? 0 : 350 - (Date.now() - splashStartedAt);
-  if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+  if (remaining > 0) await context.startupQuit.guard(new Promise((resolve) => setTimeout(resolve, remaining)));
   const pendingHandoffs = handoffs.drain();
   focusElectronWindow(
     runtimeRendererLease.window,
@@ -304,7 +372,7 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
     pendingHandoffs.length > 0 ? "second-instance" : "initial-reveal",
   );
   if (splash != null && !splash.isDestroyed()) splash.destroy();
-  await context.activation.commit();
+  await context.startupQuit.guard(context.activation.commit());
   context.startup.advance(startupSignal!, "committed");
   context.log.write("startup.committed", { generationId: runtimeGeneration.id, presentation });
   void Promise.resolve().then(() => definition.actions?.observeCommitted?.()).catch((error: unknown) => {
@@ -331,7 +399,7 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
       await completeElectronShutdown({
         async waitForHeartbeat() { await heartbeatInFlight; },
         async releaseRendererIntegration() { await runtimeRendererLease.releaseIntegration(); },
-        async disposeWarmup() { await warmup.dispose(); },
+        async disposeWarmup() { await startupWarmup.dispose(); },
         async releaseStandalone() {
           const current = await runtimePorts.lifecycle.status(scope);
           const ownsAttachment = current.occupants.some((occupant) => occupant.attachmentId === attachment.id);
@@ -349,15 +417,20 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
       processErrors.dispose();
     }
   };
-  app.on("before-quit", (event) => {
-    if (closing) return;
+  context.startupQuit.commit();
+  const beforeQuit = (event: { preventDefault(): void }) => {
     event.preventDefault();
+    if (closing) return;
     void installerArming.catch((error: unknown) => {
       console.error("[electron-kit] installer arming failed", error);
     }).then(close).catch((error: unknown) => {
       console.error("[electron-kit] shutdown or installer handoff failed", error);
-    }).finally(() => app.quit());
-  });
+    }).finally(() => {
+      app.removeListener("before-quit", beforeQuit);
+      app.quit();
+    });
+  };
+  app.on("before-quit", beforeQuit);
   void observeElectronInstallerHandoff({
     afterRevision: runtimeUpdaterRevisionAtStart,
     isClosing: () => closing,
@@ -385,11 +458,16 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
 }
 
 export async function runElectronShell(definition: ElectronShellDefinition): Promise<void> {
-  const context: ElectronRuntimeContext = { activation: null, log: null, startup: null };
+  const context: ElectronRuntimeContext = { activation: null, log: null, startup: null, startupQuit: null };
   try { await runElectronShellSession(definition, context); }
   catch (error) {
+    if (isElectronStartupCancelledError(error)) {
+      await context.startupQuit?.settled;
+      return;
+    }
     context.startup?.cancel();
-    await context.activation?.fail(error).catch(() => undefined);
+    await context.startupQuit?.cancel(error).catch(() => undefined);
+    if (context.startupQuit == null) await context.activation?.fail(error).catch(() => undefined);
     context.log?.write("startup.failed", { error });
     await context.log?.flush();
     console.error("[electron-kit] Electron Shell startup failed", error);

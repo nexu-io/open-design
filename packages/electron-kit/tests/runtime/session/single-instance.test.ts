@@ -53,6 +53,10 @@ describe("Electron single-instance preflight", () => {
       { type: "deep-link", source: "second-instance", url: "od://third" },
     ]);
     expect(queue.drain()).toEqual([]);
+    queue.enqueue({ type: "focus", source: "second-instance" });
+    queue.cancel();
+    expect(queue.enqueue({ type: "focus", source: "app-activate" })).toBe(false);
+    expect(queue.drain()).toEqual([]);
   });
 
   it("extracts one protocol URL without retaining arbitrary argv", () => {
