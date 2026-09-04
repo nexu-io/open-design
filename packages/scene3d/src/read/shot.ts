@@ -153,10 +153,14 @@ const POSE_SCALARS: readonly PoseScalar[] = [
  * re-orbits whatever the subject's box measures. An interpolation between two
  * endpoints would slide the camera along the chord between them instead.
  *
- * `frames` is uncapped by design. The cost is one render per frame, exactly
- * what a turntable step costs, and the turntable's own step count is already a
- * raisable input; a magic number here would cap the capability while the
- * identical cost sits uncapped next door.
+ * `frames` is uncapped by design at THIS layer. The cost is one render per
+ * frame, exactly what a turntable step costs, and the turntable's own step
+ * count is already a raisable input; a magic number here would cap the
+ * capability while the identical cost sits uncapped next door. The daemon's
+ * HTTP route DOES cap it (`MAX_FRAMES_PER_ITEM` in
+ * `apps/daemon/src/routes/scene3d.ts`) — a resource ceiling on the network
+ * boundary, raisable via an env var, not a limit this resolver enforces on
+ * every caller.
  */
 export interface SweepSpec {
   frames: number;
@@ -605,6 +609,18 @@ export function resolveShot(spec: ShotSpec, census: Census): ResolvedPose {
 }
 
 /**
+ * How many frames a shot resolves to: `sweep.frames` (floored, via the same
+ * implicit ToNumber `Math.floor` itself applies — a numeric string survives
+ * unchanged) when the spec sweeps, else one. Any caller reasoning about
+ * render cost before calling `resolveSweep` — the daemon route's pre-flight
+ * budget, in particular — needs exactly this number, not a re-derivation of
+ * the resolver's own coercion that could silently drift from it.
+ */
+export function sweepFrameCount(spec: Pick<ShotSpec, "sweep">): number {
+  return spec.sweep ? Math.floor(spec.sweep.frames) : 1;
+}
+
+/**
  * Resolve a shot `frames` times, advancing time and/or any ranged pose scalar.
  *
  * Each sample RE-RESOLVES the whole spec rather than interpolating between two
@@ -619,7 +635,7 @@ export function resolveShot(spec: ShotSpec, census: Census): ResolvedPose {
 export function resolveSweep(spec: ShotSpec, census: Census): ResolvedPose[] {
   const sweep = spec.sweep;
   if (!sweep) return [resolveShot(spec, census)];
-  const frames = Math.floor(sweep.frames);
+  const frames = sweepFrameCount(spec);
   if (!Number.isFinite(frames) || frames < 1) {
     throw new ShotResolveError(`sweep frames ${sweep.frames} must be a positive integer`, []);
   }

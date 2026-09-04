@@ -80,6 +80,19 @@ import { flipbookGrid, type CompiledShaderJob, type ShaderBinding } from "./shad
    declared pipeline vocabulary. */
 const STAGE_ORDER: StageId[] = ["parse", "build", "proof", "export", "lint", "manifest"];
 const DEFAULT_TIMEOUT_MS = 180_000;
+/** The runner's own resolution when a request omits `proof.resolution`.
+ *  Exported so a caller reasoning about render cost before this pipeline
+ *  runs — the daemon route's pre-flight budget check — answers "what will
+ *  this actually render at" from the one place that decides it, not a
+ *  second copy of the number. */
+export const DEFAULT_PROOF_RESOLUTION = 1024;
+/** Turntable step counts when a request omits `turntableSteps`: enough to
+ *  read as a slideshow for a static prop, enough to read as playback for a
+ *  clip preview (an animated scene's turntable doubles as one — see the
+ *  `proof` stage below). Exported for the same reason as the resolution
+ *  default above. */
+export const DEFAULT_TURNTABLE_STEPS_STATIC = 8;
+export const DEFAULT_TURNTABLE_STEPS_ANIMATED = 16;
 /** The runner is written against Blender 5.x APIs (README "Blender 5.x is
  *  required"); older majors are refused up front rather than crashing deep
  *  in the runner as a generic E-202. */
@@ -1219,7 +1232,10 @@ export async function compile(
       // walk cycle read as a slideshow. 16 keeps playback legible without
       // an explicit request; an authored turntableSteps still wins.
       const sceneAnimates = (census?.animation?.keyframedObjects.length ?? 0) > 0;
-      const steps = proofOpts.turntable ? proofOpts.turntableSteps ?? (sceneAnimates ? 16 : 8) : 1;
+      const steps = proofOpts.turntable
+        ? proofOpts.turntableSteps ??
+          (sceneAnimates ? DEFAULT_TURNTABLE_STEPS_ANIMATED : DEFAULT_TURNTABLE_STEPS_STATIC)
+        : 1;
       /* `steps` is in the hash even though it is derived from the census:
          a derived input is still an input. Without it, an animated scene's
          16-frame request collides with its old 8-frame cache entry (the
@@ -1383,7 +1399,7 @@ export async function compile(
             ...shaderPayload,
             proof: {
               engine: proofOpts.engine ?? "BLENDER_EEVEE",
-              resolution: proofOpts.resolution ?? 1024,
+              resolution: proofOpts.resolution ?? DEFAULT_PROOF_RESOLUTION,
               turntable: proofOpts.turntable ?? true,
               turntableSteps: steps,
               /* The orbit rides the authored camera's elevation when the scene

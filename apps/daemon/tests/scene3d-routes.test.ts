@@ -7,7 +7,9 @@ import * as path from 'node:path';
 import { assertBlenderIfRequired, probeBlender } from '@open-design/scene3d';
 import {
   artifactRef,
+  checkProofBudget,
   CompileGate,
+  MAX_FRAMES_PER_ITEM,
   parseDescribeQuery,
   parseProof,
   parseStages,
@@ -344,6 +346,82 @@ describe('request validation', () => {
     expect(parseProof({ engine: 'UNREAL' })).toBeNull();
     expect(parseProof({ turntable: 'yes' })).toBeNull();
   });
+
+  it('checkProofBudget bounds a single sweep, not just the aggregate', () => {
+    expect(checkProofBudget(undefined, [], [{ sweep: { frames: 12 } }])).toEqual({ ok: true });
+    expect(checkProofBudget(undefined, [], [{ sweep: { frames: MAX_FRAMES_PER_ITEM } }])).toEqual({
+      ok: true,
+    });
+    const over = checkProofBudget(undefined, [], [{ sweep: { frames: MAX_FRAMES_PER_ITEM + 1 } }]);
+    expect(over.ok).toBe(false);
+    expect((over as { message: string }).message).toMatch(/frame ceiling/);
+    // A shot with no sweep, or a malformed one, costs exactly one frame —
+    // resolveSweep rejects those on its own terms once the compiler sees
+    // them; the route only cares about resource cost, not shot semantics.
+    expect(checkProofBudget(undefined, [], [{}])).toEqual({ ok: true });
+    expect(checkProofBudget(undefined, [], [{ sweep: { frames: -5 } }])).toEqual({ ok: true });
+    expect(checkProofBudget(undefined, [], [{ sweep: { frames: NaN } }])).toEqual({ ok: true });
+  });
+
+  it('checkProofBudget catches sweep.frames sent as a numeric STRING, not just a number', () => {
+    // resolveSweep resolves frames with `Math.floor(sweep.frames)`, which
+    // coerces via JS's implicit ToNumber — `Math.floor("100000") === 100000`.
+    // A gate keyed on `typeof frames === 'number'` would count this request
+    // as one frame while the compiler renders 100,000: the exact bug this
+    // budget exists to catch, reopened by quoting the number.
+    const asString = checkProofBudget(undefined, [], [{ sweep: { frames: '100000' as any } }]);
+    expect(asString.ok).toBe(false);
+    expect((asString as { message: string }).message).toMatch(/frame ceiling/);
+    // A numeric string within bounds still resolves and counts correctly.
+    expect(checkProofBudget(undefined, [], [{ sweep: { frames: '12' as any } }])).toEqual({
+      ok: true,
+    });
+    // A non-numeric string coerces to NaN via Number(), same as resolveSweep
+    // would reject it outright — costs the safe fallback of one frame.
+    expect(checkProofBudget(undefined, [], [{ sweep: { frames: 'nope' as any } }])).toEqual({
+      ok: true,
+    });
+  });
+
+  it('checkProofBudget aggregates turntable, looks, and every shot at the request resolution', () => {
+    // 5,000 unswept shots at the default 1024px resolution outrun the total
+    // pixel budget (4,096 frame-equivalents) even though no single shot is
+    // over the per-shot ceiling.
+    const manyShots = Array.from({ length: 5000 }, () => ({}));
+    const blown = checkProofBudget(undefined, [], manyShots);
+    expect(blown.ok).toBe(false);
+    expect((blown as { message: string }).message).toMatch(/render budget/);
+    // The same shot count at a small resolution fits comfortably.
+    expect(checkProofBudget({ resolution: 64 }, [], manyShots)).toEqual({ ok: true });
+    // A big turntable alone, at the default resolution, still fits — the
+    // budget is sized to allow the largest turntable this route permits.
+    expect(checkProofBudget({ turntable: true, turntableSteps: 2048 }, [], [])).toEqual({
+      ok: true,
+    });
+  });
+
+  it('checkProofBudget counts the proof stage\'s own baseline frame even with turntable off', () => {
+    // pipeline.ts always resolves `steps` to at least 1 when the proof stage
+    // runs — turntable:false means the single default orbit frame, not zero.
+    // Exactly at the shot-only ceiling; the baseline frame is what tips it
+    // over the budget.
+    const atCeiling = Array.from({ length: 2 * MAX_FRAMES_PER_ITEM }, () => ({}));
+    expect(checkProofBudget(undefined, [], atCeiling).ok).toBe(false);
+    // One fewer shot leaves room for that baseline frame.
+    const underCeiling = Array.from({ length: 2 * MAX_FRAMES_PER_ITEM - 1 }, () => ({}));
+    expect(checkProofBudget(undefined, [], underCeiling)).toEqual({ ok: true });
+  });
+
+  it('checkProofBudget ignores render cost entirely when proof is not a selected stage', () => {
+    // Looks/shots render nothing unless the proof stage runs (pipeline.ts's
+    // own "the proof stage was not selected" path) — a request that omits it
+    // must not be rejected for a render batch that will never happen.
+    const hugeShots = Array.from({ length: 2 * MAX_FRAMES_PER_ITEM }, () => ({}));
+    expect(checkProofBudget(undefined, [], hugeShots, ['parse', 'lint'])).toEqual({ ok: true });
+    // Still enforced once proof is (or would be, by omission) selected.
+    expect(checkProofBudget(undefined, [], hugeShots, ['parse', 'proof']).ok).toBe(false);
+    expect(checkProofBudget(undefined, [], hugeShots, undefined).ok).toBe(false);
+  });
 });
 
 describe('sanitizeTweaks', () => {
@@ -583,6 +661,89 @@ describe('POST /api/projects/:id/scene3d/compile', () => {
       body: { stages: ['parse', 'raytrace'] },
     });
     expect(res.status).toBe(400);
+  });
+
+  it('400s a single shot sweeping past the per-shot frame ceiling', async () => {
+    const root = tempProjectsRoot();
+    fs.mkdirSync(path.join(root, 'proj1'), { recursive: true });
+    const api = await startServer({ projectsRoot: root });
+    // The exact repro from the review: a compact request that would expand
+    // into 100,000 resolved looks before Blender ever starts.
+    const res = await api.req('/api/projects/proj1/scene3d/compile', {
+      method: 'POST',
+      body: { shots: [{ sweep: { frames: 100000, over: { azimuthDeg: [0, 360] } } }] },
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('BAD_REQUEST');
+    expect(res.body.error.message).toMatch(/frame ceiling/);
+  });
+
+  it('400s the same repro sent with sweep.frames as a JSON string', async () => {
+    const root = tempProjectsRoot();
+    fs.mkdirSync(path.join(root, 'proj1'), { recursive: true });
+    const api = await startServer({ projectsRoot: root });
+    // JSON.parse leaves this a string, not a number — a naive `typeof
+    // frames === 'number'` gate would miss it while the compiler's own
+    // `Math.floor(sweep.frames)` still coerces and renders 100,000 frames.
+    const res = await api.req('/api/projects/proj1/scene3d/compile', {
+      method: 'POST',
+      body: { shots: [{ sweep: { frames: '100000', over: { azimuthDeg: [0, 360] } } }] },
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('BAD_REQUEST');
+    expect(res.body.error.message).toMatch(/frame ceiling/);
+  });
+
+  it('400s many small shots whose combined frames blow the aggregate render budget', async () => {
+    const root = tempProjectsRoot();
+    fs.mkdirSync(path.join(root, 'proj1'), { recursive: true });
+    const api = await startServer({ projectsRoot: root });
+    // No single shot trips the per-shot ceiling, but 5,000 of them at the
+    // default resolution together outrun the total pixel budget.
+    const shots = Array.from({ length: 5000 }, () => ({}));
+    const res = await api.req('/api/projects/proj1/scene3d/compile', {
+      method: 'POST',
+      body: { shots },
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('BAD_REQUEST');
+    expect(res.body.error.message).toMatch(/render budget/);
+  });
+
+  it('does not reject an over-budget shots list when the proof stage is not selected', async () => {
+    const root = tempProjectsRoot();
+    fs.mkdirSync(path.join(root, 'proj1'), { recursive: true });
+    const api = await startServer({ projectsRoot: root });
+    // Looks/shots render nothing without the proof stage, so this huge list
+    // must sail past the budget check — proven by reaching the scene-lookup
+    // 404 rather than a budget 400.
+    const shots = Array.from({ length: 5000 }, () => ({}));
+    const res = await api.req('/api/projects/proj1/scene3d/compile', {
+      method: 'POST',
+      body: { scenePath: 'scenes/missing', stages: ['parse', 'lint'], shots },
+    });
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('SCENE_NOT_FOUND');
+  });
+
+  it('accepts a real multi-shot proof request within budget', async () => {
+    const root = tempProjectsRoot();
+    fs.mkdirSync(path.join(root, 'proj1'), { recursive: true });
+    const api = await startServer({ projectsRoot: root });
+    const res = await api.req('/api/projects/proj1/scene3d/compile', {
+      method: 'POST',
+      body: {
+        // No scene exists at this scenePath, so a request that clears the
+        // budget check still 404s past it — proving the budget did not
+        // reject a legitimate request before it got there.
+        scenePath: 'scenes/missing',
+        proof: { turntable: true, turntableSteps: 24 },
+        looks: [{ from: 'front' }, { from: 'left' }],
+        shots: [{ sweep: { frames: 12, over: { azimuthDeg: [0, 360] } } }],
+      },
+    });
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('SCENE_NOT_FOUND');
   });
 
   it('404s a scene directory that does not exist', async () => {

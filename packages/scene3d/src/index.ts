@@ -10,7 +10,13 @@
 export * from "./types.js";
 export { ISSUE_CODES, summarize } from "./errors.js";
 export { DEFAULT_CONTRACT, normalizeContract, validateContract, BLENDER_DEFAULT_NAMES } from "./contract.js";
-export { compile } from "./pipeline.js";
+export {
+  compile,
+  DEFAULT_PROOF_RESOLUTION,
+  DEFAULT_TURNTABLE_STEPS_STATIC,
+  DEFAULT_TURNTABLE_STEPS_ANIMATED,
+} from "./pipeline.js";
+export { sweepFrameCount } from "./read/shot.js";
 export { compileInWorker, workerEvalAvailable, type CompileInWorkerOptions } from "./compile-in-worker.js";
 export { renderAgentReport } from "./report.js";
 export { buildManifest, writeManifest, writeViewer, writeProjectKit } from "./manifest.js";

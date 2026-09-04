@@ -10,10 +10,22 @@ import type {
   Scene3dManifest,
   Scene3dManifestResponse,
   Scene3dProofOptions,
+  Scene3dShotSpec,
   Scene3dStageId,
 } from '@open-design/contracts';
 import { buildScene3dAssetUrl, scene3dIssueTitle } from '@open-design/contracts';
-import { compileInWorker, workerEvalAvailable, renderAgentReport, probeBlender, writeProjectKit, describeScene, DescribeRefusal } from '@open-design/scene3d';
+import {
+  compileInWorker,
+  workerEvalAvailable,
+  renderAgentReport,
+  probeBlender,
+  writeProjectKit,
+  describeScene,
+  DescribeRefusal,
+  DEFAULT_PROOF_RESOLUTION,
+  DEFAULT_TURNTABLE_STEPS_ANIMATED,
+  sweepFrameCount,
+} from '@open-design/scene3d';
 import type { RouteDeps } from '../server-context.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 
@@ -60,12 +72,15 @@ if (!workerEvalAvailable) {
 // asset: excess compiles QUEUE, none are rejected, and the ceiling is raisable
 // for a bigger box via OD_SCENE3D_COMPILE_CONCURRENCY. `inFlight` still dedupes
 // the same scene; this bounds the cross-scene total.
-const parseConcurrency = (raw: string | undefined): number | undefined => {
+/** Shared by every raisable resource ceiling in this file — one parser, one
+ *  validation rule (a positive integer or the built-in default), rather than
+ *  each ceiling growing its own copy. */
+const parsePositiveInt = (raw: string | undefined): number | undefined => {
   const n = raw === undefined ? NaN : Number(raw);
   return Number.isInteger(n) && n > 0 ? n : undefined;
 };
 const COMPILE_CONCURRENCY =
-  parseConcurrency(process.env.OD_SCENE3D_COMPILE_CONCURRENCY) ??
+  parsePositiveInt(process.env.OD_SCENE3D_COMPILE_CONCURRENCY) ??
   Math.max(1, Math.min(4, os.cpus().length - 1));
 
 const gateAbortError = () => new DOMException('The compile was aborted while queued', 'AbortError');
@@ -202,6 +217,15 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
       );
       if (shots.length !== (body.shots ?? []).length) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'each shot must be an object');
+      }
+      // Unlike the envelope check above, frame COUNT is not something the
+      // compiler answers better with a census — it is pure request
+      // arithmetic, so it gets the same resource-ceiling treatment
+      // resolution and turntableSteps already got in parseProof, checked
+      // before the worker starts rather than discovered mid-render.
+      const budget = checkProofBudget(proof, looks, shots, stages);
+      if (!budget.ok) {
+        return sendApiError(res, 400, 'BAD_REQUEST', budget.message);
       }
 
       let sceneDir: string;
@@ -1083,6 +1107,29 @@ export function parseStages(value: unknown): Scene3dStageId[] | undefined | null
 }
 
 /**
+ * A turntable step and a swept shot frame cost the pipeline identically (see
+ * `SweepSpec`'s docstring in `packages/scene3d/src/read/shot.ts`), so one
+ * ceiling governs both — `turntableSteps` below and a shot's `sweep.frames`
+ * in `checkProofBudget`. Raisable for a bigger box via
+ * `OD_SCENE3D_MAX_SWEEP_FRAMES`, the same way `COMPILE_CONCURRENCY` is.
+ */
+export const MAX_FRAMES_PER_ITEM = parsePositiveInt(process.env.OD_SCENE3D_MAX_SWEEP_FRAMES) ?? 2048;
+
+/**
+ * Twice the pixel cost of the largest turntable this route already allows,
+ * at the default resolution — generous for a real multi-shot proof set
+ * (dozens of looks, a handful of swept shots) while still catching a request
+ * that would expand into an unbounded render batch — turntable frames, every
+ * resolved look, every swept shot's frames, all at whatever resolution was
+ * asked for — before Blender, or even this route's own output-path
+ * allocation, does any work. Independently raisable via
+ * `OD_SCENE3D_MAX_TOTAL_PROOF_PIXELS`.
+ */
+const MAX_TOTAL_PROOF_PIXELS =
+  parsePositiveInt(process.env.OD_SCENE3D_MAX_TOTAL_PROOF_PIXELS) ??
+  2 * MAX_FRAMES_PER_ITEM * DEFAULT_PROOF_RESOLUTION ** 2;
+
+/**
  * Proof options come from a client, and every one of them costs render time,
  * so each is range-checked here instead of being trusted into Blender.
  */
@@ -1112,8 +1159,8 @@ export function parseProof(value: unknown): Scene3dProofOptions | undefined | nu
     if (typeof v.turntableSteps !== 'number' || !Number.isInteger(v.turntableSteps)) return null;
     // Frame count is a TIME/disk concern the per-stage timeoutMs already governs,
     // not a size cap on the asset — a 120-frame hero turntable is legitimate. A
-    // generous 2048 backstops runaway disk without walling real use.
-    if (v.turntableSteps < 1 || v.turntableSteps > 2048) return null;
+    // generous ceiling backstops runaway disk without walling real use.
+    if (v.turntableSteps < 1 || v.turntableSteps > MAX_FRAMES_PER_ITEM) return null;
     out.turntableSteps = v.turntableSteps;
   }
   if (v.respectSceneCamera !== undefined) {
@@ -1121,4 +1168,77 @@ export function parseProof(value: unknown): Scene3dProofOptions | undefined | nu
     out.respectSceneCamera = v.respectSceneCamera;
   }
   return out;
+}
+
+/**
+ * A sweep resolves this many frames; an unswept shot — or one whose `sweep`
+ * is missing or malformed, which `resolveSweep` will reject on its own terms
+ * once the compiler gets it — costs exactly one, the same as a plain look.
+ *
+ * Delegates the actual arithmetic to the compiler's own `sweepFrameCount` so
+ * this pre-flight estimate cannot drift from what `resolveSweep` will really
+ * do with the same spec — including its coercion: a request-body JSON string
+ * like `"100000"` is not a `number` by `typeof`, but `sweepFrameCount`'s
+ * `Math.floor` coerces it via the same implicit ToNumber the resolver uses,
+ * so it still counts as 100,000. Gating on `typeof === 'number'` here
+ * instead would count that request as one frame right up until it reached
+ * Blender — exactly the blowup this budget exists to catch, just spelled
+ * with quotes. Read defensively regardless: the request body is unchecked
+ * JSON, not the typed `Scene3dShotSpec` it is cast to.
+ */
+function shotFrameCount(shot: Scene3dShotSpec): number {
+  const sweep = shot?.sweep as unknown;
+  if (sweep === null || typeof sweep !== 'object') return 1;
+  const frames = sweepFrameCount({ sweep: sweep as { frames: number } });
+  return Number.isFinite(frames) && frames >= 1 ? frames : 1;
+}
+
+/**
+ * Whether a compile request's proof workload fits the render budget — pure
+ * arithmetic over the request shape (selected stages, turntable option, look
+ * count, each shot's sweep), needing no census, so it can gate the worker
+ * before it starts rather than after Blender is already mid-render.
+ */
+export function checkProofBudget(
+  proof: Scene3dProofOptions | undefined,
+  looks: readonly unknown[],
+  shots: readonly Scene3dShotSpec[],
+  stages?: readonly Scene3dStageId[],
+): { ok: true } | { ok: false; message: string } {
+  // The proof stage is what resolves and renders looks/shots at all — a
+  // request that drops it from `stages` renders none of them (pipeline.ts's
+  // own `askedFor > 0 && ... "the proof stage was not selected"` path), so a
+  // huge shots/looks list sent alongside `--stages parse,lint` costs nothing
+  // and must not be rejected as if it would render.
+  if (stages !== undefined && !stages.includes('proof')) {
+    return { ok: true };
+  }
+  for (const [i, shot] of shots.entries()) {
+    const frames = shotFrameCount(shot);
+    if (frames > MAX_FRAMES_PER_ITEM) {
+      return {
+        ok: false,
+        message: `shots[${i}].sweep.frames (${frames}) exceeds the ${MAX_FRAMES_PER_ITEM}-frame ceiling`,
+      };
+    }
+  }
+  // pipeline.ts always resolves `steps` to at least 1 when the proof stage
+  // runs — turntable:false does not mean zero frames, it means the single
+  // default orbit frame the stage renders either way.
+  const turntableFrames = proof?.turntable
+    ? proof.turntableSteps ?? DEFAULT_TURNTABLE_STEPS_ANIMATED
+    : 1;
+  const shotFrames = shots.reduce((sum, s) => sum + shotFrameCount(s), 0);
+  const totalFrames = turntableFrames + looks.length + shotFrames;
+  const resolutionPx = proof?.resolution ?? DEFAULT_PROOF_RESOLUTION;
+  const totalPixels = totalFrames * resolutionPx * resolutionPx;
+  if (totalPixels > MAX_TOTAL_PROOF_PIXELS) {
+    return {
+      ok: false,
+      message:
+        `this compile would render ~${totalFrames} frames at ${resolutionPx}px, over the render budget — ` +
+        'lower turntableSteps, sweep frames, resolution, or how many shots/looks you send',
+    };
+  }
+  return { ok: true };
 }
