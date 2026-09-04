@@ -14,6 +14,7 @@ import {
   ELECTRON_STANDALONE_INSTALLATION_FILE,
   loadElectronStandaloneInstallation,
 } from "@/adapters/standalone/installation.js";
+import { loadElectronStandaloneAuthorityResources } from "../scripts/build-authority.mjs";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true }))); });
@@ -99,6 +100,15 @@ describe("Electron Standalone installed authority input", () => {
     expect(installation.trustedKeys.has("release")).toBe(true);
     expect(Object.keys(installation.candidates).sort()).toEqual(fixture.declaration.seeds.map(({ blobSha256 }) => blobSha256).sort());
     expect(installation.hostPath).toBe(join(fixture.root, "standalone-host.mjs"));
+    await expect(loadElectronStandaloneAuthorityResources(fixture.root)).resolves.toEqual([
+      { name: "standalone-installation.json", path: join(fixture.root, "standalone-installation.json") },
+      { name: "standalone-host.mjs", path: join(fixture.root, "standalone-host.mjs") },
+      { name: "supervisor.mjs", path: join(fixture.root, "supervisor.mjs") },
+      { name: "standalone-content.json", path: join(fixture.root, "standalone-content.json") },
+      { name: "standalone-trust.json", path: join(fixture.root, "standalone-trust.json") },
+      { name: "standalone-launcher.mjs", path: join(fixture.root, "standalone-launcher.mjs") },
+      { name: "closure.mjs", path: join(fixture.root, "closure.mjs") },
+    ]);
   });
 
   it("rejects installed byte drift before trusting content", async () => {
@@ -106,6 +116,7 @@ describe("Electron Standalone installed authority input", () => {
     await writeFile(join(fixture.root, fixture.declaration.content.file), "{}\n");
     await expect(loadElectronStandaloneInstallation({ resourceRoot: fixture.root, channel: "betahyx", target: "darwin-arm64" }))
       .rejects.toThrow("content size does not match");
+    await expect(loadElectronStandaloneAuthorityResources(fixture.root)).rejects.toThrow("content resource differs from its descriptor");
   });
 
   it("rejects a symlinked installed resource even when its bytes match", async () => {

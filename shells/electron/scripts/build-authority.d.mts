@@ -4,3 +4,8 @@ export type ElectronStandaloneAuthorityBuild = Readonly<{
 }>;
 
 export function buildElectronStandaloneAuthority(outputRoot: string): Promise<ElectronStandaloneAuthorityBuild>;
+
+export function loadElectronStandaloneAuthorityResources(resourceRoot: string): Promise<readonly Readonly<{
+  name: string;
+  path: string;
+}>[]>;

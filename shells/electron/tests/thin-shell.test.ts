@@ -21,6 +21,10 @@ describe("Electron product shell", () => {
       readFile(new URL("../scripts/pack.mjs", import.meta.url), "utf8"),
     ]);
     expect(dev).not.toContain("distribution.json");
+    expect(dev).not.toMatch(/fixture-sidecar|createElectronFixture/u);
+    expect(pack).not.toMatch(/fixture-sidecar|createElectronFixture/u);
+    expect(dev).toContain("OD_ELECTRON_STANDALONE_RESOURCE_ROOT");
+    expect(pack).toContain("OD_ELECTRON_STANDALONE_RESOURCE_ROOT");
     expect(pack).toContain('new URL("../config/distribution.json"');
     expect(pack).toContain('new URL("../config/platforms/windows.json"');
   });
@@ -74,8 +78,11 @@ describe("Electron product shell", () => {
     const sources = await shellSources();
     const main = sources.find(({ name }) => name === "main.ts")!.source;
     const composition = sources.filter(({ name }) => name.startsWith("composition/"));
+    const definition = sources.find(({ name }) => name === "composition/definition.ts")!.source;
     expect(main).toContain('from "./composition/definition.js"');
     expect(main).not.toMatch(/config\/|adapters\/|ElectronFixture|scheduleElectronInstallerHandoff/u);
+    expect(definition).toContain("createElectronStandaloneAuthorityFactory");
+    expect(definition).not.toContain("createElectronFixtureStandaloneAuthorityFactory");
     for (const file of composition) expect(file.source).not.toMatch(/from "electron"/u);
     for (const file of sources.filter(({ name }) => !name.startsWith("adapters/"))) {
       expect(file.source, file.name).not.toMatch(/from "electron"/u);

@@ -1,9 +1,9 @@
 import runtime from "../../config/runtime.json" with { type: "json" };
 import manifest from "../../config/shell.json" with { type: "json" };
+import standalone from "../../config/standalone.json" with { type: "json" };
 import macRuntime from "../../config/platforms/mac.json" with { type: "json" };
 import windowsLifecycle from "../../config/platforms/windows.json" with { type: "json" };
 
-import { createElectronFixtureStandaloneAuthorityFactory } from "@open-design/electron-kit/runtime";
 import type {
   ElectronRuntimeConfig,
   ElectronShellDefinition,
@@ -13,6 +13,8 @@ import type { ElectronMacRuntimePolicy } from "@open-design/electron-kit/macos";
 import type { ElectronWindowsLifecyclePolicy } from "@open-design/electron-kit/windows";
 
 import { createPlaceholderRendererAdapter } from "../adapters/renderer/placeholder.js";
+import { createElectronStandaloneAuthorityFactory } from "../adapters/standalone/authority.js";
+import type { ElectronPhysicalResourceSetDeclaration } from "../adapters/standalone/physical-resources.js";
 import { createInstallerHandoffAdapter } from "../adapters/updater/installer.js";
 import { createWindowsCommittedObserver } from "../adapters/windows/lifecycle.js";
 import { assertShellWarmupBindings } from "./warmup-bindings.js";
@@ -38,6 +40,9 @@ export function createElectronShellDefinition(): ElectronShellDefinition {
       },
       installUpdate: createInstallerHandoffAdapter(),
     }),
-    createStandaloneAuthority: createElectronFixtureStandaloneAuthorityFactory(shellManifest),
+    createStandaloneAuthority: createElectronStandaloneAuthorityFactory(
+      shellManifest,
+      standalone as ElectronPhysicalResourceSetDeclaration,
+    ),
   });
 }
