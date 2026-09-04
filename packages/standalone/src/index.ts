@@ -1,6 +1,7 @@
 export * from "./protocol.js";
 export * from "./feedback.js";
 export * from "./shell-update.js";
+export * from "./shell-update-capability.js";
 export * from "./blob.js";
 export * from "./garbage.js";
 export * from "./maintenance.js";

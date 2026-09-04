@@ -11,11 +11,11 @@ import {
 } from "@open-design/sidecar";
 import {
   FossilHandoffHost,
+  createStandaloneShellUpdaterCapabilityHandler,
   validateShellIdentity,
   type StandaloneHandoffRequest,
   type StandaloneRuntimeHandle,
   type StandaloneRuntimeCommand,
-  type StandaloneShellCapabilityRequest,
 } from "@open-design/standalone";
 
 import {
@@ -198,17 +198,7 @@ class ElectronStandaloneHostRuntime {
       const handle = await this.#handoff.handoff({
         binding: request.binding,
         attachment: request.attachment,
-        capabilities: Object.freeze({
-          async invoke(capabilityRequest: StandaloneShellCapabilityRequest) {
-            return Object.freeze({
-              requestId: capabilityRequest.requestId,
-              attachmentId: capabilityRequest.attachmentId,
-              bindingDigest: capabilityRequest.bindingDigest,
-              outcome: "unsupported" as const,
-              error: Object.freeze({ code: "electron-capability-unavailable" }),
-            });
-          },
-        }),
+        capabilities: createStandaloneShellUpdaterCapabilityHandler(this.updater),
       });
       const started = await pending.run();
       const exact = await handle.readStatus();
