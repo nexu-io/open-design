@@ -3278,6 +3278,9 @@ function manualEditPatchKindToTracking(patch: ManualEditPatch): TrackingArtifact
     case 'set-attributes': return 'attributes';
     case 'set-outer-html': return 'html';
     case 'set-full-source': return 'source';
+    // Canvas drag/resize commits report as 'style' — the tracking union has
+    // no finer-grained kind for them.
+    case 'set-position': return 'style';
   }
 }
 
