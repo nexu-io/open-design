@@ -850,6 +850,9 @@ importers:
       electron:
         specifier: 41.3.0
         version: 41.3.0
+      esbuild:
+        specifier: 0.28.0
+        version: 0.28.0
       typescript:
         specifier: 6.0.3
         version: 6.0.3
@@ -3477,6 +3480,7 @@ packages:
 
   '@types/mustache@4.2.6':
     resolution: {integrity: sha512-t+8/QWTAhOFlrF1IVZqKnMRJi84EgkIK5Kh0p2JV4OLywUvCwJPFxbJAl7XAow7DVIHsF+xW9f1MVzg0L6Szjw==}
+
   '@types/node-fetch@2.6.13':
     resolution: {integrity: sha512-QGpRVpzSaUs30JBSGPjOg4Uveu384erbHBoT1zeONvyCfwQxIkUshLAOqN/k9EjGviPRmWTTe6aH2qySWKTVSw==}
 
@@ -9162,6 +9166,7 @@ snapshots:
       '@types/express': 5.0.6
 
   '@types/mustache@4.2.6': {}
+
   '@types/node-fetch@2.6.13':
     dependencies:
       '@types/node': 24.12.2
