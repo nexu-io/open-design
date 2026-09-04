@@ -269,9 +269,13 @@ export function DesignSystemPicker({
     );
   };
 
-  // Clear: reset the search query and deselect any chosen system (back to "No
-  // design system") without closing, so the user can keep browsing. Create:
-  // jump to the standalone design-system creation page, closing the popover.
+  // Search clear resets only the query; selection clear also deselects the
+  // chosen system (back to "No design system") without closing the popover.
+  // Create jumps to the standalone design-system creation page.
+  const clearQuery = () => {
+    setQuery('');
+    inputRef.current?.focus();
+  };
   const clearSelection = () => {
     setQuery('');
     onChange(null);
@@ -320,6 +324,17 @@ export function DesignSystemPicker({
                 placeholder={t('designSystemPicker.searchCompactPlaceholder')}
                 data-testid="project-ds-picker-search"
               />
+              {query ? (
+                <button
+                  type="button"
+                  className="project-ds-picker-search-clear"
+                  aria-label={t('pluginsHome.clearSearch')}
+                  data-testid="project-ds-picker-search-clear"
+                  onClick={clearQuery}
+                >
+                  <Icon name="close" size={12} />
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="project-ds-picker-action"
