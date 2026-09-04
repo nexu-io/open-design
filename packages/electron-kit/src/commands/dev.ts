@@ -19,6 +19,7 @@ export async function devElectronShell(input: Readonly<{
   fixtureSidecarPath: string;
   nodeCarrierLockPath: string;
   projectRoot: string;
+  rendererPreloadEntryPath: string;
   runtimeConfigPath: string;
   argv?: readonly string[];
 }>): Promise<number> {
@@ -29,6 +30,7 @@ export async function devElectronShell(input: Readonly<{
     outputRoot: join(input.projectRoot, ".tmp", "electron-kit", manifest.namespace, "scene"),
     fixtureSidecarPath: input.fixtureSidecarPath,
     nodeCarrierLockPath: input.nodeCarrierLockPath,
+    rendererPreloadEntryPath: input.rendererPreloadEntryPath,
     runtimeConfigPath: input.runtimeConfigPath,
   });
   const child = spawn(electronPath as unknown as string, [scene.sceneRoot, ...normalizeElectronDevArgv(input.argv ?? [])], { env: process.env, stdio: "inherit" });

@@ -6,6 +6,7 @@ export type ElectronSceneReceipt = Readonly<{
   sceneManifestSha256: string;
   receiptPath: string;
   mainPath: string;
+  rendererPreloadPath: string;
   shellManifestPath: string;
   nodeCarrierLockPath: string;
   runtimeConfigPath: string;

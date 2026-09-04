@@ -93,6 +93,7 @@ describe("Electron distribution policy", () => {
     });
     expect(configuration.files).not.toContain("distribution.json");
     expect(configuration.files).toContain("scene.json");
+    expect(configuration.files).toContain("renderer-mount-preload.cjs");
     expect(configuration.files).not.toContain("scene-receipt.json");
   });
 

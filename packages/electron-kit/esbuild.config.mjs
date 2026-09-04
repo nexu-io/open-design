@@ -22,6 +22,15 @@ await build({
   platform: "node",
   target: "node24",
 });
+await build({
+  bundle: true,
+  entryPoints: ["./src/renderer-api.ts"],
+  format: "esm",
+  outfile: "./dist/renderer-api.mjs",
+  packages: "external",
+  platform: "node",
+  target: "node24",
+});
 const publicEntries = {
   "contracts/index": "contracts/index",
   "integrations/shortcuts/index": "integrations/shortcuts/index",

@@ -92,7 +92,7 @@ export function resolveElectronDistributionConfiguration(input: Readonly<{
     asar: true,
     compression: "maximum",
     directories: { output: input.outputRoot },
-    files: ["main.cjs", "shell.json", "runtime.json", "node-lock.json", "package.json", "scene.json"],
+    files: ["main.cjs", "renderer-mount-preload.cjs", "shell.json", "runtime.json", "node-lock.json", "package.json", "scene.json"],
     npmRebuild: false,
     nodeGypRebuild: false,
     mac: { category: policy.mac.category, target: [...policy.mac.targets] },

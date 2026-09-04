@@ -16,6 +16,7 @@ export async function packElectronShell(input: Readonly<{
   windowsLifecyclePath: string;
   outputRoot: string;
   projectRoot: string;
+  rendererPreloadEntryPath: string;
 }>): Promise<ElectronDistributionReceipt> {
   const manifest = validateElectronShellManifest(JSON.parse(await readFile(input.manifestPath, "utf8")) as ElectronShellManifest);
   const policy = validateElectronDistributionPolicy(
@@ -30,6 +31,7 @@ export async function packElectronShell(input: Readonly<{
     outputRoot: join(input.projectRoot, ".tmp", "electron-kit", manifest.namespace, "scene"),
     fixtureSidecarPath: input.fixtureSidecarPath,
     nodeCarrierLockPath: input.nodeCarrierLockPath,
+    rendererPreloadEntryPath: input.rendererPreloadEntryPath,
     runtimeConfigPath: input.runtimeConfigPath,
   });
   return await buildElectronDistribution({ scene, manifest, policy, windowsLifecycle, outputRoot: input.outputRoot });

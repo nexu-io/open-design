@@ -1,4 +1,6 @@
-import { protocol } from "electron";
+import { join } from "node:path";
+
+import { app, protocol } from "electron";
 
 import type {
   ElectronShellRenderer,
@@ -18,7 +20,7 @@ function escapeHtml(value: string): string {
 
 function placeholder(title: string): string {
   const safeTitle = escapeHtml(title);
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${safeTitle}</title><style>html{font-family:ui-sans-serif,system-ui;background:#f7f7f4;color:#20201e}body{margin:0;display:grid;min-height:100vh;place-items:center}.card{max-width:560px;padding:48px;border:1px solid #deded8;border-radius:20px;background:#fff;box-shadow:0 18px 70px #00000012}small{color:#777}h1{font-size:32px;margin:12px 0}p{line-height:1.65}</style></head><body><main class="card"><small>Electron Shell Foundation</small><h1>${safeTitle}</h1><p>Electron + electron-kit 已完成冷启动、显式 readiness 与占位渲染闭环。</p></main><script>document.documentElement.dataset.electronShellMounted="1"</script></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-electron-shell-placeholder'"><title>${safeTitle}</title><style>html{font-family:ui-sans-serif,system-ui;background:#f7f7f4;color:#20201e}body{margin:0;display:grid;min-height:100vh;place-items:center}.card{max-width:560px;padding:48px;border:1px solid #deded8;border-radius:20px;background:#fff;box-shadow:0 18px 70px #00000012}small{color:#777}h1{font-size:32px;margin:12px 0}p{line-height:1.65}</style></head><body><main class="card"><small>Electron Shell Foundation</small><h1>${safeTitle}</h1><p>Electron + electron-kit 已完成冷启动、显式 readiness 与占位渲染闭环。</p></main><script nonce="electron-shell-placeholder">window.electronShell.acknowledgeMounted()</script></body></html>`;
 }
 
 export type PlaceholderRendererAdapter = Readonly<{
@@ -35,7 +37,14 @@ export function createPlaceholderRendererAdapter(title: string): PlaceholderRend
   };
   const renderer: ElectronShellRenderer = Object.freeze({
     windowOptions() {
-      return { webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } };
+      return {
+        webPreferences: {
+          contextIsolation: true,
+          nodeIntegration: false,
+          preload: join(app.getAppPath(), "renderer-mount-preload.cjs"),
+          sandbox: true,
+        },
+      };
     },
     async mount({ manifest, window }) {
       protocol.handle(manifest.protocol, () => new Response(resolveResource(), {
@@ -43,11 +52,6 @@ export function createPlaceholderRendererAdapter(title: string): PlaceholderRend
       }));
       try {
         await window.loadURL(`${manifest.protocol}://app/`);
-        const mounted = await window.webContents.executeJavaScript(
-          `document.documentElement.dataset.electronShellMounted === "1"`,
-          true,
-        );
-        if (mounted !== true) throw new Error("placeholder renderer did not acknowledge mounted state");
       } catch (error) {
         protocol.unhandle(manifest.protocol);
         throw error;

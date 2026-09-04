@@ -19,6 +19,7 @@ describe("Electron scene", () => {
     const paths = {
       entryPath: join(root, "main.ts"),
       fixtureSidecarPath: join(root, "sidecar.cjs"),
+      rendererPreloadEntryPath: join(root, "renderer-preload.ts"),
       manifestPath: join(root, "shell.json"),
       nodeCarrierLockPath: join(root, "node-lock.json"),
       outputRoot: join(root, "build", "scene"),
@@ -27,6 +28,7 @@ describe("Electron scene", () => {
     await Promise.all([
       writeFile(paths.entryPath, "export const foundation = true;\n", "utf8"),
       writeFile(paths.fixtureSidecarPath, "module.exports = {};\n", "utf8"),
+      writeFile(paths.rendererPreloadEntryPath, "export const preload = true;\n", "utf8"),
       writeFile(paths.manifestPath, `${JSON.stringify({
         schemaVersion: 1,
         appId: "io.example.electron",
@@ -66,6 +68,7 @@ describe("Electron scene", () => {
       schemaVersion: 1,
       operation: "electron.scene.build",
       products: expect.arrayContaining([
+        expect.objectContaining({ name: "renderer-mount-preload.cjs", sha256: expect.stringMatching(/^[a-f0-9]{64}$/u) }),
         expect.objectContaining({ name: "runtime.json", sha256: expect.stringMatching(/^[a-f0-9]{64}$/u) }),
         expect.objectContaining({ name: "shell.json", sha256: expect.stringMatching(/^[a-f0-9]{64}$/u) }),
       ]),

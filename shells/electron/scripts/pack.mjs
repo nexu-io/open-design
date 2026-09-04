@@ -12,5 +12,6 @@ const receipt = await packElectronShell({
   windowsLifecyclePath: fileURLToPath(new URL("../config/platforms/windows.json", import.meta.url)),
   outputRoot: fileURLToPath(new URL("../dist", import.meta.url)),
   projectRoot: fileURLToPath(new URL("..", import.meta.url)),
+  rendererPreloadEntryPath: fileURLToPath(new URL("../src/adapters/renderer/preload.ts", import.meta.url)),
 });
 process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);

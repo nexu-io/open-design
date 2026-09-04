@@ -12,6 +12,7 @@ export type AssembleElectronSceneInput = Readonly<{
   entryPath: string;
   manifestPath: string;
   outputRoot: string;
+  rendererPreloadEntryPath: string;
   fixtureSidecarPath: string;
   nodeCarrierLockPath: string;
   runtimeConfigPath: string;
@@ -48,6 +49,7 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
   await rm(input.outputRoot, { force: true, recursive: true });
   await mkdir(input.outputRoot, { recursive: true });
   const mainPath = join(input.outputRoot, "main.cjs");
+  const rendererPreloadPath = join(input.outputRoot, "renderer-mount-preload.cjs");
   const sidecarPath = join(input.outputRoot, "fixture-sidecar.cjs");
   const nodeCarrierLockPath = join(input.outputRoot, "node-lock.json");
   const runtimeConfigPath = join(input.outputRoot, "runtime.json");
@@ -61,6 +63,15 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     target: "node24",
   });
   await copyFile(input.fixtureSidecarPath, sidecarPath);
+  await bundle({
+    bundle: true,
+    entryPoints: [input.rendererPreloadEntryPath],
+    external: ["electron"],
+    format: "cjs",
+    outfile: rendererPreloadPath,
+    platform: "node",
+    target: "node24",
+  });
   await copyFile(input.nodeCarrierLockPath, nodeCarrierLockPath);
   await writeFile(runtimeConfigPath, `${JSON.stringify(runtimeConfig, null, 2)}\n`, "utf8");
 
@@ -80,6 +91,7 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     "main.cjs",
     "fixture-sidecar.cjs",
     "node-lock.json",
+    "renderer-mount-preload.cjs",
     "runtime.json",
     "shell.json",
     "package.json",
@@ -101,6 +113,7 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     sceneManifestSha256,
     receiptPath,
     mainPath,
+    rendererPreloadPath,
     shellManifestPath: packagedManifestPath,
     nodeCarrierLockPath,
     runtimeConfigPath,

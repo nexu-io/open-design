@@ -18,6 +18,10 @@
       "types": "./dist/runtime-api.d.ts",
       "default": "./dist/runtime-api.mjs"
     },
+    "./renderer": {
+      "types": "./dist/renderer-api.d.ts",
+      "default": "./dist/renderer-api.mjs"
+    },
     "./contracts": {
       "types": "./dist/contracts/index.d.ts",
       "default": "./dist/contracts/index.mjs"

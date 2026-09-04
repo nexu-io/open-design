@@ -87,9 +87,10 @@ describe("Electron product shell", () => {
   });
 
   it("owns concrete preflight, warmup topology and placeholder readiness outside electron-kit", async () => {
-    const [runtimeSource, rendererSource, kitRuntimeSource, kitPreflightSource] = await Promise.all([
+    const [runtimeSource, rendererSource, preloadSource, kitRuntimeSource, kitPreflightSource] = await Promise.all([
       readFile(new URL("../config/runtime.json", import.meta.url), "utf8"),
       readFile(new URL("../src/adapters/renderer/placeholder.ts", import.meta.url), "utf8"),
+      readFile(new URL("../src/adapters/renderer/preload.ts", import.meta.url), "utf8"),
       readFile(new URL("../../../packages/electron-kit/src/runtime/index.ts", import.meta.url), "utf8"),
       readFile(new URL("../../../packages/electron-kit/src/runtime/startup/preflight/apply.ts", import.meta.url), "utf8"),
     ]);
@@ -109,7 +110,10 @@ describe("Electron product shell", () => {
     expect(rendererSource).toContain("createPlaceholderRendererAdapter");
     expect(rendererSource).toContain("let warmedHtml");
     expect(rendererSource).not.toContain("let warmedPlaceholder");
-    expect(rendererSource).toContain("electronShellMounted");
+    expect(rendererSource).toContain("electronShell.acknowledgeMounted()");
+    expect(rendererSource).not.toContain("executeJavaScript");
+    expect(preloadSource).toContain("@open-design/electron-kit/renderer");
+    expect(preloadSource).toContain("ipcRenderer.send");
     expect(kitRuntimeSource).not.toMatch(/Electron Shell Foundation|electronShellMounted|electronKitMounted/u);
     expect(kitRuntimeSource).not.toMatch(/lifecycle\.(?:heartbeat|release|status|stop)/u);
     expect(runtime.preflight.atoms.flatMap((atom) => atom.hosts ?? [])).toEqual(["127.0.0.1", "localhost"]);

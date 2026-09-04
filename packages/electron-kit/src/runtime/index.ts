@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
-import { BrowserWindow, app, dialog, protocol } from "electron";
+import { BrowserWindow, app, dialog, ipcMain, protocol } from "electron";
 import {
   type GenerationRecord,
   type StandaloneGenerationBinding,
@@ -49,6 +49,11 @@ import {
   type ElectronStartupQuitBarrier,
 } from "./startup/cancellation.js";
 import { focusElectronWindow, resolveElectronPresentationMode } from "./window/presentation.js";
+import {
+  createElectronRendererMountAcknowledgement,
+  installElectronRendererMountBarrier,
+  serializeElectronRendererMountAcknowledgement,
+} from "./window/mount-acknowledgement.js";
 
 export * from "./session/logging.js";
 export * from "./session/namespace-paths.js";
@@ -59,6 +64,7 @@ export * from "./session/update-handoff.js";
 export * from "./startup/attempt.js";
 export * from "./startup/cancellation.js";
 export * from "./window/presentation.js";
+export * from "./window/mount-acknowledgement.js";
 
 function splashHtml(title: string): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html><html><style>html{font-family:ui-sans-serif,system-ui;background:#151515;color:#fff}body{margin:0;display:grid;min-height:100vh;place-items:center;text-align:center}p{color:#aaa}</style><body><main><h2>${title}</h2><p id="stage">Preparing Electron…</p></main></body></html>`)}`;
@@ -309,28 +315,47 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
         ) throw new Error("Standalone runtime handle did not acknowledge exact readiness");
         context.startup!.advance(startupSignal!, "runtime-ready");
       },
-      [ELECTRON_WARMUP_ATOMS.MOUNT_RENDERER]: async () => {
+      [ELECTRON_WARMUP_ATOMS.MOUNT_RENDERER]: async ({ signal }) => {
         rendererMount = (async () => {
+          const acknowledgement = createElectronRendererMountAcknowledgement(startupSignal!);
+          const rendererOptions = definition.renderer.windowOptions?.({ acknowledgement, manifest, preflight, presentation });
           const window = new BrowserWindow({
-            ...definition.renderer.windowOptions?.({ manifest, preflight, presentation }),
+            ...rendererOptions,
             width: manifest.window.width,
             height: manifest.window.height,
             title: manifest.window.title,
             show: false,
+            webPreferences: {
+              ...rendererOptions?.webPreferences,
+              additionalArguments: [
+                ...(rendererOptions?.webPreferences?.additionalArguments ?? []),
+                serializeElectronRendererMountAcknowledgement(acknowledgement),
+              ],
+            },
           });
+          const barrier = installElectronRendererMountBarrier({ acknowledgement, ipc: ipcMain, sender: window.webContents, signal });
+          let integration: Awaited<ReturnType<ElectronShellDefinition["renderer"]["mount"]>> | null = null;
           try {
-            const integration = await definition.renderer.mount({ manifest, preflight, presentation, window });
+            integration = await definition.renderer.mount({ acknowledgement, manifest, preflight, presentation, window });
+            await barrier.ready;
+            const mountedIntegration = integration;
             rendererLease = Object.freeze({
               window,
               releaseIntegration() {
-                return integration.dispose();
+                return mountedIntegration.dispose();
               },
               destroy() { if (!window.isDestroyed()) window.destroy(); },
             });
             context.startup!.advance(startupSignal!, "renderer-mounted");
           } catch (error) {
             if (!window.isDestroyed()) window.destroy();
+            try { await integration?.dispose(); }
+            catch (disposeError) {
+              throw new AggregateError([error, disposeError], "Electron renderer mount and integration cleanup failed");
+            }
             throw error;
+          } finally {
+            barrier.dispose();
           }
         })();
         await rendererMount;

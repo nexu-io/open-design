@@ -76,13 +76,22 @@ export type ElectronRendererLease = Readonly<{
   destroy(): void;
 }>;
 
+export type ElectronRendererMountAcknowledgement = Readonly<{
+  attemptId: string;
+  bindingDigest: string;
+  channel: string;
+  nonce: string;
+}>;
+
 export type ElectronShellRenderer = Readonly<{
   windowOptions?(input: Readonly<{
+    acknowledgement: ElectronRendererMountAcknowledgement;
     manifest: ElectronShellManifest;
     preflight: ElectronPreflightResult;
     presentation: "headless" | "interactive";
   }>): Readonly<BrowserWindowConstructorOptions>;
   mount(input: Readonly<{
+    acknowledgement: ElectronRendererMountAcknowledgement;
     manifest: ElectronShellManifest;
     preflight: ElectronPreflightResult;
     presentation: "headless" | "interactive";
