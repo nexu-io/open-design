@@ -23,6 +23,7 @@ import {
   validateElectronStandaloneControlRequest,
 } from "./control-contract.js";
 import { ElectronStandaloneHostLifecycle } from "./host-lifecycle.js";
+import { ElectronStandaloneLifecycleLedger } from "./lifecycle-ledger.js";
 
 export const ELECTRON_STANDALONE_HOST_CONFIG_ENV = "OD_ELECTRON_STANDALONE_HOST_V1";
 
@@ -75,7 +76,9 @@ class ElectronStandaloneHostRuntime {
   readonly #pending = new Map<string, PendingStart>();
 
   constructor(readonly config: HostConfig) {
-    this.lifecycle = new ElectronStandaloneHostLifecycle(config.scope);
+    this.lifecycle = new ElectronStandaloneHostLifecycle(config.scope, {
+      statePort: new ElectronStandaloneLifecycleLedger(config.storeRoot, config.scope),
+    });
     this.#handoff = new FossilHandoffHost(async (binding) => {
       const bytes = await readFile(binding.launcher.path);
       if (createHash("sha256").update(bytes).digest("hex") !== binding.launcher.blobSha256) {
@@ -200,6 +203,11 @@ class ElectronStandaloneHostRuntime {
       },
     });
   }
+
+  async stop(): Promise<void> {
+    const current = await this.lifecycle.status();
+    if (current.references === 0 && current.state === "running") await this.lifecycle.stop(current.fence);
+  }
 }
 
 export async function runElectronStandaloneHost(): Promise<void> {
@@ -237,7 +245,10 @@ export async function runElectronStandaloneHost(): Promise<void> {
           lifecycle: await active.lifecycle.status(),
         });
       },
-      async stop() { runtime = null; },
+      async stop(active) {
+        await active.stop();
+        runtime = null;
+      },
     },
   });
   await client.start();

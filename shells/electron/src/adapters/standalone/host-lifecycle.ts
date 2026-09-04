@@ -16,6 +16,11 @@ export type ElectronStandaloneHostStart = Readonly<{
   status: LifecycleStatus;
 }>;
 
+export type ElectronStandaloneLifecycleStatePort = Readonly<{
+  read(): Promise<SharedLifecycleState | null>;
+  write(state: SharedLifecycleState): Promise<void>;
+}>;
+
 type Clock = () => Date;
 
 function capabilityHash(value: string): string {
@@ -33,15 +38,17 @@ export class ElectronStandaloneHostLifecycle {
   readonly #heartbeatIntervalMs: number;
   readonly #leaseDurationMs: number;
   #state: SharedLifecycleState;
+  readonly #statePort: ElectronStandaloneLifecycleStatePort | null;
   #tail: Promise<void> = Promise.resolve();
 
   constructor(
     readonly scope: LifecycleScope,
-    options: Readonly<{ clock?: Clock; heartbeatIntervalMs?: number; leaseDurationMs?: number }> = {},
+    options: Readonly<{ clock?: Clock; heartbeatIntervalMs?: number; leaseDurationMs?: number; statePort?: ElectronStandaloneLifecycleStatePort }> = {},
   ) {
     this.#clock = options.clock ?? (() => new Date());
     this.#heartbeatIntervalMs = options.heartbeatIntervalMs ?? 5_000;
     this.#leaseDurationMs = options.leaseDurationMs ?? 30_000;
+    this.#statePort = options.statePort ?? null;
     if (!Number.isSafeInteger(this.#heartbeatIntervalMs) || this.#heartbeatIntervalMs < 100) throw new Error("invalid Electron Standalone heartbeat interval");
     if (!Number.isSafeInteger(this.#leaseDurationMs) || this.#leaseDurationMs <= this.#heartbeatIntervalMs * 2) throw new Error("invalid Electron Standalone lease duration");
     this.#state = SHARED_LIFECYCLE_ALGEBRA.initial(scope);
@@ -59,10 +66,13 @@ export class ElectronStandaloneHostLifecycle {
     this.#tail = new Promise<void>((resolve) => { release = resolve; });
     await previous;
     try {
+      const persisted = await this.#statePort?.read();
+      const source = persisted ?? this.#state;
       const now = this.#iso();
-      const current = SHARED_LIFECYCLE_ALGEBRA.reduce(this.#state, { type: "tick", now, leaseDurationMs: this.#leaseDurationMs });
+      const current = SHARED_LIFECYCLE_ALGEBRA.reduce(source, { type: "tick", now, leaseDurationMs: this.#leaseDurationMs });
       const next = operation(current);
       this.#state = SHARED_LIFECYCLE_ALGEBRA.validate(next.state, this.scope);
+      await this.#statePort?.write(this.#state);
       return next.result;
     } finally {
       release();

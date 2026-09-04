@@ -1,9 +1,12 @@
 import { resolve } from "node:path";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 
 import { createStandaloneGenerationBinding, type GenerationRecord } from "@open-design/standalone";
 
 import { ElectronStandaloneHostLifecycle } from "@/adapters/standalone/host-lifecycle.js";
+import { ElectronStandaloneLifecycleLedger } from "@/adapters/standalone/lifecycle-ledger.js";
 
 const scope = Object.freeze({ channel: "betahyx", namespace: "electron-foundation" });
 const shell = Object.freeze({ type: "electron", version: "0.1.0", buildHash: "a".repeat(64), digest: "b".repeat(64) });
@@ -59,5 +62,24 @@ describe("Electron Standalone Sidecar-host lifecycle", () => {
     expect(expired).toMatchObject({ state: "stopped", references: 0, generationId: null, fence: 2 });
     await expect(lifecycle.stop(1)).rejects.toThrow("stale shared lifecycle stop fence");
     expect(await lifecycle.stop(expired.fence)).toMatchObject({ state: "stopped", fence: 3 });
+  });
+
+  it("recovers the single durable ledger across host replacement without a second lock", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "electron-lifecycle-ledger-"));
+    try {
+      const ledger = new ElectronStandaloneLifecycleLedger(root, scope);
+      const attachment = { id: "electron-1", shell };
+      const firstHost = new ElectronStandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000, statePort: ledger });
+      const started = await firstHost.start(generation, attachment, binding, null);
+      const replacementHost = new ElectronStandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000, statePort: ledger });
+      expect(await replacementHost.status()).toMatchObject({ state: "running", references: 1, bindingDigest: binding.digest });
+      await expect(replacementHost.start(generation, attachment, binding, null)).rejects.toThrow("capability is required");
+      expect((await replacementHost.heartbeat(attachment, started.attachmentCapability)).references).toBe(1);
+      const current = await replacementHost.status();
+      expect(await replacementHost.stop(current.fence)).toMatchObject({ state: "stopped", references: 0 });
+      expect(await ledger.read()).toMatchObject({ state: "stopped", attachments: [] });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
   });
 });
