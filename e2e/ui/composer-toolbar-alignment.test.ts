@@ -1,18 +1,23 @@
 // Composer footer toolbar alignment.
 //
-// The composer's bottom row mixes four controls authored across separate
-// components — Add context, design system, agent/model, and Send. The composer
-// mounts under `.chat-composer-fixed-layer` (a body-level portal), so an
-// app-scoped normalization can miss it. Even though the row centers its
-// children, differing control heights then look visibly misaligned.
-//
+// The composer's bottom row mixes three controls authored in three different
+// components — the + icon (.icon-btn), the agent avatar
+// (.avatar-agent-trigger) and Send (.composer-send); the session-mode picker
+// that used to sit between them left the row (#7635), and the working
+// directory lives inside the + menu rather than as a pill of its own. The composer mounts under `.chat-composer-fixed-layer` (a
+// body-level portal), so the `.app`-scoped "one control system" normalization
+// in chat.css never reached it and the controls drifted to 28/30/32px. Even
+// though the row centers them, the differing heights left the pills and Send
+// visibly misaligned against the left buttons.//
 // This spec is the regression boundary: the utility controls share the compact
-// 28px geometry, Send keeps its deliberate 36px emphasis, and every control
-// shares one vertical center so the toolbar reads as a single row.
+// 28px geometry, Send keeps its deliberate emphasis as the supplied 32px
+// disc (#7635), and every control shares one vertical center so the toolbar
+// reads as a single row.
 
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
+import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
 
@@ -73,35 +78,47 @@ test('[P1] composer footer controls keep their size hierarchy on one baseline', 
   await page.goto('/');
   await createProject(page, 'Composer toolbar alignment');
   await expect(page).toHaveURL(/\/projects\//);
-  await expect(page.getByTestId('chat-composer')).toBeVisible();
+  // A cold worker compiles the project route on first open, which can outlive
+  // the default assertion window; gate on the loading screen clearing first.
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
+  await expect(page.getByTestId('chat-composer')).toBeVisible({ timeout: T.long });
   await expect(page.getByTestId('chat-send')).toBeVisible();
 
-  const toolbarControls = [
-    ['plus', page.getByTestId('chat-plus-trigger')],
-    ['design-system', page.getByTestId('composer-design-system-trigger')],
-    ['agent', page.getByTestId('avatar-agent-trigger')],
-    ['send', page.getByTestId('chat-send')],
-  ] as const;
-  const controls: Array<{ id: string; height: number; center: number }> = [];
-  for (const [id, control] of toolbarControls) {
-    await expect(control).toBeVisible();
-    controls.push(await control.evaluate((element, controlId) => {
-      const rect = element.getBoundingClientRect();
-      return {
-        id: controlId,
-        height: rect.height,
-        center: rect.top + rect.height / 2,
-      };
-    }, id));
-  }
+  const metrics = await page.evaluate(() => {
+    const row = document.querySelector('.composer-row');
+    if (!row) return { error: 'no .composer-row' as const };
+    const selectors = [
+      '.icon-btn',
+      '.avatar-agent-trigger',
+      '.composer-send',
+    ];
+    const controls: Array<{ sel: string; height: number; center: number }> = [];
+    for (const sel of selectors) {
+      const el = row.querySelector(sel);
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      controls.push({ sel, height: r.height, center: r.top + r.height / 2 });
+    }
+    return { controls };
+  });
 
+  if ('error' in metrics) throw new Error(metrics.error);
+  const { controls } = metrics;
+
+  // Every control the row is documented to carry must be found; a shorter
+  // list means a selector went stale and the height assertions below would be
+  // measuring less than the whole toolbar.
+  expect(controls.map((control) => control.sel)).toEqual([
+    '.icon-btn',
+    '.avatar-agent-trigger',
+    '.composer-send',
+  ]);
   const centers = controls.map((c) => c.center);
   const spread = (xs: number[]) => Math.max(...xs) - Math.min(...xs);
 
-  const send = controls.find((control) => control.id === 'send');
-  const utilityControls = controls.filter((control) => control.id !== 'send');
-  expect(send?.height, `control heights: ${JSON.stringify(controls)}`).toBe(36);
-  for (const control of utilityControls) {
+  const send = controls.find((control) => control.sel === '.composer-send');
+  const utilityControls = controls.filter((control) => control.sel !== '.composer-send');
+  expect(send?.height, `control heights: ${JSON.stringify(controls)}`).toBe(32);  for (const control of utilityControls) {
     expect(control.height, `control heights: ${JSON.stringify(controls)}`).toBe(28);
   }
 

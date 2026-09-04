@@ -14,6 +14,7 @@ import {
 } from "react";
 import { createPortal } from 'react-dom';
 import { Button } from '@open-design/components';
+import { ThinkingOrb } from './composer/ThinkingOrb';
 import { useI18n } from '../i18n';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import type { Dict, Locale } from '../i18n/types';
@@ -3665,45 +3666,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 setComposerEngaged(true);
               }}
               onSubmenuOpen={(submenu) => {
-                // The toolbox flyout tracks its own open (design_toolbox_open);
-                // the working-dir flyout carries actions, not a resource list.
-                if (submenu === 'toolbox' || submenu === 'workingDir') return;
+                // The working-dir flyout carries actions, not a resource list.
+                if (submenu === 'workingDir') return;
                 trackComposerBar({
                   element: 'plus_submenu_open',
                   resource_kind: PLUS_SUBMENU_RESOURCE_KIND[submenu],
                 });
-              }}
-              onSearchUsed={(submenu) => {
-                trackComposerBar({
-                  element: 'plus_search',
-                  resource_kind: PLUS_SUBMENU_RESOURCE_KIND[submenu],
-                });
-              }}
-              connectors={connectors}
-              onPickConnector={(connector) => {
-                trackComposerBar({
-                  element: 'plus_pick',
-                  resource_kind: 'connector',
-                  resource_id: connector.id,
-                });
-                insertConnectorMention(connector);
-              }}
-              onAddConnector={() => {
-                trackComposerBar({ element: 'plus_add', resource_kind: 'connector' });
-                onOpenConnectors?.();
-              }}
-              plugins={pluginsForComposer}
-              onPickPlugin={(record) => {
-                trackComposerBar({
-                  element: 'plus_pick',
-                  resource_kind: 'plugin',
-                  resource_id: record.id,
-                });
-                void insertPluginMention(record);
-              }}
-              onAddPlugin={() => {
-                trackComposerBar({ element: 'plus_add', resource_kind: 'plugin' });
-                onBrowsePlugins?.();
               }}
               skills={skills}
               onPickSkill={(skill) => {
@@ -3713,19 +3681,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   resource_id: skill.id,
                 });
                 void insertSkillMention(skill);
-              }}
-              mcpServers={enabledMcpServers}
-              onPickMcp={(server) => {
-                trackComposerBar({
-                  element: 'plus_pick',
-                  resource_kind: 'mcp',
-                  resource_id: server.id,
-                });
-                insertMcpMention(server);
-              }}
-              onAddMcp={() => {
-                trackComposerBar({ element: 'plus_add', resource_kind: 'mcp' });
-                onOpenMcpSettings?.();
               }}
               onAttachFiles={() => {
                 trackChatPanelClick(analytics.track, {
@@ -3796,59 +3751,18 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 trackComposerBar({ element: 'design_system_open' });
                 openDesignSystemPicker();
               } : undefined}
-              // 插件 and 设计百宝箱 live inside the "+" menu (right below
-              // 工作目录) as hover-expand submenus. The toolbox flyout reuses
-              // the same DesignToolboxPanel the standalone popover renders.
-              toolboxLabel={t('chat.designToolbox.title')}
-              renderToolbox={(close) => (
-                <DesignToolboxPanel
-                  workspaceContext={workspaceContext}
-                  actions={DESIGN_TOOLBOX_ACTIONS}
-                  skills={skills}
-                  plugins={pluginsForComposer}
-                  mcpServers={enabledMcpServers}
-                  mcpTemplates={mcpTemplates}
-                  connectors={connectors}
-                  projectFiles={projectFiles}
-                  activeSkillIds={stagedSkills.map((skill) => skill.id)}
-                  activePluginId={activeAppliedPlugin?.pluginId ?? pinnedPluginId ?? null}
-                  activeMcpServerIds={stagedMcpServers.map((server) => server.id)}
-                  activeConnectorIds={stagedConnectors.map((connector) => connector.id)}
-                  activeFilePaths={staged.map((item) => item.path)}
-                  onOpened={() => trackDesignToolbox({ element: 'design_toolbox_open' })}
-                  onPickAction={(action) => {
-                    trackDesignToolbox({
-                      element: 'design_toolbox_action',
-                      toolbox_action_id: action.id,
-                    });
-                    applyDesignToolboxAction(action);
-                    close();
-                  }}
-                  onPickSkill={(skill) => {
-                    trackDesignToolbox({
-                      element: 'design_toolbox_resource',
-                      resource_kind: 'skill',
-                      resource_id: skill.id,
-                    });
-                    applyDesignToolboxSkill(skill);
-                    close();
-                  }}
-                  onPickResource={(resource) => {
-                    trackDesignToolbox({
-                      element: 'design_toolbox_resource',
-                      ...designToolboxResourceTracking(resource),
-                    });
-                    applyDesignToolboxResource(resource);
-                    close();
-                  }}
-                />
-              )}
             />
             {/* #5517: the design-system picker sits inline in the composer's
                 icon row (palette icon) instead of the staged-context bar. */}
             {designSystemPicker}
             {leadingAccessory}
             <span className="composer-spacer" />
+            {/* No mode picker in the composer (2026-08-19, product): the row
+                carried a 规划/设计/提问 chooser that every run defaulted past.
+                `sessionMode` still flows through this component — a
+                conversation keeps its stored mode and next-step actions still
+                switch it (ChatPane.handleNextStepPromptAction) — it just is
+                not chosen from here any more. */}
             {footerAccessory}
             {showAdmissionPendingButton ? (
               <button
@@ -3859,24 +3773,35 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 aria-busy="true"
                 aria-label={t('assistant.statusPreparing')}
               >
+                {/* 预检那一档是本分支独有的(main 没有 admission-pending)。
+                    合并 main 时几何取了它的 32px 方框,那里装不下文字,所以这里
+                    只留球 —— 「正在准备」仍然由 `aria-label` + `aria-busy` 说给
+                    读屏,视觉上和运行态一样靠球表达「有事在发生」。按钮本身保留:
+                    它要挡住预检期间的第二次点击。 */}
                 <ComposerRunIcon className="composer-run-glyph" />
-                <span className="composer-run-labels">
-                  <span className="composer-run-label">{t('assistant.statusPreparing')}</span>
-                </span>
               </button>
             ) : null}
             {showStopButton ? (
               <button
                 type="button"
-                className="composer-send stop"
+                className="composer-send stop od-tooltip"
                 onClick={onStop}
                 aria-label={t('chat.stop')}
+                title={t('chat.stop')}
+                data-tooltip={t('chat.stop')}
               >
+                {/* Executing = the send mark's own box (底.svg: the 32px
+                    near-black squircle, no arrow) carrying one of two green
+                    glyphs. At rest it is the matrix loader; on hover/focus it
+                    is the stop square (Group 2147224570.svg), so the button
+                    shows what clicking it does. Both render and CSS swaps
+                    which one is visible, so nothing reflows mid-run.
+                    The button used to widen into a labelled pill — dot-matrix
+                    + 思考中, swapping to 停止 on hover — but a 32px square has
+                    no room for that copy, so 停止 moved to the hover tooltip;
+                    the aria-label already carried it. */}
                 <ComposerRunIcon className="composer-run-glyph" />
-                <span className="composer-run-labels">
-                  <span className="composer-run-label">{t('assistant.thinking')}</span>
-                  <span className="composer-stop-label">{t('chat.stop')}</span>
-                </span>
+                <ComposerStopIcon className="composer-stop-glyph" />
               </button>
             ) : null}
             {showSendButton ? (
@@ -3897,7 +3822,16 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 title={t('chat.send')}
                 data-tooltip={t('chat.send')}
               >
-                <ChatSendArrowIcon size={16} />
+                {/* Home's send mark: the glyph fills half of its own box, so
+                    it renders at the button's full 32px rather than inset.
+
+                    合并 main 时产品拍板取这一版(2026-09-05):本分支 09-04 曾按
+                    交付稿 `729fa43ce7` 把它改成「盒子 28 / 图标 16」,而 main 的
+                    `2e4c1a753b`(#7635 / OPEND-2553)在 7 小时后带着自己那份设计
+                    上线,明确覆盖了项目输入区。两份设计撞在同一颗控件上,取已上线
+                    的那份 —— 在合并里悄悄撤销别人已上线的工作,不该由做合并的人
+                    代劳。稿子那一格的 28/16 就此作废,判据见本次合并说明。 */}
+                <Icon name="arrow-up-fill" size={32} />
               </button>
             ) : null}
           </div>
@@ -4193,18 +4127,51 @@ function sortChatCommentAttachmentsByOrder(attachments: ChatCommentAttachment[])
 /* 5×5 dot-matrix "cross expand" glyph shown inside the black send button while
    a run is executing: a plus shape blooms outward from the center in Manhattan
    steps (delay = 220ms × Manhattan distance from the middle dot); the faint
-   base grid stays static.
+   base grid stays static. Dots use currentColor so the glyph adapts to the
+   button's light-on-dark (and dark-mode inverted) fill. */
+/* Running glyph: the `thinking-orbs` solving orb (vendored in
+   composer/ThinkingOrb.tsx) — the bands of a dotted sphere scramble in quarter
+   turns, then click back. It draws to a <canvas> and parks itself when the tab
+   is hidden or the element scrolls out of view, and honours
+   prefers-reduced-motion by holding a single frame.
 
-   The dot ink is baked into the file (#DEDDDD), NOT currentColor: an <img>
-   renders its SVG in an isolated document, so no host colour — currentColor
-   included — reaches inside it. Anything this glyph needs to look right has to
-   live in the file itself, which is also why a filter in there once painted a
-   black box over the whole 18×18 box with nothing in the app able to override
-   it (see ChatComposer.thinking-glyph.test.tsx). */
+   The vendored copy is fixed at the package's 20px preset (the two sizes it
+   ships are separately tuned designs, not a scale factor) — the mark's own ink
+   box is ~14px, and the extra 6px still clear the 32px disc — and PINNED to
+   the dark palette: this disc is #202020 in BOTH app themes, so an auto theme
+   would paint dark ink onto the dark disc under a light app and vanish. Dark =
+   light ink, which the CSS filter on `.composer-run-glyph` then carries to the
+   mark's green. */
 function ComposerRunIcon({ className }: { className?: string }) {
-  // Self-animating matrix loader (SMIL inside the SVG); runs on its own as an
-  // <img>, so it needs none of the <video> autoplay/loop plumbing.
-  return <img className={className} src="/composer-matrix-loader.svg" alt="" aria-hidden />;
+  return (
+    <ThinkingOrb
+      className={className}
+      // The orb labels itself (role="img" + "Solving…"); the button it sits in
+      // is already labelled 停止, so keep it out of the a11y tree.
+      aria-hidden
+    />
+  );
+}
+
+/* Stop mark shown while the run button is hovered/focused (Group
+   2147224570.svg): a 14px rounded square centred in the send mark's own 32
+   box. Kept at the source's 32 viewBox and rendered at 32px — like the send
+   arrow — so it lands exactly where the file draws it, and `currentColor`
+   picks the button's green up from `--send-ground`. */
+function ComposerStopIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      width="32"
+      height="32"
+      viewBox="0 0 32 32"
+      fill="currentColor"
+      aria-hidden
+      focusable="false"
+    >
+      <path d="M18 9.00004C20.7614 9.00005 23 11.2386 23 14V18C23 20.7614 20.7614 22.9999 18 23L14 23C11.2386 23 9 20.7614 9 18V14C9 11.2386 11.2386 9.00001 14 9.00002L18 9.00004Z" />
+    </svg>
+  );
 }
 
 function workspaceContextIcon(item: WorkspaceContextItem): IconName {

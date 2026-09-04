@@ -34,6 +34,10 @@
   /* Unified scrim blur behind modals/drawers — the scrim's own tint color
      stays with each component; only the blur amount is standardized. */
   --scrim-backdrop: blur(4px);
+  /* Shared scrim tint for overlays that opt into one material (the Use
+     Everywhere modal today). Deliberate exceptions keep painting their own
+     tint at their own rule. */
+  --scrim-tint: rgba(255, 255, 255, 0.6);
 
   /* Standard material surfaces (content-layer separation) */
   --material-ultrathin: rgba(250, 250, 250, 0.45);
@@ -183,6 +187,11 @@
     --material-regular-backdrop: none;
     --material-thick-backdrop: none;
     --glass-backdrop: none;
+    /* With the blur off, a translucent scrim leaves a modal barely separated
+       from the page behind it — so the tint degrades to an opaque light
+       ground, the same `--bg-elevated` every material surface above falls
+       back to. */
+    --scrim-tint: var(--bg-elevated);
     --scrim-backdrop: none;
     --vibrancy-label: var(--text-strong);
     --vibrancy-label-secondary: var(--text-muted);
@@ -204,6 +213,10 @@
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   html:root {
+    /* Without backdrop-filter the blur is inert; the tint degrades the same
+       way the reduced-transparency block above does. */
+    --scrim-tint: var(--bg-elevated);
+    --scrim-backdrop: none;
     --material-ultrathin: var(--bg-elevated);
     --material-thin: var(--bg-elevated);
     --material-regular: var(--bg-elevated);

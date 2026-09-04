@@ -172,5 +172,5 @@ test('[P2] returning from another entry view via the home nav reaches the home h
   await page.getByTestId('entry-nav-home').click();
   await expect(page.getByTestId('home-hero')).toBeVisible();
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
-  await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
+  await expect(page.getByTestId('home-hero-type-pills')).toBeVisible();
 });

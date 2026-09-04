@@ -107,7 +107,7 @@ describe('home composer sending state', () => {
     }));
   });
 
-  it('shows Sending… and swallows repeat clicks while creation is in flight', async () => {
+  it('keeps the send arrow stable and swallows repeat clicks while creation is in flight', async () => {
     let resolveSubmit: (accepted: boolean) => void = () => undefined;
     const onSubmit = vi.fn(
       () => new Promise<boolean>((resolve) => { resolveSubmit = resolve; }),
@@ -124,10 +124,13 @@ describe('home composer sending state', () => {
       expect(submit.disabled).toBe(true);
     });
     // #5517 made the submit button icon-only (spinner while sending); the
-    // Sending… state now lives on the accessible name instead of a label span.
-    expect(submit.getAttribute('aria-label')).toBe('Sending…');
-    expect(submit.getAttribute('aria-busy')).toBe('true');
-    expect(submit.className).toContain('is-sending');
+    // Navigation owns the progress handoff. Home must never flash a spinner,
+    // loading label, or busy state in the frame before it unmounts; the send
+    // mark stays the 36px arrow throughout.
+    expect(submit.getAttribute('aria-label')).toBe('Run');
+    expect(submit.getAttribute('aria-busy')).toBe('false');
+    expect(submit.className).not.toContain('is-sending');
+    expect(submit.querySelector('svg')?.getAttribute('width')).toBe('36');
 
     // A second click during the in-flight window must not start a second run.
     fireEvent.click(submit);
@@ -249,12 +252,9 @@ describe('home composer sending state', () => {
       </I18nProvider>,
     );
 
-    // #5517 removed the inline template rail; templates are picked from the
-    // composer footer's radial Template picker.
-    fireEvent.click(await screen.findByTestId('home-hero-template-trigger'));
     // Seeding through a fallback prompt-example card is what arms the
-    // examplePromptContext marker.
-    fireEvent.click(await screen.findByTestId('home-hero-template-wedge-prototype'));
+    // examplePromptContext marker; the type comes from the row under the composer.
+    fireEvent.click(await screen.findByTestId('home-hero-type-pill-prototype'));
     const exampleCards = await screen.findAllByTestId('home-hero-prompt-example');
     fireEvent.click(exampleCards[0]!);
 
