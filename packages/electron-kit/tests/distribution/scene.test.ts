@@ -19,6 +19,8 @@ describe("Electron scene", () => {
     const paths = {
       entryPath: join(root, "main.ts"),
       authorityResourcePath: join(root, "sidecar.cjs"),
+      closureResourcePath: join(root, "closure.mjs"),
+      launcherResourcePath: join(root, "standalone-launcher.mjs"),
       rendererPreloadEntryPath: join(root, "renderer-preload.ts"),
       manifestPath: join(root, "shell.json"),
       nodeCarrierLockPath: join(root, "node-lock.json"),
@@ -28,6 +30,8 @@ describe("Electron scene", () => {
     await Promise.all([
       writeFile(paths.entryPath, "export const foundation = true;\n", "utf8"),
       writeFile(paths.authorityResourcePath, "module.exports = {};\n", "utf8"),
+      writeFile(paths.closureResourcePath, "export const closure = true;\n", "utf8"),
+      writeFile(paths.launcherResourcePath, "export const launcher = true;\n", "utf8"),
       writeFile(paths.rendererPreloadEntryPath, "export const preload = true;\n", "utf8"),
       writeFile(paths.manifestPath, `${JSON.stringify({
         schemaVersion: 1,
@@ -60,7 +64,12 @@ describe("Electron scene", () => {
 
     const receipt = await assembleElectronScene({
       ...paths,
-      authorityResources: [{ name: "standalone-host.cjs", path: paths.authorityResourcePath }],
+      authorityResources: [
+        { name: "standalone-host.cjs", path: paths.authorityResourcePath },
+        { name: "closure.mjs", path: paths.closureResourcePath },
+        { name: "standalone-launcher.mjs", path: paths.launcherResourcePath },
+      ],
+      standaloneBinding: { target: "darwin-arm64", closureResourceName: "closure.mjs", launcherResourceName: "standalone-launcher.mjs" },
     });
     const scene = await readFile(receipt.sceneManifestPath, "utf8");
     const packageManifest = JSON.parse(await readFile(join(paths.outputRoot, "package.json"), "utf8")) as Record<string, unknown>;
@@ -70,6 +79,11 @@ describe("Electron scene", () => {
     expect(JSON.parse(scene)).toMatchObject({
       schemaVersion: 1,
       operation: "electron.scene.build",
+      target: "darwin-arm64",
+      shellVersion: "1.2.3",
+      shellBuildHash: "a".repeat(64),
+      closure: { file: "closure.mjs", sha256: expect.stringMatching(/^[a-f0-9]{64}$/u) },
+      standalone: { entrypoint: "standalone-launcher.mjs", sha256: expect.stringMatching(/^[a-f0-9]{64}$/u) },
       products: expect.arrayContaining([
         expect.objectContaining({ name: "renderer-mount-preload.cjs", sha256: expect.stringMatching(/^[a-f0-9]{64}$/u) }),
         expect.objectContaining({ name: "runtime.json", sha256: expect.stringMatching(/^[a-f0-9]{64}$/u) }),
@@ -78,11 +92,12 @@ describe("Electron scene", () => {
     });
     await expect(readFile(join(paths.outputRoot, "scene-receipt.json"), "utf8")).rejects.toThrow();
     expect(packageManifest.author).toBe("Example Company");
-    expect(receipt.authorityResources).toEqual([expect.objectContaining({
+    expect(receipt.authorityResources).toHaveLength(3);
+    expect(receipt.authorityResources).toEqual(expect.arrayContaining([expect.objectContaining({
       name: "standalone-host.cjs",
       path: join(paths.outputRoot, "standalone-host.cjs"),
       sha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
-    })]);
+    })]));
   });
 
   it("rejects path-like, reserved and duplicate authority resource names", async () => {
@@ -107,4 +122,5 @@ describe("Electron scene", () => {
       ],
     })).rejects.toThrow(/authority resource name/u);
   });
+
 });

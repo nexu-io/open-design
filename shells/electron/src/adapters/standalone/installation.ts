@@ -38,6 +38,7 @@ export type ResolvedElectronStandaloneInstallation = Readonly<{
   envelope: SignedStandaloneMetadata;
   trustedKeys: ReadonlyMap<string, KeyObject>;
   hostPath: string;
+  supervisorPath: string;
   candidates: Readonly<Record<string, readonly StandaloneBlobCandidate[]>>;
 }>;
 
@@ -220,6 +221,7 @@ export async function loadElectronStandaloneInstallation(input: Readonly<{
     envelope,
     trustedKeys,
     hostPath: join(input.resourceRoot, declaration.host.file),
+    supervisorPath: join(input.resourceRoot, declaration.supervisor.file),
     candidates: Object.freeze(candidates),
   });
 }

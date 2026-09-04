@@ -119,6 +119,7 @@ export function createElectronStandaloneAuthorityFactory(
       const hostExpected = Object.freeze({
         hostSha256: installation.declaration.host.sha256,
         supervisorSha256: installation.declaration.supervisor.sha256,
+        supervisorPath: installation.supervisorPath,
         dataRoot: storeRoot,
         runtimeRoot: sidecarRuntimeRoot,
         resourceRoot: resolve(resourceRoot),
@@ -132,6 +133,7 @@ export function createElectronStandaloneAuthorityFactory(
         resourceRoot: resolve(resourceRoot),
         hostPath: installation.hostPath,
         hostSha256: hostExpected.hostSha256,
+        supervisorPath: installation.supervisorPath,
         supervisorSha256: hostExpected.supervisorSha256,
         shell: request.shell,
       });

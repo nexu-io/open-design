@@ -1,4 +1,5 @@
 import type { ChildProcess } from "node:child_process";
+import { isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { SpawnProcessRequest } from "@open-design/platform";
@@ -60,6 +61,7 @@ export type SidecarLaunchRequest = Omit<SpawnProcessRequest, "args" | "env"> & {
   env?: NodeJS.ProcessEnv;
   resources: Omit<SidecarResources, "pid">;
   stamp: SidecarStamp;
+  supervisor?: Readonly<{ command: string; entrypoint: string }>;
 };
 
 export type SidecarRestartOptions = {
@@ -156,6 +158,7 @@ export async function bootstrapSidecarProcess(
     cwd?: string;
     env?: NodeJS.ProcessEnv;
     launch?: typeof launchSidecar;
+    supervisor?: SidecarLaunchRequest["supervisor"];
     waitUntilReady?: (stamp: SidecarStamp, pid: number) => Promise<void>;
   } = {},
 ): Promise<boolean> {
@@ -172,6 +175,7 @@ export async function bootstrapSidecarProcess(
     logFd: null,
     resources,
     stamp,
+    supervisor: options.supervisor,
   });
   try {
     await (options.waitUntilReady ?? waitForBootstrappedSidecarReady)(stamp, launched.pid, BOOTSTRAP_READY_TIMEOUT_MS);
@@ -197,7 +201,7 @@ export async function spawnSidecarLauncher(
   request: SidecarLaunchRequest,
 ): Promise<ChildProcess & { pid: number }> {
   const stamp = normalizeSidecarStamp(request.stamp);
-  const { args = [], command, env, resources, ...spawnRequest } = request;
+  const { args = [], command, env, resources, supervisor: _supervisor, ...spawnRequest } = request;
   const child = await spawnLoggedProcess({
     ...spawnRequest,
     args: [
@@ -319,19 +323,25 @@ function normalizeDuration(value: number | undefined, fallback: number): number 
 
 function sidecarSpawnRequest(request: SidecarLaunchRequest): SpawnProcessRequest {
   const stamp = normalizeSidecarStamp(request.stamp);
-  const { args = [], command, env, resources, ...spawnRequest } = request;
+  const { args = [], command, env, resources, supervisor, ...spawnRequest } = request;
   const preparedEnv = prepareSidecarLaunchEnvironment(env ?? process.env, resources);
-  const supervisorEntry = import.meta.url.endsWith(".ts")
+  if (supervisor != null && (
+    !isAbsolute(supervisor.command)
+    || resolve(supervisor.command) !== supervisor.command
+    || !isAbsolute(supervisor.entrypoint)
+    || resolve(supervisor.entrypoint) !== supervisor.entrypoint
+  )) throw new Error("Sidecar supervisor binding must contain absolute normalized paths");
+  const supervisorEntry = supervisor?.entrypoint ?? (import.meta.url.endsWith(".ts")
     ? fileURLToPath(new URL("./supervisor.ts", import.meta.url))
-    : fileURLToPath(new URL("./supervisor.mjs", import.meta.url));
+    : fileURLToPath(new URL("./supervisor.mjs", import.meta.url)));
   return {
     ...spawnRequest,
     args: [
-      ...(import.meta.url.endsWith(".ts") ? ["--import", "tsx"] : []),
+      ...(supervisor == null && import.meta.url.endsWith(".ts") ? ["--import", "tsx"] : []),
       supervisorEntry,
       ...createProcessStampArgs(stamp, SIDECAR_STAMP_CONTRACT),
     ],
-    command: process.execPath,
+    command: supervisor?.command ?? process.execPath,
     env: {
       ...preparedEnv,
       ELECTRON_RUN_AS_NODE: "1",

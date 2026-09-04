@@ -372,6 +372,21 @@ describe("normalized sidecar client", () => {
 });
 
 describe("server-side atomic operations", () => {
+  it("rejects an unbound supervisor path before spawning", async () => {
+    await expect(launchSidecar({
+      args: ["/unused/target.mjs"],
+      command: process.execPath,
+      resources: {
+        dataRoot: "/tmp/open-design-invalid-supervisor",
+        ownerPid: null,
+        port: 0,
+        runtimeRoot: "/tmp/open-design-invalid-supervisor-runtime",
+      },
+      stamp: { ...stamp, namespace: `invalid-supervisor-${process.pid}` },
+      supervisor: { command: process.execPath, entrypoint: "relative-supervisor.mjs" },
+    })).rejects.toThrow("absolute normalized paths");
+  });
+
   it("keeps an uncommitted launcher outside generation discovery", async () => {
     const fixture = fileURLToPath(new URL("./fixtures/stamped-child.ts", import.meta.url));
     const launcherStamp = { ...stamp, namespace: `launcher-role-${process.pid}` };

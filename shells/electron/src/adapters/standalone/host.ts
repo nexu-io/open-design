@@ -41,6 +41,7 @@ type HostConfig = Readonly<{
   hostPath: string;
   hostSha256: string;
   supervisorSha256: string;
+  supervisorPath: string;
   shell: Readonly<{ type: string; version: string; buildHash: string; digest: string }>;
 }>;
 
@@ -49,7 +50,7 @@ function readConfig(): HostConfig {
   if (serialized == null) throw new Error(`${ELECTRON_STANDALONE_HOST_CONFIG_ENV} is required`);
   const value = JSON.parse(serialized) as Partial<HostConfig>;
   const keys = Object.keys(value).sort();
-  if (JSON.stringify(keys) !== JSON.stringify(["hostPath", "hostSha256", "resourceRoot", "runtimeRoot", "schemaVersion", "scope", "shell", "storeRoot", "supervisorSha256"])) throw new Error("Electron Standalone host configuration fields are invalid");
+  if (JSON.stringify(keys) !== JSON.stringify(["hostPath", "hostSha256", "resourceRoot", "runtimeRoot", "schemaVersion", "scope", "shell", "storeRoot", "supervisorPath", "supervisorSha256"])) throw new Error("Electron Standalone host configuration fields are invalid");
   if (
     value.schemaVersion !== 1
     || value.scope == null
@@ -59,6 +60,7 @@ function readConfig(): HostConfig {
     || typeof value.runtimeRoot !== "string"
     || typeof value.resourceRoot !== "string"
     || typeof value.hostPath !== "string"
+    || typeof value.supervisorPath !== "string"
     || !/^[a-f0-9]{64}$/u.test(value.hostSha256 ?? "")
     || !/^[a-f0-9]{64}$/u.test(value.supervisorSha256 ?? "")
   ) throw new Error("Electron Standalone host configuration is invalid");
@@ -66,12 +68,13 @@ function readConfig(): HostConfig {
   const runtimeRoot = resolve(value.runtimeRoot);
   const resourceRoot = resolve(value.resourceRoot);
   const hostPath = resolve(value.hostPath);
-  if (storeRoot !== value.storeRoot || runtimeRoot !== value.runtimeRoot || resourceRoot !== value.resourceRoot || hostPath !== value.hostPath) throw new Error("Electron Standalone host paths must be absolute and normalized");
+  const supervisorPath = resolve(value.supervisorPath);
+  if (storeRoot !== value.storeRoot || runtimeRoot !== value.runtimeRoot || resourceRoot !== value.resourceRoot || hostPath !== value.hostPath || supervisorPath !== value.supervisorPath) throw new Error("Electron Standalone host paths must be absolute and normalized");
   if (value.shell == null || typeof value.shell !== "object" || Array.isArray(value.shell)
     || JSON.stringify(Object.keys(value.shell).sort()) !== JSON.stringify(["buildHash", "digest", "type", "version"])) throw new Error("Electron Standalone host Shell identity is invalid");
   const shell = value.shell as HostConfig["shell"];
   validateShellIdentity(shell);
-  return Object.freeze({ schemaVersion: 1, scope: Object.freeze({ ...value.scope }), storeRoot, runtimeRoot, resourceRoot, hostPath, hostSha256: value.hostSha256!, supervisorSha256: value.supervisorSha256!, shell: Object.freeze({ ...shell }) });
+  return Object.freeze({ schemaVersion: 1, scope: Object.freeze({ ...value.scope }), storeRoot, runtimeRoot, resourceRoot, hostPath, hostSha256: value.hostSha256!, supervisorPath, supervisorSha256: value.supervisorSha256!, shell: Object.freeze({ ...shell }) });
 }
 
 type PendingStart = Readonly<{
@@ -272,7 +275,13 @@ export async function runElectronStandaloneHost(): Promise<void> {
     throw new Error("Electron Standalone host configuration differs from its Sidecar stamp");
   }
   const resources = Object.freeze({ dataRoot: config.storeRoot, ownerPid: null, port: 0, runtimeRoot: config.runtimeRoot });
-  if (await bootstrapSidecarProcess(stamp, resources, { args: [config.hostPath], command: process.execPath, cwd: process.cwd(), env: process.env })) return;
+  if (await bootstrapSidecarProcess(stamp, resources, {
+    args: [config.hostPath],
+    command: process.execPath,
+    cwd: process.cwd(),
+    env: process.env,
+    supervisor: { command: process.execPath, entrypoint: config.supervisorPath },
+  })) return;
   let runtime: ElectronStandaloneHostRuntime | null = null;
   let client!: SidecarClient<ElectronStandaloneHostRuntime>;
   client = SidecarFactory.create<ElectronStandaloneHostRuntime>({

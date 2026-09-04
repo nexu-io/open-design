@@ -14,6 +14,7 @@ describe("Electron product shell", () => {
   it("keeps dev and pack as thin electron-kit entrypoints", async () => {
     const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as { scripts: Record<string, string> };
     expect(packageJson.scripts.dev).toBe("node ./scripts/dev.mjs");
+    expect(packageJson.scripts["exact:scene"]).toBe("node ./scripts/exact-scene.ts");
     expect(packageJson.scripts.pack).toBe("node ./scripts/pack.mjs");
     expect(packageJson.scripts.prepack).toBe(packageJson.scripts.pack);
     const [dev, pack] = await Promise.all([

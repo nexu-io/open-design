@@ -16,6 +16,11 @@ export type AssembleElectronSceneInput = Readonly<{
   rendererPreloadEntryPath: string;
   nodeCarrierLockPath: string;
   runtimeConfigPath: string;
+  standaloneBinding?: Readonly<{
+    target: string;
+    closureResourceName: string;
+    launcherResourceName: string;
+  }>;
 }>;
 
 const sceneResourceName = /^[a-z][a-z0-9.-]{0,127}$/u;
@@ -120,9 +125,26 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     ...resource,
     path: join(input.outputRoot, resource.name),
   }));
+  let standaloneBinding: Readonly<Record<string, unknown>> = Object.freeze({});
+  if (input.standaloneBinding != null) {
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(input.standaloneBinding.target)) throw new Error("invalid Electron Standalone scene target");
+    const closure = products.find(({ name }) => name === input.standaloneBinding!.closureResourceName);
+    const launcher = products.find(({ name }) => name === input.standaloneBinding!.launcherResourceName);
+    if (closure == null || launcher == null || !authorityResourceNames.has(closure.name) || !authorityResourceNames.has(launcher.name)) {
+      throw new Error("Electron Standalone scene binding must select exact authority resources");
+    }
+    standaloneBinding = Object.freeze({
+      target: input.standaloneBinding.target,
+      shellVersion: manifest.shell.version,
+      shellBuildHash: manifest.shell.buildHash,
+      closure: Object.freeze({ file: closure.name, sha256: closure.sha256, size: closure.size }),
+      standalone: Object.freeze({ entrypoint: launcher.name, sha256: launcher.sha256, size: launcher.size }),
+    });
+  }
   await writeFile(sceneManifestPath, `${JSON.stringify({
     schemaVersion: 1,
     operation: "electron.scene.build",
+    ...standaloneBinding,
     products,
   }, null, 2)}\n`, "utf8");
   const sceneManifestSha256 = createHash("sha256")
