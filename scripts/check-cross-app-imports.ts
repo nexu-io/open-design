@@ -329,6 +329,11 @@ export async function loadAppDirectoryRegistry(
     try {
       manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { name?: unknown };
     } catch (error) {
+      // An orphaned app directory (e.g. a leftover node_modules/ after the
+      // package was removed) has no manifest; it is not an app boundary and
+      // must not fail the whole guard run. Skip it instead of throwing.
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") continue;
       const reason = error instanceof Error ? error.message : String(error);
       throw new Error(`Failed to load app package manifest at ${manifestPath}: ${reason}`);
     }
