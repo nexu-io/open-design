@@ -82,6 +82,7 @@ describe("Electron product shell", () => {
     const composition = sources.filter(({ name }) => name.startsWith("composition/"));
     const definition = sources.find(({ name }) => name === "composition/definition.ts")!.source;
     expect(main).toContain('from "./composition/definition.js"');
+    expect(main).toContain('readFileSync(join(__dirname, "shell.json"');
     expect(main).not.toMatch(/config\/|adapters\/|ElectronFixture|scheduleElectronInstallerHandoff/u);
     expect(definition).toContain("createElectronStandaloneAuthorityFactory");
     expect(definition).not.toContain("createElectronFixtureStandaloneAuthorityFactory");

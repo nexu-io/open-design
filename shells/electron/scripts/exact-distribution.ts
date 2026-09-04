@@ -7,7 +7,7 @@ import { validateElectronShellManifest, type ElectronShellManifest } from "@open
 import { buildElectronDistribution, loadElectronScene } from "@open-design/electron-kit/distribution";
 import { canonicalJson } from "@open-design/standalone";
 
-import { loadElectronStandaloneInstallation, type ElectronStandaloneTarget } from "../src/adapters/standalone/installation.js";
+import { loadElectronStandaloneInstallation, type ElectronStandaloneTarget } from "../src/adapters/standalone/installation.ts";
 
 type Request = Readonly<{
   schemaVersion: 1;
@@ -63,7 +63,9 @@ if (sceneManifest.target !== input.target || typeof sceneManifest.closure?.file 
 }
 const manifest = validateElectronShellManifest(JSON.parse(await readFile(scene.shellManifestPath, "utf8")) as ElectronShellManifest);
 const contentEnvelope = JSON.parse(await readFile(input.contentMetadataFile, "utf8")) as { metadata?: { channel?: unknown; releaseVersion?: unknown } };
-if (contentEnvelope.metadata?.channel !== manifest.channel || contentEnvelope.metadata.releaseVersion !== manifest.version) throw new Error("Electron exact content differs from its Shell release identity");
+if (contentEnvelope.metadata?.channel !== manifest.channel || typeof contentEnvelope.metadata.releaseVersion !== "string") {
+  throw new Error("Electron exact content differs from its Shell channel identity");
+}
 
 const stagingRoot = resolve(dirname(input.outputDirectory), `electron-installed-${input.target}`);
 await rm(stagingRoot, { force: true, recursive: true });
@@ -85,7 +87,7 @@ for (const resource of [host, supervisor, closure, launcher]) await copyFile(res
 const installation = Object.freeze({
   schemaVersion: 1,
   channel: manifest.channel,
-  releaseVersion: manifest.version,
+  releaseVersion: contentEnvelope.metadata.releaseVersion,
   target: input.target,
   host: await descriptor(host.path, host.name),
   supervisor: await descriptor(supervisor.path, supervisor.name),

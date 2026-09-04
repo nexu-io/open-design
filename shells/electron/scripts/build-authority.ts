@@ -3,9 +3,11 @@ import { lstat, mkdir, readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { build } from "esbuild";
+import { build, type BuildOptions } from "esbuild";
 
-export async function buildElectronStandaloneAuthority(outputRoot) {
+type InstalledResource = Readonly<{ file: string; sha256: string; size: number }>;
+
+export async function buildElectronStandaloneAuthority(outputRoot: string) {
   const root = resolve(outputRoot);
   await mkdir(root, { recursive: true });
   const hostPath = resolve(root, "standalone-host.mjs");
@@ -15,7 +17,7 @@ export async function buildElectronStandaloneAuthority(outputRoot) {
     format: "esm",
     platform: "node",
     target: "node24",
-  };
+  } satisfies BuildOptions;
   await Promise.all([
     build({
       ...shared,
@@ -36,29 +38,34 @@ export async function buildElectronStandaloneAuthority(outputRoot) {
   });
 }
 
-const digestPattern = /^[a-f0-9]{64}$/;
-const resourceNamePattern = /^[a-z][a-z0-9.-]{0,127}$/;
+const digestPattern = /^[a-f0-9]{64}$/u;
+const resourceNamePattern = /^[a-z][a-z0-9.-]{0,127}$/u;
 
-async function verifiedResource(root, descriptor, label) {
-  if (descriptor == null || typeof descriptor !== "object" || Array.isArray(descriptor)) throw new Error(`Electron Standalone ${label} descriptor is invalid`);
-  const { file, sha256, size } = descriptor;
-  if (typeof file !== "string" || basename(file) !== file || !resourceNamePattern.test(file) || !digestPattern.test(sha256) || !Number.isSafeInteger(size) || size < 1) {
-    throw new Error(`Electron Standalone ${label} descriptor is invalid`);
-  }
-  const path = join(root, file);
+function installedResource(value: unknown, label: string): InstalledResource {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error(`Electron Standalone ${label} descriptor is invalid`);
+  const { file, sha256, size } = value as Partial<InstalledResource>;
+  if (typeof file !== "string" || basename(file) !== file || !resourceNamePattern.test(file)
+    || typeof sha256 !== "string" || !digestPattern.test(sha256)
+    || !Number.isSafeInteger(size) || (size as number) < 1) throw new Error(`Electron Standalone ${label} descriptor is invalid`);
+  return Object.freeze({ file, sha256, size: size as number });
+}
+
+async function verifiedResource(root: string, value: unknown, label: string) {
+  const descriptor = installedResource(value, label);
+  const path = join(root, descriptor.file);
   const details = await lstat(path);
-  if (!details.isFile() || details.isSymbolicLink() || details.size !== size) throw new Error(`Electron Standalone ${label} resource differs from its descriptor`);
+  if (!details.isFile() || details.isSymbolicLink() || details.size !== descriptor.size) throw new Error(`Electron Standalone ${label} resource differs from its descriptor`);
   const bytes = await readFile(path);
-  if (createHash("sha256").update(bytes).digest("hex") !== sha256) throw new Error(`Electron Standalone ${label} resource failed its digest`);
-  return Object.freeze({ name: file, path });
+  if (createHash("sha256").update(bytes).digest("hex") !== descriptor.sha256) throw new Error(`Electron Standalone ${label} resource failed its digest`);
+  return Object.freeze({ name: descriptor.file, path });
 }
 
 /** Resolve one complete, immutable installed authority resource set for scene assembly. */
-export async function loadElectronStandaloneAuthorityResources(resourceRoot) {
+export async function loadElectronStandaloneAuthorityResources(resourceRoot: string) {
   const root = resolve(resourceRoot);
   const installationPath = join(root, "standalone-installation.json");
-  const installation = JSON.parse(await readFile(installationPath, "utf8"));
-  if (installation?.schemaVersion !== 1 || !Array.isArray(installation.seeds) || installation.seeds.length === 0) throw new Error("Electron Standalone installation declaration is invalid");
+  const installation = JSON.parse(await readFile(installationPath, "utf8")) as Record<string, unknown>;
+  if (installation.schemaVersion !== 1 || !Array.isArray(installation.seeds) || installation.seeds.length === 0) throw new Error("Electron Standalone installation declaration is invalid");
   const resources = [
     Object.freeze({ name: "standalone-installation.json", path: installationPath }),
     await verifiedResource(root, installation.host, "host"),
@@ -74,6 +81,6 @@ export async function loadElectronStandaloneAuthorityResources(resourceRoot) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const outputRoot = process.argv[2];
-  if (outputRoot == null) throw new Error("usage: build-authority.mjs <output-root>");
+  if (outputRoot == null) throw new Error("usage: build-authority.ts <output-root>");
   process.stdout.write(`${JSON.stringify(await buildElectronStandaloneAuthority(outputRoot), null, 2)}\n`);
 }

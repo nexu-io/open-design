@@ -54,6 +54,11 @@ type HostStatus = Readonly<{
   shell: ElectronShellManifest["shell"];
 }>;
 
+export function isElectronStandaloneScope(manifest: ElectronShellManifest, scope: Readonly<{ channel: string; namespace: string }>): boolean {
+  return scope.channel === manifest.channel
+    && (scope.namespace === manifest.namespace || scope.namespace === `${manifest.namespace}-headless`);
+}
+
 function projectRuntimeStatus(status: Awaited<ReturnType<ElectronStandaloneControlClient["status"]>>, bindingDigest: string, generationId: string): StandaloneRuntimeStatus {
   return Object.freeze({
     bindingDigest,
@@ -87,7 +92,7 @@ export function createElectronStandaloneAuthorityFactory(
   if (runtimeResource == null) throw new Error("Electron physical resource set lacks standalone-runtime");
   return ({ officialNodeExecutablePath, observeFeedback, resourceRoot, runtimeRoot }) => ({
     async prepare(request) {
-      if (request.scope.channel !== manifest.channel || request.scope.namespace !== manifest.namespace) throw new Error("Electron Standalone authority request escaped its Shell scope");
+      if (!isElectronStandaloneScope(manifest, request.scope)) throw new Error("Electron Standalone authority request escaped its Shell scope");
       if (request.releaseVersion !== manifest.version || canonicalJson(request.shell) !== canonicalJson(manifest.shell)) throw new Error("Electron Standalone authority request escaped its Shell identity");
       const installation = await loadElectronStandaloneInstallation({ resourceRoot, channel: request.scope.channel, target: resolveElectronStandaloneTarget() });
       const storeRoot = join(runtimeRoot, "standalone-store");

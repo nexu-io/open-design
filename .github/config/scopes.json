@@ -70,8 +70,8 @@
       "exact": ["docs/agent-adapters.md"],
       "exclude": ["match://daemon-runtime-definition", "prefix://apps/daemon/src/sidecar/"]
     },
-    "terminal-exact": {
-      "prefixes": ["apps/closure/", "packages/standalone/", "shells/terminal/"],
+    "shell-exact": {
+      "prefixes": ["apps/closure/", "packages/electron-kit/", "packages/sidecar/", "packages/standalone/", "shells/electron/", "shells/terminal/"],
       "exact": [".github/scripts/pack.py", ".github/scripts/release.py", ".github/workflows/convergence-exact.atom.yml", ".github/workflows/release-exact.yml"]
     },
     "medium-exempt": {
@@ -87,10 +87,10 @@
       "include": ["match://certain-exempt", "match://packaged-leaf", "match://daemon-core"]
     },
     "workspace-exempt": {
-      "include": ["match://certain-exempt", "match://medium-exempt", "match://packaged-leaf", "match://daemon-core", "match://terminal-exact"]
+      "include": ["match://certain-exempt", "match://medium-exempt", "match://packaged-leaf", "match://daemon-core", "match://shell-exact"]
     },
     "ui-critical-exempt": {
-      "include": ["match://certain-exempt", "match://medium-exempt", "match://daemon-core", "match://terminal-exact"],
+      "include": ["match://certain-exempt", "match://medium-exempt", "match://daemon-core", "match://shell-exact"],
       "prefixes": ["apps/desktop/", "apps/packaged/", "tools/pack/"]
     }
   },
@@ -166,8 +166,8 @@
       "effects": ["tools_pack_tests_required"], "confidence": "medium"
     },
     {
-      "id": "terminal-exact-sources",
-      "match": { "include": ["match://terminal-exact"] },
+      "id": "shell-exact-sources",
+      "match": { "include": ["match://shell-exact"] },
       "effects": [], "confidence": "certain"
     },
     {

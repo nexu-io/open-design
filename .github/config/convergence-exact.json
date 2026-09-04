@@ -22,15 +22,40 @@
       "packages/sidecar/",
       "packages/standalone/",
       "shells/terminal/"
+    ],
+    "electron-scene": [
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "scripts/postinstall.mjs",
+      "apps/closure/",
+      "packages/download/",
+      "packages/electron-kit/",
+      "packages/platform/",
+      "packages/sidecar/",
+      "packages/standalone/",
+      "shells/electron/"
     ]
   },
   "workflows": {
     "release-exact": {
-      "policy": "terminal-scene-v1",
+      "policy": "shell-scenes-v2",
       "workloads": {
         "terminal_scene_darwin_arm64": {
           "inputs": ["suite://terminal-scene"],
           "runnerClass": "terminal_darwin_arm64",
+          "products": "manifest",
+          "reusable": true
+        },
+        "electron_scene_darwin_arm64": {
+          "inputs": ["suite://electron-scene"],
+          "runnerClass": "electron_darwin_arm64",
+          "products": "manifest",
+          "reusable": true
+        },
+        "electron_scene_win32_x64": {
+          "inputs": ["suite://electron-scene"],
+          "runnerClass": "electron_win32_x64",
           "products": "manifest",
           "reusable": true
         }

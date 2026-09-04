@@ -8,8 +8,8 @@ import { stopSidecar } from "@open-design/sidecar";
 import { canonicalJson, SHELL_UPDATE_ALGEBRA, signStandaloneMetadata, type StandaloneMetadata } from "@open-design/standalone";
 import type { ElectronShellManifest } from "@open-design/electron-kit/runtime";
 
-import { buildElectronStandaloneAuthority } from "../scripts/build-authority.mjs";
-import { createElectronStandaloneAuthorityFactory } from "@/adapters/standalone/authority.js";
+import { buildElectronStandaloneAuthority } from "../scripts/build-authority.ts";
+import { createElectronStandaloneAuthorityFactory, isElectronStandaloneScope } from "@/adapters/standalone/authority.js";
 import { bindElectronPhysicalResourceSet } from "@/adapters/standalone/physical-resources.js";
 import { ElectronStandaloneInstallerClaimLedger } from "@/adapters/standalone/installer-claim.js";
 import { ElectronStandaloneShellUpdaterLedger } from "@/adapters/standalone/shell-updater-ledger.js";
@@ -27,6 +27,14 @@ const physicalResources = {
 } as const;
 
 describe("Electron production Standalone authority", () => {
+  it("accepts only the interactive and derived headless namespaces for its channel", () => {
+    const manifest = { channel: "betahyx", namespace: "electron-foundation" } as ElectronShellManifest;
+    expect(isElectronStandaloneScope(manifest, { channel: "betahyx", namespace: "electron-foundation" })).toBe(true);
+    expect(isElectronStandaloneScope(manifest, { channel: "betahyx", namespace: "electron-foundation-headless" })).toBe(true);
+    expect(isElectronStandaloneScope(manifest, { channel: "dev", namespace: "electron-foundation-headless" })).toBe(false);
+    expect(isElectronStandaloneScope(manifest, { channel: "betahyx", namespace: "other-headless" })).toBe(false);
+  });
+
   it("cold-starts a signed offline generation through official Node and a supervised Sidecar host", async () => {
     const root = await mkdtemp(join(tmpdir(), "electron-standalone-authority-"));
     roots.push(root);

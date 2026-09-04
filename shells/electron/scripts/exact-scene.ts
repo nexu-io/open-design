@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { assembleElectronScene } from "@open-design/electron-kit/distribution";
 
-import { buildElectronStandaloneAuthority } from "./build-authority.mjs";
+import { buildElectronStandaloneAuthority } from "./build-authority.ts";
 
 type Request = Readonly<{
   schemaVersion: 1;

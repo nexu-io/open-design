@@ -14,7 +14,7 @@ import {
   ELECTRON_STANDALONE_INSTALLATION_FILE,
   loadElectronStandaloneInstallation,
 } from "@/adapters/standalone/installation.js";
-import { loadElectronStandaloneAuthorityResources } from "../scripts/build-authority.mjs";
+import { loadElectronStandaloneAuthorityResources } from "../scripts/build-authority.ts";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true }))); });

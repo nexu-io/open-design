@@ -29,6 +29,64 @@ describe('exact release scripts', () => {
     expect(workflow).not.toContain('datetime.now');
   });
 
+  it('keeps Terminal channels intact and adds the complete betahyx Electron topology', async () => {
+    const workflow = await readFile(resolve('../.github/workflows/release-exact.yml'), 'utf8');
+    const convergence = JSON.parse(await readFile(resolve('../.github/config/convergence-exact.json'), 'utf8'));
+    expect(workflow).toContain('options: [somechan, somepreview, betahyx]');
+    expect(workflow).toContain('electron_scene_darwin_arm64');
+    expect(workflow).toContain('electron_scene_win32_x64');
+    expect(workflow).toContain('@open-design/shell-electron exact:scene');
+    expect(workflow).toContain('@open-design/shell-electron exact:distribution');
+    expect(workflow).toContain('Install and exercise macOS Electron Shell');
+    expect(workflow).toContain('Install and exercise Windows Electron Shell');
+    expect(workflow).toContain('exact-${{ matrix.shell }}-scene-${{ matrix.target }}-${{ inputs.source_sha }}');
+    expect(convergence.workflows['release-exact']).toMatchObject({
+      policy: 'shell-scenes-v2',
+      workloads: {
+        terminal_scene_darwin_arm64: { reusable: true },
+        electron_scene_darwin_arm64: { runnerClass: 'electron_darwin_arm64', reusable: true },
+        electron_scene_win32_x64: { runnerClass: 'electron_win32_x64', reusable: true },
+      },
+    });
+  });
+
+  it('binds Electron acceptance to the installed exact resource set and real headless exit', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'exact-electron-acceptance-'));
+    roots.push(root);
+    const publishedRoot = join(root, 'published');
+    const installedRoot = join(root, 'installed');
+    await Promise.all([mkdir(publishedRoot), mkdir(installedRoot)]);
+    const shell = { type: 'electron', version: '0.1.0', buildHash: 'a'.repeat(64) };
+    const artifact = { url: 'https://releases.invalid/app.dmg', sha256: 'b'.repeat(64), size: 7, mediaType: 'application/x-apple-diskimage' };
+    const shellMetadata = { url: 'https://releases.invalid/electron-metadata.json', sha256: 'c'.repeat(64), size: 11 };
+    const descriptor = async (file: string, body: string) => {
+      const path = join(installedRoot, file);
+      await writeFile(path, body);
+      return { file, sha256: createHash('sha256').update(body).digest('hex'), size: Buffer.byteLength(body) };
+    };
+    const installation = {
+      schemaVersion: 1, channel: 'betahyx', releaseVersion: '0.1.0-betahyx.1', target: 'darwin-arm64',
+      host: await descriptor('standalone-host.mjs', 'host'),
+      supervisor: await descriptor('supervisor.mjs', 'supervisor'),
+      content: await descriptor('standalone-content.json', 'content'),
+      trust: await descriptor('standalone-trust.json', 'trust'),
+      seeds: [await descriptor('closure.mjs', 'closure')],
+      update: { channelHeadUrl: 'https://releases.invalid/betahyx/latest/channel-head.json' },
+    };
+    await writeFile(join(installedRoot, 'standalone-installation.json'), JSON.stringify(installation));
+    await writeFile(join(publishedRoot, 'publish-receipt.json'), JSON.stringify({ channel: 'betahyx', releaseVersion: '0.1.0-betahyx.1', sourceCommit: 'd'.repeat(40) }));
+    await writeFile(join(root, 'required-acceptance.json'), JSON.stringify({ shell, target: 'darwin-arm64', artifact, shellMetadata }));
+    const runtimeLog = join(root, 'electron-runtime.jsonl');
+    await writeFile(runtimeLog, [
+      { attemptId: 'installed-attempt', event: 'startup.committed' },
+      { attemptId: 'installed-attempt', event: 'shutdown.complete' },
+    ].map((event) => JSON.stringify(event)).join('\n') + '\n');
+    const result = await runPython('.github/scripts/release/installed_acceptance.py', '--root', root, '--installed-root', installedRoot, '--shell-type', 'electron', '--target', 'darwin-arm64', '--runtime-log', runtimeLog);
+    expect(result).toMatchObject({ status: 0, stderr: '' });
+    const credential = JSON.parse(await readFile(join(root, 'acceptance', 'electron-darwin-arm64.json'), 'utf8'));
+    expect(credential).toMatchObject({ status: 'accepted', shell, installed: { shell, target: 'darwin-arm64', proof: { runtime: { outcome: 'ready', attemptId: 'installed-attempt' } } } });
+  });
+
   it('rejects a reused Terminal scene for a different standalone version', async () => {
     const root = await mkdtemp(join(tmpdir(), 'exact-pack-version-'));
     roots.push(root);

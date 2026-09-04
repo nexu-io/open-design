@@ -9,16 +9,73 @@ def read_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8-sig"))
 
 
+def verified_file(root: Path, value: dict, label: str) -> dict:
+    path = root / str(value.get("file", ""))
+    body = path.read_bytes()
+    if hashlib.sha256(body).hexdigest() != value.get("sha256") or len(body) != value.get("size"):
+        raise SystemExit(f"installed Electron {label} binding mismatch")
+    return {"file": path.name, "sha256": value["sha256"], "size": value["size"]}
+
+
+def electron_proof(args, published: dict, required: dict) -> dict:
+    installation_path = args.installed_root / "standalone-installation.json"
+    installation = read_json(installation_path)
+    if (installation.get("schemaVersion") != 1 or installation.get("channel") != published["channel"]
+            or installation.get("releaseVersion") != published["releaseVersion"] or installation.get("target") != required["target"]):
+        raise SystemExit("installed Electron release identity mismatch")
+    files = {
+        "host": verified_file(args.installed_root, installation.get("host", {}), "host"),
+        "supervisor": verified_file(args.installed_root, installation.get("supervisor", {}), "supervisor"),
+        "content": verified_file(args.installed_root, installation.get("content", {}), "content"),
+        "trust": verified_file(args.installed_root, installation.get("trust", {}), "trust"),
+        "seeds": [verified_file(args.installed_root, value, f"seed {index}") for index, value in enumerate(installation.get("seeds", []))],
+    }
+    if args.runtime_log is None:
+        raise SystemExit("installed Electron acceptance requires its runtime log")
+    attempts = {}
+    for line in args.runtime_log.read_text(encoding="utf-8-sig").splitlines():
+        event = json.loads(line)
+        attempts.setdefault(event.get("attemptId"), []).append(event.get("event"))
+    committed = next(((attempt_id, events) for attempt_id, events in attempts.items()
+                      if "startup.committed" in events and "shutdown.complete" in events and "startup.failed" not in events), None)
+    if committed is None:
+        raise SystemExit("installed Electron headless startup did not commit and shut down cleanly")
+    runtime = {"outcome": "ready", "attemptId": committed[0], "events": committed[1]}
+    return {
+        "shell": required["shell"],
+        "target": installation["target"],
+        "proof": {
+            "installationSha256": hashlib.sha256(installation_path.read_bytes()).hexdigest(),
+            "files": files,
+            "runtime": runtime,
+        },
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--installed-root", type=Path, required=True)
     parser.add_argument("--shell-type", required=True)
     parser.add_argument("--target", required=True)
+    parser.add_argument("--runtime-log", type=Path)
     args = parser.parse_args()
 
     published = read_json(args.root / "published" / "publish-receipt.json")
     required = read_json(args.root / "required-acceptance.json")
+    shell = required["shell"]
+    if args.shell_type == "electron":
+        credential = {
+            "schemaVersion": 1, "operation": "exact.acceptance", "status": "accepted",
+            "channel": published["channel"], "releaseVersion": published["releaseVersion"], "sourceCommit": published["sourceCommit"],
+            "shell": shell, "target": required["target"], "artifact": required["artifact"], "shellMetadata": required["shellMetadata"],
+            "installed": electron_proof(args, published, required),
+        }
+        destination = args.root / "acceptance"
+        destination.mkdir()
+        destination.joinpath(f"{args.shell_type}-{args.target}.json").write_text(json.dumps(credential, sort_keys=True, separators=(",", ":")) + "\n")
+        return
+
     proof = read_json(args.root / "installed-proof.json")
     manifest_path = args.installed_root / "install-manifest.json"
     manifest = read_json(manifest_path)
@@ -26,7 +83,6 @@ def main() -> None:
     manifest_digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     runtime = {operation: read_json(args.root / f"runtime-{operation}.json") for operation in ("start", "status", "stop")}
 
-    shell = required["shell"]
     if manifest.get("target") != required["target"] or manifest.get("shell") != shell:
         raise SystemExit("installed Shell manifest does not bind the published contribution")
     if manifest_digest != sidecar_digest:

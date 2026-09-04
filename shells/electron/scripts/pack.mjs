@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 
 import { packElectronShell } from "@open-design/electron-kit/pack";
-import { loadElectronStandaloneAuthorityResources } from "./build-authority.mjs";
+import { loadElectronStandaloneAuthorityResources } from "./build-authority.ts";
 
 const authorityResourceRoot = process.env.OD_ELECTRON_STANDALONE_RESOURCE_ROOT;
 if (authorityResourceRoot == null) throw new Error("OD_ELECTRON_STANDALONE_RESOURCE_ROOT is required; fixture authority fallback has been removed");

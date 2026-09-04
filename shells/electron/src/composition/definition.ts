@@ -19,8 +19,8 @@ import { createInstallerHandoffAdapter } from "../adapters/updater/installer.js"
 import { createWindowsCommittedObserver } from "../adapters/windows/lifecycle.js";
 import { assertShellWarmupBindings } from "./warmup-bindings.js";
 
-export function createElectronShellDefinition(): ElectronShellDefinition {
-  const shellManifest = manifest as ElectronShellManifest;
+export function createElectronShellDefinition(installedManifest: ElectronShellManifest = manifest as ElectronShellManifest): ElectronShellDefinition {
+  const shellManifest = installedManifest;
   const runtimeConfig = runtime as ElectronRuntimeConfig;
   const placeholder = createPlaceholderRendererAdapter(shellManifest.window.title);
   return Object.freeze({
