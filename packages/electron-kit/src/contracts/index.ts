@@ -63,6 +63,24 @@ export type ElectronRendererMountAcknowledgement = Readonly<{
   nonce: string;
 }>;
 
+export type ElectronStandaloneContentUpdateApplication =
+  | Readonly<{
+      status: "applied";
+      binding: StandaloneGenerationBinding;
+      generation: GenerationRecord;
+      lifecycle: LifecycleStatus;
+    }>
+  | Readonly<{
+      status: "blocked";
+      reason: "occupied" | "transition-active" | "unavailable";
+      occupants: readonly StandaloneLifecycleOccupant[];
+    }>;
+
+export interface ElectronStandaloneContentUpdaterPort {
+  prepareLatest(activationPolicy: UpdateActivationPolicy): Promise<UpdatePreparation>;
+  applyNow(options?: Readonly<{ force?: boolean }>): Promise<ElectronStandaloneContentUpdateApplication>;
+}
+
 export type ElectronShellRenderer = Readonly<{
   windowOptions?(input: Readonly<{
     acknowledgement: ElectronRendererMountAcknowledgement;
@@ -75,6 +93,7 @@ export type ElectronShellRenderer = Readonly<{
     manifest: ElectronShellManifest;
     preflight: ElectronPreflightResult;
     presentation: "headless" | "interactive";
+    contentUpdater: ElectronStandaloneContentUpdaterPort;
     window: BrowserWindow;
   }>): Readonly<{ dispose(): void | Promise<void> }> | Promise<Readonly<{ dispose(): void | Promise<void> }>>;
 }>;
@@ -83,22 +102,7 @@ export type ElectronStandalonePreparedRuntime = Readonly<{
   binding: StandaloneGenerationBinding;
   generation: GenerationRecord;
   updater: StandaloneShellUpdaterPort;
-  contentUpdater: Readonly<{
-    prepareLatest(activationPolicy: UpdateActivationPolicy): Promise<UpdatePreparation>;
-    applyNow(options?: Readonly<{ force?: boolean }>): Promise<
-      | Readonly<{
-          status: "applied";
-          binding: StandaloneGenerationBinding;
-          generation: GenerationRecord;
-          lifecycle: LifecycleStatus;
-        }>
-      | Readonly<{
-          status: "blocked";
-          reason: "occupied" | "transition-active" | "unavailable";
-          occupants: readonly StandaloneLifecycleOccupant[];
-        }>
-    >;
-  }>;
+  contentUpdater: ElectronStandaloneContentUpdaterPort;
   armShellInstallation(input: Readonly<{
     request: ElectronInstallerHandoffRequest;
     install(request: ElectronInstallerHandoffRequest): ElectronInstallerHandoffReceipt | Promise<ElectronInstallerHandoffReceipt>;

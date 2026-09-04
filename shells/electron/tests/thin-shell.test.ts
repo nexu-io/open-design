@@ -126,6 +126,9 @@ describe("Electron product shell", () => {
     expect(rendererSource).not.toContain("executeJavaScript");
     expect(preloadSource).toContain("@open-design/electron-kit/renderer");
     expect(preloadSource).toContain("ipcRenderer.send");
+    expect(preloadSource).toContain("ELECTRON_CONTENT_UPDATE_CHANNELS");
+    expect(rendererSource).toContain("createElectronContentUpdateHandler(contentUpdater)");
+    expect(rendererSource).toContain("sender === window.webContents");
     expect(kitRuntimeSource).not.toMatch(/Electron Shell Foundation|electronShellMounted|electronKitMounted/u);
     expect(kitRuntimeSource).not.toMatch(/lifecycle\.(?:heartbeat|release|status|stop)/u);
     expect(runtime.preflight.atoms.flatMap((atom) => atom.hosts ?? [])).toEqual(["127.0.0.1", "localhost"]);
