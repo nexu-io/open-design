@@ -11,6 +11,7 @@ import {
 } from "@open-design/sidecar";
 import {
   FossilHandoffHost,
+  initialShellUpdaterSnapshot,
   type StandaloneHandoffRequest,
   type StandaloneRuntimeHandle,
   type StandaloneRuntimeCommand,
@@ -31,6 +32,8 @@ type HostConfig = Readonly<{
   storeRoot: string;
   runtimeRoot: string;
   hostPath: string;
+  hostSha256: string;
+  supervisorSha256: string;
 }>;
 
 function readConfig(): HostConfig {
@@ -38,7 +41,7 @@ function readConfig(): HostConfig {
   if (serialized == null) throw new Error(`${ELECTRON_STANDALONE_HOST_CONFIG_ENV} is required`);
   const value = JSON.parse(serialized) as Partial<HostConfig>;
   const keys = Object.keys(value).sort();
-  if (JSON.stringify(keys) !== JSON.stringify(["hostPath", "runtimeRoot", "schemaVersion", "scope", "storeRoot"])) throw new Error("Electron Standalone host configuration fields are invalid");
+  if (JSON.stringify(keys) !== JSON.stringify(["hostPath", "hostSha256", "runtimeRoot", "schemaVersion", "scope", "storeRoot", "supervisorSha256"])) throw new Error("Electron Standalone host configuration fields are invalid");
   if (
     value.schemaVersion !== 1
     || value.scope == null
@@ -47,12 +50,14 @@ function readConfig(): HostConfig {
     || typeof value.storeRoot !== "string"
     || typeof value.runtimeRoot !== "string"
     || typeof value.hostPath !== "string"
+    || !/^[a-f0-9]{64}$/u.test(value.hostSha256 ?? "")
+    || !/^[a-f0-9]{64}$/u.test(value.supervisorSha256 ?? "")
   ) throw new Error("Electron Standalone host configuration is invalid");
   const storeRoot = resolve(value.storeRoot);
   const runtimeRoot = resolve(value.runtimeRoot);
   const hostPath = resolve(value.hostPath);
   if (storeRoot !== value.storeRoot || runtimeRoot !== value.runtimeRoot || hostPath !== value.hostPath) throw new Error("Electron Standalone host paths must be absolute and normalized");
-  return Object.freeze({ schemaVersion: 1, scope: Object.freeze({ ...value.scope }), storeRoot, runtimeRoot, hostPath });
+  return Object.freeze({ schemaVersion: 1, scope: Object.freeze({ ...value.scope }), storeRoot, runtimeRoot, hostPath, hostSha256: value.hostSha256!, supervisorSha256: value.supervisorSha256! });
 }
 
 type PendingStart = Readonly<{
@@ -118,6 +123,14 @@ class ElectronStandaloneHostRuntime {
       if (active == null) throw new Error("Electron Standalone runtime attachment is unavailable");
       await this.lifecycle.heartbeat(active.attachment, request.attachmentCapability);
       return await active.handle.invoke(request.command);
+    }
+    if (request.operation === "updater.read") return initialShellUpdaterSnapshot(request.shellType);
+    if (request.operation === "updater.wait") {
+      await new Promise((resolveWait) => setTimeout(resolveWait, request.timeoutMs));
+      return initialShellUpdaterSnapshot(request.shellType);
+    }
+    if (request.operation === "updater.invoke" || request.operation === "updater.confirm-installed") {
+      return Object.freeze({ outcome: "unsupported", snapshot: initialShellUpdaterSnapshot(request.shellType) });
     }
     throw new Error(`Electron Standalone host operation is not implemented: ${request.operation}`);
   }
@@ -217,6 +230,8 @@ export async function runElectronStandaloneHost(): Promise<void> {
           control: "ready",
           generationPid: client.resources.pid,
           hostPid: process.pid,
+          hostSha256: config.hostSha256,
+          supervisorSha256: config.supervisorSha256,
           dataRoot: client.resources.dataRoot,
           runtimeRoot: client.resources.runtimeRoot,
           lifecycle: await active.lifecycle.status(),

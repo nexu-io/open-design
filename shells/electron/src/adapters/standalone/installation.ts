@@ -45,6 +45,15 @@ const keyIdPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/u;
 const safeFlatFilePattern = /^[a-z0-9][a-z0-9._-]{0,127}$/u;
 const supportedTargets = new Set<ElectronStandaloneTarget>(["darwin-arm64", "darwin-x64", "win32-x64"]);
 
+export function resolveElectronStandaloneTarget(
+  platform: NodeJS.Platform = process.platform,
+  arch: string = process.arch,
+): ElectronStandaloneTarget {
+  const target = platform === "win32" ? `win32-${arch}` : `${platform}-${arch}`;
+  if (!supportedTargets.has(target as ElectronStandaloneTarget)) throw new Error(`unsupported Electron Standalone target: ${target}`);
+  return target as ElectronStandaloneTarget;
+}
+
 function record(value: unknown, label: string): Record<string, unknown> {
   if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be an object`);
   return value as Record<string, unknown>;

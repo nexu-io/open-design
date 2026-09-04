@@ -224,7 +224,9 @@ export function validateElectronStandaloneControlRequest(
   if (value.operation === "updater.wait") {
     exactKeys(value, ["afterRevision", "operation", "schemaVersion", "scope", "shellType", "timeoutMs"], "Electron Standalone updater.wait request");
     if (typeof value.shellType !== "string" || !shellTypePattern.test(value.shellType)) throw new Error("Electron Standalone updater Shell type is invalid");
-    return Object.freeze({ ...base, operation: value.operation, shellType: value.shellType, afterRevision: integer(value.afterRevision, "Electron Standalone updater revision"), timeoutMs: integer(value.timeoutMs, "Electron Standalone updater timeout", 1) });
+    const timeoutMs = integer(value.timeoutMs, "Electron Standalone updater timeout", 1);
+    if (timeoutMs > 60_000) throw new Error("Electron Standalone updater timeout is too large");
+    return Object.freeze({ ...base, operation: value.operation, shellType: value.shellType, afterRevision: integer(value.afterRevision, "Electron Standalone updater revision"), timeoutMs });
   }
   if (value.operation === "updater.invoke") {
     exactKeys(value, ["action", "operation", "schemaVersion", "scope", "shellType"], "Electron Standalone updater.invoke request");
