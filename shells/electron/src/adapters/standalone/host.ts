@@ -167,6 +167,9 @@ class ElectronStandaloneHostRuntime {
       this.#handles.clear();
       return transition;
     }
+    if (request.operation === "transition.complete-start") {
+      return await this.#completeTransitionStart(request);
+    }
     if (request.operation === "updater.read") {
       if (request.shellType !== this.updater.shellType) throw new Error("Electron Standalone updater Shell type differs from its host");
       return await this.updater.readSnapshot();
@@ -187,12 +190,33 @@ class ElectronStandaloneHostRuntime {
   }
 
   async #start(request: Extract<ReturnType<typeof validateElectronStandaloneControlRequest>, { operation: "lifecycle.start" }>) {
+    return await this.#boundStart(request, () => this.#startLifecycle(request));
+  }
+
+  async #completeTransitionStart(request: Extract<ReturnType<typeof validateElectronStandaloneControlRequest>, { operation: "transition.complete-start" }>) {
+    return await this.#boundStart(request, () => this.lifecycle.completeTransitionStart(
+      request.token,
+      request.fence,
+      request.generation,
+      request.attachment,
+      request.binding,
+    ));
+  }
+
+  async #boundStart(
+    request: Readonly<{
+      attachment: StandaloneHandoffRequest["attachment"];
+      binding: StandaloneHandoffRequest["binding"];
+      generation: Parameters<ElectronStandaloneHostLifecycle["start"]>[0];
+    }>,
+    startLifecycle: () => Promise<Awaited<ReturnType<ElectronStandaloneHostLifecycle["start"]>>>,
+  ) {
     if (this.#pending.has(request.attachment.id)) throw new Error("Electron Standalone attachment already has a pending start");
     let task: Promise<Awaited<ReturnType<ElectronStandaloneHostLifecycle["start"]>>> | null = null;
     const pending: PendingStart = Object.freeze({
       bindingDigest: request.binding.digest,
       run: () => {
-        task ??= this.#startLifecycle(request);
+        task ??= startLifecycle();
         return task;
       },
     });

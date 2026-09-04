@@ -96,6 +96,45 @@ describe("Electron guarded physical lifecycle", () => {
       }));
   });
 
+  it("retires a failed replacement only after the original set and under the same guard", async () => {
+    const replacement = Object.freeze({
+      ...resourceSet,
+      binding: Object.freeze({
+        ...resourceSet.binding,
+        generationId: "d".repeat(64),
+        digest: "e".repeat(64),
+      }),
+    });
+    sidecar.stopSidecars.mockResolvedValue({
+      ...stopped,
+      results: [{ result: stopped, stamp }],
+    });
+    await withElectronPhysicalResourceSetGuard(resourceSet, async (guard) => {
+      await expect(guard.retireReplacement(replacement)).rejects.toThrow("original resource set");
+      await guard.retire();
+      await expect(guard.retireReplacement(replacement)).resolves.toMatchObject({
+        bindingDigest: replacement.binding.digest,
+        generationId: replacement.binding.generationId,
+      });
+    });
+    expect(sidecar.stopSidecars).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects replacement retirement outside the guarded resource identity", async () => {
+    sidecar.stopSidecars.mockResolvedValue({
+      ...stopped,
+      results: [{ result: stopped, stamp }],
+    });
+    await expect(withElectronPhysicalResourceSetGuard(resourceSet, async (guard) => {
+      await guard.retire();
+      await guard.retireReplacement(Object.freeze({
+        ...resourceSet,
+        resources: Object.freeze([{ id: "standalone-runtime", stamp: Object.freeze({ ...stamp, namespace: "other" }) }]),
+      }));
+    })).rejects.toThrow("escaped the guarded physical resource set");
+    expect(sidecar.stopSidecars).toHaveBeenCalledOnce();
+  });
+
   it("does not retire resources when the guarded continuation only observes", async () => {
     await expect(withElectronPhysicalResourceSetGuard(resourceSet, async (guard) => ({
       bindingDigest: guard.bindingDigest,

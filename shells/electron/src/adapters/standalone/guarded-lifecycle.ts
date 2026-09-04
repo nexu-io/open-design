@@ -25,6 +25,7 @@ export type ElectronPhysicalResourceSetGuard = Readonly<{
   bindingDigest: string;
   generationId: string;
   retire(options?: SidecarStopOptions): Promise<ElectronPhysicalRetirementCertificate>;
+  retireReplacement(resourceSet: ElectronBoundPhysicalResourceSet, options?: SidecarStopOptions): Promise<ElectronPhysicalRetirementCertificate>;
 }>;
 
 export class ElectronPhysicalRetirementError extends Error {
@@ -55,6 +56,17 @@ export async function withElectronPhysicalResourceSetGuard<T>(
         if (!active) throw new Error("Electron physical resource-set guard is no longer active");
         retirement ??= retirePhysicalResourceSet(resourceSet, stopOptions);
         return retirement;
+      },
+      async retireReplacement(replacement: ElectronBoundPhysicalResourceSet, stopOptions: SidecarStopOptions = {}) {
+        if (!active) throw new Error("Electron physical resource-set guard is no longer active");
+        if (retirement == null) throw new Error("Electron replacement retirement requires the original resource set to be retired first");
+        await retirement;
+        const originalStamps = resourceSet.resources.map(({ id, stamp }) => JSON.stringify([id, stamp.source, stamp.mode, stamp.app, stamp.channel, stamp.namespace])).sort();
+        const replacementStamps = replacement.resources.map(({ id, stamp }) => JSON.stringify([id, stamp.source, stamp.mode, stamp.app, stamp.channel, stamp.namespace])).sort();
+        if (originalStamps.length !== replacementStamps.length || originalStamps.some((stamp, index) => stamp !== replacementStamps[index])) {
+          throw new Error("Electron replacement escaped the guarded physical resource set");
+        }
+        return await retirePhysicalResourceSet(replacement, stopOptions);
       },
     });
     let outcome: Readonly<{ ok: true; value: T }> | Readonly<{ error: unknown; ok: false }>;

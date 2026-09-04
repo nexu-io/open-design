@@ -10,6 +10,7 @@ import {
   type SignedStandaloneShellMetadata,
   type StandaloneShellDistribution,
   type StandaloneShellIdentity,
+  type StandaloneUpdateSource,
 } from "@open-design/standalone";
 
 import type { ElectronStandaloneTarget } from "./installation.js";
@@ -51,7 +52,9 @@ function json<T>(value: Uint8Array, label: string): T {
   catch (error) { throw new Error(`${label} is not valid JSON`, { cause: error }); }
 }
 
-export class ElectronReleaseExactFeed {
+export class ElectronReleaseExactFeed implements StandaloneUpdateSource {
+  readonly prepare: StandaloneUpdateSource["prepare"];
+
   constructor(private readonly options: Readonly<{
     cacheRoot: string;
     channel: string;
@@ -61,11 +64,23 @@ export class ElectronReleaseExactFeed {
     shell: StandaloneShellIdentity;
     target: ElectronStandaloneTarget;
     trustedKeys: ReadonlyMap<string, KeyObject>;
-  }>) {}
+  }>) {
+    this.prepare = Object.freeze({ fetch: options.fetch });
+  }
+
+  async readChannelHead(channel: string): Promise<SignedStandaloneChannelHead> {
+    if (channel !== this.options.channel) throw new Error("Electron content updater escaped its installed channel");
+    const fetcher = this.options.fetch ?? globalThis.fetch;
+    return json<SignedStandaloneChannelHead>(await bytes(fetcher, this.options.channelHeadUrl, "Electron channel head"), "Electron channel head");
+  }
+
+  async readDocument(url: string): Promise<Uint8Array> {
+    return await bytes(this.options.fetch ?? globalThis.fetch, url, "Electron release document");
+  }
 
   async check(): Promise<ElectronReleaseExactCandidate | null> {
     const fetcher = this.options.fetch ?? globalThis.fetch;
-    const envelope = json<SignedStandaloneChannelHead>(await bytes(fetcher, this.options.channelHeadUrl, "Electron channel head"), "Electron channel head");
+    const envelope = await this.readChannelHead(this.options.channel);
     verifyStandaloneChannelHead(envelope, this.options.trustedKeys);
     if (envelope.head.channel !== this.options.channel) throw new Error("Electron channel head escaped its installed channel");
     const lane = envelope.head.lanes.electron;

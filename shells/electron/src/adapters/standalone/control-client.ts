@@ -142,6 +142,33 @@ export class ElectronStandaloneControlClient implements LifecyclePort {
     return status;
   }
 
+  async completeTransitionStart(
+    token: string,
+    fence: number,
+    generation: GenerationRecord,
+    attachment: LifecycleAttachment,
+    binding: StandaloneGenerationBinding,
+  ): Promise<LifecycleStatus> {
+    const response = object(await this.#request({
+      schemaVersion: ELECTRON_STANDALONE_CONTROL_SCHEMA_VERSION,
+      operation: "transition.complete-start",
+      scope: this.#scope,
+      token,
+      fence,
+      generation,
+      binding,
+      attachment,
+    }), "Electron Standalone transition.complete-start response");
+    exactKeys(response, ["attachmentCapability", "status"], "Electron Standalone transition.complete-start response");
+    const capability = attachmentCapability(response.attachmentCapability);
+    const status = validateElectronStandaloneLifecycleStatus(response.status, this.#scope);
+    if (status.generationId !== generation.id || status.bindingDigest !== binding.digest || !status.occupants.some(({ attachmentId }) => attachmentId === attachment.id)) {
+      throw new Error("Electron Standalone host completed a different transition generation");
+    }
+    this.#capabilities.set(attachment.id, capability);
+    return status;
+  }
+
   async invoke(command: StandaloneRuntimeCommand): Promise<StandaloneRuntimeCommandResult> {
     const attachmentCapability = this.#requireCapability(command.attachmentId);
     const response = object(await this.#request({

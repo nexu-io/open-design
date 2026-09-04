@@ -81,6 +81,10 @@ export function createElectronFixtureStandaloneAuthorityFactory(
           binding,
           generation,
           updater,
+          contentUpdater: Object.freeze({
+            async prepareLatest() { return Object.freeze({ status: "current" as const, generationId: generation.id }); },
+            async applyNow() { return Object.freeze({ status: "blocked" as const, reason: "unavailable" as const, occupants: [] }); },
+          }),
           async armShellInstallation({ install, request }) {
             return await install(request);
           },
