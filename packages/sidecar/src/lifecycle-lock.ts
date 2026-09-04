@@ -8,11 +8,15 @@ export type SidecarLifecycleLockOptions = Readonly<{
   timeoutMs?: number;
 }>;
 
+type SidecarLifecycleLockEndpoint = string | Readonly<{ host: string; port: number }>;
+
 /**
- * Serialize one Windows lifecycle resource set across independent clients.
+ * Serialize one lifecycle resource set across independent clients.
  *
- * The named pipe is an ephemeral kernel lock, not a second resource identity:
- * callers still declare the exact five-field stamps they intend to coordinate.
+ * The named pipe on Windows and loopback listener on POSIX are ephemeral kernel
+ * locks, not resource identities or Sidecar transports. Callers still declare
+ * only the exact five-field stamps they intend to coordinate. Kernel ownership
+ * also makes an abandoned lock disappear when its process exits.
  */
 export async function withSidecarLifecycleLock<T>(
   stampInputs: readonly SidecarStamp[],
@@ -20,14 +24,13 @@ export async function withSidecarLifecycleLock<T>(
   options: SidecarLifecycleLockOptions = {},
 ): Promise<T> {
   if (stampInputs.length === 0) return await operation();
-  if (process.platform !== "win32") return await operation();
 
-  const lockPath = resolveWindowsLifecycleLockPath(stampInputs);
+  const endpoint = resolveLifecycleLockEndpoint(stampInputs);
   const timeoutMs = normalizeTimeoutMs(options.timeoutMs);
   const deadline = Date.now() + timeoutMs;
   let server: Server | null = null;
   while (server == null) {
-    server = await tryListen(lockPath);
+    server = await tryListen(endpoint);
     if (server != null) break;
     if (Date.now() >= deadline) {
       throw new Error(`timed out waiting for sidecar lifecycle lock after ${timeoutMs}ms`);
@@ -42,18 +45,24 @@ export async function withSidecarLifecycleLock<T>(
   }
 }
 
-function resolveWindowsLifecycleLockPath(stampInputs: readonly SidecarStamp[]): string {
+function resolveLifecycleLockEndpoint(stampInputs: readonly SidecarStamp[]): SidecarLifecycleLockEndpoint {
   const principal = (() => {
     try { return userInfo().username; } catch { return process.env.USERNAME ?? "unknown"; }
   })();
   const resourceSet = [...new Set(stampInputs.map((stamp) => sidecarStampKey(normalizeSidecarStamp(stamp))))]
     .sort()
     .join("\n---\n");
-  const digest = createHash("sha256").update(`${principal}\n${resourceSet}`).digest("hex").slice(0, 32);
-  return `\\\\.\\pipe\\open-design-sidecar-lifecycle-${digest}`;
+  const digest = createHash("sha256").update(`${principal}\n${resourceSet}`).digest();
+  if (process.platform === "win32") {
+    return `\\\\.\\pipe\\open-design-sidecar-lifecycle-${digest.toString("hex").slice(0, 32)}`;
+  }
+  return Object.freeze({
+    host: "127.0.0.1",
+    port: 49_152 + digest.readUInt16BE(0) % 16_384,
+  });
 }
 
-async function tryListen(path: string): Promise<Server | null> {
+async function tryListen(endpoint: SidecarLifecycleLockEndpoint): Promise<Server | null> {
   const server = createServer((socket) => socket.destroy());
   return await new Promise<Server | null>((resolve, reject) => {
     const onError = (error: NodeJS.ErrnoException): void => {
@@ -67,7 +76,8 @@ async function tryListen(path: string): Promise<Server | null> {
     };
     server.once("error", onError);
     server.once("listening", onListening);
-    server.listen({ exclusive: true, path });
+    if (typeof endpoint === "string") server.listen({ exclusive: true, path: endpoint });
+    else server.listen({ exclusive: true, host: endpoint.host, port: endpoint.port });
   });
 }
 
