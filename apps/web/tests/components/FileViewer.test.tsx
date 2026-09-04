@@ -7618,6 +7618,135 @@ describe('FileViewer SVG artifacts', () => {
     await waitFor(() => expect(confirm.disabled).toBe(true));
   });
 
+  // PDF and image export reach the SAME renderer as PPTX, so they answer to the
+  // same capability. They used to be gated on `isOpenDesignHostAvailable()`,
+  // which asks whether this UI runs inside the desktop shell — a different
+  // question, and wrong in both directions. The pair below pins both directions
+  // at the entry the user actually clicks.
+  const stubExportFetch = (capabilities?: { slideRenderer: boolean }) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(typeof input === 'object' && 'url' in input ? input.url : input);
+      if (url.includes('/api/version')) return versionResponse(capabilities);
+      if (url.endsWith('/export/pdf-image')) return new Response('PDF', { status: 200 });
+      // A renderer-less daemon's answer, so a capture that reaches the daemon
+      // falls back the way it would in production instead of throwing.
+      if (url.endsWith('/export/image')) {
+        return new Response(JSON.stringify({ error: { code: 'UPSTREAM_UNAVAILABLE' } }), {
+          status: 501,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/export/pdf')) return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+      return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  };
+  const calledPaths = (fetchMock: ReturnType<typeof vi.fn>) =>
+    fetchMock.mock.calls.map(([input]) => String(input));
+
+  it('renders PDF through the daemon in a browser when it advertises a renderer', async () => {
+    // No desktop shell is installed here — this is a plain browser talking to a
+    // daemon that HAS a renderer, which is exactly the case the old shell check
+    // got wrong: it reported "no renderer", so the screenshot path was skipped
+    // and the export silently downgraded to the vector one.
+    const fetchMock = stubExportFetch({ slideRenderer: true });
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={deckFile()} liveHtml={DECK_HTML} />,
+    );
+
+    await openUnifiedExportTab();
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Export as PDF/i }));
+
+    await waitFor(() => {
+      expect(calledPaths(fetchMock)).toContain('/api/projects/project-1/export/pdf-image');
+    });
+  });
+
+  it('skips the daemon render when it advertises no renderer', async () => {
+    // Inside the desktop shell, so the old predicate would be true here: this
+    // pins the other direction, where a daemon that cannot render still received
+    // a POST that could only come back 501 before the vector fallback ran.
+    // Waiting for the vector POST is what makes the negative meaningful —
+    // without it the assertion would pass simply by running before anything was
+    // requested.
+    const restoreHost = installMockOpenDesignHost();
+    const fetchMock = stubExportFetch({ slideRenderer: false });
+    try {
+      render(
+        <FileViewer projectId="project-1" projectKind="prototype" file={deckFile()} liveHtml={DECK_HTML} />,
+      );
+
+      await openUnifiedExportTab();
+      // Wait for the resolved `false`: asserting while the probe is pending
+      // would pass vacuously, since unknown deliberately fails open.
+      await waitFor(() => {
+        expect(screen.queryByRole('menuitem', { name: /Export as PPTX/i })).toBeNull();
+      });
+      fireEvent.click(screen.getByRole('menuitem', { name: /Export as PDF/i }));
+
+      await waitFor(() => {
+        expect(calledPaths(fetchMock)).toContain('/api/projects/project-1/export/pdf');
+      });
+      expect(calledPaths(fetchMock)).not.toContain('/api/projects/project-1/export/pdf-image');
+    } finally {
+      restoreHost();
+    }
+  });
+
+  it('forgets the capability once its last surface closes', async () => {
+    // Clause 1 of the contract above: an answer never outlives the surface
+    // opening that fetched it. That held for free while only surfaces read the
+    // value; `captureExportImageSnapshot` now reads it too, from capture paths
+    // that belong to no surface, so a resolved `false` left behind would go on
+    // suppressing the daemon render against a daemon that may since have one.
+    //
+    // The fixture needs `data-title` alongside `class="slide"`. The viewer's
+    // deck signal accepts a bare `.slide`, but the EXPORT signal
+    // (`sourceLooksLikeExportableDeck`) requires structure — and it is the
+    // export signal that `planDeckImageCapture` reads. Without it the capture
+    // is planned as a page, stays viewport-based, and never reaches the daemon
+    // no matter what the capability says, which makes the whole spec vacuous.
+    const deckHtml =
+      '<html><body>' +
+      '<section class="slide" data-title="One">One</section>' +
+      '<section class="slide" data-title="Two">Two</section>' +
+      '</body></html>';
+    const fetchMock = stubExportFetch({ slideRenderer: false });
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={deckFile()}
+        liveHtml={deckHtml}
+        slideNavRequest={{ nonce: 7620, slideIndex: 1 }}
+      />,
+    );
+
+    // Phase 1 — establish that `false` actually resolved and took effect. The
+    // PDF entry is the observable: a resolved `false` skips the screenshot
+    // route entirely, so seeing the vector POST without it proves the state.
+    await openUnifiedExportTab();
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Export as PDF/i }));
+    await waitFor(() => {
+      expect(calledPaths(fetchMock)).toContain('/api/projects/project-1/export/pdf');
+    });
+    expect(calledPaths(fetchMock)).not.toContain('/api/projects/project-1/export/pdf-image');
+
+    // Phase 2 — the surface is gone, so a capture that belongs to none of them
+    // must be back to unknown and ask the daemon again.
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    fetchMock.mockClear();
+    fireEvent.click(screen.getByTestId('edit-screenshot-to-chat-button'));
+
+    await waitFor(() => {
+      expect(calledPaths(fetchMock)).toContain('/api/projects/project-1/export/image');
+    });
+  });
+
   it('opens a PPTX mode dialog in a browser and defaults to editable export', async () => {
     const originalCreateObjectUrl = URL.createObjectURL;
     const originalRevokeObjectUrl = URL.revokeObjectURL;
@@ -8170,6 +8299,13 @@ describe('FileViewer SVG artifacts', () => {
           : typeof (input as { url?: unknown })?.url === 'string'
             ? (input as { url: string }).url
             : '';
+      // A daemon with no slide renderer, which is what makes the vector path
+      // below the one that runs. The capability is unknown here (this mock does
+      // not answer /api/version), and unknown attempts the screenshot route
+      // before falling back — so the 501 is part of the path under test.
+      if (url === '/api/projects/project-1/export/pdf-image') {
+        return new Response(JSON.stringify({ error: 'no renderer' }), { status: 501 });
+      }
       if (url === '/api/projects/project-1/export/pdf') {
         return new Response(JSON.stringify({ ok: true, canceled: true }), { status: 200 });
       }

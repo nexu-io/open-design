@@ -9,6 +9,7 @@ import type {
   DesktopRenderSlidesInput,
   DesktopRenderSlidesResult,
 } from '@open-design/sidecar-proto';
+import { httpSlideRendererFromEnv } from './integrations/slide-renderer-http.js';
 import express from 'express';
 import multer from 'multer';
 import JSZip from 'jszip';
@@ -2811,8 +2812,17 @@ export function createSseResponse(
 
 export type DesktopPdfExporter = (input: DesktopExportPdfInput) => Promise<DesktopExportPdfResult>;
 export type DesktopFrameRenderer = (input: DesktopRenderFramesInput) => Promise<DesktopRenderFramesResult>;
-export type DesktopSlideRenderer = (input: DesktopRenderSlidesInput) => Promise<DesktopRenderSlidesResult>;
+// `options.signal` lets a caller cancel a render it no longer has a consumer
+// for — an export client that disconnected. Optional so the desktop sidecar's
+// injector, which does not take one, still satisfies the type.
+export type DesktopSlideRenderer = (
+  input: DesktopRenderSlidesInput,
+  options?: { signal?: AbortSignal },
+) => Promise<DesktopRenderSlidesResult>;
 export type DesktopArtifactExporter = (input: DesktopExportArtifactInput) => Promise<DesktopExportArtifactResult>;
+
+// The optional external slide renderer lives in src/integrations; only its
+// wiring belongs here. See that module for the protocol and its rationale.
 
 // Loosely typed shape — we only access `namespace`, `base`, `mode`, and
 // `source` from the runtime context when building the diagnostics export.
@@ -2878,6 +2888,14 @@ export async function startServer({
   odNextComplexProductionResolver = null,
 }: StartServerOptions = {}) {
   host = normalizeDaemonBindHost(host);
+  // An injected renderer always wins: the desktop sidecar passes its own, and
+  // this must not second-guess it. Only when there is none does the optional
+  // OD_SLIDE_RENDERER_URL extension point get a say, and only if it is set.
+  // Reassigned before any route closes over the binding, so the export routes'
+  // 501 guard and the capability the version endpoint advertises are computed
+  // from the same final value — an external renderer cannot end up serving
+  // exports that the daemon advertises as unavailable, or vice versa.
+  desktopSlideRenderer = desktopSlideRenderer ?? httpSlideRendererFromEnv();
   let resolvedPort = port;
   let daemonShuttingDown = false;
   const extraAllowedOrigins = configuredAllowedOrigins();

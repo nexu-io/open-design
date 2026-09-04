@@ -268,8 +268,14 @@ app.whenReady().then(() => {
       const electronPath = join(desktopRoot, 'node_modules', 'electron', 'dist', electronRelativePath);
       const env: NodeJS.ProcessEnv = { ...process.env };
       delete env.ELECTRON_RUN_AS_NODE;
+      // Same flags as the other Electron probes in this file. Without
+      // --no-sandbox the runtime cannot start where unprivileged user
+      // namespaces are restricted, which is the default on Ubuntu 24.04, so the
+      // probe exits non-zero before reaching its first assertion. Only some CI
+      // fleets relax that, which is why this one spec could sit here passing.
+      const electronArgs = [probeDir, '--no-sandbox', '--disable-gpu'];
       const command = process.platform === 'linux' ? 'xvfb-run' : electronPath;
-      const args = process.platform === 'linux' ? ['-a', electronPath, probeDir] : [probeDir];
+      const args = process.platform === 'linux' ? ['-a', electronPath, ...electronArgs] : electronArgs;
       const { stdout, stderr } = await execFileP(command, args, { env, timeout: 10_000 });
       const marker = stdout.split(/\r?\n/).find((line) => line.startsWith('OD_PNG_PAINT:'));
       if (!marker) throw new Error(`Electron paint probe returned no result: ${stdout || stderr}`);

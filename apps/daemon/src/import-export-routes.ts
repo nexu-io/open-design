@@ -1048,9 +1048,17 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       // renderer outage — surface it as 502 UPSTREAM_UNAVAILABLE (matching the
       // `!rendered.ok` branch below), not the outer 400 BAD_REQUEST which is for
       // genuine request-validation / assembly errors.
+      // Nobody left to render for: if the export client disconnects mid-render,
+      // tell the renderer to stop. The co-located Electron one shares our
+      // lifetime, but an external renderer does not — it would keep executing
+      // the artifact and holding a multi-megabyte response for a consumer that
+      // is already gone.
+      const renderAbort = new AbortController();
+      const abortOnDisconnect = () => renderAbort.abort();
+      res.once('close', abortOnDisconnect);
       let rendered;
       try {
-        rendered = await desktopSlideRenderer(input);
+        rendered = await desktopSlideRenderer(input, { signal: renderAbort.signal });
       } catch (err: any) {
         return sendApiError(
           res,
@@ -1059,6 +1067,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
           `desktop renderer unavailable: ${err?.message || String(err)}`,
         );
       } finally {
+        res.off('close', abortOnDisconnect);
         if (renderPreviewScope) {
           ctx.projectPreviewScopes.revoke(renderPreviewScope);
           renderPreviewScope = null;

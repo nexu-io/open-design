@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectFile } from '../../src/types';
 
 const {
@@ -9,7 +9,6 @@ const {
   downloadImageDataUrlMock,
   exportProjectImageDataUrlMock,
   imageDataUrlToBlobMock,
-  isOpenDesignHostAvailableMock,
   prepareImageExportTargetMock,
   requestPreviewSnapshotMock,
   saveImageBlobMock,
@@ -18,9 +17,6 @@ const {
   downloadImageDataUrlMock: vi.fn(),
   exportProjectImageDataUrlMock: vi.fn(),
   imageDataUrlToBlobMock: vi.fn(),
-  // Default: no desktop host, so existing tests exercise the host-snapshot
-  // fallback path exactly as before. The runtime-deck test flips this on.
-  isOpenDesignHostAvailableMock: vi.fn(() => false),
   prepareImageExportTargetMock: vi.fn(),
   requestPreviewSnapshotMock: vi.fn(),
   saveImageBlobMock: vi.fn(),
@@ -36,7 +32,6 @@ vi.mock('../../src/runtime/exports', async () => {
     downloadImageDataUrl: downloadImageDataUrlMock,
     exportProjectImageDataUrl: exportProjectImageDataUrlMock,
     imageDataUrlToBlob: imageDataUrlToBlobMock,
-    isOpenDesignHostAvailable: isOpenDesignHostAvailableMock,
     prepareImageExportTarget: prepareImageExportTargetMock,
     requestPreviewSnapshot: requestPreviewSnapshotMock,
   };
@@ -110,6 +105,21 @@ async function clickSave() {
 }
 
 describe('FileViewer image export', () => {
+  beforeEach(() => {
+    // Default: a daemon with no slide renderer, which is what puts these tests
+    // on the visible-snapshot fallback. It used to be expressed as "no desktop
+    // host", but the off-screen path is now decided by the daemon's advertised
+    // capability, and an unknown capability deliberately still attempts — so
+    // the switch has to live in what the exporter answers, exactly as a
+    // renderer-less daemon answers it (501 → unavailable → fall through).
+    // Tests that want the off-screen path override with mockResolvedValueOnce.
+    exportProjectImageDataUrlMock.mockResolvedValue({
+      ok: false,
+      unavailable: true,
+      reason: 'no-renderer',
+    });
+  });
+
   afterEach(() => {
     cleanup();
     vi.resetAllMocks();
@@ -305,7 +315,6 @@ describe('FileViewer image export', () => {
   });
 
   it('passes the selected mobile viewport to the off-screen image exporter', async () => {
-    isOpenDesignHostAvailableMock.mockReturnValue(true);
     exportProjectImageDataUrlMock.mockResolvedValueOnce({
       ok: true,
       snapshot: {
@@ -339,7 +348,6 @@ describe('FileViewer image export', () => {
   });
 
   it('keeps desktop page exports on the renderer defaults', async () => {
-    isOpenDesignHostAvailableMock.mockReturnValue(true);
     exportProjectImageDataUrlMock.mockResolvedValueOnce({
       ok: true,
       snapshot: {
@@ -370,7 +378,6 @@ describe('FileViewer image export', () => {
   });
 
   it('keeps deck exports on the renderer defaults when mobile preview is selected', async () => {
-    isOpenDesignHostAvailableMock.mockReturnValue(true);
     exportProjectImageDataUrlMock.mockResolvedValueOnce({
       ok: true,
       snapshot: {
@@ -459,7 +466,6 @@ describe('FileViewer image export', () => {
     // affordance: the export menu's 截图 row was removed (export produces files
     // and links; a capture is a different job). Both always shared this one
     // `captureExportImageSnapshot` path, which is what this test pins.
-    isOpenDesignHostAvailableMock.mockReturnValue(true);
     captureHostIframeSnapshotMock.mockResolvedValue({ dataUrl: 'data:image/png;base64,host', w: 1280, h: 720 });
 
     render(

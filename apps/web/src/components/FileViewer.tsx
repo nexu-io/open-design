@@ -168,7 +168,6 @@ import {
   exportReactComponentAsZip,
   captureHostIframeSnapshot,
   imageDataUrlToBlob,
-  isOpenDesignHostAvailable,
   openSandboxedPreviewInNewTab,
   prepareImageExportTarget,
   planDeckImageCapture,
@@ -9096,9 +9095,12 @@ function HtmlViewer({
   // whole capability contract, stated once:
   //
   //   1. An answer never outlives the surface opening that fetched it. The
-  //      export surface is the popover's Export tab or the PPTX modal — not
-  //      the popover shell, which can open on Share and sit there across a
-  //      daemon swap before the tab is switched. Every way the surface can
+  //      export surface is the popover's Export tab, the PPTX modal or the
+  //      image-export modal — not the popover shell, which can open on Share
+  //      and sit there across a daemon swap before the tab is switched. The
+  //      image modal is on the list because image export reaches the same
+  //      renderer, so an unprobed opening would spend a doomed request on
+  //      every capture. Every way the surface can
   //      become visible (opening onto the Export tab, switching Share to
   //      Export, the menu-to-modal handoff) starts from unknown and asks
   //      again. Transitions arrive as batched updates whose OR can stay
@@ -9118,8 +9120,16 @@ function HtmlViewer({
   const [slideRendererAvailable, setSlideRendererAvailable] = useState<boolean | null>(null);
   useEffect(() => {
     const exportSurfaceVisible =
-      (deployMenuOpen && unifiedActionTab === 'export') || pptxExportModalOpen;
-    if (!exportSurfaceVisible) return;
+      (deployMenuOpen && unifiedActionTab === 'export') || pptxExportModalOpen || imageExportModalOpen;
+    if (!exportSurfaceVisible) {
+      // Closing the last surface discards the answer, or clause 1 above would
+      // be false: capture paths that belong to no surface (screenshot-to-chat,
+      // Mark/Draw) read this state too, so a resolved `false` left behind would
+      // keep suppressing the daemon render after the daemon it described is
+      // gone. Unknown fails open, which is the safe direction.
+      setSlideRendererAvailable(null);
+      return;
+    }
     let cancelled = false;
     setSlideRendererAvailable(null);
     void (async () => {
@@ -9147,7 +9157,7 @@ function HtmlViewer({
     return () => {
       cancelled = true;
     };
-  }, [deployMenuOpen, unifiedActionTab, pptxExportModalOpen]);
+  }, [deployMenuOpen, unifiedActionTab, pptxExportModalOpen, imageExportModalOpen]);
   const [pptxExportMode, setPptxExportMode] = useState<'editable' | 'screenshot'>('editable');
   const imageExportSnapshotDataUrlRef = useRef<string | null>(null);
   // Threads the share-popover click → artifact_export_result(image) pair, the
@@ -14997,7 +15007,18 @@ function HtmlViewer({
     const pdfTitle = context?.title ?? exportTitle;
     const pdfSource = context?.content ?? source ?? '';
     const pdfDeck = deckExportSignalForContext(context);
-    if (isOpenDesignHostAvailable()) {
+    // Whether the screenshot path is worth attempting is a fact about the
+    // DAEMON, so it is answered by the daemon's advertised capability — the same
+    // one the PPTX entry is gated on. `isOpenDesignHostAvailable()` used to
+    // stand in for it, but it reports whether this web UI is running inside the
+    // desktop shell, which is a different question and wrong in both directions:
+    // a browser talking to a daemon that HAS a renderer was told it did not, and
+    // silently took the vector path instead.
+    // `null` (not probed on this surface, or a daemon predating the flag) still
+    // attempts: the export POST's own 501 is the authority of last resort and
+    // falls through to the same vector path, so the unconfigured case behaves
+    // exactly as it does today.
+    if (slideRendererAvailable !== false) {
       const res = await exportProjectScreenshotPdf({
         projectId,
         fileName: file.name,
@@ -15005,8 +15026,8 @@ function HtmlViewer({
         workspaceContext,
         // Broader deck signal than the viewer's nav so runtime-managed decks
         // (<deck-stage>) paginate per slide; the vector fallback below uses
-        // the SAME signal, so an artifact exports identically with or without
-        // a desktop host (no per-host divergence).
+        // the SAME signal, so an artifact exports identically whether or not a
+        // slide renderer is reachable (no per-deployment divergence).
         deck: pdfDeck,
         ...(context?.versionId ? { versionId: context.versionId } : {}),
       });
@@ -15155,21 +15176,24 @@ function HtmlViewer({
     // in the browser screenshot flow (DesignBrowserPanel).
     await waitForAnimationFrame();
     await waitForAnimationFrame();
-    // Prefer the daemon's off-screen render (desktop only): isolated from the
-    // preview pane and, rendering the artifact alone in a hidden window, it can
-    // never capture OpenDesign's own UI. Page exports use the selected preview
-    // preset; desktop pages and decks retain the renderer defaults. `wholeDeck`
-    // (Export as image) stitches every slide
+    // Prefer the daemon's off-screen render when one is reachable: isolated from
+    // the preview pane and, rendering the artifact alone in a hidden window, it
+    // can never capture OpenDesign's own UI. Page exports use the selected
+    // preview preset; desktop pages and decks retain the renderer defaults.
+    // `wholeDeck` (Export as image) stitches every slide
     // top-to-bottom into one long image — matching the slide count the viewer
     // reports; otherwise (Copy screenshot, Mark/Draw capture) it grabs the
     // CURRENT slide, mirroring what's on screen. An ordinary page is its
     // full-page capture either way.
-    if (isOpenDesignHostAvailable() && projectId && file.name) {
+    // Gated on the daemon's advertised capability rather than on the presence of
+    // the desktop shell, for the reason spelled out in exportHtmlPdf: the shell
+    // answers a different question. `null` attempts and lets the 501 decide.
+    if (slideRendererAvailable !== false && projectId && file.name) {
       // Deck-vs-page uses the same signal as PDF export — broader than the viewer's nav
       // signal — so runtime-managed decks (`<deck-stage>` / `data-screen-label`,
       // no literal `.slide`) export as a deck instead of a single page-mode shot
       // of slide 1. The vector-PDF fallback below uses the SAME signal, so an
-      // artifact exports identically with or without a desktop host.
+      // artifact exports identically whether or not a slide renderer is reachable.
       const wholeDeck = options?.wholeDeck === true;
       // For a CURRENT-slide capture we need the active slide index, which only
       // exists when the viewer tracks it. Runtime-managed decks have no
@@ -15276,6 +15300,7 @@ function HtmlViewer({
     previewViewport,
     projectId,
     file.name,
+    slideRendererAvailable,
   ]);
 
   // NOTE: the clipboard-capture handler that used to live here was removed with
@@ -17088,7 +17113,11 @@ function HtmlViewer({
                       // Chinese-first product. Falls back to the vector/browser
                       // print path on web or on failure.
                       fireShareExport('pdf', async () => {
-                        if (isOpenDesignHostAvailable()) {
+                        // Same capability gate as exportHtmlPdf — this menu item
+                        // is the second entry into the identical flow. Reached
+                        // from the export surface, so the probe has run and a
+                        // renderer-less daemon costs no request at all.
+                        if (slideRendererAvailable !== false) {
                           const res = await exportProjectScreenshotPdf({
                             projectId,
                             fileName: file.name,
@@ -17097,8 +17126,8 @@ function HtmlViewer({
                             // Broader deck signal than the viewer's nav so
                             // runtime-managed decks (<deck-stage>) paginate per
                             // slide; the vector fallback below uses the SAME
-                            // signal, so an artifact exports identically with or
-                            // without a desktop host (no per-host divergence).
+                            // signal, so an artifact exports identically whether
+                            // or not a slide renderer is reachable.
                             deck: deckExportSignal,
                           });
                           if (res.ok) return;
