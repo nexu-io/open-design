@@ -292,3 +292,40 @@ claude-sonnet-4-6\tClaude Sonnet 4.6 (Thinking)
     expect(parseAntigravityModels('Fetching available models...\n')).toBeNull();
   });
 });
+
+describe('antigravityAgentDef.buildArgs', () => {
+  it('includes runtimeContext.cwd in --add-dir flags so agy has an active workspace', () => {
+    const args = antigravityAgentDef.buildArgs(
+      'design a todo app',
+      [],
+      ['/extra/skills'],
+      {},
+      { cwd: '/projects/my-todo-app' },
+    );
+    expect(args).toContain('--add-dir');
+    const addDirIndices: number[] = [];
+    args.forEach((arg, i) => {
+      if (arg === '--add-dir') addDirIndices.push(i);
+    });
+    const addedDirs = addDirIndices.map((i) => args[i + 1]);
+    expect(addedDirs).toContain('/extra/skills');
+    expect(addedDirs).toContain('/projects/my-todo-app');
+  });
+
+  it('omits empty or missing cwd gracefully', () => {
+    const args = antigravityAgentDef.buildArgs(
+      'design a todo app',
+      [],
+      ['/extra/skills'],
+      {},
+      { cwd: '' },
+    );
+    const addDirIndices: number[] = [];
+    args.forEach((arg, i) => {
+      if (arg === '--add-dir') addDirIndices.push(i);
+    });
+    const addedDirs = addDirIndices.map((i) => args[i + 1]);
+    expect(addedDirs).toEqual(['/extra/skills']);
+  });
+});
+

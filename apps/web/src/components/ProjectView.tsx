@@ -47,6 +47,7 @@ import {
   uploadProjectFiles,
   upsertPreviewComment,
   writeProjectTextFile,
+  writeProjectTextFileDetailed,
 } from '../providers/registry';
 import { useProjectFileEvents, type ProjectEvent } from '../providers/project-events';
 import { claimProjectTurnIndex, claimRunTurnIndex } from '../analytics/identity';
@@ -3865,10 +3866,11 @@ export function ProjectView({
                 designSystemId: projectDesignSystemId,
               },
             });
-      const file = await writeProjectTextFile(project.id, fileName, artifactToPersist.html, {
+      const writeResult = await writeProjectTextFileDetailed(project.id, fileName, artifactToPersist.html, {
         artifactManifest: manifest ?? undefined,
       }, projectRunWorkspaceContext);
-      if (file) {
+      if (writeResult.ok) {
+        const file = writeResult.file;
         savedArtifactRef.current = file.name;
         bumpFilesRefresh();
         // Surface the daemon's stub-guard warning when it fires in `warn`
@@ -3887,17 +3889,12 @@ export function ProjectView({
         requestOpenFile(file.name);
         return { ok: true as const, fileName: file.name };
       } else {
-        // writeProjectTextFile collapses all failure paths (non-OK HTTP
-        // responses, network errors, and stub-guard 422s) to null — the
-        // helper's return contract would need to be widened to distinguish
-        // them, which is out of scope here.  Show a generic banner so the
-        // failure is observable rather than silent; the daemon logs carry
-        // the structured details for any specific error type.
         // Clear the saved-artifact ref so the user can retry.
         savedArtifactRef.current = '';
-        const message =
-          `Couldn't save artifact "${fileName}". The write failed — ` +
-          'check the daemon logs for details.';
+        const details = writeResult.message
+          ? `${writeResult.message}${writeResult.status ? ` (HTTP ${writeResult.status})` : ''}`
+          : 'The write failed — check the daemon logs for details.';
+        const message = `Couldn't save artifact "${fileName}". ${details}`;
         setError(message);
         return { ok: false as const, error: message };
       }

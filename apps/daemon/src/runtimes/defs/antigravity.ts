@@ -264,6 +264,9 @@ export const antigravityAgentDef = {
     const dirs = (extraAllowedDirs || []).filter(
       (dir) => typeof dir === 'string' && dir.trim(),
     );
+    if (runtimeContext.cwd && typeof runtimeContext.cwd === 'string' && runtimeContext.cwd.trim()) {
+      dirs.push(runtimeContext.cwd.trim());
+    }
     for (const dir of dirs) {
       args.push('--add-dir', dir);
     }
@@ -282,6 +285,10 @@ export const antigravityAgentDef = {
     // Daemon-managed print-mode runs have no interactive approval channel.
     if (agentCapabilities.get('antigravity')?.skipPermissions) {
       args.push(ANTIGRAVITY_SKIP_PERMISSIONS_FLAG);
+    }
+    const printTimeout = process.env.OD_AGY_PRINT_TIMEOUT;
+    if (printTimeout) {
+      args.push('--print-timeout', printTimeout);
     }
     args.push('--output-format', 'stream-json');
     args.push('-p', prompt);

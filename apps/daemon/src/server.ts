@@ -261,6 +261,7 @@ import {
   extractPlainStreamArtifacts,
   persistPlainStreamArtifactList,
   plainStdoutFromRunEvents,
+  textDeltaFromRunEvents,
 } from './runtimes/plain-stream.js';
 import {
   readVelaLoginStatus,
@@ -11855,11 +11856,21 @@ export async function startServer({
       // head to the tail-biased run.events at their exact stream offset, so no
       // artifact is lost and none is double-counted regardless of where in the
       // stream it appears.
-      if (event === 'stdout' && data && typeof data.chunk === 'string') {
-        run.plainStdoutTotalBytes = (run.plainStdoutTotalBytes ?? 0) + data.chunk.length;
+      const plainArtifactChunk =
+        event === 'stdout' && data && typeof data.chunk === 'string'
+          ? data.chunk
+          : def.streamFormat === 'antigravity-stream-json' &&
+            event === 'agent' &&
+            data &&
+            data.type === 'text_delta' &&
+            typeof data.delta === 'string'
+            ? data.delta
+            : null;
+      if (plainArtifactChunk !== null) {
+        run.plainStdoutTotalBytes = (run.plainStdoutTotalBytes ?? 0) + plainArtifactChunk.length;
         if ((run.plainArtifactStdout?.length ?? 0) < PLAIN_ARTIFACT_STDOUT_CAP) {
           run.plainArtifactStdout =
-            ((run.plainArtifactStdout ?? '') + data.chunk).slice(0, PLAIN_ARTIFACT_STDOUT_CAP);
+            ((run.plainArtifactStdout ?? '') + plainArtifactChunk).slice(0, PLAIN_ARTIFACT_STDOUT_CAP);
         }
       }
       persistRunEventToAssistantMessage(db, run, event, data);
@@ -15249,7 +15260,7 @@ export async function startServer({
         typeof acpSession?.completedSuccessfully === 'function' &&
         acpSession.completedSuccessfully();
       const runArtifactSideEffects = runSideEffectsForRun(run);
-      const status = classifyChatRunCloseStatus({
+      let status = classifyChatRunCloseStatus({
         cancelRequested: !!run.cancelRequested,
         code,
         signal,
@@ -15260,6 +15271,30 @@ export async function startServer({
           runArtifactSideEffects.artifactWriteSeen ||
           runArtifactSideEffects.liveArtifactSeen,
       });
+      if (status === 'succeeded') {
+        const linkedMediaTask = typeof mediaTaskStore !== 'undefined' && mediaTaskStore?.mediaTasks
+          ? Array.from(mediaTaskStore.mediaTasks.values()).find((t) => t.runId === run.id)
+          : null;
+        if (linkedMediaTask && linkedMediaTask.status === 'failed') {
+          status = 'failed';
+          send(
+            'error',
+            createSseErrorPayload(
+              'MEDIA_DISPATCH_FAILED',
+              linkedMediaTask.error?.message ?? 'Media generation failed',
+              { retryable: true },
+            ),
+          );
+        } else if (agentStdoutTail.includes('MEDIA_DISPATCH_FAILED')) {
+          status = 'failed';
+          send(
+            'error',
+            createSseErrorPayload('MEDIA_DISPATCH_FAILED', 'Media generation failed', {
+              retryable: true,
+            }),
+          );
+        }
+      }
       // Authentication guards above have now ruled out Antigravity's OAuth
       // prompt. Publish any remaining guarded plaintext before a close error
       // so both the emit-time admission ledger and durable-log reconciliation
@@ -15356,6 +15391,46 @@ export async function startServer({
               metadata: project?.metadata,
             });
             const dir = resolveProjectDir(PROJECTS_DIR, run.projectId, project?.metadata);
+            if (
+              (def.id === 'antigravity' || def.streamFormat === 'antigravity-stream-json') &&
+              typeof capturedSessionId === 'string' &&
+              capturedSessionId
+            ) {
+              try {
+                const agyBrainDir = path.join(
+                  os.homedir(),
+                  '.gemini',
+                  'antigravity-cli',
+                  'brain',
+                  capturedSessionId,
+                );
+                if (fs.existsSync(agyBrainDir)) {
+                  const agyEntries = await fs.promises.readdir(agyBrainDir);
+                  for (const entry of agyEntries) {
+                    if (entry.startsWith('.') || entry === 'scratch' || entry.endsWith('.md')) {
+                      continue;
+                    }
+                    const ext = path.extname(entry).toLowerCase();
+                    if (
+                      ['.html', '.htm', '.css', '.js', '.svg', '.png', '.jpg', '.webp'].includes(
+                        ext,
+                      )
+                    ) {
+                      const srcFile = path.join(agyBrainDir, entry);
+                      const destFile = path.join(dir, entry);
+                      const srcStat = await fs.promises.stat(srcFile);
+                      const destExists = fs.existsSync(destFile);
+                      const destStat = destExists ? await fs.promises.stat(destFile) : null;
+                      if (!destExists || srcStat.mtimeMs > (destStat?.mtimeMs ?? 0)) {
+                        await fs.promises.copyFile(srcFile, destFile);
+                      }
+                    }
+                  }
+                }
+              } catch {
+                /* brain-sync best-effort */
+              }
+            }
             for (const f of files) {
               const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
               if (ext !== '.html' && ext !== '.htm') continue;
@@ -15376,7 +15451,7 @@ export async function startServer({
       }
       if (
         status === 'succeeded' &&
-        (def.streamFormat ?? 'plain') === 'plain' &&
+        ((def.streamFormat ?? 'plain') === 'plain' || def.streamFormat === 'antigravity-stream-json') &&
         run.projectId
       ) {
         // Reconstruct the agent's stdout for artifact extraction from two
@@ -15399,7 +15474,10 @@ export async function startServer({
         //     was already unrecoverable before this change (the old code only
         //     ever had the tail).
         const head = run.plainArtifactStdout ?? '';
-        const tail = plainStdoutFromRunEvents(run.events);
+        const tail =
+          def.streamFormat === 'antigravity-stream-json'
+            ? textDeltaFromRunEvents(run.events)
+            : plainStdoutFromRunEvents(run.events);
         const totalBytes = run.plainStdoutTotalBytes ?? head.length;
         const tailStart = Math.max(0, totalBytes - tail.length);
         let plainArtifacts: ReturnType<typeof extractPlainStreamArtifacts>;
@@ -15854,7 +15932,9 @@ export async function startServer({
           },
         );
       }
-      } finally {
+    } catch (childCloseErr) {
+      console.error('[runs] child close error:', childCloseErr);
+    } finally {
         // Best-effort cleanup of the per-run agy log file on every close
         // path — successful, failed, cancelled, or non-zero exit — so
         // /tmp doesn't accumulate one file per Antigravity run. The log
