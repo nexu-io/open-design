@@ -1269,6 +1269,12 @@ export class McpObservabilitySession {
           pluginWorkflowId: inherited.pluginWorkflowId,
         };
       }
+      if (args.pluginWorkflowId !== undefined) {
+        validatePluginWorkflowId(args.pluginWorkflowId);
+        throw pluginContractError(
+          'pluginWorkflowId requires an attributed brief draft',
+        );
+      }
     }
 
     if (args.pluginWorkflowId !== undefined) {
