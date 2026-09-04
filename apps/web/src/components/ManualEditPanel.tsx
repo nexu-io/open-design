@@ -1,8 +1,24 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import type { ProjectDesignTokenSuggestion, ProjectDesignTokenSuggestionProp } from '../providers/registry';
 import { useT } from '../i18n';
+import { type AlignmentOp } from '../edit-mode/alignment';
 import { emptyManualEditStyles, type ManualEditHistoryEntry, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../edit-mode/types';
 import { Icon } from './Icon';
+
+function parseRotationDeg(t: string): string {
+  const m = (t || '').match(/rotate\((-?[0-9.]+)deg\)/);
+  return m ? m[1]! : '0';
+}
+const alignBtnStyle: CSSProperties = {
+  background: 'none',
+  border: '1px solid var(--separator)',
+  borderRadius: 4,
+  cursor: 'pointer',
+  padding: '2px 6px',
+  fontSize: 14,
+  lineHeight: '18px',
+  color: 'var(--fg)',
+};
 
 export interface ManualEditDraft {
   text: string;
@@ -31,6 +47,8 @@ export function ManualEditPanel({
   canRedo,
   busy,
   resetAvailable = false,
+  selectedCount = 1,
+  onAlign,
   onDraftChange,
   onStyleChange,
   onInvalidStyle,
@@ -63,6 +81,8 @@ export function ManualEditPanel({
   canRedo: boolean;
   busy?: boolean;
   resetAvailable?: boolean;
+  selectedCount?: number;
+  onAlign?: (op: AlignmentOp) => void;
   pageStylesEnabled?: boolean;
   onSelectTarget: (target: ManualEditTarget) => void;
   onDraftChange: (draft: ManualEditDraft) => void;
@@ -100,6 +120,16 @@ export function ManualEditPanel({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const targetForInspector = selectedTarget;
   const panelTitle = targetForInspector ? readableManualEditTargetName(targetForInspector) : t('manualEdit.fallbackTitle');
+  const alignBtnStyle: CSSProperties = {
+    background: 'none',
+    border: '1px solid var(--separator)',
+    borderRadius: 4,
+    cursor: 'pointer',
+    padding: '2px 6px',
+    fontSize: 14,
+    lineHeight: '18px',
+    color: 'var(--fg)',
+  };
   useEffect(() => {
     selectedTargetRef.current = selectedTarget;
   }, [selectedTarget]);
@@ -226,6 +256,21 @@ export function ManualEditPanel({
             </button>
           ) : null}
         </div>
+        {selectedCount > 1 && onAlign ? (
+          <div role="toolbar" aria-label={t('manualEdit.align')} style={{ display: 'flex', gap: 2, padding: '4px 8px', borderBottom: '1px solid var(--separator)', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, color: 'var(--muted)', padding: '0 4px', display: 'flex', alignItems: 'center' }}>{selectedCount} selected</span>
+            <button type="button" title={t('manualEdit.alignLeft')} onClick={() => onAlign('align-left')} style={alignBtnStyle}>⟵</button>
+            <button type="button" title={t('manualEdit.alignCenterH')} onClick={() => onAlign('align-center-h')} style={alignBtnStyle}>⟷</button>
+            <button type="button" title={t('manualEdit.alignRight')} onClick={() => onAlign('align-right')} style={alignBtnStyle}>⟶</button>
+            <span style={{ width: 4 }} />
+            <button type="button" title={t('manualEdit.alignTop')} onClick={() => onAlign('align-top')} style={alignBtnStyle}>⟰</button>
+            <button type="button" title={t('manualEdit.alignCenterV')} onClick={() => onAlign('align-center-v')} style={alignBtnStyle}>↕</button>
+            <button type="button" title={t('manualEdit.alignBottom')} onClick={() => onAlign('align-bottom')} style={alignBtnStyle}>⟱</button>
+            <span style={{ width: 4 }} />
+            <button type="button" title={t('manualEdit.distributeH')} onClick={() => onAlign('distribute-h')} style={alignBtnStyle}>⇥</button>
+            <button type="button" title={t('manualEdit.distributeV')} onClick={() => onAlign('distribute-v')} style={alignBtnStyle}>⇅</button>
+          </div>
+        ) : null}
         <div className="manual-edit-scroll">
           {targetForInspector ? (
             <>
@@ -853,6 +898,23 @@ function StyleInspector({
           <UnitRow label={t('manualEdit.width')} value={styles.width} placeholder={widthPlaceholder} onChange={(v) => u('width', v)} unit="px" autoUnit onFocus={() => activate('width', t('manualEdit.width'))} />
           <UnitRow label={t('manualEdit.height')} value={styles.height} placeholder={heightPlaceholder} onChange={(v) => u('height', v)} unit="px" autoUnit onFocus={() => activate('height', t('manualEdit.height'))} />
         </PairRow>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: -4, marginBottom: 4 }}>
+          <input type="range" min="0" max="1" step="0.05" value={parseFloat(styles.opacity || '1')} style={{ flex: 1, height: 4 }}
+            onChange={(e) => u('opacity', e.target.value)} />
+          <span style={{ fontSize: 10, color: 'var(--muted)', minWidth: 30 }}>{(parseFloat(styles.opacity || '1') * 100).toFixed(0)}%</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 11 }}>
+          <span>{t('manualEdit.order')}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <button title={t('manualEdit.sendBackward')} style={alignBtnStyle} onClick={() => u('zIndex', String(Math.max(0, (parseInt(styles.zIndex || '0', 10) || 0) - 1)))}>↓</button>
+            <span style={{ minWidth: 24, textAlign: 'center', color: 'var(--muted)' }}>{styles.zIndex || '0'}</span>
+            <button title={t('manualEdit.bringForward')} style={alignBtnStyle} onClick={() => u('zIndex', String((parseInt(styles.zIndex || '0', 10) || 0) + 1))}>↑</button>
+            <button title={t('manualEdit.toFront')} style={alignBtnStyle} onClick={() => u('zIndex', '9999')}>⤒</button>
+            <button title={t('manualEdit.toBack')} style={alignBtnStyle} onClick={() => u('zIndex', '0')}>⤓</button>
+          </div>
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 6, paddingLeft: 2 }}>Ctrl+[/] to adjust layer order</div>
+
 
         <QuadRow label={t('manualEdit.padding')} axes={{
           t: t('manualEdit.sideTop'), r: t('manualEdit.sideRight'), b: t('manualEdit.sideBottom'), l: t('manualEdit.sideLeft'),
@@ -882,6 +944,26 @@ function StyleInspector({
           )}
         </PairRow>
         {layoutDisabled ? <p className="cc-section-hint">{t('manualEdit.layoutUnavailable')}</p> : null}
+        <UnitRow label={t('manualEdit.radius')} value={styles.borderRadius} onChange={(v) => u('borderRadius', v)} unit="px" autoUnit />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+          <span style={{ fontSize: 11, color: 'var(--muted)', minWidth: 60 }}>{t('manualEdit.rotate')}</span>
+          <input type="number" min="-360" max="360" step="1" value={parseRotationDeg(styles.transform)}
+            onChange={(e) => u('transform', e.target.value ? 'rotate(' + e.target.value + 'deg)' : '')}
+            style={{ fontSize: 11, flex: 1, maxWidth: 60, background: 'var(--bg-input)', color: 'var(--fg)', border: '1px solid var(--separator)', borderRadius: 4, padding: '2px 4px' }} />
+          <span style={{ fontSize: 10, color: 'var(--muted)' }}>°</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+          <span style={{ fontSize: 11, color: 'var(--muted)', minWidth: 60 }}>{t('manualEdit.shadow')}</span>
+          <select value={styles.boxShadow || ''} onChange={(e) => u('boxShadow', e.target.value)}
+            style={{ fontSize: 11, flex: 1, background: 'var(--bg-input)', color: 'var(--fg)', border: '1px solid var(--separator)', borderRadius: 4, padding: '2px 4px' }}>
+            <option value="">{t('manualEdit.shadowNone')}</option>
+            <option value="0 1px 3px rgba(0,0,0,0.12)">Sm</option>
+            <option value="0 4px 6px rgba(0,0,0,0.1)">Md</option>
+            <option value="0 10px 25px rgba(0,0,0,0.15)">Lg</option>
+            <option value="0 20px 50px rgba(0,0,0,0.2)">Xl</option>
+          </select>
+        </div>
+
       </Section>
 
       {activeField && activeProp ? (

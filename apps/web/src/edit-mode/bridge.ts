@@ -174,7 +174,12 @@ export function buildManualEditBridge(enabled: boolean): string {
   var discoverySelector = ${JSON.stringify(MANUAL_EDIT_DISCOVERY_SELECTOR)};
   var hostNodeSelector = ${JSON.stringify(MANUAL_EDIT_HOST_NODE_SELECTOR)};
   var sourcePathAttr = ${JSON.stringify(MANUAL_EDIT_SOURCE_PATH_ATTR)};
-  var styleProps = ['fontFamily','fontSize','fontWeight','color','textAlign','lineHeight','letterSpacing','width','height','minHeight','gap','flexDirection','justifyContent','alignItems','backgroundColor','opacity','padding','paddingTop','paddingRight','paddingBottom','paddingLeft','margin','marginTop','marginRight','marginBottom','marginLeft','border','borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth','borderStyle','borderColor','borderRadius','transform','display'];
+  var styleProps = ['fontFamily','fontSize','fontWeight','color','textAlign','lineHeight','letterSpacing','width','height','minHeight','gap','flexDirection','justifyContent','alignItems','backgroundColor','opacity','padding','paddingTop','paddingRight','paddingBottom','paddingLeft','margin','marginTop','marginRight','marginBottom','marginLeft','border','borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth','borderStyle','borderColor','borderRadius','transform','display','position','left','top','right','bottom','zIndex','boxShadow'];
+  var dragState = null; // { el, startX, startY, startLeft, startTop, startWidth, startHeight, handle, id }
+  var handles = []; // live handle elements
+  var selectedElForHandles = null; // which element currently has handles shown
+  var selectedIds = {}; // map of id → true for multi-selected elements
+  var rubberband = null; // { el, startX, startY } for drag-to-select rectangle
   function isHostNode(el){
     return !!(el && el.matches && el.matches(hostNodeSelector));
   }
@@ -913,6 +918,8 @@ export function buildManualEditBridge(enabled: boolean): string {
         // dropping it (the #3647 exit-path regression).
         finishActiveTextEdit(true);
         clearSelectedTarget();
+        removeHandles();
+        removeRotationHandle();
         clearGuidesLayer();
         // Re-entering Edit must treat the first pointerover as fresh. Keeping
         // lastHoverId here made the same element look deduplicated forever
@@ -927,9 +934,12 @@ export function buildManualEditBridge(enabled: boolean): string {
     }
     if (ev.data.type === 'od-edit-selected-target') {
       setSelectedTarget(ev.data.id || null);
-      if (!ev.data.id) clearGuidesLayer();
+      if (!ev.data.id) { clearGuidesLayer(); removeHandles(); }
       else {
         renderSelectedChromeForCurrent();
+        var selEl2 = findById(ev.data.id);
+        if (selEl2) setTimeout(function(){ createHandles(selEl2); }, 0);
+        else removeHandles();
       }
       return;
     }
@@ -1018,6 +1028,8 @@ export function buildManualEditBridge(enabled: boolean): string {
     if (ev.target && ev.target.closest && ev.target.closest('[data-od-editing="true"]')) return;
     var el = closestTarget(ev);
     if (!el) { dragPending = null; return; }
+    // Elements with resize handles are owned by the handle engine below.
+    if (selectedElForHandles && selectedElForHandles === el) return;
     var base = readTranslateBase(el);
     dragPending = {
       el: el,
@@ -1043,24 +1055,506 @@ export function buildManualEditBridge(enabled: boolean): string {
     if (drag.bumpedDisplay) msg.display = 'inline-block';
     window.parent.postMessage(msg, '*');
   }, true);
+  // ── Drag & Resize Engine ──
+
+  var HANDLE_SIZE = 8;
+  // ── Multi-select helpers ──
+  function getSelectedCount(){ var n=0; for (var _k in selectedIds) n++; return n; }
+  function getSelectedIds(){ var ids=[]; for (var _k in selectedIds) ids.push(_k); return ids; }
+  function isSelectedId(id){ return !!selectedIds[id]; }
+  function addToMultiSelectionById(id){ if (id){ selectedIds[id]=true; } }
+  function removeFromMultiSelectionById(id){ if (id){ delete selectedIds[id]; } }
+  function clearMultiSelection(){ selectedIds={}; }
+  function applyMultiSelectionAttrs(){
+    // Highlight all selected elements, focus highlight on the last clicked
+    var all = document.querySelectorAll('[data-od-edit-selected]');
+    for (var s=0; s<all.length; s++) all[s].removeAttribute('data-od-edit-selected');
+    var ids = getSelectedIds();
+    for (var j=0; j<ids.length; j++){
+      var selEl = findById(ids[j]);
+      if (selEl) selEl.setAttribute('data-od-edit-selected', 'true');
+    }
+  }
+  function postMultiSelect(){
+    window.parent.postMessage({ type: 'od-edit-multi-select', ids: getSelectedIds() }, '*');
+    applyMultiSelectionAttrs();
+  }
+
+  // ── Rubberband drag-to-select ──
+  function startRubberband(clientX, clientY){
+    rubberband = { startX: clientX, startY: clientY, el: null };
+  }
+  function updateRubberband(clientX, clientY){
+    if (!rubberband) return;
+    var rx = Math.min(rubberband.startX, clientX);
+    var ry = Math.min(rubberband.startY, clientY);
+    var rw = Math.max(10, Math.abs(clientX - rubberband.startX));
+    var rh = Math.max(10, Math.abs(clientY - rubberband.startY));
+    if (!rubberband.el){
+      rubberband.el = document.createElement('div');
+      rubberband.el.setAttribute('data-od-rubberband', '');
+      rubberband.el.style.cssText = 'position:fixed;z-index:2147483646;background:rgba(37,99,235,0.12);border:1px solid #2563eb;pointer-events:none;';
+      document.body.appendChild(rubberband.el);
+    }
+    rubberband.el.style.left = rx + 'px';
+    rubberband.el.style.top = ry + 'px';
+    rubberband.el.style.width = rw + 'px';
+    rubberband.el.style.height = rh + 'px';
+  }
+  function endRubberband(clientX, clientY){
+    if (!rubberband) return;
+    if (rubberband.el && rubberband.el.parentNode) rubberband.el.parentNode.removeChild(rubberband.el);
+    // Find elements intersecting rubberband rectangle
+    var rx = Math.min(rubberband.startX, clientX);
+    var ry = Math.min(rubberband.startY, clientY);
+    var rw = Math.abs(clientX - rubberband.startX);
+    var rh = Math.abs(clientY - rubberband.startY);
+    // Only activate if rubberband is larger than a click (>= 5px)
+    if (rw < 5 && rh < 5){ rubberband = null; return; }
+    var rubberbandRect = { left: rx, top: ry, right: rx+rw, bottom: ry+rh };
+    clearMultiSelection();
+    var allEls = document.querySelectorAll(discoverySelector);
+    for (var i=0; i<allEls.length; i++){
+      var el2 = allEls[i];
+      if (!isSourceMappable(el2)) continue;
+      var rect2 = el2.getBoundingClientRect();
+      if (rect2.right > rubberbandRect.left && rect2.left < rubberbandRect.right &&
+          rect2.bottom > rubberbandRect.top && rect2.top < rubberbandRect.bottom){
+        addToMultiSelectionById(stableId(el2));
+      }
+    }
+    rubberband = null;
+    postMultiSelect();
+    if (getSelectedCount() >= 1){
+      // Show handles on first selected
+      var firstId = getSelectedIds()[0];
+      if (firstId) {
+        var firstEl = findById(firstId);
+        if (firstEl) createHandles(firstEl);
+      }
+    }
+  }
+
+  // ── Multi-element drag helpers ──
+  function getSelectedElements(){
+    var result = [];
+    var ids = getSelectedIds();
+    for (var i=0; i<ids.length; i++){
+      var el3 = findById(ids[i]);
+      if (el3 && el3.isConnected) result.push(el3);
+    }
+    return result;
+  }
+  function commitMultiPosition(els){
+    var positions = [];
+    for (var m=0; m<els.length; m++){
+      var e = els[m];
+      if (!e || !e.isConnected) continue;
+      var r = e.getBoundingClientRect();
+      positions.push({ id: stableId(e), left: Math.round(r.left)+'px', top: Math.round(r.top)+'px', width: Math.round(r.width)+'px', height: Math.round(r.height)+'px' });
+    }
+    if (positions.length > 0){
+      window.parent.postMessage({ type: 'od-edit-position-commit-batch', positions: positions }, '*');
+    }
+  }
+
+  // ── Rotation handle ──
+  var rotationHandle = null;
+  var rotationLineEl = null;
+  function createRotationHandle(el){
+    removeRotationHandle();
+    if (!el || !el.isConnected) return;
+    var rect = el.getBoundingClientRect();
+    var cx = rect.left + rect.width / 2;
+    var cy = rect.top;
+    // Connecting line
+    var line = document.createElement('div');
+    line.setAttribute('data-od-rotation-line', '');
+    line.style.cssText = 'position:fixed;z-index:2147483646;pointer-events:none;background:#2563eb;left:' + cx + 'px;top:' + (cy - 24) + 'px;width:1px;height:24px;';
+    document.body.appendChild(line);
+    rotationLineEl = line;
+    // Handle circle
+    var handle = document.createElement('div');
+    handle.setAttribute('data-od-rotation-handle', '');
+    handle.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:auto;width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid #2563eb;cursor:grab;transform:translate(-50%,-50%);left:' + cx + 'px;top:' + (cy - 30) + 'px;';
+    document.body.appendChild(handle);
+    rotationHandle = { el: handle, cx: cx, cy: cy, w: rect.width, h: rect.height, targetEl: el };
+  }
+  function updateRotationHandlePos(el){
+    if (!rotationHandle || rotationHandle.targetEl !== el) { removeRotationHandle(); return; }
+    var rect = el.getBoundingClientRect();
+    var cx = rect.left + rect.width / 2;
+    rotationHandle.cx = cx;
+    rotationHandle.cy = rect.top;
+    rotationHandle.el.style.left = cx + 'px';
+    rotationHandle.el.style.top = (rect.top - 30) + 'px';
+    if (rotationLineEl){
+      rotationLineEl.style.left = cx + 'px';
+      rotationLineEl.style.top = (rect.top - 24) + 'px';
+    }
+  }
+  function removeRotationHandle(){
+    if (rotationHandle && rotationHandle.el.parentNode) rotationHandle.el.parentNode.removeChild(rotationHandle.el);
+    if (rotationLineEl && rotationLineEl.parentNode) rotationLineEl.parentNode.removeChild(rotationLineEl);
+    rotationHandle = null;
+    rotationLineEl = null;
+  }
+
+  function removeHandles(){
+    for (var i = 0; i < handles.length; i++) {
+      if (handles[i] && handles[i].parentNode) handles[i].parentNode.removeChild(handles[i]);
+    }
+    handles = [];
+    selectedElForHandles = null;
+  }
+
+  function createHandles(el){
+    removeHandles();
+    if (!el || el === document.body || el === document.documentElement) return;
+    // Guard: element destroyed by srcdoc reload after position commit
+    if (!el.isConnected) return;
+    selectedElForHandles = el;
+    var rect = el.getBoundingClientRect();
+    var containerEl = el.offsetParent || document.body;
+    if (!containerEl || !containerEl.isConnected) return;
+    var containerRect = containerEl.getBoundingClientRect();
+    var positions = [
+      { h: 'nw', cursor: 'nwse-resize', left: rect.left - containerRect.left - HANDLE_SIZE/2, top: rect.top - containerRect.top - HANDLE_SIZE/2 },
+      { h: 'n',  cursor: 'ns-resize',   left: rect.left - containerRect.left + rect.width/2 - HANDLE_SIZE/2, top: rect.top - containerRect.top - HANDLE_SIZE/2 },
+      { h: 'ne', cursor: 'nesw-resize', left: rect.left - containerRect.left + rect.width - HANDLE_SIZE/2, top: rect.top - containerRect.top - HANDLE_SIZE/2 },
+      { h: 'e',  cursor: 'ew-resize',   left: rect.left - containerRect.left + rect.width - HANDLE_SIZE/2, top: rect.top - containerRect.top + rect.height/2 - HANDLE_SIZE/2 },
+      { h: 'se', cursor: 'nwse-resize', left: rect.left - containerRect.left + rect.width - HANDLE_SIZE/2, top: rect.top - containerRect.top + rect.height - HANDLE_SIZE/2 },
+      { h: 's',  cursor: 'ns-resize',   left: rect.left - containerRect.left + rect.width/2 - HANDLE_SIZE/2, top: rect.top - containerRect.top + rect.height - HANDLE_SIZE/2 },
+      { h: 'sw', cursor: 'nesw-resize', left: rect.left - containerRect.left - HANDLE_SIZE/2, top: rect.top - containerRect.top + rect.height - HANDLE_SIZE/2 },
+      { h: 'w',  cursor: 'ew-resize',   left: rect.left - containerRect.left - HANDLE_SIZE/2, top: rect.top - containerRect.top + rect.height/2 - HANDLE_SIZE/2 },
+    ];
+    for (var j = 0; j < positions.length; j++) {
+      var p = positions[j];
+      var handle = document.createElement('div');
+      handle.setAttribute('data-od-drag-handle', p.h);
+      handle.style.cssText = [
+        'position:absolute',
+        'left:' + Math.round(p.left) + 'px',
+        'top:' + Math.round(p.top) + 'px',
+        'width:' + HANDLE_SIZE + 'px',
+        'height:' + HANDLE_SIZE + 'px',
+        'background:#2563eb',
+        'border:2px solid #fff',
+        'border-radius:1px',
+        'z-index:2147483647',
+        'pointer-events:auto',
+        'cursor:' + p.cursor,
+        'box-sizing:border-box',
+      ].join(';');
+      containerEl.appendChild(handle);
+      handles.push(handle);
+    }
+  }
+
+  function updateHandlePositions(el){
+    if (selectedElForHandles !== el) return;
+    if (!el) { removeHandles(); return; }
+    var rect = el.getBoundingClientRect();
+    var containerEl = el.offsetParent || document.body;
+    var containerRect = containerEl.getBoundingClientRect();
+    var offsets = [
+      { h: 'nw', left: -HANDLE_SIZE/2, top: -HANDLE_SIZE/2 },
+      { h: 'n',  left: rect.width/2 - HANDLE_SIZE/2, top: -HANDLE_SIZE/2 },
+      { h: 'ne', left: rect.width - HANDLE_SIZE/2, top: -HANDLE_SIZE/2 },
+      { h: 'e',  left: rect.width - HANDLE_SIZE/2, top: rect.height/2 - HANDLE_SIZE/2 },
+      { h: 'se', left: rect.width - HANDLE_SIZE/2, top: rect.height - HANDLE_SIZE/2 },
+      { h: 's',  left: rect.width/2 - HANDLE_SIZE/2, top: rect.height - HANDLE_SIZE/2 },
+      { h: 'sw', left: -HANDLE_SIZE/2, top: rect.height - HANDLE_SIZE/2 },
+      { h: 'w',  left: -HANDLE_SIZE/2, top: rect.height/2 - HANDLE_SIZE/2 },
+    ];
+    for (var j = 0; j < handles.length; j++) {
+      if (j >= offsets.length) break;
+      var o = offsets[j];
+      handles[j].style.left = Math.round(rect.left - containerRect.left + o.left) + 'px';
+      handles[j].style.top = Math.round(rect.top - containerRect.top + o.top) + 'px';
+    }
+  }
+
+  function parseRotation(el){
+    var t = el.style.transform || '';
+    var m = t.match(/rotate\((-?[0-9.]+)deg\)/);
+    return m ? parseFloat(m[1]) : 0;
+  }
+  function ensureAbsolute(el){
+    var pos = window.getComputedStyle(el).position;
+    if (pos !== 'absolute' && pos !== 'fixed') {
+      var rect = el.getBoundingClientRect();
+      el.style.position = 'absolute';
+      el.style.left = rect.left + 'px';
+      el.style.top = rect.top + 'px';
+      el.style.width = rect.width + 'px';
+      el.style.height = rect.height + 'px';
+      el.style.margin = '0';
+      el.style.transform = ''; // fold any prior translate into left/top — rect above already includes it
+    }
+  }
+
+  function commitPosition(el, id){
+    var rect = el.getBoundingClientRect();
+    var msg = {
+      type: 'od-edit-position-commit',
+      id: id,
+      left: Math.round(rect.left) + 'px',
+      top: Math.round(rect.top) + 'px',
+      width: Math.round(rect.width) + 'px',
+      height: Math.round(rect.height) + 'px',
+    };
+    var t = el.style.transform || '';
+    if (t) msg.transform = t;
+    window.parent.postMessage(msg, '*');
+  }
+
+  // Pointer handlers for drag + resize
+  function onPointerDown(ev){
+    if (!enabled) return;
+    // Check rotation handle first
+    if (ev.target && ev.target.closest && ev.target.closest('[data-od-rotation-handle]')){
+      ev.preventDefault(); ev.stopPropagation();
+      if (!rotationHandle) return;
+      dragState = { el: rotationHandle.targetEl, startX: ev.clientX, startY: ev.clientY, handle: 'rotate', id: stableId(rotationHandle.targetEl), moved: false,
+        startLeft: rotationHandle.cx, startTop: rotationHandle.cy, startWidth: 0, startHeight: 0, rotationStart: parseRotation(rotationHandle.targetEl),
+        cx: rotationHandle.cx, cy: rotationHandle.cy };
+      rotationHandle.targetEl.setPointerCapture(ev.pointerId);
+      return;
+    }
+    // Check handle hit first
+    var handleEl = ev.target && ev.target.closest ? ev.target.closest('[data-od-drag-handle]') : null;
+    if (handleEl && selectedElForHandles) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      var el = selectedElForHandles;
+      ensureAbsolute(el);
+      var rect = el.getBoundingClientRect();
+      dragState = {
+        el: el,
+        startX: ev.clientX,
+        startY: ev.clientY,
+        startLeft: rect.left,
+        startTop: rect.top,
+        startWidth: rect.width,
+        startHeight: rect.height,
+        handle: handleEl.getAttribute('data-od-drag-handle'),
+        id: stableId(el),
+        moved: false,
+      };
+      el.setPointerCapture(ev.pointerId);
+      window.parent.postMessage({ type: 'od-edit-drag-start', id: dragState.id }, '*');
+      return;
+    }
+    // Check if pointer is on a selectable element
+    var targetEl = closestTarget(ev);
+    var targetId = targetEl ? stableId(targetEl) : null;
+    var isMultiDrag = targetEl && isSelectedId(targetId) && getSelectedCount() > 1;
+
+    if (targetEl && !handleEl && (targetEl === selectedElForHandles || isMultiDrag)) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (isMultiDrag) {
+        // Multi-drag: store all selected elements
+        var selEls = getSelectedElements();
+        var multiEls = [];
+        for (var i2 = 0; i2 < selEls.length; i2++) {
+          var selEl = selEls[i2];
+          ensureAbsolute(selEl);
+          var sr = selEl.getBoundingClientRect();
+          multiEls.push({ el: selEl, startLeft: sr.left, startTop: sr.top });
+        }
+        dragState = {
+          el: targetEl,
+          startX: ev.clientX,
+          startY: ev.clientY,
+          startLeft: 0, startTop: 0,
+          startWidth: 0, startHeight: 0,
+          handle: 'body',
+          id: targetId,
+          moved: false,
+          multiEls: multiEls,
+        };
+      } else {
+        // Single drag
+        ensureAbsolute(targetEl);
+        var rect2 = targetEl.getBoundingClientRect();
+        dragState = {
+          el: targetEl,
+          startX: ev.clientX,
+          startY: ev.clientY,
+          startLeft: rect2.left,
+          startTop: rect2.top,
+          startWidth: rect2.width,
+          startHeight: rect2.height,
+          handle: 'body',
+          id: targetId,
+          moved: false,
+        };
+      }
+      targetEl.setPointerCapture(ev.pointerId);
+      window.parent.postMessage({ type: 'od-edit-drag-start', id: dragState.id }, '*');
+      return;
+    }
+    // Start rubberband on background click (no source-mapped ancestor)
+    if (!targetEl && !handleEl){
+      startRubberband(ev.clientX, ev.clientY);
+      return;
+    }
+  }
+
+  function onPointerMove(ev){
+    if (rubberband) { updateRubberband(ev.clientX, ev.clientY); return; }
+    if (!dragState) return;
+    // Rotation
+    if (dragState.handle === 'rotate'){
+      var angle = Math.atan2(ev.clientY - dragState.cy, ev.clientX - dragState.cx) * 180 / Math.PI + 90;
+      dragState.el.style.transform = 'rotate(' + Math.round(angle) + 'deg)';
+      dragState.moved = true;
+      updateRotationHandlePos(dragState.el);
+      updateHandlePositions(dragState.el);
+      return;
+    }
+    var dx = ev.clientX - dragState.startX;
+    var dy = ev.clientY - dragState.startY;
+    if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+    dragState.moved = true;
+    // Multi-drag
+    if (dragState.multiEls){
+      for (var mi=0; mi<dragState.multiEls.length; mi++){
+        var me = dragState.multiEls[mi];
+        me.el.style.left = (me.startLeft + dx) + 'px';
+        me.el.style.top = (me.startTop + dy) + 'px';
+      }
+      updateHandlePositions(dragState.el);
+      return;
+    }
+    var el = dragState.el;
+    if (dragState.handle === 'body') {
+      el.style.left = (dragState.startLeft + dx) + 'px';
+      el.style.top = (dragState.startTop + dy) + 'px';
+    } else {
+      // Resize — anchor the opposite corner
+      var h = dragState.handle;
+      var newLeft = dragState.startLeft;
+      var newTop = dragState.startTop;
+      var newW = dragState.startWidth;
+      var newH = dragState.startHeight;
+      if (h.indexOf('e') >= 0) { newW = Math.max(10, dragState.startWidth + dx); }
+      if (h.indexOf('w') >= 0) { newLeft = dragState.startLeft + dx; newW = Math.max(10, dragState.startWidth - dx); }
+      if (h.indexOf('s') >= 0) { newH = Math.max(10, dragState.startHeight + dy); }
+      if (h.indexOf('n') >= 0) { newTop = dragState.startTop + dy; newH = Math.max(10, dragState.startHeight - dy); }
+      el.style.left = newLeft + 'px';
+      el.style.top = newTop + 'px';
+      el.style.width = newW + 'px';
+      el.style.height = newH + 'px';
+    }
+    updateHandlePositions(el);
+  }
+
+  function onPointerUp(ev){
+    if (rubberband) { endRubberband(ev.clientX, ev.clientY); return; }
+    if (!dragState) return;
+    var el = dragState.el;
+    var id = dragState.id;
+    try { el.releasePointerCapture(ev.pointerId); } catch(e) {}
+    if (dragState.handle === 'rotate'){
+      if (dragState.moved){
+        commitPosition(el, id);
+        dragEndedJustNow = true;
+      }
+      dragState = null;
+      updateRotationHandlePos(el);
+      updateHandlePositions(el);
+      return;
+    }
+    if (dragState.moved) {
+      if (dragState.multiEls){
+        commitMultiPosition(dragState.multiEls.map(function(m2){ return m2.el; }));
+        dragEndedJustNow = true;
+      } else {
+        commitPosition(el, id);
+        dragEndedJustNow = true;
+      }
+    }
+    dragState = null;
+    if (el) {
+      updateHandlePositions(el);
+      window.parent.postMessage({ type: 'od-edit-drag-end', id: id || '' }, '*');
+    }
+  }
+
+  document.addEventListener('pointerdown', onPointerDown, true);
+  document.addEventListener('pointermove', onPointerMove, true);
+  document.addEventListener('pointerup', onPointerUp, true);
+  // Also listen on pointerup outside iframe bounds
+  document.addEventListener('pointerleave', function(ev){
+    if (rubberband){
+      if (rubberband.el && rubberband.el.parentNode) rubberband.el.parentNode.removeChild(rubberband.el);
+      rubberband = null;
+      return;
+    }
+    if (dragState) {
+      var el2 = dragState.el;
+      var id2 = dragState.id;
+      try { el2.releasePointerCapture(ev.pointerId); } catch(e) {}
+      if (dragState.moved) {
+        if (dragState.multiEls){
+          commitMultiPosition(dragState.multiEls.map(function(m2){ return m2.el; }));
+        } else {
+          commitPosition(el2, id2);
+        }
+      }
+      dragState = null;
+      window.parent.postMessage({ type: 'od-edit-drag-end', id: id2 || '' }, '*');
+    }
+  }, true);
+
+  // ── end drag engine ──
+
+  var dragEndedJustNow = false;
   document.addEventListener('click', function(ev){
     if (!enabled) return;
     if (justDragged) { justDragged = false; ev.preventDefault(); ev.stopPropagation(); return; }
+    if (dragEndedJustNow) { dragEndedJustNow = false; return; }
     if (ev.target && ev.target.closest && ev.target.closest('[data-od-editing="true"]')) return;
+    if (ev.target && ev.target.closest && ev.target.closest('[data-od-drag-handle]')) return;
     ev.preventDefault();
     ev.stopPropagation();
     var el = closestTarget(ev);
     if (!el) {
-      // Clicking empty canvas (no source-mapped ancestor) is the gesture for
-      // page-level styles; commit any in-flight edit first so the host and
-      // iframe stay in sync, then let the host decide whether to surface the
-      // page-styles card.
+      removeHandles();
+      clearMultiSelection();
+      postMultiSelect();
       if (activeTextEdit) finishActiveTextEdit(true);
       window.parent.postMessage({ type: 'od-edit-background' }, '*');
       return;
     }
-    // Switching to a different target commits the in-flight edit first, so the
-    // previous edit is never silently dropped.
+    var id = stableId(el);
+    if (ev.shiftKey) {
+      // Shift+click: toggle individual element in multi-selection
+      if (isSelectedId(id)) { removeFromMultiSelectionById(id); }
+      else { addToMultiSelectionById(id); }
+      // Show handles on last-clicked
+      if (el) { createHandles(el); }
+      postMultiSelect();
+      // If single after toggle, also send select for inspector
+      if (getSelectedCount() === 1){
+        window.parent.postMessage({ type: 'od-edit-select', target: targetFrom(el, true) }, '*');
+      }
+      return;
+    }
+    if (isSelectedId(id) && getSelectedCount() > 1){
+      // Click on a multi-selected element: collapse to single select
+      clearMultiSelection();
+      addToMultiSelectionById(id);
+      postMultiSelect();
+    } else if (!isSelectedId(id)){
+      // Click on unselected element: clear multi-select
+      clearMultiSelection();
+      addToMultiSelectionById(id);
+      postMultiSelect();
+    }
     if (activeTextEdit && activeTextEdit.el !== el) finishActiveTextEdit(true);
     var kind = inferKind(el);
     var selectedTarget = targetFrom(el, true);
@@ -1068,6 +1562,8 @@ export function buildManualEditBridge(enabled: boolean): string {
     renderSelectedChromeForCurrent();
     window.parent.postMessage({ type: 'od-edit-select', target: selectedTarget }, '*');
     window.parent.postMessage({ type: 'od-edit-inspect-select', target: selectedTarget }, '*');
+    // Show resize handles for selected element
+    setTimeout(function(){ createHandles(el); createRotationHandle(el); }, 0);
     if (kind === 'text' || kind === 'link') {
       makeEditable(el, ev);
       return;
@@ -1218,26 +1714,42 @@ export function buildManualEditBridge(enabled: boolean): string {
     postHoverTarget(hoveredEl);
   }, true);
   window.addEventListener('resize', postTargets);
-  var hoverGuidesScrollScheduled = false;
-  var scheduleGuideFrame = window.requestAnimationFrame
-    ? window.requestAnimationFrame.bind(window)
-    : function(cb){ return setTimeout(cb, 16); };
-  // Guides are drawn in viewport (fixed) coordinates, so any scroll — page or
-  // inner container — invalidates them; re-measure the tracked hover element.
-  window.addEventListener('scroll', function(){
-    if (!enabled || hoverGuidesScrollScheduled) return;
-    hoverGuidesScrollScheduled = true;
-    scheduleGuideFrame(function(){
-      hoverGuidesScrollScheduled = false;
-      if (!lastHoverEl) return;
-      if (!lastHoverEl.isConnected) {
-        lastHoverEl = null;
-        clearGuidesLayer();
-        return;
-      }
-      renderHoverRelation(targetFrom(lastHoverEl, false));
-    });
+  // style-commit passthrough (z-index / opacity / box-shadow / transform panel)
+  // ── Z-index keyboard shortcuts ──
+  document.addEventListener('keydown', function(ev){
+    if (!enabled || !selectedElForHandles) return;
+    if (activeTextEdit) return;
+    if (!ev.ctrlKey && !ev.metaKey) return;
+    var el = selectedElForHandles;
+    var cur = parseInt(el.style.zIndex || '', 10) || 0;
+    if (ev.key === ']'){
+      ev.preventDefault();
+      el.style.zIndex = String(cur + 1);
+      commitStyle(selectedElForHandles, 'zIndex', String(cur + 1));
+    } else if (ev.key === '['){
+      ev.preventDefault();
+      el.style.zIndex = String(Math.max(0, cur - 1));
+      commitStyle(selectedElForHandles, 'zIndex', String(Math.max(0, cur - 1)));
+    } else if (ev.key === ']' && ev.shiftKey){
+      ev.preventDefault();
+      el.style.zIndex = '9999';
+      commitStyle(selectedElForHandles, 'zIndex', '9999');
+    }
   }, true);
+
+  function commitStyle(el, prop, value){
+    window.parent.postMessage({
+      type: 'od-edit-preview-style-applied',
+      id: stableId(el), version: (Date.now() % 100000), ok: true,
+    }, '*');
+    // Defer actual commit via set-style
+    var target = el ? targetFrom(el, false) : null;
+    if (!target) return;
+    var patch = { id: stableId(el), kind: 'set-style', styles: {} };
+    patch.styles[prop] = value;
+    window.parent.postMessage({ type: 'od-edit-style-commit', id: stableId(el), prop: prop, value: value }, '*');
+  }
+
   // Double-tap Command screenshot hotkey (edit mode only). Keyboard focus can
   // live inside the sandboxed iframe, where the host's window listener never
   // hears the keys — detect here and delegate the capture to the host. Two
@@ -1363,6 +1875,10 @@ html[data-od-hide-edit-chrome] [data-od-editing="true"] {
   opacity: 0 !important;
   box-shadow: none !important;
   outline-color: transparent !important;
+}
+[data-od-drag-handle] {
+  pointer-events: auto !important;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.9);
 }
 </style>`;
 }

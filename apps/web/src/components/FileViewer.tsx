@@ -296,6 +296,7 @@ import {
   readManualEditStyles,
 } from '../edit-mode/source-patches';
 import { MANUAL_EDIT_STYLE_PROPS, type ManualEditBridgeMessage, type ManualEditHistoryEntry, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../edit-mode/types';
+import { computeAlignedPositions, type AlignmentOp, type PositionedTarget } from '../edit-mode/alignment';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 import {
   getHtmlSourceSnapshot,
@@ -3278,6 +3279,9 @@ function manualEditPatchKindToTracking(patch: ManualEditPatch): TrackingArtifact
     case 'set-attributes': return 'attributes';
     case 'set-outer-html': return 'html';
     case 'set-full-source': return 'source';
+    // Canvas drag/resize commits report as 'style' — the tracking union has
+    // no finer-grained kind for them.
+    case 'set-position': return 'style';
   }
 }
 
@@ -8881,6 +8885,8 @@ function HtmlViewer({
   }, []);
   const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([]);
   const [selectedManualEditTarget, setSelectedManualEditTarget] = useState<ManualEditTarget | null>(null);
+  const [manualEditMultiSelectedIds, setManualEditMultiSelectedIds] = useState<string[]>([]);
+  const manualEditMultiSelectedCount = manualEditMultiSelectedIds.length > 1 ? manualEditMultiSelectedIds.length : 1;
   const [manualEditHoverTarget, setManualEditHoverTarget] = useState<ManualEditTarget | null>(null);
   const [manualEditPageStylesOpen, setManualEditPageStylesOpen] = useState(false);
   const [manualEditPanelPosition, setManualEditPanelPosition] = useState<{ left: number; top: number } | null>(null);
@@ -12625,6 +12631,93 @@ function HtmlViewer({
         }
         return;
       }
+      if (data.type === 'od-edit-position-commit') {
+        const transform = typeof data.transform === 'string' ? data.transform : undefined;
+        void applyManualEdit({
+          id: String(data.id),
+          kind: 'set-position',
+          left: String(data.left),
+          top: String(data.top),
+          width: String(data.width),
+          height: String(data.height),
+          transform,
+        }, 'Drag / Resize');
+        return;
+      }
+      if (data.type === 'od-edit-position-commit-batch') {
+        void (async () => {
+          const positions: Array<{ id: string; left: string; top: string; width: string; height: string }> =
+            Array.isArray(data.positions) ? data.positions : [];
+          if (positions.length === 0) return;
+          if (manualEditSavingRef.current) return;
+          const baseSource = sourceRef.current;
+          if (baseSource == null) return;
+          let patched = baseSource;
+          for (const pos of positions) {
+            const r = applyManualEditPatch(patched, {
+              id: String(pos.id),
+              kind: 'set-position',
+              left: String(pos.left),
+              top: String(pos.top),
+              width: String(pos.width),
+              height: String(pos.height),
+            });
+            if (r.ok) patched = r.source;
+          }
+          if (patched === baseSource) return;
+          manualEditSavingRef.current = true;
+          setManualEditSaving(true);
+          try {
+            const saved = await writeProjectTextFileDetailed(projectId, file.name, patched, {
+              artifactManifest: file.artifactManifest,
+            });
+            if (!saved.ok) {
+              const message = 'message' in saved ? (saved as { message: string }).message : 'Unknown save error';
+              setManualEditError(`Could not save batch: ${message}`);
+              return;
+            }
+            const before = baseSource;
+            setSource(patched);
+            sourceRef.current = patched;
+            setInlinedSource(null);
+            setManualEditHistory((current) => [{
+              id: `${Date.now()}-${current.length}`,
+              label: 'Multi-drag',
+              patch: { kind: 'set-full-source', source: patched },
+              beforeSource: before,
+              afterSource: patched,
+              createdAt: Date.now(),
+            }, ...current]);
+          } finally {
+            manualEditSavingRef.current = false;
+            setManualEditSaving(false);
+          }
+        })();
+        return;
+      }
+      if (data.type === 'od-edit-multi-select') {
+        setManualEditMultiSelectedIds(Array.isArray(data.ids) ? data.ids.filter((id): id is string => typeof id === 'string') : []);
+        return;
+      }
+      if (data.type === 'od-edit-drag-start') {
+        return;
+      }
+      if (data.type === 'od-edit-style-commit') {
+        var sk = String(data.prop || '');
+        var sv = String(data.value || '');
+        if (sk && data.id) {
+          void applyManualEdit({
+            id: String(data.id),
+            kind: 'set-style',
+            styles: { [sk]: sv } as Partial<ManualEditStyles>,
+          }, 'Style: ' + sk);
+        }
+        return;
+      }
+      if (data.type === 'od-edit-drag-end') {
+
+        return;
+      }
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -13355,6 +13448,65 @@ function HtmlViewer({
   ): string {
     const status = saved.status ? ` (${saved.status}${saved.code ? ` ${saved.code}` : ''})` : '';
     return `${prefix}${status}: ${saved.message}`;
+  }
+
+  async function handleManualEditAlign(op: AlignmentOp) {
+    if (manualEditSavingRef.current) return;
+    const ids = manualEditMultiSelectedIds;
+    if (ids.length < 2) return;
+    const baseSource = sourceRef.current;
+    if (baseSource == null) return;
+    const idSet = new Set(ids);
+    const targets: PositionedTarget[] = manualEditTargets
+      .filter((t) => idSet.has(t.id))
+      .map((t) => ({ id: t.id, left: t.rect.x, top: t.rect.y, width: t.rect.width, height: t.rect.height }));
+    if (targets.length < 2) return;
+    const positions = computeAlignedPositions(targets, op);
+    if (!positions) return;
+    let patched = baseSource;
+    let anyChanged = false;
+    for (const pos of Object.entries(positions)) {
+      const [id, { left, top }] = pos;
+      const target = targets.find((t) => t.id === id);
+      if (!target) continue;
+      const r = applyManualEditPatch(patched, {
+        id,
+        kind: 'set-position',
+        left,
+        top,
+        width: `${Math.round(target.width)}px`,
+        height: `${Math.round(target.height)}px`,
+      });
+      if (r.ok && r.source !== patched) { patched = r.source; anyChanged = true; }
+    }
+    if (!anyChanged) return;
+    manualEditSavingRef.current = true;
+    setManualEditSaving(true);
+    try {
+      const saved = await writeProjectTextFileDetailed(projectId, file.name, patched, {
+        artifactManifest: file.artifactManifest,
+      });
+      if (!saved.ok) {
+        const message = 'message' in saved ? (saved as { message: string }).message : 'Unknown save error';
+        setManualEditError(`Could not save alignment: ${message}`);
+        return;
+      }
+      setSource(patched);
+      sourceRef.current = patched;
+      setInlinedSource(null);
+      setManualEditHistory((current) => [{
+        id: `${Date.now()}-${current.length}`,
+        label: `Align: ${op}`,
+        patch: { kind: 'set-full-source', source: patched },
+        beforeSource: baseSource,
+        afterSource: patched,
+        createdAt: Date.now(),
+      }, ...current]);
+    } finally {
+      manualEditSavingRef.current = false;
+      setManualEditSaving(false);
+    }
+
   }
 
   async function undoManualEdit() {
@@ -15797,6 +15949,8 @@ function HtmlViewer({
     <ManualEditPanel
       targets={manualEditTargets}
       selectedTarget={selectedManualEditTarget}
+      selectedCount={manualEditMultiSelectedCount}
+      onAlign={handleManualEditAlign}
       draft={manualEditDraft}
       history={manualEditHistory}
       error={manualEditError}

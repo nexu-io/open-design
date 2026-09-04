@@ -84,6 +84,13 @@ export interface ManualEditStyles {
      bumped to inline-block for inline elements so the translate takes effect. */
   transform: string;
   display: string;
+  position: string;
+  left: string;
+  top: string;
+  right: string;
+  bottom: string;
+  zIndex: string;
+  boxShadow: string;
 }
 
 export interface ManualEditTarget {
@@ -116,7 +123,16 @@ export type ManualEditPatch =
   | { id: string; kind: 'set-style'; styles: Partial<ManualEditStyles> }
   | { id: string; kind: 'set-attributes'; attributes: Record<string, string> }
   | { id: string; kind: 'set-outer-html'; html: string }
-  | { kind: 'set-full-source'; source: string };
+  | { kind: 'set-full-source'; source: string }
+  | {
+      id: string;
+      kind: 'set-position';
+      left: string;
+      top: string;
+      width: string;
+      height: string;
+      transform?: string;
+    };
 
 export interface ManualEditHistoryEntry {
   id: string;
@@ -189,6 +205,48 @@ export interface ManualEditDragCommitMessage {
   display?: string;
 }
 
+export interface ManualEditStyleCommitMessage {
+  type: 'od-edit-style-commit';
+  id: string;
+  prop: string;
+  value: string;
+}
+
+export interface ManualEditPositionCommitMessage {
+  type: 'od-edit-position-commit';
+  id: string;
+  left: string;
+  top: string;
+  width: string;
+  height: string;
+  transform?: string;
+}
+
+export interface ManualEditDragStartMessage {
+  type: 'od-edit-drag-start';
+  id: string;
+}
+
+export interface ManualEditDragEndMessage {
+  type: 'od-edit-drag-end';
+  id: string;
+}
+
+export interface ManualEditMultiSelectMessage {
+  type: 'od-edit-multi-select';
+  ids: string[];
+}
+
+export interface ManualEditSetSelectedIdsMessage {
+  type: 'od-edit-set-selected-ids';
+  ids: string[];
+}
+
+export interface ManualEditPositionCommitBatchMessage {
+  type: 'od-edit-position-commit-batch';
+  positions: Array<{ id: string; left: string; top: string; width: string; height: string }>;
+}
+
 export type ManualEditBridgeMessage =
   | ManualEditTargetMessage
   | ManualEditSelectMessage
@@ -199,7 +257,14 @@ export type ManualEditBridgeMessage =
   | ManualEditPreviewAppliedMessage
   | ManualEditTextCommitMessage
   | ManualEditTextSessionMessage
-  | ManualEditDragCommitMessage;
+  | ManualEditDragCommitMessage
+  | ManualEditPositionCommitMessage
+  | ManualEditDragStartMessage
+  | ManualEditDragEndMessage
+  | ManualEditMultiSelectMessage
+  | ManualEditSetSelectedIdsMessage
+  | ManualEditPositionCommitBatchMessage
+  | ManualEditStyleCommitMessage;
 
 export const MANUAL_EDIT_STYLE_PROPS: readonly (keyof ManualEditStyles)[] = [
   'fontFamily', 'fontSize', 'fontWeight', 'color', 'textAlign', 'lineHeight', 'letterSpacing',
@@ -210,7 +275,7 @@ export const MANUAL_EDIT_STYLE_PROPS: readonly (keyof ManualEditStyles)[] = [
   'margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
   'border', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
   'borderStyle', 'borderColor', 'borderRadius',
-  'transform', 'display',
+  'transform', 'display', 'position', 'left', 'top', 'right', 'bottom', 'zIndex', 'boxShadow',
 ];
 
 export function emptyManualEditStyles(): ManualEditStyles {
