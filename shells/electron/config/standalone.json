@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "resources": [
+    {
+      "id": "standalone-runtime",
+      "stamp": {
+        "source": "standalone",
+        "mode": "runtime",
+        "app": "standalone"
+      }
+    }
+  ]
+}

@@ -82,7 +82,9 @@ describe("Electron product shell", () => {
     }
     for (const file of sources) {
       expect(file.source, file.name).not.toMatch(/apps\/closure|apps\/web|apps\/daemon/u);
-      expect(file.source, file.name).not.toMatch(/@open-design\/standalone/u);
+      if (!file.name.startsWith("adapters/standalone/")) {
+        expect(file.source, file.name).not.toMatch(/@open-design\/(?:sidecar|standalone)/u);
+      }
     }
   });
 

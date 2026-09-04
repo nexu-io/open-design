@@ -837,6 +837,12 @@ importers:
       '@open-design/electron-kit':
         specifier: workspace:*
         version: link:../../packages/electron-kit
+      '@open-design/sidecar':
+        specifier: workspace:*
+        version: link:../../packages/sidecar
+      '@open-design/standalone':
+        specifier: workspace:*
+        version: link:../../packages/standalone
     devDependencies:
       '@types/node':
         specifier: 24.12.2

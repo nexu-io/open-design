@@ -21,7 +21,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
-    "@open-design/electron-kit": "workspace:*"
+    "@open-design/electron-kit": "workspace:*",
+    "@open-design/sidecar": "workspace:*",
+    "@open-design/standalone": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
