@@ -139,6 +139,10 @@ export interface HomeChatComposerClickProps {
     // Re-selecting a previously used folder from the working-dir picker's
     // "Recent folders" submenu.
     | 'working_dir_recent'
+    // Submitting a typed absolute path via the working-dir picker's
+    // "Type a path…" manual-entry form (pure-web path only; the native OS
+    // folder dialog can't work for a remote/headless daemon).
+    | 'working_dir_manual'
     | 'task_chip'
     // Sub-category filter pill under the task rail (全部 / Landing / Brand /
     // Dashboards / …). `subcategory` carries the picked slug; '全部' sends

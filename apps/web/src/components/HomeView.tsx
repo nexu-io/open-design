@@ -2139,6 +2139,14 @@ export function HomeView({
     setContextWorkspaceItems((current) => current.filter((item) => item.id !== id));
   }
 
+  function folderPickerErrorDetails(err: unknown): string | undefined {
+    if (!(err instanceof Error)) return undefined;
+    const message = err.message.trim();
+    if (!message) return undefined;
+    const detail = message.replace(/^Could not open folder picker:\s*/i, '').trim();
+    return detail || message;
+  }
+
   async function handlePickWorkingDir() {
     // On desktop the working-dir POST is gated behind a host-minted token, so
     // pick through the host bridge to capture { baseDir, token } together.
@@ -2166,15 +2174,27 @@ export function HomeView({
       return null;
     }
     // Pure web path: no desktop host, so there is no token gate — the raw
-    // browser folder path is the expected, working input.
-    const picked = await openFolderDialog();
-    if (picked) {
-      setWorkingDir(picked);
-      setWorkingDirToken(null);
-      void rememberRecentDir(picked);
-      return picked;
+    // browser folder path is the expected, working input. The native OS
+    // dialog runs on the daemon's machine, not the browser's — for a
+    // remote/headless daemon it can fail outright (e.g. no DISPLAY), so we
+    // opt into throwOnError and surface that failure instead of silently
+    // doing nothing (the "Type a path…" manual entry is the working
+    // alternative in that case).
+    try {
+      const picked = await openFolderDialog({ throwOnError: true });
+      if (picked) {
+        setWorkingDir(picked);
+        setWorkingDirToken(null);
+        void rememberRecentDir(picked);
+        return picked;
+      }
+      return null;
+    } catch (err) {
+      setError(
+        `Couldn't open the folder picker (${folderPickerErrorDetails(err) ?? 'unknown error'}).`,
+      );
+      return null;
     }
-    return null;
   }
 
   async function handlePickLocalCodeDir() {
@@ -2190,12 +2210,32 @@ export function HomeView({
       );
       return null;
     }
-    const picked = await openFolderDialog();
-    if (picked) {
-      void rememberRecentDir(picked);
-      return picked;
+    try {
+      const picked = await openFolderDialog({ throwOnError: true });
+      if (picked) {
+        void rememberRecentDir(picked);
+        return picked;
+      }
+      return null;
+    } catch (err) {
+      setError(
+        `Couldn't open the folder picker (${folderPickerErrorDetails(err) ?? 'unknown error'}).`,
+      );
+      return null;
     }
-    return null;
+  }
+
+  async function handleSubmitManualWorkingDir(
+    raw: string,
+  ): Promise<{ ok: boolean; message?: string }> {
+    const path = raw.trim();
+    if (!path) return { ok: false, message: t('homeWorkingDir.manualEmpty') };
+    const exists = await dirExists(path);
+    if (!exists) return { ok: false, message: t('homeWorkingDir.manualNotFound') };
+    setWorkingDir(path);
+    setWorkingDirToken(null);
+    void rememberRecentDir(path);
+    return { ok: true };
   }
 
   function updateActiveInputs(next: Record<string, unknown>) {
@@ -3195,6 +3235,7 @@ export function HomeView({
         recentDirs={recentDirs}
         onPickWorkingDir={handlePickWorkingDir}
         onPickLocalCodeDir={handlePickLocalCodeDir}
+        onSubmitWorkingDirPath={isOpenDesignHostAvailable() ? undefined : handleSubmitManualWorkingDir}
         onSelectRecentWorkingDir={(dir) => {
           setWorkingDir(dir);
           // Recents come from the browser-side picker only; they carry no

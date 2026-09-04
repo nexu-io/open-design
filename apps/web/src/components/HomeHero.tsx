@@ -244,6 +244,14 @@ interface Props {
   onPickLocalCodeDir?: () => Promise<string | null> | string | null | void;
   onSelectRecentWorkingDir?: (dir: string) => void;
   onClearWorkingDir?: () => void;
+  /**
+   * Submit a manually-typed absolute working-directory path. Passed through
+   * to `WorkingDirPicker`'s `onSubmitPath`; omit to hide that menu item
+   * (e.g. on the desktop host path, where the native dialog already works
+   * and a tokenless manual path would fail the desktop working-dir commit
+   * gate).
+   */
+  onSubmitWorkingDirPath?: (path: string) => Promise<{ ok: boolean; message?: string }>;
   onExamplePromptStatusChange?: (info: ExamplePromptInfo | null) => void;
   // "…or start a blank project" — creates an empty project directly (no dialog,
   // no design system / template / prompt) and enters it. Omit to hide the link.
@@ -374,6 +382,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onPickLocalCodeDir,
     onSelectRecentWorkingDir,
     onClearWorkingDir,
+    onSubmitWorkingDirPath,
     onExamplePromptStatusChange,
     onStartBlankProject,
     executionSwitcher,
@@ -2110,6 +2119,14 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 });
                 onClearWorkingDir?.();
               }}
+              onSubmitPath={onSubmitWorkingDirPath ? (path) => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'working_dir_manual',
+                });
+                return onSubmitWorkingDirPath(path);
+              } : undefined}
             />
           ) : null}
         </div>
