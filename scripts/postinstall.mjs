@@ -79,25 +79,6 @@ function availableBuildTargets() {
   return targets;
 }
 
-function runBuildTargetSync(target) {
-  const result = spawnSync(
-    packageManager.command,
-    [...packageManager.argsPrefix, "-C", target, "run", "build"],
-    {
-      cwd: repoRoot,
-      stdio: "inherit",
-    },
-  );
-
-  if (result.error != null) {
-    throw result.error;
-  }
-
-  if (result.status !== 0) {
-    process.exit(result.status ?? 1);
-  }
-}
-
 function runBuildTarget(target) {
   return new Promise((resolvePromise, rejectPromise) => {
     const child = spawn(
@@ -216,13 +197,6 @@ async function runBuildTargetsInParallel(targets, concurrency) {
 async function runBuildTargets() {
   const targets = availableBuildTargets();
   const concurrency = postinstallConcurrency();
-  if (concurrency <= 1) {
-    for (const target of targets) {
-      runBuildTargetSync(target);
-    }
-    return;
-  }
-
   await runBuildTargetsInParallel(targets, concurrency);
 }
 

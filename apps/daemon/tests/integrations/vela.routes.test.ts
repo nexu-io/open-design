@@ -309,13 +309,6 @@ describe('GET /api/integrations/vela/wallet', () => {
     const walletApi = await startWalletApi((req, res) => {
       expect(req.headers.authorization).toBe('Bearer ck-wallet-balance');
       res.setHeader('content-type', 'application/json');
-      if (req.url === '/api/v1/billing/coding-plan-models') {
-        res.end(JSON.stringify({
-          membershipTier: 'go',
-          models: ['deepseek-v4-flash', 'glm-5.2'],
-        }));
-        return;
-      }
       expect(req.url).toBe('/api/v1/wallet/balance');
       res.end(JSON.stringify({
         balanceUsd: '0.1000',
@@ -334,7 +327,6 @@ describe('GET /api/integrations/vela/wallet', () => {
         source: string;
         status: string;
         user: { email?: string } | null;
-        codingPlanModels?: string[] | null;
       }>(`${baseUrl}/api/integrations/vela/wallet`);
       const second = await getJson<{ balanceUsd: string | null; source: string }>(
         `${baseUrl}/api/integrations/vela/wallet`,
@@ -345,13 +337,9 @@ describe('GET /api/integrations/vela/wallet', () => {
       expect(first.body.balanceUsd).toBe('0.1000');
       expect(first.body.source).toBe('vela_api');
       expect(first.body.user?.email).toBe('wallet@example.com');
-      expect(first.body.codingPlanModels).toEqual(['deepseek-v4-flash', 'glm-5.2']);
       expect(second.body.balanceUsd).toBe('0.1000');
       expect(second.body.source).toBe('daemon_cache');
-      expect(walletApi.requests).toEqual([
-        'Bearer ck-wallet-balance',
-        'Bearer ck-wallet-balance',
-      ]);
+      expect(walletApi.requests).toEqual(['Bearer ck-wallet-balance']);
       expect(JSON.stringify(first.body)).not.toContain('ck-wallet-balance');
       expect(JSON.stringify(first.body)).not.toContain('rt-wallet-balance');
     } finally {
@@ -553,10 +541,6 @@ describe('GET /api/integrations/vela/wallet', () => {
     let walletRequestCount = 0;
     const walletApi = await startWalletApi((req, res) => {
       res.setHeader('content-type', 'application/json');
-      if (req.url === '/api/v1/billing/coding-plan-models') {
-        res.end(JSON.stringify({ membershipTier: 'free', models: [] }));
-        return;
-      }
       walletRequestCount += 1;
       if (walletRequestCount === 1) {
         res.end(JSON.stringify({
@@ -646,10 +630,7 @@ describe('GET /api/integrations/vela/wallet', () => {
       expect(body.source).toBe('unavailable');
       expect(body.error?.code).toBe('network');
       expect(body.error?.message).toMatch(/temporarily unavailable/i);
-      expect(walletApi.requests).toEqual([
-        'Bearer ck-stalled-wallet',
-        'Bearer ck-stalled-wallet',
-      ]);
+      expect(walletApi.requests).toEqual(['Bearer ck-stalled-wallet']);
     } finally {
       await walletApi.close();
     }

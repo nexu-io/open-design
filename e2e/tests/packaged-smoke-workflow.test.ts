@@ -52,7 +52,6 @@ const rerunInfraCancelScriptPath = join(workspaceRoot, ".github", "scripts", "re
 const bakePluginPreviewsWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews.yml");
 const bakePluginPreviewsPrWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews-pr.yml");
 const dockerImageWorkflowPath = join(workspaceRoot, ".github", "workflows", "docker-image.yml");
-const flakePath = join(workspaceRoot, "flake.nix");
 const backportAutomergeWorkflowPath = join(workspaceRoot, ".github", "workflows", "backport-automerge.yml");
 const bakePreviewsAutomergeWorkflowPath = join(
   workspaceRoot,
@@ -99,11 +98,9 @@ const cutReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-
 const cutPatchReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-patch-release.yml");
 const feishuCardScriptPath = join(workspaceRoot, "tools", "release", "src", "notifications", "feishu.ts");
 const feishuNoticeScriptPath = join(workspaceRoot, "tools", "release", "src", "notifications", "feishu-notice.ts");
-const landingPageDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-daily-feishu.yml");
-const landingPageCiWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-ci.yml");
-const landingPageStagingWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-staging.yml");
-const landingPageProductionWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-production.yml");
-const landingPageDailyFeishuScriptPath = join(workspaceRoot, ".github", "scripts", "landing-page-daily-feishu.ts");
+const dshBootstrapPublishWorkflowPath = join(workspaceRoot, ".github", "workflows", "dsh-bootstrap-publish.yml");
+const catalogPublishWorkflowPath = join(workspaceRoot, ".github", "workflows", "catalog-publish.yml");
+const catalogValidateWorkflowPath = join(workspaceRoot, ".github", "workflows", "catalog-validate.yml");
 const releasePublishMetadataScriptPath = join(
   workspaceRoot,
   "tools",
@@ -1394,17 +1391,133 @@ process.stdin.on("end", () => {
       run_ui_p0: true,
       run_preflight: true,
     });
-    // Packaging (nix / docker) is no longer part of core scopes / Validate workspace.
+    // Docker packaging is not part of core scopes / Validate workspace.
     for (const plan of await Promise.all([
       runScopesPrint("merge_group", {}),
       runScopesPrint("workflow_dispatch", { inputs: {} }),
       runScopesPrint("pull_request", { pull_request: { number: 1 } }, ["apps/web/src/app/page.tsx"]),
     ])) {
-      expect(plan).not.toHaveProperty("run_nix_validation");
       expect(plan).not.toHaveProperty("run_docker_build");
-      expect(plan).not.toHaveProperty("nix_validation_required");
       expect(plan).not.toHaveProperty("docker_validation_required");
     }
+  });
+
+
+  it("[P1] builds tools-release before the standalone DSH publisher invokes its bin", async () => {
+    const workflow = await readFile(dshBootstrapPublishWorkflowPath, "utf8");
+    const buildIndex = workflow.indexOf("pnpm --filter @open-design/tools-release build");
+    const publishIndex = workflow.indexOf("pnpm exec tools-release publish-dsh-bootstrap");
+
+    expect(buildIndex).toBeGreaterThanOrEqual(0);
+    expect(publishIndex).toBeGreaterThan(buildIndex);
+  });
+
+  it("[P2] triggers the standalone DSH publisher for its bundle helpers", async () => {
+    const workflow = await readFile(dshBootstrapPublishWorkflowPath, "utf8");
+    const trigger = sectionBetween(workflow, "on:", "\npermissions:");
+
+    expect(trigger).toContain('"tools/release/resources/dsh-bootstrap/**"');
+    expect(trigger).toContain('"tools/release/src/storage/dsh-bootstrap-*.ts"');
+    expect(trigger).toContain('"tools/release/src/storage/publish-dsh-bootstrap.ts"');
+    expect(trigger).toContain('"tools/release/src/storage/common.ts"');
+    expect(trigger).toContain('"tools/release/src/storage/s3-upload.ts"');
+  });
+
+  it("[P1] serializes the standalone DSH latest-pointer publisher", async () => {
+    const workflow = await readFile(dshBootstrapPublishWorkflowPath, "utf8");
+
+    expect(workflow).toContain("group: dsh-bootstrap-publish");
+    expect(workflow).toContain("cancel-in-progress: false");
+  });
+
+  it("[P1] rejects stale reruns before the DSH publisher can update latest", async () => {
+    const workflow = await readFile(dshBootstrapPublishWorkflowPath, "utf8");
+    const freshnessIndex = workflow.indexOf(
+      'main_sha="$(git ls-remote origin refs/heads/main | awk \'{print $1}\')"',
+    );
+    const staleGuardIndex = workflow.indexOf('$GITHUB_SHA" != "$main_sha');
+    const publishIndex = workflow.indexOf("pnpm exec tools-release publish-dsh-bootstrap");
+
+    expect(freshnessIndex).toBeGreaterThanOrEqual(0);
+    expect(staleGuardIndex).toBeGreaterThan(freshnessIndex);
+    expect(publishIndex).toBeGreaterThan(staleGuardIndex);
+    expect(workflow).toContain("refusing");
+    expect(workflow).toContain("stale workflow SHA");
+  });
+
+  it("[P1] publishes catalog snapshots only from main", async () => {
+    const workflow = await readFile(catalogPublishWorkflowPath, "utf8");
+    const guardedJobs = workflow.match(
+      /if: github\.repository == 'nexu-io\/open-design' && github\.ref == 'refs\/heads\/main'/g,
+    );
+
+    expect(guardedJobs).toHaveLength(2);
+  });
+
+  it("[P1] marks the catalog pack checkout safe and pins source commit to github.sha", async () => {
+    const workflow = await readFile(catalogPublishWorkflowPath, "utf8");
+    const pack = sectionBetween(workflow, "  pack:", "\n  publish:");
+
+    expect(pack).toContain("source_commit: ${{ github.sha }}");
+    expect(pack).toContain('git config --global --add safe.directory "$GITHUB_WORKSPACE"');
+    expect(pack.indexOf('git config --global --add safe.directory "$GITHUB_WORKSPACE"')).toBeGreaterThan(
+      pack.indexOf("uses: actions/checkout@v6.0.2"),
+    );
+    expect(pack.indexOf('git config --global --add safe.directory "$GITHUB_WORKSPACE"')).toBeLessThan(
+      pack.indexOf("pnpm exec tools-release export-catalog"),
+    );
+    expect(pack).toContain("CATALOG_SOURCE_COMMIT: ${{ github.sha }}");
+    expect(pack).not.toContain("git rev-parse HEAD");
+    expect(pack).not.toContain("steps.meta.outputs.source_commit");
+  });
+
+  it("[P2] triggers catalog publishing for shared storage helpers", async () => {
+    const [publishWorkflow, validateWorkflow] = await Promise.all([
+      readFile(catalogPublishWorkflowPath, "utf8"),
+      readFile(catalogValidateWorkflowPath, "utf8"),
+    ]);
+
+    for (const workflow of [publishWorkflow, validateWorkflow]) {
+      const trigger = sectionBetween(workflow, "on:", "\npermissions:");
+      expect(trigger).toContain('"tools/release/src/storage/publish-catalog.ts"');
+      expect(trigger).toContain('"tools/release/src/storage/common.ts"');
+      expect(trigger).toContain('"tools/release/src/storage/s3-upload.ts"');
+    }
+  });
+
+  it("[P1] preserves checksummed hidden files in the catalog handoff artifact", async () => {
+    const workflow = await readFile(catalogPublishWorkflowPath, "utf8");
+    const upload = sectionBetween(workflow, "- name: Upload snapshot artifact", "\n\n  publish:");
+
+    expect(upload).toContain("uses: actions/upload-artifact@v4");
+    expect(upload).toContain("path: .tmp/catalog-snapshot");
+    expect(upload).toContain("include-hidden-files: true");
+  });
+
+  it("[P1] renders immutable catalog previews in a digest-pinned environment", async () => {
+    const [workflow, packageJsonText] = await Promise.all([
+      readFile(catalogPublishWorkflowPath, "utf8"),
+      readFile(join(workspaceRoot, "tools", "release", "package.json"), "utf8"),
+    ]);
+    const packageJson = JSON.parse(packageJsonText) as {
+      optionalDependencies?: { playwright?: string };
+    };
+
+    expect(workflow).toContain(
+      "image: mcr.microsoft.com/playwright:v1.60.0-noble@sha256:9bd26ad900bb5e0f4dee75839e957a89ae89c2b7ab1e76050e559790e946b948",
+    );
+    expect(packageJson.optionalDependencies?.playwright).toBe("1.60.0");
+    expect(workflow).toContain(
+      `mcr.microsoft.com/playwright:v${packageJson.optionalDependencies?.playwright}-noble@sha256:`,
+    );
+    expect(workflow).toContain("options: --ipc=host");
+    expect(workflow).toContain(
+      "apt-get install -y --no-install-recommends zstd=1.5.5+dfsg2-2build1.1",
+    );
+    expect(workflow).not.toContain("playwright install --with-deps chromium");
+    expect(workflow.indexOf("Render previews")).toBeLessThan(
+      workflow.indexOf("Install pinned zstd"),
+    );
   });
 
   it("[P2] closes packaged-leaf coverage without duplicating the broad E2E lane", async () => {
@@ -1553,15 +1666,12 @@ process.stdin.on("end", () => {
     });
   }, T.medium);
 
-  it("[P2] keeps packaging (nix/docker) off the core Validate workspace gate", async () => {
+  it("[P2] keeps Docker packaging off the core Validate workspace gate", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     const validate = sectionBetween(workflow, "  validate:", "  runtime_summary:");
 
-    expect(workflow).not.toContain("nix_validation:");
     expect(workflow).not.toContain("docker_pr:");
-    expect(validate).not.toContain("nix_validation");
     expect(validate).not.toContain("docker_pr");
-    expect(validate).not.toContain("run_nix_validation");
     expect(validate).not.toContain("run_docker_build");
     expect(validate).toContain("Check workspace validation jobs");
 
@@ -1641,16 +1751,6 @@ process.stdin.on("end", () => {
       plan: { result: "success", outputs: { run: JSON.stringify(run) } },
       e2e_vitest: { result: "failure" },
     })).resolves.toBe(false);
-  });
-
-  it("[P1] includes launcher protocol in the Nix daemon workspace build", async () => {
-    const flake = await readFile(flakePath, "utf8");
-    const daemonWorkspaces = sectionBetween(flake, "      daemonWorkspacePaths = [", "      ];");
-
-    expect(daemonWorkspaces).toContain('"packages/launcher-proto"');
-    expect(daemonWorkspaces.indexOf('"packages/launcher-proto"')).toBeLessThan(
-      daemonWorkspaces.indexOf('"apps/daemon"'),
-    );
   });
 
   it("[P2] routes trusted Linux CI through the Nexu runner fleet", async () => {
@@ -2044,7 +2144,7 @@ process.stdin.on("end", () => {
     ]);
 
     // Core ci still produces comment + report handoffs (needs-validation, visual).
-    // Packaging hash autofix left core ci with nix — no ci-produced autofix handoffs for now.
+    // No current core-ci producer emits autofix handoffs.
     expect(ciWorkflow).toContain("handoff.py dir comment");
     expect(ciWorkflow).toContain("handoff.py dir report");
     expect(ciWorkflow).toContain("convergence.py handoff");
@@ -2053,7 +2153,6 @@ process.stdin.on("end", () => {
     expect(ciWorkflow).toContain("handoff-convergence-");
     expect(ciWorkflow).not.toContain("handoff.py dir autofix");
     expect(ciWorkflow).not.toContain("handoff-autofix-");
-    expect(ciWorkflow).not.toContain("nix-hash-autofix");
     expect(ciWorkflow).not.toContain("visual-pr-comment");
     expect(commentWorkflow).toContain("artifact-pattern comment");
     expect(commentWorkflow).toContain("merge-multiple: false");
@@ -2089,7 +2188,6 @@ process.stdin.on("end", () => {
     for (const workflow of [commentWorkflow, autofixWorkflow]) {
       expect(workflow).toContain("python3 .github/scripts/handoff.py self-check");
       expect(workflow).toContain("github.event.workflow_run.event == 'pull_request'");
-      expect(workflow).not.toContain("nix/pnpm-deps.nix");
       expect(workflow).not.toContain("visual-report");
     }
     expect(reportWorkflow).toContain("python3 .github/scripts/handoff.py self-check");
@@ -2925,90 +3023,6 @@ process.stdin.on("end", () => {
     expect(patchNotice).toContain("if: steps.guard.outputs.published == 'true'");
   });
 
-  it("[P2] sends the daily landing PR summary to Feishu with staging deployment status", async () => {
-    const [workflow, ciWorkflow, stagingWorkflow, productionWorkflow, script] = await Promise.all([
-      readFile(landingPageDailyFeishuWorkflowPath, "utf8"),
-      readFile(landingPageCiWorkflowPath, "utf8"),
-      readFile(landingPageStagingWorkflowPath, "utf8"),
-      readFile(landingPageProductionWorkflowPath, "utf8"),
-      readFile(landingPageDailyFeishuScriptPath, "utf8"),
-    ]);
-    const trigger = sectionBetween(workflow, "on:", "\npermissions:");
-    const productionCheckout = sectionBetween(productionWorkflow, "- name: Checkout", "- name: Setup pnpm");
-
-    expect(trigger).toContain('cron: "0 1 * * *"');
-    expect(trigger).not.toContain("lookback_hours:");
-    expect(workflow).toContain("actions: read");
-    expect(workflow).toContain("contents: read");
-    expect(workflow).toContain("pull-requests: read");
-    expect(workflow).toContain("github.ref == 'refs/heads/main'");
-    expect(workflow).toContain("FEISHU_WEBHOOK: ${{ secrets.FEISHU_LANDING_WEBHOOK || secrets.FEISHU_RELEASE_WEBHOOK }}");
-    expect(workflow).toContain("FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_LANDING_SIGN_SECRET || secrets.FEISHU_RELEASE_SIGN_SECRET }}");
-    expect(workflow).toContain("node --experimental-strip-types .github/scripts/landing-page-daily-feishu.ts self-check");
-    expect(workflow).toContain("node --experimental-strip-types .github/scripts/landing-page-daily-feishu.ts");
-    expect(workflow).toContain("ref: main");
-    expect(workflow).toContain("fetch-depth: 0");
-    expect(productionCheckout).toContain("ref: ${{ github.sha }}");
-    expect(productionCheckout).not.toContain("ref: main");
-    expect(productionCheckout).toContain("Verify production checkout commit");
-    expect(productionCheckout).toContain('deployed_sha="$(git rev-parse HEAD)"');
-    expect(productionCheckout).toContain('$deployed_sha" != "$GITHUB_SHA');
-    expect(productionCheckout).toContain('main_sha="$(git ls-remote origin refs/heads/main');
-    expect(productionCheckout).toContain('$GITHUB_SHA" != "$main_sha');
-    expect(productionCheckout).toContain("refusing production deploy for stale workflow SHA");
-
-    // Wrangler Pages ignores custom --config paths. Before every staging
-    // migration/deploy, replace the default config with staging's isolated
-    // bindings so preview/staging traffic can never touch production KV/D1.
-    for (const stagingDeployWorkflow of [ciWorkflow, stagingWorkflow]) {
-      expect(stagingDeployWorkflow).toContain("Prepare staging Pages configuration");
-      expect(stagingDeployWorkflow).toContain("cp apps/landing-page/wrangler.staging.toml apps/landing-page/wrangler.toml");
-      expect(stagingDeployWorkflow).toContain('wranglerVersion: "4.110.0"');
-      expect(stagingDeployWorkflow).toContain("d1 migrations apply open-design-landing-staging-attribution --remote");
-      expect(stagingDeployWorkflow).not.toContain("--config wrangler.staging.toml");
-    }
-    expect(productionWorkflow).toContain('wranglerVersion: "4.110.0"');
-    expect(productionWorkflow).toContain("d1 migrations apply open-design-landing-attribution --remote");
-    expect(productionWorkflow).toContain("Publish immutable DeepSeek Harness bootstrap installers to R2");
-    expect(productionWorkflow).toContain("id: dsh_bootstrap");
-    // The bootstrap version follows the installer bytes. Pinning it in the
-    // workflow is what turned a copy edit inside install-dsh.ps1 into a hard
-    // production deploy failure, so the promotion must read the version the
-    // publisher resolved instead of naming one.
-    expect(productionWorkflow).not.toMatch(/DSH_BOOTSTRAP_VERSION: v\d/);
-    expect(productionWorkflow).toContain("DSH_BOOTSTRAP_VERSION: ${{ steps.dsh_bootstrap.outputs.version }}");
-    expect(productionWorkflow).toContain('"$RELEASE_PUBLIC_ORIGIN/bootstrap/dsh/$DSH_BOOTSTRAP_VERSION/$name"');
-    expect(productionWorkflow).toContain("DSH_BOOTSTRAP_SOURCE_DIR: apps/landing-page/public");
-    expect(productionWorkflow).toContain("RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}");
-    expect(productionWorkflow).toContain("RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}");
-    expect(productionWorkflow).toContain("RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}");
-    expect(productionWorkflow).toContain("RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}");
-    expect(productionWorkflow).toContain("pnpm exec tools-release publish-dsh-bootstrap");
-    expect(productionWorkflow.indexOf("pnpm exec tools-release publish-dsh-bootstrap")).toBeLessThan(
-      productionWorkflow.indexOf("pages deploy out"),
-    );
-
-    expect(script).toContain('const STAGING_URL = "https://staging.open-design.ai"');
-    expect(script).toContain('const STAGING_WORKFLOW = "landing-page-staging.yml"');
-    expect(script).toContain('const PRODUCTION_WORKFLOW = "landing-page-production.yml"');
-    expect(script).toContain("type StagingSnapshot");
-    expect(script).toContain("createStagingSnapshot");
-    expect(script).toContain("run_started_at");
-    expect(script).toContain("run_attempt");
-    expect(script).toContain("runOperationalTime");
-    expect(script).toContain("staging: StagingSnapshot");
-    expect(script).toContain("historical staging success not to count as current staging deployment");
-    expect(script).toContain("rerun historical staging success to become current staging deployment");
-    expect(script).toContain("rerun staging header to use the rerun historical deployment");
-    expect(script).toContain("No successful ${PRODUCTION_WORKFLOW} run found on main");
-    expect(script).toContain("正式环境基线");
-    expect(script).toContain("待 QA 验收");
-    expect(script).toContain("git\", [\"merge-base\", \"--is-ancestor\"");
-    expect(script).toContain("已自动部署到当前 staging.open-design.ai");
-    expect(script).toContain("正在部署到 staging.open-design.ai");
-    expect(script).toContain("apps/landing-page/");
-    expect(script).toContain(".github/workflows/landing-page-staging.yml");
-  });
 
   it("[P2] supports stable metadata, prepublish, and publish dispatch modes", async () => {
     const [workflow, script] = await Promise.all([

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexu.io/contracts/terminal/distribution-request-v1.schema.json",
+  "title": "Terminal distribution request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "operation", "target", "sceneDirectory", "sceneManifestSha256", "releaseDocumentsDirectory", "trustFile", "release", "outputDirectory"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "operation": {"const": "terminal.distribution.build"},
+    "target": {"enum": ["darwin-arm64", "darwin-x64", "win32-x64"]},
+    "sceneDirectory": {"type": "string", "minLength": 1},
+    "sceneManifestSha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "releaseDocumentsDirectory": {"type": "string", "minLength": 1},
+    "trustFile": {"type": "string", "minLength": 1},
+    "outputDirectory": {"type": "string", "minLength": 1},
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["channel", "releaseVersion", "sourceCommit", "publishedAt", "artifactBaseUrl"],
+      "properties": {
+        "channel": {"type": "string", "pattern": "^[a-z0-9]{1,12}$", "not": {"const": "local"}},
+        "releaseVersion": {"type": "string"},
+        "sourceCommit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+        "publishedAt": {"type": "string", "format": "date-time"},
+        "artifactBaseUrl": {"type": "string", "format": "uri"}
+      }
+    }
+  }
+}

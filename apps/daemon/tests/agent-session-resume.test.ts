@@ -13,6 +13,7 @@ import {
   upsertMessage,
 } from '../src/db.js';
 import {
+  createPhysicalAgentSessionUsageTracker,
   computeIncludeStable,
   hashStableInstructions,
   isAgentResumeFailure,
@@ -26,6 +27,25 @@ import {
   resolveAgentResumeFailurePolicy,
   resolveAgentResumePromptPolicy,
 } from '../src/agent-session-resume.js';
+
+describe('physical agent session usage', () => {
+  it('does not leak usage across sessions and retains it for an exact-session continuation', () => {
+    const attemptA = createPhysicalAgentSessionUsageTracker();
+    attemptA.observe('agent', {
+      type: 'usage',
+      usage: { input_tokens: 12, output_tokens: 3 },
+    });
+    expect(attemptA.inputTokens()).toBe(12);
+
+    const differentSessionAttempt = createPhysicalAgentSessionUsageTracker();
+    expect(differentSessionAttempt.inputTokens()).toBeNull();
+
+    const forcedSameSessionContinuation = createPhysicalAgentSessionUsageTracker(
+      attemptA.inputTokens(),
+    );
+    expect(forcedSameSessionContinuation.inputTokens()).toBe(12);
+  });
+});
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -97,6 +117,28 @@ describe('resolveAgentResumeContext', () => {
     expect(ctx.isResuming).toBe(true);
     expect(ctx.resumeSessionId).toBe('sess-A');
     expect(ctx.invalidationReason).toBeNull();
+  });
+
+  it('exposes stored input usage only as resume observability context', () => {
+    const db = seed();
+    seedMessage(db, 'asst-1', 'assistant');
+    upsertAgentSession(db, {
+      conversationId: 'conv-1',
+      agentId: 'claude',
+      sessionId: 'sess-A',
+      lastMessageId: 'asst-1',
+      model: null,
+      cwd: null,
+      lastInputTokens: 123_456,
+    });
+
+    const ctx = resolveAgentResumeContext(db, {
+      conversationId: 'conv-1',
+      agentId: 'claude',
+    });
+
+    expect(ctx.isResuming).toBe(true);
+    expect(ctx.storedInputTokens).toBe(123_456);
   });
 
   it('still resumes when only the current run placeholder is newer (normal follow-up)', () => {

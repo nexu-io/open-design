@@ -30,6 +30,14 @@ import {
   finalizeRunTelemetryDelivery,
   recordRunTelemetryDeliveryAttempt,
 } from '../observability/delivery-state.js';
+import {
+  beginPosthogTerminalDelivery,
+  finalizePosthogTerminalDelivery,
+  recordIgnoredTerminalClaim,
+  terminalLifecycleSnapshot,
+  terminalPersistenceErrorType,
+} from '../observability/run-terminal-lifecycle.js';
+import { normalizeTelemetryAppVersionInfo } from '../app-version.js';
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 
@@ -509,8 +517,10 @@ function atomicWriteJson(filePath, value) {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(tempPath, `${JSON.stringify(value)}\n`, { encoding: 'utf8', mode: 0o600 });
     fs.renameSync(tempPath, filePath);
-  } catch {
+    return { ok: true };
+  } catch (error) {
     try { fs.unlinkSync(tempPath); } catch { /* best-effort cleanup */ }
+    return { ok: false, errorType: terminalPersistenceErrorType(error) };
   }
 }
 
@@ -527,6 +537,7 @@ function durableRunState(run) {
       ? { strategyRolloutDecision: run.strategyRolloutDecision }
       : {}),
     agentId: run.agentId,
+    ...(run.appVersionInfo ? { appVersionInfo: run.appVersionInfo } : {}),
     status: run.status,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
@@ -568,6 +579,12 @@ function durableRunState(run) {
     ...(run.externalPluginAnalytics
       ? { externalPluginAnalytics: run.externalPluginAnalytics }
       : {}),
+    ...(typeof run.cumulativeRetryAttemptCount === 'number'
+      ? { cumulativeRetryAttemptCount: run.cumulativeRetryAttemptCount }
+      : {}),
+    ...(typeof run.retryAttemptCount === 'number'
+      ? { retryAttemptCount: run.retryAttemptCount }
+      : {}),
     ...(typeof run.manualResumeAttemptCount === 'number'
       ? { manualResumeAttemptCount: run.manualResumeAttemptCount }
       : {}),
@@ -600,6 +617,7 @@ function durableRunState(run) {
       ? { langfuseCompletedAt: run.langfuseCompletedAt }
       : {}),
     ...(run.telemetryDelivery ? { telemetryDelivery: run.telemetryDelivery } : {}),
+    ...(run.terminalLifecycle ? { terminalLifecycle: run.terminalLifecycle } : {}),
   };
 }
 
@@ -679,6 +697,12 @@ export function createChatRunService({
   // durable but before the terminal SSE event is published, so local outbox
   // writes share the exact terminal timestamp without delaying on delivery.
   onTerminal = null,
+  // Snapshot the daemon version at Run creation so a later daemon version
+  // cannot rewrite this Run's terminal telemetry during restart recovery.
+  getAppVersionInfo = () => null,
+  // Test seam for deterministic storage-failure coverage. Production callers
+  // use the atomic writer above; the result carries only a bounded error type.
+  writeDurableState = atomicWriteJson,
 }) {
   const runs = new Map();
   const runIdsByClientRequestId = new Map();
@@ -738,7 +762,7 @@ export function createChatRunService({
     if (!state || state.id !== id) return null;
     const interruptedAfterRestart =
       interruptDurableRunAfterDaemonRestart(state);
-    if (interruptedAfterRestart) atomicWriteJson(statePath, state);
+    if (interruptedAfterRestart) writeDurableState(statePath, state);
     backfillDurableTerminal(state);
     if (!TERMINAL_RUN_STATUSES.has(state.status)) return null;
     const eventsLogPath = path.join(runsLogDir, id, 'events.jsonl');
@@ -815,6 +839,13 @@ export function createChatRunService({
   const create = (meta = {}) => {
     const now = Date.now();
     const id = randomUUID();
+    let appVersionInfo = null;
+    try {
+      appVersionInfo = normalizeTelemetryAppVersionInfo(getAppVersionInfo());
+    } catch {
+      // Version attribution is best-effort; missing is explicit in the
+      // durable state instead of persisting a placeholder release number.
+    }
     const run = {
       id,
       projectId: typeof meta.projectId === 'string' && meta.projectId ? meta.projectId : null,
@@ -832,6 +863,7 @@ export function createChatRunService({
           ? meta.strategyRolloutDecision
           : null,
       agentId: typeof meta.agentId === 'string' && meta.agentId ? meta.agentId : null,
+      appVersionInfo,
       projectMetadata:
         meta.projectMetadata && typeof meta.projectMetadata === 'object' && !Array.isArray(meta.projectMetadata)
           ? meta.projectMetadata
@@ -940,6 +972,7 @@ export function createChatRunService({
       // can't lazily re-open a stream nothing will ever close (FD leak).
       eventsLogClosed: false,
       cleanupGeneration: 0,
+      cumulativeRetryAttemptCount: 0,
       manualResumeAttemptCount: 0,
       rechargeWaitDurationMs: 0,
     };
@@ -964,7 +997,7 @@ export function createChatRunService({
         run.id,
       );
     }
-    if (run.statePath) atomicWriteJson(run.statePath, durableRunState(run));
+    if (run.statePath) writeDurableState(run.statePath, durableRunState(run));
     return run;
   };
 
@@ -996,7 +1029,51 @@ export function createChatRunService({
   };
 
   const persistState = (run) => {
-    if (run?.statePath) atomicWriteJson(run.statePath, durableRunState(run));
+    if (!run?.statePath) return { ok: false, errorType: 'storage_unavailable' };
+    return writeDurableState(run.statePath, durableRunState(run));
+  };
+
+  const persistTerminalState = (run, lifecycleEvidence = run.terminalLifecycle) => {
+    const priorTerminalPersistence = lifecycleEvidence?.terminalPersistence;
+    const terminalPersistence = run.statePath
+      ? { status: 'acknowledged', errorType: null }
+      : { status: 'unknown', errorType: null };
+    run.terminalLifecycle = terminalLifecycleSnapshot({
+      cumulativeRetryAttemptCount: run.cumulativeRetryAttemptCount,
+      retryAttemptCount: run.retryAttemptCount,
+      manualResumeAttemptCount: run.manualResumeAttemptCount,
+      runtimeGenerationId: run.runtimeGenerationId,
+      cancelOrigin: run.cancelOrigin ?? null,
+      terminalTrigger: run.terminalTrigger ?? null,
+      terminalIntegrity:
+        lifecycleEvidence?.terminalIntegrity ?? run.terminalIntegrity ?? 'canonical',
+      terminalPersistence,
+      posthogDelivery: lifecycleEvidence?.posthogDelivery,
+      duplicateTerminalCount: lifecycleEvidence?.duplicateTerminalCount,
+      lateTerminalCount: lifecycleEvidence?.lateTerminalCount,
+    });
+    if (!run.statePath) return { ok: false, errorType: 'storage_unavailable' };
+    const result = persistState(run);
+    if (!result.ok && priorTerminalPersistence?.status !== 'acknowledged') {
+      run.terminalLifecycle = terminalLifecycleSnapshot({
+        cumulativeRetryAttemptCount: run.cumulativeRetryAttemptCount,
+        retryAttemptCount: run.retryAttemptCount,
+        manualResumeAttemptCount: run.manualResumeAttemptCount,
+        runtimeGenerationId: run.runtimeGenerationId,
+        cancelOrigin: run.cancelOrigin ?? null,
+        terminalTrigger: run.terminalTrigger ?? null,
+        terminalIntegrity:
+          run.terminalLifecycle?.terminalIntegrity ?? run.terminalIntegrity ?? 'canonical',
+        posthogDelivery: run.terminalLifecycle?.posthogDelivery,
+        duplicateTerminalCount: run.terminalLifecycle?.duplicateTerminalCount,
+        lateTerminalCount: run.terminalLifecycle?.lateTerminalCount,
+        terminalPersistence: {
+          status: 'failed',
+          errorType: result.errorType ?? 'unknown',
+        },
+      });
+    }
+    return result;
   };
 
   const setAnalyticsRecovery = (run, recovery) => {
@@ -1013,6 +1090,23 @@ export function createChatRunService({
     if (!run?.analyticsRecovery) return;
     run.analyticsRecovery.completedAt = Date.now();
     persistState(run);
+  };
+
+  const beginAnalyticsDelivery = (run) => {
+    if (!run?.terminalLifecycle) return null;
+    run.terminalLifecycle = beginPosthogTerminalDelivery(run.terminalLifecycle);
+    persistState(run);
+    return run.terminalLifecycle.posthogDelivery;
+  };
+
+  const finalizeAnalyticsDelivery = (run, delivery) => {
+    if (!run?.terminalLifecycle || !delivery) return null;
+    run.terminalLifecycle = finalizePosthogTerminalDelivery(
+      run.terminalLifecycle,
+      delivery,
+    );
+    persistState(run);
+    return run.terminalLifecycle.posthogDelivery;
   };
 
   const beginTelemetryDelivery = (run) => {
@@ -1117,6 +1211,8 @@ export function createChatRunService({
     run.terminalTrigger = null;
     run.runtimeFailureObservedBeforeCancellation = false;
     run.retryRestartTimer = null;
+    run.cumulativeRetryAttemptCount = (run.cumulativeRetryAttemptCount ?? 0)
+      + (run.retryAttemptCount ?? 0);
     run.retryAttemptCount = 0;
     run.retryFinalResult = undefined;
     run.retrySuppressedReason = undefined;
@@ -1138,6 +1234,9 @@ export function createChatRunService({
     run.stdinOpen = false;
     run.eventsLogStream = null;
     run.eventsLogClosed = false;
+    run.runtimeGenerationId = null;
+    run.terminalIntegrity = null;
+    run.terminalLifecycle = undefined;
     // A resumed attempt is a fresh execution, so it must not inherit the prior
     // attempt's lifecycle marks. Keeping them makes every phase boundary
     // measure from before the recharge pause, putting the wait time inside the
@@ -1306,12 +1405,19 @@ export function createChatRunService({
       ? { deliverableArtifactKind: run.deliverableArtifactKind }
       : {}),
     ...(run.strategyTask ? { strategyTask: run.strategyTask } : {}),
+    ...(run.terminalLifecycle ? { terminalLifecycle: run.terminalLifecycle } : {}),
     ...(TERMINAL_RUN_STATUSES.has(run.status)
       ? { executionDiagnostics: buildExecutionDiagnostics(run) }
       : {}),
   });
 
-  const commitFinish = (run, status, code: number | null = null, signal: string | null = null) => {
+  const commitFinish = (
+    run,
+    status,
+    code: number | null = null,
+    signal: string | null = null,
+    lifecycleEvidence = null,
+  ) => {
     if (TERMINAL_RUN_STATUSES.has(run.status)) return;
     if (beforeFinish) beforeFinish(run, status, code, signal);
     const terminalAt = Date.now();
@@ -1338,7 +1444,7 @@ export function createChatRunService({
         && todoSnapshotHasUnfinishedWork(run.lastTodoSnapshot));
     // Commit the terminal Run snapshot before exposing its terminal event. The
     // optional outbox hook is local-only and synchronous by contract.
-    persistState(run);
+    persistTerminalState(run, lifecycleEvidence);
     finalizeTerminalLocally(run, status, terminalAt);
     // Release run-scoped resources the starter registered (e.g. the minted
     // tool-token grant + agent event-sink entries). This runs on EVERY
@@ -1353,7 +1459,7 @@ export function createChatRunService({
     // Terminal finalizers can add artifact metadata after the authoritative
     // terminal timestamp snapshot. Persist once more before publishing `end`
     // so restart hydration sees the same artifact result as live clients.
-    persistState(run);
+    persistTerminalState(run);
     emit(run, 'end', {
       code,
       signal,
@@ -1387,9 +1493,47 @@ export function createChatRunService({
   // `close`. The first verdict owns the terminal fields; duplicate close/error
   // paths wait on the same pending finish instead of publishing twice.
   const finish = (run, status, code: number | null = null, signal: string | null = null) => {
-    if (TERMINAL_RUN_STATUSES.has(run.status) || run.pendingTerminalFinish) return;
+    if (TERMINAL_RUN_STATUSES.has(run.status)) {
+      if (run.terminalLifecycle) {
+        const kind = run.status === status
+          && (run.exitCode ?? null) === code
+          && (run.signal ?? null) === signal
+          ? 'duplicate'
+          : 'late';
+        run.terminalLifecycle = recordIgnoredTerminalClaim(run.terminalLifecycle, kind);
+        persistState(run);
+      }
+      return;
+    }
+    if (run.pendingTerminalFinish) {
+      const pending = run.pendingTerminalFinish;
+      const kind = pending.status === status
+        && (pending.code ?? null) === code
+        && (pending.signal ?? null) === signal
+        ? 'duplicate'
+        : 'late';
+      pending.lifecycle = recordIgnoredTerminalClaim(pending.lifecycle, kind);
+      return;
+    }
     if ((run.processTreeTerminationPending ?? 0) > 0) {
-      run.pendingTerminalFinish = { status, code, signal };
+      run.pendingTerminalFinish = {
+        status,
+        code,
+        signal,
+        lifecycle: terminalLifecycleSnapshot({
+          cumulativeRetryAttemptCount: run.cumulativeRetryAttemptCount,
+          retryAttemptCount: run.retryAttemptCount,
+          manualResumeAttemptCount: run.manualResumeAttemptCount,
+          runtimeGenerationId: run.runtimeGenerationId,
+          cancelOrigin: run.cancelOrigin ?? null,
+          terminalTrigger: run.terminalTrigger ?? null,
+          terminalIntegrity: run.terminalIntegrity ?? 'canonical',
+          terminalPersistence: {
+            status: 'unknown',
+            errorType: null,
+          },
+        }),
+      };
       return;
     }
     commitFinish(run, status, code, signal);
@@ -1702,7 +1846,13 @@ export function createChatRunService({
       if (run.processTreeTerminationPending === 0 && run.pendingTerminalFinish) {
         const pending = run.pendingTerminalFinish;
         run.pendingTerminalFinish = null;
-        commitFinish(run, pending.status, pending.code, pending.signal);
+        commitFinish(
+          run,
+          pending.status,
+          pending.code,
+          pending.signal,
+          pending.lifecycle,
+        );
       }
     });
 
@@ -1912,6 +2062,8 @@ export function createChatRunService({
     emit,
     persistState,
     setAnalyticsRecovery,
+    beginAnalyticsDelivery,
+    finalizeAnalyticsDelivery,
     markAnalyticsCompleted,
     beginTelemetryDelivery,
     recordTelemetryDeliveryAttempt,

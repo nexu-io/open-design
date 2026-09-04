@@ -13,6 +13,7 @@
 // Nothing here may throw into the caller: analytics is an observer of the Run,
 // never a participant in it.
 
+import { scheduler } from 'node:timers/promises';
 import {
   buildRunCreatedV4Aliases,
   buildRunFinishedV4Aliases,
@@ -27,8 +28,8 @@ import {
   type TrackingRunRecoveryActionType,
 } from '@open-design/contracts/analytics';
 import { spawnEnvForAgent } from '../agents.js';
-import { newInsertId } from '../analytics.js';
-import type { AnalyticsContext } from '../analytics.js';
+import { newInsertId, normalizeAnalyticsCaptureResult } from '../analytics.js';
+import type { AnalyticsCaptureResult, AnalyticsContext } from '../analytics.js';
 import { agentCliEnvForAgent, readAppConfig } from '../app-config.js';
 import {
   codexSessionIdFromRunEvents,
@@ -63,6 +64,7 @@ import {
 import { summarizeRunDiagnosticsForAnalytics } from '../run-diagnostics.js';
 import { classifyRunFailure } from '../run-failure-classification.js';
 import { deriveRunErrorCode, runResultFromStatus } from '../run-result.js';
+import { terminalLifecycleForPosthogLocalQueue } from '../observability/run-terminal-lifecycle.js';
 import { runMessageEventPersistenceAnalytics } from '../runtimes/chat-run-messages.js';
 import { getDetectedRuntimeVersions } from '../runtimes/detection.js';
 import {
@@ -73,6 +75,7 @@ import {
   runArtifactCountForRun,
   runDesignSystemCreatedForRun,
   runFilesWrittenForRun,
+  runAdmissionEvidenceForRun,
   runPreviewModuleCountForRun,
 } from '../runtimes/run-lifecycle-analytics.js';
 import { odNextRolloutAnalyticsProperties } from '../strategies/od-next/rollout-analytics.js';
@@ -213,6 +216,8 @@ export interface RunAnalyticsLifecycleDeps {
         insertId: string;
       }): void;
       markAnalyticsCompleted?(run: ChatRun): void;
+      beginAnalyticsDelivery?(run: ChatRun): void;
+      finalizeAnalyticsDelivery?(run: ChatRun, result: AnalyticsCaptureResult): void;
       setDeliverableValidation?(run: ChatRun, result: unknown): void;
     };
     analytics: {
@@ -222,7 +227,7 @@ export interface RunAnalyticsLifecycleDeps {
         appVersion: string;
         properties: Record<string, unknown>;
         insertId: string;
-      }): void | Promise<void>;
+      }): unknown | Promise<unknown>;
     };
     getAppVersion(): string;
   };
@@ -282,6 +287,14 @@ export interface RunAnalyticsFacts {
 
 /** The facts plus the Run they describe. */
 export type RunAnalyticsInstallInput = RunAnalyticsFacts & { run: ChatRun };
+
+async function waitForTerminalClaimSettlementBoundary(): Promise<void> {
+  // A physical runtime can report the same terminal outcome through adjacent
+  // error/close callbacks. Give callbacks already queued by the first terminal
+  // transition one check phase to update the lifecycle before freezing the
+  // sole run_finished envelope.
+  await scheduler.yield();
+}
 
 export interface RunAnalyticsLifecycle {
   /**
@@ -727,6 +740,7 @@ export function createRunAnalyticsLifecycle(
             cancelOrigin: run.cancelOrigin ?? null,
             terminalTrigger: run.terminalTrigger ?? null,
             events: run.events,
+            admissionEvidence: runAdmissionEvidenceForRun(run),
           });
           const usageAnalytics = scanRunEventsForUsageAnalytics(
             run.events,
@@ -907,6 +921,7 @@ export function createRunAnalyticsLifecycle(
           });
           const diagnosticsAnalytics = summarizeRunDiagnosticsForAnalytics({
             events: run.events,
+            promptBudgetDiagnostics: run.promptBudgetDiagnostics,
             exitCode: status.exitCode ?? null,
             signal: status.signal ?? null,
             cancelRequested: !!run.cancelRequested,
@@ -946,6 +961,11 @@ export function createRunAnalyticsLifecycle(
           const supportingAssetFilesChanged = artifactDiff
             ? supportingAssetFilesChangedForRun(artifactDiff, runProjectKind)
             : undefined;
+          design.runs.beginAnalyticsDelivery?.(run);
+          await waitForTerminalClaimSettlementBoundary();
+          const terminalLifecycle = run.terminalLifecycle
+            ? terminalLifecycleForPosthogLocalQueue(run.terminalLifecycle)
+            : undefined;
           const finishedProperties: Record<string, unknown> = {
               ...baseProps,
               design_system_id: run.designSystemId ?? undefined,
@@ -961,6 +981,30 @@ export function createRunAnalyticsLifecycle(
               stable_prompt_changed_sections: run.promptCache?.changedSections ?? undefined,
               area: isDesignSystemRun ? 'design_system_generation' : 'chat_panel',
               result,
+              terminal_integrity: terminalLifecycle?.terminalIntegrity ?? 'canonical',
+              ...(terminalLifecycle
+                ? {
+                    run_attempt: terminalLifecycle.runAttempt,
+                    ...(terminalLifecycle.runtimeGenerationId
+                      ? { runtime_generation_id: terminalLifecycle.runtimeGenerationId }
+                      : {}),
+                    termination_origin: terminalLifecycle.terminationOrigin,
+                    terminal_persistence_status:
+                      terminalLifecycle.terminalPersistence.status,
+                    terminal_persistence_error_type:
+                      terminalLifecycle.terminalPersistence.errorType,
+                    posthog_delivery_status: terminalLifecycle.posthogDelivery.status,
+                    posthog_acknowledgement:
+                      terminalLifecycle.posthogDelivery.acknowledgement,
+                    posthog_delivery_attempt_count:
+                      terminalLifecycle.posthogDelivery.attemptCount,
+                    posthog_error_type: terminalLifecycle.posthogDelivery.errorType,
+                    mature_unfinished_state: terminalLifecycle.unfinishedState,
+                    duplicate_terminal_count:
+                      terminalLifecycle.duplicateTerminalCount,
+                    late_terminal_count: terminalLifecycle.lateTerminalCount,
+                  }
+                : {}),
               ...(activationMilestones ? { $set_once: activationMilestones } : {}),
               model_id: finishedModelId,
               artifact_count: artifactCount,
@@ -1155,14 +1199,28 @@ export function createRunAnalyticsLifecycle(
             properties: finishedProperties,
             insertId: runInsertId,
           });
-          await Promise.resolve(design.analytics.capture({
-            eventName: 'run_finished',
-            context: analyticsContext,
-            appVersion: design.getAppVersion(),
-            properties: finishedProperties,
-            insertId: `${runInsertId}-finish`,
-          }));
-          design.runs.markAnalyticsCompleted?.(run);
+          let captureResult: AnalyticsCaptureResult;
+          try {
+            captureResult = normalizeAnalyticsCaptureResult(
+              await Promise.resolve(design.analytics.capture({
+                eventName: 'run_finished',
+                context: analyticsContext,
+                appVersion: design.getAppVersion(),
+                properties: finishedProperties,
+                insertId: `${runInsertId}-finish`,
+              })),
+            );
+          } catch {
+            captureResult = {
+              status: 'failed',
+              acknowledgement: 'none',
+              errorType: 'enqueue_failed',
+            };
+          }
+          design.runs.finalizeAnalyticsDelivery?.(run, captureResult);
+          if (captureResult.status !== 'failed') {
+            design.runs.markAnalyticsCompleted?.(run);
+          }
         }).catch(() => {});
       }
     })().catch(() => {

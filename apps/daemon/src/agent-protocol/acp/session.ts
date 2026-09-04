@@ -63,6 +63,11 @@ import {
 import { buildAcpSessionNewParams, buildPromptBlocks, type AcpMcpServerInput } from './session-params.js';
 import { withholdStdioMcpServersForBuild } from './stdio-mcp.js';
 import { createVelaChildEvidenceConsumer } from '../../runtimes/vela-child-evidence.js';
+import { withAcpEmissionProvenance, type AcpEmissionMeta } from './emission-provenance.js';
+import {
+  createToolExecutionLifecycleDeduper,
+  sanitizeToolExecutionLifecycleUpdate,
+} from './tool-execution-lifecycle.js';
 
 const NON_DISPLAYABLE_ACP_SESSION_UPDATES = new Set([
   'usage_update',
@@ -84,8 +89,15 @@ const NON_DISPLAYABLE_ACP_SESSION_UPDATES = new Set([
  * exclude these; consumers that build the transcript still want them, which is
  * why the pair is emitted rather than dropped.
  */
-export interface AcpEmissionMeta {
-  hostSynthesized?: boolean;
+export type { AcpEmissionMeta } from './emission-provenance.js';
+
+export interface AcpPromptBudgetContext {
+  modelId?: string | null;
+  modelIdSource?: 'model_catalog' | 'unknown';
+  contextWindowTokens?: number | null;
+  contextWindowSource?: 'model_metadata' | 'unknown';
+  priorSessionInputTokens?: number | null;
+  priorSessionUsageSource?: 'agent_session' | 'unknown';
 }
 
 /**
@@ -125,6 +137,8 @@ export interface AttachAcpSessionOptions {
   // `session/new`. The agent verifies the session and, if it is gone, returns a
   // structured `resume_failed` error the caller maps to its reseed path.
   resumeSessionId?: string | null;
+  /** Safe model/session metadata attached to the exact prompt-frame diagnostic. */
+  promptBudgetContext?: AcpPromptBudgetContext;
   // Subsegment timing markers for spawn->first-token attribution (#3408 §4).
   // `onCliReady` fires once on the first well-formed ACP JSON-RPC message
   // (the CLI is up and speaking the protocol); `onSessionInit` fires once when
@@ -185,18 +199,44 @@ export function attachAcpSession({
   modelUnavailableErrorCode,
   completePromptOnTurnEnd = false,
   resumeSessionId,
+  promptBudgetContext,
   onCliReady,
   onSessionInit,
   onPromptComplete,
   onTerminal,
 }: AttachAcpSessionOptions) {
   const runStartedAt = Date.now();
+  const toolExecutionLifecycleDeduper = createToolExecutionLifecycleDeduper();
   const effectiveCwd = path.resolve(cwd || process.cwd());
   if (!child.stdin || !child.stdout) {
     throw new Error('ACP child process must expose stdin and stdout streams');
   }
   const stdin = child.stdin;
   const stdout = child.stdout;
+
+  const nonNegativeInteger = (value: unknown): number | undefined =>
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    value <= 1_000_000_000
+      ? value
+      : undefined;
+
+  const boundedModelId = (value: unknown): string => {
+    const trimmed = typeof value === 'string' ? value.trim() : '';
+    if (!trimmed) return 'default';
+    if (trimmed.length > 128 || !/^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/.test(trimmed)) {
+      return 'other';
+    }
+    return redactSecrets(trimmed) === trimmed ? trimmed : 'redacted';
+  };
+  const promptBudgetModelId = (): string => {
+    if (promptBudgetContext?.modelIdSource === 'model_catalog') {
+      return boundedModelId(promptBudgetContext.modelId);
+    }
+    const requested = typeof model === 'string' ? model.trim() : '';
+    return !requested || requested.toLowerCase() === 'default' ? 'default' : 'other';
+  };
   let expectedId = 1;
   let nextId = 2;
   let promptRequestId: JsonRpcId | null = null;
@@ -315,7 +355,7 @@ export function attachAcpSession({
     // ids (paths, tokens, JWTs) never leak into Langfuse span ids or
     // metadata.toolCallId.
     const telemetryToolCallId = acpTelemetryToolCallId(toolCallId);
-    send('agent', {
+    send('agent', withAcpEmissionProvenance({
       type: 'tool_use',
       id: telemetryToolCallId,
       name: st.name,
@@ -323,15 +363,15 @@ export function attachAcpSession({
       // Wall-clock start of the first ACP frame for this toolCallId so analytics
       // can compute real duration even though tool_use is emitted at terminal.
       startedAt: st.firstSeenAt,
-    }, meta);
-    send('agent', {
+    }, meta), meta);
+    send('agent', withAcpEmissionProvenance({
       type: 'tool_result',
       toolUseId: telemetryToolCallId,
       // Bash/execute stdout can dump private files (cat .env). Langfuse only
       // lexically masks Bash, so redact before the canonical transcript ships.
       content: acpSafeToolResultContent(st.name, st.resultContent),
       isError,
-    }, meta);
+    }, meta), meta);
     // Concrete only on terminal tool_result for a real (non-think) tool.
     emittedConcreteToolEvent = true;
   };
@@ -456,7 +496,60 @@ export function attachAcpSession({
     currentStage = timeoutLabel;
     resetStageTimer(timeoutLabel);
     try {
-      sendRpc(stdin, id, method, params);
+      sendRpc(
+        stdin,
+        id,
+        method,
+        params,
+        method === 'session/prompt'
+          ? ({ frameBytes }) => {
+              const promptBytes = Buffer.byteLength(prompt, 'utf8');
+              const boundedFrameBytes = nonNegativeInteger(frameBytes);
+              const boundedPromptBytes = nonNegativeInteger(promptBytes);
+              if (
+                boundedFrameBytes === undefined ||
+                boundedPromptBytes === undefined
+              ) {
+                return;
+              }
+              const contextWindowTokens = nonNegativeInteger(
+                promptBudgetContext?.contextWindowTokens,
+              );
+              const priorSessionInputTokens = nonNegativeInteger(
+                promptBudgetContext?.priorSessionInputTokens,
+              );
+              send('agent', {
+                type: 'diagnostic',
+                name: 'prompt_budget_v1',
+                source: 'acp-json-rpc',
+                schemaVersion: 1,
+                frameBytes: boundedFrameBytes,
+                promptBytes: boundedPromptBytes,
+                promptTokenEstimate: Math.ceil(boundedPromptBytes / 3),
+                tokenEstimateMethod: 'utf8_bytes_div_3_ceil_v1',
+                sessionMode: resumeSessionId ? 'resume' : 'new',
+                // ACP response fields are peer-controlled. Persist only the
+                // catalog identity supplied by the daemon; bucket everything
+                // else instead of projecting the peer's active model value.
+                modelId: promptBudgetModelId(),
+                contextWindowSource:
+                  contextWindowTokens !== undefined &&
+                  promptBudgetContext?.contextWindowSource === 'model_metadata'
+                    ? 'model_metadata'
+                    : 'unknown',
+                ...(contextWindowTokens !== undefined ? { contextWindowTokens } : {}),
+                priorSessionUsageSource:
+                  priorSessionInputTokens !== undefined &&
+                  promptBudgetContext?.priorSessionUsageSource === 'agent_session'
+                    ? 'agent_session'
+                    : 'unknown',
+                ...(priorSessionInputTokens !== undefined
+                  ? { priorSessionInputTokens }
+                  : {}),
+              });
+            }
+          : undefined,
+      );
     } catch (err) {
       fail(`stdin write failed: ${errorMessage(err)}`);
     }
@@ -477,10 +570,25 @@ export function attachAcpSession({
 
   const emitAcpExecutionObservability = (update: JsonObject): boolean => {
     const name = typeof update.sessionUpdate === 'string' ? update.sessionUpdate : '';
+    if (name === 'tool_execution_lifecycle') {
+      if (modelUnavailableErrorCode) {
+        const diagnostic = sanitizeToolExecutionLifecycleUpdate(update);
+        if (diagnostic && toolExecutionLifecycleDeduper.accept(diagnostic)) {
+          send('agent', {
+            ...diagnostic,
+            elapsedMs: Date.now() - runStartedAt,
+          });
+        }
+      }
+      // Private adapter diagnostics never fall through to generic status or
+      // tool-result projection, including unknown schema versions.
+      return true;
+    }
     if (
       name !== 'assistant_message_lifecycle' &&
       name !== 'model_step_lifecycle' &&
-      name !== 'model_retry'
+      name !== 'model_retry' &&
+      name !== 'opencode_compaction'
     ) {
       return false;
     }

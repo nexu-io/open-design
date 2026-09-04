@@ -1985,26 +1985,6 @@
   text-align: left;
 }
 
-.inline-switcher__campaign-badge {
-  flex: 0 0 auto;
-  padding: 2px 6px;
-  border-radius: 999px;
-  color: #153406;
-  background: #68f22e;
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 1.4;
-  cursor: help;
-  outline: none;
-}
-.inline-switcher__campaign-badge.is-restricted {
-  color: #5f645d;
-  background: #e4e7e2;
-}
-.inline-switcher__campaign-badge.is-unpaid {
-  color: #5f645d;
-  background: #eceeeb;
-}
 .inline-switcher__chip[data-campaign-highlight='true'] {
   border-color: var(--accent);
   animation: deepseek-campaign-chip-pulse 760ms cubic-bezier(0.23, 1, 0.32, 1) 2;

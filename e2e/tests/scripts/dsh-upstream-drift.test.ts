@@ -19,16 +19,24 @@ import {
 } from '../../../.github/scripts/dsh-upstream-drift.ts';
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
-const INSTALLER_SH = `${repoRoot}apps/landing-page/public/install-dsh.sh`;
+const INSTALLER_SH = `${repoRoot}tools/release/resources/dsh-bootstrap/install-dsh.sh`;
 const AGENT_DEF = `${repoRoot}apps/daemon/src/runtimes/defs/deepseek-harness.ts`;
+const DRIFT_SCRIPT = `${repoRoot}.github/scripts/dsh-upstream-drift.ts`;
 const WORKFLOW = `${repoRoot}.github/workflows/dsh-upstream-drift.yml`;
 
 describe('DeepSeek Harness upstream drift', () => {
   it('reads what we currently ship out of the real files', async () => {
-    const [installer, def] = await Promise.all([
+    const [installer, def, script] = await Promise.all([
       readFile(INSTALLER_SH, 'utf8'),
       readFile(AGENT_DEF, 'utf8'),
+      readFile(DRIFT_SCRIPT, 'utf8'),
     ]);
+
+    // Canonical product path — not the temporary landing public copies.
+    expect(script).toContain(
+      'tools/release/resources/dsh-bootstrap/install-dsh.sh',
+    );
+    expect(script).not.toContain('apps/landing-page/public/install-dsh.sh');
 
     const pinned = readPinnedVersion(installer);
     expect(pinned).toMatch(/^\d+\.\d+\.\d+/u);

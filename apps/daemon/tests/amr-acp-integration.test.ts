@@ -148,13 +148,8 @@ describe('AMR runtime def', () => {
     expect(def?.streamFormat).toBe('acp-json-rpc');
   });
 
-  it('builds the documented `vela agent run --runtime opencode` argv', () => {
-    expect(amrAgentDef.buildArgs()).toEqual([
-      'agent',
-      'run',
-      '--runtime',
-      'opencode',
-    ]);
+  it('builds the documented `vela agent run` argv', () => {
+    expect(amrAgentDef.buildArgs()).toEqual(['agent', 'run']);
   });
 
   it('fails closed instead of exposing static stale fallback models', () => {
@@ -238,7 +233,11 @@ describe('AMR runtime def', () => {
           enabled: true,
           default: true,
           cost: { input: 0.14, output: 0.28 },
-          metadata: { cost: 'low', capability: 'standard' },
+          metadata: {
+            cost: 'low',
+            capability: 'standard',
+            contextWindowTokens: 200_000,
+          },
         },
         { id: 'gpt-image-2' },
         { id: 'nano-banana-2' },
@@ -256,7 +255,11 @@ describe('AMR runtime def', () => {
         default: true,
         inputPriceUsdPerMillion: 0.14,
         outputPriceUsdPerMillion: 0.28,
-        metadata: { cost: 'low', capability: 'standard' },
+        metadata: {
+          cost: 'low',
+          capability: 'standard',
+          contextWindowTokens: 200_000,
+        },
       },
       { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
       { id: 'kimi-k2.7-code', label: 'kimi-k2.7-code', enabled: false },

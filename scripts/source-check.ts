@@ -152,8 +152,6 @@ function isTestSource(repositoryPath: string): boolean {
 function isResourceLike(repositoryPath: string): boolean {
   return (
     /\/i18n\/(locales|types)\.ts$/.test(repositoryPath)
-    || /apps\/landing-page\/app\/(i18n|home-page-i18n|info-page-i18n)\.ts$/.test(repositoryPath)
-    || /apps\/landing-page\/app\/_lib\/[\w-]*i18n\.ts$/.test(repositoryPath)
     || /remixicon\.css$/.test(repositoryPath)
   );
 }

@@ -16,6 +16,7 @@
     "@open-design/launcher-proto": "workspace:*",
     "@open-design/release": "workspace:*",
     "cac": "6.7.14",
+    "sharp": "0.35.3",
     "yaml": "2.9.0"
   },
   "devDependencies": {
@@ -24,6 +25,9 @@
     "tsx": "4.22.3",
     "typescript": "6.0.3",
     "vitest": "4.1.6"
+  },
+  "optionalDependencies": {
+    "playwright": "1.60.0"
   },
   "engines": {
     "node": "~24"

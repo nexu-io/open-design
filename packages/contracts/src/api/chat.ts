@@ -27,6 +27,13 @@ import type {
   TrackingRunFailureDetail,
   TrackingRunRecoveryActionType,
   TrackingRunTerminalTrigger,
+  TrackingRunTerminalIntegrity,
+  TrackingRunTerminationOrigin,
+  TrackingRunTerminalPersistenceErrorType,
+  TrackingRunPosthogDeliveryStatus,
+  TrackingRunPosthogAcknowledgement,
+  TrackingRunPosthogErrorType,
+  TrackingRunMatureUnfinishedState,
 } from '../analytics/events.js';
 import type { StrategyTaskProjectionV2 } from '../plugins/strategy-v2.js';
 import type { OdNextRolloutDecision } from './strategy-rollout.js';
@@ -41,6 +48,31 @@ export type RunFailureDetail = TrackingRunFailureDetail;
 export type RunCancelOrigin = TrackingRunCancelOrigin;
 export type RunTerminalTrigger = TrackingRunTerminalTrigger;
 export type RunFailureAction = 'relogin' | 'recharge' | 'upgrade' | 'retry' | 'none';
+
+export interface RunTerminalLifecycleStatus {
+  version: 1;
+  runAttempt: number;
+  runtimeGenerationId: string | null;
+  terminationOrigin: TrackingRunTerminationOrigin;
+  terminalIntegrity: TrackingRunTerminalIntegrity;
+  terminalPersistence: {
+    status: 'acknowledged' | 'failed' | 'unknown';
+    errorType: TrackingRunTerminalPersistenceErrorType | null;
+  };
+  posthogDelivery: {
+    status: TrackingRunPosthogDeliveryStatus;
+    acknowledgement: TrackingRunPosthogAcknowledgement;
+    attemptCount: number;
+    errorType: TrackingRunPosthogErrorType | null;
+  };
+  unfinishedState: TrackingRunMatureUnfinishedState;
+  duplicateTerminalCount: number;
+  lateTerminalCount: number;
+  reconciliation?: {
+    generationId: string;
+    integrity: 'recovered';
+  };
+}
 
 export type ChatRole = 'user' | 'assistant';
 export type ChatSessionMode = 'design' | 'chat' | 'plan';
@@ -678,6 +710,8 @@ export interface ChatRunStatusResponse {
   cancelOrigin?: RunCancelOrigin | null;
   /** Structured lifecycle or watchdog mechanism that forced termination. */
   terminalTrigger?: RunTerminalTrigger | null;
+  /** Metadata-only terminal persistence and delivery state. */
+  terminalLifecycle?: RunTerminalLifecycleStatus;
   childPid?: number | null;
   processGroupId?: number | null;
   childExited?: boolean;

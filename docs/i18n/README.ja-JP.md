@@ -333,7 +333,7 @@ pnpm tools-dev run web
 
 `tools-dev` が表示した URL を開いてください。明示的なポートフラグがなければ、開発ポートは動的に割り当てられます。
 
-Node `~24`、pnpm `10.33.x`。Windows ユーザーは [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md) を参照してください。完全なクイックスタート、環境変数、Nix flake、パッケージ化されたビルドフロー → [`QUICKSTART.ja-JP.md`](QUICKSTART.ja-JP.md)。
+Node `~24`、pnpm `10.33.x`。Windows ユーザーは [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md) を参照してください。完全なクイックスタート、環境変数、パッケージ化されたビルドフロー → [`QUICKSTART.ja-JP.md`](QUICKSTART.ja-JP.md)。
 
 ### 完全なワークフロー — ブリーフからアーティファクトまで
 
