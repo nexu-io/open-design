@@ -108,6 +108,10 @@ export interface ManualEditPatchResult {
 
 export function applyManualEditPatch(source: string, patch: ManualEditPatch): ManualEditPatchResult {
   if (patch.kind === 'set-full-source') return { ok: true, source: patch.source };
+  if (patch.kind === 'add-element') {
+    const addSource = insertElement(source, patch);
+    return addSource ? { ok: true, source: addSource } : { ok: false, source, error: 'Could not add element.' };
+  }
 
   const doc = parseSource(source);
   if (!doc) return { ok: false, source, error: 'Could not parse source.' };
@@ -162,6 +166,15 @@ export function applyManualEditPatch(source: string, patch: ManualEditPatch): Ma
     setInlineStyles(el as HTMLElement, patch.styles);
   } else if (patch.kind === 'set-attributes') {
     setAttributes(el, patch.attributes);
+  } else if (patch.kind === 'set-position') {
+    setInlineStyles(el as HTMLElement, {
+      position: 'absolute',
+      left: patch.left,
+      top: patch.top,
+      width: patch.width,
+      height: patch.height,
+      transform: patch.transform ?? '',
+    });
   } else if (patch.kind === 'set-outer-html') {
     const replaced = replaceOuterHtml(doc, el, patch.html);
     if (!replaced.ok) {
@@ -230,6 +243,28 @@ export function readManualEditAttributes(source: string, id: string): Record<str
 export function readManualEditOuterHtml(source: string, id: string): string {
   const doc = parseSource(source);
   return (doc ? findEditableElement(doc, id)?.outerHTML : '') ?? '';
+}
+
+function insertElement(source: string, p: Extract<ManualEditPatch, { kind: 'add-element' }>): string | null {
+  // Sanitise: reject HTML with script tags or inline event handlers
+  if (/<script[\s>]/i.test(p.html) || /\bon\w+\s*=/i.test(p.html)) return null;
+  const safeStyle = sanitiseCssValues({ left: p.left, top: p.top, width: p.width, height: p.height });
+  const style = `position:absolute;left:${safeStyle.left};top:${safeStyle.top};width:${safeStyle.width};height:${safeStyle.height};`;
+  const styledHtml = p.html.replace('<', `<${p.tagName} style="${style}" data-od-id="${p.id}" `);
+  const idx = source.lastIndexOf('</body>');
+  if (idx >= 0) return source.slice(0, idx) + styledHtml + '\n' + source.slice(idx);
+  const htmlEnd = source.lastIndexOf('</html>');
+  if (htmlEnd >= 0) return source.slice(0, htmlEnd) + styledHtml + '\n' + source.slice(htmlEnd);
+  return source + '\n' + styledHtml;
+}
+
+function sanitiseCssValues(v: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, val] of Object.entries(v)) {
+    // Strip semicolons, closing braces, unbalanced quotes — safe for CSS attribute injection
+    out[k] = String(val).replace(/[";{}()]/g, '');
+  }
+  return out;
 }
 
 function parseSource(source: string): Document | null {
