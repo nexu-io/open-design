@@ -266,4 +266,40 @@ export class ElectronStandaloneHostLifecycle {
       return { state: next, result: Object.freeze({ attachmentCapability, status: this.#project(next) }) };
     });
   }
+
+  /**
+   * Resume only a durable stopped-sealed transition after its previous host
+   * died. Inspection and completion share one ledger transaction, so a cold
+   * start cannot race a lease expiry or another transition owner.
+   */
+  async completeStoppedTransitionStart(
+    kind: "content-restart" | "shell-install",
+    expectedAttemptId: string | null,
+    generation: GenerationRecord,
+    attachment: LifecycleAttachment,
+    binding: StandaloneGenerationBinding,
+  ): Promise<ElectronStandaloneHostStart | null> {
+    return await this.#transaction((state) => {
+      const transition = state.transition;
+      if (transition == null || transition.kind !== kind || transition.phase !== "stopped-sealed"
+        || (expectedAttemptId != null && transition.token !== expectedAttemptId)) {
+        return { state, result: null };
+      }
+      const attachmentCapability = randomBytes(32).toString("hex");
+      const now = this.#iso();
+      const next = SHARED_LIFECYCLE_ALGEBRA.reduce(state, {
+        type: "complete-start",
+        token: transition.token,
+        fence: transition.fence,
+        generationId: generation.id,
+        bindingDigest: binding.digest,
+        instanceId: randomUUID(),
+        attachment,
+        heartbeatAt: now,
+        leaseExpiresAt: this.#lease(now),
+        capabilityHash: capabilityHash(attachmentCapability),
+      });
+      return { state: next, result: Object.freeze({ attachmentCapability, status: this.#project(next) }) };
+    });
+  }
 }

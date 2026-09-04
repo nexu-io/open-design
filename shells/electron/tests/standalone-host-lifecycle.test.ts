@@ -99,8 +99,53 @@ describe("Electron Standalone Sidecar-host lifecycle", () => {
       const sealed = await continuation.forceStopTransition(acquired.transition.token, acquired.transition.fence);
       expect(sealed).toMatchObject({ attemptId: "install-1", phase: "stopped-sealed", fence: 2 });
       expect(await ledger.read()).toMatchObject({ state: "stopped", transition: { token: "install-1", phase: "stopped-sealed", fence: 2 } });
+      await expect(continuation.completeStoppedTransitionStart("shell-install", "different-install", generation, attachment, binding)).resolves.toBeNull();
       const restarted = await continuation.completeTransitionStart(sealed.token, sealed.fence, generation, attachment, binding);
       expect(restarted.status).toMatchObject({ state: "running", references: 1 });
+      expect((await ledger.read())?.transition).toBeNull();
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("atomically resumes a content restart after the sealed host crashes", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "electron-content-transition-recovery-"));
+    try {
+      const ledger = new ElectronStandaloneLifecycleLedger(root, scope);
+      const attachment = { id: "electron-1", shell };
+      const firstHost = new ElectronStandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000, transitionHeartbeatIntervalMs: 100, transitionLeaseDurationMs: 1_000, statePort: ledger });
+      await firstHost.start(generation, attachment, binding, null);
+      const acquired = await firstHost.beginTransition("content-restart", { ownerAttachmentId: attachment.id });
+      if (acquired.state !== "acquired") throw new Error("content transition was not acquired");
+      await firstHost.forceStopTransition(acquired.transition.token, acquired.transition.fence);
+
+      const replacementHost = new ElectronStandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000, transitionHeartbeatIntervalMs: 100, transitionLeaseDurationMs: 1_000, statePort: ledger });
+      const recovered = await replacementHost.completeStoppedTransitionStart("content-restart", null, generation, attachment, binding);
+      expect(recovered?.status).toMatchObject({ state: "running", generationId: generation.id, bindingDigest: binding.digest, references: 1 });
+      expect((await ledger.read())?.transition).toBeNull();
+      await expect(replacementHost.completeStoppedTransitionStart("content-restart", null, generation, attachment, binding)).resolves.toBeNull();
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("fences an expired sealed transition before falling back to a normal cold start", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "electron-content-transition-expiry-"));
+    try {
+      let now = new Date("2026-09-04T00:00:00.000Z");
+      const ledger = new ElectronStandaloneLifecycleLedger(root, scope);
+      const attachment = { id: "electron-1", shell };
+      const firstHost = new ElectronStandaloneHostLifecycle(scope, { clock: () => now, heartbeatIntervalMs: 100, leaseDurationMs: 1_000, transitionHeartbeatIntervalMs: 100, transitionLeaseDurationMs: 1_000, statePort: ledger });
+      await firstHost.start(generation, attachment, binding, null);
+      const acquired = await firstHost.beginTransition("content-restart", { ownerAttachmentId: attachment.id });
+      if (acquired.state !== "acquired") throw new Error("content transition was not acquired");
+      const sealed = await firstHost.forceStopTransition(acquired.transition.token, acquired.transition.fence);
+
+      now = new Date("2026-09-04T00:00:02.000Z");
+      const replacementHost = new ElectronStandaloneHostLifecycle(scope, { clock: () => now, heartbeatIntervalMs: 100, leaseDurationMs: 1_000, transitionHeartbeatIntervalMs: 100, transitionLeaseDurationMs: 1_000, statePort: ledger });
+      await expect(replacementHost.completeStoppedTransitionStart("content-restart", null, generation, attachment, binding)).resolves.toBeNull();
+      const restarted = await replacementHost.start(generation, attachment, binding, null);
+      expect(restarted.status).toMatchObject({ state: "running", references: 1, fence: sealed.fence + 2 });
       expect((await ledger.read())?.transition).toBeNull();
     } finally {
       await rm(root, { force: true, recursive: true });
