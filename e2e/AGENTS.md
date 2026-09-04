@@ -76,6 +76,17 @@ within the file as well as across files.
   reassert a lower-layer state invariant. Retain one browser witness for each
   distinct cross-layer transition, and keep its narrower ownership tests
   explicit enough that future consolidation does not weaken coverage.
+- **Prove the product premise before adding a regression.** A new or realigned
+  E2E case must trace to current product requirements, a defect reproduced on
+  the baseline, or an explicit production contract. Do not invent a failure
+  with a route stub, request mutation, or impossible parameter combination and
+  then change product code to satisfy that synthetic scenario. Mocks may make
+  an already-proven dependency or failure deterministic, but their status,
+  payload, and trigger must match a real upstream or daemon contract that the
+  production UI can reach. If the behavior cannot be reproduced or grounded
+  in such a contract, record it as an automation candidate or intentional gap
+  instead of treating it as a bug; do not land speculative product fixes for
+  it.
 - **Order independence is the contract.** Each test performs its own complete
   setup — whatever that file's model requires — and never relies on a
   predecessor's side effects; any contiguous subset of the suite must pass

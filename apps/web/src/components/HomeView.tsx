@@ -2934,12 +2934,20 @@ export function HomeView({
       const productAutomaticScenario = submittedChip?.action.kind === 'apply-scenario'
         && submittedChip.action.automaticDefault === true
         && !pinsPluginOverAutomaticRoute(submittedActive, submittedRouteChipId);
+      // Ask stays a plain conversation unless the user explicitly selected a
+      // plugin or preset. A task type's implicit binding may already have
+      // resolved by the time the user switches modes, but that background
+      // binding must not leak plugin authority or a snapshot into Ask.
+      const submittedPlugin =
+        sessionMode === 'design' || submittedActive?.explicitPick
+          ? submittedActive
+          : null;
       const routedPluginId =
         automaticStrategyTaskProfile
           ? null
           : sessionMode === 'design'
-          ? submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID
-          : submittedActive?.record.id ?? null;
+          ? submittedPlugin?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID
+          : submittedPlugin?.record.id ?? null;
       const pluginSelectionProvenance = sessionMode === 'design'
         && (!submittedActive || productAutomaticScenario)
         ? 'automatic-default' as const
@@ -2962,12 +2970,12 @@ export function HomeView({
         ...(automaticStrategyTaskProfile && submittedExampleReference
           ? { exampleReference: submittedExampleReference }
           : {}),
-        ...(!automaticStrategyTaskProfile && submittedActive?.record.source
-          ? { pluginSource: submittedActive.record.source }
+        ...(!automaticStrategyTaskProfile && submittedPlugin?.record.source
+          ? { pluginSource: submittedPlugin.record.source }
           : {}),
         pluginType: automaticStrategyTaskProfile
           ? null
-          : submittedActive?.record.marketplaceTrust ?? (routedPluginId ? 'official' : null),
+          : submittedPlugin?.record.marketplaceTrust ?? (routedPluginId ? 'official' : null),
         skillId: resolvedSkillId,
         ...(resolvedSkillId && activeSkillCatalogScope
           ? { skillCatalogScope: activeSkillCatalogScope }
@@ -2976,12 +2984,14 @@ export function HomeView({
           : {}),
         appliedPluginSnapshotId: automaticStrategyTaskProfile
           ? null
-          : submittedActive?.result?.appliedPlugin?.snapshotId ?? null,
-        pluginTitle: automaticStrategyTaskProfile ? null : submittedActive?.record.title ?? null,
+          : submittedPlugin?.result?.appliedPlugin?.snapshotId ?? null,
+        pluginTitle: automaticStrategyTaskProfile ? null : submittedPlugin?.record.title ?? null,
         taskKind: automaticStrategyTaskProfile
           ? null
-          : submittedActive?.result?.appliedPlugin?.taskKind ?? null,
-        ...(!automaticStrategyTaskProfile ? { pluginInputs: submittedPluginInputs } : {}),
+          : submittedPlugin?.result?.appliedPlugin?.taskKind ?? null,
+        ...(!automaticStrategyTaskProfile
+          ? { pluginInputs: submittedPlugin ? submittedPluginInputs : null }
+          : {}),
         projectKind: submittedProjectKind,
         projectMetadata: submittedProjectMetadata,
         designSystemId: submittedDesignSystemId,

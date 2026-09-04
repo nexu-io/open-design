@@ -244,6 +244,69 @@ test('[P1] message center dismisses with Escape and restores the trigger state',
   await expect(trigger).toHaveAttribute('aria-expanded', 'false');
 });
 
+test('[P1] message center opens safe CTA links and hides unsafe actions', async ({ page, context }) => {
+  await seedEntryHome(page);
+
+  await page.route('**/api/integrations/vela/status', async (route) => {
+    await route.fulfill({ json: { loggedIn: true } });
+  });
+  await page.route('**/api/integrations/vela/message-center/messages**', async (route) => {
+    await route.fulfill({
+      json: {
+        messages: [
+          {
+            id: 'msg-safe-cta',
+            audienceType: 'account',
+            typeName: 'Release',
+            title: 'Open the release notes',
+            body: 'The latest release notes are ready.',
+            publishedAt: '2026-08-17T08:00:00.000Z',
+            readAt: null,
+            ctaLabel: 'View release notes',
+            ctaUrl: 'https://release-notes.example.test/latest',
+          },
+          {
+            id: 'msg-unsafe-cta',
+            audienceType: 'account',
+            typeName: 'Security',
+            title: 'Unsafe action stays hidden',
+            body: 'Non-web protocols must not become message actions.',
+            publishedAt: '2026-08-17T07:00:00.000Z',
+            readAt: null,
+            ctaLabel: 'Run unsafe action',
+            ctaUrl: 'javascript:alert(1)',
+          },
+        ],
+        nextCursor: null,
+        unreadCount: 2,
+      },
+    });
+  });
+  await page.route('**/api/integrations/vela/message-center/messages/*/read', async (route) => {
+    await route.fulfill({ json: { ok: true } });
+  });
+  await context.route('https://release-notes.example.test/latest', async (route) => {
+    await route.fulfill({
+      contentType: 'text/html',
+      body: '<!doctype html><title>Release notes</title>',
+    });
+  });
+
+  await gotoEntryHome(page);
+  await page.getByTestId('entry-nav-message-center').click();
+
+  const dialog = page.getByTestId('message-center-dialog');
+  await dialog.getByRole('button', { name: /Open the release notes/i }).click();
+  const popupPromise = context.waitForEvent('page');
+  await dialog.getByRole('button', { name: 'View release notes' }).click();
+  const popup = await popupPromise;
+  await expect(popup).toHaveURL('https://release-notes.example.test/latest');
+  await popup.close();
+
+  await dialog.getByRole('button', { name: /Unsafe action stays hidden/i }).click();
+  await expect(dialog.getByRole('button', { name: 'Run unsafe action' })).toHaveCount(0);
+});
+
 test('[P1] message center formats published dates with the selected zh-CN locale', async ({ page }) => {
   const publishedAt = '2026-07-21T08:00:00.000Z';
   const expectedDate = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium' }).format(

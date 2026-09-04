@@ -901,11 +901,12 @@ describe('HomeView prompt handoff', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     stubAnimationFrame();
+    const onSubmit = vi.fn();
 
     render(
       <HomeView
         projects={[]}
-        onSubmit={() => undefined}
+        onSubmit={onSubmit}
         onOpenProject={() => undefined}
         onViewAllProjects={() => undefined}
         promptHandoff={createPluginUseHandoff(11, 'example-web-prototype', {
@@ -929,6 +930,17 @@ describe('HomeView prompt handoff', () => {
       // would un-pin the plugin this hand-off exists to pin.
       explicitPick: true,
     });
+
+    fireEvent.click(screen.getByTestId('composer-mode-trigger'));
+    fireEvent.click(screen.getByTestId('composer-mode-menu-chat'));
+    await setPromptAndSettle('Ask how to improve this prototype.');
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      conversationMode: 'chat',
+      pluginId: 'example-web-prototype',
+      appliedPluginSnapshotId: 'snap-web-prototype',
+    })));
   });
 
   it('routes free-form submits through the hidden default plugin without applying a visible chip', async () => {
@@ -962,7 +974,7 @@ describe('HomeView prompt handoff', () => {
       prompt: 'Make a launch page for a robotics studio',
       pluginId: 'od-default',
       appliedPluginSnapshotId: null,
-      pluginInputs: { prompt: 'Make a launch page for a robotics studio' },
+      pluginInputs: null,
       projectKind: 'other',
     }));
   });
