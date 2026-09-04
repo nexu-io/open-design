@@ -113,12 +113,36 @@ function renderComposer() {
   );
 }
 
-describe('发送键盒子几何 —— 稿子 28×28,和底栏其它按钮同一档', () => {
-  it('盒子是 28×28,不是 36×36', () => {
+/*
+ * ⚠️ 2026-09-05 合并 main 时,这一节的数字**整体翻过面**。
+ *
+ * 原来钉的是交付稿 `729fa43ce7` 的「盒子 28 / 图标 16」,理由写在文件头那大段里
+ * (composer 行另外四颗控件已统一到 28px 的 "one control system")。
+ *
+ * 产品拍板取 main 的 #7635 / OPEND-2553:那份设计 09-04 07:23 已经上线,且其
+ * commit 正文明确写着覆盖「the project composer」,不是只改首页。两份设计撞在
+ * 同一颗控件上,取已上线的那份 —— 在一次合并里悄悄撤销别人已上线的工作,不该由
+ * 做合并的人代劳。产品是看过一份两版并排的真实尺寸对照之后才拍的。
+ *
+ * **这个文件真正的价值不在那个数字**,而在下面那件事:2026-09-03 有一轮只改了
+ * `chat.css` 那半边,测试绿了而真浏览器一动没动(实测仍是 36×36)—— 因为
+ * `viewer/routines.css` 的 `.app .composer-send` 特异性更高、又排在后面。所以本
+ * 文件按 `index.css` 的顺序把两份样式表都装进来再问 `getComputedStyle`。
+ * 那套机制原样保留,只是钉的数字换成了 main 那一版。
+ */
+describe('发送键盒子几何 —— main 的 32×32(2026-09-05 裁决)', () => {
+  /*
+   * 是 32,不是 36。`viewer/routines.css` 里 `.app .composer-send` 先声明了
+   * 36px,但同一个文件更后面的规则把它压到 32 —— **只读源码会读成 36**,把两份
+   * 样式表按 index.css 顺序装进来量,才是 32。这正是本文件存在的理由。
+   * 32 也和 main 自己的注释对得上:运行态「共用每一行,底.svg 就是这个盒子把
+   * 箭头拿掉」,两态是同一个 32 方框。
+   */
+  it('盒子是 32×32 —— 两份样式表一起装才照得出真实值', () => {
     renderComposer();
     const button = screen.getByTestId('chat-send');
     const style = getComputedStyle(button);
-    expect(`${style.width} × ${style.height}`).toBe('28px × 28px');
+    expect(`${style.width} × ${style.height}`).toBe('32px × 32px');
   });
 
   it('没有可见描边 —— 稿子的全局 button 复位是 border: none', () => {
@@ -132,12 +156,12 @@ describe('发送键盒子几何 —— 稿子 28×28,和底栏其它按钮同一
     expect(body, `.composer-send 的声明体里还有 box-shadow:\n${body}`).not.toMatch(/\bbox-shadow\s*:/);
   });
 
-  it('图标是 16px,不是 18px', () => {
+  it('图标是 32px —— main 那枚实心箭头填满自己的盒子', () => {
     renderComposer();
     const button = screen.getByTestId('chat-send');
     const svg = button.querySelector('svg');
     if (!svg) throw new Error('发送键里没有 svg');
-    expect(svg.getAttribute('width')).toBe('16');
-    expect(svg.getAttribute('height')).toBe('16');
+    expect(svg.getAttribute('width')).toBe('32');
+    expect(svg.getAttribute('height')).toBe('32');
   });
 });

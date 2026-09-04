@@ -487,9 +487,18 @@ describe('② 当前这一步 / 收起药丸的墨色 —— 稿子 `--plan-curr
 
 describe('结构对照 —— 手搭的那两处夹具必须跟着源码走', () => {
   it('底栏那颗 `+` 在源码里就是 `icon-btn plus-menu__trigger`', () => {
-    expect(read('src/components/ComposerPlusMenu.tsx')).toContain(
-      'icon-btn plus-menu__trigger od-tooltip',
-    );
+    /*
+     * 合并 main(2026-09-05)之后这串类名不再是一个字面量:首页那一侧多了
+     * `triggerLabel`,于是拼接变成
+     *   `icon-btn plus-menu__trigger${label ? ' --labeled' : ' od-tooltip'}${open ? ' is-active' : ''}`
+     * 聊天面板不传 label,**运行时拼出来仍然是** `icon-btn plus-menu__trigger
+     * od-tooltip` —— 上面那份手搭夹具没有过时。过时的是「按整段字面量搜源码」
+     * 这个查法,它现在只是在钉排版。改成分别钉两件事:基础类名还在,以及
+     * 「不带标签时挂 od-tooltip」这条分支还在。
+     */
+    const plusMenu = read('src/components/ComposerPlusMenu.tsx');
+    expect(plusMenu).toContain('icon-btn plus-menu__trigger');
+    expect(plusMenu).toMatch(/triggerLabel \?[^:]*:\s*' od-tooltip'/);
   });
 
   it('它坐在 `.composer-row` 里,而 `.composer-row` 由 `ChatComposer` 渲染', () => {

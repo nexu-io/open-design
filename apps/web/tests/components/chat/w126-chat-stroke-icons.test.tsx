@@ -209,11 +209,19 @@ describe('聊天面板内的调用点换过去了 —— 面板外一个都不�
   const dsPicker = src('components/DesignSystemPicker.tsx');
   const audio = src('components/chat/AudioArtifact.tsx');
 
-  it('发送键用 ChatSendArrowIcon', () => {
-    // size 从 18 改成 16 是 W134 的事(盒子/描边/阴影一起对齐稿子 28px 那组几何,
-    // 见 `chat/primitives/icons.tsx` 和 `styles/chat.css` 的 `.composer-send`),
-    // 这里只钉字形没变 —— 还是 ChatSendArrowIcon,不是共享 Icon 的实心箭头。
-    expect(chatComposer).toContain('<ChatSendArrowIcon size={16} />');
+  it('发送键用 main 那枚实心箭头(2026-09-05 裁决)', () => {
+    /*
+     * ⚠️ 这一条**翻过面**。原来钉的是「还是 ChatSendArrowIcon,不是共享 Icon 的
+     * 实心箭头」,依据是交付稿 `729fa43ce7` 的「盒子 28 / 图标 16」。
+     *
+     * 产品 2026-09-05 在合并 main 时拍板取 main 的 #7635 / OPEND-2553:那份设计
+     * 09-04 07:23 已经上线,而且它的 commit 正文明确写着覆盖「the project
+     * composer」,不是只改首页。两份设计撞在同一颗控件上,取已上线的那份 ——
+     * 在一次合并里悄悄撤销别人已上线的工作,不该由做合并的人代劳。
+     *
+     * 所以稿子那一格的 28/16 作废。字形判据仍然留着,只是钉的对象换了。
+     */
+    expect(chatComposer).toContain('<Icon name="arrow-up-fill" size={32} />');
     // 面板里除了发送键没有第二个 arrow-up 该换:
     // ChatPane 的「回到最新」浮钮和队列第三颗都是稿子里没有 / 另一枚字形的东西。
     expect(chatComposer).not.toMatch(/<Icon name="arrow-up" size=\{18\}/);
@@ -221,18 +229,31 @@ describe('聊天面板内的调用点换过去了 —— 面板外一个都不�
 
   it('加号键用 ChatPlusIcon,且只有聊天面板那一侧走它', () => {
     expect(plusMenu).toContain('<ChatPlusIcon size={16} className="od-icon" />');
-    // 只有聊天面板那一侧点名要它;home hero 不传,走 else 分支的共享 Icon。
-    expect(plusMenu).toContain('<Icon name="plus" size={16} className="od-icon" />');
+    /*
+     * 聊天面板那一侧仍然点名要描边加号(上面那条);而 else 分支——首页——在
+     * 2026-09-05 合并 main 之后换成了**回形针**:main 的 `2e4c1a753b` 把首页那颗
+     * 触发器从「+」改成了 `attach`,并给它加了可选的 `triggerLabel`。本分支
+     * 2026-09-03「首页保持共享 Icon 的实心加号」那条裁决,在首页这一格上被它取代。
+     * 两条分支都还在,只是 else 那半的字形变了。
+     */
+    expect(plusMenu).toContain('<Icon name="attach" size={16} className="od-icon" />');
     expect(src('components/ChatComposer.tsx')).toContain('strokeGlyph');
     expect(src('components/HomeHero.tsx')).not.toContain('strokeGlyph');
-    // 菜单**条目**上的加号稿子里没有对应物,保持共享 Icon 不动。
-    expect(plusMenu).toContain('<Icon name="plus" size={15} className="plus-menu__item-icon" />');
+    /* 菜单**条目**上的加号稿子里没有对应物,保持共享 Icon 不动。
+       合并 main 之后它从单行字面量变成了多行 + 加载态
+       (`name={attachLoading ? 'spinner' : 'plus'}`),所以不再按整段字面量匹配 ——
+       那样只是在钉排版。这里钉真正要守的两件事:条目图标仍是共享 Icon 的 plus、
+       仍是 15、仍挂 `plus-menu__item-icon`。 */
+    expect(plusMenu).toMatch(/name=\{attachLoading \? 'spinner' : 'plus'\}/);
+    expect(plusMenu).toMatch(/size=\{15\}\s+className="plus-menu__item-icon"/);
   });
 
   it('设计系统键用 ComposerPaletteIcon,home / 侧栏那几处不动', () => {
     expect(dsPicker).toContain('<ComposerPaletteIcon size={16} />');
-    // home 变体那一枚(size 13)和 triggerSwatches 仍走共享 Icon。
-    expect(dsPicker).toContain('<Icon name="palette" size={13} className="home-hero__ds-row-trigger-icon" />');
+    // home 变体那一枚(size 13)和 triggerSwatches 仍走共享 Icon。合并 main 之后
+    // 首页那一枚不再带 `home-hero__ds-row-trigger-icon` 这个类(main 的首页改版
+    // 重排了那一行),字形和尺寸没变 —— 这里只钉「仍走共享 Icon 的 palette 13」。
+    expect(dsPicker).toContain('<Icon name="palette" size={13} />');
     // 侧栏(EntryNavRail)压根不在这个文件里,自然不受影响。
     expect(src('components/EntryNavRail.tsx')).toContain('<Icon name="palette" size={16} />');
   });
