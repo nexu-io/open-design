@@ -9,7 +9,7 @@ vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
 
 import { HomeView } from '../../src/components/HomeView';
 import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
-import { openFolderDialog } from '../../src/providers/registry';
+import { fetchRecentLinkedDirs, openFolderDialog } from '../../src/providers/registry';
 
 vi.mock('@open-design/host', async () => {
   const actual = await vi.importActual<typeof import('@open-design/host')>('@open-design/host');
@@ -27,12 +27,14 @@ vi.mock('../../src/providers/registry', async () => {
   return {
     ...actual,
     openFolderDialog: vi.fn(),
+    fetchRecentLinkedDirs: vi.fn(),
     fetchProjectFiles: vi.fn().mockResolvedValue([]),
   };
 });
 
 const mockedIsHostAvailable = vi.mocked(isOpenDesignHostAvailable);
 const mockedPickHostWorkingDir = vi.mocked(pickHostWorkingDir);
+const mockedFetchRecentLinkedDirs = vi.mocked(fetchRecentLinkedDirs);
 const mockedOpenFolderDialog = vi.mocked(openFolderDialog);
 
 function renderHome() {
@@ -49,6 +51,7 @@ function renderHome() {
 describe('HomeView working-dir picker host fallback', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedFetchRecentLinkedDirs.mockResolvedValue([]);
     mockedOpenFolderDialog.mockResolvedValue(null);
   });
 
@@ -106,6 +109,27 @@ describe('HomeView working-dir picker host fallback', () => {
 
     fireEvent.click(screen.getByTestId('working-dir-trigger'));
     fireEvent.click(screen.getByTestId('working-dir-pick'));
+
+    await waitFor(() => {
+      expect(mockedPickHostWorkingDir).toHaveBeenCalledTimes(1);
+    });
+    expect(mockedOpenFolderDialog).not.toHaveBeenCalled();
+  });
+
+  it('re-authorizes a recent desktop folder through the native picker', async () => {
+    mockedIsHostAvailable.mockReturnValue(true);
+    mockedFetchRecentLinkedDirs.mockResolvedValue(['/Users/me/recent-folder']);
+    mockedPickHostWorkingDir.mockResolvedValue({
+      ok: true,
+      baseDir: '/Users/me/recent-folder',
+      token: 'fresh-token',
+    });
+
+    renderHome();
+
+    fireEvent.click(screen.getByTestId('working-dir-trigger'));
+    fireEvent.click(screen.getByTestId('working-dir-recent'));
+    fireEvent.click(await screen.findByTitle('/Users/me/recent-folder'));
 
     await waitFor(() => {
       expect(mockedPickHostWorkingDir).toHaveBeenCalledTimes(1);
