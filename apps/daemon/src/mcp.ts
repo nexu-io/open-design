@@ -431,6 +431,7 @@ export const TOOL_DEFS = [
           description:
             'BCP-47 Host locale used only when collect_brief had no request or tool-call locale.',
         },
+        pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG,
       },
       required: ['briefDraftId', 'nonce', 'answers'],
       additionalProperties: false,

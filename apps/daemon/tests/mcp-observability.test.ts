@@ -71,6 +71,13 @@ describe('local MCP plugin observability contract', () => {
       externalPluginContext: pluginContext,
     })).not.toThrow();
 
+    expect(() => validateMcpToolArgs('confirm_brief', {
+      briefDraftId: 'brief-draft',
+      nonce: 'brief-nonce',
+      answers: {},
+      pluginWorkflowId: '018f6f2e-4444-7444-8444-444444444444',
+    })).not.toThrow();
+
     expect(() => validateMcpToolArgs('start_run', {
       project: 'Demo',
       prompt: 'Create a launch page',
