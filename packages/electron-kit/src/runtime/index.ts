@@ -3,20 +3,22 @@ import { join } from "node:path";
 
 import { BrowserWindow, app, dialog, protocol } from "electron";
 import {
-  createStandaloneGenerationBinding,
-  StandaloneFeedbackEmitter,
   type GenerationRecord,
   type StandaloneGenerationBinding,
-  type LifecycleAttachment,
-  type LifecycleScope,
-  type LifecycleStatus,
+  type StandaloneHandoffAttachment,
+  type StandaloneRuntimeHandle,
+  type StandaloneRuntimeStatus,
+  type StandaloneShellCapabilityRequest,
+  type StandaloneShellCapabilityPort,
+  type StandaloneScope,
 } from "@open-design/standalone";
 
 import {
   validateElectronShellManifest,
-  type ElectronFixturePorts,
   type ElectronRendererLease,
   type ElectronShellDefinition,
+  type ElectronStandaloneAuthority,
+  type ElectronStandalonePreparedRuntime,
 } from "../contracts/index.js";
 import { ElectronActivationAttempt } from "./session/activation.js";
 import { ElectronRuntimeLog } from "./session/logging.js";
@@ -31,7 +33,6 @@ import {
 } from "./session/single-instance.js";
 import { observeElectronInstallerHandoff } from "./session/update-handoff.js";
 import { applyElectronMacRuntimePolicy } from "../platform/macos/index.js";
-import { ELECTRON_BOOTSTRAP_SCHEMA_VERSION, validateElectronBootstrapResult } from "./startup/bootstrap/contracts.js";
 import { ensureOfficialNodeCarrier, OfficialNodeCarrierError, type OfficialNodeCarrierReceipt } from "./startup/carrier/index.js";
 import {
   ELECTRON_WARMUP_ATOMS,
@@ -66,18 +67,6 @@ function splashHtml(title: string): string {
 function setSplashStage(window: BrowserWindow | null, stage: string): void {
   if (window == null || window.isDestroyed()) return;
   void window.webContents.executeJavaScript(`document.getElementById("stage").textContent=${JSON.stringify(stage)}`).catch(() => undefined);
-}
-
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
-  let timer: NodeJS.Timeout | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error(message)), timeoutMs); }),
-    ]);
-  } finally {
-    if (timer != null) clearTimeout(timer);
-  }
 }
 
 function requireWarmupState<T>(value: T | null, label: string): T {
@@ -187,22 +176,20 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
     preflight,
   });
   const nodeLockPath = join(app.getAppPath(), "node-lock.json");
-  const sidecarEntryPath = app.isPackaged
-    ? join(process.resourcesPath, "fixture-sidecar.cjs")
-    : join(app.getAppPath(), "fixture-sidecar.cjs");
-  const scope: LifecycleScope = { channel: manifest.channel, namespace: sessionNamespace };
-  const attachment: LifecycleAttachment = { id: `electron-${process.pid}-${randomUUID()}`, shell: manifest.shell };
+  const resourceRoot = app.isPackaged ? process.resourcesPath : app.getAppPath();
+  const scope: StandaloneScope = { channel: manifest.channel, namespace: sessionNamespace };
+  const attachment: StandaloneHandoffAttachment = { id: `electron-${process.pid}-${randomUUID()}`, shell: manifest.shell };
   let carrier: OfficialNodeCarrierReceipt | null = null;
-  let ports: ElectronFixturePorts | null = null;
-  let feedback: StandaloneFeedbackEmitter | null = null;
+  let authority: ElectronStandaloneAuthority | null = null;
+  let preparedRuntime: ElectronStandalonePreparedRuntime | null = null;
   let generation: GenerationRecord | null = null;
   let generationBinding: StandaloneGenerationBinding | null = null;
   let startupSignal: ElectronStartupSignal | null = null;
-  let status: LifecycleStatus | null = null;
+  let status: StandaloneRuntimeStatus | null = null;
+  let runtimeHandle: StandaloneRuntimeHandle | null = null;
   let updaterRevisionAtStart: number | null = null;
-  let readinessTimeoutMs: number | null = null;
   let warmup: ElectronWarmupRun | null = null;
-  let lifecycleAcquisition: Promise<LifecycleStatus> | null = null;
+  let runtimeAcquisition: Promise<StandaloneRuntimeHandle> | null = null;
   let rendererMount: Promise<void> | null = null;
   let activationAcquisition: Promise<ElectronActivationAttempt> | null = null;
 
@@ -219,13 +206,8 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
           async settleRendererMount() { await rendererMount?.catch(() => undefined); },
           async releaseRendererIntegration() { await rendererLease?.releaseIntegration(); },
           async releaseStandaloneAttachment() {
-            await lifecycleAcquisition?.catch(() => undefined);
-            const startupPorts = ports;
-            if (startupPorts == null) return;
-            const current = await startupPorts.lifecycle.status(scope);
-            const ownsAttachment = current.occupants.some((occupant) => occupant.attachmentId === attachment.id);
-            const released = ownsAttachment ? await startupPorts.lifecycle.release(scope, attachment.id) : current;
-            if (released.references === 0 && released.state === "running") await startupPorts.lifecycle.stop(scope, released.fence);
+            const acquired = await runtimeAcquisition?.catch(() => null);
+            await (runtimeHandle ?? acquired)?.close();
           },
           async failActivation() {
             const activation = await activationAcquisition?.catch(() => null);
@@ -275,41 +257,57 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
       },
       [ELECTRON_WARMUP_ATOMS.RESOLVE_STANDALONE]: async () => {
         if (carrier == null) throw new Error("official Node carrier is unavailable");
-        ports = definition.createFixturePorts({ runtimeRoot, sidecarEntryPath, nodeExecutablePath: carrier.executablePath });
-        feedback = new StandaloneFeedbackEmitter(randomUUID(), scope, ports.observeFeedback);
-        updaterRevisionAtStart = (await ports.updater.readSnapshot()).revision;
-        const bootstrapRequest = {
-          schemaVersion: ELECTRON_BOOTSTRAP_SCHEMA_VERSION,
+        authority = definition.createStandaloneAuthority({
+          officialNodeExecutablePath: carrier.executablePath,
+          resourceRoot,
+          runtimeRoot,
+          observeFeedback(event) {
+            if (!context.startupQuit?.cancelled) {
+              setSplashStage(splash, event.phase === "generation-prepared" ? "Preparing generation…" : event.phase);
+            }
+            context.log?.write("standalone.feedback", { event });
+          },
+        });
+        preparedRuntime = await authority.prepare({
           correlationId: randomUUID(),
           scope,
           shell: manifest.shell,
           releaseVersion: manifest.version,
-        } as const;
-        feedback.emit({ phase: "generation-prepared", state: "begin" });
-        const bootstrap = validateElectronBootstrapResult(bootstrapRequest, await ports.bootstrap.resolve(bootstrapRequest));
-        generation = bootstrap.generation;
-        generationBinding = createStandaloneGenerationBinding(generation, scope);
+        });
+        generation = preparedRuntime.generation;
+        generationBinding = preparedRuntime.binding;
         startupSignal = context.startup!.bind(generationBinding.digest);
-        readinessTimeoutMs = bootstrap.readinessTimeoutMs;
-        feedback.emit({ phase: "generation-prepared", state: "complete", generationId: generation.id });
+        updaterRevisionAtStart = (await preparedRuntime.updater.readSnapshot()).revision;
       },
       [ELECTRON_WARMUP_ATOMS.AWAIT_STANDALONE_READY]: async () => {
-        if (ports == null || feedback == null || generation == null || generationBinding == null || readinessTimeoutMs == null) {
+        if (preparedRuntime == null || generation == null || generationBinding == null) {
           throw new Error("Standalone resolution has not completed");
         }
-        feedback.emit({ phase: "closure-starting", state: "begin", generationId: generation.id });
-        lifecycleAcquisition = ports.lifecycle.start(scope, generation, attachment, generationBinding);
-        status = await lifecycleAcquisition;
-        if (status.instanceId == null) throw new Error("fixture lifecycle did not return an instance id");
-        const readiness = {
-          generationId: generation.id,
-          bindingDigest: generationBinding.digest,
-          instanceId: status.instanceId,
-          attachmentId: attachment.id,
-        };
-        await withTimeout(ports.lifecycle.awaitReady(scope, readiness), readinessTimeoutMs, "Electron lifecycle readiness timed out");
+        const runtime = preparedRuntime;
+        const capabilities: StandaloneShellCapabilityPort = Object.freeze({
+          async invoke(request: StandaloneShellCapabilityRequest) {
+            return Object.freeze({
+              requestId: request.requestId,
+              attachmentId: request.attachmentId,
+              bindingDigest: request.bindingDigest,
+              outcome: "unsupported" as const,
+              error: Object.freeze({ code: "electron-capability-unavailable" }),
+            });
+          },
+        });
+        runtimeAcquisition = runtime.start({
+          attachment,
+          capabilities,
+        });
+        runtimeHandle = await runtimeAcquisition;
+        status = await runtimeHandle.readStatus();
+        if (
+          status.state !== "running"
+          || status.generationId !== generation.id
+          || status.bindingDigest !== generationBinding.digest
+          || status.instanceId.length === 0
+        ) throw new Error("Standalone runtime handle did not acknowledge exact readiness");
         context.startup!.advance(startupSignal!, "runtime-ready");
-        feedback.emit({ phase: "closure-ready", state: "complete", generationId: generation.id });
       },
       [ELECTRON_WARMUP_ATOMS.MOUNT_RENDERER]: async () => {
         rendererMount = (async () => {
@@ -357,9 +355,10 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
   }
   context.log.write("warmup.ready", { nodes: startupWarmup.snapshot() });
   const runtimeCarrier = requireWarmupState(carrier as OfficialNodeCarrierReceipt | null, "the official Node carrier");
-  const runtimePorts = requireWarmupState(ports as ElectronFixturePorts | null, "fixture Standalone ports");
+  const runtimePrepared = requireWarmupState(preparedRuntime as ElectronStandalonePreparedRuntime | null, "a prepared Standalone runtime");
+  const runtimeStandaloneHandle = requireWarmupState(runtimeHandle as StandaloneRuntimeHandle | null, "a Standalone runtime handle");
   const runtimeGeneration = requireWarmupState(generation as GenerationRecord | null, "a Standalone generation");
-  const runtimeStatus = requireWarmupState(status as LifecycleStatus | null, "Standalone readiness");
+  requireWarmupState(status as StandaloneRuntimeStatus | null, "Standalone readiness");
   const runtimeUpdaterRevisionAtStart = requireWarmupState(updaterRevisionAtStart as number | null, "the updater revision");
   const runtimeRendererLease = requireWarmupState(rendererLease as ElectronRendererLease | null, "a renderer lease");
   setSplashStage(splash, "Ready");
@@ -382,30 +381,17 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
     if (ingress.type === "deep-link") dispatch(ingress.url);
   }
 
-  let heartbeatInFlight = Promise.resolve();
-  const heartbeat = setInterval(() => {
-    heartbeatInFlight = heartbeatInFlight
-      .then(async () => { await runtimePorts.lifecycle.heartbeat(scope, attachment); })
-      .catch((error: unknown) => { if (!closing) console.error("[electron-kit] lifecycle heartbeat failed", error); });
-  }, runtimeStatus.lease?.heartbeatIntervalMs ?? 1_000);
-  heartbeat.unref();
   let closing = false;
   let installerArming = Promise.resolve();
   const close = async () => {
     if (closing) return;
     closing = true;
-    clearInterval(heartbeat);
     try {
       await completeElectronShutdown({
-        async waitForHeartbeat() { await heartbeatInFlight; },
+        waitForHeartbeat() { /* Runtime-handle authorities own their leases. */ },
         async releaseRendererIntegration() { await runtimeRendererLease.releaseIntegration(); },
         async disposeWarmup() { await startupWarmup.dispose(); },
-        async releaseStandalone() {
-          const current = await runtimePorts.lifecycle.status(scope);
-          const ownsAttachment = current.occupants.some((occupant) => occupant.attachmentId === attachment.id);
-          const released = ownsAttachment ? await runtimePorts.lifecycle.release(scope, attachment.id) : current;
-          if (released.references === 0 && released.state === "running") await runtimePorts.lifecycle.stop(scope, released.fence);
-        },
+        async releaseStandalone() { await runtimeStandaloneHandle.close(); },
         async stopActivation() { await context.activation?.stop(); },
         observe(failures) {
           context.log?.write(failures.length === 0 ? "shutdown.complete" : "shutdown.failed", { failures });
@@ -434,7 +420,7 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
   void observeElectronInstallerHandoff({
     afterRevision: runtimeUpdaterRevisionAtStart,
     isClosing: () => closing,
-    updater: runtimePorts.updater,
+    updater: runtimePrepared.updater,
     async onHandoff(request) {
       if (definition.actions?.installUpdate == null) throw new Error("Electron Shell installer action is unavailable");
       installerArming = Promise.resolve(definition.actions.installUpdate({

@@ -1,11 +1,15 @@
 import type {
-  LifecyclePort,
+  GenerationRecord,
+  StandaloneGenerationBinding,
+  StandaloneHandoffAttachment,
+  StandaloneRuntimeHandle,
+  StandaloneScope,
   StandaloneFeedbackEvent,
+  StandaloneShellCapabilityPort,
   StandaloneShellIdentity,
   StandaloneShellUpdaterPort,
 } from "@open-design/standalone";
 import type { BrowserWindow, BrowserWindowConstructorOptions } from "electron";
-import type { ElectronBootstrapPort } from "../runtime/startup/bootstrap/contracts.js";
 import type { ElectronPreflightResult, ElectronPreflightTopology } from "../runtime/startup/preflight/index.js";
 import type { ElectronWarmupExecutor, ElectronWarmupTopology } from "../runtime/startup/warmup/index.js";
 import type { ElectronInstallerHandoffReceipt, ElectronInstallerHandoffRequest } from "../update/installation/contracts.js";
@@ -86,12 +90,31 @@ export type ElectronShellRenderer = Readonly<{
   }>): Readonly<{ dispose(): void | Promise<void> }> | Promise<Readonly<{ dispose(): void | Promise<void> }>>;
 }>;
 
-export type ElectronFixturePorts = Readonly<{
-  bootstrap: ElectronBootstrapPort;
-  lifecycle: LifecyclePort;
+export type ElectronStandalonePreparedRuntime = Readonly<{
+  binding: StandaloneGenerationBinding;
+  generation: GenerationRecord;
   updater: StandaloneShellUpdaterPort;
-  observeFeedback?(event: StandaloneFeedbackEvent): void | Promise<void>;
+  start(input: Readonly<{
+    attachment: StandaloneHandoffAttachment;
+    capabilities: StandaloneShellCapabilityPort;
+  }>): Promise<StandaloneRuntimeHandle>;
 }>;
+
+export interface ElectronStandaloneAuthority {
+  prepare(request: Readonly<{
+    correlationId: string;
+    releaseVersion: string;
+    scope: StandaloneScope;
+    shell: StandaloneShellIdentity;
+  }>): Promise<ElectronStandalonePreparedRuntime>;
+}
+
+export type ElectronStandaloneAuthorityFactory = (input: Readonly<{
+  officialNodeExecutablePath: string;
+  resourceRoot: string;
+  runtimeRoot: string;
+  observeFeedback?(event: StandaloneFeedbackEvent): void | Promise<void>;
+}>) => ElectronStandaloneAuthority;
 
 export type ElectronShellDefinition = Readonly<{
   manifest: ElectronShellManifest;
@@ -102,11 +125,7 @@ export type ElectronShellDefinition = Readonly<{
   actions?: ElectronShellActions;
   renderer: ElectronShellRenderer;
   warmupExecutors?: Readonly<Record<string, ElectronWarmupExecutor>>;
-  createFixturePorts(input: Readonly<{
-    runtimeRoot: string;
-    sidecarEntryPath: string;
-    nodeExecutablePath: string;
-  }>): ElectronFixturePorts;
+  createStandaloneAuthority: ElectronStandaloneAuthorityFactory;
 }>;
 
 const token = /^[a-z][a-z0-9.-]{1,127}$/u;

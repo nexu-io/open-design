@@ -54,9 +54,9 @@ directory build and NSIS installer on a Windows host. Its ephemeral NSIS include
 projects the shared Shell identity into App Paths and protocol registration, with
 owner-checked cleanup; it is loaded from electron-kit's packaged resources and never
 enters the release-neutral scene. The current lifecycle is the replaceable
-phase-one fixture. Its `createFixturePorts` adapter and low-level endpoint
-registry are explicitly not the production contract, and it does not import
-Closure implementation.
+phase-one fixture. Its `createStandaloneAuthority` adapter contains the
+low-level fixture endpoint registry behind a Standalone runtime handle; neither
+is the production contract, and the Shell does not import Closure implementation.
 The standard `prepack` lifecycle intentionally points at the same Shell-owned
 `scripts/pack.mjs` shim, because pnpm reserves `pack` as a built-in command.
 `config/carriers/node-lock.json` is Shell-local but byte-for-byte aligned with Terminal's

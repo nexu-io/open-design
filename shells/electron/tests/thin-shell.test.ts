@@ -111,6 +111,7 @@ describe("Electron product shell", () => {
     expect(rendererSource).not.toContain("let warmedPlaceholder");
     expect(rendererSource).toContain("electronShellMounted");
     expect(kitRuntimeSource).not.toMatch(/Electron Shell Foundation|electronShellMounted|electronKitMounted/u);
+    expect(kitRuntimeSource).not.toMatch(/lifecycle\.(?:heartbeat|release|status|stop)/u);
     expect(runtime.preflight.atoms.flatMap((atom) => atom.hosts ?? [])).toEqual(["127.0.0.1", "localhost"]);
     expect(kitPreflightSource).not.toMatch(/127\.0\.0\.1|localhost/u);
   });
