@@ -3278,6 +3278,9 @@ function manualEditPatchKindToTracking(patch: ManualEditPatch): TrackingArtifact
     case 'set-attributes': return 'attributes';
     case 'set-outer-html': return 'html';
     case 'set-full-source': return 'source';
+    // Canvas drag/resize commits report as 'style' — the tracking union has
+    // no finer-grained kind for them.
+    case 'set-position': return 'style';
   }
 }
 
@@ -12623,6 +12626,24 @@ function HtmlViewer({
           setManualEditDraft((current) => ({ ...current, styles: { ...current.styles, ...dragStyles } }));
           setManualEditDraftDirty(true);
         }
+        return;
+      }
+      if (data.type === 'od-edit-position-commit') {
+        void applyManualEdit({
+          id: String(data.id),
+          kind: 'set-position',
+          left: String(data.left),
+          top: String(data.top),
+          width: String(data.width),
+          height: String(data.height),
+        }, 'Drag / Resize');
+        return;
+      }
+      if (data.type === 'od-edit-drag-start') {
+        return;
+      }
+      if (data.type === 'od-edit-drag-end') {
+
         return;
       }
     }
