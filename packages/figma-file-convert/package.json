@@ -1,0 +1,21 @@
+{
+  "name": "@open-design/figma-file-convert",
+  "version": "0.19.2",
+  "description": "Convert Figma .fig binary files into Open Design design systems (DESIGN.md + tokens.css + design-tokens.json).",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "convert": "node dist/index.js",
+    "test": "echo \"no tests yet \u2014 validated against two official sample .fig files\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "openfig-core": "^0.3.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2"
+  },
+  "private": true
+}
