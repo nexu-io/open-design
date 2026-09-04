@@ -13,6 +13,7 @@ import type { BrowserWindow, BrowserWindowConstructorOptions } from "electron";
 import type { ElectronPreflightResult, ElectronPreflightTopology } from "../runtime/startup/preflight/index.js";
 import type { ElectronWarmupExecutor, ElectronWarmupTopology } from "../runtime/startup/warmup/index.js";
 import type { ElectronInstallerHandoffReceipt, ElectronInstallerHandoffRequest } from "../update/installation/contracts.js";
+export type { ElectronInstallerHandoffReceipt, ElectronInstallerHandoffRequest } from "../update/installation/contracts.js";
 import type { ElectronMacRuntimePolicy } from "../platform/macos/contracts.js";
 
 export const ELECTRON_KIT_CONTRACT_VERSION = 1 as const;

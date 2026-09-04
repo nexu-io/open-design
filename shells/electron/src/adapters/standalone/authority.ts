@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import {
   convergeSidecarLaunch,
@@ -33,6 +33,14 @@ import {
   type ElectronPhysicalResourceSetDeclaration,
 } from "./physical-resources.js";
 import { withElectronPhysicalResourceSetGuard } from "./guarded-lifecycle.js";
+import { ElectronStandaloneHostLifecycle } from "./host-lifecycle.js";
+import { ElectronStandaloneLifecycleLedger } from "./lifecycle-ledger.js";
+import {
+  electronInstallerHandoffDigest,
+  ElectronStandaloneInstallerClaimLedger,
+  validateElectronInstallerReceiptForRequest,
+} from "./installer-claim.js";
+import { ElectronStandaloneShellUpdaterLedger } from "./shell-updater-ledger.js";
 
 type HostStatus = Readonly<{
   control: "ready";
@@ -137,12 +145,69 @@ export function createElectronStandaloneAuthorityFactory(
       const transport = createElectronStandaloneControlTransport(stamp);
       const lifecycle = new ElectronStandaloneControlClient(request.scope, transport);
       const updater = new ElectronStandaloneControlUpdater(request.shell.type, request.scope, transport);
+      const updaterLedger = new ElectronStandaloneShellUpdaterLedger(storeRoot, request.scope, request.shell.type);
+      const lifecycleLedger = new ElectronStandaloneLifecycleLedger(storeRoot, request.scope);
+      const installerClaimLedger = new ElectronStandaloneInstallerClaimLedger(storeRoot, request.scope);
       return Object.freeze({
         binding,
         generation,
         updater,
-        async armShellInstallation() {
-          throw new Error("Electron Standalone production Shell installation transition is not implemented");
+        async armShellInstallation({ install, request: installationRequest }) {
+          const handoffDigest = electronInstallerHandoffDigest(installationRequest);
+          const snapshot = await updaterLedger.read();
+          if ((snapshot.state !== "applying" && snapshot.state !== "handed-off")
+            || snapshot.installAttemptId !== installationRequest.installAttemptId
+            || canonicalJson(snapshot.handoff) !== canonicalJson(installationRequest.handoff)) {
+            throw new Error("Electron installer handoff differs from the durable updater transition");
+          }
+          return await withElectronPhysicalResourceSetGuard(resourceSet, async (guard) => {
+            const guardedSnapshot = await updaterLedger.read();
+            if ((guardedSnapshot.state !== "applying" && guardedSnapshot.state !== "handed-off")
+              || guardedSnapshot.installAttemptId !== installationRequest.installAttemptId
+              || canonicalJson(guardedSnapshot.handoff) !== canonicalJson(installationRequest.handoff)) {
+              throw new Error("Electron installer handoff changed before its guarded continuation");
+            }
+            const existing = await installerClaimLedger.read();
+            if (existing != null && (existing.bindingDigest !== binding.digest
+              || existing.generationId !== generation.id
+              || existing.installAttemptId !== installationRequest.installAttemptId
+              || existing.handoffDigest !== handoffDigest
+              || existing.runtimeRoot !== resolve(installationRequest.runtimeRoot))) {
+              throw new Error("Electron installer claim differs from the guarded continuation");
+            }
+            if (existing?.state === "armed") {
+              if (guardedSnapshot.state === "applying") await updaterLedger.update({ expectedRevision: guardedSnapshot.revision, state: "handed-off" });
+              return existing.receipt!;
+            }
+
+            const retirement = await guard.retire();
+            const continuation = new ElectronStandaloneHostLifecycle(request.scope, { statePort: lifecycleLedger });
+            const transition = await continuation.beginTransition("shell-install", {
+              attemptId: installationRequest.installAttemptId,
+              ownerShellType: request.shell.type,
+              force: true,
+            });
+            if (transition.state !== "acquired") throw new Error("Electron installer lifecycle transition is unavailable after physical retirement");
+            const sealed = await continuation.forceStopTransition(transition.transition.token, transition.transition.fence);
+            if (sealed.phase !== "stopped-sealed" || sealed.attemptId !== installationRequest.installAttemptId) throw new Error("Electron installer lifecycle transition was not sealed");
+            const sealedClaim = existing ?? Object.freeze({
+              schemaVersion: 1 as const,
+              state: "sealed" as const,
+              bindingDigest: binding.digest,
+              generationId: generation.id,
+              installAttemptId: installationRequest.installAttemptId,
+              handoffDigest,
+              runtimeRoot: resolve(installationRequest.runtimeRoot),
+              retirement,
+            });
+            if (existing == null) await installerClaimLedger.write(sealedClaim);
+            const receipt = validateElectronInstallerReceiptForRequest(await install(installationRequest), installationRequest);
+            await installerClaimLedger.write(Object.freeze({ ...sealedClaim, state: "armed" as const, receipt }));
+            const current = await updaterLedger.read();
+            if (current.state === "applying") await updaterLedger.update({ expectedRevision: current.revision, state: "handed-off" });
+            else if (current.state !== "handed-off") throw new Error("Electron updater escaped its installer handoff transition");
+            return receipt;
+          });
         },
         async start({ attachment }): Promise<StandaloneRuntimeHandle> {
           const launcher = new VersionedLauncher(store, lifecycle, request.shell, attachment.id, observeFeedback);

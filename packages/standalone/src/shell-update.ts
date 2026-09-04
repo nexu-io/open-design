@@ -118,7 +118,10 @@ export function validateShellUpdaterSnapshot(value: unknown): StandaloneShellUpd
   if (["applying", "handed-off", "installed"].includes(snapshot.state) && snapshot.installAttemptId == null) throw new Error("Shell updater phase lacks an install attempt identity");
   if (["ready", "applying", "handed-off", "installed"].includes(snapshot.state) && snapshot.handoff == null) throw new Error("Shell updater phase lacks an exact handoff");
   const expectedActions = shellUpdaterActions(snapshot);
-  if (JSON.stringify(snapshot.actions) !== JSON.stringify(expectedActions)) throw new Error("Shell updater actions are not derived from its phase");
+  if (snapshot.actions.length !== expectedActions.length || snapshot.actions.some((action, index) => {
+    const expected = expectedActions[index];
+    return expected == null || action.id !== expected.id || action.emphasis !== expected.emphasis;
+  })) throw new Error("Shell updater actions are not derived from its phase");
   return structuredClone(snapshot);
 }
 

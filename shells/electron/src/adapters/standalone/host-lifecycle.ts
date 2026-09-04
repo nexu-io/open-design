@@ -73,7 +73,10 @@ export class ElectronStandaloneHostLifecycle {
     this.#leaseDurationMs = options.leaseDurationMs ?? 30_000;
     this.#statePort = options.statePort ?? null;
     this.#transitionHeartbeatIntervalMs = options.transitionHeartbeatIntervalMs ?? 5_000;
-    this.#transitionLeaseDurationMs = options.transitionLeaseDurationMs ?? 30_000;
+    // Installer arming crosses physical process retirement. Keep the durable
+    // reservation long enough for that guarded continuation without relying on
+    // a heartbeat from the host that is about to be retired.
+    this.#transitionLeaseDurationMs = options.transitionLeaseDurationMs ?? 10 * 60_000;
     if (!Number.isSafeInteger(this.#heartbeatIntervalMs) || this.#heartbeatIntervalMs < 100) throw new Error("invalid Electron Standalone heartbeat interval");
     if (!Number.isSafeInteger(this.#leaseDurationMs) || this.#leaseDurationMs <= this.#heartbeatIntervalMs * 2) throw new Error("invalid Electron Standalone lease duration");
     if (!Number.isSafeInteger(this.#transitionHeartbeatIntervalMs) || this.#transitionHeartbeatIntervalMs < 100) throw new Error("invalid Electron Standalone transition heartbeat interval");

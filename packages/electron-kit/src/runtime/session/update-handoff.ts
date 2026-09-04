@@ -16,7 +16,7 @@ export async function observeElectronInstallerHandoff(input: Readonly<{
   let snapshot = await input.updater.readSnapshot();
   while (!input.isClosing()) {
     if (snapshot.revision > input.afterRevision
-      && snapshot.state === "handed-off"
+      && (snapshot.state === "applying" || snapshot.state === "handed-off")
       && snapshot.handoff != null
       && snapshot.installAttemptId != null) {
       await input.onHandoff({ handoff: snapshot.handoff, installAttemptId: snapshot.installAttemptId });

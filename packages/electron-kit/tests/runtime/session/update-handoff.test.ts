@@ -26,6 +26,20 @@ const handedOff = {
 };
 
 describe("Electron installer handoff observation", () => {
+  it("hands an applying transition to the Shell-owned guarded continuation", async () => {
+    const onHandoff = vi.fn(async () => undefined);
+    await observeElectronInstallerHandoff({
+      afterRevision: 0,
+      isClosing: () => false,
+      onHandoff,
+      updater: {
+        readSnapshot: async () => ({ ...handedOff, state: "applying", actions: [] }),
+        waitForChange: vi.fn(),
+      },
+    });
+    expect(onHandoff).toHaveBeenCalledWith({ handoff: handedOff.handoff, installAttemptId: handedOff.installAttemptId });
+  });
+
   it("arms a handoff that completed before observation started", async () => {
     const onHandoff = vi.fn(async () => undefined);
     const waitForChange = vi.fn();

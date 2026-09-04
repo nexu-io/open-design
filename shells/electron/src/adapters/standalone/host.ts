@@ -11,7 +11,6 @@ import {
 } from "@open-design/sidecar";
 import {
   FossilHandoffHost,
-  initialShellUpdaterSnapshot,
   type StandaloneHandoffRequest,
   type StandaloneRuntimeHandle,
   type StandaloneRuntimeCommand,
@@ -24,6 +23,8 @@ import {
 } from "./control-contract.js";
 import { ElectronStandaloneHostLifecycle } from "./host-lifecycle.js";
 import { ElectronStandaloneLifecycleLedger } from "./lifecycle-ledger.js";
+import { ElectronStandaloneHostUpdater } from "./host-updater.js";
+import { ElectronStandaloneShellUpdaterLedger } from "./shell-updater-ledger.js";
 
 export const ELECTRON_STANDALONE_HOST_CONFIG_ENV = "OD_ELECTRON_STANDALONE_HOST_V1";
 
@@ -68,6 +69,7 @@ type PendingStart = Readonly<{
 
 class ElectronStandaloneHostRuntime {
   readonly lifecycle: ElectronStandaloneHostLifecycle;
+  readonly updater: ElectronStandaloneHostUpdater;
   readonly #handoff: FossilHandoffHost;
   readonly #handles = new Map<string, Readonly<{
     attachment: StandaloneHandoffRequest["attachment"];
@@ -79,6 +81,11 @@ class ElectronStandaloneHostRuntime {
     this.lifecycle = new ElectronStandaloneHostLifecycle(config.scope, {
       statePort: new ElectronStandaloneLifecycleLedger(config.storeRoot, config.scope),
     });
+    this.updater = new ElectronStandaloneHostUpdater(
+      "electron",
+      this.lifecycle,
+      new ElectronStandaloneShellUpdaterLedger(config.storeRoot, config.scope, "electron"),
+    );
     this.#handoff = new FossilHandoffHost(async (binding) => {
       const bytes = await readFile(binding.launcher.path);
       if (createHash("sha256").update(bytes).digest("hex") !== binding.launcher.blobSha256) {
@@ -136,13 +143,21 @@ class ElectronStandaloneHostRuntime {
       this.#handles.clear();
       return transition;
     }
-    if (request.operation === "updater.read") return initialShellUpdaterSnapshot(request.shellType);
-    if (request.operation === "updater.wait") {
-      await new Promise((resolveWait) => setTimeout(resolveWait, request.timeoutMs));
-      return initialShellUpdaterSnapshot(request.shellType);
+    if (request.operation === "updater.read") {
+      if (request.shellType !== this.updater.shellType) throw new Error("Electron Standalone updater Shell type differs from its host");
+      return await this.updater.readSnapshot();
     }
-    if (request.operation === "updater.invoke" || request.operation === "updater.confirm-installed") {
-      return Object.freeze({ outcome: "unsupported", snapshot: initialShellUpdaterSnapshot(request.shellType) });
+    if (request.operation === "updater.wait") {
+      if (request.shellType !== this.updater.shellType) throw new Error("Electron Standalone updater Shell type differs from its host");
+      return await this.updater.waitForChange(request.afterRevision, request.timeoutMs);
+    }
+    if (request.operation === "updater.invoke") {
+      if (request.shellType !== this.updater.shellType) throw new Error("Electron Standalone updater Shell type differs from its host");
+      return await this.updater.invoke(request.action);
+    }
+    if (request.operation === "updater.confirm-installed") {
+      if (request.shellType !== this.updater.shellType) throw new Error("Electron Standalone updater Shell type differs from its host");
+      return await this.updater.confirmInstalled(request.proof);
     }
     throw new Error(`Electron Standalone host operation is not implemented: ${request.operation}`);
   }

@@ -5,12 +5,14 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { stopSidecar } from "@open-design/sidecar";
-import { canonicalJson, signStandaloneMetadata, type StandaloneMetadata } from "@open-design/standalone";
+import { canonicalJson, SHELL_UPDATE_ALGEBRA, signStandaloneMetadata, type StandaloneMetadata } from "@open-design/standalone";
 import type { ElectronShellManifest } from "@open-design/electron-kit/runtime";
 
 import { buildElectronStandaloneAuthority } from "../scripts/build-authority.mjs";
 import { createElectronStandaloneAuthorityFactory } from "@/adapters/standalone/authority.js";
 import { bindElectronPhysicalResourceSet } from "@/adapters/standalone/physical-resources.js";
+import { ElectronStandaloneInstallerClaimLedger } from "@/adapters/standalone/installer-claim.js";
+import { ElectronStandaloneShellUpdaterLedger } from "@/adapters/standalone/shell-updater-ledger.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true }))); });
@@ -109,6 +111,57 @@ describe("Electron production Standalone authority", () => {
       });
       expect(await handle.readStatus()).toMatchObject({ state: "running", generationId: prepared.generation.id, bindingDigest: prepared.binding.digest });
       expect(await handle.close()).toMatchObject({ state: "stopped", generationId: prepared.generation.id });
+
+      const updaterLedger = new ElectronStandaloneShellUpdaterLedger(join(runtimeRoot, "standalone-store"), { channel: manifest.channel, namespace: manifest.namespace }, "electron");
+      const artifactPath = join(root, "closure-seed.mjs");
+      const handoff = {
+        interaction: "restart-and-install" as const,
+        releaseVersion: "0.2.0-betahyx.1",
+        target,
+        artifact: { path: artifactPath, sha256: closureDigest, size: closure.byteLength, mediaType: "application/octet-stream" },
+        shell: { type: "electron", version: "0.2.0", buildHash: "c".repeat(64) },
+      };
+      let updaterState = SHELL_UPDATE_ALGEBRA.initial("electron");
+      for (const command of [
+        { state: "checking" as const },
+        { state: "available" as const, candidateId: "candidate-020" },
+        { state: "downloading" as const },
+        { state: "ready" as const, handoff },
+      ]) updaterState = SHELL_UPDATE_ALGEBRA.reduce(updaterState, { expectedRevision: updaterState.revision, ...command });
+      await updaterLedger.write(updaterState);
+      const applying = await prepared.updater.invoke("install");
+      expect(applying).toMatchObject({ outcome: "accepted", snapshot: { state: "applying" } });
+      const installAttemptId = applying.snapshot.installAttemptId!;
+      const installationRequest = { handoff, installAttemptId, nodeExecutablePath: process.execPath, parentPid: process.pid, runtimeRoot, mode: "verify-only" as const };
+      await expect(prepared.armShellInstallation({
+        request: installationRequest,
+        async install() { throw new Error("injected crash after sealed claim"); },
+      })).rejects.toThrow("injected crash after sealed claim");
+      expect(await new ElectronStandaloneInstallerClaimLedger(join(runtimeRoot, "standalone-store"), { channel: manifest.channel, namespace: manifest.namespace }).read())
+        .toMatchObject({ state: "sealed", bindingDigest: prepared.binding.digest, generationId: prepared.generation.id, installAttemptId });
+
+      let installerCalls = 0;
+      const install = async (request: typeof installationRequest) => {
+          installerCalls += 1;
+          return {
+            schemaVersion: 1,
+            state: "armed",
+            installAttemptId: request.installAttemptId,
+            artifactPath: request.handoff.artifact.path,
+            artifactSha256: request.handoff.artifact.sha256,
+            helperPath: join(runtimeRoot, "installer-helper.cjs"),
+            resultPath: join(runtimeRoot, "installer-result.json"),
+            mode: "verify-only",
+            parentPid: request.parentPid,
+          } as const;
+      };
+      const receipt = await prepared.armShellInstallation({ request: installationRequest, install });
+      expect(receipt).toMatchObject({ state: "armed", installAttemptId });
+      expect(await prepared.armShellInstallation({ request: installationRequest, install })).toEqual(receipt);
+      expect(installerCalls).toBe(1);
+      expect(await updaterLedger.read()).toMatchObject({ state: "handed-off", installAttemptId });
+      expect(await new ElectronStandaloneInstallerClaimLedger(join(runtimeRoot, "standalone-store"), { channel: manifest.channel, namespace: manifest.namespace }).read())
+        .toMatchObject({ state: "armed", bindingDigest: prepared.binding.digest, generationId: prepared.generation.id, installAttemptId });
     } finally {
       if (stamp != null) {
         const stopped = await stopSidecar(stamp, { termGraceMs: 1_000, killGraceMs: 1_000 });
