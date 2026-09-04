@@ -1750,6 +1750,47 @@ export function buildManualEditBridge(enabled: boolean): string {
     window.parent.postMessage({ type: 'od-edit-style-commit', id: stableId(el), prop: prop, value: value }, '*');
   }
 
+  // Double-tap Command screenshot hotkey (edit mode only). Keyboard focus can
+  // live inside the sandboxed iframe, where the host's window listener never
+  // hears the keys — detect here and delegate the capture to the host. Two
+  // quick bare Meta taps trigger; any non-Meta key cancels (so ⌘C never
+  // fires), and holding BOTH Meta keys is the module-capture chord owned by
+  // the snapshot bridge, so it resets instead of triggering.
+  // Registered on documentElement, NOT window/document: the keyboard guard
+  // wraps window/document keydown listeners and suppresses them during inline
+  // text editing, which would silently eat the hotkey exactly when the user
+  // is editing a text element.
+  var screenshotTap = { at: 0, left: false, right: false };
+  document.documentElement.addEventListener('keydown', function(ev){
+    if (!enabled) return;
+    if (ev.key !== 'Meta') {
+      screenshotTap.at = 0;
+      return;
+    }
+    if (ev.code === 'MetaLeft') screenshotTap.left = true;
+    if (ev.code === 'MetaRight') screenshotTap.right = true;
+    if (ev.repeat) return;
+    if (screenshotTap.left && screenshotTap.right) {
+      screenshotTap.at = 0;
+      return;
+    }
+    var now = Date.now();
+    if (screenshotTap.at && now - screenshotTap.at <= 600) {
+      screenshotTap.at = 0;
+      window.parent.postMessage({ type: 'od-edit-screenshot-hotkey' }, '*');
+    } else {
+      screenshotTap.at = now;
+    }
+  }, true);
+  document.documentElement.addEventListener('keyup', function(ev){
+    if (ev.code === 'MetaLeft') screenshotTap.left = false;
+    if (ev.code === 'MetaRight') screenshotTap.right = false;
+  }, true);
+  window.addEventListener('blur', function(){
+    screenshotTap.at = 0;
+    screenshotTap.left = false;
+    screenshotTap.right = false;
+  });
   function bootEditBridge(){
     annotateBrandKitRuntimeTargets();
     postTargets();
