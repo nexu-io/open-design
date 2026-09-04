@@ -1,0 +1,32 @@
+{
+  "specVersion": "1.0.0",
+  "name": "screenshot-to-figma",
+  "version": "0.1.0",
+  "compat": {
+    "agentSkills": [{ "path": "./SKILL.md" }]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "capabilities": ["prompt:inject", "file:write"],
+    "inputs": [
+      {
+        "id": "screenshot",
+        "label": "Screenshot",
+        "description": "A UI screenshot to convert into a Figma .fig file.",
+        "kind": "file",
+        "accept": "image/png,image/jpeg,image/webp",
+        "required": true
+      },
+      {
+        "id": "outputName",
+        "label": "Output filename",
+        "description": "Name for the output .fig file (without extension).",
+        "kind": "text",
+        "default": "design"
+      }
+    ],
+    "description": "Convert UI screenshots into .fig design files using vision model analysis."
+  }
+}
