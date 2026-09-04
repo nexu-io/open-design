@@ -33,14 +33,14 @@ export class ElectronFixtureBootstrapPort implements ElectronBootstrapPort {
           protocol: "standalone-launcher-v1",
           resourceId: "standalone-launcher",
           blobSha256: generationId,
-          entrypoint: "launcher.mjs",
+          entrypoint: launcherPath,
           path: launcherPath,
         },
         resources: {
           "standalone-launcher": {
             component: "standalone.launcher",
             blobSha256: generationId,
-            entrypoint: "launcher.mjs",
+            entrypoint: launcherPath,
             materialization: { type: "file", entrypoint: "launcher.mjs" },
             mediaType: "text/javascript",
             path: launcherPath,

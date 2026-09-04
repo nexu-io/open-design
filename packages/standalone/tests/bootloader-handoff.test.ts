@@ -7,6 +7,7 @@ import {
   StandaloneHandoffError,
   createStandaloneGenerationBinding,
   createStandaloneGenerationBootloader,
+  resolveStandaloneGenerationHandoff,
   type GenerationRecord,
   type StandaloneHandoffRequest,
   type StandaloneRuntimeHandle,
@@ -35,18 +36,28 @@ function generation(id = "a".repeat(64)): GenerationRecord {
       protocol: "standalone-launcher-v1",
       resourceId: "standalone-launcher",
       blobSha256: "e".repeat(64),
-      entrypoint: "launcher.mjs",
+      entrypoint: launcherPath,
       path: launcherPath,
     },
     resources: {
       "standalone-launcher": {
         component: "standalone.launcher",
         blobSha256: "e".repeat(64),
-        entrypoint: "launcher.mjs",
+        entrypoint: launcherPath,
         materialization: { type: "file", entrypoint: "launcher.mjs" },
         mediaType: "text/javascript",
         path: launcherPath,
         size: 1,
+        sync: true,
+      },
+      "product-web": {
+        component: "standalone.resource",
+        blobSha256: "f".repeat(64),
+        entrypoint: join(process.cwd(), "fixtures", id, "web", "server.mjs"),
+        materialization: { type: "zip", entrypoint: "server.mjs", treeSha256: "0".repeat(64) },
+        mediaType: "application/zip",
+        path: join(process.cwd(), "fixtures", id, "web"),
+        size: 42,
         sync: true,
       },
     },
@@ -112,6 +123,27 @@ describe("immutable bootloader handoff", () => {
     expect(first).toEqual(same);
     expect(first.digest).not.toBe(otherScope.digest);
     expect(first.launcher).toMatchObject({ resourceId: "standalone-launcher", blobSha256: "e".repeat(64) });
+    expect(first.resources["product-web"]).toEqual({
+      component: "standalone.resource",
+      blobSha256: "f".repeat(64),
+      entrypoint: join(process.cwd(), "fixtures", "a".repeat(64), "web", "server.mjs"),
+      mediaType: "application/zip",
+      path: join(process.cwd(), "fixtures", "a".repeat(64), "web"),
+      size: 42,
+    });
+    const changedResource = generation();
+    changedResource.resources["product-web"]!.size = 43;
+    expect(createStandaloneGenerationBinding(changedResource, { channel: "somechan", namespace: "shared" }).digest).not.toBe(first.digest);
+    expect(Object.isFrozen(first.resources)).toBe(true);
+    expect(Object.isFrozen(first.resources["product-web"])).toBe(true);
+  });
+
+  it("resolves only the exact product-owned launcher export", () => {
+    const handoff = vi.fn();
+    expect(resolveStandaloneGenerationHandoff({ standaloneGenerationHandoff: handoff })).toBe(handoff);
+    expect(() => resolveStandaloneGenerationHandoff({ createStandaloneGenerationBootloader: vi.fn() })).toThrowError(
+      expect.objectContaining({ code: "launcher-invalid" }),
+    );
   });
 
   it("imports once, starts one body, multiplexes capabilities, and closes on the final attachment", async () => {

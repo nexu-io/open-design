@@ -4,7 +4,7 @@
   "title": "Terminal target scene request v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "operation", "target", "shellVersion", "node", "closureArtifactFile", "standaloneDirectory", "sidecarDirectory", "platformDirectory", "sceneDirectory"],
+  "required": ["schemaVersion", "operation", "target", "shellVersion", "node", "closureArtifactFile", "standaloneLauncherFile", "standaloneDirectory", "sidecarDirectory", "platformDirectory", "sceneDirectory"],
   "properties": {
     "schemaVersion": {"const": 1},
     "operation": {"const": "terminal.scene.build"},
@@ -21,6 +21,7 @@
       }
     },
     "closureArtifactFile": {"type": "string", "minLength": 1},
+    "standaloneLauncherFile": {"type": "string", "minLength": 1},
     "standaloneDirectory": {"type": "string", "minLength": 1},
     "sidecarDirectory": {"type": "string", "minLength": 1},
     "platformDirectory": {"type": "string", "minLength": 1},

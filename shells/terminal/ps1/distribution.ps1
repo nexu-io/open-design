@@ -78,7 +78,7 @@ try {
     schemaVersion = 1
     seed = [ordered]@{
       closure = [ordered]@{ file = "seed/closure.mjs"; sha256 = Digest (Join-Path $root "seed/closure.mjs") }
-      standaloneLauncher = [ordered]@{ file = "runtime/standalone/index.mjs"; sha256 = Digest (Join-Path $root "runtime/standalone/index.mjs") }
+      standaloneLauncher = [ordered]@{ file = "seed/standalone-launcher.mjs"; sha256 = Digest (Join-Path $root "seed/standalone-launcher.mjs") }
     }
     shell = [ordered]@{ buildHash = [string]$sceneManifest.shellBuildHash; type = "terminal"; version = $lock.shell_version }
     shellFiles = [ordered]@{

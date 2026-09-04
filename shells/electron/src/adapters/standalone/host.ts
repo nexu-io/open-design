@@ -12,10 +12,10 @@ import {
 import {
   FossilHandoffHost,
   createStandaloneShellUpdaterCapabilityHandler,
+  resolveStandaloneGenerationHandoff,
   validateShellIdentity,
   type StandaloneHandoffRequest,
   type StandaloneRuntimeHandle,
-  type StandaloneRuntimeCommand,
 } from "@open-design/standalone";
 
 import {
@@ -77,11 +77,6 @@ function readConfig(): HostConfig {
   return Object.freeze({ schemaVersion: 1, scope: Object.freeze({ ...value.scope }), storeRoot, runtimeRoot, resourceRoot, hostPath, hostSha256: value.hostSha256!, supervisorPath, supervisorSha256: value.supervisorSha256!, shell: Object.freeze({ ...shell }) });
 }
 
-type PendingStart = Readonly<{
-  bindingDigest: string;
-  run(): Promise<Awaited<ReturnType<ElectronStandaloneHostLifecycle["start"]>>>;
-}>;
-
 class ElectronStandaloneHostRuntime {
   readonly lifecycle: ElectronStandaloneHostLifecycle;
   readonly updater: ElectronStandaloneHostUpdater;
@@ -90,7 +85,6 @@ class ElectronStandaloneHostRuntime {
     attachment: StandaloneHandoffRequest["attachment"];
     handle: StandaloneRuntimeHandle;
   }>>();
-  readonly #pending = new Map<string, PendingStart>();
 
   constructor(readonly config: HostConfig, installation: ResolvedElectronStandaloneInstallation) {
     this.lifecycle = new ElectronStandaloneHostLifecycle(config.scope, {
@@ -116,18 +110,7 @@ class ElectronStandaloneHostRuntime {
         throw new Error("materialized Electron Standalone launcher failed its handoff binding");
       }
       const generation = await import(pathToFileURL(binding.launcher.path).href) as Record<string, unknown>;
-      if (typeof generation.createStandaloneGenerationBootloader !== "function") {
-        throw new Error("materialized Electron Standalone launcher lacks createStandaloneGenerationBootloader");
-      }
-      const createBootloader = generation.createStandaloneGenerationBootloader as (
-        start: (request: StandaloneHandoffRequest) => Promise<StandaloneRuntimeHandle>,
-      ) => (request: StandaloneHandoffRequest) => Promise<StandaloneRuntimeHandle>;
-      return createBootloader(async (request) => {
-        const pending = this.#pending.get(request.attachment.id);
-        if (pending == null || pending.bindingDigest !== request.binding.digest) throw new Error("Electron Standalone generation body escaped its pending start");
-        await pending.run();
-        return this.#bodyHandle(request);
-      });
+      return resolveStandaloneGenerationHandoff(generation);
     });
   }
 
@@ -211,31 +194,22 @@ class ElectronStandaloneHostRuntime {
     }>,
     startLifecycle: () => Promise<Awaited<ReturnType<ElectronStandaloneHostLifecycle["start"]>>>,
   ) {
-    if (this.#pending.has(request.attachment.id)) throw new Error("Electron Standalone attachment already has a pending start");
-    let task: Promise<Awaited<ReturnType<ElectronStandaloneHostLifecycle["start"]>>> | null = null;
-    const pending: PendingStart = Object.freeze({
-      bindingDigest: request.binding.digest,
-      run: () => {
-        task ??= startLifecycle();
-        return task;
-      },
+    const handle = await this.#handoff.handoff({
+      binding: request.binding,
+      attachment: request.attachment,
+      capabilities: createStandaloneShellUpdaterCapabilityHandler(this.updater),
     });
-    this.#pending.set(request.attachment.id, pending);
     try {
-      const handle = await this.#handoff.handoff({
-        binding: request.binding,
-        attachment: request.attachment,
-        capabilities: createStandaloneShellUpdaterCapabilityHandler(this.updater),
-      });
-      const started = await pending.run();
+      const started = await startLifecycle();
       const exact = await handle.readStatus();
       if (exact.state !== "running" || exact.generationId !== request.generation.id || exact.bindingDigest !== request.binding.digest) {
         throw new Error("Electron Standalone launcher did not acknowledge the exact Sidecar generation");
       }
       this.#handles.set(request.attachment.id, Object.freeze({ attachment: request.attachment, handle }));
       return started;
-    } finally {
-      this.#pending.delete(request.attachment.id);
+    } catch (error) {
+      await handle.close().catch(() => undefined);
+      throw error;
     }
   }
 
@@ -248,33 +222,6 @@ class ElectronStandaloneHostRuntime {
     const recoveredContent = await this.lifecycle.completeStoppedTransitionStart("content-restart", null, request.generation, request.attachment, request.binding);
     if (recoveredContent != null) return recoveredContent;
     return await this.lifecycle.start(request.generation, request.attachment, request.binding, request.attachmentCapability);
-  }
-
-  #bodyHandle(request: StandaloneHandoffRequest): StandaloneRuntimeHandle {
-    const project = async (state?: "stopped") => {
-      const status = await this.lifecycle.status();
-      return Object.freeze({
-        bindingDigest: request.binding.digest,
-        generationId: request.binding.generationId,
-        instanceId: status.instanceId ?? `stopped-${status.fence}`,
-        references: status.references,
-        state: state ?? status.state,
-      });
-    };
-    return Object.freeze({
-      readStatus: () => project(),
-      async invoke(command: StandaloneRuntimeCommand) {
-        return Object.freeze({ requestId: command.requestId, attachmentId: command.attachmentId, bindingDigest: request.binding.digest, outcome: "unsupported" as const, error: Object.freeze({ code: "electron-command-unavailable" }) });
-      },
-      close: () => project("stopped"),
-      async waitForTerminal() {
-        for (;;) {
-          const status = await project();
-          if (status.state !== "running") return status;
-          await new Promise((resolveWait) => setTimeout(resolveWait, 100));
-        }
-      },
-    });
   }
 
   async stop(): Promise<void> {

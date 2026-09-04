@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { createStandaloneGenerationBinding, type GenerationRecord } from "@open-design/standalone";
 
 import { CLOSURE_FIXTURE_COMPONENT, createClosureFixtureContribution, prepareClosureShellUpdate } from "../src/index.js";
 import closureFixture from "../src/fixture.js";
+import { standaloneGenerationHandoff } from "../src/launcher.js";
 
 describe("Closure cold-start fixture", () => {
   it("declares an intentionally Web/daemon-free content slot", () => {
@@ -13,6 +15,29 @@ describe("Closure cold-start fixture", () => {
       blob: { size: bytes.byteLength, mediaType: "text/javascript" },
       materialization: { type: "file", entrypoint: "fixture.mjs" },
     });
+  });
+
+  it("exports a generation-owned handoff without a Shell-injected body", async () => {
+    const generation: GenerationRecord = {
+      schemaVersion: 4,
+      id: "a".repeat(64),
+      channel: "betahyx",
+      releaseVersion: "0.1.0-betahyx.1",
+      standaloneVersion: "0.1.0",
+      sourceCommit: "b".repeat(40),
+      minimumShellVersions: { electron: "0.1.0" },
+      launcher: { protocol: "standalone-launcher-v1", resourceId: "standalone-launcher", blobSha256: "b".repeat(64), entrypoint: "/fixture/launcher.mjs", path: "/fixture/launcher.mjs" },
+      resources: { "standalone-launcher": { component: "standalone.launcher", blobSha256: "b".repeat(64), entrypoint: "/fixture/launcher.mjs", materialization: { type: "file", entrypoint: "launcher.mjs" }, mediaType: "text/javascript", path: "/fixture/launcher.mjs", size: 42, sync: true } },
+    };
+    const binding = createStandaloneGenerationBinding(generation, { channel: "betahyx", namespace: "closure-fixture" });
+    const request = {
+      binding,
+      attachment: { id: "electron-fixture", shell: { type: "electron", version: "0.1.0", buildHash: "d".repeat(64), digest: "e".repeat(64) } },
+      capabilities: { invoke: async (value: { requestId: string; attachmentId: string; bindingDigest: string }) => ({ ...value, outcome: "unsupported" as const }) },
+    };
+    const handle = await standaloneGenerationHandoff(request);
+    await expect(handle.readStatus()).resolves.toMatchObject({ state: "running", bindingDigest: request.binding.digest, generationId: request.binding.generationId });
+    await expect(handle.close()).resolves.toMatchObject({ state: "stopped", references: 0 });
   });
 
   it("drives a Shell-owned updater through check and download when the Closure floor is not met", async () => {

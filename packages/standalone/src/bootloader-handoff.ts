@@ -11,8 +11,18 @@ import {
 } from "./protocol.js";
 import type { GenerationRecord } from "./store.js";
 
-export const STANDALONE_BOOTLOADER_HANDOFF_SCHEMA = 1 as const;
+export const STANDALONE_BOOTLOADER_HANDOFF_SCHEMA = 2 as const;
 export const STANDALONE_LAUNCHER_PROTOCOL = "standalone-launcher-v1" as const;
+export const STANDALONE_GENERATION_HANDOFF_EXPORT = "standaloneGenerationHandoff" as const;
+
+export type StandaloneGenerationResourceBinding = Readonly<{
+  component: "standalone.launcher" | "standalone.resource";
+  blobSha256: string;
+  entrypoint: string;
+  mediaType: string;
+  path: string;
+  size: number;
+}>;
 
 export type StandaloneGenerationBinding = Readonly<{
   schemaVersion: typeof STANDALONE_BOOTLOADER_HANDOFF_SCHEMA;
@@ -25,6 +35,7 @@ export type StandaloneGenerationBinding = Readonly<{
     entrypoint: string;
     path: string;
   }>;
+  resources: Readonly<Record<string, StandaloneGenerationResourceBinding>>;
   minimumShellVersions: Readonly<Record<string, string>>;
   digest: string;
 }>;
@@ -110,6 +121,17 @@ function bindingPayload(binding: Omit<StandaloneGenerationBinding, "digest">): s
   return canonicalJson(binding);
 }
 
+function validateResourceBinding(resourceId: string, resource: StandaloneGenerationResourceBinding): void {
+  if (!/^[a-z][a-z0-9-]{0,63}$/.test(resourceId)) throw new StandaloneHandoffError("launcher-invalid", "handoff contains an invalid resource id");
+  if (resource.component !== "standalone.launcher" && resource.component !== "standalone.resource") {
+    throw new StandaloneHandoffError("launcher-invalid", `handoff resource ${resourceId} has an invalid component`);
+  }
+  if (!/^[a-f0-9]{64}$/.test(resource.blobSha256)) throw new StandaloneHandoffError("launcher-invalid", `handoff resource ${resourceId} has an invalid blob digest`);
+  if (!isAbsolute(resource.path) || !isAbsolute(resource.entrypoint)) throw new StandaloneHandoffError("launcher-invalid", `handoff resource ${resourceId} paths must be absolute`);
+  if (!/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/i.test(resource.mediaType)) throw new StandaloneHandoffError("launcher-invalid", `handoff resource ${resourceId} has an invalid media type`);
+  if (!Number.isSafeInteger(resource.size) || resource.size < 0) throw new StandaloneHandoffError("launcher-invalid", `handoff resource ${resourceId} has an invalid size`);
+}
+
 export function createStandaloneGenerationBinding(
   generation: GenerationRecord,
   scope: StandaloneScope,
@@ -131,6 +153,20 @@ export function createStandaloneGenerationBinding(
     if (!/^[a-z][a-z0-9-]{0,63}$/.test(shellType)) throw new StandaloneHandoffError("launcher-invalid", "generation contains an invalid Shell floor");
     compareVersions(minimum, minimum);
   }
+  const resources = Object.freeze(Object.fromEntries(Object.entries(generation.resources)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([resourceId, resource]) => {
+      const projected = Object.freeze({
+        component: resource.component,
+        blobSha256: resource.blobSha256,
+        entrypoint: resource.entrypoint,
+        mediaType: resource.mediaType,
+        path: resource.path,
+        size: resource.size,
+      });
+      validateResourceBinding(resourceId, projected);
+      return [resourceId, projected];
+    })));
   const payload = Object.freeze({
     schemaVersion: STANDALONE_BOOTLOADER_HANDOFF_SCHEMA,
     protocol: STANDALONE_LAUNCHER_PROTOCOL,
@@ -142,6 +178,7 @@ export function createStandaloneGenerationBinding(
       entrypoint: generation.launcher.entrypoint,
       path: generation.launcher.path,
     }),
+    resources,
     minimumShellVersions: Object.freeze({ ...generation.minimumShellVersions }),
   });
   return Object.freeze({ ...payload, digest: sha256Hex(bindingPayload(payload)) });
@@ -159,8 +196,29 @@ function validateBinding(binding: StandaloneGenerationBinding): StandaloneGenera
   if (!isAbsolute(binding.launcher.path) || binding.launcher.resourceId.length === 0 || binding.launcher.entrypoint.length === 0) {
     throw new StandaloneHandoffError("launcher-invalid", "handoff contains an invalid launcher entrypoint");
   }
+  if (binding.resources == null || typeof binding.resources !== "object" || Array.isArray(binding.resources)) {
+    throw new StandaloneHandoffError("launcher-invalid", "handoff contains invalid generation resources");
+  }
+  const resources = Object.entries(binding.resources);
+  if (resources.length === 0) throw new StandaloneHandoffError("launcher-invalid", "handoff contains no generation resources");
+  for (const [resourceId, resource] of resources) validateResourceBinding(resourceId, resource);
+  const launcherResource = binding.resources[binding.launcher.resourceId];
+  if (
+    launcherResource?.component !== "standalone.launcher"
+    || launcherResource.blobSha256 !== binding.launcher.blobSha256
+    || launcherResource.entrypoint !== binding.launcher.entrypoint
+    || launcherResource.path !== binding.launcher.path
+  ) throw new StandaloneHandoffError("launcher-invalid", "handoff launcher escaped its generation resources");
   if (sha256Hex(bindingPayload(payload)) !== digest) throw new StandaloneHandoffError("launcher-invalid", "handoff binding digest mismatch");
   return binding;
+}
+
+export function resolveStandaloneGenerationHandoff(module: Readonly<Record<string, unknown>>): StandaloneGenerationHandoff {
+  const handoff = module[STANDALONE_GENERATION_HANDOFF_EXPORT];
+  if (typeof handoff !== "function") {
+    throw new StandaloneHandoffError("launcher-invalid", `materialized Standalone launcher must export ${STANDALONE_GENERATION_HANDOFF_EXPORT}`);
+  }
+  return handoff as StandaloneGenerationHandoff;
 }
 
 function requireCompatibleShell(binding: StandaloneGenerationBinding, shell: StandaloneShellIdentity): void {

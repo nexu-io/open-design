@@ -24,9 +24,9 @@ const generation: GenerationRecord = {
   standaloneVersion: "0.1.0",
   sourceCommit: "7a4175c86fe305b6432081c3dc269cd4bd4ec04d",
   minimumShellVersions: { electron: "0.1.0" },
-  launcher: { protocol: "standalone-launcher-v1", resourceId: "standalone-launcher", blobSha256: "d".repeat(64), entrypoint: "launcher.mjs", path: launcherPath },
+  launcher: { protocol: "standalone-launcher-v1", resourceId: "standalone-launcher", blobSha256: "d".repeat(64), entrypoint: launcherPath, path: launcherPath },
   resources: {
-    "standalone-launcher": { component: "standalone.launcher", blobSha256: "d".repeat(64), entrypoint: "launcher.mjs", materialization: { type: "file", entrypoint: "launcher.mjs" }, mediaType: "text/javascript", path: launcherPath, size: 42, sync: true },
+    "standalone-launcher": { component: "standalone.launcher", blobSha256: "d".repeat(64), entrypoint: launcherPath, materialization: { type: "file", entrypoint: "launcher.mjs" }, mediaType: "text/javascript", path: launcherPath, size: 42, sync: true },
   },
 };
 const binding = createStandaloneGenerationBinding(generation, scope);

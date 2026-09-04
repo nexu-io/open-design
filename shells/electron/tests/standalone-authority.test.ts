@@ -236,7 +236,7 @@ describe("Electron production Standalone authority", () => {
       releases.set("https://releases.invalid/invalid-launcher.mjs", invalidLauncher);
       await expect(prepared.contentUpdater.prepareLatest("observe"))
         .resolves.toMatchObject({ status: "prepared", generation: { releaseVersion: failedMetadata.releaseVersion } });
-      await expect(prepared.contentUpdater.applyNow()).rejects.toThrow("lacks createStandaloneGenerationBootloader");
+      await expect(prepared.contentUpdater.applyNow()).rejects.toThrow("must export standaloneGenerationHandoff");
       expect(await handle.readStatus()).toMatchObject({ state: "running", generationId: applied.generation.id, bindingDigest: applied.binding.digest });
 
       const updaterLedger = new ElectronStandaloneShellUpdaterLedger(join(runtimeRoot, "standalone-store"), { channel: manifest.channel, namespace: manifest.namespace }, "electron");

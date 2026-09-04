@@ -31,6 +31,7 @@ node_version=$(extract_request node.version)
 node_archive=$(extract_request node.archiveFile)
 node_archive_sha256=$(extract_request node.archiveSha256)
 closure_file=$(extract_request closureArtifactFile)
+standalone_launcher_file=$(extract_request standaloneLauncherFile)
 standalone_directory=$(extract_request standaloneDirectory)
 sidecar_directory=$(extract_request sidecarDirectory)
 platform_directory=$(extract_request platformDirectory)
@@ -38,8 +39,8 @@ scene_directory=$(extract_request sceneDirectory)
 case "$target" in darwin-arm64|darwin-x64) :;; *) fail "sh scene only supports Darwin targets";; esac
 printf '%s\n' "$shell_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || fail "invalid Shell version"
 printf '%s\n' "$node_archive_sha256" | grep -Eq '^[a-f0-9]{64}$' || fail "invalid Node archive digest"
-for path in "$node_archive" "$closure_file" "$standalone_directory" "$sidecar_directory" "$platform_directory" "$scene_directory" "$receipt_file"; do json_escape "$path" >/dev/null; done
-[ -f "$node_archive" ] && [ -f "$closure_file" ] && [ -f "$standalone_directory/index.mjs" ] \
+for path in "$node_archive" "$closure_file" "$standalone_launcher_file" "$standalone_directory" "$sidecar_directory" "$platform_directory" "$scene_directory" "$receipt_file"; do json_escape "$path" >/dev/null; done
+[ -f "$node_archive" ] && [ -f "$closure_file" ] && [ -f "$standalone_launcher_file" ] && [ -f "$standalone_directory/index.mjs" ] \
   && [ -f "$sidecar_directory/index.mjs" ] && [ -f "$sidecar_directory/supervisor.mjs" ] \
   && [ -f "$platform_directory/index.mjs" ] || fail "scene input missing"
 terminal_source=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
@@ -78,6 +79,7 @@ cp "$platform_directory/index.mjs" "$stage/runtime/node_modules/@open-design/pla
 printf '%s\n' '{"name":"@open-design/sidecar","type":"module","exports":{".":"./dist/index.mjs"}}' > "$stage/runtime/node_modules/@open-design/sidecar/package.json"
 printf '%s\n' '{"name":"@open-design/platform","type":"module","exports":{".":"./dist/index.mjs"}}' > "$stage/runtime/node_modules/@open-design/platform/package.json"
 cp "$closure_file" "$stage/seed/closure.mjs"
+cp "$standalone_launcher_file" "$stage/seed/standalone-launcher.mjs"
 cp "$terminal_source/runtime/fossil.mjs" "$terminal_source/runtime/sidecar-bootstrap.mjs" "$terminal_source/runtime/sidecar-host.mjs" "$terminal_source/runtime/fixture-lifecycle.mjs" "$terminal_source/runtime/fixture-shell-updater.mjs" "$stage/runtime/"
 cp "$terminal_source/sh/terminal.sh" "$terminal_source/sh/install.sh" "$stage/sh/"
 cp "$terminal_source/ps1/terminal.ps1" "$terminal_source/ps1/install.ps1" "$stage/ps1/"
@@ -89,6 +91,7 @@ sidecar_bootstrap_sha=$(sha256_file "$stage/runtime/sidecar-bootstrap.mjs")
 fixture_lifecycle_sha=$(sha256_file "$stage/runtime/fixture-lifecycle.mjs")
 fixture_shell_updater_sha=$(sha256_file "$stage/runtime/fixture-shell-updater.mjs")
 standalone_sha=$(sha256_file "$stage/runtime/standalone/index.mjs")
+standalone_launcher_sha=$(sha256_file "$stage/seed/standalone-launcher.mjs")
 closure_sha=$(sha256_file "$stage/seed/closure.mjs")
 printf '{"files":[' > "$stage/runtime/modules.json"
 first=true
@@ -120,12 +123,13 @@ printf '%s\n' \
   "sh_install=$(sha256_file "$stage/sh/install.sh")" \
   "sh_terminal=$(sha256_file "$stage/sh/terminal.sh")" \
   "standalone=$standalone_sha" \
+  "standalone_launcher=$standalone_launcher_sha" \
   "target=$target" > "$shell_build_inputs"
 for contract in "$stage"/contract/*.json; do printf 'contract/%s=%s\n' "$(basename -- "$contract")" "$(sha256_file "$contract")" >> "$shell_build_inputs"; done
 shell_build_hash=$(sha256_file "$shell_build_inputs")
 rm "$shell_build_inputs"
-printf '{"closure":{"file":"seed/closure.mjs","sha256":"%s","size":%s},"fixtureLifecycle":{"entrypoint":"runtime/fixture-lifecycle.mjs","sha256":"%s"},"fixtureShellUpdater":{"entrypoint":"runtime/fixture-shell-updater.mjs","sha256":"%s"},"fossil":{"entrypoint":"runtime/fossil.mjs","sha256":"%s"},"node":{"archiveSha256":"%s","executable":"carrier/node/bin/node","executableSha256":"%s","version":"%s"},"runtimeModules":{"file":"runtime/modules.json","sha256":"%s"},"schemaVersion":1,"shellBuildHash":"%s","shellVersion":"%s","sidecarBootstrap":{"entrypoint":"runtime/sidecar-bootstrap.mjs","sha256":"%s"},"sidecarHost":{"entrypoint":"runtime/sidecar-host.mjs","sha256":"%s"},"standalone":{"entrypoint":"runtime/standalone/index.mjs","sha256":"%s"},"target":"%s"}\n' \
-  "$closure_sha" "$(file_size "$stage/seed/closure.mjs")" "$fixture_lifecycle_sha" "$fixture_shell_updater_sha" "$fossil_sha" "$node_archive_sha256" "$node_sha" "$node_version" "$runtime_modules_sha" "$shell_build_hash" "$shell_version" "$sidecar_bootstrap_sha" "$sidecar_host_sha" "$standalone_sha" "$target" > "$stage/scene.json"
+printf '{"closure":{"file":"seed/closure.mjs","sha256":"%s","size":%s},"fixtureLifecycle":{"entrypoint":"runtime/fixture-lifecycle.mjs","sha256":"%s"},"fixtureShellUpdater":{"entrypoint":"runtime/fixture-shell-updater.mjs","sha256":"%s"},"fossil":{"entrypoint":"runtime/fossil.mjs","sha256":"%s"},"node":{"archiveSha256":"%s","executable":"carrier/node/bin/node","executableSha256":"%s","version":"%s"},"runtimeModules":{"file":"runtime/modules.json","sha256":"%s"},"schemaVersion":1,"shellBuildHash":"%s","shellVersion":"%s","sidecarBootstrap":{"entrypoint":"runtime/sidecar-bootstrap.mjs","sha256":"%s"},"sidecarHost":{"entrypoint":"runtime/sidecar-host.mjs","sha256":"%s"},"standalone":{"entrypoint":"seed/standalone-launcher.mjs","sha256":"%s"},"standaloneRuntime":{"entrypoint":"runtime/standalone/index.mjs","sha256":"%s"},"target":"%s"}\n' \
+  "$closure_sha" "$(file_size "$stage/seed/closure.mjs")" "$fixture_lifecycle_sha" "$fixture_shell_updater_sha" "$fossil_sha" "$node_archive_sha256" "$node_sha" "$node_version" "$runtime_modules_sha" "$shell_build_hash" "$shell_version" "$sidecar_bootstrap_sha" "$sidecar_host_sha" "$standalone_launcher_sha" "$standalone_sha" "$target" > "$stage/scene.json"
 scene_sha=$(sha256_file "$stage/scene.json")
 if [ -e "$scene_directory" ]; then fail "scene destination already exists"; fi
 mv "$stage" "$scene_directory"

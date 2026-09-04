@@ -15,11 +15,11 @@ describe("Terminal Windows carrier", () => {
       if (fixture == null) {
         throw new Error(`locked Node archive for ${target} is required to run the native Windows E2E test`);
       }
-      const { archive, closureFile, directories, lock, locked, releases, standaloneDirectory, sidecarDirectory, platformDirectory, work } = fixture;
+      const { archive, closureFile, launcherFile, directories, lock, locked, releases, standaloneDirectory, sidecarDirectory, platformDirectory, work } = fixture;
       const scene = join(work, "scene");
       const sceneRequest = join(work, "scene-request.json");
       const sceneReceipt = join(work, "scene-receipt.json");
-      writeSceneRequest(sceneRequest, { target, shellVersion: readFileSync(join(terminalRoot, "version"), "utf8").trim(), nodeVersion: lock.version, nodeArchive: archive, nodeArchiveSha256: locked.sha256, closureFile, standaloneDirectory, sidecarDirectory, platformDirectory, sceneDirectory: scene });
+      writeSceneRequest(sceneRequest, { target, shellVersion: readFileSync(join(terminalRoot, "version"), "utf8").trim(), nodeVersion: lock.version, nodeArchive: archive, nodeArchiveSha256: locked.sha256, closureFile, launcherFile, standaloneDirectory, sidecarDirectory, platformDirectory, sceneDirectory: scene });
       powershell(join(terminalRoot, "ps1/scene.ps1"), ["-Request", sceneRequest, "-Receipt", sceneReceipt]);
       const sceneSha = JSON.parse(readFileSync(sceneReceipt, "utf8")).sceneManifestSha256 as string;
       expect(JSON.parse(readFileSync(join(scene, "scene.json"), "utf8"))).toMatchObject({ shellBuildHash: expectedShellBuildHash(scene, target, locked.sha256) });

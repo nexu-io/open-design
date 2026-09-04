@@ -16,7 +16,7 @@ const terminalSidecars = new Map<string, SidecarStamp>();
 
 export type TerminalOptions = { attachmentId?: string; attachmentCapability?: string; channelHeadUrl?: string; activationPolicy?: string; feedbackFile?: string };
 export type TerminalRunner = (root: string, storeRoot: string, channel: string, namespace: string, operation: string, options?: TerminalOptions) => Record<string, any>;
-type SceneRequestInput = { target: string; shellVersion: string; nodeVersion: string; nodeArchive: string; nodeArchiveSha256: string; closureFile: string; standaloneDirectory: string; sidecarDirectory: string; platformDirectory: string; sceneDirectory: string };
+type SceneRequestInput = { target: string; shellVersion: string; nodeVersion: string; nodeArchive: string; nodeArchiveSha256: string; closureFile: string; launcherFile: string; standaloneDirectory: string; sidecarDirectory: string; platformDirectory: string; sceneDirectory: string };
 type DistributionRequestInput = { target: string; sceneDirectory: string; sceneManifestSha256: string; releaseDocumentsDirectory: string; trustFile: string; release: { channel: string; releaseVersion: string; sourceCommit: string; publishedAt: string; artifactBaseUrl: string }; outputDirectory: string };
 
 export async function cleanupFixtures(): Promise<void> {
@@ -45,6 +45,7 @@ export function writeSceneRequest(path: string, input: SceneRequestInput): void 
     shellVersion: input.shellVersion,
     node: { version: input.nodeVersion, archiveFile: input.nodeArchive, archiveSha256: input.nodeArchiveSha256 },
     closureArtifactFile: input.closureFile,
+    standaloneLauncherFile: input.launcherFile,
     standaloneDirectory: input.standaloneDirectory,
     sidecarDirectory: input.sidecarDirectory,
     platformDirectory: input.platformDirectory,
@@ -84,6 +85,7 @@ export function expectedShellBuildHash(scene: string, target: string, nodeArchiv
     `sh_install=${digest("sh/install.sh")}`,
     `sh_terminal=${digest("sh/terminal.sh")}`,
     `standalone=${digest("runtime/standalone/index.mjs")}`,
+    `standalone_launcher=${digest("seed/standalone-launcher.mjs")}`,
     `target=${target}`,
     ...readdirSync(join(scene, "contract")).sort().map((name) => `contract/${name}=${digest(`contract/${name}`)}`),
   ];
@@ -203,21 +205,22 @@ export function prepareExactFixture(target: string) {
   const archive = process.env.OD_TERMINAL_NODE_ARCHIVE ?? join(repoRoot, ".tmp/terminal-e2e/node", locked.archive);
   if (!existsSync(archive)) return null;
   const closureFile = join(repoRoot, "apps/closure/dist/index.mjs");
+  const launcherFile = join(repoRoot, "apps/closure/dist/launcher.mjs");
   const standaloneDirectory = join(repoRoot, "packages/standalone/dist");
   const sidecarDirectory = join(repoRoot, "packages/sidecar/dist");
   const platformDirectory = join(repoRoot, "packages/platform/dist");
-  if (!existsSync(closureFile) || !existsSync(join(standaloneDirectory, "index.mjs")) || !existsSync(join(sidecarDirectory, "index.mjs")) || !existsSync(join(platformDirectory, "index.mjs"))) throw new Error("build Closure, Standalone, Sidecar, and Platform before the Terminal native test");
+  if (!existsSync(closureFile) || !existsSync(launcherFile) || !existsSync(join(standaloneDirectory, "index.mjs")) || !existsSync(join(sidecarDirectory, "index.mjs")) || !existsSync(join(platformDirectory, "index.mjs"))) throw new Error("build Closure, Standalone, Sidecar, and Platform before the Terminal native test");
   const work = mkdtempSync(join(tmpdir(), `terminal-${target}-e2e-`)); temporaryRoots.push(work);
   const directories = { documents: join(work, "documents"), output: join(work, "output"), unpacked: join(work, "unpacked"), store: join(work, "store") };
   mkdirSync(directories.documents); mkdirSync(directories.output); mkdirSync(directories.unpacked);
   const releases = releaseDocuments(
     work,
     new Uint8Array(readFileSync(closureFile)),
-    new Uint8Array(readFileSync(join(standaloneDirectory, "index.mjs"))),
+    new Uint8Array(readFileSync(launcherFile)),
     startToolsServeReleaseStorage(work),
   );
   writeFileSync(join(directories.documents, "content-metadata.json"), readFileSync(releases.beta1.metadataFile));
-  return { archive, closureFile, directories, lock, locked, releases, standaloneDirectory, sidecarDirectory, platformDirectory, work };
+  return { archive, closureFile, launcherFile, directories, lock, locked, releases, standaloneDirectory, sidecarDirectory, platformDirectory, work };
 }
 
 export function verifyExactLifecycle(root: string, store: string, terminal: TerminalRunner, releases: ReturnType<typeof releaseDocuments>): void {

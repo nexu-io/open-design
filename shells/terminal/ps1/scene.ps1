@@ -18,6 +18,7 @@ $NodeVersion = [string]$requestValue.node.version
 $NodeArchive = [string]$requestValue.node.archiveFile
 $NodeArchiveSha256 = [string]$requestValue.node.archiveSha256
 $Closure = [string]$requestValue.closureArtifactFile
+$StandaloneLauncher = [string]$requestValue.standaloneLauncherFile
 $Standalone = [string]$requestValue.standaloneDirectory
 $Sidecar = [string]$requestValue.sidecarDirectory
 $Platform = [string]$requestValue.platformDirectory
@@ -33,6 +34,7 @@ if ($NodeVersion -ne $nodeLock.version) { Fail "official Node version differs fr
 if ([IO.Path]::GetFileName($NodeArchive) -ne $locked.archive) { Fail "official Node archive name differs from lock" }
 if ($NodeArchiveSha256 -ne $locked.sha256) { Fail "official Node archive digest differs from lock" }
 if ((Digest $NodeArchive) -ne $NodeArchiveSha256) { Fail "official Node archive digest mismatch" }
+if (-not (Test-Path -LiteralPath $StandaloneLauncher -PathType Leaf)) { Fail "Standalone launcher artifact missing" }
 if (-not (Test-Path -LiteralPath (Join-Path $Standalone "index.mjs") -PathType Leaf)) { Fail "Standalone build artifact missing" }
 if (-not (Test-Path -LiteralPath (Join-Path $Sidecar "index.mjs") -PathType Leaf) -or -not (Test-Path -LiteralPath (Join-Path $Sidecar "supervisor.mjs") -PathType Leaf)) { Fail "Sidecar build artifact missing" }
 if (-not (Test-Path -LiteralPath (Join-Path $Platform "index.mjs") -PathType Leaf)) { Fail "Platform build artifact missing" }
@@ -58,6 +60,7 @@ try {
   [IO.File]::WriteAllText((Join-Path $stage "runtime/node_modules/@open-design/sidecar/package.json"), '{"name":"@open-design/sidecar","type":"module","exports":{".":"./dist/index.mjs"}}' + "`n", [Text.UTF8Encoding]::new($false))
   [IO.File]::WriteAllText((Join-Path $stage "runtime/node_modules/@open-design/platform/package.json"), '{"name":"@open-design/platform","type":"module","exports":{".":"./dist/index.mjs"}}' + "`n", [Text.UTF8Encoding]::new($false))
   Copy-Item -LiteralPath $Closure -Destination (Join-Path $stage "seed/closure.mjs")
+  Copy-Item -LiteralPath $StandaloneLauncher -Destination (Join-Path $stage "seed/standalone-launcher.mjs")
   Copy-Item -LiteralPath (Join-Path $terminalSource "runtime/fossil.mjs") -Destination (Join-Path $stage "runtime/fossil.mjs")
   Copy-Item -LiteralPath (Join-Path $terminalSource "runtime/sidecar-bootstrap.mjs") -Destination (Join-Path $stage "runtime/sidecar-bootstrap.mjs")
   Copy-Item -LiteralPath (Join-Path $terminalSource "runtime/sidecar-host.mjs") -Destination (Join-Path $stage "runtime/sidecar-host.mjs")
@@ -73,6 +76,7 @@ try {
   $fixtureLifecycleSha = Digest (Join-Path $stage "runtime/fixture-lifecycle.mjs")
   $fixtureShellUpdaterSha = Digest (Join-Path $stage "runtime/fixture-shell-updater.mjs")
   $standaloneSha = Digest (Join-Path $stage "runtime/standalone/index.mjs")
+  $standaloneLauncherSha = Digest (Join-Path $stage "seed/standalone-launcher.mjs")
   $closureSha = Digest (Join-Path $stage "seed/closure.mjs")
   $moduleFiles = @(
     "runtime/node_modules/@open-design/platform/dist/index.mjs",
@@ -102,6 +106,7 @@ try {
     "sh_install=$(Digest (Join-Path $stage 'sh/install.sh'))",
     "sh_terminal=$(Digest (Join-Path $stage 'sh/terminal.sh'))",
     "standalone=$standaloneSha",
+    "standalone_launcher=$standaloneLauncherSha",
     "target=$Target"
   )
   foreach ($contract in @(Get-ChildItem -LiteralPath (Join-Path $stage "contract") -File | Sort-Object Name)) { $buildLines += "contract/$($contract.Name)=$(Digest $contract.FullName)" }
@@ -119,7 +124,8 @@ try {
     schemaVersion = 1; shellBuildHash = $shellBuildHash; shellVersion = $ShellVersion
     sidecarBootstrap = [ordered]@{ entrypoint = "runtime/sidecar-bootstrap.mjs"; sha256 = $sidecarBootstrapSha }
     sidecarHost = [ordered]@{ entrypoint = "runtime/sidecar-host.mjs"; sha256 = $sidecarHostSha }
-    standalone = [ordered]@{ entrypoint = "runtime/standalone/index.mjs"; sha256 = $standaloneSha }
+    standalone = [ordered]@{ entrypoint = "seed/standalone-launcher.mjs"; sha256 = $standaloneLauncherSha }
+    standaloneRuntime = [ordered]@{ entrypoint = "runtime/standalone/index.mjs"; sha256 = $standaloneSha }
     target = $Target
   }
   [IO.File]::WriteAllText((Join-Path $stage "scene.json"), (($sceneManifest | ConvertTo-Json -Compress -Depth 5) + "`n"), [Text.UTF8Encoding]::new($false))

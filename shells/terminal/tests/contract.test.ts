@@ -14,7 +14,7 @@ const fixtureLifecycle = (root: string, options: Record<string, unknown> = {}) =
 });
 
 const exactBinding = (scope: { channel: string; namespace: string }, generation: { id: string }) => ({
-  schemaVersion: 1,
+  schemaVersion: 2,
   protocol: "standalone-launcher-v1",
   scope,
   generationId: generation.id,
@@ -23,6 +23,16 @@ const exactBinding = (scope: { channel: string; namespace: string }, generation:
     blobSha256: "0".repeat(64),
     entrypoint: "launcher.mjs",
     path: "/fixture/launcher.mjs",
+  },
+  resources: {
+    "standalone-launcher": {
+      component: "standalone.launcher",
+      blobSha256: "0".repeat(64),
+      entrypoint: "/fixture/launcher.mjs",
+      mediaType: "text/javascript",
+      path: "/fixture/launcher.mjs",
+      size: 0,
+    },
   },
   minimumShellVersions: { terminal: "0.1.0" },
   digest: generation.id,

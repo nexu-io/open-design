@@ -17,15 +17,25 @@ const declaration = {
 };
 
 const binding: StandaloneGenerationBinding = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   protocol: "standalone-launcher-v1",
   scope: { channel: "betahyx", namespace: "electron-foundation" },
   generationId: "a".repeat(64),
   launcher: {
     resourceId: "standalone-launcher",
     blobSha256: "b".repeat(64),
-    entrypoint: "launcher.mjs",
+    entrypoint: "/store/generations/launcher.mjs",
     path: "/store/generations/launcher.mjs",
+  },
+  resources: {
+    "standalone-launcher": {
+      component: "standalone.launcher",
+      blobSha256: "b".repeat(64),
+      entrypoint: "/store/generations/launcher.mjs",
+      mediaType: "text/javascript",
+      path: "/store/generations/launcher.mjs",
+      size: 42,
+    },
   },
   minimumShellVersions: { electron: "0.1.0" },
   digest: "c".repeat(64),

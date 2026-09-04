@@ -29,15 +29,25 @@ const stamp = Object.freeze({
 const resourceSet: ElectronBoundPhysicalResourceSet = Object.freeze({
   schemaVersion: 1,
   binding: Object.freeze({
-    schemaVersion: 1,
+    schemaVersion: 2,
     protocol: "standalone-launcher-v1",
     scope: Object.freeze({ channel: stamp.channel, namespace: stamp.namespace }),
     generationId: "a".repeat(64),
     launcher: Object.freeze({
       resourceId: "standalone-launcher",
       blobSha256: "b".repeat(64),
-      entrypoint: "launcher.mjs",
+      entrypoint: "/store/generations/launcher.mjs",
       path: "/store/generations/launcher.mjs",
+    }),
+    resources: Object.freeze({
+      "standalone-launcher": Object.freeze({
+        component: "standalone.launcher" as const,
+        blobSha256: "b".repeat(64),
+        entrypoint: "/store/generations/launcher.mjs",
+        mediaType: "text/javascript",
+        path: "/store/generations/launcher.mjs",
+        size: 42,
+      }),
     }),
     minimumShellVersions: Object.freeze({ electron: "0.1.0" }),
     digest: "c".repeat(64),

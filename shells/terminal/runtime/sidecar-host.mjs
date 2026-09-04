@@ -47,7 +47,6 @@ class TerminalSidecarRuntime {
     });
     this.transitions = new Map();
     this.updaterQueues = new Map();
-    this.pendingStarts = new Map();
     this.runtimeHandles = new Map();
     this.selectedBindingDigest = null;
     this.selectedGenerationId = null;
@@ -57,17 +56,7 @@ class TerminalSidecarRuntime {
         throw new Error("materialized Standalone launcher failed Sidecar handoff binding");
       }
       const generation = await import(pathToFileURL(binding.launcher.path).href);
-      if (typeof generation.createStandaloneGenerationBootloader !== "function") {
-        throw new Error("materialized Standalone launcher lacks its generation bootloader");
-      }
-      return generation.createStandaloneGenerationBootloader(async (request) => {
-        const entry = this.pendingStarts.get(request.attachment.id);
-        if (entry == null || entry.binding.digest !== request.binding.digest) {
-          throw new Error("generation body start escaped its Sidecar lifecycle continuation");
-        }
-        await entry.run();
-        return this.generationRuntimeHandle(request);
-      });
+      return standalone.resolveStandaloneGenerationHandoff(generation);
     });
   }
 
@@ -193,32 +182,21 @@ class TerminalSidecarRuntime {
     }
     this.selectedBindingDigest ??= message.binding.digest;
     this.selectedGenerationId ??= message.binding.generationId;
-    if (this.pendingStarts.has(message.attachment.id)) throw new Error("attachment already has a pending Sidecar generation start");
-    const entry = {
+    const handle = await this.handoff.handoff({
       binding: message.binding,
-      status: null,
-      task: null,
-      run() {
-        this.task ??= start().then((status) => { this.status = status; return status; });
-        return this.task;
+      attachment: message.attachment,
+      capabilities: {
+        invoke: async (request) => ({
+          requestId: request.requestId,
+          attachmentId: request.attachmentId,
+          bindingDigest: request.bindingDigest,
+          outcome: "unsupported",
+          error: { code: "terminal-capability-unavailable" },
+        }),
       },
-    };
-    this.pendingStarts.set(message.attachment.id, entry);
+    });
     try {
-      const handle = await this.handoff.handoff({
-        binding: message.binding,
-        attachment: message.attachment,
-        capabilities: {
-          invoke: async (request) => ({
-            requestId: request.requestId,
-            attachmentId: request.attachmentId,
-            bindingDigest: request.bindingDigest,
-            outcome: "unsupported",
-            error: { code: "terminal-capability-unavailable" },
-          }),
-        },
-      });
-      await entry.run();
+      const status = await start();
       const exact = await handle.readStatus();
       if (
         exact.state !== "running"
@@ -226,57 +204,11 @@ class TerminalSidecarRuntime {
         || exact.generationId !== message.generation.id
       ) throw new Error("Standalone launcher did not acknowledge its exact Sidecar generation");
       this.runtimeHandles.set(message.attachment.id, handle);
-      return { ...entry.status, attachmentCapability };
-    } finally {
-      this.pendingStarts.delete(message.attachment.id);
+      return { ...status, attachmentCapability };
+    } catch (error) {
+      await handle.close().catch(() => undefined);
+      throw error;
     }
-  }
-
-  generationRuntimeHandle(request) {
-    return {
-      readStatus: async () => {
-        const status = await this.lifecycle.status(this.scope);
-        return {
-          bindingDigest: request.binding.digest,
-          generationId: request.binding.generationId,
-          instanceId: status.instanceId ?? `stopped-${status.fence}`,
-          references: status.references,
-          state: status.state,
-        };
-      },
-      invoke: async (command) => ({
-        requestId: command.requestId,
-        attachmentId: command.attachmentId,
-        bindingDigest: request.binding.digest,
-        outcome: "unsupported",
-        error: { code: "terminal-capability-unavailable" },
-      }),
-      close: async () => {
-        const status = await this.lifecycle.status(this.scope);
-        return {
-          bindingDigest: request.binding.digest,
-          generationId: request.binding.generationId,
-          instanceId: status.instanceId ?? `stopped-${status.fence}`,
-          references: 0,
-          state: "stopped",
-        };
-      },
-      waitForTerminal: async () => {
-        for (;;) {
-          const status = await this.lifecycle.status(this.scope);
-          if (status.state !== "running") {
-            return {
-              bindingDigest: request.binding.digest,
-              generationId: request.binding.generationId,
-              instanceId: status.instanceId ?? `stopped-${status.fence}`,
-              references: status.references,
-              state: status.state,
-            };
-          }
-          await new Promise((resolveWait) => setTimeout(resolveWait, 100));
-        }
-      },
-    };
   }
 
   async generationRequest(message) {

@@ -13,6 +13,7 @@ import {
 } from "@/adapters/standalone/control-contract.js";
 
 const scope = Object.freeze({ channel: "betahyx", namespace: "electron-foundation" });
+const launcherPath = resolve("/installed/launcher.mjs");
 const shell: StandaloneShellIdentity = Object.freeze({
   type: "electron",
   version: "0.1.0",
@@ -31,17 +32,17 @@ const generation: GenerationRecord = {
     protocol: "standalone-launcher-v1",
     resourceId: "standalone-launcher",
     blobSha256: "d".repeat(64),
-    entrypoint: "launcher.mjs",
-    path: resolve("/installed/launcher.mjs"),
+    entrypoint: launcherPath,
+    path: launcherPath,
   },
   resources: {
     "standalone-launcher": {
       component: "standalone.launcher",
       blobSha256: "d".repeat(64),
-      entrypoint: "launcher.mjs",
+      entrypoint: launcherPath,
       materialization: { type: "file", entrypoint: "launcher.mjs" },
       mediaType: "text/javascript",
-      path: resolve("/installed/launcher.mjs"),
+      path: launcherPath,
       size: 42,
       sync: true,
     },

@@ -8,7 +8,8 @@
   "types": "./dist/index.d.ts",
   "files": ["dist"],
   "exports": {
-    ".": {"types": "./dist/index.d.ts", "default": "./dist/index.mjs"}
+    ".": {"types": "./dist/index.d.ts", "default": "./dist/index.mjs"},
+    "./launcher": {"types": "./dist/launcher.d.ts", "default": "./dist/launcher.mjs"}
   },
   "scripts": {
     "build": "tsx ./esbuild.config.ts && tsc -p tsconfig.json --emitDeclarationOnly",

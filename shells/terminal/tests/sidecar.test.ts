@@ -38,14 +38,14 @@ function generation(path: string, digest: string, id: string): GenerationRecord 
       protocol: "standalone-launcher-v1",
       resourceId: "standalone-launcher",
       blobSha256: digest,
-      entrypoint: "launcher.mjs",
+      entrypoint: path,
       path,
     },
     resources: {
       "standalone-launcher": {
         component: "standalone.launcher",
         blobSha256: digest,
-        entrypoint: "launcher.mjs",
+        entrypoint: path,
         materialization: { type: "file", entrypoint: "launcher.mjs" },
         mediaType: "text/javascript",
         path,
@@ -88,8 +88,9 @@ describe("Terminal Sidecar refinement", () => {
     const launcherA = join(root, "launcher-a.mjs");
     const launcherB = join(root, "launcher-b.mjs");
     const standaloneEntrypoint = resolve(repoRoot, "packages/standalone/dist/index.mjs");
-    copyFileSync(standaloneEntrypoint, launcherA);
-    copyFileSync(standaloneEntrypoint, launcherB);
+    const launcherEntrypoint = resolve(repoRoot, "apps/closure/dist/launcher.mjs");
+    copyFileSync(launcherEntrypoint, launcherA);
+    copyFileSync(launcherEntrypoint, launcherB);
     const firstGeneration = generation(launcherA, sha256Hex(readFileSync(launcherA)), "a".repeat(64));
     const secondGeneration = generation(launcherB, sha256Hex(readFileSync(launcherB)), "b".repeat(64));
     const scope = { channel: "somechan", namespace: `handoff-${process.pid}` };
