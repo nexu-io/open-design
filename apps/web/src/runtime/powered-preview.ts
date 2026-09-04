@@ -61,6 +61,19 @@ export function swapLoopbackHost(origin: string): string {
   }
 }
 
+function isRemoteHttpOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+    return url.hostname !== '127.0.0.1'
+      && url.hostname !== 'localhost'
+      && url.hostname !== '[::1]'
+      && url.hostname !== '::1';
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Resolve the origin to load the powered iframe from, given the daemon's
  * reported base. The result must be the loopback host-swapped variant, because
@@ -70,6 +83,10 @@ export function swapLoopbackHost(origin: string): string {
  */
 export function resolvePoweredBaseOrigin(baseOrigin: string): string | null {
   const appOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+  // A loopback URL reported through a reverse proxy points at the browser's
+  // machine, not the remote daemon. Fall back to the same-origin raw preview
+  // instead of leaking an unreachable localhost iframe URL.
+  if (isRemoteHttpOrigin(appOrigin)) return null;
   let normalized: string;
   try {
     normalized = new URL(baseOrigin).origin;

@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   prepareNodePtyRuntime,
   validateNodePtyRuntime,
-} from "../src/node-pty-runtime.js";
+} from "@/node-pty-runtime.js";
 
 describe("node-pty packaged runtime closure", () => {
   it("repairs and validates the target macOS prebuild", async () => {

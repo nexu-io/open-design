@@ -16,7 +16,8 @@ import { cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
-import type { AppConfig } from '../../src/types';
+import type { Route } from '../../src/router';
+import type { AppConfig, Project } from '../../src/types';
 import { loadConfig, mergeDaemonConfig, fetchDaemonConfig } from '../../src/state/config';
 import {
   daemonIsLive,
@@ -36,10 +37,26 @@ import { resetCoalescedGet } from '../../src/lib/coalesced-get';
 import { workspaceDirectoryFixture } from '../helpers/workspace-context';
 
 const homeRouteMock = { kind: 'home' as const, view: 'home' as const };
-vi.mock('../../src/router', () => ({
-  navigate: vi.fn(),
-  useRoute: () => homeRouteMock,
-}));
+const useRouteMock = vi.fn<() => Route>(() => homeRouteMock);
+const useProjectRouteWorkspaceContextMock = vi.hoisted(() => vi.fn());
+vi.mock('../../src/router', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/router')>();
+  return {
+    ...actual,
+    navigate: vi.fn(),
+    useRoute: () => useRouteMock(),
+  };
+});
+
+vi.mock('../../src/collab/useProjectRouteWorkspaceContext', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('../../src/collab/useProjectRouteWorkspaceContext')
+  >();
+  return {
+    ...actual,
+    useProjectRouteWorkspaceContext: useProjectRouteWorkspaceContextMock,
+  };
+});
 
 vi.mock('../../src/components/EntryView', () => ({
   EntryView: () => <div>Entry view</div>,
@@ -166,6 +183,37 @@ const baseConfig: AppConfig = {
   agentCliEnv: {},
 };
 
+const project: Project = {
+  id: 'project-team',
+  name: 'Team project',
+  skillId: null,
+  designSystemId: null,
+  customInstructions: '',
+  createdAt: 1,
+  updatedAt: 1,
+  workspaceId: 'ws-project-team',
+};
+
+const ambientFreeContext = {
+  workspaceId: 'ws-personal-free',
+  workspaceType: 'personal',
+  workspaceMemberId: 'member-personal',
+  role: 'owner',
+  memberStatus: 'active',
+  lifecycleState: 'active',
+  billingState: 'free',
+  planId: null,
+} as const;
+
+const projectTeamContext = {
+  workspaceId: 'ws-project-team',
+  workspaceType: 'team',
+  workspaceMemberId: 'member-team',
+  role: 'member',
+  memberStatus: 'active',
+  lifecycleState: 'active',
+} as const;
+
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status: 200,
@@ -179,6 +227,12 @@ describe('App AMR plan-tier gate', () => {
     resetWorkspaceContextCache();
     resetWorkspaceBillingCache();
     capturedPlanCalls.length = 0;
+    useRouteMock.mockReturnValue(homeRouteMock);
+    useProjectRouteWorkspaceContextMock.mockReturnValue({
+      context: null,
+      loading: false,
+      retry: vi.fn(),
+    });
     mockedDaemonIsLive.mockResolvedValue(true);
     mockedFetchAgentsStream.mockResolvedValue([]);
     mockedFetchSkills.mockResolvedValue([]);
@@ -274,6 +328,97 @@ describe('App AMR plan-tier gate', () => {
     await waitFor(() => {
       const last = capturedPlanCalls.at(-1);
       expect(last?.plan).toBe('team_plus');
+    });
+    expect(capturedPlanCalls.some((call) => call.plan === 'free')).toBe(false);
+  });
+
+  it('uses the active project Team plan instead of the ambient personal Free plan', async () => {
+    useRouteMock.mockReturnValue({
+      kind: 'project',
+      projectId: project.id,
+      conversationId: 'conversation-1',
+      fileName: null,
+    });
+    useProjectRouteWorkspaceContextMock.mockReturnValue({
+      context: projectTeamContext,
+      loading: false,
+      retry: vi.fn(),
+    });
+    mockedListProjects.mockResolvedValue([project]);
+    mockedFetchVelaLoginStatus.mockResolvedValue({
+      loggedIn: true,
+      loginInFlight: false,
+      profile: 'prod',
+      user: { id: 'member-1', email: 'member@example.com' },
+      configPath: '/tmp/amr-config.json',
+      account: { plan: 'free' },
+    });
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.endsWith('/api/workspace/directory')) {
+        return jsonResponse(workspaceDirectoryFixture([
+          ambientFreeContext,
+          projectTeamContext,
+        ]));
+      }
+      if (url.includes('/api/workspace/billing?')) {
+        const workspaceId = new URL(url, 'http://open-design.test')
+          .searchParams.get('workspaceId');
+        const context = workspaceId === projectTeamContext.workspaceId
+          ? projectTeamContext
+          : ambientFreeContext;
+        const teamScoped = context.workspaceId === projectTeamContext.workspaceId;
+        return jsonResponse({
+          summary: {
+            workspaceId: null,
+            membershipTier: 'free',
+            balanceUsd: '0',
+            workspaceBalance: null,
+          },
+          workspaceBalance: {
+            workspaceId: context.workspaceId,
+            workspaceMemberId: context.workspaceMemberId,
+            balanceUsd: teamScoped ? '12.34' : '0',
+            billingScopeVersion: 2,
+            expiresAt: null,
+            updatedAt: null,
+          },
+          workspaceSnapshot: {
+            schemaVersion: 1,
+            workspaceId: context.workspaceId,
+            workspaceMemberId: context.workspaceMemberId,
+            billingScopeVersion: 2,
+            billing: {
+              billingState: teamScoped ? 'active' : 'free',
+              planId: teamScoped ? 'team_pro' : null,
+            },
+            wallet: {
+              balanceUsd: teamScoped ? '12.34' : '0',
+              expiresAt: null,
+              updatedAt: null,
+            },
+            revisions: {
+              billing: `billing-${context.workspaceId}`,
+              wallet: `wallet-${context.workspaceId}`,
+            },
+          },
+        });
+      }
+      if (url.endsWith('/api/workspace/context')) {
+        return jsonResponse({ context: ambientFreeContext });
+      }
+      return jsonResponse({});
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(capturedPlanCalls.at(-1)).toEqual({
+        plan: 'team_pro',
+        planResolved: true,
+      });
     });
     expect(capturedPlanCalls.some((call) => call.plan === 'free')).toBe(false);
   });

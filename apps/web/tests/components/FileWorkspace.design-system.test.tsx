@@ -175,7 +175,7 @@ function todoWrite(
 }
 
 describe('FileWorkspace design-system project surface', () => {
-  it('keeps a legacy logo-only brand.json visible with the exact project Workspace scope', async () => {
+  it('keeps a legacy logo-only brand.json visible through server-derived project authority', async () => {
     const workspaceContext = teamContext();
     registryMocks.fetchProjectFileText.mockImplementation((_projectId: string, name: string) => {
       if (name === 'DESIGN.md') return Promise.resolve('# Legacy Logo');
@@ -211,8 +211,8 @@ describe('FileWorkspace design-system project surface', () => {
     expect(logo).toBeTruthy();
     const logoUrl = new URL(logo!.src);
     expect(logoUrl.pathname).toBe('/api/projects/ds-legacy-logo/raw/assets/logo.svg');
-    expect(logoUrl.searchParams.get('workspaceId')).toBe('workspace-logo');
-    expect(logoUrl.searchParams.get('workspaceMemberId')).toBe('member-logo');
+    expect(logoUrl.searchParams.get('workspaceId')).toBeNull();
+    expect(logoUrl.searchParams.get('workspaceMemberId')).toBeNull();
   });
 
   it('renders the brand.html-style kit modules from the project DESIGN.md', async () => {

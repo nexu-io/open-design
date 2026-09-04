@@ -37,6 +37,57 @@ export interface AtomBodyEntryView {
  *
  *   The trailing `---` separator is omitted after the last atom.
  */
+export interface StageAtomBodiesView {
+  stageId:    string;
+  bodies:     ReadonlyArray<AtomBodyEntryView>;
+  iteration?: number;
+}
+
+/**
+ * Render every pipeline stage's `## Active stage` block, inlining each
+ * atom's body exactly once across the whole pipeline (issue #6238).
+ *
+ * Invariant: the first stage that carries a non-empty body for an atom
+ * inlines it in full; any later stage that references the same atom
+ * keeps its `### <atomId>` subsection but replaces the body with a
+ * one-line pointer back to the stage that inlined it. Stage headers are
+ * preserved per spec §23.4 (each stage still renders its own block);
+ * only the duplicated body text is collapsed.
+ *
+ * Stages whose atoms all resolve to empty bodies render nothing and are
+ * dropped, matching `renderActiveStageBlock`'s empty-string contract.
+ */
+export function renderActiveStageBlocks(
+  stages: ReadonlyArray<StageAtomBodiesView>,
+): string[] {
+  const inlinedAtomStage = new Map<string, string>();
+  const blocks: string[] = [];
+  for (const stage of stages) {
+    const bodies = stage.bodies
+      .filter((entry) => entry.body && entry.atomId)
+      .map((entry) => {
+        const firstStageId = inlinedAtomStage.get(entry.atomId);
+        if (firstStageId !== undefined) {
+          return {
+            atomId: entry.atomId,
+            body:
+              `Atom \`${entry.atomId}\` — body already included under `
+              + `\`## Active stage: ${firstStageId}\` above; apply it in this stage as well.`,
+          };
+        }
+        inlinedAtomStage.set(entry.atomId, stage.stageId);
+        return entry;
+      });
+    const block = renderActiveStageBlock({
+      stageId: stage.stageId,
+      bodies,
+      ...(stage.iteration !== undefined ? { iteration: stage.iteration } : {}),
+    });
+    if (block.trim().length > 0) blocks.push(block);
+  }
+  return blocks;
+}
+
 export function renderActiveStageBlock(args: {
   stageId:    string;
   bodies:     ReadonlyArray<AtomBodyEntryView>;

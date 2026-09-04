@@ -9,7 +9,7 @@ rest are guidance for agents and reviewers and are flagged inline as
 honest.
 
 > Adapted from [refero_skill](https://github.com/referodesign/refero_skill)
-> (MIT), tightened to match Open Design's lint surface.
+> (MIT), tightened to match OpenDesign's lint surface.
 
 ## The seven cardinal sins
 

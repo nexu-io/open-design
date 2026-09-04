@@ -44,7 +44,7 @@ import { readAppConfig, writeAppConfig } from '../src/app-config.js';
 import { listProviderModels } from '../src/integrations/provider-models.js';
 import { readVelaCredentialRevision } from '../src/integrations/vela.js';
 import { startServer } from '../src/server.js';
-import { rememberLiveModels } from '../src/runtimes/models.js';
+import { getRememberedLiveModels, rememberLiveModels } from '../src/runtimes/models.js';
 import { amrModelLoadingCache } from '../src/runtimes/amr-model-cache.js';
 import { buildAmrModelCacheKey } from '../src/runtimes/amr-model-probe.js';
 
@@ -1070,6 +1070,45 @@ describe('POST /api/test/connection provider mode', () => {
     expect(body.status).toBe(404);
   });
 
+  it('maps OpenRouter no-endpoints 404 responses to not_found_model', async () => {
+    vi.stubGlobal(
+      'fetch',
+      passThroughOrUpstream(() =>
+        jsonResponse(
+          {
+            error: {
+              message: 'No endpoints found for anthropic/claude-3.7-sonnet.',
+            },
+          },
+          { status: 404 },
+        ),
+      ),
+    );
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        apiKey: 'sk-or-test',
+        model: 'anthropic/claude-3.7-sonnet',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+
+    expect(body).toMatchObject({
+      ok: false,
+      kind: 'not_found_model',
+      status: 404,
+      model: 'anthropic/claude-3.7-sonnet',
+    });
+    expect(body.detail).toBe(
+      'No endpoints found for anthropic/claude-3.7-sonnet.',
+    );
+  });
+
   it('maps an ambiguous 404 to invalid_base_url', async () => {
     vi.stubGlobal(
       'fetch',
@@ -1502,6 +1541,63 @@ describe('POST /api/test/connection provider mode', () => {
     expect(secondBody).toMatchObject({
       model: 'prod',
       messages: [{ role: 'user', content: 'Reply with only: ok' }],
+      max_completion_tokens: 100,
+      stream: false,
+    });
+    expect(secondBody).not.toHaveProperty('max_tokens');
+  });
+
+  it('retries Azure-hosted OpenAI protocol alias connection tests when max_tokens is rejected', async () => {
+    const fetchMock = passThroughOrUpstream((url, init) => {
+      if (url.endsWith('/models')) {
+        return jsonResponse({
+          data: [{ id: 'gpt-chat-latest', object: 'model' }],
+        });
+      }
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if ('max_tokens' in body) {
+        return jsonResponse({
+          error: {
+            message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+            type: 'invalid_request_error',
+            param: 'max_tokens',
+            code: 'unsupported_parameter',
+          },
+        }, { status: 400 });
+      }
+      return jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'https://resource.services.ai.azure.com/api/projects/project/openai/v1',
+        apiKey: 'azure-key',
+        model: 'gpt-chat-latest',
+      }),
+    });
+
+    const responseBody = (await res.json()) as Record<string, unknown>;
+    expect(responseBody.ok).toBe(true);
+    const chatCalls = fetchMock.mock.calls.filter(
+      ([input]) => String(input).endsWith('/chat/completions'),
+    );
+    expect(chatCalls).toHaveLength(2);
+    const firstBody = JSON.parse(String(chatCalls[0]![1]?.body));
+    const secondBody = JSON.parse(String(chatCalls[1]![1]?.body));
+    expect(firstBody).toMatchObject({
+      model: 'gpt-chat-latest',
+      max_tokens: 100,
+      stream: false,
+    });
+    expect(secondBody).toMatchObject({
+      model: 'gpt-chat-latest',
       max_completion_tokens: 100,
       stream: false,
     });
@@ -2872,7 +2968,7 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
 setImmediate(() => process.exit(0));
 `,
         async () => {
-          // These keys come from the process environment, not Open Design
+          // These keys come from the process environment, not OpenDesign
           // BYOK/agentCliEnv. Preserve them so local CLI API-key auth works.
           const res = await realFetch(`${baseUrl}/api/test/connection`, {
             method: 'POST',
@@ -3042,6 +3138,48 @@ process.stdin.on('end', () => {
       else process.env.ANTHROPIC_AUTH_TOKEN = previousToken;
       await fsp.rm(markerDir, { recursive: true, force: true });
     }
+  });
+
+  it('reports the concrete model resolved from a Claude alias', async () => {
+    await withFakeClaude(
+      `
+console.log(JSON.stringify({
+  type: 'system',
+  subtype: 'init',
+  model: 'claude-opus-5',
+  session_id: 'test-session',
+}));
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { input += chunk; });
+process.stdin.on('end', () => {
+  JSON.parse(input.trim());
+  console.log(JSON.stringify({
+    type: 'assistant',
+    message: {
+      id: 'msg_1',
+      content: [{ type: 'text', text: 'ok' }],
+      stop_reason: 'end_turn',
+    },
+  }));
+});
+`,
+      async () => {
+        const result = await testAgentConnection({
+          agentId: 'claude',
+          model: 'opus',
+        });
+
+        expect(result).toMatchObject({
+          ok: true,
+          kind: 'success',
+          model: 'opus',
+          resolvedModel: 'claude-opus-5',
+          agentName: 'Claude Code',
+          sample: 'ok',
+        });
+      },
+    );
   });
 
   it('waits for the Codex process before accepting early success text', async () => {
@@ -3807,22 +3945,67 @@ process.stdin.on('end', () => {
             sample: 'ok',
           });
 
-          await expect(fsp.readFile(argvFile, 'utf8')).resolves.toBe(
-            JSON.stringify([
-              'run',
-              '--format',
-              'json',
-              '-m',
-              'github-copilot/gpt-4o',
-              '--pure',
-              '--title',
-              'Connection test',
-            ]),
-          );
+          // `--dir` pins OpenCode's workspace to the probe's own temp cwd, so
+          // a connection test cannot adopt the repository root as its
+          // worktree. The path is minted per probe; everything around it still
+          // has to match byte-for-byte, since the 1.3 compatibility this test
+          // guards is a property of the argument ORDER.
+          const argv = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
+          expect(argv.slice(0, 3)).toEqual(['run', '--format', 'json']);
+          expect(argv[3]).toBe('--dir');
+          expect(path.isAbsolute(argv[4] ?? '')).toBe(true);
+          expect(argv.slice(5)).toEqual([
+            '-m',
+            'github-copilot/gpt-4o',
+            '--pure',
+            '--title',
+            'Connection test',
+          ]);
           await expect(fsp.readFile(stdinFile, 'utf8')).resolves.toBe('Reply with only: ok');
         },
       );
     } finally {
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not reuse another OpenCode binary variant catalog for an OPENCODE_BIN connection test', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-variant-scope-'));
+    const bin = path.join(markerDir, 'opencode-other');
+    const argvFile = path.join(markerDir, 'argv.json');
+    const previousModels = getRememberedLiveModels('opencode');
+    rememberLiveModels('opencode', [{
+      id: 'openai/gpt-5.6-sol',
+      label: 'openai/gpt-5.6-sol',
+      reasoningOptions: [{ id: 'high', label: 'high' }],
+    }]);
+    try {
+      await fsp.writeFile(
+        bin,
+        `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
+process.stdin.resume();
+process.stdin.on('end', () => console.log(JSON.stringify({ type: 'text', part: { text: 'ok' } })));
+`,
+      );
+      await fsp.chmod(bin, 0o755);
+
+      const result = await testAgentConnection({
+        agentId: 'opencode',
+        model: 'openai/gpt-5.6-sol',
+        reasoning: 'high',
+        agentCliEnv: { opencode: { OPENCODE_BIN: bin } },
+      });
+
+      expect(result).toMatchObject({ ok: true, kind: 'success', agentName: 'OpenCode' });
+      const argv = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
+      expect(argv).toContain('openai/gpt-5.6-sol');
+      expect(argv).not.toContain('--variant');
+      expect(argv).not.toContain('high');
+    } finally {
+      rememberLiveModels('opencode', previousModels);
       await fsp.rm(markerDir, { recursive: true, force: true });
     }
   });

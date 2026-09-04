@@ -53,6 +53,26 @@ describe('planWorkspaceProjectReconciliation (pure)', () => {
     ]);
   });
 
+  it('never promotes an owner placeholder before its content materialization commits', () => {
+    const placeholder = {
+      projectId: 'p1',
+      workspaceId: WORKSPACE_ID,
+      visibility: 'team' as const,
+      resourceState: 'active',
+      createdByWorkspaceMemberId: null,
+      resourceHubResourceId: 'resource-abc',
+      materializationPending: true as const,
+    };
+    const actions = planWorkspaceProjectReconciliation({
+      workspaceId: WORKSPACE_ID,
+      workspaceMemberId: OWNER_MEMBER_ID,
+      remoteProjects: [{ projectId: 'p1', ownerMemberId: OWNER_MEMBER_ID }],
+      localBindings: new Map([['p1', placeholder]]),
+    });
+
+    expect(actions).toEqual([]);
+  });
+
   it('preserves an already-known resourceHubResourceId when correcting a row', () => {
     const local: LocalTeamProjectBinding = {
       projectId: 'p1',

@@ -638,6 +638,66 @@ describe('API proxy routes', () => {
     expect(secondBody).not.toHaveProperty('max_tokens');
   });
 
+  it('retries Azure-hosted OpenAI protocol alias requests when max_tokens is rejected', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if ('max_tokens' in body) {
+        return Promise.resolve(new Response(
+          JSON.stringify({
+            error: {
+              message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+              type: 'invalid_request_error',
+              param: 'max_tokens',
+              code: 'unsupported_parameter',
+            },
+          }),
+          { status: 400, headers: { 'content-type': 'application/json' } },
+        ));
+      }
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://resource.services.ai.azure.com/api/projects/project/openai/v1',
+        apiKey: 'azure-key',
+        model: 'gpt-chat-latest',
+        maxTokens: 1234,
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    await expect(res.text()).resolves.toContain('event: end');
+    const upstreamCalls = fetchMock.mock.calls.filter(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(upstreamCalls).toHaveLength(2);
+    expect(String(upstreamCalls[0]![0])).toBe(
+      'https://resource.services.ai.azure.com/api/projects/project/openai/v1/chat/completions',
+    );
+    expect(upstreamCalls[0]![1]?.headers).toMatchObject({
+      Authorization: 'Bearer azure-key',
+    });
+    const firstBody = JSON.parse(String(upstreamCalls[0]![1]?.body));
+    const secondBody = JSON.parse(String(upstreamCalls[1]![1]?.body));
+    expect(firstBody).toMatchObject({
+      model: 'gpt-chat-latest',
+      max_tokens: 1234,
+      stream: true,
+    });
+    expect(secondBody).toMatchObject({
+      model: 'gpt-chat-latest',
+      max_completion_tokens: 1234,
+      stream: true,
+    });
+    expect(secondBody).not.toHaveProperty('max_tokens');
+  });
+
   it('retries Azure deployment-mode requests with max_completion_tokens when max_tokens is rejected', async () => {
     const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
       const url = String(input);
@@ -1498,7 +1558,7 @@ describe('API proxy routes', () => {
       if (url === 'https://api.senseaudio.cn/v1/image/sync') {
         return new Response(
           JSON.stringify({
-            url: 'https://cdn.example.test/cat.png',
+            url: 'https://93.184.216.34/cat.png',
             base_resp: { status_code: 0, status_msg: 'success' },
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
@@ -1506,7 +1566,7 @@ describe('API proxy routes', () => {
       }
 
       // Image bytes download (initiated by the tool, not via the proxy)
-      if (url === 'https://cdn.example.test/cat.png') {
+      if (url === 'https://93.184.216.34/cat.png') {
         return new Response(pngBytes, {
           status: 200,
           headers: { 'content-type': 'image/png' },
@@ -1722,11 +1782,11 @@ describe('API proxy routes', () => {
       if (url.startsWith(baseUrl)) return realFetch(input, init);
       if (url === 'https://api.senseaudio.cn/v1/image/sync') {
         return new Response(
-          JSON.stringify({ url: 'https://cdn.example.test/x.png' }),
+          JSON.stringify({ url: 'https://93.184.216.34/x.png' }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
-      if (url === 'https://cdn.example.test/x.png') {
+      if (url === 'https://93.184.216.34/x.png') {
         return new Response(Buffer.from([0x89, 0x50]), { status: 200 });
       }
       if (url === 'https://api.senseaudio.cn/v1/chat/completions') {
@@ -1780,11 +1840,11 @@ describe('API proxy routes', () => {
       if (url.startsWith(baseUrl)) return realFetch(input, init);
       if (url === 'https://api.senseaudio.cn/v1/image/sync') {
         return new Response(
-          JSON.stringify({ url: 'https://cdn.example.test/served.png' }),
+          JSON.stringify({ url: 'https://93.184.216.34/served.png' }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
-      if (url === 'https://cdn.example.test/served.png') {
+      if (url === 'https://93.184.216.34/served.png') {
         return new Response(pngBytes, { status: 200 });
       }
       if (url === 'https://api.senseaudio.cn/v1/chat/completions') {

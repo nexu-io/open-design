@@ -370,6 +370,9 @@
   /* removed: position, bottom, left, right, margin-bottom, fixed max-height, z-index */
 }
 .slash-popover-head {
+  /* Never a shrink target: the head is a flex child of a height-capped
+     column, so without this a long list squeezes the "COMMANDS" strip. */
+  flex: 0 0 auto;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -390,6 +393,20 @@
   letter-spacing: 0;
   color: var(--text-muted);
 }
+/* The rows' own scroll port. Command rows must NOT be direct flex children of
+   `.slash-popover`: that column is height-capped (`--cfl-max-h`), so flexbox
+   answers an overflowing list by shrinking every row down to its
+   `min-height` floor, and each row's second line (the description) spills out
+   of its own box onto its neighbours. Inside this block-level scroller the
+   rows keep their natural height and the overflow scrolls instead.
+   `min-height: 0` is what lets the scroller shrink below its content inside
+   the flex column — without it there is nothing to scroll. */
+.slash-popover-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scroll-padding-block: 6px;
+}
 .slash-item {
   display: flex;
   align-items: flex-start;
@@ -403,6 +420,12 @@
   cursor: pointer;
   font: inherit;
   min-height: 34px;
+  /* Override the global `button { height: 36px }` (styles/primitives.css) so a
+     two-line row can grow. Without this the row is pinned at 36px while its
+     command line + description need 54px, and the description paints outside
+     the row box onto the row below -- measured at 9px of overflow in Chrome
+     151. Same primitive that centers these chips' flex line elsewhere. */
+  height: auto;
   transition: background-color 120ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .slash-item:hover { background: var(--bg-subtle); }
@@ -495,8 +518,8 @@
   position: fixed;
   inset: 0;
   background: rgba(13, 12, 10, 0.32);
-  /* Sits in the modal tier (alongside prompt-template-modal-overlay) so
-   * the palette renders above any open context menus or popovers. */
+  /* Sits in the modal tier so the palette renders above any open context
+   * menus or popovers. */
   z-index: 1500;
   display: flex;
   align-items: flex-start;

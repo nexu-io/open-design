@@ -5,7 +5,7 @@ active design system decides *which* fonts; this file decides *how* they
 behave at every size.
 
 > Adapted from [refero_skill](https://github.com/referodesign/refero_skill)
-> (MIT) — distilled and re-tuned for Open Design's token system.
+> (MIT) — distilled and re-tuned for OpenDesign's token system.
 
 ## Type scale
 

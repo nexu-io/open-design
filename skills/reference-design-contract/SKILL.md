@@ -63,7 +63,7 @@ without guessing.
 
 Create three files:
 
-1. `DESIGN.md` — the reusable visual direction, following Open Design's
+1. `DESIGN.md` — the reusable visual direction, following OpenDesign's
    standard nine-section design-system shape.
 2. `design-contract.md` — the decision record: evidence used, keep/change
    boundaries, rationale, risks, and quality gate.

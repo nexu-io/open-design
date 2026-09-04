@@ -3,9 +3,9 @@ name: huashu-annual-letter
 en_name: "Write an Annual Founder's Letter like a Mission-Driven CEO"
 zh_name: "像使命驱动的 CEO 一样写年度公开信"
 description: |
-  Open Design's annual letter to its community: the year's story, what it learned, and where it's going next. Built as a decision-grade corporate strategy deck for community, contributors, investors.
+  OpenDesign's annual letter to its community: the year's story, what it learned, and where it's going next. Built as a decision-grade corporate strategy deck for community, contributors, investors.
 en_description: |
-  Open Design's annual letter to its community: the year's story, what it learned, and where it's going next. Built as a decision-grade corporate strategy deck for community, contributors, investors.
+  OpenDesign's annual letter to its community: the year's story, what it learned, and where it's going next. Built as a decision-grade corporate strategy deck for community, contributors, investors.
 zh_description: |
   像使命驱动的 CEO 一样写年度公开信——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -39,7 +39,7 @@ od:
     zh-CN: "用「年度信笺」模板把我的年度复盘写成一封 Stripe 年信风格的 HTML 幻灯片：奶白 #FBFAF8 纸面、单一 Stripe 紫 #635BFF 点睛、65ch 行宽衬线散文、内联数据卡、超大 tabular 数字锚点页，键盘 ←/→/空格翻页 + #/N hash 跳页。从 example.html 出发只换内容，不要重写设计。"
   category: "corporate-strategy"
   scenario: "strategy"
-  example_prompt: "Create \"Write an Annual Founder's Letter like a Mission-Driven CEO\" as a decision-grade Corporate strategy deck in this template's own visual system. Subject: Open Design's annual letter to its community: the year's story, what it learned, and where it's going next. Audience: community, contributors, investors. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a board member know what to approve and why before page five."
+  example_prompt: "Create \"Write an Annual Founder's Letter like a Mission-Driven CEO\" as a decision-grade Corporate strategy deck in this template's own visual system. Subject: OpenDesign's annual letter to its community: the year's story, what it learned, and where it's going next. Audience: community, contributors, investors. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a board member know what to approve and why before page five."
 ---
 
 # Annual Letter · 年度信笺

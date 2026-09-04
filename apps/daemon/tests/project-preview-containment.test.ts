@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { ensureWorkspaceProject, openDatabase } from '../src/db.js';
 import { startServer } from '../src/server.js';
+import { rewriteOutsideExecutableHtmlRanges } from '../src/routes/project/index.js';
 
 describe('project preview containment routes', () => {
   let server: http.Server;
@@ -111,6 +112,7 @@ describe('project preview containment routes', () => {
       csp: string;
       iframeSandbox: string;
       opaqueOrigin: true;
+      expiresAt: number;
     };
 
     expect(body.file).toBe('pages/index.html');
@@ -122,6 +124,25 @@ describe('project preview containment routes', () => {
     expect(body.csp).toContain("connect-src 'none'");
     expect(body.csp).not.toContain('allow-same-origin');
     expect(body.opaqueOrigin).toBe(true);
+    expect(body.expiresAt).toBeGreaterThan(Date.now());
+
+    const renewalScope = /\/preview\/([^/]+)\//u.exec(body.url)?.[1];
+    expect(renewalScope).toBeTruthy();
+    const rejectedRenewal = await fetch(
+      `${baseUrl}/api/projects/${projectId}/preview/${renewalScope}/renew`,
+      { method: 'POST' },
+    );
+    expect(rejectedRenewal.status).toBe(403);
+    const renewal = await fetch(
+      `${baseUrl}/api/projects/${projectId}/preview/${renewalScope}/renew`,
+      {
+        method: 'POST',
+        headers: { 'x-od-preview-scope-renewal': '1' },
+      },
+    );
+    expect(renewal.status).toBe(200);
+    const renewed = await renewal.json() as { expiresAt: number };
+    expect(renewed.expiresAt).toBeGreaterThanOrEqual(body.expiresAt);
 
     const previewResponse = await fetch(`${baseUrl}${body.url}`, {
       headers: { Origin: 'null' },
@@ -146,6 +167,86 @@ describe('project preview containment routes', () => {
     expect(assetResponse.headers.get('access-control-allow-origin')).toBe('*');
     expect(assetResponse.headers.get('content-type')).toContain('text/css');
     expect(await assetResponse.text()).toContain('color: black');
+  });
+
+  it('preserves script contents while rewriting workspace-scoped asset URLs', async () => {
+    const workspaceId = `workspace-${randomUUID()}`;
+    const workspaceMemberId = `member-${randomUUID()}`;
+    const projectId = await createProject({ entryFile: 'index.html' });
+    const script = [
+      'const src = "assets/runtime.png";',
+      'const markup = \'<link href="styles/runtime.css">'
+        + '<img src="assets/runtime.png" srcset="assets/runtime.png 1x">\';',
+      "const cssText = 'background: url(\"assets/runtime.png\")';",
+      "const url = 'blob:preview'; URL.revokeObjectURL(url);",
+    ].join(' ');
+    const inlineHandler = 'URL.revokeObjectURL(url)';
+    const dataUrl = 'data:text/html,<script>URL.revokeObjectURL(url)</script>';
+    const newlineJavascriptUrl = 'java\nscript:URL.revokeObjectURL(url)';
+    const tabJavascriptUrl = 'java\tscript:URL.revokeObjectURL(url)';
+    const vbscriptUrl = 'vbscript:URL.revokeObjectURL(url)';
+    const xlinkJavascriptUrl = "javascript:url('assets/executable.svg')";
+    const xlinkDataUrl = "data:image/svg+xml,<svg onload=url('assets/data.svg')></svg>";
+    await writeProjectFile(
+      projectId,
+      'index.html',
+      [
+        '<!doctype html>',
+        '<html><head>',
+        '<!-- code sample: <script> -->',
+        '<textarea><script></textarea>',
+        '<script src="assets/external.js"></script>',
+        `<script>${script}</script>`,
+        '</head><body>',
+        `<button onclick="${inlineHandler}" style="background: url(assets/button.png)">Revoke</button>`,
+        `<img src="assets/image.png" srcset="assets/image-1x.png 1x" onerror="${inlineHandler}">`,
+        `<link onload="${inlineHandler}" href="assets/theme-before.css" rel="stylesheet">`,
+        `<link href="assets/theme-after.css" onload="${inlineHandler}" rel="stylesheet">`,
+        `<iframe src="${dataUrl}"></iframe>`,
+        `<a href="${newlineJavascriptUrl}">Newline executable URL</a>`,
+        `<a href="${tabJavascriptUrl}">Tab executable URL</a>`,
+        `<a href="${vbscriptUrl}">Legacy executable URL</a>`,
+        `<svg><a xlink:href="${xlinkJavascriptUrl}">Namespaced executable URL</a></svg>`,
+        `<svg><a xlink:href="${xlinkDataUrl}">Namespaced data URL</a></svg>`,
+        '<style>.hero { background: url("assets/background.png"); }</style>',
+        '</body></html>',
+      ].join(''),
+    );
+    bindPersonalProject(projectId, workspaceId, workspaceMemberId);
+
+    const scopeQuery = new URLSearchParams({ workspaceId, workspaceMemberId });
+    const response = await fetch(
+      `${baseUrl}/api/projects/${projectId}/raw/index.html?${scopeQuery}`,
+    );
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    const scopedAssetUrl = (assetPath: string) =>
+      `/api/projects/${projectId}/raw/${assetPath}?workspaceId=${workspaceId}`
+      + `&workspaceMemberId=${workspaceMemberId}`;
+
+    expect(html).toContain(`<script>${script}</script>`);
+    expect(html).toContain(
+      `onclick="${inlineHandler}" style="background: url(${scopedAssetUrl('assets/button.png')})"`,
+    );
+    expect(html).toContain(`<script src="${scopedAssetUrl('assets/external.js')}">`);
+    expect(html).toContain(
+      `<img src="${scopedAssetUrl('assets/image.png')}"`
+      + ` srcset="${scopedAssetUrl('assets/image-1x.png')} 1x" onerror="${inlineHandler}">`,
+    );
+    expect(html).toContain(`srcset="${scopedAssetUrl('assets/image-1x.png')} 1x"`);
+    expect(html).toContain(
+      `<link onload="${inlineHandler}" href="${scopedAssetUrl('assets/theme-before.css')}"`,
+    );
+    expect(html).toContain(
+      `<link href="${scopedAssetUrl('assets/theme-after.css')}" onload="${inlineHandler}"`,
+    );
+    expect(html).toContain(`<iframe src="${dataUrl}"></iframe>`);
+    expect(html).toContain(`<a href="${newlineJavascriptUrl}">Newline executable URL</a>`);
+    expect(html).toContain(`<a href="${tabJavascriptUrl}">Tab executable URL</a>`);
+    expect(html).toContain(`<a href="${vbscriptUrl}">Legacy executable URL</a>`);
+    expect(html).toContain(`xlink:href="${xlinkJavascriptUrl}"`);
+    expect(html).toContain(`xlink:href="${xlinkDataUrl}"`);
+    expect(html).toContain(`url("${scopedAssetUrl('assets/background.png')}")`);
   });
 
   it('serves generated PNG assets through preview scopes and clearly 404s missing image references', async () => {
@@ -186,7 +287,7 @@ describe('project preview containment routes', () => {
     expect(missingBody.error?.message).toContain('assets/missing.png');
   });
 
-  it('binds runtime-created relative assets to the verified Workspace preview authority', async () => {
+  it('derives Workspace authority for headerless project previews and their runtime-created assets', async () => {
     const workspaceId = `workspace-${randomUUID()}`;
     const workspaceMemberId = `member-${randomUUID()}`;
     const projectId = await createProject({ entryFile: 'brand.html' });
@@ -210,13 +311,31 @@ describe('project preview containment routes', () => {
     expect(scopedPlainRawResponse.status).toBe(200);
     expect(await scopedPlainRawResponse.text()).not.toContain('<base href=');
 
+    const unscopedRawResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/raw/brand.html`,
+    );
+    expect(unscopedRawResponse.status).toBe(200);
+    expect(await unscopedRawResponse.text()).not.toContain('<base href=');
+
     const unscopedLogoResponse = await fetch(
       `${baseUrl}/api/projects/${projectId}/raw/logos/mark.png`,
     );
-    expect(unscopedLogoResponse.status).toBe(400);
-    expect(await unscopedLogoResponse.json()).toMatchObject({
-      error: { code: 'WORKSPACE_CONTEXT_REQUIRED' },
-    });
+    expect(unscopedLogoResponse.status).toBe(200);
+    expect(await unscopedLogoResponse.text()).toBe('brand-logo-bytes');
+
+    const previewUrlResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/preview-url?file=brand.html`,
+    );
+    expect(previewUrlResponse.status).toBe(200);
+    const previewUrlBody = await previewUrlResponse.json() as { url?: string };
+    expect(previewUrlBody.url).toMatch(
+      new RegExp(`^/api/projects/${projectId}/preview/[A-Za-z0-9_-]{8,128}/brand\\.html$`, 'u'),
+    );
+    const headerlessPreviewResponse = await fetch(
+      new URL(previewUrlBody.url!, baseUrl),
+    );
+    expect(headerlessPreviewResponse.status).toBe(200);
+    expect(await headerlessPreviewResponse.text()).toContain('<title>Brand</title>');
 
     scopeQuery.append('odPreviewBridge', 'scroll');
     const rawResponse = await fetch(
@@ -228,6 +347,19 @@ describe('project preview containment routes', () => {
     expect(baseHref).toMatch(
       new RegExp(`^/api/projects/${projectId}/preview/[A-Za-z0-9_-]{8,128}/$`, 'u'),
     );
+    expect(html).toContain('data-od-project-preview-base');
+    expect(html).toContain('data-od-preview-base-bridge');
+    expect(html).toContain("type: 'od:preview-base-scope'");
+
+    const workspaceScope = /\/preview\/([^/]+)\//u.exec(baseHref!)?.[1];
+    const workspaceRenewal = await fetch(
+      `${baseUrl}/api/projects/${projectId}/preview/${workspaceScope}/renew`,
+      {
+        method: 'POST',
+        headers: { 'x-od-preview-scope-renewal': '1' },
+      },
+    );
+    expect(workspaceRenewal.status).toBe(200);
 
     // The browser resolves runtime-created `img.src = "logos/mark.png"`
     // against <base>. A query-scoped raw document cannot do this because URL
@@ -371,4 +503,102 @@ describe('project preview containment routes', () => {
     );
     expect(escapingPath.status).toBe(400);
   });
+});
+
+describe('project preview HTML rewriting', () => {
+  const rewriteReference = (reference: string): string => `/preview/${reference}`;
+
+  it('preserves scripts while rewriting CSS URLs elsewhere in the document', () => {
+    const script = "const css = 'url(\"assets/runtime.png\")'; "
+      + "const url = 'blob:preview'; URL.revokeObjectURL(url);";
+    const html = [
+      '<!doctype html><html><head>',
+      '<!-- code sample: <script> -->',
+      '<textarea><script></textarea>',
+      `<script>${script}</script>`,
+      '</head><body>',
+      '<style>.hero { background: url("assets/hero.png"); }</style>',
+      '</body></html>',
+    ].join('');
+
+    const rewritten = rewriteOutsideExecutableHtmlRanges(html, (chunk) =>
+      chunk.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (match, quote: string, reference: string) => {
+        const rewrittenReference = rewriteReference(reference);
+        return rewrittenReference === reference
+          ? match
+          : `url(${quote}${rewrittenReference}${quote})`;
+      }));
+
+    expect(rewritten).toContain(`<script>${script}</script>`);
+    expect(rewritten).toContain('url("/preview/assets/hero.png")');
+  });
+
+  it('preserves executable HTML attributes while rewriting CSS URLs', () => {
+    const html = [
+      '<button onclick="URL.revokeObjectURL(url)" style="background: url(assets/hero.png)">Revoke</button>',
+      '<a href="javascript:URL.revokeObjectURL(url)">Revoke</a>',
+      '<iframe srcdoc="<script>URL.revokeObjectURL(url)</script>"></iframe>',
+    ].join('');
+
+    const rewritten = rewriteOutsideExecutableHtmlRanges(html, (chunk) =>
+      chunk.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (_match, quote: string, reference: string) =>
+        `url(${quote}${rewriteReference(reference)}${quote})`));
+
+    expect(rewritten).toContain(
+      'onclick="URL.revokeObjectURL(url)" style="background: url(/preview/assets/hero.png)"',
+    );
+    expect(rewritten).toContain('href="javascript:URL.revokeObjectURL(url)"');
+    expect(rewritten).toContain('srcdoc="<script>URL.revokeObjectURL(url)</script>"');
+  });
+
+  it('preserves an unclosed script through the end of the document', () => {
+    const html = '<script>const url = "blob:preview"; URL.revokeObjectURL(url)';
+
+    expect(rewriteOutsideExecutableHtmlRanges(html, (chunk) =>
+      chunk.replace('blob:preview', rewriteReference('blob:preview')))).toBe(html);
+  });
+
+  it('treats a self-closing slash on an HTML script as unclosed', () => {
+    const html = '<script/>const url = "blob:preview"; URL.revokeObjectURL(url)';
+
+    expect(rewriteOutsideExecutableHtmlRanges(html, (chunk) =>
+      chunk.replace('blob:preview', rewriteReference('blob:preview')))).toBe(html);
+  });
+
+  it('continues rewriting after a self-closing SVG script', () => {
+    const html = '<svg><script src="runtime.js" /></svg>'
+      + '<style>body { background: url(assets/hero.png); }</style>';
+
+    expect(rewriteOutsideExecutableHtmlRanges(html, (chunk) =>
+      chunk.replace('assets/hero.png', rewriteReference('assets/hero.png'))))
+      .toContain('url(/preview/assets/hero.png)');
+  });
+
+  it('avoids collisions with protected range markers already in the document', () => {
+    const script = 'const marker = "__OD_PROTECTED_HTML_RANGE_";';
+    const html = `<style>.__OD_PROTECTED_HTML_RANGE_ { background: url(assets/hero.png); }</style>`
+      + `<script>${script}</script>`;
+
+    const rewritten = rewriteOutsideExecutableHtmlRanges(html, (chunk) =>
+      chunk.replace('assets/hero.png', rewriteReference('assets/hero.png')));
+
+    expect(rewritten).toContain('.__OD_PROTECTED_HTML_RANGE_');
+    expect(rewritten).toContain('url(/preview/assets/hero.png)');
+    expect(rewritten).toContain(`<script>${script}</script>`);
+  });
+
+  it('bounds marker allocation for long prefix-like input', () => {
+    const script = 'const url = "blob:preview"; URL.revokeObjectURL(url);';
+    const html = `${'_'.repeat(100_000)}__OD_PROTECTED_HTML_RANGE_`
+      + `<style>body { background: url(assets/hero.png); }</style>`
+      + `<script>${script}</script>`;
+    const startedAt = performance.now();
+
+    const rewritten = rewriteOutsideExecutableHtmlRanges(html, (chunk) =>
+      chunk.replace('assets/hero.png', rewriteReference('assets/hero.png')));
+
+    expect(performance.now() - startedAt).toBeLessThan(2_000);
+    expect(rewritten).toContain('url(/preview/assets/hero.png)');
+    expect(rewritten).toContain(`<script>${script}</script>`);
+  }, 15_000);
 });

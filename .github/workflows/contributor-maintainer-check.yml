@@ -1,0 +1,44 @@
+name: Contributor maintainer check
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  issues: write
+
+concurrency:
+  group: contributor-maintainer-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  route:
+    if: github.repository == 'nexu-io/open-design'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Require maintainer check for configured contributors
+        uses: actions/github-script@v8
+        env:
+          NEEDS_MAINTAINER_CHECK_USER_IDS: ${{ secrets.NEEDS_MAINTAINER_CHECK_USER_IDS }}
+        with:
+          script: |
+            const rawIds = process.env.NEEDS_MAINTAINER_CHECK_USER_IDS?.trim();
+            const configuredIds = rawIds ? JSON.parse(rawIds) : [];
+            if (!Array.isArray(configuredIds) || !configuredIds.every((id) => Number.isSafeInteger(id) && id > 0)) {
+              core.setFailed('NEEDS_MAINTAINER_CHECK_USER_IDS must be a JSON array of positive integer GitHub user IDs.');
+              return;
+            }
+
+            const authorId = context.payload.pull_request?.user?.id;
+            if (!Number.isSafeInteger(authorId) || !configuredIds.includes(authorId)) {
+              return;
+            }
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              labels: ['needs-maintainer-check'],
+            });

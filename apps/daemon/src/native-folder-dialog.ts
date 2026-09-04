@@ -25,7 +25,7 @@ function hardLinuxFolderDialogFailure(error: unknown, stderrText: string): strin
 const WINDOWS_FOLDER_DIALOG_SCRIPT = [
   'Add-Type -AssemblyName System.Windows.Forms;',
   '$owner = New-Object System.Windows.Forms.Form;',
-  "$owner.Text = 'Open Design';",
+  "$owner.Text = 'OpenDesign';",
   '$owner.TopMost = $true;',
   '$owner.ShowInTaskbar = $true;',
   "$owner.StartPosition = 'CenterScreen';",

@@ -26,6 +26,7 @@ export {
 export {
   rememberLiveModels,
   isKnownModel,
+  isKnownReasoningEffort,
   isKnownServiceTier,
   sanitizeCustomModel,
 } from './runtimes/models.js';

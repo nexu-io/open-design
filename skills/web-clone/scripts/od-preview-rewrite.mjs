@@ -6,7 +6,7 @@ function usage() {
   console.log(`Usage:
   node scripts/od-preview-rewrite.mjs [--project <clone-dir>]
 
-Rewrites project-root asset URLs in HTML/CSS/SVG files so Open Design's
+Rewrites project-root asset URLs in HTML/CSS/SVG files so OpenDesign's
 file preview and exported zip can render the clone from nested entry files.
 `);
 }

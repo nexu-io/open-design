@@ -112,7 +112,7 @@ export function githubRepoNameFromPluginName(name: string): string {
 
 export const PLUGIN_SHARE_ACTION_LABELS: Record<PluginShareAction, string> = {
   'publish-github': 'Publish to GitHub',
-  'contribute-open-design': 'Contribute to Open Design',
+  'contribute-open-design': 'Contribute to OpenDesign',
 };
 
 export const USER_PLUGIN_SOURCE_KINDS = new Set([
@@ -159,10 +159,10 @@ export function renderPluginSharePrompt({ action, sourcePlugin, stagedPath }: Pl
   const title = sourcePlugin.title || sourcePlugin.id;
   if (action === 'publish-github') {
     return [
-      `Publish the local Open Design plugin "${title}" as a new public GitHub repository.`,
+      `Publish the local OpenDesign plugin "${title}" as a new public GitHub repository.`,
       '',
       `The plugin source files have been copied into this project at \`${stagedPath}\`.`,
-      'Use the local daemon share endpoint so the publish flow runs through Open Design\'s validated GitHub path:',
+      'Use the local daemon share endpoint so the publish flow runs through OpenDesign\'s validated GitHub path:',
       '',
       '```bash',
       `curl -sS -X POST "$OD_DAEMON_URL/api/projects/$OD_PROJECT_ID/plugins/publish-github" \\`,
@@ -176,10 +176,10 @@ export function renderPluginSharePrompt({ action, sourcePlugin, stagedPath }: Pl
     ].join('\n');
   }
   return [
-    `Open a pull request to add the local Open Design plugin "${title}" to the Open Design repository.`,
+    `Open a pull request to add the local OpenDesign plugin "${title}" to the OpenDesign repository.`,
     '',
     `The plugin source files have been copied into this project at \`${stagedPath}\`.`,
-    'Use the local daemon share endpoint so the contribution flow runs through Open Design\'s validated GitHub path:',
+    'Use the local daemon share endpoint so the contribution flow runs through OpenDesign\'s validated GitHub path:',
     '',
     '```bash',
     `curl -sS -X POST "$OD_DAEMON_URL/api/projects/$OD_PROJECT_ID/plugins/contribute-open-design" \\`,
@@ -407,7 +407,7 @@ export function upsertSkillPluginCandidateAssistantMessage(
   upsertMessage(db, run.conversationId, {
     id: messageId,
     role: 'assistant',
-    content: `Open Design found reusable skill material that can become a plugin: ${candidate.title}`,
+    content: `OpenDesign found reusable skill material that can become a plugin: ${candidate.title}`,
     events: [{
       kind: 'plugin_candidate',
       candidateId: candidate.id,

@@ -11,14 +11,15 @@ import type {
   WorkspaceProviderMode,
   WorkspaceType,
 } from '@open-design/contracts';
+import { resolveEffectiveVelaConsoleOrigin } from '../integrations/vela-console-origin.js';
 
 // The daemon's single B-integration point . Presence + sync need the
 // caller's workspace identity (workspaceMemberId + role + lifecycle). In
-// production this provider verifies the request's auth against the B service and
-// returns B's CurrentWorkspaceContext for that user; until B is reachable, the
-// dev provider below holds an in-memory context that a demo/tools-dev run can
-// set. Swapping the provider is the only change when B ships — routes and the
-// web client stay put.
+// production this provider verifies the signed-in identity against B's
+// workspace membership directory, then resolves the daemon's locally persisted
+// workspace selection; until B is reachable, the dev provider below holds an
+// in-memory context that a demo/tools-dev run can set. Swapping the provider is
+// the only change when B ships — routes and the web client stay put.
 
 export interface WorkspaceContextRequest {
   /** The caller's bearer token (a real provider verifies this against B). */
@@ -162,8 +163,8 @@ const BILLING_STATES: ReadonlySet<WorkspaceBillingState> = new Set([
   'locked',
 ]);
 
-/** Fallback billing state derived from lifecycle, used when a dev payload omits
- *  it. Production always carries B's authoritative `billingState`. */
+/** Fallback billing state derived from lifecycle, used when a dev payload or
+ *  membership-directory context does not carry a billing projection. */
 function billingStateForLifecycle(lifecycle: WorkspaceLifecycleState): WorkspaceBillingState {
   switch (lifecycle) {
     case 'active':
@@ -192,6 +193,7 @@ export function resolveWorkspaceSettingsUrl(
   workspaceId: string,
   explicit: unknown,
   env: NodeJS.ProcessEnv = process.env,
+  configuredEnv: Record<string, string> = {},
 ): string | undefined {
   // B's web console supports workspace deep links (?workspaceId=…): the target
   // page opens directly when it matches the account's Active Workspace, and
@@ -201,10 +203,24 @@ export function resolveWorkspaceSettingsUrl(
   // workspace another device left active, so every console link pins the id.
   // The low-cardinality source marker lets Vela attribute the resulting
   // Workspace management outcomes without carrying user-entered values.
+  const base = resolveEffectiveVelaConsoleOrigin(env, configuredEnv);
+  const hasRuntimeProfile = Boolean(
+    configuredEnv.OPEN_DESIGN_AMR_PROFILE?.trim() || configuredEnv.VELA_PROFILE?.trim(),
+  );
+  // A workspace payload can carry a console URL minted by the environment that
+  // last served it. After an in-app profile switch that value is stale by
+  // definition: letting it win would send create-team and workspace-settings
+  // actions back to prod while every API request already targets feature-test.
+  // The selected profile's build-injected origin is authoritative whenever a
+  // runtime selection exists; explicit URLs remain the compatibility source for
+  // deployments that do not support profile switching.
+  if (hasRuntimeProfile) {
+    if (!base) return undefined;
+    return withWorkspaceDeepLink(`${base.replace(/\/$/, '')}/settings`, workspaceId);
+  }
   if (typeof explicit === 'string' && explicit.trim()) {
     return withWorkspaceDeepLink(explicit.trim(), workspaceId);
   }
-  const base = env.OD_VELA_WEB_URL?.trim();
   if (!base) return undefined;
   return withWorkspaceDeepLink(`${base.replace(/\/$/, '')}/settings`, workspaceId);
 }

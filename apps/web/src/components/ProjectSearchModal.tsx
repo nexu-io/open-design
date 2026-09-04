@@ -29,6 +29,21 @@ interface Props {
   onClose: () => void;
 }
 
+/**
+ * Search spans both personal drafts and the shared workspace catalog. Shared
+ * cards win if a project temporarily appears in both lists because they carry
+ * the authoritative workspace-facing title and metadata.
+ */
+export function buildProjectSearchCatalog(
+  draftProjects: readonly Project[],
+  sharedProjects: readonly Project[],
+): Project[] {
+  const projectsById = new Map<string, Project>();
+  for (const project of draftProjects) projectsById.set(project.id, project);
+  for (const project of sharedProjects) projectsById.set(project.id, project);
+  return [...projectsById.values()];
+}
+
 export function ProjectSearchModal({
   projects,
   workspaceContext = null,

@@ -111,10 +111,9 @@ export function metadataChannel(metadata: Record<string, unknown>): DesktopUpdat
 
 export function releaseVersionForChannel(metadata: Record<string, unknown>, channel: DesktopUpdateChannel): string | null {
   if (channel === DESKTOP_UPDATE_CHANNELS.BETA) return stringField(metadata, "releaseVersion") ?? stringField(metadata, "betaVersion");
-  if (channel === DESKTOP_UPDATE_CHANNELS.BETAS) return stringField(metadata, "releaseVersion");
   if (channel === DESKTOP_UPDATE_CHANNELS.PRERELEASE) return stringField(metadata, "releaseVersion") ?? stringField(metadata, "prereleaseVersion");
-  if (channel === DESKTOP_UPDATE_CHANNELS.PREVIEW) return stringField(metadata, "releaseVersion") ?? stringField(metadata, "previewVersion");
-  return stringField(metadata, "releaseVersion") ?? stringField(metadata, "stableVersion");
+  if (channel === DESKTOP_UPDATE_CHANNELS.STABLE) return stringField(metadata, "releaseVersion") ?? stringField(metadata, "stableVersion");
+  return stringField(metadata, "releaseVersion");
 }
 
 export function selectedMacPlatformKey(arch: string): string {
@@ -443,4 +442,3 @@ export function checksumMatchesCandidate(checksum: ResolvedChecksumSnapshot, can
   if (candidate.checksum.value != null && checksum.value.toLowerCase() !== candidate.checksum.value.toLowerCase()) return false;
   return true;
 }
-

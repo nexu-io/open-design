@@ -305,7 +305,7 @@ async function uploadFile(name, content) {
     `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/u-fixture`,
     {
       role: "user",
-      content: "Create a small Open Design plugin.",
+      content: "Create a small OpenDesign plugin.",
       createdAt: now - 2000,
     },
   );

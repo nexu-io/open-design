@@ -121,6 +121,21 @@ export function decidePostToolResumeRecovery(
   const retryMaxAttempts = normalizeMaxAttempts(input.maxAttempts);
   const failure = input.failure;
   const sideEffects = input.sideEffects ?? {};
+  const isPostToolTransientFailure =
+    failure?.failure_stage === 'post_tool_resume' &&
+    failure.retryable === true &&
+    (
+      (failure.failure_category === 'timeout' &&
+        failure.failure_detail === 'inactivity_timeout') ||
+      (failure.failure_category === 'upstream_unavailable' &&
+        (
+          failure.failure_detail === 'stream_disconnected' ||
+          failure.failure_detail === 'upstream_5xx' ||
+          failure.failure_detail === 'provider_high_demand' ||
+          failure.failure_detail === 'provider_routing_error' ||
+          failure.failure_detail === 'network_error'
+        ))
+    );
   if (
     input.result !== 'failed' ||
     sideEffects.cancelRequested ||
@@ -128,10 +143,7 @@ export function decidePostToolResumeRecovery(
     !input.supportsNativeSessionContinue ||
     !input.hasNativeSession ||
     !sideEffects.toolCallSeen ||
-    failure?.failure_category !== 'timeout' ||
-    failure.failure_detail !== 'inactivity_timeout' ||
-    failure.failure_stage !== 'post_tool_resume' ||
-    failure.retryable !== true
+    !isPostToolTransientFailure
   ) {
     return null;
   }
@@ -186,8 +198,18 @@ function transientSuppressedReason(
       : 'unsafe_failure_stage';
   }
   if (category === 'process_exit') {
-    return detail === 'agent_protocol_error' ||
-      detail === 'qoder_stop_sequence' ||
+    // An `agent_protocol_error` raised while the session was still being
+    // opened (`session_init`) is deterministic: the agent CLI refused the
+    // handshake, so nothing streamed and re-running the identical request
+    // against the identical CLI build only reproduces the same rejection.
+    // Every other protocol failure reaches `child_close` — after a session
+    // existed — and stays transient. Scoped to this one detail so the other
+    // process-exit shapes (and a resume-expired session, which recovers by
+    // reseeding) keep retrying at any stage.
+    if (detail === 'agent_protocol_error') {
+      return stage === 'session_init' ? 'unsafe_failure_stage' : null;
+    }
+    return detail === 'qoder_stop_sequence' ||
       detail === 'session_resume_expired' ||
       detail === 'stream_error' ||
       detail === 'fatal_rpc_error'

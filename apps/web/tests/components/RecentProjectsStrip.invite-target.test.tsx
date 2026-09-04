@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -58,11 +58,6 @@ function teamContext(availableSeats: number): WorkspaceCollabContext {
   } as unknown as WorkspaceCollabContext;
 }
 
-function teamContextWithUnknownSeats(): WorkspaceCollabContext {
-  const context = teamContext(3);
-  return { ...context, seatSummary: undefined } as unknown as WorkspaceCollabContext;
-}
-
 function renderTeamProjects() {
   return render(
     <RecentProjectsStrip
@@ -78,6 +73,7 @@ afterEach(() => {
   cleanup();
   workspaceState.context = null;
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('RecentProjectsStrip invite target (recvqgbyLNk4eE)', () => {
@@ -107,13 +103,33 @@ describe('RecentProjectsStrip invite target (recvqgbyLNk4eE)', () => {
     expect(openSpy).not.toHaveBeenCalled();
   });
 
-  it('fails closed while the team seat state is unknown', () => {
-    workspaceState.context = teamContextWithUnknownSeats();
+  it('lets the invite API resolve the directory-derived zero/zero seat sentinel', async () => {
+    const context = teamContext(3);
+    workspaceState.context = {
+      ...context,
+      seatSummary: { seatLimit: 0, usedSeats: 0, availableSeats: 0, isSeatFull: true },
+    } as WorkspaceCollabContext;
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    const fetchSpy = vi.fn(async () => (
+      new Response(JSON.stringify({ results: [{ ok: true }] }), { status: 200 })
+    ));
+    vi.stubGlobal('fetch', fetchSpy);
     renderTeamProjects();
 
-    expect(
-      screen.queryByRole('button', { name: /Invite teammates|邀请同事/ }),
-    ).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Invite teammates|邀请同事/ }));
+
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getAllByRole('textbox')[0]!, {
+      target: { value: 'teammate@example.com' },
+    });
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: /Confirm and invite|确认并邀请/i }),
+    );
+
+    await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    const calls = fetchSpy.mock.calls as unknown[][];
+    expect(String(calls[0]?.[0])).toContain('/api/workspace/invite');
+    expect(openSpy).not.toHaveBeenCalled();
   });
 
   it('hides the invite entry when neither local capacity nor a safe Vela URL exists', () => {

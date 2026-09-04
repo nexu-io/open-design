@@ -318,6 +318,45 @@
   background: black;
   display: flex;
 }
+/* The presentation overlay is portaled to <body>, so the `.viewer`-scoped
+   `.present-exit-btn` rules in shell.css never reach it. This is the user's
+   only way out once focus moves into the sandboxed deck frame and Esc stops
+   arriving (OPEND-2156), so it sits above the frame and stays reachable.
+   Dimmed at rest so it does not compete with the slide, full strength on
+   hover/focus. */
+.present-overlay .present-exit-btn {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  right: 12px;
+  z-index: 1002;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  opacity: 0.55;
+  transition:
+    opacity 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.present-overlay:hover .present-exit-btn,
+.present-overlay .present-exit-btn:hover,
+.present-overlay .present-exit-btn:focus-visible {
+  opacity: 1;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.68);
+}
+.present-overlay .present-exit-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .present-overlay iframe {
   flex: 1;
   width: 100%;
@@ -402,13 +441,6 @@
   box-shadow: none;
 }
 .picker select:focus { outline: none; box-shadow: none; }
-.picker.agent-picker select { min-width: 140px; }
-.picker.agent-picker .icon-btn {
-  padding: 2px 8px;
-  background: transparent;
-  border: none;
-}
-
 /* Preview pane (legacy single-iframe path; kept for fallbacks) */
 .preview {
   display: flex;
@@ -465,126 +497,6 @@
 .app-project-title .title.editable:focus {
   background: var(--bg-subtle);
   box-shadow: 0 0 0 1px var(--accent);
-}
-
-/* Conversations dropdown — pill in the project topbar */
-.conv-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-panel);
-  font: inherit;
-  font-size: 12px;
-  color: inherit;
-  cursor: pointer;
-  user-select: none;
-  max-width: 220px;
-}
-.conv-pill:hover { background: var(--bg-subtle); }
-.conv-pill.open { background: var(--bg-subtle); border-color: var(--accent); }
-.conv-pill-icon { font-size: 13px; line-height: 1; }
-.conv-pill-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.conv-pill-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: var(--radius);
-  background: var(--bg-subtle);
-  color: var(--text-muted);
-  font-size: 12px;
-}
-.conv-menu {
-  position: fixed;
-  width: 320px;
-  max-height: 420px;
-  overflow-y: auto;
-  background: var(--glass-regular);
-  -webkit-backdrop-filter: var(--glass-backdrop);
-  backdrop-filter: var(--glass-backdrop);
-  border: 1px solid var(--material-separator);
-  border-radius: var(--radius);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-  z-index: 200;
-  padding: 8px;
-}
-.conv-menu-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 4px 6px 8px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 6px;
-  font-size: 12px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.conv-add-btn { padding: 2px 8px; font-size: 12px; }
-.conv-menu-empty {
-  padding: 16px 8px;
-  font-size: 12px;
-  color: var(--text-muted);
-  text-align: center;
-}
-.conv-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.conv-item {
-  display: flex;
-  align-items: stretch;
-  gap: 4px;
-  border-radius: var(--radius-sm);
-}
-.conv-item.active { background: var(--bg-subtle); }
-.conv-item-button {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px 8px;
-  border: none;
-  background: transparent;
-  text-align: left;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-.conv-item-button:hover { background: var(--bg-subtle); }
-.conv-item-name {
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.conv-item-meta {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.conv-item-del {
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 16px;
-  width: 24px;
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-}
-.conv-item-del:hover { background: var(--bg-subtle); color: var(--text); }
-.conv-rename-input {
-  flex: 1;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
-  background: var(--bg-panel);
-  padding: 6px 8px;
-  font: inherit;
-  font-size: 12px;
 }
 
 /* Collapsible system-reminder block in chat */
@@ -1787,6 +1699,18 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
 .qf-visual-card-on .qf-visual-card-name {
   opacity: 1;
   transform: translateY(0);
+}
+/* Terminal-blocked strategy task: the inline form is disabled and this strip
+   explains why (gate visible text, or the generic localized notice). */
+.qf-blocked-notice {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 .question-form-summary {
   display: flex;
@@ -3347,10 +3271,13 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding: 3px 6px 6px;
+  /* 8px sides so row edges line up with the search field above
+     (.chat-history-search margins 8px). No scrollbar-gutter: with classic
+     scrollbars enabled it reserves a right-side strip even when nothing
+     overflows, leaving rows visibly narrower than the search field. */
+  padding: 3px 8px 6px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-gutter: stable;
 }
 .chat-history-list.is-virtualized {
   gap: 0;

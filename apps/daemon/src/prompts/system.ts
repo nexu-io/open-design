@@ -38,18 +38,25 @@ import {
   SLIM_V2_ROLE_BOUNDARY_GUARD,
 } from './core-slim.js';
 import { renderDirectionIndexBlock, renderDirectionSpecBlock } from './directions.js';
-import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
-import { renderMediaGenerationContract } from './media-contract.js';
-import { IMAGE_MODELS } from '../media/models.js';
+import { renderDeckFrameworkDirective } from './deck-framework.js';
+import {
+  MEDIA_USER_REPLY_CONTRACT,
+  renderMediaGenerationContract,
+} from './media-contract.js';
 import { renderPanelPrompt } from './panel.js';
 import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
 import {
+  composeOdNextStrategyRequestPromptV2,
   executionProfileFromStreamFormat,
+  INTEGRATIONS_MCP_PATH,
+  SETTINGS_MEDIA_PROVIDERS_PATH,
   type ByokMediaDefaults,
   type ChatSessionMode,
+  type DeckFrameworkMode,
   type ExecutionProfile,
   type MediaExecutionPolicy,
   type MediaSurface,
+  type OdNextStrategyRequestRecipeV2,
 } from '@open-design/contracts';
 
 // Prepended first in every composed prompt so it wins precedence over all
@@ -90,7 +97,7 @@ function renderUiLocalePrompt(
   const lines = [
     '# UI locale override',
     '',
-    `The Open Design UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, descriptions, labels, placeholders, helper text, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
+    `The OpenDesign UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, descriptions, labels, placeholders, helper text, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
     `The artifacts you generate must also be in ${languageName}: every piece of user-visible copy in the HTML/React/page/deck you produce — headings, body text, navigation, button and link labels, captions, alt text, and form fields — is written in this language by default. This holds even when a chosen template, plugin, or design system ships its reference/example content in another language: treat that copy as a layout and style reference and translate/adapt it into ${languageName}, do not ship its wording verbatim. Keep brand names, code, and technical identifiers as-is, and honor an explicit user request for a different output language.`,
   ];
   // The worked zh-CN quick-brief copy below matches the CLASSIC default
@@ -130,7 +137,7 @@ function formatElevenLabsVoiceOptionsErrorForPrompt(
   if (!trimmed) return undefined;
 
   if (/no ElevenLabs API key/i.test(trimmed)) {
-    return `${ELEVENLABS_VOICE_OPTIONS_PROMPT_PREFIX} because the ElevenLabs API key is missing. Tell the user to configure it in Settings or paste a voice id manually.`;
+    return `${ELEVENLABS_VOICE_OPTIONS_PROMPT_PREFIX} because the ElevenLabs API key is missing. Tell the user to configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or paste a voice id manually.`;
   }
 
   const statusMatch = trimmed.match(
@@ -260,7 +267,7 @@ export function resolveExclusiveSurface(args: {
 // means the agent hand-rolls deck scaffolding — so every borderline term
 // stays in.
 const DECK_INTENT_SIGNAL =
-  /\b(slides?|deck|keynote|presentation|pitch\s?deck|(?:seed|pre[-\s]?seed|investor|fundraising|startup)\s+pitch|ppt(x)?|slideshow|carousel)\b|幻灯|简报|讲稿|演示|路演|汇报|宣讲|课件|讲解|演讲|提案/i;
+  /\b(slides?|deck|keynote|presentation|power\s?point|pitch\s?deck|(?:seed|pre[-\s]?seed|investor|fundraising|startup)\s+pitch|ppt(x)?|slideshow|carousel)\b|幻灯|简报|讲稿|演示|路演|汇报|宣讲|课件|讲解|演讲|提案/i;
 
 /**
  * Whether the outgoing user request reads as a slide-deck brief. Gates the
@@ -457,6 +464,10 @@ const MEDIA_DISPATCH_HINT = `
 
 If the user asks you to generate an image, video, or audio file — regardless of which provider or model they mention (fal, Replicate, OpenAI, etc.) — use the daemon dispatcher via your **Bash tool**. Do NOT call provider REST APIs directly.
 
+OpenDesign Cloud models use the \`vela/*\` prefix. Never invoke the \`vela\`
+CLI directly for those models: the OD dispatcher owns trusted Workspace
+attribution, polling, downloads, and final project-file placement.
+
 The daemon injects these env vars into your shell (**POSIX bash — not PowerShell**):
 
 - \`OD_NODE_BIN\`   — absolute path to the Node runtime
@@ -499,6 +510,8 @@ printf '%s\\n' "\$last"
 
 The command exits \`0\` with one line of JSON: \`{"file":{...}}\` when done within ~25s, or \`{"taskId":"..."}\` as a SUCCESSFUL handoff for slow models. On a handoff, run the exact \`media wait\` command the CLI prints on stderr and repeat it until exit \`0\` (done) or exit \`5\` (failed); exit \`2\` means still running — not a failure. Parse JSON with \`python3\`, never \`jq\`.
 
+${MEDIA_USER_REPLY_CONTRACT}
+
 MODEL_SELECTION_GUIDANCE`;
 
 function renderByokMediaDefaultsHint(defaults?: ByokMediaDefaults): string {
@@ -538,12 +551,55 @@ function renderMediaDispatchModelGuidance(defaults?: ByokMediaDefaults): string 
   return `${imagePart} ${videoPart} Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
 }
 
-function renderMediaDispatchHint(defaults?: ByokMediaDefaults): string {
-  const imageModel = defaults?.imageModel?.trim() || 'flux-pro-ultra';
+function renderMediaDispatchHint(
+  defaults?: ByokMediaDefaults,
+  runtimeDefaults?: ByokMediaDefaults,
+): string {
+  const effectiveDefaults = runtimeDefaults ?? defaults;
+  const imageModel = effectiveDefaults?.imageModel?.trim() || 'flux-pro-ultra';
   const hint = MEDIA_DISPATCH_HINT
     .replace('IMAGE_MODEL_VALUE', shellDoubleQuote(imageModel))
-    .replace('MODEL_SELECTION_GUIDANCE', renderMediaDispatchModelGuidance(defaults));
-  return `${hint}${renderByokMediaDefaultsHint(defaults)}`;
+    .replace(
+      'MODEL_SELECTION_GUIDANCE',
+      renderMediaDispatchModelGuidance(effectiveDefaults),
+    );
+  return `${hint}${renderByokMediaDefaultsHint(defaults)}${renderRuntimeMediaDefaultsHint(runtimeDefaults, defaults)}`;
+}
+
+function mediaDefaultsForRuntime(
+  agentId: string | null | undefined,
+  defaults?: ByokMediaDefaults,
+): ByokMediaDefaults | undefined {
+  if (agentId !== 'amr') return defaults;
+  return {
+    ...defaults,
+    imageModel: defaults?.imageModel?.trim() || 'vela/gpt-image-2',
+    videoModel:
+      defaults?.videoModel?.trim()
+      || 'vela/doubao-seedance-2-0-260128',
+  };
+}
+
+function renderRuntimeMediaDefaultsHint(
+  runtimeDefaults: ByokMediaDefaults | undefined,
+  userDefaults: ByokMediaDefaults | undefined,
+): string {
+  if (!runtimeDefaults) return '';
+  const lines: string[] = [];
+  if (!userDefaults?.imageModel?.trim() && runtimeDefaults.imageModel?.trim()) {
+    lines.push(`- Image model: \`${runtimeDefaults.imageModel.trim()}\``);
+  }
+  if (!userDefaults?.videoModel?.trim() && runtimeDefaults.videoModel?.trim()) {
+    lines.push(`- Video model: \`${runtimeDefaults.videoModel.trim()}\``);
+  }
+  if (lines.length === 0) return '';
+  return `
+
+### OpenDesign Cloud media defaults
+
+This AMR run uses these managed media defaults when the user has not selected
+a different run-scoped model:
+${lines.join('\n')}`;
 }
 
 const FILESYSTEM_HANDOFF_OVERRIDE = `
@@ -552,7 +608,7 @@ const FILESYSTEM_HANDOFF_OVERRIDE = `
 
 ## Filesystem handoff
 
-This run uses Open Design's filesystem execution profile. Project files are the source of truth for generated artifacts.
+This run uses OpenDesign's filesystem execution profile. Project files are the source of truth for generated artifacts.
 
 Normal rhythm for artifact work:
 1. Start with a short ordinary assistant message or compact \`<od-card>\` that states the locked direction.
@@ -562,7 +618,7 @@ Normal rhythm for artifact work:
 
 Never type a tool invocation into assistant text as XML, markdown, JSON, or prose; if the runtime cannot call the tool, briefly explain that instead of simulating it.
 
-This tool-call rule does not apply to Open Design UI markup. \`<question-form>\` and \`<od-card>\` are assistant text blocks that the host renders in the UI, not tool calls. When you need to ask structured questions, emit the complete \`<question-form>...</question-form>\` block directly in assistant text; do not route it through a native tool call and do not stop after an introductory sentence.
+This tool-call rule does not apply to OpenDesign UI markup. \`<question-form>\` and \`<od-card>\` are assistant text blocks that the host renders in the UI, not tool calls. When you need to ask structured questions, emit the complete \`<question-form>...</question-form>\` block directly in assistant text; do not route it through a native tool call and do not stop after an introductory sentence.
 
 When you write or edit an HTML file in the project folder through the native file tool, that file is already visible in the user's file panel and preview.
 
@@ -632,8 +688,12 @@ function renderDesignSystemImportModeGuidance(
 }
 
 export interface ComposeInput {
+  // Internal OD Next request-stage recipe. The daemon only constructs this
+  // after verifying bundled provenance and the Applied Strategy Binding.
+  // When present it is the whole stable system prompt; ordinary composition
+  // remains byte-identical and ignores no default quality section.
+  odNextStrategyRecipe?: OdNextStrategyRequestRecipeV2 | undefined;
   agentId?: string | null | undefined;
-  includeCodexImagegenOverride?: boolean | undefined;
   streamFormat?: string | undefined;
   skillBody?: string | undefined;
   skillName?: string | undefined;
@@ -767,11 +827,13 @@ export interface ComposeInput {
   // assistant-text <artifact> blocks.
   executionProfile?: ExecutionProfile | undefined;
   // Whether the outgoing request text reads as a slide-deck brief (see
-  // `detectDeckIntentSignal`). Only consulted for the freeform maybe-deck
-  // branch: `false` skips the ~20K conditional framework injection,
-  // `true`/`undefined` keep it. Deck-kind projects ignore this — their
-  // framework is unconditional.
+  // `detectDeckIntentSignal`). Classic uses it for the freeform maybe-deck
+  // branch. OD Next additionally uses an explicit `true` to expose the deck
+  // contract when a non-PPT project receives a cross-surface deck request.
+  // Deck-kind projects ignore this — their framework is unconditional.
   freeformDeckSignal?: boolean | undefined;
+  /** Host-resolved OD Next deck scaffold policy for blank vs legacy/existing decks. */
+  deckFrameworkMode?: DeckFrameworkMode | undefined;
   // Which always-on doctrine core to compose. `classic` (default) keeps the
   // legacy DISCOVERY_AND_PHILOSOPHY + designer-charter stack plus its tail
   // overrides. `slim` swaps all of that for the single rewritten charter in
@@ -792,8 +854,8 @@ export interface ComposeInput {
 }
 
 export function composeSystemPrompt({
+  odNextStrategyRecipe,
   agentId,
-  includeCodexImagegenOverride = true,
   skillBody,
   skillName,
   skillMode,
@@ -828,15 +890,54 @@ export function composeSystemPrompt({
   byokMediaDefaults,
   executionProfile,
   freeformDeckSignal,
+  deckFrameworkMode,
   promptCoreVariant,
   mediaHintSignal,
   platformHintSignal,
 }: ComposeInput): string {
+  // ── FORK POINT: two independent prompt implementations ──────────────────
+  // Everything below this early return is the legacy stack; OD Next runs never
+  // reach it. Their content comes from
+  // `plugins/_official/scenarios/od-next-strategy/assets/**` plus the
+  // TypeScript in `@open-design/contracts` `od-next-strategy.ts`, which is
+  // where OD Next carries host runtime contracts. The two sides share no
+  // composition floor, so a rule added below holds only for the runs that take
+  // this branch, and eligibility is re-evaluated per run
+  // (`../strategies/od-next/rollout.ts`). Read `docs/prompt-composition.md`
+  // before changing prompt text on either side.
+  if (odNextStrategyRecipe) {
+    return composeOdNextStrategyRequestPromptV2(odNextStrategyRecipe, {
+      agentId,
+      sessionMode,
+      locale,
+      deckIntent: odNextStrategyRecipe.taskType !== 'ppt' && freeformDeckSignal === true,
+      deckFrameworkMode,
+      metadata,
+      template,
+      designSystemBody,
+      designSystemTitle,
+      designSystemUsageMd,
+      designSystemTokensCss,
+      designSystemComponentsManifest,
+      designSystemFixtureHtml,
+      designSystemPullIndex,
+      designSystemImportMode,
+      craftBody,
+      craftSections,
+      memoryBody,
+      userInstructions,
+      projectInstructions,
+    });
+  }
   // Slim core collapses the discovery layer + designer charter + their tail
   // overrides into one charter document; the classic stack keeps the legacy
   // layered composition until the A/B comparison signs off.
   const isSlimCore = promptCoreVariant === 'slim';
   const isAskModeEarly = sessionMode === 'chat';
+  const runtimeMediaDefaults = mediaDefaultsForRuntime(
+    agentId,
+    byokMediaDefaults,
+  );
   // Media surfaces (image / video / audio) must be resolved BEFORE the head
   // is built: their generation contract, rather than the design charter's
   // HTML workflow, is the sole workflow authority on these runs.
@@ -917,6 +1018,7 @@ export function composeSystemPrompt({
   const resolvedExclusiveSurface = resolveExclusiveSurface({ metadata, skillMode, skillModes });
   const resolvedExecutionProfile =
     executionProfile ?? executionProfileFromStreamFormat(streamFormat);
+  const deckFrameworkDirective = renderDeckFrameworkDirective(resolvedExecutionProfile);
 
   // API/BYOK mode (streamFormat === 'plain'): mirrors the same fix from
   // `@open-design/contracts`'s composer. The daemon hits this path for
@@ -940,8 +1042,8 @@ export function composeSystemPrompt({
   // Ask mode (`chat`) is the deliberately bare conversation mode: the
   // CHAT_MODE_OVERRIDE below IS the whole charter, and every artifact-oriented
   // block (the ~3k-token discovery layer, direction library, device frames, the
-  // full designer charter, deck framework, media contracts, codex imagegen
-  // override, critique panel, DS visual-direction override) is gated off so the
+  // full designer charter, deck framework, media contracts, critique panel,
+  // DS visual-direction override) is gated off so the
   // turn stays cheap. Memory, custom instructions, the active design system,
   // attached skills, plugins, MCP tools, and the clarifying-questions surface
   // are still composed in — Ask mode is light, not amnesiac.
@@ -1238,27 +1340,28 @@ export function composeSystemPrompt({
   // skill seed is on offer.
   const isDeckProject = resolvedExclusiveSurface === 'deck';
   const isFreeformProject = activeSkillModes.size === 0 && (!metadata || metadata.kind === 'other');
-  const hasSkillSeed =
-    !!skillBody && /assets\/template\.html/.test(skillBody);
-  if (!isAskMode && isDeckProject && !hasSkillSeed) {
-    parts.push(`\n\n---\n\n${DECK_FRAMEWORK_DIRECTIVE}`);
+  const hasDeckSkillSeed =
+    activeSkillModes.has('deck') && !!skillBody && /assets\/template\.html/.test(skillBody);
+  if (!isAskMode && isDeckProject && !hasDeckSkillSeed) {
+    // ⚠️ This decides WHEN the legacy path gets the deck scaffold. OD Next has
+    // its own gate — `resolveOdNextDeckFrameworkMode` in `od-next-strategy.ts`.
+    // The scaffold is shared; the injection conditions are not. Change both.
+    parts.push(`\n\n---\n\n${deckFrameworkDirective}`);
   } else if (
     !isAskMode &&
-    isFreeformProject &&
-    !hasSkillSeed &&
-    (freeformDeckSignal ?? true)
+    !isDeckProject &&
+    !isMediaSurfaceEarly &&
+    !hasDeckSkillSeed &&
+    (freeformDeckSignal === true || (isFreeformProject && freeformDeckSignal === undefined))
   ) {
-    // Freeform / kind=other projects skip the kind picker entirely and
-    // land here. If the user's brief is a deck/keynote/slides ("讲解",
-    // "presentation", "make a deck"), the agent used to invent its own
-    // scale-to-fit + slide visibility + nav script from scratch and
-    // shipped subtle CSS specificity bugs (per-slide layout classes
-    // overriding `.slide { display:none }`). Inject the same framework
-    // here, prefixed with a one-line conditional so the agent only
-    // adopts it when the brief actually is a deck — otherwise the
-    // directive is read as background reference and ignored.
+    // A deck request may arrive after a project was created under another
+    // surface (most commonly Home's default prototype). The turn-latched
+    // signal is stronger than that creation-time kind, so give the agent the
+    // same framework instead of leaving classic/off-rollout runs to invent a
+    // third navigation runtime. Preserve the legacy absent-signal default for
+    // kind=other projects only.
     (isSlimCore ? slimTurnVariableParts : parts).push(
-      `\n\n---\n\n## If this brief is a slide deck / keynote / presentation\n\nThe user did not pre-select a "Slide deck" surface, but their request may still call for one. **If — and only if — the brief reads as slides, keynote, presentation, deck, PPT, or 讲解, follow the framework below.** Otherwise ignore everything in this section and continue with the freeform output you would have written anyway.\n\n${DECK_FRAMEWORK_DIRECTIVE}`,
+      `\n\n---\n\n## If this brief is a slide deck / keynote / presentation\n\nThe user did not pre-select a "Slide deck" surface, but their request may still call for one. **If — and only if — the brief reads as slides, keynote, presentation, deck, PPT, or 讲解, follow the framework below.** Otherwise ignore everything in this section and continue with the freeform output you would have written anyway.\n\n${deckFrameworkDirective}`,
     );
   }
 
@@ -1272,6 +1375,11 @@ export function composeSystemPrompt({
     // mode for anything that actually generates media.
   } else if (isMediaSurface) {
     parts.push(renderMediaGenerationContract(mediaExecution, byokMediaDefaults));
+    const runtimeDefaultsHint = renderRuntimeMediaDefaultsHint(
+      runtimeMediaDefaults,
+      byokMediaDefaults,
+    );
+    if (runtimeDefaultsHint) parts.push(runtimeDefaultsHint);
   } else if (mediaHintSignal ?? true) {
     // Non-media projects (prototype, deck, etc.): inject a lightweight hint
     // so the agent uses `od media generate` if the user asks for an image/video
@@ -1280,18 +1388,8 @@ export function composeSystemPrompt({
     // media, and the transcript-scanned signal flips the hint on for the
     // rest of the session as soon as one does.
     (isSlimCore ? slimTurnVariableParts : parts).push(
-      renderMediaDispatchHint(byokMediaDefaults),
+      renderMediaDispatchHint(byokMediaDefaults, runtimeMediaDefaults),
     );
-  }
-
-  if (!isAskMode && includeCodexImagegenOverride && shouldAllowCodexImagegenOverride(metadata, mediaExecution)) {
-    const codexImagegenOverride = renderCodexImagegenOverride(
-      agentId,
-      metadata,
-    );
-    if (codexImagegenOverride) {
-      parts.push(codexImagegenOverride);
-    }
   }
 
   // Critique Theater addendum. When cfg.enabled is true the panel protocol
@@ -1335,7 +1433,7 @@ export function composeSystemPrompt({
   // originating assistant message, and answers return as the next user message.
   // Applies to every agent — question-form is UI-parsed markup, not a tool.
   if (!isSlimCharterHead || isAskMode) parts.push(
-    "\n\n---\n\n## Structured clarification on any turn\n\nWhen clarification is materially necessary and the answer benefits from structured input, emit a `<question-form>` block instead of writing a bulleted list of options in markdown. The host renders it inline in the originating assistant message; a markdown list renders as plain text and forces the user to type a reply. Use the richest appropriate web form controls (`radio`, `checkbox`, `select`, `text`, `textarea`, `number`, `range`, `date`, `time`, `datetime-local`, `color`, `url`, `email`, `tel`, `file`, `switch`, or `direction-cards`). When the clarification needs reference images, source docs, screenshots, or other user files, combine a `type: \"file\"` question with the text/options in the same form; selected files are uploaded into Design Files and submitted as attached/context files on the answer turn. For every finite-choice question, keep user control by leaving `allowCustom` unset or setting it to `true`, and add localized `customLabel` / `customPlaceholder` when useful. Use free-form prose questions only when a form would add no structure. Do NOT also duplicate the form's questions as markdown text alongside it.\n\n`<question-form>` is assistant text for the Open Design UI, not a native tool call. If you need to clarify direction, emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call. Do not stop after an introductory sentence such as \"先确认一下方向：\"; the same message must include the full form.",
+    "\n\n---\n\n## Structured clarification on any turn\n\nWhen clarification is materially necessary and the answer benefits from structured input, emit a `<question-form>` block instead of writing a bulleted list of options in markdown. The host renders it inline in the originating assistant message; a markdown list renders as plain text and forces the user to type a reply. Use the richest appropriate web form controls (`radio`, `checkbox`, `select`, `text`, `textarea`, `number`, `range`, `date`, `time`, `datetime-local`, `color`, `url`, `email`, `tel`, `file`, `switch`, or `direction-cards`). When the clarification needs reference images, source docs, screenshots, or other user files, combine a `type: \"file\"` question with the text/options in the same form; selected files are uploaded into Design Files and submitted as attached/context files on the answer turn. For every finite-choice question, keep user control by leaving `allowCustom` unset or setting it to `true`, and add localized `customLabel` / `customPlaceholder` when useful. Use free-form prose questions only when a form would add no structure. Do NOT also duplicate the form's questions as markdown text alongside it.\n\n`<question-form>` is assistant text for the OpenDesign UI, not a native tool call. If you need to clarify direction, emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call. Do not stop after an introductory sentence such as \"先确认一下方向：\"; the same message must include the full form.",
   );
 
   // Pinned LAST so recency bias reinforces the role-marker prohibition.
@@ -1401,7 +1499,7 @@ If the rules below tell you to plan with TodoWrite, write the plan as prose inst
 // BYOK/API chat behave the same.
 const CHAT_MODE_OVERRIDE = `# Ask mode — bare conversation (this is the whole charter for this turn)
 
-This conversation is in Open Design Ask mode: a fast, low-overhead chat kept deliberately light to save tokens. Open Design is the open-source Claude Design alternative and a native Figma counterpart. Official links: GitHub https://github.com/nexu-io/open-design, website https://open-design.ai/, Discord https://discord.gg/mHAjSMV6gz.
+This conversation is in OpenDesign Ask mode: a fast, low-overhead chat kept deliberately light to save tokens. OpenDesign is the open-source Claude Design alternative and a native Figma counterpart. Official links: GitHub https://github.com/nexu-io/open-design, website https://open-design.ai/, Discord https://discord.gg/mHAjSMV6gz.
 
 Behave like a direct, multi-turn desktop chat assistant. Prefer concise prose: answer the question, explain, compare options, debug prompts, and review existing work. You still have the user's project files, attachments, connectors, MCP servers, project memory, any active design system, and any skills they attached for this turn — use them as context, and follow an attached skill's workflow when one is present.
 
@@ -1409,11 +1507,11 @@ This mode does not load the heavy design-discovery workflow or the full designer
 
 If the user explicitly asks you to build, generate, design, or export a concrete artifact (a page, prototype, deck, image, video, audio, or a file change), handle it inline only when it is genuinely trivial; for anything substantial, say so in one line and suggest switching to Design mode (or Plan mode for a document-first brief), where the full design workflow, brand discipline, and artifact tooling are loaded. Keep this turn conversational.
 
-For mid-conversation clarification you may still emit a \`<question-form>\` block — it is markup the Open Design UI parses, not a native tool call.`;
+For mid-conversation clarification you may still emit a \`<question-form>\` block — it is markup the OpenDesign UI parses, not a native tool call.`;
 
 const PLAN_MODE_OVERRIDE = `# Plan mode — editable document first (read first — overrides every rule below)
 
-This conversation is in Open Design Plan mode. Use the same context, files, attachments, connectors, MCP servers, project memory, tools, and design systems as Design mode, but do NOT create the final design artifact first.
+This conversation is in OpenDesign Plan mode. Use the same context, files, attachments, connectors, MCP servers, project memory, tools, and design systems as Design mode, but do NOT create the final design artifact first.
 
 In filesystem runs, substantial plan-document work still starts with a real TodoWrite/task-list tool call and keeps it updated as work progresses. Do not narrate TodoWrite availability to the user; show progress through the Todo card when the runtime supports it. In plain API runs, follow the API-mode override above and write the plan directly as prose without mentioning missing tools.
 
@@ -1481,121 +1579,8 @@ export function renderConnectedExternalMcpDirective(
     lines.join('\n'),
     '\n\n',
     '**Do NOT call any tool whose name matches `mcp__<server>__authenticate` or `mcp__<server>__complete_authentication` for the servers above.** Those are synthetic fallback tools Claude Code exposes when its first HTTP connect briefly flipped the server into a needs-auth state. The flow they drive (a `localhost:<random>/callback` redirect) cannot complete in this environment, and the real tools (e.g. `generate_image`, `models_explore`, `balance`, …) are already reachable.\n\n',
-    'If a real tool actually fails with an auth-related error, report the exact tool name and error text and stop — the user will reconnect the server in Settings → External MCP. Do not retry by invoking any `*_authenticate` tool.\n',
+    `If a real tool actually fails with an auth-related error, report the exact tool name and error text and stop — the user will reconnect the server in ${INTEGRATIONS_MCP_PATH}. Do not retry by invoking any \`*_authenticate\` tool.\n`,
   ].join('');
-}
-
-const CODEX_IMAGEGEN_MODEL_IDS = new Set(
-  IMAGE_MODELS.filter(
-    (model) =>
-      model?.provider === 'openai' &&
-      typeof model?.id === 'string' &&
-      model.id.startsWith('gpt-image-'),
-  ).map((model) => model.id),
-);
-
-export function resolveCodexImagegenModelId(
-  metadata: ProjectMetadata | undefined,
-): string {
-  const imageModel =
-    typeof metadata?.imageModel === 'string' ? metadata.imageModel.trim() : '';
-  return CODEX_IMAGEGEN_MODEL_IDS.has(imageModel) ? imageModel : '';
-}
-
-export function shouldRenderCodexImagegenOverride(
-  agentId: string | null | undefined,
-  metadata: ProjectMetadata | undefined,
-): boolean {
-  const normalizedAgentId =
-    typeof agentId === 'string' ? agentId.trim().toLowerCase() : '';
-  return (
-    normalizedAgentId === 'codex' &&
-    metadata?.kind === 'image' &&
-    resolveCodexImagegenModelId(metadata).length > 0
-  );
-}
-
-function shouldAllowCodexImagegenOverride(
-  metadata: ProjectMetadata | undefined,
-  mediaExecution: MediaExecutionPolicy | undefined,
-): boolean {
-  const mode = mediaExecution?.mode ?? 'enabled';
-  if (mode !== 'enabled') return false;
-  if (
-    Array.isArray(mediaExecution?.allowedSurfaces) &&
-    mediaExecution.allowedSurfaces.length > 0 &&
-    !mediaExecution.allowedSurfaces.includes('image')
-  ) {
-    return false;
-  }
-  const model = resolveCodexImagegenModelId(metadata);
-  if (
-    model &&
-    Array.isArray(mediaExecution?.allowedModels) &&
-    mediaExecution.allowedModels.length > 0 &&
-    !mediaExecution.allowedModels.includes(model)
-  ) {
-    return false;
-  }
-  return true;
-}
-
-export function renderCodexImagegenOverride(
-  agentId: string | null | undefined,
-  metadata: ProjectMetadata | undefined,
-): string {
-  if (!shouldRenderCodexImagegenOverride(agentId, metadata)) {
-    return '';
-  }
-  const imageModel = resolveCodexImagegenModelId(metadata);
-
-  return `
-
----
-
-## Codex built-in imagegen override (load-bearing — Codex only)
-
-The active agent is Codex and this image project selected \`${imageModel}\`.
-For this specific case, use Codex's built-in image generation capability
-instead of \`"$OD_NODE_BIN" "$OD_BIN" media generate\` for the first generation
-attempt. This is an intentional exception to the media generation contract and
-the active image skill's dispatcher wording.
-
-Do not require, request, or mention \`OPENAI_API_KEY\` before trying the
-built-in path. Reuse the project metadata, reference prompt template, aspect
-ratio, style notes, and the user's current brief to form the final image
-prompt. Generate the image with Codex built-in imagegen, then use the actual
-output path returned by the built-in imagegen result as the source file first.
-Only if the built-in result does not return a usable path should you search
-\`\${CODEX_HOME:-$HOME/.codex}/generated_images/.../ig_*.png\` as a fallback
-source. Never leave a project-referenced asset only under \`$CODEX_HOME\`.
-
-When the user asked for one image, produce exactly one final project image
-file. If Codex built-in imagegen returns multiple candidate files, previews, or
-variants, select the single best match and import only that file into
-\`$OD_PROJECT_DIR\`. Do not copy every generated variant, do not keep multiple
-final image files, and do not present multiple outputs unless the user
-explicitly asked for variants or more than one image.
-
-Copy or move the selected generated file into \`$OD_PROJECT_DIR\` with a short
-descriptive filename, then verify the exact destination file exists under
-\`$OD_PROJECT_DIR\` before claiming success. If reading the source path,
-creating the destination directory, copying/moving, or verifying the copied
-asset fails, report the exact source path, destination path, and access/copy
-error. Do not claim success, silently fall back, or ask about OpenAI/Azure
-fallback after a generated image exists but the project copy fails; stop after
-reporting the failure unless the user explicitly chooses fallback in a later
-turn, because fallback may create a different image.
-
-After the file exists under \`$OD_PROJECT_DIR\`, reply with the project-local
-filename and a short summary of the prompt used. Do not emit an \`<artifact>\`
-block for media.
-
-If Codex built-in imagegen is unavailable or generation fails before producing
-an image, surface the actual failure message and ask the user for one-time
-confirmation before falling back to the existing OpenAI/Azure API-key provider
-path via \`"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model ${imageModel}\`.
-Do not silently fall back.`;
 }
 
 // `style: 'facts'` (slim core) keeps the block a pure fact sheet: key-value
@@ -1779,7 +1764,7 @@ function renderMetadataBlock(
     ));
     if (metadata.videoModel === 'hyperframes-html') {
       lines.push(
-        'Special case: `hyperframes-html` is a local HTML-to-MP4 renderer, not a photoreal text-to-video model. Treat it like a motion design renderer, ask at most one clarifying question, then create a HyperFrames composition with `npx hyperframes init` under `.hyperframes-cache/`, edit `index.html`, and dispatch via `"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model hyperframes-html --composition-dir <rel>`. Do not run `npx hyperframes render` yourself.',
+        'Special case: `hyperframes-html` is a local HTML-to-MP4 renderer, not a photoreal text-to-video model. Treat it like a motion design renderer, ask at most one clarifying question, then create a HyperFrames composition with `"$OD_NODE_BIN" "$OD_BIN" media scaffold --composition-dir <rel>` under `.hyperframes-cache/`, edit `index.html`, and dispatch via `"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model hyperframes-html --composition-dir <rel>`. Do not run HyperFrames `init` or `render` yourself.',
       );
     }
   }
@@ -1913,7 +1898,13 @@ function renderMetadataBlock(
     lines.push(`### Reference prompt template — "${tpl.title ?? 'untitled'}"`);
     const meta = [];
     if (tpl.category) meta.push(`category: ${tpl.category}`);
-    if (tpl.model) meta.push(`suggested model: ${tpl.model}`);
+    const suggestedModel =
+      metadata.kind === 'image' &&
+      !metadata.imageModel?.trim() &&
+      tpl.model === 'gpt-image-2'
+        ? 'vela/gpt-image-2'
+        : tpl.model;
+    if (suggestedModel) meta.push(`suggested model: ${suggestedModel}`);
     if (tpl.aspect) meta.push(`aspect: ${tpl.aspect}`);
     if (Array.isArray(tpl.tags) && tpl.tags.length > 0) {
       meta.push(`tags: ${tpl.tags.join(', ')}`);
@@ -1982,7 +1973,7 @@ function renderMediaMetadataAction(
   const article = surface === 'audio' ? 'an' : 'a';
   const mode = mediaExecution?.mode ?? 'enabled';
   if (mode === 'disabled') {
-    return `This is ${article} **${surface}** project, but Open Design-owned media execution is disabled for this run. Plan the creative brief only unless an external MCP media tool is explicitly configured. Do NOT call OD media generation tools and do NOT emit \`<artifact>\` HTML for media surfaces.`;
+    return `This is ${article} **${surface}** project, but OpenDesign-owned media execution is disabled for this run. Plan the creative brief only unless an external MCP media tool is explicitly configured. Do NOT call OD media generation tools and do NOT emit \`<artifact>\` HTML for media surfaces.`;
   }
   return `This is ${article} **${surface}** project. Plan the creative brief carefully, then dispatch via the **media generation contract** using ${command}. Do NOT emit \`<artifact>\` HTML for media surfaces.`;
 }

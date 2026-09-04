@@ -1,10 +1,38 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
+import { load } from 'cheerio';
 import type { Express, Request, Response } from 'express';
+import type { LintArtifactRequest, LintArtifactResponse } from '@open-design/contracts';
 import {
+  PREVIEW_OBSERVABILITY_BRIDGE_MARKER,
+  buildPreviewBaseHrefBridge,
+  buildPreviewObservabilityBridge,
+} from '@open-design/contracts/runtime/preview-observability';
+import {
+  buildPreviewFocusGuard,
+  buildPreviewRedirectGuard,
+  buildPreviewSandboxShim,
+  PREVIEW_URL_GUARD_MAX_HTML_BYTES,
+  previewHtmlHasLoadTimeLocationNavigation,
+} from '@open-design/contracts/runtime/preview-guards';
+import {
+  endOfTag,
+  findRealElementRange,
+  findRealTagEnd,
+  findRealTagOffset,
+  HTML_TAG_PATTERNS,
+  prependAfterDoctype,
+} from '@open-design/contracts/runtime/html-injection-points';
+import {
+  PREVIEW_RUNTIME_STATE_LIMITS,
+  PREVIEW_RUNTIME_STATE_VERSION,
+} from '@open-design/contracts/runtime/preview-runtime-state';
+import {
+  automaticStrategyTaskProfileForProjectMetadata,
   defaultScenarioPluginIdForProjectMetadata,
   type ChatSessionMode,
+  type LocalCatalogScope,
   type PluginManifest,
   type PreviewComment,
   type ProjectDesignTokenSuggestionProp,
@@ -15,6 +43,9 @@ import {
   type ProjectFileVersionPromptSource,
   type ProjectFileVersionSource,
   type ProjectFileVersionWarning,
+  type ProjectMetadata,
+  type RestoreProjectAutomaticScenarioRequest,
+  type RestoreProjectAutomaticScenarioResponse,
   type ProjectSyncState,
   type WorkspaceCollabContext,
 } from '@open-design/contracts';
@@ -47,7 +78,17 @@ import {
   buildConnectorProbe,
   getInstalledPlugin,
   listInstalledPlugins,
+  automaticScenarioTaskProfile,
+  createAutomaticProjectStrategyBinding,
+  createProjectExampleBinding,
+  digestExampleSkillManifest,
+  InvalidProjectExampleBindingError,
+  readVerifiedProjectScenarioBinding,
+  readVerifiedProjectStrategyBinding,
   resolvePluginSnapshot,
+  restoreProjectSnapshotLink,
+  type ResolveSnapshotError,
+  type ResolveSnapshotOk,
 } from '../../plugins/index.js';
 import { connectorService } from '../../connectors/service.js';
 import type { RouteDeps } from '../../server-context.js';
@@ -55,6 +96,7 @@ import { listSkills } from '../../skills.js';
 import { isSafeId } from '../../projects.js';
 import {
   ensureTeamProjectCommentConversations,
+  getFirstProjectConversation,
   SYNC_KEEPS_UPDATED_AT,
 } from '../../db.js';
 import {
@@ -83,10 +125,8 @@ import {
   type WorkspaceTypeRegistry,
 } from '../../collab/team-share-scope.js';
 import {
-  enforceVerifiedWorkspaceResourceMutation,
   headerValue,
   isWorkspaceResourceLocked as isWorkspaceLocked,
-  requestCanMutateVerifiedWorkspaceResource,
   workspaceResourceAccess,
   workspaceResourceContext as workspaceProjectContext,
   workspaceResourceContextFromRequest as workspaceProjectContextFromRequest,
@@ -97,22 +137,134 @@ import {
   type WorkspaceResourceMutationCapability,
 } from '../../collab/workspace-resource-mutation.js';
 import {
-  resolveProjectWorkspaceScope,
-  resolveProjectWorkspaceScopeBootstrap,
+  resolveLocalProjectWorkspaceScope,
 } from '../../collab/project-workspace-scope.js';
 import {
   createAuthorizeProjectRequest,
+  enforceLocalProjectDataPlaneRequest,
   type AuthorizeProjectRequest,
 } from '../../collab/project-request-authority.js';
 import {
-  authorizeCreatedProjectWorkspace,
   bindCreatedProjectToWorkspace,
   createCreatedProjectWorkspaceResolver,
   CreatedProjectWorkspaceResolutionError,
-  sendCreatedProjectWorkspaceError,
+  localProjectWorkspaceAttribution,
+  type CreatedProjectWorkspaceResolver,
 } from '../../collab/created-project-workspace.js';
+import { localPluginRegistryScope } from '../../plugins/local-source.js';
 import type { WorkspaceDirectoryFetchResult } from '../../collab/vela-workspace-context.js';
 import { cancelRunsOwnedBy } from './cancel-owned-runs.js';
+
+export function rewriteOutsideExecutableHtmlRanges(
+  html: string,
+  rewriteChunk: (chunk: string) => string,
+): string {
+  const $ = load(html, { sourceCodeLocationInfo: true }, false);
+  const scriptRanges = $('script')
+    .toArray()
+    .flatMap((node) => {
+      const location = node.sourceCodeLocation;
+      if (!location?.startTag) return [];
+      const startTag = html.slice(location.startTag.startOffset, location.startTag.endOffset);
+      const isSelfClosingForeignScript = node.namespace !== 'http://www.w3.org/1999/xhtml'
+        && startTag.endsWith('/>');
+      return [{
+        start: location.startTag.endOffset,
+        end: location.endTag?.startOffset
+          ?? (isSelfClosingForeignScript ? location.startTag.endOffset : html.length),
+      }];
+    });
+  const executableAttributeRanges = $('*')
+    .toArray()
+    .flatMap((node) => {
+      const sourceLocation = node.sourceCodeLocation;
+      if (!sourceLocation || !('attrs' in sourceLocation)) return [];
+      const attributes = sourceLocation.attrs as Record<string, {
+        startOffset: number;
+        endOffset: number;
+      }> | undefined;
+      const element = node as Extract<typeof node, { attribs: Record<string, string> }>;
+      // parse5 stores namespaced values by local name and keeps their source prefix separately.
+      const valuesBySourceName = new Map(Object.entries(element.attribs).map(([localName, value]) => {
+        const prefix = element['x-attribsPrefix']?.[localName];
+        return [(prefix ? `${prefix}:${localName}` : localName).toLowerCase(), value] as const;
+      }));
+      return Object.entries(attributes ?? {}).flatMap(([name, location]) => {
+        const normalizedName = name.toLowerCase();
+        const value = valuesBySourceName.get(normalizedName) ?? '';
+        const normalizedSchemeValue = value.replace(/[\t\n\r]/g, '');
+        if (
+          normalizedName.startsWith('on')
+          || normalizedName === 'srcdoc'
+          || /^\s*(?:javascript|vbscript|data):/i.test(normalizedSchemeValue)
+        ) {
+          return [{ start: location.startOffset, end: location.endOffset }];
+        }
+        return [];
+      });
+    });
+  const protectedRanges = [...scriptRanges, ...executableAttributeRanges]
+    .sort((left, right) => left.start - right.start)
+    .reduce<Array<{ start: number; end: number }>>((ranges, range) => {
+      const previous = ranges.at(-1);
+      if (!previous || range.start > previous.end) {
+        ranges.push({ ...range });
+      } else {
+        previous.end = Math.max(previous.end, range.end);
+      }
+      return ranges;
+    }, []);
+
+  let markerPrefix: string | null = null;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const candidate = `__OD_PROTECTED_HTML_RANGE_${randomUUID()}_`;
+    if (!html.includes(candidate)) {
+      markerPrefix = candidate;
+      break;
+    }
+  }
+  if (!markerPrefix) throw new Error('Unable to allocate protected HTML marker');
+
+  const protectedValues: Array<{ marker: string; value: string }> = [];
+  let maskedHtml = '';
+  let cursor = 0;
+  for (const [index, range] of protectedRanges.entries()) {
+    const marker = `${markerPrefix}${index}__`;
+    maskedHtml += html.slice(cursor, range.start);
+    maskedHtml += marker;
+    protectedValues.push({ marker, value: html.slice(range.start, range.end) });
+    cursor = range.end;
+  }
+  maskedHtml += html.slice(cursor);
+
+  let rewrittenHtml = rewriteChunk(maskedHtml);
+  for (const { marker, value } of protectedValues) {
+    rewrittenHtml = rewrittenHtml.split(marker).join(value);
+  }
+  return rewrittenHtml;
+}
+
+function parseLocalCatalogScope(value: unknown, field: string): LocalCatalogScope | null {
+  if (value === undefined || value === null) return null;
+  if (!value || typeof value !== 'object') {
+    throw new Error(`${field} must contain workspaceId and workspaceMemberId`);
+  }
+  const record = value as Record<string, unknown>;
+  const workspaceId = typeof record.workspaceId === 'string'
+    ? record.workspaceId.trim()
+    : '';
+  const workspaceMemberId = typeof record.workspaceMemberId === 'string'
+    ? record.workspaceMemberId.trim()
+    : '';
+  if (!workspaceId || !workspaceMemberId) {
+    throw new Error(`${field} must contain workspaceId and workspaceMemberId`);
+  }
+  return { workspaceId, workspaceMemberId };
+}
+
+function sameLocalCatalogScopes(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+}
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'agents' | 'validation' | 'collabSync'> {
   pluginScope?: {
@@ -124,31 +276,37 @@ export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | '
       id: string,
       options: { workspaceId: string | null; workspaceMemberId: string | null },
     ) => Promise<unknown | null>;
+    getLocalPluginBySource?: (
+      id: string,
+      source: string,
+    ) => Promise<Parameters<typeof resolvePluginSnapshot>[0]['plugin'] | null>;
   };
   teamProjectCatalog?: VelaTeamProjectCatalogClient;
   /** Bounded authoritative verifier for idempotent Workspace project reads. */
   verifyWorkspaceReadAuthority?: VerifyWorkspaceRequestAuthority;
   /** Authoritative verifier for every Workspace-bound project mutation. */
   verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
-  /** Shared fresh exact authority gate for all project data-plane routes. */
+  /**
+   * Cached-only authority verifier for deleting a personal, local-only
+   * project. It must never start network I/O; all other mutations continue
+   * through `verifyWorkspaceRequestAuthority`.
+   */
+  verifyPersonalProjectDeleteLeaseAuthority?: VerifyWorkspaceRequestAuthority;
+  /** Shared local binding gate for all project data-plane routes. */
   authorizeProjectRequest?: AuthorizeProjectRequest;
   /** Startup-hydrated O(1) quarantine lookup for stale Team mirrors. */
   isProjectRevoked?: (projectId: string) => boolean;
-  /**
-   * Authoritative signed-in membership directory. Project detail uses it to
-   * resolve the project's persisted workspace independently from any
-   * daemon-global active/current state.
-   */
+  /** Durable first-open placeholder stamp lookup. */
+  isProjectUnmaterializedPlaceholder?: (projectId: string) => boolean;
+  /** Membership directory used by Workspace account and cloud boundaries. */
   fetchWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
-  /**
-   * Production-only authority for project creation. Kept distinct from the
-   * read-side directory fetcher so local/dev and explicitly anonymous callers
-   * retain their existing behavior.
-   */
+  /** Current settings-backed AMR environment for synthesized project contexts. */
+  configuredEnv?: () => Record<string, string>;
+  /** @deprecated Creation is local; retained for compatible route composition. */
   fetchProjectCreationWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
   /**
    * Persist a design system and its Workspace ownership envelope from the
-   * exact directory-verified creation context. Production injects the shared
+   * request's complete local attribution. Production injects the shared
    * design-system creation service; the optional shape preserves isolated
    * route harnesses and headerless/local compatibility.
    */
@@ -205,7 +363,7 @@ export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | '
    * team share aimed at a personal workspace even when the caller's headers say
    * otherwise. See `collab/team-share-scope.ts`.
    */
-  workspaceTypes?: Pick<WorkspaceTypeRegistry, 'isKnownPersonal'>;
+  workspaceTypes?: Pick<WorkspaceTypeRegistry, 'isKnownPersonal' | 'learn' | 'typeOf'>;
 }
 
 // `WorkspaceProjectContext`/`WorkspaceProjectMutationCapability`/
@@ -293,20 +451,12 @@ function projectAccess(
 }
 
 /**
- * Build the project-flavored authoritative mutation gate. Every bound project
- * requires an exact Workspace/member pair and a fresh directory-backed
- * verifier result; request role/permission claims and daemon-global
- * active/current/last-known state are never authority. The exported factory is
- * shared with run/chat routes so all project mutations fail closed identically.
- */
-/**
  * The non-rejecting counterpart of `createEnforceWorkspaceProjectMutation`,
- * for a read route that would otherwise write as a side effect. See
- * `requestCanMutateVerifiedWorkspaceResource` for why a READ must answer this question
- * without ever answering it with a 401/403.
+ * for a read route that would otherwise write as a local side effect.
  */
 export function createWorkspaceProjectWriteAuthorityCheck(
-  verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority,
+  _verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority,
+  isProjectUnmaterializedPlaceholder?: (projectId: string) => boolean,
 ) {
   return async function requestCanWriteWorkspaceProject(
     req: any,
@@ -315,42 +465,62 @@ export function createWorkspaceProjectWriteAuthorityCheck(
     db: unknown,
     projectId: string,
   ): Promise<boolean> {
-    return requestCanMutateVerifiedWorkspaceResource(
+    const allowed = await enforceLocalProjectDataPlaneRequest({
       req,
+      projectId,
+      options: { mode: 'write', capability: 'writeFiles' },
+      db,
       getWorkspaceProject,
       getWorkspaceProjectByProjectId,
-      db,
-      projectId,
-      verifyWorkspaceRequestAuthority,
-    );
+    });
+    return allowed && !isProjectUnmaterializedPlaceholder?.(projectId);
   };
 }
 
 export function createEnforceWorkspaceProjectMutation(
-  verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority,
+  _verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority,
+  _verifyPersonalProjectDeleteLeaseAuthority?: VerifyWorkspaceRequestAuthority,
+  authorizeProjectRequest?: AuthorizeProjectRequest,
 ) {
   return async function enforceWorkspaceProjectMutation(
     req: any,
     res: Response,
-    sendApiError: (res: Response, status: number, code: string, message: string) => unknown,
+    sendApiError: (
+      res: Response,
+      status: number,
+      code: string,
+      message: string,
+      details?: Record<string, unknown>,
+    ) => unknown,
     getWorkspaceProject: (db: unknown, workspaceId: string, projectId: string) => WorkspaceProjectAccessInput | null | undefined,
     getWorkspaceProjectByProjectId: (db: unknown, projectId: string) => WorkspaceProjectAccessInput | null | undefined,
     db: unknown,
     projectId: string,
     capability: WorkspaceProjectMutationCapability,
   ): Promise<boolean> {
-    return enforceVerifiedWorkspaceResourceMutation(
-      'project',
+    // Production routes must converge on the central project authority gate.
+    // In particular, that gate carries the durable placeholder-stamp check;
+    // relying only on the placeholder's creator-null binding would make one
+    // accidental reconciliation promotion sufficient to reopen content writes.
+    // Keep the local-data-plane fallback solely for focused legacy fixtures
+    // that do not provide the production authorizer.
+    if (authorizeProjectRequest) {
+      return authorizeProjectRequest(req, res, projectId, {
+        mode: 'write',
+        capability,
+      });
+    }
+    return enforceLocalProjectDataPlaneRequest({
       req,
-      res,
-      sendApiError,
+      projectId,
+      options: { mode: 'write', capability },
+      db,
       getWorkspaceProject,
       getWorkspaceProjectByProjectId,
-      db,
-      projectId,
-      capability,
-      verifyWorkspaceRequestAuthority,
-    );
+      onDenied: (status, code, message, details) => details === undefined
+        ? sendApiError(res, status, code, message)
+        : sendApiError(res, status, code, message, details),
+    });
   };
 }
 
@@ -587,9 +757,53 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   var activeCommentElementId = null;
   var activeCommentSelector = null;
   var activeTargetPending = false;
+  function postReady(){
+    window.parent.postMessage({ type: 'od:url-selection-bridge-ready', href: window.location.href }, '*');
+  }
   function esc(value){
     try { return window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/"/g, '\\\\"'); }
     catch (_) { return String(value); }
+  }
+  function previewHtmlFileForLink(link){
+    if (!link || link.hasAttribute('download')) return null;
+    var target = String(link.getAttribute('target') || '').toLowerCase();
+    if (target && target !== '_self') return null;
+    var href = link.getAttribute('href');
+    if (!href || href.charAt(0) === '#') return null;
+    try {
+      var baseUrl = new URL(document.baseURI || location.href);
+      var nextUrl = new URL(href, baseUrl);
+      if (nextUrl.origin !== baseUrl.origin) return null;
+      var fileRoot = null;
+      var projectMarker = '/api/projects/';
+      var projectIndex = baseUrl.pathname.indexOf(projectMarker);
+      if (projectIndex < 0) return null;
+      var projectIdStart = projectIndex + projectMarker.length;
+      var routeMarkerStart = baseUrl.pathname.indexOf('/', projectIdStart);
+      if (routeMarkerStart < 0 || routeMarkerStart === projectIdStart) return null;
+      var rawMarker = '/raw/';
+      if (baseUrl.pathname.slice(routeMarkerStart, routeMarkerStart + rawMarker.length) === rawMarker) {
+        fileRoot = baseUrl.pathname.slice(0, routeMarkerStart + rawMarker.length);
+      } else {
+        var previewMarker = '/preview/';
+        if (baseUrl.pathname.slice(routeMarkerStart, routeMarkerStart + previewMarker.length) !== previewMarker) return null;
+        var scopeStart = routeMarkerStart + previewMarker.length;
+        var scopeEnd = baseUrl.pathname.indexOf('/', scopeStart);
+        if (scopeEnd < 0 || scopeEnd === scopeStart) return null;
+        fileRoot = baseUrl.pathname.slice(0, scopeEnd + 1);
+      }
+      if (nextUrl.pathname.indexOf(fileRoot) !== 0) return null;
+      var fileName = decodeURIComponent(nextUrl.pathname.slice(fileRoot.length));
+      if (
+        !fileName ||
+        fileName.charAt(0) === '/' ||
+        fileName.split('/').some(function(part){ return !part || part === '.' || part === '..'; }) ||
+        !/\\.html?$/i.test(fileName)
+      ) return null;
+      return { fileName: fileName, search: nextUrl.search || '', hash: nextUrl.hash || '' };
+    } catch (_) {
+      return null;
+    }
   }
   function ensureStyle(){
     if (document.querySelector('style[data-od-url-selection-style]')) return;
@@ -835,8 +1049,8 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     });
   }
   // The host switches a plain URL preview to a bridge-enabled srcDoc when
-  // Manual Edit opens. Capture only mutable UI state so the second document
-  // can show the same app page without copying or evaluating artifact code.
+  // Manual Edit opens. Capture the rendered body as a frozen DOM handoff so
+  // stateful regions outside conventional #app/#root containers are not lost.
   function runtimeStateAttributeAllowed(name){
     return name === 'class' ||
       name === 'style' ||
@@ -848,10 +1062,13 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   function runtimeStateAttributes(el){
     var attrs = Object.create(null);
     if (!el || !el.attributes) return attrs;
-    for (var i = 0; i < el.attributes.length; i++) {
+    for (var i = 0; i < el.attributes.length && Object.keys(attrs).length < ${PREVIEW_RUNTIME_STATE_LIMITS.maxAttributes}; i++) {
       var attr = el.attributes[i];
       if (!attr || !runtimeStateAttributeAllowed(attr.name)) continue;
-      attrs[attr.name] = String(attr.value || '');
+      var attrName = String(attr.name || '');
+      var attrValue = String(attr.value || '');
+      if (attrName.length > ${PREVIEW_RUNTIME_STATE_LIMITS.maxAttributeNameLength} || attrValue.length > ${PREVIEW_RUNTIME_STATE_LIMITS.maxAttributeValueLength}) continue;
+      attrs[attrName] = attrValue;
     }
     return attrs;
   }
@@ -860,41 +1077,119 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     var node = el;
     while (node && node !== document.body) {
       var parent = node.parentElement;
-      if (!parent) return null;
+      if (!parent || path.length >= ${PREVIEW_RUNTIME_STATE_LIMITS.maxPathLength}) return null;
       var index = Array.prototype.indexOf.call(parent.children, node);
-      if (index < 0) return null;
+      if (index < 0 || index > ${PREVIEW_RUNTIME_STATE_LIMITS.maxPathIndex}) return null;
       path.unshift(index);
       node = parent;
     }
     return node === document.body ? path : null;
   }
+  function runtimeStateRoots(){
+    if (!document.body) return [];
+    var roots = [];
+    var canonical = document.body.querySelectorAll('#app, #root, [data-reactroot]');
+    for (var c = 0; c < canonical.length && roots.length < ${PREVIEW_RUNTIME_STATE_LIMITS.maxRoots}; c++) {
+      roots.push(canonical[c]);
+    }
+    // Stateful overlays and detail panes are often siblings of #app/#root.
+    // Capture the outermost identified sibling roots as well; otherwise the
+    // attribute pass can restore an open/hidden state while leaving that pane's
+    // dynamic body at its source placeholder. Never select an ancestor or
+    // descendant of a canonical root, so framework-owned trees keep their
+    // existing single snapshot boundary.
+    var identified = document.body.querySelectorAll('[id]');
+    for (var i = 0; i < identified.length && roots.length < ${PREVIEW_RUNTIME_STATE_LIMITS.maxRoots}; i++) {
+      var candidate = identified[i];
+      var overlaps = false;
+      for (var r = 0; r < roots.length; r++) {
+        if (roots[r].contains(candidate) || candidate.contains(roots[r])) {
+          overlaps = true;
+          break;
+        }
+      }
+      if (!overlaps) roots.push(candidate);
+    }
+    return roots;
+  }
+  function captureRuntimeBodyHtml(){
+    if (!document.body || !document.body.cloneNode) return null;
+    try {
+      var clone = document.body.cloneNode(true);
+      var liveControls = document.body.querySelectorAll('input, textarea, option');
+      var clonedControls = clone.querySelectorAll('input, textarea, option');
+      var controlCount = Math.min(liveControls.length, clonedControls.length);
+      for (var controlIndex = 0; controlIndex < controlCount; controlIndex++) {
+        var liveControl = liveControls[controlIndex];
+        var clonedControl = clonedControls[controlIndex];
+        var controlTag = String(liveControl.tagName || '').toLowerCase();
+        if (controlTag === 'textarea') {
+          clonedControl.textContent = String(liveControl.value == null ? '' : liveControl.value);
+        } else if (controlTag === 'option') {
+          if (liveControl.selected) clonedControl.setAttribute('selected', '');
+          else clonedControl.removeAttribute('selected');
+        } else {
+          clonedControl.setAttribute('value', String(liveControl.value == null ? '' : liveControl.value));
+          if (liveControl.type === 'checkbox' || liveControl.type === 'radio') {
+            if (liveControl.checked) clonedControl.setAttribute('checked', '');
+            else clonedControl.removeAttribute('checked');
+          }
+        }
+      }
+      // Host bridges belong to the URL browsing context. Keeping their script
+      // elements in the frozen body is unnecessary (innerHTML scripts are
+      // inert) and leaks transport-only nodes into Manual Edit's DOM paths.
+      var cloneScripts = clone.querySelectorAll('script');
+      for (var scriptIndex = cloneScripts.length - 1; scriptIndex >= 0; scriptIndex--) {
+        var scriptNode = cloneScripts[scriptIndex];
+        var scriptAttrs = scriptNode.attributes || [];
+        var hostScript = false;
+        for (var scriptAttrIndex = 0; scriptAttrIndex < scriptAttrs.length; scriptAttrIndex++) {
+          var scriptAttrName = String(scriptAttrs[scriptAttrIndex].name || '');
+          if (scriptAttrName.indexOf('data-od-url-') === 0 && /-bridge$/.test(scriptAttrName)) {
+            hostScript = true;
+            break;
+          }
+        }
+        if (hostScript) scriptNode.remove();
+      }
+      var html = String(clone.innerHTML || '');
+      return html.length <= ${PREVIEW_RUNTIME_STATE_LIMITS.maxBodyHtmlLength} ? html : null;
+    } catch (_) {
+      return null;
+    }
+  }
   function captureRuntimeState(){
     var entries = [];
     var roots = [];
     var rootHtmlLength = 0;
-    var runtimeRoots = document.body
-      ? document.body.querySelectorAll('#app, #root, [data-reactroot]')
-      : [];
-    for (var rootIndex = 0; rootIndex < runtimeRoots.length && roots.length < 64; rootIndex++) {
-      var root = runtimeRoots[rootIndex];
-      var rootTag = String(root.tagName || '').toLowerCase();
-      var rootPath = runtimeStatePath(root);
-      if (!rootPath) continue;
-      var rootHtml = String(root.innerHTML || '');
-      if (rootHtmlLength + rootHtml.length > 2097152) break;
-      var rootEntry = {
-        path: rootPath,
-        tag: rootTag,
-        html: rootHtml
-      };
-      if (root.id) rootEntry.id = String(root.id);
-      var rootOdId = root.getAttribute && root.getAttribute('data-od-id');
-      if (rootOdId) rootEntry.odId = String(rootOdId);
-      roots.push(rootEntry);
-      rootHtmlLength += rootHtml.length;
+    var bodyHtml = captureRuntimeBodyHtml();
+    // Keep the old bounded root capture only as an oversize/DOM-clone
+    // fallback. Normal Edit entry carries exactly one copy of the rendered
+    // markup instead of duplicating the entire body plus its app roots.
+    if (bodyHtml === null) {
+      var runtimeRoots = runtimeStateRoots();
+      for (var rootIndex = 0; rootIndex < runtimeRoots.length && roots.length < ${PREVIEW_RUNTIME_STATE_LIMITS.maxRoots}; rootIndex++) {
+        var root = runtimeRoots[rootIndex];
+        var rootTag = String(root.tagName || '').toLowerCase();
+        var rootPath = runtimeStatePath(root);
+        if (!rootPath) continue;
+        var rootHtml = String(root.innerHTML || '');
+        if (rootHtmlLength + rootHtml.length > ${PREVIEW_RUNTIME_STATE_LIMITS.maxRootHtmlLength}) break;
+        var rootEntry = {
+          path: rootPath,
+          tag: rootTag,
+          html: rootHtml
+        };
+        if (root.id && String(root.id).length <= ${PREVIEW_RUNTIME_STATE_LIMITS.maxIdentityLength}) rootEntry.id = String(root.id);
+        var rootOdId = root.getAttribute && root.getAttribute('data-od-id');
+        if (rootOdId && String(rootOdId).length <= ${PREVIEW_RUNTIME_STATE_LIMITS.maxIdentityLength}) rootEntry.odId = String(rootOdId);
+        roots.push(rootEntry);
+        rootHtmlLength += rootHtml.length;
+      }
     }
     var nodes = document.body ? document.body.querySelectorAll('*') : [];
-    var count = Math.min(nodes.length, 3500);
+    var count = Math.min(nodes.length, ${PREVIEW_RUNTIME_STATE_LIMITS.maxElements});
     for (var i = 0; i < count; i++) {
       var el = nodes[i];
       var path = runtimeStatePath(el);
@@ -904,12 +1199,13 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
         tag: String(el.tagName || '').toLowerCase(),
         attrs: runtimeStateAttributes(el)
       };
-      if (el.id) entry.id = String(el.id);
+      if (el.id && String(el.id).length <= ${PREVIEW_RUNTIME_STATE_LIMITS.maxIdentityLength}) entry.id = String(el.id);
       var odId = el.getAttribute && el.getAttribute('data-od-id');
-      if (odId) entry.odId = String(odId);
+      if (odId && String(odId).length <= ${PREVIEW_RUNTIME_STATE_LIMITS.maxIdentityLength}) entry.odId = String(odId);
       var tag = entry.tag;
       if (tag === 'input' || tag === 'textarea' || tag === 'select') {
-        entry.value = String(el.value == null ? '' : el.value);
+        var value = String(el.value == null ? '' : el.value);
+        if (value.length <= ${PREVIEW_RUNTIME_STATE_LIMITS.maxValueLength}) entry.value = value;
       }
       if (tag === 'input' && (el.type === 'checkbox' || el.type === 'radio')) {
         entry.checked = !!el.checked;
@@ -920,8 +1216,9 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
       entries.push(entry);
     }
     return {
-      version: 1,
-      hash: String(window.location.hash || ''),
+      version: ${PREVIEW_RUNTIME_STATE_VERSION},
+      hash: String(window.location.hash || '').slice(0, ${PREVIEW_RUNTIME_STATE_LIMITS.maxHashLength}),
+      bodyHtml: bodyHtml,
       roots: roots,
       htmlAttrs: runtimeStateAttributes(document.documentElement),
       bodyAttrs: runtimeStateAttributes(document.body),
@@ -932,7 +1229,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     var data = ev && ev.data;
     if (!data || !data.type) return;
     if (data.type === 'od:url-selection-bridge-probe') {
-      window.parent.postMessage({ type: 'od:url-selection-bridge-ready' }, '*');
+      postReady();
       return;
     }
     if (data.type === 'od:preview-runtime-state-capture' && data.id) {
@@ -987,6 +1284,23 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     }
     hoveredId = null;
     window.parent.postMessage({ type: 'od:comment-leave' }, '*');
+  }, true);
+  // Keep same-project HTML navigation in the workspace even on the canonical
+  // URL transport. Otherwise leaving Manual Edit makes a link replace the
+  // iframe document while the workspace tab still points at the old file.
+  document.addEventListener('click', function(ev){
+    if (commentEnabled || ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+    var origin = ev.target;
+    var link = origin && origin.closest ? origin.closest('a[href]') : null;
+    var destination = previewHtmlFileForLink(link);
+    if (!destination) return;
+    ev.preventDefault();
+    window.parent.postMessage({
+      type: 'od:preview-open-file',
+      fileName: destination.fileName,
+      search: destination.search,
+      hash: destination.hash
+    }, '*');
   }, true);
   document.addEventListener('click', function(ev){
     if (!commentEnabled || mode !== 'picker') return;
@@ -1066,7 +1380,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   var mo = new MutationObserver(schedulePostTargets);
   mo.observe(document.documentElement, { subtree: true, childList: true });
   ensureStyle();
-  window.parent.postMessage({ type: 'od:url-selection-bridge-ready' }, '*');
+  postReady();
 })();
 </script>`;
 
@@ -1266,16 +1580,88 @@ function wantsUrlPreviewSnapshotBridge(value: unknown): boolean {
   return previewBridgeTokens(value).some((token) => token === 'snapshot' || token === 'image' || token === 'capture');
 }
 
+function wantsUrlPreviewObservabilityBridge(value: unknown): boolean {
+  return previewBridgeTokens(value).some((token) => token === 'observability' || token === 'errors' || token === 'diagnostics');
+}
+
+function wantsUrlPreviewSandboxGuard(value: unknown): boolean {
+  return previewBridgeTokens(value).some((token) => token === 'sandbox' || token === 'storage');
+}
+
+function wantsUrlPreviewFocusGuard(value: unknown): boolean {
+  return previewBridgeTokens(value).some((token) => token === 'focus');
+}
+
+function wantsUrlPreviewRedirectGuard(value: unknown): boolean {
+  return previewBridgeTokens(value).some((token) => token === 'redirect');
+}
+
 function injectBeforeBodyClose(html: string, marker: string, injection: string): string {
   if (html.includes(marker)) return html;
-  const bodyCloseIndex = html.search(/<\/body\s*>/i);
+  const bodyCloseIndex = findRealTagOffset(html, /<\/body(?=[\t\n\f\r >])/i);
   if (bodyCloseIndex >= 0) {
     return `${html.slice(0, bodyCloseIndex)}${injection}${html.slice(bodyCloseIndex)}`;
   }
-  return `${html}${injection}`;
+  // No boundary: appending is not a safe fallback, because the reason there is
+  // no boundary is often that the document ends inside a construct that
+  // swallows whatever follows — `<plaintext>` never leaves PLAINTEXT, an
+  // unterminated comment or script runs to EOF. Appended markup would become
+  // text there and the bridge would never run. Going in near the top instead
+  // costs the "end of body" placement but keeps the bridge live.
+  const headStart = findRealTagOffset(html, /<head(?=[\t\n\f\r />])/i);
+  const headEnd = headStart >= 0 ? endOfTag(html, headStart) : -1;
+  if (headEnd >= 0) return `${html.slice(0, headEnd + 1)}${injection}${html.slice(headEnd + 1)}`;
+  const htmlStart = findRealTagOffset(html, /<html(?=[\t\n\f\r />])/i);
+  const htmlEnd = htmlStart >= 0 ? endOfTag(html, htmlStart) : -1;
+  if (htmlEnd >= 0) return `${html.slice(0, htmlEnd + 1)}<head>${injection}</head>${html.slice(htmlEnd + 1)}`;
+  return prependAfterDoctype(html, injection);
 }
 
-function injectUrlPreviewBridge(html: string, bridge: 'scroll' | 'selection' | 'snapshot'): string {
+function injectAfterHeadOpen(html: string, marker: string, injection: string): string {
+  if (html.includes(marker)) return html;
+  const headOpenIndex = findRealTagOffset(html, /<head(?=[\t\n\f\r />])/i);
+  if (headOpenIndex >= 0) {
+    const openTagEnd = endOfTag(html, headOpenIndex);
+    if (openTagEnd >= 0) {
+      return `${html.slice(0, openTagEnd + 1)}${injection}${html.slice(openTagEnd + 1)}`;
+    }
+  }
+  const htmlOpenIndex = findRealTagOffset(html, /<html(?=[\t\n\f\r />])/i);
+  if (htmlOpenIndex >= 0) {
+    const openTagEnd = endOfTag(html, htmlOpenIndex);
+    if (openTagEnd >= 0) {
+      return `${html.slice(0, openTagEnd + 1)}<head>${injection}</head>${html.slice(openTagEnd + 1)}`;
+    }
+  }
+  return prependAfterDoctype(html, injection);
+}
+
+function injectUrlPreviewBridge(
+  html: string,
+  bridge: 'scroll' | 'selection' | 'snapshot' | 'observability' | 'sandbox' | 'focus' | 'redirect',
+): string {
+  if (bridge === 'sandbox') {
+    return injectAfterHeadOpen(html, 'data-od-sandbox-shim', buildPreviewSandboxShim());
+  }
+  if (bridge === 'focus') {
+    return injectAfterHeadOpen(html, 'data-od-preview-focus-guard', buildPreviewFocusGuard());
+  }
+  if (bridge === 'redirect') {
+    return injectAfterHeadOpen(
+      html,
+      'data-od-preview-redirect-guard',
+      buildPreviewRedirectGuard({
+        blockLoadTimeScriptRedirect: previewHtmlHasLoadTimeLocationNavigation(html),
+      }),
+    );
+  }
+  if (bridge === 'observability') {
+    return injectAfterHeadOpen(
+      html,
+      PREVIEW_OBSERVABILITY_BRIDGE_MARKER,
+      buildPreviewObservabilityBridge(),
+    );
+  }
   if (bridge === 'scroll') {
     return injectBeforeBodyClose(html, 'data-od-url-scroll-bridge', URL_PREVIEW_SCROLL_BRIDGE);
   }
@@ -1294,7 +1680,11 @@ function applyUrlPreviewBridgesToHtml(
     !(
       wantsUrlPreviewScrollBridge(requestedBridge) ||
       wantsUrlPreviewSelectionBridge(requestedBridge) ||
-      wantsUrlPreviewSnapshotBridge(requestedBridge)
+      wantsUrlPreviewSnapshotBridge(requestedBridge) ||
+      wantsUrlPreviewObservabilityBridge(requestedBridge) ||
+      wantsUrlPreviewSandboxGuard(requestedBridge) ||
+      wantsUrlPreviewFocusGuard(requestedBridge) ||
+      wantsUrlPreviewRedirectGuard(requestedBridge)
     ) ||
     !/^text\/html(?:;|$)/i.test(mime)
   ) {
@@ -1306,6 +1696,21 @@ function applyUrlPreviewBridgesToHtml(
   // filename. URL-load iframes cannot rely on the host rewriting the document
   // title after load, and powered previews are intentionally cross-origin.
   html = daemonSanitizeTitleInDoc(html);
+  // Guards must run before authored scripts. injectAfterHeadOpen prepends at
+  // the start of <head>; apply in reverse runtime order so the final document
+  // executes sandbox -> redirect -> observability -> focus.
+  if (wantsUrlPreviewFocusGuard(requestedBridge)) {
+    html = injectUrlPreviewBridge(html, 'focus');
+  }
+  if (wantsUrlPreviewObservabilityBridge(requestedBridge)) {
+    html = injectUrlPreviewBridge(html, 'observability');
+  }
+  if (wantsUrlPreviewRedirectGuard(requestedBridge)) {
+    html = injectUrlPreviewBridge(html, 'redirect');
+  }
+  if (wantsUrlPreviewSandboxGuard(requestedBridge)) {
+    html = injectUrlPreviewBridge(html, 'sandbox');
+  }
   if (wantsUrlPreviewScrollBridge(requestedBridge)) {
     html = injectUrlPreviewBridge(html, 'scroll');
   }
@@ -1431,31 +1836,29 @@ function daemonFindRealTitleOffset(html: string, searchLimit: number): number {
  *
  * Exported for unit testing; not part of the public API surface.
  */
+const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
+
 export function daemonSanitizeTitleInDoc(html: string): string {
-  const lower = html.toLowerCase();
-  const bodyStart = lower.indexOf('<body');
-  const headEnd = lower.lastIndexOf('</head>', bodyStart >= 0 ? bodyStart - 1 : lower.length - 1);
-  const searchLimit = headEnd >= 0
-    ? headEnd + 7
-    : bodyStart >= 0
-      ? bodyStart
-      : html.length;
+  // Only the head's own <title> names the document; an <svg><title> in the body
+  // is an accessible label for that graphic. Both boundaries are located
+  // structurally, so a `</head>` or `<body>` an author wrote into a script
+  // string cannot move the limit.
+  const headClose = findRealTagOffset(html, HTML_TAG_PATTERNS.headClose);
+  const bodyOpen = findRealTagOffset(html, HTML_TAG_PATTERNS.bodyOpen);
+  const searchLimit = headClose >= 0 ? headClose : bodyOpen >= 0 ? bodyOpen : html.length;
 
-  const titleStart = daemonFindRealTitleOffset(html, searchLimit);
-  if (titleStart < 0) return html;
+  // Both ends of the element by the parser's rules: the open tag through
+  // `endOfTag`, so a `>` inside a quoted attribute cannot cut it short, and the
+  // close by the raw-text rule, so `</title >` closes it while `</title-page>`
+  // does not. A plain `indexOf('</title>')` accepted only one spelling.
+  const range = findRealElementRange(html, HTML_TAG_PATTERNS.titleOpen, 'title');
+  if (!range || range.start >= searchLimit) return html;
 
-  const openTagEnd = html.indexOf('>', titleStart);
-  if (openTagEnd < 0) return html;
-
-  const closingTagStart = html.toLowerCase().indexOf('</title>', openTagEnd + 1);
-  if (closingTagStart < 0) return html;
-
-  const closingTagEnd = html.indexOf('>', closingTagStart);
-  if (closingTagEnd < 0) return html;
-
-  const openTag = html.slice(titleStart, openTagEnd + 1);
-  const rawContent = html.slice(openTagEnd + 1, closingTagStart);
-  const closeTag = html.slice(closingTagStart, closingTagEnd + 1);
+  const titleStart = range.start;
+  const closingTagEnd = range.end - 1;
+  const openTag = html.slice(range.start, range.contentStart);
+  const rawContent = html.slice(range.contentStart, range.contentEnd);
+  const closeTag = html.slice(range.contentEnd, range.end);
 
   const decoded = daemonDecodeHtmlEntitiesForTitle(rawContent);
   const safe = daemonSanitizePreviewTitle(decoded);
@@ -1540,7 +1943,7 @@ function buildDesignSystemCopySourceContext(input: {
   return [
     '# Source Project Context',
     '',
-    'This design-system workspace was created from an existing Open Design project. Treat the copied project files as the primary source evidence for the generated design system.',
+    'This design-system workspace was created from an existing OpenDesign project. Treat the copied project files as the primary source evidence for the generated design system.',
     '',
     '## Source project',
     '',
@@ -1570,7 +1973,7 @@ function buildDesignSystemCopySourceContext(input: {
     '- Read this file before editing design-system outputs.',
     '- Read the copied files directly from the project workspace; they are source evidence, not generated design-system output.',
     '- Preserve high-signal assets, source examples, UI surfaces, copy, tokens, typography, and interaction patterns from the copied project.',
-    '- Generate a reusable Open Design design-system package in this same project: DESIGN.md, README.md, SKILL.md, colors_and_type.css, context/provenance, focused preview cards, preserved assets/build/fonts when available, and ui_kits/app/.',
+    '- Generate a reusable OpenDesign design-system package in this same project: DESIGN.md, README.md, SKILL.md, colors_and_type.css, context/provenance, focused preview cards, preserved assets/build/fonts when available, and ui_kits/app/.',
     '- Before final response, run `"$OD_NODE_BIN" "$OD_BIN" tools connectors design-system-package-audit --path . --fail-on-warnings` and fix every actionable issue.',
     '',
   ].join('\n');
@@ -1590,7 +1993,7 @@ function buildDesignSystemCopyPendingPrompt(input: {
     .slice(0, 140)
     .map((name) => `  - ${name}`);
   return [
-    'Create this project as a complete Open Design design system workspace.',
+    'Create this project as a complete OpenDesign design system workspace.',
     '',
     'Autonomy requirement:',
     '- Do not ask setup or clarification questions during design-system generation.',
@@ -1667,9 +2070,13 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   const { randomId } = ctx.ids;
   const { validateProjectDesignSystemId, validateProjectSkillId } = ctx.validation;
   const { collabSync, teamProjectCatalog, workspaceTypes } = ctx;
-  const enforceWorkspaceProjectMutation = createEnforceWorkspaceProjectMutation(
-    ctx.verifyWorkspaceRequestAuthority,
-  );
+  const learnAssertedWorkspaceType = (context: WorkspaceResourceContext | null) => {
+    if (!context?.workspaceTypeAsserted) return;
+    workspaceTypes?.learn({
+      workspaceId: context.workspaceId,
+      workspaceType: context.workspaceTypeAsserted,
+    });
+  };
   const verifyWorkspaceProjectReadAuthority =
     ctx.verifyWorkspaceReadAuthority ?? ctx.verifyWorkspaceRequestAuthority;
   const authorizeProjectRequest =
@@ -1680,11 +2087,18 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       getWorkspaceProjectByProjectId,
       isProjectRevoked: (_db, projectId) =>
         ctx.isProjectRevoked?.(projectId) ?? false,
+      isProjectUnmaterializedPlaceholder: (_db, projectId) =>
+        ctx.isProjectUnmaterializedPlaceholder?.(projectId) ?? false,
       ...(ctx.verifyWorkspaceRequestAuthority
         ? { verifyWorkspaceRequestAuthority: ctx.verifyWorkspaceRequestAuthority }
         : {}),
       sendApiError,
     });
+  const enforceWorkspaceProjectMutation = createEnforceWorkspaceProjectMutation(
+    ctx.verifyWorkspaceRequestAuthority,
+    ctx.verifyPersonalProjectDeleteLeaseAuthority,
+    authorizeProjectRequest,
+  );
   async function verifiedWorkspaceProjectContext(
     req: any,
   ): Promise<WorkspaceProjectContext | null> {
@@ -1692,18 +2106,20 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     const verified = await ctx.verifyWorkspaceRequestAuthority(req);
     return verified.ok ? workspaceResourceContextFromVerified(verified.context) : null;
   }
-  /**
-   * Where a created project belongs when the request has no authorization gate
-   * of its own — the duplicate / design-system-copy pair and the
-   * project-location scan importer. An asserted pair is verified through the
-   * same directory lookup as `POST /api/projects`; a headerless legacy/local
-   * request remains unbound and a failed assertion writes nothing.
-   */
-  const resolveCreatedProjectHome = createCreatedProjectWorkspaceResolver({
+  // Duplicate/import paths use the same optional local attribution as ordinary
+  // project creation. Cloud authority is checked only when a later operation
+  // actually shares, syncs, or publishes the project.
+  const resolveCreatedProjectHomeWithLocalAttribution = createCreatedProjectWorkspaceResolver({
     ...(ctx.fetchProjectCreationWorkspaceDirectory
       ? { fetchWorkspaceDirectory: ctx.fetchProjectCreationWorkspaceDirectory }
       : {}),
+    ...(ctx.configuredEnv ? { configuredEnv: ctx.configuredEnv } : {}),
   });
+  const resolveCreatedProjectHome: CreatedProjectWorkspaceResolver = async (req) => {
+    const home = await resolveCreatedProjectHomeWithLocalAttribution(req);
+    learnAssertedWorkspaceType(home);
+    return home;
+  };
   function sendMissingWorkspaceContext(res: Response) {
     return sendApiError(res, 401, 'WORKSPACE_CONTEXT_REQUIRED', 'workspace context is required');
   }
@@ -2334,6 +2750,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     now: number,
   ) {
     if (ctx === null) return;
+    learnAssertedWorkspaceType(ctx);
     ensureWorkspaceProject(db, {
       projectId: targetProjectId,
       workspaceId: ctx.workspaceId,
@@ -2353,7 +2770,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
    * CURRENT mutating request's workspace, right before
    * `enforceWorkspaceProjectMutation` evaluates it.
    *
-   * the verified Workspace mutation gate denies any
+   * The Workspace mutation gate denies any
    * mutation the moment the two-key lookup comes back empty
    * (`workspaceResourceMutationAllowed`'s `if (!row) return false;`) — right
    * for a project genuinely bound to a DIFFERENT workspace than the one the
@@ -2382,37 +2799,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
    * explicit mutation request naming this exact project is the "yes, this is
    * mine" signal a read never had.
    *
-   * But that owner is NOT the request's own claim. `workspaceProjectContextFromRequest`
-   * only PARSES `x-od-workspace-*`, which is an unauthenticated hint any local
-   * caller can forge, and this row's `createdByWorkspaceMemberId` is what
-   * `workspaceResourceAccess` turns into `selfCreated` — the bit that grants a
-   * non-privileged member mutation rights over it. Writing the header value
-   * meant a plain curl could claim someone else's orphaned project into a
-   * workspace it has no membership in and install itself as the author.
-   *
-   * So the workspace and authorship both come from
-   * `resolveCreatedProjectHome`, the same exact verifier every created-project
-   * path uses:
-   *
-   *   - the asserted identity VERIFIES against the membership directory -> claim
-   *     it, attributed to the DIRECTORY's member id rather than the header's;
-   *   - it does NOT verify — foreign, inactive, removed, or authority unreadable
-   *     -> write NOTHING;
-   *   - no pair was asserted -> write nothing, and let the pre-existing gate
-   *     below answer. A caller that cannot prove membership over a project
-   *     nothing has ever claimed is exactly who that gate is for; inventing a
-   *     binding to keep it happy is what this fix removes.
-   *
-   * Failing closed is essential because this binding is sticky: assigning an
-   * orphan from a forged or unverifiable request could prevent its rightful
-   * Workspace from reconciling it later.
-   *
-   * The `null`/`'missing'` early return is unchanged and load-bearing, and is
-   * why this does not simply use `createdProjectWorkspaceHome`'s own third
-   * branch. The verified Workspace mutation gate runs immediately after this and
-   * its HEADERLESS branch answers 401 WORKSPACE_CONTEXT_REQUIRED as soon as ANY
-   * row exists for the resource. Claiming on a request that asserts nothing
-   * would therefore convert a working headerless mutation into a 401.
+   * A complete explicit pair may claim a true local orphan. Partial/headerless
+   * requests write nothing, and a project already bound anywhere is never
+   * re-homed. The daemon's loopback request boundary protects this local
+   * attribution; remote membership is enforced only at share/sync/publish.
    */
   function reconcileUnboundProjectBeforeMutation(
     req: any,
@@ -2423,7 +2813,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     if (asserted === null || asserted === 'missing') return;
     if (getWorkspaceProjectByProjectId(db, projectId)) return;
     if (!home) return;
-    // Verified assertions resolve to the exact pair used as the directory key.
+    // The resolver and parser must agree on the exact local attribution pair.
     if (
       home.workspaceId !== asserted.workspaceId
       || home.workspaceMemberId !== asserted.workspaceMemberId
@@ -2774,9 +3164,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             // A project this scan adopts off disk is as much a created project
             // as one typed into the composer, and needs the same home
             // workspace. Without this the imported project is an orphan the
-            // moment it appears: denied its first run by
-            // the verified Workspace mutation gate, and billing-less on any run
-            // that does get through.
+            // moment it appears: account-scoped local runs remain possible,
+            // but Workspace mutations and Workspace-pinned billing would have
+            // no durable home.
             bindCreatedProjectToWorkspace(
               (input) => ensureWorkspaceProject(db, input),
               createHome,
@@ -3327,13 +3717,14 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.post('/api/projects', async (req, res) => {
     try {
-      const createWorkspace = await authorizeCreatedProjectWorkspace(
-        req,
-        ctx.fetchProjectCreationWorkspaceDirectory,
-      );
-      if (!createWorkspace.ok) {
-        return sendCreatedProjectWorkspaceError(res, createWorkspace);
-      }
+      // Ordinary project creation is local. Capture any complete identity that
+      // the Web already has for local attribution, but do not turn Workspace
+      // directory availability into a Send dependency. Remote share/sync/move
+      // routes retain their authoritative checks.
+      const createWorkspace = {
+        context: localProjectWorkspaceAttribution(req),
+      };
+      learnAssertedWorkspaceType(createWorkspace.context);
       const { id, name, projectLocationId, skillId, designSystemId, pendingPrompt, metadata, customInstructions, skipDiscoveryBrief } =
         req.body || {};
       if (typeof id !== 'string' || !isSafeId(id)) {
@@ -3397,9 +3788,27 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         workspaceId: createWorkspace.context?.workspaceId ?? null,
         workspaceMemberId: createWorkspace.context?.workspaceMemberId ?? null,
       };
+      let skillCatalogScope: LocalCatalogScope | null;
+      let designSystemCatalogScope: LocalCatalogScope | null;
+      try {
+        skillCatalogScope = parseLocalCatalogScope(
+          req.body?.skillCatalogScope,
+          'skillCatalogScope',
+        );
+        designSystemCatalogScope = parseLocalCatalogScope(
+          req.body?.designSystemCatalogScope,
+          'designSystemCatalogScope',
+        );
+      } catch (error) {
+        return sendApiError(res, 400, 'BAD_REQUEST', String(error));
+      }
+      // A staged local resource can outlive the shell's current identity
+      // snapshot while a Workspace switch is loading. Use the partition that
+      // produced that exact selection for local lookup only. It does not bind
+      // this local project to that Workspace or prove current membership.
       const designSystemValidation = await validateProjectDesignSystemId(
         designSystemId,
-        creationWorkspaceScope,
+        designSystemCatalogScope ?? creationWorkspaceScope,
       );
       if (!designSystemValidation.ok) {
         return sendApiError(
@@ -3412,7 +3821,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       const normalizedDesignSystemId = designSystemValidation.id;
       const skillValidation = await validateProjectSkillId(
         skillId,
-        creationWorkspaceScope,
+        skillCatalogScope ?? creationWorkspaceScope,
       );
       if (!skillValidation.ok) {
         return sendApiError(res, 400, skillValidation.code, skillValidation.message);
@@ -3422,10 +3831,29 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         typeof req.body?.pluginId === 'string' && req.body.pluginId.trim().length > 0
           ? req.body.pluginId.trim()
           : null;
+      const requestedPluginSource =
+        typeof req.body?.pluginSource === 'string' && req.body.pluginSource.trim().length > 0
+          ? req.body.pluginSource.trim()
+          : null;
+      // Local identity resolution only. Do not compare this historical source
+      // with the project's current Workspace or perform a membership request:
+      // Home already reconciles staged selections against its current local
+      // catalogue, and this project is local until a later share/sync/move.
+      const selectedLocalPlugin = requestedPluginId && requestedPluginSource
+        ? await ctx.pluginScope?.getLocalPluginBySource?.(
+            requestedPluginId,
+            requestedPluginSource,
+          ) ?? null
+        : null;
       if (requestedPluginId) {
-        const visiblePlugin = ctx.pluginScope
-          ? await ctx.pluginScope.getPlugin(requestedPluginId, creationWorkspaceScope)
-          : getInstalledPlugin(db, requestedPluginId);
+        // Once a source is supplied, never substitute a same-id Personal or
+        // other catalogue record. A missing local source is a missing plugin,
+        // not a Workspace authorization verdict.
+        const visiblePlugin = requestedPluginSource
+          ? selectedLocalPlugin
+          : ctx.pluginScope
+            ? await ctx.pluginScope.getPlugin(requestedPluginId, creationWorkspaceScope)
+            : getInstalledPlugin(db, requestedPluginId);
         if (!visiblePlugin) {
           return sendApiError(res, 404, 'PLUGIN_NOT_FOUND', 'plugin not found');
         }
@@ -3454,10 +3882,31 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         && (metadata as { intent?: unknown }).intent === 'web-clone'
         && typeof pendingPrompt === 'string'
         && /https?:\/\/\S+/i.test(pendingPrompt);
-      const projectMetadata =
-        metadata && typeof metadata === 'object'
+      const localCatalogScopes = {
+        ...(normalizedSkillId && skillCatalogScope ? { skill: skillCatalogScope } : {}),
+        ...(normalizedDesignSystemId && designSystemCatalogScope
+          ? { designSystem: designSystemCatalogScope }
+          : {}),
+      };
+      const hasLocalCatalogScopes = Object.keys(localCatalogScopes).length > 0;
+      // This metadata is daemon-owned. A caller may supply provenance through
+      // the typed top-level fields, but cannot smuggle a different partition
+      // inside the otherwise extensible project metadata object.
+      const clientMetadata = metadata && typeof metadata === 'object'
+        ? Object.fromEntries(
+            Object.entries(metadata).filter(([key]) => (
+              key !== 'localCatalogScopes'
+              && key !== 'scenarioBinding'
+              && key !== 'strategyBinding'
+              && key !== 'exampleBinding'
+            )),
+          )
+        : null;
+      const baseProjectMetadata =
+        clientMetadata
           ? {
-              ...metadata,
+              ...clientMetadata,
+              ...(hasLocalCatalogScopes ? { localCatalogScopes } : {}),
               ...(skipDiscoveryBrief === true || webCloneUrlSkipsDiscovery
                 ? { skipDiscoveryBrief: true }
                 : {}),
@@ -3468,9 +3917,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                     projectLocationId: selectedLocationId,
                   }
                 : {}),
-              ...(Array.isArray(metadata.linkedDirs)
+              ...(Array.isArray(clientMetadata.linkedDirs)
                 ? (() => {
-                    const v = validateLinkedDirs(metadata.linkedDirs);
+                    const v = validateLinkedDirs(clientMetadata.linkedDirs);
                     return v.error ? {} : { linkedDirs: v.dirs };
                   })()
                 : {}),
@@ -3478,6 +3927,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           : skipDiscoveryBrief === true
             ? {
                 skipDiscoveryBrief: true,
+                ...(hasLocalCatalogScopes ? { localCatalogScopes } : {}),
                 ...(externalProjectDir
                   ? {
                       baseDir: externalProjectDir,
@@ -3493,13 +3943,163 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                   importedFrom: 'project-location',
                   projectLocationId: selectedLocationId,
                 }
-              : null;
+              : hasLocalCatalogScopes
+                ? {
+                    localCatalogScopes,
+                  }
+                : null;
       const now = Date.now();
       const cid = randomId();
       const initialSessionMode = normalizeChatSessionMode(
         req.body?.conversationMode ?? req.body?.sessionMode,
       );
+      const requestedAutomaticStrategyTaskProfile =
+        req.body?.automaticStrategyTaskProfile === 'prototype'
+        || req.body?.automaticStrategyTaskProfile === 'ppt'
+        || req.body?.automaticStrategyTaskProfile === 'marketing'
+        || req.body?.automaticStrategyTaskProfile === 'hyperframes'
+          ? req.body.automaticStrategyTaskProfile
+          : null;
+      if (
+        req.body?.automaticStrategyTaskProfile !== undefined
+        && !requestedAutomaticStrategyTaskProfile
+      ) {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          'automaticStrategyTaskProfile is invalid',
+        );
+      }
+      const explicitPlugin =
+        typeof req.body?.pluginId === 'string' && req.body.pluginId.trim().length > 0
+          ? true
+          : typeof req.body?.appliedPluginSnapshotId === 'string'
+            && req.body.appliedPluginSnapshotId.trim().length > 0;
+      // An official example card picked under a task type. It is a reference,
+      // not a strategy: the project keeps its automatic OD Next route and the
+      // example's SKILL.md travels as a user-selected Skill at run start. It
+      // therefore deliberately does NOT participate in `explicitPlugin` — the
+      // whole point is to stop pinning an executable plugin.
+      //
+      // Fail-closed like `automaticStrategyTaskProfile` above: a present but
+      // unusable reference is a 400, never a silent drop, because a dropped
+      // reference produces a run that looks correct and quietly lost the
+      // example the user picked.
+      const rawExampleReference = req.body?.exampleReference;
+      let exampleBinding: ProjectMetadata['exampleBinding'] | null = null;
+      if (rawExampleReference !== undefined) {
+        const exampleReference =
+          rawExampleReference && typeof rawExampleReference === 'object'
+          && !Array.isArray(rawExampleReference)
+            ? rawExampleReference as Record<string, unknown>
+            : null;
+        const examplePluginId = typeof exampleReference?.pluginId === 'string'
+          ? exampleReference.pluginId.trim()
+          : '';
+        const exampleSource = typeof exampleReference?.source === 'string'
+          ? exampleReference.source.trim()
+          : '';
+        if (!examplePluginId || !exampleSource) {
+          return sendApiError(res, 400, 'BAD_REQUEST', 'exampleReference is invalid');
+        }
+        // Contradictory claims. `pluginId`/`appliedPluginSnapshotId` say "run
+        // this plugin as the strategy"; `exampleReference` says "keep the
+        // automatic route and carry this example as reference material". A
+        // request asserting both has no single correct reading, and guessing
+        // one would silently decide the route for the user.
+        if (explicitPlugin) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'exampleReference cannot be combined with pluginId or appliedPluginSnapshotId',
+          );
+        }
+        // Re-resolve server-side through the same local lookup
+        // `/api/plugins/:id/apply-local` uses, then read the example's bytes
+        // from the record's own path. The request body contributes an identity
+        // claim only; it never contributes content.
+        const resolvedExample = await ctx.pluginScope?.getLocalPluginBySource?.(
+          examplePluginId,
+          exampleSource,
+        ) ?? null;
+        const resolvedExampleRecord = resolvedExample as
+          { id?: unknown; source?: unknown; fsPath?: unknown } | null;
+        if (
+          !resolvedExampleRecord
+          || resolvedExampleRecord.id !== examplePluginId
+          || resolvedExampleRecord.source !== exampleSource
+          || typeof resolvedExampleRecord.fsPath !== 'string'
+          || !resolvedExampleRecord.fsPath
+        ) {
+          return sendApiError(res, 404, 'PLUGIN_NOT_FOUND', 'example plugin not found');
+        }
+        try {
+          exampleBinding = createProjectExampleBinding({
+            pluginId: examplePluginId,
+            pluginSource: exampleSource,
+            manifestSourceDigest: await digestExampleSkillManifest(
+              resolvedExampleRecord.fsPath,
+            ),
+            boundAt: now,
+          });
+        } catch (error) {
+          if (error instanceof InvalidProjectExampleBindingError) {
+            return sendApiError(res, 400, 'BAD_REQUEST', error.message);
+          }
+          throw error;
+        }
+      }
+      const automaticStrategyBinding = requestedAutomaticStrategyTaskProfile
+        && initialSessionMode === 'design'
+        && !explicitPlugin
+          ? createAutomaticProjectStrategyBinding({
+              metadata: baseProjectMetadata as ProjectMetadata | null,
+              taskProfile: requestedAutomaticStrategyTaskProfile,
+              boundAt: now,
+            })
+          : null;
+      if (requestedAutomaticStrategyTaskProfile && !automaticStrategyBinding) {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          'automaticStrategyTaskProfile does not match this automatic Design route',
+        );
+      }
+      const projectMetadata = automaticStrategyBinding || exampleBinding
+        ? {
+            ...(baseProjectMetadata ?? {}),
+            ...(automaticStrategyBinding
+              ? { strategyBinding: automaticStrategyBinding }
+              : {}),
+            ...(exampleBinding ? { exampleBinding } : {}),
+          }
+        : baseProjectMetadata;
+      const defaultScenarioPluginId = defaultScenarioPluginIdForProjectMetadata(
+        projectMetadata && typeof projectMetadata.kind === 'string'
+          ? projectMetadata as Parameters<
+              typeof defaultScenarioPluginIdForProjectMetadata
+            >[0]
+          : null,
+      );
+      const automaticDefaultRouting = initialSessionMode === 'design'
+        && Boolean(defaultScenarioPluginId)
+        && !explicitPlugin
+        && !automaticStrategyBinding;
+      let resolveBody =
+        explicitPlugin ? (req.body as Record<string, unknown>) : null;
+      if (!resolveBody && initialSessionMode === 'design' && !automaticStrategyBinding) {
+        if (defaultScenarioPluginId && getInstalledPlugin(db, defaultScenarioPluginId)) {
+          resolveBody = { ...(req.body || {}), pluginId: defaultScenarioPluginId };
+        }
+      }
       let project;
+      const pluginResolutionState: {
+        snapshot: ResolveSnapshotOk | null;
+        failure: ResolveSnapshotError | null;
+      } = { snapshot: null, failure: null };
       try {
         if (externalProjectDir) {
           await writeProjectManifest(externalProjectDir, {
@@ -3512,8 +4112,33 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             designSystemId: normalizedDesignSystemId,
           });
         }
+        const registry = resolveBody
+          ? await loadPluginRegistryView(
+              selectedLocalPlugin
+                ? localPluginRegistryScope(selectedLocalPlugin)
+                : creationWorkspaceScope,
+            )
+          : null;
+        let pluginForSnapshot = selectedLocalPlugin;
+        if (requestedPluginId && requestedPluginSource) {
+          // All preparation above is asynchronous. Re-resolve the exact local
+          // source immediately before the synchronous SQLite transaction so a
+          // reconciliation tombstone cannot leave a project/conversation or
+          // snapshot behind. This is local catalogue freshness only: do not
+          // turn it into a remote membership or current-Workspace gate.
+          pluginForSnapshot = await ctx.pluginScope?.getLocalPluginBySource?.(
+            requestedPluginId,
+            requestedPluginSource,
+          ) ?? null;
+          if (!pluginForSnapshot) {
+            if (externalProjectDir) {
+              await rm(externalProjectDir, { recursive: true, force: true }).catch(() => {});
+            }
+            return sendApiError(res, 404, 'PLUGIN_NOT_FOUND', 'plugin not found');
+          }
+        }
         project = db.transaction(() => {
-          const createdProject = insertProject(db, {
+          let createdProject = insertProject(db, {
             id,
             name: name.trim(),
             skillId: normalizedSkillId,
@@ -3543,6 +4168,45 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             id,
             now,
           );
+          if (resolveBody && registry) {
+            const resolved = resolvePluginSnapshot({
+              db,
+              body: resolveBody,
+              projectId: id,
+              conversationId: cid,
+              registry,
+              activeProjectDesignSystem:
+                typeof normalizedDesignSystemId === 'string' && normalizedDesignSystemId.length > 0
+                  ? { id: normalizedDesignSystemId }
+                  : undefined,
+              connectorProbe: buildConnectorProbe(connectorService),
+              ...(pluginForSnapshot ? { plugin: pluginForSnapshot } : {}),
+              ...(automaticDefaultRouting && defaultScenarioPluginId
+                ? {
+                    projectBinding: {
+                      provenance: 'automatic_default' as const,
+                      taskProfile: automaticScenarioTaskProfile({
+                        metadata: projectMetadata as ProjectMetadata | null,
+                        pluginId: defaultScenarioPluginId,
+                      }),
+                    },
+                  }
+                : {}),
+            });
+            if (resolved && !resolved.ok) {
+              if (!explicitPlugin) {
+                console.warn(
+                  `[plugins] default-scenario fallback skipped for project ${id}: ${resolved.body?.error?.code ?? 'unknown'}`,
+                );
+              } else {
+                pluginResolutionState.failure = resolved;
+                throw new Error('explicit plugin resolution failed');
+              }
+            } else {
+              pluginResolutionState.snapshot = resolved;
+              if (resolved) createdProject = getProject(db, id) ?? createdProject;
+            }
+          }
           return createdProject;
         })();
       } catch (err) {
@@ -3552,47 +4216,12 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         if (externalProjectDir) {
           await rm(externalProjectDir, { recursive: true, force: true }).catch(() => {});
         }
+        if (pluginResolutionState.failure) {
+          return res
+            .status(pluginResolutionState.failure.status)
+            .json(pluginResolutionState.failure.body);
+        }
         throw err;
-      }
-      const explicitPlugin =
-        typeof req.body?.pluginId === 'string' && req.body.pluginId.trim().length > 0
-          ? true
-          : typeof req.body?.appliedPluginSnapshotId === 'string'
-            && req.body.appliedPluginSnapshotId.trim().length > 0;
-      let resolveBody =
-        explicitPlugin ? (req.body as Record<string, unknown>) : null;
-      if (!resolveBody && initialSessionMode === 'design') {
-        const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(projectMetadata);
-        if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
-          resolveBody = { ...(req.body || {}), pluginId: fallbackPluginId };
-        }
-      }
-      let resolvedSnapshot = null;
-      if (resolveBody) {
-        const registry = await loadPluginRegistryView(creationWorkspaceScope);
-        const resolved = resolvePluginSnapshot({
-          db,
-          body: resolveBody,
-          projectId: id,
-          conversationId: cid,
-          registry,
-          activeProjectDesignSystem:
-            typeof normalizedDesignSystemId === 'string' && normalizedDesignSystemId.length > 0
-              ? { id: normalizedDesignSystemId }
-              : undefined,
-          connectorProbe: buildConnectorProbe(connectorService),
-        });
-        if (resolved && !resolved.ok) {
-          if (!explicitPlugin) {
-            console.warn(
-              `[plugins] default-scenario fallback skipped for project ${id}: ${resolved.body?.error?.code ?? 'unknown'}`,
-            );
-          } else {
-            return res.status(resolved.status).json(resolved.body);
-          }
-        } else {
-          resolvedSnapshot = resolved;
-        }
       }
       // For "from template" projects, seed the chosen template's snapshot
       // HTML into the new project folder so the agent can Read/edit files
@@ -3632,7 +4261,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         }
       }
       /** @type {import('@open-design/contracts').CreateProjectResponse} */
-      const createdProject = resolvedSnapshot?.ok ? getProject(db, id) ?? project : project;
+      const createdProject = pluginResolutionState.snapshot
+        ? getProject(db, id) ?? project
+        : project;
       const body = {
         // The binding above is part of the same transaction as the project and
         // seed conversation. Return that authority immediately so the Web can
@@ -3643,13 +4274,215 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           ? { ...createdProject, workspaceId: createWorkspace.context.workspaceId }
           : createdProject,
         conversationId: cid,
-        ...(resolvedSnapshot?.ok
-          ? { appliedPluginSnapshotId: resolvedSnapshot.snapshotId }
+        ...(pluginResolutionState.snapshot
+          ? { appliedPluginSnapshotId: pluginResolutionState.snapshot.snapshotId }
           : {}),
       };
       res.json(body);
     } catch (err: any) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
+  app.post('/api/projects/:id/scenario/restore-automatic', async (req, res) => {
+    const project = getProject(db, req.params.id);
+    if (!project) {
+      return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+    }
+    if (!await enforceWorkspaceProjectMutation(
+      req,
+      res,
+      sendApiError,
+      getWorkspaceProject,
+      getWorkspaceProjectByProjectId,
+      db,
+      project.id,
+      'rename',
+    )) return;
+
+    const request = req.body as Partial<RestoreProjectAutomaticScenarioRequest> | null;
+    if (!request || !Object.prototype.hasOwnProperty.call(request, 'expectedCurrentSnapshotId')) {
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'expectedCurrentSnapshotId is required',
+      );
+    }
+    if (
+      request.expectedCurrentSnapshotId !== null
+      && typeof request.expectedCurrentSnapshotId !== 'string'
+    ) {
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'expectedCurrentSnapshotId must be a string or null',
+      );
+    }
+    const currentSnapshotId = project.appliedPluginSnapshotId ?? null;
+    if (request.expectedCurrentSnapshotId !== currentSnapshotId) {
+      return sendApiError(
+        res,
+        409,
+        'PROJECT_SCENARIO_CONFLICT',
+        'project scenario changed; refresh before restoring the automatic scenario',
+      );
+    }
+
+    const automaticStrategyTaskProfile = automaticStrategyTaskProfileForProjectMetadata(
+      project.metadata,
+    );
+    if (automaticStrategyTaskProfile) {
+      const currentStrategyBinding = readVerifiedProjectStrategyBinding(project.metadata);
+      const strategyBinding = createAutomaticProjectStrategyBinding({
+        metadata: project.metadata,
+        taskProfile: automaticStrategyTaskProfile,
+      });
+      if (!strategyBinding) {
+        return sendApiError(
+          res,
+          409,
+          'DEFAULT_SCENARIO_UNAVAILABLE',
+          'no automatic strategy route is available for this project',
+        );
+      }
+      if (
+        currentSnapshotId === null
+        && currentStrategyBinding?.taskProfile === automaticStrategyTaskProfile
+        && !project.metadata?.scenarioBinding
+      ) {
+        const body: RestoreProjectAutomaticScenarioResponse = {
+          project,
+          strategyBinding: currentStrategyBinding,
+          changed: false,
+        };
+        return res.json(body);
+      }
+
+      const restored = db.transaction(() => {
+        if (currentSnapshotId) {
+          restoreProjectSnapshotLink(db, project.id, currentSnapshotId, null);
+        }
+        const metadata: ProjectMetadata = {
+          ...(project.metadata ?? { kind: 'prototype' }),
+          strategyBinding,
+        };
+        delete metadata.scenarioBinding;
+        return updateProject(db, project.id, { metadata });
+      })();
+      if (!restored) {
+        return sendApiError(
+          res,
+          409,
+          'DEFAULT_SCENARIO_RESTORE_FAILED',
+          'automatic strategy restoration failed',
+        );
+      }
+      const body: RestoreProjectAutomaticScenarioResponse = {
+        project: restored,
+        strategyBinding,
+        changed: true,
+      };
+      return res.json(body);
+    }
+
+    const defaultPluginId = defaultScenarioPluginIdForProjectMetadata(project.metadata);
+    if (!defaultPluginId || !getInstalledPlugin(db, defaultPluginId)) {
+      return sendApiError(
+        res,
+        409,
+        'DEFAULT_SCENARIO_UNAVAILABLE',
+        'no installed automatic scenario is available for this project',
+      );
+    }
+    const taskProfile = automaticScenarioTaskProfile({
+      metadata: project.metadata,
+      pluginId: defaultPluginId,
+    });
+    const currentBinding = readVerifiedProjectScenarioBinding(db, {
+      projectId: project.id,
+      appliedPluginSnapshotId: currentSnapshotId,
+      metadata: project.metadata,
+    });
+    if (
+      currentBinding?.provenance === 'automatic_default'
+      && currentBinding.snapshotId === currentSnapshotId
+      && currentBinding.pluginId === defaultPluginId
+      && (currentBinding.taskProfile ?? null) === taskProfile
+    ) {
+      const body: RestoreProjectAutomaticScenarioResponse = {
+        project,
+        scenarioBinding: currentBinding,
+        changed: false,
+      };
+      return res.json(body);
+    }
+
+    const workspaceProject = getWorkspaceProjectByProjectId(db, project.id);
+    const registry = await ctx.pluginScope?.loadRegistry({
+      workspaceId: workspaceProject?.workspaceId == null
+        ? null
+        : String(workspaceProject.workspaceId),
+      workspaceMemberId: typeof workspaceProject?.createdByWorkspaceMemberId === 'string'
+        ? workspaceProject.createdByWorkspaceMemberId
+        : null,
+    });
+    if (!registry) {
+      return sendApiError(res, 503, 'PLUGIN_REGISTRY_UNAVAILABLE', 'plugin registry unavailable');
+    }
+    const conversationId = getFirstProjectConversation(db, project.id)?.id ?? null;
+    const restore = db.transaction(():
+      | { ok: true; resolved: ResolveSnapshotOk; project: NonNullable<ReturnType<typeof getProject>> }
+      | { ok: false; failure: ResolveSnapshotError | null } => {
+      const resolved = resolvePluginSnapshot({
+        db,
+        body: { pluginId: defaultPluginId },
+        projectId: project.id,
+        conversationId,
+        registry,
+        connectorProbe: buildConnectorProbe(connectorService),
+        projectBinding: {
+          provenance: 'automatic_default',
+          taskProfile,
+        },
+      });
+      if (!resolved || !resolved.ok) {
+        return { ok: false, failure: resolved && !resolved.ok ? resolved : null };
+      }
+      const updated = getProject(db, project.id);
+      if (!updated?.metadata?.scenarioBinding) {
+        throw new Error('automatic scenario binding was not persisted');
+      }
+      return { ok: true, resolved, project: updated };
+    });
+    try {
+      const outcome = restore();
+      if (!outcome.ok) {
+        if (outcome.failure) {
+          return res.status(outcome.failure.status).json(outcome.failure.body);
+        }
+        return sendApiError(
+          res,
+          409,
+          'DEFAULT_SCENARIO_RESTORE_FAILED',
+          'automatic scenario restoration failed',
+        );
+      }
+      const body: RestoreProjectAutomaticScenarioResponse = {
+        project: outcome.project,
+        scenarioBinding: outcome.project.metadata!.scenarioBinding!,
+        changed: outcome.resolved.snapshotId !== currentSnapshotId,
+      };
+      return res.json(body);
+    } catch (error) {
+      console.warn('[projects] automatic scenario restore failed', error);
+      return sendApiError(
+        res,
+        409,
+        'DEFAULT_SCENARIO_RESTORE_FAILED',
+        'automatic scenario restoration failed; the existing project pin was preserved',
+      );
     }
   });
 
@@ -3812,7 +4645,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       const targetProjectId = randomId();
       const targetName = normalizeDesignSystemCopyName(req.body?.name, sourceProject);
       const requestedPendingPrompt = normalizePendingPrompt(req.body?.pendingPrompt);
-      const sourceNotes = `Created from Open Design project "${sourceProject.name}" (${sourceProject.id}).`;
+      const sourceNotes = `Created from OpenDesign project "${sourceProject.name}" (${sourceProject.id}).`;
       let createdDesignSystemId: string | null = null;
       let insertedProject = false;
       try {
@@ -3998,51 +4831,26 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
     }
     const binding = getWorkspaceProjectByProjectId(db, project.id);
-    const hasWorkspaceClaim =
-      headerValue(req, 'x-od-workspace-id') !== null
-      || headerValue(req, 'x-od-workspace-member-id') !== null;
-    if (binding && !hasWorkspaceClaim) {
-      // This is the same session-generation keyed authority broker used by the
-      // shell directory and ordinary read gate. A cold shell + bootstrap joins
-      // one upstream read; its short successful lease is exact-account scoped,
-      // while failures are not cached. Never consult current/default Workspace.
-      const directory = ctx.fetchWorkspaceDirectory
-        ? await ctx.fetchWorkspaceDirectory().catch(
-            (): WorkspaceDirectoryFetchResult => ({ ok: false, items: [] }),
-          )
-        : { ok: false, items: [] };
-      const bootstrap = resolveProjectWorkspaceScopeBootstrap({
-        projectId: project.id,
-        binding,
-        directory,
-      });
-      if (!bootstrap.ok) {
-        return sendApiError(
-          res,
-          bootstrap.status,
-          bootstrap.code,
-          bootstrap.message,
-          bootstrap.status === 503 ? { retryable: true } : {},
-        );
-      }
-      /** @type {import('@open-design/contracts').ProjectWorkspaceScopeResponse} */
-      const body = { scope: bootstrap.scope };
-      return res.json(body);
-    }
     if (!await authorizeProjectRequest(req, res, project.id, { mode: 'read' })) return;
-    const directory = ctx.fetchWorkspaceDirectory
-      ? await ctx.fetchWorkspaceDirectory().catch(
-          (): WorkspaceDirectoryFetchResult => ({ ok: false, items: [] }),
-        )
-      : { ok: false, items: [] };
-    // Persisted binding is the resource identity. The authorization gate above
-    // freshly verifies the exact caller pair for a bound project; a genuinely
-    // unbound legacy project remains unbound even when a caller supplies an
-    // unrelated Workspace identity.
-    const scope = resolveProjectWorkspaceScope({
+    const claimed = workspaceProjectContextFromRequest(req);
+    const assertedType = headerValue(req, 'x-od-workspace-type');
+    const requestWorkspaceType = assertedType === 'team' || assertedType === 'personal'
+      ? assertedType
+      : null;
+    if (binding?.workspaceId && requestWorkspaceType) {
+      workspaceTypes?.learn({
+        workspaceId: binding.workspaceId,
+        workspaceType: requestWorkspaceType,
+      });
+    }
+    const scope = resolveLocalProjectWorkspaceScope({
       projectId: project.id,
       binding,
-      directory,
+      requestWorkspaceMemberId:
+        claimed && claimed !== 'missing' ? claimed.workspaceMemberId : null,
+      requestWorkspaceType,
+      knownWorkspaceType: workspaceTypes?.typeOf(binding?.workspaceId) ?? null,
+      ...(ctx.configuredEnv ? { configuredEnv: ctx.configuredEnv() } : {}),
     });
     /** @type {import('@open-design/contracts').ProjectWorkspaceScopeResponse} */
     const body = { scope };
@@ -4129,6 +4937,22 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // patching other metadata without ever losing their import root.
       if (patch.metadata === null) {
         const existing = getProject(db, req.params.id);
+        if (existing?.metadata?.strategyBinding) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'metadata cannot be cleared while strategyBinding is daemon-owned',
+          );
+        }
+        if (existing?.metadata?.exampleBinding) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'metadata cannot be cleared while exampleBinding is daemon-owned',
+          );
+        }
         if (existing?.metadata?.baseDir) {
           return sendApiError(
             res,
@@ -4141,6 +4965,56 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (patch.metadata && typeof patch.metadata === 'object') {
         const existing = getProject(db, req.params.id);
         const existingMeta = existing?.metadata;
+        if (
+          'localCatalogScopes' in patch.metadata
+          && !sameLocalCatalogScopes(
+            patch.metadata.localCatalogScopes,
+            existingMeta?.localCatalogScopes,
+          )
+        ) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'localCatalogScopes can only be set during project creation',
+          );
+        }
+        if (
+          'scenarioBinding' in patch.metadata
+          && JSON.stringify(patch.metadata.scenarioBinding)
+            !== JSON.stringify(existingMeta?.scenarioBinding)
+        ) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'scenarioBinding is daemon-owned',
+          );
+        }
+        if (
+          'strategyBinding' in patch.metadata
+          && JSON.stringify(patch.metadata.strategyBinding)
+            !== JSON.stringify(existingMeta?.strategyBinding)
+        ) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'strategyBinding is daemon-owned',
+          );
+        }
+        if (
+          'exampleBinding' in patch.metadata
+          && JSON.stringify(patch.metadata.exampleBinding)
+            !== JSON.stringify(existingMeta?.exampleBinding)
+        ) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'exampleBinding is daemon-owned',
+          );
+        }
         if ('fromTrustedPicker' in patch.metadata
             && patch.metadata.fromTrustedPicker !== existingMeta?.fromTrustedPicker) {
           return sendApiError(
@@ -4184,6 +5058,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           }
           patch.metadata = {
             ...patch.metadata,
+            ...(existingMeta?.localCatalogScopes
+              ? { localCatalogScopes: existingMeta.localCatalogScopes }
+              : {}),
             baseDir: existingMeta.baseDir,
             ...(existingMeta.importedFrom === 'folder'
               ? { importedFrom: 'folder' }
@@ -4213,6 +5090,32 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             res, 400, 'BAD_REQUEST',
             'orchestratorWorkspace can only be set via POST /api/import/folder or POST /api/projects/:id/working-dir',
           );
+        } else if (existingMeta?.localCatalogScopes) {
+          patch.metadata = {
+            ...patch.metadata,
+            localCatalogScopes: existingMeta.localCatalogScopes,
+          };
+        }
+        if (existingMeta?.scenarioBinding) {
+          patch.metadata = {
+            ...patch.metadata,
+            scenarioBinding: existingMeta.scenarioBinding,
+          };
+        }
+        if (existingMeta?.strategyBinding) {
+          patch.metadata = {
+            ...patch.metadata,
+            strategyBinding: existingMeta.strategyBinding,
+          };
+        }
+        // `updateProject` replaces metadata wholesale, so a patch that simply
+        // omits the daemon-owned example binding would erase the user's
+        // example without ever naming it.
+        if (existingMeta?.exampleBinding) {
+          patch.metadata = {
+            ...patch.metadata,
+            exampleBinding: existingMeta.exampleBinding,
+          };
         }
       }
       if (patch.metadata?.linkedDirs) {
@@ -4266,6 +5169,33 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           return sendApiError(res, 400, skillValidation.code, skillValidation.message);
         }
         patch.skillId = skillValidation.id;
+      }
+      if (
+        (Object.prototype.hasOwnProperty.call(patch, 'skillId')
+          && patch.skillId !== patchProject.skillId)
+        || (Object.prototype.hasOwnProperty.call(patch, 'designSystemId')
+          && patch.designSystemId !== patchProject.designSystemId)
+      ) {
+        const currentMetadata = patch.metadata && typeof patch.metadata === 'object'
+          ? patch.metadata
+          : patchProject.metadata;
+        const currentScopes = currentMetadata?.localCatalogScopes;
+        if (currentScopes) {
+          const nextScopes = { ...currentScopes };
+          if (
+            Object.prototype.hasOwnProperty.call(patch, 'skillId')
+            && patch.skillId !== patchProject.skillId
+          ) delete nextScopes.skill;
+          if (
+            Object.prototype.hasOwnProperty.call(patch, 'designSystemId')
+            && patch.designSystemId !== patchProject.designSystemId
+          ) delete nextScopes.designSystem;
+          const { localCatalogScopes: _localCatalogScopes, ...metadataWithoutScopes } =
+            currentMetadata;
+          patch.metadata = Object.keys(nextScopes).length > 0
+            ? { ...metadataWithoutScopes, localCatalogScopes: nextScopes }
+            : metadataWithoutScopes;
+        }
       }
       if (typeof patch.name === 'string' && patch.name.trim().length > 0) {
         // Design-system workspace projects mirror their design system's
@@ -4615,17 +5545,20 @@ export function registerProjectArtifactRoutes(app: Express, ctx: RegisterProject
   // Standalone lint endpoint — POST raw HTML, get findings back.
   // The chat layer uses this to lint streamed-in artifacts without writing
   // them to disk first, so a P0 issue can be surfaced before save.
+  // Request/response are typed against the shared contract so a producer
+  // change that breaks the wire shape fails compilation here.
   app.post('/api/artifacts/lint', (req, res) => {
     try {
-      const { html } = req.body || {};
+      const { html } = (req.body ?? {}) as Partial<LintArtifactRequest>;
       if (typeof html !== 'string' || html.length === 0) {
         return res.status(400).json({ error: 'html required' });
       }
       const findings = lintArtifact(html);
-      res.json({
+      const payload: LintArtifactResponse = {
         findings,
         agentMessage: renderFindingsForAgent(findings),
-      });
+      };
+      res.json(payload);
     } catch (err: any) {
       res.status(500).json({ error: String(err) });
     }
@@ -4638,6 +5571,8 @@ export interface RegisterProjectFileRoutesDeps extends RouteDeps<'db' | 'http' |
   authorizeProjectRequest?: AuthorizeProjectRequest;
   /** Startup-hydrated O(1) quarantine lookup for stale Team mirrors. */
   isProjectRevoked?: (projectId: string) => boolean;
+  /** Durable first-open placeholder stamp lookup. */
+  isProjectUnmaterializedPlaceholder?: (projectId: string) => boolean;
 }
 
 export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFileRoutesDeps) {
@@ -4649,9 +5584,6 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   const { upload } = ctx.uploads;
   const { fs } = ctx.node;
   const { getProject, getWorkspaceProject, getWorkspaceProjectByProjectId } = ctx.projectStore;
-  const enforceWorkspaceProjectMutation = createEnforceWorkspaceProjectMutation(
-    ctx.verifyWorkspaceRequestAuthority,
-  );
   const authorizeProjectRequest =
     ctx.authorizeProjectRequest ??
     createAuthorizeProjectRequest({
@@ -4660,20 +5592,27 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       getWorkspaceProjectByProjectId,
       isProjectRevoked: (_db, projectId) =>
         ctx.isProjectRevoked?.(projectId) ?? false,
+      isProjectUnmaterializedPlaceholder: (_db, projectId) =>
+        ctx.isProjectUnmaterializedPlaceholder?.(projectId) ?? false,
       ...(ctx.verifyWorkspaceRequestAuthority
         ? { verifyWorkspaceRequestAuthority: ctx.verifyWorkspaceRequestAuthority }
         : {}),
       sendApiError,
     });
+  const enforceWorkspaceProjectMutation = createEnforceWorkspaceProjectMutation(
+    ctx.verifyWorkspaceRequestAuthority,
+    undefined,
+    authorizeProjectRequest,
+  );
   const requestCanWriteWorkspaceProject = createWorkspaceProjectWriteAuthorityCheck(
     ctx.verifyWorkspaceRequestAuthority,
+    ctx.isProjectUnmaterializedPlaceholder,
   );
   const { listFiles, listProjectFolders, createProjectFolder, deleteProjectFolder, searchProjectFiles, readProjectFile, resolveProjectDir, resolveProjectFilePath, parseByteRange, renameProjectFile, deleteProjectFile, writeProjectFile, sanitizeName, sanitizePath, ensureProject } = ctx.projectFiles;
   const { buildDocumentPreview } = ctx.documents;
   const { validateArtifactManifestInput } = ctx.artifacts;
   const { projectPreviewScopes } = ctx;
   const projectPreviewIframeSandbox = 'allow-scripts allow-forms';
-  const HTML_PREVIEW_BRIDGE_MAX_BYTES = 2 * 1024 * 1024;
   const HTML_POWERED_PREVIEW_HINT_SCAN_MAX_BYTES = 128 * 1024 * 1024;
   const projectPreviewCsp = [
     `sandbox ${projectPreviewIframeSandbox}`,
@@ -5153,25 +6092,73 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     return filePath.split('/').map((segment) => encodeURIComponent(segment)).join('/');
   }
 
+  /**
+   * Whether the document contains a `<base>` the browser would actually honour.
+   *
+   * Parsed rather than scanned, because the answer depends on namespace and on
+   * template content: a `<base>` directly under `<svg>` is an SVG element and
+   * inert, and one inside an HTML `<template>` belongs to an inert fragment.
+   * Both look identical to a linear scan.
+   *
+   * The template test is by namespace as well as name. A foreign element may
+   * also be called `template` — `<svg><template><foreignObject><base>` — and it
+   * creates no inert fragment, so the base under it is live and a name-only
+   * test would wrongly discard it.
+   */
+  function hasAuthoredHtmlBase(html: string): boolean {
+    const $ = load(html);
+    return $('base').toArray().some((element) => {
+      if (element.namespace !== HTML_NAMESPACE) return false;
+      for (let node: typeof element.parent = element.parent; node; node = node.parent) {
+        const candidate = node as { name?: string; namespace?: string };
+        if (candidate.name === 'template' && candidate.namespace === HTML_NAMESPACE) return false;
+      }
+      return true;
+    });
+  }
+
   function injectProjectPreviewBase(
     html: string,
     projectId: string,
     ownerFilePath: string,
     scope: string,
+    expiresAt: number,
   ): string {
     // Respect an artifact-authored base URL. Only generated documents without
     // one need the containment base that keeps runtime-created relative URLs
-    // (for example `img.src = payload.logo`) on the minted preview scope.
-    if (/<base\b/i.test(html)) return html;
+    // (for example `img.src = payload.logo`) on the minted preview scope. A
+    // `<base>` an author merely wrote into a string does not govern this
+    // document, so it must not suppress containment.
+    if (findRealTagOffset(html, /<base(?=[\t\n\f\r />])/i) >= 0) return html;
+    // A `<base>` can also sit inside an HTML integration point — under
+    // `<foreignObject>`, `<desc>`, or an `annotation-xml` that names an HTML
+    // encoding — where the structural scan deliberately does not go, because
+    // for its own purpose the whole foreign subtree is skippable. Such a base
+    // is an HTML-namespace element and governs the document; the generated one
+    // would land in `<head>` ahead of it and win, silently repointing every
+    // authored relative URL. Only foreign content can hide one, so the parse
+    // below is gated on the document having some — 10% of this repository's
+    // HTML files reach it, at a few milliseconds each.
+    if (/<(svg|math)[\t\n\f\r />]/i.test(html) && hasAuthoredHtmlBase(html)) return html;
     const ownerDir = path.posix.dirname(ownerFilePath);
     const dirSuffix = ownerDir === '.'
       ? ''
       : `${encodeProjectPathForUrl(ownerDir)}/`;
     const baseTag = `<base href="/api/projects/${encodeURIComponent(projectId)}`
-      + `/preview/${encodeURIComponent(scope)}/${dirSuffix}">`;
-    const head = /<head\b[^>]*>/i;
-    if (head.test(html)) return html.replace(head, (tag) => `${tag}${baseTag}`);
-    return `${baseTag}${html}`;
+      + `/preview/${encodeURIComponent(scope)}/${dirSuffix}" data-od-project-preview-base>`;
+    const baseHref = `/api/projects/${encodeURIComponent(projectId)}`
+      + `/preview/${encodeURIComponent(scope)}/${dirSuffix}`;
+    const bridge = buildPreviewBaseHrefBridge({ href: baseHref, expiresAt });
+    // Same structural rule as the bridge injectors above: a `<head>` inside a
+    // script string is text, not this document's head.
+    const headOpenIndex = findRealTagOffset(html, /<head(?=[\t\n\f\r />])/i);
+    if (headOpenIndex >= 0) {
+      const openTagEnd = endOfTag(html, headOpenIndex);
+      if (openTagEnd >= 0) {
+        return `${html.slice(0, openTagEnd + 1)}${baseTag}${bridge}${html.slice(openTagEnd + 1)}`;
+      }
+    }
+    return prependAfterDoctype(html, `${baseTag}${bridge}`);
   }
 
   function rewriteWorkspaceScopedHtmlAssetUrls(
@@ -5213,42 +6200,46 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       return `${scoped}&${suffix.slice(1)}`;
     };
 
-    let next = html.replace(
-      assetAttr,
-      (match, space: string, name: string, eq: string, quote: string, value: string) => {
-        const rewritten = rewrite(value);
-        return rewritten === value ? match : `${space}${name}${eq}${quote}${rewritten}${quote}`;
-      },
-    );
-    next = next.replace(linkTag, (tag) =>
-      tag.replace(linkHref, (match, prefix: string, quote: string, value: string) => {
-        const rewritten = rewrite(value);
+    const rewriteChunk = (chunk: string): string => {
+      let next = chunk.replace(
+        assetAttr,
+        (match, space: string, name: string, eq: string, quote: string, value: string) => {
+          const rewritten = rewrite(value);
+          return rewritten === value ? match : `${space}${name}${eq}${quote}${rewritten}${quote}`;
+        },
+      );
+      next = next.replace(linkTag, (tag) =>
+        tag.replace(linkHref, (match, prefix: string, quote: string, value: string) => {
+          const rewritten = rewrite(value);
+          return rewritten === value ? match : `${prefix}${quote}${rewritten}${quote}`;
+        }),
+      );
+      next = next.replace(srcsetAttr, (match, prefix: string, quote: string, value: string) => {
+        // A data URL contains an unescaped comma, so the lightweight candidate
+        // splitter below cannot safely rewrite a mixed data-URL srcset. Leave the
+        // whole attribute untouched rather than corrupting embedded bytes.
+        if (/(?:^|,\s*)data:/i.test(value)) return match;
+        const rewritten = value
+          .split(',')
+          .map((candidate) => {
+            const body = candidate.trim();
+            if (!body) return candidate;
+            const [url = '', ...descriptors] = body.split(/\s+/);
+            const rewrittenUrl = rewrite(url);
+            if (rewrittenUrl === url) return candidate;
+            const leading = candidate.match(/^\s*/)?.[0] ?? '';
+            return `${leading}${[rewrittenUrl, ...descriptors].join(' ')}`;
+          })
+          .join(',');
         return rewritten === value ? match : `${prefix}${quote}${rewritten}${quote}`;
-      }),
-    );
-    next = next.replace(srcsetAttr, (match, prefix: string, quote: string, value: string) => {
-      // A data URL contains an unescaped comma, so the lightweight candidate
-      // splitter below cannot safely rewrite a mixed data-URL srcset. Leave the
-      // whole attribute untouched rather than corrupting embedded bytes.
-      if (/(?:^|,\s*)data:/i.test(value)) return match;
-      const rewritten = value
-        .split(',')
-        .map((candidate) => {
-          const body = candidate.trim();
-          if (!body) return candidate;
-          const [url = '', ...descriptors] = body.split(/\s+/);
-          const rewrittenUrl = rewrite(url);
-          if (rewrittenUrl === url) return candidate;
-          const leading = candidate.match(/^\s*/)?.[0] ?? '';
-          return `${leading}${[rewrittenUrl, ...descriptors].join(' ')}`;
-        })
-        .join(',');
-      return rewritten === value ? match : `${prefix}${quote}${rewritten}${quote}`;
-    });
-    return next.replace(cssUrl, (match, quote: string, value: string) => {
-      const rewritten = rewrite(value);
-      return rewritten === value ? match : `url(${quote}${rewritten}${quote})`;
-    });
+      });
+      return next.replace(cssUrl, (match, quote: string, value: string) => {
+        const rewritten = rewrite(value);
+        return rewritten === value ? match : `url(${quote}${rewritten}${quote})`;
+      });
+    };
+
+    return rewriteOutsideExecutableHtmlRanges(html, rewriteChunk);
   }
 
   async function maybeResolveVitePreviewHtml({
@@ -5310,6 +6301,13 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         since: Number.isFinite(since) ? since : undefined,
         metadata: project?.metadata,
       });
+      // The directory is mutated outside HTTP by agent CLIs and filesystem
+      // tools. A cached 200 can therefore outlive a completed Write even when
+      // the daemon's fresh scan already sees the new file, leaving the
+      // workspace on the previous snapshot. The web layer owns its own short
+      // request-coalescing window, so transport caches must always revalidate
+      // this dynamic inventory.
+      res.setHeader('Cache-Control', 'no-store');
       /** @type {import('@open-design/contracts').ProjectFilesResponse} */
       const body = { files };
       res.json(body);
@@ -5533,6 +6531,11 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
               workspaceMemberId: requestContext.workspaceMemberId,
             },
       );
+      const expiresAt = projectPreviewScopes.expiresAt(project.id, scope);
+      if (expiresAt === undefined) {
+        sendApiError(res, 503, 'PREVIEW_SCOPE_NOT_FOUND', 'preview scope not found');
+        return;
+      }
       /** @type {import('@open-design/contracts').ProjectPreviewUrlResponse} */
       const body = {
         url: `/api/projects/${encodeURIComponent(project.id)}/preview/${scope}/${encodeProjectPathForUrl(meta.name)}`,
@@ -5540,6 +6543,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         csp: projectPreviewCsp,
         iframeSandbox: projectPreviewIframeSandbox,
         opaqueOrigin: true,
+        expiresAt,
       };
       res.setHeader('Cache-Control', 'no-store');
       res.json(body);
@@ -5551,6 +6555,61 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
         String(err),
       );
+    }
+  });
+
+  app.post('/api/projects/:id/preview/:scope/renew', async (req, res) => {
+    try {
+      const projectId = String(req.params.id ?? '');
+      const scope = String(req.params.scope ?? '');
+      // The scope is embedded in untrusted preview HTML. Requiring a custom
+      // header makes renewal a host-only operation: an opaque-origin iframe
+      // cannot set it without a CORS preflight, and this route grants no CORS.
+      if (req.get('x-od-preview-scope-renewal') !== '1') {
+        sendApiError(res, 403, 'FORBIDDEN', 'preview scope renewal requires host authorization');
+        return;
+      }
+      if (!previewScopeRe.test(scope)) {
+        sendApiError(res, 400, 'BAD_REQUEST', 'invalid preview scope');
+        return;
+      }
+      const project = getProject(db, projectId);
+      if (!project) {
+        sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+        return;
+      }
+      const previewWorkspace = projectPreviewScopes.resolve(project.id, scope);
+      if (previewWorkspace === undefined) {
+        sendApiError(res, 404, 'PREVIEW_SCOPE_NOT_FOUND', 'preview scope not found');
+        return;
+      }
+      const authorityRequest = previewWorkspace
+        ? {
+            query: {
+              ...req.query,
+              workspaceId: previewWorkspace.workspaceId,
+              workspaceMemberId: previewWorkspace.workspaceMemberId,
+            },
+            get: req.get.bind(req),
+          }
+        : req;
+      if (!await authorizeProjectRequest(
+        authorityRequest,
+        res,
+        project.id,
+        { mode: 'read', allowNavigationQuery: true },
+      )) return;
+      const expiresAt = projectPreviewScopes.renew(project.id, scope);
+      if (expiresAt === undefined) {
+        sendApiError(res, 404, 'PREVIEW_SCOPE_NOT_FOUND', 'preview scope not found');
+        return;
+      }
+      /** @type {import('@open-design/contracts').ProjectPreviewScopeRenewResponse} */
+      const body = { expiresAt };
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(body);
+    } catch (err: any) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }
   });
 
@@ -5727,7 +6786,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         project?.metadata,
       );
       const skipHtmlPreviewBridge =
-        /^text\/html(?:;|$)/i.test(meta.mime) && meta.size > HTML_PREVIEW_BRIDGE_MAX_BYTES;
+        /^text\/html(?:;|$)/i.test(meta.mime) && meta.size > PREVIEW_URL_GUARD_MAX_HTML_BYTES;
 
       await sendProjectFile(
         req,
@@ -5783,11 +6842,14 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
                 }
               : null;
           const scope = projectPreviewScopes.mint(projectId, previewWorkspace);
+          const expiresAt = projectPreviewScopes.expiresAt(projectId, scope);
+          if (expiresAt === undefined) return html;
           return injectProjectPreviewBase(
             html,
             projectId,
             relPath,
             scope,
+            expiresAt,
           );
         },
         true, // revalidate: emit ETag/Last-Modified so covers/preview/export reuse cached assets
@@ -5839,7 +6901,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         project?.metadata,
       );
       const skipPoweredTransform =
-        /^text\/html(?:;|$)/i.test(meta.mime) && meta.size > HTML_PREVIEW_BRIDGE_MAX_BYTES;
+        /^text\/html(?:;|$)/i.test(meta.mime) && meta.size > PREVIEW_URL_GUARD_MAX_HTML_BYTES;
       await sendProjectFile(
         req,
         res,
@@ -6604,6 +7666,9 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
 export interface RegisterProjectUploadRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'paths' | 'projectStore' | 'projectFiles'> {
   verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
+  authorizeProjectRequest?: AuthorizeProjectRequest;
+  /** Durable first-open placeholder stamp lookup. */
+  isProjectUnmaterializedPlaceholder?: (projectId: string) => boolean;
 }
 
 export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUploadRoutesDeps) {
@@ -6614,8 +7679,23 @@ export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUp
   const { getProject, getWorkspaceProject, getWorkspaceProjectByProjectId } = ctx.projectStore;
   const { readProjectFile } = ctx.projectFiles;
   const { fs } = ctx.node;
+  const authorizeProjectRequest =
+    ctx.authorizeProjectRequest ??
+    createAuthorizeProjectRequest({
+      db,
+      getWorkspaceProject,
+      getWorkspaceProjectByProjectId,
+      isProjectUnmaterializedPlaceholder: (_db, projectId) =>
+        ctx.isProjectUnmaterializedPlaceholder?.(projectId) ?? false,
+      ...(ctx.verifyWorkspaceRequestAuthority
+        ? { verifyWorkspaceRequestAuthority: ctx.verifyWorkspaceRequestAuthority }
+        : {}),
+      sendApiError,
+    });
   const enforceWorkspaceProjectMutation = createEnforceWorkspaceProjectMutation(
     ctx.verifyWorkspaceRequestAuthority,
+    undefined,
+    authorizeProjectRequest,
   );
 
   app.post(

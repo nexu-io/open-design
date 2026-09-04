@@ -90,7 +90,90 @@ function projectCollabValue(workspaceContext = PROJECT_A_CONTEXT) {
   };
 }
 
+describe('internal control markers', () => {
+  // Acceptance: a resumed CLI repeated the daemon's internal title directive on
+  // a later turn, and `<od-title>LV奢侈品电商原型</od-title>` rendered as body text.
+  it('never renders a leaked title marker as prose', () => {
+    const content = [
+      '我会使用 Open Design 技能把已确认的电商流程整理为可执行的原型计划。',
+      '<od-title>LV奢侈品电商原型</od-title>',
+      '目标已锁定为响应式 LV 奢侈品电商概念原型。',
+    ].join('\n\n');
+
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content,
+          events: [{ kind: 'text', text: content } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+      />,
+    );
+
+    expect(document.body.textContent).not.toContain('od-title');
+    expect(document.body.textContent).toContain('目标已锁定为响应式');
+  });
+
+  it('never renders OD Next machine protocol blocks as prose', () => {
+    const content = [
+      'Plan is frozen.',
+      '<open-design-plan-contract>{"schema":"open-design.plan-contract/v2"}</open-design-plan-contract>',
+      '<open-design-runtime-state>{"schema":"open-design.strategy-state/v2"}</open-design-runtime-state>',
+    ].join('\n\n');
+
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content,
+          events: [{ kind: 'text', text: content } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+      />,
+    );
+
+    expect(document.body.textContent).not.toContain('open-design-plan-contract');
+    expect(document.body.textContent).not.toContain('open-design-runtime-state');
+    expect(document.body.textContent).toContain('Plan is frozen.');
+  });
+});
+
 describe('AssistantMessage feedback gate', () => {
+  it('opens a produced file when the user clicks the filename row', () => {
+    const onRequestOpenFile = vi.fn();
+    render(
+      <AssistantMessage
+        message={baseMessage({ producedFiles: [producedFile('poster.png')] })}
+        streaming={false}
+        projectId="proj-1"
+        onRequestOpenFile={onRequestOpenFile}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('poster.png'));
+    expect(onRequestOpenFile).toHaveBeenCalledWith('poster.png');
+  });
+
+  it.each(['Enter', ' '])(
+    'opens a produced file when the user presses %s on its row',
+    (key) => {
+      const onRequestOpenFile = vi.fn();
+      render(
+        <AssistantMessage
+          message={baseMessage({ producedFiles: [producedFile('poster.png')] })}
+          streaming={false}
+          projectId="proj-1"
+          onRequestOpenFile={onRequestOpenFile}
+        />,
+      );
+
+      const row = screen.getByRole('button', { name: 'Open: poster.png' });
+      fireEvent.keyDown(row, { key });
+      expect(onRequestOpenFile).toHaveBeenCalledWith('poster.png');
+    },
+  );
+
   it('renders plugin suggestions as compact user decisions with secondary actions in details', () => {
     const message = baseMessage({
       content: '',
@@ -243,7 +326,7 @@ describe('AssistantMessage feedback gate', () => {
     expect(onForkFromMessage).toHaveBeenCalledTimes(1);
   });
 
-  it('reaches Contribute (share to Open Design) through the More -> Share cascade', () => {
+  it('reaches Contribute (share to OpenDesign) through the More -> Share cascade', () => {
     const onShare = vi.fn();
 
     render(
@@ -462,6 +545,27 @@ describe('AssistantMessage status badge updates (Bug A)', () => {
     expect(screen.getByText('compacting context')).toBeTruthy();
     expect(screen.getByText('Compacting conversation history after a context-length error')).toBeTruthy();
   });
+
+  it('suppresses legacy persisted OpenCode compaction lifecycle statuses', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          events: [
+            { kind: 'text', text: 'Visible answer' } as ChatMessage['events'][number],
+            {
+              kind: 'status',
+              label: 'opencode_compaction',
+            } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+      />,
+    );
+
+    expect(screen.getByText('Visible answer')).toBeTruthy();
+    expect(screen.queryByText('opencode_compaction')).toBeNull();
+  });
 });
 
 describe('AssistantMessage thinking blocks', () => {
@@ -559,8 +663,15 @@ describe('AssistantMessage question forms', () => {
       target: { value: 'Product evaluators' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Send answers' }));
+    // The trailing arguments carry the answer's occupancy: the form id (and,
+    // from ChatPane, the asking message's id) is what gives the answer a
+    // stable identity instead of a fresh one per send.
     expect(onSubmitQuestionForm).toHaveBeenCalledWith(
       expect.stringContaining('- Who is this for?: Product evaluators'),
+      undefined,
+      undefined,
+      undefined,
+      'discovery',
     );
     expect(screen.queryByText('Quick brief — 30 seconds')).toBeNull();
     expect(screen.queryByText('What are we making?')).toBeNull();
@@ -744,6 +855,8 @@ describe('AssistantMessage question forms', () => {
             },
           ],
         },
+        undefined,
+        'references',
       );
     });
   });
@@ -922,6 +1035,8 @@ describe('AssistantMessage question forms', () => {
           expect.objectContaining({ path: 'uploads/brief.png' }),
         ],
         expect.any(Object),
+        undefined,
+        'references',
       );
     });
     expect(deleteProjectFileMock).toHaveBeenCalledTimes(1);
@@ -1262,6 +1377,31 @@ describe('AssistantMessage question forms', () => {
     expect(screen.getByTestId('question-form-loading')).toBeTruthy();
     expect(screen.getByText('One quick check:')).toBeTruthy();
   });
+
+  it('renders a prose-bodied open tag as text instead of a loading frame', () => {
+    // Production repro: a strategy turn that needed no clarification narrated
+    // its decision into an open <question-form> tag. The tail can never parse
+    // as a form body, so the skeleton must not appear and no character after
+    // the tag may be dropped from the view.
+    const text =
+      '策略判断信息充足，将直接进入生产。\n\n<question-form> 无需提出——所有决策都可通过场景推断安全默认。';
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: text,
+          events: [{ kind: 'text', text } as ChatMessage['events'][number]],
+        })}
+        streaming
+        projectId="proj-1"
+        isLast
+      />,
+    );
+
+    expect(screen.queryByTestId('question-form-loading')).toBeNull();
+    expect(
+      screen.getByText(/无需提出——所有决策都可通过场景推断安全默认。/),
+    ).toBeTruthy();
+  });
 });
 
 describe('AssistantMessage recovered produced files', () => {
@@ -1299,8 +1439,9 @@ describe('AssistantMessage recovered produced files', () => {
     expect(produced?.textContent).toContain('browser-war-deck-outline.md');
     const download = produced?.querySelector('a[download]');
     expect(download).toBeTruthy();
-    expect(download?.getAttribute('href')).toContain('workspaceId=workspace-a');
-    expect(download?.getAttribute('href')).toContain('workspaceMemberId=member-a');
+    expect(download?.getAttribute('href')).toBe(
+      '/api/projects/proj-1/raw/browser-war-deck-outline.md',
+    );
     expect(screen.queryByTestId('file-ops-summary')).toBeNull();
   });
 
@@ -1346,6 +1487,53 @@ describe('AssistantMessage recovered produced files', () => {
     const hasProducedFiles = !!document.querySelector('.produced-files');
     expect(hasFileOpsSummary).toBe(true);
     expect(hasProducedFiles).toBe(false);
+  });
+
+  it('lists only the authoritative artifact when an earlier edit targeted a wrong project path', () => {
+    const fileName = 'opendesign-b2b-sales-deck.html';
+    const failedPath = `/workspace/projects/wrong-project/${fileName}`;
+    const deliveredPath = `/workspace/projects/project-1/${fileName}`;
+    const file = producedFile(fileName);
+
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          events: [
+            {
+              kind: 'tool_use',
+              id: 'failed-edit',
+              name: 'Edit',
+              input: { file_path: failedPath },
+            } as ChatMessage['events'][number],
+            {
+              kind: 'tool_result',
+              toolUseId: 'failed-edit',
+              content: `File ${failedPath} not found`,
+              isError: true,
+            } as ChatMessage['events'][number],
+            {
+              kind: 'tool_use',
+              id: 'successful-edit',
+              name: 'Edit',
+              input: { file_path: deliveredPath },
+            } as ChatMessage['events'][number],
+            {
+              kind: 'tool_result',
+              toolUseId: 'successful-edit',
+              content: 'Updated successfully.',
+              isError: false,
+            } as ChatMessage['events'][number],
+          ],
+          producedFiles: [file],
+        })}
+        streaming={false}
+        projectId="project-1"
+        projectFiles={[file]}
+      />,
+    );
+
+    expect(screen.getAllByTestId(`file-ops-row-${fileName}`)).toHaveLength(1);
+    expect(screen.queryByTestId('file-ops-toggle')).toBeNull();
   });
 
   it('shows project files mentioned as plain filenames in the assistant summary', () => {

@@ -83,6 +83,44 @@ afterEach(() => {
 });
 
 describe('first open of an unmaterialized shared project (QA P0)', () => {
+  it('fails closed from the route witness before its first status poll and unlocks only after status settles', async () => {
+    let resolveStatus!: (value: Response) => void;
+    const statusGate = new Promise<Response>((resolve) => {
+      resolveStatus = resolve;
+    });
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      if (pathname.endsWith('/collab/status')) return statusGate;
+      if (pathname.endsWith('/presence/heartbeat')) return response({ present: [] });
+      return response({ ok: true });
+    }) as typeof fetch;
+    const { result } = renderHook(() =>
+      useProjectCollab('p1', {
+        fetch: fetchImpl,
+        statusPollMs: 30_000,
+        workspaceContext: OWNER_CONTEXT,
+        initialMaterializationPending: true,
+      }),
+    );
+
+    expect(result.current.materializationPending).toBe(true);
+    expect(result.current.downloadPending).toBe(true);
+    expect(result.current.writerAuthority).toBe('pending');
+
+    resolveStatus(response(firstOpenStatus({
+      awaitingFirstMaterialization: false,
+      publishedVersion: 4,
+      materializedVersion: 4,
+    })));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(result.current.materializationPending).toBe(false);
+    expect(result.current.downloadPending).toBe(false);
+    expect(result.current.writerAuthority).toBe('allowed');
+  });
+
   it('reports downloadPending from the first status, before any published head is known', async () => {
     // Hoisted: `useProjectCollab` keys its effects on the fetch identity, so a
     // fresh closure per render would loop.

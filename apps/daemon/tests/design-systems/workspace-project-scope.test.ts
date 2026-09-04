@@ -8,6 +8,7 @@ import { materializeWorkspaceScopedTeamResource } from '../../src/collab/team-re
 import {
   closeDatabase,
   ensureWorkspaceProject,
+  ensureWorkspaceResource,
   getProject,
   insertProject,
   openDatabase,
@@ -15,6 +16,7 @@ import {
 } from '../../src/db.js';
 import * as designSystems from '../../src/design-systems/index.js';
 import { createDesignSystemServerServices } from '../../src/design-systems/server-services.js';
+import { workspaceTeamDesignSystemBindingResourceId } from '../../src/design-systems/workspace-team-binding.js';
 import {
   isSafeId,
   listFiles,
@@ -171,6 +173,22 @@ describe('design-system workspace projects preserve exact Workspace scope', () =
       verifyWorkspaceScope: async () => true,
       verifyStillShared: async () => true,
     });
+    // Team-resource sync writes the local materialization and its binding
+    // together. Keep this fixture faithful so read-time tombstone filtering
+    // can distinguish an active mirror from a stale directory left on disk.
+    ensureWorkspaceResource(
+      db,
+      'design_system',
+      'team-workspace',
+      workspaceTeamDesignSystemBindingResourceId('team-workspace', personal.id),
+      {
+        visibility: 'team',
+        resourceState: 'active',
+        createdByWorkspaceMemberId: 'team-member',
+        updatedByWorkspaceMemberId: 'team-member',
+        resourceHubResourceId: 'team-shopify-resource',
+      },
+    );
     return { designSystemId: personal.id, logoBytes, personalProjectId };
   }
 

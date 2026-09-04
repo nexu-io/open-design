@@ -1,0 +1,346 @@
+{
+  "fixtureKind": "sanitized_real_best_effort",
+  "runtime": "codex",
+  "cliVersion": "codex-cli 0.147.0",
+  "sourceTag": "rust-v0.147.0",
+  "sourceCommit": "be6e8eac029b183056b7e4402879f15d2c85f61b",
+  "recordingDigest": "sha256:729d0e58e80e7b8b81eb90ad286471a26c3df80411f0b0f7092c19d157b50cc6",
+  "anonymizationVersion": "od-runtime-evidence/v1",
+  "evidenceReview": "open_design_best_effort",
+  "note": "Exact Codex CLI lifecycle facts recorded in isolated repositories. Child failure was produced by an isolated local Responses API that closed the Child stream after response.created; no online trace or user project was touched.",
+  "caseCoverage": [
+    {
+      "caseId": "main_run",
+      "outcome": "passed",
+      "minimumEvidence": "L0",
+      "source": "codex_parent_rollout",
+      "evidence": {
+        "parentSessionId": "10000000-0000-4000-8000-000000000001",
+        "startedAtMs": 1786860355000,
+        "completedAtMs": 1786860384000,
+        "terminalStatus": "completed",
+        "terminalError": false
+      }
+    },
+    {
+      "caseId": "tool",
+      "outcome": "passed",
+      "minimumEvidence": "L1",
+      "source": "codex_sub_agent_activity",
+      "evidence": {
+        "parentSessionId": "10000000-0000-4000-8000-000000000001",
+        "childSessionId": "20000000-0000-4000-8000-000000000002",
+        "activityKind": "started",
+        "occurredAtMs": 1786860363244
+      }
+    },
+    {
+      "caseId": "child_success",
+      "outcome": "passed",
+      "minimumEvidence": "L2",
+      "source": "codex_parent_and_child_rollouts",
+      "evidence": {
+        "childSessionId": "20000000-0000-4000-8000-000000000002",
+        "childStartedAtMs": 1786860363278,
+        "childTerminalAtMs": 1786860375132,
+        "childTerminal": "completed",
+        "usageInputTokens": 18067,
+        "usageOutputTokens": 7
+      }
+    },
+    {
+      "caseId": "child_failure_parent_recovers",
+      "outcome": "passed",
+      "minimumEvidence": "L2",
+      "source": "codex_0_147_local_responses_failure_replay",
+      "evidence": {
+        "parentSessionId": "30000000-0000-4000-8000-000000000003",
+        "childSessionId": "40000000-0000-4000-8000-000000000004",
+        "childStartedAtMs": 1786862329489,
+        "childTerminalAtMs": 1786862329852,
+        "childTerminal": "failed",
+        "terminalErrorCode": "other",
+        "parentTerminalAtMs": 1786862329863,
+        "parentTerminal": "completed",
+        "parentError": false
+      }
+    },
+    {
+      "caseId": "cancel",
+      "outcome": "passed",
+      "minimumEvidence": "L0",
+      "source": "codex_interrupt_agent_and_child_rollout",
+      "evidence": {
+        "parentSessionId": "50000000-0000-4000-8000-000000000005",
+        "childSessionId": "60000000-0000-4000-8000-000000000006",
+        "parentActivityKind": "interrupted",
+        "childAbortReason": "interrupted",
+        "childTerminal": "canceled",
+        "parentTerminal": "completed"
+      }
+    },
+    {
+      "caseId": "timeout",
+      "outcome": "passed",
+      "minimumEvidence": "L0",
+      "source": "open_design_host_timeout",
+      "nativeChildTerminal": "unavailable",
+      "evidence": {
+        "hostRunStatus": "failed",
+        "hostSignal": "SIGTERM",
+        "childStarted": true,
+        "nativeTerminalObserved": false,
+        "limitation": "The host timeout owns the Run terminal; Codex 0.147.0 emitted no native Child terminal before process termination."
+      }
+    },
+    {
+      "caseId": "resume",
+      "outcome": "passed",
+      "minimumEvidence": "L0",
+      "source": "codex_followup_task_same_child_session",
+      "evidence": {
+        "parentSessionId": "10000000-0000-4000-8000-000000000001",
+        "childSessionId": "20000000-0000-4000-8000-000000000002",
+        "priorTurnId": "child-success-turn",
+        "resumeTurnId": "child-resume-turn",
+        "priorTerminalAtMs": 1786860375132,
+        "resumeStartedAtMs": 1786860377409,
+        "resumeTerminalAtMs": 1786860380876,
+        "resumeTerminal": "completed"
+      }
+    }
+  ],
+  "replayCases": [
+    {
+      "caseId": "child_success",
+      "parentSessionId": "10000000-0000-4000-8000-000000000001",
+      "parentTurnId": "parent-success-turn",
+      "childSessionId": "20000000-0000-4000-8000-000000000002",
+      "parentRollout": [
+        {
+          "timestamp": "2026-08-16T06:05:55.469Z",
+          "type": "session_meta",
+          "payload": {
+            "id": "10000000-0000-4000-8000-000000000001",
+            "session_id": "10000000-0000-4000-8000-000000000001",
+            "source": "exec"
+          }
+        },
+        {
+          "timestamp": "2026-08-16T06:05:55.470Z",
+          "type": "event_msg",
+          "payload": { "type": "task_started", "turn_id": "parent-success-turn" }
+        },
+        {
+          "timestamp": "2026-08-16T06:06:03.244Z",
+          "type": "event_msg",
+          "payload": {
+            "type": "sub_agent_activity",
+            "agent_thread_id": "20000000-0000-4000-8000-000000000002",
+            "kind": "started",
+            "occurred_at_ms": 1786860363244
+          }
+        },
+        {
+          "timestamp": "2026-08-16T06:06:24.286Z",
+          "type": "event_msg",
+          "payload": { "type": "task_complete", "turn_id": "parent-success-turn" }
+        }
+      ],
+      "childRollout": [
+        {
+          "timestamp": "2026-08-16T06:06:03.277Z",
+          "type": "session_meta",
+          "payload": {
+            "id": "20000000-0000-4000-8000-000000000002",
+            "session_id": "10000000-0000-4000-8000-000000000001",
+            "parent_thread_id": "10000000-0000-4000-8000-000000000001",
+            "source": {
+              "subagent": {
+                "thread_spawn": { "parent_thread_id": "10000000-0000-4000-8000-000000000001" }
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-08-16T06:06:03.278Z",
+          "type": "event_msg",
+          "payload": { "type": "task_started", "turn_id": "child-success-turn" }
+        },
+        {
+          "timestamp": "2026-08-16T06:06:15.118Z",
+          "type": "event_msg",
+          "payload": {
+            "type": "token_count",
+            "info": {
+              "last_token_usage": {
+                "input_tokens": 18067,
+                "cached_input_tokens": 16128,
+                "output_tokens": 7,
+                "reasoning_output_tokens": 0
+              },
+              "total_token_usage": {
+                "input_tokens": 18067,
+                "cached_input_tokens": 16128,
+                "output_tokens": 7,
+                "reasoning_output_tokens": 0
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-08-16T06:06:15.132Z",
+          "type": "event_msg",
+          "payload": { "type": "task_complete", "turn_id": "child-success-turn" }
+        }
+      ]
+    },
+    {
+      "caseId": "child_failure_parent_recovers",
+      "parentSessionId": "30000000-0000-4000-8000-000000000003",
+      "parentTurnId": "parent-failure-turn",
+      "childSessionId": "40000000-0000-4000-8000-000000000004",
+      "parentRollout": [
+        {
+          "timestamp": "2026-08-16T06:38:49.396Z",
+          "type": "session_meta",
+          "payload": {
+            "id": "30000000-0000-4000-8000-000000000003",
+            "session_id": "30000000-0000-4000-8000-000000000003",
+            "source": "exec"
+          }
+        },
+        {
+          "timestamp": "2026-08-16T06:38:49.396Z",
+          "type": "event_msg",
+          "payload": { "type": "task_started", "turn_id": "parent-failure-turn" }
+        },
+        {
+          "timestamp": "2026-08-16T06:38:49.488Z",
+          "type": "event_msg",
+          "payload": {
+            "type": "sub_agent_activity",
+            "agent_thread_id": "40000000-0000-4000-8000-000000000004",
+            "kind": "started",
+            "occurred_at_ms": 1786862329488
+          }
+        },
+        {
+          "timestamp": "2026-08-16T06:38:49.863Z",
+          "type": "event_msg",
+          "payload": { "type": "task_complete", "turn_id": "parent-failure-turn" }
+        }
+      ],
+      "childRollout": [
+        {
+          "timestamp": "2026-08-16T06:38:49.486Z",
+          "type": "session_meta",
+          "payload": {
+            "id": "40000000-0000-4000-8000-000000000004",
+            "session_id": "30000000-0000-4000-8000-000000000003",
+            "parent_thread_id": "30000000-0000-4000-8000-000000000003",
+            "source": {
+              "subagent": {
+                "thread_spawn": { "parent_thread_id": "30000000-0000-4000-8000-000000000003" }
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-08-16T06:38:49.489Z",
+          "type": "event_msg",
+          "payload": { "type": "task_started", "turn_id": "child-failure-turn" }
+        },
+        {
+          "timestamp": "2026-08-16T06:38:49.852Z",
+          "type": "event_msg",
+          "payload": {
+            "type": "task_complete",
+            "turn_id": "child-failure-turn",
+            "error": {
+              "message": "stream disconnected before completion: stream closed before response.completed",
+              "codex_error_info": "other"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "cancel",
+      "parentSessionId": "50000000-0000-4000-8000-000000000005",
+      "parentTurnId": "parent-cancel-turn",
+      "childSessionId": "60000000-0000-4000-8000-000000000006",
+      "parentRollout": [
+        {
+          "timestamp": "2026-08-16T06:14:25.941Z",
+          "type": "session_meta",
+          "payload": {
+            "id": "50000000-0000-4000-8000-000000000005",
+            "session_id": "50000000-0000-4000-8000-000000000005",
+            "source": "exec"
+          }
+        },
+        {
+          "timestamp": "2026-08-16T06:14:25.942Z",
+          "type": "event_msg",
+          "payload": { "type": "task_started", "turn_id": "parent-cancel-turn" }
+        },
+        {
+          "timestamp": "2026-08-16T06:14:35.513Z",
+          "type": "event_msg",
+          "payload": {
+            "type": "sub_agent_activity",
+            "agent_thread_id": "60000000-0000-4000-8000-000000000006",
+            "kind": "started",
+            "occurred_at_ms": 1786860875513
+          }
+        },
+        {
+          "timestamp": "2026-08-16T06:14:38.193Z",
+          "type": "event_msg",
+          "payload": {
+            "type": "sub_agent_activity",
+            "agent_thread_id": "60000000-0000-4000-8000-000000000006",
+            "kind": "interrupted",
+            "occurred_at_ms": 1786860878193
+          }
+        },
+        {
+          "timestamp": "2026-08-16T06:14:43.409Z",
+          "type": "event_msg",
+          "payload": { "type": "task_complete", "turn_id": "parent-cancel-turn" }
+        }
+      ],
+      "childRollout": [
+        {
+          "timestamp": "2026-08-16T06:14:35.544Z",
+          "type": "session_meta",
+          "payload": {
+            "id": "60000000-0000-4000-8000-000000000006",
+            "session_id": "50000000-0000-4000-8000-000000000005",
+            "parent_thread_id": "50000000-0000-4000-8000-000000000005",
+            "source": {
+              "subagent": {
+                "thread_spawn": { "parent_thread_id": "50000000-0000-4000-8000-000000000005" }
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-08-16T06:14:35.544Z",
+          "type": "event_msg",
+          "payload": { "type": "task_started", "turn_id": "child-cancel-turn" }
+        },
+        {
+          "timestamp": "2026-08-16T06:14:38.196Z",
+          "type": "event_msg",
+          "payload": {
+            "type": "turn_aborted",
+            "turn_id": "child-cancel-turn",
+            "reason": "interrupted"
+          }
+        }
+      ]
+    }
+  ]
+}

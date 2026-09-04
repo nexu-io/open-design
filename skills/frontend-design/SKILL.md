@@ -26,7 +26,7 @@ od:
 
 # frontend-design
 
-> Adapted from Anthropic's official `frontend-design` skill for Open Design.
+> Adapted from Anthropic's official `frontend-design` skill for OpenDesign.
 
 Use this skill when the user asks to build or improve a frontend interface: a website, landing page, dashboard, application screen, HTML/CSS artifact, React/Vue/Svelte component, or a visual redesign of an existing UI.
 
@@ -69,11 +69,11 @@ The goal is not just "make it nicer." The goal is to ship working frontend code 
    - The design avoids obvious AI-generated visual tropes.
    - The result has one memorable quality a user could describe after closing the page.
 
-## Open Design Integration
+## OpenDesign Integration
 
-When Open Design provides an active design system, treat it as the product's brand contract. Use the injected color, typography, layout, and component guidance first, then apply this skill's frontend craft rules where the design system is silent.
+When OpenDesign provides an active design system, treat it as the product's brand contract. Use the injected color, typography, layout, and component guidance first, then apply this skill's frontend craft rules where the design system is silent.
 
-When Open Design injects craft references such as `typography`, `color`, and `anti-ai-slop`, apply those checks before finishing. If the user's brand guidance conflicts with a generic craft rule, the user's brand guidance wins.
+When OpenDesign injects craft references such as `typography`, `color`, and `anti-ai-slop`, apply those checks before finishing. If the user's brand guidance conflicts with a generic craft rule, the user's brand guidance wins.
 
 ## Source
 

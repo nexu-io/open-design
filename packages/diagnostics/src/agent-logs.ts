@@ -91,7 +91,7 @@ async function latestLogFilesIn(
 export interface AgentCliLogOptions {
   /** User home directory; CLI configs/logs live under here. */
   homeDir: string;
-  /** Open Design data dir (OD_DATA_DIR); fallback location of the AMR OpenCode home. */
+  /** OpenDesign data dir (OD_DATA_DIR); fallback location of the AMR OpenCode home. */
   dataDir?: string | null;
   /**
    * Effective AMR OpenCode home (the resolved `OPENCODE_TEST_HOME`). Callers
@@ -119,7 +119,7 @@ export interface AgentCliLogOptions {
 }
 
 /**
- * Collect the native on-disk logs of the coding-agent CLIs Open Design drives:
+ * Collect the native on-disk logs of the coding-agent CLIs OpenDesign drives:
  * Claude Code, Codex, OpenCode, and AMR (vela's OpenCode runtime). These
  * complement the per-run `events.jsonl` capture with the CLI's own internal
  * diagnostics (provider errors, retries, auth state) that never reach the

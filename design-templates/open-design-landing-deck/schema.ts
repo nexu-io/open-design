@@ -20,7 +20,7 @@ export type { MixedText, BrandBlock, ImageryConfig };
 /** Cover slide — title plate at the start of the deck. */
 export interface CoverSlide {
   kind: 'cover';
-  /** Eyebrow above the title — `'Open Design · Vol. 01'`. */
+  /** Eyebrow above the title — `'OpenDesign · Vol. 01'`. */
   eyebrow: string;
   /** Display title; encoded as `MixedText` for italic-serif rhythm. */
   title: MixedText;
@@ -92,7 +92,7 @@ export interface CTASlide {
 /** End slide — huge italic kicker word and footer signature. */
 export interface EndSlide {
   kind: 'end';
-  /** The huge kicker — `'Open Design.'`. */
+  /** The huge kicker — `'OpenDesign.'`. */
   mega: MixedText;
   /** Footer text under the kicker — `'Apache-2.0 · MMXXVI · Berlin'`. */
   footer?: string;
@@ -112,7 +112,7 @@ export type Slide =
 export interface OpenDesignLandingDeckInputs {
   $schema?: string;
   brand: BrandBlock;
-  /** Deck-wide title shown in the HUD — `'Open Design · Vol. 01'`. */
+  /** Deck-wide title shown in the HUD — `'OpenDesign · Vol. 01'`. */
   deck_title: string;
   slides: Slide[];
   imagery: ImageryConfig;

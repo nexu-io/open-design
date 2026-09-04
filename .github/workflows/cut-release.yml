@@ -1,8 +1,10 @@
 name: cut-release
-# Every Tuesday 09:00 Asia/Shanghai, cut the next minor release branch from main HEAD:
+# Every Tuesday 09:00 Asia/Shanghai, cut the next minor release branch from main:
 #   1. Compute version (highest release/vX.Y.Z -> bump minor -> X.(Y+1).0; e.g. 0.11.0 -> 0.12.0)
-#   2. Create release/vX.Y.Z, bump apps/packaged/package.json, push
+#   2. Create release/vX.Y.Z from main, bump apps/packaged/package.json, push
 #   3. Create the "backport release/vX.Y.Z" label
+# The independent main prerelease Windows canary remains an advisory signal: its
+# smoke result is notified separately and never blocks a branch cut or package.
 # The push uses the App token (not GITHUB_TOKEN), so it triggers notify-release-feishu
 # -> builds a nightly package and posts the Feishu card.
 
@@ -17,7 +19,7 @@ on:
         default: ''
 
 permissions:
-  contents: read               # actual writes go through the App token below
+  contents: read               # branch/label writes still go through the App token below
 
 jobs:
   cut:
@@ -32,7 +34,8 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          ref: main            # always cut from main HEAD, even on a manual dispatch from another branch
+          # Smoke is advisory; release cuts always use the current main tip.
+          ref: main
           fetch-depth: 0
           token: ${{ steps.app.outputs.token }}
 
@@ -47,6 +50,7 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
+          latest=""
           if [ -n "$INPUT_VERSION" ]; then
             # Strict x.y.z, digits only — rejects shell metacharacters, newlines, etc.
             if ! printf '%s' "$INPUT_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
@@ -63,11 +67,42 @@ jobs:
             V="${major}.$((minor+1)).0"
           fi
           # V is now guaranteed to match ^[0-9]+\.[0-9]+\.[0-9]+$
-          echo "version=$V"          >> "$GITHUB_OUTPUT"
-          echo "branch=release/v$V"  >> "$GITHUB_OUTPUT"
+          {
+            echo "version=$V"
+            echo "branch=release/v$V"
+            echo "latest_release=$latest"
+          } >> "$GITHUB_OUTPUT"
           echo "Cutting v$V (branch release/v$V)"
 
+      - name: Check the current release line is published
+        id: gate
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          LATEST_RELEASE: ${{ steps.ver.outputs.latest_release }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" != "schedule" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "Manual cut requested; published-line guard does not apply."
+            exit 0
+          fi
+
+          published="$(gh release view "open-design-v$LATEST_RELEASE" \
+            --repo nexu-io/open-design \
+            --json isDraft,isPrerelease \
+            --jq '(.isDraft or .isPrerelease) | not' 2>/dev/null || true)"
+          if [ "$published" != "true" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Scheduled cut skipped: release/v$LATEST_RELEASE has not been published stable." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+          echo "release/v$LATEST_RELEASE is published stable; scheduled cut may proceed."
+
       - name: Bail out if the branch already exists
+        if: steps.gate.outputs.ready == 'true'
         env:
           BRANCH: ${{ steps.ver.outputs.branch }}
         run: |
@@ -78,6 +113,7 @@ jobs:
           fi
 
       - name: Create branch + bump version + push
+        if: steps.gate.outputs.ready == 'true'
         env:
           VERSION: ${{ steps.ver.outputs.version }}
           BRANCH: ${{ steps.ver.outputs.branch }}
@@ -91,6 +127,7 @@ jobs:
           git push origin "$BRANCH"   # App token push -> triggers notify-release-feishu (nightly + Feishu)
 
       - name: Create backport label
+        if: steps.gate.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           VERSION: ${{ steps.ver.outputs.version }}
@@ -108,6 +145,7 @@ jobs:
       # build. feishu-notice.ts only imports node:crypto, so the setup-node above
       # is all it needs.
       - name: Notify Feishu that the branch was cut
+        if: steps.gate.outputs.ready == 'true'
         env:
           FEISHU_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
           FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_RELEASE_SIGN_SECRET }}

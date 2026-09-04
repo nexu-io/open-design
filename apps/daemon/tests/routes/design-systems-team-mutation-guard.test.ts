@@ -6,12 +6,9 @@
 // stopped a direct PATCH/DELETE call before this guard: `canMutateUserDesignSystem`
 // is the server-side enforcement point these specs pin down.
 //
-// Spec 9.2 adds a second, independent gate on top: a locked/deleted workspace
-// (billing lapse, deletion in progress) must refuse every PATCH/DELETE
-// regardless of what `canMutateUserDesignSystem` itself would say — see the
-// "workspace lock" describe block below. That gate lives in the route, not
-// inside the (here mocked) `canMutateUserDesignSystem`, precisely so it holds
-// no matter what a caller-supplied mutation predicate decides.
+// Local mutations use persisted resource state. Browser lifecycle headers are
+// only a stale UI snapshot and must not turn a network/control-plane problem
+// into a failed local edit.
 
 import type http from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -283,7 +280,7 @@ describe('design system revision accept/reject team-share mutation guard', () =>
     expect(updateUserDesignSystemRevisionStatus).toHaveBeenCalledOnce();
   });
 
-  it('rejects resolving a revision when the caller workspace is locked, even if otherwise permitted', async () => {
+  it('allows resolving a local revision despite a stale locked header', async () => {
     const app = express();
     app.use(express.json());
     const { updateUserDesignSystemRevisionStatus } = registerRoutes(app, async () => true);
@@ -300,24 +297,21 @@ describe('design system revision accept/reject team-share mutation guard', () =>
       body: JSON.stringify({ status: 'accepted' }),
     });
 
-    expect(res.status).toBe(403);
-    const body = (await res.json()) as { error?: string };
-    expect(body.error).toBe('WORKSPACE_LOCKED');
-    expect(updateUserDesignSystemRevisionStatus).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(updateUserDesignSystemRevisionStatus).toHaveBeenCalledOnce();
   });
 });
 
-describe('design system PATCH/DELETE workspace-lock guard (spec 9.2)', () => {
+describe('design system local mutations ignore stale Workspace lifecycle headers', () => {
   const lockedHeaders = {
     'x-od-workspace-id': 'ws-locked',
     'x-od-workspace-member-id': 'member-1',
     'x-od-workspace-lifecycle-state': 'locked',
   };
 
-  it('rejects publishing/editing when the caller workspace is locked, even if otherwise permitted', async () => {
+  it('allows publishing/editing when a stale request says the workspace is locked', async () => {
     const app = express();
     app.use(express.json());
-    // canMutate itself says yes — the lock gate must still win.
     const { updateUserDesignSystem } = registerRoutes(app, async () => true);
     const baseUrl = await listen(app);
 
@@ -327,13 +321,11 @@ describe('design system PATCH/DELETE workspace-lock guard (spec 9.2)', () => {
       body: JSON.stringify({ status: 'published' }),
     });
 
-    expect(res.status).toBe(403);
-    const body = (await res.json()) as { error?: string };
-    expect(body.error).toBe('WORKSPACE_LOCKED');
-    expect(updateUserDesignSystem).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(updateUserDesignSystem).toHaveBeenCalledOnce();
   });
 
-  it('rejects deleting when the caller workspace is locked, even if otherwise permitted', async () => {
+  it('allows deleting when a stale request says the workspace is locked', async () => {
     const app = express();
     app.use(express.json());
     const { deleteUserDesignSystem } = registerRoutes(app, async () => true);
@@ -344,13 +336,11 @@ describe('design system PATCH/DELETE workspace-lock guard (spec 9.2)', () => {
       headers: lockedHeaders,
     });
 
-    expect(res.status).toBe(403);
-    const body = (await res.json()) as { error?: string };
-    expect(body.error).toBe('WORKSPACE_LOCKED');
-    expect(deleteUserDesignSystem).not.toHaveBeenCalled();
+    expect(res.status).toBe(204);
+    expect(deleteUserDesignSystem).toHaveBeenCalledOnce();
   });
 
-  it('rejects deleting when the caller workspace is deleted', async () => {
+  it('allows deleting when a stale request says the workspace is deleted', async () => {
     const app = express();
     app.use(express.json());
     const { deleteUserDesignSystem } = registerRoutes(app, async () => true);
@@ -361,10 +351,8 @@ describe('design system PATCH/DELETE workspace-lock guard (spec 9.2)', () => {
       headers: { ...lockedHeaders, 'x-od-workspace-lifecycle-state': 'deleted' },
     });
 
-    expect(res.status).toBe(403);
-    const body = (await res.json()) as { error?: string };
-    expect(body.error).toBe('WORKSPACE_LOCKED');
-    expect(deleteUserDesignSystem).not.toHaveBeenCalled();
+    expect(res.status).toBe(204);
+    expect(deleteUserDesignSystem).toHaveBeenCalledOnce();
   });
 
   it('still allows deleting an active (unlocked) workspace resource', async () => {

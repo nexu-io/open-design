@@ -1,9 +1,9 @@
 ---
-title: Open Design 0.16.0
+title: OpenDesign 0.16.0
 description: Choose a visual direction, keep your work intact, and move from creation to delivery with confidence.
 ---
 
-# Open Design 0.16.0 — The Confident Creative Loop
+# OpenDesign 0.16.0 — The Confident Creative Loop
 
 🎨 **92 PRs · 20 contributors · 5 days** — **Choose the direction, keep the work, and ship without second-guessing the path.** Visual guidance now reaches more kinds of work, model setup is easier to trust before a task begins, and long tasks and app updates are less likely to interrupt access to your latest results. 0.16.0 makes the whole journey more dependable—from choosing the look to reopening the app that delivers it.
 
@@ -11,7 +11,7 @@ description: Choose a visual direction, keep your work intact, and move from cre
 
 - 🎨 **Visual direction now follows the thing you are actually making.** Style choices are no longer limited to decks and prototypes. Documents, posters and other images, videos, Web Clones, wireframes, mobile work, and Hyperframes each get previews suited to their format—with four quick choices inline and the full library one click away. (#5746)
 
-- 🔔 **Product news now has a home inside Open Design.** A new bell in the Home and project headers opens a message center with unread counts, filters, mark-all-read, and links to relevant content. Read state stays on the device for anonymous use or follows a signed-in account. Dates use your locale, and the close button is always easy to find. (#5920, #5954, #5959, #5968) Thanks @nettee.
+- 🔔 **Product news now has a home inside OpenDesign.** A new bell in the Home and project headers opens a message center with unread counts, filters, mark-all-read, and links to relevant content. Read state stays on the device for anonymous use or follows a signed-in account. Dates use your locale, and the close button is always easy to find. (#5920, #5954, #5959, #5968) Thanks @nettee.
 
 - 🔄 **Automatic updates now cover more of the app.** After upgrading, the new version takes effect more reliably and features affected by an incomplete update—including PPTX export—work again. On macOS, “Check for Updates…” now clearly shows whether the app is current, downloading, ready to restart, waiting for active work to finish, or needs a manual download. Update reliability also improves on Windows. (#5789, #5766, #5678, #5915, #5940, #5955, #5967) Thanks @PerishCode.
 
@@ -61,7 +61,7 @@ description: Choose a visual direction, keep your work intact, and move from cre
 
 ### 🖼️ Preview and interface
 
-- **Small visual signals tell the truth again.** Browser-extraction failures keep a visible red surface, the model picker stays on screen, and the Open Design Website Clone example loads its real logo with the first screen. (#5454, #5907, #5765) Thanks @xxiaoxiong, @lefarcen.
+- **Small visual signals tell the truth again.** Browser-extraction failures keep a visible red surface, the model picker stays on screen, and the OpenDesign Website Clone example loads its real logo with the first screen. (#5454, #5907, #5765) Thanks @xxiaoxiong, @lefarcen.
 
 ## 🙏 Thanks to everyone who shipped 0.16.0
 

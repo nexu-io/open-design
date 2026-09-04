@@ -1827,13 +1827,15 @@
    32/34px to 28px here. Radius stays as authored (circle when neutral, pill
    when selected). The home composer footer keeps the picker's larger native
    sizing via its own `.home-hero__input-card` scope. */
-.app .composer-row .composer-mode__trigger {
+.app .composer-row .composer-mode__trigger,
+.chat-composer-fixed-layer .composer-row .composer-mode__trigger {
   width: 28px;
   height: 28px;
   min-width: 28px;
   box-shadow: none;
 }
-.app .composer-row .composer-mode.is-selected .composer-mode__trigger {
+.app .composer-row .composer-mode.is-selected .composer-mode__trigger,
+.chat-composer-fixed-layer .composer-row .composer-mode.is-selected .composer-mode__trigger {
   width: auto;
   height: 28px;
   min-width: 0;

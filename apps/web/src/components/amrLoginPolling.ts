@@ -11,12 +11,18 @@ export type AmrLoginStatusEventReason =
   | 'login-canceled'
   | 'status-changed';
 
+export function isAmrSessionAuthenticated(
+  status: VelaLoginStatus | null | undefined,
+): boolean {
+  return status?.loggedIn === true && status.sessionState !== 'reauth_required';
+}
+
 export function amrLoginPollOutcome(
   status: VelaLoginStatus | null,
   startedAt: number,
   now: number = Date.now(),
 ): AmrLoginPollOutcome {
-  if (status?.loggedIn) return 'signed-in';
+  if (isAmrSessionAuthenticated(status)) return 'signed-in';
   if (
     status?.loginInFlight === false &&
     now - startedAt >= AMR_LOGIN_STARTUP_SETTLE_MS

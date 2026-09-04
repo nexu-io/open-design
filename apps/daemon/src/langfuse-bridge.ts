@@ -12,15 +12,21 @@ import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 
-import { modelIdForTracking } from '@open-design/contracts/analytics';
+import {
+  modelIdForTracking,
+  type TrackingRunCancelOrigin,
+  type TrackingRunTerminalTrigger,
+} from '@open-design/contracts/analytics';
+import type { OdNextRolloutDecision, SafeRunQualityV1 } from '@open-design/contracts';
 
-import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
+import { agentCliEnvForAgent, readAppConfig, type TelemetryPrefs } from './app-config.js';
 import type { AppVersionInfo } from './app-version.js';
 import { listMessages } from './db.js';
-import { normalizeOpenDesignTelemetryRelayUrl } from './integrations/telemetry-relay.js';
 import {
   deriveLangfuseDeliveryState,
+  buildSafeRunQualityProjectionV1,
   readFeedbackTelemetrySinkConfig,
+  readRunTelemetrySinkConfig,
   reportRunCompleted,
   reportRunFeedback,
   type AgentEventSummary,
@@ -54,18 +60,23 @@ import {
 import {
   collectStderrTailSummary,
   collectStdoutTailSummary,
+  promptBudgetAnalyticsFromDiagnostic,
   summarizeRunDiagnosticsForAnalytics,
+  type RunDiagnosticsAnalytics,
 } from './run-diagnostics.js';
+import { projectToolExecutionLifecycleDiagnostic } from './agent-protocol/acp/tool-execution-lifecycle.js';
 import {
   classifyRunFailure,
   type RunFailureClassification,
 } from './run-failure-classification.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
+import { runAdmissionEvidenceForRun } from './runtimes/run-lifecycle-analytics.js';
 import { buildTraceObjectManifests } from './trace-object-manifest.js';
 import type { TraceArtifactObjectSource, TraceObjectUploadManifests } from './trace-object-manifest.js';
 import { getDetectedRuntimeVersions } from './runtimes/detection.js';
+import { runTelemetryDeliveryIdempotencyKey } from './observability/delivery-state.js';
 
-interface DaemonRunRecord {
+export interface DaemonRunRecord {
   id: string;
   projectId: string | null;
   conversationId: string | null;
@@ -76,6 +87,8 @@ interface DaemonRunRecord {
   signal?: string | null;
   error?: string | null;
   errorCode?: string | null;
+  cancelOrigin?: TrackingRunCancelOrigin | null;
+  terminalTrigger?: TrackingRunTerminalTrigger | null;
   analyticsTelemetry?: RunTelemetryTimestamps | null;
   createdAt: number;
   updatedAt: number;
@@ -111,6 +124,42 @@ interface DaemonRunRecord {
   retryFinalResult?: string;
   retrySuppressedReason?: string;
   retryOriginalFailure?: RunFailureClassification;
+  promptBudgetDiagnostics?: Partial<RunDiagnosticsAnalytics> | null;
+  strategyRolloutDecision?: OdNextRolloutDecision | null;
+}
+
+export interface BuildSafeRunQualityProjectionFromDaemonOpts {
+  db: unknown;
+  dataDir: string;
+  run: SafeRunQualityDaemonRunRecord;
+  prefs: TelemetryPrefs;
+  installationId?: string | null;
+  env?: NodeJS.ProcessEnv;
+  fetchImpl?: typeof fetch;
+}
+
+/** Minimal durable Run surface required to rebuild the Task-safe projection. */
+export interface SafeRunQualityDaemonRunRecord {
+  id: string;
+  projectId: string | null;
+  conversationId: string | null;
+  assistantMessageId: string | null;
+  agentId: string | null;
+  status: string;
+  createdAt: number;
+  updatedAt: number;
+  events: DaemonRunRecord['events'];
+  exitCode?: number | null | undefined;
+  signal?: string | null | undefined;
+  error?: string | null | undefined;
+  errorCode?: string | null | undefined;
+  cancelOrigin?: TrackingRunCancelOrigin | null | undefined;
+  terminalTrigger?: TrackingRunTerminalTrigger | null | undefined;
+  analyticsTelemetry?: RunTelemetryTimestamps | null | undefined;
+  promptBudgetDiagnostics?: Partial<RunDiagnosticsAnalytics> | null | undefined;
+  userPrompt?: string | undefined;
+  projectAttachmentPaths?: string[] | undefined;
+  projectMetadata?: Record<string, unknown> | null | undefined;
 }
 
 interface TraceSafeManifestResult {
@@ -134,6 +183,10 @@ export interface ReportRunCompletedFromDaemonOpts {
   persistedEndedAt?: number;
   /** App version info — collected once at daemon startup and reused. */
   appVersion?: AppVersionInfo | null;
+  /** Exact identity persisted by the caller before crossing the network. */
+  deliveryIdempotencyKey?: string;
+  /** Persists each concrete transport attempt before fetch. */
+  onDeliveryAttempt?: () => void;
   fetchImpl?: typeof fetch;
 }
 
@@ -194,56 +247,6 @@ function mergeTraceSafeManifests(
     artifactManifest,
     ...(inputTextSnapshotManifest ? { inputTextSnapshotManifest } : {}),
     completeness: deriveManifestCompleteness(entries, selectedFallbackUnavailable),
-  };
-}
-
-function inferObjectRegistrationRelayUrl(env: NodeJS.ProcessEnv = process.env): string | null {
-  const objectRelayUrl = env.OPEN_DESIGN_OBJECT_RELAY_URL?.trim();
-  if (!objectRelayUrl) {
-    const telemetryRelayUrl = env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim();
-    return telemetryRelayUrl
-      ? normalizeOpenDesignTelemetryRelayUrl(telemetryRelayUrl)
-      : null;
-  }
-  const normalizedObjectRelayUrl = normalizeOpenDesignTelemetryRelayUrl(
-    objectRelayUrl,
-  );
-  try {
-    const url = new URL(normalizedObjectRelayUrl);
-    url.pathname = url.pathname.replace(/\/api\/objects\/batch\/?$/, '/api/langfuse');
-    return url.toString().replace(/\/+$/, '');
-  } catch {
-    return normalizedObjectRelayUrl
-      .replace(/\/api\/objects\/batch\/?$/, '/api/langfuse')
-      .replace(/\/+$/, '');
-  }
-}
-
-function parsePositiveInt(value: string | undefined, fallback: number): number {
-  if (value === undefined) return fallback;
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function parseNonNegativeInt(value: string | undefined, fallback: number): number {
-  if (value === undefined) return fallback;
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
-}
-
-function objectRegistrationTelemetryConfig(
-  env: NodeJS.ProcessEnv = process.env,
-): Extract<TelemetrySinkConfig, { kind: 'relay' }> | null {
-  const relayUrl = inferObjectRegistrationRelayUrl(env);
-  if (!relayUrl) return null;
-  return {
-    kind: 'relay',
-    relayUrl,
-    timeoutMs: parsePositiveInt(
-      env.OPEN_DESIGN_OBJECT_RELAY_TIMEOUT_MS ?? env.OPEN_DESIGN_TELEMETRY_TIMEOUT_MS,
-      20_000,
-    ),
-    retries: parseNonNegativeInt(env.OPEN_DESIGN_TELEMETRY_RETRIES, 1),
   };
 }
 
@@ -499,12 +502,14 @@ function collectAgentEvents(
   runStartedAt: number,
   runEndedAt: number,
   agentId: string | null | undefined,
+  retainedPromptBudget?: Partial<RunDiagnosticsAnalytics> | null,
 ): AgentEventSummary[] {
   const out: AgentEventSummary[] = [];
   const statusCounts = new Map<string, number>();
   const diagnosticCounts = new Map<string, number>();
   let thinkingCount = 0;
   let usageCount = 0;
+  let promptBudgetObserved = false;
   const source =
     typeof agentId === 'string' && agentId.trim().length > 0
       ? agentId.trim()
@@ -604,14 +609,22 @@ function collectAgentEvents(
         typeof data.name === 'string' && data.name.length > 0
           ? data.name
           : 'runtime_diagnostic';
+      const toolExecutionLifecycle = diagnosticName === 'tool_execution_lifecycle'
+        ? projectToolExecutionLifecycleDiagnostic(data)
+        : null;
+      if (diagnosticName === 'tool_execution_lifecycle' && !toolExecutionLifecycle) continue;
       const index = diagnosticCounts.get(diagnosticName) ?? 0;
       diagnosticCounts.set(diagnosticName, index + 1);
+      const promptBudget = promptBudgetAnalyticsFromDiagnostic(
+        data as Record<string, unknown>,
+      );
+      if (promptBudget) promptBudgetObserved = true;
       out.push({
         id: `diagnostic-${diagnosticName}-${index}`,
         name: `agent-diagnostic:${diagnosticName}`,
         timestamp,
         input: eventInput('diagnostic'),
-        output: {
+        output: toolExecutionLifecycle ?? {
           name: diagnosticName,
           ...(typeof data.source === 'string' ? { source: data.source } : {}),
           ...(typeof data.reason === 'string' ? { reason: data.reason } : {}),
@@ -629,12 +642,67 @@ function collectAgentEvents(
             : {}),
           ...(typeof data.suppressing === 'boolean' ? { suppressing: data.suppressing } : {}),
           ...(data.shape && typeof data.shape === 'object' ? { shape: data.shape } : {}),
+          ...(promptBudget
+            ? {
+                schema_version: 1,
+                frame_bytes: promptBudget.prompt_frame_bytes,
+                prompt_bytes: promptBudget.prompt_bytes,
+                prompt_token_estimate: promptBudget.prompt_token_estimate,
+                token_estimate_method: promptBudget.prompt_token_estimate_method,
+                session_mode: promptBudget.prompt_session_mode,
+                model_id: promptBudget.prompt_model_id,
+                context_window_source: promptBudget.prompt_context_window_source,
+                ...(promptBudget.prompt_context_window_tokens !== undefined
+                  ? { context_window_tokens: promptBudget.prompt_context_window_tokens }
+                  : {}),
+                prior_session_usage_source:
+                  promptBudget.prompt_prior_session_usage_source,
+                ...(promptBudget.prompt_prior_session_input_tokens !== undefined
+                  ? {
+                      prior_session_input_tokens:
+                        promptBudget.prompt_prior_session_input_tokens,
+                    }
+                  : {}),
+              }
+            : {}),
         },
         metadata: {
           diagnostic_name: diagnosticName,
         },
       });
     }
+  }
+  if (!promptBudgetObserved && retainedPromptBudget?.prompt_budget_version === 'prompt_budget_v1') {
+    out.push({
+      id: 'diagnostic-prompt_budget_v1-retained',
+      name: 'agent-diagnostic:prompt_budget_v1',
+      timestamp: runStartedAt,
+      input: eventInput('diagnostic'),
+      output: {
+        name: 'prompt_budget_v1',
+        source: 'acp-json-rpc',
+        schema_version: 1,
+        frame_bytes: retainedPromptBudget.prompt_frame_bytes,
+        prompt_bytes: retainedPromptBudget.prompt_bytes,
+        prompt_token_estimate: retainedPromptBudget.prompt_token_estimate,
+        token_estimate_method: retainedPromptBudget.prompt_token_estimate_method,
+        session_mode: retainedPromptBudget.prompt_session_mode,
+        model_id: retainedPromptBudget.prompt_model_id,
+        context_window_source: retainedPromptBudget.prompt_context_window_source,
+        ...(retainedPromptBudget.prompt_context_window_tokens !== undefined
+          ? { context_window_tokens: retainedPromptBudget.prompt_context_window_tokens }
+          : {}),
+        prior_session_usage_source:
+          retainedPromptBudget.prompt_prior_session_usage_source,
+        ...(retainedPromptBudget.prompt_prior_session_input_tokens !== undefined
+          ? {
+              prior_session_input_tokens:
+                retainedPromptBudget.prompt_prior_session_input_tokens,
+            }
+          : {}),
+      },
+      metadata: { diagnostic_name: 'prompt_budget_v1' },
+    });
   }
   return out;
 }
@@ -957,7 +1025,7 @@ function buildTraceObjectSummary(args: {
 }
 
 function pickRunError(
-  run: DaemonRunRecord,
+  run: Pick<DaemonRunRecord, 'events'>,
   status: ReportContext['run']['status'],
 ): string | undefined {
   if (status === 'succeeded') return undefined;
@@ -982,6 +1050,132 @@ function pickRunError(
 function normalizeStatus(s: string): ReportContext['run']['status'] {
   if (s === 'succeeded' || s === 'failed' || s === 'canceled') return s;
   return 'failed';
+}
+
+/**
+ * Rebuild the quality facts used by Task hierarchy from the same durable
+ * message/Run/manifest sources as ordinary single-Run reporting. The object
+ * manifest pass is registration-only: it may inspect local metadata but never
+ * uploads an object or emits a second trace.
+ */
+export async function buildSafeRunQualityProjectionFromDaemon(
+  opts: BuildSafeRunQualityProjectionFromDaemonOpts,
+): Promise<SafeRunQualityV1 | undefined> {
+  if (opts.prefs.metrics !== true || opts.prefs.content !== true) return undefined;
+  const { db, dataDir, run } = opts;
+  let messageContent = '';
+  let producedFilesRaw: unknown;
+  let traceObjectFilesRaw: unknown;
+  let attachmentsRaw: unknown;
+  if (run.conversationId && run.assistantMessageId) {
+    try {
+      const messages = (
+        listMessages as (database: unknown, conversationId: string) => unknown[]
+      )(db, run.conversationId) as Array<Record<string, unknown>>;
+      const assistantIndex = messages.findIndex((message) => (
+        message.id === run.assistantMessageId
+      ));
+      const message = assistantIndex >= 0 ? messages[assistantIndex] : undefined;
+      if (message) {
+        messageContent = typeof message.content === 'string' ? message.content : '';
+        producedFilesRaw = message.producedFiles;
+        traceObjectFilesRaw = traceObjectFilesForTelemetry(
+          message.traceObjectFiles,
+          producedFilesRaw,
+        );
+        attachmentsRaw = collectPriorUserAttachments(messages, assistantIndex);
+      }
+    } catch (error) {
+      console.warn('[langfuse-bridge] Task quality message read failed:', String(error));
+    }
+  }
+
+  const fallbackManifests = buildTraceSafeManifests({
+    projectId: run.projectId,
+    runId: run.id,
+    attachmentsRaw,
+    traceObjectFilesRaw,
+  });
+  const registrationManifests = await buildTraceObjectManifests({
+    installationId: opts.installationId ?? null,
+    projectId: run.projectId ?? '',
+    runId: run.id,
+    projectsRoot: path.join(dataDir, 'projects'),
+    ...(run.projectMetadata ? { projectMetadata: run.projectMetadata } : {}),
+    ...(run.projectAttachmentPaths
+      ? { attachmentPaths: run.projectAttachmentPaths }
+      : {}),
+    artifacts: buildTraceObjectArtifactSources(traceObjectFilesRaw),
+    prompt: run.userPrompt ?? '',
+    prefs: opts.prefs,
+    ...(opts.env ? { env: opts.env } : {}),
+    ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
+    uploadMode: 'manifest-only',
+  });
+  const manifests = mergeTraceSafeManifests(fallbackManifests, registrationManifests);
+  const status = normalizeStatus(run.status);
+  const error = run.error ?? pickRunError(run, status);
+  const errorCode = deriveRunErrorCode({
+    status,
+    errorCode: run.errorCode ?? null,
+    exitCode: run.exitCode ?? null,
+    signal: run.signal ?? null,
+  });
+  const result = runResultFromStatus(status);
+  const failure = classifyRunFailure({
+    result,
+    status: {
+      status,
+      error: error ?? null,
+      errorCode: run.errorCode ?? null,
+      exitCode: run.exitCode ?? null,
+      signal: run.signal ?? null,
+    },
+    ...(errorCode ? { errorCode } : {}),
+    agentId: run.agentId,
+    cancelOrigin: run.cancelOrigin ?? null,
+    terminalTrigger: run.terminalTrigger ?? null,
+    events: run.events,
+    admissionEvidence: runAdmissionEvidenceForRun(run),
+  });
+  // Terminal process evidence. The single-Run trace reported the stderr and
+  // stdout tails only for a non-succeeded Run, and always reported the derived
+  // close diagnostics; the Task hierarchy must report at least the same.
+  const stderr = status === 'succeeded'
+    ? undefined
+    : collectStderrTailSummary(run.events);
+  const stdout = status === 'succeeded'
+    ? undefined
+    : collectStdoutTailSummary(run.events);
+  const diagnostics = summarizeRunDiagnosticsForAnalytics({
+    events: run.events,
+    promptBudgetDiagnostics: run.promptBudgetDiagnostics,
+    exitCode: run.exitCode ?? null,
+    signal: run.signal ?? null,
+    cancelRequested: status === 'canceled',
+    firstTokenSeen: Boolean(run.analyticsTelemetry?.firstTokenAt),
+  });
+  return buildSafeRunQualityProjectionV1({
+    prefs: opts.prefs,
+    messageOutput: messageContent,
+    ...(error ? { errorMessage: error } : {}),
+    ...(errorCode ? { errorCode } : {}),
+    ...(failure ? { failure } : {}),
+    ...(run.exitCode !== undefined && run.exitCode !== null
+      ? { exitCode: run.exitCode }
+      : {}),
+    ...(run.signal ? { signal: run.signal } : {}),
+    ...(stderr ? { stderr } : {}),
+    ...(stdout ? { stdout } : {}),
+    diagnostics,
+    tools: collectToolCalls(run.events, run.createdAt, run.updatedAt),
+    attachmentManifest: manifests.attachmentManifest,
+    artifactManifest: manifests.artifactManifest,
+    ...(manifests.inputTextSnapshotManifest
+      ? { inputTextSnapshotManifest: manifests.inputTextSnapshotManifest }
+      : {}),
+    manifestCompleteness: manifests.completeness,
+  });
 }
 
 export async function reportRunCompletedFromDaemon(
@@ -1061,7 +1255,10 @@ export async function reportRunCompletedFromDaemon(
       },
       ...(errorCode ? { errorCode } : {}),
       agentId: run.agentId,
+      cancelOrigin: run.cancelOrigin ?? null,
+      terminalTrigger: run.terminalTrigger ?? null,
       events: run.events,
+      admissionEvidence: runAdmissionEvidenceForRun(run),
     });
     const timings = summarizeRunTimingAnalytics({
       runCreatedAt: run.createdAt,
@@ -1088,6 +1285,7 @@ export async function reportRunCompletedFromDaemon(
     const artifacts = summarizeProducedFiles(traceObjectFilesRaw);
     const diagnostics = summarizeRunDiagnosticsForAnalytics({
       events: run.events,
+      promptBudgetDiagnostics: run.promptBudgetDiagnostics,
       exitCode: run.exitCode ?? null,
       signal: run.signal ?? null,
       cancelRequested: run.status === 'canceled',
@@ -1123,6 +1321,9 @@ export async function reportRunCompletedFromDaemon(
       projectId: run.projectId ?? '',
       conversationId: run.conversationId ?? '',
       ...(run.agentId ? { agentId: run.agentId } : {}),
+      ...(run.strategyRolloutDecision
+        ? { strategyRolloutDecision: run.strategyRolloutDecision }
+        : {}),
       run: {
         runId: run.id,
         status,
@@ -1166,7 +1367,13 @@ export async function reportRunCompletedFromDaemon(
       manifestCompleteness: finalManifests.completeness,
       traceObjectSummary,
       tools: collectToolCalls(run.events, startedAt, endedAt),
-      agentEvents: collectAgentEvents(run.events, startedAt, endedAt, run.agentId),
+      agentEvents: collectAgentEvents(
+        run.events,
+        startedAt,
+        endedAt,
+        run.agentId,
+        run.promptBudgetDiagnostics,
+      ),
       eventsSummary: summarizeEvents(run.events, durationMs),
       prefs,
       ...(turn ? { turn } : {}),
@@ -1178,26 +1385,44 @@ export async function reportRunCompletedFromDaemon(
       ...objectManifestOptions,
       uploadMode: 'manifest-only',
     });
-    if (registrationManifests) {
+    const finalTelemetryConfig = readRunTelemetrySinkConfig(
+      process.env,
+      configuredAmrEnv,
+    );
+    let uploadedManifests: TraceObjectUploadManifests | undefined;
+    let finalObjectManifests = registrationManifests;
+
+    if (registrationManifests && finalTelemetryConfig?.kind === 'vela') {
+      // Only Vela's signed service path can establish object authority. An
+      // anonymous relay/direct client must not create a content-free Langfuse
+      // registration trace or obtain upload permission from self-reported
+      // object metadata.
       await reportRunCompleted(
         buildContext(mergeTraceSafeManifests(manifests, registrationManifests)),
         {
-          config: objectRegistrationTelemetryConfig(),
+          config: finalTelemetryConfig,
           deliveryPurpose: 'object-registration',
           ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
         },
       );
+      uploadedManifests = await buildTraceObjectManifests(objectManifestOptions);
+      finalObjectManifests = uploadedManifests ?? registrationManifests;
     }
 
-    const uploadedManifests = await buildTraceObjectManifests(objectManifestOptions);
-    const finalManifests = mergeTraceSafeManifests(manifests, uploadedManifests);
+    const finalManifests = mergeTraceSafeManifests(manifests, finalObjectManifests);
     return await reportRunCompleted(
       buildContext(finalManifests, buildTraceObjectSummary({
         traceObjectFilesRaw,
         ...(uploadedManifests ? { uploaded: uploadedManifests } : {}),
       })),
       {
-        configuredEnv: configuredAmrEnv,
+        config: finalTelemetryConfig,
+        deliveryIdempotencyKey:
+          opts.deliveryIdempotencyKey
+          ?? runTelemetryDeliveryIdempotencyKey(run.id),
+        ...(opts.onDeliveryAttempt
+          ? { onDeliveryAttempt: opts.onDeliveryAttempt }
+          : {}),
         ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
       },
     );

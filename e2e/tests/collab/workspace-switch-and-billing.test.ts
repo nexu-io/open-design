@@ -1,7 +1,8 @@
 // @vitest-environment node
 
-import { chmod, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
@@ -32,33 +33,12 @@ const TEAM = {
 let authority: Server;
 let authorityUrl: string;
 let directoryItems = [PERSONAL, TEAM];
-let teamCurrentUnavailable = false;
 
 beforeAll(async () => {
   authority = createServer((req, res) => {
     if (req.url === '/api/v1/workspaces' && req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ items: directoryItems }));
-      return;
-    }
-    if (req.url === '/api/v1/workspaces/current' && req.method === 'GET') {
-      const workspaceId = req.headers['x-vela-workspace-id'];
-      const current = workspaceId === TEAM.workspaceId ? TEAM : PERSONAL;
-      if (!workspaceId || (workspaceId === TEAM.workspaceId && teamCurrentUnavailable)) {
-        res.writeHead(403, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ error: 'missing_principal' }));
-        return;
-      }
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({
-        ...current,
-        billingState: current.workspaceType === 'team' ? 'active' : 'free',
-        planId: current.workspaceType === 'team' ? 'team_plus' : null,
-        providerMode: 'platform_credits',
-        seatSummary: current.workspaceType === 'team'
-          ? { seatLimit: 5, usedSeats: 1 }
-          : { seatLimit: 1, usedSeats: 1 },
-      }));
       return;
     }
     res.writeHead(404, { 'content-type': 'application/json' });
@@ -136,7 +116,6 @@ describe('workspace switching and scoped billing', () => {
     async () => {
       const suite = await createSmokeSuite('collab-workspace-switch-and-billing');
       directoryItems = [PERSONAL, TEAM];
-      teamCurrentUnavailable = false;
       const velaBin = await writeBillingVelaBin(join(suite.scratchDir, 'fake-vela-billing'));
 
       await suite.with.toolsDev(
@@ -171,7 +150,7 @@ describe('workspace switching and scoped billing', () => {
             webUrl,
             '/api/workspace/directory',
           );
-          expect(directory.activeWorkspaceId).toBeNull();
+          expect(directory.activeWorkspaceId).toBe(TEAM.workspaceId);
           const selected = await requestJson<{
             context: { workspaceId: string; workspaceMemberId: string } | null;
           }>(webUrl, '/api/workspace/context', {
@@ -259,15 +238,20 @@ describe('workspace switching and scoped billing', () => {
     'rejects a removed Team request identity while Personal remains selectable',
     { timeout: 240_000 },
     async () => {
-      const suite = await createSmokeSuite('collab-workspace-stale-pin-recovery');
-      directoryItems = [PERSONAL, TEAM];
-      teamCurrentUnavailable = false;
-
-      await suite.with.toolsDev(
-        async ({ webUrl }) => {
-          await requestJson(webUrl, '/api/workspace/context', {
-            headers: workspaceHeaders(PERSONAL),
-          });
+      const externalRoot = await mkdtemp(join(tmpdir(), 'od-workspace-restart-e2e-'));
+      const sharedDataDir = join(externalRoot, 'daemon-data');
+      const runtimeEnv = {
+        AMR_HOME: join(externalRoot, 'empty-amr-home'),
+        OD_WORKSPACE_CONTEXT_SOURCE: 'vela',
+        VELA_API_URL: authorityUrl,
+        VELA_CONTROL_KEY: 'e2e-stale-pin-control-key',
+      };
+      try {
+        directoryItems = [PERSONAL, TEAM];
+        const first = await createSmokeSuite('collab-workspace-stale-pin-first', {
+          dataDir: sharedDataDir,
+        });
+        await first.with.toolsDev(async ({ webUrl }) => {
           await requestJson(webUrl, '/api/workspace/active', {
             method: 'PUT',
             body: {
@@ -275,13 +259,16 @@ describe('workspace switching and scoped billing', () => {
               workspaceMemberId: TEAM.workspaceMemberId,
             },
           });
+        }, { env: runtimeEnv });
 
-          // Simulate B confirming that the Team membership disappeared. The
-          // removed request-local identity can no longer resolve, while the
-          // directory still contains the user's Personal workspace.
-          directoryItems = [PERSONAL];
-          teamCurrentUnavailable = true;
-
+        // Start a new daemon over the same persisted data after the Team
+        // membership disappears. No in-memory directory lease survives this
+        // boundary, so the stale restart default must be cleared.
+        directoryItems = [PERSONAL];
+        const restarted = await createSmokeSuite('collab-workspace-stale-pin-restarted', {
+          dataDir: sharedDataDir,
+        });
+        await restarted.with.toolsDev(async ({ webUrl }) => {
           const directory = await requestJson<{ activeWorkspaceId: string | null }>(
             webUrl,
             '/api/workspace/directory',
@@ -302,17 +289,10 @@ describe('workspace switching and scoped billing', () => {
             workspaceName: PERSONAL.workspaceName,
             workspaceType: 'personal',
           });
-
-        },
-        {
-          env: {
-            AMR_HOME: join(suite.scratchDir, 'empty-amr-home'),
-            OD_WORKSPACE_CONTEXT_SOURCE: 'vela',
-            VELA_API_URL: authorityUrl,
-            VELA_CONTROL_KEY: 'e2e-stale-pin-control-key',
-          },
-        },
-      );
+        }, { env: runtimeEnv });
+      } finally {
+        await rm(externalRoot, { force: true, recursive: true });
+      }
     },
   );
 });

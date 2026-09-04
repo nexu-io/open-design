@@ -205,19 +205,16 @@ describe('Skill example and asset Workspace authority', () => {
     expect(await assetB.text()).toBe('workspace-b-bytes');
   });
 
-  it.each([
-    ['workspace-removed', 403, 'WORKSPACE_ACCESS_DENIED'],
-    ['workspace-outage', 503, 'WORKSPACE_AUTHORITY_UNAVAILABLE'],
-  ] as const)(
-    'returns authority failure for %s without serving another Workspace bytes',
-    async (workspaceId, status, code) => {
+  it.each(['workspace-removed', 'workspace-outage'] as const)(
+    'does not consult remote authority for %s and never serves another Workspace bytes',
+    async (workspaceId) => {
       const baseUrl = await fixture();
       const response = await fetch(
         `${baseUrl}/api/skills/same-skill/assets/secret.txt?workspaceId=${workspaceId}&workspaceMemberId=member-a`,
       );
 
-      expect(response.status).toBe(status);
-      expect(await response.json()).toMatchObject({ error: code });
+      expect(response.status).toBe(404);
+      expect(await response.text()).toBe('skill not found');
     },
   );
 

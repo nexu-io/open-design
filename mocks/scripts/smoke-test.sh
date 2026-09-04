@@ -114,7 +114,7 @@ else
 fi
 
 # vela ACP roundtrip (strict set_model gate enforced).
-vela_acp_out=$(cat <<EOF | vela agent run --runtime opencode 2>/dev/null
+vela_acp_out=$(cat <<EOF | vela agent run 2>/dev/null
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}
 {"jsonrpc":"2.0","id":2,"method":"session/new","params":{"cwd":"/tmp"}}
 {"jsonrpc":"2.0","id":3,"method":"session/set_model","params":{"sessionId":"fake-vela-session-1","modelId":"deepseek-v3.2"}}
@@ -132,7 +132,7 @@ else
 fi
 
 # vela strict set_model gate — skipping set_model must reject prompt.
-vela_gate_out=$(cat <<EOF | vela agent run --runtime opencode 2>/dev/null
+vela_gate_out=$(cat <<EOF | vela agent run 2>/dev/null
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}
 {"jsonrpc":"2.0","id":2,"method":"session/new","params":{"cwd":"/tmp"}}
 {"jsonrpc":"2.0","id":3,"method":"session/prompt","params":{"sessionId":"fake-vela-session-1","prompt":[{"type":"text","text":"hi"}]}}

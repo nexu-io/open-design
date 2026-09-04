@@ -6,7 +6,38 @@ import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const platformMocks = vi.hoisted(() => ({
+  listProcessSnapshots: vi.fn(),
+  stopProcesses: vi.fn(),
+  actualListProcessSnapshots: null as null | typeof import('@open-design/platform').listProcessSnapshots,
+  actualStopProcesses: null as null | typeof import('@open-design/platform').stopProcesses,
+}));
+
+vi.mock('@open-design/platform', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@open-design/platform')>();
+  platformMocks.actualListProcessSnapshots = actual.listProcessSnapshots;
+  platformMocks.actualStopProcesses = actual.stopProcesses;
+  platformMocks.listProcessSnapshots.mockImplementation(actual.listProcessSnapshots);
+  platformMocks.stopProcesses.mockImplementation(actual.stopProcesses);
+  return {
+    ...actual,
+    listProcessSnapshots: platformMocks.listProcessSnapshots,
+    stopProcesses: platformMocks.stopProcesses,
+  };
+});
+
 import { createChatRunService } from '../../src/runtimes/runs.js';
+
+afterEach(() => {
+  platformMocks.listProcessSnapshots.mockReset();
+  platformMocks.stopProcesses.mockReset();
+  platformMocks.listProcessSnapshots.mockImplementation(
+    platformMocks.actualListProcessSnapshots as typeof import('@open-design/platform').listProcessSnapshots,
+  );
+  platformMocks.stopProcesses.mockImplementation(
+    platformMocks.actualStopProcesses as typeof import('@open-design/platform').stopProcesses,
+  );
+});
 
 describe('chat run service shutdown', () => {
   it('exports terminal diagnostics without confusing a measured zero with missing data', () => {
@@ -155,6 +186,64 @@ describe('chat run service shutdown', () => {
     vi.useRealTimers();
   });
 
+  it('uses runtime usage attribution when the adapter has no message lifecycle', () => {
+    const runs = createRuns();
+    const run = runs.create({
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      agentId: 'deepseek-harness',
+    }) as any;
+    run.model = 'default';
+    runs.emit(run, 'agent', {
+      type: 'usage',
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-flash',
+      usage: { input_tokens: 10, output_tokens: 2 },
+    });
+    runs.finish(run, 'succeeded', 0, null);
+
+    const diagnostics = runs.statusBody(run).executionDiagnostics;
+    expect(diagnostics?.environment).toMatchObject({
+      requestedModel: { state: 'available', value: 'default' },
+      provider: { state: 'available', value: 'deepseek-official' },
+      resolvedModel: { state: 'available', value: 'deepseek-v4-flash' },
+    });
+    expect(diagnostics?.assistantMessages.count).toMatchObject({
+      state: 'not_collected',
+      missingReason: 'assistant_message_lifecycle_not_exposed_by_runtime',
+    });
+  });
+
+  it('keeps lifecycle attribution ahead of the usage fallback', () => {
+    const runs = createRuns();
+    const run = runs.create({
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      agentId: 'amr',
+    }) as any;
+    runs.emit(run, 'agent', {
+      type: 'usage',
+      provider: 'usage-provider',
+      model: 'usage-model',
+      usage: { input_tokens: 10, output_tokens: 2 },
+    });
+    runs.emit(run, 'agent', {
+      type: 'diagnostic',
+      name: 'assistant_message_lifecycle',
+      phase: 'end',
+      status: 'completed',
+      assistantMessageIndex: 1,
+      provider: 'lifecycle-provider',
+      model: 'lifecycle-model',
+    });
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(runs.statusBody(run).executionDiagnostics?.environment).toMatchObject({
+      provider: { state: 'available', value: 'lifecycle-provider' },
+      resolvedModel: { state: 'available', value: 'lifecycle-model' },
+    });
+  });
+
   it('keeps model-step percentiles unavailable until the documented sample minimum', () => {
     const runs = createRuns();
     const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1', agentId: 'amr' }) as any;
@@ -275,6 +364,27 @@ describe('chat run service shutdown', () => {
     await expect(wait).resolves.toMatchObject({ status: 'succeeded', artifactCount: 2 });
   });
 
+  it('publishes authoritative project-relative artifact paths in status and terminal events', async () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+
+    run.artifactCount = 2;
+    run.artifactPaths = ['existing.png', 'renders/new.png'];
+    const wait = runs.wait(run);
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(runs.statusBody(run)).toMatchObject({
+      artifactPaths: ['existing.png', 'renders/new.png'],
+    });
+    expect(run.events.at(-1)).toMatchObject({
+      event: 'end',
+      data: { artifactPaths: ['existing.png', 'renders/new.png'] },
+    });
+    await expect(wait).resolves.toMatchObject({
+      artifactPaths: ['existing.png', 'renders/new.png'],
+    });
+  });
+
   it('retains structured error details on failed run status bodies', async () => {
     const runs = createRuns();
     const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
@@ -300,6 +410,51 @@ describe('chat run service shutdown', () => {
       errorCode: 'AGENT_EXECUTION_FAILED',
       error: 'Agent stalled without emitting any new output for 1s.',
     });
+  });
+
+  it('clears the prior attempt\'s lifecycle marks when reopening for recharge', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-20T00:00:00.000Z'));
+    const runs = createRuns();
+    const run = runs.create({
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      clientRequestId: 'brief-recharge-marks',
+      requestFingerprint: 'same-logical-request',
+      agentId: 'amr',
+    });
+    const runStartedAt = Date.now();
+    (run as any).analyticsTelemetry = {
+      startRequestedAt: runStartedAt,
+      startChatRunStartedAt: runStartedAt + 10,
+      processSpawnedAt: runStartedAt + 100,
+      stdinWriteEndAt: runStartedAt + 150,
+      firstModelEventAt: runStartedAt + 400,
+      firstModelEventType: 'text_delta',
+      firstTokenAt: runStartedAt + 400,
+      attemptStartedAt: runStartedAt,
+      attemptIndex: 0,
+    };
+    (run as any).failureAction = 'recharge';
+    runs.finish(run, 'failed', 1, null);
+    vi.advanceTimersByTime(600_000);
+
+    runs.prepareRestart(run);
+
+    // The resumed attempt is a fresh execution. Keeping attempt 1's marks
+    // makes every phase boundary measure from before the recharge pause, so
+    // the wait time lands inside the new attempt's model-active window.
+    const telemetry = (run as any).analyticsTelemetry ?? {};
+    expect(telemetry.firstModelEventAt).toBeUndefined();
+    expect(telemetry.firstTokenAt).toBeUndefined();
+    expect(telemetry.stdinWriteEndAt).toBeUndefined();
+    expect(telemetry.processSpawnedAt).toBeUndefined();
+    // The logical run start survives -- queue time is still measured from
+    // when the user asked for this run, not from the resume.
+    expect(telemetry.startRequestedAt).toBe(runStartedAt);
+    // The attempt boundary moves to the resume, which is what scopes
+    // outstanding tool spans to the current attempt.
+    expect(telemetry.attemptStartedAt).toBe(runStartedAt + 600_000);
   });
 
   it('reopens the same logical run for an explicit recharge recovery attempt', () => {
@@ -348,6 +503,56 @@ describe('chat run service shutdown', () => {
       },
     });
     vi.useRealTimers();
+  });
+
+  it('starts resumed terminal delivery from a fresh attempt-scoped lifecycle', () => {
+    const runs = createRuns();
+    const run = runs.create({
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      agentId: 'amr',
+    }) as any;
+    run.runtimeGenerationId = '0f2d4d9e-f034-4ed5-8330-314bd1d525cc';
+
+    runs.finish(run, 'failed', 1, null);
+    runs.beginAnalyticsDelivery(run);
+    runs.finalizeAnalyticsDelivery(run, {
+      status: 'queued',
+      acknowledgement: 'local_buffer',
+      errorType: null,
+    });
+    runs.finish(run, 'succeeded', 0, null);
+    expect(runs.statusBody(run).terminalLifecycle).toMatchObject({
+      posthogDelivery: { status: 'queued', attemptCount: 1 },
+      lateTerminalCount: 1,
+    });
+
+    runs.prepareRestart(run);
+    expect(run.runtimeGenerationId).toBeNull();
+    expect(runs.statusBody(run)).not.toHaveProperty('terminalLifecycle');
+
+    runs.finish(run, 'succeeded', 0, null);
+    expect(runs.statusBody(run).terminalLifecycle).toMatchObject({
+      runAttempt: 1,
+      runtimeGenerationId: null,
+      terminalIntegrity: 'canonical',
+      posthogDelivery: {
+        status: 'unknown',
+        acknowledgement: 'unknown',
+        attemptCount: 0,
+        errorType: null,
+      },
+      duplicateTerminalCount: 0,
+      lateTerminalCount: 0,
+    });
+
+    runs.beginAnalyticsDelivery(run);
+    expect(runs.statusBody(run).terminalLifecycle.posthogDelivery).toMatchObject({
+      status: 'in_flight',
+      acknowledgement: 'none',
+      attemptCount: 1,
+      errorType: null,
+    });
   });
 
   it('keeps the first accepted plugin attribution immutable across request reuse', () => {
@@ -405,6 +610,55 @@ describe('chat run service shutdown', () => {
     expect(run.events.filter((event: { event: string }) => event.event === 'end')).toHaveLength(1);
     await expect(wait).resolves.toMatchObject({ status: 'succeeded', exitCode: 0, signal: null });
   });
+
+  it('retains duplicate and late terminal claims while process-tree teardown is pending', async () => {
+    const childPid = 40_500;
+    const child = new FakeChildProcess({ closeOn: 'SIGTERM', pid: childPid });
+    let releaseInitialSnapshots: (
+      snapshots: Array<{ pid: number; ppid: number; command: string }>,
+    ) => void = () => undefined;
+    const initialSnapshots = new Promise<Array<{
+      pid: number;
+      ppid: number;
+      command: string;
+    }>>((resolve) => {
+      releaseInitialSnapshots = resolve;
+    });
+    platformMocks.listProcessSnapshots
+      .mockReturnValueOnce(initialSnapshots)
+      .mockResolvedValueOnce([{ pid: childPid, ppid: 1, command: 'agent' }])
+      .mockResolvedValueOnce([{ pid: process.pid, ppid: 1, command: 'vitest' }]);
+    platformMocks.stopProcesses.mockResolvedValue({
+      alreadyStopped: false,
+      forcedPids: [],
+      matchedPids: [childPid],
+      remainingPids: [],
+      stoppedPids: [childPid],
+    });
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+    run.status = 'running';
+
+    const teardown = runs.terminateProcessTree(run, child, null);
+    runs.finish(run, 'failed', 1, null);
+    runs.finish(run, 'failed', 1, null);
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(run.status).toBe('running');
+    releaseInitialSnapshots([{ pid: childPid, ppid: 1, command: 'agent' }]);
+    await teardown;
+
+    expect(runs.statusBody(run)).toMatchObject({
+      status: 'failed',
+      exitCode: 1,
+      terminalLifecycle: {
+        terminalIntegrity: 'late',
+        duplicateTerminalCount: 1,
+        lateTerminalCount: 1,
+      },
+    });
+  });
+
   it('filters active runs by conversation within the same project', () => {
     const runs = createRuns();
     const runA = runs.create({ projectId: 'project-1', conversationId: 'conv-a' });
@@ -437,10 +691,11 @@ describe('chat run service shutdown', () => {
     const run = runs.create({ projectId: 'project-1', conversationId: 'conv-queued' });
 
     const wait = runs.wait(run);
-    await runs.cancel(run);
+    await runs.cancel(run, 'user_stop');
 
     expect(run.status).toBe('canceled');
     expect(run.cancelRequested).toBe(true);
+    expect(runs.statusBody(run).cancelOrigin).toBe('user_stop');
     expect(run.signal).toBe('SIGTERM');
     expect(run.events.at(-1)).toMatchObject({
       event: 'end',
@@ -509,25 +764,103 @@ describe('chat run service shutdown', () => {
         order.push(signal);
         return originalKill(signal);
       });
-      const abort = vi.fn(() => order.push('abort'));
       const run = runs.create();
       run.status = 'running';
+      run.stdinOpen = true;
       (run as any).child = child;
-      (run as any).acpSession = { abort };
+      (run as any).acpSession = {
+        abort: vi.fn(() => {
+          order.push('abort');
+          expect(child.stdin.end).not.toHaveBeenCalled();
+          expect(run.stdinOpen).toBe(true);
+        }),
+      };
 
       const cancelPromise = runs.cancel(run);
 
-      expect(abort).toHaveBeenCalledTimes(1);
+      expect((run as any).acpSession.abort).toHaveBeenCalledTimes(1);
       expect(order).toEqual(['abort']);
+      expect(child.stdin.end).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(30);
       expect(order).toEqual(['abort', 'SIGTERM']);
+      expect(child.stdin.end).toHaveBeenCalledTimes(1);
+      expect(run.stdinOpen).toBe(false);
 
       await vi.advanceTimersByTimeAsync(30);
       expect(order).toEqual(['abort', 'SIGTERM', 'SIGKILL']);
       await cancelPromise;
       expect(run.status).toBe('canceled');
       expect(run.signal).toBe('SIGKILL');
+    });
+
+    it('includes descendants created during ACP abort grace in no-pgid teardown', async () => {
+      vi.useFakeTimers();
+      vi.stubEnv('PI_ABORT_GRACE_MS', '30');
+      const childPid = 41_000;
+      const descendantPid = 41_001;
+      const child = new FakeChildProcess({ closeOn: 'SIGKILL', pid: childPid });
+      platformMocks.listProcessSnapshots
+        .mockResolvedValueOnce([{ pid: childPid, ppid: 1, command: 'wrapper' }])
+        .mockResolvedValueOnce([
+          { pid: childPid, ppid: 1, command: 'wrapper' },
+          { pid: descendantPid, ppid: childPid, command: 'late descendant' },
+        ])
+        .mockResolvedValueOnce([{ pid: process.pid, ppid: 1, command: 'vitest' }]);
+      platformMocks.stopProcesses.mockResolvedValue({
+        alreadyStopped: false,
+        forcedPids: [childPid, descendantPid],
+        matchedPids: [childPid, descendantPid],
+        remainingPids: [],
+        stoppedPids: [childPid, descendantPid],
+      });
+      const runs = createRuns();
+      const run = runs.create() as any;
+      run.status = 'running';
+      run.child = child;
+      run.acpSession = { abort: vi.fn() };
+
+      const cancelPromise = runs.cancel(run);
+      await vi.advanceTimersByTimeAsync(30);
+      await cancelPromise;
+
+      expect(platformMocks.stopProcesses).toHaveBeenCalledWith(
+        [descendantPid, childPid],
+        { termGraceMs: 30, killGraceMs: 500 },
+      );
+      expect(run.events).not.toContainEqual(expect.objectContaining({
+        event: 'diagnostic',
+        data: expect.objectContaining({ type: 'termination_failed' }),
+      }));
+    });
+
+    it('records termination_failed when no-pgid process enumeration is unverifiable', async () => {
+      const childPid = 42_000;
+      const child = new FakeChildProcess({ closeOn: 'SIGTERM', pid: childPid });
+      platformMocks.listProcessSnapshots.mockResolvedValue([]);
+      platformMocks.stopProcesses.mockResolvedValue({
+        alreadyStopped: false,
+        forcedPids: [],
+        matchedPids: [childPid],
+        remainingPids: [],
+        stoppedPids: [childPid],
+      });
+      const runs = createRuns();
+      const run = runs.create() as any;
+      run.status = 'running';
+      run.child = child;
+
+      await runs.cancel(run);
+
+      expect(run.events).toContainEqual(expect.objectContaining({
+        event: 'diagnostic',
+        data: expect.objectContaining({
+          type: 'termination_failed',
+          reason: 'run_cancel',
+          child_pid: childPid,
+        }),
+      }));
+      expect(run.events.at(-1)).toMatchObject({ event: 'end', data: { status: 'canceled' } });
     });
 
     it('waits for a real process group to exit before returning canceled status', async () => {
@@ -814,11 +1147,39 @@ describe('chat run service shutdown', () => {
     expect(child.signals).toEqual(['SIGTERM']);
     expect(run.status).toBe('canceled');
     expect(run.cancelRequested).toBe(true);
+    expect(runs.statusBody(run).cancelOrigin).toBe('daemon_shutdown');
     expect(run.signal).toBe('SIGTERM');
     await expect(wait).resolves.toMatchObject({ status: 'canceled', signal: 'SIGTERM' });
     expect(run.events.at(-1)).toMatchObject({
       event: 'end',
       data: { status: 'canceled', signal: 'SIGTERM' },
+    });
+  });
+
+  it('runs durable terminal convergence before shutdown publishes the physical end event', async () => {
+    const observed: string[] = [];
+    const runs = createChatRunService({
+      createSseResponse: () => ({ send: vi.fn(() => true), end: vi.fn(), cleanup: vi.fn() }),
+      createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
+      shutdownGraceMs: 10,
+      ttlMs: 60_000,
+      beforeFinish: ((run: any, status: string) => {
+        observed.push(`before:${status}:${run.status}`);
+        run.strategyTask = { outcome: 'canceled', terminal: true };
+      }) as unknown as null,
+    });
+    const run = runs.create() as any;
+    run.status = 'running';
+
+    await runs.shutdownActive({ graceMs: 10 });
+
+    expect(observed).toEqual(['before:canceled:running']);
+    expect(run.events.at(-1)).toMatchObject({
+      event: 'end',
+      data: {
+        status: 'canceled',
+        strategyTask: { outcome: 'canceled', terminal: true },
+      },
     });
   });
 
@@ -838,15 +1199,21 @@ describe('chat run service shutdown', () => {
   it('uses adapter abort before process signals for ACP-style runs', async () => {
     const runs = createRuns();
     const child = new FakeChildProcess({ closeOn: 'SIGTERM' });
-    const abort = vi.fn();
     const run = runs.create();
     run.status = 'running';
+    run.stdinOpen = true;
     (run as any).child = child;
-    (run as any).acpSession = { abort };
+    (run as any).acpSession = {
+      abort: vi.fn(() => {
+        expect(child.stdin.end).not.toHaveBeenCalled();
+        expect(run.stdinOpen).toBe(true);
+      }),
+    };
 
     await runs.shutdownActive({ graceMs: 10 });
 
-    expect(abort).toHaveBeenCalledTimes(1);
+    expect((run as any).acpSession.abort).toHaveBeenCalledTimes(1);
+    expect(child.lifecycle.slice(0, 2)).toEqual(['stdin.end', 'SIGTERM']);
     expect(child.signals).toEqual(['SIGTERM']);
     expect(run.status).toBe('canceled');
   });
@@ -983,6 +1350,7 @@ async function expectPidGone(pid: number): Promise<void> {
 }
 
 class FakeChildProcess extends EventEmitter {
+  pid: number | undefined;
   exitCode: number | null = null;
   signalCode: string | null = null;
   killed = false;
@@ -996,8 +1364,9 @@ class FakeChildProcess extends EventEmitter {
     }),
   };
 
-  constructor(private readonly options: { closeOn: 'SIGTERM' | 'SIGKILL' }) {
+  constructor(private readonly options: { closeOn: 'SIGTERM' | 'SIGKILL'; pid?: number }) {
     super();
+    this.pid = options.pid;
   }
 
   kill(signal: string): boolean {
@@ -1124,16 +1493,253 @@ describe('run event log persistence', () => {
     runs.emit(run, 'start', { status: 'running' });
     runs.finish(run, 'failed', 1, null);
     runs.markAnalyticsCompleted(run);
-    runs.markLangfuseCompleted(run);
+    runs.beginTelemetryDelivery(run);
+    runs.recordTelemetryDeliveryAttempt(run);
+    runs.recordTelemetryDeliveryAttempt(run);
+    runs.finalizeTelemetryDelivery(run, {
+      langfuse_expected: true,
+      langfuse_delivery_status: 'failed',
+      langfuse_drop_reason: 'network_error',
+      langfuse_attempt_count: 2,
+    });
 
-    expect(JSON.parse(fs.readFileSync(statePath, 'utf8'))).toMatchObject({
+    const failedDeliveryState = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    expect(failedDeliveryState).toMatchObject({
       status: 'failed',
       exitCode: 1,
       analyticsRecovery: {
         insertId: 'run-created-1',
         completedAt: expect.any(Number),
       },
-      langfuseCompletedAt: expect.any(Number),
+      telemetryDelivery: {
+        version: 1,
+        idempotencyKey: expect.stringMatching(/^od-run-telemetry-v1-[a-f0-9]{64}$/u),
+        status: 'failed',
+        attemptCount: 2,
+        crashWindow: false,
+        dropReason: 'network_error',
+      },
+    });
+    expect(failedDeliveryState).not.toHaveProperty('langfuseCompletedAt');
+    expect(failedDeliveryState.telemetryDelivery).not.toHaveProperty('finalizedAt');
+  });
+
+  it('persists attempt-scoped terminal lifecycle facts before publishing the terminal event', () => {
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({
+      projectId: 'p1',
+      conversationId: 'c1',
+      agentId: 'amr',
+    });
+    Object.assign(run, {
+      retryAttemptCount: 1,
+      manualResumeAttemptCount: 1,
+      terminalTrigger: 'inactivity_watchdog',
+    });
+
+    runs.finish(run, 'failed', 130, 'SIGTERM');
+
+    const state = JSON.parse(
+      fs.readFileSync(path.join(tmpDir, run.id, 'state.json'), 'utf8'),
+    );
+    expect(state.terminalLifecycle).toEqual({
+      version: 1,
+      runAttempt: 2,
+      runtimeGenerationId: null,
+      terminationOrigin: 'watchdog_cleanup',
+      terminalIntegrity: 'canonical',
+      terminalPersistence: {
+        status: 'acknowledged',
+        errorType: null,
+      },
+      posthogDelivery: {
+        status: 'unknown',
+        acknowledgement: 'unknown',
+        attemptCount: 0,
+        errorType: null,
+      },
+      unfinishedState: 'unknown',
+      duplicateTerminalCount: 0,
+      lateTerminalCount: 0,
+    });
+    expect(runs.statusBody(run).terminalLifecycle).toEqual(state.terminalLifecycle);
+  });
+
+  it('advances the durable terminal attempt after an automatic retry and manual resume', () => {
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({
+      projectId: 'p1',
+      conversationId: 'c1',
+      agentId: 'amr',
+    });
+    Object.assign(run, { retryAttemptCount: 1 });
+
+    runs.finish(run, 'failed', 1, null);
+    expect(runs.statusBody(run).terminalLifecycle?.runAttempt).toBe(1);
+
+    const runsAfterRestart = createRunsWithLog(tmpDir);
+    const runAfterRestart = runsAfterRestart.get(run.id);
+    expect(runAfterRestart).toMatchObject({ retryAttemptCount: 1 });
+
+    runsAfterRestart.prepareRestart(runAfterRestart);
+    const resumedState = JSON.parse(
+      fs.readFileSync(path.join(tmpDir, run.id, 'state.json'), 'utf8'),
+    );
+    expect(resumedState).toMatchObject({
+      status: 'queued',
+      cumulativeRetryAttemptCount: 1,
+      manualResumeAttemptCount: 1,
+    });
+
+    runsAfterRestart.finish(runAfterRestart, 'succeeded', 0, null);
+    const terminalState = JSON.parse(
+      fs.readFileSync(path.join(tmpDir, run.id, 'state.json'), 'utf8'),
+    );
+    expect(terminalState.terminalLifecycle.runAttempt).toBe(2);
+  });
+
+  it('retains a bounded terminal persistence failure when the durable terminal write fails', () => {
+    const runs = createChatRunService({
+      createSseResponse: () => ({ send: vi.fn(() => true), end: vi.fn(), cleanup: vi.fn() }),
+      createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
+      shutdownGraceMs: 10,
+      ttlMs: 60_000,
+      runsLogDir: tmpDir as unknown as null,
+      writeDurableState: (_filePath: string, value: { status?: string }) =>
+        value.status === 'failed'
+          ? { ok: false, errorType: 'storage_full' }
+          : { ok: true },
+    });
+    const run = runs.create({ projectId: 'p1', agentId: 'amr' });
+
+    runs.finish(run, 'failed', 1, null);
+
+    expect(runs.statusBody(run).terminalLifecycle).toMatchObject({
+      runAttempt: 0,
+      terminationOrigin: 'unknown',
+      terminalPersistence: {
+        status: 'failed',
+        errorType: 'storage_full',
+      },
+    });
+  });
+
+  it.each([
+    {
+      name: 'preserves acknowledgement when the metadata refresh fails',
+      terminalWrites: [
+        { ok: true as const },
+        { ok: false as const, errorType: 'storage_full' as const },
+      ],
+    },
+    {
+      name: 'promotes a failed first write when the metadata refresh succeeds',
+      terminalWrites: [
+        { ok: false as const, errorType: 'storage_full' as const },
+        { ok: true as const },
+      ],
+    },
+  ])('$name', ({ terminalWrites }) => {
+    let writeCount = 0;
+    const runs = createChatRunService({
+      createSseResponse: () => ({ send: vi.fn(() => true), end: vi.fn(), cleanup: vi.fn() }),
+      createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
+      shutdownGraceMs: 10,
+      ttlMs: 60_000,
+      runsLogDir: tmpDir as unknown as null,
+      writeDurableState: () => {
+        writeCount += 1;
+        return writeCount === 1
+          ? { ok: true as const }
+          : terminalWrites[writeCount - 2] ?? { ok: true as const };
+      },
+    });
+    const run = runs.create({ projectId: 'p1', agentId: 'amr' });
+
+    runs.finish(run, 'failed', 1, null);
+
+    expect(writeCount).toBe(3);
+    expect(runs.statusBody(run).terminalLifecycle).toMatchObject({
+      terminalPersistence: {
+        status: 'acknowledged',
+        errorType: null,
+      },
+    });
+  });
+
+  it('keeps terminal persistence unknown when durable run journals are disabled', () => {
+    const runs = createChatRunService({
+      createSseResponse: () => ({ send: vi.fn(() => true), end: vi.fn(), cleanup: vi.fn() }),
+      createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
+      shutdownGraceMs: 10,
+      ttlMs: 60_000,
+      runsLogDir: null,
+    });
+    const run = runs.create({ projectId: 'p1', agentId: 'amr' });
+
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(runs.statusBody(run).terminalLifecycle).toMatchObject({
+      terminalPersistence: {
+        status: 'unknown',
+        errorType: null,
+      },
+      unfinishedState: 'unknown',
+    });
+  });
+
+  it('persists failed PostHog queueing as recoverable terminal delivery state', () => {
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({ projectId: 'p1', agentId: 'amr' });
+    runs.finish(run, 'failed', 1, null);
+
+    runs.beginAnalyticsDelivery(run);
+    runs.finalizeAnalyticsDelivery(run, {
+      status: 'failed',
+      acknowledgement: 'none',
+      errorType: 'enqueue_failed',
+    });
+
+    const state = JSON.parse(
+      fs.readFileSync(path.join(tmpDir, run.id, 'state.json'), 'utf8'),
+    );
+    expect(state.terminalLifecycle.posthogDelivery).toMatchObject({
+      status: 'failed',
+      acknowledgement: 'none',
+      attemptCount: 1,
+      errorType: 'enqueue_failed',
+    });
+    expect(state.terminalLifecycle.unfinishedState).toBe(
+      'terminal_persisted_posthog_failed',
+    );
+    expect(state.analyticsRecovery?.completedAt).toBeUndefined();
+  });
+
+  it('keeps the first terminal verdict and records duplicate or late terminal claims', () => {
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({ projectId: 'p1', agentId: 'amr' });
+
+    runs.finish(run, 'failed', 1, null);
+    runs.finish(run, 'failed', 1, null);
+    expect(runs.statusBody(run)).toMatchObject({
+      status: 'failed',
+      exitCode: 1,
+      terminalLifecycle: {
+        terminalIntegrity: 'duplicate',
+        duplicateTerminalCount: 1,
+        lateTerminalCount: 0,
+      },
+    });
+
+    runs.finish(run, 'succeeded', 0, null);
+    expect(runs.statusBody(run)).toMatchObject({
+      status: 'failed',
+      exitCode: 1,
+      terminalLifecycle: {
+        terminalIntegrity: 'late',
+        duplicateTerminalCount: 1,
+        lateTerminalCount: 1,
+      },
     });
   });
 
@@ -1174,6 +1780,22 @@ describe('run event log persistence', () => {
     });
   });
 
+  it('retains the cancellation cause when hydrating durable status after restart', async () => {
+    const beforeRestart = createRunsWithLog(tmpDir);
+    const canceled = beforeRestart.create({ projectId: 'p1' });
+    await beforeRestart.cancel(canceled, 'user_stop');
+
+    const afterRestart = createRunsWithLog(tmpDir);
+    const hydrated = afterRestart.get(canceled.id);
+
+    expect(hydrated).not.toBeNull();
+    expect(afterRestart.statusBody(hydrated)).toMatchObject({
+      id: canceled.id,
+      status: 'canceled',
+      cancelOrigin: 'user_stop',
+    });
+  });
+
   it('reuses an interrupted durable request instead of starting it twice after restart', () => {
     const clientRequestId = '018f6f2e-6666-7666-8666-666666666666';
     const requestFingerprint = 'same-cloud-request';
@@ -1207,6 +1829,7 @@ describe('run event log persistence', () => {
       errorCode: 'DAEMON_RESTARTED',
       error: 'Run interrupted because the daemon restarted.',
     });
+    expect(afterRestart.statusBody(reused.run).terminalTrigger).toBe('daemon_restart');
     expect(reused.run.events.slice(-2)).toMatchObject([
       { event: 'error', data: { error: { code: 'DAEMON_RESTARTED' } } },
       { event: 'end', data: { status: 'failed' } },
@@ -1377,5 +2000,89 @@ describe('run event log persistence', () => {
     // ~ITER (each late emit re-opened a never-closed stream).
     expect(after - before).toBeLessThan(15);
     expect(kept.length).toBe(ITER);
+  });
+});
+
+describe('work completeness vs a settled OD Next verdict', () => {
+  function createRuns() {
+    return createChatRunService({
+      createSseResponse: () => ({ send: vi.fn(() => true), end: vi.fn(), cleanup: vi.fn() }),
+      createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
+      shutdownGraceMs: 10,
+      ttlMs: 60_000,
+    });
+  }
+
+  /** A settled OD Next task projection. `completed` is only reachable once the
+   *  coordinator saw BOTH a succeeded process AND a resolvable canonical
+   *  deliverable, so it is the strongest completion evidence the daemon holds. */
+  function completedStrategyTask() {
+    return {
+      taskExecutionId: 'odnext_8979d0a7452e4e65a51c666ad89f864d',
+      strategy: {
+        id: 'od-next-strategy',
+        version: '2.0.0',
+        packageHash: 'a'.repeat(64),
+        snapshotId: 'snapshot-1',
+      },
+      inputStage: 'production',
+      outcome: 'completed',
+      route: 'full_plan',
+      executionMode: 'simple',
+      activeRunId: 'run-1',
+      terminal: true,
+    };
+  }
+
+  it('does not report unfinished work when OD Next settled the task as completed', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    // The agent delivered index.html plus six images and declared the task
+    // complete, but its LAST TodoWrite snapshot still carried two pending
+    // items — the exact shape QA captured on project 3ffc55f1.
+    run.lastTodoSnapshot = [
+      { content: '生成品牌视觉资产', status: 'completed' },
+      { content: '写入响应式交互原型', status: 'pending' },
+      { content: '交付根目录运行入口', status: 'pending' },
+    ];
+    run.strategyTask = completedStrategyTask();
+    run.deliverableValid = true;
+
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(run.endedWithUnfinishedWork).toBe(false);
+  });
+
+  it('still reports unfinished work when the OD Next task did not complete', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.lastTodoSnapshot = [{ content: '写入响应式交互原型', status: 'pending' }];
+    run.strategyTask = { ...completedStrategyTask(), outcome: 'blocked' };
+
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(run.endedWithUnfinishedWork).toBe(true);
+  });
+
+  it('still reports unfinished work for a non-strategy run', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.lastTodoSnapshot = [{ content: 'ship it', status: 'in_progress' }];
+
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(run.endedWithUnfinishedWork).toBe(true);
+  });
+
+  it('keeps a max_tokens truncation unfinished even under a completed verdict', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.truncatedMidTurn = true;
+    run.strategyTask = completedStrategyTask();
+    run.deliverableValid = true;
+
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(run.endedWithUnfinishedWork).toBe(true);
   });
 });

@@ -1,0 +1,29 @@
+{
+  "name": "@open-design/closure",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Independently distributable OpenDesign Closure content.",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "exports": {
+    ".": {"types": "./dist/index.d.ts", "default": "./dist/index.mjs"}
+  },
+  "scripts": {
+    "build": "tsx ./esbuild.config.ts && tsc -p tsconfig.json --emitDeclarationOnly",
+    "pretest": "pnpm --filter @open-design/standalone build",
+    "test": "vitest run",
+    "pretypecheck": "pnpm --filter @open-design/standalone build",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+  },
+  "dependencies": {"@open-design/standalone": "workspace:*"},
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "esbuild": "0.28.0",
+    "tsx": "4.22.3",
+    "typescript": "6.0.3",
+    "vitest": "4.1.6"
+  },
+  "engines": {"node": "~24"}
+}

@@ -1,7 +1,39 @@
 import {
+  PUBLIC_FILE_MANUAL_REVOKE_REQUIRED,
   workspaceContextHasWorkspaceIdentity,
+  type PublicFileManualRevokeRequiredData,
+  type PublicProjectFilePublication,
   type WorkspaceCollabContext,
 } from '@open-design/contracts';
+
+export class PublicFilePublishError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+    readonly data?: PublicFileManualRevokeRequiredData,
+  ) {
+    super(message);
+    this.name = 'PublicFilePublishError';
+  }
+}
+
+export function publicFileManualRevokePublication(
+  error: unknown,
+): PublicProjectFilePublication | null {
+  if (
+    !(error instanceof PublicFilePublishError)
+    || error.code !== PUBLIC_FILE_MANUAL_REVOKE_REQUIRED
+    || !error.data
+  ) {
+    return null;
+  }
+  return {
+    url: error.data.url,
+    slug: error.data.slug,
+    fileName: error.data.fileName,
+  };
+}
 
 /**
  * Whether the public single-file "Publish" entry point may be rendered.

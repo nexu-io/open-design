@@ -8,7 +8,7 @@ import {
   type DesktopUpdateMode,
   type SidecarSource,
 } from "@open-design/sidecar-proto";
-import { releaseChannelFromVersion } from "@open-design/release";
+import { isReleaseChannel, releaseChannelFromVersion } from "@open-design/release";
 
 /**
  * @module updater-config
@@ -44,7 +44,6 @@ const STABLE_POLL_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_POLL_INITIAL_DELAY_MS = 5000;
 const DEFAULT_POLL_BACKOFF_INITIAL_MS = 60 * 1000;
 const DEFAULT_POLL_BACKOFF_MAX_MS = 30 * 60 * 1000;
-const DESKTOP_UPDATE_CHANNEL_VALUES = new Set<string>(Object.values(DESKTOP_UPDATE_CHANNELS));
 
 export type DesktopUpdaterConfigInput = {
   appVersion?: string | null;
@@ -112,7 +111,7 @@ function normalizeChannel(value: string | undefined, fallback: DesktopUpdateChan
 }
 
 export function isDesktopUpdateChannel(value: unknown): value is DesktopUpdateChannel {
-  return typeof value === "string" && DESKTOP_UPDATE_CHANNEL_VALUES.has(value);
+  return isReleaseChannel(value);
 }
 
 function defaultMetadataUrl(channel: DesktopUpdateChannel): string {

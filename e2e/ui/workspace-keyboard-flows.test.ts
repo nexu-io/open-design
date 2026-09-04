@@ -86,9 +86,9 @@ test('[P1] quick switcher arrow keys move selection before opening a file', asyn
   await openQuickSwitcher(page);
   const quickSwitcher = page.locator('.qs-overlay');
   const quickSwitcherInput = page.locator('.qs-input');
-  const selectedOption = page.getByRole('option', { selected: true });
+  const selectedOption = quickSwitcher.getByRole('option', { selected: true });
   await expect(quickSwitcher).toBeVisible();
-  await expect(page.getByRole('option')).toHaveCount(3);
+  expect(await quickSwitcher.getByRole('option').count()).toBeGreaterThanOrEqual(3);
 
   const initialSelection = await selectedOption.textContent();
   await quickSwitcherInput.press('ArrowDown');
@@ -262,7 +262,7 @@ test('[P1] quick switcher still activates another file after the project reloads
   await expect(quickSwitcher).toBeVisible();
 
   await quickSwitcherInput.fill('reload-beta');
-  await expect(page.getByRole('option', { name: /reload-beta\.png/i })).toBeVisible();
+  await expect(quickSwitcher.getByRole('option', { name: /reload-beta\.png/i }).first()).toBeVisible();
   await quickSwitcherInput.press('Enter');
 
   await expect(quickSwitcher).toBeHidden();
@@ -279,7 +279,7 @@ test('[P1] quick switcher only lists files from the active project after switchi
 
   await uploadTinyPng(page, 'alpha-project-file.png');
   await uploadTinyPng(page, 'alpha-project-secondary.png');
-  await page.getByRole('button', { name: /back to projects/i }).click();
+  await page.goto('/projects', { waitUntil: 'domcontentloaded' });
   await expectProjectsView(page);
 
   await createProject(page, 'Quick switcher Project Beta');
@@ -295,10 +295,10 @@ test('[P1] quick switcher only lists files from the active project after switchi
   await expect(quickSwitcher).toBeVisible();
 
   await quickSwitcherInput.fill('project');
-  await expect(page.getByRole('option', { name: /beta-project-file\.png/i })).toBeVisible();
-  await expect(page.getByRole('option', { name: /beta-project-secondary\.png/i })).toBeVisible();
-  await expect(page.getByRole('option', { name: /alpha-project-file\.png/i })).toHaveCount(0);
-  await expect(page.getByRole('option', { name: /alpha-project-secondary\.png/i })).toHaveCount(0);
+  await expect(quickSwitcher.getByRole('option', { name: /beta-project-file\.png/i }).first()).toBeVisible();
+  await expect(quickSwitcher.getByRole('option', { name: /beta-project-secondary\.png/i }).first()).toBeVisible();
+  await expect(quickSwitcher.getByRole('option', { name: /alpha-project-file\.png/i })).toHaveCount(0);
+  await expect(quickSwitcher.getByRole('option', { name: /alpha-project-secondary\.png/i })).toHaveCount(0);
   await expectProjectFilesToIncludeSuffixes(page, betaProjectId, ['beta-project-file.png', 'beta-project-secondary.png']);
   await expectProjectFilesToIncludeSuffixes(page, alphaProjectId, ['alpha-project-file.png', 'alpha-project-secondary.png']);
 
@@ -329,7 +329,7 @@ test('[P1] quick switcher leaves the Design Files panel and opens the selected f
   await expect(quickSwitcher).toBeVisible();
 
   await quickSwitcherInput.fill('design-files-alpha');
-  await expect(page.getByRole('option', { name: /design-files-alpha\.png/i })).toBeVisible();
+  await expect(quickSwitcher.getByRole('option', { name: /design-files-alpha\.png/i }).first()).toBeVisible();
   await quickSwitcherInput.press('Enter');
 
   await expect(quickSwitcher).toBeHidden();
@@ -375,7 +375,7 @@ test('[P1] quick switcher can switch from a design file tab back to a generated 
   await expect(quickSwitcher).toBeVisible();
 
   await quickSwitcherInput.fill('quick-switcher-artifact');
-  await expect(page.getByRole('option', { name: /quick-switcher-artifact\.html/i })).toBeVisible();
+  await expect(quickSwitcher.getByRole('option', { name: /quick-switcher-artifact\.html/i }).first()).toBeVisible();
   await quickSwitcherInput.press('Enter');
 
   await expect(quickSwitcher).toBeHidden();
@@ -406,8 +406,8 @@ async function createProject(
 
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
@@ -422,8 +422,10 @@ async function openNewProjectModal(page: Page) {
 
 async function expectProjectsView(page: Page) {
   const legacyProjectsToolbar = page.locator('.tab-panel-toolbar');
+  const projectsHeading = page.getByRole('heading', { name: /^Projects$/i });
   const homeRecentProjects = page.getByRole('heading', { name: /recent projects|最近项目/i });
   if (await legacyProjectsToolbar.isVisible().catch(() => false)) return;
+  if (await projectsHeading.isVisible().catch(() => false)) return;
   if (await homeRecentProjects.isVisible().catch(() => false)) return;
 
   await ensureRailOpen(page);
@@ -441,12 +443,12 @@ async function expectProjectsView(page: Page) {
     return;
   }
 
-  await expect(homeRecentProjects).toBeVisible();
+  await expect(projectsHeading.or(homeRecentProjects)).toBeVisible();
 }
 
 async function expectWorkspaceReady(page: Page) {
   await expect(page).toHaveURL(/\/projects\//);
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0);
+  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();

@@ -27,6 +27,7 @@ describe('cancelRunsOwnedBy (#5468)', () => {
     await cancelRunsOwnedBy(runs, { projectId: 'p1' });
 
     expect(mine.status).toBe('canceled');
+    expect(runs.statusBody(mine).cancelOrigin).toBe('project_cleanup');
     expect(other.status).not.toBe('canceled');
     expect(runs.list({ projectId: 'p1', status: 'active' })).toEqual([]);
     expect(runs.list({ projectId: 'p2', status: 'active' })).toHaveLength(1);

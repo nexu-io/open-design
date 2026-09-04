@@ -9,7 +9,7 @@
  * AmrLoginPill.test.tsx; here we only assert ChatPane's wiring.
  */
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { forwardRef, useEffect, type ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -19,8 +19,11 @@ import type { VelaLoginStatus } from '../../src/providers/daemon';
 
 const fetchVelaLoginStatusMock = vi.hoisted(() => vi.fn());
 
+const translate = (key: string) => key;
+
 vi.mock('../../src/i18n', () => ({
-  useT: () => (key: string) => key,
+  useI18n: () => ({ locale: 'en', setLocale: () => undefined, t: translate }),
+  useT: () => translate,
 }));
 
 vi.mock('../../src/components/AssistantMessage', () => ({
@@ -292,6 +295,11 @@ describe('ChatPane inline AMR auth', () => {
   });
 
   it('retries an unbound local project on the same mount only after signed-out -> signed-in', () => {
+    // Keep the component's background status reads pending so this test owns
+    // the exact auth observations under test. A resolved mock can otherwise
+    // race the direct callback below when the full CI shard yields between the
+    // rerender and assertion.
+    fetchVelaLoginStatusMock.mockImplementation(() => new Promise(() => {}));
     const onRetry = vi.fn();
     let armed: Parameters<NonNullable<ComponentProps<typeof ChatPane>['onArmAmrAuthRetryContinuation']>>[0] | null = null;
     const onArm = vi.fn((next) => {
@@ -311,7 +319,9 @@ describe('ChatPane inline AMR auth', () => {
     };
     const view = renderChat(onRetry, baseProps);
 
-    lastPillProps?.onSignInStarted?.();
+    act(() => {
+      lastPillProps?.onSignInStarted?.();
+    });
     expect(armed).not.toBeNull();
     view.rerender(
       <ChatPane
@@ -357,18 +367,35 @@ describe('ChatPane inline AMR auth', () => {
 
     // A signed-in poll by itself is not proof that this authorization attempt
     // changed identity, so it must not retry.
-    lastPillProps?.onStatusChange?.(signedIn);
+    act(() => {
+      lastPillProps?.onStatusChange?.(signedIn);
+    });
     expect(onRetry).not.toHaveBeenCalled();
 
-    lastPillProps?.onStatusChange?.({
-      loggedIn: false,
-      loginInFlight: true,
-      profile: 'prod',
-      user: null,
-      configPath: '',
+    // A plain signed-out shell snapshot may predate this authorization attempt
+    // and therefore cannot establish the transition either.
+    act(() => {
+      lastPillProps?.onStatusChange?.({
+        loggedIn: false,
+        profile: 'prod',
+        user: null,
+        configPath: '',
+      });
+      lastPillProps?.onStatusChange?.(signedIn);
     });
-    lastPillProps?.onStatusChange?.(signedIn);
-    lastPillProps?.onStatusChange?.(signedIn);
+    expect(onRetry).not.toHaveBeenCalled();
+
+    act(() => {
+      lastPillProps?.onStatusChange?.({
+        loggedIn: false,
+        loginInFlight: true,
+        profile: 'prod',
+        user: null,
+        configPath: '',
+      });
+      lastPillProps?.onStatusChange?.(signedIn);
+      lastPillProps?.onStatusChange?.(signedIn);
+    });
 
     expect(onConsume).toHaveBeenCalledTimes(1);
     expect(onRetry).toHaveBeenCalledTimes(1);

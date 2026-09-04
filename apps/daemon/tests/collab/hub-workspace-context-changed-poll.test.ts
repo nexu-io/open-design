@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   handleHubVerifiedConnection,
+  handleHubWorkspaceAccessRevoked,
   handleHubWorkspaceContextChanged,
 } from '../../src/server.js';
 
@@ -36,10 +37,19 @@ describe('handleHubVerifiedConnection', () => {
 describe('handleHubWorkspaceContextChanged', () => {
   it('triggers an immediate workspace-invalidation poll cycle', async () => {
     const pollWorkspaceInvalidation = vi.fn(async () => undefined);
+    const invalidateWorkspaceDirectory = vi.fn();
 
-    handleHubWorkspaceContextChanged('workspace-1', pollWorkspaceInvalidation);
+    handleHubWorkspaceContextChanged(
+      'workspace-1',
+      pollWorkspaceInvalidation,
+      invalidateWorkspaceDirectory,
+    );
 
+    expect(invalidateWorkspaceDirectory).toHaveBeenCalledTimes(1);
     expect(pollWorkspaceInvalidation).toHaveBeenCalledTimes(1);
+    expect(invalidateWorkspaceDirectory.mock.invocationCallOrder[0]).toBeLessThan(
+      pollWorkspaceInvalidation.mock.invocationCallOrder[0]!,
+    );
   });
 
   it('never lets a poll failure throw or reject out of the hub event handler', async () => {
@@ -59,6 +69,31 @@ describe('handleHubWorkspaceContextChanged', () => {
   });
 });
 
+describe('handleHubWorkspaceAccessRevoked', () => {
+  it('invalidates directory and billing state before starting reconciliation', () => {
+    const pollWorkspaceInvalidation = vi.fn(async () => undefined);
+    const invalidateWorkspaceDirectory = vi.fn();
+    const revokeWorkspaceBilling = vi.fn();
+
+    handleHubWorkspaceAccessRevoked(
+      'workspace-1',
+      pollWorkspaceInvalidation,
+      invalidateWorkspaceDirectory,
+      revokeWorkspaceBilling,
+    );
+
+    expect(invalidateWorkspaceDirectory).toHaveBeenCalledTimes(1);
+    expect(revokeWorkspaceBilling).toHaveBeenCalledWith('workspace-1');
+    expect(pollWorkspaceInvalidation).toHaveBeenCalledTimes(1);
+    expect(invalidateWorkspaceDirectory.mock.invocationCallOrder[0]).toBeLessThan(
+      pollWorkspaceInvalidation.mock.invocationCallOrder[0]!,
+    );
+    expect(revokeWorkspaceBilling.mock.invocationCallOrder[0]).toBeLessThan(
+      pollWorkspaceInvalidation.mock.invocationCallOrder[0]!,
+    );
+  });
+});
+
 // Scope-boundary guard (real source, not a re-implementation): the fix is
 // deliberately scoped to ONLY the `workspace-context-changed` hub event.
 // `team-projects-changed`, `comment-changed`, `presence-changed`,
@@ -74,7 +109,7 @@ describe('hub events onEvent switch (source boundary)', () => {
   const source = fs.readFileSync(serverSourcePath, 'utf8');
 
   function extractOnEventSwitchBody(): string {
-    const anchor = 'onEvent: (event) => {';
+    const anchor = 'onEvent: (event, connection) => {';
     const start = source.indexOf(anchor);
     expect(start, 'expected to find the hub events onEvent handler in server.ts').toBeGreaterThan(-1);
     const switchStart = source.indexOf('switch (event.type) {', start);
@@ -93,7 +128,7 @@ describe('hub events onEvent switch (source boundary)', () => {
     return source.slice(switchStart, i + 1);
   }
 
-  it('calls the immediate poll trigger from exactly one case: workspace-context-changed', () => {
+  it('calls the immediate poll trigger only for context and roster authority changes', () => {
     const switchBody = extractOnEventSwitchBody();
     const cases = switchBody.split(/(?=case '[a-z-]+':)/g).filter((chunk) => chunk.startsWith("case '"));
     expect(cases.length).toBeGreaterThanOrEqual(7);
@@ -101,7 +136,10 @@ describe('hub events onEvent switch (source boundary)', () => {
     const casesCallingPoll = cases.filter((chunk) => /handleHubWorkspaceContextChanged|workspaceInvalidationPoller\.pollOnce\(/.test(chunk));
     const caseNames = casesCallingPoll.map((chunk) => chunk.match(/^case '([a-z-]+)':/)?.[1]);
 
-    expect(caseNames).toEqual(['workspace-context-changed']);
+    expect(caseNames).toEqual([
+      'workspace-context-changed',
+      'workspace-members-changed',
+    ]);
   });
 
   it('preserves the renamed project id and metadata kind on the workspace invalidation', () => {

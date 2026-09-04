@@ -84,11 +84,32 @@ async function startProjectStubServer(): Promise<StubServer> {
         res.end(JSON.stringify({ files: [] }));
         return;
       }
+      if (
+        captured.method === 'DELETE'
+        && captured.url === '/api/projects/project-1/files/nested%2Findex.html/publish-public'
+      ) {
+        res.statusCode = 200;
+        res.end(JSON.stringify({
+          ok: true,
+          slug: 'legacy-public-slug',
+          fileName: 'nested/index.html',
+        }));
+        return;
+      }
       if (captured.method === 'GET' && captured.url === '/api/workspaces/ws-1/projects?view=team') {
         res.statusCode = 200;
         res.end(JSON.stringify({
           projects: [
             { id: 'project-1', name: 'Project One', visibility: 'team', resourceState: 'active' },
+          ],
+        }));
+        return;
+      }
+      if (captured.method === 'GET' && captured.url === '/api/workspaces/ws-1/projects') {
+        res.statusCode = 200;
+        res.end(JSON.stringify({
+          projects: [
+            { id: 'project-1', name: 'Project One', skillId: null },
           ],
         }));
         return;
@@ -122,6 +143,44 @@ async function startProjectStubServer(): Promise<StubServer> {
       if (captured.method === 'POST' && captured.url === '/api/workspaces/ws-1/projects/batch-delete') {
         res.statusCode = 200;
         res.end(JSON.stringify({ ok: true, deletedProjectIds: ['project-1', 'project-2'] }));
+        return;
+      }
+      // Workspace directory used by `od project list` to auto-resolve the
+      // signed-in workspace when no explicit --workspace/--workspace-member
+      // is supplied (#6679). Mirrors the personal workspace shape returned
+      // by the real daemon GET /api/workspace/directory.
+      if (captured.method === 'GET' && captured.url === '/api/workspace/directory') {
+        res.statusCode = 200;
+        res.end(JSON.stringify({
+          items: [
+            {
+              workspaceId: 'ws-personal',
+              workspaceName: 'Personal',
+              workspaceType: 'personal',
+              workspaceMemberId: 'mem-personal',
+              role: 'owner',
+              memberStatus: 'active',
+              lifecycleState: 'active',
+            },
+          ],
+          activeWorkspaceId: null,
+        }));
+        return;
+      }
+      if (captured.method === 'GET' && captured.url === '/api/workspaces/ws-personal/projects') {
+        res.statusCode = 200;
+        res.end(JSON.stringify({
+          projects: [
+            { id: 'bound-project-1', name: 'Bound Project One', skillId: 'skill-1' },
+            { id: 'bound-project-2', name: 'Bound Project Two', skillId: 'skill-2' },
+          ],
+        }));
+        return;
+      }
+      // An unbound project catalog (no signed-in workspace / non-vela).
+      if (captured.method === 'GET' && captured.url === '/api/projects') {
+        res.statusCode = 200;
+        res.end(JSON.stringify({ projects: [] }));
         return;
       }
 
@@ -199,6 +258,44 @@ describe('od project CLI', () => {
     expect(stub.requests[0]!.headers).toMatchObject({
       'x-od-workspace-id': 'ws-1',
       'x-od-workspace-member-id': 'member-1',
+    });
+  });
+
+  it('revokes a legacy public link by extracting its snapshot slug', async () => {
+    stub = await startProjectStubServer();
+
+    const result = await runCli([
+      'project',
+      'revoke-public-link',
+      'project-1',
+      '--path',
+      'nested/index.html',
+      '--url',
+      'https://hub.example.test/api/v1/public/snapshots/legacy-public-slug/files/nested/index.html',
+      '--workspace',
+      'ws-1',
+      '--workspace-member',
+      'member-1',
+      '--daemon-url',
+      stub.baseUrl,
+      '--json',
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      ok: true,
+      slug: 'legacy-public-slug',
+    });
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]).toMatchObject({
+      method: 'DELETE',
+      url: '/api/projects/project-1/files/nested%2Findex.html/publish-public',
+      headers: {
+        'x-od-workspace-id': 'ws-1',
+        'x-od-workspace-member-id': 'member-1',
+      },
+      body: JSON.stringify({ slug: 'legacy-public-slug' }),
     });
   });
 
@@ -300,6 +397,129 @@ describe('od project CLI', () => {
       'x-od-workspace-member-id': 'member-1',
       'x-od-workspace-role': 'admin',
     });
+  });
+
+  it('od project list without --workspace resolves the signed-in workspace automatically (#6679)', async () => {
+    stub = await startProjectStubServer();
+
+    const result = await runCli(['project', 'list', '--json', '--daemon-url', stub.baseUrl]);
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    const data = JSON.parse(result.stdout);
+    expect(data.projects).toEqual([
+      { id: 'bound-project-1', name: 'Bound Project One', skillId: 'skill-1' },
+      { id: 'bound-project-2', name: 'Bound Project Two', skillId: 'skill-2' },
+    ]);
+    // Should hit both the directory resolver and the workspace-scoped catalog.
+    expect(stub.requests).toHaveLength(2);
+    expect(stub.requests[0]).toMatchObject({
+      method: 'GET',
+      url: '/api/workspace/directory',
+    });
+    expect(stub.requests[1]).toMatchObject({
+      method: 'GET',
+      url: '/api/workspaces/ws-personal/projects',
+    });
+    expect(stub.requests[1]!.headers).toMatchObject({
+      'x-od-workspace-id': 'ws-personal',
+      'x-od-workspace-member-id': 'mem-personal',
+    });
+  });
+
+  it('od project list with explicit --workspace routes to the workspace-scoped catalog (#6679)', async () => {
+    stub = await startProjectStubServer();
+
+    const result = await runCli([
+      'project',
+      'list',
+      '--workspace',
+      'ws-1',
+      '--workspace-member',
+      'member-1',
+      '--json',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    // No workspace/directory call — explicit flags win, but they route to
+    // the workspace-scoped catalog (/api/workspaces/:id/projects), not to
+    // the unbound /api/projects catalog. Passing --workspace to /api/projects
+    // does NOT scope it (#6679 repro), so the explicit path mirrors the
+    // implicit signed-in path.
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]).toMatchObject({
+      method: 'GET',
+      url: '/api/workspaces/ws-1/projects',
+    });
+    expect(stub.requests[0]!.headers).toMatchObject({
+      'x-od-workspace-id': 'ws-1',
+      'x-od-workspace-member-id': 'member-1',
+    });
+  });
+
+  it('od project list falls back to headerless catalog when no signed-in workspace (#6679)', async () => {
+    // Custom stub whose directory endpoint returns empty (signed-out / no vela)
+    // so resolveMcpWorkspaceContext returns null and the CLI falls back to the
+    // headerless unbound catalog exactly as before the fix.
+    const requests: CapturedRequest[] = [];
+    const server = http.createServer((req, res) => {
+      let raw = '';
+      req.on('data', (chunk) => {
+        raw += chunk;
+      });
+      req.on('end', () => {
+        const captured: CapturedRequest = {
+          method: req.method ?? '',
+          url: req.url ?? '',
+          headers: req.headers,
+          body: raw,
+        };
+        requests.push(captured);
+        res.setHeader('content-type', 'application/json');
+        if (captured.method === 'GET' && captured.url === '/api/workspace/directory') {
+          res.statusCode = 200;
+          res.end(JSON.stringify({ items: [], activeWorkspaceId: null }));
+          return;
+        }
+        if (captured.method === 'GET' && captured.url === '/api/projects') {
+          res.statusCode = 200;
+          res.end(JSON.stringify({ projects: [{ id: 'unbound-1', name: 'Unbound One' }] }));
+          return;
+        }
+        res.statusCode = 404;
+        res.end(JSON.stringify({ error: { code: 'unexpected', message: captured.url } }));
+      });
+    });
+    await new Promise<void>((resolveListen) => server.listen(0, '127.0.0.1', resolveListen));
+    const addr = server.address();
+    if (!addr || typeof addr === 'string') throw new Error('stub server has no address');
+    const fallBaseUrl = `http://127.0.0.1:${addr.port}`;
+    const fallStub = { baseUrl: fallBaseUrl, requests };
+    // Replace `stub` so afterEach closes the original stub (we just closed its
+    // server implicitly via the same afterEach hook on the closure name).
+    stub = {
+      baseUrl: fallStub.baseUrl,
+      requests,
+      close: () =>
+        new Promise<void>((resolveClose, rejectClose) => {
+          server.close((err) => (err ? rejectClose(err) : resolveClose()));
+        }),
+    };
+
+    const result = await runCli(['project', 'list', '--json', '--daemon-url', fallStub.baseUrl]);
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    const data = JSON.parse(result.stdout);
+    expect(data.projects).toEqual([{ id: 'unbound-1', name: 'Unbound One' }]);
+    // Fallback path fires: directory probed then unbound catalog.
+    const dirReq = requests.find((r) => r.method === 'GET' && r.url === '/api/workspace/directory');
+    const catalogReq = requests.find((r) => r.method === 'GET' && r.url === '/api/projects');
+    expect(dirReq).toBeDefined();
+    expect(catalogReq).toBeDefined();
   });
 
   it('creates workspace invites through the workspace invite API', async () => {

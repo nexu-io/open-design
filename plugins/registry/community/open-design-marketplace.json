@@ -2,14 +2,14 @@
   "$schema": "https://open-design.ai/schemas/marketplace.v1.json",
   "specVersion": "1.0.0",
   "name": "open-design-community",
-  "version": "0.2.3",
+  "version": "0.2.10",
   "owner": {
-    "name": "Open Design Community",
+    "name": "OpenDesign Community",
     "url": "https://open-design.ai/marketplace/community"
   },
   "metadata": {
     "description": "Default community plugin registry seed. Entries here are discoverable by default but remain restricted until the user installs and trusts them.",
-    "version": "0.2.3"
+    "version": "0.2.10"
   },
   "plugins": [
     {
@@ -111,6 +111,34 @@
         "qa"
       ],
       "description": "Presentation system for agent-made PPTs: AST (audience-state-transfer) outline with per-page media decisions, a production brief for downstream renderers, and a capped 3-round presentation checkup on the rendered deck."
+    },
+    {
+      "name": "community/handoff-od",
+      "title": "Handoff to OpenCode",
+      "version": "0.1.9",
+      "source": "github:ross-sec/handoff-od@v0.1.9",
+      "publisher": {
+        "id": "ross-technologies",
+        "github": "ross-sec",
+        "url": "https://github.com/ross-sec"
+      },
+      "homepage": "https://github.com/ross-sec/handoff-od",
+      "license": "MIT",
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:read",
+        "fs:write",
+        "bash"
+      ],
+      "tags": [
+        "community",
+        "export",
+        "handoff",
+        "opencode",
+        "code-agent",
+        "design-to-code"
+      ],
+      "description": "Hand an Open Design project off to OpenCode as an offline-complete bundle: a verbatim project mirror, the design system materialized with real font binaries, and a machine-enforced adherence config."
     }
   ]
 }

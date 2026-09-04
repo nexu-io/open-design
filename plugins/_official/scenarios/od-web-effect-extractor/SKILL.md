@@ -1,6 +1,6 @@
 ---
 name: od-web-effect-extractor
-description: Extract visual effects, animation systems, Canvas/WebGL/Shader behavior, and interaction details from a reference website, then rebuild them as an editable Open Design web artifact.
+description: Extract visual effects, animation systems, Canvas/WebGL/Shader behavior, and interaction details from a reference website, then rebuild them as an editable OpenDesign web artifact.
 od:
   scenario: web-effect-extraction
   mode: scenario
@@ -8,13 +8,13 @@ od:
 
 # Web Effect Extractor
 
-Use this plugin when the user gives a website URL and asks Open Design to recreate, remix, or learn from its visual effects. It is especially useful for hero backgrounds, WebGL scenes, Canvas animations, shader effects, cursor trails, scroll-driven motion, animated typography, and interaction patterns that are hard to understand from screenshots alone.
+Use this plugin when the user gives a website URL and asks OpenDesign to recreate, remix, or learn from its visual effects. It is especially useful for hero backgrounds, WebGL scenes, Canvas animations, shader effects, cursor trails, scroll-driven motion, animated typography, and interaction patterns that are hard to understand from screenshots alone.
 
-This workflow is inspired by the MIT-licensed `web-shader-extractor` skill from `lixiaolin94/skills`, adapted for Open Design's website recreation and editable artifact workflow.
+This workflow is inspired by the MIT-licensed `web-shader-extractor` skill from `lixiaolin94/skills`, adapted for OpenDesign's website recreation and editable artifact workflow.
 
 ## Scope
 
-The goal is to produce a faithful, editable Open Design artifact that preserves the reference site's visual effect and interaction logic while replacing private content, trademarks, tracking code, and nonessential app logic.
+The goal is to produce a faithful, editable OpenDesign artifact that preserves the reference site's visual effect and interaction logic while replacing private content, trademarks, tracking code, and nonessential app logic.
 
 Extract only what is needed to understand and recreate the visual behavior:
 
@@ -75,7 +75,7 @@ Turn the raw capture into a compact visual model:
 
 Prefer evidence over guesses. If an effect cannot be observed directly, mark it as an inference.
 
-### 4. Rebuild In Open Design
+### 4. Rebuild In OpenDesign
 
 Create a standalone web artifact that can be inspected and edited.
 

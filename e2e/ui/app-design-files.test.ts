@@ -6,10 +6,19 @@ import type { Locator, Page, Request } from '@playwright/test';
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
 import { T } from '@/timeouts';
+import {
+  PREVIEW_WHITE_SCREEN_CONFIRMATION_MS,
+  PREVIEW_WHITE_SCREEN_TIMEOUT_MS,
+} from '@open-design/contracts/runtime/preview-observability';
 
 const STORAGE_KEY = 'open-design:config';
 const TINY_PNG_B64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=';
+
+interface CapturedSafetyEvent {
+  event?: string;
+  properties?: Record<string, unknown>;
+}
 
 test.describe.configure({ timeout: T.xlong });
 
@@ -41,6 +50,78 @@ async function routeMockAgents(page: Page) {
       models: [{ id: 'default', label: 'Default' }],
     },
   ]);
+}
+
+async function captureSafetyTelemetry(page: Page): Promise<CapturedSafetyEvent[]> {
+  const events: CapturedSafetyEvent[] = [];
+  await page.unroute('**/api/app-config').catch(() => {});
+  await page.addInitScript((key) => {
+    window.localStorage.setItem(
+      key,
+      JSON.stringify({
+        mode: 'daemon',
+        apiKey: '',
+        baseUrl: 'https://api.anthropic.com',
+        model: 'claude-sonnet-4-5',
+        agentId: 'mock',
+        skillId: null,
+        designSystemId: null,
+        onboardingCompleted: true,
+        agentModels: {},
+        privacyDecisionAt: 1,
+        telemetry: { metrics: true, content: false, artifactManifest: false },
+      }),
+    );
+  }, STORAGE_KEY);
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      json: {
+        config: {
+          onboardingCompleted: true,
+          agentId: 'mock',
+          skillId: null,
+          designSystemId: null,
+          agentModels: {},
+          privacyDecisionAt: 1,
+          telemetry: { metrics: true, content: false, artifactManifest: false },
+        },
+      },
+    });
+  });
+  await page.route('**/api/analytics/config', async (route) => {
+    await route.fulfill({
+      json: {
+        enabled: true,
+        env: 'e2e',
+        key: 'phc_e2e',
+        host: 'https://analytics.open-design.test',
+        installationId: 'e2e-installation',
+      },
+    });
+  });
+  await page.route('https://analytics.open-design.test/**', async (route) => {
+    const body = route.request().postData();
+    if (body) {
+      try {
+        events.push(JSON.parse(body) as CapturedSafetyEvent);
+      } catch {
+        // posthog-js can use non-JSON batch encodings; this witness owns only
+        // the direct JSON safety-telemetry transport.
+      }
+    }
+    await route.fulfill({ status: 200, json: { status: 1 } });
+  });
+  return events;
+}
+
+function capturedWhiteScreenEvents(
+  events: CapturedSafetyEvent[],
+): CapturedSafetyEvent[] {
+  return events.filter((event) => event.event === 'client_preview_white_screen');
 }
 
 for (const entry of automatedUiScenarios().filter((scenario) => designFileFlows.has(scenario.flow ?? ''))) {
@@ -105,7 +186,7 @@ async function createProjectNameOnly(page: Page, entry: UiScenario) {
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
@@ -300,12 +381,12 @@ async function selectComposerSessionMode(page: Page, modeTitle: 'Ask mode' | 'Pl
 }
 
 async function openDesignFile(page: Page, fileName: string) {
-  const preview = page.getByTestId('artifact-preview-frame');
-  if (await preview.isVisible()) return;
-
   const fileTab = page.getByRole('tab', { name: new RegExp(fileName.replace(/\./g, '\\.'), 'i') });
   if (await fileTab.isVisible()) {
-    await fileTab.click();
+    if (await fileTab.getAttribute('aria-selected') !== 'true') {
+      await fileTab.click();
+    }
+    await expect(fileTab).toHaveAttribute('aria-selected', 'true');
     return;
   }
 
@@ -341,7 +422,7 @@ async function revealDesignFileRow(page: Page, fileName: string): Promise<Locato
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
 }
 
 async function expectVisibleAcrossAnimationFrames(locator: Locator) {
@@ -430,7 +511,7 @@ async function runUploadedImageRendersInPreviewFlow(page: Page, entry: UiScenari
     projectId,
     'image-preview.html',
     // Generated pages commonly use site-root paths. Before the preview asset
-    // normalization fix, this resolved against the Open Design app origin and
+    // normalization fix, this resolved against the OpenDesign app origin and
     // left the uploaded image broken even though its project raw URL was valid.
     '<!doctype html><html><body><main><h1>Image Preview</h1><img alt="Brand logo" src="/brand.png"></main></body></html>',
   );
@@ -539,7 +620,7 @@ async function runDesignFilesDeleteFlow(page: Page) {
     .toBe(true);
 }
 
-test('[P1] design files page keeps the current single-file actions and context hint copy', async ({ page }) => {
+test('[P1] design files page keeps the current single-file menu actions', async ({ page }) => {
   await routeMockAgents(page);
 
   await gotoEntryHome(page);
@@ -553,10 +634,6 @@ test('[P1] design files page keeps the current single-file actions and context h
   await page.reload();
   await expectWorkspaceReady(page);
   await openAllProjectFiles(page);
-
-  await expect(page.getByTestId('design-files-upload-trigger')).toBeVisible();
-  await expect(page.getByRole('button', { name: /new sketch/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: /create document/i })).toBeVisible();
 
   await expect(page.getByRole('button', { name: /filter by kind/i })).toHaveCount(0);
   await expect(page.getByTestId('design-files-batch-delete')).toHaveCount(0);
@@ -572,8 +649,6 @@ test('[P1] design files page keeps the current single-file actions and context h
   await expect(menu.getByRole('button', { name: /rename/i })).toBeVisible();
   await expect(menu.getByRole('button', { name: /download/i })).toBeVisible();
   await expect(menu.getByRole('button', { name: /delete/i })).toBeVisible();
-
-  await expect(page.getByText(/images, docs, references, or folders/i)).toBeVisible();
 });
 
 test('[P1] design files new sketch creates a persisted sketch tab and restores it after reload', async ({ page }) => {
@@ -605,18 +680,26 @@ test('[P1] design files new sketch creates a persisted sketch tab and restores i
   await expect(page.getByTestId('sketch-excalidraw-editor')).toBeVisible();
 });
 
-test('[P1] design files sketch toolbar creates a sketch and exposes editor menu actions', async ({ page }) => {
+test('[P1] design files tab launcher creates a sketch and exposes editor menu actions', async ({ page }) => {
   test.setTimeout(90_000);
   await routeMockAgents(page);
 
-  const projectId = await createProjectViaApi(page, 'Design files sketch toolbar');
+  await gotoEntryHome(page);
+  await openNewProjectModal(page);
+  await page.getByTestId('new-project-name').fill('Design files sketch launcher');
+  await page.getByTestId('create-project').click();
+  await expectWorkspaceReady(page);
+  const { projectId } = await getCurrentProjectContext(page);
   await seedProjectFile(page, projectId, 'alpha.html', '<!doctype html><title>alpha</title><h1>alpha</h1>');
-  await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
   await openAllProjectFiles(page);
 
   await expect(page.getByTestId('design-file-row-alpha.html')).toBeVisible();
-  await page.getByRole('button', { name: /new sketch/i }).click();
+  await page.getByTestId('workspace-add-tab').click();
+  const launcher = page.getByTestId('tab-launcher-menu');
+  await expect(launcher).toBeVisible();
+  await launcher.getByRole('button', { name: /^New Sketch$/i }).click();
 
   const sketchName = await waitForSingleSketchFile(page, projectId);
   await expect(page.getByTestId('file-workspace').getByRole('tab', {
@@ -712,7 +795,12 @@ test('[P1] plan mode selection and new Excalidraw sketch emit analytics dimensio
 test('[P1] markdown plan documents support code, split, preview, and autosaved edits', async ({ page }) => {
   await routeMockAgents(page);
 
-  const projectId = await createProjectViaApi(page, 'Markdown plan editor modes');
+  await gotoEntryHome(page);
+  await openNewProjectModal(page);
+  await page.getByTestId('new-project-name').fill('Markdown plan editor modes');
+  await page.getByTestId('create-project').click();
+  await expectWorkspaceReady(page);
+  const { projectId } = await getCurrentProjectContext(page);
   await seedProjectFile(
     page,
     projectId,
@@ -737,8 +825,11 @@ test('[P1] markdown plan documents support code, split, preview, and autosaved e
   const editor = page.getByRole('textbox', { name: /markdown editor/i });
   const preview = page.getByLabel(/markdown preview/i);
 
-  await expect(splitTab).toHaveAttribute('aria-selected', 'true');
-  await expect(editor).toHaveValue(/Seeded Plan/);
+  await expect(codeTab).toBeEnabled();
+  await expect(splitTab).toBeEnabled();
+  await previewTab.click();
+  await expect(previewTab).toHaveAttribute('aria-selected', 'true');
+  await expect(editor).toHaveCount(0);
   await expect(preview).toContainText('Scope');
 
   await codeTab.click();
@@ -766,8 +857,12 @@ test('[P1] markdown plan documents support code, split, preview, and autosaved e
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
-  await expect(page.getByRole('textbox', { name: /markdown editor/i })).toHaveValue(/Edited from code mode/);
+  await expect(codeTab).toBeEnabled();
+  await previewTab.click();
+  await expect(previewTab).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByLabel(/markdown preview/i)).toContainText('Edited from split mode.');
+  await codeTab.click();
+  await expect(page.getByRole('textbox', { name: /markdown editor/i })).toHaveValue(/Edited from code mode/);
 });
 
 test('[P1] design files batch delete removes selected files and keeps cancel retryable', async ({ page }) => {
@@ -915,6 +1010,84 @@ test('[P0] @critical file workspace restores HTML preview after switching throug
   await expect(page.getByTestId('file-workspace')).toBeVisible();
 });
 
+test('[P0] @critical white-screen monitoring recovers layout stalls and confirms persistent blanks', async ({ page }) => {
+  const safetyEvents = await captureSafetyTelemetry(page);
+  await routeMockAgents(page);
+
+  const projectId = await createProjectViaApi(page, 'Preview white-screen monitoring');
+  await seedHtmlArtifact(
+    page,
+    projectId,
+    'recoverable-blank.html',
+    `<!doctype html>
+      <html>
+        <head><style>main { display: none; }</style></head>
+        <body data-monitor-fixture="recoverable" data-monitor-recovered="false">
+          <main><h1>Recovered preview paint</h1></main>
+          <script>
+            window.__monitorFixtureStartedAt = performance.now();
+            window.addEventListener('resize', function () {
+              if (performance.now() - window.__monitorFixtureStartedAt < 4500) return;
+              document.querySelector('main').style.display = 'block';
+              document.body.dataset.monitorRecovered = 'true';
+            });
+          </script>
+        </body>
+      </html>`,
+  );
+  await seedHtmlArtifact(
+    page,
+    projectId,
+    'persistent-blank.html',
+    `<!doctype html>
+      <html>
+        <body data-monitor-fixture="persistent">
+          <script>window.__monitorFixtureReady = true;</script>
+        </body>
+      </html>`,
+  );
+
+  await page.goto(`/projects/${projectId}?forceInline=1`, { waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+  await openDesignFile(page, 'recoverable-blank.html');
+
+  const activePreview = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  const recoverableBody = activePreview.locator('body[data-monitor-fixture="recoverable"]');
+  const recoverableMain = recoverableBody.locator('main');
+  await expect(recoverableBody).toBeVisible();
+  await expect(recoverableBody).toHaveAttribute('data-monitor-recovered', 'true', {
+    timeout: PREVIEW_WHITE_SCREEN_TIMEOUT_MS + T.short,
+  });
+  await expect(recoverableMain).toHaveCSS('display', 'block', {
+    timeout: PREVIEW_WHITE_SCREEN_TIMEOUT_MS + T.short,
+  });
+  await page.waitForTimeout(PREVIEW_WHITE_SCREEN_CONFIRMATION_MS + 100);
+  expect(capturedWhiteScreenEvents(safetyEvents)).toEqual([]);
+
+  await openAllProjectFiles(page);
+  const persistentRow = await revealDesignFileRow(page, 'persistent-blank.html');
+  await persistentRow.getByRole('button').first().click();
+  await expect(page.getByRole('tab', { name: /persistent-blank\.html/i }))
+    .toHaveAttribute('aria-selected', 'true');
+  const persistentBody = activePreview.locator('body[data-monitor-fixture="persistent"]');
+  await expect(persistentBody).toBeAttached();
+
+  await page.waitForTimeout(PREVIEW_WHITE_SCREEN_TIMEOUT_MS - 500);
+  expect(capturedWhiteScreenEvents(safetyEvents)).toEqual([]);
+
+  await expect.poll(
+    () => capturedWhiteScreenEvents(safetyEvents).length,
+    { timeout: PREVIEW_WHITE_SCREEN_CONFIRMATION_MS + T.short },
+  ).toBe(1);
+  const [whiteScreen] = capturedWhiteScreenEvents(safetyEvents);
+  expect(whiteScreen?.properties).toMatchObject({
+    blank_observation_count: 2,
+    sample_interval_ms: PREVIEW_WHITE_SCREEN_CONFIRMATION_MS,
+    visible_element_count: 0,
+    visibility_state: 'visible',
+  });
+});
+
 test('[P0] @critical HTML file list and previews stay stable across repeated switches', async ({ page }) => {
   await routeMockAgents(page);
 
@@ -967,6 +1140,14 @@ test('[P0] @critical HTML file list and previews stay stable across repeated swi
   await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
 
+  // Project restore asynchronously opens the newest HTML file. If Design
+  // Files is clicked while that restore is still committing, the late file
+  // selection wins and immediately switches the tab back, making the list
+  // assertion race startup instead of testing file stability. Let the restore
+  // own its initial selection, then enter Design Files as the user would.
+  await expect(page.getByRole('tab', { name: /stable-(?:alpha|beta)\.html/i })).toBeVisible();
+  await expect(page.locator('iframe[data-od-active="true"]')).toBeVisible();
+
   await openAllProjectFiles(page);
   const alphaRow = await revealDesignFileRow(page, 'stable-alpha.html');
   const betaRow = designFileRow(page, 'stable-beta.html');
@@ -1016,6 +1197,18 @@ test('[P0] @critical HTML file list and previews stay stable across repeated swi
   const alphaFrameHandle = await captureWarmFrame('stable-alpha.html');
 
   await openAllProjectFiles(page);
+  // #7007 regressed only when the active viewer had already cached the HTML
+  // source and Design Files mounted its thumbnail from that cache on the very
+  // first render. Exercise that exact browser path, not just the jsdom style
+  // contract: the thumbnail must start with the desktop layout viewport and
+  // immediately paint the cached document.
+  const warmAlphaRow = await revealDesignFileRow(page, 'stable-alpha.html');
+  const warmAlphaThumbnail = warmAlphaRow.locator('.df-card-thumb iframe');
+  await expect(warmAlphaThumbnail).toHaveCSS('width', '1200px');
+  await expect(warmAlphaThumbnail).toHaveCSS('height', '675px');
+  await expect(warmAlphaRow.frameLocator('.df-card-thumb iframe').getByRole('heading', {
+    name: 'Stable Alpha',
+  })).toBeVisible();
   await betaRow.getByRole('button').first().click();
   const betaTab = page.getByRole('tab', { name: /stable-beta\.html/i });
   const betaHeading = page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {

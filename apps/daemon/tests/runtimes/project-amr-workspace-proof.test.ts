@@ -11,6 +11,7 @@ import {
   rebindWorkspaceProject,
 } from '../../src/db.js';
 import {
+  accountScopedRunWorkspaceScopeForProject,
   openDesignAmrTraceEnvForRun,
   pinRunWorkspaceScopeForProject,
   type ProjectWorkspaceScopeOutcome,
@@ -228,36 +229,32 @@ describe('AMR persisted project Workspace scope', () => {
     expect(retry.OPEN_DESIGN_WORKSPACE_ID).toBe('workspace-personal');
   });
 
-  it('refuses an unbound AMR project on both initial spawn and retry', async () => {
+  it('keeps an unbound local AMR project account-scoped on initial spawn and retry', async () => {
     const db = seedProject({ projectId: 'project-legacy' });
     const outcomes: ProjectWorkspaceScopeOutcome[] = [];
-    await expect(openDesignAmrTraceEnvForRun({
+    const initial = await openDesignAmrTraceEnvForRun({
       agentId: 'amr',
       runId: 'run-legacy',
       runAttempt: 0,
       projectId: 'project-legacy',
-      workspaceScope: pinRunWorkspaceScopeForProject(db, 'project-legacy'),
+      workspaceScope: accountScopedRunWorkspaceScopeForProject('project-legacy'),
     }, {
       onWorkspaceScopeOutcome: (outcome) => outcomes.push(outcome),
-    })).rejects.toMatchObject({
-      code: 'AMR_WORKSPACE_SCOPE_REQUIRED',
-      projectId: 'project-legacy',
     });
-    await expect(openDesignAmrTraceEnvForRun({
+    const retry = await openDesignAmrTraceEnvForRun({
       agentId: 'amr',
       runId: 'run-legacy',
       runAttempt: 1,
       projectId: 'project-legacy',
-      workspaceScope: pinRunWorkspaceScopeForProject(db, 'project-legacy'),
+      workspaceScope: accountScopedRunWorkspaceScopeForProject('project-legacy'),
     }, {
       onWorkspaceScopeOutcome: (outcome) => outcomes.push(outcome),
-    })).rejects.toMatchObject({
-      code: 'AMR_WORKSPACE_SCOPE_REQUIRED',
-      projectId: 'project-legacy',
     });
+    expect(initial).not.toHaveProperty('OPEN_DESIGN_WORKSPACE_ID');
+    expect(retry).not.toHaveProperty('OPEN_DESIGN_WORKSPACE_ID');
     expect(outcomes).toHaveLength(2);
     expect(outcomes).toEqual([0, 1].map(() => ({
-      kind: 'refused_unbound',
+      kind: 'account_scoped_unbound',
       projectId: 'project-legacy',
       workspaceId: null,
     })));

@@ -6,6 +6,7 @@ import type {
   AgentCliEnvIntentPrefs,
   AgentModelPrefs,
   AgentTestRequest,
+  AppRuntimeCapabilities,
   AppVersionInfo,
   AppVersionResponse,
   WhatsNewContent,
@@ -145,7 +146,7 @@ export function liveArtifactIdFromTabId(tabId: LiveArtifactTabId): string {
 // Side Chat tab convention. A `chat:<conversationId>` tab mounts a secondary
 // ChatPane bound to that conversation (Stage 2), mirroring the `live:` scheme
 // above. The conversation is a normal conversation, so it also shows up in the
-// header ConversationsMenu.
+// conversation list.
 export type SideChatTabId = `chat:${string}`;
 
 export function sideChatTabId(conversationId: string): SideChatTabId {
@@ -346,14 +347,13 @@ export interface PetCustom {
 }
 
 export interface NotificationsConfig {
-  // Master switch for the completion sound. Default false — first-run users
-  // hear nothing until they opt in.
+  // Master switch for the completion sound. Default true; users can opt out.
   soundEnabled: boolean;
   // Sound id played when a turn ends with `runStatus === 'succeeded'`.
   successSoundId: string;
   // Sound id played when a turn ends with `runStatus === 'failed'`.
   failureSoundId: string;
-  // Master switch for the browser Notification API banner. Default false.
+  // Master switch for the browser Notification API banner. Default true.
   desktopEnabled: boolean;
 }
 
@@ -583,6 +583,7 @@ export type {
   AgentDiagnostic,
   AgentFixIntent,
   AgentTestRequest,
+  AppRuntimeCapabilities,
   AppVersionInfo,
   AppVersionResponse,
   WhatsNewContent,

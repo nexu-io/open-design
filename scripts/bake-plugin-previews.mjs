@@ -34,12 +34,12 @@
 // Uploading <out> to R2 + committing the manifest is the CI step's job; this
 // script only renders + encodes so it stays runnable locally and in CI alike.
 
-import puppeteer from 'puppeteer-core';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdirSync, rmSync, writeFileSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 // Bump when the bake recipe changes (capture geometry, timing, encoder, waits…)
 // so every plugin re-bakes even though its page content is byte-identical.
@@ -61,19 +61,23 @@ import path from 'node:path';
 //       of skipping them forever. Bumped so every entry's metadata is
 //       corrected in one sweep (23 entries carried holdMs > real duration,
 //       5 static-page entries could never refresh at all).
-const BAKE_VERSION = 5;
+//   v6: capture decks in their native 16:9 frame so the gallery does not bake
+//       the outer black canvas into posters/clips; a plugin declared with
+//       `od.mode: deck` now takes the slide-walk path by default instead of
+//       being misclassified as a vertically scrolling page.
+const BAKE_VERSION = 6;
 
 // ---- config ---------------------------------------------------------------
 const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:17579';
 const RENDER_W = 1440;          // pages lay out at their desktop width
 const VIEW_H = 1099;            // 1.31-aspect window showing the FULL width (no clip)
-// Decks (PPT/slideshow: a fixed 100vh page navigated by arrow keys or the wheel,
-// NOT vertical scroll) are captured at the SAME 1.31 tile aspect as everything
-// else — so the clip fills the card with no crop or letterbox — but at a larger
-// width. At the normal 1440 width decks hit a width breakpoint and collapse into
-// a compact variant (hero headline -> condensed strip); 1760 clears it.
+// Decks are authored and displayed at 16:9. Capture that frame directly rather
+// than the old 1.31 page viewport, which recorded the stage's outer black canvas
+// above/beside the slide. The wider viewport still avoids compact breakpoints.
 const DECK_W = 1760;
-const DECK_H = 1344;            // 1760/1344 = 1.31, the tile aspect
+const DECK_H = 990;             // 1760/990 = 16:9, the slide/card aspect
+const DECK_CAPTURE_SELECTOR =
+  '.slide, [data-screen-label], .deck-slide, .ppt-slide, .slide-frame';
 const SLIDE_MS = 1150;          // deck per-slide dwell: ~.9s CSS transition + settle
 const MAX_SLIDES = 6;           // advance budget; HOLD + slides stays ~<=9s
 const MAX_WALK_MS = 8000;       // hard wall-time cap on the walk: even when signal
@@ -212,8 +216,10 @@ async function discoverIds() {
 }
 
 // Authors can declare how their preview should be captured via
-// `od.preview.motion` ('scroll' | 'deck' | 'static'); we honor it and only
-// auto-detect when it's absent. Returns an id -> motion map (missing => null).
+// `od.preview.motion` ('scroll' | 'deck' | 'static'); we honor it first. When
+// absent, an `od.mode: deck` declaration is authoritative — vertically stacked
+// deck DOM must still be walked page-by-page, not recorded as one long scroll.
+// Everything else remains auto-detected. Returns id -> motion (missing => null).
 async function loadMotionMap() {
   const map = {};
   try {
@@ -224,7 +230,12 @@ async function loadMotionMap() {
       if (!it || typeof it !== 'object') continue;
       const id = it.id || it.slug;
       const m = it.manifest?.od?.preview?.motion;
-      if (id && (m === 'scroll' || m === 'deck' || m === 'static')) map[id] = m;
+      if (!id) continue;
+      if (m === 'scroll' || m === 'deck' || m === 'static') {
+        map[id] = m;
+      } else if (it.manifest?.od?.mode === 'deck') {
+        map[id] = 'deck';
+      }
     }
   } catch {}
   return map;
@@ -251,13 +262,79 @@ function deckSignal(cap) {
       parts.push(getComputedStyle(el).transform);
     }
     if (el.scrollWidth > el.clientWidth + 4) parts.push(`sl${el.scrollLeft}`);
+    if (el.scrollHeight > el.clientHeight + 4) parts.push(`st${el.scrollTop}`);
   }
   const a = document.querySelector('.active,.is-active,[aria-current="true"],[data-active="true"]');
   if (a) parts.push((a.id || '') + (a.className || ''));
   return parts.join('|').slice(0, 4000);
 }
 
+// Locate and optionally advance a vertically stacked deck. Some templates keep
+// html/body fixed and put the actual slide rail in an inner overflow-y
+// container, so window.scrollY alone cannot describe or drive them. Runs in the
+// page; must stay self-contained.
+export function verticalDeckState(selector, action) {
+  const slides = Array.from(document.querySelectorAll(selector)).filter((el) => {
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return rect.width > 1 && rect.height > 1 && style.display !== 'none' && style.visibility !== 'hidden';
+  });
+  if (slides.length < 2) return { hasStack: false, moved: false };
+
+  const isRoot = (el) => el === document.scrollingElement || el === document.documentElement || el === document.body;
+  let scroller = null;
+  let node = slides[0].parentElement;
+  while (node && !isRoot(node)) {
+    const containsAll = slides.every((slide) => node.contains(slide));
+    const overflowY = String(getComputedStyle(node).overflowY || '').toLowerCase();
+    if (
+      containsAll &&
+      node.scrollHeight > node.clientHeight + 1 &&
+      (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay')
+    ) {
+      scroller = node;
+      break;
+    }
+    node = node.parentElement;
+  }
+
+  const root = !scroller;
+  scroller ||= document.scrollingElement || document.documentElement || document.body;
+  const current = root
+    ? Math.max(
+      Number(window.scrollY || window.pageYOffset || 0),
+      Number(document.documentElement?.scrollTop || 0),
+      Number(document.body?.scrollTop || 0),
+    )
+    : Number(scroller.scrollTop || 0);
+  const origin = root ? 0 : Number(scroller.getBoundingClientRect().top || 0);
+  const tops = slides.map((el) => current + Number(el.getBoundingClientRect().top || 0) - origin);
+  const span = Math.max(1, root ? window.innerHeight : scroller.clientHeight);
+  const hasStack = Math.max(...tops) - Math.min(...tops) > span * 0.5;
+  if (!hasStack || action !== 'advance') return { hasStack, moved: false };
+
+  const currentIndex = Number(window.__odBakeVerticalSlideIndex || 0);
+  const nextIndex = currentIndex + 1;
+  if (nextIndex >= slides.length) return { hasStack, moved: false };
+  const top = tops[nextIndex];
+  window.__odBakeVerticalSlideIndex = nextIndex;
+  if (root) {
+    window.scrollTo({ left: window.scrollX, top, behavior: 'auto' });
+  } else {
+    try {
+      scroller.scrollTo({ left: scroller.scrollLeft, top, behavior: 'auto' });
+    } catch {
+      scroller.scrollTop = top;
+    }
+  }
+  return { hasStack, moved: true };
+}
+
 async function driveDeck(page, driver) {
+  if (driver === 'vertical') {
+    const state = await page.evaluate(verticalDeckState, DECK_CAPTURE_SELECTOR, 'advance');
+    return state.moved;
+  }
   if (driver === 'arrow') { await page.keyboard.press('ArrowRight'); return; }
   if (driver === 'wheel') {
     await page.evaluate(() => {
@@ -283,6 +360,12 @@ async function walkSlides(page, driver) {
   const t0 = Date.now();
   for (let s = 0; s < MAX_SLIDES; s += 1) {
     if (Date.now() - t0 > MAX_WALK_MS) break; // backstop so the clip never runs long
+    if (driver === 'vertical') {
+      if (!(await driveDeck(page, driver))) break;
+      await sleep(SLIDE_MS);
+      moved += 1;
+      continue;
+    }
     const before = await page.evaluate(deckSignal, DECK_SCAN_CAP);
     await driveDeck(page, driver);
     await sleep(SLIDE_MS);
@@ -304,7 +387,59 @@ async function probeDeckDriver(page) {
   await driveDeck(page, 'wheel');
   await sleep(900);
   if ((await page.evaluate(deckSignal, DECK_SCAN_CAP)) !== sig0) return 'wheel';
+  const verticalState = await page.evaluate(verticalDeckState, DECK_CAPTURE_SELECTOR, 'probe');
+  if (verticalState.hasStack) return 'vertical';
   return null;
+}
+
+// Size and position the screencast viewport against the authored slide itself,
+// not the surrounding stage/body. This is what removes baked-in black canvas:
+// matching only the slide's aspect ratio is insufficient when the page adds
+// padding or renders a fixed 1280×720 canvas at a smaller CSS transform.
+async function cropDeckViewportToSlide(page, fallbackW, fallbackH) {
+  const measured = await page.evaluate((selector) => {
+    const slides = Array.from(document.querySelectorAll(selector));
+    const candidates = slides.map((el, index) => {
+      const rect = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      const active = el.matches('.active,.is-active,[aria-current="true"],[data-active="true"],[data-od-deck-active]');
+      const visible = rect.width > 1 && rect.height > 1 && style.display !== 'none' && style.visibility !== 'hidden';
+      const onscreen = rect.right > 0 && rect.bottom > 0 && rect.left < innerWidth && rect.top < innerHeight;
+      return { index, active, visible, onscreen, width: rect.width, height: rect.height };
+    });
+    return candidates.find((item) => item.active && item.visible)
+      || candidates.find((item) => item.visible && item.onscreen)
+      || candidates.find((item) => item.visible)
+      || null;
+  }, DECK_CAPTURE_SELECTOR);
+  if (!measured) return { width: fallbackW, height: fallbackH };
+
+  const width = Math.max(320, Math.min(2560, Math.round(measured.width)));
+  const height = Math.max(180, Math.min(1440, Math.round(measured.height)));
+  const aspect = width / height;
+  if (!Number.isFinite(aspect) || aspect < 1.2 || aspect > 2.4) {
+    return { width: fallbackW, height: fallbackH };
+  }
+
+  if (width !== fallbackW || height !== fallbackH) {
+    await page.setViewport({ width, height, deviceScaleFactor: 1 });
+    await sleep(250);
+  }
+  await page.evaluate(({ selector, index }) => {
+    document.documentElement.style.setProperty('overflow', 'auto', 'important');
+    document.body.style.setProperty('overflow', 'visible', 'important');
+    const target = document.querySelectorAll(selector)[index];
+    if (!target) return;
+    const rect = target.getBoundingClientRect();
+    window.__odBakeVerticalSlideIndex = 0;
+    window.scrollTo({
+      left: window.scrollX + rect.left,
+      top: window.scrollY + rect.top,
+      behavior: 'auto',
+    });
+  }, { selector: DECK_CAPTURE_SELECTOR, index: measured.index });
+  await sleep(100);
+  return { width, height };
 }
 
 // ---- render + encode one plugin -------------------------------------------
@@ -423,6 +558,12 @@ async function bakeOne(browser, id, hash, motion) {
     }, 12000);
   } catch {}
   await sleep(600);
+
+  if (isDeck) {
+    const crop = await cropDeckViewportToSlide(page, capW, capH);
+    capW = crop.width;
+    capH = crop.height;
+  }
 
   const frameDir = path.join(OUT, `.frames-${id}`);
   rmSync(frameDir, { recursive: true, force: true }); mkdirSync(frameDir, { recursive: true });
@@ -582,6 +723,8 @@ async function bakeOne(browser, id, hash, motion) {
 }
 
 // ---- main -----------------------------------------------------------------
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+const { default: puppeteer } = await import('puppeteer-core');
 mkdirSync(OUT, { recursive: true });
 const ids = await discoverIds();
 const motionMap = await loadMotionMap();
@@ -732,3 +875,4 @@ await Promise.all([process.stdout, process.stderr].map(
   (stream) => new Promise((resolve) => stream.write('', resolve)),
 ));
 process.exit(strictFail ? 1 : 0);
+}

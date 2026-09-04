@@ -2,7 +2,7 @@
    recent-projects rail; deliberately lighter than a full card so it doesn't
    compete with the hero input for first-screen attention. */
 /* Delayed accordion reveal — the repo's canonical auto-height pattern
-   (grid-template-rows 0fr -> 1fr, see plugins-home home-templates-reveal).
+   (grid-template-rows 0fr -> 1fr).
    The slot stays collapsed while Home paints, then expands and PUSHES the
    template section down: displacement is the attention cue for this
    optional entry — quieter than a glint, impossible to miss. */

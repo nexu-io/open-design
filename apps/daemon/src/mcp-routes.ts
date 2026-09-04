@@ -13,7 +13,7 @@ export interface RegisterMcpRoutesDeps extends RouteDeps<'http' | 'paths' | 'mcp
 export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   const { isLocalSameOrigin, resolvedPortRef, sendApiError } = ctx.http;
   const { OD_BIN, RUNTIME_DATA_DIR, PROJECTS_DIR } = ctx.paths;
-  const { pendingAuth, daemonUrlRef } = ctx.mcp;
+  const { pendingAuth, daemonUrlRef, inheritedEnvironment } = ctx.mcp;
   const getResolvedPort = () => resolvedPortRef.current;
   const getDaemonUrl = () => daemonUrlRef.current;
   // Surfaces the absolute paths to the daemon's Node-compatible runtime and
@@ -41,20 +41,10 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   // differently depending on which install path the user took.
   function computeInstallPayload(): McpInstallPayload {
     const cliPath = OD_BIN;
-    // The daemon was bootstrapped as a sidecar (tools-dev, packaged) iff
-    // bootstrapSidecarRuntime stamped OD_SIDECAR_IPC_PATH into the env.
-    // In sidecar mode the snippet omits --daemon-url and the spawned
-    // `od mcp` discovers the live URL via the concrete IPC endpoint on
-    // every spawn, so the client config survives ephemeral-port
-    // restarts. For direct `od` / `od --port X` launches there is no
-    // IPC socket; the helper bakes --daemon-url so custom ports keep
-    // working.
-    const sidecarIpcPath = process.env[SIDECAR_ENV.IPC_PATH];
-    const isSidecarMode = sidecarIpcPath != null && sidecarIpcPath.length > 0;
-    const sidecarEnv: Record<string, string> = {};
-    if (isSidecarMode) {
-      sidecarEnv[SIDECAR_ENV.IPC_PATH] = sidecarIpcPath;
-    }
+    // Forward only the opaque inherited client capability. IPC endpoint
+    // naming and transport stay private to @open-design/sidecar.
+    const sidecarEnv = inheritedEnvironment();
+    const isSidecarMode = Object.keys(sidecarEnv).length > 0;
     const mcpBootstrapCommand = process.env.OD_MCP_BOOTSTRAP_COMMAND;
     if (
       mcpBootstrapCommand != null
@@ -67,7 +57,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       sidecarEnv.OD_MCP_BOOTSTRAP_ARGS = mcpBootstrapArgs;
     }
     // tools-dev / packaged launchers export OD_WEB_PORT so the daemon
-    // knows where the browser-facing Open Design studio is running.
+    // knows where the browser-facing OpenDesign studio is running.
     // CLI-only / headless launches set neither and webBaseUrl falls
     // through as null — MCP clients then just omit the studio deep
     // link from their responses.
@@ -166,7 +156,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
     }
   });
 
-  // External MCP server configuration. Open Design connects to these as a
+  // External MCP server configuration. OpenDesign connects to these as a
   // CLIENT and surfaces their tools to the underlying agent at spawn time.
   // GET returns user-saved entries plus the built-in template list so the UI
   // can render the "Add MCP server" picker without a second round-trip.
@@ -398,7 +388,7 @@ function renderOAuthResultPage(opts: any) {
   const title = ok ? 'Connected' : 'Authorization failed';
   const heading = ok ? '✅ Connected' : '⚠️ Authorization failed';
   const body = ok
-    ? `Your MCP server <code>${escapeHtml(opts.serverId ?? '')}</code> is now connected. You can close this tab and return to Open Design.`
+    ? `Your MCP server <code>${escapeHtml(opts.serverId ?? '')}</code> is now connected. You can close this tab and return to OpenDesign.`
     : escapeHtml(opts.message ?? 'Authorization could not be completed.');
   const accent = ok ? '#1a7f37' : '#cf222e';
   const payload = ok
@@ -408,7 +398,7 @@ function renderOAuthResultPage(opts: any) {
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>${escapeHtml(title)} — Open Design</title>
+<title>${escapeHtml(title)} — OpenDesign</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
   :root { color-scheme: light dark; }

@@ -392,6 +392,13 @@ function KeyboardPlugin({
             e.preventDefault();
             return true;
           }
+          // A held Enter key produces repeated keydown events. Sending is a
+          // one-shot action, so only the initial keydown may submit or choose
+          // a popover item. Shift+Enter remains repeatable for line breaks.
+          if (e?.repeat) {
+            e.preventDefault();
+            return true;
+          }
           // Cmd/Ctrl+Enter force-sends even with a popover open.
           if (e?.metaKey || e?.ctrlKey) {
             e.preventDefault();

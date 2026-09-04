@@ -43,6 +43,7 @@ import {
   DEFAULT_IMAGE_MODEL,
   DEFAULT_VIDEO_MODEL,
   findProvider,
+  imageModelIdForPromptTemplate,
   IMAGE_MODELS,
   MEDIA_ASPECTS,
   type MediaModel,
@@ -128,6 +129,8 @@ export type MediaSurface = 'image' | 'video' | 'audio';
 export interface CreateInput {
   name: string;
   skillId: string | null;
+  /** UI-only intent marker; the public project contract still receives only the resolved skill id. */
+  skillSelectionProvenance?: 'automatic-default' | 'explicit-user';
   designSystemId: string | null;
   metadata: ProjectMetadata;
   userWorkingDirToken?: string;
@@ -563,8 +566,16 @@ export function NewProjectPanel({
   // stays on the default seedance — the agent then dispatches the wrong
   // model and the render path mismatches the prompt.
   function handleImagePromptTemplate(pick: PromptTemplatePick | null) {
-    setImagePromptTemplate(pick);
-    const m = pick?.summary.model;
+    const rawModel = pick?.summary.model;
+    const normalizedModel = rawModel
+      ? imageModelIdForPromptTemplate(rawModel)
+      : undefined;
+    const normalizedPick =
+      pick && normalizedModel && normalizedModel !== rawModel
+        ? { ...pick, summary: { ...pick.summary, model: normalizedModel } }
+        : pick;
+    setImagePromptTemplate(normalizedPick);
+    const m = normalizedModel;
     // Accept catalogued ids plus any live AIHubMix catalogue id (aihubmix-*),
     // which renders dynamically and won't appear in the static IMAGE_MODELS.
     if (m && (IMAGE_MODELS.some((x) => x.id === m) || m.startsWith('aihubmix-'))) setImageModel(m);
@@ -766,6 +777,7 @@ export function NewProjectPanel({
     onCreate({
       name: trimmedName || autoName(tab, mediaSurface, t),
       skillId: startTemplateId ?? skillIdForTab,
+      skillSelectionProvenance: startTemplateId ? 'explicit-user' : 'automatic-default',
       designSystemId: primaryDs,
       metadata: {
         ...metadata,
@@ -791,7 +803,7 @@ export function NewProjectPanel({
         }
         if ('canceled' in result && result.canceled) return;
         setWorkingDirError({
-          message: `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update Open Design and try again.`,
+          message: `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update OpenDesign and try again.`,
         });
         return;
       }
@@ -2759,7 +2771,7 @@ function MediaProjectOptions(props:
 
 export function supportedModels(surface: 'image' | 'video' | 'audio', models: MediaModel[]): MediaModel[] {
   const supportedProviders: Record<'image' | 'video' | 'audio', Set<string>> = {
-    image: new Set(['openai', 'codex', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image', 'aihubmix', 'minimax']),
+    image: new Set(['vela', 'openai', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image', 'aihubmix', 'minimax']),
     video: new Set(['volcengine', 'hyperframes', 'grok', 'openrouter', 'imagerouter', 'aihubmix']),
     audio: new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine', 'aihubmix']),
   };

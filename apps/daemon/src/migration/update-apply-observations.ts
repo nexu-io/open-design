@@ -139,10 +139,10 @@ async function writeSummary(filePath: string, summary: InstallerObservationSumma
 }
 
 export function normalizeUpdateObservationChannel(version: string, explicit?: string | null): InstallerObservationChannel {
-  if (isReleaseChannel(explicit)) return explicit;
   if (explicit != null && explicit.startsWith('beta')) return 'beta';
   if (explicit != null && explicit.startsWith('preview')) return 'preview';
   if (explicit != null && explicit.startsWith('prerelease')) return 'prerelease';
+  if (isReleaseChannel(explicit)) return explicit;
   const cleaned = version.trim().replace(/^v/i, '');
   const prerelease = cleaned.split('-', 2)[1] ?? '';
   const channel = releaseChannelFromVersion(version);

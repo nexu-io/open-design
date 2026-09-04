@@ -238,6 +238,13 @@ export function stripTrailingOpenQuestionForm(
     const openEnd = openStart + m[0].length;
     const closeIdx = findCloseTag(input, openEnd, closeTag);
     if (closeIdx === -1) {
+      if (!couldCompleteAsQuestionFormBody(input.slice(openEnd))) {
+        // Prose, not a form body: the tag is narration the model typed
+        // inline. Keep scanning past it so a genuine form later in the
+        // message still wins, and leave every character visible.
+        cursor = openEnd;
+        continue;
+      }
       return { text: input.slice(0, openStart), hadOpenForm: true };
     }
     cursor = closeIdx + closeTag.length;
@@ -249,6 +256,60 @@ export function stripTrailingOpenQuestionForm(
 // streamed in yet — i.e. the model is still generating the form.
 export function hasUnterminatedQuestionForm(input: string): boolean {
   return stripTrailingOpenQuestionForm(input).hadOpenForm;
+}
+
+/**
+ * The single precondition every "is a form in flight?" decision shares: an
+ * open `<question-form>` / `<ask-question>` tag only means a form is being
+ * generated while the text after it could still grow into a valid form body.
+ *
+ * {@link parseForm} accepts exactly one grammar — JSON, optionally wrapped in
+ * a ```` ```json ```` fence, that parses to an object carrying a `questions`
+ * array (or to a bare array of questions). A tail is therefore still a
+ * candidate only while it is empty (nothing has streamed past the tag yet),
+ * is a fence opener that has not finished arriving, or begins a JSON object
+ * or array.
+ *
+ * A tail that opens with prose — the model narrating "no questions needed"
+ * straight into the tag instead of emitting a form — can never satisfy that
+ * grammar. Such a tag is ordinary text: it must not raise a loading skeleton,
+ * must not hold the turn in a clarification handshake, and must not hide the
+ * narration that follows it.
+ */
+export function couldCompleteAsQuestionFormBody(tail: string): boolean {
+  const body = stripLeadingJsonFence(tail).trim();
+  if (body.length === 0) return true;
+  return body.startsWith('{') || body.startsWith('[');
+}
+
+// Consume a leading ```` ```json ```` fence, including one that is itself only
+// partially streamed (anything from a lone backtick through ```` ```json ````).
+// Whatever the fence does not cover is left for the JSON check.
+function stripLeadingJsonFence(tail: string): string {
+  const m = /^\s*`{1,3}(?:json|jso|js|j)?[^\S\n]*\n?/.exec(tail);
+  return m ? tail.slice(m[0].length) : tail;
+}
+
+/**
+ * True when the content actually asks the user something through the form
+ * protocol: a closed `<question-form>` block, or an open tag whose body could
+ * still complete into one (see {@link couldCompleteAsQuestionFormBody}).
+ *
+ * A stray open tag followed by prose is narration, not an ask, so callers that
+ * classify a turn as "awaiting user input" must not be tripped by it.
+ */
+export function containsQuestionFormAsk(input: string): boolean {
+  let cursor = 0;
+  while (cursor < input.length) {
+    const m = OPEN_RE.exec(input.slice(cursor));
+    if (!m) return false;
+    const tagName = (m[1] ?? 'question-form').toLowerCase();
+    const openEnd = cursor + m.index + m[0].length;
+    if (findCloseTag(input, openEnd, `</${tagName}>`) !== -1) return true;
+    if (couldCompleteAsQuestionFormBody(input.slice(openEnd))) return true;
+    cursor = openEnd;
+  }
+  return false;
 }
 
 function findCloseTag(input: string, from: number, closeTag: string): number {

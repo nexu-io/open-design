@@ -10,17 +10,17 @@ created: '2026-06-01'
 ### Problem Statement
 
 AMR model discovery currently rides on the general agent probing path. The
-Open Design AMR runtime still calls legacy `vela models`, waits for that
+OpenDesign AMR runtime still calls legacy `vela models`, waits for that
 catalog before `/api/agents` can return AMR model data, and parses
 production-shaped text ids that the new Vela model discovery contract no
-longer wants Open Design to treat as primary.
+longer wants OpenDesign to treat as primary.
 
 The Vela CLI now exposes a split contract:
 
 - `vela model preset --format json`: fast local picker seed.
 - `vela model list --format json`: authoritative remote AMR catalog.
 
-Open Design should use the fast preset to occupy AMR model pickers while a
+OpenDesign should use the fast preset to occupy AMR model pickers while a
 background remote catalog refresh fills a loading cache. `/api/agents` can
 keep its existing compatibility payload, but AMR UI surfaces should not rely
 on `/api/agents` for the AMR model list.
@@ -42,7 +42,7 @@ on `/api/agents` for the AMR model list.
 - Do not remove `/api/agents` AMR model fields in this change.
 - Do not add new glossary terms to `CONTEXT.md`.
 - Do not implement a broader generic runtime model endpoint.
-- Do not change AMR execution away from `vela agent run --runtime opencode`.
+- Do not change AMR execution away from `vela agent run`.
 
 ### Success Criteria
 
@@ -65,7 +65,7 @@ on `/api/agents` for the AMR model list.
   filters media model prefixes, deduplicates, and orders preferred chat
   models. Source: `apps/daemon/src/runtimes/defs/amr.ts:39-117,120-132`.
 - AMR declares `fallbackModels: []`, disables custom model ids, and keeps
-  execution on `vela agent run --runtime opencode`. Source:
+  execution on `vela agent run`. Source:
   `apps/daemon/src/runtimes/defs/amr.ts:188-208`.
 - Generic runtime probing calls each runtime's `fetchModels` during
   `detectAgents`, maps successful results to `modelsSource: "live"`, and
@@ -166,7 +166,7 @@ but AMR picker freshness no longer depends on general agent probing.
   `packages/contracts/src/api/registry.ts:15-18`.
 - Decision: Keep generic `fallback` behavior unchanged. Non-AMR runtime
   probing uses `"fallback"` for static runtime lists, while Vela preset is a
-  CLI-provided local seed, not an Open Design static fallback. Source:
+  CLI-provided local seed, not an OpenDesign static fallback. Source:
   `apps/daemon/src/runtimes/detection.ts:27-60`;
   `/private/tmp/open-design-amr-model-catalog-handoff.md:50-61`.
 - Decision: Parse new Vela JSON by `data[].id` directly and do not apply

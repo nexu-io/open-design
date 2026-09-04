@@ -121,7 +121,7 @@ describe('AssistantMessage — chat file-link routing (#1239)', () => {
     const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
     anchor!.dispatchEvent(clickEvent);
 
-    // Not the current workspace's file — but it IS an Open Design file, so
+    // Not the current workspace's file — but it IS an OpenDesign file, so
     // the click must route to the owning project in the SAME window rather
     // than falling through to Electron's window-open handler (which lands a
     // chrome-less child window on the home screen).

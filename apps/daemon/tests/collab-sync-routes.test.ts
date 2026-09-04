@@ -1202,7 +1202,8 @@ describe('collab sync routes', () => {
     expect(resolveSharedProjectOwnerForStatus).toHaveBeenCalledTimes(1);
   });
 
-  it('does not cache a failed status authority read', async () => {
+  it('circuits failed status authority reads and retries after the outage lease', async () => {
+    let now = 0;
     const context = teamContext('ws-1', 'wm-1');
     const fetchReadDirectory = vi
       .fn()
@@ -1223,6 +1224,10 @@ describe('collab sync routes', () => {
       fetchDirectory: fetchReadDirectory,
       identityKey: () => 'account-a:config-a',
       ttlMs: 5_000,
+      failureBackoffMinMs: 100,
+      failureBackoffMaxMs: 100,
+      now: () => now,
+      random: () => 0,
     });
     const api = await startSyncServer(
       { current: async () => context },
@@ -1241,6 +1246,10 @@ describe('collab sync routes', () => {
     );
 
     expect((await api.json('/api/projects/p1/collab/status')).status).toBe(503);
+    expect((await api.json('/api/projects/p1/collab/status')).status).toBe(503);
+    expect(fetchReadDirectory).toHaveBeenCalledOnce();
+
+    now = 100;
     expect((await api.json('/api/projects/p1/collab/status')).status).toBe(200);
     expect(fetchReadDirectory).toHaveBeenCalledTimes(2);
   });
@@ -1666,6 +1675,32 @@ describe('collab sync routes', () => {
     const status = await api.json('/api/projects/p1/collab/status');
     expect(status.body.syncState).toBe('local_only');
     expect(status.body.publishedVersion).toBeNull();
+  });
+
+  it('invalidates the team-project catalog on a sync-intent share and unshare', async () => {
+    // The display read behind `/api/workspace/projects/team` is served from a
+    // 3s SWR entry, so invalidation is part of the mutation contract now. The
+    // `/api/workspaces/:id/projects` move path already invalidates; this route
+    // — the one `od project share` and CollabDemoView drive — did not, so a
+    // catalog GET right after sharing could answer with the pre-share list
+    // until the freshness window expired or a hub event happened to arrive.
+    const invalidateTeamProjectCatalog = vi.fn();
+    const api = await startSyncServer(
+      fixedShareContextProvider(true),
+      { invalidateTeamProjectCatalog },
+    );
+
+    await api.json('/api/projects/p1/collab/sync-intent', {
+      method: 'POST',
+      body: { event: 'project_team_share_requested', projectId: 'p1' },
+    });
+    expect(invalidateTeamProjectCatalog).toHaveBeenCalledTimes(1);
+
+    await api.json('/api/projects/p1/collab/sync-intent', {
+      method: 'POST',
+      body: { event: 'project_team_unshare_requested', projectId: 'p1' },
+    });
+    expect(invalidateTeamProjectCatalog).toHaveBeenCalledTimes(2);
   });
 
   it('accepts a visibility-changed intent as a no-op signal', async () => {

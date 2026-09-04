@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 /**
- * The signed-out rail's bottom "Open Design Cloud" callout is the ONLY entry
+ * The signed-out rail's bottom "OpenDesign Cloud" callout is the ONLY entry
  * point for this card — unlike its siblings (AmrLoginPill, InlineModelSwitcher,
  * EntryShell's onboarding flow), it must release the daemon's login lock on a
  * timed-out attempt, or a retry click can never spawn a fresh `vela login`
@@ -173,7 +173,7 @@ describe('RailAccountSyncTip', () => {
     // Same headline as the callout it replaces (now screen-reader-only, see
     // the skeleton-shape test below), so assistive tech still announces the
     // swap as a state change on the same card rather than a different one.
-    expect(status.textContent).toContain('Open Design Cloud');
+    expect(status.textContent).toContain('OpenDesign Cloud');
     expect(status.textContent).toContain('Loading');
   });
 
@@ -196,7 +196,7 @@ describe('RailAccountSyncTip', () => {
     const status = await screen.findByTestId('entry-rail-account-sync-tip');
     expect(status.querySelector('.entry-rail-account-skeleton__avatar')).not.toBeNull();
     expect(status.querySelector('.entry-rail-account-skeleton__name')).not.toBeNull();
-    // The old card rendered a visible "Open Design Cloud" / "Loading…" pair
+    // The old card rendered a visible "OpenDesign Cloud" / "Loading…" pair
     // of text nodes for sighted users; that text now exists for assistive
     // tech only, so a plain <strong> headline must not reappear inline.
     expect(status.querySelector('strong')).toBeNull();

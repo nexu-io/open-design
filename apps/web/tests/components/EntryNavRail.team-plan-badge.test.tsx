@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 //
-// Acceptance: which plan wordmark a TEAM workspace draws on the rail's account
-// row (bottom-left) and on its twin inside the account menu's billing card.
+// Acceptance: which plan wordmark a TEAM workspace draws on the account
+// nameplate. That nameplate used to render twice — the rail's bottom-left
+// account row plus the account menu's billing card; since 320a36ac1 the
+// account module is a floating avatar-only trigger, so the billing card is
+// the only site left. See `nameplateTier()` below.
 //
 // Reported (owner, from a real client standing in a team workspace):
 // 「团队版的订阅，这里应该都显示 team 的标识」 …… 「产品期望团队从 free 到 max，
@@ -124,13 +127,16 @@ function drawnTier(slot: Element | null | undefined): PlanBadgeTier | 'unrecogni
   return tierByFingerprint().get(wordmarkFingerprint(svg)) ?? 'unrecognized';
 }
 
-/** The wordmark on the always-visible account row, in place of the chevron. */
-function accountRowTier() {
-  return drawnTier(document.querySelector('.entry-nav-rail__account-trigger'));
-}
-
-/** Its twin inside the account menu's billing card. Opens the menu. */
-function billingCardTier() {
+/**
+ * The wordmark on the account nameplate, inside the menu's billing card.
+ *
+ * 320a36ac1 moved the account module into the floating top-right cluster and
+ * reduced its trigger to a bare avatar circle — the nameplate (tier label +
+ * wordmark) now renders only here, so this opens the menu to read it. The
+ * subject of these cases is `planBadgeTierForWorkspace`'s answer, which is
+ * unchanged; only the one surface that draws it moved.
+ */
+function nameplateTier() {
   fireEvent.click(screen.getByTestId('entry-nav-account'));
   return drawnTier(document.querySelector('.entry-nav-rail__menu-credits'));
 }
@@ -190,17 +196,21 @@ describe('plan wordmark — a team workspace draws `team` at every tier', () => 
       billing: billing({ membershipTier }),
     });
 
-    expect(accountRowTier()).toBe('team');
+    expect(nameplateTier()).toBe('team');
   });
 
-  it('draws the same wordmark on the account row and in the billing card', () => {
+  // Was "draws the same wordmark on the account row and in the billing card":
+  // the two sites agreeing stopped being assertable when 320a36ac1 collapsed
+  // the always-visible account row into a bare avatar and left the billing
+  // card as the only nameplate. What survives is that a paid team tier whose
+  // id embeds a personal tier word still resolves to `team`.
+  it('draws the team wordmark for a paid team tier whose id embeds a personal one', () => {
     renderRail({
       context: context({ billingState: 'active', planId: 'team_pro' } as Partial<WorkspaceCollabContext>),
       billing: billing({ membershipTier: 'team_pro', subscriptionStatus: 'active' }),
     });
 
-    expect(accountRowTier()).toBe('team');
-    expect(billingCardTier()).toBe('team');
+    expect(nameplateTier()).toBe('team');
   });
 
   // A personal workspace CAN hold a team-namespaced plan — membership is per
@@ -219,7 +229,7 @@ describe('plan wordmark — a team workspace draws `team` at every tier', () => 
       billing: billing({ membershipTier: 'team_plus', subscriptionStatus: 'active' }),
     });
 
-    expect(accountRowTier()).toBe('team');
+    expect(nameplateTier()).toBe('team');
   });
 });
 
@@ -241,6 +251,6 @@ describe('plan wordmark — the personal ladder is untouched', () => {
       billing: billing({ membershipTier: plan, subscriptionStatus: entitlement.billingState }),
     });
 
-    expect(accountRowTier()).toBe(plan);
+    expect(nameplateTier()).toBe(plan);
   });
 });

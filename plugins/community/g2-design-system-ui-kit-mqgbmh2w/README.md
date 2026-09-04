@@ -4,7 +4,7 @@ This community plugin packages a reviewable UI kit for the HiCatcat G2 AR glasse
 
 ## What It Enables
 
-- Generate dark G2 HUD-style prototypes inside Open Design.
+- Generate dark G2 HUD-style prototypes inside OpenDesign.
 - Reuse source-backed role components for call, message, AI card, teleprompter, device, and bottom command surfaces.
 - Switch between regular 640 display scale and compact 320 display scale.
 - Avoid generic mobile, SaaS dashboard, marketing page, and warm brand-kit styling.

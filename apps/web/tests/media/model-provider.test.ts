@@ -20,9 +20,10 @@ describe('mediaModelProviderId', () => {
   });
 
   it('resolves static models to their registry provider', () => {
-    // gpt-image-2 is the New Project dialog default → provider openai. On a
+    // vela/gpt-image-2 is the New Project dialog default → provider vela. On a
     // SenseAudio run this !== 'senseaudio', so the guard drops the seed and the
     // user's Settings default is kept.
+    expect(mediaModelProviderId('vela/gpt-image-2')).toBe('vela');
     expect(mediaModelProviderId('gpt-image-2')).toBe('openai');
     expect(mediaModelProviderId('senseaudio-image-2.0-260319')).toBe('senseaudio');
     expect(mediaModelProviderId('senseaudio-tts')).toBe('senseaudio');
@@ -41,11 +42,11 @@ describe('mediaModelProviderId', () => {
 
     // AIHubMix run + AIHubMix pick → carried.
     expect(carries('aihubmix-qwen-image-2-pro', 'aihubmix')).toBe(true);
-    // SenseAudio run + dialog-default gpt-image-2 → NOT carried (keeps Settings default).
-    expect(carries('gpt-image-2', 'senseaudio')).toBe(false);
+    // SenseAudio run + dialog-default Vela model → NOT carried (keeps Settings default).
+    expect(carries('vela/gpt-image-2', 'senseaudio')).toBe(false);
     // SenseAudio run + SenseAudio pick → carried.
     expect(carries('senseaudio-image-2.0-260319', 'senseaudio')).toBe(true);
     // Non-BYOK run never matches (byokImageModel is ignored daemon-side anyway).
-    expect(carries('gpt-image-2', 'official')).toBe(false);
+    expect(carries('vela/gpt-image-2', 'official')).toBe(false);
   });
 });

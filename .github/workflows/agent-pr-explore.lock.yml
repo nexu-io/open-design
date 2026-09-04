@@ -12,7 +12,6 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - "apps/web/**"
-      - "apps/landing-page/**"
       - "design-templates/open-design-landing/**"
       - "skills/**"
       - "design-systems/**"

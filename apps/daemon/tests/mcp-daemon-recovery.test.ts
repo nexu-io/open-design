@@ -4,7 +4,7 @@ import { createMcpDaemonTarget } from '../src/mcp.js';
 
 function unreachable(url: string) {
   return {
-    content: [{ type: 'text' as const, text: `cannot reach the Open Design daemon at ${url}.` }],
+    content: [{ type: 'text' as const, text: `cannot reach the OpenDesign daemon at ${url}.` }],
     isError: true,
   };
 }

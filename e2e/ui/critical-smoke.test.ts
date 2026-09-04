@@ -2,13 +2,20 @@ import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen, openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import { settingsSurface } from '@/playwright/amr';
 import type { Locator, Page } from '@playwright/test';
-import { applyStandardMocks } from '@/playwright/mock-factory';
+import { applyStandardMocks, routeSignedOutVelaStatus } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 
 test.describe.configure({ timeout: T.xlong });
 
 test.beforeEach(async ({ page }) => {
   await applyStandardMocks(page);
+  // This file is the compact Personal/local capability lane. Pin Cloud to a
+  // definitive signed-out response so Home and project creation cannot pass
+  // merely because identity stayed unresolved behind the standard 503 mock.
+  await routeSignedOutVelaStatus(page);
+  await page.route('**/api/workspace/directory', async (route) => {
+    await route.fulfill({ json: { items: [] } });
+  });
 });
 
 test('[P0] @critical home loads with the primary entry controls', async ({ page }) => {
@@ -59,7 +66,7 @@ test('[P0] @critical prototype project creation reaches the workspace shell', as
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
@@ -86,5 +93,5 @@ async function expectWorkspaceReady(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
 }

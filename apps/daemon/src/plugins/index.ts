@@ -3,6 +3,7 @@
 // and accidentally bypasses the snapshot writer (spec §8.2.1).
 export * from './atoms.js';
 export * from './apply.js';
+export * from './local-source.js';
 export {
   validatePluginFolder,
   flattenValidationDiagnostics,
@@ -99,7 +100,13 @@ export * from './registry.js';
 export * from './scaffold.js';
 export * from './gc.js';
 export * from './resolve-snapshot.js';
+export * from './example-binding.js';
+export * from './scenario-binding.js';
+export * from './strategy-binding.js';
 export * from './snapshots.js';
+export * from './strategy-stage-policy.js';
+export * from './strategy-package.js';
+export * from './strategy-recipe.js';
 export * from './skill-candidates.js';
 export * from './trust.js';
 export * from './until.js';

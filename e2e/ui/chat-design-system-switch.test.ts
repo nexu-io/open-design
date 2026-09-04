@@ -44,6 +44,7 @@ test.beforeEach(async ({ page }) => {
         skillId: null,
         designSystemId: null,
         onboardingCompleted: true,
+        privacyDecisionAt: 1,
         agentModels: {},
       }),
     );
@@ -54,6 +55,7 @@ test.beforeEach(async ({ page }) => {
       json: {
         config: {
           onboardingCompleted: true,
+          privacyDecisionAt: 1,
           agentId: 'mock',
           skillId: null,
           designSystemId: null,
@@ -118,7 +120,7 @@ test('[P1] chat composer switches the project design system mid-chat', async ({ 
   await expect
     .poll(async () => (await fetchCurrentProject(page)).designSystemId)
     .toBe('editorial');
-  await expect(page.getByTestId('project-ds-picker-trigger')).toContainText('Editorial');
+  await expect(page.getByTestId('composer-design-system-trigger')).toHaveAccessibleName('Editorial');
 
   // The regression boundary: send a chat turn and assert the outbound
   // run carries the *switched* design system. If the composer kept
@@ -142,8 +144,7 @@ test('[P1] chat composer switches the project design system mid-chat', async ({ 
 
 async function openDesignSystemPicker(page: Page) {
   const composer = page.getByTestId('chat-composer');
-  await composer.getByTestId('chat-plus-trigger').click();
-  await page.getByTestId('composer-plus-design-system').click();
+  await composer.getByTestId('composer-design-system-trigger').click();
 }
 
 async function createProject(page: Page, projectName: string): Promise<void> {

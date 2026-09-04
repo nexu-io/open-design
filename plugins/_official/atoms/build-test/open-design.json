@@ -8,7 +8,7 @@
   "description": "Run the project's build / typecheck / lint / test commands and emit build.passing + tests.passing signals.",
   "license": "MIT",
   "author": {
-    "name": "Open Design",
+    "name": "OpenDesign",
     "url": "https://github.com/nexu-io"
   },
   "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/atoms/build-test",

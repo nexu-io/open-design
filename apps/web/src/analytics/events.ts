@@ -19,6 +19,7 @@ import type {
   AssistantFeedbackReasonPanelSurfaceViewProps,
   QuestionsFormSurfaceViewProps,
   DeepSeekCampaignModalSurfaceViewProps,
+  GoPlanSunsetModalSurfaceViewProps,
   DeepSeekCampaignBadgeSurfaceViewProps,
   DeepSeekCampaignModelBenefitSurfaceViewProps,
   // ui_click
@@ -79,6 +80,7 @@ import type {
   AmrEntryClickProps,
   PreviewRunStatusSurfaceViewProps,
   DeepSeekCampaignModalClickProps,
+  GoPlanSunsetModalClickProps,
   DeepSeekCampaignBadgeClickProps,
   RunFailedToastSurfaceViewProps,
   RunRecoveryActionSurfaceViewProps,
@@ -110,6 +112,7 @@ import type {
   AssistantFeedbackClickProps,
   AssistantFeedbackReasonClickProps,
   AssistantFeedbackReasonSubmitClickProps,
+  ConversationForkClickProps,
   AssistantFeedbackReasonSubmitProps,
   AssistantFeedbackReasonViewProps,
   SettingsSidebarClickProps,
@@ -134,18 +137,23 @@ import type {
   FileUploadResultProps,
   ContextLinkResultProps,
   SpeakerNotesSaveResultProps,
+  ArtifactEditResultProps,
   ArtifactExportResultProps,
   ArtifactDeployResultProps,
+  ArtifactPublishResultProps,
   SketchSaveResultProps,
   SketchExportResultProps,
   FeedbackSubmitResultProps,
+  ConversationForkResultProps,
   SettingsViewProps,
+  LabsItemToggledProps,
   SettingsCliTestResultProps,
   SettingsByokModelsFetchResultProps,
   SettingsByokTestResultProps,
   SettingsConnectorAuthResultProps,
   ByokPreflightBlockedProps,
   OnboardingClickProps,
+  AgentDetectDiagnosticProps,
   OnboardingRuntimeScanResultProps,
   OnboardingCompleteResultProps,
   OnboardingPromptPrefilledProps,
@@ -179,7 +187,7 @@ import type {
 } from '@open-design/contracts/analytics';
 
 type TrackOptions = { requestId?: string; insertId?: string };
-type Track = (
+export type Track = (
   event: string,
   properties: Record<string, unknown>,
   options?: TrackOptions,
@@ -187,6 +195,15 @@ type Track = (
 
 // Helper: forward a typed payload to the loose `track()` API. Centralized so
 // every call site stays one-line.
+import {
+  EXPERIENCE_SURVEY_ID,
+  EXPERIENCE_SURVEY_IMPROVEMENT_CHOICES,
+  EXPERIENCE_SURVEY_IMPROVEMENT_OTHER,
+  EXPERIENCE_SURVEY_QUESTION_IDS,
+  EXPERIENCE_SURVEY_QUESTION_TEXT,
+  EXPERIENCE_SURVEY_TRIGGER,
+} from './experience-survey-contract';
+
 function send<T extends object>(
   track: Track,
   event: string,
@@ -425,6 +442,13 @@ export function trackDeepSeekCampaignModalSurfaceView(
   send(track, 'surface_view', props);
 }
 
+export function trackGoPlanSunsetModalSurfaceView(
+  track: Track,
+  props: GoPlanSunsetModalSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
 export function trackDeepSeekCampaignBadgeSurfaceView(
   track: Track,
   props: DeepSeekCampaignBadgeSurfaceViewProps,
@@ -442,6 +466,13 @@ export function trackDeepSeekCampaignModelBenefitSurfaceView(
 export function trackDeepSeekCampaignModalClick(
   track: Track,
   props: DeepSeekCampaignModalClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackGoPlanSunsetModalClick(
+  track: Track,
+  props: GoPlanSunsetModalClickProps,
 ): void {
   send(track, 'ui_click', props);
 }
@@ -991,6 +1022,14 @@ export function trackAssistantFeedbackButtonClick(
   send(track, 'ui_click', props);
 }
 
+export function trackConversationForkClick(
+  track: Track,
+  props: ConversationForkClickProps,
+  options?: { requestId?: string },
+): void {
+  send(track, 'ui_click', props, options);
+}
+
 export function trackAssistantFeedbackReasonSubmitClick(
   track: Track,
   props: AssistantFeedbackReasonSubmitClickProps,
@@ -1157,12 +1196,26 @@ export function trackArtifactExportResult(
   send(track, 'artifact_export_result', props, options);
 }
 
+export function trackArtifactEditResult(
+  track: Track,
+  props: ArtifactEditResultProps,
+): void {
+  send(track, 'artifact_edit_result', props);
+}
+
 export function trackArtifactDeployResult(
   track: Track,
   props: ArtifactDeployResultProps,
   options?: { requestId?: string },
 ): void {
   send(track, 'artifact_deploy_result', props, options);
+}
+
+export function trackArtifactPublishResult(
+  track: Track,
+  props: ArtifactPublishResultProps,
+): void {
+  send(track, 'artifact_publish_result', props);
 }
 
 export function trackFileVersionRestoreResult(
@@ -1180,6 +1233,14 @@ export function trackFeedbackSubmitResult(
   send(track, 'feedback_submit_result', props, options);
 }
 
+export function trackConversationForkResult(
+  track: Track,
+  props: ConversationForkResultProps,
+  options?: { requestId?: string },
+): void {
+  send(track, 'conversation_fork_result', props, options);
+}
+
 // ---- Settings view + test/auth result events -----------------------------
 
 export function trackSettingsView(
@@ -1187,6 +1248,19 @@ export function trackSettingsView(
   props: SettingsViewProps,
 ): void {
   send(track, 'settings_view', props);
+}
+
+// ---- Labs ----------------------------------------------------------------
+
+/**
+ * Fires after the preference is persisted, not on click.
+ *
+ * The event asserts "this install now prefers X". A failed write rolls the
+ * switch back, so reporting the click would assert something that is not true
+ * of the machine. Losing the rare failed toggle is the cheaper error.
+ */
+export function trackLabsItemToggled(track: Track, props: LabsItemToggledProps): void {
+  send(track, 'labs_item_toggled', props);
 }
 
 export function trackSettingsCliTestResult(
@@ -1284,6 +1358,13 @@ export function trackOnboardingClick(
   props: OnboardingClickProps,
 ): void {
   send(track, 'ui_click', props);
+}
+
+export function trackAgentDetectDiagnostic(
+  track: Track,
+  props: AgentDetectDiagnosticProps,
+): void {
+  send(track, 'agent_detect_diagnostic', props);
 }
 
 export function trackOnboardingRuntimeScanResult(
@@ -1413,4 +1494,67 @@ export function trackWhatsNewPopupClick(
   props: WhatsNewPopupClickProps,
 ): void {
   send(track, 'ui_click', props);
+}
+
+// ---- experience survey ---------------------------------------------------
+// The experience survey is `type: api` in PostHog: PostHog stores and analyses
+// the responses while `ExperienceSurvey` renders the card. That makes the
+// client responsible for the three reserved event names PostHog's survey
+// analytics reads, which is the only place in this app that emits reserved
+// PostHog events rather than the v2 schema's own.
+
+export function trackExperienceSurveyShown(track: Track): void {
+  send(track, 'survey shown', {
+    $survey_id: EXPERIENCE_SURVEY_ID,
+    trigger: EXPERIENCE_SURVEY_TRIGGER,
+  });
+}
+
+export function trackExperienceSurveyDismissed(track: Track): void {
+  send(track, 'survey dismissed', {
+    $survey_id: EXPERIENCE_SURVEY_ID,
+    trigger: EXPERIENCE_SURVEY_TRIGGER,
+  });
+}
+
+/**
+ * Reports a finished response. A skipped follow-up is omitted rather than sent
+ * as null, so PostHog's per-question response counts stay honest about how
+ * many people actually answered it.
+ */
+export function trackExperienceSurveySent(
+  track: Track,
+  answers: { recommendation: number; improvement?: number; improvementOther?: string },
+): void {
+  const ids = EXPERIENCE_SURVEY_QUESTION_IDS;
+  const text = EXPERIENCE_SURVEY_QUESTION_TEXT;
+  const answered: Array<{ id: string; question: string; response: string | number }> = [];
+  const responses: Record<string, string | number> = {};
+
+  const add = (id: string, question: string, response: string | number) => {
+    answered.push({ id, question, response });
+    responses[`$survey_response_${id}`] = response;
+  };
+
+  add(ids.recommendation, text.recommendation, answers.recommendation);
+  if (typeof answers.improvementOther === 'string') {
+    // PostHog's open-choice convention: the response is what they typed. An
+    // empty field still reports the choice itself, so "none of these fit"
+    // survives instead of looking like the question was skipped.
+    add(
+      ids.improvement,
+      text.improvement,
+      answers.improvementOther.trim() || EXPERIENCE_SURVEY_IMPROVEMENT_OTHER,
+    );
+  } else if (typeof answers.improvement === 'number') {
+    const choice = EXPERIENCE_SURVEY_IMPROVEMENT_CHOICES[answers.improvement];
+    if (choice) add(ids.improvement, text.improvement, choice);
+  }
+
+  send(track, 'survey sent', {
+    $survey_id: EXPERIENCE_SURVEY_ID,
+    trigger: EXPERIENCE_SURVEY_TRIGGER,
+    $survey_questions: answered,
+    ...responses,
+  });
 }

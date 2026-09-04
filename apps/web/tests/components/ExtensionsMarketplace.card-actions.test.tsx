@@ -21,9 +21,11 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { ExtensionsMarketplace } from '../../src/components/PluginsView';
 import { I18nProvider } from '../../src/i18n';
 
+const analyticsTrack = vi.hoisted(() => vi.fn());
+
 vi.mock('../../src/analytics/provider', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/analytics/provider')>();
-  return { ...actual, useAnalytics: () => ({ track: vi.fn() }) };
+  return { ...actual, useAnalytics: () => ({ track: analyticsTrack }) };
 });
 
 const TEAM_CONTEXT = {
@@ -101,6 +103,7 @@ let skills: Array<typeof USER_SKILL>;
 let installResolvers: Array<() => void>;
 let skillDetailFailuresRemaining: number;
 let skillDetailRequests: number;
+let uploadFolderFailureCode: string | null;
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -125,8 +128,19 @@ beforeEach(() => {
   installResolvers = [];
   skillDetailFailuresRemaining = 0;
   skillDetailRequests = 0;
+  uploadFolderFailureCode = null;
+  analyticsTrack.mockClear();
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
+    if (url === '/api/plugins/upload-folder' && uploadFolderFailureCode) {
+      return jsonResponse({
+        ok: false,
+        warnings: [],
+        message: 'Plugin manifest is missing.',
+        errorCode: uploadFolderFailureCode,
+        log: [],
+      }, 400);
+    }
     if (url.startsWith('/api/skills/import')) {
       const body = JSON.parse(String(init?.body ?? '{}')) as { name?: string };
       const imported = { ...USER_SKILL, id: body.name ?? 'imported', name: body.name ?? 'imported' };
@@ -380,6 +394,35 @@ describe('ExtensionsMarketplace card affordances', () => {
 });
 
 describe('ExtensionsMarketplace import', () => {
+  it('tracks the daemon error code when plugin folder upload fails', async () => {
+    uploadFolderFailureCode = 'INVALID_MANIFEST';
+    const { container } = renderMarketplace();
+    await waitFor(() => {
+      expect(container.querySelectorAll('.plugin-marketplace__item').length).toBeGreaterThan(0);
+    });
+
+    fireEvent.click(container.querySelector('.plugin-marketplace__create')!);
+    const folderInput = await waitFor(() =>
+      container.querySelector<HTMLInputElement>('input[webkitdirectory]')!,
+    );
+    const folderFile = new File(['{}'], 'open-design.json', { type: 'application/json' });
+    fireEvent.change(folderInput, { target: { files: [folderFile] } });
+    fireEvent.click(screen.getByTestId('plugin-create-upload-folder'));
+
+    await waitFor(() => {
+      expect(analyticsTrack).toHaveBeenCalledWith(
+        'workspace_resource_action_result',
+        expect.objectContaining({
+          action: 'add',
+          resource_kind: 'expert_plugin',
+          result: 'failed',
+          error_code: 'INVALID_MANIFEST',
+        }),
+        undefined,
+      );
+    });
+  });
+
   it('#132 — a successful plugin URL import keeps workspace authority and reveals the result', async () => {
     workspaceContext = TEAM_CONTEXT;
     const { container } = renderMarketplace();

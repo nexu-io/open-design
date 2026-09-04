@@ -27,6 +27,8 @@ export function ManualEditPanel({
   selectedTarget,
   draft,
   error,
+  canUndo,
+  canRedo,
   busy,
   resetAvailable = false,
   onDraftChange,
@@ -36,6 +38,8 @@ export function ManualEditPanel({
   onCancelDraft,
   onSaveDraft,
   onResetDraft,
+  onUndo,
+  onRedo,
   onExit,
   onApplyPatch,
   onPickImage,
@@ -303,6 +307,26 @@ export function ManualEditPanel({
         <div className="manual-edit-footer">
           <div className="manual-edit-footer-actions">
             <div className="manual-edit-footer-left">
+              <button
+                type="button"
+                className="manual-edit-history-btn"
+                aria-label={t('manualEdit.undo')}
+                title={t('manualEdit.undo')}
+                disabled={busy || !canUndo}
+                onClick={onUndo}
+              >
+                <Icon name="undo" size={15} />
+              </button>
+              <button
+                type="button"
+                className="manual-edit-history-btn"
+                aria-label={t('manualEdit.redo')}
+                title={t('manualEdit.redo')}
+                disabled={busy || !canRedo}
+                onClick={onRedo}
+              >
+                <Icon name="redo" size={15} />
+              </button>
               {targetForInspector ? (
                 <button
                   type="button"

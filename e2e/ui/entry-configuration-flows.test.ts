@@ -57,7 +57,7 @@ const IMAGE_TEMPLATE = {
   source: {
     repo: 'open-design/test-prompts',
     license: 'MIT',
-    author: 'Open Design QA',
+    author: 'OpenDesign QA',
   },
 };
 
@@ -194,6 +194,7 @@ test('[P2] connectors search supports empty results and keyboard-closeable detai
       skillId: null,
       designSystemId: null,
       onboardingCompleted: true,
+      privacyDecisionAt: 1,
       agentModels: {},
       composio: {
         apiKey: '',
@@ -327,7 +328,7 @@ test('[P1] typing a draft replacement Composio key does not trigger global autos
     },
   );
 
-  const replacementInput = settingsDialog.getByPlaceholder('Paste a new key to replace the saved one');
+  const replacementInput = settingsDialog.getByPlaceholder(/new key to replace the saved key/i);
   await replacementInput.fill('cmp-draft-secret-9999');
   await expect(settingsDialog.getByRole('button', { name: 'Save key', exact: true })).toBeEnabled();
 
@@ -389,7 +390,7 @@ async function routeConnectors(page: Page, connectors: typeof CONNECTORS) {
 
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
   await expect(page.getByTestId('home-hero')).toBeVisible({ timeout: T.long });
   await expect(page.getByTestId('home-hero-input')).toBeVisible({ timeout: T.long });
 }

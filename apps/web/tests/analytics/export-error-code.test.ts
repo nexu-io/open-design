@@ -47,8 +47,10 @@ describe('exportErrorCode', () => {
     // reported as that status, which is strictly more attributable than the
     // name of the base Error class.
     expect(exportErrorCode(new Error('export request failed (500)'))).toBe('HTTP_500');
-    // A genuinely signal-free message still falls back to the name.
-    expect(exportErrorCode(new Error('export request failed'))).toBe('Error');
+    // A genuinely signal-free message is now reported as UNCLASSIFIED rather
+    // than as the base class name. See the [P0] case below for why: "Error"
+    // was the largest failure bucket in production and identified nothing.
+    expect(exportErrorCode(new Error('export request failed'))).toBe('UNCLASSIFIED');
   });
 
   it('returns UNKNOWN for non-Error throwables', () => {
@@ -91,9 +93,32 @@ describe('exportErrorCode — non-sidecar failures', () => {
     expect(exportErrorCode(new Error('render service replied 503'))).toBe('HTTP_503');
   });
 
-  it('still yields a usable code for a bare Error', () => {
-    // Cannot do better than the name here, but it must not be empty.
-    expect(exportErrorCode(new Error(''))).toBe('Error');
+  // This used to assert `.toBe('Error')`, treating `err.name` as an acceptable
+  // last resort. Production disagreed: over 14 days, `error_code: "Error"` was
+  // the single largest image-export failure bucket — 148 events across 82
+  // users, 48% of all failures — and it identifies nothing, so none of those
+  // users' failures could be diagnosed. An unclassified failure must say so.
+  it('[P0] never reports the useless literal "Error" for an unclassified failure', () => {
+    expect(exportErrorCode(new Error(''))).toBe('UNCLASSIFIED');
+    expect(exportErrorCode(new Error('something we have no pattern for'))).toBe('UNCLASSIFIED');
     expect(exportErrorCode('a string throw')).toBe('UNKNOWN');
+  });
+
+  // The daemon always classifies its own failures; the web export path used to
+  // drop that code on the floor and keep only the message. When no message
+  // pattern matches, the envelope code is coarse but real, and beats guessing.
+  it('[P0] falls back to the daemon envelope code rather than discarding it', () => {
+    const err = Object.assign(new Error('screenshot render failed'), { code: 'INTERNAL' });
+    expect(exportErrorCode(err)).toBe('ENVELOPE_INTERNAL');
+  });
+
+  it('reports a status carried on the error, not just one found in the message', () => {
+    const err = Object.assign(new Error('screenshot render failed'), { status: 502 });
+    expect(exportErrorCode(err)).toBe('HTTP_502');
+  });
+
+  it('keeps preferring a specific daemon code over the envelope fallback', () => {
+    const err = Object.assign(new Error('whatever'), { code: 'RENDERER_BUSY' });
+    expect(exportErrorCode(err)).toBe('RENDERER_BUSY');
   });
 });

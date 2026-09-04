@@ -6,14 +6,14 @@ import { promisify } from "node:util";
 import { rebuild } from "@electron/rebuild";
 import { createCommandInvocation, createPackageManagerInvocation } from "@open-design/platform";
 
-import { hashJson, hashPath, ToolPackCache } from "../cache.js";
-import type { ToolPackConfig } from "../config.js";
+import { hashJson, hashPath, ToolPackCache } from "../cache/index.js";
+import type { ToolPackConfig } from "../config/index.js";
 import {
   prepareNodePtyRuntime,
   validateNodePtyRuntime,
 } from "../node-pty-runtime.js";
 import { hashPackageSourcePath } from "../package-source-hash.js";
-import { electronBuilderVersionForAppVersion } from "../versions.js";
+import { electronBuilderVersionForAppVersion } from "../versioning/index.js";
 import {
   WIN_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER,
   WIN_PREBUNDLE_ESBUILD_TARGET,
@@ -30,8 +30,7 @@ import {
   renderWinPackagedMainEntry,
   shouldInstallInternalPackageForWinPrebundle,
   shouldUseWinStandalonePrebundle,
-} from "../win-prebundle.js";
-import { processWebSourcemaps } from "../web-sourcemaps.js";
+} from "./prebundle.js";
 import { ensureWorkspaceBuildArtifacts } from "../workspace-build.js";
 import {
   ELECTRON_BUILDER_BUILD_DEPENDENCIES_FROM_SOURCE,
@@ -127,43 +126,12 @@ async function validateWinPackagedAppRuntime(appRoot: string): Promise<string | 
   });
 }
 
-async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
-  const webNextEnvPath = join(config.workspaceRoot, "apps", "web", "next-env.d.ts");
-  const previousWebNextEnv = await readFile(webNextEnvPath, "utf8").catch(() => null);
-
-  await runPnpm(config, ["--filter", "@open-design/release", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/contracts", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/registry-protocol", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/sidecar-proto", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/launcher-proto", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/sidecar", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/platform", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/agui-adapter", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/plugin-runtime", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/download", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/host", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/diagnostics", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/components", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/daemon", "build"]);
-  try {
-    await runPnpm(config, ["--filter", "@open-design/web", "build"], { OD_WEB_OUTPUT_MODE: config.webOutputMode });
-    await runPnpm(config, ["--filter", "@open-design/web", "build:sidecar"]);
-    // Inject chunk IDs + upload browser sourcemaps to PostHog, then strip
-    // .map files before any packaging step copies the web output into the
-    // Electron resources. See `tools/pack/src/web-sourcemaps.ts`.
-    await processWebSourcemaps(config);
-  } finally {
-    if (previousWebNextEnv == null) await rm(webNextEnvPath, { force: true });
-    else await writeFile(webNextEnvPath, previousWebNextEnv, "utf8");
-  }
-  await runPnpm(config, ["--filter", "@open-design/desktop", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/packaged", "build"]);
-}
-
 export async function ensureWinWorkspaceBuild(config: ToolPackConfig, cache: ToolPackCache): Promise<string> {
-  return ensureWorkspaceBuildArtifacts(config, cache, async () => {
-    await buildWorkspaceArtifacts(config);
-  });
+  return ensureWorkspaceBuildArtifacts(
+    config,
+    cache,
+    async (args, extraEnv) => await runPnpm(config, args, extraEnv),
+  );
 }
 
 export async function createWorkspaceTarballsCacheKey(
@@ -418,6 +386,7 @@ export async function createWinPackagedAppCacheKey(
   config: ToolPackConfig,
   tarballsKey: string,
   packedTarballs: PackedTarballInfo[],
+  runtimeDependencies: Readonly<Record<string, string>> = WIN_PREBUNDLE_RUNTIME_DEPENDENCIES,
 ): Promise<string> {
   return hashJson({
     arch: "x64",
@@ -427,7 +396,8 @@ export async function createWinPackagedAppCacheKey(
     packedTarballs,
     platform: "win32",
     prebundle: shouldUseWinStandalonePrebundle(config.webOutputMode),
-    schemaVersion: 3,
+    runtimeDependencies: shouldUseWinStandalonePrebundle(config.webOutputMode) ? runtimeDependencies : null,
+    schemaVersion: 6,
     tarballsKey,
     webOutputMode: config.webOutputMode,
   });

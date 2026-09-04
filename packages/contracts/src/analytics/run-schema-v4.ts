@@ -180,6 +180,7 @@ function timingFromLegacy(legacy: JsonRecord): RunTimingProps {
   const firstVisibleOutputDuration = numberValue(legacy.time_to_first_visible_output_ms);
   const firstArtifactDuration = numberValue(legacy.time_to_first_artifact_ms);
   const generationDuration = numberValue(legacy.generation_duration_ms);
+  const modelActiveDuration = numberValue(legacy.model_active_duration_ms);
   const finalizeDuration = numberValue(legacy.finalize_duration_ms);
   const firstModelEventType = stringValue(legacy.first_model_event_type);
   const collectionStatus = stringValue(legacy.phase_timing_status);
@@ -208,6 +209,9 @@ function timingFromLegacy(legacy: JsonRecord): RunTimingProps {
       : {}),
     ...(generationDuration !== undefined
       ? { generation_duration_ms: generationDuration }
+      : {}),
+    ...(modelActiveDuration !== undefined
+      ? { model_active_duration_ms: modelActiveDuration }
       : {}),
     ...(finalizeDuration !== undefined
       ? { finalize_duration_ms: finalizeDuration }
@@ -281,6 +285,7 @@ function diagnosticsFromLegacy(legacy: JsonRecord): RunDiagnosticsProps | undefi
     launch_preflight_duration_ms: numberValue(legacy.launch_preflight_duration_ms),
     stdin_write_duration_ms: numberValue(legacy.stdin_write_duration_ms),
     runtime_init_to_first_token_ms: numberValue(legacy.runtime_init_to_first_token_ms),
+    runtime_init_to_first_model_response_ms: numberValue(legacy.runtime_init_to_first_model_response_ms),
     spawn_to_first_token_ms: numberValue(legacy.spawn_to_first_token_ms),
     cli_ready_ms: numberValue(legacy.cli_ready_ms),
     session_init_ms: numberValue(legacy.session_init_ms),

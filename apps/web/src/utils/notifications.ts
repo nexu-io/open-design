@@ -1,4 +1,5 @@
 import type { Dict } from '../i18n/types';
+import type { NotificationsConfig } from '../types';
 
 export type SoundId = string;
 
@@ -31,6 +32,7 @@ type NotificationOptionsWithBrowserExtensions = NotificationOptions & {
 let ctx: AudioContext | null = null;
 const activeNotifications = new Set<Notification>();
 const SERVICE_WORKER_URL = '/od-notifications-sw.js';
+const COMPLETION_FEEDBACK_GESTURE_EVENT = 'od:completion-feedback-gesture';
 
 function getCtx(): AudioContext | null {
   if (typeof window === 'undefined') return null;
@@ -146,6 +148,15 @@ export function playSound(id: SoundId): void {
   }
 }
 
+/**
+ * Create/resume the shared AudioContext from a trusted user gesture without
+ * playing a preview. Later task-completion sounds can then run after the
+ * gesture has ended without being rejected by browser autoplay policy.
+ */
+export function prepareCompletionSound(): void {
+  getCtx();
+}
+
 export function previewSuccess(id: SoundId): void {
   playSound(id);
 }
@@ -171,6 +182,49 @@ export async function requestNotificationPermission(): Promise<
   } catch {
     return 'denied';
   }
+}
+
+export interface CompletionFeedbackActivationResult {
+  desktopPermission: NotificationPermission | 'unsupported' | null;
+}
+
+/**
+ * Arm completion feedback until the first real task submission. The submit
+ * surfaces dispatch the event synchronously from their click/keyboard handler,
+ * preserving the trusted gesture required by browser permission/autoplay APIs
+ * without prompting on unrelated app interactions.
+ */
+export function armCompletionFeedbackOnFirstGesture(
+  config: NotificationsConfig,
+  onResult: (result: CompletionFeedbackActivationResult) => void,
+): () => void {
+  if (typeof window === 'undefined') return () => undefined;
+  let armed = true;
+  function dispose() {
+    if (!armed) return;
+    armed = false;
+    window.removeEventListener(COMPLETION_FEEDBACK_GESTURE_EVENT, activate);
+  }
+  function activate() {
+    if (!armed) return;
+    dispose();
+    if (config.soundEnabled) prepareCompletionSound();
+    if (!config.desktopEnabled) {
+      onResult({ desktopPermission: null });
+      return;
+    }
+    void requestNotificationPermission().then((desktopPermission) => {
+      onResult({ desktopPermission });
+    });
+  }
+  window.addEventListener(COMPLETION_FEEDBACK_GESTURE_EVENT, activate);
+  return dispose;
+}
+
+/** Signal a real task submission while still inside its trusted user gesture. */
+export function notifyCompletionFeedbackGesture(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new window.Event(COMPLETION_FEEDBACK_GESTURE_EVENT));
 }
 
 export interface CompletionNotificationOpts {

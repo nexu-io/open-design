@@ -5,7 +5,20 @@ import path from 'node:path';
 import JSZip from 'jszip';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { buildProjectArchive } from '../src/projects.js';
+import {
+  buildProjectArchive,
+  createBatchArchiveStream,
+  createProjectArchiveStream,
+} from '../src/projects.js';
+
+async function collectStream(stream: NodeJS.ReadableStream): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    stream.once('error', reject);
+    stream.once('end', () => resolve(Buffer.concat(chunks)));
+  });
+}
 
 describe('buildProjectArchive', () => {
   let projectsRoot = '';
@@ -37,6 +50,52 @@ describe('buildProjectArchive', () => {
       .map((entry) => entry.name)
       .sort();
     expect(fileEntries).toEqual(['DESIGN-HANDOFF.md', 'DESIGN-MANIFEST.json', 'frames/phone.html', 'index.html', 'src/app.css']);
+  });
+
+  it('exposes a consumable stream with the same archive contents', async () => {
+    const { stream, baseName } = await createProjectArchiveStream(
+      projectsRoot,
+      projectId,
+      'ui-design',
+    );
+    expect(baseName).toBe('ui-design');
+    const zip = await JSZip.loadAsync(await collectStream(stream));
+    const fileEntries = Object.values(zip.files)
+      .filter((entry) => !entry.dir)
+      .map((entry) => entry.name)
+      .sort();
+    expect(fileEntries).toEqual([
+      'DESIGN-HANDOFF.md',
+      'DESIGN-MANIFEST.json',
+      'frames/phone.html',
+      'index.html',
+      'src/app.css',
+    ]);
+  });
+
+  it('streams a validated batch without changing its entry names', async () => {
+    const { stream } = await createBatchArchiveStream(
+      projectsRoot,
+      projectId,
+      ['ui-design/index.html', 'ui-design/src/app.css'],
+    );
+    const zip = await JSZip.loadAsync(await collectStream(stream));
+    expect(
+      Object.values(zip.files)
+        .filter((entry) => !entry.dir)
+        .map((entry) => entry.name)
+        .sort(),
+    ).toEqual(['ui-design/index.html', 'ui-design/src/app.css']);
+  });
+
+  it('rejects an invalid batch before returning a download stream', async () => {
+    await expect(
+      createBatchArchiveStream(
+        projectsRoot,
+        projectId,
+        ['ui-design/index.html', 'missing.html'],
+      ),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 
   it('zips the whole project when no root is given', async () => {

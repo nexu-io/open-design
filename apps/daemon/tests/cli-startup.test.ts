@@ -102,6 +102,8 @@ describe('CLI startup boundaries', () => {
       ...process.env,
       OD_BIND_HOST: '127.0.0.1',
       OD_DATA_DIR: dataDir,
+      POSTHOG_KEY: '',
+      POSTHOG_HOST: '',
       OPEN_DESIGN_VELA_TELEMETRY: 'off',
       OPEN_DESIGN_TELEMETRY_RELAY_URL: '',
       LANGFUSE_PUBLIC_KEY: '',
@@ -169,11 +171,16 @@ describe('CLI startup boundaries', () => {
         const line = await waitForStdoutLine(second, /\[od\] listening on (http:\/\/[^\s]+)/u);
         expect(line).toContain(`127.0.0.1:${port}`);
         await waitFor(() => {
-          const state = JSON.parse(readFileSync(statePath, 'utf8')) as { status?: string };
+          const state = JSON.parse(readFileSync(statePath, 'utf8')) as {
+            status?: string;
+            analyticsRecovery?: { completedAt?: number };
+          };
           const checkDb = new Database(join(dataDir, 'app.sqlite'), { readonly: true });
           try {
             const row = checkDb.prepare(`SELECT run_status AS status FROM messages WHERE id = ?`).get(messageId) as { status?: string } | undefined;
-            return state.status === 'failed' && row?.status === 'failed';
+            return state.status === 'failed'
+              && row?.status === 'failed'
+              && typeof state.analyticsRecovery?.completedAt === 'number';
           } finally {
             checkDb.close();
           }
@@ -276,8 +283,14 @@ describe('CLI startup boundaries', () => {
       const failed = error as { code?: number; stderr?: string };
       const stderr = failed.stderr ?? '';
       expect(failed.code).toBe(3);
-      expect(stderr).toContain('failed to reach daemon');
+      expect(JSON.parse(stderr)).toEqual({
+        error: {
+          code: 'MEDIA_DISPATCHER_UNREACHABLE',
+          message: 'local media dispatcher could not be reached',
+        },
+      });
       expect(stderr).not.toContain('OD_DATA_DIR');
+      expect(stderr).not.toContain('127.0.0.1');
     } finally {
       await chmod(dataDir, 0o700).catch(() => undefined);
       await rm(root, { recursive: true, force: true });

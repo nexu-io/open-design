@@ -1,6 +1,6 @@
 # AI Native Observability Trace Analysis Guide
 
-This document records how to read the new Open Design Langfuse trace shape for
+This document records how to read the new OpenDesign Langfuse trace shape for
 AI Native observability. It is intended for product, engineering, and Agent
 reviewers who need to decide whether an Agent candidate improves quality,
 stability, latency, and cost without weakening user trust.
@@ -89,7 +89,7 @@ it stays available even when a reviewer does not expand individual observations.
 
 The section list is enough to analyze prompt composition, size, truncation, and
 fingerprint changes. It is not a full raw prompt archive. Heavy or sensitive
-content should remain in Open Design object storage and be referenced by
+content should remain in OpenDesign object storage and be referenced by
 `storage_ref`, hash, and retention policy rather than inlining full raw prompt
 text into Langfuse.
 
@@ -282,17 +282,17 @@ references:
 - `sensitivity`
 - `approved_by`
 
-Raw sensitive content belongs in Open Design object storage with access control,
+Raw sensitive content belongs in OpenDesign object storage with access control,
 retention policy, and deletion semantics. Langfuse should remain the
 observability surface, not the source-of-truth storage surface for private
 customer materials.
 
 ## Issue #3733 Compatibility Check
 
-Issue #3733 targets the first durable bridge between Open Design-owned object
+Issue #3733 targets the first durable bridge between OpenDesign-owned object
 references and Langfuse. Its current implementation boundary is intentionally
 narrow: add trace-safe attachment/artifact manifests that can resolve back to
-Open Design-owned project storage today and to a ProjectStorage or
+OpenDesign-owned project storage today and to a ProjectStorage or
 S3-compatible backend later. It does not require full object-storage
 productization, ACL enforcement, quota enforcement, signed download URLs, or
 lifecycle cleanup in the same slice.
@@ -308,7 +308,7 @@ The important scope boundary is:
 | Area | Current branch | Issue #3733 target | Conflict check |
 | --- | --- | --- | --- |
 | Langfuse trace metadata | Adds attachment/artifact manifests, cost diagnostics, tool diagnostics, and prompt stack metadata. | Requires trace-safe manifest metadata behind telemetry gates. | No conflict; current branch implements part of the target. |
-| Storage reference | Emits stable `od://objects/...` references. | Treats `storage_ref` as an Open Design registry reference, future-compatible with ProjectStorage/S3 backends. | No conflict; current refs should remain non-dereferenceable from Langfuse. |
+| Storage reference | Emits stable `od://objects/...` references. | Treats `storage_ref` as an OpenDesign registry reference, future-compatible with ProjectStorage/S3 backends. | No conflict; current refs should remain non-dereferenceable from Langfuse. |
 | Raw content handling | Keeps attachments and artifact bodies out of Langfuse. | Requires privacy tests proving raw bodies, local paths, signed URLs, and credentials are absent. | No conflict; this is the intended privacy boundary. |
 | Actual object storage backend | Not implemented here. Existing project storage remains the source used by the manifest builder. | Full object storage productization is out of scope for #3733, but future-compatible schema is required. | No conflict; this is a remaining backend follow-up, not a blocker. |
 | Governance/accounting fields | Adds retention, access, sensitivity, source, run/project/workspace attribution where available. | Requires defaults for governance and future quota/cost attribution. | No conflict; current branch aligns with the schema direction. |
@@ -316,7 +316,7 @@ The important scope boundary is:
 
 Remaining work for #3733 after this branch:
 
-1. Make the manifest builder resolve through a concrete Open Design object
+1. Make the manifest builder resolve through a concrete OpenDesign object
    registry boundary instead of only best-effort project/run surfaces.
 2. Fill `workspace_id` and `sha256` consistently for every attachment and
    artifact when the backing storage can provide them.
@@ -324,7 +324,7 @@ Remaining work for #3733 after this branch:
    attachment text, artifact body content, local absolute paths, credentials,
    signed URLs, or client-usable upload/download URLs.
 4. Preserve `storage_ref` as a stable, non-secret reference and require any
-   future download or preview access to go through Open Design-controlled
+   future download or preview access to go through OpenDesign-controlled
    authorization.
 5. Decide the first real backend path: local ProjectStorage-compatible registry
    first, then optional S3-compatible object storage once quota, retention, and
@@ -367,7 +367,7 @@ Validated trace results:
 
 ## Current Gaps To Track
 
-1. Store complete raw/redacted prompt payloads in Open Design object storage and
+1. Store complete raw/redacted prompt payloads in OpenDesign object storage and
    add `full_prompt_ref`, `full_prompt_sha256`, `full_prompt_bytes`, and
    `full_prompt_content_policy` to `prompt-build.output`.
 2. Emit retry group and attempt indexes for tool calls.

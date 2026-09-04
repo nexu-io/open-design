@@ -3,8 +3,9 @@
 // First-run guidance trail (home-hero/firstRunGuide.ts).
 //
 // A brand-new user (no projects, fresh storage) gets a sheen pulse on the
-// Prototype type chip; picking any type chip advances the persisted stage
-// so the first example card can pulse next, and the trail never replays.
+// Prototype type chip when no type can be selected automatically; a default
+// type skips that redundant beat so the first example card can pulse next,
+// and the trail never replays.
 // Users with existing projects have the trail completed silently.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -148,7 +149,7 @@ describe('Home first-run guide trail', () => {
     });
   });
 
-  it('carries beat 2 through the static prompt-example fallback', async () => {
+  it('carries a default prototype straight to beat 2 through the static prompt-example fallback', async () => {
     // The chip's default plugin exists (so the chip binds) but nothing
     // matches the example filter — the chip renders static prompt-example
     // cards, and the guide's beat 2 must land on the first of those.
@@ -181,9 +182,6 @@ describe('Home first-run guide trail', () => {
       throw new Error(`unexpected fetch ${url}`);
     }));
     renderHome([]);
-
-    await pickHomeTemplate('prototype');
-    expect(readHomeGuideStage()).toBe('card');
 
     const exampleCards = await screen.findAllByTestId('home-hero-prompt-example');
     await waitFor(

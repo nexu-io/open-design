@@ -407,4 +407,4 @@ Forbidden:
 
 ## Attribution
 
-Aesthetic inspiration drawn from [tw93/kami](https://github.com/tw93/kami) (MIT, © Tw93 and contributors). kami is a Claude skill for typesetting professional documents and slide decks; the tokens, type rules, and "ten invariants" above adapt its print-first design language for use as an Open Design system.
+Aesthetic inspiration drawn from [tw93/kami](https://github.com/tw93/kami) (MIT, © Tw93 and contributors). kami is a Claude skill for typesetting professional documents and slide decks; the tokens, type rules, and "ten invariants" above adapt its print-first design language for use as an OpenDesign system.

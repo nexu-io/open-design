@@ -18,7 +18,7 @@ import { ChatComposer, type ChatComposerHandle } from '../../src/components/Chat
 import { I18nProvider } from '../../src/i18n';
 import type { Locale } from '../../src/i18n/types';
 import type { AppliedPluginSnapshot, ProjectMetadata } from '@open-design/contracts';
-import { composerText, pressEnter, typeAndSettle } from '../helpers/lexical-composer';
+import { composerText, pressEnter, typeAndSettle, typeInComposer } from '../helpers/lexical-composer';
 
 const COMMUNITY_PLUGIN = {
   id: 'community-deck',
@@ -220,7 +220,10 @@ beforeEach(() => {
         headers: { 'content-type': 'application/json' },
       });
     }
-    if (url.includes('/api/plugins/') && url.endsWith('/apply')) {
+    if (
+      url.includes('/api/plugins/')
+      && (url.endsWith('/apply') || url.endsWith('/apply-local'))
+    ) {
       return new Response(JSON.stringify(APPLY_RESULT), {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -408,6 +411,23 @@ describe('ChatComposer context pickers', () => {
 
     await waitFor(() => expect(screen.getByText('没有找到“missing”的结果。')).toBeTruthy());
     expect(screen.queryByText('No results for “missing”.')).toBeNull();
+  });
+
+  it('describes /mcp slash commands as MCP actions instead of pet actions', async () => {
+    renderComposer();
+    await flushMounts();
+
+    await typeAndSettle('/');
+
+    const popover = await screen.findByTestId('slash-popover');
+    const settingsRow = within(popover).getByText('/mcp').closest('button');
+    const mcpRow = within(popover).getByText('/mcp slack').closest('button');
+    expect(settingsRow).toBeTruthy();
+    expect(mcpRow).toBeTruthy();
+    expect(settingsRow?.textContent).toContain('Open MCP server settings or insert a server tool hint.');
+    expect(settingsRow?.textContent).not.toContain('Toggle, adopt, or jump to pet settings.');
+    expect(mcpRow?.textContent).toContain('Open MCP server settings or insert a server tool hint.');
+    expect(mcpRow?.textContent).not.toContain('Toggle, adopt, or jump to pet settings.');
   });
 
   it('lists Design Files first in All and picks the first file with Enter', async () => {
@@ -1026,6 +1046,25 @@ describe('ChatComposer context pickers', () => {
     fireEvent.click(screen.getByLabelText('Remove Deck Builder'));
     await waitFor(() => expect(composerText().trim()).toBe(''));
     expect(screen.queryByTestId('staged-contexts')).toBeNull();
+  });
+
+  it('does not keep a removed @ skill marked active when the mention picker reopens', async () => {
+    renderComposer({ currentSkillId: 'deck-builder' });
+    await flushMounts();
+
+    await typeAndSettle('@deck');
+    await waitFor(() => expect(screen.getByText('Deck Builder')).toBeTruthy());
+    fireEvent.click(screen.getByText('Deck Builder'));
+    await waitFor(() => expect(composerText()).toBe('@Deck Builder '));
+
+    typeInComposer('');
+    await waitFor(() => expect(screen.queryByTestId('staged-contexts')).toBeNull());
+
+    await typeAndSettle('@deck');
+    const picker = await screen.findByTestId('mention-popover');
+    const skill = within(picker).getByRole('option', { name: /Deck Builder/ });
+
+    expect(skill.textContent).not.toContain('Active');
   });
 
   it('shows all matching skills and ranks exact prefix matches first', async () => {

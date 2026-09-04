@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-// Six independent visual/interaction acceptance fixes. Each `it` is scoped to
+// Independent visual/interaction acceptance fixes. Each `it` is scoped to
 // one Feishu acceptance-sheet row and only asserts the rule(s) that row's fix
 // touched, so a regression in one area fails only its own test.
 
@@ -49,7 +49,10 @@ describe('recvpYC6eTaifb — home hero blank space above the title (empty worksp
     expect(ruleValue(centeredHero, 'padding-top')).toBe('var(--spacing-4)');
     // The base (non-centered) tuned offset must stay untouched — this is an
     // override for the centered variant only, not a rewrite of the fold math.
-    expect(ruleValue(baseHero, 'padding')).toBe('240px 0 var(--spacing-4)');
+    // 320a36ac1 retuned that base offset 240px → 96px (输入框整块上移，顶距
+    // 从 446 收到 300); what this case guards is that the centered variant
+    // still overrides whatever the base is, not the base number itself.
+    expect(ruleValue(baseHero, 'padding')).toBe('96px 0 var(--spacing-4)');
     // The centering itself (the other candidate cause) stays intact too.
     const centeredView = cssDeclarations(homeHeroCss, '.home-view--centered');
     expect(ruleValue(centeredView, 'justify-content')).toBe('center');
@@ -131,24 +134,37 @@ describe('recvpZpbZcu4iy — design-file tab bar has no border separating it fro
 
 describe('recvq4iEq1Esno — settings full page swallowed the autosave "Saved" pill', () => {
   it('hides only the close/fullscreen chrome buttons on the full-page presentation, not the autosave pill', () => {
-    // The old rule targeted `.settings-chrome` itself — the shared corner
-    // strip that also contains `.settings-autosave` — so hiding the
-    // close/fullscreen buttons for page mode took the save confirmation
-    // down with them. #6156 re-introduced the bare selector to centre the
-    // pill under the top nav, which is fine: what must never come back is a
-    // page-mode rule that hides the whole strip. Absent is fine too, hence the
-    // tolerant read.
-    let chromeStrip = '';
-    try {
-      chromeStrip = cssDeclarations(mentionHomeCss, '.settings-page-shell .settings-chrome');
-    } catch {
-      chromeStrip = '';
-    }
-    expect(chromeStrip).not.toMatch(/display\s*:\s*none/);
+    // The status now lives outside `.settings-chrome`, so page-mode button
+    // suppression cannot accidentally take the save confirmation with it.
+    const feedbackLayer = cssDeclarations(mentionHomeCss, '.settings-autosave-layer');
+    expect(feedbackLayer).not.toMatch(/display\s*:\s*none/);
 
     // The fix must still hide the buttons that don't belong on a full page
     // (there's a "返回首页" link instead of a floating close/fullscreen pair).
     const hiddenButtons = cssDeclarations(mentionHomeCss, '.settings-page-shell .settings-chrome-btn');
     expect(ruleValue(hiddenButtons, 'display')).toBe('none');
+  });
+});
+
+describe('OPEND-2148 — Settings autosave feedback obscures Local CLI controls', () => {
+  it('keeps autosave feedback in a viewport-level layer below model popovers', () => {
+    const feedbackLayer = cssDeclarations(mentionHomeCss, '.settings-autosave-layer');
+
+    expect(ruleValue(feedbackLayer, 'position')).toBe('fixed');
+    expect(ruleValue(feedbackLayer, 'left')).toBe('50%');
+    // The layer moved from the bottom of the viewport onto the app's top
+    // chrome row. What this ticket guarantees is that passive status keeps
+    // clear of the Local CLI controls in the panel's upper band and stays
+    // under the model picker — not the specific edge it hangs from.
+    expect(ruleValue(feedbackLayer, 'top')).toBe('0');
+    expect(ruleValue(feedbackLayer, 'transform')).toBe('translateX(-50%)');
+    const feedbackZIndex = Number(ruleValue(feedbackLayer, 'z-index'));
+    expect(feedbackZIndex).toBeGreaterThan(1700);
+    expect(feedbackZIndex).toBeLessThan(10500);
+
+    // The feedback copy used to disappear below 720px because it shared the
+    // cramped top-right close/fullscreen strip. A detached feedback layer has
+    // room for the message and must keep it readable on narrow viewports.
+    expect(mentionHomeCss).not.toContain('.settings-autosave.is-saved span');
   });
 });

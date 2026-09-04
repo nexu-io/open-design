@@ -98,6 +98,12 @@ export interface UseProjectCollabOptions {
    */
   workspaceContext?: WorkspaceCollabContext | null;
   workspaceContextLoading?: boolean;
+  /**
+   * Route bootstrap already proved that the local row is only a Team-bound
+   * placeholder. Keep writes and empty-file affordances fail-closed from the
+   * first paint until this hook completes its own status check.
+   */
+  initialMaterializationPending?: boolean;
   /** Injectable for tests. */
   fetch?: typeof fetch;
   baseUrl?: string;
@@ -220,6 +226,8 @@ export interface ProjectCollab {
    * files visible while the first status request is in flight.
    */
   downloadPending: boolean;
+  /** The exact local project tree is not usable as content authority yet. */
+  materializationPending?: boolean;
   reportChange: () => void;
   requestPublish: () => void;
   /** Refresh the presence roster now (hub push-channel consumer). */
@@ -238,9 +246,11 @@ export function resolveProjectWriterAuthority(options: {
   isOwner: boolean;
   knownOwnedByViewer: boolean;
   createdByViewerThisSession: boolean;
+  materializationPending?: boolean;
   syncState: ProjectCollab['syncState'];
 }): ProjectCollab['writerAuthority'] {
   if (options.workspaceReadOnly || options.lostAccessAfterUnshare) return 'denied';
+  if (options.materializationPending) return 'pending';
   if (options.workspaceContextReadOnly) return 'pending';
   // A settled daemon status outranks every provisional browser-side witness.
   // Catalog ownership and same-session creation exist only to bridge the
@@ -426,6 +436,12 @@ export function useProjectCollab(
   const sharedReadOnly =
     unknownStatusReadOnly || (shared && !isOwner) || lostAccessAfterUnshare;
   const viewerOnly = workspaceContextReadOnly || workspaceReadOnly || sharedReadOnly;
+  const materializationPending =
+    collab.awaitingFirstMaterialization
+    || (
+      options.initialMaterializationPending === true
+      && collab.statusPollGeneration === 0
+    );
   const writerAuthority = resolveProjectWriterAuthority({
     workspaceReadOnly,
     workspaceContextReadOnly,
@@ -434,6 +450,7 @@ export function useProjectCollab(
     isOwner,
     knownOwnedByViewer,
     createdByViewerThisSession,
+    materializationPending,
     syncState: collab.syncState,
   });
   // Positive non-owner evidence only — sticky UX (default-collapsed chat) must
@@ -557,7 +574,7 @@ export function useProjectCollab(
   // is still active). `pullTick` is not read directly, but its state bump
   // forces this render to observe the ref cursor written by a successful pull.
   const downloadPending = localFilesAreNotTheContentYet({
-    awaitingFirstMaterialization: collab.awaitingFirstMaterialization,
+    awaitingFirstMaterialization: materializationPending,
     shouldAutoPull,
     transferring: collab.contentTransferState?.status === 'downloading',
     behindPublishedHead:
@@ -579,6 +596,7 @@ export function useProjectCollab(
     ownerDisplayName: collab.ownerDisplayName,
     ownerRole: collab.ownerRole,
     downloadPending,
+    materializationPending,
     reportChange: collab.reportChange,
     requestPublish: collab.requestPublish,
     refreshPresence: collab.refreshPresence,

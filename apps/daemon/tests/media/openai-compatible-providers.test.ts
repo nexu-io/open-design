@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -21,8 +21,6 @@ describe('OpenAI-compatible media providers', () => {
   const realFetch = globalThis.fetch;
   const originalImageRouterKey = process.env.OD_IMAGEROUTER_API_KEY;
   const originalCustomImageKey = process.env.OD_CUSTOM_IMAGE_API_KEY;
-  const originalCodexBin = process.env.CODEX_BIN;
-  const originalCodexHome = process.env.CODEX_HOME;
   const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
   const originalDataDir = process.env.OD_DATA_DIR;
   const originalEnvAliases = process.env.OD_MEDIA_MODEL_ALIASES;
@@ -38,8 +36,6 @@ describe('OpenAI-compatible media providers', () => {
     await mkdir(projectsRoot, { recursive: true });
     delete process.env.OD_IMAGEROUTER_API_KEY;
     delete process.env.OD_CUSTOM_IMAGE_API_KEY;
-    delete process.env.CODEX_BIN;
-    delete process.env.CODEX_HOME;
     delete process.env.OD_MEDIA_CONFIG_DIR;
     delete process.env.OD_DATA_DIR;
     delete process.env.OD_MEDIA_MODEL_ALIASES;
@@ -61,16 +57,6 @@ describe('OpenAI-compatible media providers', () => {
       delete process.env.OD_CUSTOM_IMAGE_API_KEY;
     } else {
       process.env.OD_CUSTOM_IMAGE_API_KEY = originalCustomImageKey;
-    }
-    if (originalCodexBin == null) {
-      delete process.env.CODEX_BIN;
-    } else {
-      process.env.CODEX_BIN = originalCodexBin;
-    }
-    if (originalCodexHome == null) {
-      delete process.env.CODEX_HOME;
-    } else {
-      process.env.CODEX_HOME = originalCodexHome;
     }
     if (originalMediaConfigDir == null) {
       delete process.env.OD_MEDIA_CONFIG_DIR;
@@ -106,71 +92,6 @@ describe('OpenAI-compatible media providers', () => {
     const file = path.join(projectRoot, '.od', 'media-config.json');
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, JSON.stringify(data), 'utf8');
-  }
-
-  async function writeCodexAuth(codexHome: string, data: unknown) {
-    await mkdir(codexHome, { recursive: true });
-    await writeFile(path.join(codexHome, 'auth.json'), JSON.stringify(data), 'utf8');
-  }
-
-  async function installFakeCodex(
-    codexHome: string,
-    threadId: string,
-    options: {
-      expectedConfigIncludes?: string;
-      expectedConfigExcludes?: string;
-      expectedArgsIncludes?: string;
-      expectedArgsExcludes?: string;
-      outputFileName?: string;
-    } = {},
-  ) {
-    const codexBin = path.join(root, `${threadId}.mjs`);
-    await writeFile(codexBin, `#!/usr/bin/env node
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
-
-const pngBase64 = '${PNG_BASE64}';
-const expectedConfigIncludes = ${JSON.stringify(options.expectedConfigIncludes ?? '')};
-const expectedConfigExcludes = ${JSON.stringify(options.expectedConfigExcludes ?? '')};
-const expectedArgsIncludes = ${JSON.stringify(options.expectedArgsIncludes ?? '')};
-const expectedArgsExcludes = ${JSON.stringify(options.expectedArgsExcludes ?? '')};
-const outputFileName = ${JSON.stringify(options.outputFileName ?? 'ig_0001.png')};
-const args = process.argv.slice(2);
-const addDirIndex = args.indexOf('--add-dir');
-const generatedRoot = addDirIndex >= 0 ? args[addDirIndex + 1] : '';
-let stdin = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => { stdin += chunk; });
-process.stdin.on('end', () => {
-  if (expectedConfigIncludes || expectedConfigExcludes) {
-    const config = readFileSync(path.join(process.env.CODEX_HOME || '', 'config.toml'), 'utf8');
-    if (expectedConfigIncludes && !config.includes(expectedConfigIncludes)) {
-      process.stderr.write('expected normalized config to include ' + expectedConfigIncludes);
-      process.exit(8);
-    }
-    if (expectedConfigExcludes && config.includes(expectedConfigExcludes)) {
-      process.stderr.write('expected normalized config to exclude ' + expectedConfigExcludes);
-      process.exit(9);
-    }
-  }
-  if (expectedArgsIncludes && !args.includes(expectedArgsIncludes)) {
-    process.stderr.write('expected args to include ' + expectedArgsIncludes);
-    process.exit(10);
-  }
-  if (expectedArgsExcludes && args.some((arg) => arg.includes(expectedArgsExcludes))) {
-    process.stderr.write('expected args to exclude ' + expectedArgsExcludes);
-    process.exit(11);
-  }
-  if (!stdin.includes('$imagegen') || !generatedRoot) process.exit(7);
-  const outDir = path.join(generatedRoot, '${threadId}');
-  mkdirSync(outDir, { recursive: true });
-  writeFileSync(path.join(outDir, outputFileName), Buffer.from(pngBase64, 'base64'));
-  process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: '${threadId}' }) + '\\n');
-});
-`, 'utf8');
-    await chmod(codexBin, 0o755);
-    process.env.CODEX_BIN = codexBin;
-    process.env.CODEX_HOME = codexHome;
   }
 
   it('renders custom /v1/images/generations providers with configured base URL and model', async () => {
@@ -300,13 +221,13 @@ process.stdin.on('end', () => {
       if (String(input) === 'https://images.example.test/v1/images/generations') {
         expect(init?.dispatcher).toBe(dispatcher);
         return new Response(JSON.stringify({
-          data: [{ url: 'https://cdn.example.test/generated.png' }],
+          data: [{ url: 'https://93.184.216.34/generated.png' }],
         }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
       }
-      expect(String(input)).toBe('https://cdn.example.test/generated.png');
+      expect(String(input)).toBe('https://93.184.216.34/generated.png');
       expect(init?.dispatcher).toBe(dispatcher);
       return new Response(Buffer.from(PNG_BASE64, 'base64'));
     });
@@ -341,13 +262,13 @@ process.stdin.on('end', () => {
       if (String(input) === 'https://images.example.test/v1/images/generations') {
         submitCalls += 1;
         return new Response(JSON.stringify({
-          data: [{ url: 'https://cdn.example.test/generated.png' }],
+          data: [{ url: 'https://93.184.216.34/generated.png' }],
         }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
       }
-      expect(String(input)).toBe('https://cdn.example.test/generated.png');
+      expect(String(input)).toBe('https://93.184.216.34/generated.png');
       return new Response('temporarily unavailable', { status: 503 });
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -608,166 +529,7 @@ process.stdin.on('end', () => {
     expect(bytes.length).toBeGreaterThan(0);
   });
 
-  it('routes default gpt-image-2 through Codex when a subscription login is available', async () => {
-    const generatedHome = path.join(root, 'subscription-codex-home');
-    await writeCodexAuth(generatedHome, {
-      auth_mode: 'chatgpt',
-      OPENAI_API_KEY: null,
-    });
-    await installFakeCodex(generatedHome, 'subscription-codex-thread');
-
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-
-    const result = await generateMedia({
-      projectRoot,
-      projectsRoot,
-      projectId: 'project-1',
-      surface: 'image',
-      model: 'gpt-image-2',
-      prompt: 'A compact green app icon with a folded page motif',
-      output: 'subscription-default.png',
-    });
-
-    expect(result.providerId).toBe('codex');
-    expect(result.providerNote).toContain('codex/gpt-image-2');
-    expect(fetchMock).not.toHaveBeenCalled();
-    const bytes = await readFile(path.join(projectsRoot, 'project-1', 'subscription-default.png'));
-    expect(bytes.length).toBeGreaterThan(0);
-  });
-
-  it('ingests call-prefixed Codex subscription image output', async () => {
-    const generatedHome = path.join(root, 'call-prefixed-codex-home');
-    await writeCodexAuth(generatedHome, {
-      auth_mode: 'chatgpt',
-      OPENAI_API_KEY: null,
-    });
-    await installFakeCodex(generatedHome, 'call-prefixed-codex-thread', {
-      outputFileName: 'call_Er2KDML8Fof5QcOXdSovI85V.png',
-    });
-
-    const result = await generateMedia({
-      projectRoot,
-      projectsRoot,
-      projectId: 'project-1',
-      surface: 'image',
-      model: 'gpt-image-2',
-      prompt: 'A compact purple cat icon',
-      output: 'call-prefixed.png',
-    });
-
-    expect(result.providerId).toBe('codex');
-    const bytes = await readFile(path.join(projectsRoot, 'project-1', 'call-prefixed.png'));
-    expect(bytes.length).toBeGreaterThan(0);
-  });
-
-  it('ignores unrelated image files in the Codex generated thread directory', async () => {
-    const generatedHome = path.join(root, 'unrelated-image-codex-home');
-    await writeCodexAuth(generatedHome, {
-      auth_mode: 'chatgpt',
-      OPENAI_API_KEY: null,
-    });
-    await installFakeCodex(generatedHome, 'unrelated-image-codex-thread', {
-      outputFileName: 'preview.png',
-    });
-
-    await expect(generateMedia({
-      projectRoot,
-      projectsRoot,
-      projectId: 'project-1',
-      surface: 'image',
-      model: 'gpt-image-2',
-      prompt: 'A compact purple cat icon',
-      output: 'unrelated-image.png',
-    })).rejects.toThrow(/did not write an ig_\* or call_\* image/i);
-  });
-
-  it('prefers the Codex subscription path for gpt-image-2 even when an OpenAI key is configured', async () => {
-    const generatedHome = path.join(root, 'subscription-before-api-codex-home');
-    await writeCodexAuth(generatedHome, {
-      tokens: { access_token: 'codex-oauth-token' },
-    });
-    await installFakeCodex(generatedHome, 'subscription-before-api-thread');
-    process.env.OPENAI_API_KEY = 'sk-openai-test-key';
-
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-
-    const result = await generateMedia({
-      projectRoot,
-      projectsRoot,
-      projectId: 'project-1',
-      surface: 'image',
-      model: 'gpt-image-2',
-      prompt: 'A compact green app icon with a folded page motif',
-      output: 'subscription-before-api.png',
-    });
-
-    expect(result.providerId).toBe('codex');
-    expect(result.providerNote).toContain('codex/gpt-image-2');
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('removes stale Codex service_tier before subscription image generation', async () => {
-    const generatedHome = path.join(root, 'stale-tier-codex-home');
-    await writeCodexAuth(generatedHome, {
-      auth_mode: 'chatgpt',
-      OPENAI_API_KEY: null,
-    });
-    await writeFile(
-      path.join(generatedHome, 'config.toml'),
-      `[model]\nservice_tier = "default"\nmodel = "gpt-5.5"\n`,
-      'utf8',
-    );
-    await installFakeCodex(generatedHome, 'stale-tier-codex-thread', {
-      // The invalid service_tier line is removed entirely (Codex falls back to
-      // its built-in default tier), so the key is gone and the rest remains.
-      expectedConfigIncludes: 'model = "gpt-5.5"',
-      expectedConfigExcludes: 'service_tier',
-      expectedArgsExcludes: 'default_permissions',
-    });
-
-    const result = await generateMedia({
-      projectRoot,
-      projectsRoot,
-      projectId: 'project-1',
-      surface: 'image',
-      model: 'gpt-image-2',
-      prompt: 'A compact green app icon with a folded page motif',
-      output: 'subscription-stale-tier.png',
-    });
-
-    expect(result.providerId).toBe('codex');
-    const after = await readFile(path.join(generatedHome, 'config.toml'), 'utf8');
-    expect(after).not.toContain('service_tier');
-    expect(after).not.toContain('"default"');
-    expect(after).toContain('model = "gpt-5.5"');
-  });
-
-  it('does not reroute OpenAI image models without a Codex twin', async () => {
-    const generatedHome = path.join(root, 'dalle-subscription-codex-home');
-    await writeCodexAuth(generatedHome, {
-      auth_mode: 'chatgpt',
-    });
-    process.env.CODEX_HOME = generatedHome;
-
-    await expect(generateMedia({
-      projectRoot,
-      projectsRoot,
-      projectId: 'project-1',
-      surface: 'image',
-      model: 'dall-e-3',
-      prompt: 'A product render on white seamless paper',
-      output: 'dalle.png',
-    })).rejects.toThrow(/codex-gpt-image-2/);
-  });
-
   it('keeps aliased gpt-image-2 on the explicit OpenAI API path', async () => {
-    const generatedHome = path.join(root, 'aliased-subscription-codex-home');
-    await writeCodexAuth(generatedHome, {
-      auth_mode: 'chatgpt',
-    });
-    process.env.CODEX_HOME = generatedHome;
     process.env.OPENAI_API_KEY = 'sk-openai-test-key';
     process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
       'gpt-image-2': 'custom-gpt-image-2-deployment',
@@ -807,280 +569,4 @@ process.stdin.on('end', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('renders Codex subscription images through the local Codex CLI', async () => {
-    const generatedHome = path.join(root, 'codex-home');
-    const codexBin = path.join(root, 'fake-codex.mjs');
-    await writeFile(codexBin, `#!/usr/bin/env node
-import { mkdirSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
-
-const pngBase64 = '${PNG_BASE64}';
-const args = process.argv.slice(2);
-const addDirIndex = args.indexOf('--add-dir');
-const generatedRoot = addDirIndex >= 0 ? args[addDirIndex + 1] : '';
-let stdin = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => { stdin += chunk; });
-process.stdin.on('end', () => {
-  if (!stdin.includes('$imagegen') || !generatedRoot) process.exit(7);
-  const threadId = 'codex-thread-test';
-  const outDir = path.join(generatedRoot, threadId);
-  mkdirSync(outDir, { recursive: true });
-  writeFileSync(path.join(outDir, 'ig_0001.png'), Buffer.from(pngBase64, 'base64'));
-  process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: threadId }) + '\\n');
-  process.stdout.write(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 4, output_tokens: 2 } }) + '\\n');
-});
-`, 'utf8');
-    await chmod(codexBin, 0o755);
-    process.env.CODEX_BIN = codexBin;
-    process.env.CODEX_HOME = generatedHome;
-
-    const result = await generateMedia({
-      projectRoot,
-      projectsRoot,
-      projectId: 'project-1',
-      surface: 'image',
-      model: 'codex-gpt-image-2',
-      prompt: 'A compact green app icon with a folded page motif',
-      output: 'codex.png',
-    });
-
-    expect(result.providerId).toBe('codex');
-    expect(result.providerNote).toContain('codex/gpt-image-2');
-    const bytes = await readFile(path.join(projectsRoot, 'project-1', 'codex.png'));
-    expect(bytes.length).toBeGreaterThan(0);
-  });
-
-  it('reports Codex preview-only imagegen output without leaking ENOENT', async () => {
-    const generatedHome = path.join(root, 'preview-only-codex-home');
-    const codexBin = path.join(root, 'preview-only-codex.mjs');
-    await writeFile(codexBin, `#!/usr/bin/env node
-let stdin = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => { stdin += chunk; });
-process.stdin.on('end', () => {
-  if (!stdin.includes('$imagegen')) process.exit(7);
-  process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: 'preview-only-thread' }) + '\\n');
-  process.stdout.write(JSON.stringify({
-    type: 'item.completed',
-    item: {
-      type: 'agent_message',
-      text: 'This is preview-only, so I generated it without saving a file to the project.'
-    }
-  }) + '\\n');
-  process.stdout.write(JSON.stringify({ type: 'turn.completed' }) + '\\n');
-});
-`, 'utf8');
-    await chmod(codexBin, 0o755);
-    process.env.CODEX_BIN = codexBin;
-    process.env.CODEX_HOME = generatedHome;
-
-    await expect(generateMedia({
-      projectRoot,
-      projectsRoot,
-      projectId: 'project-1',
-      surface: 'image',
-      model: 'codex-gpt-image-2',
-      prompt: 'A compact green app icon with a folded page motif',
-      output: 'codex-preview-only.png',
-    })).rejects.toThrow(/Codex imagegen completed in preview-only mode/i);
-  });
-
-  it('uses app-config Codex CLI env overrides for subscription image generation', async () => {
-    const dataDir = path.join(root, 'app-data');
-    const generatedHome = path.join(root, 'configured-codex-home');
-    const codexBin = path.join(root, 'configured-codex.mjs');
-    const wrongCodexBin = path.join(root, 'wrong-codex.mjs');
-    await mkdir(dataDir, { recursive: true });
-    await writeFile(path.join(dataDir, 'app-config.json'), JSON.stringify({
-      agentCliEnv: {
-        codex: {
-          CODEX_BIN: codexBin,
-          CODEX_HOME: generatedHome,
-        },
-      },
-    }), 'utf8');
-    await writeFile(wrongCodexBin, `#!/usr/bin/env node
-process.stderr.write('wrong codex bin used');
-process.exit(17);
-`, 'utf8');
-    await chmod(wrongCodexBin, 0o755);
-    await writeFile(codexBin, `#!/usr/bin/env node
-import { mkdirSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
-
-const pngBase64 = '${PNG_BASE64}';
-const expectedHome = ${JSON.stringify(generatedHome)};
-const args = process.argv.slice(2);
-const addDirIndex = args.indexOf('--add-dir');
-const generatedRoot = addDirIndex >= 0 ? args[addDirIndex + 1] : '';
-if (process.env.CODEX_HOME !== expectedHome) {
-  process.stderr.write('CODEX_HOME override was not forwarded');
-  process.exit(18);
-}
-if (!generatedRoot.startsWith(path.join(expectedHome, 'generated_images'))) {
-  process.stderr.write('generated root did not use configured CODEX_HOME');
-  process.exit(19);
-}
-let stdin = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => { stdin += chunk; });
-process.stdin.on('end', () => {
-  if (!stdin.includes('$imagegen') || !generatedRoot) process.exit(20);
-  const threadId = 'configured-codex-thread';
-  const outDir = path.join(generatedRoot, threadId);
-  mkdirSync(outDir, { recursive: true });
-  writeFileSync(path.join(outDir, 'ig_0001.png'), Buffer.from(pngBase64, 'base64'));
-  process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: threadId }) + '\\n');
-});
-`, 'utf8');
-    await chmod(codexBin, 0o755);
-    process.env.OD_DATA_DIR = dataDir;
-    process.env.CODEX_BIN = wrongCodexBin;
-    process.env.CODEX_HOME = path.join(root, 'wrong-codex-home');
-
-    const result = await generateMedia({
-      projectRoot,
-      projectsRoot,
-      projectId: 'project-1',
-      surface: 'image',
-      model: 'codex-gpt-image-2',
-      prompt: 'A compact green app icon with a folded page motif',
-      output: 'codex-configured.png',
-    });
-
-    expect(result.providerId).toBe('codex');
-    expect(result.providerNote).toContain('codex/gpt-image-2');
-    const bytes = await readFile(path.join(projectsRoot, 'project-1', 'codex-configured.png'));
-    expect(bytes.length).toBeGreaterThan(0);
-  });
-
-  it('uses default app-config Codex CLI env overrides when OD_DATA_DIR is absent', async () => {
-    const dataDir = path.join(projectRoot, '.od');
-    const generatedHome = path.join(root, 'default-codex-home');
-    const codexBin = path.join(root, 'default-codex.mjs');
-    const wrongCodexBin = path.join(root, 'wrong-default-codex.mjs');
-    await mkdir(dataDir, { recursive: true });
-    await writeFile(path.join(dataDir, 'app-config.json'), JSON.stringify({
-      agentCliEnv: {
-        codex: {
-          CODEX_BIN: codexBin,
-          CODEX_HOME: generatedHome,
-        },
-      },
-    }), 'utf8');
-    await writeFile(wrongCodexBin, `#!/usr/bin/env node
-process.stderr.write('wrong codex bin used without OD_DATA_DIR');
-process.exit(24);
-`, 'utf8');
-    await chmod(wrongCodexBin, 0o755);
-    await writeFile(codexBin, `#!/usr/bin/env node
-import { mkdirSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
-
-const pngBase64 = '${PNG_BASE64}';
-const expectedHome = ${JSON.stringify(generatedHome)};
-const args = process.argv.slice(2);
-const addDirIndex = args.indexOf('--add-dir');
-const generatedRoot = addDirIndex >= 0 ? args[addDirIndex + 1] : '';
-if (process.env.CODEX_HOME !== expectedHome) {
-  process.stderr.write('default CODEX_HOME override was not forwarded');
-  process.exit(25);
-}
-let stdin = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => { stdin += chunk; });
-process.stdin.on('end', () => {
-  if (!stdin.includes('$imagegen') || !generatedRoot) process.exit(26);
-  const threadId = 'default-codex-thread';
-  const outDir = path.join(generatedRoot, threadId);
-  mkdirSync(outDir, { recursive: true });
-  writeFileSync(path.join(outDir, 'ig_0001.png'), Buffer.from(pngBase64, 'base64'));
-  process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: threadId }) + '\\n');
-});
-`, 'utf8');
-    await chmod(codexBin, 0o755);
-    delete process.env.OD_DATA_DIR;
-    process.env.CODEX_BIN = wrongCodexBin;
-    process.env.CODEX_HOME = path.join(root, 'wrong-default-codex-home');
-
-    const result = await generateMedia({
-      projectRoot,
-      projectsRoot,
-      projectId: 'project-1',
-      surface: 'image',
-      model: 'codex-gpt-image-2',
-      prompt: 'A compact green app icon with a folded page motif',
-      output: 'codex-default-config.png',
-    });
-
-    expect(result.providerId).toBe('codex');
-    expect(result.providerNote).toContain('codex/gpt-image-2');
-    const bytes = await readFile(path.join(projectsRoot, 'project-1', 'codex-default-config.png'));
-    expect(bytes.length).toBeGreaterThan(0);
-  });
-
-  it('preserves Codex custom gateway credentials for subscription image generation', async () => {
-    const dataDir = path.join(root, 'app-data');
-    const generatedHome = path.join(root, 'gateway-codex-home');
-    const codexBin = path.join(root, 'gateway-codex.mjs');
-    const gatewayUrl = 'https://gateway.example.test/v1';
-    await mkdir(dataDir, { recursive: true });
-    await writeFile(path.join(dataDir, 'app-config.json'), JSON.stringify({
-      agentCliEnv: {
-        codex: {
-          CODEX_BIN: codexBin,
-          CODEX_HOME: generatedHome,
-          OPENAI_BASE_URL: gatewayUrl,
-          OPENAI_API_KEY: 'gateway-openai-key',
-        },
-      },
-    }), 'utf8');
-    await writeFile(codexBin, `#!/usr/bin/env node
-import { mkdirSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
-
-const pngBase64 = '${PNG_BASE64}';
-const expectedBaseUrl = ${JSON.stringify(gatewayUrl)};
-const args = process.argv.slice(2);
-const addDirIndex = args.indexOf('--add-dir');
-const generatedRoot = addDirIndex >= 0 ? args[addDirIndex + 1] : '';
-if (process.env.OPENAI_BASE_URL !== expectedBaseUrl) {
-  process.stderr.write('OPENAI_BASE_URL override was not forwarded');
-  process.exit(21);
-}
-if (process.env.OPENAI_API_KEY !== 'gateway-openai-key') {
-  process.stderr.write('OPENAI_API_KEY was not preserved for custom gateway');
-  process.exit(22);
-}
-let stdin = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => { stdin += chunk; });
-process.stdin.on('end', () => {
-  if (!stdin.includes('$imagegen') || !generatedRoot) process.exit(23);
-  const threadId = 'gateway-codex-thread';
-  const outDir = path.join(generatedRoot, threadId);
-  mkdirSync(outDir, { recursive: true });
-  writeFileSync(path.join(outDir, 'ig_0001.png'), Buffer.from(pngBase64, 'base64'));
-  process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: threadId }) + '\\n');
-});
-`, 'utf8');
-    await chmod(codexBin, 0o755);
-    process.env.OD_DATA_DIR = dataDir;
-
-    const result = await generateMedia({
-      projectRoot,
-      projectsRoot,
-      projectId: 'project-1',
-      surface: 'image',
-      model: 'codex-gpt-image-2',
-      prompt: 'A compact green app icon with a folded page motif',
-      output: 'codex-gateway.png',
-    });
-
-    expect(result.providerId).toBe('codex');
-    expect(result.providerNote).toContain('codex/gpt-image-2');
-    const bytes = await readFile(path.join(projectsRoot, 'project-1', 'codex-gateway.png'));
-    expect(bytes.length).toBeGreaterThan(0);
-  });
 });

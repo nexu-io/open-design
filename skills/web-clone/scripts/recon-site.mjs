@@ -5,7 +5,10 @@ import { loadPlaywright, launchChromium } from "./lib/playwright-loader.mjs";
 
 function usage() {
   console.log(`Usage:
-  node scripts/recon-site.mjs --url <url> --out <RECON dir> [--label original|clone] [--widths 1440,768,390] [--wait 1200]
+  node scripts/recon-site.mjs --url <url> --out <RECON dir> [--label original|clone] [--widths 1440,768,390] [--wait 1200] [--navigation-timeout 45000]
+
+  --wait is an extra post-navigation stabilization delay. It does not change
+  the navigation timeout; use --navigation-timeout for that.
 
 Outputs:
   <out>/<label>-recon.json
@@ -21,6 +24,7 @@ function parseArgs(argv) {
     label: "site",
     widths: [1440, 768, 390],
     waitMs: 1200,
+    navigationTimeoutMs: 45000,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -30,6 +34,7 @@ function parseArgs(argv) {
     else if (arg === "--label") out.label = argv[++i] || "site";
     else if (arg === "--widths") out.widths = (argv[++i] || "").split(",").map((n) => Number(n.trim())).filter(Boolean);
     else if (arg === "--wait") out.waitMs = Number(argv[++i] || "1200");
+    else if (arg === "--navigation-timeout") out.navigationTimeoutMs = Number(argv[++i] || "45000");
     else throw new Error(`Unexpected argument: ${arg}`);
   }
   return out;
@@ -57,6 +62,7 @@ function writeSummary(file, data) {
     `- Link count: ${first.counts?.links ?? 0}`,
     `- Console errors: ${data.console.errors.length}`,
     `- Page errors: ${data.console.pageErrors.length}`,
+    `- Recovered navigation timeouts: ${(data.navigation || []).filter((entry) => entry.recovered).length}`,
     "",
     "## Palette (computed — 复刻必须照抄这些值，不许目测)",
     ...Object.entries(first.palette || {})
@@ -75,6 +81,33 @@ function writeSummary(file, data) {
     "",
   ];
   fs.writeFileSync(file, lines.join("\n"));
+}
+
+async function navigateForRecon(page, url, timeout) {
+  try {
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout });
+    return { recovered: false, url: page.url(), readyState: await page.evaluate(() => document.readyState) };
+  } catch (error) {
+    const state = await page.evaluate(() => ({
+      url: location.href,
+      readyState: document.readyState,
+      hasDocument: Boolean(document.documentElement),
+      hasBody: Boolean(document.body),
+      bodyTextChars: (document.body?.innerText || "").length,
+    })).catch(() => null);
+    const isTimeout = error?.name === "TimeoutError" || /timeout/i.test(error?.message || "");
+    const hasUsableDocument = state?.hasDocument
+      && state.hasBody
+      && /^https?:/i.test(state.url);
+    if (!isTimeout || !hasUsableDocument) throw error;
+    return {
+      recovered: true,
+      url: state.url,
+      readyState: state.readyState,
+      bodyTextChars: state.bodyTextChars,
+      warning: `Navigation did not reach DOMContentLoaded within ${timeout}ms; continuing with the committed document.`,
+    };
+  }
 }
 
 async function collectSignals(page) {
@@ -300,6 +333,7 @@ async function scrollThroughPage(page, stepPx = 700) {
   await page.waitForTimeout(600);
 }
 
+let browser = null;
 try {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || !args.url) {
@@ -313,8 +347,9 @@ try {
   fs.mkdirSync(screenshotsDir, { recursive: true });
 
   const consoleState = { errors: [], warnings: [], pageErrors: [] };
-  const browser = await launchChromium(chromium);
+  browser = await launchChromium(chromium);
   const captures = [];
+  const navigation = [];
 
   for (const width of args.widths) {
     const page = await browser.newPage({ viewport: { width, height: 900 }, deviceScaleFactor: 1 });
@@ -327,7 +362,9 @@ try {
       consoleState.pageErrors.push({ message: error.message, viewport: width });
     });
 
-    await page.goto(args.url, { waitUntil: "domcontentloaded", timeout: 45000 });
+    const navigationState = await navigateForRecon(page, args.url, args.navigationTimeoutMs);
+    navigation.push({ viewport: width, ...navigationState });
+    if (navigationState.warning) console.warn(`recon-site warning (${width}px): ${navigationState.warning}`);
     await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
     if (args.waitMs > 0) await page.waitForTimeout(args.waitMs);
     await scrollThroughPage(page);
@@ -345,12 +382,14 @@ try {
   }
 
   await browser.close();
+  browser = null;
 
   const result = {
     label: args.label,
     url: args.url,
     capturedAt: new Date().toISOString(),
     console: consoleState,
+    navigation,
     captures,
   };
   const jsonFile = path.join(outDir, `${args.label}-recon.json`);
@@ -359,5 +398,7 @@ try {
   console.log(jsonFile);
 } catch (error) {
   console.error(`recon-site failed: ${error.message}`);
-  process.exit(1);
+  process.exitCode = 1;
+} finally {
+  await browser?.close().catch(() => {});
 }

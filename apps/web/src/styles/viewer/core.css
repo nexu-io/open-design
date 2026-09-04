@@ -412,9 +412,6 @@
   background: var(--bg-muted);
   color: var(--text);
 }
-.artifact-tool-menu-item .palette-tweaks-badge {
-  margin-left: auto;
-}
 /* Preview-only controls: keep layout stable across modes.
    When inactive, reserve the same horizontal slot but fully disable interaction. */
 .viewer-preview-controls {
@@ -1307,6 +1304,22 @@
   visibility: hidden;
   pointer-events: none;
 }
+/* Manual Edit hands ownership between the canonical URL document and its
+   bridge-enabled srcDoc twin. Keep the outgoing frame painted until the
+   incoming frame reports its exact document revision ready. `opacity: 0`
+   still lets Chromium lay out and paint the standby document, unlike
+   `visibility: hidden`, which previously stranded reveal animations. */
+.artifact-preview-transport-stack iframe[data-od-handoff-visible='true'] {
+  visibility: visible;
+  pointer-events: none;
+  z-index: 1;
+}
+.artifact-preview-transport-stack iframe[data-od-handoff-pending='true'] {
+  visibility: visible;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2;
+}
 /* First-ever URL-load of an artifact: the iframe's own navigation can queue
    behind heavy same-origin traffic (e.g. drafts-grid cover iframes), which
    otherwise reads as a dead white pane. Sits above both transport iframes
@@ -1723,6 +1736,23 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.comment-popover-view-all {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.25;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.comment-popover-view-all:hover {
+  color: var(--text);
+}
 .comment-popover-drag-handle {
   flex: 0 0 auto;
   display: inline-flex;
@@ -2109,6 +2139,16 @@
   align-items: center;
   gap: 6px;
   flex: 0 0 auto;
+}
+/* Select-all sits on its own row UNDER the header divider (per product), so
+   the header keeps just the title and the close control. */
+.comment-side-toolbar {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  /* No bottom inset: the 16px gap down to the first comment is owned by the
+     list's own top padding, so the two never stack into a 22px+ gutter. */
+  padding: 6px 8px 0;
 }
 .comment-side-select-all {
   border: 0;

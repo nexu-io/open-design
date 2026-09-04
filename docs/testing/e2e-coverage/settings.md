@@ -4,11 +4,11 @@
 
 - Execution mode 页面
 - Memory 页面
-- Automations / Orbit 页面
+- Orbit 内部组件契约（当前无产品入口）
 - Language 页面
 - Pets 页面
 - Integrations 的 Skills 标签页
-- Settings 的 Design systems 页面
+- Design systems 内部组件契约（当前无 Settings 入口）
 - API protocol 迁移与切换回归
 - 国际化内容注册完整性
 
@@ -17,7 +17,6 @@
 - `e2e/ui/settings-api-protocol.test.ts`
 - `e2e/ui/settings-media-providers.test.ts`
 - `e2e/ui/settings-memory-routines.test.ts`
-- `e2e/ui/settings-design-systems.test.ts`
 - `e2e/tests/localized-content.test.ts`
 - `apps/web/tests/components/App.connectors.test.tsx`
 - `apps/web/tests/components/App.mediaProviders.test.tsx`
@@ -82,7 +81,7 @@
 | SET-046 | Language 页面不依赖全局保存按钮；语言切换即时生效，关闭 Settings 也不会回滚已应用 locale | `SettingsDialog.execution.test.tsx` |
 | SET-047 | 多语言内容资源可通过翻译字典或英文 fallback 渲染为非空 skill、design system、prompt template 展示内容 | `localized-content.test.ts` |
 | SET-048 | Design system category、prompt template category 和 tag 在缺少 locale 字典项时回退到源值，已有字典项仍可本地化 | `localized-content.test.ts` |
-| SET-049 | Notifications 默认以 `offline` 展示；开启 completion sound 后才会显示成功/失败音选择器，并立即试听默认成功音 | `SettingsDialog.execution.test.tsx` |
+| SET-049 | Notifications 默认启用 completion sound 和桌面通知，并直接展示成功/失败音选择器；用户仍可分别关闭两个开关 | `SettingsDialog.execution.test.tsx` |
 | SET-050 | Notifications 支持切换 success / failure sound，并把声音选择保存到通知配置 | `SettingsDialog.execution.test.tsx` |
 | SET-051 | Desktop notification 在授权成功后会切为 `active`，支持发送测试通知并展示发送结果文案 | `SettingsDialog.execution.test.tsx` |
 | SET-052 | Desktop notification 在权限被拒绝时，会保持禁用并展示浏览器阻止提示，不显示测试按钮 | `SettingsDialog.execution.test.tsx` |
@@ -98,7 +97,7 @@
 | SET-062 | Community 标签页的 hatch prompt 会带上当前 concept，支持复制到剪贴板并展示 `Copied!` 反馈 | `SettingsDialog.execution.test.tsx` |
 | SET-063 | Integrations 的 Skills 标签页展示 functional skills，支持按 type/category 筛选并结合搜索缩小结果 | `SettingsDialog.execution.test.tsx`, `SkillsSection.test.tsx` |
 | SET-064 | Integrations 的 Skills 标签页支持展开详情，并可通过 toggle 把 skill 加入 `disabledSkills` 保存 | `SettingsDialog.execution.test.tsx`, `SkillsSection.test.tsx` |
-| SET-065 | Settings 的独立 Design systems 页面支持按 category 筛选、展开详情，并保存 `disabledDesignSystems` | `SettingsDialog.execution.test.tsx`, `DesignSystemsSection.test.tsx` |
+| SET-065 | 无 Settings 入口的 Design systems 内部组件支持按 category 筛选、展开详情，并保存 `disabledDesignSystems` | `SettingsDialog.execution.test.tsx`, `DesignSystemsSection.test.tsx` |
 | SET-066 | Integrations 的 Skills 标签页在筛选或搜索无匹配时展示空结果提示 | `SettingsDialog.execution.test.tsx` |
 | SET-067 | About 页面会正确展示 `Version / Channel / Runtime / Platform / Architecture` 五项只读版本信息 | `SettingsDialog.execution.test.tsx` |
 | SET-068 | About 页面在 `appVersionInfo` 缺失时，会展示版本信息不可用的降级空态 | `SettingsDialog.execution.test.tsx` |
@@ -107,17 +106,15 @@
 | SET-071 | BYOK 页面 `Test` 按钮只有必填字段可用后才允许测试，并会展示 provider 连接测试结果 | `SettingsDialog.execution.test.tsx` |
 | SET-072 | Local CLI 页面 `Test` 按钮会使用当前选中的已安装 agent 发起连接测试，并展示 agent 响应结果 | `SettingsDialog.execution.test.tsx` |
 | SET-073 | Appearance 支持 preset accent color 和自定义色值，切换时实时预览并自动保存 `accentColor` | `SettingsDialog.execution.test.tsx` |
-| SET-074 | Orbit 页面在没有可用 connector 时锁定 Run / 开关 / 时间 / 模板控件，并通过 gate CTA 跳转到 Connectors | `SettingsDialog.orbit.test.tsx` |
-| SET-075 | Orbit 页面在 connector 可用后支持切换 daily summary、修改 run time、切换 prompt template，并自动保存 schedule 配置 | `SettingsDialog.orbit.test.tsx` |
-| SET-076 | Orbit 页面展示最近一次运行收据、统计计数、live artifact 入口，并支持复制 markdown 结果 | `SettingsDialog.orbit.test.tsx` |
+| SET-074 | 无产品入口的 Orbit 内部组件在没有可用 connector 时锁定 Run / 开关 / 时间 / 模板控件，并通过 gate CTA 跳转到 Connectors | `SettingsDialog.orbit.test.tsx` |
+| SET-075 | 无产品入口的 Orbit 内部组件在 connector 可用后支持切换 daily summary、修改 run time、切换 prompt template，并自动保存 schedule 配置 | `SettingsDialog.orbit.test.tsx` |
+| SET-076 | 无产品入口的 Orbit 内部组件展示最近一次运行收据、统计计数、live artifact 入口，并支持复制 markdown 结果 | `SettingsDialog.orbit.test.tsx` |
 | SET-077 | Memory 页面默认展示新的三分区 source tabs：`Add manually / Learn from chats / Import from apps`，并保留手动新增入口 | `settings-memory-routines.test.ts` |
 | SET-078 | Memory 页面会展示 `Saved memory` 统计、type filters、extractions 管理按钮和 `Memory tree` 结构摘要 | `settings-memory-routines.test.ts`, `MemorySection.test.tsx` |
 | SET-079 | 手动新建 memory 后，条目会立即出现，并在关闭后重开设置时继续可见 | `settings-memory-routines.test.ts`, `MemorySection.test.tsx` |
 | SET-080 | 关闭 memory injection 后，会展示 disabled banner，并在重开设置时保持关闭状态 | `settings-memory-routines.test.ts`, `MemorySection.test.tsx` |
 | SET-081 | `Learn from chats` 开关会持久化 `chatExtractionEnabled`，重开 Memory 页面后保持一致 | `settings-memory-routines.test.ts`, `MemorySection.test.tsx` |
 | SET-082 | 手动创建 memory 失败时，编辑器保持打开，用户已输入内容不会丢失 | `settings-memory-routines.test.ts`, `MemorySection.test.tsx` |
-| SET-083 | Automations 主页面支持创建 automation、Run now，并在列表内展示最近一次运行入口 | `settings-memory-routines.test.ts` |
-| SET-084 | Automations 创建失败时，modal 保持打开并回显错误，不会误写入列表 | `settings-memory-routines.test.ts` |
 | SET-085 | `Import from apps` 页面支持通过 `Manage` 跳到 `Connectors`，并在重开后保留 connector authorization pending 状态 | `settings-memory-routines.test.ts`, `MemorySection.test.tsx` |
 | SET-086 | `Import from apps` 支持 connected app 的选择、扫描、失败诊断、`Suggested memories` 保存，以及 `Saved memory` extraction 的 `Refresh / Clear` 管理 | `settings-memory-routines.test.ts`, `MemorySection.test.tsx` |
 | SET-087 | `Import from apps` 支持 connector OAuth 完成后的回流：pending app 会在授权回调后变成 connected，并可立即继续扫描生成 suggested memories | `settings-memory-routines.test.ts` |
