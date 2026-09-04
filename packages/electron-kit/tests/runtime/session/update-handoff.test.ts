@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { observeElectronInstallerHandoff } from "@/runtime/session/update-handoff.js";
+import { observeElectronInstallerHandoff, resolveElectronInstallerRecovery } from "@/runtime/session/update-handoff.js";
 
 const handedOff = {
   schemaVersion: 3 as const,
@@ -26,6 +26,26 @@ const handedOff = {
 };
 
 describe("Electron installer handoff observation", () => {
+  it("resumes installer arming when the current Shell is still the old identity", async () => {
+    const confirmInstalled = vi.fn(async () => ({ outcome: "blocked" as const, snapshot: handedOff }));
+    await expect(resolveElectronInstallerRecovery({
+      shell: { type: "electron", version: "0.0.9", buildHash: "c".repeat(64), digest: "d".repeat(64) },
+      updater: { readSnapshot: async () => handedOff, confirmInstalled },
+    })).resolves.toMatchObject({ state: "arm-and-quit", request: { handoff: handedOff.handoff, installAttemptId: handedOff.installAttemptId } });
+    expect(confirmInstalled).toHaveBeenCalledOnce();
+  });
+
+  it("continues startup after the exact replacement Shell confirms installation", async () => {
+    const installed = { ...handedOff, revision: 7, state: "installed" as const, actions: [] };
+    await expect(resolveElectronInstallerRecovery({
+      shell: { ...handedOff.handoff.shell, digest: "d".repeat(64) },
+      updater: {
+        readSnapshot: async () => handedOff,
+        confirmInstalled: async () => ({ outcome: "accepted", snapshot: installed }),
+      },
+    })).resolves.toEqual({ state: "continue", snapshot: installed });
+  });
+
   it("hands an applying transition to the Shell-owned guarded continuation", async () => {
     const onHandoff = vi.fn(async () => undefined);
     await observeElectronInstallerHandoff({

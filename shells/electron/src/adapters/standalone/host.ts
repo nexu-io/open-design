@@ -168,7 +168,7 @@ class ElectronStandaloneHostRuntime {
     const pending: PendingStart = Object.freeze({
       bindingDigest: request.binding.digest,
       run: () => {
-        task ??= this.lifecycle.start(request.generation, request.attachment, request.binding, request.attachmentCapability);
+        task ??= this.#startLifecycle(request);
         return task;
       },
     });
@@ -199,6 +199,24 @@ class ElectronStandaloneHostRuntime {
     } finally {
       this.#pending.delete(request.attachment.id);
     }
+  }
+
+  async #startLifecycle(request: Extract<ReturnType<typeof validateElectronStandaloneControlRequest>, { operation: "lifecycle.start" }>) {
+    const updater = await this.updater.readSnapshot();
+    if (updater.state === "installed" && updater.installAttemptId != null) {
+      const transition = await this.lifecycle.beginTransition("shell-install", { attemptId: updater.installAttemptId, force: true });
+      if (transition.state === "acquired" && transition.transition.phase === "stopped-sealed") {
+        return await this.lifecycle.completeTransitionStart(
+          transition.transition.token,
+          transition.transition.fence,
+          request.generation,
+          request.attachment,
+          request.binding,
+        );
+      }
+      if (transition.state === "acquired") await this.lifecycle.releaseTransition(transition.transition.token, transition.transition.fence);
+    }
+    return await this.lifecycle.start(request.generation, request.attachment, request.binding, request.attachmentCapability);
   }
 
   #bodyHandle(request: StandaloneHandoffRequest): StandaloneRuntimeHandle {

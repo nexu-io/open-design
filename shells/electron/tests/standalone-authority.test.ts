@@ -162,6 +162,31 @@ describe("Electron production Standalone authority", () => {
       expect(await updaterLedger.read()).toMatchObject({ state: "handed-off", installAttemptId });
       expect(await new ElectronStandaloneInstallerClaimLedger(join(runtimeRoot, "standalone-store"), { channel: manifest.channel, namespace: manifest.namespace }).read())
         .toMatchObject({ state: "armed", bindingDigest: prepared.binding.digest, generationId: prepared.generation.id, installAttemptId });
+
+      const replacementManifest: ElectronShellManifest = {
+        ...manifest,
+        version: handoff.shell.version,
+        shell: { ...handoff.shell, digest: "d".repeat(64) },
+      };
+      const replacementAuthority = createElectronStandaloneAuthorityFactory(replacementManifest, physicalResources)({
+        officialNodeExecutablePath: process.execPath,
+        resourceRoot: root,
+        runtimeRoot,
+      });
+      const replacement = await replacementAuthority.prepare({
+        correlationId: "replacement-authority-test",
+        releaseVersion: replacementManifest.version,
+        scope: { channel: replacementManifest.channel, namespace: replacementManifest.namespace },
+        shell: replacementManifest.shell,
+      });
+      expect(await replacement.updater.confirmInstalled(replacementManifest.shell))
+        .toMatchObject({ outcome: "accepted", snapshot: { state: "installed", installAttemptId } });
+      const replacementHandle = await replacement.start({
+        attachment: { id: "electron-replacement", shell: replacementManifest.shell },
+        capabilities: { async invoke(request) { return { requestId: request.requestId, attachmentId: request.attachmentId, bindingDigest: request.bindingDigest, outcome: "unsupported" }; } },
+      });
+      expect(await replacementHandle.readStatus()).toMatchObject({ state: "running", generationId: replacement.generation.id, bindingDigest: replacement.binding.digest });
+      await replacementHandle.close();
     } finally {
       if (stamp != null) {
         const stopped = await stopSidecar(stamp, { termGraceMs: 1_000, killGraceMs: 1_000 });

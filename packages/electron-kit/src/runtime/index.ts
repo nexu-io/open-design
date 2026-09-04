@@ -31,7 +31,7 @@ import {
   findElectronProtocolUrl,
   parseElectronInstallerReplacementData,
 } from "./session/single-instance.js";
-import { observeElectronInstallerHandoff } from "./session/update-handoff.js";
+import { observeElectronInstallerHandoff, resolveElectronInstallerRecovery } from "./session/update-handoff.js";
 import { applyElectronMacRuntimePolicy } from "../platform/macos/index.js";
 import { ensureOfficialNodeCarrier, OfficialNodeCarrierError, type OfficialNodeCarrierReceipt } from "./startup/carrier/index.js";
 import {
@@ -283,7 +283,23 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
         generation = preparedRuntime.generation;
         generationBinding = preparedRuntime.binding;
         startupSignal = context.startup!.bind(generationBinding.digest);
-        updaterRevisionAtStart = (await preparedRuntime.updater.readSnapshot()).revision;
+        const installerRecovery = await resolveElectronInstallerRecovery({ shell: manifest.shell, updater: preparedRuntime.updater });
+        if (installerRecovery.state === "arm-and-quit") {
+            if (definition.actions?.installUpdate == null) throw new Error("Electron Shell cannot recover its pending installer handoff");
+            const receipt = await preparedRuntime.armShellInstallation({
+              request: {
+                ...installerRecovery.request,
+                nodeExecutablePath: carrier.executablePath,
+                parentPid: process.pid,
+                runtimeRoot,
+              },
+              install: definition.actions.installUpdate,
+            });
+            context.log?.write("installer.recovered", { installAttemptId: receipt.installAttemptId });
+            app.quit();
+            return;
+        }
+        updaterRevisionAtStart = installerRecovery.snapshot.revision;
       },
       [ELECTRON_WARMUP_ATOMS.AWAIT_STANDALONE_READY]: async () => {
         if (preparedRuntime == null || generation == null || generationBinding == null) {
