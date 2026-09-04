@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { build as bundle } from "esbuild";
 
@@ -145,6 +145,7 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     schemaVersion: 1,
     operation: "electron.scene.build",
     ...standaloneBinding,
+    authorityResources: [...authorityResourceNames].sort(),
     products,
   }, null, 2)}\n`, "utf8");
   const sceneManifestSha256 = createHash("sha256")
@@ -167,4 +168,51 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
   };
   await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
   return receipt;
+}
+
+/** Rehydrate a path-bearing receipt from one immutable, path-neutral scene. */
+export async function loadElectronScene(sceneRootInput: string, expectedManifestSha256: string): Promise<ElectronSceneReceipt> {
+  const sceneRoot = resolve(sceneRootInput);
+  const sceneManifestPath = join(sceneRoot, "scene.json");
+  const manifestBytes = await readFile(sceneManifestPath);
+  if (!/^[a-f0-9]{64}$/u.test(expectedManifestSha256) || createHash("sha256").update(manifestBytes).digest("hex") !== expectedManifestSha256) {
+    throw new Error("Electron scene manifest failed binding verification");
+  }
+  const manifest = JSON.parse(manifestBytes.toString("utf8")) as { schemaVersion?: unknown; operation?: unknown; products?: unknown; authorityResources?: unknown };
+  if (manifest.schemaVersion !== 1 || manifest.operation !== "electron.scene.build" || !Array.isArray(manifest.products) || !Array.isArray(manifest.authorityResources)) {
+    throw new Error("Electron scene manifest is invalid");
+  }
+  const products = new Map<string, Readonly<{ name: string; sha256: string; size: number }>>();
+  for (const value of manifest.products) {
+    if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error("Electron scene product is invalid");
+    const product = value as { name?: unknown; sha256?: unknown; size?: unknown };
+    if (typeof product.name !== "string" || !sceneResourceName.test(product.name) || products.has(product.name)
+      || typeof product.sha256 !== "string" || !/^[a-f0-9]{64}$/u.test(product.sha256)
+      || !Number.isSafeInteger(product.size) || (product.size as number) < 1) throw new Error("Electron scene product is invalid");
+    const actual = await describeSceneProduct(sceneRoot, product.name);
+    if (actual.sha256 !== product.sha256 || actual.size !== product.size) throw new Error(`Electron scene product failed binding verification: ${product.name}`);
+    products.set(product.name, actual);
+  }
+  const authorityNames = manifest.authorityResources;
+  if (authorityNames.some((name) => typeof name !== "string" || !products.has(name)) || new Set(authorityNames).size !== authorityNames.length) {
+    throw new Error("Electron scene authority resource index is invalid");
+  }
+  const product = (name: string) => {
+    if (!products.has(name)) throw new Error(`Electron scene lacks required product ${name}`);
+    return join(sceneRoot, name);
+  };
+  return Object.freeze({
+    schemaVersion: 1,
+    operation: "electron.scene.build",
+    sceneRoot,
+    sceneManifestPath,
+    sceneManifestSha256: expectedManifestSha256,
+    receiptPath: join(dirname(sceneRoot), "scene-receipt.json"),
+    mainPath: product("main.cjs"),
+    rendererPreloadPath: product("renderer-mount-preload.cjs"),
+    shellManifestPath: product("shell.json"),
+    nodeCarrierLockPath: product("node-lock.json"),
+    runtimeConfigPath: product("runtime.json"),
+    authorityResources: Object.freeze(authorityNames.map((name) => Object.freeze({ ...products.get(name)!, path: join(sceneRoot, name) }))),
+  });
 }

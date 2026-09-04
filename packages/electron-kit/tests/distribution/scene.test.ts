@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { assembleElectronScene } from "@/distribution/index.js";
+import { assembleElectronScene, loadElectronScene } from "@/distribution/index.js";
 
 const roots: string[] = [];
 
@@ -79,6 +79,7 @@ describe("Electron scene", () => {
     expect(JSON.parse(scene)).toMatchObject({
       schemaVersion: 1,
       operation: "electron.scene.build",
+      authorityResources: ["closure.mjs", "standalone-host.cjs", "standalone-launcher.mjs"],
       target: "darwin-arm64",
       shellVersion: "1.2.3",
       shellBuildHash: "a".repeat(64),
@@ -98,6 +99,8 @@ describe("Electron scene", () => {
       path: join(paths.outputRoot, "standalone-host.cjs"),
       sha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
     })]));
+    await expect(loadElectronScene(paths.outputRoot, receipt.sceneManifestSha256)).resolves.toEqual(receipt);
+    await expect(loadElectronScene(paths.outputRoot, "f".repeat(64))).rejects.toThrow("binding verification");
   });
 
   it("rejects path-like, reserved and duplicate authority resource names", async () => {

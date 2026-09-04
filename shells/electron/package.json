@@ -15,6 +15,7 @@
   ],
   "scripts": {
     "dev": "node ./scripts/dev.mjs",
+    "exact:distribution": "node ./scripts/exact-distribution.ts",
     "exact:scene": "node ./scripts/exact-scene.ts",
     "prepack": "node ./scripts/pack.mjs",
     "pack": "node ./scripts/pack.mjs",

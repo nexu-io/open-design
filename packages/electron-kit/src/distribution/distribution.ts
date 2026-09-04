@@ -26,6 +26,7 @@ export type BuildElectronDistributionInput = Readonly<{
   policy: ElectronDistributionPolicy;
   windowsLifecycle: ElectronWindowsLifecyclePolicy;
   outputRoot: string;
+  additionalResources?: readonly Readonly<{ name: string; path: string }>[];
 }>;
 
 export async function buildElectronDistribution(input: BuildElectronDistributionInput): Promise<ElectronDistributionReceipt> {
@@ -42,6 +43,13 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
   const scratchRoot = platform === "win" ? await mkdtemp(join(tmpdir(), "electron-kit-nsis-")) : null;
   const windowsNsisIncludePath = scratchRoot == null ? undefined : join(scratchRoot, "installer.nsh");
   let built: string[];
+  const existingResourceNames = new Set(input.scene.authorityResources.map(({ name }) => name));
+  const additionalResources = input.additionalResources ?? [];
+  for (const resource of additionalResources) {
+    if (!/^[a-z][a-z0-9.-]{0,127}$/u.test(resource.name) || existingResourceNames.has(resource.name)) throw new Error(`invalid or duplicate Electron distribution resource: ${resource.name}`);
+    existingResourceNames.add(resource.name);
+    await access(resource.path);
+  }
   try {
     if (windowsNsisIncludePath != null) {
       await writeElectronWindowsNsisInclude({
@@ -61,7 +69,7 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
           windowsLifecycle,
           windowsNsisIncludePath,
         }),
-        extraResources: input.scene.authorityResources.map((resource) => ({
+        extraResources: [...input.scene.authorityResources, ...additionalResources].map((resource) => ({
           from: resource.path,
           to: resource.name,
         })),
