@@ -221,7 +221,6 @@ export interface ManualEditDragEndMessage {
   type: 'od-edit-drag-end';
   id: string;
 }
-}
 
 export type ManualEditBridgeMessage =
   | ManualEditTargetMessage
