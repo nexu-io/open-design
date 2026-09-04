@@ -1064,8 +1064,9 @@ describe('chat run service shutdown', () => {
       createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
       shutdownGraceMs: 10,
       ttlMs: 60_000,
-      beforeFinish: ((run: any, status: string) => {
+      beforeFinish: ((run: any, status: string, _code: unknown, _signal: unknown, terminalAt: number) => {
         observed.push(`before:${status}:${run.status}`);
+        observed.push(`terminal:${terminalAt}`);
         run.strategyTask = { outcome: 'canceled', terminal: true };
       }) as unknown as null,
     });
@@ -1074,7 +1075,10 @@ describe('chat run service shutdown', () => {
 
     await runs.shutdownActive({ graceMs: 10 });
 
-    expect(observed).toEqual(['before:canceled:running']);
+    expect(observed).toEqual([
+      'before:canceled:running',
+      `terminal:${run.terminalAt}`,
+    ]);
     expect(run.events.at(-1)).toMatchObject({
       event: 'end',
       data: {

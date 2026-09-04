@@ -40,6 +40,7 @@ describe('deliverable syntax finalization', () => {
         repairableCheckCount: 1,
         initialDiagnosticCount: 1,
         latestDiagnosticCount: 1,
+        firstRepairableAtMs: 100,
       },
       monotonicNow: (() => {
         const values = [100, 107];
@@ -57,6 +58,9 @@ describe('deliverable syntax finalization', () => {
           repairableCheckCount: 1,
           initialDiagnosticCount: 1,
           latestDiagnosticCount: 0,
+          firstRepairableAtMs: 100,
+          repairPassedAtMs: 123,
+          repairWindowDurationMs: 23,
         },
       },
     });

@@ -15,10 +15,19 @@ export function recordDeliverableSyntaxCheck(input: {
   previous?: DeliverableSyntaxMetrics;
   result: DeliverableSyntaxCheckResult;
   durationMs: number;
+  checkedAtMs: number;
 }): DeliverableSyntaxMetrics {
   const previous = input.previous;
   const diagnosticCount = input.result.diagnostics.length;
   const repairable = input.result.status === 'repairable';
+  const firstRepairableAtMs = previous?.firstRepairableAtMs
+    ?? (repairable ? finiteNonNegative(input.checkedAtMs) : undefined);
+  const repairPassedAtMs = previous?.repairPassedAtMs
+    ?? (
+      input.result.status === 'pass' && firstRepairableAtMs !== undefined
+        ? finiteNonNegative(input.checkedAtMs)
+        : undefined
+    );
   return {
     schema: DELIVERABLE_SYNTAX_METRICS_SCHEMA,
     checkCount: (previous?.checkCount ?? 0) + 1,
@@ -33,5 +42,34 @@ export function recordDeliverableSyntaxCheck(input: {
           ? diagnosticCount
           : 0,
     latestDiagnosticCount: diagnosticCount,
+    ...(firstRepairableAtMs !== undefined ? { firstRepairableAtMs } : {}),
+    ...(repairPassedAtMs !== undefined ? { repairPassedAtMs } : {}),
+    ...(firstRepairableAtMs !== undefined && repairPassedAtMs !== undefined
+      ? {
+          repairWindowDurationMs: Math.max(
+            0,
+            repairPassedAtMs - firstRepairableAtMs,
+          ),
+        }
+      : {}),
+    ...(previous?.repairToDeliveryDurationMs !== undefined
+      ? { repairToDeliveryDurationMs: previous.repairToDeliveryDurationMs }
+      : {}),
+  };
+}
+
+/** Freeze the repair-to-terminal window at the physical Run terminal boundary. */
+export function recordDeliverableSyntaxDelivery(input: {
+  previous: DeliverableSyntaxMetrics;
+  terminalAtMs: number;
+}): DeliverableSyntaxMetrics {
+  const firstRepairableAtMs = input.previous.firstRepairableAtMs;
+  if (firstRepairableAtMs === undefined) return input.previous;
+  return {
+    ...input.previous,
+    repairToDeliveryDurationMs: Math.max(
+      0,
+      finiteNonNegative(input.terminalAtMs) - firstRepairableAtMs,
+    ),
   };
 }

@@ -884,6 +884,9 @@ export function deliverableSyntaxFlatMetadata(
     deliverable_syntax_checked_file_count: syntax.checkedFileCount,
     deliverable_syntax_check_count: syntax.checkCount,
     deliverable_syntax_checker_duration_ms: syntax.checkerDurationMs,
+    deliverable_syntax_repair_window_duration_ms: syntax.repairWindowDurationMs,
+    deliverable_syntax_repair_to_delivery_duration_ms:
+      syntax.repairToDeliveryDurationMs,
     deliverable_syntax_repairable_check_count: syntax.repairableCheckCount,
     deliverable_syntax_initial_diagnostic_count: syntax.initialDiagnosticCount,
     deliverable_syntax_latest_diagnostic_count: syntax.latestDiagnosticCount,
@@ -911,6 +914,14 @@ export function taskDeliverableSyntaxTelemetry(
   const durations = syntaxes.flatMap((syntax) => (
     syntax.checkerDurationMs === null ? [] : [syntax.checkerDurationMs]
   ));
+  const repairWindowDurations = syntaxes.flatMap((syntax) => (
+    syntax.repairWindowDurationMs === null ? [] : [syntax.repairWindowDurationMs]
+  ));
+  const repairToDeliveryDurations = syntaxes.flatMap((syntax) => (
+    syntax.repairToDeliveryDurationMs === null
+      ? []
+      : [syntax.repairToDeliveryDurationMs]
+  ));
   const initialDiagnostics = syntaxes.flatMap((syntax) => (
     syntax.initialDiagnosticCount === null ? [] : [syntax.initialDiagnosticCount]
   ));
@@ -925,6 +936,12 @@ export function taskDeliverableSyntaxTelemetry(
     checkCount: syntaxes.reduce((sum, syntax) => sum + syntax.checkCount, 0),
     checkerDurationMs: durations.length > 0
       ? durations.reduce((sum, duration) => sum + duration, 0)
+      : null,
+    repairWindowDurationMs: repairWindowDurations.length > 0
+      ? repairWindowDurations.reduce((sum, duration) => sum + duration, 0)
+      : null,
+    repairToDeliveryDurationMs: repairToDeliveryDurations.length > 0
+      ? repairToDeliveryDurations.reduce((sum, duration) => sum + duration, 0)
       : null,
     repairableCheckCount: syntaxes.reduce(
       (sum, syntax) => sum + syntax.repairableCheckCount,

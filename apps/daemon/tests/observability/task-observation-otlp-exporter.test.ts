@@ -444,6 +444,8 @@ describe('task observation OTLP exporter', () => {
       checkedFileCount: 1,
       checkCount: 3,
       checkerDurationMs: 16,
+      repairWindowDurationMs: 650,
+      repairToDeliveryDurationMs: 900,
       repairableCheckCount: 2,
       initialDiagnosticCount: 1,
       latestDiagnosticCount: 0,
@@ -459,6 +461,8 @@ describe('task observation OTLP exporter', () => {
     const legacyTrace = legacyEventFor(legacy, source.root.observationId);
     expect(legacyTrace.body.metadata).toMatchObject({
       deliverable_syntax_checker_duration_ms: 16,
+      deliverable_syntax_repair_window_duration_ms: 650,
+      deliverable_syntax_repair_to_delivery_duration_ms: 900,
       deliverable_syntax_repair_outcome: 'repaired',
       deliverable_syntax_recovered_delivery_count: 1,
     });

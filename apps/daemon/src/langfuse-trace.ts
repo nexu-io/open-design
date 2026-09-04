@@ -2104,6 +2104,10 @@ export function buildTracePayload(
     deliverable_syntax_checked_file_count: ctx.deliverableSyntax?.checkedFileCount,
     deliverable_syntax_check_count: ctx.deliverableSyntax?.checkCount,
     deliverable_syntax_checker_duration_ms: ctx.deliverableSyntax?.checkerDurationMs,
+    deliverable_syntax_repair_window_duration_ms:
+      ctx.deliverableSyntax?.repairWindowDurationMs,
+    deliverable_syntax_repair_to_delivery_duration_ms:
+      ctx.deliverableSyntax?.repairToDeliveryDurationMs,
     deliverable_syntax_repairable_check_count:
       ctx.deliverableSyntax?.repairableCheckCount,
     deliverable_syntax_initial_diagnostic_count:

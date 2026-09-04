@@ -685,6 +685,8 @@ export const SafeDeliverableSyntaxTelemetryV1Schema = z.object({
   checkedFileCount: z.number().int().nonnegative(),
   checkCount: z.number().int().nonnegative(),
   checkerDurationMs: z.number().nonnegative().nullable(),
+  repairWindowDurationMs: z.number().nonnegative().nullable(),
+  repairToDeliveryDurationMs: z.number().nonnegative().nullable(),
   repairableCheckCount: z.number().int().nonnegative(),
   initialDiagnosticCount: z.number().int().nonnegative().nullable(),
   latestDiagnosticCount: z.number().int().nonnegative().nullable(),

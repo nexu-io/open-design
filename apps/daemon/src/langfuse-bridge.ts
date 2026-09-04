@@ -327,6 +327,10 @@ export function projectDeliverableSyntaxTelemetry(
         ? 0
         : 1),
     checkerDurationMs: nonNegativeFinite(metrics?.checkerDurationMs) ?? null,
+    repairWindowDurationMs:
+      nonNegativeFinite(metrics?.repairWindowDurationMs) ?? null,
+    repairToDeliveryDurationMs:
+      nonNegativeFinite(metrics?.repairToDeliveryDurationMs) ?? null,
     repairableCheckCount: nonNegativeInteger(metrics?.repairableCheckCount)
       ?? (validation.status === 'repairable' || validation.status === 'exhausted' ? 1 : 0),
     initialDiagnosticCount: nonNegativeInteger(metrics?.initialDiagnosticCount)

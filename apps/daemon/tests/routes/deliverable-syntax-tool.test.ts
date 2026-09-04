@@ -131,6 +131,9 @@ describe('deliverable syntax tool route', () => {
       repairableCheckCount: 1,
       initialDiagnosticCount: 1,
       latestDiagnosticCount: 0,
+      firstRepairableAtMs: expect.any(Number),
+      repairPassedAtMs: expect.any(Number),
+      repairWindowDurationMs: expect.any(Number),
     });
     expect(test.persistCount()).toBe(2);
   });

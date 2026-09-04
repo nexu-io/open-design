@@ -24,6 +24,14 @@ export interface DeliverableSyntaxMetrics {
   repairableCheckCount: number;
   initialDiagnosticCount: number;
   latestDiagnosticCount: number;
+  /** Wall-clock instant when this Run first observed a repairable candidate. */
+  firstRepairableAtMs?: number;
+  /** Wall-clock instant when the first later check passed. */
+  repairPassedAtMs?: number;
+  /** Time from the first repairable result to the first later passing result. */
+  repairWindowDurationMs?: number;
+  /** Time from the first repairable result to the physical Run terminal. */
+  repairToDeliveryDurationMs?: number;
 }
 
 export interface DeliverableSyntaxDiagnostic {

@@ -78,6 +78,7 @@ export async function finalizeDeliverableSyntax(input: {
       ...(input.previousMetrics ? { previous: input.previousMetrics } : {}),
       result: syntax,
       durationMs: checkerDurationMs,
+      checkedAtMs: checkedAt,
     }),
   };
   if (syntax.status !== 'repairable') {

@@ -560,6 +560,7 @@ import { promptBudgetAnalyticsFromDiagnostic } from './run-diagnostics.js';
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
 import { validateRunDeliverable } from './run-deliverable-validation.js';
 import { finalizeDeliverableSyntax } from './artifacts/deliverable-syntax-finalization.js';
+import { recordDeliverableSyntaxDelivery } from './artifacts/deliverable-syntax-metrics.js';
 import {
   POST_TOOL_RESUME_CONTINUATION_PROMPT,
   decidePostToolResumeRecovery,
@@ -7543,7 +7544,16 @@ export async function startServer({
         if (promptBudget) run.promptBudgetDiagnostics = promptBudget;
       },
       onTerminal: createAmrTerminalReportFinalizer(amrTerminalReportOutbox),
-      beforeFinish: (run, status) => {
+      beforeFinish: (run, status, _code, _signal, terminalAt) => {
+        if (run.deliverableSyntaxValidation?.metrics) {
+          run.deliverableSyntaxValidation = {
+            ...run.deliverableSyntaxValidation,
+            metrics: recordDeliverableSyntaxDelivery({
+              previous: run.deliverableSyntaxValidation.metrics,
+              terminalAtMs: terminalAt,
+            }),
+          };
+        }
         if (status !== 'failed' && status !== 'canceled') return;
         try {
           reconcileStrategyTaskRunTerminal(db, { runId: run.id, status });

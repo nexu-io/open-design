@@ -1342,8 +1342,8 @@ export function createChatRunService({
 
   const commitFinish = (run, status, code: number | null = null, signal: string | null = null) => {
     if (TERMINAL_RUN_STATUSES.has(run.status)) return;
-    if (beforeFinish) beforeFinish(run, status, code, signal);
     const terminalAt = Date.now();
+    if (beforeFinish) beforeFinish(run, status, code, signal, terminalAt);
     run.status = status;
     run.exitCode = code;
     run.signal = signal;

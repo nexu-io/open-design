@@ -218,6 +218,7 @@ export function registerDeliverableSyntaxToolRoutes(
         0,
         (ctx.monotonicNow?.() ?? performance.now()) - checkerStartedAt,
       );
+      const checkedAt = Date.now();
       const previous = storedRepairState(run.deliverableSyntaxRepair);
       const response = toolResponse(result, previous);
       const decision = decideDeliverableSyntaxRepair({
@@ -229,13 +230,14 @@ export function registerDeliverableSyntaxToolRoutes(
       run.deliverableSyntaxValidation = {
         ...response,
         source: 'agent_tool',
-        checkedAt: Date.now(),
+        checkedAt,
         metrics: recordDeliverableSyntaxCheck({
           ...(run.deliverableSyntaxValidation?.metrics
             ? { previous: run.deliverableSyntaxValidation.metrics }
             : {}),
           result,
           durationMs: checkerDurationMs,
+          checkedAtMs: checkedAt,
         }),
       };
       ctx.persistRunState(run);
