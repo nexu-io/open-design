@@ -1171,7 +1171,7 @@ test('[P0] @critical home composer delegates the default prototype scenario to d
   expect(body.metadata?.kind).toBe('prototype');
 });
 
-test('[P0] @critical home working directory creates the project with linked dirs instead of importing files', async ({ page }) => {
+test('[P0] @critical home working directory creates the project with a writable workspace', async ({ page }) => {
   const workingDir = '/Users/mac/Projects/Dashboard-UI-Liquid-Glass';
   await page.route('**/api/recent-dirs', async (route) => {
     await route.fulfill({ json: { dirs: [workingDir] } });
@@ -1213,9 +1213,9 @@ test('[P0] @critical home working directory creates the project with linked dirs
   };
   expect(body.pendingPrompt).toBe('Create a premium dashboard for operations review.');
   expect(body.conversationMode).toBe('design');
-  expect(body.metadata?.linkedDirs).toEqual([workingDir]);
+  expect(body.metadata?.linkedDirs).toBeUndefined();
   expect(body.metadata?.baseDir).toBeUndefined();
-  expect(body.metadata?.userWorkingDir).toBeUndefined();
+  expect(body.metadata?.userWorkingDir).toBe(workingDir);
 });
 
 test('[P0] @critical clearing the home working directory removes linked dirs from project creation', async ({ page }) => {
