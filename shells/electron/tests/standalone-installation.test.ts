@@ -67,6 +67,7 @@ async function installedFixture() {
     supervisor: descriptor("supervisor.mjs", supervisor),
     content: descriptor("standalone-content.json", content),
     trust: descriptor("standalone-trust.json", trust),
+    update: { channelHeadUrl: "https://releases.invalid/betahyx/latest/channel-head.json" },
     seeds: [
       { ...descriptor("standalone-launcher.mjs", launcher), blobSha256: launcherDigest },
       { ...descriptor("closure.mjs", closure), blobSha256: closureDigest },

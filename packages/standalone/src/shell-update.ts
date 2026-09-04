@@ -127,7 +127,7 @@ export function validateShellUpdaterSnapshot(value: unknown): StandaloneShellUpd
 
 const shellUpdateTransitions: Readonly<Record<StandaloneShellUpdaterState, readonly StandaloneShellUpdaterState[]>> = {
   idle: ["checking"],
-  checking: ["available", "failed"],
+  checking: ["idle", "available", "failed"],
   available: ["checking", "downloading", "failed"],
   downloading: ["ready", "failed"],
   ready: ["checking", "ready", "applying", "failed"],

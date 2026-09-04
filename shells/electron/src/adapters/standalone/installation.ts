@@ -29,6 +29,7 @@ export type ElectronStandaloneInstallation = Readonly<{
   supervisor: InstalledFile;
   content: InstalledFile;
   trust: InstalledFile;
+  update: Readonly<{ channelHeadUrl: string }>;
   seeds: readonly Readonly<InstalledFile & { blobSha256: string }>[];
 }>;
 
@@ -76,9 +77,20 @@ function installedFile(value: unknown, label: string): InstalledFile {
   return Object.freeze({ file: candidate.file, sha256: candidate.sha256, size: candidate.size as number });
 }
 
+function channelHeadUrl(value: unknown): string {
+  const update = record(value, "Electron Standalone update source");
+  exactKeys(update, ["channelHeadUrl"], "Electron Standalone update source");
+  if (typeof update.channelHeadUrl !== "string") throw new Error("Electron Standalone channel head URL is invalid");
+  const parsed = new URL(update.channelHeadUrl);
+  if ((parsed.protocol !== "https:" && parsed.protocol !== "http:") || parsed.username !== "" || parsed.password !== "" || parsed.hash !== "") {
+    throw new Error("Electron Standalone channel head URL is invalid");
+  }
+  return parsed.href;
+}
+
 export function validateElectronStandaloneInstallation(value: unknown): ElectronStandaloneInstallation {
   const candidate = record(value, "Electron Standalone installation");
-  exactKeys(candidate, ["channel", "content", "host", "releaseVersion", "schemaVersion", "seeds", "supervisor", "target", "trust"], "Electron Standalone installation");
+  exactKeys(candidate, ["channel", "content", "host", "releaseVersion", "schemaVersion", "seeds", "supervisor", "target", "trust", "update"], "Electron Standalone installation");
   if (candidate.schemaVersion !== ELECTRON_STANDALONE_INSTALLATION_SCHEMA_VERSION) throw new Error("unsupported Electron Standalone installation schema");
   if (typeof candidate.channel !== "string") throw new Error("Electron Standalone installation channel must be a string");
   if (typeof candidate.releaseVersion !== "string") throw new Error("Electron Standalone installation releaseVersion must be a string");
@@ -118,6 +130,7 @@ export function validateElectronStandaloneInstallation(value: unknown): Electron
     supervisor,
     content,
     trust,
+    update: Object.freeze({ channelHeadUrl: channelHeadUrl(candidate.update) }),
     seeds: Object.freeze(seeds),
   });
 }

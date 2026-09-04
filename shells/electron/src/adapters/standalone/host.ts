@@ -11,6 +11,7 @@ import {
 } from "@open-design/sidecar";
 import {
   FossilHandoffHost,
+  validateShellIdentity,
   type StandaloneHandoffRequest,
   type StandaloneRuntimeHandle,
   type StandaloneRuntimeCommand,
@@ -25,6 +26,9 @@ import { ElectronStandaloneHostLifecycle } from "./host-lifecycle.js";
 import { ElectronStandaloneLifecycleLedger } from "./lifecycle-ledger.js";
 import { ElectronStandaloneHostUpdater } from "./host-updater.js";
 import { ElectronStandaloneShellUpdaterLedger } from "./shell-updater-ledger.js";
+import { ElectronReleaseExactFeed } from "./release-feed.js";
+import { ElectronStandaloneShellCandidateLedger } from "./shell-updater-candidate.js";
+import { loadElectronStandaloneInstallation, resolveElectronStandaloneTarget, type ResolvedElectronStandaloneInstallation } from "./installation.js";
 
 export const ELECTRON_STANDALONE_HOST_CONFIG_ENV = "OD_ELECTRON_STANDALONE_HOST_V1";
 
@@ -33,9 +37,11 @@ type HostConfig = Readonly<{
   scope: Readonly<{ channel: string; namespace: string }>;
   storeRoot: string;
   runtimeRoot: string;
+  resourceRoot: string;
   hostPath: string;
   hostSha256: string;
   supervisorSha256: string;
+  shell: Readonly<{ type: string; version: string; buildHash: string; digest: string }>;
 }>;
 
 function readConfig(): HostConfig {
@@ -43,7 +49,7 @@ function readConfig(): HostConfig {
   if (serialized == null) throw new Error(`${ELECTRON_STANDALONE_HOST_CONFIG_ENV} is required`);
   const value = JSON.parse(serialized) as Partial<HostConfig>;
   const keys = Object.keys(value).sort();
-  if (JSON.stringify(keys) !== JSON.stringify(["hostPath", "hostSha256", "runtimeRoot", "schemaVersion", "scope", "storeRoot", "supervisorSha256"])) throw new Error("Electron Standalone host configuration fields are invalid");
+  if (JSON.stringify(keys) !== JSON.stringify(["hostPath", "hostSha256", "resourceRoot", "runtimeRoot", "schemaVersion", "scope", "shell", "storeRoot", "supervisorSha256"])) throw new Error("Electron Standalone host configuration fields are invalid");
   if (
     value.schemaVersion !== 1
     || value.scope == null
@@ -51,15 +57,21 @@ function readConfig(): HostConfig {
     || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(value.scope.namespace ?? "")
     || typeof value.storeRoot !== "string"
     || typeof value.runtimeRoot !== "string"
+    || typeof value.resourceRoot !== "string"
     || typeof value.hostPath !== "string"
     || !/^[a-f0-9]{64}$/u.test(value.hostSha256 ?? "")
     || !/^[a-f0-9]{64}$/u.test(value.supervisorSha256 ?? "")
   ) throw new Error("Electron Standalone host configuration is invalid");
   const storeRoot = resolve(value.storeRoot);
   const runtimeRoot = resolve(value.runtimeRoot);
+  const resourceRoot = resolve(value.resourceRoot);
   const hostPath = resolve(value.hostPath);
-  if (storeRoot !== value.storeRoot || runtimeRoot !== value.runtimeRoot || hostPath !== value.hostPath) throw new Error("Electron Standalone host paths must be absolute and normalized");
-  return Object.freeze({ schemaVersion: 1, scope: Object.freeze({ ...value.scope }), storeRoot, runtimeRoot, hostPath, hostSha256: value.hostSha256!, supervisorSha256: value.supervisorSha256! });
+  if (storeRoot !== value.storeRoot || runtimeRoot !== value.runtimeRoot || resourceRoot !== value.resourceRoot || hostPath !== value.hostPath) throw new Error("Electron Standalone host paths must be absolute and normalized");
+  if (value.shell == null || typeof value.shell !== "object" || Array.isArray(value.shell)
+    || JSON.stringify(Object.keys(value.shell).sort()) !== JSON.stringify(["buildHash", "digest", "type", "version"])) throw new Error("Electron Standalone host Shell identity is invalid");
+  const shell = value.shell as HostConfig["shell"];
+  validateShellIdentity(shell);
+  return Object.freeze({ schemaVersion: 1, scope: Object.freeze({ ...value.scope }), storeRoot, runtimeRoot, resourceRoot, hostPath, hostSha256: value.hostSha256!, supervisorSha256: value.supervisorSha256!, shell: Object.freeze({ ...shell }) });
 }
 
 type PendingStart = Readonly<{
@@ -77,15 +89,24 @@ class ElectronStandaloneHostRuntime {
   }>>();
   readonly #pending = new Map<string, PendingStart>();
 
-  constructor(readonly config: HostConfig) {
+  constructor(readonly config: HostConfig, installation: ResolvedElectronStandaloneInstallation) {
     this.lifecycle = new ElectronStandaloneHostLifecycle(config.scope, {
       statePort: new ElectronStandaloneLifecycleLedger(config.storeRoot, config.scope),
     });
-    this.updater = new ElectronStandaloneHostUpdater(
-      "electron",
-      this.lifecycle,
-      new ElectronStandaloneShellUpdaterLedger(config.storeRoot, config.scope, "electron"),
-    );
+    const updaterLedger = new ElectronStandaloneShellUpdaterLedger(config.storeRoot, config.scope, "electron");
+    const feed = new ElectronReleaseExactFeed({
+      cacheRoot: config.storeRoot,
+      channel: config.scope.channel,
+      channelHeadUrl: installation.declaration.update.channelHeadUrl,
+      currentReleaseVersion: installation.declaration.releaseVersion,
+      shell: config.shell,
+      target: installation.declaration.target,
+      trustedKeys: installation.trustedKeys,
+    });
+    this.updater = new ElectronStandaloneHostUpdater("electron", this.lifecycle, updaterLedger, {
+      feed,
+      candidates: new ElectronStandaloneShellCandidateLedger(config.storeRoot, config.scope, feed),
+    });
     this.#handoff = new FossilHandoffHost(async (binding) => {
       const bytes = await readFile(binding.launcher.path);
       if (createHash("sha256").update(bytes).digest("hex") !== binding.launcher.blobSha256) {
@@ -254,6 +275,8 @@ class ElectronStandaloneHostRuntime {
 
 export async function runElectronStandaloneHost(): Promise<void> {
   const config = readConfig();
+  const target = resolveElectronStandaloneTarget();
+  const installation = await loadElectronStandaloneInstallation({ resourceRoot: config.resourceRoot, channel: config.scope.channel, target });
   const stamp = Object.freeze({ ...readCurrentSidecarStamp() });
   if (stamp.channel !== config.scope.channel || stamp.namespace !== config.scope.namespace || stamp.source !== "standalone" || stamp.mode !== "runtime" || stamp.app !== "standalone") {
     throw new Error("Electron Standalone host configuration differs from its Sidecar stamp");
@@ -272,7 +295,7 @@ export async function runElectronStandaloneHost(): Promise<void> {
     lifecycle: {
       async start(sidecarResources) {
         if (resolve(sidecarResources.dataRoot ?? "") !== config.storeRoot || resolve(sidecarResources.runtimeRoot) !== config.runtimeRoot) throw new Error("Electron Standalone host resources differ from its launch contract");
-        runtime = new ElectronStandaloneHostRuntime(config);
+        runtime = new ElectronStandaloneHostRuntime(config, installation);
         return runtime;
       },
       async status(active) {
@@ -284,6 +307,8 @@ export async function runElectronStandaloneHost(): Promise<void> {
           supervisorSha256: config.supervisorSha256,
           dataRoot: client.resources.dataRoot,
           runtimeRoot: client.resources.runtimeRoot,
+          resourceRoot: config.resourceRoot,
+          shell: config.shell,
           lifecycle: await active.lifecycle.status(),
         });
       },

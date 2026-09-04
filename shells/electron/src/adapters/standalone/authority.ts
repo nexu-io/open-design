@@ -50,6 +50,8 @@ type HostStatus = Readonly<{
   supervisorSha256: string;
   dataRoot: string;
   runtimeRoot: string;
+  resourceRoot: string;
+  shell: ElectronShellManifest["shell"];
 }>;
 
 function projectRuntimeStatus(status: Awaited<ReturnType<ElectronStandaloneControlClient["status"]>>, bindingDigest: string, generationId: string): StandaloneRuntimeStatus {
@@ -71,7 +73,9 @@ function exactHostStatus(value: unknown, expected: Omit<HostStatus, "control" | 
     && status.hostSha256 === expected.hostSha256
     && status.supervisorSha256 === expected.supervisorSha256
     && status.dataRoot === expected.dataRoot
-    && status.runtimeRoot === expected.runtimeRoot;
+    && status.runtimeRoot === expected.runtimeRoot
+    && status.resourceRoot === expected.resourceRoot
+    && canonicalJson(status.shell) === canonicalJson(expected.shell);
 }
 
 export function createElectronStandaloneAuthorityFactory(
@@ -117,15 +121,19 @@ export function createElectronStandaloneAuthorityFactory(
         supervisorSha256: installation.declaration.supervisor.sha256,
         dataRoot: storeRoot,
         runtimeRoot: sidecarRuntimeRoot,
+        resourceRoot: resolve(resourceRoot),
+        shell: request.shell,
       });
       const hostConfig = Object.freeze({
         schemaVersion: 1,
         scope: request.scope,
         storeRoot,
         runtimeRoot: sidecarRuntimeRoot,
+        resourceRoot: resolve(resourceRoot),
         hostPath: installation.hostPath,
         hostSha256: hostExpected.hostSha256,
         supervisorSha256: hostExpected.supervisorSha256,
+        shell: request.shell,
       });
       await withElectronPhysicalResourceSetGuard(resourceSet, async (guard) => {
         const existing = await getSidecarStatus<unknown>(stamp, { timeoutMs: 500 }).catch(() => null);
