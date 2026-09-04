@@ -7,6 +7,7 @@ import {
   type LifecycleAttachment,
   type LifecycleReadiness,
   type LifecycleScope,
+  type LifecycleStatus,
   type StandaloneGenerationBinding,
   type StandaloneRuntimeCommand,
   type StandaloneShellIdentity,
@@ -101,6 +102,60 @@ function capability(value: unknown, nullable = false): string | null {
   return token(value, "Electron Standalone attachment capability");
 }
 
+export function validateElectronStandaloneLifecycleStatus(input: unknown, expectedScope: LifecycleScope): LifecycleStatus {
+  const value = object(input, "Electron Standalone lifecycle status");
+  exactKeys(value, ["bindingDigest", "fence", "generationId", "instanceId", "lease", "occupants", "references", "scope", "state"], "Electron Standalone lifecycle status");
+  const scope = exactScope(value.scope, expectedScope);
+  if (value.state !== "running" && value.state !== "stopped") throw new Error("Electron Standalone lifecycle state is invalid");
+  const fence = integer(value.fence, "Electron Standalone lifecycle fence");
+  const references = integer(value.references, "Electron Standalone lifecycle references");
+  if (!Array.isArray(value.occupants)) throw new Error("Electron Standalone lifecycle occupants are invalid");
+  const occupants = value.occupants.map((input, index) => {
+    const occupant = object(input, `Electron Standalone lifecycle occupant ${index}`);
+    exactKeys(occupant, ["attachmentId", "generationId", "shell"], `Electron Standalone lifecycle occupant ${index}`);
+    const identity = attachment({ id: occupant.attachmentId, shell: occupant.shell });
+    if (typeof occupant.generationId !== "string" || !digestPattern.test(occupant.generationId)) throw new Error(`Electron Standalone lifecycle occupant ${index} generation is invalid`);
+    return Object.freeze({ attachmentId: identity.id, generationId: occupant.generationId, shell: identity.shell });
+  });
+  if (references !== occupants.length) throw new Error("Electron Standalone lifecycle references do not match its occupants");
+  if (value.state === "stopped") {
+    if (value.bindingDigest !== null || value.generationId !== null || value.instanceId !== null || value.lease !== null || references !== 0) {
+      throw new Error("stopped Electron Standalone lifecycle retains a running identity");
+    }
+    return Object.freeze({ scope, state: value.state, generationId: null, bindingDigest: null, instanceId: null, references, occupants: Object.freeze(occupants), fence, lease: null });
+  }
+  for (const field of ["bindingDigest", "generationId"] as const) {
+    if (typeof value[field] !== "string" || !digestPattern.test(value[field])) throw new Error(`Electron Standalone lifecycle ${field} is invalid`);
+  }
+  const instanceId = token(value.instanceId, "Electron Standalone lifecycle instance id");
+  const lease = object(value.lease, "Electron Standalone lifecycle lease");
+  exactKeys(lease, ["expiresAt", "heartbeatIntervalMs"], "Electron Standalone lifecycle lease");
+  if (typeof lease.expiresAt !== "string" || !Number.isFinite(Date.parse(lease.expiresAt))) throw new Error("Electron Standalone lifecycle lease expiry is invalid");
+  const heartbeatIntervalMs = integer(lease.heartbeatIntervalMs, "Electron Standalone lifecycle heartbeat interval", 1);
+  if (occupants.some(({ generationId }) => generationId !== value.generationId)) throw new Error("Electron Standalone lifecycle occupants escaped its generation");
+  return Object.freeze({
+    scope,
+    state: value.state,
+    generationId: value.generationId as string,
+    bindingDigest: value.bindingDigest as string,
+    instanceId,
+    references,
+    occupants: Object.freeze(occupants),
+    fence,
+    lease: Object.freeze({ expiresAt: lease.expiresAt, heartbeatIntervalMs }),
+  });
+}
+
+export function validateElectronStandaloneReadiness(input: unknown): LifecycleReadiness {
+  const value = object(input, "Electron Standalone readiness");
+  exactKeys(value, ["attachmentId", "bindingDigest", "generationId", "instanceId"], "Electron Standalone readiness");
+  const attachmentId = token(value.attachmentId, "Electron Standalone readiness attachmentId");
+  const instanceId = token(value.instanceId, "Electron Standalone readiness instanceId");
+  if (typeof value.bindingDigest !== "string" || !digestPattern.test(value.bindingDigest)) throw new Error("Electron Standalone readiness bindingDigest is invalid");
+  if (typeof value.generationId !== "string" || !digestPattern.test(value.generationId)) throw new Error("Electron Standalone readiness generationId is invalid");
+  return Object.freeze({ attachmentId, instanceId, bindingDigest: value.bindingDigest, generationId: value.generationId });
+}
+
 export function validateElectronStandaloneControlRequest(
   input: unknown,
   expectedScope: LifecycleScope,
@@ -120,13 +175,7 @@ export function validateElectronStandaloneControlRequest(
   }
   if (value.operation === "lifecycle.ready") {
     exactKeys(value, ["operation", "readiness", "schemaVersion", "scope"], "Electron Standalone lifecycle.ready request");
-    const readiness = object(value.readiness, "Electron Standalone readiness");
-    exactKeys(readiness, ["attachmentId", "bindingDigest", "generationId", "instanceId"], "Electron Standalone readiness");
-    token(readiness.attachmentId, "Electron Standalone readiness attachmentId");
-    token(readiness.instanceId, "Electron Standalone readiness instanceId");
-    if (typeof readiness.bindingDigest !== "string" || !digestPattern.test(readiness.bindingDigest)) throw new Error("Electron Standalone readiness bindingDigest is invalid");
-    if (typeof readiness.generationId !== "string" || !digestPattern.test(readiness.generationId)) throw new Error("Electron Standalone readiness generationId is invalid");
-    return Object.freeze({ ...base, operation: value.operation, readiness: Object.freeze(readiness as LifecycleReadiness) });
+    return Object.freeze({ ...base, operation: value.operation, readiness: validateElectronStandaloneReadiness(value.readiness) });
   }
   if (value.operation === "lifecycle.heartbeat") {
     exactKeys(value, ["attachment", "attachmentCapability", "operation", "schemaVersion", "scope"], "Electron Standalone lifecycle.heartbeat request");
