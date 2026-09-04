@@ -1,53 +1,102 @@
-import { describe, expect, it } from 'vitest';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import assert from 'node:assert/strict';
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  isValidBrainSessionId,
+  syncAntigravityBrainArtifacts,
+} from '../../src/runtimes/antigravity-sync.js';
 
-describe('antigravity brain artifact sync', () => {
-  it('syncs generated html, css, js files from brain dir into project dir', async () => {
-    const tempRoot = await mkdtemp(path.join(tmpdir(), 'od-agy-sync-test-'));
+describe('antigravity-sync', () => {
+  it('validates session IDs and prevents path traversal', () => {
+    expect(isValidBrainSessionId('')).toBe(false);
+    expect(isValidBrainSessionId('   ')).toBe(false);
+    expect(isValidBrainSessionId('../etc/passwd')).toBe(false);
+    expect(isValidBrainSessionId('session/123')).toBe(false);
+    expect(isValidBrainSessionId('session\\123')).toBe(false);
+    expect(isValidBrainSessionId('..')).toBe(false);
+    expect(isValidBrainSessionId('valid-session-uuid-1234')).toBe(true);
+  });
+
+  it('rejects path traversal session IDs during sync', async () => {
+    const result = await syncAntigravityBrainArtifacts({
+      projectsRoot: 'D:\\projects',
+      projectId: 'proj-1',
+      sessionId: '../../traversal',
+    });
+    expect(result.syncedCount).toBe(0);
+    expect(result.skippedReason).toBe('invalid_session_id');
+  });
+
+  it('handles non-existent session directory gracefully', async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'od-sync-test-'));
     try {
-      const brainDir = path.join(tempRoot, 'brain', 'session-123');
-      const projectDir = path.join(tempRoot, 'project-1');
-      await mkdir(brainDir, { recursive: true });
-      await mkdir(projectDir, { recursive: true });
-
-      await writeFile(path.join(brainDir, 'clock-ui.html'), '<!doctype html><html><body>Clock</body></html>');
-      await writeFile(path.join(brainDir, 'style.css'), 'body { background: #000; }');
-      await writeFile(path.join(brainDir, 'app.js'), 'console.log("hello");');
-      await writeFile(path.join(brainDir, 'implementation_plan.md'), '# Plan');
-      await writeFile(path.join(brainDir, 'walkthrough.md'), '# Walkthrough');
-      await mkdir(path.join(brainDir, 'scratch'), { recursive: true });
-      await writeFile(path.join(brainDir, 'scratch', 'test.html'), '<html>scratch</html>');
-
-      const agyEntries = await (await import('node:fs')).promises.readdir(brainDir);
-      for (const entry of agyEntries) {
-        if (entry.startsWith('.') || entry === 'scratch' || entry.endsWith('.md')) {
-          continue;
-        }
-        const ext = path.extname(entry).toLowerCase();
-        if (['.html', '.htm', '.css', '.js', '.svg', '.png', '.jpg', '.webp'].includes(ext)) {
-          const srcFile = path.join(brainDir, entry);
-          const destFile = path.join(projectDir, entry);
-          await (await import('node:fs')).promises.copyFile(srcFile, destFile);
-        }
-      }
-
-      const htmlContent = await readFile(path.join(projectDir, 'clock-ui.html'), 'utf8');
-      expect(htmlContent).toBe('<!doctype html><html><body>Clock</body></html>');
-
-      const cssContent = await readFile(path.join(projectDir, 'style.css'), 'utf8');
-      expect(cssContent).toBe('body { background: #000; }');
-
-      const jsContent = await readFile(path.join(projectDir, 'app.js'), 'utf8');
-      expect(jsContent).toBe('console.log("hello");');
-
-      const { existsSync } = await import('node:fs');
-      expect(existsSync(path.join(projectDir, 'implementation_plan.md'))).toBe(false);
-      expect(existsSync(path.join(projectDir, 'walkthrough.md'))).toBe(false);
-      expect(existsSync(path.join(projectDir, 'test.html'))).toBe(false);
+      const result = await syncAntigravityBrainArtifacts({
+        projectsRoot: path.join(tmpDir, 'projects'),
+        projectId: 'proj-1',
+        sessionId: 'non-existent-session',
+        brainBaseDir: path.join(tmpDir, 'brain'),
+      });
+      expect(result.syncedCount).toBe(0);
+      expect(result.skippedReason).toBe('no_session_dir');
     } finally {
-      await rm(tempRoot, { recursive: true, force: true });
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('syncs web artifacts and ignores markdown and scratch files', async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'od-sync-test-'));
+    const brainDir = path.join(tmpDir, 'brain', 'session-1');
+    const projectsRoot = path.join(tmpDir, 'projects');
+    const projDir = path.join(projectsRoot, 'proj-1');
+
+    await fs.mkdir(brainDir, { recursive: true });
+    await fs.mkdir(projDir, { recursive: true });
+
+    // Create various files in the brain directory
+    await fs.writeFile(path.join(brainDir, 'preview.html'), '<html>Hello</html>');
+    await fs.writeFile(path.join(brainDir, 'styles.css'), 'body { color: red; }');
+    await fs.writeFile(path.join(brainDir, 'walkthrough.md'), '# Walkthrough');
+    await fs.writeFile(path.join(brainDir, 'implementation_plan.md'), '# Plan');
+    await fs.writeFile(path.join(brainDir, '.hidden'), 'hidden');
+
+    const scratchDir = path.join(brainDir, 'scratch');
+    await fs.mkdir(scratchDir);
+    await fs.writeFile(path.join(scratchDir, 'temp.html'), 'temp');
+
+    const mockWrite = vi.fn().mockResolvedValue({ name: 'ok' });
+
+    try {
+      const result = await syncAntigravityBrainArtifacts({
+        projectsRoot,
+        projectId: 'proj-1',
+        sessionId: 'session-1',
+        brainBaseDir: path.join(tmpDir, 'brain'),
+        writeProjectFileFn: mockWrite as any,
+      });
+
+      expect(result.syncedCount).toBe(2);
+      expect(result.syncedFiles.sort()).toEqual(['preview.html', 'styles.css']);
+      expect(mockWrite).toHaveBeenCalledTimes(2);
+      expect(mockWrite).toHaveBeenCalledWith(
+        projectsRoot,
+        'proj-1',
+        'preview.html',
+        expect.any(Buffer),
+        { overwrite: true },
+        undefined,
+      );
+      expect(mockWrite).toHaveBeenCalledWith(
+        projectsRoot,
+        'proj-1',
+        'styles.css',
+        expect.any(Buffer),
+        { overwrite: true },
+        undefined,
+      );
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true });
     }
   });
 });

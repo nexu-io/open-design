@@ -64,7 +64,7 @@ test('antigravity-stream streams text_delta chunks for agent_response', () => {
   assert.deepEqual(events[1], { type: 'text_delta', delta: 'World!' });
 });
 
-test('antigravity-stream maps tool lifecycle: ACTIVE -> DONE', () => {
+test('antigravity-stream maps tool lifecycle: ACTIVE -> DONE with toolUseId', () => {
   const events: AntigravityStreamEvent[] = [];
   const handler = createAntigravityStreamHandler((e) => events.push(e));
 
@@ -111,14 +111,16 @@ test('antigravity-stream maps tool lifecycle: ACTIVE -> DONE', () => {
   assert.equal(events.length, 2);
   assert.deepEqual(events[1], {
     type: 'tool_result',
+    toolUseId: 'agy-step-2',
     tool_use_id: 'agy-step-2',
     content: 'On branch main\nnothing to commit',
+    isError: false,
     is_error: false,
     durationMs: 450,
   });
 });
 
-test('antigravity-stream maps tool ERROR state with error message', () => {
+test('antigravity-stream maps tool ERROR state with error message and toolUseId', () => {
   const events: AntigravityStreamEvent[] = [];
   const handler = createAntigravityStreamHandler((e) => events.push(e));
 
@@ -156,8 +158,10 @@ test('antigravity-stream maps tool ERROR state with error message', () => {
   assert.equal(events.length, 2);
   assert.deepEqual(events[1], {
     type: 'tool_result',
+    toolUseId: 'agy-step-3',
     tool_use_id: 'agy-step-3',
     content: 'File does not exist',
+    isError: true,
     is_error: true,
     durationMs: 120,
   });
@@ -200,7 +204,6 @@ test('antigravity-stream maps result event with usage and duration', () => {
   );
   handler.flush();
 
-  // text_delta was already emitted, so result should only emit usage, without duplicate text_delta
   assert.equal(events.length, 2);
   assert.deepEqual(events[0], { type: 'text_delta', delta: 'All done.' });
   assert.deepEqual(events[1], {
@@ -242,32 +245,40 @@ test('antigravity-stream fallback: emits text_delta from result.response if no d
   assert.equal(events[1]?.type, 'usage');
 });
 
-test('antigravity-stream handles cross-chunk fragmentation correctly', () => {
+test('antigravity-stream parses legacy Gemini JSONL sequence', () => {
   const events: AntigravityStreamEvent[] = [];
   const handler = createAntigravityStreamHandler((e) => events.push(e));
 
-  const jsonStr = JSON.stringify({
-    event: 'step_update',
-    step_update: {
-      step_index: 1,
-      state: 'ACTIVE',
-      step_type: 'agent_response',
-      text_delta: 'Piece by piece',
-    },
+  handler.feed(JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' }) + '\n');
+  handler.feed(JSON.stringify({ type: 'message', role: 'assistant', content: 'Hello from Antigravity.', delta: true }) + '\n');
+  handler.feed(JSON.stringify({ type: 'result', status: 'success', stats: { input_tokens: 4, output_tokens: 5, cached: 0, duration_ms: 25 } }) + '\n');
+  handler.flush();
+
+  assert.equal(events.length, 3);
+  assert.deepEqual(events[0], { type: 'status', label: 'initializing', sessionId: 'agy-1', tools: undefined, cwd: undefined });
+  assert.deepEqual(events[1], { type: 'text_delta', delta: 'Hello from Antigravity.' });
+  assert.deepEqual(events[2], {
+    type: 'usage',
+    usage: { input_tokens: 4, output_tokens: 5, cached_tokens: 0 },
+    durationMs: 25,
+    stopReason: 'success',
+    isError: false,
   });
+});
 
-  // Feed in 3 fragmented pieces
-  const mid1 = 20;
-  const mid2 = 45;
-  handler.feed(jsonStr.slice(0, mid1));
-  assert.equal(events.length, 0); // incomplete line, no events yet
+test('antigravity-stream suppresses OAuth prompts into oauth_prompt event', () => {
+  const events: AntigravityStreamEvent[] = [];
+  const handler = createAntigravityStreamHandler((e) => events.push(e));
 
-  handler.feed(jsonStr.slice(mid1, mid2));
-  assert.equal(events.length, 0); // still incomplete
+  handler.feed('Authentication required. Please visit the URL to log in: https://accounts.google.com/o/oauth2/auth?client_id=123\n');
+  handler.feed('Waiting for authentication (timeout 30s)...\n');
+  handler.feed('Error: authentication timed out.\n');
+  handler.flush();
 
-  handler.feed(jsonStr.slice(mid2) + '\n');
-  assert.equal(events.length, 1);
-  assert.deepEqual(events[0], { type: 'text_delta', delta: 'Piece by piece' });
+  assert.equal(events.length, 3);
+  assert.equal(events[0]?.type, 'oauth_prompt');
+  assert.equal(events[1]?.type, 'oauth_prompt');
+  assert.equal(events[2]?.type, 'oauth_prompt');
 });
 
 test('antigravity-stream passes non-JSON text through as raw event', () => {

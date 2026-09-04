@@ -502,6 +502,7 @@ import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
 import { createAntigravityStreamHandler } from './runtimes/antigravity-stream.js';
+import { syncAntigravityBrainArtifacts } from './runtimes/antigravity-sync.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { importFigmaFromBytes } from './figma/figma-import.js';
 import { renderDesignSystemPreview } from './design-systems/preview.js';
@@ -14463,7 +14464,23 @@ export async function startServer({
       child.on('close', () => qoder.flush());
     } else if (def.streamFormat === 'antigravity-stream-json') {
       trackingSubstantiveOutput = true;
-      const agy = createAntigravityStreamHandler(sendAgentEvent);
+      const agy = createAntigravityStreamHandler((ev) => {
+        if (ev?.type === 'oauth_prompt') {
+          return;
+        }
+        if (ev?.type === 'raw' && typeof ev.line === 'string') {
+          if (
+            isAntigravityAuthFailureText(ev.line) ||
+            ev.line.includes('accounts.google.com')
+          ) {
+            return;
+          }
+          noteFirstTokenAt();
+          send('stdout', { chunk: ev.line + '\n' });
+          return;
+        }
+        sendAgentEvent(ev);
+      });
       child.stdout.on('data', (chunk) => agy.feed(chunk));
       child.on('close', () => agy.flush());
     } else if (def.streamFormat === 'copilot-stream-json') {
@@ -15130,6 +15147,18 @@ export async function startServer({
         trackingSubstantiveOutput &&
         !agentProducedOutput
       ) {
+        const authFailure = classifyAgentAuthFailure(
+          agentId,
+          `${agentStderrTail}\n${agentStdoutTail}`,
+        );
+        if (authFailure?.status === 'missing') {
+          send('error', createSseErrorPayload(
+            'AGENT_AUTH_REQUIRED',
+            authFailure.message ?? `${def.name} authentication required. Please re-authenticate and retry.`,
+            { retryable: true },
+          ));
+          return finishWithRetryDecision('failed', 0, signal);
+        }
         markRpcCloseReason('empty_output');
         send('error', createSseErrorPayload(
           'AGENT_EXECUTION_FAILED',
@@ -15394,39 +15423,17 @@ export async function startServer({
             if (
               (def.id === 'antigravity' || def.streamFormat === 'antigravity-stream-json') &&
               typeof capturedSessionId === 'string' &&
-              capturedSessionId
+              capturedSessionId &&
+              run.projectId
             ) {
               try {
-                const agyBrainDir = path.join(
-                  os.homedir(),
-                  '.gemini',
-                  'antigravity-cli',
-                  'brain',
-                  capturedSessionId,
-                );
-                if (fs.existsSync(agyBrainDir)) {
-                  const agyEntries = await fs.promises.readdir(agyBrainDir);
-                  for (const entry of agyEntries) {
-                    if (entry.startsWith('.') || entry === 'scratch' || entry.endsWith('.md')) {
-                      continue;
-                    }
-                    const ext = path.extname(entry).toLowerCase();
-                    if (
-                      ['.html', '.htm', '.css', '.js', '.svg', '.png', '.jpg', '.webp'].includes(
-                        ext,
-                      )
-                    ) {
-                      const srcFile = path.join(agyBrainDir, entry);
-                      const destFile = path.join(dir, entry);
-                      const srcStat = await fs.promises.stat(srcFile);
-                      const destExists = fs.existsSync(destFile);
-                      const destStat = destExists ? await fs.promises.stat(destFile) : null;
-                      if (!destExists || srcStat.mtimeMs > (destStat?.mtimeMs ?? 0)) {
-                        await fs.promises.copyFile(srcFile, destFile);
-                      }
-                    }
-                  }
-                }
+                await syncAntigravityBrainArtifacts({
+                  projectsRoot: PROJECTS_DIR,
+                  projectId: run.projectId,
+                  sessionId: capturedSessionId,
+                  projectMetadata: project?.metadata,
+                  writeProjectFileFn: writeProjectFile,
+                });
               } catch {
                 /* brain-sync best-effort */
               }
@@ -15934,6 +15941,20 @@ export async function startServer({
       }
     } catch (childCloseErr) {
       console.error('[runs] child close error:', childCloseErr);
+      if (!design.runs.isTerminal(run.status)) {
+        try {
+          send('error', createSseErrorPayload(
+            'AGENT_EXECUTION_FAILED',
+            `Internal daemon error during run completion: ${childCloseErr instanceof Error ? childCloseErr.message : String(childCloseErr)}`,
+            { retryable: false },
+          ));
+        } catch {}
+        try {
+          finishWithRetryDecision('failed', code ?? 1, signal ?? null);
+        } catch (finishErr) {
+          console.error('[runs] finishWithRetryDecision failed in child close catch:', finishErr);
+        }
+      }
     } finally {
         // Best-effort cleanup of the per-run agy log file on every close
         // path — successful, failed, cancelled, or non-zero exit — so

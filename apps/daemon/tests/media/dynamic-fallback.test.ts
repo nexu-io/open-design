@@ -4,12 +4,27 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { generateMedia } from "../../src/media/index.js";
 import { writeConfig } from "../../src/media/config.js";
+import { renderVelaImage, VelaMediaError } from "../../src/media/vela.js";
+
+const { runVelaCommandMock } = vi.hoisted(() => ({
+  runVelaCommandMock: vi.fn(),
+}));
+
+vi.mock("../../src/integrations/vela-command.js", async () => {
+  const actual = await vi.importActual("../../src/integrations/vela-command.js");
+  return {
+    ...actual,
+    runVelaCommand: runVelaCommandMock,
+  };
+});
 
 describe("Dynamic Image Provider Negotiation & Fallback", () => {
   let projectRoot: string;
   let projectsRoot: string;
 
   beforeEach(async () => {
+    runVelaCommandMock.mockReset();
+    runVelaCommandMock.mockRejectedValue(new Error("not logged in: authentication required"));
     delete process.env.OD_MEDIA_CONFIG_DIR;
     delete process.env.OD_DATA_DIR;
     delete process.env.OD_SANDBOX_MODE;
@@ -124,6 +139,100 @@ describe("Dynamic Image Provider Negotiation & Fallback", () => {
       expect(res.providerNote).toContain("[auto-routed]");
     } finally {
       globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("does not re-lookup model catalog using alias when alias is configured", async () => {
+    // Set an alias mapping a registered catalog model to another wire name
+    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+      "gpt-image-2": "gpt-image-custom-wire",
+    });
+
+    // Configure nanobanana as fallback so generateMedia can succeed or fail at render step
+    await writeConfig(projectRoot, {
+      providers: { nanobanana: { apiKey: "test-google-key" } },
+    });
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockImplementation(async (url: any) => {
+      if (String(url).includes("generativelanguage.googleapis.com")) {
+        return new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      inlineData: {
+                        mimeType: "image/png",
+                        data: Buffer.from("fake-png-bytes").toString("base64"),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    try {
+      // Calling with canonical "gpt-image-2" must resolve "gpt-image-2" in the catalog
+      // rather than failing or re-resolving with "gpt-image-custom-wire"
+      const res = await generateMedia({
+        projectRoot,
+        projectsRoot,
+        projectId: "test-alias",
+        surface: "image",
+        model: "gpt-image-2",
+      });
+      expect(res.providerId).toBe("nanobanana");
+    } finally {
+      delete process.env.OD_MEDIA_MODEL_ALIASES;
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("does not classify timeout or process errors from vela models command as UNAUTHORIZED", async () => {
+    const fakeRunner = vi.fn().mockRejectedValue(new Error("ETIMEDOUT: command timed out"));
+
+    await expect(
+      renderVelaImage(
+        {
+          aspect: "16:9",
+          imageRefs: [],
+          model: "vela/gpt-image-2",
+          prompt: "test prompt",
+          quality: undefined,
+          resolution: undefined,
+          wireModel: "gpt-image-2",
+          workspaceId: undefined,
+        },
+        fakeRunner as any,
+      ),
+    ).rejects.toThrow("ETIMEDOUT: command timed out");
+
+    // Must NOT throw VelaMediaError with UNAUTHORIZED
+    try {
+      await renderVelaImage(
+        {
+          aspect: "16:9",
+          imageRefs: [],
+          model: "vela/gpt-image-2",
+          prompt: "test prompt",
+          quality: undefined,
+          resolution: undefined,
+          wireModel: "gpt-image-2",
+          workspaceId: undefined,
+        },
+        fakeRunner as any,
+      );
+    } catch (err: any) {
+      expect(err).not.toBeInstanceOf(VelaMediaError);
+      expect(err.code).not.toBe("UNAUTHORIZED");
     }
   });
 });

@@ -282,7 +282,21 @@ async function fetchPublishedImageCapabilities(
     const providerError = velaMediaErrorFromFailure(error, 'media models');
     if (providerError) throw providerError;
     const msg = error instanceof Error ? error.message : String(error);
-    throw new VelaMediaError(msg, { code: 'UNAUTHORIZED', retryable: false });
+    const stdout = velaCommandStdout(error);
+    const stderr = velaCommandStderr(error);
+    const combined = `${msg}\n${stdout}\n${stderr}`.toLowerCase();
+    const isUnauthenticated =
+      combined.includes('unauthorized') ||
+      combined.includes('not logged in') ||
+      combined.includes('login required') ||
+      combined.includes('authentication required') ||
+      combined.includes('auth required') ||
+      combined.includes('please log in') ||
+      combined.includes('unauthenticated');
+    if (isUnauthenticated) {
+      throw new VelaMediaError(msg, { code: 'UNAUTHORIZED', retryable: false });
+    }
+    throw error;
   }
 }
 

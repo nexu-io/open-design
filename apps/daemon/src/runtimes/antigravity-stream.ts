@@ -6,6 +6,11 @@
  *   - init        : { event: 'init', conversation_id, init: { tools, cwd } }
  *   - step_update : { event: 'step_update', step_update: { step_index, state, step_type, text_delta, tool_name, tool_info, usage } }
  *   - result      : { event: 'result', result: { status, response, duration_seconds, usage } }
+ *
+ * Also maintains compatibility with legacy Gemini JSONL frames:
+ *   - { type: 'init', session_id, model }
+ *   - { type: 'message', role: 'assistant', content, delta }
+ *   - { type: 'result', status, stats }
  */
 
 import { Buffer } from 'node:buffer';
@@ -29,24 +34,91 @@ function stringifyContent(value: unknown): string {
   }
 }
 
+function isAntigravityOAuthLine(line: string): boolean {
+  return (
+    /authentication required/i.test(line) ||
+    /accounts\.google\.com\/o\/oauth2\/auth/i.test(line) ||
+    /waiting for authentication/i.test(line) ||
+    /authentication timed out/i.test(line)
+  );
+}
+
 export function createAntigravityStreamHandler(onEvent: AntigravityEventSink) {
   let buffer = '';
   let hasEmittedTextDelta = false;
+  let hasSeenInit = false;
   const activeToolSteps = new Set<number>();
 
   function handleObject(obj: JsonRecord, rawLine: string) {
     const eventType = obj.event;
 
-    // 1. Session initialization
-    if (eventType === 'init') {
+    // 1. Session initialization (native event: 'init' or legacy type: 'init')
+    if (eventType === 'init' || (!eventType && obj.type === 'init')) {
+      hasSeenInit = true;
       const initData = isRecord(obj.init) ? obj.init : {};
+      const sessionId =
+        typeof obj.conversation_id === 'string'
+          ? obj.conversation_id
+          : typeof obj.session_id === 'string'
+            ? obj.session_id
+            : undefined;
+
       onEvent({
         type: 'status',
         label: 'initializing',
-        sessionId: typeof obj.conversation_id === 'string' ? obj.conversation_id : undefined,
+        sessionId,
         tools: Array.isArray(initData.tools) ? initData.tools : undefined,
         cwd: typeof initData.cwd === 'string' ? initData.cwd : undefined,
       });
+      return;
+    }
+
+    // Legacy Gemini JSONL: { type: 'message', role: 'assistant', content, delta }
+    if (!eventType && obj.type === 'message' && hasSeenInit) {
+      if (obj.role === 'assistant') {
+        const content = typeof obj.content === 'string' ? obj.content : '';
+        if (content.length > 0) {
+          hasEmittedTextDelta = true;
+          onEvent({ type: 'text_delta', delta: content });
+        }
+      }
+      return;
+    }
+
+    // Legacy Gemini JSONL: { type: 'result', status, stats }
+    if (!eventType && obj.type === 'result' && hasSeenInit) {
+      const status = typeof obj.status === 'string' ? obj.status : 'success';
+      const isError = status.toLowerCase() === 'error';
+      let usage: JsonRecord | null = null;
+      let durationMs: number | null = null;
+      if (isRecord(obj.stats)) {
+        usage = {
+          input_tokens: obj.stats.input_tokens,
+          output_tokens: obj.stats.output_tokens,
+          cached_tokens: obj.stats.cached,
+        };
+        if (typeof obj.stats.duration_ms === 'number') {
+          durationMs = obj.stats.duration_ms;
+        }
+      } else if (isRecord(obj.usage)) {
+        usage = obj.usage;
+      }
+
+      onEvent({
+        type: 'usage',
+        usage,
+        durationMs,
+        stopReason: status,
+        isError,
+      });
+      if (isError) {
+        onEvent({
+          type: 'error',
+          message:
+            typeof obj.message === 'string' ? obj.message : 'Antigravity execution failed',
+          raw: rawLine,
+        });
+      }
       return;
     }
 
@@ -104,8 +176,10 @@ export function createAntigravityStreamHandler(onEvent: AntigravityEventSink) {
 
           onEvent({
             type: 'tool_result',
+            toolUseId,
             tool_use_id: toolUseId,
             content: output,
+            isError: false,
             is_error: false,
             ...(durationMs != null ? { durationMs } : {}),
           });
@@ -128,8 +202,10 @@ export function createAntigravityStreamHandler(onEvent: AntigravityEventSink) {
 
           onEvent({
             type: 'tool_result',
+            toolUseId,
             tool_use_id: toolUseId,
             content: errorMessage,
+            isError: true,
             is_error: true,
             ...(durationMs != null ? { durationMs } : {}),
           });
@@ -158,8 +234,10 @@ export function createAntigravityStreamHandler(onEvent: AntigravityEventSink) {
       for (const stepIndex of activeToolSteps) {
         onEvent({
           type: 'tool_result',
+          toolUseId: `agy-step-${stepIndex}`,
           tool_use_id: `agy-step-${stepIndex}`,
           content: isError || isCanceled ? 'Tool interrupted' : '',
+          isError: isError || isCanceled,
           is_error: isError || isCanceled,
         });
       }
@@ -199,6 +277,10 @@ export function createAntigravityStreamHandler(onEvent: AntigravityEventSink) {
   function handleLine(line: string) {
     const trimmed = line.trim();
     if (!trimmed) return;
+    if (isAntigravityOAuthLine(trimmed)) {
+      onEvent({ type: 'oauth_prompt', line: trimmed });
+      return;
+    }
     try {
       const parsed = JSON.parse(trimmed);
       if (isRecord(parsed)) {
@@ -231,8 +313,10 @@ export function createAntigravityStreamHandler(onEvent: AntigravityEventSink) {
     for (const stepIndex of activeToolSteps) {
       onEvent({
         type: 'tool_result',
+        toolUseId: `agy-step-${stepIndex}`,
         tool_use_id: `agy-step-${stepIndex}`,
         content: '',
+        isError: false,
         is_error: false,
       });
     }
