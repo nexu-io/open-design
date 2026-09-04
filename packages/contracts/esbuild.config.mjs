@@ -20,6 +20,7 @@ await build({
     "./src/runtime/preview-runtime-state.ts",
     "./src/runtime/preview-guards.ts",
     "./src/runtime/html-injection-points.ts",
+    "./src/runtime/product-runtime.ts",
     "./src/design-systems/components-manifest.ts",
     "./src/design-systems/derived-token-outputs.ts",
     "./src/design-systems/token-schema.ts",

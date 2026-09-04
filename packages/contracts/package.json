@@ -66,6 +66,10 @@
       "types": "./dist/runtime/preview-guards.d.ts",
       "default": "./dist/runtime/preview-guards.mjs"
     },
+    "./runtime/product-runtime": {
+      "types": "./dist/runtime/product-runtime.d.ts",
+      "default": "./dist/runtime/product-runtime.mjs"
+    },
     "./design-systems/components-manifest": {
       "types": "./dist/design-systems/components-manifest.d.ts",
       "default": "./dist/design-systems/components-manifest.mjs"

@@ -61,6 +61,7 @@ export * from './runtime/preview-runtime-state.js';
 export * from './runtime/model-window-limit.js';
 export * from './runtime/membership-concurrency-limit.js';
 export * from './runtime/od-next-capability.js';
+export * from './runtime/product-runtime.js';
 export * from './design-systems/components-manifest.js';
 export * from './design-systems/derived-token-outputs.js';
 export * from './design-systems/token-schema.js';
