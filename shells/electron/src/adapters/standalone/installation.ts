@@ -26,6 +26,7 @@ export type ElectronStandaloneInstallation = Readonly<{
   releaseVersion: string;
   target: ElectronStandaloneTarget;
   host: InstalledFile;
+  supervisor: InstalledFile;
   content: InstalledFile;
   trust: InstalledFile;
   seeds: readonly Readonly<InstalledFile & { blobSha256: string }>[];
@@ -68,7 +69,7 @@ function installedFile(value: unknown, label: string): InstalledFile {
 
 export function validateElectronStandaloneInstallation(value: unknown): ElectronStandaloneInstallation {
   const candidate = record(value, "Electron Standalone installation");
-  exactKeys(candidate, ["channel", "content", "host", "releaseVersion", "schemaVersion", "seeds", "target", "trust"], "Electron Standalone installation");
+  exactKeys(candidate, ["channel", "content", "host", "releaseVersion", "schemaVersion", "seeds", "supervisor", "target", "trust"], "Electron Standalone installation");
   if (candidate.schemaVersion !== ELECTRON_STANDALONE_INSTALLATION_SCHEMA_VERSION) throw new Error("unsupported Electron Standalone installation schema");
   if (typeof candidate.channel !== "string") throw new Error("Electron Standalone installation channel must be a string");
   if (typeof candidate.releaseVersion !== "string") throw new Error("Electron Standalone installation releaseVersion must be a string");
@@ -83,6 +84,8 @@ export function validateElectronStandaloneInstallation(value: unknown): Electron
     return file;
   };
   const host = reserve(installedFile(candidate.host, "Electron Standalone host"), "Electron Standalone host");
+  const supervisor = reserve(installedFile(candidate.supervisor, "Electron Standalone supervisor"), "Electron Standalone supervisor");
+  if (supervisor.file !== "supervisor.mjs") throw new Error("Electron Standalone supervisor must retain Sidecar's fixed module name");
   const content = reserve(installedFile(candidate.content, "Electron Standalone content"), "Electron Standalone content");
   const trust = reserve(installedFile(candidate.trust, "Electron Standalone trust"), "Electron Standalone trust");
   const blobDigests = new Set<string>();
@@ -103,6 +106,7 @@ export function validateElectronStandaloneInstallation(value: unknown): Electron
     releaseVersion: candidate.releaseVersion,
     target: candidate.target as ElectronStandaloneTarget,
     host,
+    supervisor,
     content,
     trust,
     seeds: Object.freeze(seeds),
@@ -161,13 +165,15 @@ export async function loadElectronStandaloneInstallation(input: Readonly<{
   if (declaration.channel !== input.channel) throw new Error("Electron Standalone installation escaped its exact channel");
   if (declaration.target !== input.target) throw new Error("Electron Standalone installation target does not match this Shell");
 
-  const [hostBytes, contentBytes, trustBytes, seedBytes] = await Promise.all([
+  const [hostBytes, supervisorBytes, contentBytes, trustBytes, seedBytes] = await Promise.all([
     verifiedInstalledBytes(input.resourceRoot, declaration.host, "Electron Standalone host"),
+    verifiedInstalledBytes(input.resourceRoot, declaration.supervisor, "Electron Standalone supervisor"),
     verifiedInstalledBytes(input.resourceRoot, declaration.content, "Electron Standalone content"),
     verifiedInstalledBytes(input.resourceRoot, declaration.trust, "Electron Standalone trust"),
     Promise.all(declaration.seeds.map((seed, index) => verifiedInstalledBytes(input.resourceRoot, seed, `Electron Standalone seed ${index}`))),
   ]);
   void hostBytes;
+  void supervisorBytes;
   const trustedKeys = parseTrust(trustBytes);
   const envelope = parseJson(contentBytes, "Electron Standalone content") as SignedStandaloneMetadata;
   verifyStandaloneMetadata(envelope, trustedKeys);

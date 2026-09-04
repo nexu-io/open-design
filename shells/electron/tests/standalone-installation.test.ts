@@ -30,6 +30,7 @@ async function installedFixture() {
   const root = await mkdtemp(join(tmpdir(), "electron-standalone-installation-"));
   roots.push(root);
   const host = Buffer.from("export default 'host';\n");
+  const supervisor = Buffer.from("export default 'supervisor';\n");
   const launcher = Buffer.from("export default 'launcher';\n");
   const closure = Buffer.from("export default 'closure';\n");
   const launcherDigest = createHash("sha256").update(launcher).digest("hex");
@@ -63,6 +64,7 @@ async function installedFixture() {
     releaseVersion: metadata.releaseVersion,
     target: "darwin-arm64",
     host: descriptor("standalone-host.mjs", host),
+    supervisor: descriptor("supervisor.mjs", supervisor),
     content: descriptor("standalone-content.json", content),
     trust: descriptor("standalone-trust.json", trust),
     seeds: [
@@ -72,6 +74,7 @@ async function installedFixture() {
   } as const;
   await Promise.all([
     writeFile(join(root, declaration.host.file), host),
+    writeFile(join(root, declaration.supervisor.file), supervisor),
     writeFile(join(root, declaration.content.file), content),
     writeFile(join(root, declaration.trust.file), trust),
     writeFile(join(root, declaration.seeds[0].file), launcher),
