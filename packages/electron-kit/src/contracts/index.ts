@@ -22,31 +22,6 @@ import type { ElectronMacRuntimePolicy } from "../platform/macos/contracts.js";
 
 export const ELECTRON_KIT_CONTRACT_VERSION = 1 as const;
 
-/**
- * Temporary wire surface implemented only by the phase-one fixture.
- *
- * Production integration must consume the upstream Standalone handoff and
- * Sidecar runtime-handle contracts once those tasks freeze; this registry is
- * deliberately not a production Electron/Closure protocol.
- */
-export const ELECTRON_FIXTURE_ENDPOINTS = Object.freeze([
-  "bootstrap.handoff",
-  "lifecycle.start",
-  "lifecycle.awaitReady",
-  "lifecycle.status",
-  "lifecycle.heartbeat",
-  "lifecycle.release",
-  "lifecycle.stop",
-  "lifecycle.beginTransition",
-  "feedback.observe",
-  "shellUpdater.readSnapshot",
-  "shellUpdater.waitForChange",
-  "shellUpdater.invoke",
-  "shellUpdater.confirmInstalled",
-] as const);
-
-export type ElectronFixtureEndpoint = (typeof ELECTRON_FIXTURE_ENDPOINTS)[number];
-
 export type ElectronShellManifest = Readonly<{
   schemaVersion: typeof ELECTRON_KIT_CONTRACT_VERSION;
   appId: string;
@@ -186,11 +161,4 @@ export function validateElectronShellManifest(value: ElectronShellManifest): Ele
     throw new Error("Electron Shell identity does not match its manifest");
   }
   return structuredClone(value);
-}
-
-export function assertElectronFixtureEndpoint(endpoint: string): ElectronFixtureEndpoint {
-  if (!(ELECTRON_FIXTURE_ENDPOINTS as readonly string[]).includes(endpoint)) {
-    throw new Error(`unknown Electron fixture endpoint: ${endpoint}`);
-  }
-  return endpoint as ElectronFixtureEndpoint;
 }

@@ -51,11 +51,3 @@ for (const [entry, output] of Object.entries(publicEntries)) {
     target: "node24",
   });
 }
-await build({
-  bundle: true,
-  entryPoints: ["./src/fixtures/lifecycle/sidecar.ts"],
-  format: "cjs",
-  outfile: "./dist/fixtures/lifecycle/sidecar.cjs",
-  platform: "node",
-  target: "node24",
-});

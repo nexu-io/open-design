@@ -3,20 +3,12 @@ import { readFile, readdir } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 import {
-  ELECTRON_FIXTURE_ENDPOINTS,
-  assertElectronFixtureEndpoint,
   validateElectronShellManifest,
 } from "@/contracts/index.js";
 
 const hash = "a".repeat(64);
 
 describe("Electron integration boundary", () => {
-  it("labels the phase-one fixture surface and rejects unknown endpoints", () => {
-    expect(ELECTRON_FIXTURE_ENDPOINTS).toHaveLength(13);
-    expect(assertElectronFixtureEndpoint("lifecycle.awaitReady")).toBe("lifecycle.awaitReady");
-    expect(() => assertElectronFixtureEndpoint("closure.invokeAnything")).toThrow(/unknown Electron fixture endpoint/u);
-  });
-
   it("requires Shell identity to match the manifest", () => {
     expect(validateElectronShellManifest({
       schemaVersion: 1,

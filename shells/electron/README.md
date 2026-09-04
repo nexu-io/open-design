@@ -22,12 +22,11 @@ uses `app.setActivationPolicy`, `app.dock.show()` and `app.dock.hide()` only for
 the current process presentation. A user's “Keep in Dock” choice is persisted
 and matched to the stable bundle identity by macOS; neither the Shell nor
 electron-kit stores, infers, pins, or unpins that state.
-Desktop handlers land only after the Standalone logical-handoff and Sidecar
-runtime-handle contracts freeze. Shell JSON and Shell code own product
+Shell JSON and Shell code own product
 composition, while Sidecar owns private IPC, process identity, guarded physical
 lifetime, retirement, and terminal stop. electron-kit does not publish a
-transport or control-session wrapper. The phase-one fixture intentionally does
-not publish a temporary desktop handler protocol.
+transport or control-session wrapper. The deleted phase-one fixture is not a
+fallback path and no temporary desktop handler protocol is published.
 
 ```sh
 pnpm -C shells/electron dev
@@ -39,28 +38,18 @@ Headless mode completes the same lifecycle, explicit-readiness, protocol, and
 hidden-renderer mount sequence without creating a splash or revealing/focusing
 a window. `ELECTRON_KIT_HEADLESS=1` is the environment equivalent.
 
-For the fixture update proof, point `OD_UPDATE_METADATA_URL` at a
-`tools-serve updater` metadata endpoint. Setting
-`ELECTRON_KIT_FIXTURE_PREPARE_UPDATE=1` makes the fixture Closure schedule the
-Shell-owned check/download path. Adding `ELECTRON_KIT_FIXTURE_INSTALL_UPDATE=1`
-exercises the shared lifecycle transition and orderly after-quit installer
-handoff; `ELECTRON_KIT_FIXTURE_INSTALLER_VERIFY_ONLY=1` keeps that proof safe by
-re-verifying the artifact and writing the detached-helper receipt without
-opening it. The Shell handler arms that helper before Electron requests quit;
-the helper still waits for the Electron parent to exit before acting.
-
 `pack` emits a macOS `.app` and `.dmg` under `dist/` on macOS. Windows emits a
 directory build and NSIS installer on a Windows host. Its ephemeral NSIS include
 projects the shared Shell identity into App Paths and protocol registration, with
 owner-checked cleanup; it is loaded from electron-kit's packaged resources and never
-enters the release-neutral scene. The current lifecycle is the replaceable
-phase-one fixture. Its `createStandaloneAuthority` adapter contains the
-low-level fixture endpoint registry behind a Standalone runtime handle; neither
-is the production contract, and the Shell does not import Closure implementation.
+enters the release-neutral scene. The production `createStandaloneAuthority`
+adapter consumes signed exact content, the Standalone updater/runtime-handle
+contracts, and Sidecar guarded resource sets; the Shell does not import Closure
+implementation.
 The standard `prepack` lifecycle intentionally points at the same Shell-owned
 `scripts/pack.mjs` shim, because pnpm reserves `pack` as a built-in command.
 `config/carriers/node-lock.json` is Shell-local but byte-for-byte aligned with Terminal's
 official Node lock; tests prevent the two supported carriers from drifting.
 The lock is consumed by the thin `dev.mjs`/`pack.mjs` shims and the packaged
-runtime. The verified carrier executes bootstrap/lifecycle helpers; electron-kit
+runtime. The verified carrier executes the production Fossil host; electron-kit
 does not expose a bin and the Shell never imports another Shell at runtime.
