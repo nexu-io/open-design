@@ -13,7 +13,9 @@ import type {
   Scene3dIssue,
   Scene3dManifestResponse,
   Scene3dProofOptions,
+  WorkspaceCollabContext,
 } from '@open-design/contracts';
+import { workspaceProjectHeaders } from '../collab/workspace-identity';
 
 export interface Scene3dCompileState {
   /** The last compile report, or null before the first compile. */
@@ -99,6 +101,7 @@ export function scene3dScenePathForFile(filePath: string): string | null {
 export function useScene3dCompile(
   projectId: string,
   scenePath = '.',
+  workspaceContext: WorkspaceCollabContext | null = null,
 ): Scene3dCompileState {
   const [result, setResult] = useState<Scene3dCompileResponse | null>(null);
   const [stored, setStored] = useState<Scene3dManifestResponse | null>(null);
@@ -125,7 +128,10 @@ export function useScene3dCompile(
         const query = `?scenePath=${encodeURIComponent(scenePath)}`;
         const resp = await fetch(
           `/api/projects/${encodeURIComponent(projectId)}/scene3d/manifest${query}`,
-          { signal: controller.signal },
+          {
+            signal: controller.signal,
+            headers: workspaceContext ? workspaceProjectHeaders(workspaceContext) : undefined,
+          },
         );
         if (!resp.ok) throw new Error(`scene3d manifest → HTTP ${resp.status}`);
         const body = (await resp.json()) as Scene3dManifestResponse;
@@ -140,7 +146,7 @@ export function useScene3dCompile(
       }
     })();
     return () => controller.abort();
-  }, [projectId, scenePath]);
+  }, [projectId, scenePath, workspaceContext]);
 
   const compile = useCallback(
     async (options: Scene3dCompileOptions = {}) => {
@@ -152,7 +158,10 @@ export function useScene3dCompile(
           `/api/projects/${encodeURIComponent(projectId)}/scene3d/compile`,
           {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
+            headers: {
+              'content-type': 'application/json',
+              ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+            },
             body: JSON.stringify(body),
           },
         );
@@ -172,7 +181,7 @@ export function useScene3dCompile(
         if (aliveRef.current) setCompiling(false);
       }
     },
-    [projectId, scenePath],
+    [projectId, scenePath, workspaceContext],
   );
 
   return { result, stored, compiling, loading, error, compile };

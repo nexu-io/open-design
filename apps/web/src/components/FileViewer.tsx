@@ -38,6 +38,7 @@ import {
   appendResourceQuery,
   workspaceIdentityCacheKey,
   workspaceProjectHeaders,
+  workspaceResourceUrl,
 } from '../collab/workspace-identity';
 import {
   anonymizeArtifactId,
@@ -1911,6 +1912,7 @@ export const FileViewer = memo(function FileViewer({
           ?? '.'
         }
         file={file}
+        workspaceContext={projectCollabContext.workspaceContext}
       />
     );
   }
@@ -2007,7 +2009,14 @@ export const FileViewer = memo(function FileViewer({
   // bytes of a `.glb` or a `.usda` layer tell a user nothing on their own.
   const scene3dScenePath = scene3dScenePathForFile(file.path ?? file.name);
   if (scene3dScenePath !== null) {
-    return <Scene3dPanel projectId={projectId} scenePath={scene3dScenePath} file={file} />;
+    return (
+      <Scene3dPanel
+        projectId={projectId}
+        scenePath={scene3dScenePath}
+        file={file}
+        workspaceContext={projectCollabContext.workspaceContext}
+      />
+    );
   }
   if (file.kind === 'text' || file.kind === 'code') {
     return <TextViewer projectId={projectId} file={file} />;
@@ -8453,7 +8462,12 @@ function HtmlViewer({
           // running) is reported as its own message, not a bare status.
           void fetch(`/api/projects/${encodeURIComponent(projectId)}/scene3d/compile`, {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
+            headers: {
+              'content-type': 'application/json',
+              ...(collab.workspaceContext
+                ? workspaceProjectHeaders(collab.workspaceContext)
+                : {}),
+            },
             body: JSON.stringify(scenePath ? { scenePath } : {}),
           })
             .then(async (resp) => {
@@ -8468,7 +8482,11 @@ function HtmlViewer({
           return;
         }
         if (request.op === 'load') {
-          void fetch(scenePath ? `${url}?scenePath=${encodeURIComponent(scenePath)}` : url)
+          void fetch(scenePath ? `${url}?scenePath=${encodeURIComponent(scenePath)}` : url, {
+            headers: collab.workspaceContext
+              ? workspaceProjectHeaders(collab.workspaceContext)
+              : undefined,
+          })
             .then(async (resp) => {
               if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
               const body = (await resp.json()) as { tweaks?: unknown };
@@ -8489,7 +8507,12 @@ function HtmlViewer({
           if (scenePath) body.scenePath = scenePath;
           void fetch(url, {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
+            headers: {
+              'content-type': 'application/json',
+              ...(collab.workspaceContext
+                ? workspaceProjectHeaders(collab.workspaceContext)
+                : {}),
+            },
             body: JSON.stringify(body),
           })
             .then((resp) => {
@@ -8540,7 +8563,7 @@ function HtmlViewer({
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [isScene3dArtifact, file.name]);
+  }, [isScene3dArtifact, file.name, collab.workspaceContext]);
   const viewerRootRef = useRef<HTMLDivElement | null>(null);
   const srcDocNavigationCommittedRef = useRef<{
     frame: HTMLIFrameElement;
@@ -17458,7 +17481,7 @@ function HtmlViewer({
                                     key={item.ref.path}
                                     className="share-menu-model-format"
                                     role="menuitem"
-                                    href={item.ref.url}
+                                    href={workspaceResourceUrl(item.ref.url, workspaceContext)}
                                     download={item.downloadName}
                                     title={item.downloadName}
                                     onClick={() => setDeployMenuOpen(false)}

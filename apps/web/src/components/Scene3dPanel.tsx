@@ -29,6 +29,8 @@ import {
   type Scene3dSelectionPart,
   type Scene3dTreeNodeInput,
   type Scene3dTreeRow, meshPartCount } from '@open-design/contracts';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
+import { workspaceResourceUrl } from '../collab/workspace-identity';
 import { useT } from '../i18n';
 import {
   displayFrames,
@@ -66,6 +68,14 @@ export interface Scene3dPanelProps {
   scenePath?: string;
   /** The file that opened this panel, when one did. Used for the title. */
   file?: ProjectFile;
+  /**
+   * Present only for a Workspace-bound project. The export menu's links are
+   * plain `<a href>` navigations — a browser can't attach request headers to
+   * those — so they carry this authority as a query string via
+   * `workspaceResourceUrl` instead, the same pattern every other download
+   * surface in the app uses (`exports.ts`, `DesignKitView`, …).
+   */
+  workspaceContext?: WorkspaceCollabContext | null;
 }
 
 const SEVERITY_CLASS: Record<string, string> = {
@@ -74,8 +84,15 @@ const SEVERITY_CLASS: Record<string, string> = {
   info: styles.severityInfo!,
 };
 
-export function Scene3dPanel({ projectId, scenePath = '.', file }: Scene3dPanelProps) {
-  return <Scene3dScenePanel projectId={projectId} scenePath={scenePath} file={file} />;
+export function Scene3dPanel({ projectId, scenePath = '.', file, workspaceContext }: Scene3dPanelProps) {
+  return (
+    <Scene3dScenePanel
+      projectId={projectId}
+      scenePath={scenePath}
+      file={file}
+      workspaceContext={workspaceContext}
+    />
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -313,7 +330,18 @@ function issueDomain(code: string): string {
  * carries the identity and the `download` name (`<scene>.<ext>`) keeps
  * saved files from colliding.
  */
-function ExportMenu({ label, refs }: { label: string; refs: readonly Scene3dArtifactRef[] }) {
+/** Exported for `scene3d-export-menu-workspace-scoping.test.tsx` — the smallest
+ *  piece of the panel that actually applies `workspaceResourceUrl`, so it's
+ *  the cheapest place to pin that the wiring, not just the primitive, works. */
+export function ExportMenu({
+  label,
+  refs,
+  workspaceContext,
+}: {
+  label: string;
+  refs: readonly Scene3dArtifactRef[];
+  workspaceContext?: WorkspaceCollabContext | null;
+}) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const row = useMemo(() => modelRowFromRefs(label, refs), [label, refs]);
@@ -363,7 +391,7 @@ function ExportMenu({ label, refs }: { label: string; refs: readonly Scene3dArti
                   key={item.ref.path}
                   className={styles.exportFormat}
                   role="menuitem"
-                  href={item.ref.url}
+                  href={workspaceResourceUrl(item.ref.url, workspaceContext)}
                   download={item.downloadName}
                   title={item.downloadName}
                   onClick={() => setOpen(false)}
@@ -387,18 +415,29 @@ function Scene3dScenePanel({
   projectId,
   scenePath,
   file,
+  workspaceContext,
 }: {
   projectId: string;
   scenePath: string;
   file?: ProjectFile;
+  workspaceContext?: WorkspaceCollabContext | null;
 }) {
   const t = useT();
   const { result, stored, compiling, loading, error, compile } = useScene3dCompile(
     projectId,
     scenePath,
+    workspaceContext,
   );
 
-  const frames = useMemo(() => displayFrames(result, stored), [result, stored]);
+  // Scoped once here, at the boundary where the compiler's raw file URLs
+  // enter the component: every reader below (the visible frame, and the
+  // x-ray canvas compositing's own `idMapUrlFor` sibling lookup) treats
+  // `frames` as already-authoritative, so fixing it per-reader would be one
+  // more call site to forget next time a new frame consumer is added.
+  const frames = useMemo(
+    () => displayFrames(result, stored).map((url) => workspaceResourceUrl(url, workspaceContext)),
+    [result, stored, workspaceContext],
+  );
   const manifest: Scene3dManifest | null = result?.manifest ?? stored?.manifest ?? null;
   const issues = useMemo(() => sortIssuesBySeverity(result?.issues ?? []), [result]);
   // Sorted by code so equal domains sit together (severity + decade order for
@@ -971,7 +1010,7 @@ function Scene3dScenePanel({
           <ProvenBadge claims={manifest?.claims} />
         </div>
         <div className="viewer-toolbar-actions">
-          <ExportMenu label={assetName} refs={assets} />
+          <ExportMenu label={assetName} refs={assets} workspaceContext={workspaceContext} />
           <Button variant="primary" onClick={() => void compile()} disabled={compiling || loading}>
             {compiling
               ? t('scene3d.compiling')
