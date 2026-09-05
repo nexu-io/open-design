@@ -4,7 +4,7 @@ description: "A two-page A4 report that turns real business data into an executi
 license: MIT
 metadata:
   author: Open Design
-  version: "0.1.0"
+  version: "0.1.1"
 ---
 
 # Data Visualization Report
@@ -56,3 +56,8 @@ This is deliberately a two-page A4 report: page one carries the signal and analy
 - No content, chart, table, ornament, or footer is clipped.
 - The output preserves the reference page geometry: A4, exactly 2 pages.
 - The final HTML contains the user's actual content rather than lorem ipsum, placeholder images, or invented numbers.
+
+## Paper export boundaries
+
+- Preserve `data-od-document-page` on each complete A4 paper root so PDF export captures the authored page rather than splitting at screen-height boundaries.
+- Keep exactly 2 marked paper pages in the final HTML, and verify that no content exceeds its paper boundary.

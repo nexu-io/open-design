@@ -7,7 +7,7 @@
     "en": "DOCX Workspace Template",
     "zh-CN": "DOCX 工作区模板"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publishedAt": "2026-08-27T00:00:00Z",
   "description": "An authoring blueprint for building a decision-ready, editable DOCX update from bounded source material.",
   "description_i18n": {

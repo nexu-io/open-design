@@ -7,7 +7,7 @@
     "en": "Decision Memo",
     "zh-CN": "决策备忘录"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publishedAt": "2026-08-27T00:00:00Z",
   "description": "A one-page decision memo that makes the recommendation, evidence, option trade-offs, controls, and next action immediately scannable.",
   "description_i18n": {

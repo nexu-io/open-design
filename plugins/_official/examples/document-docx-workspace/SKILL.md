@@ -4,7 +4,7 @@ description: "An authoring blueprint for building a decision-ready, editable DOC
 license: MIT
 metadata:
   author: Open Design
-  version: "0.1.0"
+  version: "0.1.1"
 ---
 
 # DOCX Workspace Template
@@ -47,3 +47,8 @@ Use this skill when the user wants a document in the visual and information patt
 - No content, chart, table, ornament, or footer is clipped.
 - The output preserves the reference page geometry: A4, exactly 1 page.
 - The final HTML contains the user's actual content rather than lorem ipsum, placeholder images, or invented numbers.
+
+## Paper export boundaries
+
+- Preserve `data-od-document-page` on each complete A4 paper root so PDF export captures the authored page rather than splitting at screen-height boundaries.
+- Keep exactly 1 marked paper page in the final HTML, and verify that no content exceeds its paper boundary.

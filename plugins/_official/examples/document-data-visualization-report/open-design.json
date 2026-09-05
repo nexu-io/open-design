@@ -7,7 +7,7 @@
     "en": "Data Visualization Report",
     "zh-CN": "数据可视化报告"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publishedAt": "2026-08-27T00:00:00Z",
   "description": "A two-page A4 report that turns real business data into an executive signal, directly labeled charts, decisions, and a validation plan.",
   "description_i18n": {
