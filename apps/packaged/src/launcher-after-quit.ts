@@ -14,6 +14,7 @@ import {
 import {
   getSidecarStatus,
   invokeSidecar,
+  isJsonIpcTimeoutError,
   stopSidecar,
   type SidecarStamp,
 } from "@open-design/sidecar";
@@ -26,6 +27,28 @@ const PACKAGED_SIDECAR_SOURCES = [SIDECAR_SOURCES.TOOLS_PACK, SIDECAR_SOURCES.PA
 
 function packagedSidecarSourcesFor(stamp: SidecarStamp): readonly SidecarStamp["source"][] {
   return [stamp.source, ...PACKAGED_SIDECAR_SOURCES.filter((source) => source !== stamp.source)];
+}
+
+const PEER_PROBE_TIMEOUT_MS = 350;
+const BUSY_PEER_PROBE_TIMEOUT_MS = 1500;
+
+type PeerProbeResult = "busy" | "healthy" | "stale";
+
+/**
+ * A peer whose endpoint is gone is stale; a peer that accepts the connection
+ * but cannot answer inside the probe budget is merely busy (for example the
+ * daemon serving an agent run) and must not cost the user their desktop.
+ */
+async function probeSidecarPeer(peer: SidecarStamp, getStatus: typeof getSidecarStatus): Promise<PeerProbeResult> {
+  for (const timeoutMs of [PEER_PROBE_TIMEOUT_MS, BUSY_PEER_PROBE_TIMEOUT_MS]) {
+    try {
+      const status = await getStatus<{ url?: unknown }>(peer, { timeoutMs });
+      return typeof status?.url === "string" && status.url.length > 0 ? "healthy" : "stale";
+    } catch (error) {
+      if (!isJsonIpcTimeoutError(error)) return "stale";
+    }
+  }
+  return "busy";
 }
 
 export type LauncherExistingDesktopGateResult =
@@ -244,14 +267,11 @@ export async function inspectExistingDesktopForLauncher(
   const { stamp: inspectedStamp, status } = ownerInspection.running;
 
   const staleSidecars: AppKey[] = [];
+  const busySidecars: AppKey[] = [];
   for (const app of [APP_KEYS.DAEMON, APP_KEYS.WEB]) {
-    const sidecarStatus = await getStatus<{ url?: unknown }>(
-      { ...inspectedStamp, app, mode: inspectedStamp.mode },
-      { timeoutMs: 350 },
-    ).catch(() => null);
-    if (typeof sidecarStatus?.url !== "string" || sidecarStatus.url.length === 0) {
-      staleSidecars.push(app);
-    }
+    const probe = await probeSidecarPeer({ ...inspectedStamp, app, mode: inspectedStamp.mode }, getStatus);
+    if (probe === "stale") staleSidecars.push(app);
+    else if (probe === "busy") busySidecars.push(app);
   }
 
   if (staleSidecars.length > 0) {
@@ -271,6 +291,13 @@ export async function inspectExistingDesktopForLauncher(
     });
     if (!restarted) return { action: "exit", reason: "existing-focus-failed" };
     return { action: "continue", reason: "stale-sidecar" };
+  }
+
+  if (busySidecars.length > 0) {
+    await writeLauncherAfterQuitLog(
+      options.paths,
+      `inspect-found-existing namespace=${namespace} peer=busy apps=${busySidecars.join(",")} pid=${typeof status.pid === "number" ? status.pid : "unknown"}`,
+    );
   }
 
   const existingVersion = status.update?.currentVersion;
