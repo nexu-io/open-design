@@ -43,6 +43,7 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   { id: 'comfyui', label: 'ComfyUI', hint: 'Local JSON workflow server (planned adapter)', integrated: false, defaultBaseUrl: 'http://127.0.0.1:8188', docsUrl: 'https://docs.comfy.org/development/core-concepts/workflow' },
   { id: 'bfl', label: 'Black Forest Labs', hint: 'FLUX 1.1 Pro / FLUX Pro / Dev', integrated: false, defaultBaseUrl: 'https://api.bfl.ai' },
   { id: 'fal', label: 'Fal.ai', hint: 'FLUX / Sora / Veo / Wan / Ideogram / Recraft and any fal-ai/* model', integrated: true, defaultBaseUrl: 'https://fal.run', supportsCustomModel: true },
+  { id: 'pruna', label: 'Pruna AI', hint: 'p-image / p-image-edit / p-video — fast image + video on one endpoint', integrated: true, credentialsRequired: true, settingsVisible: true, defaultBaseUrl: 'https://api.pruna.ai/v1', docsUrl: 'https://docs.api.pruna.ai/guides/quickstart', supportsCustomModel: true, customModelPlaceholder: 'p-image or wan-t2v' },
   { id: 'leonardo', label: 'Leonardo.ai', hint: 'Phoenix / Kino XL / FLUX', integrated: true, credentialsRequired: true, settingsVisible: true, defaultBaseUrl: 'https://cloud.leonardo.ai/api/rest/v1' },
   { id: 'replicate', label: 'Replicate', hint: 'FLUX / SDXL / Ideogram', integrated: false, defaultBaseUrl: 'https://api.replicate.com' },
   { id: 'google', label: 'Google AI / Vertex', hint: 'Imagen 4 / Veo 3 / Lyria', integrated: false },
@@ -145,6 +146,16 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'recraft-v3-fal', label: 'recraft-v3', hint: 'Fal · Recraft v3 · vector + illustration (~15–30s)', provider: 'fal', caps: ['t2i'] },
   { id: 'sd-3.5', label: 'stable-diffusion-3.5', hint: 'Fal · SD 3.5 (~20–40s)', provider: 'fal', caps: ['t2i'] },
 
+  // Pruna AI image models. The `p-*` names are unique upstream so they carry
+  // through verbatim; generic names take a `-pruna` suffix the way the fal
+  // entries above take `-fal`, and the renderer maps them back to the wire
+  // name. Any other Pruna model works via the Settings custom-model field.
+  { id: 'p-image', label: 'p-image', hint: 'Pruna · ultra-fast text-to-image', provider: 'pruna', caps: ['t2i'] },
+  { id: 'p-image-edit', label: 'p-image-edit', hint: 'Pruna · image editing, 1-5 reference images', provider: 'pruna', caps: ['i2i'] },
+  { id: 'p-image-ideogram', label: 'p-image-ideogram', hint: 'Pruna · strong typography', provider: 'pruna', caps: ['t2i'] },
+  { id: 'flux-dev-pruna', label: 'flux-dev (Pruna)', hint: 'Pruna · FLUX.1 Dev', provider: 'pruna', caps: ['t2i'] },
+  { id: 'qwen-image-edit-plus-pruna', label: 'qwen-image-edit-plus (Pruna)', hint: 'Pruna · Qwen image editing', provider: 'pruna', caps: ['i2i'] },
+
   { id: 'leonardo-phoenix', label: 'Phoenix', hint: 'Leonardo · versatile', provider: 'leonardo', caps: ['t2i'] },
   { id: 'leonardo-kino-xl', label: 'Kino XL', hint: 'Leonardo · cinematic', provider: 'leonardo', caps: ['t2i'] },
   { id: 'leonardo-flux-dev', label: 'FLUX Dev', hint: 'Leonardo · FLUX', provider: 'leonardo', caps: ['t2i'] },
@@ -191,6 +202,12 @@ export const VIDEO_MODELS: MediaModel[] = [
   { id: 'kling-2.1-t2v-fal', label: 'kling-2.1 (fal)', hint: 'Fal · Kling 2.1 Pro text-to-video', provider: 'fal', caps: ['t2v'] },
   { id: 'sora-2', label: 'sora-2', hint: 'Fal · OpenAI Sora 2', provider: 'fal', caps: ['t2v'] },
   { id: 'sora-2-pro', label: 'sora-2-pro', hint: 'Fal · OpenAI Sora 2 Pro', provider: 'fal', caps: ['t2v'] },
+
+  // Pruna AI video models. p-video covers text-to-video and image-to-video on
+  // one model id and keeps generated audio in the mp4 by default.
+  { id: 'p-video', label: 'p-video', hint: 'Pruna · 720p/1080p, up to 20s, sound-on', provider: 'pruna', caps: ['t2v', 'i2v', 'audio'] },
+  { id: 'wan-t2v-pruna', label: 'wan-t2v (Pruna)', hint: 'Pruna · Wan text-to-video', provider: 'pruna', caps: ['t2v'] },
+  { id: 'wan-i2v-pruna', label: 'wan-i2v (Pruna)', hint: 'Pruna · Wan image-to-video', provider: 'pruna', caps: ['i2v'] },
 
   { id: 'minimax-video-01', label: 'video-01', hint: 'MiniMax · Hailuo', provider: 'minimax', caps: ['t2v', 'i2v'] },
   { id: 'hyperframes-html', label: 'hyperframes-html', hint: 'HyperFrames · local HTML renderer', provider: 'hyperframes', caps: ['t2v'] },

@@ -92,6 +92,9 @@ const ENV_KEYS: Record<string, string[]> = {
   'custom-image': ['OD_CUSTOM_IMAGE_API_KEY', 'CUSTOM_IMAGE_API_KEY'],
   bfl: ['OD_BFL_API_KEY', 'BFL_API_KEY'],
   fal: ['OD_FAL_KEY', 'FAL_KEY'],
+  // OD_PRUNA_API_KEY first (project-reserved override), then PRUNA_API_KEY as
+  // the canonical env the Pruna quickstart and SDK examples use.
+  pruna: ['OD_PRUNA_API_KEY', 'PRUNA_API_KEY'],
   replicate: ['OD_REPLICATE_API_TOKEN', 'REPLICATE_API_TOKEN'],
   google: ['OD_GOOGLE_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY'],
   kling: ['OD_KLING_API_KEY', 'KLING_API_KEY'],

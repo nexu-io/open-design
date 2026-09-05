@@ -2771,8 +2771,8 @@ function MediaProjectOptions(props:
 
 export function supportedModels(surface: 'image' | 'video' | 'audio', models: MediaModel[]): MediaModel[] {
   const supportedProviders: Record<'image' | 'video' | 'audio', Set<string>> = {
-    image: new Set(['vela', 'openai', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image', 'aihubmix', 'minimax']),
-    video: new Set(['volcengine', 'hyperframes', 'grok', 'openrouter', 'imagerouter', 'aihubmix']),
+    image: new Set(['vela', 'openai', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'pruna', 'custom-image', 'aihubmix', 'minimax']),
+    video: new Set(['volcengine', 'hyperframes', 'grok', 'openrouter', 'imagerouter', 'pruna', 'aihubmix']),
     audio: new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine', 'aihubmix']),
   };
   return models.filter((model) => {

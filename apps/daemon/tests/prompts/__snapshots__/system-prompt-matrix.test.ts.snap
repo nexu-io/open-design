@@ -48,7 +48,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "clarifying-questions",
       "role-marker-guard",
     ],
-    "totalChars": 48156,
+    "totalChars": 48296,
   },
   "critique-enabled": {
     "sections": [
@@ -237,7 +237,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "clarifying-questions",
       "role-marker-guard",
     ],
-    "totalChars": 48154,
+    "totalChars": 48294,
   },
   "memory-hooks-off": {
     "sections": [

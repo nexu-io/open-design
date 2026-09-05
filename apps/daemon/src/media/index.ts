@@ -147,6 +147,8 @@ type MediaContext = {
   provider: MediaProvider | null;
   prompt: string;
   aspect: string | undefined;
+  /** True only when the caller supplied --aspect; provider defaults stay distinguishable. */
+  aspectExplicit: boolean;
   /**
    * Published quality tier the caller asked for, passed through verbatim and
    * left undefined when they asked for nothing. Only the Vela renderer reads
@@ -485,7 +487,24 @@ export async function generateMedia(args: {
     : durationClamp.value;
   const warnings = [lengthClamp.warning, durationClamp.warning].filter(Boolean);
 
+  const extraImages = Array.isArray(args.images) ? args.images : [];
   const dir = await ensureProject(projectsRoot, projectId);
+  if (def.provider === 'pruna') {
+    // The CLI sends its first repeated --image value in both `image` and
+    // `images`; normalize paths before counting so five distinct files remain
+    // five, while still rejecting an oversized request before reading bytes.
+    const distinctReferences = new Set(
+      [image, ...extraImages]
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        .map((value) => path.resolve(dir, value.trim())),
+    );
+    if (distinctReferences.size > PRUNA_MAX_REFERENCE_IMAGES) {
+      throw new Error(
+        `Pruna accepts at most ${PRUNA_MAX_REFERENCE_IMAGES} uploaded references per request; ` +
+        `received ${distinctReferences.size}.`,
+      );
+    }
+  }
   const safeOut = sanitizeName(
     output || autoOutputName(surface, model, resolvedAudioKind),
   );
@@ -502,7 +521,6 @@ export async function generateMedia(args: {
   // Multi-image support: resolve additional images from the `images`
   // array param. The first resolved image (imageRef) is the primary
   // reference; additional images flow as style/content references.
-  const extraImages = Array.isArray(args.images) ? args.images : [];
   const imageRefs: ImageRef[] = [];
   if (imageRef) imageRefs.push(imageRef);
   for (const imgPath of extraImages) {
@@ -531,6 +549,7 @@ export async function generateMedia(args: {
     provider: findProvider(def.provider),
     prompt: prompt || '',
     aspect: aspect || defaultAspectFor(surface),
+    aspectExplicit: typeof aspect === 'string' && aspect.trim().length > 0,
     // No default tier or resolution here on purpose: unlike aspect, an absent
     // one is a meaningful request. Substituting a value would take the pricing
     // decision away from the provider's own default.
@@ -776,6 +795,16 @@ export async function generateMedia(args: {
       suggestedExt = result.suggestedExt;
     } else if (def.provider === 'fal' && surface === 'video') {
       const result = await renderFalVideo(ctx, credentials, args.onProgress);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'pruna' && surface === 'image') {
+      const result = await renderPrunaImage(ctx, credentials, args.onProgress);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'pruna' && surface === 'video') {
+      const result = await renderPrunaVideo(ctx, credentials, args.onProgress);
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
@@ -3816,6 +3845,625 @@ async function renderFalVideo(ctx: MediaContext, credentials: ProviderConfig, on
   return {
     bytes,
     providerNote: `fal/${endpoint} · ${aspectRatio}${durationPart} · ${bytes.length} bytes`,
+    suggestedExt: '.mp4',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Provider: Pruna AI — https://docs.api.pruna.ai/guides/quickstart
+//
+// One endpoint (POST /predictions) serves every model. The model id travels
+// in a `Model:` header rather than in the body, and the credential in an
+// `apikey` header rather than as a Bearer token. Three properties of the API
+// shape this adapter:
+//
+//   1. We always take the async submit-then-poll path. `Try-Sync: true`
+//      returns the result inline, but the docs cap it at 60s and warn about
+//      504s — a bad trade for a dispatcher that already knows how to poll,
+//      and unusable for the video models.
+//   2. Reference images must be URLs; the API has no data-URL input. An
+//      i2i / i2v request therefore uploads the bytes to POST /files first
+//      and passes the returned `urls.get` back in.
+//   3. `generation_url` comes back absolute from some models and
+//      root-relative (`/v1/predictions/delivery/...`) from others, and the
+//      delivery endpoint itself requires the apikey header. Treating that
+//      URL as public would 401 on download.
+// ---------------------------------------------------------------------------
+
+const PRUNA_DEFAULT_BASE_URL = 'https://api.pruna.ai/v1';
+const PRUNA_JSON_MAX_BYTES = 1024 * 1024;
+const PRUNA_IMAGE_MAX_BYTES = 64 * 1024 * 1024;
+const PRUNA_VIDEO_MAX_BYTES = 256 * 1024 * 1024;
+const PRUNA_DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
+const PRUNA_MAX_REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
+
+// Catalog id -> upstream wire name, for entries whose catalog id carries a
+// `-pruna` disambiguation suffix (same convention as the `-fal` entries).
+// Unsuffixed `p-*` ids are already unique upstream and pass through.
+const PRUNA_WIRE_MODELS: Record<string, string> = {
+  'flux-dev-pruna': 'flux-dev',
+  'qwen-image-edit-plus-pruna': 'qwen-image-edit-plus',
+  'wan-t2v-pruna': 'wan-t2v',
+  'wan-i2v-pruna': 'wan-i2v',
+};
+
+// p-image-edit uses `images`; Qwen uses `image` with either one URL or an
+// array. Their documented limits differ, so keep wire-level contracts explicit.
+const PRUNA_IMAGES_FIELD_MODELS = new Set(['p-image-edit']);
+const PRUNA_REFERENCE_LIMITS: Record<string, number> = {
+  'p-image-edit': 5,
+  'qwen-image-edit-plus': 2,
+};
+const PRUNA_REQUIRED_REFERENCE_MODELS = new Set([
+  'p-image-edit',
+  'qwen-image-edit-plus',
+  'wan-i2v',
+]);
+const PRUNA_MATCH_INPUT_ASPECT_MODELS = new Set([
+  'p-image-edit',
+  'qwen-image-edit-plus',
+]);
+
+const PRUNA_ASPECT_RATIOS = new Set(['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3']);
+const PRUNA_VIDEO_RESOLUTIONS = new Set(['720p', '1080p']);
+const PRUNA_WAN_RESOLUTIONS = new Set(['480p', '720p']);
+const PRUNA_WAN_ASPECT_RATIOS = new Set(['16:9', '9:16']);
+const PRUNA_WAN_MIN_FRAMES = 81;
+const PRUNA_WAN_MAX_FRAMES = 121;
+const PRUNA_WAN_MIN_FPS = 5;
+const PRUNA_WAN_MAX_FPS = 30;
+const PRUNA_MIN_VIDEO_SECONDS = 1;
+const PRUNA_MAX_VIDEO_SECONDS = 20;
+// Reference-image count p-image-edit accepts per the API docs.
+const PRUNA_MAX_REFERENCE_IMAGES = 5;
+
+/**
+ * Resolve the model name to put in the `Model:` header.
+ *
+ * An explicit alias always wins: `wireModel` differs from `model` only when
+ * the user configured one in media-config.json / OD_MEDIA_MODEL_ALIASES, and
+ * that override exists precisely so a new upstream model can be reached
+ * without a catalog entry. Absent an alias, strip our disambiguation suffix.
+ */
+function prunaWireModel(ctx: MediaContext, credentials: ProviderConfig): string {
+  const configuredModel = credentials.model?.trim();
+  if (configuredModel) return configuredModel;
+  if (ctx.wireModel !== ctx.model) return ctx.wireModel;
+  return PRUNA_WIRE_MODELS[ctx.model] ?? ctx.model;
+}
+
+function prunaBaseUrl(credentials: ProviderConfig): string {
+  const raw = (credentials.baseUrl || PRUNA_DEFAULT_BASE_URL).trim();
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error(`Pruna base URL is invalid: ${raw}`);
+  }
+  if (parsed.protocol !== 'https:') {
+    throw new Error('Pruna base URL must use HTTPS.');
+  }
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new Error('Pruna base URL must not contain credentials, query parameters, or a fragment.');
+  }
+  return parsed.toString().replace(/\/$/, '');
+}
+
+function prunaAspectFor(aspect: string | undefined, fallback: string): string {
+  return aspect && PRUNA_ASPECT_RATIOS.has(aspect) ? aspect : fallback;
+}
+
+type PrunaWanTiming = {
+  numFrames: number;
+  framesPerSecond: number;
+  effectiveSeconds: number;
+  note: string;
+};
+
+function prunaWanTiming(requestedSeconds: number | undefined): PrunaWanTiming {
+  // Preserve Pruna's documented default when OpenDesign did not request a
+  // length. Explicit UI buckets are mapped to the closest legal frame/fps
+  // pair, preferring fewer frames when multiple pairs have equal error.
+  if (requestedSeconds == null) {
+    return {
+      numFrames: 81,
+      framesPerSecond: 16,
+      effectiveSeconds: 81 / 16,
+      note: '',
+    };
+  }
+
+  let best: Omit<PrunaWanTiming, 'note'> | null = null;
+  let bestError = Number.POSITIVE_INFINITY;
+  for (let fps = PRUNA_WAN_MIN_FPS; fps <= PRUNA_WAN_MAX_FPS; fps += 1) {
+    const numFrames = Math.min(
+      Math.max(Math.round(requestedSeconds * fps), PRUNA_WAN_MIN_FRAMES),
+      PRUNA_WAN_MAX_FRAMES,
+    );
+    const effectiveSeconds = numFrames / fps;
+    const error = Math.abs(effectiveSeconds - requestedSeconds);
+    if (
+      error < bestError - Number.EPSILON
+      || (Math.abs(error - bestError) <= Number.EPSILON
+        && (best == null || numFrames < best.numFrames))
+    ) {
+      best = { numFrames, framesPerSecond: fps, effectiveSeconds };
+      bestError = error;
+    }
+  }
+
+  if (!best) throw new Error('Pruna Wan timing could not be resolved.');
+  const maxDuration = PRUNA_WAN_MAX_FRAMES / PRUNA_WAN_MIN_FPS;
+  const note = requestedSeconds > maxDuration
+    ? ` (requested ${requestedSeconds}s → capped to ${maxDuration.toFixed(1)}s)`
+    : '';
+  return { ...best, note };
+}
+
+function prunaWanResolution(requested: string | undefined): {
+  value: string;
+  note: string;
+} {
+  if (requested && PRUNA_WAN_RESOLUTIONS.has(requested)) {
+    return { value: requested, note: '' };
+  }
+  if (requested) {
+    return { value: '720p', note: ` (requested ${requested} → capped to 720p)` };
+  }
+  return { value: '480p', note: '' };
+}
+
+function prunaWanAspect(aspect: string | undefined): string {
+  return aspect && PRUNA_WAN_ASPECT_RATIOS.has(aspect) ? aspect : '16:9';
+}
+
+function prunaMaxPollMs(defaultMs: number): number {
+  const v = Number(process.env.OD_PRUNA_MAX_POLL_MS);
+  return Number.isFinite(v) && v >= 30_000 ? v : defaultMs;
+}
+
+// Per-request ceiling, distinct from the total poll ceiling. Keep the override
+// bounded so an operator cannot accidentally turn a stalled upstream fetch into
+// an unbounded daemon hang.
+function prunaRequestTimeoutMs(): number {
+  const configured = Number(process.env.OD_PRUNA_REQUEST_TIMEOUT_MS);
+  return Number.isSafeInteger(configured)
+    && configured >= 1000
+    && configured <= PRUNA_MAX_REQUEST_TIMEOUT_MS
+    ? configured
+    : PRUNA_DEFAULT_REQUEST_TIMEOUT_MS;
+}
+
+/** Resolve documented absolute, version-rooted, and API-root-relative URLs. */
+function prunaResolveUrl(baseUrl: string, raw: string): string {
+  const value = raw.trim();
+  if (!value) throw new Error('Pruna returned an empty URL.');
+  if (/^https?:\/\//i.test(value)) return new URL(value).toString();
+
+  const base = new URL(baseUrl);
+  const basePath = base.pathname.replace(/\/$/, '');
+  if (!value.startsWith('/')) {
+    return new URL(value, `${baseUrl}/`).toString();
+  }
+  if (value === basePath || value.startsWith(`${basePath}/`)) {
+    return `${base.origin}${value}`;
+  }
+
+  // A gateway can mount Pruna below a prefix, for example /pruna/v1. Pruna
+  // may return either /v1/... or /predictions/...; preserve both /pruna and
+  // /v1 without guessing from the final path segment.
+  const version = /\/v\d+$/.exec(basePath)?.[0] ?? '';
+  if (version && (value === version || value.startsWith(`${version}/`))) {
+    return `${base.origin}${basePath.slice(0, -version.length)}${value}`;
+  }
+  return `${base.origin}${basePath}${value}`;
+}
+
+function prunaSameOriginUrl(baseUrl: string, raw: string, kind: string): string {
+  const resolved = prunaResolveUrl(baseUrl, raw);
+  if (new URL(resolved).origin !== new URL(baseUrl).origin) {
+    throw new Error(`Pruna ${kind} URL must use the configured Pruna origin.`);
+  }
+  return resolved;
+}
+
+function prunaHeaders(apiKey: string): Record<string, string> {
+  return { apikey: apiKey };
+}
+
+function prunaRequestInit(
+  ctx: MediaContext,
+  init: RequestInit,
+  timeoutMs = prunaRequestTimeoutMs(),
+): RequestInit {
+  return withMediaRequestInit(ctx, {
+    ...init,
+    redirect: 'error',
+    signal: AbortSignal.timeout(Math.max(1, timeoutMs)),
+  });
+}
+
+async function prunaFetch(
+  ctx: MediaContext,
+  url: string,
+  init: RequestInit,
+  operation: string,
+  timeoutMs = prunaRequestTimeoutMs(),
+): Promise<Response> {
+  try {
+    return await fetch(url, prunaRequestInit(ctx, init, timeoutMs));
+  } catch (err) {
+    if (isRecord(err) && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+      throw new Error(`Pruna ${operation} timed out after ${timeoutMs}ms.`);
+    }
+    throw err;
+  }
+}
+
+async function prunaReadBounded(
+  response: Response,
+  maxBytes: number,
+  label: string,
+): Promise<Buffer> {
+  const declared = Number(response.headers.get('content-length') ?? '');
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    throw new Error(`Pruna ${label} response exceeds ${maxBytes} bytes.`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length > maxBytes) {
+      throw new Error(`Pruna ${label} response exceeds ${maxBytes} bytes.`);
+    }
+    return bytes;
+  }
+
+  const chunks: Buffer[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = Buffer.from(value);
+    total += chunk.length;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new Error(`Pruna ${label} response exceeds ${maxBytes} bytes.`);
+    }
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks, total);
+}
+
+async function prunaReadText(response: Response, label: string): Promise<string> {
+  return (await prunaReadBounded(response, PRUNA_JSON_MAX_BYTES, label)).toString('utf8');
+}
+
+/**
+ * Upload reference bytes and return the URL Pruna hands back for them.
+ *
+ * The bytes come from the data URL the dispatcher already built in
+ * resolveProjectImage (which is also where the escape-the-project-dir guard
+ * lives), so this never re-reads the filesystem.
+ */
+async function prunaUploadReference(
+  ctx: MediaContext,
+  baseUrl: string,
+  apiKey: string,
+  ref: ImageRef,
+): Promise<string> {
+  const base64 = ref.dataUrl.slice(ref.dataUrl.indexOf(',') + 1);
+  const form = new FormData();
+  form.append(
+    'content',
+    new Blob([Buffer.from(base64, 'base64')], { type: ref.mime }),
+    path.basename(ref.abs),
+  );
+  const resp = await prunaFetch(ctx, `${baseUrl}/files`, {
+    method: 'POST',
+    headers: prunaHeaders(apiKey),
+    body: form,
+  }, 'file upload');
+  const text = await prunaReadText(resp, 'file upload');
+  if (!resp.ok) {
+    throw new Error(`pruna file upload ${resp.status}: ${truncate(text, 240)}`);
+  }
+  let data: any;
+  try { data = JSON.parse(text); } catch {
+    throw new Error(`pruna file upload non-JSON: ${truncate(text, 200)}`);
+  }
+  const url = data?.urls?.get;
+  if (typeof url !== 'string' || !url) {
+    throw new Error(`pruna file upload missing urls.get: ${truncate(text, 200)}`);
+  }
+  return prunaResolveUrl(baseUrl, url);
+}
+
+/**
+ * Submit a prediction and poll until it succeeds, returning the resolved
+ * delivery URL. Mirrors falQueueRun: submit, poll on an interval, fail fast
+ * on a terminal error status, and time out with a message that names the
+ * env var that raises the ceiling.
+ */
+async function prunaPredict(
+  ctx: MediaContext,
+  baseUrl: string,
+  apiKey: string,
+  wireModel: string,
+  input: Record<string, unknown>,
+  maxMs: number,
+  onProgress?: ProgressFn,
+): Promise<string> {
+  const submitResp = await prunaFetch(ctx, `${baseUrl}/predictions`, {
+    method: 'POST',
+    headers: {
+      ...prunaHeaders(apiKey),
+      'content-type': 'application/json',
+      Model: wireModel,
+    },
+    body: JSON.stringify({ input }),
+  }, 'submit');
+  const submitText = await prunaReadText(submitResp, 'submit');
+  if (!submitResp.ok) {
+    throw new Error(`pruna submit ${submitResp.status}: ${truncate(submitText, 240)}`);
+  }
+  let submitData: any;
+  try { submitData = JSON.parse(submitText); } catch {
+    throw new Error(`pruna submit non-JSON: ${truncate(submitText, 200)}`);
+  }
+
+  // A fast model can settle inside the submit call even without Try-Sync.
+  if (submitData?.status === 'succeeded' && typeof submitData?.generation_url === 'string') {
+    return prunaSameOriginUrl(baseUrl, submitData.generation_url, 'delivery');
+  }
+  const statusUrlRaw = submitData?.get_url
+    ?? (typeof submitData?.id === 'string' ? `${baseUrl}/predictions/status/${encodeURIComponent(submitData.id)}` : null);
+  if (typeof statusUrlRaw !== 'string' || !statusUrlRaw) {
+    throw new Error(`pruna submit missing get_url: ${truncate(submitText, 200)}`);
+  }
+  const statusUrl = prunaSameOriginUrl(baseUrl, statusUrlRaw, 'status');
+  const taskLabel = typeof submitData?.id === 'string' ? submitData.id.slice(0, 8) : wireModel;
+  const startedAt = Date.now();
+  let lastStatus = String(submitData?.status ?? '');
+
+  if (onProgress) {
+    onProgress(`pruna ${wireModel} task ${taskLabel} accepted; polling…`);
+  }
+
+  let firstPoll = true;
+  while (Date.now() - startedAt < maxMs) {
+    if (!firstPoll) await sleep(3000);
+    firstPoll = false;
+    const remainingMs = maxMs - (Date.now() - startedAt);
+    if (remainingMs <= 0) break;
+    const statusResp = await prunaFetch(ctx, statusUrl, {
+      headers: prunaHeaders(apiKey),
+    }, 'poll', Math.min(prunaRequestTimeoutMs(), remainingMs));
+    const statusText = await prunaReadText(statusResp, 'poll');
+    if (!statusResp.ok) {
+      throw new Error(`pruna poll ${statusResp.status}: ${truncate(statusText, 240)}`);
+    }
+    let statusData: any;
+    try { statusData = JSON.parse(statusText); } catch {
+      throw new Error(`pruna poll non-JSON: ${truncate(statusText, 200)}`);
+    }
+    lastStatus = String(statusData?.status ?? '');
+    if (onProgress) {
+      const elapsed = Math.round((Date.now() - startedAt) / 1000);
+      onProgress(`pruna task ${taskLabel} status=${lastStatus || 'unknown'} (${elapsed}s)`);
+    }
+    if (lastStatus === 'succeeded') {
+      const generationUrl = statusData?.generation_url;
+      if (typeof generationUrl !== 'string' || !generationUrl) {
+        throw new Error(`pruna succeeded without generation_url: ${truncate(statusText, 200)}`);
+      }
+      return prunaSameOriginUrl(baseUrl, generationUrl, 'delivery');
+    }
+    // 'starting' and 'processing' are the documented in-flight states.
+    // Anything else terminal (failed, canceled, or a state added later) is
+    // reported rather than polled until the ceiling — a silent 10-minute
+    // wait on a status we do not understand is worse than a clear error.
+    if (lastStatus !== 'starting' && lastStatus !== 'processing') {
+      const detail = statusData?.error
+        ?? statusData?.message
+        ?? truncate(statusText, 200);
+      throw new Error(`pruna task ${lastStatus || 'unknown'}: ${errorMessage(detail)}`);
+    }
+  }
+  const elapsed = Math.round((Date.now() - startedAt) / 1000);
+  const ceil = Math.round(maxMs / 1000);
+  throw new Error(
+    `pruna timed out after ${elapsed}s waiting for succeeded ` +
+    `(last status: ${lastStatus || 'unknown'}, ceiling ${ceil}s). ` +
+    `Raise OD_PRUNA_MAX_POLL_MS to extend the ceiling.`,
+  );
+}
+
+async function prunaDownload(
+  ctx: MediaContext,
+  baseUrl: string,
+  apiKey: string,
+  rawUrl: string,
+  kind: 'image' | 'video',
+): Promise<Buffer> {
+  // Delivery is authenticated by the same Pruna key. Never attach it to a URL
+  // on another origin, even if that URL came from a successful API response.
+  const url = prunaSameOriginUrl(baseUrl, rawUrl, 'delivery');
+  const resp = await prunaFetch(ctx, url, {
+    headers: prunaHeaders(apiKey),
+  }, `${kind} download`, kind === 'video' ? 5 * 60 * 1000 : prunaRequestTimeoutMs());
+  if (!resp.ok) {
+    throw new Error(`pruna ${kind} download ${resp.status}`);
+  }
+  const bytes = await prunaReadBounded(
+    resp,
+    kind === 'video' ? PRUNA_VIDEO_MAX_BYTES : PRUNA_IMAGE_MAX_BYTES,
+    kind,
+  );
+  if (bytes.length === 0) {
+    throw new Error(`pruna ${kind} download returned 0 bytes`);
+  }
+  return bytes;
+}
+
+const PRUNA_NO_CREDENTIAL_MESSAGE =
+  `no Pruna API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH}, ` +
+  'set OD_PRUNA_API_KEY, or set PRUNA_API_KEY';
+
+async function renderPrunaImage(
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+  onProgress?: ProgressFn,
+): Promise<RenderResult> {
+  if (!credentials.apiKey) throw new Error(PRUNA_NO_CREDENTIAL_MESSAGE);
+  const apiKey = credentials.apiKey;
+  const baseUrl = prunaBaseUrl(credentials);
+  const wireModel = prunaWireModel(ctx, credentials);
+
+  // `imageRefs` already leads with the primary `--image` and is deduped by
+  // absolute path, so reading both fields would upload the primary twice.
+  const refs = ctx.imageRefs.length
+    ? ctx.imageRefs
+    : (ctx.imageRef ? [ctx.imageRef] : []);
+  if (PRUNA_REQUIRED_REFERENCE_MODELS.has(wireModel) && refs.length === 0) {
+    throw new Error(`Pruna model ${wireModel} requires at least one reference image.`);
+  }
+  const aspectRatio = PRUNA_MATCH_INPUT_ASPECT_MODELS.has(wireModel)
+    && refs.length > 0
+    && !ctx.aspectExplicit
+    ? 'match_input_image'
+    : prunaAspectFor(ctx.aspect, '1:1');
+
+  const input: Record<string, unknown> = {
+    prompt: ctx.prompt || 'A high-quality image.',
+    aspect_ratio: aspectRatio,
+  };
+
+  let refsNote = '';
+  if (refs.length) {
+    const documentedLimit = PRUNA_REFERENCE_LIMITS[wireModel];
+    if (documentedLimit && refs.length > documentedLimit) {
+      throw new Error(
+        `Pruna model ${wireModel} accepts at most ${documentedLimit} reference images; ` +
+        `received ${refs.length}.`,
+      );
+    }
+    // Unknown and single-image models receive only the primary reference. Do
+    // not pay for uploads the wire contract will discard.
+    const limit = documentedLimit ?? 1;
+    const accepted = refs.slice(0, limit);
+    if (accepted.length < refs.length) {
+      refsNote =
+        ` (${refs.length} references given, ${accepted.length} sent — ` +
+        `${wireModel} accepts ${limit})`;
+    }
+    const urls: string[] = [];
+    for (const ref of accepted) {
+      urls.push(await prunaUploadReference(ctx, baseUrl, apiKey, ref));
+    }
+    if (PRUNA_IMAGES_FIELD_MODELS.has(wireModel)) {
+      input.images = urls;
+    } else if (wireModel === 'qwen-image-edit-plus') {
+      input.image = urls.length === 1 ? urls[0] : urls;
+    } else {
+      input.image = urls[0];
+    }
+  }
+
+  const generationUrl = await prunaPredict(
+    ctx, baseUrl, apiKey, wireModel, input,
+    prunaMaxPollMs(5 * 60 * 1000), onProgress,
+  );
+  const bytes = await prunaDownload(ctx, baseUrl, apiKey, generationUrl, 'image');
+
+  return {
+    bytes,
+    providerNote:
+      `pruna/${wireModel} · ${aspectRatio}${refsNote} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+async function renderPrunaVideo(
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+  onProgress?: ProgressFn,
+): Promise<RenderResult> {
+  if (!credentials.apiKey) throw new Error(PRUNA_NO_CREDENTIAL_MESSAGE);
+  const apiKey = credentials.apiKey;
+  const baseUrl = prunaBaseUrl(credentials);
+  const wireModel = prunaWireModel(ctx, credentials);
+  const videoReference = ctx.imageRef ?? ctx.imageRefs[0] ?? null;
+  if (PRUNA_REQUIRED_REFERENCE_MODELS.has(wireModel) && !videoReference) {
+    throw new Error(`Pruna model ${wireModel} requires at least one reference image.`);
+  }
+
+  const isWanT2V = wireModel === 'wan-t2v';
+  const isWanI2V = wireModel === 'wan-i2v';
+  const isWan = isWanT2V || isWanI2V;
+  let input: Record<string, unknown>;
+  let providerDetails: string;
+
+  if (isWan) {
+    const timing = prunaWanTiming(ctx.length);
+    const resolution = prunaWanResolution(ctx.resolution);
+    input = {
+      prompt: ctx.prompt || 'A short cinematic clip.',
+      num_frames: timing.numFrames,
+      resolution: resolution.value,
+    };
+    if (isWanI2V) {
+      input.image = await prunaUploadReference(ctx, baseUrl, apiKey, videoReference!);
+    } else {
+      input.aspect_ratio = prunaWanAspect(ctx.aspect);
+    }
+    input.frames_per_second = timing.framesPerSecond;
+    const framing = isWanI2V ? 'from input image' : String(input.aspect_ratio);
+    const effectiveSeconds = Number(timing.effectiveSeconds.toFixed(2));
+    providerDetails =
+      `${framing} · ${resolution.value}${resolution.note} · ` +
+      `${timing.numFrames}f@${timing.framesPerSecond}fps · ` +
+      `${effectiveSeconds}s${timing.note}`;
+  } else {
+    // p-video supports 1-20 seconds and 720p/1080p. The dispatcher clamps to
+    // VIDEO_LENGTHS_SEC, which goes up to 30, so enforce the provider ceiling.
+    const requestedSec = ctx.length || 5;
+    const durationSec = Math.min(
+      Math.max(Math.round(requestedSec), PRUNA_MIN_VIDEO_SECONDS),
+      PRUNA_MAX_VIDEO_SECONDS,
+    );
+    const durationSnappedNote = durationSec !== requestedSec
+      ? ` (requested ${requestedSec}s → clamped to ${durationSec}s)`
+      : '';
+    const resolution = ctx.resolution && PRUNA_VIDEO_RESOLUTIONS.has(ctx.resolution)
+      ? ctx.resolution
+      : '720p';
+    input = {
+      prompt: ctx.prompt || 'A short cinematic clip.',
+      duration: durationSec,
+      resolution,
+    };
+    if (videoReference) {
+      input.image = await prunaUploadReference(ctx, baseUrl, apiKey, videoReference);
+    } else {
+      input.aspect_ratio = prunaAspectFor(ctx.aspect, '16:9');
+    }
+    const framing = typeof input.aspect_ratio === 'string'
+      ? input.aspect_ratio
+      : 'from input image';
+    providerDetails =
+      `${framing} · ${resolution} · ${durationSec}s${durationSnappedNote}`;
+  }
+
+  const generationUrl = await prunaPredict(
+    ctx, baseUrl, apiKey, wireModel, input,
+    prunaMaxPollMs(10 * 60 * 1000), onProgress,
+  );
+  const bytes = await prunaDownload(ctx, baseUrl, apiKey, generationUrl, 'video');
+
+  return {
+    bytes,
+    providerNote: `pruna/${wireModel} · ${providerDetails} · ${bytes.length} bytes`,
     suggestedExt: '.mp4',
   };
 }
