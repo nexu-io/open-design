@@ -8,9 +8,11 @@ describe('Design Files reveal action copy', () => {
     expect(en['designFiles.revealInFinder']).toBe('Show in Finder');
     expect(en['designFiles.revealInExplorer']).toBe('Show in Explorer');
     expect(en['designFiles.revealInFileManager']).toBe('Show in File Manager');
+    expect(en['designFiles.revealFailed']).toBe('Could not show this file');
 
     expect(zhCN['designFiles.revealInFinder']).toBe('在访达中显示');
     expect(zhCN['designFiles.revealInExplorer']).toBe('在文件资源管理器中显示');
     expect(zhCN['designFiles.revealInFileManager']).toBe('在文件管理器中显示');
+    expect(zhCN['designFiles.revealFailed']).toBe('无法显示此文件');
   });
 });

@@ -2877,6 +2877,7 @@ export const fr: Dict = {
   'designFiles.revealInFinder': 'Afficher dans le Finder',
   'designFiles.revealInExplorer': "Afficher dans l'Explorateur",
   'designFiles.revealInFileManager': 'Afficher dans le gestionnaire de fichiers',
+  'designFiles.revealFailed': 'Impossible d’afficher ce fichier',
   'designFiles.deleteFolderConfirm': 'Supprimer le dossier « {name} » et tout son contenu ?',
   'designFiles.folderCreated': 'Dossier « {name} » créé',
   'designFiles.folderDeleted': 'Dossier « {name} » supprimé',

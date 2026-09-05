@@ -526,6 +526,77 @@ describe("DesignFilesPanel selection", () => {
       expect(revealFile).toHaveBeenCalledWith("test-project", "alpha.html");
       // Closes the row menu popover after invocation
       expect(screen.queryByTestId("design-file-menu-popover")).toBeNull();
+      // Success leaves no error alert visible
+      expect(screen.queryByRole("alert")).toBeNull();
+    } finally {
+      restoreHost();
+    }
+  });
+
+  it("shows an error alert feedback when revealHostFile returns a failure result", async () => {
+    const revealFile = vi.fn().mockResolvedValue({ ok: false, reason: "file does not exist" });
+    const restoreHost = installMockOpenDesignHost({
+      host: {
+        client: { type: "desktop", platform: "darwin" },
+        shell: {
+          revealFile,
+        },
+      },
+    });
+    try {
+      renderPanel([
+        file({
+          name: "alpha.html",
+          path: "alpha.html",
+          localPath: "/tmp/open-design/projects/test-project/alpha.html",
+        }),
+      ]);
+
+      fireEvent.click(screen.getByTestId("design-file-menu-alpha.html"));
+      const revealBtn = screen.getByRole("button", { name: "Show in Finder" });
+      fireEvent.click(revealBtn);
+
+      expect(revealFile).toHaveBeenCalledWith("test-project", "alpha.html");
+      expect(screen.queryByTestId("design-file-menu-popover")).toBeNull();
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("Could not show this file");
+      expect(alert).toHaveTextContent("file does not exist");
+      // Does not reopen menu on failure
+      expect(screen.queryByTestId("design-file-menu-popover")).toBeNull();
+    } finally {
+      restoreHost();
+    }
+  });
+
+  it("shows an error alert feedback when revealHostFile rejects / throws", async () => {
+    const revealFile = vi.fn().mockRejectedValue(new Error("IPC connection lost"));
+    const restoreHost = installMockOpenDesignHost({
+      host: {
+        client: { type: "desktop", platform: "darwin" },
+        shell: {
+          revealFile,
+        },
+      },
+    });
+    try {
+      renderPanel([
+        file({
+          name: "alpha.html",
+          path: "alpha.html",
+        }),
+      ]);
+
+      fireEvent.click(screen.getByTestId("design-file-menu-alpha.html"));
+      const revealBtn = screen.getByRole("button", { name: "Show in Finder" });
+      fireEvent.click(revealBtn);
+
+      expect(revealFile).toHaveBeenCalledWith("test-project", "alpha.html");
+      expect(screen.queryByTestId("design-file-menu-popover")).toBeNull();
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("Could not show this file");
+      expect(alert).toHaveTextContent("IPC connection lost");
     } finally {
       restoreHost();
     }

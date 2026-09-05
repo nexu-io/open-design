@@ -2877,6 +2877,7 @@ export const uk: Dict = {
   'designFiles.revealInFinder': 'Показати у Finder',
   'designFiles.revealInExplorer': 'Показати у Провіднику',
   'designFiles.revealInFileManager': 'Показати у файловому менеджері',
+  'designFiles.revealFailed': 'Не вдалося показати цей файл',
   'designFiles.deleteFolderConfirm': 'Видалити папку «{name}» з усім вмістом?',
   'designFiles.folderCreated': 'Папку «{name}» створено',
   'designFiles.folderDeleted': 'Папку «{name}» видалено',

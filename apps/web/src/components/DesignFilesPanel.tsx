@@ -28,6 +28,7 @@ import { FileSyncBadge } from '../collab/FileSyncBadge';
 import { Icon } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { RemixIcon } from './RemixIcon';
+import { Toast } from './Toast';
 import {
   getHtmlSourceSnapshot,
   htmlSourceSnapshotRefreshKey,
@@ -503,6 +504,10 @@ export function DesignFilesPanel({
   const projectMenuRef = useRef<HTMLDivElement | null>(null);
   const host = getOpenDesignHost();
   const canRevealFile = typeof host?.shell?.revealFile === 'function';
+  const [revealToast, setRevealToast] = useState<{
+    message: string;
+    details?: string | null;
+  } | null>(null);
   const revealFileLabel = useMemo(() => {
     const platform = host?.client?.platform;
     if (platform === 'darwin') {
@@ -1862,13 +1867,37 @@ export function DesignFilesPanel({
           {canRevealFile ? (
             <button
               type="button"
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.stopPropagation();
                 const name = menuPos.name;
                 setMenuPos(null);
                 const targetFile = files.find((file) => file.name === name);
                 const relativePath = targetFile?.path ?? name;
-                void revealHostFile(projectId, relativePath);
+                try {
+                  const result = await revealHostFile(projectId, relativePath);
+                  if (!result.ok) {
+                    const rawReason =
+                      typeof result.reason === 'string' && result.reason.trim().length > 0
+                        ? result.reason.trim()
+                        : null;
+                    const cleanDetail = rawReason
+                      ? rawReason.replace(/^(?:reveal-file|open-path):\s*/, '')
+                      : null;
+                    setRevealToast({
+                      message: t('designFiles.revealFailed'),
+                      details: cleanDetail,
+                    });
+                  }
+                } catch (err) {
+                  const rawReason = err instanceof Error ? err.message : String(err);
+                  const cleanDetail = rawReason
+                    ? rawReason.replace(/^(?:reveal-file|open-path):\s*/, '')
+                    : null;
+                  setRevealToast({
+                    message: t('designFiles.revealFailed'),
+                    details: cleanDetail,
+                  });
+                }
               }}
             >
               {revealFileLabel}
@@ -1904,6 +1933,16 @@ export function DesignFilesPanel({
             {t('designFiles.delete')}
           </button>
         </div>
+      ) : null}
+      {revealToast ? (
+        <Toast
+          message={revealToast.message}
+          details={revealToast.details}
+          tone="error"
+          role="alert"
+          ttlMs={4000}
+          onDismiss={() => setRevealToast(null)}
+        />
       ) : null}
     </div>
   );

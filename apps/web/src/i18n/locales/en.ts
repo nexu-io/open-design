@@ -2891,6 +2891,7 @@ export const en: Dict = {
   'designFiles.revealInFinder': 'Show in Finder',
   'designFiles.revealInExplorer': 'Show in Explorer',
   'designFiles.revealInFileManager': 'Show in File Manager',
+  'designFiles.revealFailed': 'Could not show this file',
   'designFiles.deleteFolderConfirm': 'Delete folder "{name}" and all its contents?',
   'designFiles.folderCreated': 'Created folder "{name}"',
   'designFiles.folderDeleted': 'Deleted folder "{name}"',

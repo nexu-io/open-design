@@ -2877,6 +2877,7 @@ export const ko: Dict = {
   'designFiles.revealInFinder': 'Finder에서 보기',
   'designFiles.revealInExplorer': '파일 탐색기에서 보기',
   'designFiles.revealInFileManager': '파일 관리자에서 보기',
+  'designFiles.revealFailed': '이 파일을 표시할 수 없습니다',
   'designFiles.deleteFolderConfirm': '폴더 "{name}" 및 모든 내용을 삭제하시겠습니까?',
   'designFiles.folderCreated': '폴더 "{name}"이(가) 생성됨',
   'designFiles.folderDeleted': '폴더 "{name}"이(가) 삭제됨',

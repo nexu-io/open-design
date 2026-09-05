@@ -2877,6 +2877,7 @@ export const hu: Dict = {
   'designFiles.revealInFinder': 'Megjelenítés a Finderben',
   'designFiles.revealInExplorer': 'Megjelenítés az Intézőben',
   'designFiles.revealInFileManager': 'Megjelenítés a fájlkezelőben',
+  'designFiles.revealFailed': 'A fájl nem jeleníthető meg',
   'designFiles.deleteFolderConfirm': 'Törli a(z) „{name}“ mappát és teljes tartalmát?',
   'designFiles.folderCreated': '„{name}“ mappa létrehozva',
   'designFiles.folderDeleted': '„{name}“ mappa törölve',

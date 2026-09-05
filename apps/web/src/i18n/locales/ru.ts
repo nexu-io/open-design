@@ -2877,6 +2877,7 @@ export const ru: Dict = {
   'designFiles.revealInFinder': 'Показать в Finder',
   'designFiles.revealInExplorer': 'Показать в Проводнике',
   'designFiles.revealInFileManager': 'Показать в файловом менеджере',
+  'designFiles.revealFailed': 'Не удалось показать этот файл',
   'designFiles.deleteFolderConfirm': 'Удалить папку «{name}» со всем содержимым?',
   'designFiles.folderCreated': 'Папка «{name}» создана',
   'designFiles.folderDeleted': 'Папка «{name}» удалена',

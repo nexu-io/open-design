@@ -3723,6 +3723,7 @@ export interface Dict {
   'designFiles.revealInFinder': string;
   'designFiles.revealInExplorer': string;
   'designFiles.revealInFileManager': string;
+  'designFiles.revealFailed': string;
   'designFiles.deleteFolderConfirm': string;
   'designFiles.folderCreated': string;
   'designFiles.folderDeleted': string;

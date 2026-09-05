@@ -2877,6 +2877,7 @@ export const ar: Dict = {
   'designFiles.revealInFinder': 'إظهار في Finder',
   'designFiles.revealInExplorer': 'إظهار في مستكشف الملفات',
   'designFiles.revealInFileManager': 'إظهار في مدير الملفات',
+  'designFiles.revealFailed': 'تعذّر إظهار هذا الملف',
   'designFiles.deleteFolderConfirm': 'حذف المجلد "{name}" وكل محتوياته؟',
   'designFiles.folderCreated': 'تم إنشاء المجلد "{name}"',
   'designFiles.folderDeleted': 'تم حذف المجلد "{name}"',

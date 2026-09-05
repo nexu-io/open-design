@@ -2877,6 +2877,7 @@ export const ja: Dict = {
   'designFiles.revealInFinder': 'Finder で表示',
   'designFiles.revealInExplorer': 'エクスプローラーで表示',
   'designFiles.revealInFileManager': 'ファイルマネージャーで表示',
+  'designFiles.revealFailed': 'このファイルを表示できませんでした',
   'designFiles.deleteFolderConfirm': 'フォルダ「{name}」とそのすべての内容を削除しますか?',
   'designFiles.folderCreated': 'フォルダ「{name}」を作成しました',
   'designFiles.folderDeleted': 'フォルダ「{name}」を削除しました',

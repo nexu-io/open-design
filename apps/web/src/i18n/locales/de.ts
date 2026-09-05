@@ -2877,6 +2877,7 @@ export const de: Dict = {
   'designFiles.revealInFinder': 'Im Finder anzeigen',
   'designFiles.revealInExplorer': 'Im Explorer anzeigen',
   'designFiles.revealInFileManager': 'Im Dateimanager anzeigen',
+  'designFiles.revealFailed': 'Diese Datei konnte nicht angezeigt werden',
   'designFiles.deleteFolderConfirm': 'Ordner „{name}“ und seinen gesamten Inhalt löschen?',
   'designFiles.folderCreated': 'Ordner „{name}“ erstellt',
   'designFiles.folderDeleted': 'Ordner „{name}“ gelöscht',

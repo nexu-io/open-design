@@ -72,6 +72,102 @@ export async function openValidatedDirectory(
   return await deps.openPath(resolvedPath);
 }
 
+/** Dependencies for revealing a validated file in the native file manager. */
+export interface RevealPathDeps {
+  release: () => string;
+  execFile: (command: string, args: readonly string[]) => Promise<{ stdout: string }>;
+  showItemInFolder: (path: string) => void;
+}
+
+/**
+ * Reveals a validated file in the native file manager (Finder on macOS,
+ * Explorer on Windows, native file manager on Linux). On WSL2, routes
+ * through `wslpath -w <file>` + `explorer.exe /select,<windows-path>` so
+ * Windows Explorer selects/reveals the file rather than falling back to
+ * xdg-open (which either fails or opens Chrome with file://).
+ */
+export async function revealValidatedFile(
+  resolvedFilePath: string,
+  deps: RevealPathDeps,
+): Promise<string> {
+  if (deps.release().toLowerCase().includes('microsoft')) {
+    let windowsPath: string;
+    try {
+      const { stdout } = await deps.execFile('wslpath', ['-w', resolvedFilePath]);
+      windowsPath = stdout.trim();
+    } catch {
+      deps.showItemInFolder(resolvedFilePath);
+      return '';
+    }
+    if (windowsPath.length > 0) {
+      try {
+        await deps.execFile('explorer.exe', [`/select,${windowsPath}`]);
+      } catch (err) {
+        const code =
+          err && typeof err === 'object' && 'code' in err
+            ? (err as { code?: unknown }).code
+            : undefined;
+        if (code === 'ENOENT' || code === 'EACCES') {
+          deps.showItemInFolder(resolvedFilePath);
+          return '';
+        }
+      }
+      return '';
+    }
+  }
+  deps.showItemInFolder(resolvedFilePath);
+  return '';
+}
+
+export interface RevealProjectFileDeps extends RevealPathDeps {
+  fetchResolvedProjectDir: (
+    apiBaseUrl: string,
+    projectId: string,
+  ) => Promise<{ ok: true; context: { fromTrustedPicker: boolean; hasBaseDir: boolean; resolvedDir: string } } | { ok: false; reason: string }>;
+  isOpenPathAllowedForProject: (
+    context: { fromTrustedPicker: boolean; hasBaseDir: boolean; resolvedDir: string },
+  ) => { ok: true } | { ok: false; reason: string };
+  validateExistingDirectory: (
+    dir: string,
+  ) => Promise<{ ok: true; resolved: string } | { ok: false; reason: string }>;
+  resolveProjectRelativeFile: (
+    projectRoot: string,
+    relativePath: string,
+  ) => Promise<{ ok: true; resolved: string } | { ok: false; reason: string }>;
+}
+
+/**
+ * Full IPC pipeline for revealing a project-relative file:
+ * 1. resolve project directory via daemon API trust boundary
+ * 2. verify folder-import trust status
+ * 3. validate existing directory
+ * 4. resolve relative file against project root with security gates
+ * 5. reveal in file manager (with WSL routing)
+ */
+export async function handleRevealProjectFile(
+  apiBaseUrl: string | null,
+  projectId: string,
+  relativePath: string,
+  deps: RevealProjectFileDeps,
+): Promise<string> {
+  if (!apiBaseUrl) {
+    return 'reveal-file: daemon API URL not available';
+  }
+  const resolved = await deps.fetchResolvedProjectDir(apiBaseUrl, projectId);
+  if (!resolved.ok) return `reveal-file: ${resolved.reason}`;
+  const allowed = deps.isOpenPathAllowedForProject(resolved.context);
+  if (!allowed.ok) return `reveal-file: ${allowed.reason}`;
+  const validated = await deps.validateExistingDirectory(resolved.context.resolvedDir);
+  if (!validated.ok) return `reveal-file: ${validated.reason}`;
+  const resolvedFile = await deps.resolveProjectRelativeFile(validated.resolved, relativePath);
+  if (!resolvedFile.ok) return `reveal-file: ${resolvedFile.reason}`;
+  try {
+    return await revealValidatedFile(resolvedFile.resolved, deps);
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+}
+
 /**
  * Resolves and validates a project-relative file path against a canonical
  * project directory. Rejects absolute paths, null bytes, directory traversal

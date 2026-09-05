@@ -3106,6 +3106,7 @@ export const zhTW: Dict = {
   "designFiles.revealInFinder": "在 Finder 中顯示",
   "designFiles.revealInExplorer": "在檔案總管中顯示",
   "designFiles.revealInFileManager": "在檔案管理器中顯示",
+  "designFiles.revealFailed": "無法顯示此檔案",
   "designFiles.deleteFolderConfirm": "刪除資料夾「{name}」及其全部內容?",
   "designFiles.folderCreated": "已建立資料夾「{name}」",
   "designFiles.folderDeleted": "已刪除資料夾「{name}」",

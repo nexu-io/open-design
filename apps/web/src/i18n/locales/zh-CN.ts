@@ -3098,6 +3098,7 @@ export const zhCN: Dict = {
   "designFiles.revealInFinder": "在访达中显示",
   "designFiles.revealInExplorer": "在文件资源管理器中显示",
   "designFiles.revealInFileManager": "在文件管理器中显示",
+  "designFiles.revealFailed": "无法显示此文件",
   "designFiles.deleteFolderConfirm": "删除文件夹「{name}」及其全部内容?",
   "designFiles.folderCreated": "已创建文件夹「{name}」",
   "designFiles.folderDeleted": "已删除文件夹「{name}」",

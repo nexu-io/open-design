@@ -2877,6 +2877,7 @@ export const fa: Dict = {
   'designFiles.revealInFinder': 'نمایش در Finder',
   'designFiles.revealInExplorer': 'نمایش در مرورگر فایل',
   'designFiles.revealInFileManager': 'نمایش در مدیریت فایل',
+  'designFiles.revealFailed': 'امکان نمایش این فایل وجود نداشت',
   'designFiles.deleteFolderConfirm': 'پوشه «{name}» و تمام محتوای آن حذف شود؟',
   'designFiles.folderCreated': 'پوشه «{name}» ایجاد شد',
   'designFiles.folderDeleted': 'پوشه «{name}» حذف شد',

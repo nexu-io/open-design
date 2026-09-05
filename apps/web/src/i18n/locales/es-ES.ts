@@ -2877,6 +2877,7 @@ export const esES: Dict = {
   'designFiles.revealInFinder': 'Mostrar en Finder',
   'designFiles.revealInExplorer': 'Mostrar en el Explorador',
   'designFiles.revealInFileManager': 'Mostrar en el administrador de archivos',
+  'designFiles.revealFailed': 'No se pudo mostrar este archivo',
   'designFiles.deleteFolderConfirm': '¿Eliminar la carpeta "{name}" y todo su contenido?',
   'designFiles.folderCreated': 'Carpeta "{name}" creada',
   'designFiles.folderDeleted': 'Carpeta "{name}" eliminada',

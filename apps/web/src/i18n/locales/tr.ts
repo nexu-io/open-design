@@ -2877,6 +2877,7 @@ export const tr: Dict = {
   'designFiles.revealInFinder': "Finder'da Göster",
   'designFiles.revealInExplorer': "Dosya Gezgini'nde Göster",
   'designFiles.revealInFileManager': 'Dosya Yöneticisinde Göster',
+  'designFiles.revealFailed': 'Bu dosya gösterilemedi',
   'designFiles.deleteFolderConfirm': '"{name}" klasörü ve tüm içeriği silinsin mi?',
   'designFiles.folderCreated': '"{name}" klasörü oluşturuldu',
   'designFiles.folderDeleted': '"{name}" klasörü silindi',
