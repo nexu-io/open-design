@@ -1915,3 +1915,28 @@ bound rather than render bound. Caveat on the numbers: this machine has an
 unusually large set of agent CLIs installed and was under load, so treat them as
 an order of magnitude, not a measurement. Belongs to the launch-performance line
 of work, not to this branch.
+
+### Correction: the manifest was not the deck's double provision (2026-09-05)
+
+`7c59ae3cd2` stops an artifact manifest from minting a new document identity,
+and its commit message attributes the deck's `ownNavigationCount: 2` to it.
+**That attribution is wrong.** Measured against the running product after the
+change: the deck's Manual Edit exit is still `own: 2`, unchanged.
+
+What the change is still good for, on its own merits: a manifest carries a
+title, a kind and an export list and cannot change a pixel of the document it
+describes, so it should not mint a document identity. Verified neutral on
+everything else — `foreignNavigationPaths: []` across the matrix,
+`versionUpdate own: 1`, selection reports its target, the saved edit is visible,
+and `ordinary-html` / `relative-support-assets` both pass fail-closed.
+
+So the deck double provision stays open with one more cause ruled out. The two
+navigations carry the same content hash under different session ids, which
+still says two scopes were minted for one save; the manifest write is no longer
+a candidate for the second one.
+
+That makes nine wrong causes on this surface. The pattern has not changed: a
+cause derived by reading code has never once survived contact with the running
+product here. Measure first, and re-measure after the fix — this one was caught
+only because the fix was verified live instead of being trusted for passing its
+unit test.
