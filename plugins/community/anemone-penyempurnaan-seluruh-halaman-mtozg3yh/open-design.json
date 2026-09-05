@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "anemone-penyempurnaan-seluruh-halaman-mtozg3yh",
+  "title": "Anemone · penyempurnaan seluruh halaman",
+  "version": "0.1.0",
+  "description": "Hasil: 9 halaman prototipe interaktif dan `index.html` sebagai daftar halaman. Implementasi sumber tetap berada pada repo laundry-membership dan tidak diubah.",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

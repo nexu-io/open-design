@@ -1,0 +1,103 @@
+{
+  "candidateId": "85d3cd6b-57e2-4636-a478-a5550537cdbc",
+  "projectId": "640fe0e2-c799-42e9-9ea7-6919b7e7861c",
+  "runId": "6ad5d70f-e4bb-44f5-b7b1-5596eac610b1",
+  "conversationId": "e8f634f4-7bab-4389-97a5-e8a8365142bd",
+  "provenance": {
+    "summary": "Detected from NOTES.md, plugin-source/clone-audit-mto3u9is/references/source-5-audit-raw.md, plugin-source/clone-audit-mto3u9is/references/source-4-SKILL.md, plugin-source/clone-audit-mto3u9is/references/source-3-source-1-audit-raw.md, plugin-source/clone-audit-mto3u9is/references/source-2-SKILL.md, plugin-source/clone-audit-mto3u9is/references/source-1-source-1-audit-raw.md, plugin-source/clone-audit-mto3u9is/SKILL.md, plugin-source/clone-audit-mto3sbhs/references/source-5-audit-raw.md, plugin-source/clone-audit-mto3sbhs/references/source-4-SKILL.md, plugin-source/clone-audit-mto3sbhs/references/source-3-source-1-audit-raw.md, plugin-source/clone-audit-mto3sbhs/references/source-2-SKILL.md, plugin-source/clone-audit-mto3sbhs/references/source-1-source-1-audit-raw.md, plugin-source/clone-audit-mto3sbhs/SKILL.md after a successful run.",
+    "detectedAt": 1788648988631
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "NOTES.md",
+      "label": "NOTES.md",
+      "size": 32838,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/clone-audit-mto3u9is/references/source-5-audit-raw.md",
+      "label": "plugin-source/clone-audit-mto3u9is/references/source-5-audit-raw.md",
+      "size": 6654,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/clone-audit-mto3u9is/references/source-4-SKILL.md",
+      "label": "plugin-source/clone-audit-mto3u9is/references/source-4-SKILL.md",
+      "size": 6748,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/clone-audit-mto3u9is/references/source-3-source-1-audit-raw.md",
+      "label": "plugin-source/clone-audit-mto3u9is/references/source-3-source-1-audit-raw.md",
+      "size": 6654,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/clone-audit-mto3u9is/references/source-2-SKILL.md",
+      "label": "plugin-source/clone-audit-mto3u9is/references/source-2-SKILL.md",
+      "size": 6748,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/clone-audit-mto3u9is/references/source-1-source-1-audit-raw.md",
+      "label": "plugin-source/clone-audit-mto3u9is/references/source-1-source-1-audit-raw.md",
+      "size": 6654,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/clone-audit-mto3u9is/SKILL.md",
+      "label": "plugin-source/clone-audit-mto3u9is/SKILL.md",
+      "size": 6748,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/clone-audit-mto3sbhs/references/source-5-audit-raw.md",
+      "label": "plugin-source/clone-audit-mto3sbhs/references/source-5-audit-raw.md",
+      "size": 6654,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/clone-audit-mto3sbhs/references/source-4-SKILL.md",
+      "label": "plugin-source/clone-audit-mto3sbhs/references/source-4-SKILL.md",
+      "size": 6748,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/clone-audit-mto3sbhs/references/source-3-source-1-audit-raw.md",
+      "label": "plugin-source/clone-audit-mto3sbhs/references/source-3-source-1-audit-raw.md",
+      "size": 6654,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/clone-audit-mto3sbhs/references/source-2-SKILL.md",
+      "label": "plugin-source/clone-audit-mto3sbhs/references/source-2-SKILL.md",
+      "size": 6748,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/clone-audit-mto3sbhs/references/source-1-source-1-audit-raw.md",
+      "label": "plugin-source/clone-audit-mto3sbhs/references/source-1-source-1-audit-raw.md",
+      "size": 6654,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/clone-audit-mto3sbhs/SKILL.md",
+      "label": "plugin-source/clone-audit-mto3sbhs/SKILL.md",
+      "size": 6748,
+      "copied": true
+    }
+  ]
+}
