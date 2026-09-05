@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@open-design/release": "workspace:*",
+    "@open-design/standalone": "workspace:*",
     "cac": "6.7.14"
   },
   "devDependencies": {

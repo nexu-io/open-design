@@ -1011,6 +1011,9 @@ importers:
       '@open-design/release':
         specifier: workspace:*
         version: link:../../packages/release
+      '@open-design/standalone':
+        specifier: workspace:*
+        version: link:../../packages/standalone
       cac:
         specifier: 6.7.14
         version: 6.7.14
