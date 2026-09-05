@@ -184,7 +184,13 @@ async function pickHomeTemplate(id: string) {
   // switching means clearing back to the empty state first.
   const clear = screen.queryByTestId('home-hero-template-clear');
   if (clear) fireEvent.click(clear);
-  const rowPill = await screen.findByTestId(`home-hero-type-pill-${id}`);
+  let rowPill = screen.queryByTestId(`home-hero-type-pill-${id}`);
+  if (!rowPill) {
+    const more = await screen.findByTestId('home-hero-type-pills-more');
+    await waitFor(() => expect((more as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(more);
+    rowPill = await screen.findByTestId(`home-hero-type-pill-${id}-more`);
+  }
   await waitFor(() => expect((rowPill as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(rowPill);
 }
