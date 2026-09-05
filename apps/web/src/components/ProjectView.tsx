@@ -4071,15 +4071,23 @@ export function ProjectView({
   const refreshPreviewCommentsRef = useRef<(() => Promise<void>) | null>(null);
   const handleProjectEvent = useCallback((evt: ProjectEvent) => {
     if (evt.type === 'file-changed') {
-      // An artifact manifest is generated metadata about exactly one document:
-      // the daemon keeps it out of the file listing and the app keeps it out of
-      // the file tree, so no page can reference it and no page needs to refresh
-      // for it. Every artifact save writes one alongside the document, and
-      // reading it as an ordinary project file made that pair look like a
-      // project-wide mutation. Attribute it to the document it describes.
-      const changedPath = artifactManifestSubjectPath(
-        normalizeComparableFilePath(evt.path),
-      );
+      const changedPath = normalizeComparableFilePath(evt.path);
+      // An artifact manifest is generated metadata about one document: a title,
+      // a kind, an export list. The daemon keeps it out of the file listing and
+      // the app keeps it out of the file tree, so no page can reference it, and
+      // it cannot change a single pixel of the document it describes — so no
+      // preview is entitled to a new document identity because of it. Every
+      // artifact save writes one alongside the document, so reading it as an
+      // ordinary project file first made one save look like a project-wide
+      // mutation, and then made the saved document itself navigate twice.
+      //
+      // The project still re-reads its file list below, which is what actually
+      // carries a new title or export list into the UI.
+      if (artifactManifestSubjectPath(changedPath) !== changedPath) {
+        coalescedFileChangedRefresh();
+        void recoverMaterializedConversations(project.id, projectRunAuthorityKey);
+        return;
+      }
       const hasOtherHtmlDocument = projectFilesRef.current.some((file) => (
         isHtmlProjectFile(file)
         && normalizeComparableFilePath(file.path || file.name) !== changedPath

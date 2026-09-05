@@ -233,16 +233,24 @@ describe('which previews a file change is allowed to disturb', () => {
   // document, which took the wildcard, which reloaded every open preview.
   // Measured live: saving index.html re-navigated lru-5.html and lru-6.html
   // with an unchanged content hash and a brand-new preview session.
-  it('does not disturb other previews when an artifact manifest changes', async () => {
+  it('does not refresh any preview when only an artifact manifest changes', async () => {
     renderProjectView();
     await waitFor(() => expect(emitFileEvent).not.toBeNull());
 
     emitFileEvent!({ type: 'file-changed', kind: 'change', path: 'index.html.artifact.json' });
-
+    // The document's own change event is what a save is really made of, and it
+    // arrives separately. Let the app settle so a late refresh cannot pass this
+    // by simply not having happened yet.
+    emitFileEvent!({ type: 'file-changed', kind: 'change', path: 'styles.css' });
     await waitFor(() => {
-      expect(observedRefreshKeys.value.get('index.html')).toBeGreaterThan(0);
+      expect(observedRefreshKeys.value.get(WILDCARD)).toBeGreaterThan(0);
     });
-    expect(observedRefreshKeys.value.get(WILDCARD) ?? 0).toBe(0);
+
+    // A manifest carries a title and an export list. It cannot change a single
+    // pixel of the document it describes, so it is not entitled to a new
+    // document identity — and an artifact save writes one every time, which
+    // made the document navigate twice for one save.
+    expect(observedRefreshKeys.value.get('index.html') ?? 0).toBe(0);
   });
 
   it('does not disturb other previews when an HTML document changes', async () => {
