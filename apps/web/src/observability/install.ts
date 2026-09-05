@@ -18,6 +18,7 @@ import { installVisibilityObserver } from './visibility';
 import { installWhiteScreenDetector } from './white-screen';
 import { installPreviewIframeMessageObserver } from './iframe-error';
 import { installChatInteractionObserver } from './chat-interaction';
+import { installChatScrollFreezeObserver } from './chat-scroll-freeze';
 
 let installed = false;
 
@@ -38,6 +39,12 @@ export function installWebObservability(): () => void {
     // interaction lands, which is well before any chat surface mounts.
     // It attributes entries to the chat panel itself and ignores the rest.
     installChatInteractionObserver(),
+    // The scroll-freeze probe is global for the same reason: it has to be
+    // listening before the chat log first auto-scrolls, because that is
+    // the transition it most needs in its ring buffer. It discovers the
+    // log from the first scroll event that comes out of it and stays inert
+    // until then.
+    installChatScrollFreezeObserver(),
   ];
 
   return () => {

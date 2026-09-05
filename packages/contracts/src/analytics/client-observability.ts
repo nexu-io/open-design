@@ -274,6 +274,115 @@ export interface ChatRecoveryProps extends ChatCorrelationProps {
   message_count?: number;
 }
 
+/** Which symptom of a stale compositor scroll ceiling fired. */
+export type ChatScrollFreezeTrigger =
+  /** Repeated downward wheels asked for real distance and moved nothing. */
+  | 'wheel_stall'
+  /** A downward wheel threw the scroller BACKWARDS onto the stale ceiling. */
+  | 'wheel_snap_back';
+
+/**
+ * `client_chat_scroll_frozen` — the chat log stopped responding to the
+ * wheel while layout still says it has room.
+ *
+ * The defect this reports is invisible to JS from the inside: the
+ * compositor keeps its own copy of a scroller's maximum offset so wheel
+ * input need not wait on the main thread, and on the chat log that copy
+ * can freeze at an early value and never refresh. Measured on a real
+ * machine: `scrollHeight` 2347 and `clientHeight` 583 (1764px of travel),
+ * `scrollTop = 1700` assigned from JS took effect, yet twelve wheel
+ * notches asking for 1440px stopped dead at 91 — and a notch from 800
+ * snapped back to 91. Only destroying and rebuilding the layout box
+ * cleared it.
+ *
+ * Nothing here reads the compositor. Every field is the symptom, plus
+ * enough of the run-up to date the freeze — which is the point, since the
+ * user already knows it is stuck and cannot tell us what preceded it.
+ *
+ * Structural only: counts, pixels, durations, enums. No message text, no
+ * selector, no user-authored string.
+ */
+export interface ChatScrollFreezeProps extends ChatCorrelationProps {
+  trigger: ChatScrollFreezeTrigger;
+  /** Random per-surface handle, so a follow-up event can be joined to this one. */
+  probe_id: string;
+
+  // -- geometry at the moment of the freeze --------------------------------
+  scroll_top: number;
+  scroll_height: number;
+  client_height: number;
+  /** The scrollTop the wheel refuses to pass. */
+  ceiling_scroll_top: number;
+  /** Highest scrollTop ever seen, INCLUDING programmatic writes. */
+  max_scroll_top_seen: number;
+  /** scrollHeight - clientHeight: what layout would permit. */
+  layout_max_scroll_top: number;
+  /** How much of the log the wheel cannot reach. */
+  unreachable_px: number;
+
+  // -- the inferred freeze point -------------------------------------------
+  /**
+   * ceiling + clientHeight. The content height the compositor still
+   * believes in — 674 in the measured case. Compare against
+   * `content_px_at_scrollable_on`: if they match, the copy was stale from
+   * the moment the scroll node was created.
+   */
+  compositor_content_px: number;
+  /** scrollHeight. The content height layout actually has. */
+  layout_content_px: number;
+
+  // -- the gesture ----------------------------------------------------------
+  wheel_count: number;
+  wheel_requested_px: number;
+  /**
+   * Scrollable descendants between the wheel target and the chat log that
+   * still had travel left. Reported only when zero — a non-zero count
+   * means an inner box could have eaten the wheel and no report is sent.
+   */
+  inner_scroller_count: number;
+
+  // -- the run-up -----------------------------------------------------------
+  /** ms since the probe attached to this chat log element. */
+  surface_age_ms: number;
+  /**
+   * Compact structural trail, `scrollable_on@1200:c674/v583,…`. A string
+   * rather than an array of objects because it is read by a human staring
+   * at one bad event and never aggregated.
+   */
+  transitions: string;
+  /** Content height when the log first became scrollable. The prime suspect. */
+  content_px_at_scrollable_on?: number;
+  /** ms between that transition and the freeze. */
+  scrollable_since_ms?: number;
+
+  // -- compositing layers ---------------------------------------------------
+  /** Elements with a layer-promoting property when the probe attached. */
+  layer_count_at_attach?: number;
+  /** …and at the freeze. A rise names a new layer as a suspect. */
+  layer_count_now?: number;
+  /** Distinct triggers present now, e.g. `will_change,backdrop_filter`. */
+  layer_kinds_now?: string;
+  /** True when the subtree scan hit its element budget. */
+  layer_scan_truncated?: boolean;
+  /** Layer-promoting properties on the chat log's ancestor chain. */
+  ancestor_layer_kinds?: string;
+
+  // -- runtime state --------------------------------------------------------
+  /** A turn was streaming into the log at the moment it froze. */
+  streaming: boolean;
+  /** A `<question-form>` skeleton was mounted. */
+  question_form_pending: boolean;
+  /** Direct children of the chat log — message rows. */
+  message_row_count: number;
+  visibility_state: string;
+  device_pixel_ratio?: number;
+  /** Parsed from the UA. Low cardinality; never the full UA string. */
+  chromium_version?: string;
+  electron_version?: string;
+  /** Running inside the packaged desktop shell (`od://`). */
+  packaged: boolean;
+}
+
 /**
  * The full `client_chat_*` event surface. Adding a member here is the
  * only sanctioned way to introduce a new chat observability event.
@@ -285,6 +394,7 @@ export type ChatObservabilityEvent =
   | { event: 'client_chat_stream_health'; props: ChatStreamHealthProps }
   | { event: 'client_chat_interaction_latency'; props: ChatInteractionLatencyProps }
   | { event: 'client_chat_protocol_anomaly'; props: ChatProtocolAnomalyProps }
-  | { event: 'client_chat_recovery'; props: ChatRecoveryProps };
+  | { event: 'client_chat_recovery'; props: ChatRecoveryProps }
+  | { event: 'client_chat_scroll_frozen'; props: ChatScrollFreezeProps };
 
 export type ChatObservabilityEventName = ChatObservabilityEvent['event'];
