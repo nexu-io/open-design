@@ -116,7 +116,6 @@ export type ElectronStandalonePreparedRuntime = Readonly<{
 export interface ElectronStandaloneAuthority {
   prepare(request: Readonly<{
     correlationId: string;
-    releaseVersion: string;
     scope: StandaloneScope;
     shell: StandaloneShellIdentity;
   }>): Promise<ElectronStandalonePreparedRuntime>;

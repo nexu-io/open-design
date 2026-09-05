@@ -105,7 +105,7 @@ export function createElectronStandaloneAuthorityFactory(
   return ({ officialNodeExecutablePath, observeFeedback, resourceRoot, runtimeRoot }) => ({
     async prepare(request) {
       if (!isElectronStandaloneScope(manifest, request.scope)) throw new Error("Electron Standalone authority request escaped its Shell scope");
-      if (request.releaseVersion !== manifest.version || canonicalJson(request.shell) !== canonicalJson(manifest.shell)) throw new Error("Electron Standalone authority request escaped its Shell identity");
+      if (canonicalJson(request.shell) !== canonicalJson(manifest.shell)) throw new Error("Electron Standalone authority request escaped its Shell identity");
       const installation = await loadElectronStandaloneInstallation({ resourceRoot, channel: request.scope.channel, target: resolveElectronStandaloneTarget() });
       const storeRoot = join(runtimeRoot, "standalone-store");
       const sidecarRuntimeRoot = join(runtimeRoot, "standalone-sidecar");

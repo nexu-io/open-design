@@ -278,7 +278,6 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
           correlationId: randomUUID(),
           scope,
           shell: manifest.shell,
-          releaseVersion: manifest.version,
         });
         generation = preparedRuntime.generation;
         generationBinding = preparedRuntime.binding;

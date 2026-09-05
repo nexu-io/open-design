@@ -118,7 +118,9 @@ describe("Electron production Standalone authority", () => {
     });
     let stamp: ReturnType<typeof bindElectronPhysicalResourceSet>["resources"][number]["stamp"] | null = null;
     try {
-      const prepared = await authority.prepare({ correlationId: "authority-test", releaseVersion: manifest.version, scope: { channel: manifest.channel, namespace: manifest.namespace }, shell: manifest.shell });
+      const prepared = await authority.prepare({ correlationId: "authority-test", scope: { channel: manifest.channel, namespace: manifest.namespace }, shell: manifest.shell });
+      expect(prepared.generation.releaseVersion).toBe("0.1.0-betahyx.1");
+      expect(prepared.generation.releaseVersion).not.toBe(manifest.version);
       stamp = bindElectronPhysicalResourceSet(physicalResources, prepared.binding).resources[0]!.stamp;
       expect(await prepared.updater.readSnapshot()).toMatchObject({ state: "idle", shellType: "electron" });
       const handle = await prepared.start({
@@ -306,7 +308,6 @@ describe("Electron production Standalone authority", () => {
       });
       const replacement = await replacementAuthority.prepare({
         correlationId: "replacement-authority-test",
-        releaseVersion: replacementManifest.version,
         scope: { channel: replacementManifest.channel, namespace: replacementManifest.namespace },
         shell: replacementManifest.shell,
       });
