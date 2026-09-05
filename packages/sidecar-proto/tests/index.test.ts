@@ -61,6 +61,13 @@ describe("open-design sidecar contract", () => {
     expect(normalizeSidecarRuntimeLayout(validStamp)).toEqual(validStamp);
   });
 
+  it("accepts standalone as an explicit Shell-owned runtime source", () => {
+    expect(normalizeSidecarRuntimeLayout({ ...validStamp, source: SIDECAR_SOURCES.STANDALONE })).toEqual({
+      ...validStamp,
+      source: "standalone",
+    });
+  });
+
   it("rejects legacy or extra stamp fields", () => {
     expect(() => normalizeSidecarRuntimeLayout({ ...validStamp, runtimeToken: "legacy" })).toThrow();
     expect(() => normalizeSidecarRuntimeLayout({ ...validStamp, role: "web-sidecar" })).toThrow();

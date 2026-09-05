@@ -43,7 +43,7 @@ type HostConfig = Readonly<{
   resourceRoot: string;
   hostPath: string;
   hostSha256: string;
-  layout: Readonly<{ dataRoot: string; logsRoot: string; runtimeRoot: string }>;
+  layout: Readonly<{ dataRoot: string; logsRoot: string; resourceStoreRoot: string; runtimeRoot: string; sidecarSupervisorPath: string }>;
   supervisorSha256: string;
   supervisorPath: string;
   shell: Readonly<{ type: string; version: string; buildHash: string; digest: string }>;

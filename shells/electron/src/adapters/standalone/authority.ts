@@ -59,7 +59,7 @@ type HostStatus = Readonly<{
   generationPid: number;
   hostPid: number;
   hostSha256: string;
-  layout: Readonly<{ dataRoot: string; logsRoot: string; runtimeRoot: string }>;
+  layout: Readonly<{ dataRoot: string; logsRoot: string; resourceStoreRoot: string; runtimeRoot: string; sidecarSupervisorPath: string }>;
   supervisorSha256: string;
   dataRoot: string;
   runtimeRoot: string;
@@ -114,7 +114,9 @@ export function createElectronStandaloneAuthorityFactory(
       const layout = Object.freeze({
         dataRoot: join(namespaceRoot, "data", "product"),
         logsRoot: join(namespaceRoot, "logs", "product"),
+        resourceStoreRoot: storeRoot,
         runtimeRoot: join(namespaceRoot, "runtime", "product"),
+        sidecarSupervisorPath: installation.supervisorPath,
       });
       const store = new StandaloneStore(storeRoot, request.scope);
       const feedback = new StandaloneFeedbackEmitter(request.correlationId, request.scope, observeFeedback);

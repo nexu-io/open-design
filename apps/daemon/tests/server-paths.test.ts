@@ -88,12 +88,19 @@ describe('resolveDaemonResourceRoot', () => {
     expect(resolveDaemonResourceRoot({ configured, safeBases: [installationRoot] })).toBe(configured);
   });
 
+  it('allows an exact resource under its Shell-owned store root', () => {
+    const storeRoot = path.resolve(import.meta.dirname, '..', 'fixtures', 'runtime', 'standalone-store');
+    const configured = path.join(storeRoot, 'materialized', 'daemon');
+
+    expect(resolveDaemonResourceRoot({ configured, safeBases: [storeRoot] })).toBe(configured);
+  });
+
   it('rejects resource roots outside the safe bases', () => {
     const safeBase = path.resolve(import.meta.dirname, '..', 'fixtures', 'resources');
     const configured = path.resolve(import.meta.dirname, '..', 'fixtures-other', 'resources');
 
     expect(() => resolveDaemonResourceRoot({ configured, safeBases: [safeBase] })).toThrow(
-      /OD_RESOURCE_ROOT must be under/,
+      /OD_RESOURCE_ROOT must be under an authorized resource base/,
     );
   });
 });

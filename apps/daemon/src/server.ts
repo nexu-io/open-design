@@ -72,6 +72,7 @@ import {
   resolveDaemonResourceRoot,
   resolveDataDir,
   resolveProcessResourcesPath,
+  RESOURCE_STORE_ROOT_ENV,
 } from './daemon-paths.js';
 export {
   resolveDaemonCliPath,
@@ -1175,6 +1176,7 @@ const DAEMON_RESOURCE_ROOT = resolveDaemonResourceRoot({
     PROJECT_ROOT,
     resolveProcessResourcesPath(),
     process.env.OD_INSTALLATION_DIR,
+    process.env[RESOURCE_STORE_ROOT_ENV],
   ],
 });
 // Built web app lives in `out/` — that's where Next.js writes the static

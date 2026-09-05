@@ -13,7 +13,9 @@ export const STANDALONE_RUNTIME_LAYOUT_CAPABILITY_SCHEMA = 1 as const;
 export type StandaloneRuntimeLayout = Readonly<{
   dataRoot: string;
   logsRoot: string;
+  resourceStoreRoot: string;
   runtimeRoot: string;
+  sidecarSupervisorPath: string;
 }>;
 
 type LayoutInput = Readonly<{
@@ -43,16 +45,16 @@ function exactScope(value: unknown, expected: StandaloneScope): StandaloneScope 
 
 export function validateStandaloneRuntimeLayout(value: unknown): StandaloneRuntimeLayout {
   const layout = record(value, "Standalone runtime layout");
-  exactKeys(layout, ["dataRoot", "logsRoot", "runtimeRoot"], "Standalone runtime layout");
-  if (typeof layout.dataRoot !== "string" || typeof layout.logsRoot !== "string" || typeof layout.runtimeRoot !== "string") {
+  exactKeys(layout, ["dataRoot", "logsRoot", "resourceStoreRoot", "runtimeRoot", "sidecarSupervisorPath"], "Standalone runtime layout");
+  if (typeof layout.dataRoot !== "string" || typeof layout.logsRoot !== "string" || typeof layout.resourceStoreRoot !== "string" || typeof layout.runtimeRoot !== "string" || typeof layout.sidecarSupervisorPath !== "string") {
     throw new Error("Standalone runtime layout paths must be strings");
   }
-  const paths: readonly string[] = [layout.dataRoot, layout.logsRoot, layout.runtimeRoot];
+  const paths: readonly string[] = [layout.dataRoot, layout.logsRoot, layout.resourceStoreRoot, layout.runtimeRoot, layout.sidecarSupervisorPath];
   if (paths.some((path) => !isAbsolute(path) || resolve(path) !== path)) {
     throw new Error("Standalone runtime layout paths must be absolute and normalized");
   }
   if (new Set(paths).size !== paths.length) throw new Error("Standalone runtime layout paths must be distinct");
-  return Object.freeze({ dataRoot: paths[0]!, logsRoot: paths[1]!, runtimeRoot: paths[2]! });
+  return Object.freeze({ dataRoot: paths[0]!, logsRoot: paths[1]!, resourceStoreRoot: paths[2]!, runtimeRoot: paths[3]!, sidecarSupervisorPath: paths[4]! });
 }
 
 function validateInput(value: unknown, scope: StandaloneScope): LayoutInput {

@@ -5,6 +5,7 @@ import {
   APP_KEYS,
   SIDECAR_ENV,
   SIDECAR_MESSAGES,
+  SIDECAR_SOURCES,
   type DaemonStatusSnapshot,
   type RegisterWebUrlResult,
   type WebStatusSnapshot,
@@ -56,7 +57,7 @@ function stamp(request: StandaloneHandoffRequest, app: typeof APP_KEYS.DAEMON | 
     channel: request.binding.scope.channel,
     mode: "runtime",
     namespace: request.binding.scope.namespace,
-    source: "standalone",
+    source: SIDECAR_SOURCES.STANDALONE,
   });
 }
 
@@ -95,6 +96,7 @@ async function spawnRuntime(input: Readonly<{
   logPath: string;
   request: StandaloneHandoffRequest;
   runtimeRoot: string;
+  sidecarSupervisorPath: string;
 }>): Promise<ManagedRuntime> {
   const runtimeStamp = stamp(input.request, input.app);
   const retired = await stopSidecar(runtimeStamp, { termGraceMs: 5_000 });
@@ -110,6 +112,7 @@ async function spawnRuntime(input: Readonly<{
       logFd: log.fd,
       resources: { dataRoot: input.dataRoot, ownerPid: process.pid, port: 0, runtimeRoot: input.runtimeRoot },
       stamp: runtimeStamp,
+      supervisor: { command: process.execPath, entrypoint: input.sidecarSupervisorPath },
     });
     return Object.freeze({ generation, log, stamp: runtimeStamp });
   } catch (error) {
@@ -198,10 +201,12 @@ async function startOpenDesignGeneration(request: StandaloneHandoffRequest): Pro
         OD_DATA_DIR: layout.dataRoot,
         OD_INSTALLATION_DIR: dirname(layout.dataRoot),
         OD_RESOURCE_ROOT: daemonResource.path,
+        OD_RESOURCE_STORE_ROOT: layout.resourceStoreRoot,
       },
       logPath: join(layout.logsRoot, APP_KEYS.DAEMON, "latest.log"),
       request,
       runtimeRoot: layout.runtimeRoot,
+      sidecarSupervisorPath: layout.sidecarSupervisorPath,
     });
     daemonStatus = await waitForStatus<DaemonStatusSnapshot>({
       child: daemon.generation,
@@ -225,6 +230,7 @@ async function startOpenDesignGeneration(request: StandaloneHandoffRequest): Pro
       logPath: join(layout.logsRoot, APP_KEYS.WEB, "latest.log"),
       request,
       runtimeRoot: layout.runtimeRoot,
+      sidecarSupervisorPath: layout.sidecarSupervisorPath,
     });
     webStatus = await waitForStatus<WebStatusSnapshot>({
       child: web.generation,

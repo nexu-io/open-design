@@ -9,6 +9,7 @@ const require = createRequire(import.meta.url);
 
 export const DAEMON_CLI_PATH_ENV = 'OD_DAEMON_CLI_PATH';
 export const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
+export const RESOURCE_STORE_ROOT_ENV = 'OD_RESOURCE_STORE_ROOT';
 
 function cleanOptionalPath(value: string | undefined): string | null {
   return typeof value === 'string' && value.trim().length > 0
@@ -81,7 +82,7 @@ export function resolveDaemonResourceRoot({
 
   if (!normalizedSafeBases.some((base) => isPathWithin(base, resolved))) {
     throw new Error(
-      `${RESOURCE_ROOT_ENV} must be under the workspace root or app resources path`,
+      `${RESOURCE_ROOT_ENV} must be under an authorized resource base`,
     );
   }
 

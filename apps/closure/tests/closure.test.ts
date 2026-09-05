@@ -67,7 +67,7 @@ describe("Closure generation runtime", () => {
         createStandaloneShellUpdaterCapabilityHandler(updater),
         createStandaloneRuntimeLayoutCapabilityHandler({
           scope,
-          layout: { dataRoot: join(runtimeRoot, "data"), logsRoot: join(runtimeRoot, "logs"), runtimeRoot: join(runtimeRoot, "processes") },
+          layout: { dataRoot: join(runtimeRoot, "data"), logsRoot: join(runtimeRoot, "logs"), resourceStoreRoot: join(runtimeRoot, "store"), runtimeRoot: join(runtimeRoot, "processes"), sidecarSupervisorPath: join(runtimeRoot, "supervisor.mjs") },
         }),
       ]),
     };

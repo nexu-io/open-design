@@ -17,6 +17,7 @@ export type SidecarMode = (typeof SIDECAR_MODES)[keyof typeof SIDECAR_MODES];
 
 export const SIDECAR_SOURCES = Object.freeze({
   PACKAGED: "packaged",
+  STANDALONE: "standalone",
   TOOLS_DEV: "tools-dev",
   TOOLS_PACK: "tools-pack",
 } as const);

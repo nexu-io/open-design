@@ -15,7 +15,9 @@ const bindingDigest = "a".repeat(64);
 const layout = Object.freeze({
   dataRoot: join(tmpdir(), "od-layout", "data"),
   logsRoot: join(tmpdir(), "od-layout", "logs"),
+  resourceStoreRoot: join(tmpdir(), "od-layout", "store"),
   runtimeRoot: join(tmpdir(), "od-layout", "runtime"),
+  sidecarSupervisorPath: join(tmpdir(), "od-layout", "supervisor.mjs"),
 });
 
 describe("Standalone runtime layout capability", () => {

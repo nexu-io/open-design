@@ -855,6 +855,9 @@ importers:
       '@open-design/standalone':
         specifier: workspace:*
         version: link:../../packages/standalone
+      jszip:
+        specifier: 3.10.1
+        version: 3.10.1
     devDependencies:
       '@types/node':
         specifier: 24.12.2

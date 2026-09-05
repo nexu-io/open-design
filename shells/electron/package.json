@@ -26,7 +26,8 @@
     "@open-design/contracts": "workspace:*",
     "@open-design/electron-kit": "workspace:*",
     "@open-design/sidecar": "workspace:*",
-    "@open-design/standalone": "workspace:*"
+    "@open-design/standalone": "workspace:*",
+    "jszip": "3.10.1"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
