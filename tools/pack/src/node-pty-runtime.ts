@@ -83,12 +83,7 @@ export async function validateNodePtyRuntime(
       const metadata = await stat(path);
       if (!metadata.isFile()) return `node-pty ${file.label} is not a file: ${path}`;
       if (metadata.size === 0) return `node-pty ${file.label} is empty: ${path}`;
-      if (
-        process.platform !== "win32" &&
-        "executable" in file &&
-        file.executable === true &&
-        (metadata.mode & 0o111) === 0
-      ) {
+      if ("executable" in file && file.executable === true && (metadata.mode & 0o111) === 0) {
         return `node-pty ${file.label} is not executable: ${path}`;
       }
     } catch (error) {

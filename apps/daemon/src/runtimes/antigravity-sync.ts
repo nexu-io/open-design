@@ -50,6 +50,13 @@ export function isValidBrainSessionId(sessionId: string): boolean {
   return path.basename(trimmed) === trimmed;
 }
 
+function isPathInside(parent: string, child: string): boolean {
+  const normParent = path.resolve(parent).toLowerCase();
+  const normChild = path.resolve(child).toLowerCase();
+  const rel = path.relative(normParent, normChild);
+  return !rel.startsWith('..') && !path.isAbsolute(rel) && rel !== '';
+}
+
 export async function syncAntigravityBrainArtifacts(
   options: SyncAntigravityBrainArtifactsOptions,
 ): Promise<SyncAntigravityBrainArtifactsResult> {
@@ -71,11 +78,18 @@ export async function syncAntigravityBrainArtifacts(
     path.join(os.homedir(), '.gemini', 'antigravity-cli', 'brain');
   const sessionDir = path.join(baseDir, sessionId.trim());
 
+  let realSessionDir: string;
+  try {
+    realSessionDir = await fs.realpath(sessionDir);
+  } catch {
+    // Session directory does not exist or cannot be resolved
+    return { syncedCount: 0, syncedFiles: [], skippedReason: 'no_session_dir' };
+  }
+
   let entries: string[];
   try {
-    entries = await fs.readdir(sessionDir);
+    entries = await fs.readdir(realSessionDir);
   } catch {
-    // Session directory does not exist or cannot be read
     return { syncedCount: 0, syncedFiles: [], skippedReason: 'no_session_dir' };
   }
 
@@ -96,26 +110,63 @@ export async function syncAntigravityBrainArtifacts(
       continue;
     }
 
-    const srcFile = path.join(sessionDir, entry);
+    const srcFile = path.join(realSessionDir, entry);
     const destFile = path.join(projectDir, entry);
 
     try {
-      const srcStat = await fs.stat(srcFile);
-      if (!srcStat.isFile()) continue;
+      // 1. Inspect file directly with lstat: must be a regular file and NOT a symlink
+      const srcLstat = await fs.lstat(srcFile);
+      if (srcLstat.isSymbolicLink() || !srcLstat.isFile()) {
+        continue;
+      }
 
+      // 2. Resolve realpath and verify it remains strictly within realSessionDir
+      const realSrc = await fs.realpath(srcFile);
+      if (!isPathInside(realSessionDir, realSrc)) {
+        continue;
+      }
+
+      // 3. Check mtime against destination
       let shouldWrite = true;
       try {
         const destStat = await fs.stat(destFile);
-        if (destStat.mtimeMs >= srcStat.mtimeMs) {
+        if (destStat.mtimeMs >= srcLstat.mtimeMs) {
           shouldWrite = false;
         }
       } catch {
-        // Destination does not exist; write it
         shouldWrite = true;
       }
 
-      if (shouldWrite) {
-        const content = await fs.readFile(srcFile);
+      if (!shouldWrite) {
+        continue;
+      }
+
+      // 4. Open file handle and verify handle identity matches lstat (prevent TOCTOU swap)
+      let handle: fs.FileHandle | undefined;
+      try {
+        handle = await fs.open(srcFile, 'r');
+        const handleStat = await handle.stat();
+        if (!handleStat.isFile()) {
+          continue;
+        }
+
+        if (process.platform !== 'win32') {
+          if (
+            srcLstat.ino !== 0 &&
+            (handleStat.ino !== srcLstat.ino || handleStat.dev !== srcLstat.dev)
+          ) {
+            continue;
+          }
+        } else {
+          if (
+            handleStat.size !== srcLstat.size ||
+            Math.abs(handleStat.mtimeMs - srcLstat.mtimeMs) > 1
+          ) {
+            continue;
+          }
+        }
+
+        const content = await handle.readFile();
         await writeProjectFileFn(
           projectsRoot,
           projectId,
@@ -125,6 +176,8 @@ export async function syncAntigravityBrainArtifacts(
           projectMetadata,
         );
         syncedFiles.push(entry);
+      } finally {
+        await handle?.close();
       }
     } catch {
       // Best-effort per file

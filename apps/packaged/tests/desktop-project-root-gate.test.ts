@@ -77,7 +77,7 @@ describe("validateExistingDirectory", () => {
     const realDir = path.join(tempRoot, "real");
     await mkdir(realDir);
     const linkDir = path.join(tempRoot, "link");
-    symlinkSync(realDir, linkDir, process.platform === "win32" ? "junction" : "dir");
+    symlinkSync(realDir, linkDir, "dir");
     const result = await validateExistingDirectory(linkDir);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.resolved).toBe(await realpath(realDir));
@@ -103,7 +103,7 @@ describe("validateExistingDirectory", () => {
     const realApp = path.join(tempRoot, "Real.app");
     await mkdir(realApp);
     const linkDir = path.join(tempRoot, "innocent-name");
-    symlinkSync(realApp, linkDir, process.platform === "win32" ? "junction" : "dir");
+    symlinkSync(realApp, linkDir, "dir");
     const result = await validateExistingDirectory(linkDir);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toMatch(/application bundles/i);

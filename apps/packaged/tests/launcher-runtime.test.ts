@@ -109,7 +109,7 @@ describe("resolvePackagedLauncherRuntime", () => {
       const executable = join(physicalRoot, "Open Design.app", "Contents", "MacOS", "Open Design");
       await mkdir(dirname(executable), { recursive: true });
       await writeFile(executable, "");
-      await symlink(physicalRoot, aliasRoot, process.platform === "win32" ? "junction" : "dir");
+      await symlink(physicalRoot, aliasRoot, "dir");
 
       await expect(sameExecutablePath(
         join(aliasRoot, "Open Design.app", "Contents", "MacOS", "Open Design"),

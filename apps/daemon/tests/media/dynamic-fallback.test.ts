@@ -351,4 +351,62 @@ describe("Dynamic Image Provider Negotiation & Fallback", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("auto-routes unauthenticated vela call to configured aihubmix provider for t2i and i2i", async () => {
+    await writeConfig(projectRoot, {
+      providers: { aihubmix: { apiKey: "test-aihubmix-key" } },
+    });
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockImplementation(async (url: any) => {
+      if (String(url).includes("aihubmix.com") || String(url).includes("/images/generations")) {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                b64_json: Buffer.from("fake-aihubmix-png-bytes").toString("base64"),
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const projDir = path.join(projectsRoot, "test-aihubmix-fallback");
+    await mkdir(projDir, { recursive: true });
+    await writeFile(path.join(projDir, "input.png"), Buffer.from("fake-input-png"));
+
+    try {
+      // 1. Test t2i fallback
+      const t2iRes = await generateMedia({
+        projectRoot,
+        projectsRoot,
+        projectId: "test-aihubmix-fallback",
+        surface: "image",
+        model: "vela/gpt-image-2",
+        prompt: "a beautiful mountain sunrise",
+      });
+      expect(t2iRes.providerId).toBe("aihubmix");
+      expect(t2iRes.providerNote).toContain("[auto-routed]");
+      expect(t2iRes.providerNote).toContain("aihubmix");
+
+      // 2. Test i2i fallback (aihubmix-gpt-image-1 supports i2i)
+      const i2iRes = await generateMedia({
+        projectRoot,
+        projectsRoot,
+        projectId: "test-aihubmix-fallback",
+        surface: "image",
+        model: "vela/gpt-image-2",
+        image: "input.png",
+        prompt: "turn this mountain into sunset",
+      });
+      expect(i2iRes.providerId).toBe("aihubmix");
+      expect(i2iRes.providerNote).toContain("[auto-routed]");
+      expect(i2iRes.providerNote).toContain("aihubmix");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

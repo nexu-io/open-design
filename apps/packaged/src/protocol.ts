@@ -449,11 +449,6 @@ function resolveOdProxyFetch(): OdProtocolFetch {
       return await net.fetch(request);
     } catch (error) {
       if (!OD_PROXY_RETRYABLE_METHODS.has(request.method) || isClientCancelled(request)) {
-        console.warn("[open-design packaged] net.fetch failed for non-retryable request", {
-          message: error instanceof Error ? error.message : String(error),
-          method: request.method,
-          target: request.url,
-        });
         throw error;
       }
       // The fallback exists to rescue Electron-specific transport rejections

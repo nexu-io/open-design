@@ -25,9 +25,7 @@ describe("node-pty packaged runtime closure", () => {
         arch: "arm64",
         platform: "darwin",
       })).resolves.toBeUndefined();
-      if (process.platform !== "win32") {
-        expect((await stat(join(prebuildRoot, "spawn-helper"))).mode & 0o111).not.toBe(0);
-      }
+      expect((await stat(join(prebuildRoot, "spawn-helper"))).mode & 0o111).not.toBe(0);
       await expect(validateNodePtyRuntime({
         appRoot: root,
         arch: "arm64",

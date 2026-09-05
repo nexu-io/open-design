@@ -106,7 +106,7 @@ describe('resolveDaemonPrewarmTargets', () => {
     expect(targets).toEqual([
       { kind: 'file', path: '/res/open-design/bin/node' },
       { kind: 'dir', path: '/res/app/node_modules/@open-design/daemon/dist' },
-      { kind: 'dir', path: join('/res/open-design', 'plugins') },
+      { kind: 'dir', path: '/res/open-design/plugins' },
     ]);
   });
 
@@ -118,7 +118,7 @@ describe('resolveDaemonPrewarmTargets', () => {
     });
     expect(targets).toEqual([
       { kind: 'dir', path: '/res/app/node_modules/@open-design/daemon/dist' },
-      { kind: 'dir', path: join('/res/open-design', 'plugins') },
+      { kind: 'dir', path: '/res/open-design/plugins' },
     ]);
   });
 
@@ -149,8 +149,8 @@ describe('resolveWebPrewarmTargets', () => {
     });
     expect(targets).toEqual([
       { kind: 'dir', path: '/res/app/node_modules/@open-design/web/dist/sidecar' },
-      { kind: 'dir', path: join('/res/app/node_modules/@open-design/web', '.next/server') },
-      { kind: 'dir', path: join('/res/app/node_modules/next', 'dist/server') },
+      { kind: 'dir', path: '/res/app/node_modules/@open-design/web/.next/server' },
+      { kind: 'dir', path: '/res/app/node_modules/next/dist/server' },
     ]);
   });
 
@@ -171,7 +171,7 @@ describe('resolveWebPrewarmTargets', () => {
     });
     expect(targets).toEqual([
       { kind: 'dir', path: '/res/app/node_modules/@open-design/web/dist/sidecar' },
-      { kind: 'dir', path: join('/res/app/node_modules/@open-design/web', '.next/server') },
+      { kind: 'dir', path: '/res/app/node_modules/@open-design/web/.next/server' },
     ]);
   });
 
@@ -190,11 +190,7 @@ describe('collectPrewarmFiles', () => {
     writeFileSync(join(dir, 'a.js'), 'aaa');
     writeFileSync(join(dir, 'nested', 'b.js'), 'bbbbb');
     writeFileSync(join(root, 'node.bin'), 'nn');
-    try {
-      symlinkSync(join(dir, 'a.js'), join(dir, 'link.js'));
-    } catch {
-      // Symlink creation may not be permitted on Windows without Developer Mode
-    }
+    symlinkSync(join(dir, 'a.js'), join(dir, 'link.js'));
 
     const resolved = await collectPrewarmFiles([
       { kind: 'dir', path: dir },
@@ -241,11 +237,9 @@ describe('prewarmPackagedFiles', () => {
   it('skips when the payload is not backed by a FUSE mount', async () => {
     const root = makeTempRoot();
     writeFileSync(join(root, 'node.bin'), 'nn');
-    const normalizedRoot = root.replaceAll('\\', '/').replace(/^[a-zA-Z]:/, '');
-    const mounts = `${MOUNTS_FIXTURE}\ntmpfs ${normalizedRoot} tmpfs rw,nosuid,nodev 0 0`;
     const report = await prewarmPackagedFiles([{ kind: 'file', path: join(root, 'node.bin') }], {
       platform: 'linux',
-      mountsContent: mounts,
+      mountsContent: MOUNTS_FIXTURE,
     });
     expect(report.skipped).toBe(true);
     expect(report.reason).toBe('not-fuse');
@@ -256,11 +250,7 @@ describe('prewarmPackagedFiles', () => {
     const fuseRoot = join(root, '.mount_Open DePl0rQ');
     mkdirSync(fuseRoot, { recursive: true });
     writeFileSync(join(fuseRoot, 'node.bin'), Buffer.alloc(4096, 3));
-    const normalizedFuseRoot = fuseRoot.replaceAll('\\', '/').replace(/^[a-zA-Z]:/, '');
-    const mounts = MOUNTS_FIXTURE.replaceAll(
-      '/tmp/.mount_Open\\040DePl0rQ',
-      normalizedFuseRoot.replaceAll(' ', '\\040'),
-    );
+    const mounts = MOUNTS_FIXTURE.replaceAll('/tmp/.mount_Open\\040DePl0rQ', fuseRoot.replaceAll(' ', '\\040'));
 
     const report = await prewarmPackagedFiles([{ kind: 'file', path: join(fuseRoot, 'node.bin') }], {
       platform: 'linux',

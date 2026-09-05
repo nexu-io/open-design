@@ -366,6 +366,9 @@ async function findActiveImageProvider(
     'custom-image',
     'imagerouter',
     'openrouter',
+    'aihubmix',
+    'leonardo',
+    'senseaudio',
   ];
   for (const pid of candidateProviders) {
     if (excludeProviders.includes(pid)) continue;
@@ -394,6 +397,9 @@ async function dispatchFallbackImage(
   if (provider === 'imagerouter') return renderImageRouterImage(ctx, credentials);
   if (provider === 'openrouter') return renderOpenRouterImage(ctx, credentials);
   if (provider === 'openai') return renderOpenAIImage(ctx, credentials);
+  if (provider === 'aihubmix') return renderAIHubMixImage(ctx, credentials);
+  if (provider === 'leonardo') return renderLeonardoImage(ctx, credentials);
+  if (provider === 'senseaudio') return renderSenseAudioImage(ctx, credentials);
   throw new Error(`Unsupported fallback provider: ${provider}`);
 }
 

@@ -1,12 +1,8 @@
-import { execFile } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { promisify } from "node:util";
 
 import { describe, expect, it } from "vitest";
-
-const execFileAsync = promisify(execFile);
 
 import type { ToolPackConfig } from "@/config/index.js";
 import { buildCustomWinNsisInstaller } from "@/win/custom-installer.js";
@@ -73,30 +69,6 @@ async function writeFakeMakensis(root: string): Promise<void> {
     "makensis.exe",
   );
   await mkdir(dirname(command), { recursive: true });
-  if (process.platform === "win32") {
-    const cscPath = "C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe";
-    const srcPath = join(dirname(command), "makensis.cs");
-    await writeFile(
-      srcPath,
-      `using System;
-using System.IO;
-class Program {
-    static void Main(string[] args) {
-        foreach (var arg in args) {
-            if (arg.StartsWith("/DOUTPUT_EXE=")) {
-                var path = arg.Substring("/DOUTPUT_EXE=".Length);
-                Directory.CreateDirectory(Path.GetDirectoryName(path));
-                File.WriteAllText(path, "");
-            }
-        }
-    }
-}`,
-      "utf8",
-    );
-    await execFileAsync(cscPath, ["/nologo", `/out:${command}`, srcPath]);
-    await rm(srcPath, { force: true });
-    return;
-  }
   await writeFile(
     command,
     `#!/bin/sh

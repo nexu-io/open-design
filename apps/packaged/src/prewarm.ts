@@ -54,7 +54,6 @@ export function detectFuseBackedPath(
   targetPath: string,
   mountsContent: string,
 ): boolean | null {
-  const normalizedPath = targetPath.replaceAll("\\", "/").replace(/^[a-zA-Z]:/, "");
   let bestMatch: { mountpoint: string; fstype: string } | null = null;
   for (const line of mountsContent.split("\n")) {
     const fields = line.trim().split(/\s+/);
@@ -63,8 +62,8 @@ export function detectFuseBackedPath(
     const fstype = fields[2];
     const matches =
       mountpoint === "/"
-        ? normalizedPath.startsWith("/")
-        : normalizedPath === mountpoint || normalizedPath.startsWith(`${mountpoint}/`);
+        ? targetPath.startsWith("/")
+        : targetPath === mountpoint || targetPath.startsWith(`${mountpoint}/`);
     if (!matches) continue;
     if (bestMatch == null || mountpoint.length > bestMatch.mountpoint.length) {
       bestMatch = { mountpoint, fstype };
