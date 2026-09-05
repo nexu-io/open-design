@@ -5,9 +5,10 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 ## Active tools
 
 - `tools/dev` provides `@open-design/tools-dev` and the `tools-dev` bin. It is the only currently active local development lifecycle control plane.
-- `pnpm tools-dev` manages daemon -> web -> desktop.
+- `pnpm tools-dev` exposes `desktop` as the public selector for the integrated `shells/electron` stack; its internal typed identity is `electron`.
+- `tools-dev` invokes only the typed lifecycle adapter under `shells/electron/scripts` for desktop and does not import electron-kit or launch `apps/desktop`.
 - `pnpm tools-dev run web` runs foreground daemon + web for the Playwright webServer flow.
-- `pnpm tools-dev inspect desktop ...` inspects the desktop runtime through sidecar IPC.
+- `pnpm tools-dev inspect desktop status` projects the Electron Shell status through its typed adapter.
 - `tools/pack` provides `@open-design/tools-pack` and the `tools-pack` bin. The active slice is packaged artifact build/install/start/stop/logs/uninstall/cleanup/list/reset plus beta release artifact preparation for mac and Windows lanes, plus a Linux AppImage lane with optional containerized builds.
 - `tools/serve` provides `@open-design/tools-serve` and the `tools-serve` bin. It owns local fixture services such as `tools-serve start updater`.
 - `tools/release` provides `@open-design/tools-release` and the `tools-release` bin. It owns release metadata, storage publishing, release reports, and notification-facing file/data contracts; artifact build, cache, installer, payload, and smoke work stays in `tools/pack`.

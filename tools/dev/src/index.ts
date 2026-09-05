@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { lstat, mkdir, open, readdir, rm, symlink, writeFile, type FileHandle } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, readdir, rm, symlink, writeFile, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 
 import { cac } from "cac";
@@ -7,20 +7,12 @@ import { cac } from "cac";
 import {
   APP_KEYS,
   SIDECAR_ENV,
-  SIDECAR_MESSAGES,
   SIDECAR_SOURCES,
   type DaemonStatusSnapshot,
-  type DesktopClickResult,
-  type DesktopConsoleResult,
-  type DesktopEvalResult,
-  type DesktopScreenshotResult,
-  type DesktopStatusSnapshot,
-  type DesktopUpdateResult,
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
 import {
   findSidecarProcesses,
-  invokeSidecar,
   launchSidecar,
   restartSidecar,
   stopSidecar,
@@ -62,26 +54,19 @@ import {
 } from "./diagnostics.js";
 import {
   inspectDaemonRuntime,
-  inspectDesktopRuntime,
   inspectWebRuntime,
   waitForDaemonRuntime,
-  waitForDesktopRuntime,
   waitForWebRuntime,
 } from "./sidecar-client.js";
 import { rewriteCliArgsForDefaultStart } from "./cli-args.js";
-import { ensureDaemonGateForDesktop } from "./desktop-auth-gate.js";
 import { loadWorkspaceLocalEnv } from "./local-env.js";
 import { resolveSharedPortsFromRunningState } from "./shared-ports.js";
 
 type CliOptions = ToolDevOptions & {
   envFile?: string | string[];
-  expr?: string;
   noEnvFile?: boolean;
   parentPid?: number;
-  path?: string;
-  selector?: string;
-  timeout?: string;
-  updateAction?: string;
+  standaloneBootstrapUrl?: string;
 };
 
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
@@ -401,7 +386,7 @@ async function spawnSidecarRuntime(request: {
 async function spawnDaemonRuntime(
   config: ToolDevConfig,
   options: CliOptions,
-  spawnOptions: { requireDesktopAuth?: boolean; restart?: boolean; restartOptions?: SidecarRestartOptions } = {},
+  spawnOptions: { restart?: boolean; restartOptions?: SidecarRestartOptions } = {},
 ): Promise<{ pid: number } | SidecarRestartResult> {
   const daemonPort = parsePortOption(options.daemonPort, "--daemon-port");
   const webPort = parsePortOption(options.webPort, "--web-port");
@@ -411,16 +396,6 @@ async function spawnDaemonRuntime(
     await ensureDaemonCliBuild(config, logHandle);
     await logHandle.write(`\n[tools-dev] launching daemon at ${new Date().toISOString()}\n`);
     if (webPort != null) await logHandle.write(`[tools-dev] trusting web origin port ${webPort}\n`);
-    if (spawnOptions.requireDesktopAuth) {
-      // PR #974 round-4 P1: when this daemon is being spawned in a
-      // desktop-bundled flow, hand it the env var that pins the
-      // import-folder gate ON from request 0. The daemon-side flag
-      // refuses tokenless imports even before the desktop main
-      // process has finished registering, closing the
-      // daemon-restart-mid-session bypass that the runtime-only
-      // handshake left open.
-      await logHandle.write(`[tools-dev] requiring desktop auth on /api/import/folder\n`);
-    }
     return await spawnSidecarRuntime({
       appName: APP_KEYS.DAEMON,
       config,
@@ -428,7 +403,6 @@ async function spawnDaemonRuntime(
         [SIDECAR_ENV.DAEMON_PORT]: String(daemonPort ?? 0),
         ...(webPort == null ? {} : { [SIDECAR_ENV.WEB_PORT]: String(webPort) }),
         ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
-        ...(spawnOptions.requireDesktopAuth ? { OD_REQUIRE_DESKTOP_AUTH: "1" } : {}),
       },
       logHandle,
       ...(spawnOptions.restart === undefined ? {} : { restart: spawnOptions.restart }),
@@ -475,19 +449,6 @@ async function spawnWebRuntime(config: ToolDevConfig, options: CliOptions): Prom
   } finally {
     await logHandle.close();
   }
-}
-
-async function buildDesktop(config: ToolDevConfig, logHandle: FileHandle): Promise<void> {
-  await logHandle.write(`\n[tools-dev] building @open-design/desktop at ${new Date().toISOString()}\n`);
-  const invocation = createPackageManagerInvocation(["--filter", "@open-design/desktop", "build"], process.env);
-  await runLoggedCommand({
-    args: invocation.args,
-    command: invocation.command,
-    cwd: config.workspaceRoot,
-    env: process.env,
-    logFd: logHandle.fd,
-    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
-  });
 }
 
 async function latestMtimeMs(filePath: string): Promise<number> {
@@ -589,54 +550,38 @@ async function writeWebDevTsconfig(config: ToolDevConfig): Promise<void> {
   );
 }
 
-async function spawnDesktopRuntime(config: ToolDevConfig, options: CliOptions): Promise<{ pid: number }> {
-  const logHandle = await openAppLog(config, APP_KEYS.DESKTOP);
+type ElectronLifecycleOperation = "electron.dev.start" | "electron.dev.status" | "electron.dev.stop";
 
+async function invokeElectronLifecycle(config: ToolDevConfig, operation: ElectronLifecycleOperation, options: CliOptions): Promise<Record<string, unknown>> {
+  const logHandle = await openAppLog(config, APP_KEYS.DESKTOP);
   try {
-    await buildDesktop(config, logHandle);
-    await logHandle.write(`[tools-dev] launching desktop at ${new Date().toISOString()}\n`);
-    const spawnEnv: NodeJS.ProcessEnv = {
-      ...process.env,
-      ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
-    };
-    // ELECTRON_RUN_AS_NODE=1 makes Electron boot as plain Node and skip
-    // main-process API injection (app, BrowserWindow, protocol all become
-    // undefined). Strip it from the spawn env so desktop always boots in
-    // real Electron mode even when the parent shell is an Electron-based
-    // IDE that sets this variable for sidecar reuse.
-    //
-    // Iterate keys with a case-insensitive comparison rather than
-    // `delete spawnEnv.ELECTRON_RUN_AS_NODE`: spreading process.env into
-    // a plain object loses Node's Windows case-insensitive proxy, so any
-    // alternate-cased variant (e.g. `electron_run_as_node`) would still
-    // be passed to the child and Win32 CreateProcess would treat it as
-    // the same variable, undoing the fix.
-    //
-    // Scope is tools-dev only. The packaged runtime intentionally sets
-    // ELECTRON_RUN_AS_NODE on its own daemon/web sidecars (see
-    // apps/packaged/src/sidecars.ts) to reuse the bundled Node binary;
-    // that flow is independent and untouched here.
-    for (const key of Object.keys(spawnEnv)) {
-      if (key.toUpperCase() === "ELECTRON_RUN_AS_NODE") {
-        delete spawnEnv[key];
-      }
-    }
-    const spawned = await launchSidecar({
-      args: [config.apps.desktop.mainEntryPath],
-      command: config.apps.desktop.electronBinaryPath,
-      cwd: config.workspaceRoot,
-      detached: true,
-      env: spawnEnv,
-      logFd: logHandle.fd,
-      resources: {
-        dataRoot: resolveToolsDevDataRoot(config.workspaceRoot),
+    const request = {
+      schemaVersion: 1,
+      operation,
+      channel: "dev",
+      namespace: config.namespace,
+      controlRuntimeRoot: config.apps.desktop.controlRuntimeRoot,
+      ...(operation === "electron.dev.start" ? {
+        bootstrapUrl: options.standaloneBootstrapUrl ?? process.env.OD_ELECTRON_STANDALONE_BOOTSTRAP_URL,
+        installationRoot: config.apps.desktop.installationRoot,
         ownerPid: options.parentPid ?? null,
-        port: 0,
-        runtimeRoot: config.toolsDevRoot,
-      },
-      stamp: createConvergedAppStamp(config, APP_KEYS.DESKTOP),
+      } : {}),
+    };
+    if (operation === "electron.dev.start" && request.bootstrapUrl == null) {
+      throw new Error("--standalone-bootstrap-url is required for tools-dev desktop");
+    }
+    await mkdir(config.apps.desktop.controlRuntimeRoot, { recursive: true });
+    await rm(config.apps.desktop.receiptPath, { force: true });
+    await writeFile(config.apps.desktop.requestPath, `${JSON.stringify(request, null, 2)}\n`, "utf8");
+    await logHandle.write(`\n[tools-dev] ${operation} via shells/electron at ${new Date().toISOString()}\n`);
+    await runLoggedCommand({
+      args: [config.apps.desktop.lifecycleScriptPath, "--request", config.apps.desktop.requestPath, "--receipt", config.apps.desktop.receiptPath],
+      command: process.execPath,
+      cwd: config.workspaceRoot,
+      env: process.env,
+      logFd: logHandle.fd,
     });
-    return { pid: spawned.pid };
+    return JSON.parse(await readFile(config.apps.desktop.receiptPath, "utf8")) as Record<string, unknown>;
   } finally {
     await logHandle.close();
   }
@@ -645,7 +590,7 @@ async function spawnDesktopRuntime(config: ToolDevConfig, options: CliOptions): 
 async function startDaemon(
   config: ToolDevConfig,
   options: CliOptions,
-  startOptions: { refreshWebOrigin?: boolean; requireDesktopAuth?: boolean } = {},
+  startOptions: { refreshWebOrigin?: boolean } = {},
 ) {
   const daemonPort = parsePortOption(options.daemonPort, "--daemon-port");
   const webPort = parsePortOption(options.webPort, "--web-port");
@@ -680,16 +625,7 @@ async function startDaemon(
   }
   await assertNoStaleActiveProcess(config, APP_KEYS.DAEMON);
 
-  // PR #974 round-4 P1: pin the import-auth gate on the daemon when
-  // this spawn is part of a desktop-bundled flow OR a desktop runtime
-  // is already alive (revival case where the daemon died mid-session
-  // and the user is bringing it back up while desktop kept running).
-  // Both branches close the daemon-restart bypass.
-  const desktopAlreadyRunning = await inspectDesktopRuntime(runtimeLookup(config));
-  const requireDesktopAuth =
-    (startOptions.requireDesktopAuth ?? false) || desktopAlreadyRunning != null;
-
-  const spawned = await spawnDaemonRuntime(config, options, { requireDesktopAuth });
+  const spawned = await spawnDaemonRuntime(config, options);
   try {
     const status = await waitForDaemonRuntime(
       runtimeLookup(config),
@@ -743,9 +679,7 @@ async function restartDaemon(config: ToolDevConfig, options: CliOptions) {
       ? { daemonPort: runningDaemonPort }
       : {}),
   };
-  const desktopAlreadyRunning = await inspectDesktopRuntime(runtimeLookup(config));
   const restarted = await spawnDaemonRuntime(config, restartOptions, {
-    requireDesktopAuth: desktopAlreadyRunning != null,
     restart: true,
     restartOptions: { requireConcretePort: runningWebPort != null },
   });
@@ -819,8 +753,9 @@ async function startWeb(config: ToolDevConfig, options: CliOptions) {
 }
 
 async function startDesktop(config: ToolDevConfig, options: CliOptions) {
-  const existing = await inspectDesktopRuntime(runtimeLookup(config));
-  if (existing != null) {
+  if (options.daemonPort != null || options.webPort != null) throw new Error("desktop owns transient daemon/Web ports through Closure; port flags apply only to daemon or web development");
+  const existing = asRecord((await invokeElectronLifecycle(config, "electron.dev.status", options)).status);
+  if (existing?.state === "running") {
     if (options.parentPid != null) {
       throw new Error(
         `${APP_KEYS.DESKTOP} is already running in namespace ${config.namespace}; ` +
@@ -829,26 +764,9 @@ async function startDesktop(config: ToolDevConfig, options: CliOptions) {
     }
     return { app: APP_KEYS.DESKTOP, created: false, logPath: config.apps.desktop.latestLogPath, status: existing };
   }
-  await assertNoStaleActiveProcess(config, APP_KEYS.DESKTOP);
-
-  const spawned = await spawnDesktopRuntime(config, options);
-  try {
-    const status = await waitForDesktopRuntime(
-      runtimeLookup(config),
-      undefined,
-      () => isProcessAlive(spawned.pid),
-    );
-    return {
-      app: APP_KEYS.DESKTOP,
-      created: true,
-      logPath: config.apps.desktop.latestLogPath,
-      pid: spawned.pid,
-      status,
-    };
-  } catch (error) {
-    await stopApp(config, APP_KEYS.DESKTOP).catch(() => undefined);
-    throw error;
-  }
+  const receipt = await invokeElectronLifecycle(config, "electron.dev.start", options);
+  const status = asRecord(receipt.status);
+  return { app: APP_KEYS.DESKTOP, created: true, logPath: config.apps.desktop.latestLogPath, pid: numberField(status ?? {}, "pid"), status };
 }
 
 async function startApp(
@@ -860,47 +778,11 @@ async function startApp(
   switch (appName) {
     case APP_KEYS.DAEMON:
       return await startDaemon(config, options, {
-        // PR #974 round-4 P1: when daemon is being spawned alongside
-        // desktop in the same orchestrator invocation, pin the import-
-        // auth gate via env var so the daemon refuses tokenless imports
-        // before desktop has had a chance to register. The introspection
-        // case (desktop already running) is handled inside startDaemon.
         refreshWebOrigin: context.targets?.includes(APP_KEYS.WEB) === true,
-        requireDesktopAuth: context.targets?.includes(APP_KEYS.DESKTOP) === true,
       });
     case APP_KEYS.WEB:
       return await startWeb(config, options);
     case APP_KEYS.DESKTOP:
-      // PR #974 round 6 (mrcfps): if a daemon is already running but
-      // ungated (split-start dev flow `start daemon` -> `start desktop`),
-      // restart it with the gate armed BEFORE launching desktop main —
-      // see `ensureDaemonGateForDesktop` above for the rationale.
-      await ensureDaemonGateForDesktop({
-        inspectDaemon: () => inspectDaemonRuntime(runtimeLookup(config)),
-        inspectWeb: () => inspectWebRuntime(runtimeLookup(config)),
-        stopApp: async (app) => {
-          await stopApp(config, app);
-        },
-        // Round 7 (lefarcen P2): preserve the running daemon/web ports
-        // across the hardening restart. Without this, a stack started
-        // with `--daemon-port`/`--web-port` would silently drift to
-        // random ports during the restart, breaking pinned browsers.
-        startDaemonGated: async ({ port, webPort }) => {
-          const portedOptions: CliOptions =
-            port != null ? { ...options, daemonPort: port } : { ...options };
-          if (webPort != null) portedOptions.webPort = webPort;
-          await startDaemon(config, portedOptions, {
-            refreshWebOrigin: webPort != null,
-            requireDesktopAuth: true,
-          });
-        },
-        startWeb: async ({ port }) => {
-          const portedOptions: CliOptions =
-            port != null ? { ...options, webPort: port } : options;
-          await startWeb(config, portedOptions);
-        },
-        log: (msg) => process.stderr.write(`${msg}\n`),
-      });
       return await startDesktop(config, options);
   }
 }
@@ -915,6 +797,16 @@ function formatStopAppResult(appName: ToolDevAppName, stop: Awaited<ReturnType<t
 }
 
 async function stopApp(config: ToolDevConfig, appName: ToolDevAppName) {
+  if (appName === APP_KEYS.DESKTOP) {
+    const receipt = await invokeElectronLifecycle(config, "electron.dev.stop", {});
+    const stopped = asRecord(receipt.stopped) ?? {};
+    return {
+      app: APP_KEYS.DESKTOP,
+      status: Array.isArray(stopped.remainingPids) && stopped.remainingPids.length > 0 ? "partial" : "stopped",
+      stop: stopped,
+      via: stopped.gracefulAccepted === true ? "ipc" : "fallback",
+    };
+  }
   return formatStopAppResult(appName, await stopSidecar(createConvergedAppStamp(config, appName)));
 }
 
@@ -924,11 +816,7 @@ async function inspectAppStatus(config: ToolDevConfig, appName: ToolDevAppName) 
     if (status != null) return status;
     const active = await findAppProcessTree(config, appName);
     return {
-      // PR #974 round 6: synthetic snapshot when the IPC is unreachable
-      // — daemon is starting or idle, so the gate is definitionally not
-      // active yet. The desktop-auth-gate helper treats this branch as
-      // "no daemon running" via the null check, but the type contract
-      // still requires the field.
+      // Synthetic snapshot while the web-only development daemon is starting.
       desktopAuthGateActive: false,
       pid: active.rootPids[0] ?? null,
       state: active.pids.length > 0 ? "starting" : "idle",
@@ -942,10 +830,7 @@ async function inspectAppStatus(config: ToolDevConfig, appName: ToolDevAppName) 
     return { pid: active.rootPids[0] ?? null, state: active.pids.length > 0 ? "starting" : "idle", url: null } satisfies WebStatusSnapshot;
   }
 
-  const status = await inspectDesktopRuntime(runtimeLookup(config));
-  if (status != null) return status;
-  const active = await findAppProcessTree(config, appName);
-  return { pid: active.rootPids[0] ?? null, state: active.pids.length > 0 ? "unknown" : "idle", url: null };
+  return asRecord((await invokeElectronLifecycle(config, "electron.dev.status", {})).status) ?? { state: "idle" };
 }
 
 function summarizeStatus(apps: Record<ToolDevAppName, any>): string {
@@ -1045,42 +930,10 @@ function printCheckResult(result: unknown, options: CliOptions): void {
   }
 }
 
-function parseTimeoutMs(value: string | undefined): number | undefined {
-  if (value == null) return undefined;
-  const seconds = Number(value);
-  if (!Number.isFinite(seconds) || seconds <= 0) throw new Error("--timeout must be a positive number of seconds");
-  return seconds * 1000;
-}
-
 async function inspectDesktop(config: ToolDevConfig, target: string | undefined, options: CliOptions) {
   const operation = target ?? "status";
-  const timeoutMs = parseTimeoutMs(options.timeout) ?? 30000;
-
-  switch (operation) {
-    case "status":
-      return (await inspectDesktopRuntime(runtimeLookup(config), 1000)) ?? ({ state: "idle" } satisfies DesktopStatusSnapshot);
-    case "eval":
-      if (options.expr == null) throw new Error("--expr is required for desktop eval");
-      return await invokeSidecar<DesktopEvalResult>(createConvergedAppStamp(config, APP_KEYS.DESKTOP), SIDECAR_MESSAGES.EVAL, { expression: options.expr }, { timeoutMs });
-    case "screenshot":
-      if (options.path == null) throw new Error("--path is required for desktop screenshot");
-      return await invokeSidecar<DesktopScreenshotResult>(createConvergedAppStamp(config, APP_KEYS.DESKTOP), SIDECAR_MESSAGES.SCREENSHOT, { path: options.path }, { timeoutMs });
-    case "console":
-      return await invokeSidecar<DesktopConsoleResult>(createConvergedAppStamp(config, APP_KEYS.DESKTOP), SIDECAR_MESSAGES.CONSOLE, undefined, { timeoutMs });
-    case "update":
-      if (
-        options.updateAction != null &&
-        !["status", "check", "download", "install"].includes(options.updateAction)
-      ) {
-        throw new Error("--update-action must be status, check, download, or install");
-      }
-      return await invokeSidecar<DesktopUpdateResult>(createConvergedAppStamp(config, APP_KEYS.DESKTOP), SIDECAR_MESSAGES.UPDATE, { action: options.updateAction ?? "status" }, { timeoutMs });
-    case "click":
-      if (options.selector == null) throw new Error("--selector is required for desktop click");
-      return await invokeSidecar<DesktopClickResult>(createConvergedAppStamp(config, APP_KEYS.DESKTOP), SIDECAR_MESSAGES.CLICK, { selector: options.selector }, { timeoutMs });
-    default:
-      throw new Error(`unsupported desktop inspect target: ${operation}`);
-  }
+  if (operation !== "status") throw new Error(`desktop ${operation} has not yet migrated to the Electron Shell handler surface`);
+  return asRecord((await invokeElectronLifecycle(config, "electron.dev.status", options)).status) ?? { state: "idle" };
 }
 
 async function inspect(config: ToolDevConfig, appName: string, target: string | undefined, options: CliOptions) {
@@ -1150,6 +1003,7 @@ function addSharedOptions(command: ReturnType<typeof cli.command>) {
     .option("--tools-dev-root <path>", "tools-dev runtime root")
     .option("--env-file <path>", "load env file before resolving tools-dev config; repeatable")
     .option("--no-env-file", "skip automatic .env file loading", { default: false })
+    .option("--standalone-bootstrap-url <url>", "signed local Standalone bootstrap for desktop")
     .option("--json", "print JSON");
 }
 
@@ -1225,13 +1079,8 @@ addSharedOptions(cli.command("logs [app]", "Show log tail for daemon, web, deskt
 );
 
 addSharedOptions(
-  cli.command("inspect <app> [target]", "Inspect daemon/web status or desktop status/eval/screenshot/console/click"),
+  cli.command("inspect <app> [target]", "Inspect daemon, web, or Electron desktop status"),
 )
-  .option("--expr <js>", "JavaScript expression for desktop eval")
-  .option("--path <file>", "Output path for desktop screenshot")
-  .option("--selector <css>", "CSS selector for desktop click")
-  .option("--timeout <seconds>", "Desktop inspect timeout in seconds")
-  .option("--update-action <action>", "Desktop update action: status|check|download|install")
   .action(async (appName: string, target: string | undefined, options: CliOptions) => {
     output(await inspect(resolveToolDevConfig(options), appName, target, options), options);
   });

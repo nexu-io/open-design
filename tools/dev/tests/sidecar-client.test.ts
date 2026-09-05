@@ -4,7 +4,6 @@ import { describe, it } from "node:test";
 import {
   DAEMON_STARTUP_TIMEOUT_MS,
   waitForDaemonRuntime,
-  waitForDesktopRuntime,
   waitForWebRuntime,
 } from "../src/sidecar-client.js";
 
@@ -17,7 +16,6 @@ describe("sidecar startup waits", () => {
     const waits = [
       ["daemon", waitForDaemonRuntime],
       ["web", waitForWebRuntime],
-      ["desktop", waitForDesktopRuntime],
     ] as const;
 
     for (const [appName, waitForRuntime] of waits) {

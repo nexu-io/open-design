@@ -5,6 +5,7 @@ import { runElectronShell } from "@open-design/electron-kit/runtime";
 import type { ElectronShellManifest } from "@open-design/electron-kit/contracts";
 
 import { createElectronShellDefinition } from "./composition/definition.js";
+import { runControlledElectronShell } from "./adapters/standalone/electron-control.js";
 
 const installedManifest = JSON.parse(readFileSync(join(__dirname, "shell.json"), "utf8")) as ElectronShellManifest;
-void runElectronShell(createElectronShellDefinition(installedManifest));
+void runControlledElectronShell(async () => await runElectronShell(createElectronShellDefinition(installedManifest)));

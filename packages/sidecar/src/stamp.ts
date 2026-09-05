@@ -81,6 +81,13 @@ export function readCurrentSidecarStamp(): SidecarStamp {
   return readSupervisedSidecarContext()?.stamp ?? readCurrentSidecarArgvStamp();
 }
 
+/** Read a complete current resource identity, while distinguishing an unstamped process from malformed identity. */
+export function readOptionalCurrentSidecarStamp(): SidecarStamp | null {
+  const supervised = readSupervisedSidecarContext();
+  if (supervised != null) return supervised.stamp;
+  return readProcessStamp(process.argv.slice(1), SIDECAR_STAMP_CONTRACT);
+}
+
 export function serializeSupervisedSidecarContext(
   stampInput: SidecarStamp,
   generationPid: number,

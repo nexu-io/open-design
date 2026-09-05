@@ -3,6 +3,7 @@ import { RELEASE_CHANNELS, type ReleaseChannel } from "@open-design/release";
 export const APP_KEYS = Object.freeze({
   DAEMON: "daemon",
   DESKTOP: "desktop",
+  ELECTRON: "electron",
   WEB: "web",
 } as const);
 

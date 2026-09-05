@@ -182,6 +182,18 @@ describe("immutable bootloader handoff", () => {
     await expect(second.waitForTerminal()).resolves.toMatchObject({ state: "stopped", bindingDigest: secondRequest.binding.digest });
   });
 
+  it("starts a fresh body after the final attachment closes", async () => {
+    const starts = vi.fn(async (initial: StandaloneHandoffRequest) => body(initial.binding.digest, initial.binding.generationId).handle);
+    const bootloader = createStandaloneGenerationBootloader(starts);
+    const first = await bootloader(request("terminal-a"));
+    await expect(first.close()).resolves.toMatchObject({ state: "stopped", references: 0 });
+
+    const second = await bootloader(request("terminal-b"));
+    await expect(second.readStatus()).resolves.toMatchObject({ state: "running", references: 1 });
+    expect(starts).toHaveBeenCalledTimes(2);
+    await expect(second.close()).resolves.toMatchObject({ state: "stopped", references: 0 });
+  });
+
   it("fails closed on another generation or changed attachment identity", async () => {
     const bootloader = createStandaloneGenerationBootloader(async (initial) => body(initial.binding.digest, initial.binding.generationId).handle);
     const fossil = new FossilHandoffHost(async () => bootloader);

@@ -852,6 +852,9 @@ importers:
       '@open-design/sidecar':
         specifier: workspace:*
         version: link:../../packages/sidecar
+      '@open-design/sidecar-proto':
+        specifier: workspace:*
+        version: link:../../packages/sidecar-proto
       '@open-design/standalone':
         specifier: workspace:*
         version: link:../../packages/standalone

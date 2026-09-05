@@ -6,6 +6,7 @@ import electronPath from "electron";
 
 import { validateElectronShellManifest, type ElectronShellManifest } from "../contracts/index.js";
 import { assembleElectronScene } from "../distribution/index.js";
+import type { ElectronSceneReceipt } from "../distribution/index.js";
 
 export function normalizeElectronDevArgv(argv: readonly string[]): string[] {
   const normalized = [...argv];
@@ -13,7 +14,7 @@ export function normalizeElectronDevArgv(argv: readonly string[]): string[] {
   return normalized;
 }
 
-export async function devElectronShell(input: Readonly<{
+export type PrepareElectronDevShellInput = Readonly<{
   authorityResources: readonly Readonly<{ name: string; path: string }>[];
   entryPath: string;
   manifestPath: string;
@@ -22,7 +23,16 @@ export async function devElectronShell(input: Readonly<{
   rendererPreloadEntryPath: string;
   runtimeConfigPath: string;
   argv?: readonly string[];
-}>): Promise<number> {
+}>;
+
+export type ElectronDevShellPreparation = Readonly<{
+  electronPath: string;
+  manifest: ElectronShellManifest;
+  scene: ElectronSceneReceipt;
+}>;
+
+/** Assemble a development scene without deciding how its lifecycle is supervised. */
+export async function prepareElectronDevShell(input: PrepareElectronDevShellInput): Promise<ElectronDevShellPreparation> {
   const manifest = validateElectronShellManifest(JSON.parse(await readFile(input.manifestPath, "utf8")) as ElectronShellManifest);
   const scene = await assembleElectronScene({
     authorityResources: input.authorityResources,
@@ -33,7 +43,12 @@ export async function devElectronShell(input: Readonly<{
     rendererPreloadEntryPath: input.rendererPreloadEntryPath,
     runtimeConfigPath: input.runtimeConfigPath,
   });
-  const child = spawn(electronPath as unknown as string, [scene.sceneRoot, ...normalizeElectronDevArgv(input.argv ?? [])], { env: process.env, stdio: "inherit" });
+  return Object.freeze({ electronPath: electronPath as unknown as string, manifest, scene });
+}
+
+export async function devElectronShell(input: PrepareElectronDevShellInput): Promise<number> {
+  const prepared = await prepareElectronDevShell(input);
+  const child = spawn(prepared.electronPath, [prepared.scene.sceneRoot, ...normalizeElectronDevArgv(input.argv ?? [])], { env: process.env, stdio: "inherit" });
   return await new Promise<number>((resolveCode, reject) => {
     child.once("error", reject);
     child.once("exit", (exitCode) => resolveCode(exitCode ?? 1));

@@ -375,7 +375,13 @@ export function createStandaloneGenerationBootloader(
       async close() {
         if (closed != null) return closed;
         active.attachments.delete(request.attachment.id);
-        if (active.attachments.size === 0) closed = validateStatus(await (await active.body).close(), binding);
+        if (active.attachments.size === 0) {
+          // Retire the multiplexed body before awaiting its physical close. A
+          // later Shell attachment must start a fresh body instead of binding
+          // to the already-closing handle retained by this closure.
+          if (entry === active) entry = null;
+          closed = validateStatus(await (await active.body).close(), binding);
+        }
         else {
           const status = validateStatus(await (await active.body).readStatus(), binding);
           closed = Object.freeze({ ...status, state: "stopped" as const, references: active.attachments.size });
