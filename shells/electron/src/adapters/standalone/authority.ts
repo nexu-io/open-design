@@ -59,6 +59,7 @@ type HostStatus = Readonly<{
   generationPid: number;
   hostPid: number;
   hostSha256: string;
+  layout: Readonly<{ dataRoot: string; logsRoot: string; runtimeRoot: string }>;
   supervisorSha256: string;
   dataRoot: string;
   runtimeRoot: string;
@@ -88,6 +89,7 @@ function exactHostStatus(value: unknown, expected: Omit<HostStatus, "control" | 
     && Number.isSafeInteger(status.generationPid)
     && Number.isSafeInteger(status.hostPid)
     && status.hostSha256 === expected.hostSha256
+    && canonicalJson(status.layout) === canonicalJson(expected.layout)
     && status.supervisorSha256 === expected.supervisorSha256
     && status.dataRoot === expected.dataRoot
     && status.runtimeRoot === expected.runtimeRoot
@@ -102,13 +104,18 @@ export function createElectronStandaloneAuthorityFactory(
   const resources = validateElectronPhysicalResourceSet(resourcesInput);
   const runtimeResource = resources.resources.find(({ id }) => id === "standalone-runtime");
   if (runtimeResource == null) throw new Error("Electron physical resource set lacks standalone-runtime");
-  return ({ officialNodeExecutablePath, observeFeedback, resourceRoot, runtimeRoot }) => ({
+  return ({ namespaceRoot, officialNodeExecutablePath, observeFeedback, resourceRoot, runtimeRoot }) => ({
     async prepare(request) {
       if (!isElectronStandaloneScope(manifest, request.scope)) throw new Error("Electron Standalone authority request escaped its Shell scope");
       if (canonicalJson(request.shell) !== canonicalJson(manifest.shell)) throw new Error("Electron Standalone authority request escaped its Shell identity");
       const installation = await loadElectronStandaloneInstallation({ resourceRoot, channel: request.scope.channel, target: resolveElectronStandaloneTarget() });
       const storeRoot = join(runtimeRoot, "standalone-store");
       const sidecarRuntimeRoot = join(runtimeRoot, "standalone-sidecar");
+      const layout = Object.freeze({
+        dataRoot: join(namespaceRoot, "data", "product"),
+        logsRoot: join(namespaceRoot, "logs", "product"),
+        runtimeRoot: join(namespaceRoot, "runtime", "product"),
+      });
       const store = new StandaloneStore(storeRoot, request.scope);
       const feedback = new StandaloneFeedbackEmitter(request.correlationId, request.scope, observeFeedback);
       const installedGenerationId = sha256Hex(canonicalJson(installation.envelope.metadata));
@@ -133,6 +140,7 @@ export function createElectronStandaloneAuthorityFactory(
       const binding = createStandaloneGenerationBinding(generation, request.scope);
       const hostExpected = Object.freeze({
         hostSha256: installation.declaration.host.sha256,
+        layout,
         supervisorSha256: installation.declaration.supervisor.sha256,
         supervisorPath: installation.supervisorPath,
         dataRoot: storeRoot,
@@ -148,6 +156,7 @@ export function createElectronStandaloneAuthorityFactory(
         resourceRoot: resolve(resourceRoot),
         hostPath: installation.hostPath,
         hostSha256: hostExpected.hostSha256,
+        layout,
         supervisorPath: installation.supervisorPath,
         supervisorSha256: hostExpected.supervisorSha256,
         shell: request.shell,

@@ -131,6 +131,7 @@ export interface ElectronStandaloneAuthority {
 
 export type ElectronStandaloneAuthorityFactory = (input: Readonly<{
   officialNodeExecutablePath: string;
+  namespaceRoot: string;
   resourceRoot: string;
   runtimeRoot: string;
   observeFeedback?(event: StandaloneFeedbackEvent): void | Promise<void>;

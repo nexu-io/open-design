@@ -112,6 +112,7 @@ describe("Electron production Standalone authority", () => {
       shell: { type: "electron", version: "0.1.0", buildHash: "a".repeat(64), digest: "b".repeat(64) },
     };
     const authority = createElectronStandaloneAuthorityFactory(manifest, physicalResources)({
+      namespaceRoot: join(runtimeRoot, "namespace"),
       officialNodeExecutablePath: process.execPath,
       resourceRoot: root,
       runtimeRoot,
@@ -302,6 +303,7 @@ describe("Electron production Standalone authority", () => {
         shell: { ...handoff.shell, digest: "d".repeat(64) },
       };
       const replacementAuthority = createElectronStandaloneAuthorityFactory(replacementManifest, physicalResources)({
+        namespaceRoot: join(runtimeRoot, "namespace"),
         officialNodeExecutablePath: process.execPath,
         resourceRoot: root,
         runtimeRoot,

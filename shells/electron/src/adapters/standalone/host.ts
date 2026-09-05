@@ -11,9 +11,12 @@ import {
 } from "@open-design/sidecar";
 import {
   FossilHandoffHost,
+  createStandaloneRuntimeLayoutCapabilityHandler,
+  createStandaloneShellCapabilityRouter,
   createStandaloneShellUpdaterCapabilityHandler,
   resolveStandaloneGenerationHandoff,
   validateShellIdentity,
+  validateStandaloneRuntimeLayout,
   type StandaloneHandoffRequest,
   type StandaloneRuntimeHandle,
 } from "@open-design/standalone";
@@ -40,6 +43,7 @@ type HostConfig = Readonly<{
   resourceRoot: string;
   hostPath: string;
   hostSha256: string;
+  layout: Readonly<{ dataRoot: string; logsRoot: string; runtimeRoot: string }>;
   supervisorSha256: string;
   supervisorPath: string;
   shell: Readonly<{ type: string; version: string; buildHash: string; digest: string }>;
@@ -50,7 +54,7 @@ function readConfig(): HostConfig {
   if (serialized == null) throw new Error(`${ELECTRON_STANDALONE_HOST_CONFIG_ENV} is required`);
   const value = JSON.parse(serialized) as Partial<HostConfig>;
   const keys = Object.keys(value).sort();
-  if (JSON.stringify(keys) !== JSON.stringify(["hostPath", "hostSha256", "resourceRoot", "runtimeRoot", "schemaVersion", "scope", "shell", "storeRoot", "supervisorPath", "supervisorSha256"])) throw new Error("Electron Standalone host configuration fields are invalid");
+  if (JSON.stringify(keys) !== JSON.stringify(["hostPath", "hostSha256", "layout", "resourceRoot", "runtimeRoot", "schemaVersion", "scope", "shell", "storeRoot", "supervisorPath", "supervisorSha256"])) throw new Error("Electron Standalone host configuration fields are invalid");
   if (
     value.schemaVersion !== 1
     || value.scope == null
@@ -60,6 +64,7 @@ function readConfig(): HostConfig {
     || typeof value.runtimeRoot !== "string"
     || typeof value.resourceRoot !== "string"
     || typeof value.hostPath !== "string"
+    || value.layout == null
     || typeof value.supervisorPath !== "string"
     || !/^[a-f0-9]{64}$/u.test(value.hostSha256 ?? "")
     || !/^[a-f0-9]{64}$/u.test(value.supervisorSha256 ?? "")
@@ -74,7 +79,8 @@ function readConfig(): HostConfig {
     || JSON.stringify(Object.keys(value.shell).sort()) !== JSON.stringify(["buildHash", "digest", "type", "version"])) throw new Error("Electron Standalone host Shell identity is invalid");
   const shell = value.shell as HostConfig["shell"];
   validateShellIdentity(shell);
-  return Object.freeze({ schemaVersion: 1, scope: Object.freeze({ ...value.scope }), storeRoot, runtimeRoot, resourceRoot, hostPath, hostSha256: value.hostSha256!, supervisorPath, supervisorSha256: value.supervisorSha256!, shell: Object.freeze({ ...shell }) });
+  const layout = validateStandaloneRuntimeLayout(value.layout);
+  return Object.freeze({ schemaVersion: 1, scope: Object.freeze({ ...value.scope }), storeRoot, runtimeRoot, resourceRoot, hostPath, hostSha256: value.hostSha256!, layout, supervisorPath, supervisorSha256: value.supervisorSha256!, shell: Object.freeze({ ...shell }) });
 }
 
 class ElectronStandaloneHostRuntime {
@@ -197,7 +203,10 @@ class ElectronStandaloneHostRuntime {
     const handle = await this.#handoff.handoff({
       binding: request.binding,
       attachment: request.attachment,
-      capabilities: createStandaloneShellUpdaterCapabilityHandler(this.updater),
+      capabilities: createStandaloneShellCapabilityRouter([
+        createStandaloneShellUpdaterCapabilityHandler(this.updater),
+        createStandaloneRuntimeLayoutCapabilityHandler({ layout: this.config.layout, scope: this.config.scope }),
+      ]),
     });
     try {
       const started = await startLifecycle();
@@ -267,6 +276,7 @@ export async function runElectronStandaloneHost(): Promise<void> {
           generationPid: client.resources.pid,
           hostPid: process.pid,
           hostSha256: config.hostSha256,
+          layout: config.layout,
           supervisorSha256: config.supervisorSha256,
           dataRoot: client.resources.dataRoot,
           runtimeRoot: client.resources.runtimeRoot,

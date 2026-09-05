@@ -15,6 +15,20 @@ export async function standaloneGenerationHandoff(request) {
       || updater.output?.operation !== "read"
       || updater.output?.snapshot?.shellType !== request.attachment.shell.type
     ) throw new Error("Closure fixture could not reach its typed Shell updater");
+    const layout = await request.capabilities.invoke({
+      requestId: "closure-runtime-layout-read",
+      attachmentId: request.attachment.id,
+      bindingDigest: request.binding.digest,
+      capability: "standalone-runtime-layout-v1",
+      input: { schemaVersion: 1, operation: "read", scope: request.binding.scope },
+    });
+    if (
+      layout.outcome !== "accepted"
+      || layout.output?.schemaVersion !== 1
+      || layout.output?.operation !== "read"
+      || layout.output?.scope?.channel !== request.binding.scope.channel
+      || !layout.output?.layout?.runtimeRoot
+    ) throw new Error("Closure fixture could not reach its scoped Shell runtime layout");
     let state = "running";
     let resolveTerminal;
     const terminal = new Promise((resolve) => { resolveTerminal = resolve; });

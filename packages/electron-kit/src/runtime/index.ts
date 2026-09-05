@@ -265,6 +265,7 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
         if (carrier == null) throw new Error("official Node carrier is unavailable");
         authority = definition.createStandaloneAuthority({
           officialNodeExecutablePath: carrier.executablePath,
+          namespaceRoot: paths.namespaceRoot,
           resourceRoot,
           runtimeRoot,
           observeFeedback(event) {
