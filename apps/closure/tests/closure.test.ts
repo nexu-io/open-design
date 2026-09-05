@@ -1,23 +1,41 @@
-import { describe, expect, it } from "vitest";
-import { createStandaloneGenerationBinding, type GenerationRecord } from "@open-design/standalone";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
-import { CLOSURE_FIXTURE_COMPONENT, createClosureFixtureContribution, prepareClosureShellUpdate } from "../src/index.js";
-import closureFixture from "../src/fixture.js";
+import { describe, expect, it, vi } from "vitest";
+import {
+  createStandaloneGenerationBinding,
+  createStandaloneRuntimeLayoutCapabilityHandler,
+  createStandaloneShellCapabilityRouter,
+  createStandaloneShellUpdaterCapabilityHandler,
+  initialShellUpdaterSnapshot,
+  type GenerationRecord,
+} from "@open-design/standalone";
+
+const sidecars = vi.hoisted(() => ({ spawned: [] as Array<{ app: string; env: NodeJS.ProcessEnv }> }));
+vi.mock("@open-design/sidecar", () => ({
+  async stopSidecar() { return { forcedPids: [], remainingPids: [] }; },
+  async spawnSidecar(input: { env: NodeJS.ProcessEnv; stamp: { app: string } }) {
+    sidecars.spawned.push({ app: input.stamp.app, env: input.env });
+    return {
+      process: { exitCode: null, pid: 4000 + sidecars.spawned.length, signalCode: null, once() {} },
+      async stop() { return { forcedPids: [], remainingPids: [] }; },
+    };
+  },
+  async getSidecarStatus(stamp: { app: string }) {
+    return stamp.app === "daemon"
+      ? { state: "running", url: "http://127.0.0.1:17578" }
+      : { state: "running", url: "http://127.0.0.1:17579" };
+  },
+  async invokeSidecar() { return { accepted: true }; },
+}));
+
+import { prepareClosureShellUpdate } from "../src/index.js";
 import { standaloneGenerationHandoff } from "../src/launcher.js";
 
-describe("Closure cold-start fixture", () => {
-  it("declares an intentionally Web/daemon-free content slot", () => {
-    expect(closureFixture).toEqual({ schemaVersion: 1, capability: "cold-start-lifecycle-fixture", web: false, daemon: false });
-    const bytes = Buffer.from("fixture");
-    expect(createClosureFixtureContribution({ artifactUrl: "https://example.invalid/fixture.mjs", artifactBytes: bytes })).toMatchObject({
-      id: CLOSURE_FIXTURE_COMPONENT,
-      sync: true,
-      blob: { size: bytes.byteLength, mediaType: "text/javascript" },
-      materialization: { type: "file", entrypoint: "fixture.mjs" },
-    });
-  });
-
-  it("exports a generation-owned handoff without a Shell-injected body", async () => {
+describe("Closure generation runtime", () => {
+  it("starts exact daemon/Web resources and projects their attachment-fenced endpoints", async () => {
+    sidecars.spawned.length = 0;
+    const runtimeRoot = join(tmpdir(), "closure-runtime-test");
     const generation: GenerationRecord = {
       schemaVersion: 4,
       id: "a".repeat(64),
@@ -27,16 +45,46 @@ describe("Closure cold-start fixture", () => {
       sourceCommit: "b".repeat(40),
       minimumShellVersions: { electron: "0.1.0" },
       launcher: { protocol: "standalone-launcher-v1", resourceId: "standalone-launcher", blobSha256: "b".repeat(64), entrypoint: "/fixture/launcher.mjs", path: "/fixture/launcher.mjs" },
-      resources: { "standalone-launcher": { component: "standalone.launcher", blobSha256: "b".repeat(64), entrypoint: "/fixture/launcher.mjs", materialization: { type: "file", entrypoint: "launcher.mjs" }, mediaType: "text/javascript", path: "/fixture/launcher.mjs", size: 42, sync: true } },
+      resources: {
+        "standalone-launcher": { component: "standalone.launcher", blobSha256: "b".repeat(64), entrypoint: "/fixture/launcher.mjs", materialization: { type: "file", entrypoint: "launcher.mjs" }, mediaType: "text/javascript", path: "/fixture/launcher.mjs", size: 42, sync: true },
+        "open-design-daemon": { component: "standalone.resource", blobSha256: "f".repeat(64), entrypoint: "/fixture/daemon/sidecar.mjs", materialization: { type: "zip", entrypoint: "sidecar.mjs", treeSha256: "1".repeat(64) }, mediaType: "application/zip", path: "/fixture/daemon", size: 43, sync: true },
+        "open-design-web": { component: "standalone.resource", blobSha256: "9".repeat(64), entrypoint: "/fixture/web/sidecar.mjs", materialization: { type: "zip", entrypoint: "sidecar.mjs", treeSha256: "2".repeat(64) }, mediaType: "application/zip", path: "/fixture/web", size: 44, sync: true },
+      },
     };
-    const binding = createStandaloneGenerationBinding(generation, { channel: "betahyx", namespace: "closure-fixture" });
+    const scope = { channel: "betahyx", namespace: "closure-runtime" } as const;
+    const binding = createStandaloneGenerationBinding(generation, scope);
+    const updater = {
+      shellType: "electron",
+      readSnapshot: async () => initialShellUpdaterSnapshot("electron"),
+      waitForChange: async () => initialShellUpdaterSnapshot("electron"),
+      invoke: async () => ({ outcome: "unsupported" as const, snapshot: initialShellUpdaterSnapshot("electron") }),
+      confirmInstalled: async () => ({ outcome: "unsupported" as const, snapshot: initialShellUpdaterSnapshot("electron") }),
+    };
     const request = {
       binding,
       attachment: { id: "electron-fixture", shell: { type: "electron", version: "0.1.0", buildHash: "d".repeat(64), digest: "e".repeat(64) } },
-      capabilities: { invoke: async (value: { requestId: string; attachmentId: string; bindingDigest: string }) => ({ ...value, outcome: "unsupported" as const }) },
+      capabilities: createStandaloneShellCapabilityRouter([
+        createStandaloneShellUpdaterCapabilityHandler(updater),
+        createStandaloneRuntimeLayoutCapabilityHandler({
+          scope,
+          layout: { dataRoot: join(runtimeRoot, "data"), logsRoot: join(runtimeRoot, "logs"), runtimeRoot: join(runtimeRoot, "processes") },
+        }),
+      ]),
     };
     const handle = await standaloneGenerationHandoff(request);
     await expect(handle.readStatus()).resolves.toMatchObject({ state: "running", bindingDigest: request.binding.digest, generationId: request.binding.generationId });
+    await expect(handle.invoke({
+      requestId: "renderer-read",
+      attachmentId: request.attachment.id,
+      bindingDigest: request.binding.digest,
+      command: "open-design.product-runtime.read.v1",
+      input: { schemaVersion: 1, operation: "read" },
+    })).resolves.toMatchObject({
+      outcome: "accepted",
+      output: { daemon: { url: "http://127.0.0.1:17578" }, web: { url: "http://127.0.0.1:17579" } },
+    });
+    expect(sidecars.spawned.map(({ app }) => app)).toEqual(["daemon", "web"]);
+    expect(sidecars.spawned[1]!.env).toMatchObject({ OD_PORT: "17578", OD_WEB_OUTPUT_MODE: "standalone" });
     await expect(handle.close()).resolves.toMatchObject({ state: "stopped", references: 0 });
   });
 

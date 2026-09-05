@@ -1,7 +1,5 @@
 import {
   resolveStandaloneShellCompatibility,
-  sha256Hex,
-  type StandaloneResourceContribution,
   type StandaloneShellIdentity,
   type StandaloneShellRequirement,
   type StandaloneShellUpdaterPort,
@@ -9,26 +7,6 @@ import {
 } from "@open-design/standalone";
 
 export const CLOSURE_VERSION = "0.1.0";
-export const CLOSURE_FIXTURE_COMPONENT = "closure-fixture";
-
-export function createClosureFixtureContribution(input: {
-  artifactUrl: string;
-  artifactBytes: Uint8Array;
-}): StandaloneResourceContribution {
-  const sha256 = sha256Hex(input.artifactBytes);
-  return {
-    id: CLOSURE_FIXTURE_COMPONENT,
-    component: "standalone.resource",
-    sync: true,
-    blob: {
-      mediaType: "text/javascript",
-      sha256,
-      size: input.artifactBytes.byteLength,
-      sources: [{ kind: "remote", url: input.artifactUrl }],
-    },
-    materialization: { type: "file", entrypoint: "fixture.mjs" },
-  };
-}
 
 export type ClosureShellUpdatePreparation = Readonly<
   | { state: "compatible" }

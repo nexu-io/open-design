@@ -18,7 +18,12 @@
     "pretypecheck": "pnpm --filter @open-design/standalone build",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
-  "dependencies": {"@open-design/standalone": "workspace:*"},
+  "dependencies": {
+    "@open-design/contracts": "workspace:*",
+    "@open-design/sidecar": "workspace:*",
+    "@open-design/sidecar-proto": "workspace:*",
+    "@open-design/standalone": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "24.12.2",
     "esbuild": "0.28.0",
