@@ -145,15 +145,16 @@ function stubAnimationFrame() {
 
 // Mirrors HomeView.prefill.test.tsx's local helper: the inline template rail
 // was replaced by the composer footer's radial Template picker (#5517).
+// Home starts with no creation type: the type row under the composer is the
+// empty state's only control, and it retires once something is picked.
 async function pickHomeTemplate(id: string) {
-  const trigger = await screen.findByTestId('home-hero-template-trigger');
-  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false));
-  fireEvent.click(trigger);
-  const wedge = await screen.findByTestId(`home-hero-template-wedge-${id}`);
-  await waitFor(() =>
-    expect(screen.getByTestId(`home-hero-template-wedge-${id}`).getAttribute('aria-disabled')).not.toBe('true'),
-  );
-  fireEvent.click(wedge);
+  // A type already picked retires the row, and the pill has no menu — so
+  // switching means clearing back to the empty state first.
+  const clear = screen.queryByTestId('home-hero-template-clear');
+  if (clear) fireEvent.click(clear);
+  const rowPill = await screen.findByTestId(`home-hero-type-pill-${id}`);
+  await waitFor(() => expect((rowPill as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(rowPill);
 }
 
 function fetchMockFor(plugins: unknown[]) {
@@ -199,7 +200,8 @@ describe('HomeView chip/plugin selection survives a real unmount+remount', () =>
     await screen.findByTestId('home-hero-input');
     await pickHomeTemplate('prototype');
 
-    // The trigger resolves the localized `homeHero.chip.prototype` label.
+    // 'Prototype' is the current en localization of the `prototype` chip
+    // (homeHero.chip.prototype).
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
     });
@@ -223,13 +225,11 @@ describe('HomeView chip/plugin selection survives a real unmount+remount', () =>
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
     });
-    // Restoring a persisted type is background hydration, not a submit. Keep
-    // the type rail interactive and defer the plugin apply until the user
-    // actually sends; otherwise a slow local apply washes out and disables
-    // every type pill while Home is loading.
-    expect(
-      (screen.getByTestId('home-hero-type-pill-prototype') as HTMLButtonElement).disabled,
-    ).toBe(false);
+    // Restoring a persisted type is background hydration, not a submit: defer
+    // the plugin apply until the user actually sends, and leave the type
+    // reversible meanwhile. With a type restored the row is retired, so the
+    // pill's clear is what must stay live.
+    expect(screen.getByTestId('home-hero-template-clear')).toBeTruthy();
     expect(
       fetchMock.mock.calls.some(
         ([url]) => typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply'),
@@ -262,8 +262,6 @@ describe('HomeView chip/plugin selection survives a real unmount+remount', () =>
     await screen.findByTestId('home-hero-input');
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
-      expect(screen.getByTestId(`home-hero-subtype-${legacyChipId}`).getAttribute('aria-selected'))
-        .toBe('true');
       expect(JSON.parse(window.localStorage.getItem('open-design:home-composer:chip') ?? '{}'))
         .toMatchObject({ chipId: 'prototype', prototypeSubtypeId: legacyChipId });
     });

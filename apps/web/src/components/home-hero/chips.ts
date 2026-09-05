@@ -145,14 +145,13 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     label: 'Website clone',
     icon: 'globe',
     group: 'create',
-    description: 'Recreate an existing website',
-    hint: 'Paste a site URL and recreate its structure, visuals, and interactions from real source evidence.',
-    // Website reproduction is its own creation workflow (start from a target
-    // URL, source-first recon, preserve real structure/assets), so it binds
-    // the bundled `example-web-clone` skill instead of the blank prototype
-    // seed. The project still stores `kind: 'prototype'` for preview
-    // behavior; `intent: 'web-clone'` routes the scenario plugin and splits
-    // the analytics `project_kind` (see contracts scenario-defaults/events).
+    description: 'Source-first site reproduction',
+    hint: 'Paste a target URL, then reconstruct the site and audit the clone.',
+    // Website reproduction binds the bundled `example-web-clone` plugin.
+    // Stored as a prototype so the artifact keeps prototype preview
+    // behavior; `intent: 'web-clone'` is what routes the scenario plugin
+    // (see `defaultScenarioPluginIdForProjectMetadata`) and splits these
+    // projects into their own `web_clone` analytics kind.
     action: {
       kind: 'apply-scenario',
       pluginId: 'example-web-clone',
@@ -161,6 +160,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
       projectMetadata: {
         kind: 'prototype',
         intent: 'web-clone',
+        fidelity: 'high-fidelity',
       },
     },
   },
@@ -287,6 +287,29 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     },
   },
   {
+    id: 'web-clone',
+    label: 'Website clone',
+    icon: 'globe',
+    group: 'create',
+    description: 'Source-first site reproduction',
+    hint: 'Paste a target URL, then reconstruct the site and audit the clone.',
+    // Website reproduction binds the bundled `example-web-clone` plugin.
+    // Stored as a prototype so the artifact keeps prototype preview
+    // behavior; `intent: 'web-clone'` is what routes the scenario plugin
+    // (see `defaultScenarioPluginIdForProjectMetadata`) and splits these
+    // projects into their own `web_clone` analytics kind.
+    action: {
+      kind: 'apply-scenario',
+      pluginId: 'example-web-clone',
+      projectKind: 'prototype',
+      projectMetadata: {
+        kind: 'prototype',
+        intent: 'web-clone',
+        fidelity: 'high-fidelity',
+      },
+    },
+  },
+  {
     id: 'image',
     label: 'Image',
     icon: 'image',
@@ -383,19 +406,28 @@ export function chipsForGroup(group: ChipGroup): HomeHeroChip[] {
 
 // Fixed Home information architecture. Only these ten output types are
 // top-level choices. Action-only create entries (for example Create Design
-// System) are intentionally excluded.
+// System) are intentionally excluded. Prototype leads and Slide deck follows;
+// the media scenarios trail so at typical widths they live in the 更多
+// overflow popover rather than the visible pill row.
 export const CREATE_RAIL_ORDER = [
   'prototype',
   'deck',
-  'image',
   'document',
-  'hyperframes',
+  'image',
   'web-clone',
+  'hyperframes',
+  'webgl',
+  'live-artifact',
   'video',
   'audio',
-  'live-artifact',
-  'webgl',
 ] as const;
+
+// The Home type row is an explicit product decision, not a width computation
+// (2026-08-31): three entry types stay inline, and 更多 holds exactly two.
+// Everything else in the create catalog stays reachable through the composer's
+// template picker instead of widening this row.
+export const HOME_TYPE_ROW_IDS: readonly string[] = ['prototype', 'deck', 'document'];
+export const HOME_TYPE_ROW_MORE_IDS: readonly string[] = ['image', 'web-clone'];
 
 // Chip ids the onboarding "build a design system" teaser intentionally omits.
 // Video and Audio are pure-media outputs and the least central to the

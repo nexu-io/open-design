@@ -2244,7 +2244,7 @@
   padding: 5px;
   gap: 8px;
   border-color: var(--border-soft);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   background: color-mix(in srgb, var(--bg-subtle) 45%, var(--bg-panel));
   box-shadow: none;
 }
@@ -2289,7 +2289,7 @@
   /* No inner frame — the input sits directly on the shell surface. The shell
      keeps its own outer border (see .composer-shell above). */
   border-color: transparent;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   overflow: hidden;
 }
 .chat-composer-fixed-layer .composer-input-wrap:focus-within {
@@ -2303,7 +2303,7 @@
 .chat-composer-fixed-layer .composer-input-editor [contenteditable='true'],
 .chat-composer-fixed-layer .composer-input-editor .composer-editable {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .chat-composer-fixed-layer .composer-input-placeholder,
 .chat-composer-fixed-layer .composer-input-wrap .home-hero__carousel {
@@ -2395,21 +2395,6 @@
   font-weight: 600;
   box-shadow: var(--shadow-xs);
 }
-.app .composer-send.stop,
-.chat-composer-fixed-layer .composer-send.stop {
-  /* Executing state: same 36px capsule as Send — dot-matrix bloom + 思考中
-     label, width hugging the content. Geometry must match .app .composer-send
-     above; only the width goes auto for the label. */
-  width: auto;
-  min-width: 0;
-  height: 36px;
-  min-height: 36px;
-  padding: 0 14px 0 10px;
-  border-radius: var(--radius-pill);
-  font-size: 13px;
-  font-weight: 600;
-  box-shadow: var(--shadow-xs);
-}
 /* The session-mode ("Design"/CLI) toggle and the agent avatar are authored in
    their own components and default to 32px. The composer now mounts under
    .chat-composer-fixed-layer (a body-level portal), so chat.css's .app-scoped
@@ -2497,49 +2482,54 @@
 .chat-composer-fixed-layer .composer-row .avatar-agent-trigger:has(.avatar-agent-trigger__model) .agent-icon {
   display: none;
 }
-/* Keep the project composer send action visually aligned with the Home
-   composer: deep neutral surface, brand-green foreground, and the same
-   theme-aware disabled treatment. */
-.app .composer-send:not(.stop),
-.chat-composer-fixed-layer .composer-send:not(.stop) {
-  --composer-send-bg: var(--text-strong);
-  --composer-send-fg: #87ea5c;
+/* The project composer's send IS the Home composer's send mark (Group
+   2147224569.svg), down to the box: a 32px near-black square at the file's
+   rx 14, the saturated green glyph, and no rim. `--send-ink` / `--send-ground`
+   carry their own contrast, so the pair is the same in both themes — no
+   dark-theme swap.
+   The executing state shares every line of this: 底.svg is precisely this box
+   with the arrow taken out, and the green matrix loader runs on it. Hence no
+   `:not(.stop)` — the run button is not a different button, it is this one
+   with a different glyph. */
+.app .composer-send,
+.chat-composer-fixed-layer .composer-send {
+  --composer-send-bg: var(--send-ink);
+  --composer-send-fg: var(--send-ground);
 
   position: relative;
   overflow: hidden;
-  border: var(--stroke-thin) solid transparent;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  border: 0;
+  border-radius: 14px;
   background: var(--composer-send-bg);
   color: var(--composer-send-fg);
   box-shadow: none;
 }
-[data-theme="dark"] .app .composer-send:not(.stop),
-[data-theme="dark"] .chat-composer-fixed-layer .composer-send:not(.stop) {
-  --composer-send-bg: var(--accent-tint);
-}
-@media (prefers-color-scheme: dark) {
-  html:not([data-theme="light"]) .app .composer-send:not(.stop),
-  html:not([data-theme="light"]) .chat-composer-fixed-layer .composer-send:not(.stop) {
-    --composer-send-bg: var(--accent-tint);
-  }
-}
+/* Hover stays `:not(.stop)`: only the SEND disc lifts toward its glyph colour.
+   The executing button keeps its ground flat on hover — Group 2147224570.svg
+   draws the hovered run state on the same #202020 — and swaps its glyph for
+   the stop square instead (chat.css). */
 .app .composer-send:not(.stop):hover:not(:disabled),
 .app .composer-send:not(.stop):active:not(:disabled),
 .chat-composer-fixed-layer .composer-send:not(.stop):hover:not(:disabled),
 .chat-composer-fixed-layer .composer-send:not(.stop):active:not(:disabled) {
-  border-color: transparent;
-  background: color-mix(in srgb, var(--composer-send-bg) 86%, #fff);
+  /* Same hover as Home: the disc lifts toward its own glyph colour. */
+  background: color-mix(in srgb, var(--composer-send-bg) 88%, var(--send-ground));
   color: var(--composer-send-fg);
   box-shadow: none;
   transform: none;
 }
-.app .composer-send:disabled,
-.chat-composer-fixed-layer .composer-send:disabled {
-  /* Idle (nothing typed): gray ground with the deep-green arrow; typing
-     flips to the ink-black ground with the bright #87ea5c arrow. */
+.app .composer-send:not(.stop):disabled,
+.chat-composer-fixed-layer .composer-send:not(.stop):disabled {
+  /* Idle (nothing typed) reads identical to the active state, as on Home — the
+     button never shifts colour when the user starts typing. */
   opacity: 1;
-  background: var(--bg-muted);
+  background: var(--composer-send-bg);
   border-color: transparent;
-  color: #2f781d;
+  color: var(--composer-send-fg);
   box-shadow: none;
 }
 .composer-send:not(.stop) .od-icon {
@@ -3588,6 +3578,14 @@
      the pill actions on the true vertical midline. */
   height: 52px;
   color: var(--text-muted);
+  flex: 0 0 auto;
+}
+/* The magnifier is a flex item beside a `flex: 1 1 auto` input, so it took its
+   share of any shortfall in the row and got SQUASHED horizontally — measured
+   10.2px wide against its own 14px height, i.e. an ellipse where the glyph
+   draws a circle. Icons hold their box; the input (min-width: 0) absorbs the
+   shortfall instead. */
+.project-ds-picker-search > svg {
   flex: 0 0 auto;
 }
 .project-ds-picker-search input {

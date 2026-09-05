@@ -1,0 +1,208 @@
+/* Siri Orb — neon build.
+ *
+ * Adapted from SmoothUI's Siri Orb, © Edu Calvo (educlopez), MIT licence.
+ * https://github.com/educlopez/smoothui
+ *
+ * Every quantity the orb draws comes from a custom property, so the component
+ * beside this file only does the size math CSS cannot express (contrast is
+ * unitless and cannot be derived from a length).
+ *
+ * `--siri-orb-angle` is namespaced deliberately: CSS Modules scope class and
+ * keyframe names but NOT custom properties, so `@property --angle` would
+ * register a global of that name. The repo's other registered properties are
+ * namespaced for the same reason (see `--project-chat-panel-width` in
+ * shell.css).
+ */
+
+@property --siri-orb-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.orb {
+  /* Palette. Three constraints from the original, none of them negotiable:
+     `--c3` may occupy at most 2 of the 8 layers (more and the orb turns into a
+     black disc at some rotations); black must never be `--c2`, which doubles
+     as the outer glow colour and has to stay chromatic; `--c4` cannot be
+     dropped — it bridges 24% lightness to 87% and without it `contrast()`
+     bites a hard-edged chunk out of the sphere. Recolouring goes through
+     `--c1` (and `--c2` if the bloom needs to follow). */
+  --c1: #00ff08;
+  --c2: #00ffae;
+  --c3: #202020;
+  --c4: oklch(48% 0.13 152);
+  --c5: #eaffeb;
+  --bg: #202020;
+  --fill: oklch(48% 0.12 158);
+
+  --sat: 1.12;
+  --duration: 20s;
+  --drift: 9.6s;
+  --glow-opacity: 0.5;
+
+  /* Size-derived; the component overwrites all of these inline. */
+  --size: 24px;
+  --blur: 1px;
+  --contrast: 1.1;
+  --dot: 0.1px;
+  --shadow: 0.5px;
+  --rim: 1.5px;
+  --mask: 0%;
+
+  position: relative;
+  display: inline-block;
+  width: var(--size);
+  height: var(--size);
+  vertical-align: middle;
+}
+
+/* The bloom lives outside the disc, which clips its own overflow. */
+.glow {
+  position: absolute;
+  inset: -12%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, var(--c2) 0%, transparent 64%);
+  filter: blur(calc(var(--size) * 0.28));
+  opacity: var(--glow-opacity);
+  pointer-events: none;
+}
+
+.disc {
+  position: relative;
+  display: grid;
+  grid-template-areas: "stack";
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 50%;
+  isolation: isolate;
+  /* Without this the transparent wedges punch through to the page. */
+  background: var(--fill);
+}
+
+.disc::before,
+.disc::after,
+.layer {
+  content: "";
+  display: block;
+  grid-area: stack;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+/* Eight conic gradients turning at different speeds. The c5 highlight sits
+   third so the neons paint over its edges — on top it cuts a hard white
+   wedge. Long-hand `animation-*` rather than the shorthand, per the lesson
+   recorded in MatrixLoader.module.css: the shorthand resets siblings. */
+.disc::before {
+  background:
+    conic-gradient(from calc(var(--siri-orb-angle) *  2)   at 25% 70%, var(--c3), transparent 20% 80%, var(--c3)),
+    conic-gradient(from calc(var(--siri-orb-angle) *  2)   at 45% 75%, var(--c2), transparent 30% 60%, var(--c2)),
+    conic-gradient(from calc(var(--siri-orb-angle) * -1.5) at 32% 26%, var(--c5), transparent 14% 86%, var(--c5)),
+    conic-gradient(from calc(var(--siri-orb-angle) * -3)   at 80% 20%, var(--c1), transparent 40% 60%, var(--c1)),
+    conic-gradient(from calc(var(--siri-orb-angle) *  1.5) at 60% 35%, var(--c4), transparent 25% 75%, var(--c4)),
+    conic-gradient(from calc(var(--siri-orb-angle) *  2)   at 15% 5%,  var(--c2), transparent 10% 90%, var(--c2)),
+    conic-gradient(from calc(var(--siri-orb-angle) *  1)   at 20% 80%, var(--c1), transparent 10% 90%, var(--c1)),
+    conic-gradient(from calc(var(--siri-orb-angle) * -2)   at 85% 10%, var(--c3), transparent 20% 80%, var(--c3));
+  box-shadow: inset var(--bg) 0 0 var(--shadow) calc(var(--shadow) * 0.2);
+  filter: blur(var(--blur)) contrast(var(--contrast)) saturate(var(--sat));
+  animation-name: siri-orb-rotate;
+  animation-duration: var(--duration);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+/* Fine dot texture, multiplied into the mesh. */
+.disc::after {
+  background-image: radial-gradient(circle at center, var(--bg) var(--dot), transparent var(--dot));
+  background-size: calc(var(--dot) * 2) calc(var(--dot) * 2);
+  backdrop-filter: blur(calc(var(--blur) * 2)) contrast(calc(var(--contrast) * 2));
+  mix-blend-mode: overlay;
+  mask-image: radial-gradient(black var(--mask), transparent 75%);
+}
+
+/* At icon sizes the mask has nothing left to grade, and keeping it only dims
+   the centre. The component sets `.isTiny` below 30px. */
+.isTiny .disc::after {
+  mask-image: none;
+}
+
+/* Icon-size palette. At 192px the near-black dark side reads as a sphere
+   turning away from the light; at 14px it is ~half of a 150-pixel dot, and the
+   orb stops looking like its own colour — a failed one reads "dark red blob",
+   not orange. Re-tint the two dark slots to a deep shade of the accent so the
+   whole dot stays in its colour family while keeping the light/dark modelling
+   the `contrast()` pass needs.
+   `--c3` is still exactly 2 of the 8 layers and `--c4` is still present, so
+   both of the original's structural constraints hold; only the hue changes.
+   `--c1` may be set inline by the component, and custom properties resolve at
+   computed-value time, so these mixes follow whatever colour it was given. */
+.isTiny {
+  --c3: color-mix(in srgb, var(--c1) 42%, #101010);
+  --c4: color-mix(in srgb, var(--c1) 62%, #123018);
+  --bg: color-mix(in srgb, var(--c1) 24%, #101010);
+}
+
+/* Drifting specular sheen — keeps the highlight from reading as printed on. */
+.sheen {
+  background:
+    radial-gradient(circle at 30% 24%, hsl(0 0% 100% / 0.32), transparent 34%),
+    radial-gradient(circle at 72% 80%, hsl(0 0% 100% / 0.07), transparent 48%);
+  mix-blend-mode: screen;
+  animation-name: siri-orb-drift;
+  animation-duration: var(--drift);
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+
+/* Lit top edge, shaded bottom, thin inner ring. */
+.rim {
+  box-shadow:
+    inset 0 0 0 1px hsl(0 0% 100% / 0.16),
+    inset 0 calc(var(--rim) *  1)   calc(var(--rim) * 2)   hsl(0 0% 100% / 0.22),
+    inset 0 calc(var(--rim) * -1.2) calc(var(--rim) * 2.4) hsl(0 0% 0% / 0.4);
+  pointer-events: none;
+}
+
+@keyframes siri-orb-rotate {
+  to { --siri-orb-angle: 360deg; }
+}
+
+@keyframes siri-orb-drift {
+  0%   { transform: translate(-6%, -4%) scale(1.05); }
+  100% { transform: translate(7%, 6%)   scale(1.12); }
+}
+
+/* Speed only — the palette never changes with state, so the orb stays
+   recognisably the same object while it works. */
+.isThinking { --duration: 6s; --drift: 5s; }
+.isThinking .disc { transform: scale(1.02); }
+
+.isStreaming { --duration: 9s; --drift: 6.5s; }
+
+.isIdle {
+  --duration: 20s;
+  --glow-opacity: 0.32;
+  animation-name: siri-orb-breathe;
+  animation-duration: 5.5s;
+  animation-timing-function: cubic-bezier(0.645, 0.045, 0.355, 1);
+  animation-iteration-count: infinite;
+}
+
+@keyframes siri-orb-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.035); }
+}
+
+/* base.css already ships a global reduced-motion killswitch; this keeps the
+   component honest on its own terms too. The orb stays visible, just still. */
+@media (prefers-reduced-motion: reduce) {
+  .orb,
+  .disc::before,
+  .sheen {
+    animation: none;
+  }
+}

@@ -151,6 +151,27 @@ describe('DesignSystemPicker', () => {
     expect(onChange).toHaveBeenCalledWith(null);
   });
 
+  it('only clears the selected home design system from its close action', async () => {
+    const onChange = vi.fn();
+    renderPicker({ variant: 'home', onChange });
+
+    const trigger = screen.getByTestId('home-hero-design-system-trigger');
+    expect(trigger.className).toContain('is-selected');
+    expect(trigger.getAttribute('aria-label')).toBe('Editorial Noir');
+    expect(trigger.querySelector('.home-hero__ds-row-trigger-icon-default')).toBeTruthy();
+    expect(trigger.querySelector('.home-hero__ds-row-clear')).toBeNull();
+
+    fireEvent.click(trigger);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('project-ds-picker-popover')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '清除: Editorial Noir' }));
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(null);
+    expect(screen.queryByTestId('project-ds-picker-popover')).toBeNull();
+  });
+
   it('uses localized picker copy', async () => {
     renderPicker({}, 'fr');
 

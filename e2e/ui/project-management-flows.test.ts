@@ -707,7 +707,7 @@ test('[P1] project detail composer working directory picker opens without leavin
   await expect(page).toHaveURL(/\/projects\//);
 });
 
-test('[P1] project detail composer plus menu exposes attachment, connector, plugin, and MCP entries', async ({ page }) => {
+test('[P1] project detail composer plus menu exposes the attachment entry and no resource submenus', async ({ page }) => {
   await routeComposerPlusFixtures(page);
   await page.goto('/');
   await createProject(page, 'Composer plus context menu');
@@ -716,18 +716,11 @@ test('[P1] project detail composer plus menu exposes attachment, connector, plug
   const composer = page.getByTestId('chat-composer');
   await composer.getByTestId('chat-plus-trigger').click();
   await expect(page.getByTestId('composer-plus-attach')).toBeVisible();
-  await expect(page.getByTestId('composer-plus-connectors')).toBeVisible();
-  await expect(page.getByTestId('composer-plus-plugins')).toBeVisible();
-  await expect(page.getByTestId('composer-plus-mcp')).toBeVisible();
-
-  await page.getByTestId('composer-plus-connectors').click();
-  await expect(page.getByRole('menuitem', { name: /Figma Connector/i })).toBeVisible();
-
-  await page.getByTestId('composer-plus-plugins').click();
-  await expect(page.getByRole('menuitem', { name: /Composer Context Plugin/i })).toBeVisible();
-
-  await page.getByTestId('composer-plus-mcp').click();
-  await expect(page.getByRole('menuitem', { name: /Design Docs MCP/i })).toBeVisible();
+  // Plugins, connectors and MCP were removed from this menu; they stay
+  // reachable from their own surfaces.
+  await expect(page.getByTestId('composer-plus-plugins')).toHaveCount(0);
+  await expect(page.getByTestId('composer-plus-connectors')).toHaveCount(0);
+  await expect(page.getByTestId('composer-plus-mcp')).toHaveCount(0);
 });
 
 test('[P1] project detail composer plus menu opens project, local code, Figma help, and design system context actions', async ({ page }) => {
@@ -796,6 +789,8 @@ test('[P1] project detail composer plus menu opens project, local code, Figma he
   const input = page.getByTestId('chat-composer-input');
 
   await composer.getByTestId('chat-plus-trigger').click();
+  // Both context actions sit inside the "+" menu's working-dir group.
+  await page.getByTestId('composer-plus-working-dir').click();
   await page.getByTestId('composer-plus-reference-project').click();
   const referenceDialog = page.getByRole('dialog', { name: 'Reference another project' });
   await expect(referenceDialog).toBeVisible();
@@ -805,6 +800,7 @@ test('[P1] project detail composer plus menu opens project, local code, Figma he
   await expect(input).toContainText('Reference Project Context');
 
   await composer.getByTestId('chat-plus-trigger').click();
+  await page.getByTestId('composer-plus-working-dir').click();
   await page.getByTestId('composer-plus-local-code').click();
   await expect(input).toContainText('local-code-project');
 
@@ -987,6 +983,8 @@ test('[P1] project detail composer sends referenced workspace contexts into the 
   const input = page.getByTestId('chat-composer-input');
 
   await composer.getByTestId('chat-plus-trigger').click();
+  // Both context actions sit inside the "+" menu's working-dir group.
+  await page.getByTestId('composer-plus-working-dir').click();
   await page.getByTestId('composer-plus-reference-project').click();
   const referenceDialog = page.getByRole('dialog', { name: 'Reference another project' });
   await expect(referenceDialog.getByRole('option', { name: /Reference Project Payload/i })).toHaveAttribute('aria-selected', 'true');
@@ -994,6 +992,7 @@ test('[P1] project detail composer sends referenced workspace contexts into the 
   await expect(input).toContainText('Reference Project Payload');
 
   await composer.getByTestId('chat-plus-trigger').click();
+  await page.getByTestId('composer-plus-working-dir').click();
   await page.getByTestId('composer-plus-local-code').click();
   await expect(input).toContainText('local-code-project-payload');
 
@@ -1061,6 +1060,7 @@ test('[P1] project detail composer removing local-code context updates metadata 
   const input = page.getByTestId('chat-composer-input');
 
   await composer.getByTestId('chat-plus-trigger').click();
+  await page.getByTestId('composer-plus-working-dir').click();
   await page.getByTestId('composer-plus-local-code').click();
   await expect(input).toContainText('local-code-remove');
 
@@ -1130,6 +1130,8 @@ test('[P1] project detail keeps local-code context when linkedDirs PATCH removal
   const input = page.getByTestId('chat-composer-input');
 
   await composer.getByTestId('chat-plus-trigger').click();
+  // Link-local-code sits inside the + menu's working-dir group.
+  await page.getByTestId('composer-plus-working-dir').click();
   await page.getByRole('menuitem', { name: /Link local code/i }).click();
   await expect(input).toContainText('local-code-persist');
 
@@ -1230,6 +1232,7 @@ test('[P1] project detail composer context actions emit analytics event fields',
   const composer = page.getByTestId('chat-composer');
 
   await composer.getByTestId('chat-plus-trigger').click();
+  await page.getByTestId('composer-plus-working-dir').click();
   await page.getByTestId('composer-plus-local-code').click();
   const chip = composer.locator('.staged-context--workspace', { hasText: 'local-code-analytics' });
   await expect(chip).toBeVisible();
@@ -1704,7 +1707,7 @@ test('[P0] @critical project detail composer agent menu lets the user switch the
   ).toContainText(/GPT 5\.5/i);
 });
 
-test('[P0] project detail composer model and Plan mode switches carry into the next daemon run request', async ({ page }) => {
+test('[P0] project detail composer model switch carries into the next daemon run request', async ({ page }) => {
   test.setTimeout(60_000);
   const runRequestBodies: Array<Record<string, unknown>> = [];
   await routeSuccessfulRuns(page, { bodies: runRequestBodies, runId: 'agent-model-run' });
@@ -1718,7 +1721,9 @@ test('[P0] project detail composer model and Plan mode switches carry into the n
 
   await pickComposerModel(page, /^GPT 5\.5$/i);
 
-  await selectComposerSessionMode(page, 'Plan mode');
+  // The composer no longer carries a session-mode picker (#7635): every turn
+  // runs in the conversation's stored mode, which is design for a new project.
+  await expect(page.getByTestId('chat-composer').getByTestId('composer-mode-trigger')).toHaveCount(0);
 
   const input = page.getByTestId('chat-composer-input');
   await input.fill('Plan the selected local agent run.');
@@ -1730,7 +1735,7 @@ test('[P0] project detail composer model and Plan mode switches carry into the n
   expect(runRequestBodies.length).toBeGreaterThan(0);
   expect(runRequestBodies[0]?.agentId).toBe('codex');
   expect(runRequestBodies[0]?.model).toBe('gpt-5.5');
-  expect(runRequestBodies[0]?.sessionMode).toBe('plan');
+  expect(runRequestBodies[0]?.sessionMode).toBe('design');
 });
 
 test('[P1] GPT 5.5 Fast service tier carries into the next Codex daemon run request', async ({ page }) => {
@@ -1768,13 +1773,13 @@ test('[P1] GPT 5.5 Fast service tier carries into the next Codex daemon run requ
     serviceTier: 'priority',
   });
 });
-test('[P1] project detail composer can alternate Design, Ask, and Plan modes across turns', async ({ page }) => {
+test('[P1] project detail composer keeps design mode across consecutive turns without a mode picker', async ({ page }) => {
   test.setTimeout(60_000);
   const runRequestBodies: Array<Record<string, unknown>> = [];
   await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'mode-run' });
 
   await page.goto('/');
-  await createProject(page, 'Composer session mode alternation');
+  await createProject(page, 'Composer session mode contract');
   await expectWorkspaceReady(page);
 
   async function sendTurn(prompt: string) {
@@ -1788,50 +1793,16 @@ test('[P1] project detail composer can alternate Design, Ask, and Plan modes acr
     await expect(input).toHaveText('');
   }
 
-  await selectComposerSessionMode(page, 'Design mode');
+  // The 规划/设计/提问 picker left the composer row (#7635): there is nothing
+  // to alternate from here, and consecutive turns keep the conversation's
+  // stored mode — design for a new project — on every run request.
+  await expect(page.getByTestId('chat-composer').getByTestId('composer-mode-trigger')).toHaveCount(0);
+  await expect(page.getByTestId('composer-mode-menu')).toHaveCount(0);
+
   await sendTurn('Design the first iteration.');
+  await sendTurn('Design the second iteration without touching any mode control.');
 
-  await selectComposerSessionMode(page, 'Ask mode');
-  await sendTurn('Ask a clarifying question about the direction.');
-
-  await selectComposerSessionMode(page, 'Plan mode');
-  await sendTurn('Plan the implementation steps.');
-
-  await selectComposerSessionMode(page, 'Design mode');
-  await sendTurn('Design the final iteration.');
-
-  expect(runRequestBodies.map((body) => body.sessionMode)).toEqual(['design', 'chat', 'plan', 'design']);
-});
-
-test('[P1] project detail composer keeps the selected mode across consecutive turns', async ({ page }) => {
-  test.setTimeout(60_000);
-  const runRequestBodies: Array<Record<string, unknown>> = [];
-  await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'same-mode-run' });
-
-  await page.goto('/');
-  await createProject(page, 'Composer same session mode reuse');
-  await expectWorkspaceReady(page);
-
-  async function sendTurn(prompt: string) {
-    const input = page.getByTestId('chat-composer-input');
-    await expect(input).toBeVisible();
-    await input.fill(prompt);
-    await Promise.all([
-      page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
-      page.getByTestId('chat-send').click(),
-    ]);
-    await expect(input).toHaveText('');
-  }
-
-  await selectComposerSessionMode(page, 'Plan mode');
-  await sendTurn('Plan the first pass.');
-  await sendTurn('Plan the second pass without changing mode.');
-
-  expect(runRequestBodies.map((body) => body.sessionMode)).toEqual(['plan', 'plan']);
-  await expect(page.getByTestId('chat-composer').getByTestId('composer-mode-trigger')).toHaveAttribute(
-    'aria-label',
-    'Mode: Plan',
-  );
+  expect(runRequestBodies.map((body) => body.sessionMode)).toEqual(['design', 'design']);
 });
 
 test('[P0] @critical project detail composer opens Execution settings where BYOK model choice persists', async ({ page }) => {
@@ -2213,7 +2184,7 @@ test('[P1] project detail workspace keeps design file tabs and preview controls 
   await expect(page.locator('pre.viewer-source')).toHaveCount(0);
 });
 
-test('[P1] project detail session mode switch carries Ask and Plan semantics into daemon runs', async ({ page }) => {
+test('[P1] project detail turns carry the stored design session mode into daemon runs and message history', async ({ page }) => {
   const runRequestBodies: Array<Record<string, unknown>> = [];
   await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'session-mode-run' });
 
@@ -2221,37 +2192,21 @@ test('[P1] project detail session mode switch carries Ask and Plan semantics int
   await createProject(page, 'Project session mode contract');
   await expectWorkspaceReady(page);
 
-  const modeTrigger = page.getByTestId('composer-mode-trigger');
-  // Design is the app default and is represented as an explicit selection.
-  await expect(modeTrigger).toHaveAttribute('aria-label', 'Mode: Design');
+  // No picker in the composer row any more (#7635); the conversation's stored
+  // mode is what every run request and message chip carry.
+  await expect(page.getByTestId('composer-mode-trigger')).toHaveCount(0);
 
-  await modeTrigger.click();
-  await page.getByTestId('composer-mode-menu-plan').click();
-  await expect(modeTrigger).toHaveAttribute('aria-label', 'Mode: Plan');
-  await expect(modeTrigger).toContainText('Plan');
-
-  await page.getByTestId('chat-composer-input').fill('Draft the plan before generating files.');
+  await page.getByTestId('chat-composer-input').fill('Draft the first pass of the screens.');
   await Promise.all([
     page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
     page.getByTestId('chat-send').click(),
   ]);
   await expect.poll(() => runRequestBodies.length).toBe(1);
-  expect(runRequestBodies[0]?.sessionMode).toBe('plan');
-  await expect(page.getByTestId('msg-session-mode-chip').last()).toContainText('Plan');
-
-  await modeTrigger.click();
-  await page.getByTestId('composer-mode-menu-chat').click();
-  await expect(modeTrigger).toHaveAttribute('aria-label', 'Mode: Ask');
-  await expect(modeTrigger).toContainText('Ask');
-
-  await page.getByTestId('chat-composer-input').fill('Just answer this without creating files.');
-  await Promise.all([
-    page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
-    page.getByTestId('chat-send').click(),
-  ]);
-  await expect.poll(() => runRequestBodies.length).toBe(2);
-  expect(runRequestBodies[1]?.sessionMode).toBe('chat');
-  await expect(page.getByTestId('msg-session-mode-chip').last()).toContainText('Ask');
+  expect(runRequestBodies[0]?.sessionMode).toBe('design');
+  // Design is the default, so the message history carries no mode chip for it
+  // (only Ask / Plan turns are chipped).
+  await expect(page.getByTestId('msg-run-context-row').last()).toBeVisible();
+  await expect(page.getByTestId('msg-session-mode-chip')).toHaveCount(0);
 });
 
 test('[P1] BYOK OpenCode project run sends provider config through the daemon contract', async ({ page }) => {
@@ -2498,7 +2453,7 @@ test('[P1] project detail active file context is sent with the run and shown on 
   await expect(chip).toContainText(uploadedName);
 });
 
-test('[P1] project detail session mode and active file context survive reload in message history', async ({ page }) => {
+test('[P1] project detail active file context survives reload in message history', async ({ page }) => {
   const runRequestBodies: Array<Record<string, unknown>> = [];
   await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'workspace-context-reload-run' });
 
@@ -2513,11 +2468,6 @@ test('[P1] project detail session mode and active file context survive reload in
   );
   await expect(tabBySuffix(page, uploadedName)).toHaveAttribute('aria-selected', 'true');
 
-  const modeTrigger = page.getByTestId('composer-mode-trigger');
-  await modeTrigger.click();
-  await page.getByTestId('composer-mode-menu-plan').click();
-  await expect(modeTrigger).toHaveAttribute('aria-label', 'Mode: Plan');
-
   await page.getByTestId('chat-composer-input').fill('Persist this file context through reload.');
   await Promise.all([
     page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
@@ -2526,14 +2476,15 @@ test('[P1] project detail session mode and active file context survive reload in
 
   await expect.poll(() => runRequestBodies.length).toBe(1);
   const context = runRequestBodies[0]?.context as { workspaceItems?: Array<{ label?: string; id?: string }> } | undefined;
-  expect(runRequestBodies[0]?.sessionMode).toBe('plan');
+  expect(runRequestBodies[0]?.sessionMode).toBe('design');
   expect(context?.workspaceItems?.some((item) => item.label === uploadedName || item.id?.includes(uploadedName))).toBe(true);
-  await expect(page.getByTestId('msg-session-mode-chip').last()).toContainText('Plan');
+  // Design turns carry no mode chip (only Ask / Plan are chipped).
+  await expect(page.getByTestId('msg-session-mode-chip')).toHaveCount(0);
   await expect(page.getByTestId('msg-workspace-context-chip').last()).toContainText(uploadedName);
 
   await page.reload();
   await expectWorkspaceReady(page);
-  await expect(page.getByTestId('msg-session-mode-chip').last()).toContainText('Plan');
+  await expect(page.getByTestId('msg-session-mode-chip')).toHaveCount(0);
   await expect(page.getByTestId('msg-workspace-context-chip').last()).toContainText(uploadedName);
 });
 
@@ -4092,23 +4043,6 @@ async function selectAvatarModelOption(
   }
   await expect(option).toBeVisible({ timeout: 10_000 });
   await option.click();
-}
-
-async function selectComposerSessionMode(page: Page, modeTitle: 'Ask mode' | 'Plan mode' | 'Design mode') {
-  // #5517 composer mode picker: Ask maps to the real `chat` session mode.
-  const modeId = modeTitle === 'Ask mode' ? 'chat' : modeTitle === 'Plan mode' ? 'plan' : 'design';
-  const modeName = modeTitle.replace(' mode', '');
-  const trigger = page.getByTestId('chat-composer').getByTestId('composer-mode-trigger');
-  await expect(trigger).toBeVisible();
-  await trigger.click();
-
-  const menu = page.getByTestId('composer-mode-menu');
-  await expect(menu).toBeVisible();
-  await expect(menu.getByTestId('composer-mode-menu-chat')).toBeVisible();
-  await expect(menu.getByTestId('composer-mode-menu-plan')).toBeVisible();
-  await expect(menu.getByTestId('composer-mode-menu-design')).toBeVisible();
-  await menu.getByTestId(`composer-mode-menu-${modeId}`).click();
-  await expect(trigger).toHaveAttribute('aria-label', `Mode: ${modeName}`);
 }
 
 async function routeComposerPlusFixtures(page: Page) {

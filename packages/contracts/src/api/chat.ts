@@ -800,6 +800,24 @@ export type ChatRunResultPackageResponse = RunResultPackageResponse;
 
 export interface ChatRunListResponse {
   runs: ChatRunStatusResponse[];
+  /**
+   * Projects holding an unanswered `<question-form>` / `<ask-question>`.
+   *
+   * `ChatRunStatus` cannot express "waiting on the user": that state outlives
+   * the run that asked, so the run itself reads `succeeded` while the project
+   * is still blocked — see `ProjectDisplayStatus.awaiting_input`, which the
+   * daemon composes from exactly this set. Callers that render a per-project
+   * status from the runs feed need it or they will show such a project as
+   * finished.
+   *
+   * Always a subset of the projects the accompanying `runs` already expose —
+   * never the raw query — so it cannot widen what a caller can see. A project
+   * that has no visible run therefore never appears here, which is harmless:
+   * awaiting_input only arises from a run that asked.
+   *
+   * Optional: older daemons omit it, and absent means "unknown", not "none".
+   */
+  awaitingInputProjectIds?: string[];
 }
 
 export interface ChatRunCancelResponse {
