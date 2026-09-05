@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { SETTINGS_MEDIA_PROVIDERS_PATH } from "@open-design/contracts";
 import { generateMedia } from "../../src/media/index.js";
 import { writeConfig } from "../../src/media/config.js";
 import { renderVelaImage, VelaMediaError } from "../../src/media/vela.js";
@@ -46,7 +47,7 @@ describe("Dynamic Image Provider Negotiation & Fallback", () => {
         surface: "image",
         model: "gpt-image-2",
       })
-    ).rejects.toThrow(/Image generation failed.*Settings -> API Providers/);
+    ).rejects.toThrow(new RegExp(`Image generation failed.*${SETTINGS_MEDIA_PROVIDERS_PATH}`));
   });
 
   it("auto-routes unauthenticated vela call to configured nanobanana provider", async () => {
@@ -190,6 +191,50 @@ describe("Dynamic Image Provider Negotiation & Fallback", () => {
         model: "gpt-image-2",
       });
       expect(res.providerId).toBe("nanobanana");
+    } finally {
+      delete process.env.OD_MEDIA_MODEL_ALIASES;
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("resolves a configured wire alias for the dynamically selected fallback model", async () => {
+    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+      "gemini-3.1-flash-image-preview": "google-gemini-fallback-wire",
+    });
+    await writeConfig(projectRoot, {
+      providers: { nanobanana: { apiKey: "test-google-key" } },
+    });
+
+    const originalFetch = globalThis.fetch;
+    const fetchedUrls: string[] = [];
+    globalThis.fetch = vi.fn().mockImplementation(async (url: any) => {
+      fetchedUrls.push(String(url));
+      if (String(url).includes("generativelanguage.googleapis.com")) {
+        return new Response(
+          JSON.stringify({
+            candidates: [{ content: { parts: [{ inlineData: {
+              mimeType: "image/png",
+              data: Buffer.from("fake-png-bytes").toString("base64"),
+            } }] } }],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    try {
+      const result = await generateMedia({
+        projectRoot,
+        projectsRoot,
+        projectId: "test-fallback-alias",
+        surface: "image",
+        model: "vela/gpt-image-2",
+      });
+
+      expect(result.providerId).toBe("nanobanana");
+      expect(fetchedUrls.some((url) => url.includes("google-gemini-fallback-wire"))).toBe(true);
+      expect(fetchedUrls.some((url) => url.includes("gemini-3.1-flash-image-preview"))).toBe(false);
     } finally {
       delete process.env.OD_MEDIA_MODEL_ALIASES;
       globalThis.fetch = originalFetch;

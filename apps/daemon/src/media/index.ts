@@ -397,6 +397,23 @@ async function dispatchFallbackImage(
   throw new Error(`Unsupported fallback provider: ${provider}`);
 }
 
+async function createFallbackMediaContext(
+  ctx: MediaContext,
+  fallbackModel: MediaModel,
+): Promise<MediaContext> {
+  return {
+    ...ctx,
+    model: fallbackModel.id,
+    // Fallbacks take the same canonical-to-wire alias path as the selected
+    // model. Keeping the catalog id in `model` preserves capability-specific
+    // renderer behavior while `wireModel` carries the provider's configured
+    // alias (issue #7768).
+    wireModel: await resolveModelAlias(ctx.projectRoot, fallbackModel.id),
+    modelDef: fallbackModel,
+    provider: findProvider(fallbackModel.provider),
+  };
+}
+
 export async function generateMedia(args: {
   projectRoot: string; projectsRoot: string; projectId: string; surface: MediaSurface; model: string;
   prompt?: string; output?: string; aspect?: string; quality?: string; resolution?: string;
@@ -666,13 +683,7 @@ export async function generateMedia(args: {
           const fallbackModel = await findActiveImageProvider(projectRoot, ['vela'], preferredCap);
           if (fallbackModel) {
             const fallbackCreds = await resolveProviderConfig(projectRoot, fallbackModel.provider);
-            const fallbackCtx: MediaContext = {
-              ...ctx,
-              model: fallbackModel.id,
-              wireModel: fallbackModel.id,
-              modelDef: fallbackModel,
-              provider: findProvider(fallbackModel.provider),
-            };
+            const fallbackCtx = await createFallbackMediaContext(ctx, fallbackModel);
             const fallbackResult = await dispatchFallbackImage(fallbackModel.provider, fallbackCtx, fallbackCreds);
             bytes = fallbackResult.bytes;
             providerNote = `[auto-routed] Vela unauthenticated; dynamically routed to ${fallbackModel.provider} (${fallbackModel.id})`;
@@ -681,7 +692,7 @@ export async function generateMedia(args: {
           } else {
             throw new Error(
               'Image generation failed: OpenDesign Cloud (Vela) is not logged in, and no alternative image provider is configured. ' +
-              'Please log in via `vela login` or configure an image provider (such as Google Nano Banana, OpenAI, Fal.ai, Volcengine Doubao, or MiniMax) in Settings -> API Providers.'
+              `Please log in via \`vela login\` or configure an image provider (such as Google Nano Banana, OpenAI, Fal.ai, Volcengine Doubao, or MiniMax) in ${SETTINGS_MEDIA_PROVIDERS_PATH}.`
             );
           }
         } else {
@@ -715,13 +726,7 @@ export async function generateMedia(args: {
           const fallbackModel = await findActiveImageProvider(projectRoot, ['openai'], preferredCap);
           if (fallbackModel) {
             const fallbackCreds = await resolveProviderConfig(projectRoot, fallbackModel.provider);
-            const fallbackCtx: MediaContext = {
-              ...ctx,
-              model: fallbackModel.id,
-              wireModel: fallbackModel.id,
-              modelDef: fallbackModel,
-              provider: findProvider(fallbackModel.provider),
-            };
+            const fallbackCtx = await createFallbackMediaContext(ctx, fallbackModel);
             const fallbackResult = await dispatchFallbackImage(fallbackModel.provider, fallbackCtx, fallbackCreds);
             bytes = fallbackResult.bytes;
             providerNote = `[auto-routed] OpenAI credentials not configured; dynamically routed to ${fallbackModel.provider} (${fallbackModel.id})`;
@@ -730,7 +735,7 @@ export async function generateMedia(args: {
           } else {
             throw new Error(
               'Image generation failed: OpenAI API key is not configured, and no alternative image provider is active. ' +
-              'Please configure an image provider (such as Google Nano Banana, Fal.ai, Volcengine Doubao, or MiniMax) in Settings -> API Providers.'
+              `Please configure an image provider (such as Google Nano Banana, Fal.ai, Volcengine Doubao, or MiniMax) in ${SETTINGS_MEDIA_PROVIDERS_PATH}.`
             );
           }
         } else {

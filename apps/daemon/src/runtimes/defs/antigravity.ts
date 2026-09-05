@@ -267,6 +267,9 @@ export const antigravityAgentDef = {
     if (runtimeContext.cwd && typeof runtimeContext.cwd === 'string' && runtimeContext.cwd.trim()) {
       dirs.push(runtimeContext.cwd.trim());
     }
+    if (runtimeContext.promptFilePath) {
+      dirs.push(dirname(runtimeContext.promptFilePath));
+    }
     for (const dir of dirs) {
       args.push('--add-dir', dir);
     }
@@ -291,9 +294,17 @@ export const antigravityAgentDef = {
       args.push('--print-timeout', printTimeout);
     }
     args.push('--output-format', 'stream-json');
-    args.push('-p', prompt);
+    if (runtimeContext.promptFilePath) {
+      args.push(
+        '-p',
+        `Read the system instructions, conversation history, and user request from the file ${runtimeContext.promptFilePath}. Follow the instructions strictly and provide the final response to the user's latest request.`,
+      );
+    } else {
+      args.push('-p', prompt);
+    }
     return args;
   },
+  promptViaFile: true,
   promptViaStdin: false,
   capturesSessionIdFromStream: true,
   streamFormat: 'antigravity-stream-json',

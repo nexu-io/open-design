@@ -830,6 +830,21 @@ test('antigravity places permission bypass after log args', () => {
   }
 });
 
+test('antigravity adopts promptViaFile and passes promptFilePath via --add-dir and instruction prompt', () => {
+  assert.equal(antigravity.promptViaFile, true);
+  const args = antigravity.buildArgs('', [], [], {}, {
+    promptFilePath: '/tmp/od-agy-prompt-123/prompt.md',
+  });
+  assert.deepEqual(args, [
+    '--add-dir',
+    '/tmp/od-agy-prompt-123',
+    '--output-format',
+    'stream-json',
+    '-p',
+    'Read the system instructions, conversation history, and user request from the file /tmp/od-agy-prompt-123/prompt.md. Follow the instructions strictly and provide the final response to the user\'s latest request.',
+  ]);
+});
+
 // `agy` reads `~/.gemini/antigravity-cli/settings.json` on every CLI
 // startup — verified by capturing the `--log-file` line `Propagating
 // selected model override to backend: label=…`. Routing OD's model

@@ -14477,6 +14477,7 @@ export async function startServer({
             return;
           }
           noteFirstTokenAt();
+          agentProducedOutput = true;
           send('stdout', { chunk: ev.line + '\n' });
           return;
         }
@@ -15146,7 +15147,12 @@ export async function startServer({
         code === 0 &&
         !run.cancelRequested &&
         trackingSubstantiveOutput &&
-        !agentProducedOutput
+        !agentProducedOutput &&
+        // Antigravity has a later, log-aware silent-exit branch when no
+        // stdout was seen at all (agy fails silently on quota/auth in print
+        // mode). If stdout was seen (e.g. Gemini init/usage records) but
+        // carried no assistant content, fall through to AGENT_EXECUTION_FAILED.
+        !(def.id === 'antigravity' && !childStdoutSeen)
       ) {
         const authFailure = classifyAgentAuthFailure(
           agentId,
@@ -15230,6 +15236,7 @@ export async function startServer({
       const antigravityStreamSilentExit =
         def.streamFormat === 'antigravity-stream-json' &&
         !agentProducedOutput &&
+        !childStdoutSeen &&
         !run.cancelRequested &&
         code === 0;
       if (
@@ -15259,6 +15266,15 @@ export async function startServer({
           : null;
         const isAntigravityQuota =
           def.id === 'antigravity' && serviceFailure === 'RATE_LIMITED';
+        // `RESOURCE_EXHAUSTED` is agy's hard per-model quota signal. It is
+        // safe to retry an ordinary transient 429, but retrying this same
+        // model only replaces the useful quota guidance with a second empty
+        // response (and can race the previous attempt's log cleanup).
+        const isAntigravityHardQuota =
+          isAntigravityQuota &&
+          /\bRESOURCE_EXHAUSTED\b|\b(?:individual )?quota (?:reached|exhausted|exceeded)\b|\b(?:session|usage) limit\b/i.test(
+            combinedDetail,
+          );
         // Antigravity-only fallback: if neither classifier matched but
         // the run was silent, lean on the empirical observation that
         // an empty agy print-mode exit almost always means
@@ -15282,9 +15298,11 @@ export async function startServer({
         send('error', createSseErrorPayload(
           errorCode,
           msg,
-          { retryable: true },
+          { retryable: !isAntigravityHardQuota },
         ));
-        return finishWithRetryDecision('failed', 0, signal);
+        return finishWithRetryDecision('failed', 0, signal, {
+          allowRetry: !isAntigravityHardQuota,
+        });
       }
       // ACP agents that don't shut down on stdin.end() (e.g. Devin for
       // Terminal) are forced to exit via SIGTERM from attachAcpSession after

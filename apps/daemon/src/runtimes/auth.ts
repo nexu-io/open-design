@@ -51,7 +51,7 @@ const ANTIGRAVITY_AUTH_GUIDANCE =
 // the picker from OD until upstream issue #35 ships a `--model`
 // flag — see antigravity.ts notes.
 const ANTIGRAVITY_QUOTA_GUIDANCE =
-  'Antigravity returned "RESOURCE_EXHAUSTED" for the current model. Each Antigravity model (Gemini 3.8 / 3.7 / 3.6 Flash, Gemini 3.1 Pro, Claude 4.6, GPT-OSS) has its own independent quota.\n\nFix: switch to another model directly in the OpenDesign model picker (e.g. Gemini 3.8 Flash or Claude Sonnet 4.6) and retry this chat. Quotas reset automatically on Antigravity\'s schedule.';
+  'Antigravity returned "RESOURCE_EXHAUSTED" for the current model. Each Antigravity model (Gemini 3.8 / 3.7 / 3.6 Flash, Gemini 3.1 Pro, Claude 4.6, GPT-OSS) has its own independent quota.\n\nFix: use the Switch Model picker to choose another model directly in OpenDesign (e.g. Gemini 3.8 Flash or Claude Sonnet 4.6), then retry this chat. Quotas reset automatically on Antigravity\'s schedule.';
 
 const REASONIX_AUTH_GUIDANCE =
   'DeepSeek Reasonix is installed but is not authenticated. Add your API key in `~/.reasonix/config.json` under `apiKey`, or expose DEEPSEEK_API_KEY to the OpenDesign daemon process, then retry. If OpenDesign is launched outside an interactive shell, shell rc files such as ~/.zshrc may not be loaded.';
