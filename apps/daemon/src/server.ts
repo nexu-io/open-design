@@ -1808,7 +1808,6 @@ export function createAgentRuntimeToolPrompt(
     '- On PowerShell use `& $env:OD_NODE_BIN $env:OD_BIN tools ...`; on cmd.exe use `"%OD_NODE_BIN%" "%OD_BIN%" tools ...`.',
     tokenLine,
     '- Prefer project wrapper commands through `OD_NODE_BIN` + `OD_BIN` over raw HTTP. The wrappers read these environment values automatically.',
-    '- Only when this run creates or updates a final Web deliverable, invoke `"$OD_NODE_BIN" "$OD_BIN" tools deliverable-syntax check --json` exactly once immediately after the final edit. Do not perform a self-review, manual validation, extra reads, or any other checks before this invocation. If it reports `pass`, stop immediately without further tool calls or edits. Only if it reports `repairable`, fix only the reported syntax location and invoke this same wrapper once more; allow at most 3 repair attempts. Do not run `node --check`, custom validation scripts, tests, or broader correctness reviews as part of this syntax gate. Skip the gate for planning/analysis turns and non-Web deliverables; stop without retrying on `skipped`, `incomplete`, or `exhausted`.',
   ].join('\n');
 }
 
@@ -15714,13 +15713,10 @@ export async function startServer({
           });
           design.runs.setDeliverableValidation?.(run, deliverable);
           deliverableValid = deliverable.valid;
-          // The in-turn syntax tool gives the agent a cheap repair loop while
-          // it still owns the model turn. Re-run the same read-only checker on
-          // the final filesystem state as a backstop: prompt non-compliance or
-          // a late edit must never turn a parse-broken Web artifact into a
-          // successful OD Next completion. This gate is scoped to canonical
-          // HTML delivery only; non-Web outputs and non-completion stages do
-          // not pay for it.
+          // The host owns the complete parse gate after the model turn. It
+          // checks the settled filesystem, applies only deterministic
+          // syntax-only patches, and verifies after every patch. The Agent is
+          // neither resumed nor prompted to self-review.
           if (deliverable.valid && typeof run.projectId === 'string') {
             const syntaxFinalization = await finalizeDeliverableSyntax({
               artifactKind: deliverable.artifactKind,
@@ -15742,6 +15738,9 @@ export async function startServer({
             });
             if (syntaxFinalization.action !== 'skip') {
               run.deliverableSyntaxValidation = syntaxFinalization.validation;
+              if (syntaxFinalization.validation.repairState) {
+                run.deliverableSyntaxRepair = syntaxFinalization.validation.repairState;
+              }
               design.runs.persistState(run);
               if (syntaxFinalization.validation.checker) {
                 design.runs.emit(run, 'diagnostic', {
@@ -15759,12 +15758,18 @@ export async function startServer({
                     syntaxFinalization.validation.metrics?.checkerDurationMs ?? null,
                   repairableCheckCount:
                     syntaxFinalization.validation.metrics?.repairableCheckCount ?? null,
+                  repairExecutor:
+                    syntaxFinalization.validation.metrics?.repairExecutor ?? null,
+                  repairDurationMs:
+                    syntaxFinalization.validation.metrics?.repairDurationMs ?? null,
+                  appliedRepairRules:
+                    syntaxFinalization.validation.metrics?.appliedRepairRules ?? [],
                 });
               }
               if (syntaxFinalization.action === 'fail') {
                 send('error', createSseErrorPayload(
                   'AGENT_EXECUTION_FAILED',
-                  `Final Web deliverable still has a syntax error at ${syntaxFinalization.location}. The bounded in-turn repair loop ended without a valid candidate.`,
+                  `Final Web deliverable still has a syntax error at ${syntaxFinalization.location}. Deterministic host repair stopped: ${syntaxFinalization.reason}.`,
                   { retryable: false },
                 ));
                 finishStrategyAwarePhysicalRun('failed', 1, signal);

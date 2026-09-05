@@ -2108,6 +2108,10 @@ export function buildTracePayload(
       ctx.deliverableSyntax?.repairWindowDurationMs,
     deliverable_syntax_repair_to_delivery_duration_ms:
       ctx.deliverableSyntax?.repairToDeliveryDurationMs,
+    deliverable_syntax_repair_executor: ctx.deliverableSyntax?.repairExecutor,
+    deliverable_syntax_repair_duration_ms: ctx.deliverableSyntax?.repairDurationMs,
+    deliverable_syntax_applied_repair_rules:
+      ctx.deliverableSyntax?.appliedRepairRules?.join(','),
     deliverable_syntax_repairable_check_count:
       ctx.deliverableSyntax?.repairableCheckCount,
     deliverable_syntax_initial_diagnostic_count:

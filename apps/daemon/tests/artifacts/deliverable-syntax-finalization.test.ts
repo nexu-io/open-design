@@ -78,8 +78,87 @@ describe('deliverable syntax finalization', () => {
       processTreeQuiescent: true,
     })).resolves.toMatchObject({
       action: 'fail',
+      reason: 'no_safe_fix',
       location: expect.stringMatching(/^index\.html:1:/u),
       validation: { status: 'repairable', source: 'run_finalizer' },
+    });
+  });
+
+  it('repairs missing delimiters in the host and verifies after each patch', async () => {
+    const projectRoot = await htmlFixture(
+      '<!doctype html><script>function ready() { const items = [1, 2;</script>',
+    );
+    const wallValues = [1_000, 1_012, 1_025];
+    const monotonicValues = [0, 4, 4, 7, 7, 12, 12, 17, 17, 23];
+
+    await expect(finalizeDeliverableSyntax({
+      artifactKind: 'html',
+      projectRoot,
+      entryFile: 'index.html',
+      processTreeQuiescent: true,
+      wallNow: () => wallValues.shift() ?? 1_025,
+      monotonicNow: () => monotonicValues.shift() ?? 23,
+    })).resolves.toMatchObject({
+      action: 'allow',
+      validation: {
+        status: 'pass',
+        repairState: {
+          mode: 'host_safe_fixer',
+          attempt: 2,
+          maxAttempts: 3,
+        },
+        metrics: {
+          checkCount: 3,
+          checkerDurationMs: 15,
+          repairableCheckCount: 2,
+          initialDiagnosticCount: 1,
+          latestDiagnosticCount: 0,
+          repairWindowDurationMs: 25,
+          repairExecutor: 'host_safe_fixer',
+          repairDurationMs: 8,
+          appliedRepairRules: ['insert_missing_closing_delimiter'],
+        },
+      },
+    });
+    await expect(fs.readFile(path.join(projectRoot, 'index.html'), 'utf8'))
+      .resolves.toBe(
+        '<!doctype html><script>function ready() { const items = [1, 2];}</script>',
+      );
+  });
+
+  it('does not ask the host fixer to guess an expression value', async () => {
+    const projectRoot = await htmlFixture(
+      '<!doctype html><script>const broken = ;</script>',
+    );
+
+    await expect(finalizeDeliverableSyntax({
+      artifactKind: 'html',
+      projectRoot,
+      entryFile: 'index.html',
+      processTreeQuiescent: true,
+    })).resolves.toMatchObject({ action: 'fail', reason: 'no_safe_fix' });
+    await expect(fs.readFile(path.join(projectRoot, 'index.html'), 'utf8'))
+      .resolves.toBe('<!doctype html><script>const broken = ;</script>');
+  });
+
+  it('stops after three accepted patches when the candidate still does not parse', async () => {
+    const projectRoot = await htmlFixture(
+      '<!doctype html><script>function ready() { if (true) { const items = [[1, 2;</script>',
+    );
+
+    await expect(finalizeDeliverableSyntax({
+      artifactKind: 'html',
+      projectRoot,
+      entryFile: 'index.html',
+      processTreeQuiescent: true,
+    })).resolves.toMatchObject({
+      action: 'fail',
+      reason: 'attempt_limit_reached',
+      validation: {
+        status: 'repairable',
+        repairState: { attempt: 3, maxAttempts: 3, mode: 'host_safe_fixer' },
+        metrics: { checkCount: 4, repairableCheckCount: 4 },
+      },
     });
   });
 
