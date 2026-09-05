@@ -113,7 +113,7 @@ describe('deterministic Electron frame capture', () => {
   });
 
   test('uses zero-padded names that match the FFmpeg printf pattern', () => {
-    expect(frameFilePath('/tmp/frames', 42)).toBe('/tmp/frames/frame-00000042.png');
+    expect(frameFilePath('/tmp/frames', 42)).toBe(join('/tmp/frames', 'frame-00000042.png'));
   });
 
   test('rejects audio compositions instead of silently producing a muted video', async () => {

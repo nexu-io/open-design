@@ -632,16 +632,11 @@ function installFatalTelemetryHandlers({
   };
   const onUnhandledRejection = (reason: unknown) => {
     const asError = reason instanceof Error ? reason : null;
-    console.error('[daemon unhandledRejection]:', reason);
-    void analyticsService.captureSafety({
-      eventName: 'daemon_unhandled_rejection',
-      appVersion: getAppVersion()?.version ?? UNKNOWN_APP_VERSION,
-      properties: {
-        error_message: asError?.message ?? (typeof reason === 'string' ? reason : String(reason)),
-        error_name: asError?.name ?? 'NonErrorRejection',
-        error_stack: typeof asError?.stack === 'string' ? asError.stack.slice(0, 8192) : undefined,
-      },
-    }).catch(() => {});
+    triggerFatalShutdown('daemon_unhandled_rejection', {
+      error_message: asError?.message ?? (typeof reason === 'string' ? reason : String(reason)),
+      error_name: asError?.name ?? 'NonErrorRejection',
+      error_stack: typeof asError?.stack === 'string' ? asError.stack.slice(0, 8192) : undefined,
+    });
   };
   process.on('uncaughtException', onUncaughtException);
   process.on('unhandledRejection', onUnhandledRejection);

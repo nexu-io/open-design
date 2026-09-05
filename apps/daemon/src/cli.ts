@@ -854,10 +854,11 @@ if (first && SUBCOMMAND_MAP[first]) {
   await SUBCOMMAND_MAP[first](rest);
   // Respect a non-zero exit code a handler set via process.exitCode (e.g. a
   // failed `od resource get`); default to 0 when it left it unset.
-  process.exit(process.exitCode ?? 0);
-}
-
-if (argv[0] === 'tools' && argv[1] === 'live-artifacts') {
+  process.exitCode = process.exitCode ?? 0;
+  if (process.platform !== 'win32') {
+    process.exit(process.exitCode);
+  }
+} else if (argv[0] === 'tools' && argv[1] === 'live-artifacts') {
   runLiveArtifactsToolCli(argv.slice(2))
     .then(({ exitCode }) => {
       process.exitCode = exitCode;
@@ -1895,9 +1896,11 @@ async function runMediaGenerate(rawArgs) {
       code: 'MEDIA_DISPATCHER_UNREACHABLE',
       message: 'local media dispatcher could not be reached',
     }, 3);
+    return;
   }
   if (!resp.ok) {
     await exitWithMediaHttpFailure(resp);
+    return;
   }
   const accepted = await resp.json();
   const { taskId } = accepted;
@@ -1941,6 +1944,7 @@ async function exitWithMediaHttpFailure(resp) {
     && error.message.trim()
   ) {
     await exitWithMediaError(error, 4);
+    return;
   }
   await exitWithMediaError({
     code: 'MEDIA_DISPATCH_FAILED',
@@ -1991,15 +1995,35 @@ async function runMediaWait(rawArgs) {
 // (Windows named pipes, or large/backpressured output on any platform) the
 // final JSON line can be dropped, leaving the caller with exit 0 and empty
 // output. Writing an empty chunk with a callback resolves only after every
-// previously queued write has been flushed. The resolve callback
-// deliberately ignores the error argument (EPIPE and similar still exit
-// with the requested code).
+// preceding chunk on that stream has been flushed to the kernel.
+//
+// On Windows, abruptly calling process.exit() while pipes are completing
+// overlapped I/O can trigger CRT fast-fail (0xC0000409). Setting process.exitCode
+// and letting the event loop unwind naturally avoids this, backed by an unref'd
+// fallback timer.
 async function flushStreamsAndExit(code) {
+  const waitForDrain = (stream) =>
+    new Promise((resolve) => {
+      if (!stream) return resolve();
+      if (stream.writableNeedDrain) {
+        stream.once('drain', resolve);
+        stream.once('error', resolve);
+      } else {
+        stream.write('', resolve);
+      }
+    });
+
   await Promise.all([
-    new Promise((resolve) => process.stdout.write('', resolve)),
-    new Promise((resolve) => process.stderr.write('', resolve)),
+    waitForDrain(process.stdout),
+    waitForDrain(process.stderr),
   ]);
-  process.exit(code);
+  process.exitCode = code;
+  if (process.platform === 'win32') {
+    const t = setTimeout(() => process.exit(code), 500);
+    t.unref?.();
+  } else {
+    process.exit(code);
+  }
 }
 
 async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}) {
@@ -2032,15 +2056,18 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
     } catch (err) {
       surfaceFetchError(err, daemonUrl);
       await flushStreamsAndExit(3);
+      return;
     }
     if (resp.status === 404) {
       console.error(`task ${taskId} not found (expired or never queued)`);
       await flushStreamsAndExit(4);
+      return;
     }
     if (!resp.ok) {
       const text = await resp.text();
       console.error(`daemon ${resp.status}: ${text}`);
       await flushStreamsAndExit(4);
+      return;
     }
     let snap;
     try {
@@ -2048,6 +2075,7 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
     } catch {
       console.error('daemon returned non-JSON for /wait');
       await flushStreamsAndExit(4);
+      return;
     }
     lastSnapshot = snap;
     if (Array.isArray(snap.progress)) {
@@ -2076,6 +2104,7 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
       }
       process.stdout.write(JSON.stringify({ file }) + '\n');
       await flushStreamsAndExit(file.providerError ? 5 : 0);
+      return;
     }
     if (snap.status === 'failed') {
       const msg = snap.error?.message || 'task failed';
@@ -2084,6 +2113,7 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
         JSON.stringify({ taskId, status: 'failed', error: snap.error || {} }) + '\n',
       );
       await flushStreamsAndExit(snap.error?.status || 5);
+      return;
     }
     if (snap.status === 'interrupted') {
       const msg = snap.error?.message || 'task interrupted';
@@ -2092,6 +2122,7 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
         JSON.stringify({ taskId, status: 'interrupted', error: snap.error || {} }) + '\n',
       );
       await flushStreamsAndExit(snap.error?.status || 5);
+      return;
     }
   }
 

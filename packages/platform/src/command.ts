@@ -10,7 +10,10 @@
  * Consumed by the `process` module's spawn helpers; owns no process lifecycle
  * itself.
  */
-import { extname } from "node:path";
+import { extname, join } from "node:path";
+import { tmpdir } from "node:os";
+import { randomUUID } from "node:crypto";
+import { closeSync, openSync, readSync, statSync, writeFileSync } from "node:fs";
 
 export type CommandInvocation = {
   args: string[];
@@ -73,18 +76,60 @@ function buildCmdShimInvocation(command: string, args: string[], env: NodeJS.Pro
 
 const nodeLoadablePackageManagerExtensions = new Set([".js", ".cjs", ".mjs"]);
 
+function isNodeShebangFile(command: string): boolean {
+  if (process.platform !== "win32") return false;
+  const ext = extname(command).toLowerCase();
+  if (ext === ".exe" || ext === ".cmd" || ext === ".bat" || ext === ".com") return false;
+  try {
+    const stat = statSync(command);
+    if (!stat.isFile() || stat.size < 2) return false;
+    const fd = openSync(command, "r");
+    try {
+      const buf = Buffer.alloc(Math.min(stat.size, 256));
+      readSync(fd, buf, 0, buf.length, 0);
+      const text = buf.toString("utf8");
+      if (!text.startsWith("#!")) return false;
+      const firstLine = text.split(/\r?\n/)[0] ?? "";
+      return /\bnode\b/i.test(firstLine);
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Resolve a command request into the concrete invocation to spawn. On Windows,
  * `.bat` / `.cmd` targets are rewrapped as a `cmd.exe /d /s /c "..."` shim with
  * `windowsVerbatimArguments` so quoting and percent-expansion behave safely;
+ * Node shebang scripts (`#!/usr/bin/env node`) without a Windows executable extension
+ * are dispatched via `process.execPath`;
  * every other case passes the command and args straight through.
  *
  * @param request - The command, optional args, and env to base the invocation on.
  * @returns The `{ command, args }` (plus `windowsVerbatimArguments` when a shim is used) to spawn.
  */
 export function createCommandInvocation({ args = [], command, env = process.env }: CommandInvocationRequest): CommandInvocation {
-  if (process.platform === "win32" && /\.(bat|cmd)$/i.test(command)) {
-    return buildCmdShimInvocation(command, args, env);
+  if (process.platform === "win32") {
+    if (/\.(bat|cmd)$/i.test(command)) {
+      return buildCmdShimInvocation(command, args, env);
+    }
+    if (isNodeShebangFile(command)) {
+      const totalLength = command.length + args.reduce((sum, arg) => sum + String(arg).length + 1, 0);
+      if (totalLength > 30000) {
+        const argsFile = join(tmpdir(), `od-node-args-${randomUUID()}.json`);
+        writeFileSync(argsFile, JSON.stringify(args), "utf8");
+        const runnerCode =
+          "const fs=require('fs');const {pathToFileURL}=require('url');const argsFile=process.argv[1];const target=process.argv[2];const args=JSON.parse(fs.readFileSync(argsFile,'utf8'));try{fs.unlinkSync(argsFile);}catch{}process.argv=[process.execPath,target,...args];import(pathToFileURL(target).href);";
+        return {
+          args: ["-e", runnerCode, argsFile, command],
+          command: process.execPath,
+          windowsVerbatimArguments: false,
+        };
+      }
+      return { args: [command, ...args], command: process.execPath };
+    }
   }
   return { args, command };
 }

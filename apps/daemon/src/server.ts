@@ -496,6 +496,7 @@ import {
   classifyAgentAuthFailure,
   classifyAgentServiceFailure,
   cursorAuthGuidance,
+  isAntigravityAuthFailureText,
   normalizeDeepSeekHarnessFailure,
 } from './runtimes/auth.js';
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
@@ -15219,11 +15220,24 @@ export async function startServer({
       // guard can grep the upstream error code (RESOURCE_EXHAUSTED 429
       // for quota, "not logged into Antigravity" for auth) and route
       // to the right user-facing guidance.
-      if (
-        code === 0 &&
+      //
+      // Also enters for `antigravity-stream-json` when the structured
+      // stream received zero agent-produced content (agentProducedOutput
+      // is false). In that mode trackingSubstantiveOutput is always true
+      // (set at spawn time), so the !trackingSubstantiveOutput path is
+      // never reached — but a silent agy exit still needs log-file
+      // classification for RATE_LIMITED / AGENT_AUTH_REQUIRED routing.
+      const antigravityStreamSilentExit =
+        def.streamFormat === 'antigravity-stream-json' &&
+        !agentProducedOutput &&
         !run.cancelRequested &&
-        !trackingSubstantiveOutput &&
-        !childStdoutSeen
+        code === 0;
+      if (
+        (code === 0 &&
+          !run.cancelRequested &&
+          !trackingSubstantiveOutput &&
+          !childStdoutSeen) ||
+        antigravityStreamSilentExit
       ) {
         markRpcCloseReason('empty_output');
         let combinedDetail = `${agentStderrTail}\n${agentStdoutTail}`;

@@ -374,15 +374,9 @@ async function findActiveImageProvider(
       if (model) return model;
     }
   }
-  if (preferredCap !== 't2i') {
-    for (const pid of candidateProviders) {
-      if (excludeProviders.includes(pid)) continue;
-      if (masked.providers[pid]?.configured) {
-        const model = IMAGE_MODELS.find((m) => m.provider === pid && m.caps.includes('t2i'));
-        if (model) return model;
-      }
-    }
-  }
+  // No provider found with the requested capability; do NOT silently
+  // downgrade an i2i request to a t2i-only provider — callers must
+  // handle null and surface an actionable error to the user.
   return null;
 }
 

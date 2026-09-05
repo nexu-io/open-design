@@ -1,4 +1,4 @@
-import { accessSync, constants, existsSync, statSync } from 'node:fs';
+import { accessSync, closeSync, constants, existsSync, openSync, readSync, statSync } from 'node:fs';
 import { delimiter } from 'node:path';
 import path from 'node:path';
 import { homedir } from 'node:os';
@@ -138,7 +138,7 @@ export function agentBinEnvKey(agentId: string | undefined): string | null {
 export function resolveAllOnPath(bin: string): string[] {
   const exts =
     process.platform === 'win32'
-      ? (process.env.PATHEXT || '.EXE;.CMD;.BAT').split(';')
+      ? [...(process.env.PATHEXT || '.EXE;.CMD;.BAT').split(';'), '']
       : [''];
   const dirs = resolvePathDirs();
   const found: string[] = [];
@@ -148,6 +148,9 @@ export function resolveAllOnPath(bin: string): string[] {
       const full = path.join(dir, bin + ext);
       if (!full || seen.has(full)) continue;
       if (existsSync(full)) {
+        if (process.platform === 'win32' && !ext) {
+          if (!looksExecutableOnWindows(full)) continue;
+        }
         seen.add(full);
         found.push(full);
       }
@@ -160,14 +163,36 @@ export function resolveOnPath(bin: string): string | null {
   return resolveAllOnPath(bin)[0] ?? null;
 }
 
+function isNodeShebangFile(filePath: string): boolean {
+  try {
+    const stat = statSync(filePath);
+    if (!stat.isFile() || stat.size < 2) return false;
+    const fd = openSync(filePath, 'r');
+    try {
+      const buf = Buffer.alloc(Math.min(stat.size, 256));
+      readSync(fd, buf, 0, buf.length, 0);
+      const text = buf.toString('utf8');
+      if (!text.startsWith('#!')) return false;
+      const firstLine = text.split(/\r?\n/)[0] ?? '';
+      return /\bnode\b/i.test(firstLine);
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    return false;
+  }
+}
+
 function looksExecutableOnWindows(filePath: string): boolean {
   const ext = path.extname(filePath).trim().toUpperCase();
-  if (!ext) return false;
-  const executableExts = (process.env.PATHEXT || '.EXE;.CMD;.BAT')
-    .split(';')
-    .map((value) => value.trim().toUpperCase())
-    .filter(Boolean);
-  return executableExts.includes(ext);
+  if (ext) {
+    const executableExts = (process.env.PATHEXT || '.EXE;.CMD;.BAT')
+      .split(';')
+      .map((value) => value.trim().toUpperCase())
+      .filter(Boolean);
+    if (executableExts.includes(ext)) return true;
+  }
+  return isNodeShebangFile(filePath);
 }
 
 function executableFilePath(raw: string | undefined): string | null {

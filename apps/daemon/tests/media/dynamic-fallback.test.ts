@@ -235,4 +235,75 @@ describe("Dynamic Image Provider Negotiation & Fallback", () => {
       expect(err.code).not.toBe("UNAUTHORIZED");
     }
   });
+
+  it("does not dispatch an i2i request to a t2i-only provider when no i2i provider is available", async () => {
+    // Configure nanobanana only — it is t2i-only (no i2i capability).
+    // When generateMedia is called with an imageRef (i2i request) and the only
+    // active fallback is Vela (which fails UNAUTHORIZED), the i2i fallback must
+    // return null rather than silently downgrading to nanobanana.
+    await writeConfig(projectRoot, {
+      providers: { nanobanana: { apiKey: "test-google-key" } },
+    });
+
+    const originalFetch = globalThis.fetch;
+    // Track every URL that fetch is called with
+    const fetchedUrls: string[] = [];
+    globalThis.fetch = vi.fn().mockImplementation(async (url: any) => {
+      fetchedUrls.push(String(url));
+      // nanobanana / generativelanguage would succeed if called
+      if (String(url).includes("generativelanguage.googleapis.com")) {
+        return new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      inlineData: {
+                        mimeType: "image/png",
+                        data: Buffer.from("fake-png-bytes").toString("base64"),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const projDir = path.join(projectsRoot, "test-i2i-no-downgrade");
+    await mkdir(projDir, { recursive: true });
+    const refImagePath = path.join(projDir, "ref.png");
+    await writeFile(refImagePath, Buffer.from("fake-ref-png"));
+
+    try {
+      // generateMedia with an imageRef on a vela model when only t2i providers
+      // are configured must NOT silently succeed via nanobanana (t2i-only).
+      // It must fail — either with a provider-not-found error or a vela auth
+      // error — but it must NOT call nanobanana with an i2i request.
+      await expect(
+        generateMedia({
+          projectRoot,
+          projectsRoot,
+          projectId: "test-i2i-no-downgrade",
+          surface: "image",
+          model: "vela/gpt-image-2",
+          image: "ref.png",
+        }),
+      ).rejects.toThrow();
+
+      // Critically: nanobanana (generativelanguage.googleapis.com) must NOT
+      // have been called — the i2i fallback returned null, not a t2i model.
+      const nanobananaCalled = fetchedUrls.some((u) =>
+        u.includes("generativelanguage.googleapis.com"),
+      );
+      expect(nanobananaCalled).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

@@ -86,7 +86,7 @@ describe("mac prebundle entrypoints", () => {
     await mkdir(fromDirectory, { recursive: true });
     await mkdir(dirname(targetPath), { recursive: true });
     await writeFile(targetPath, "export {};\n", "utf8");
-    await symlink(physicalRoot, linkedRoot, "dir");
+    await symlink(physicalRoot, linkedRoot, process.platform === "win32" ? "junction" : "dir");
     try {
       await expect(toRelativeImportSpecifier(join(linkedRoot, "entrypoints"), targetPath))
         .resolves.toBe("../dist/entry.js");
@@ -202,6 +202,7 @@ describe("copyResourceTree", () => {
       for (const name of resourceNames) {
         await mkdir(join(root, name), { recursive: true });
       }
+      await writeFile(join(root, "package.json"), "{\n  \"name\": \"root\",\n  \"version\": \"0.0.0\",\n  \"private\": true\n}\n", "utf8");
       const dshRuntimeRoot = join(root, "packages", "dsh-runtime");
       await mkdir(join(dshRuntimeRoot, "dist", "types"), { recursive: true });
       await writeFile(

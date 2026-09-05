@@ -295,6 +295,7 @@ export const antigravityAgentDef = {
     return args;
   },
   promptViaStdin: false,
+  capturesSessionIdFromStream: true,
   streamFormat: 'antigravity-stream-json',
   installUrl: 'https://antigravity.google/cli',
   docsUrl: 'https://antigravity.google/docs/cli-overview',
