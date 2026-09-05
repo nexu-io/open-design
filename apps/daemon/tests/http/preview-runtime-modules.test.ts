@@ -270,6 +270,55 @@ describe('preview runtime modules', () => {
     expect(rootAttributes.has('data-od-tweaks-hidden')).toBe(true);
   });
 
+  it('keeps the artifact restore control reachable once its Tweaks panel is closed', () => {
+    // Mirrors the visibility contract of the shipped tweaks template
+    // (`design-templates/tweaks/example.html`): the floating restore button is
+    // `display: none` until the artifact's own close handler adds `tw-show`.
+    // The preview runtime must not override that contract — if it does, an
+    // artifact whose panel has been closed has no pointer-reachable way back.
+    const dom = new JSDOM(
+      `<!doctype html><html><head><style>
+        .tw-panel { position: fixed; }
+        .tw-panel.tw-hidden { opacity: 0; }
+        .tw-restore { display: none; align-items: center; }
+        .tw-restore.tw-show { display: flex; }
+      </style></head><body>
+        <aside class="tw-panel" id="tw-panel">Tweaks</aside>
+        <button class="tw-restore" id="tw-restore" title="Show panel (T)">T</button>
+      </body></html>`,
+      { runScripts: 'outside-only', url: 'http://n-scope.localhost/index.html' },
+    );
+    const context = dom.getInternalVMContext() as vm.Context & Record<string, any>;
+    context.parent = { postMessage: () => {} };
+    const source = buildPreviewRuntimeBootstrap({
+      sessionId: 'session-1',
+      documentVersion: 'version-1',
+      availableCapabilities: ['tweaks'],
+      modules: [buildTweaksRuntimeModule()],
+    }).replace(/^<script[^>]*>/u, '').replace(/<\/script>$/u, '');
+    vm.runInContext(source, context);
+    dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
+
+    // Exactly what the artifact's own `× close` handler does.
+    const panel = dom.window.document.getElementById('tw-panel');
+    const restore = dom.window.document.getElementById('tw-restore');
+    panel.classList.add('tw-hidden');
+    restore.classList.add('tw-show');
+
+    const style = dom.window.getComputedStyle(restore);
+    expect(style.display).not.toBe('none');
+    expect(style.visibility).not.toBe('hidden');
+    expect(style.pointerEvents).not.toBe('none');
+
+    // While the panel is open the artifact keeps the button out of the way on
+    // its own; the runtime must not force it visible either.
+    panel.classList.remove('tw-hidden');
+    restore.classList.remove('tw-show');
+    expect(dom.window.getComputedStyle(restore).display).toBe('none');
+
+    dom.window.close();
+  });
+
   it('installs passive scripts immediately and interaction scripts only on first enable', () => {
     const modules = [
       buildInstalledScriptRuntimeModule(

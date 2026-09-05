@@ -281,6 +281,12 @@ register('content_measurement',function(){return {
 /**
  * Tweaks must install its hide style before the authored body parses, otherwise
  * a default-visible panel flashes before the host can negotiate capabilities.
+ *
+ * That hide style is scoped to `.tw-panel` only. The artifact owns its own
+ * `.tw-restore` affordance — hidden until its close handler adds `tw-show` —
+ * and this runtime must not override it. Forcing `.tw-restore` hidden (which
+ * it used to, back when a host toolbar offered a competing entry point) leaves
+ * a closed panel with no pointer-reachable way to reopen it.
  */
 export function buildTweaksRuntimeModule(): PreviewRuntimeModuleSource {
   return {
@@ -292,7 +298,7 @@ var suppressTweaksEcho=false;
 var tweaksObserver=null;
 var tweaksStyle=document.createElement('style');
 tweaksStyle.setAttribute('data-od-tweaks-bridge-style','');
-tweaksStyle.textContent='[data-od-tweaks-hidden] .tw-panel{transform:translateX(calc(100% + 32px))!important;opacity:0!important;pointer-events:none!important}.tw-restore{display:none!important}';
+tweaksStyle.textContent='[data-od-tweaks-hidden] .tw-panel{transform:translateX(calc(100% + 32px))!important;opacity:0!important;pointer-events:none!important}';
 (document.head||document.documentElement).appendChild(tweaksStyle);
 document.documentElement.setAttribute('data-od-tweaks-hidden','');
 function tweaksPanel(){return document.querySelector('.tw-panel');}

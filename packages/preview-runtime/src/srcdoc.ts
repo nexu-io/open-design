@@ -4322,15 +4322,22 @@ function injectDeckBridge(
 // host can disable the toggle on artifacts without a `.tw-panel`.
 function injectTweaksBridge(doc: string): string {
   // Hide-state styling mirrors the artifact's own `.tw-hidden` (transform +
-  // opacity) so the CSS transition plays in both directions. `.tw-restore` is
-  // kept permanently hidden — the host toolbar is the only entry point.
+  // opacity) so the CSS transition plays in both directions.
+  //
+  // Scope this to `.tw-panel` only. The artifact also ships its own
+  // `.tw-restore` affordance, and it owns that element's visibility: hidden
+  // until its close handler adds `tw-show`. This bridge used to force
+  // `.tw-restore { display: none !important }` back when a host toolbar
+  // provided a competing entry point, but no host surface drives the panel
+  // any more, so overriding it just left a closed panel with no
+  // pointer-reachable way back — the artifact's keyboard shortcut became the
+  // only entry point, and the hint for it is printed on the hidden button.
   const style = `<style data-od-tweaks-bridge-style>
 [data-od-tweaks-hidden] .tw-panel {
   transform: translateX(calc(100% + 32px)) !important;
   opacity: 0 !important;
   pointer-events: none !important;
 }
-.tw-restore { display: none !important; }
 </style>`;
   const script = `<script data-od-tweaks-bridge>(function(){
   // Synchronously hide BEFORE the artifact body parses so the panel never
