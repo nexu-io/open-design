@@ -1890,3 +1890,28 @@ disproven by disabling them one at a time against the live product and watching
 the symptom survive. What found the real cause was recording the *inputs* to
 scope minting per file and watching `content-refresh:0` become
 `content-refresh:1` on a file nobody touched.
+
+### Two adjacent things this turned up, not fixed here
+
+**Every dot-entry is already non-content, and the watcher does not know it.**
+`collectFiles` (`apps/daemon/src/projects.ts:306`) skips every entry whose name
+starts with `.`, so nothing dot-prefixed is ever listed as a project file. The
+watcher fix above silences only the two reserved directories, because those are
+the two that were measured. `.od-skills` and `.od-frames` are the obvious next
+candidates — both appear in `MEMBER_MIRROR_EXCLUDED_ENTRIES` alongside
+`.file-versions` and `.live-artifacts` — but neither has been observed causing a
+fan-out, so they were left alone rather than changed on a hunch. The one thing
+that argues against a blanket dot-entry rule: a document can reference a
+dot-named sibling relatively, and the raw route will serve it.
+
+**`/api/agents` re-probes every installed agent CLI on every call.**
+`detectAgents` (`apps/daemon/src/runtimes/detection.ts:789`) runs a probe per
+agent def per request; only `--help` capabilities are cached. Three
+back-to-back calls on this machine took 7.7 s, 4.4 s and 4.8 s, each spawning a
+swarm of `opencode --version` / `opencode models --verbose` / `dsh --probe`
+subprocesses. It is the single largest cost in a cold app boot here and it is
+why the corpus runner — which boots the app once per artifact — is subprocess
+bound rather than render bound. Caveat on the numbers: this machine has an
+unusually large set of agent CLIs installed and was under load, so treat them as
+an order of magnitude, not a measurement. Belongs to the launch-performance line
+of work, not to this branch.
