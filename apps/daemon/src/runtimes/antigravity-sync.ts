@@ -17,6 +17,7 @@ export interface SyncAntigravityBrainArtifactsOptions {
   sessionId: string;
   projectMetadata?: Record<string, unknown>;
   brainBaseDir?: string;
+  collisionPolicy?: 'skip' | 'overwrite';
   writeProjectFileFn?: typeof writeProjectFile;
 }
 
@@ -66,6 +67,7 @@ export async function syncAntigravityBrainArtifacts(
     sessionId,
     projectMetadata,
     brainBaseDir,
+    collisionPolicy = 'skip',
     writeProjectFileFn = writeProjectFile,
   } = options;
 
@@ -76,14 +78,37 @@ export async function syncAntigravityBrainArtifacts(
   const baseDir =
     brainBaseDir ??
     path.join(os.homedir(), '.gemini', 'antigravity-cli', 'brain');
+
+  let realBaseDir: string;
+  try {
+    realBaseDir = await fs.realpath(baseDir);
+  } catch {
+    // Brain base directory does not exist
+    return { syncedCount: 0, syncedFiles: [], skippedReason: 'no_session_dir' };
+  }
+
   const sessionDir = path.join(baseDir, sessionId.trim());
 
+  // 1. Check session directory identity: must be a real directory and NOT a symlink
+  try {
+    const sessionLstat = await fs.lstat(sessionDir);
+    if (sessionLstat.isSymbolicLink() || !sessionLstat.isDirectory()) {
+      return { syncedCount: 0, syncedFiles: [], skippedReason: 'symlink_session_dir' };
+    }
+  } catch {
+    return { syncedCount: 0, syncedFiles: [], skippedReason: 'no_session_dir' };
+  }
+
+  // 2. Resolve realpath and ensure sessionDir does not escape brainBaseDir
   let realSessionDir: string;
   try {
     realSessionDir = await fs.realpath(sessionDir);
   } catch {
-    // Session directory does not exist or cannot be resolved
     return { syncedCount: 0, syncedFiles: [], skippedReason: 'no_session_dir' };
+  }
+
+  if (!isPathInside(realBaseDir, realSessionDir)) {
+    return { syncedCount: 0, syncedFiles: [], skippedReason: 'escaped_session_dir' };
   }
 
   let entries: string[];
@@ -114,34 +139,30 @@ export async function syncAntigravityBrainArtifacts(
     const destFile = path.join(projectDir, entry);
 
     try {
-      // 1. Inspect file directly with lstat: must be a regular file and NOT a symlink
+      // 3. Inspect file directly with lstat: must be a regular file and NOT a symlink
       const srcLstat = await fs.lstat(srcFile);
       if (srcLstat.isSymbolicLink() || !srcLstat.isFile()) {
         continue;
       }
 
-      // 2. Resolve realpath and verify it remains strictly within realSessionDir
+      // 4. Resolve realpath and verify it remains strictly within realSessionDir
       const realSrc = await fs.realpath(srcFile);
       if (!isPathInside(realSessionDir, realSrc)) {
         continue;
       }
 
-      // 3. Check mtime against destination
-      let shouldWrite = true;
-      try {
-        const destStat = await fs.stat(destFile);
-        if (destStat.mtimeMs >= srcLstat.mtimeMs) {
-          shouldWrite = false;
+      // 5. Collision policy: default to skipping existing files to preserve user content
+      if (collisionPolicy !== 'overwrite') {
+        try {
+          await fs.stat(destFile);
+          // Destination already exists; do not overwrite user files
+          continue;
+        } catch {
+          // Destination does not exist; proceed
         }
-      } catch {
-        shouldWrite = true;
       }
 
-      if (!shouldWrite) {
-        continue;
-      }
-
-      // 4. Open file handle and verify handle identity matches lstat (prevent TOCTOU swap)
+      // 6. Open file handle and verify handle identity matches lstat (prevent TOCTOU swap)
       let handle: fs.FileHandle | undefined;
       try {
         handle = await fs.open(srcFile, 'r');
@@ -172,7 +193,7 @@ export async function syncAntigravityBrainArtifacts(
           projectId,
           entry,
           content,
-          { overwrite: true },
+          { overwrite: collisionPolicy === 'overwrite' },
           projectMetadata,
         );
         syncedFiles.push(entry);

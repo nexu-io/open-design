@@ -84,7 +84,7 @@ describe('antigravity-sync', () => {
         'proj-1',
         'preview.html',
         expect.any(Buffer),
-        { overwrite: true },
+        { overwrite: false },
         undefined,
       );
       expect(mockWrite).toHaveBeenCalledWith(
@@ -92,7 +92,7 @@ describe('antigravity-sync', () => {
         'proj-1',
         'styles.css',
         expect.any(Buffer),
-        { overwrite: true },
+        { overwrite: false },
         undefined,
       );
     } finally {
@@ -174,7 +174,7 @@ describe('antigravity-sync', () => {
     }
   });
 
-  it('supports safely sync from a symlinked/junction session directory', async () => {
+  it('rejects a symlinked or junction session directory that escapes the brain root', async () => {
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'od-sync-test-'));
     const realSessionDir = path.join(tmpDir, 'actual-brain-store', 'session-1');
     const brainDir = path.join(tmpDir, 'brain');
@@ -201,14 +201,58 @@ describe('antigravity-sync', () => {
         writeProjectFileFn: mockWrite as any,
       });
 
+      expect(result.syncedCount).toBe(0);
+      expect(result.syncedFiles).toEqual([]);
+      expect(mockWrite).not.toHaveBeenCalled();
+      expect(result.skippedReason).toMatch(/symlink_session_dir|escaped_session_dir/);
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves existing user project files and does not overwrite under default collision policy', async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'od-sync-test-'));
+    const brainDir = path.join(tmpDir, 'brain', 'session-1');
+    const projectsRoot = path.join(tmpDir, 'projects');
+    const projDir = path.join(projectsRoot, 'proj-1');
+
+    await fs.mkdir(brainDir, { recursive: true });
+    await fs.mkdir(projDir, { recursive: true });
+
+    // Existing user project file
+    const existingFile = path.join(projDir, 'index.html');
+    await fs.writeFile(existingFile, '<h1>User original content</h1>');
+
+    // Agent outputs in brain session: index.html (newer) and new-feature.html
+    await fs.writeFile(path.join(brainDir, 'index.html'), '<h1>Agent clobber attempt</h1>');
+    await fs.writeFile(path.join(brainDir, 'new-feature.html'), '<h1>New feature</h1>');
+
+    const mockWrite = vi.fn().mockResolvedValue({ name: 'ok' });
+
+    try {
+      const result = await syncAntigravityBrainArtifacts({
+        projectsRoot,
+        projectId: 'proj-1',
+        sessionId: 'session-1',
+        brainBaseDir: path.join(tmpDir, 'brain'),
+        writeProjectFileFn: mockWrite as any,
+      });
+
+      // index.html must be preserved and skipped, only new-feature.html synced
       expect(result.syncedCount).toBe(1);
-      expect(result.syncedFiles).toEqual(['app.html']);
+      expect(result.syncedFiles).toEqual(['new-feature.html']);
+
+      // Assert user's existing file bytes remain intact
+      const preservedContent = await fs.readFile(existingFile, 'utf8');
+      expect(preservedContent).toBe('<h1>User original content</h1>');
+
+      expect(mockWrite).toHaveBeenCalledTimes(1);
       expect(mockWrite).toHaveBeenCalledWith(
         projectsRoot,
         'proj-1',
-        'app.html',
+        'new-feature.html',
         expect.any(Buffer),
-        { overwrite: true },
+        { overwrite: false },
         undefined,
       );
     } finally {
