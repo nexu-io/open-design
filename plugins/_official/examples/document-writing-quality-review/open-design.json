@@ -7,7 +7,7 @@
     "en": "Writing Quality Review",
     "zh-CN": "写作质量评审"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publishedAt": "2026-08-27T00:00:00Z",
   "description": "An editorial review sheet that prioritizes findings, preserves what works, and supplies a concrete replacement draft.",
   "description_i18n": {

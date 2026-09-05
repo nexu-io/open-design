@@ -4,7 +4,7 @@ description: "A structured partner proposal covering recommendation, approach, s
 license: MIT
 metadata:
   author: Open Design
-  version: "0.1.0"
+  version: "0.1.1"
 ---
 
 # Branded Proposal
@@ -36,7 +36,7 @@ Use this skill when the user wants a document in the visual and information patt
 
 ## Visual invariants
 
-- Keep the compact proposal hierarchy and the four numbered sections on one print-ready page.
+- Keep the compact proposal hierarchy and the four numbered sections across two print-ready A4 pages.
 - Preserve the restrained blue accent, editorial typography, structured cards, and timeline table.
 - Balance copy lengths across success, workstream, and scope cards so no column feels materially heavier.
 
@@ -45,5 +45,9 @@ Use this skill when the user wants a document in the visual and information patt
 - The output opens without external setup and visually matches `example.webp` at first glance.
 - Text remains readable in both browser preview and print/PDF output.
 - No content, chart, table, ornament, or footer is clipped.
-- The output preserves the reference page geometry: responsive long page.
+- The output preserves the reference page geometry: A4, exactly 2 pages.
 - The final HTML contains the user's actual content rather than lorem ipsum, placeholder images, or invented numbers.
+
+## Document page boundaries
+
+Preserve `data-od-document-page` on each complete paper container. The reference has 2 A4 pages. Keep these page boundaries and the print stylesheet when replacing content. Check every page for overflow; do not hide extra content. Validate the actual exported PDF has exactly 2 pages.

@@ -1225,6 +1225,19 @@ describe('sandboxed preview Blob exports', () => {
     expect(wrapper).not.toContain('allow-same-origin');
   });
 
+  it('prints authored paper inside the sandbox instead of slicing a viewport screenshot', async () => {
+    vi.stubGlobal('DOMParser', class {
+      parseFromString() { return { querySelector: () => ({}) }; }
+    });
+    await exportAsPdf('<main data-od-document-page>One complete A4 sheet</main>', 'Paper');
+    const wrapper = await capturedBlob!.text();
+    expect(wrapper).toContain('sandbox="allow-scripts allow-modals"');
+    expect(wrapper).toContain('&lt;script data-od-print-paper&gt;');
+    expect(wrapper).toContain('document.fonts');
+    expect(wrapper).not.toContain('window.__odPrintReady=false');
+    expect(openCalls).toEqual([['', '_blank']]);
+  });
+
   it('uses a sandboxed Blob wrapper with synchronous popup detection for PDF exports', async () => {
     await exportAsPdf('<script>window.parent.document.body.innerHTML="owned"</script>', 'PDF');
 

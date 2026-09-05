@@ -1442,13 +1442,31 @@ export async function exportAsPdf(
   // each slide (deck) or the full page through the export-capture bridge, then
   // build it with jsPDF. No print dialog, no agent. The window.print() popup
   // below is kept only as a last-resort fallback if the capture path throws.
+  let isPaperDocument = false;
   try {
-    await exportArtifactAsPdf(html, title, { deck: !!opts?.deck, onProgress: opts?.onProgress });
-    return;
+    const documentPages = new DOMParser().parseFromString(html, 'text/html')
+      .querySelector('[data-od-document-page]');
+    isPaperDocument = !!documentPages;
+    if (!documentPages) {
+      await exportArtifactAsPdf(html, title, { deck: !!opts?.deck, onProgress: opts?.onProgress });
+      return;
+    }
+    // Authored paper documents need @page/@media print, not a tall screenshot.
+    // Continue into the browser print path below.
+
   } catch (err) {
     console.warn('[exportAsPdf] programmatic PDF failed, falling back to print popup:', err);
   }
 
+  if (isPaperDocument) {
+    // Print the sandboxed child itself. Printing the viewport-sized parent
+    // wrapper can clip later paper pages and ignores the child's @page size.
+    const printPaper = `<script data-od-print-paper>window.addEventListener('load',function(){Promise.resolve(document.fonts&&document.fonts.ready).then(function(){requestAnimationFrame(function(){requestAnimationFrame(function(){window.print()})})})});<\/script>`;
+    const bodyClose = findRealTagOffset(doc, HTML_TAG_PATTERNS.bodyClose);
+    doc = bodyClose >= 0
+      ? doc.slice(0, bodyClose) + printPaper + doc.slice(bodyClose)
+      : doc + printPaper;
+  }
   // Last-resort: wrap with allow-modals so the injected script can call
   // window.print(), then inject the self-printing script and open a popup.
   if (sandboxedPreview) {
@@ -1457,8 +1475,10 @@ export async function exportAsPdf(
   // Even in the non-sandboxed browser fallback we keep the same readiness
   // cache contract as the desktop bridge so the popup can wait for actual
   // rendered content instead of printing after a blind fixed delay.
-  doc = injectParentPrintReadyCache(doc, nonce);
-  doc = injectPrintScript(doc, title);
+  if (!isPaperDocument) {
+    doc = injectParentPrintReadyCache(doc, nonce);
+    doc = injectPrintScript(doc, title);
+  }
 
   const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);

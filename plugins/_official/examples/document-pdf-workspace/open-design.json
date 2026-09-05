@@ -7,7 +7,7 @@
     "en": "PDF Workspace Template",
     "zh-CN": "PDF 工作区模板"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publishedAt": "2026-08-27T00:00:00Z",
   "description": "A fill-and-prepare agreement workspace that turns supplied facts into a review-ready, printable PDF document.",
   "description_i18n": {

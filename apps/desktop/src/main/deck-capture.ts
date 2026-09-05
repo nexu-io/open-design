@@ -7,6 +7,8 @@ import { promisify } from "node:util";
 import { BrowserWindow, nativeImage } from "electron";
 import type { DesktopRenderSlidesInput, DesktopRenderSlidesResult } from "@open-design/sidecar-proto";
 
+import { measureDocumentPages } from "./document-pages.js";
+
 import { waitForPrintableContent } from "./pdf-export.js";
 import { findRealTagEnd, findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
 
@@ -320,6 +322,11 @@ export async function renderDeckSlides(
     if (!wantsDeck) {
       // Page mode: capture the original, unmodified document. `paginate` (set by
       // the PDF path) splits a long page into one image per viewport.
+      if (input.paginate && await window.webContents.executeJavaScript(
+        "Boolean(document.querySelector('[data-od-document-page]'))", true,
+      )) {
+        return finish(await captureDocumentPages(window, input.outputDir));
+      }
       const pageJpeg = shouldCapturePageAsJpeg(input.pageImageFormat, input.paginate);
       return finish(
         await capturePage(window, pageJpeg, input.outputDir, input.paginate === true, requestedPage),
@@ -1807,6 +1814,40 @@ async function queryPageBackgroundColor(window: BrowserWindow): Promise<BgraColo
 
 function clampByte(value: number): number {
   return Math.max(0, Math.min(255, Math.round(Number.isFinite(value) ? value : 0)));
+}
+
+// Paper documents use their authored print layout and explicit page boxes. Capture
+// raster pixels for CJK fidelity, but never paginate paper at screen boundaries.
+async function captureDocumentPages(
+  window: BrowserWindow,
+  outputDir: string | undefined,
+): Promise<DesktopRenderSlidesResult> {
+  const debuggerClient = window.webContents.debugger;
+  debuggerClient.attach("1.3");
+  try {
+    await debuggerClient.sendCommand("Emulation.setEmulatedMedia", { media: "print" });
+    window.setContentSize(PAGE_W, PAGE_VIEW_H);
+    await waitForPrintableContent(window);
+    await nextFrames(window);
+    const pages = await window.webContents.executeJavaScript(
+      `(${measureDocumentPages.toString()})()`, true,
+    ) as ReturnType<typeof measureDocumentPages>;
+    if (!pages.length) throw new Error("No document pages found");
+    const images: Array<{ buffer: Buffer; jpeg: boolean }> = [];
+    for (const page of pages) {
+      const shot = await debuggerClient.sendCommand("Page.captureScreenshot", {
+        format: "png", captureBeyondViewport: true,
+        clip: { ...page, scale: 2 },
+      }) as { data: string };
+      images.push({ buffer: Buffer.from(shot.data, "base64"), jpeg: false });
+    }
+    const size = nativeImage.createFromBuffer(images[0]!.buffer).getSize();
+    return { ok: true, ...(await emitImages(images, outputDir)),
+      width: size.width, height: size.height, mode: "page",
+      documentPageSizes: pages.map(p => ({ width: p.width * 72 / 96, height: p.height * 72 / 96 })) };
+  } finally {
+    debuggerClient.detach();
+  }
 }
 
 // Splits an ordinary (non-deck) page into one image PER VIEWPORT, top to

@@ -310,6 +310,8 @@ export type DesktopRenderSlidesErrorCode =
   | "SLIDE_INDEX_OUT_OF_RANGE";
 
 export type DesktopRenderSlidesResult = {
+  /** Authored paper sizes in PDF points, one per captured image. */
+  documentPageSizes?: Array<{ width: number; height: number }>;
   error?: string;
   errorCode?: DesktopRenderSlidesErrorCode;
   height?: number;

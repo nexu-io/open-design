@@ -4,7 +4,7 @@ description: "An editorial review sheet that prioritizes findings, preserves wha
 license: MIT
 metadata:
   author: Open Design
-  version: "0.1.0"
+  version: "0.1.1"
 ---
 
 # Writing Quality Review
@@ -47,3 +47,7 @@ Use this skill when the user wants a document in the visual and information patt
 - No content, chart, table, ornament, or footer is clipped.
 - The output preserves the reference page geometry: A4-width long page.
 - The final HTML contains the user's actual content rather than lorem ipsum, placeholder images, or invented numbers.
+
+## Document page boundaries
+
+Preserve `data-od-document-page` on each complete paper container. The reference has 1 A4 page. Keep these page boundaries and the print stylesheet when replacing content. Check every page for overflow; do not hide extra content. Validate the actual exported PDF has exactly 1 page.
