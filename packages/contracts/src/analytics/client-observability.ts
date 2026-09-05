@@ -355,6 +355,83 @@ export interface ChatScrollFreezeProps extends ChatCorrelationProps {
   /** ms between that transition and the freeze. */
   scrollable_since_ms?: number;
 
+  // -- what else was moving -------------------------------------------------
+  /**
+   * Bounded trail of parallel activity, `jump_shown:jump@1204,…` — oldest
+   * first, milliseconds since the probe attached, `xN` for a coalesced
+   * burst.
+   *
+   * The geometry above dates the freeze; it cannot say what else the page
+   * was doing at that instant, and after 225 synthetic reproduction
+   * attempts that is the only lead left. Kinds and roles are enums; the
+   * class names they were derived from never leave the browser.
+   */
+  activity_trail: string;
+  /**
+   * The same trail sliced to ±500ms around the birth of the scroll node.
+   * Absent when the probe attached after the log was already scrollable —
+   * there is then no birth to centre on.
+   */
+  activity_near_scroll_node?: string;
+  /** …and to the two seconds before the verdict. */
+  activity_pre_freeze: string;
+  /** Entries evicted from the ring buffer, so a partial trail cannot read as whole. */
+  activity_dropped: number;
+  /** `kind=count` totals over the buffer, e.g. `jump_shown=1,log_class=4`. */
+  activity_counts: string;
+  /** The "back to latest" button was already lit when the probe attached. */
+  jump_active_at_attach: boolean;
+  /** ms after attach that the button was first SEEN to light up. */
+  jump_first_active_ms?: number;
+  /**
+   * Signed ms between that and the scroll node's birth; negative means the
+   * button lit up first. The button carries `od-glass-refract` (a
+   * backdrop-filter/SDF layer) and can only appear once the log is
+   * scrollable, which makes it the closest thing to a suspect this probe
+   * has.
+   */
+  jump_active_vs_scroll_node_ms?: number;
+
+  // -- the drift ------------------------------------------------------------
+  /**
+   * Every content-height change, `1600:c1434/v583/m851+assistant_msg:534` —
+   * ms since attach, content, viewport, the ceiling layout permits, and the
+   * child that grew.
+   *
+   * Unfiltered, unlike `transitions`: a live capture showed the compositor
+   * falling behind five and nine pixels at a time, so a 200px step filter
+   * would have drawn a flat line through the interesting part.
+   */
+  content_steps: string;
+  /** Content changes observed in total, including those the ring evicted. */
+  content_step_count: number;
+  /**
+   * Rounds of "the wheel asked to go further and stopped here",
+   * `1900:r846/m851/s5` — ms, reached, layout maximum, shortfall; `xN` for a
+   * collapsed run at the same ceiling.
+   *
+   * This is the sequence that overturned "the ceiling froze at birth": in
+   * the capture it read 0, 1, 5, 9, 12, 27 against an unchanging layout.
+   */
+  ceiling_probes: string;
+  ceiling_probe_count: number;
+  /** ms after attach that the compositor first fell behind layout. */
+  shortfall_first_ms?: number;
+  /** …by how much (>= 1px; sub-pixel slack does not count). */
+  shortfall_first_px?: number;
+  shortfall_first_reached_px?: number;
+  shortfall_first_layout_max_px?: number;
+  /** Content height at that moment — WHICH content change opened the deficit. */
+  shortfall_first_content_px?: number;
+  /** What grew into it, `assistant_msg:534`. Role enum and pixels only. */
+  shortfall_first_growth?: string;
+  /**
+   * `.chat-log-tail-spacer`'s height at the freeze. It was 0 throughout the
+   * capture; whether it ever has height while the deficit opens is an open
+   * question this answers.
+   */
+  tail_spacer_px?: number;
+
   // -- compositing layers ---------------------------------------------------
   /** Elements with a layer-promoting property when the probe attached. */
   layer_count_at_attach?: number;

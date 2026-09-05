@@ -4,15 +4,28 @@
 // -------------------
 // The compositor keeps its own copy of "how far this scroller scrolls", so
 // a wheel can move the page without waiting on the main thread. On the
-// chat log that copy can freeze at an early value and never refresh. The
-// user sees a chat that will not scroll; every number JS can read says the
-// chat is fine. Measured on a real machine (Chromium 146 / Electron 41):
-// `scrollHeight` 2347, `clientHeight` 583, `scrollTop = 1700` assigned
-// from JS took effect — yet twelve wheel notches asking for 1440px stopped
-// at 91, and a notch from 800 snapped straight back to 91. 583 + 91 = 674,
-// the correct ceiling for a 674px content box, so the copy went stale when
-// the log was 674px tall and stayed there through a tripling of the
-// content. Only destroying and rebuilding the layout box cleared it.
+// chat log that copy stops tracking layout. The user sees a chat that will
+// not scroll; every number JS can read says the chat is fine. Measured on
+// a real machine (Chromium 146 / Electron 41): `scrollHeight` 2347,
+// `clientHeight` 583, `scrollTop = 1700` assigned from JS took effect —
+// yet twelve wheel notches asking for 1440px stopped at 91, and a notch
+// from 800 snapped straight back to 91. Only destroying and rebuilding the
+// layout box cleared it.
+//
+// It does not snap. It DRIFTS. A later capture from a user's machine, with
+// layout steady at 851px of travel, caught six consecutive rounds:
+//
+//   reached 851 → short 0     reached 842 → short 9
+//   reached 850 → short 1     reached 839 → short 12
+//   reached 846 → short 5     reached 824 → short 27  ← reported
+//
+// The copy falls a little further behind on each content change and the
+// deficit accumulates; the 91 / 1673px case is the same mechanism run to
+// the floor. That capture also cleared the decorations — no thinking
+// block, no tool row, no question form, no error card, no iframe, no inner
+// scroller, just one user message and one 1188px assistant message — so
+// the question worth instrumenting is not "what was on screen" but "which
+// content change did the compositor first fail to keep up with".
 //
 // JS cannot read the compositor's copy. It can read the symptom, and the
 // symptom is fully observable: a downward wheel, room left according to
@@ -59,18 +72,51 @@
 //     `scheduleAttachCensus`) and once at the freeze, where cost no longer
 //     matters.
 //   - Everything scheduled is cancellable, and `detach()` cancels it. A
-//     probe that leaves a frame or an idle callback in flight after its
-//     element is gone is a probe that runs inside somebody else's work.
+//     probe that leaves a frame, an idle callback, an observer or a
+//     listener in flight after its element is gone is a probe that runs
+//     inside somebody else's work.
 //   - One report per chat log element, and a hard per-session cap.
 //
+// Parallel activity
+// -----------------
+// The geometry above dates the freeze. It cannot say what ELSE was moving
+// at that instant, and after 225 synthetic reproduction attempts that is
+// the only lead left. So the probe also keeps a bounded ring buffer of
+// structural events around the scroller — see "Parallel activity" below
+// for the exact watch list and what it deliberately does not cover. The
+// same discipline applies with no exceptions: those callbacks read no
+// layout, resolve no computed style, schedule no frame, and every one of
+// them is taken down by `detach()`.
+//
+// Its per-event cost is two `getAttribute` calls, an enum lookup and one
+// ring-buffer slot; the buffer is 64 entries and evicts the oldest, so a
+// busy surface costs a bounded amount of memory rather than a growing one.
+//
+// The shortfall ledger
+// --------------------
+// The drift above is what the report is really for, so every content-height
+// change is paired with the furthest a downward wheel could actually get,
+// and the first round where those two diverge is kept forever. Both halves
+// are computed inside the frame callback that already read the geometry, so
+// they add no layout pass. The one new read is `offsetHeight` on the chat
+// log's children, to say WHICH child grew — bounded to the last
+// `MAX_CHILD_HEIGHT_SCAN` of them and taken only on a frame where the
+// content height actually moved, so a settled transcript costs nothing.
+//
 // Privacy: counts, pixels, durations and fixed enums only. No message
-// text, no selector, no user-authored string is read.
+// text, no selector, no user-authored string is read. Class names and test
+// ids ARE read — to derive a role enum, which is the only thing reported.
 
 import type { ChatScrollFreezeProps } from '@open-design/contracts/analytics';
 
 import { reportSafetyEvent } from '../analytics/error-tracking';
 import { chatCorrelation } from './chat-context';
 import {
+  ACTIVITY_NEAR_WINDOW_MS,
+  ACTIVITY_PRE_FREEZE_MS,
+  type ChatActivityKind,
+  type ChatActivityLog,
+  type ChatActivityRole,
   EDGE_TOLERANCE_PX,
   type LayerStyleProbe,
   type ScrollFreezeEvidence,
@@ -78,11 +124,25 @@ import {
   type ScrollGeometry,
   type ScrollLayerTrigger,
   type ScrollShapeMemo,
+  type ShortfallLedger,
+  classifyActivityRole,
   classifyLayerTriggers,
+  countActivity,
+  createActivityLog,
   createScrollFreezeState,
+  createShortfallLedger,
   diffScrollShape,
+  listActivity,
   observeScroll,
   observeWheelBatch,
+  pushActivity,
+  recordCeilingProbe,
+  recordContentStep,
+  serialiseActivity,
+  serialiseCeilingProbes,
+  serialiseContentSteps,
+  sliceActivityBefore,
+  sliceActivityWindow,
 } from './chat-scroll-freeze-detector';
 
 /**
@@ -107,6 +167,57 @@ const MAX_REPORTS_PER_SESSION = 3;
 const MAX_LAYER_SCAN = 600;
 /** `deltaMode: 1` is lines. Chromium's own line height for wheel input. */
 const LINE_HEIGHT_PX = 16;
+
+/**
+ * The two moving parts beside the scroller, by the markers they already
+ * ship. Same reasoning as `CHAT_LOG_SELECTOR`: a dedicated `data-od-*`
+ * attribute would be cleaner and would also make this observer wait on a
+ * component change, and the bug is in production now.
+ */
+const FLOAT_SLOT_TESTID = 'chat-bottom-float-slot';
+const FLOAT_SLOT_CLASS = 'chat-bottom-float-slot';
+const JUMP_BTN_TESTID = 'chat-jump-btn';
+const JUMP_BTN_CLASS = 'chat-jump-btn';
+/** The class the jump button carries only while it is visible. */
+const JUMP_ACTIVE_CLASS = 'chat-jump-btn-active';
+
+/**
+ * Only these two attributes are watched, on every watched element. `class`
+ * and `style` are where a layout-affecting change shows up; watching
+ * everything would put this observer on the receiving end of every
+ * `aria-*` and `data-*` update React makes.
+ */
+const WATCHED_ATTRIBUTES = ['class', 'style'];
+/** How far up the ancestor chain attribute changes are worth watching. */
+const MAX_ANCESTOR_WATCH = 20;
+/**
+ * Node budget for locating the float slot and the jump button. A BFS from
+ * the chat log's siblings, never entering the chat log itself — the whole
+ * point is to avoid walking a transcript.
+ */
+const PART_SCAN_BUDGET = 64;
+
+/**
+ * Direct children of the chat log measured when the content height moves.
+ *
+ * The TAIL of the list, not the whole thing: growth happens at the bottom
+ * (the streaming assistant message and the tail spacer), and a transcript
+ * can be thousands of rows. Bounding the scan makes the cost independent of
+ * conversation length.
+ */
+const MAX_CHILD_HEIGHT_SCAN = 32;
+
+/** Motion events worth a slot. `animationiteration` is deliberately absent. */
+const MOTION_KIND: Readonly<Record<string, ChatActivityKind>> = {
+  animationstart: 'anim_start',
+  animationend: 'anim_end',
+  transitionstart: 'trans_start',
+  transitionend: 'trans_end',
+};
+const MOTION_EVENTS = Object.keys(MOTION_KIND);
+/** Every listener this module adds. Capture so nothing can stop it; passive so it cannot block. */
+const LISTEN_OPTIONS = { capture: true, passive: true } as const;
+const UNLISTEN_OPTIONS = { capture: true } as const;
 
 interface TransitionEntry {
   at: number;
@@ -142,6 +253,42 @@ interface Surface {
   idleHandle: number | null;
   reported: boolean;
   resizeObserver: ResizeObserver | null;
+
+  // -- parallel activity ----------------------------------------------------
+  /** What else was moving. Bounded ring buffer; see the detector. */
+  activity: ChatActivityLog;
+  /** The chat log's parent — the box siblings mount into. */
+  shell: HTMLElement | null;
+  /** Ancestors whose `class`/`style` are watched. Identity set, for dispatch. */
+  ancestors: Set<Element>;
+  /** The bottom float slot, where the jump button and the plan pill swap. */
+  floatHost: HTMLElement | null;
+  /** The jump button as currently mounted. Replaced wholesale on a swap. */
+  jumpButton: HTMLElement | null;
+  jumpActive: boolean;
+  /** It was already lit when the probe arrived — so we never witnessed it appear. */
+  jumpActiveAtAttach: boolean;
+  /** Clock reading the first time we SAW it light up. */
+  jumpFirstActiveAt: number | null;
+  /** Latest known value of the streaming flag inside the log. */
+  streamingOn: boolean;
+  structureObserver: MutationObserver | null;
+  streamObserver: MutationObserver | null;
+  /** Resizes of the box that gives the log its height. */
+  hostResizeObserver: ResizeObserver | null;
+  /** `offsetParent` forces layout, so it is resolved once, inside a frame. */
+  hostResolved: boolean;
+
+  // -- the shortfall ledger -------------------------------------------------
+  /** Content changes paired with how far the wheel could actually reach. */
+  ledger: ShortfallLedger;
+  /**
+   * `scrollHeight` at the last sample — EVERY change, unlike
+   * `shape.contentPx`, which only advances in 200px steps.
+   */
+  lastContentPx: number | null;
+  /** Per-child heights from the previous measured frame. Weak, so it cannot leak. */
+  childHeights: WeakMap<Element, number>;
 }
 
 let surface: Surface | null = null;
@@ -330,6 +477,22 @@ function attach(element: HTMLElement): Surface | null {
     idleHandle: null,
     reported: false,
     resizeObserver: null,
+    activity: createActivityLog(),
+    shell: null,
+    ancestors: new Set(),
+    floatHost: null,
+    jumpButton: null,
+    jumpActive: false,
+    jumpActiveAtAttach: false,
+    jumpFirstActiveAt: null,
+    streamingOn: false,
+    structureObserver: null,
+    streamObserver: null,
+    hostResizeObserver: null,
+    hostResolved: false,
+    ledger: createShortfallLedger(),
+    lastContentPx: null,
+    childHeights: new WeakMap(),
   };
   surface = active;
 
@@ -345,6 +508,10 @@ function attach(element: HTMLElement): Surface | null {
     try {
       const observer = new ResizeObserver(() => {
         if (surface !== active || active.reported) return;
+        // The entry's own `contentRect` would be free, but the ring buffer
+        // wants a moment, not a measurement — and the frame below reads the
+        // real geometry a beat later anyway.
+        pushActivity(active.activity, 'log_resize', 'log', now());
         active.scrollSamplePending = true;
         scheduleFrame(active);
       });
@@ -355,6 +522,7 @@ function attach(element: HTMLElement): Surface | null {
     }
   }
 
+  armActivity(active);
   scheduleAttachCensus(active);
   scheduleFrame(active);
   return active;
@@ -370,6 +538,7 @@ function detach(): void {
   active.element.removeEventListener('wheel', onSurfaceWheel, { capture: true });
   cancelFrame(active);
   cancelAttachCensus(active);
+  disarmActivity(active);
   active.pendingWheelTarget = null;
   try {
     active.resizeObserver?.disconnect();
@@ -378,6 +547,445 @@ function detach(): void {
   }
   active.resizeObserver = null;
   armWheelDiscovery();
+}
+
+// ---------------------------------------------------------------------------
+// Parallel activity — what ELSE the page was doing
+// ---------------------------------------------------------------------------
+//
+// Everything below records; nothing below reads layout, schedules a frame,
+// or resolves a computed style. That is the whole contract, and it is why
+// these observers are affordable on a page that is already struggling.
+//
+// The watch is deliberately narrow:
+//
+//   * `childList` on the chat log's PARENT only — one level, no subtree.
+//     That is where the float slot and the message rail mount, which is
+//     where a height change the scroller cannot see comes from. A
+//     `subtree: true` childList anywhere near `.chat-log` would fire on
+//     every streamed token.
+//   * `childList` + `class`/`style` on the bottom float slot, because the
+//     jump button and the plan pill SWAP there rather than stacking.
+//   * `class`/`style` on the chat log and on its ancestor chain. Two
+//     attribute names, never "all attributes".
+//   * `data-streaming` with `subtree: true` on the chat log — the ONE
+//     registration that reaches inside. It is a single attribute name, so
+//     the engine rejects the class churn of a streaming turn without ever
+//     queueing a record, and the flag itself flips about twice a turn.
+//     This is the only item here that goes past "shell plus ancestors",
+//     and it is here because "was a turn streaming into the log while this
+//     happened" is a question the report otherwise answers only at the
+//     final instant.
+//   * `animationstart` / `animationend` / `transitionstart` /
+//     `transitionend` on the shell, capture and passive.
+//     `animationiteration` is NOT listened for: an infinite shimmer would
+//     otherwise fill the buffer by itself.
+//
+// What is knowingly NOT covered: a question form or a skeleton
+// APPEARING or DISAPPEARING is a childList change inside the transcript,
+// and observing that costs a subtree childList watch on a node that
+// mutates every frame while streaming. So those show up only when they
+// animate (which the skeleton does) or when they land as a direct sibling.
+// Absent beats expensive.
+
+function armActivity(active: Surface): void {
+  const shell = active.element.parentElement;
+  active.shell = shell;
+
+  // The chain is a dozen elements in the real app; the cap is there so a
+  // pathological document cannot turn this into a walk.
+  active.ancestors.clear();
+  let node: HTMLElement | null = shell;
+  for (let depth = 0; node != null && depth < MAX_ANCESTOR_WATCH; depth += 1) {
+    active.ancestors.add(node);
+    node = node.parentElement;
+  }
+
+  if (typeof MutationObserver !== 'undefined') {
+    try {
+      const structure = new MutationObserver(onStructureMutations);
+      structure.observe(active.element, {
+        attributes: true,
+        attributeFilter: WATCHED_ATTRIBUTES,
+      });
+      for (const ancestor of active.ancestors) {
+        structure.observe(
+          ancestor,
+          ancestor === shell
+            // One registration, not two: observing the same node twice with
+            // the same observer REPLACES the options rather than adding to
+            // them, so the shell's childList and attribute watches have to
+            // arrive together.
+            ? { childList: true, attributes: true, attributeFilter: WATCHED_ATTRIBUTES }
+            : { attributes: true, attributeFilter: WATCHED_ATTRIBUTES },
+        );
+      }
+      active.structureObserver = structure;
+    } catch {
+      active.structureObserver = null;
+    }
+
+    // A SECOND observer for the same reason: `data-streaming` needs
+    // `subtree: true` on the chat log, and the log already carries a
+    // non-subtree registration on the structure observer that a second
+    // `observe()` call would overwrite.
+    try {
+      const stream = new MutationObserver(onStreamMutations);
+      stream.observe(active.element, {
+        attributes: true,
+        attributeFilter: ['data-streaming'],
+        subtree: true,
+      });
+      active.streamObserver = stream;
+    } catch {
+      active.streamObserver = null;
+    }
+  }
+
+  adoptSurfaceParts(active, now(), true);
+
+  if (shell != null) {
+    for (const type of MOTION_EVENTS) {
+      shell.addEventListener(type, onSurfaceMotion, LISTEN_OPTIONS);
+    }
+  }
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', onVisibilityChange, LISTEN_OPTIONS);
+  }
+}
+
+function disarmActivity(active: Surface): void {
+  try {
+    active.structureObserver?.disconnect();
+  } catch {
+    // best-effort — teardown must never propagate
+  }
+  active.structureObserver = null;
+  try {
+    active.streamObserver?.disconnect();
+  } catch {
+    // best-effort
+  }
+  active.streamObserver = null;
+  try {
+    active.hostResizeObserver?.disconnect();
+  } catch {
+    // best-effort
+  }
+  active.hostResizeObserver = null;
+
+  const shell = active.shell;
+  if (shell != null) {
+    for (const type of MOTION_EVENTS) {
+      shell.removeEventListener(type, onSurfaceMotion, UNLISTEN_OPTIONS);
+    }
+  }
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', onVisibilityChange, UNLISTEN_OPTIONS);
+  }
+
+  active.shell = null;
+  active.ancestors.clear();
+  active.floatHost = null;
+  active.jumpButton = null;
+}
+
+/**
+ * Locate the float slot and the jump button, and watch whichever of them
+ * exist.
+ *
+ * Called at attach and again whenever the shell or the float slot changes
+ * children, because on this branch the button is genuinely destroyed and
+ * rebuilt when the plan pill takes the slot — the same node does not come
+ * back.
+ *
+ * `initial` distinguishes "we arrived and it was already lit" (which is not
+ * a transition and must not be dated as one) from "we watched it light up".
+ */
+function adoptSurfaceParts(active: Surface, at: number, initial: boolean): void {
+  const shell = active.shell;
+  if (shell == null) return;
+  const parts = scanSurfaceParts(shell, active.element);
+
+  if (parts.float !== active.floatHost) {
+    active.floatHost = parts.float;
+    if (parts.float != null) {
+      try {
+        active.structureObserver?.observe(parts.float, {
+          childList: true,
+          attributes: true,
+          attributeFilter: WATCHED_ATTRIBUTES,
+        });
+      } catch {
+        // best-effort — a missing watch loses evidence, never correctness
+      }
+    }
+  }
+
+  if (parts.jump !== active.jumpButton) {
+    active.jumpButton = parts.jump;
+    const lit = parts.jump != null && isJumpActive(parts.jump);
+    if (initial) {
+      active.jumpActive = lit;
+      active.jumpActiveAtAttach = lit;
+    } else if (lit !== active.jumpActive) {
+      // The button can arrive ALREADY lit — that is the documented path on
+      // this branch, where the plan pill stepping aside hands the slot back
+      // to a jump button that is on from its first frame. Dropping that
+      // would lose the exact event the report is hunting.
+      active.jumpActive = lit;
+      if (lit && active.jumpFirstActiveAt == null) active.jumpFirstActiveAt = at;
+      pushActivity(active.activity, lit ? 'jump_shown' : 'jump_hidden', 'jump', at);
+    }
+    if (parts.jump != null) {
+      try {
+        active.structureObserver?.observe(parts.jump, {
+          attributes: true,
+          attributeFilter: WATCHED_ATTRIBUTES,
+        });
+      } catch {
+        // best-effort
+      }
+    }
+  }
+}
+
+/**
+ * Breadth-first over the chat log's SIBLINGS, never into the log itself,
+ * with a hard node budget.
+ *
+ * `querySelector` from the shell would be one line and would walk the whole
+ * transcript on every miss, which on a long conversation is thousands of
+ * nodes for a button that lives two levels down beside it.
+ */
+function scanSurfaceParts(
+  shell: HTMLElement,
+  chatLog: HTMLElement,
+): { jump: HTMLElement | null; float: HTMLElement | null } {
+  let jump: HTMLElement | null = null;
+  let float: HTMLElement | null = null;
+  let budget = PART_SCAN_BUDGET;
+  const queue: Element[] = [];
+  for (const child of Array.from(shell.children)) {
+    if (child !== chatLog) queue.push(child);
+  }
+  while (queue.length > 0 && budget > 0) {
+    const node = queue.shift();
+    if (node == null) break;
+    budget -= 1;
+    if (jump == null && hasPartIdentity(node, JUMP_BTN_TESTID, JUMP_BTN_CLASS)) {
+      jump = node as HTMLElement;
+    } else if (float == null && hasPartIdentity(node, FLOAT_SLOT_TESTID, FLOAT_SLOT_CLASS)) {
+      float = node as HTMLElement;
+    }
+    if (jump != null && float != null) break;
+    for (const child of Array.from(node.children)) queue.push(child);
+  }
+  return { jump, float };
+}
+
+function hasPartIdentity(el: Element, testId: string, className: string): boolean {
+  try {
+    if (el.getAttribute('data-testid') === testId) return true;
+    return el.classList.contains(className);
+  } catch {
+    return false;
+  }
+}
+
+function isJumpActive(el: Element): boolean {
+  try {
+    return el.classList.contains(JUMP_ACTIVE_CLASS);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Structural mutations. One clock read for the whole batch, then a switch
+ * on node identity — no selector matching, no layout, no scheduling.
+ *
+ * Dispatch is by identity rather than by `contains()` on purpose. A
+ * `MutationObserver` has no way to stop watching a single node, so a jump
+ * button that has been swapped out stays registered until it is collected;
+ * comparing against the CURRENT `jumpButton` is what keeps a dead node's
+ * last gasp out of the trail.
+ */
+function onStructureMutations(records: MutationRecord[]): void {
+  const active = surface;
+  if (active === null || active.reported) return;
+  const at = now();
+  let partsDirty = false;
+
+  for (const record of records) {
+    const target = record.target;
+    if (record.type === 'childList') {
+      const inFloat = target === active.floatHost;
+      const inShell = target === active.shell;
+      if (!inFloat && !inShell) continue;
+      for (const node of Array.from(record.addedNodes)) {
+        if (!isElement(node)) continue;
+        pushActivity(
+          active.activity,
+          inFloat ? 'float_child_added' : 'shell_child_added',
+          roleOfNode(node),
+          at,
+        );
+      }
+      for (const node of Array.from(record.removedNodes)) {
+        if (!isElement(node)) continue;
+        pushActivity(
+          active.activity,
+          inFloat ? 'float_child_removed' : 'shell_child_removed',
+          roleOfNode(node),
+          at,
+        );
+      }
+      partsDirty = true;
+      continue;
+    }
+
+    const isStyle = record.attributeName === 'style';
+    if (target === active.element) {
+      pushActivity(active.activity, isStyle ? 'log_style' : 'log_class', 'log', at);
+      continue;
+    }
+    if (target === active.jumpButton) {
+      const lit = isJumpActive(target as Element);
+      if (lit === active.jumpActive) {
+        pushActivity(active.activity, 'jump_attr', 'jump', at);
+        continue;
+      }
+      active.jumpActive = lit;
+      if (lit && active.jumpFirstActiveAt == null) active.jumpFirstActiveAt = at;
+      pushActivity(active.activity, lit ? 'jump_shown' : 'jump_hidden', 'jump', at);
+      continue;
+    }
+    if (target === active.floatHost) {
+      pushActivity(active.activity, 'float_attr', 'float', at);
+      continue;
+    }
+    if (isElement(target) && active.ancestors.has(target)) {
+      pushActivity(
+        active.activity,
+        isStyle ? 'ancestor_style' : 'ancestor_class',
+        roleOfNode(target),
+        at,
+      );
+    }
+    // Anything else is a node we no longer own. Silence is correct.
+  }
+
+  if (partsDirty) adoptSurfaceParts(active, at, false);
+}
+
+/**
+ * The streaming flag, read from the record's own target.
+ *
+ * Only the newest assistant message streams, so taking the mutated
+ * element's new value as the surface's state is accurate in practice. It
+ * would be wrong if two messages ever streamed at once — at which point the
+ * trail would show a spurious `streaming_off`, which is a legible wrong
+ * rather than an expensive right.
+ */
+function onStreamMutations(records: MutationRecord[]): void {
+  const active = surface;
+  if (active === null || active.reported) return;
+  const at = now();
+  for (const record of records) {
+    const target = record.target;
+    if (!isElement(target)) continue;
+    const streaming = target.getAttribute('data-streaming') === 'true';
+    if (streaming === active.streamingOn) continue;
+    active.streamingOn = streaming;
+    pushActivity(
+      active.activity,
+      streaming ? 'streaming_on' : 'streaming_off',
+      roleOfNode(target),
+      at,
+    );
+  }
+}
+
+/**
+ * Animations and transitions anywhere under the shell.
+ *
+ * The `currentTarget` check is not defensive noise: `addEventListener`
+ * de-duplicates identical registrations, so a listener left on an abandoned
+ * shell is invisible to any same-element test. Comparing against the live
+ * shell is what actually guarantees a superseded surface stops feeding the
+ * buffer.
+ */
+function onSurfaceMotion(event: Event): void {
+  const active = surface;
+  if (active === null || active.reported) return;
+  if (event.currentTarget !== active.shell) return;
+  const kind = MOTION_KIND[event.type];
+  if (kind === undefined) return;
+  pushActivity(active.activity, kind, roleOfNode(event.target), now());
+}
+
+function onVisibilityChange(): void {
+  const active = surface;
+  if (active === null || active.reported) return;
+  const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+  pushActivity(active.activity, hidden ? 'doc_hidden' : 'doc_visible', 'other', now());
+}
+
+/**
+ * Watch the box that gives the chat log its height.
+ *
+ * `offsetParent` forces a synchronous layout, which is banned everywhere
+ * else in this file. It is read HERE, from inside the frame callback that
+ * has just read `scrollHeight`, so layout is already clean and the read
+ * costs nothing — and it happens exactly once per surface.
+ */
+function observeHostBox(active: Surface): void {
+  if (typeof ResizeObserver === 'undefined') return;
+  let host: HTMLElement | null = null;
+  try {
+    host = (active.element.offsetParent as HTMLElement | null) ?? active.element.parentElement;
+  } catch {
+    host = active.element.parentElement;
+  }
+  if (host == null || host === active.element) return;
+  const target = host;
+  try {
+    const observer = new ResizeObserver(() => {
+      if (surface !== active || active.reported) return;
+      // Record only. Unlike the chat log's own observer this does NOT
+      // schedule a geometry frame: the host's height is not one of the three
+      // numbers the verdict is made from.
+      pushActivity(active.activity, 'host_resize', roleOfNode(target), now());
+    });
+    observer.observe(target);
+    active.hostResizeObserver = observer;
+  } catch {
+    active.hostResizeObserver = null;
+  }
+}
+
+/**
+ * Class names and test ids in, an enum member out.
+ *
+ * `getAttribute('class')` rather than `.className` because on an SVG
+ * element the latter is an `SVGAnimatedString`, not a string. Neither
+ * reads layout.
+ */
+function roleOfNode(node: EventTarget | Node | null): ChatActivityRole {
+  if (!isElement(node)) return 'other';
+  try {
+    return classifyActivityRole(
+      node.getAttribute('class') ?? '',
+      node.getAttribute('data-testid'),
+    );
+  } catch {
+    return 'other';
+  }
+}
+
+function isElement(node: EventTarget | Node | null): node is Element {
+  return typeof Element !== 'undefined' && node instanceof Element;
 }
 
 // ---------------------------------------------------------------------------
@@ -434,6 +1042,13 @@ function runFrame(active: Surface): void {
     clientHeight: active.element.clientHeight,
   };
   active.geometry = geometry;
+  // Layout is clean at this point, so the one `offsetParent` read this
+  // module allows itself happens here and nowhere else.
+  if (!active.hostResolved) {
+    active.hostResolved = true;
+    observeHostBox(active);
+  }
+  recordContentChange(active, geometry, at);
   recordShape(active, geometry, at);
 
   const wheelCount = active.pendingWheelCount;
@@ -451,6 +1066,21 @@ function runFrame(active: Surface): void {
   if (wheelCount === 0) {
     active.state = observeScroll(active.state, geometry);
     return;
+  }
+
+  // One round of "the wheel asked to go further; this is where it stopped".
+  // Read BEFORE `observeWheelBatch`, which replaces `lastScrollTop`. A batch
+  // that did not advance — including one thrown backwards — has found the
+  // compositor's current ceiling, whether or not it is far enough from
+  // layout's to be worth reporting on its own.
+  const previousTop = active.state.lastScrollTop;
+  if (wheelPx > 0 && previousTop != null && geometry.scrollTop <= previousTop) {
+    recordCeilingProbe(active.ledger, {
+      at,
+      reachedPx: geometry.scrollTop,
+      layoutMax: Math.max(0, geometry.scrollHeight - geometry.clientHeight),
+      contentPx: geometry.scrollHeight,
+    });
   }
 
   const result = observeWheelBatch(active.state, {
@@ -484,6 +1114,106 @@ function runFrame(active: Surface): void {
   report(active, geometry, result.verdict.evidence, innerScrollerCount, at);
 }
 
+/**
+ * Note every content-height change, and say which child caused it.
+ *
+ * Deliberately NOT filtered the way `recordShape` is. `transitions` ignores
+ * anything under 200px so a token stream cannot flood it; the ledger cannot
+ * afford that, because the captured deficit grew five and nine pixels at a
+ * time and a 200px filter would have shown a flat line.
+ *
+ * The first sample records nothing: we arrived at a height, we did not
+ * witness a change. It still takes the child snapshot, so the next real
+ * change has a baseline to subtract from.
+ */
+function recordContentChange(
+  active: Surface,
+  geometry: ScrollGeometry,
+  at: number,
+): void {
+  const contentPx = geometry.scrollHeight;
+  if (active.lastContentPx === contentPx) return;
+  const arriving = active.lastContentPx == null;
+  active.lastContentPx = contentPx;
+  const growth = measureChildGrowth(active);
+  if (arriving) return;
+  recordContentStep(active.ledger, {
+    at,
+    contentPx,
+    viewportPx: geometry.clientHeight,
+    layoutMax: Math.max(0, contentPx - geometry.clientHeight),
+    ...(growth != null ? { growthRole: growth.role, growthPx: growth.deltaPx } : {}),
+  });
+}
+
+/**
+ * Which direct child of the chat log changed height, and by how much.
+ *
+ * `offsetHeight` is layout, and this is the only place outside the geometry
+ * read that touches it. It is affordable because of where it sits: the
+ * frame callback has just read `scrollHeight`, so layout is clean and these
+ * reads cost a lookup each rather than a reflow — and nothing between the
+ * two reads writes to the DOM, because this module never writes to the DOM.
+ *
+ * Bounded twice over: only the last `MAX_CHILD_HEIGHT_SCAN` children (growth
+ * happens at the tail — the streaming message and the spacer), and only on a
+ * frame where the content height moved.
+ *
+ * Returns the single largest mover. The capture that motivates this had one
+ * assistant message doing every pixel of the growing, and "the assistant
+ * message grew 534px" is the fact worth 32 reads; a full per-child census
+ * would be a different, more expensive event.
+ */
+function measureChildGrowth(
+  active: Surface,
+): { role: ChatActivityRole; deltaPx: number } | null {
+  let winner: Element | null = null;
+  let winnerDelta = 0;
+  try {
+    const children = active.element.children;
+    const total = children.length;
+    for (let i = Math.max(0, total - MAX_CHILD_HEIGHT_SCAN); i < total; i += 1) {
+      const child = children[i];
+      if (child == null || !(child instanceof HTMLElement)) continue;
+      const height = child.offsetHeight;
+      const previous = active.childHeights.get(child);
+      active.childHeights.set(child, height);
+      if (previous === undefined) continue;
+      const delta = height - previous;
+      if (Math.abs(delta) > Math.abs(winnerDelta)) {
+        winner = child;
+        winnerDelta = delta;
+      }
+    }
+  } catch {
+    // A measurement failure must never suppress the step it decorates.
+  }
+  if (winner == null || winnerDelta === 0) return null;
+  return { role: roleOfNode(winner), deltaPx: winnerDelta };
+}
+
+/**
+ * The tail spacer's height at the freeze.
+ *
+ * It was 0 in the capture, which is itself the finding — "does this thing
+ * ever have height while the deficit is opening" is a question the report
+ * should be able to answer. Read here rather than per frame because report
+ * time is the one place cost stops mattering.
+ */
+function readTailSpacerPx(root: HTMLElement): number | null {
+  try {
+    const children = root.children;
+    for (let i = children.length - 1; i >= 0 && i >= children.length - 4; i -= 1) {
+      const child = children[i];
+      if (child == null || !(child instanceof HTMLElement)) continue;
+      if (roleOfNode(child) === 'tail_spacer') return child.offsetHeight;
+    }
+  } catch {
+    // best-effort
+  }
+  return null;
+}
+
 function recordShape(active: Surface, geometry: ScrollGeometry, at: number): void {
   const { memo, transitions } = diffScrollShape(active.shape, geometry);
   const first = active.shape == null;
@@ -496,6 +1226,9 @@ function recordShape(active: Surface, geometry: ScrollGeometry, at: number): voi
     if (kind === 'scrollable_on' && active.scrollableOnContentPx == null) {
       active.scrollableOnContentPx = geometry.scrollHeight;
       active.scrollableOnAt = at;
+      // The anchor the activity slices are measured against, planted in the
+      // trail itself so the trail can be read without the other fields.
+      pushActivity(active.activity, 'scroll_node_born', 'log', at);
     }
     pushTransition(active, kind, geometry, at);
   }
@@ -619,6 +1352,10 @@ function report(
   const census = scanLayerTriggers(active.element);
   const ancestors = scanAncestorLayerTriggers(active.element);
   const runtime = readRuntimeIdentity();
+  const activity = listActivity(active.activity);
+  const ledger = active.ledger;
+  const firstShortfall = ledger.first;
+  const tailSpacerPx = readTailSpacerPx(active.element);
 
   const props: ChatScrollFreezeProps = {
     ...chatCorrelation(),
@@ -650,6 +1387,56 @@ function report(
       : {}),
     ...(active.scrollableOnAt != null
       ? { scrollable_since_ms: Math.round(at - active.scrollableOnAt) }
+      : {}),
+
+    // -- what else was moving ------------------------------------------
+    activity_trail: serialiseActivity(activity, active.attachedAt),
+    activity_pre_freeze: serialiseActivity(
+      sliceActivityBefore(activity, at, ACTIVITY_PRE_FREEZE_MS),
+      active.attachedAt,
+    ),
+    ...(active.scrollableOnAt != null
+      ? {
+          activity_near_scroll_node: serialiseActivity(
+            sliceActivityWindow(activity, active.scrollableOnAt, ACTIVITY_NEAR_WINDOW_MS),
+            active.attachedAt,
+          ),
+        }
+      : {}),
+    activity_dropped: active.activity.dropped,
+    activity_counts: countActivity(activity),
+
+    // -- the drift -----------------------------------------------------
+    content_steps: serialiseContentSteps(ledger.steps, active.attachedAt),
+    content_step_count: ledger.stepCount,
+    ceiling_probes: serialiseCeilingProbes(ledger.probes, active.attachedAt),
+    ceiling_probe_count: ledger.probeCount,
+    ...(firstShortfall != null
+      ? {
+          shortfall_first_ms: Math.round(firstShortfall.at - active.attachedAt),
+          shortfall_first_px: Math.round(firstShortfall.shortfallPx),
+          shortfall_first_reached_px: Math.round(firstShortfall.reachedPx),
+          shortfall_first_layout_max_px: Math.round(firstShortfall.layoutMax),
+          shortfall_first_content_px: Math.round(firstShortfall.contentPx),
+          ...(firstShortfall.growthRole != null && firstShortfall.growthPx != null
+            ? {
+                shortfall_first_growth:
+                  `${firstShortfall.growthRole}:${Math.round(firstShortfall.growthPx)}`,
+              }
+            : {}),
+        }
+      : {}),
+    ...(tailSpacerPx != null ? { tail_spacer_px: Math.round(tailSpacerPx) } : {}),
+    jump_active_at_attach: active.jumpActiveAtAttach,
+    ...(active.jumpFirstActiveAt != null
+      ? { jump_first_active_ms: Math.round(active.jumpFirstActiveAt - active.attachedAt) }
+      : {}),
+    ...(active.jumpFirstActiveAt != null && active.scrollableOnAt != null
+      ? {
+          jump_active_vs_scroll_node_ms: Math.round(
+            active.jumpFirstActiveAt - active.scrollableOnAt,
+          ),
+        }
       : {}),
 
     ...(active.layerCountAtAttach != null
