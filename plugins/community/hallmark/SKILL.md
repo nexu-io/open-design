@@ -206,24 +206,11 @@ Hallmark works best when you know three things before writing code:
 2. **Use case.** What single job does this interface do? What is the one action the user should be able to take?
 3. **Tone.** Pick an extreme — *editorial, brutalist, soft, utilitarian, luxury, playful, technical, austere*. "Clean and modern" is not a tone.
 
-**Always ask — answering is optional.** Hallmark **always** asks before it designs. The bundled question is the first thing the user sees after the pre-flight block. Even on a five-word brief — *"design a podcast site"*, *"build a SaaS landing"*, *"make me a portfolio"* — ask. Especially on those briefs, since they're where the model is most tempted to invent.
+**Clarify only material gaps.** Read the brief and existing project context first. If the audience, use case, and tone are given or can reasonably be inferred, proceed directly to an editable first draft and explain consequential assumptions at delivery. Do not repeat questions the user has already answered.
 
-The prompt format:
+Ask one concise question only when missing information would materially change the page's purpose, audience, or acceptance criteria, or when the user explicitly asks to compare directions before implementation. Continue independent work while waiting; silence is not approval for an action that requires approval. Routine theme and component choices do not require a confirmation round.
 
-> *Before I build, I need three things:*
->
-> *1. **Audience** — Who will use this? What do they care about?*
-> *2. **Use case** — What's the one action the page should drive? (Sign up? Subscribe? Read? Buy?)*
-> *3. **Tone** — Pick an extreme: editorial · brutalist · soft · utilitarian · luxury · playful · technical · austere. "Clean and modern" isn't a tone.*
->
-> *Or say **"go ahead"** and I'll infer from the brief — I'll tell you what I picked.*
-
-Send the prompt **once**, in one message. Bold the three labels (Audience / Use case / Tone) so the user can scan them. Do not ladder follow-ups; if the user answers some fields and skips others, treat the skipped fields as opt-out and infer them. If the user says "go ahead", "you pick", "just build it", "don't ask", or doesn't engage after one prompt, the inference protocol below kicks in.
-
-**One exception** where the gate is silent:
-- The skill is invoked with `audit`, `study`, or `redesign --mood` — those verbs read context from the target, not the user.
-
-There is no "the brief looks complete" exception. There is no "the user already named all three" exception. There is no length threshold below which asking is skipped. A long, detailed brief gets the same three-question prompt as a five-word one — the user can wave you through with *"go ahead"* in two seconds. **Default is to ask. The cost of asking is one extra message; the cost of guessing wrong is a whole rebuild.**
+An explicit request to build, redesign, or proceed authorizes ordinary design choices within the stated scope, not publishing, destructive changes, or replacing an established design system. Existing approval requirements for those actions remain in force.
 
 **Genre — pick before themes.** Before the theme route, settle on a genre. Hallmark ships four: **editorial** (default · the canonical anti-slop voice), **modern-minimal** (Stripe / Linear / ElevenLabs school), **atmospheric** (Suno / Runway / dark-AI-tool school), **playful** (post-Linear soft school). The genre scopes which themes can rotate, which slop-test gates apply, and which voice fixtures the LLM picks from. Detection is signal-based — silent default to editorial unless the brief fires one of these:
 

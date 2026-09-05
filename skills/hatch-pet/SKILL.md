@@ -240,7 +240,7 @@ Deterministic validation is necessary but not sufficient. Before calling the pet
 
 ## Subagent Row Generation
 
-After the base job has been recorded and `references/canonical-base.png` exists, row-strip visual generation must use subagents unless the user explicitly says not to use subagents for this session. Before row generation, state that subagents are being used and which row jobs are being delegated. If subagents cannot be spawned because the current environment or tool policy blocks them, stop before row-strip generation, explain the blocker, and ask for explicit user direction before continuing sequentially.
+After the base job has been recorded and `references/canonical-base.png` exists, prefer subagents for independent row-strip jobs when available and authorized. State which jobs are delegated. If delegation is unavailable or the user requests sequential work, explain and generate the same jobs sequentially with the same model, quality checks, and job budget. Ask only if the fallback would materially change cost, scope, acceptance criteria, or an explicit user constraint.
 
 The parent agent must own the manifest and package writes.
 
@@ -291,7 +291,7 @@ selected_source=/absolute/path/to/$CODEX_HOME/generated_images/.../ig_*.png
 qa_note=<one sentence>
 ```
 
-No silent sequential fallback: if subagents cannot be used for row-strip visual generation, stop and ask for explicit user direction before continuing without them. Only an explicit user instruction such as "do not use subagents" or "run this sequentially" authorizes a normal sequential row-generation path. The final answer must report which row jobs were delegated to subagents and which, if any, were mirrored or repaired by the parent.
+Report sequential fallback without adding a confirmation gate when scope, cost, and acceptance criteria remain unchanged. The final answer must distinguish delegated jobs from sequential jobs and any rows mirrored or repaired by the parent. Image-tool approvals, model-switch approvals, and visual acceptance checks remain mandatory.
 
 ## Repair Workflow
 
