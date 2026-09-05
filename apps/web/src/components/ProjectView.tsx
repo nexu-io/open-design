@@ -13,7 +13,11 @@ import {
   type SetStateAction,
 } from 'react';
 import { AnimatePresence } from 'motion/react';
-import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
+import {
+  artifactManifestSubjectPath,
+  createHtmlArtifactManifest,
+  inferLegacyManifest,
+} from '../artifacts/manifest';
 import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
 import { validateHtmlArtifact } from '../artifacts/validate';
 import { recoverHtmlDocumentFromMarkdownFence, recoverStandaloneHtmlDocument, resolvePersistedArtifactHtml } from '../artifacts/recover';
@@ -4067,18 +4071,52 @@ export function ProjectView({
   const refreshPreviewCommentsRef = useRef<(() => Promise<void>) | null>(null);
   const handleProjectEvent = useCallback((evt: ProjectEvent) => {
     if (evt.type === 'file-changed') {
-      const changedPath = normalizeComparableFilePath(evt.path);
+      // An artifact manifest is generated metadata about exactly one document:
+      // the daemon keeps it out of the file listing and the app keeps it out of
+      // the file tree, so no page can reference it and no page needs to refresh
+      // for it. Every artifact save writes one alongside the document, and
+      // reading it as an ordinary project file made that pair look like a
+      // project-wide mutation. Attribute it to the document it describes.
+      const changedPath = artifactManifestSubjectPath(
+        normalizeComparableFilePath(evt.path),
+      );
       const hasOtherHtmlDocument = projectFilesRef.current.some((file) => (
         isHtmlProjectFile(file)
         && normalizeComparableFilePath(file.path || file.name) !== changedPath
       ));
       // The first HTML document already receives a fresh URL from its file
       // identity. Giving that same document a content-refresh witness makes it
-      // navigate twice. Every other mutation can affect an existing HTML page
-      // through script, stylesheet, image, nested iframe, or dynamic resource
-      // loads, so advance the project wildcard as well as the exact path.
+      // navigate twice.
+      //
+      // Which OTHER previews a mutation is entitled to disturb follows from
+      // what it is. A stylesheet, script, image or data file is authored to be
+      // REFERENCED, and by whom is undecidable — dynamic `import()`, `fetch`,
+      // CSS `url()` and JS-built URLs put a real dependency graph out of reach
+      // — so the honest conservative answer is the project wildcard, which
+      // refreshes every open preview. Appearing and disappearing files keep the
+      // wildcard for the same reason at a different moment: a reference that
+      // was 404ing and now resolves, or resolved and now 404s, leaves an open
+      // page showing a BROKEN embed that only a reload repairs.
+      //
+      // Editing an existing HTML document is the one case that carries none of
+      // that. It is authored to be opened rather than referenced, and an
+      // embedder of it is showing stale-but-working content, not breakage. So
+      // its own edit scopes to itself. Without this line, saving one page
+      // re-navigated every other open preview and discarded its JS heap,
+      // timers, canvas and scroll — the exact loss the retained-frame runtime
+      // exists to prevent — and edits are the high-frequency event, one per
+      // agent write and per manual save.
+      //
+      // Residual risk, narrow and nameable: page A embeds page B, B is edited,
+      // and A keeps showing the previous B until anything else in the project
+      // changes or A is reloaded by hand.
+      //
       // Collab's atomic directory replacement reports `change` with an empty
-      // path, which naturally remains the project wildcard.
+      // path, which is not an HTML document path and so naturally remains the
+      // project wildcard.
+      const changeScopesToItself = (
+        evt.kind === 'change' && isHtmlProjectFilePath(changedPath)
+      );
       if (
         evt.kind !== 'add'
         || !isHtmlProjectFilePath(changedPath)
@@ -4089,9 +4127,22 @@ export function ProjectView({
           changedPath,
           refreshGeneration,
         );
-        pendingFileContentRefreshKeysRef.current.set('', refreshGeneration);
+        if (!changeScopesToItself) {
+          pendingFileContentRefreshKeysRef.current.set('', refreshGeneration);
+        }
       }
-      iframeKeepAlivePool.evictProject(project.id);
+      // Same scope rule as the refresh key above, applied to the retained
+      // frames themselves. Evicting the whole project on every file change
+      // destroyed the parked browsing contexts of documents that did not
+      // change, so the next visit to one had to re-navigate from scratch.
+      if (changeScopesToItself) {
+        iframeKeepAlivePool.evictMatching((entry) => (
+          entry.projectId === project.id
+          && normalizeComparableFilePath(entry.fileName) === changedPath
+        ));
+      } else {
+        iframeKeepAlivePool.evictProject(project.id);
+      }
       invalidateHtmlSourceSnapshotProject(project.id);
       coalescedFileChangedRefresh();
       void recoverMaterializedConversations(project.id, projectRunAuthorityKey);

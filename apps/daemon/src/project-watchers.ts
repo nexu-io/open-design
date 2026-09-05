@@ -3,7 +3,7 @@ import path from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
 
 import { isIgnoredProjectDirName } from './project-ignored-dirs.js';
-import { projectDir, resolveProjectDir } from './projects.js';
+import { RESERVED_PROJECT_FILE_SEGMENTS, projectDir, resolveProjectDir } from './projects.js';
 
 /**
  * Refcounted per-project file watcher registry.
@@ -18,7 +18,16 @@ import { projectDir, resolveProjectDir } from './projects.js';
 // against the path *relative to the watch root* so that ancestor directories
 // (e.g. the daemon's own `.od/` runtime dir, which contains every project) do
 // not accidentally match and silence every event in the tree.
-const WATCHER_ONLY_IGNORE_NAMES = new Set(['.ds_store']);
+// The daemon's own bookkeeping directories are in here for a second reason:
+// they are not user content. One save of one HTML file also writes a version
+// snapshot and its manifest, and announcing those as project file changes made
+// a single save look like a project-wide mutation — which the web app answers
+// by re-navigating every open preview, discarding the JS heap, timers, canvas
+// and scroll of documents the user never touched.
+const WATCHER_ONLY_IGNORE_NAMES = new Set([
+  '.ds_store',
+  ...RESERVED_PROJECT_FILE_SEGMENTS,
+]);
 export type ProjectWatchKind = 'add' | 'change' | 'unlink';
 export interface ProjectWatchEvent { type: 'file-changed'; path: string; kind: ProjectWatchKind }
 export interface ProjectWatchFileIdentity {

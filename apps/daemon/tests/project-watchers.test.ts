@@ -373,6 +373,48 @@ describe('project-watchers (real chokidar)', () => {
     }
   }, REAL_WATCHER_TEST_TIMEOUT_MS);
 
+  // Saving one HTML file writes THREE things: the file, a version snapshot, and
+  // the snapshot manifest. Only the first is user content. Surfacing the other
+  // two as project file changes made every save look like a project-wide
+  // mutation, which the web app answers by re-navigating every open preview —
+  // measured live as `saving reloaded 2 other preview(s): lru-5.html,
+  // lru-6.html`, each of which lost its JS heap, timers, canvas and scroll.
+  //
+  // These directories are reserved: the daemon refuses user writes into them
+  // and excludes them from member mirrors, so nothing outside the daemon has
+  // any business hearing about them.
+  it('ignores the daemon\'s own reserved bookkeeping directories', async () => {
+    const { root, projectId } = await makeProjectsRoot();
+    const events: ProjectWatchEvent[] = [];
+    const sub = subscribe(root, projectId, recordEvent(events), FAST_WATCH_OPTIONS);
+    await sub.ready;
+
+    const reserved = ['.file-versions', '.live-artifacts'];
+    try {
+      for (const dir of reserved) {
+        await mkdir(path.join(root, projectId, dir, 'abc123'), { recursive: true });
+        await writeFile(path.join(root, projectId, dir, 'abc123', 'manifest.json'), '{}');
+        await writeFile(path.join(root, projectId, dir, 'abc123', '0001-snapshot.html'), '<p>v1</p>');
+      }
+
+      // The user's own save must still be heard; without this control the case
+      // could pass by silencing the watcher entirely.
+      await writeFile(path.join(root, projectId, 'index.html'), '<p>real</p>');
+      await waitFor(() => events.some((e) => e.path === 'index.html'), {
+        timeout: REAL_WATCHER_WAIT_TIMEOUT_MS,
+        debug: () => debugEvents(events),
+      });
+
+      const leaked = events.filter((e) =>
+        reserved.some((dir) => e.path.startsWith(`${dir}/`)),
+      );
+      expect(leaked).toEqual([]);
+    } finally {
+      await sub.unsubscribe();
+      await rm(root, { recursive: true, force: true });
+    }
+  }, REAL_WATCHER_TEST_TIMEOUT_MS);
+
   it('attaches an error listener and survives an emitted error event', async () => {
     // Regression for codex P1: chokidar's FSWatcher is an EventEmitter.
     // Without an 'error' listener, transient FS faults (ENOSPC, EPERM,

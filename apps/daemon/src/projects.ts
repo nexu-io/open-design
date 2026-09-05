@@ -42,7 +42,16 @@ import { isOrchestratorScratchWorkspace } from './workspace-contract.js';
 // meant a document could ask for a file the write API refused — measured on 12
 // of 400 real design-system artifacts, surfacing as a 500.
 const FORBIDDEN_SEGMENT = /^$|^\.\.$/;
-const RESERVED_PROJECT_FILE_SEGMENTS = new Set(['.file-versions', '.live-artifacts']);
+/**
+ * Directories the daemon keeps for its own bookkeeping inside a project.
+ *
+ * User writes into them are refused and they are excluded from member mirrors,
+ * so nothing outside the daemon addresses them by path — which also makes them
+ * the wrong thing to announce as project file changes. Exported so the file
+ * watcher silences exactly this set instead of keeping a second list that can
+ * drift away from it.
+ */
+export const RESERVED_PROJECT_FILE_SEGMENTS = new Set(['.file-versions', '.live-artifacts']);
 const DESIGN_HANDOFF_FILENAME = 'DESIGN-HANDOFF.md';
 const DESIGN_MANIFEST_FILENAME = 'DESIGN-MANIFEST.json';
 export const RUN_ARTIFACT_RECONCILE_MTIME_GRACE_MS = 1000;
