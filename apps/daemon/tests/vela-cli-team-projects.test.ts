@@ -552,6 +552,11 @@ describe('Vela CLI team-project catalog adapter', () => {
       run: async () => JSON.stringify({
         projects: [
           {
+            projectId: 'legacy-minimal',
+            ownerMemberId: 'wm-owner',
+            createdAt: '2026-07-01T00:00:00.000Z',
+          },
+          {
             projectId: 'legacy-failed-after-success',
             ownerMemberId: 'wm-owner',
             syncState: 'failed',
@@ -577,6 +582,7 @@ describe('Vela CLI team-project catalog adapter', () => {
     });
 
     await expect(catalog.list('team-selected')).resolves.toEqual([
+      expect.objectContaining({ projectId: 'legacy-minimal' }),
       expect.objectContaining({ projectId: 'legacy-failed-after-success' }),
       expect.objectContaining({ projectId: 'legacy-synced' }),
     ]);

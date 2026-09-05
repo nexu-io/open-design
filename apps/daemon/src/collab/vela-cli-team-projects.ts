@@ -466,6 +466,10 @@ function hasReadablePublishedVersion(record: TeamProjectWire): boolean {
     return typeof record.publishedVersionId === 'string'
       && record.publishedVersionId.trim().length > 0;
   }
+  // The original team-project response did not include publication fields or
+  // sync state. Preserve its established visibility until Vela explicitly
+  // supplies one of the newer publication signals.
+  if (typeof record.syncState !== 'string') return true;
   return record.syncState === 'synced'
     || (typeof record.lastSyncedVersionId === 'string'
       && record.lastSyncedVersionId.trim().length > 0);
