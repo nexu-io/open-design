@@ -15,10 +15,11 @@ export interface SyncAntigravityBrainArtifactsOptions {
   projectsRoot: string;
   projectId: string;
   sessionId: string;
-  projectMetadata?: Record<string, unknown>;
-  brainBaseDir?: string;
-  collisionPolicy?: 'skip' | 'overwrite';
-  writeProjectFileFn?: typeof writeProjectFile;
+  projectMetadata?: Record<string, unknown> | undefined;
+  brainBaseDir?: string | undefined;
+  agentHome?: string | undefined;
+  collisionPolicy?: 'skip' | 'overwrite' | undefined;
+  writeProjectFileFn?: typeof writeProjectFile | undefined;
 }
 
 export interface SyncAntigravityBrainArtifactsResult {
@@ -67,6 +68,7 @@ export async function syncAntigravityBrainArtifacts(
     sessionId,
     projectMetadata,
     brainBaseDir,
+    agentHome,
     collisionPolicy = 'skip',
     writeProjectFileFn = writeProjectFile,
   } = options;
@@ -77,7 +79,7 @@ export async function syncAntigravityBrainArtifacts(
 
   const baseDir =
     brainBaseDir ??
-    path.join(os.homedir(), '.gemini', 'antigravity-cli', 'brain');
+    path.join(agentHome ?? os.homedir(), '.gemini', 'antigravity-cli', 'brain');
 
   let realBaseDir: string;
   try {

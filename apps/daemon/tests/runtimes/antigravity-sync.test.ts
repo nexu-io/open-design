@@ -7,6 +7,11 @@ import {
   isValidBrainSessionId,
   syncAntigravityBrainArtifacts,
 } from '../../src/runtimes/antigravity-sync.js';
+import {
+  applySandboxRuntimeEnv,
+  ensureSandboxRuntimeDirs,
+  resolveSandboxRuntimeConfig,
+} from '../../src/sandbox-mode.js';
 
 describe('antigravity-sync', () => {
   it('validates session IDs and prevents path traversal', () => {
@@ -299,6 +304,85 @@ describe('antigravity-sync', () => {
       spyOpen.mockRestore();
       expect(result.syncedCount).toBe(0);
       expect(mockWrite).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('syncs brain artifacts when sandbox mode is enabled and home is remapped', async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'od-sync-sandbox-test-'));
+    const dataDir = path.join(tmpDir, 'daemon-data');
+    const sandboxConfig = resolveSandboxRuntimeConfig(true, dataDir);
+    ensureSandboxRuntimeDirs(sandboxConfig);
+
+    const agentHome = sandboxConfig.roots.agentHomeDir;
+    const sessionId = 'session-sandbox-123';
+    const brainDir = path.join(agentHome, '.gemini', 'antigravity-cli', 'brain', sessionId);
+    const projectsRoot = path.join(tmpDir, 'projects');
+    const projDir = path.join(projectsRoot, 'proj-1');
+
+    await fs.mkdir(brainDir, { recursive: true });
+    await fs.mkdir(projDir, { recursive: true });
+
+    // Agent running in sandbox environment creates artifacts under remapped HOME
+    const testContent = '<html><body>Sandbox Output</body></html>';
+    await fs.writeFile(path.join(brainDir, 'index.html'), testContent);
+
+    // Apply sandbox runtime env to simulate the spawned agent's environment
+    const spawnedEnv = applySandboxRuntimeEnv(
+      { HOME: '/host/home/runner' },
+      sandboxConfig,
+    );
+    expect(spawnedEnv.HOME).toBe(agentHome);
+
+    const mockWrite = vi.fn().mockResolvedValue({ name: 'ok' });
+
+    try {
+      // 1. Calling with agentHome derived from spawned agent's HOME (sandbox root)
+      const result = await syncAntigravityBrainArtifacts({
+        projectsRoot,
+        projectId: 'proj-1',
+        sessionId,
+        agentHome: spawnedEnv.HOME,
+        writeProjectFileFn: mockWrite as any,
+      });
+
+      expect(result.syncedCount).toBe(1);
+      expect(result.syncedFiles).toEqual(['index.html']);
+      expect(mockWrite).toHaveBeenCalledTimes(1);
+      expect(mockWrite).toHaveBeenCalledWith(
+        projectsRoot,
+        'proj-1',
+        'index.html',
+        Buffer.from(testContent),
+        { overwrite: false },
+        undefined,
+      );
+
+      // 2. Also verify deriving brainBaseDir from sandbox agent home works
+      mockWrite.mockClear();
+      const brainBaseDir = path.join(spawnedEnv.HOME!, '.gemini', 'antigravity-cli', 'brain');
+      const resultWithBaseDir = await syncAntigravityBrainArtifacts({
+        projectsRoot,
+        projectId: 'proj-1',
+        sessionId,
+        brainBaseDir,
+        writeProjectFileFn: mockWrite as any,
+      });
+
+      expect(resultWithBaseDir.syncedCount).toBe(1);
+      expect(resultWithBaseDir.syncedFiles).toEqual(['index.html']);
+      expect(mockWrite).toHaveBeenCalledTimes(1);
+
+      // 3. Verify that without agentHome or brainBaseDir, fallback to host os.homedir() misses the sandboxed session
+      const missedResult = await syncAntigravityBrainArtifacts({
+        projectsRoot,
+        projectId: 'proj-1',
+        sessionId,
+        writeProjectFileFn: mockWrite as any,
+      });
+      expect(missedResult.syncedCount).toBe(0);
+      expect(missedResult.skippedReason).toBe('no_session_dir');
     } finally {
       await fs.rm(tmpDir, { recursive: true, force: true });
     }

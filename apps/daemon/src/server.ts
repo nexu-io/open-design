@@ -15459,11 +15459,20 @@ export async function startServer({
               run.projectId
             ) {
               try {
+                const childEnv = spawnedAgentEnv ?? agentSpawnEnv;
+                const childHome =
+                  childEnv?.OD_AGENT_HOME ||
+                  childEnv?.HOME ||
+                  childEnv?.USERPROFILE ||
+                  (SANDBOX_RUNTIME.enabled ? SANDBOX_RUNTIME.roots.agentHomeDir : os.homedir());
+                const brainBaseDir = path.join(childHome, '.gemini', 'antigravity-cli', 'brain');
                 await syncAntigravityBrainArtifacts({
                   projectsRoot: PROJECTS_DIR,
                   projectId: run.projectId,
                   sessionId: capturedSessionId,
                   projectMetadata: project?.metadata,
+                  brainBaseDir,
+                  agentHome: childHome,
                   writeProjectFileFn: writeProjectFile,
                 });
               } catch {
