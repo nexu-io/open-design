@@ -10657,11 +10657,26 @@ function HtmlViewer({
   );
   const frozenSrcDocSourceSnapshotRefreshKeyRef = useRef(sourceSnapshotRefreshKey);
   const persistedManualEditDocument = manualEditPersistedDocumentRef.current;
+  // Both Manual Edit retention latches fingerprint the exact bytes the save
+  // wrote to disk, so the only source that can answer "is that revision still
+  // the one on screen?" is the persisted source itself. Anything derived from
+  // it for rendering is a different string by construction: deck visual
+  // normalization strips the whitespace before `</body>`, speaker-note removal
+  // deletes authored nodes, asset inlining rewrites every relative reference.
+  // Comparing a latch against one of those can never match, which retires it on
+  // the first render after Edit closes.
+  //
+  // Measured on a deck: latch `2666:3b3bcc7` against a deck-normalized
+  // `2665:92140dc1`. The identity unfroze and the runtime minted two preview
+  // scopes for one save — first for the post-save size/mtime, then ~130ms later
+  // for the watcher content-refresh carrying those same bytes.
+  const persistedManualEditSourceFingerprint =
+    source === null ? null : previewSourceFingerprint(source);
   const canAdoptPersistedManualEditDocument =
     !interactivePreviewModeActive
     && persistedManualEditDocument?.reloadKey === reloadKey
-    && livePreviewSource != null
-    && persistedManualEditDocument.sourceFingerprint === previewSourceFingerprint(livePreviewSource);
+    && persistedManualEditSourceFingerprint !== null
+    && persistedManualEditDocument.sourceFingerprint === persistedManualEditSourceFingerprint;
   // Adoption is a one-revision latch, not a permanent fingerprint cache. Wait
   // until Edit has closed (the save can render once before its source state is
   // committed), then retire the latch as soon as a genuinely different live
@@ -10670,7 +10685,7 @@ function HtmlViewer({
   if (
     !interactivePreviewModeActive
     && persistedManualEditDocument
-    && livePreviewSource != null
+    && persistedManualEditSourceFingerprint !== null
     && !canAdoptPersistedManualEditDocument
   ) {
     manualEditPersistedDocumentRef.current = null;
@@ -10698,16 +10713,17 @@ function HtmlViewer({
   const frozenPreviewSrcUrlRef = useRef<string | null>(null);
   const manualEditUrlStandbySourceFingerprint =
     manualEditUrlStandbySourceFingerprintRef.current;
+  // Same rule as the document latch above: this fingerprint was taken from the
+  // persisted bytes, so only the persisted source can witness it.
   const canAdoptManualEditUrlStandby =
     !interactivePreviewModeActive
     && manualEditUrlStandbySourceFingerprint !== null
-    && livePreviewSource !== null
-    && manualEditUrlStandbySourceFingerprint
-      === previewSourceFingerprint(livePreviewSource);
+    && persistedManualEditSourceFingerprint !== null
+    && manualEditUrlStandbySourceFingerprint === persistedManualEditSourceFingerprint;
   if (
     !interactivePreviewModeActive
     && manualEditUrlStandbySourceFingerprint !== null
-    && livePreviewSource !== null
+    && persistedManualEditSourceFingerprint !== null
     && !canAdoptManualEditUrlStandby
   ) {
     // A genuinely different source revision supersedes the prewarmed edit

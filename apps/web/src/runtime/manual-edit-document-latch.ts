@@ -14,6 +14,13 @@
  * only after the bridge confirms the apply, and it releases itself as soon as
  * the source genuinely differs, so it can never pin a stale document.
  *
+ * Its fingerprint is taken from the bytes written to disk, so every consumer
+ * must compare it against the persisted source and never against a source
+ * derived for rendering. Deck visual normalization, speaker-note removal and
+ * asset inlining each produce a different string for the same revision, so a
+ * latch compared against one of those can never match: it retires on the first
+ * render after Edit closes and the document is replaced anyway.
+ *
  * Measured before this existed as a named rule: the "no reload needed" check
  * passed (`matched: true`) and the document was replaced 2.7s later anyway,
  * because the exit path cleared the latch in the same synchronous block that
