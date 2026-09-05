@@ -19,6 +19,13 @@ export type StandaloneExactFixtureOptions = Readonly<{
   port?: number;
   publishedAt?: string;
   releaseVersion: string;
+  resources?: readonly Readonly<{
+    entrypoint: string;
+    file: string;
+    id: string;
+    path: string;
+    treeSha256: string;
+  }>[];
   shell: Readonly<{ buildHash: string; type: string; version: string }>;
   sourceCommit?: string;
   standaloneVersion?: string;
@@ -132,6 +139,17 @@ export async function startStandaloneExactFixtureServer(
       "text/javascript",
       `${origin}${releaseRoot}/closure.mjs`,
     );
+    const resources = await Promise.all((options.resources ?? []).map(async (resource) => {
+      if (!/^[a-z][a-z0-9-]{0,63}$/u.test(resource.id)
+        || !/^[a-z0-9][a-z0-9._-]{0,127}$/u.test(resource.file)
+        || !/^[a-f0-9]{64}$/u.test(resource.treeSha256)) {
+        throw new Error(`Standalone exact fixture resource is invalid: ${resource.id}`);
+      }
+      return Object.freeze({
+        ...resource,
+        file: await sourceFile(resource.path, resource.file, "application/zip", `${origin}${releaseRoot}/${resource.file}`),
+      });
+    }));
     const metadata: StandaloneMetadata = {
       schemaVersion: 4,
       channel: options.channel,
@@ -142,10 +160,18 @@ export async function startStandaloneExactFixtureServer(
       blobs: {
         [launcher.sha256]: { sha256: launcher.sha256, size: launcher.size, mediaType: launcher.contentType, sources: [{ kind: "remote", url: launcher.url }] },
         [closure.sha256]: { sha256: closure.sha256, size: closure.size, mediaType: closure.contentType, sources: [{ kind: "remote", url: closure.url }] },
+        ...Object.fromEntries(resources.map(({ file }) => [file.sha256, { sha256: file.sha256, size: file.size, mediaType: file.contentType, sources: [{ kind: "remote" as const, url: file.url }] }])),
       },
       resources: [
         { id: "standalone-launcher", component: "standalone.launcher", blob: launcher.sha256, sync: true, materialization: { type: "file", entrypoint: "launcher.mjs" } },
         { id: "closure", component: "standalone.resource", blob: closure.sha256, sync: true, materialization: { type: "file", entrypoint: "closure.mjs" } },
+        ...resources.map((resource) => ({
+          id: resource.id,
+          component: "standalone.resource" as const,
+          blob: resource.file.sha256,
+          sync: true as const,
+          materialization: { type: "zip" as const, entrypoint: resource.entrypoint, treeSha256: resource.treeSha256 },
+        })),
       ],
       shellRequirements: [{ type: options.shell.type, minVersion: options.shell.version, buildHash: options.shell.buildHash }],
     };
@@ -180,10 +206,11 @@ export async function startStandaloneExactFixtureServer(
       seeds: [
         { ...artifact(launcher), blobSha256: launcher.sha256, component: "standalone.launcher", file: launcher.file },
         { ...artifact(closure), blobSha256: closure.sha256, component: "standalone.resource", file: closure.file },
+        ...resources.map(({ file }) => ({ ...artifact(file), blobSha256: file.sha256, component: "standalone.resource" as const, file: file.file })),
       ],
     }, bootstrapUrl);
 
-    for (const file of [launcher, closure, content, trust, channelHead, bootstrap]) {
+    for (const file of [launcher, closure, ...resources.map((resource) => resource.file), content, trust, channelHead, bootstrap]) {
       routes.set(new URL(file.url).pathname, file);
     }
     return Object.freeze({

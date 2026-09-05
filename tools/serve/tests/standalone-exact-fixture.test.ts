@@ -18,9 +18,13 @@ describe("Standalone exact fixture server", () => {
     const root = await mkdtemp(join(tmpdir(), "od-standalone-exact-fixture-"));
     const launcherPath = join(root, "launcher.mjs");
     const closurePath = join(root, "closure.mjs");
+    const daemonPath = join(root, "open-design-daemon.zip");
+    const webPath = join(root, "open-design-web.zip");
     await Promise.all([
       writeFile(launcherPath, "export const standaloneGenerationHandoff = async () => undefined;\n"),
       writeFile(closurePath, "export const closure = 'local-exact';\n"),
+      writeFile(daemonPath, "daemon zip fixture\n"),
+      writeFile(webPath, "web zip fixture\n"),
     ]);
     const server = await startStandaloneExactFixtureServer({
       channel: "dev",
@@ -28,6 +32,10 @@ describe("Standalone exact fixture server", () => {
       launcherPath,
       publishedAt: "2026-09-05T00:00:00.000Z",
       releaseVersion: "0.1.0-dev.1",
+      resources: [
+        { id: "open-design-daemon", file: "open-design-daemon.zip", path: daemonPath, entrypoint: "sidecar.mjs", treeSha256: "c".repeat(64) },
+        { id: "open-design-web", file: "open-design-web.zip", path: webPath, entrypoint: "sidecar.mjs", treeSha256: "d".repeat(64) },
+      ],
       shell: { buildHash: "a".repeat(64), type: "electron", version: "0.1.0" },
       sourceCommit: "b".repeat(40),
     });
@@ -47,7 +55,7 @@ describe("Standalone exact fixture server", () => {
         channelHeadUrl: server.info.channelHeadUrl,
         releaseVersion: "0.1.0-dev.1",
       });
-      expect(bootstrap.seeds.map(({ component }) => component)).toEqual(["standalone.launcher", "standalone.resource"]);
+      expect(bootstrap.seeds.map(({ component }) => component)).toEqual(["standalone.launcher", "standalone.resource", "standalone.resource", "standalone.resource"]);
       expect(bootstrap.seeds.every(({ blobSha256, sha256 }) => blobSha256 === sha256)).toBe(true);
 
       const trust = await (await fetch(bootstrap.trust.url)).json() as {
@@ -59,6 +67,10 @@ describe("Standalone exact fixture server", () => {
       const content = await contentResponse.json() as SignedStandaloneMetadata;
       expect(verifyStandaloneMetadata(content, ring)).toBe("local-exact");
       expect(content.metadata).toMatchObject({ channel: "dev", releaseVersion: "0.1.0-dev.1" });
+      expect(content.metadata.resources).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: "open-design-daemon", materialization: { type: "zip", entrypoint: "sidecar.mjs", treeSha256: "c".repeat(64) } }),
+        expect.objectContaining({ id: "open-design-web", materialization: { type: "zip", entrypoint: "sidecar.mjs", treeSha256: "d".repeat(64) } }),
+      ]));
       expect(content.metadata.shellRequirements).toEqual([{ buildHash: "a".repeat(64), minVersion: "0.1.0", type: "electron" }]);
 
       const head = await (await fetch(bootstrap.channelHeadUrl)).json() as SignedStandaloneChannelHead;

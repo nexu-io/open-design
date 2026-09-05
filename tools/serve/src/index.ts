@@ -23,6 +23,7 @@ type CliOptions = {
   payloadPath?: string;
   launcherPath?: string;
   releaseVersion?: string;
+  resource?: string | string[];
   shellBuildHash?: string;
   shellVersion?: string;
   sourceCommit?: string;
@@ -30,6 +31,25 @@ type CliOptions = {
   version?: string;
   token?: string;
 };
+
+function parseStandaloneResources(value: string | string[] | undefined) {
+  const serialized = value == null ? [] : Array.isArray(value) ? value : [value];
+  return serialized.map((item, index) => {
+    let parsed: unknown;
+    try { parsed = JSON.parse(item); }
+    catch (error) { throw new Error(`--resource ${index + 1} must be JSON`, { cause: error }); }
+    if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error(`--resource ${index + 1} must be an object`);
+    const resource = parsed as Record<string, unknown>;
+    const keys = Object.keys(resource).sort();
+    if (JSON.stringify(keys) !== JSON.stringify(["entrypoint", "file", "id", "path", "treeSha256"])) {
+      throw new Error(`--resource ${index + 1} fields are invalid`);
+    }
+    if (Object.values(resource).some((candidate) => typeof candidate !== "string" || candidate.length === 0)) {
+      throw new Error(`--resource ${index + 1} values must be non-empty strings`);
+    }
+    return resource as { entrypoint: string; file: string; id: string; path: string; treeSha256: string };
+  });
+}
 
 function parsePort(value: string | undefined): number {
   if (value == null || value.length === 0) return 0;
@@ -63,6 +83,7 @@ async function start(service: string, options: CliOptions): Promise<void> {
       launcherPath: options.launcherPath,
       port: parsePort(options.port),
       releaseVersion: options.releaseVersion ?? `0.1.0-${channel}.1`,
+      resources: parseStandaloneResources(options.resource),
       shell: { buildHash: options.shellBuildHash, type: "electron", version: options.shellVersion ?? "0.1.0" },
       sourceCommit: options.sourceCommit,
       standaloneVersion: options.standaloneVersion,
@@ -173,6 +194,7 @@ cli
   .option("--token <token>", "collab-cloud: shared bearer token clients must present")
   .option("--port <port>", "Port to bind, 0 for dynamic", { default: "0" })
   .option("--release-version <version>", "standalone-exact: channel release version")
+  .option("--resource <json>", "standalone-exact: repeatable signed zip resource descriptor")
   .option("--shell-build-hash <digest>", "standalone-exact: accepted Electron Shell build hash")
   .option("--shell-version <version>", "standalone-exact: minimum Electron Shell version")
   .option("--source-commit <sha>", "standalone-exact: source commit identity")
