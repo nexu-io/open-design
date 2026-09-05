@@ -98,14 +98,9 @@ const cutReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-
 const cutPatchReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-patch-release.yml");
 const feishuCardScriptPath = join(workspaceRoot, "tools", "release", "src", "notifications", "feishu.ts");
 const feishuNoticeScriptPath = join(workspaceRoot, "tools", "release", "src", "notifications", "feishu-notice.ts");
-const landingPageDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-daily-feishu.yml");
-const landingPageCiWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-ci.yml");
-const landingPageStagingWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-staging.yml");
-const landingPageProductionWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-production.yml");
 const dshBootstrapPublishWorkflowPath = join(workspaceRoot, ".github", "workflows", "dsh-bootstrap-publish.yml");
 const catalogPublishWorkflowPath = join(workspaceRoot, ".github", "workflows", "catalog-publish.yml");
 const catalogValidateWorkflowPath = join(workspaceRoot, ".github", "workflows", "catalog-validate.yml");
-const landingPageDailyFeishuScriptPath = join(workspaceRoot, ".github", "scripts", "landing-page-daily-feishu.ts");
 const releasePublishMetadataScriptPath = join(
   workspaceRoot,
   "tools",
@@ -1407,20 +1402,6 @@ process.stdin.on("end", () => {
     }
   });
 
-  it("[P2] routes both DSH installer sources to the cross-resource identity test", async () => {
-    for (const file of [
-      "tools/release/resources/dsh-bootstrap/install-dsh.sh",
-      "apps/landing-page/public/install-dsh.sh",
-      "e2e/tests/dsh-bootstrap-source-identity.test.ts",
-    ]) {
-      await expect(
-        runScopesPrint("pull_request", { pull_request: { number: 1 } }, [file]),
-      ).resolves.toMatchObject({
-        run_e2e_vitest: true,
-        web_tests_required: true,
-      });
-    }
-  });
 
   it("[P1] builds tools-release before the standalone DSH publisher invokes its bin", async () => {
     const workflow = await readFile(dshBootstrapPublishWorkflowPath, "utf8");
@@ -1442,37 +1423,26 @@ process.stdin.on("end", () => {
     expect(trigger).toContain('"tools/release/src/storage/s3-upload.ts"');
   });
 
-  it("[P1] serializes both DSH latest-pointer publishers", async () => {
-    const [standaloneWorkflow, productionWorkflow] = await Promise.all([
-      readFile(dshBootstrapPublishWorkflowPath, "utf8"),
-      readFile(landingPageProductionWorkflowPath, "utf8"),
-    ]);
+  it("[P1] serializes the standalone DSH latest-pointer publisher", async () => {
+    const workflow = await readFile(dshBootstrapPublishWorkflowPath, "utf8");
 
-    expect(standaloneWorkflow).toContain("group: landing-page-production");
-    expect(productionWorkflow).toContain("group: landing-page-production");
-    expect(standaloneWorkflow).toContain("cancel-in-progress: false");
-    expect(productionWorkflow).toContain("cancel-in-progress: false");
+    expect(workflow).toContain("group: dsh-bootstrap-publish");
+    expect(workflow).toContain("cancel-in-progress: false");
   });
 
-  it("[P1] rejects stale reruns before either DSH publisher can update latest", async () => {
-    const [standaloneWorkflow, productionWorkflow] = await Promise.all([
-      readFile(dshBootstrapPublishWorkflowPath, "utf8"),
-      readFile(landingPageProductionWorkflowPath, "utf8"),
-    ]);
+  it("[P1] rejects stale reruns before the DSH publisher can update latest", async () => {
+    const workflow = await readFile(dshBootstrapPublishWorkflowPath, "utf8");
+    const freshnessIndex = workflow.indexOf(
+      'main_sha="$(git ls-remote origin refs/heads/main | awk \'{print $1}\')"',
+    );
+    const staleGuardIndex = workflow.indexOf('$GITHUB_SHA" != "$main_sha');
+    const publishIndex = workflow.indexOf("pnpm exec tools-release publish-dsh-bootstrap");
 
-    for (const workflow of [standaloneWorkflow, productionWorkflow]) {
-      const freshnessIndex = workflow.indexOf(
-        'main_sha="$(git ls-remote origin refs/heads/main | awk \'{print $1}\')"',
-      );
-      const staleGuardIndex = workflow.indexOf('$GITHUB_SHA" != "$main_sha');
-      const publishIndex = workflow.indexOf("pnpm exec tools-release publish-dsh-bootstrap");
-
-      expect(freshnessIndex).toBeGreaterThanOrEqual(0);
-      expect(staleGuardIndex).toBeGreaterThan(freshnessIndex);
-      expect(publishIndex).toBeGreaterThan(staleGuardIndex);
-      expect(workflow).toContain("refusing");
-      expect(workflow).toContain("stale workflow SHA");
-    }
+    expect(freshnessIndex).toBeGreaterThanOrEqual(0);
+    expect(staleGuardIndex).toBeGreaterThan(freshnessIndex);
+    expect(publishIndex).toBeGreaterThan(staleGuardIndex);
+    expect(workflow).toContain("refusing");
+    expect(workflow).toContain("stale workflow SHA");
   });
 
   it("[P1] publishes catalog snapshots only from main", async () => {
@@ -3053,90 +3023,6 @@ process.stdin.on("end", () => {
     expect(patchNotice).toContain("if: steps.guard.outputs.published == 'true'");
   });
 
-  it("[P2] sends the daily landing PR summary to Feishu with staging deployment status", async () => {
-    const [workflow, ciWorkflow, stagingWorkflow, productionWorkflow, script] = await Promise.all([
-      readFile(landingPageDailyFeishuWorkflowPath, "utf8"),
-      readFile(landingPageCiWorkflowPath, "utf8"),
-      readFile(landingPageStagingWorkflowPath, "utf8"),
-      readFile(landingPageProductionWorkflowPath, "utf8"),
-      readFile(landingPageDailyFeishuScriptPath, "utf8"),
-    ]);
-    const trigger = sectionBetween(workflow, "on:", "\npermissions:");
-    const productionCheckout = sectionBetween(productionWorkflow, "- name: Checkout", "- name: Setup pnpm");
-
-    expect(trigger).toContain('cron: "0 1 * * *"');
-    expect(trigger).not.toContain("lookback_hours:");
-    expect(workflow).toContain("actions: read");
-    expect(workflow).toContain("contents: read");
-    expect(workflow).toContain("pull-requests: read");
-    expect(workflow).toContain("github.ref == 'refs/heads/main'");
-    expect(workflow).toContain("FEISHU_WEBHOOK: ${{ secrets.FEISHU_LANDING_WEBHOOK || secrets.FEISHU_RELEASE_WEBHOOK }}");
-    expect(workflow).toContain("FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_LANDING_SIGN_SECRET || secrets.FEISHU_RELEASE_SIGN_SECRET }}");
-    expect(workflow).toContain("node --experimental-strip-types .github/scripts/landing-page-daily-feishu.ts self-check");
-    expect(workflow).toContain("node --experimental-strip-types .github/scripts/landing-page-daily-feishu.ts");
-    expect(workflow).toContain("ref: main");
-    expect(workflow).toContain("fetch-depth: 0");
-    expect(productionCheckout).toContain("ref: ${{ github.sha }}");
-    expect(productionCheckout).not.toContain("ref: main");
-    expect(productionCheckout).toContain("Verify production checkout commit");
-    expect(productionCheckout).toContain('deployed_sha="$(git rev-parse HEAD)"');
-    expect(productionCheckout).toContain('$deployed_sha" != "$GITHUB_SHA');
-    expect(productionCheckout).toContain('main_sha="$(git ls-remote origin refs/heads/main');
-    expect(productionCheckout).toContain('$GITHUB_SHA" != "$main_sha');
-    expect(productionCheckout).toContain("refusing production deploy for stale workflow SHA");
-
-    // Wrangler Pages ignores custom --config paths. Before every staging
-    // migration/deploy, replace the default config with staging's isolated
-    // bindings so preview/staging traffic can never touch production KV/D1.
-    for (const stagingDeployWorkflow of [ciWorkflow, stagingWorkflow]) {
-      expect(stagingDeployWorkflow).toContain("Prepare staging Pages configuration");
-      expect(stagingDeployWorkflow).toContain("cp apps/landing-page/wrangler.staging.toml apps/landing-page/wrangler.toml");
-      expect(stagingDeployWorkflow).toContain('wranglerVersion: "4.110.0"');
-      expect(stagingDeployWorkflow).toContain("d1 migrations apply open-design-landing-staging-attribution --remote");
-      expect(stagingDeployWorkflow).not.toContain("--config wrangler.staging.toml");
-    }
-    expect(productionWorkflow).toContain('wranglerVersion: "4.110.0"');
-    expect(productionWorkflow).toContain("d1 migrations apply open-design-landing-attribution --remote");
-    expect(productionWorkflow).toContain("Publish immutable DeepSeek Harness bootstrap installers to R2");
-    expect(productionWorkflow).toContain("id: dsh_bootstrap");
-    // The bootstrap version follows the installer bytes. Pinning it in the
-    // workflow is what turned a copy edit inside install-dsh.ps1 into a hard
-    // production deploy failure, so the promotion must read the version the
-    // publisher resolved instead of naming one.
-    expect(productionWorkflow).not.toMatch(/DSH_BOOTSTRAP_VERSION: v\d/);
-    expect(productionWorkflow).toContain("DSH_BOOTSTRAP_VERSION: ${{ steps.dsh_bootstrap.outputs.version }}");
-    expect(productionWorkflow).toContain('"$RELEASE_PUBLIC_ORIGIN/bootstrap/dsh/$DSH_BOOTSTRAP_VERSION/$name"');
-    expect(productionWorkflow).toContain("DSH_BOOTSTRAP_SOURCE_DIR: tools/release/resources/dsh-bootstrap");
-    expect(productionWorkflow).toContain("RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}");
-    expect(productionWorkflow).toContain("RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}");
-    expect(productionWorkflow).toContain("RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}");
-    expect(productionWorkflow).toContain("RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}");
-    expect(productionWorkflow).toContain("pnpm exec tools-release publish-dsh-bootstrap");
-    expect(productionWorkflow.indexOf("pnpm exec tools-release publish-dsh-bootstrap")).toBeLessThan(
-      productionWorkflow.indexOf("pages deploy out"),
-    );
-
-    expect(script).toContain('const STAGING_URL = "https://staging.open-design.ai"');
-    expect(script).toContain('const STAGING_WORKFLOW = "landing-page-staging.yml"');
-    expect(script).toContain('const PRODUCTION_WORKFLOW = "landing-page-production.yml"');
-    expect(script).toContain("type StagingSnapshot");
-    expect(script).toContain("createStagingSnapshot");
-    expect(script).toContain("run_started_at");
-    expect(script).toContain("run_attempt");
-    expect(script).toContain("runOperationalTime");
-    expect(script).toContain("staging: StagingSnapshot");
-    expect(script).toContain("historical staging success not to count as current staging deployment");
-    expect(script).toContain("rerun historical staging success to become current staging deployment");
-    expect(script).toContain("rerun staging header to use the rerun historical deployment");
-    expect(script).toContain("No successful ${PRODUCTION_WORKFLOW} run found on main");
-    expect(script).toContain("正式环境基线");
-    expect(script).toContain("待 QA 验收");
-    expect(script).toContain("git\", [\"merge-base\", \"--is-ancestor\"");
-    expect(script).toContain("已自动部署到当前 staging.open-design.ai");
-    expect(script).toContain("正在部署到 staging.open-design.ai");
-    expect(script).toContain("apps/landing-page/");
-    expect(script).toContain(".github/workflows/landing-page-staging.yml");
-  });
 
   it("[P2] supports stable metadata, prepublish, and publish dispatch modes", async () => {
     const [workflow, script] = await Promise.all([

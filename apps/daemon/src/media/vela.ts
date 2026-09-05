@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import {
   runVelaCommand,
+  velaCommandStderr,
   velaCommandStdout,
   velaWorkspaceCommandOptions,
 } from '../integrations/vela-command.js';
@@ -92,6 +93,15 @@ function parseJsonObject(stdout: string, command: string): JsonRecord {
 
 function nonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function submittedImageTaskIdFromPollingFailure(
+  error: unknown,
+): string | undefined {
+  const match = velaCommandStderr(error).match(
+    /(?:^|\r?\n)Error: perform media request GET \/api\/v1\/media\/images\/tasks\/(mit_[A-Za-z0-9_-]+):/,
+  );
+  return match?.[1];
 }
 
 function positiveIntegerFromEnv(name: string, fallback: number): number {
@@ -387,8 +397,37 @@ export async function renderVelaImage(
       });
     } catch (error) {
       // A refused request is a verdict the user can act on, so it must reach
-      // them as one. Everything else keeps its original error untouched.
-      throw velaMediaErrorFromFailure(error, `image ${command}`) ?? error;
+      // them as one. Decode it before transport recovery so a provider verdict
+      // can never be mistaken for a retryable polling failure.
+      const providerError = velaMediaErrorFromFailure(error, `image ${command}`);
+      if (providerError) throw providerError;
+
+      const submittedTaskId = submittedImageTaskIdFromPollingFailure(error);
+      if (!submittedTaskId) throw error;
+
+      // `vela image gen --wait` has already submitted (and potentially charged)
+      // the remote task before its status GET can time out. Resume that exact
+      // task instead of calling `gen` again, which avoids duplicate work and
+      // duplicate billing while tolerating a transient poll failure.
+      try {
+        stdout = await runCommand(
+          [
+            'image',
+            'get',
+            submittedTaskId,
+            '--wait',
+            '--output',
+            outputPath,
+            '--json',
+          ],
+          {
+            ...velaWorkspaceCommandOptions(input.workspaceId),
+            timeoutMs: VELA_IMAGE_TIMEOUT_MS,
+          },
+        );
+      } catch (recoveryError) {
+        throw velaMediaErrorFromFailure(recoveryError, 'image get') ?? recoveryError;
+      }
     }
     const asset = parseJsonObject(stdout, `image ${command}`);
     const assetId = nonEmptyString(asset.asset_id);

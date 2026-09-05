@@ -65,6 +65,27 @@ export interface RunDiagnosticsAnalytics {
   // with a fresh session + full transcript, with no user-facing error. Lets us
   // monitor how often the resume optimization falls back (should be rare).
   resume_auto_reseeded: boolean;
+  prompt_budget_version?: 'prompt_budget_v1';
+  prompt_frame_bytes?: number;
+  prompt_bytes?: number;
+  prompt_token_estimate?: number;
+  prompt_token_estimate_method?: 'utf8_bytes_div_3_ceil_v1';
+  prompt_session_mode?: 'new' | 'resume';
+  prompt_model_id?: string;
+  prompt_context_window_source?: 'model_metadata' | 'unknown';
+  prompt_context_window_tokens?: number;
+  prompt_prior_session_usage_source?: 'agent_session' | 'unknown';
+  prompt_prior_session_input_tokens?: number;
+  tool_execution_lifecycle_seen?: boolean;
+  tool_execution_lifecycle_count_bucket?: '1' | '2_5' | '6_20' | 'gt_20';
+  tool_execution_trigger?: 'exit' | 'abort' | 'deadline' | 'mixed' | 'unknown';
+  tool_execution_terminal?: 'running' | 'returned' | 'failed' | 'interrupted' | 'mixed' | 'unknown';
+  tool_terminal_source?: 'tool_result' | 'tool_error' | 'processor_cleanup' | 'mixed' | 'unknown';
+  tool_kill_outcome?: 'none' | 'requested' | 'sent' | 'failed';
+  tool_child_close_seen?: boolean;
+  tool_stdout_close_seen?: boolean;
+  tool_stderr_close_seen?: boolean;
+  tool_execution_evidence_incomplete?: boolean;
 }
 
 export interface RunToolProgress {
@@ -84,11 +105,77 @@ export type StdoutTailSummary = StreamTailSummary;
 
 const STDERR_TAIL_MAX_LINES = 20;
 export const STDERR_TAIL_MAX_BYTES = 4 * 1024;
+const PROMPT_BUDGET_MAX_NUMERIC_VALUE = 1_000_000_000;
 
 function recordValue(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
+}
+
+function promptBudgetInteger(value: unknown): number | undefined {
+  return typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    value <= PROMPT_BUDGET_MAX_NUMERIC_VALUE
+    ? value
+    : undefined;
+}
+
+function promptBudgetModelId(value: unknown): string {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  if (!trimmed) return 'default';
+  if (trimmed.length > 128 || !/^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/.test(trimmed)) {
+    return 'other';
+  }
+  return redactSecrets(trimmed) === trimmed ? trimmed : 'redacted';
+}
+
+export function promptBudgetAnalyticsFromDiagnostic(
+  data: Record<string, unknown>,
+): Partial<RunDiagnosticsAnalytics> | null {
+  if (
+    data.type !== 'diagnostic' ||
+    data.name !== 'prompt_budget_v1' ||
+    data.schemaVersion !== 1 ||
+    data.tokenEstimateMethod !== 'utf8_bytes_div_3_ceil_v1'
+  ) {
+    return null;
+  }
+  const frameBytes = promptBudgetInteger(data.frameBytes);
+  const promptBytes = promptBudgetInteger(data.promptBytes);
+  const promptTokenEstimate = promptBudgetInteger(data.promptTokenEstimate);
+  if (
+    frameBytes === undefined ||
+    promptBytes === undefined ||
+    promptTokenEstimate === undefined
+  ) {
+    return null;
+  }
+  const sessionMode = data.sessionMode === 'resume' ? 'resume' : 'new';
+  const contextWindowSource = data.contextWindowSource === 'model_metadata'
+    ? 'model_metadata'
+    : 'unknown';
+  const priorSessionUsageSource = data.priorSessionUsageSource === 'agent_session'
+    ? 'agent_session'
+    : 'unknown';
+  const contextWindowTokens = promptBudgetInteger(data.contextWindowTokens);
+  const priorSessionInputTokens = promptBudgetInteger(data.priorSessionInputTokens);
+  return {
+    prompt_budget_version: 'prompt_budget_v1',
+    prompt_frame_bytes: frameBytes,
+    prompt_bytes: promptBytes,
+    prompt_token_estimate: promptTokenEstimate,
+    prompt_token_estimate_method: 'utf8_bytes_div_3_ceil_v1',
+    prompt_session_mode: sessionMode,
+    prompt_model_id: promptBudgetModelId(data.modelId),
+    prompt_context_window_source: contextWindowSource,
+    ...(contextWindowTokens !== undefined ? { prompt_context_window_tokens: contextWindowTokens } : {}),
+    prompt_prior_session_usage_source: priorSessionUsageSource,
+    ...(priorSessionInputTokens !== undefined
+      ? { prompt_prior_session_input_tokens: priorSessionInputTokens }
+      : {}),
+  };
 }
 
 function amrOpenCodeErrorPhase(value: unknown): TrackingAmrOpenCodeErrorPhase | undefined {
@@ -168,6 +255,162 @@ function amrOpenCodeDiagnosticsFromError(data: unknown): Partial<RunDiagnosticsA
     ...(lastEventType ? { amr_opencode_last_event_type: lastEventType } : {}),
     ...(lastToolStatus ? { amr_opencode_last_tool_status: lastToolStatus } : {}),
     ...(lastToolKind ? { amr_opencode_last_tool_kind: lastToolKind } : {}),
+  };
+}
+
+function lifecycleCountBucket(count: number): NonNullable<RunDiagnosticsAnalytics['tool_execution_lifecycle_count_bucket']> {
+  if (count <= 1) return '1';
+  if (count <= 5) return '2_5';
+  if (count <= 20) return '6_20';
+  return 'gt_20';
+}
+
+function collapseLifecycleEnum<T extends string>(values: Set<T>): T | 'mixed' | 'unknown' {
+  if (values.size === 0) return 'unknown';
+  if (values.size > 1) return 'mixed';
+  return values.values().next().value ?? 'unknown';
+}
+
+function toolExecutionLifecycleAnalytics(
+  events: RunEventForDiagnostics[],
+): Partial<RunDiagnosticsAnalytics> {
+  const toolCallIds = new Set<string>();
+  const triggers = new Set<'exit' | 'abort' | 'deadline'>();
+  const terminals = new Set<'running' | 'returned' | 'failed' | 'interrupted'>();
+  const terminalSources = new Set<'tool_result' | 'tool_error' | 'processor_cleanup'>();
+  let lifecycleCount = 0;
+  let killRequested = false;
+  let killSent = false;
+  let killFailed = false;
+  let childCloseSeen = false;
+  let stdoutCloseSeen = false;
+  let stderrCloseSeen = false;
+  let evidenceIncomplete = false;
+
+  // Terminal snapshots carry the most complete evidence. Bound work and
+  // memory to the latest 64 distinct diagnostics while preserving that tail.
+  for (const event of events.slice().reverse()) {
+    if (event.event !== 'agent') continue;
+    const data = recordValue(event.data);
+    if (
+      data?.type !== 'diagnostic' ||
+      data.name !== 'tool_execution_lifecycle' ||
+      data.schema !== 'vela.tool_execution_lifecycle' ||
+      data.version !== 1
+    ) {
+      continue;
+    }
+    const safeLifecycleEvents = Array.isArray(data.events)
+      ? data.events.slice(-64).flatMap((rawLifecycleEvent) => {
+          const lifecycleEvent = recordValue(rawLifecycleEvent);
+          const phase = lifecycleEvent?.phase;
+          if (
+            phase !== 'kill_requested' && phase !== 'kill_sent' &&
+            phase !== 'kill_failed' && phase !== 'stdout_close' &&
+            phase !== 'stderr_close' && phase !== 'close'
+          ) {
+            return [];
+          }
+          return [{
+            phase,
+            ...(typeof lifecycleEvent?.stdoutClosed === 'boolean'
+              ? { stdoutClosed: lifecycleEvent.stdoutClosed }
+              : {}),
+            ...(typeof lifecycleEvent?.stderrClosed === 'boolean'
+              ? { stderrClosed: lifecycleEvent.stderrClosed }
+              : {}),
+          }];
+        })
+      : [];
+    const rawToolTerminal = recordValue(data.toolTerminal);
+    const safeToolTerminal =
+      rawToolTerminal?.source === 'tool_result' ||
+      rawToolTerminal?.source === 'tool_error' ||
+      rawToolTerminal?.source === 'processor_cleanup'
+        ? {
+            source: rawToolTerminal.source,
+            ...(typeof rawToolTerminal.confirmed === 'boolean'
+              ? { confirmed: rawToolTerminal.confirmed }
+              : {}),
+          }
+        : null;
+    const toolCallIdHash = data.toolCallIdHash;
+    if (typeof toolCallIdHash !== 'string' || !/^acp_[a-f0-9]{24}$/.test(toolCallIdHash)) {
+      continue;
+    }
+    if (toolCallIds.has(toolCallIdHash)) continue;
+    toolCallIds.add(toolCallIdHash);
+    lifecycleCount += 1;
+
+    if (data.trigger === 'exit' || data.trigger === 'abort' || data.trigger === 'deadline') {
+      triggers.add(data.trigger);
+    }
+    if (
+      data.terminal === 'running' || data.terminal === 'returned' ||
+      data.terminal === 'failed' || data.terminal === 'interrupted'
+    ) {
+      terminals.add(data.terminal);
+    }
+    if (data.terminal === 'running') evidenceIncomplete = true;
+    if (typeof data.droppedEvents === 'number' && data.droppedEvents > 0) {
+      evidenceIncomplete = true;
+    }
+
+    const toolTerminal = safeToolTerminal;
+    if (
+      toolTerminal?.source === 'tool_result' ||
+      toolTerminal?.source === 'tool_error' ||
+      toolTerminal?.source === 'processor_cleanup'
+    ) {
+      terminalSources.add(toolTerminal.source);
+      if (toolTerminal.source === 'processor_cleanup' || toolTerminal.confirmed !== true) {
+        evidenceIncomplete = true;
+      }
+    } else {
+      evidenceIncomplete = true;
+    }
+
+    if (safeLifecycleEvents.length > 0) {
+      for (const lifecycleEvent of safeLifecycleEvents) {
+        const phase = lifecycleEvent?.phase;
+        if (phase === 'kill_requested') killRequested = true;
+        if (phase === 'kill_sent') killSent = true;
+        if (phase === 'kill_failed') killFailed = true;
+        if (phase === 'stdout_close') stdoutCloseSeen = true;
+        if (phase === 'stderr_close') stderrCloseSeen = true;
+        if (phase === 'close') {
+          childCloseSeen = true;
+          if (lifecycleEvent?.stdoutClosed === true) stdoutCloseSeen = true;
+          if (lifecycleEvent?.stderrClosed === true) stderrCloseSeen = true;
+          if (lifecycleEvent?.stdoutClosed !== true || lifecycleEvent?.stderrClosed !== true) {
+            evidenceIncomplete = true;
+          }
+        }
+      }
+    }
+    if (lifecycleCount >= 64) break;
+  }
+
+  if (lifecycleCount === 0) return {};
+  if (triggers.size > 0 && !childCloseSeen) evidenceIncomplete = true;
+  if (killRequested && !killSent && !killFailed) evidenceIncomplete = true;
+  return {
+    tool_execution_lifecycle_seen: true,
+    tool_execution_lifecycle_count_bucket: lifecycleCountBucket(lifecycleCount),
+    tool_execution_trigger: collapseLifecycleEnum(triggers),
+    tool_execution_terminal: collapseLifecycleEnum(terminals),
+    tool_terminal_source: collapseLifecycleEnum(terminalSources),
+    tool_kill_outcome: killFailed
+      ? 'failed'
+      : killSent
+        ? 'sent'
+        : killRequested
+          ? 'requested'
+          : 'none',
+    tool_child_close_seen: childCloseSeen,
+    tool_stdout_close_seen: stdoutCloseSeen,
+    tool_stderr_close_seen: stderrCloseSeen,
+    tool_execution_evidence_incomplete: evidenceIncomplete,
   };
 }
 
@@ -303,6 +546,8 @@ export function collectStdoutTailSummary(
 
 export function summarizeRunDiagnosticsForAnalytics(args: {
   events?: RunEventForDiagnostics[];
+  /** Validated projection folded before the in-memory event tail can evict it. */
+  promptBudgetDiagnostics?: Partial<RunDiagnosticsAnalytics> | null | undefined;
   exitCode?: number | null;
   signal?: string | null;
   cancelRequested?: boolean;
@@ -315,6 +560,7 @@ export function summarizeRunDiagnosticsForAnalytics(args: {
 }): RunDiagnosticsAnalytics {
   const events = args.events ?? [];
   const toolProgress = summarizeRunToolProgress(events);
+  const toolExecutionLifecycle = toolExecutionLifecycleAnalytics(events);
   let stderr = '';
   let stdout = '';
   let userVisibleOutputSeen = false;
@@ -324,6 +570,8 @@ export function summarizeRunDiagnosticsForAnalytics(args: {
   let recordedCloseReason: RunCloseReason | null = null;
   let resumeAutoReseeded = false;
   let amrOpenCodeDiagnostics: Partial<RunDiagnosticsAnalytics> = {};
+  let promptBudgetDiagnostics: Partial<RunDiagnosticsAnalytics> =
+    args.promptBudgetDiagnostics ?? {};
   for (const event of events) {
     if (event.event === 'stderr') {
       const chunk = readStderrChunk(event.data);
@@ -346,6 +594,8 @@ export function summarizeRunDiagnosticsForAnalytics(args: {
     if (data.type === 'diagnostic' && data.name === 'acp_approval_request') {
       approvalRequested = true;
     }
+    const promptBudget = promptBudgetAnalyticsFromDiagnostic(data);
+    if (promptBudget) promptBudgetDiagnostics = promptBudget;
     if (event.event === 'diagnostic' && data.type === 'agent_resume_auto_reseed') {
       resumeAutoReseeded = true;
     }
@@ -426,5 +676,7 @@ export function summarizeRunDiagnosticsForAnalytics(args: {
     live_artifact_seen: liveArtifactSeen,
     resume_auto_reseeded: resumeAutoReseeded,
     ...amrOpenCodeDiagnostics,
+    ...promptBudgetDiagnostics,
+    ...toolExecutionLifecycle,
   };
 }

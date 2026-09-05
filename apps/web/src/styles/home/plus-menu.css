@@ -3,7 +3,7 @@
 
    Neutral styling for the ComposerPlusMenu component used by both the
    home hero and the project chat composer: a trigger button, a popup
-   with an attach row + connector / plugin / MCP submenus, and (project
+   with an attach row + connector / MCP submenus, and (project
    only) a design-toolbox submenu. Mirrors the original home-hero__plus-*
    styling so both surfaces look identical.
    ============================================================ */
@@ -37,39 +37,121 @@
   background: var(--bg-subtle);
   color: var(--text);
 }
-/* The "+" glyph pivots 45° while the menu is open (reads as a close ×),
-   and eases back on dismiss. */
 .plus-menu__trigger .od-icon {
   display: inline-flex;
-  transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.plus-menu__trigger.is-active .od-icon {
-  transform: rotate(45deg);
-}
-@media (prefers-reduced-motion: reduce) {
-  .plus-menu__trigger .od-icon {
-    transition: none;
-  }
-}
-.home-hero__input-card .plus-menu__trigger {
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
+/* No motion on the glyph at all (per product): opening the menu used to pivot
+   it 45° so it read as a close ×, which the trigger's own fill already says. */
+/* The Home "+" now sits in the accessory row UNDER the composer card (before
+   the working-directory picker), so both selectors carry the round-button
+   treatment — the card-scoped one stays for the project chat composer. */
+.home-hero__input-card .plus-menu__trigger,
+.home-hero__workdir-row .plus-menu__trigger {
   border-radius: var(--radius-circular, 50%);
   background: var(--bg-panel);
   border-color: var(--border);
   color: var(--text-muted);
   box-shadow: var(--shadow-xs);
 }
+.home-hero__input-card .plus-menu__trigger {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+}
+/* In the accessory row the "+" is the only control carrying a visible fill —
+   the working-directory picker beside it is borderless until hover. Match that
+   picker's 26px band so the disc reads as part of the same line instead of
+   standing a head taller than everything on it. */
+.home-hero__workdir-row .plus-menu__trigger {
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+}
 .home-hero__input-card .plus-menu__trigger:hover:not(:disabled),
 .home-hero__input-card .plus-menu__trigger:focus-visible,
-.home-hero__input-card .plus-menu__trigger.is-active {
+.home-hero__input-card .plus-menu__trigger.is-active,
+.home-hero__workdir-row .plus-menu__trigger:hover:not(:disabled),
+.home-hero__workdir-row .plus-menu__trigger:focus-visible,
+.home-hero__workdir-row .plus-menu__trigger.is-active {
   outline: none;
   background: var(--bg-panel);
   border-color: var(--border-strong);
   color: var(--text);
   box-shadow: var(--shadow-sm);
 }
+/* Labeled variant — the Home accessory row, where the "+" now reads "上传文件"
+   beside the working-directory picker. With a label it is no longer a disc, so
+   it drops the fixed square and takes that picker's borderless text treatment
+   (13px, --text-muted, white fill on hover) and the two controls read as one
+   line. Everything below must sit AFTER the disc rules above: the workdir-row
+   selectors match at the same specificity, so source order decides. */
+.plus-menu__trigger--labeled {
+  width: auto;
+  height: auto;
+  min-height: 26px;
+  padding: 4px 8px;
+  gap: 6px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  /* Match the working-directory trigger beside it: `icon-btn` ships 500, which
+     made this label read a step heavier than its only neighbour. */
+  font-weight: 600;
+}
+.plus-menu__trigger-label {
+  white-space: nowrap;
+}
+.home-hero__workdir-row .plus-menu__trigger--labeled {
+  font-weight: 600;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  /* Bare text at rest (per product) — no fill, no stroke: the row reads as two
+     plain labels under the card, and the white pill only comes up on hover.
+     Even 8px inset on all four sides. */
+  padding: var(--spacing-8);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+.home-hero__workdir-row .plus-menu__trigger--labeled:hover:not(:disabled),
+.home-hero__workdir-row .plus-menu__trigger--labeled:focus-visible,
+.home-hero__workdir-row .plus-menu__trigger--labeled.is-active {
+  /* The pill only exists under the pointer — that is the whole affordance now
+     that the control rests as bare text. */
+  background: var(--bg);
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text-strong);
+}
+/* Home's foot row: the upload entry is an icon-only disc at the head of the
+   row. It takes the model chip's own metrics and fill from the far end of the
+   same row (`.home-hero__execution-switcher .inline-switcher__chip`: 36px,
+   --bg-panel, no stroke, no shadow, --bg-subtle under the pointer), so the two
+   ends read as one set of controls. Must sit after the
+   `.home-hero__input-card` disc rules above — same specificity, so source
+   order decides. */
+.home-hero__foot-left .plus-menu__trigger {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0;
+  border-radius: var(--radius-circular, 50%);
+  border-color: transparent;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  box-shadow: none;
+}
+.home-hero__foot-left .plus-menu__trigger:hover:not(:disabled),
+.home-hero__foot-left .plus-menu__trigger:focus-visible,
+.home-hero__foot-left .plus-menu__trigger.is-active {
+  border-color: transparent;
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+  box-shadow: none;
+}
+
 .plus-menu__popup {
   position: fixed;
   bottom: auto;
@@ -81,7 +163,8 @@
   flex-direction: column;
   gap: 0;
   padding: 5px;
-  border: 1px solid var(--border-strong, var(--border));
+  /* No stroke: the shadow below already separates the panel from the page, and
+     a 1px outline on top of it read as a hard seam against the composer card. */
   border-radius: var(--radius-lg);
   background: var(--bg-panel);
   box-shadow:
@@ -154,7 +237,7 @@
   flex-direction: column;
   gap: 0;
   padding: 5px;
-  border: 1px solid var(--border-strong, var(--border));
+  /* Same material as the popup it hangs off — strokeless for the same reason. */
   border-radius: var(--radius-lg);
   background: var(--bg-panel);
   box-shadow:
@@ -201,11 +284,6 @@
 .plus-menu__popup--flyout-contained .plus-menu__flyout::before {
   display: none;
 }
-.plus-menu__popup--flyout-contained .plus-menu__flyout .composer-design-toolbox-menu {
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-}
 .plus-menu__search {
   display: flex;
   align-items: center;
@@ -249,18 +327,12 @@
   color: var(--text-muted);
   font-size: 12px;
 }
-/* ---------- Plugins flyout: list + hover-preview column ---------- */
-/* The plugins flyout is wider than the others: the left column is the
-   familiar search + list, the right column mirrors the hovered row with
-   a live preview hero and metadata. Placement math reserves the extra
-   width via PLUS_MENU_PLUGIN_FLYOUT_WIDTH. */
-.plus-menu__flyout--plugins {
-  min-width: 0;
-  max-width: none;
-  width: 466px;
-  max-width: calc(100vw - 24px);
-  overflow: hidden;
-}
+/* ---------- Plugin pane: list + hover-preview column ---------- */
+/* Owned by the project composer's 插件 quick pill popover
+   (ChatComposer's ComposerPluginsPaneContent), which sizes itself through
+   `.composer-plugins-standalone-popup`. The left column is the familiar
+   search + list, the right column mirrors the hovered row with a live
+   preview hero and metadata. */
 .plus-menu__plugin-pane {
   display: flex;
   gap: 8px;
@@ -277,7 +349,7 @@
 .plus-menu__plugin-main .plus-menu__list {
   max-height: 248px;
 }
-/* Base preview block — reused both as the plugins-flyout side column and
+/* Base preview block — reused both as the plugin pane's side column and
    inside the design-toolbox hover-detail panel, so it stays layout-neutral
    here; the column divider lives in the plugin-pane scope below. */
 .plus-menu__preview {
@@ -289,7 +361,7 @@
 }
 .plus-menu__plugin-pane .plus-menu__preview {
   flex: 1 1 auto;
-  /* The flyout's own padding is a tight 5px; the detail column needs more
+  /* The pane's own padding is a tight 5px; the detail column needs more
      air than the list rows, so it carries its own inset — top and sides
      (dogfood 2026-07-28). */
   padding: 10px 10px 6px 14px;
@@ -357,16 +429,6 @@
 }
 /* Narrow surfaces (contained flyout) have no room for a side column, so
    the preview drops below the list and the hero height is capped. */
-.plus-menu__popup--flyout-contained .plus-menu__flyout--plugins {
-  width: auto;
-}
-.plus-menu__popup--flyout-contained .plus-menu__plugin-pane {
-  flex-direction: column;
-}
-.plus-menu__popup--flyout-contained .plus-menu__plugin-main {
-  flex: 1 1 auto;
-  max-width: none;
-}
 .plus-menu__popup--flyout-contained .plus-menu__preview {
   border-left: 0;
   border-top: 1px solid var(--border);
@@ -441,229 +503,3 @@
   position: relative;
 }
 
-/* The design-toolbox panel sits inside a flyout; give the flyout room and
-   let the panel's own styling (composer-design-toolbox-*) drive the rest. */
-.plus-menu__flyout .composer-design-toolbox-menu {
-  position: static;
-  width: auto;
-  min-width: 320px;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  padding: 0;
-  background: transparent;
-}
-
-/* ── Composer mode picker (Plan / Design / Ask), left of the model selector ── */
-.composer-mode {
-  position: relative;
-  display: inline-flex;
-  /* Match the selected-state green to the "原型" template chip
-     (deep brand green #2f781d on the #f9fff4 tint). */
-  --green: #2f781d;
-  --green-bg: #f9fff4;
-}
-.composer-mode__trigger {
-  box-sizing: border-box;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid transparent;
-  border-radius: var(--radius-circular, 50%);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition:
-    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.composer-mode__trigger:hover:not(:disabled),
-.composer-mode__trigger.is-open,
-.composer-mode__trigger.is-selected {
-  background: var(--bg-subtle);
-  color: var(--text);
-}
-.composer-mode__icon {
-  display: inline-flex;
-}
-.composer-mode__icon svg {
-  display: block;
-  /* 16px in both states — the unselected circular trigger previously ran the
-     glyph at 18px, a touch larger than the selected pill's 16px. */
-  width: 16px;
-  height: 16px;
-}
-/* Selected pill keeps the same 16px glyph as the neutral trigger
-   (dogfood 2026-07-28 icon-size pass). */
-.composer-mode.is-selected .composer-mode__icon svg {
-  width: 16px;
-  height: 16px;
-}
-/* In the home composer footer, match the "+" button chrome exactly: a 36px
-   circular outlined button (panel fill + border + soft shadow, muted glyph)
-   instead of the bare 32px borderless icon. */
-.home-hero__input-card .composer-mode__trigger {
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  border-radius: var(--radius-circular, 50%);
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  box-shadow: var(--shadow-xs);
-}
-.home-hero__input-card .composer-mode__trigger:hover:not(:disabled),
-.home-hero__input-card .composer-mode__trigger.is-open {
-  outline: none;
-  background: var(--bg-panel);
-  border-color: var(--border-strong);
-  color: var(--text);
-}
-
-/* Selected state (Cursor-style): the circular icon button becomes a green
-   capsule — icon + mode name + a clear ×. The `.composer-mode` root holds the
-   pill fill; the trigger and clear button ride transparently on it. */
-.composer-mode.is-selected {
-  display: inline-flex;
-  align-items: center;
-  gap: 0;
-  padding: 0 4px 0 0;
-  border-radius: var(--radius-pill, 999px);
-  /* Neutral chip (dogfood 2026-07-28): no green plate, no green ring — the
-     selected mode reads in the same muted ink as the design-system palette
-     icon beside it. */
-  background: transparent;
-  box-shadow: none;
-}
-.home-hero__input-card .composer-mode.is-selected .composer-mode__trigger,
-.composer-mode.is-selected .composer-mode__trigger {
-  width: auto;
-  min-width: 0;
-  height: 34px;
-  gap: 6px;
-  padding: 0 6px 0 11px;
-  border: none;
-  border-radius: var(--radius-pill, 999px);
-  background: transparent;
-  box-shadow: none;
-  color: var(--text-muted);
-}
-.home-hero__input-card .composer-mode.is-selected .composer-mode__trigger:hover:not(:disabled),
-.composer-mode.is-selected .composer-mode__trigger:hover:not(:disabled),
-.composer-mode.is-selected .composer-mode__trigger.is-open {
-  background: transparent;
-  border: none;
-  color: var(--text);
-}
-.composer-mode__label {
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-  color: var(--text-muted);
-}
-.composer-mode__clear {
-  appearance: none;
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-pill, 999px);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: background-color 120ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.composer-mode__clear:hover {
-  background: var(--bg-subtle);
-  color: var(--text);
-}
-
-.composer-mode-menu {
-  position: fixed;
-  z-index: 90;
-  display: flex;
-  flex-direction: column;
-  /* 2px between items so a hovered/selected row's fill sits clear of its
-     neighbours instead of butting against them. */
-  gap: 2px;
-  padding: 5px;
-  overflow-y: auto;
-  border: 1px solid var(--border-strong, var(--border));
-  border-radius: var(--radius-lg);
-  background: var(--bg-panel);
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.04),
-    0 10px 28px -10px rgba(0, 0, 0, 0.18);
-}
-.composer-mode-menu__item {
-  appearance: none;
-  width: 100%;
-  /* Override the global `button { height: 36px }` — items grow to fit the
-     name + always-visible description. */
-  height: auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  padding: 8px 9px;
-  border: 0;
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--text-strong);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.composer-mode-menu__item:hover,
-.composer-mode-menu__item:focus-visible,
-.composer-mode-menu__item.is-selected {
-  outline: none;
-  background: var(--bg-subtle);
-}
-.composer-mode-menu__head {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-.composer-mode-menu__icon {
-  flex: 0 0 auto;
-  display: inline-flex;
-  opacity: 0.85;
-}
-.composer-mode-menu__icon svg {
-  display: block;
-  width: 16px;
-  height: 16px;
-}
-.composer-mode-menu__name {
-  font-size: 13px;
-  font-weight: 500;
-}
-/* Checkmark on the selected row, pushed to the right edge of the name line. */
-.composer-mode-menu__check {
-  margin-left: auto;
-  flex: 0 0 auto;
-  display: inline-flex;
-  color: var(--text);
-}
-/* Description sits under the name, always visible (aligned past the icon).
-   `min-width: 0` lets the flex item shrink so long text wraps inside the menu
-   width instead of overflowing to the right. */
-.composer-mode-menu__desc {
-  min-width: 0;
-  padding: 3px 0 0 25px;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--text-muted);
-  white-space: normal;
-  overflow-wrap: break-word;
-}

@@ -1,5 +1,9 @@
+import { writeFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
-import { velaCommandStdout } from '../src/integrations/vela-command.js';
+import {
+  velaCommandStderr,
+  velaCommandStdout,
+} from '../src/integrations/vela-command.js';
 import {
   VELA_SAFETY_REJECTION_CODE,
   VelaMediaError,
@@ -26,13 +30,18 @@ function velaTaskJson(
 }
 
 /** An exec rejection carrying the CLI's stdout, as vela-command now attaches it. */
-function failedCommand(stdout: string): Error & { stdout?: string; code?: number } {
+function failedCommand(
+  stdout: string,
+  stderr = '',
+): Error & { stdout?: string; stderr?: string; code?: number } {
   const error = new Error('Command failed: vela image gen') as Error & {
     stdout?: string;
+    stderr?: string;
     code?: number;
   };
   error.code = 1;
   error.stdout = stdout;
+  error.stderr = stderr;
   return error;
 }
 
@@ -46,6 +55,18 @@ describe('velaCommandStdout', () => {
     expect(velaCommandStdout(undefined)).toBe('');
     expect(velaCommandStdout(null)).toBe('');
     expect(velaCommandStdout('a string rejection')).toBe('');
+  });
+});
+
+describe('velaCommandStderr', () => {
+  it('reads back the stderr a failed command carried', () => {
+    expect(velaCommandStderr(failedCommand('', 'network timeout'))).toBe(
+      'network timeout',
+    );
+  });
+
+  it('returns an empty string when the failure carried none', () => {
+    expect(velaCommandStderr(new Error('boom'))).toBe('');
   });
 });
 
@@ -215,5 +236,115 @@ describe('renderVelaImage', () => {
 
     expect(thrown).toBe(original);
     expect(thrown).not.toBeInstanceOf(VelaMediaError);
+  });
+
+  it('resumes a submitted image task after a polling timeout without resubmitting', async () => {
+    const timedOut = failedCommand(
+      '',
+      'Error: perform media request GET /api/v1/media/images/tasks/mit_recover_once: ' +
+      'dial tcp 198.18.1.87:443: connect: operation timed out',
+    );
+    const calls: string[][] = [];
+    const optionsSeen: Array<Record<string, unknown> | undefined> = [];
+    const runCommand = (async (
+      args: string[],
+      options?: Record<string, unknown>,
+    ) => {
+      calls.push(args);
+      optionsSeen.push(options);
+      if (args[0] === 'image' && args[1] === 'gen') throw timedOut;
+      if (args[0] === 'image' && args[1] === 'get') {
+        const outputIndex = args.indexOf('--output');
+        const output = args[outputIndex + 1];
+        if (!output) throw new Error('missing recovery output path');
+        await writeFile(output, Buffer.from('recovered-image'));
+        return JSON.stringify({
+          asset_id: 'ma_recovered',
+          status: 'ready',
+          kind: 'image',
+          mime_type: 'image/png',
+        });
+      }
+      throw new Error(`unexpected command: ${args.join(' ')}`);
+    }) as unknown as Parameters<typeof renderVelaImage>[1];
+
+    const result = await renderVelaImage(input, runCommand);
+
+    expect(result.bytes).toEqual(Buffer.from('recovered-image'));
+    expect(
+      calls.filter((args) => args[0] === 'image' && args[1] === 'gen'),
+    ).toHaveLength(1);
+    expect(calls[1]?.slice(0, 4)).toEqual([
+      'image',
+      'get',
+      'mit_recover_once',
+      '--wait',
+    ]);
+    expect(calls[1]).toContain('--json');
+    expect(optionsSeen[1]).toEqual(optionsSeen[0]);
+    expect(optionsSeen[1]).toMatchObject({
+      configuredEnv: {
+        VELA_INVOCATION_SOURCE: 'open-design',
+        VELA_WORKSPACE_ID: 'team-1',
+      },
+      timeoutMs: 330_000,
+    });
+  });
+
+  it('does not recover from a task path that appears only in the command message', async () => {
+    const original = new Error(
+      'Command failed: vela image gen --prompt ' +
+      '/api/v1/media/images/tasks/mit_prompt_injection',
+    );
+    const calls: string[][] = [];
+    const runCommand = (async (args: string[]) => {
+      calls.push(args);
+      throw original;
+    }) as unknown as Parameters<typeof renderVelaImage>[1];
+
+    const thrown = await renderVelaImage(input, runCommand).catch(
+      (error: unknown) => error,
+    );
+
+    expect(thrown).toBe(original);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.slice(0, 2)).toEqual(['image', 'gen']);
+  });
+
+  it('preserves a structured provider verdict returned by the recovery command', async () => {
+    const initialFailure = failedCommand(
+      '',
+      'Error: perform media request GET /api/v1/media/images/tasks/mit_recover_refused: operation timed out',
+    );
+    const recoveryFailure = failedCommand(
+      velaTaskJson({
+        code: 'safety_rejection',
+        message: 'the request was rejected by a content safety policy',
+        subject: 'output_image',
+        retryable: false,
+      }),
+    );
+    const calls: string[][] = [];
+    const runCommand = (async (args: string[]) => {
+      calls.push(args);
+      if (calls.length === 1) throw initialFailure;
+      throw recoveryFailure;
+    }) as unknown as Parameters<typeof renderVelaImage>[1];
+
+    const thrown = await renderVelaImage(input, runCommand).catch(
+      (error: unknown) => error,
+    );
+
+    expect(thrown).toBeInstanceOf(VelaMediaError);
+    expect((thrown as VelaMediaError).code).toBe(VELA_SAFETY_REJECTION_CODE);
+    expect((thrown as VelaMediaError).subject).toBe('output_image');
+    expect((thrown as VelaMediaError).retryable).toBe(false);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.slice(0, 2)).toEqual(['image', 'gen']);
+    expect(calls[1]?.slice(0, 3)).toEqual([
+      'image',
+      'get',
+      'mit_recover_refused',
+    ]);
   });
 });

@@ -671,15 +671,18 @@ test('[P1] real daemon run treats an in-place artifact edit as produced work', a
   await expect(versionsDialog.getByRole('option')).toHaveCount(3);
 });
 
-test('[P1] Plan mode daemon run creates, opens, and restores an editable markdown plan', async ({ page }) => {
-  await createProject(page, 'Plan mode markdown smoke');
+test('[P1] plan-document daemon run creates, opens, and restores an editable markdown plan', async ({ page }) => {
+  await createProject(page, 'Plan document markdown smoke');
   await expectWorkspaceReady(page);
 
-  await selectComposerSessionMode(page, 'Plan mode');
+  // The composer has no session-mode picker any more (#7635); the plan
+  // document flow is driven by the prompt (the fake runtime keys on it), and
+  // the run carries the conversation's stored design mode.
+  await expect(page.getByTestId('chat-composer').getByTestId('composer-mode-trigger')).toHaveCount(0);
   const runRequestPromise = page.waitForRequest(isCreateRunRequest);
   await sendPrompt(page, 'Create a deterministic plan document');
   const runRequest = await runRequestPromise;
-  expect((runRequest.postDataJSON() as { sessionMode?: string }).sessionMode).toBe('plan');
+  expect((runRequest.postDataJSON() as { sessionMode?: string }).sessionMode).toBe('design');
 
   const { projectId } = await currentProjectContext(page);
   await expectProjectFilesToContain(page, projectId, ['plan.md']);
@@ -731,12 +734,11 @@ test('[P1] media-only turn auto-opens the generated image file', async ({ page }
 // writes the HTML as a project file (Write tool, no inline artifact echo) and
 // then touches the plan document again. The viewer must auto-open the
 // generated HTML instead of staying on the markdown plan.
-test('[P1] Plan mode generation turn auto-opens the generated HTML file', async ({ page }) => {
+test('[P1] plan-document generation turn auto-opens the generated HTML file', async ({ page }) => {
   test.setTimeout(120_000);
-  await createProject(page, 'Plan mode html auto-open smoke', 'claude');
+  await createProject(page, 'Plan document html auto-open smoke', 'claude');
   await expectWorkspaceReady(page);
 
-  await selectComposerSessionMode(page, 'Plan mode');
   await sendPrompt(page, 'Create a deterministic plan document');
   const { projectId } = await currentProjectContext(page);
   await expectProjectFilesToContain(page, projectId, ['plan.md']);
@@ -767,12 +769,11 @@ test('[P1] Plan mode generation turn auto-opens the generated HTML file', async 
 // file — the viewer must still re-focus the regenerated HTML. Uses the codex
 // fake runtime (no tool_use events, like most CLI protocols) so the per-write
 // auto-open path cannot mask the turn-end selection.
-test('[P1] Plan mode regeneration re-opens the existing generated HTML file', async ({ page }) => {
+test('[P1] plan-document regeneration re-opens the existing generated HTML file', async ({ page }) => {
   test.setTimeout(120_000);
-  await createProject(page, 'Plan mode html regen smoke');
+  await createProject(page, 'Plan document html regen smoke');
   await expectWorkspaceReady(page);
 
-  await selectComposerSessionMode(page, 'Plan mode');
   await sendPrompt(page, 'Create a deterministic plan document');
   const { projectId, conversationId } = await currentProjectContext(page);
   await expectProjectFilesToContain(page, projectId, ['plan.md']);
@@ -1497,23 +1498,6 @@ async function expectWorkspaceReady(page: Page) {
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();
-}
-
-async function selectComposerSessionMode(page: Page, modeTitle: 'Ask mode' | 'Plan mode' | 'Design mode') {
-  // #5517 composer mode picker: Ask maps to the real `chat` session mode.
-  const modeId = modeTitle === 'Ask mode' ? 'chat' : modeTitle === 'Plan mode' ? 'plan' : 'design';
-  const modeName = modeTitle.replace(' mode', '');
-  const trigger = page.getByTestId('chat-composer').getByTestId('composer-mode-trigger');
-  await expect(trigger).toBeVisible();
-  await trigger.click();
-
-  const menu = page.getByTestId('composer-mode-menu');
-  await expect(menu).toBeVisible();
-  await expect(menu.getByTestId('composer-mode-menu-chat')).toBeVisible();
-  await expect(menu.getByTestId('composer-mode-menu-plan')).toBeVisible();
-  await expect(menu.getByTestId('composer-mode-menu-design')).toBeVisible();
-  await menu.getByTestId(`composer-mode-menu-${modeId}`).click();
-  await expect(trigger).toHaveAttribute('aria-label', `Mode: ${modeName}`);
 }
 
 async function sendPrompt(page: Page, prompt: string, responseTimeout = T.medium) {

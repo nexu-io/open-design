@@ -3,10 +3,7 @@ name: dsh-bootstrap-publish
 # Publish immutable DeepSeek Harness bootstrap installers to R2 from the
 # product-owned canonical source under tools/release/resources/dsh-bootstrap/.
 #
-# Standalone and outside the merge gate (like nix.yml / docker-image.yml):
-# product can ship a DSH bootstrap snapshot without a landing production deploy.
-# landing-page-production.yml still publishes the same bytes before Pages deploy
-# so production cannot go live with unpublished installers.
+# Standalone and outside the merge gate (like nix.yml / docker-image.yml).
 
 on:
   workflow_dispatch:
@@ -25,10 +22,9 @@ permissions:
   contents: read
 
 concurrency:
-  # Coordinate with the production workflow, which publishes the same pointer
-  # before deploying Pages. The publisher also uses a monotonic CAS update so
-  # queued reruns cannot rewind latest after a newer version ships.
-  group: landing-page-production
+  # The publisher uses a monotonic CAS update so queued reruns cannot rewind
+  # latest after a newer version ships.
+  group: dsh-bootstrap-publish
   cancel-in-progress: false
 
 jobs:

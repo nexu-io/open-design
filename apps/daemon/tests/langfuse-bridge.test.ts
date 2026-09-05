@@ -510,6 +510,74 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
                 files: ['index.html'],
               },
             },
+            {
+              id: 2,
+              event: 'agent',
+              timestamp: Date.now() - 50,
+              data: {
+                type: 'diagnostic',
+                name: 'prompt_budget_v1',
+                source: 'acp-json-rpc',
+                schemaVersion: 1,
+                frameBytes: 34_810,
+                promptBytes: 34_222,
+                promptTokenEstimate: 11_408,
+                tokenEstimateMethod: 'utf8_bytes_div_3_ceil_v1',
+                sessionMode: 'resume',
+                modelId: 'claude-opus-5',
+                contextWindowSource: 'model_metadata',
+                contextWindowTokens: 200_000,
+                priorSessionUsageSource: 'agent_session',
+                priorSessionInputTokens: 123_456,
+                prompt: 'PRIVATE_PROMPT_MUST_NOT_LEAK',
+                sessionId: 'PRIVATE_SESSION_MUST_NOT_LEAK',
+                command: 'PRIVATE_COMMAND_MUST_NOT_LEAK',
+                path: '/PRIVATE_PATH_MUST_NOT_LEAK',
+                headers: { authorization: 'PRIVATE_HEADER_MUST_NOT_LEAK' },
+                toolInput: 'PRIVATE_TOOL_INPUT_MUST_NOT_LEAK',
+              },
+            },
+            {
+              id: 3,
+              event: 'agent',
+              timestamp: Date.now() - 25,
+              data: {
+                type: 'diagnostic',
+                name: 'tool_execution_lifecycle',
+                source: 'amr-opencode',
+                elapsedMs: 50,
+                schema: 'vela.tool_execution_lifecycle',
+                version: 1,
+                status: 'failed',
+                phase: 'close',
+                executionVersion: 1,
+                toolCallIdHash: 'acp_0123456789abcdef01234567',
+                trigger: 'deadline',
+                terminal: 'interrupted',
+                droppedEvents: 1,
+                events: [
+                  { phase: 'kill_sent', elapsedMs: 10, target: 'group', mechanism: 'process_group' },
+                  { phase: 'close', stdoutClosed: true, stderrClosed: false },
+                ],
+                toolTerminal: { source: 'processor_cleanup', confirmed: false },
+                command: 'cat /private/secret',
+                headers: { authorization: 'Bearer secret' },
+              },
+            },
+            {
+              id: 4,
+              event: 'agent',
+              timestamp: Date.now() - 10,
+              data: {
+                type: 'diagnostic',
+                name: 'tool_execution_lifecycle',
+                source: 'amr-opencode',
+                schema: 'vela.tool_execution_lifecycle',
+                version: 1,
+                toolCallIdHash: 'invalid-hash',
+                reason: 'private-command --token super-secret-lifecycle-value',
+              },
+            },
           ] as any,
         }) as any,
         fetchImpl: fetchSpy as any,
@@ -541,6 +609,132 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
       metadata: {
         diagnostic_name: 'acp_artifact_text_suppression',
       },
+    });
+    expect(
+      bodyOf(batch, 'event-create', 'agent-diagnostic:prompt_budget_v1'),
+    ).toMatchObject({
+      input: {
+        source: 'amr',
+        event_type: 'diagnostic',
+      },
+      output: {
+        name: 'prompt_budget_v1',
+        source: 'acp-json-rpc',
+        schema_version: 1,
+        frame_bytes: 34_810,
+        prompt_bytes: 34_222,
+        prompt_token_estimate: 11_408,
+        token_estimate_method: 'utf8_bytes_div_3_ceil_v1',
+        session_mode: 'resume',
+        model_id: 'claude-opus-5',
+        context_window_source: 'model_metadata',
+        context_window_tokens: 200_000,
+        prior_session_usage_source: 'agent_session',
+        prior_session_input_tokens: 123_456,
+      },
+      metadata: {
+        diagnostic_name: 'prompt_budget_v1',
+      },
+    });
+    expect(batch[0].body.metadata.diagnostics).toMatchObject({
+      prompt_budget_version: 'prompt_budget_v1',
+      prompt_frame_bytes: 34_810,
+      prompt_bytes: 34_222,
+      prompt_token_estimate: 11_408,
+      prompt_session_mode: 'resume',
+      prompt_model_id: 'claude-opus-5',
+      prompt_context_window_source: 'model_metadata',
+      prompt_context_window_tokens: 200_000,
+      prompt_prior_session_usage_source: 'agent_session',
+      prompt_prior_session_input_tokens: 123_456,
+    });
+    expect(JSON.stringify(batch)).not.toContain('PRIVATE_');
+    expect(
+      bodyOf(batch, 'event-create', 'agent-diagnostic:tool_execution_lifecycle'),
+    ).toMatchObject({
+      output: {
+        name: 'tool_execution_lifecycle',
+        source: 'amr-opencode',
+        elapsed_ms: 50,
+        schema: 'vela.tool_execution_lifecycle',
+        version: 1,
+        tool_call_id_hash: 'acp_0123456789abcdef01234567',
+        status: 'failed',
+        phase: 'close',
+        execution_version: 1,
+        trigger: 'deadline',
+        terminal: 'interrupted',
+        dropped_events: 1,
+        events: [
+          { phase: 'kill_sent', elapsed_ms: 10, target: 'group', mechanism: 'process_group' },
+          { phase: 'close', stdout_closed: true, stderr_closed: false },
+        ],
+        tool_terminal: { source: 'processor_cleanup', confirmed: false },
+      },
+      metadata: { diagnostic_name: 'tool_execution_lifecycle' },
+    });
+    const serializedBatch = JSON.stringify(batch);
+    expect(serializedBatch).not.toContain('cat /private/secret');
+    expect(serializedBatch).not.toContain('Bearer secret');
+    expect(serializedBatch).not.toContain('super-secret-lifecycle-value');
+  });
+
+  it('projects a retained prompt budget after the diagnostic leaves the 2,000-event tail', async () => {
+    await writeAppCfg({
+      installationId: 'install-uuid-1',
+      telemetry: { metrics: true, content: true, artifactManifest: false },
+    });
+    const fetchSpy = vi.fn().mockResolvedValue(new Response('{}', { status: 207 }));
+    process.env.LANGFUSE_PUBLIC_KEY = 'pk';
+    process.env.LANGFUSE_SECRET_KEY = 'sk';
+    try {
+      await reportRunCompletedFromDaemon({
+        db: makeDbWithListMessages({
+          'conv-1': [{ id: 'msg-1', role: 'assistant', content: '', producedFiles: [] }],
+        }),
+        dataDir,
+        run: makeRun({
+          agentId: 'amr',
+          events: Array.from({ length: 2_001 }, (_, index) => ({
+            id: index + 2,
+            event: 'agent',
+            timestamp: Date.now() - 2_001 + index,
+            data: { type: 'status', label: 'working' },
+          })),
+          promptBudgetDiagnostics: {
+            prompt_budget_version: 'prompt_budget_v1',
+            prompt_frame_bytes: 34_810,
+            prompt_bytes: 34_222,
+            prompt_token_estimate: 11_408,
+            prompt_token_estimate_method: 'utf8_bytes_div_3_ceil_v1',
+            prompt_session_mode: 'resume',
+            prompt_model_id: 'claude-opus-5',
+            prompt_context_window_source: 'model_metadata',
+            prompt_context_window_tokens: 200_000,
+            prompt_prior_session_usage_source: 'agent_session',
+            prompt_prior_session_input_tokens: 123_456,
+          },
+        }) as any,
+        fetchImpl: fetchSpy as any,
+      });
+    } finally {
+      delete process.env.LANGFUSE_PUBLIC_KEY;
+      delete process.env.LANGFUSE_SECRET_KEY;
+    }
+
+    const batch = JSON.parse(fetchSpy.mock.calls[0]![1]!.body as string).batch as any[];
+    expect(
+      bodyOf(batch, 'event-create', 'agent-diagnostic:prompt_budget_v1'),
+    ).toMatchObject({
+      output: {
+        frame_bytes: 34_810,
+        prompt_bytes: 34_222,
+        prior_session_input_tokens: 123_456,
+      },
+    });
+    expect(batch[0].body.metadata.diagnostics).toMatchObject({
+      prompt_budget_version: 'prompt_budget_v1',
+      prompt_frame_bytes: 34_810,
     });
   });
 

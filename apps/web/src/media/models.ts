@@ -700,6 +700,18 @@ export function canonicalMediaModelId(id: string): string {
   return MEDIA_MODEL_ALIASES[id] ?? id;
 }
 
+/**
+ * A prompt template recommends a model family; it is not an explicit BYOK
+ * provider choice. Legacy first-party templates used the unqualified
+ * `gpt-image-2` family id, so keep those on the managed Cloud route while
+ * preserving `gpt-image-2` for users who select OpenAI directly.
+ */
+export function imageModelIdForPromptTemplate(id: string): string {
+  const normalized = id.trim();
+  if (normalized === 'gpt-image-2') return 'vela/gpt-image-2';
+  return canonicalMediaModelId(normalized);
+}
+
 export function findMediaModel(id: string): MediaModel | null {
   const all: MediaModel[] = [
     ...IMAGE_MODELS,

@@ -63,11 +63,16 @@ afterEach(() => {
 // #5517 removed the inline template rail from Home, so beat 1 of the guide no
 // longer has a chip card to sheen; the stage still arms on mount and advances
 // when a template is picked from the composer footer's radial picker.
+// Home starts with no creation type: the type row under the composer is the
+// empty state's only control, and it retires once something is picked.
 async function pickHomeTemplate(id: string) {
-  const trigger = await screen.findByTestId('home-hero-template-trigger');
-  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false));
-  fireEvent.click(trigger);
-  fireEvent.click(await screen.findByTestId(`home-hero-template-wedge-${id}`));
+  // A type already picked retires the row, and the pill has no menu — so
+  // switching means clearing back to the empty state first.
+  const clear = screen.queryByTestId('home-hero-template-clear');
+  if (clear) fireEvent.click(clear);
+  const rowPill = await screen.findByTestId(`home-hero-type-pill-${id}`);
+  await waitFor(() => expect((rowPill as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(rowPill);
 }
 
 describe('Home first-run guide trail', () => {
@@ -183,6 +188,9 @@ describe('Home first-run guide trail', () => {
     }));
     renderHome([]);
 
+    // Home no longer seeds a default type; beat 1 is the pick itself, and beat
+    // 2 then lands on the first static prompt-example card under it.
+    await pickHomeTemplate('prototype');
     const exampleCards = await screen.findAllByTestId('home-hero-prompt-example');
     await waitFor(
       () => {

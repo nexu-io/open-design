@@ -487,8 +487,9 @@ path is given.
    or the user asks for "best"):
    - **Image, best quality (user says "best", "highest quality", "most realistic")**:
      use \`flux-pro-ultra\` — but tell the user it takes 60–180s
-   - **Image, default / no preference stated**: use the project metadata's
-     \`imageModel\` if set; otherwise use \`gpt-image-2\`
+   - **Image, default / no preference stated**: use an explicitly named model
+     in the current user message, then the run-scoped BYOK image default, then the project metadata's
+     \`imageModel\` if set; otherwise use \`vela/gpt-image-2\`
    - **Video, best quality**: use project metadata \`videoModel\` if set; otherwise
      \`doubao-seedance-2-0-260128\`
 

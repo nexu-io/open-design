@@ -256,10 +256,11 @@ test('[P2] captures the topbar BYOK execution switcher surface', async ({ page }
   await gotoVisualHome(page);
 
   const chip = page.getByTestId('inline-model-switcher-chip');
-  // BYOK identity reads off the compact chip now: the link glyph stands in for
-  // an agent logo and the configured model name follows it. That is what the
+  // BYOK identity reads off the compact chip now: the selected model's brand
+  // mark leads (the link glyph is only the fallback for a vendor without one)
+  // and the configured model name follows it. That is what the
   // `aria-selected` mode tab used to prove.
-  await expect(chip.locator('.inline-switcher__byok-glyph')).toBeVisible();
+  await expect(chip.locator('.inline-switcher__chip-model-logo')).toBeVisible();
   await expect(chip).toHaveAttribute('aria-label', /gpt-4o/);
   await chip.click();
   const popover = page.getByTestId('inline-model-switcher-popover');

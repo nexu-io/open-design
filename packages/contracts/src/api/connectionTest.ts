@@ -285,6 +285,8 @@ export interface ConnectionTestResponse {
   latencyMs: number;
   // Model id or CLI default slot that this test exercised.
   model?: string;
+  // Concrete model reported by a local agent when an alias or default slot resolves.
+  resolvedModel?: string;
   // Truncated assistant reply (≤ 120 chars) on success.
   sample?: string;
   // Upstream HTTP status when relevant (provider tests).

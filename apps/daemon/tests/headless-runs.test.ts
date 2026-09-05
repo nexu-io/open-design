@@ -98,7 +98,9 @@ describe('POST /api/runs headless fallbacks', () => {
 
     const runsResponse = await fetch(`${started.url}/api/runs`);
     expect(runsResponse.status).toBe(200);
-    await expect(runsResponse.json()).resolves.toEqual({ runs: [] });
+    // The awaiting-input set rides along with every list (see
+    // runs-list-awaiting-input.test.ts); with no runs it is simply empty.
+    await expect(runsResponse.json()).resolves.toEqual({ runs: [], awaitingInputProjectIds: [] });
   });
 
   it('binds omitted conversationId to the seeded project conversation', async () => {

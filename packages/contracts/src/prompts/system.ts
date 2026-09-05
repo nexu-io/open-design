@@ -986,7 +986,13 @@ function promptTemplateReferenceLines(
     out.push(`### Reference prompt template — "${tpl.title}"`);
     const meta: string[] = [];
     if (tpl.category) meta.push(`category: ${tpl.category}`);
-    if (tpl.model) meta.push(`suggested model: ${tpl.model}`);
+    const suggestedModel =
+      metadata.kind === 'image' &&
+      !metadata.imageModel?.trim() &&
+      tpl.model === 'gpt-image-2'
+        ? 'vela/gpt-image-2'
+        : tpl.model;
+    if (suggestedModel) meta.push(`suggested model: ${suggestedModel}`);
     if (tpl.aspect) meta.push(`aspect: ${tpl.aspect}`);
     if (tpl.tags && tpl.tags.length > 0) {
       meta.push(`tags: ${tpl.tags.join(', ')}`);

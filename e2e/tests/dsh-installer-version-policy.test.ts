@@ -8,8 +8,7 @@
 //
 // This guard pins the two together across the app boundary: bumping an
 // installer without teaching the daemon to accept what it installs fails here.
-// Landing still ships byte-identical copies under `apps/landing-page/public/`
-// until extraction; identity is frozen in tools/release tests.
+// Canonical installer bytes live in tools/release.
 
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';

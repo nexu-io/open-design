@@ -46,7 +46,7 @@ if (
   process.exit(2);
 }
 
-const child = spawn(velaBin, ['agent', 'run', '--runtime', 'opencode'], {
+const child = spawn(velaBin, ['agent', 'run'], {
   stdio: ['pipe', 'pipe', 'pipe'],
   env: process.env,
 });

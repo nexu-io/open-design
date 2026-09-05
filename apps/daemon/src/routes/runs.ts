@@ -52,6 +52,7 @@ import {
   getFirstProjectConversation,
   getConversation,
   getProject,
+  listProjectsAwaitingInput,
   normalizeConversationSessionMode,
   updateProject,
   upsertMessage,
@@ -3129,7 +3130,27 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         'projectId is required when listing Workspace-bound runs',
       );
     }
-    const body = { runs: visibleRuns.map(statusWithStrategyTask) };
+    // `ChatRunStatus` cannot say "waiting on the user": the run that asked the
+    // question reports `succeeded` and exits, while the project stays blocked.
+    // Clients rendering a per-project status off this feed would show such a
+    // project as finished, so ship the awaiting-input set alongside — the same
+    // one `GET /api/projects` composes `awaiting_input` from.
+    //
+    // Intersected with the projects `visibleRuns` already reveals: the query
+    // itself is unscoped, and returning it raw would leak the ids of projects
+    // this caller is not authorized to see.
+    const visibleProjectIds = new Set(
+      visibleRuns
+        .map((run) => run.projectId)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    );
+    const awaitingInputProjectIds = visibleProjectIds.size
+      ? [...listProjectsAwaitingInput(db)].filter((id) => visibleProjectIds.has(id))
+      : [];
+    const body = {
+      runs: visibleRuns.map(statusWithStrategyTask),
+      awaitingInputProjectIds,
+    };
     res.json(body);
   });
 

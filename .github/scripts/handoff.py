@@ -210,7 +210,7 @@ def validate_convergence(entry_dir: Path) -> dict[str, Any]:
     if entry_dir.name not in {handoff_id, artifact_name("convergence", handoff_id)}:
         fail(f"Metadata id {handoff_id!r} does not match directory {entry_dir.name!r}")
     event = require_text(metadata.get("event"), "event")
-    if event not in {"pull_request", "merge_group"}:
+    if event not in {"pull_request", "merge_group", "workflow_dispatch"}:
         fail(f"Unsupported convergence event: {event!r}")
     candidate_path = entry_dir / "candidate.json"
     if not candidate_path.is_file():
