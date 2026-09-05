@@ -3,6 +3,38 @@ import { cac } from "cac";
 const cli = cac("tools-release");
 
 cli
+  .command("exact-baseline", "Resolve an accepted Electron Shell baseline or a cold-channel bootstrap")
+  .option("--channel <channel>", "Isolated exact channel")
+  .option("--target <target>", "Exact target: darwin-arm64, darwin-x64, or win32-x64")
+  .option("--current-closure-identity <digest>", "Current Closure content identity")
+  .option("--accepted-receipt <path>", "Previously accepted baseline receipt")
+  .option("--accepted-receipt-sha256 <digest>", "Expected digest of the accepted receipt")
+  .option("--output <path>", "Baseline resolution receipt", { default: ".tmp/release-exact/accepted-baseline.json" })
+  .action(async (options: {
+    acceptedReceipt?: string; acceptedReceiptSha256?: string; channel?: string; currentClosureIdentity?: string;
+    output: string; target?: string;
+  }) => {
+    if (options.channel == null || options.target == null || options.currentClosureIdentity == null) {
+      throw new Error("--channel, --target, and --current-closure-identity are required");
+    }
+    if (options.target !== "darwin-arm64" && options.target !== "darwin-x64" && options.target !== "win32-x64") {
+      throw new Error("--target must be darwin-arm64, darwin-x64, or win32-x64");
+    }
+    if (!/^sha256:[a-f0-9]{64}$/u.test(options.currentClosureIdentity)) throw new Error("--current-closure-identity must be a sha256 digest");
+    if (options.acceptedReceiptSha256 != null && !/^sha256:[a-f0-9]{64}$/u.test(options.acceptedReceiptSha256)) {
+      throw new Error("--accepted-receipt-sha256 must be a sha256 digest");
+    }
+    const { writeAcceptedShellBaselineResolution } = await import("./exact/write-accepted-baseline.ts");
+    await writeAcceptedShellBaselineResolution({
+      ...options,
+      channel: options.channel,
+      currentClosureIdentity: options.currentClosureIdentity as `sha256:${string}`,
+      acceptedReceiptSha256: options.acceptedReceiptSha256 as `sha256:${string}` | undefined,
+      target: options.target,
+    });
+  });
+
+cli
   .command("exact-plan", "Resolve exact release identities and actions")
   .option("--root <path>", "Repository root (auto-detected by default)")
   .option("--registry <path>", "Content identity registry", { default: "tools/release/resources/exact-plan-identities.json" })

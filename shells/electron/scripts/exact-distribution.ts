@@ -37,7 +37,7 @@ if (sceneManifest.target !== input.target || typeof sceneManifest.closure?.file 
   throw new Error("Electron exact distribution differs from its scene target or seeds");
 }
 const manifest = validateElectronShellManifest(JSON.parse(await readFile(scene.shellManifestPath, "utf8")) as ElectronShellManifest);
-const contentEnvelope = JSON.parse(await readFile(input.contentMetadataFile, "utf8")) as { metadata?: { channel?: unknown; releaseVersion?: unknown } };
+const contentEnvelope = JSON.parse(await readFile(input.acceptedContentMetadataFile, "utf8")) as { metadata?: { channel?: unknown; releaseVersion?: unknown } };
 if (contentEnvelope.metadata?.channel !== manifest.channel || typeof contentEnvelope.metadata.releaseVersion !== "string") {
   throw new Error("Electron exact content differs from its Shell channel identity");
 }
@@ -47,7 +47,7 @@ await rm(stagingRoot, { force: true, recursive: true });
 await mkdir(stagingRoot, { recursive: true });
 const contentPath = join(stagingRoot, "standalone-content.json");
 const trustPath = join(stagingRoot, "standalone-trust.json");
-await Promise.all([copyFile(input.contentMetadataFile, contentPath), copyFile(input.trustFile, trustPath)]);
+await Promise.all([copyFile(input.acceptedContentMetadataFile, contentPath), copyFile(input.acceptedTrustFile, trustPath)]);
 const byName = new Map(scene.authorityResources.map((resource) => [resource.name, resource]));
 const required = (name: string) => {
   const resource = byName.get(name);

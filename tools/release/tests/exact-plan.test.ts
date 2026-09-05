@@ -74,6 +74,9 @@ describe("exact release plan", () => {
     const after = await createExactPlan({ ...input, acceptedShellBaseline: ACCEPTED_BASELINE, target: "darwin-arm64" });
     const actions = selectExactPlanActions(after, identities(before)).map(({ id }) => id);
 
+    expect(after.nodes["electron.shell.build"].identity).toBe(before.nodes["electron.shell.build"].identity);
+    expect(after.nodes["electron.shell.test"].identity).toBe(before.nodes["electron.shell.test"].identity);
+    expect(after.nodes["electron.distribution"].identity).toBe(before.nodes["electron.distribution"].identity);
     expect(actions).toEqual([
       "closure.build",
       "closure.test",

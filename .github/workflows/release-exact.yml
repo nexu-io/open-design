@@ -234,7 +234,7 @@ jobs:
               request = {
                   "schemaVersion": 1, "operation": "electron.scene.build", "target": target,
                   "shellManifestFile": str(manifest_path),
-                  "closureArtifactFile": str(Path("apps/closure/dist/index.mjs").resolve()),
+                  "acceptedClosureBaselineFile": str(Path("apps/closure/dist/index.mjs").resolve()),
                   "standaloneLauncherFile": str(Path("packages/standalone/dist/index.mjs").resolve()),
                   "sceneDirectory": str(Path(os.environ["RUNNER_TEMP"], "exact-scene")),
               }
@@ -464,15 +464,17 @@ jobs:
           common = {
               "schemaVersion": 1, "target": os.environ["TARGET"], "sceneDirectory": str(scene),
               "sceneManifestSha256": hashlib.sha256((scene / "scene.json").read_bytes()).hexdigest(),
-              "trustFile": str(root / "prepared" / "trust" / "keys.json"), "outputDirectory": str(root / "distribution"),
+              "outputDirectory": str(root / "distribution"),
           }
           if os.environ["SHELL_TYPE"] == "terminal":
               request = {**common, "operation": "terminal.distribution.build",
+                  "trustFile": str(root / "prepared" / "trust" / "keys.json"),
                   "releaseDocumentsDirectory": str(root / "prepared" / "documents"),
                   "release": {"channel": os.environ["CHANNEL"], "releaseVersion": os.environ["RELEASE_VERSION"], "sourceCommit": os.environ["SOURCE_SHA"], "publishedAt": prepared["publishedAt"], "artifactBaseUrl": prepared["artifactBaseUrl"]}}
           elif os.environ["SHELL_TYPE"] == "electron":
               request = {**common, "operation": "electron.distribution.build",
-                  "contentMetadataFile": str(root / "prepared" / "documents" / "content-metadata.json"),
+                  "acceptedContentMetadataFile": str(root / "prepared" / "documents" / "content-metadata.json"),
+                  "acceptedTrustFile": str(root / "prepared" / "trust" / "keys.json"),
                   "channelHeadUrl": prepared["artifactBaseUrl"].rsplit("/", 1)[0] + "/latest/channel-head.json"}
           else:
               raise SystemExit(f"unsupported exact Shell: {os.environ['SHELL_TYPE']}")

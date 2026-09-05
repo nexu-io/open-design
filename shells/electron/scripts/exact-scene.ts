@@ -23,7 +23,7 @@ const receipt = await assembleElectronScene({
   authorityResources: [
     authority.host,
     authority.supervisor,
-    { name: "closure.mjs", path: input.closureArtifactFile },
+    { name: "closure.mjs", path: input.acceptedClosureBaselineFile },
     { name: "standalone-launcher.mjs", path: input.standaloneLauncherFile },
   ],
   entryPath: fileURLToPath(new URL("../src/main.ts", import.meta.url)),
