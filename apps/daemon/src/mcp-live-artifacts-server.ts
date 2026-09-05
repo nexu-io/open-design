@@ -1,5 +1,4 @@
 import readline from 'node:readline';
-import type { DeliverableSyntaxToolResponse } from '@open-design/contracts';
 
 type JsonObject = Record<string, unknown>;
 
@@ -107,11 +106,6 @@ export function createLiveArtifactsMcpTools(): McpTool[] {
         },
       },
     },
-    {
-      name: 'deliverable_syntax_check',
-      description: 'Check the current deliverable syntax through the daemon tool endpoint. POSIX equivalent: `"$OD_NODE_BIN" "$OD_BIN" tools deliverable-syntax check --json`.',
-      inputSchema: EMPTY_OBJECT_SCHEMA,
-    },
   ];
 }
 
@@ -203,12 +197,6 @@ async function callTool(name: string, args: JsonObject): Promise<unknown> {
       method: 'POST',
       body: JSON.stringify({ connectorId: args.connectorId, toolName: args.toolName, input: args.input ?? {} }),
     });
-  }
-  if (name === 'deliverable_syntax_check') {
-    return await requestJson<DeliverableSyntaxToolResponse>(
-      '/api/tools/deliverable-syntax/check',
-      { method: 'POST' },
-    );
   }
   throw new Error(`unknown MCP tool: ${name}`);
 }
