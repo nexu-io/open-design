@@ -55,6 +55,7 @@ function defaultHost(): OpenDesignHostBridge {
     shell: {
       openExternal: async () => ({ ok: true }),
       openPath: async () => ({ ok: true }),
+      revealFile: async () => ({ ok: true }),
     },
     project: {
       pickAndImport: async () => ({

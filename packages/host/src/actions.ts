@@ -67,6 +67,24 @@ export async function openHostProjectPath(projectId: string, scope: OpenDesignHo
   }
 }
 
+/** Reveal a project-relative file in the host platform's native file manager. */
+export async function revealHostFile(
+  projectId: string,
+  relativePath: string,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): Promise<OpenDesignHostActionResult> {
+  const host = getOpenDesignHost(scope);
+  if (host == null) return unavailable("OpenDesign host is not available");
+  if (typeof host.shell.revealFile !== "function") {
+    return unavailable("Host shell does not support revealing files");
+  }
+  try {
+    return await host.shell.revealFile(projectId, relativePath);
+  } catch (error) {
+    return unavailable(error instanceof Error ? error.message : String(error));
+  }
+}
+
 /** Clear host browser data (cookies and/or storage). */
 export async function clearHostBrowserData(
   options?: OpenDesignHostBrowserClearDataOptions,

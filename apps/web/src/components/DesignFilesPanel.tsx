@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
+import { getOpenDesignHost, revealHostFile } from '@open-design/host';
 import { useAnalytics } from '../analytics/provider';
 import { trackFileManagerClick } from '../analytics/events';
 import { useT } from '../i18n';
@@ -500,6 +501,18 @@ export function DesignFilesPanel({
   const [currentDir, setCurrentDir] = useState<string>(() => navState?.currentDir ?? '');
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const projectMenuRef = useRef<HTMLDivElement | null>(null);
+  const host = getOpenDesignHost();
+  const canRevealFile = typeof host?.shell?.revealFile === 'function';
+  const revealFileLabel = useMemo(() => {
+    const platform = host?.client?.platform;
+    if (platform === 'darwin') {
+      return t('designFiles.revealInFinder');
+    }
+    if (platform === 'win32') {
+      return t('designFiles.revealInExplorer');
+    }
+    return t('designFiles.revealInFileManager');
+  }, [host?.client?.platform, t]);
 
   // Keep the parent's create-target in sync with the folder being viewed, so
   // uploads / pastes / new sketches / dropped files land in the open folder
@@ -1846,6 +1859,21 @@ export function DesignFilesPanel({
               ? t('designFiles.copiedLocalPath')
               : t('designFiles.copyLocalPath')}
           </button>
+          {canRevealFile ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                const name = menuPos.name;
+                setMenuPos(null);
+                const targetFile = files.find((file) => file.name === name);
+                const relativePath = targetFile?.path ?? name;
+                void revealHostFile(projectId, relativePath);
+              }}
+            >
+              {revealFileLabel}
+            </button>
+          ) : null}
           <a
             href={projectFileUrl(projectId, menuPos.name, workspaceContext)}
             download={menuPos.name}

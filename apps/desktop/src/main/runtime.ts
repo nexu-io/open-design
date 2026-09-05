@@ -35,7 +35,7 @@ import type {
 import { renderDeckSlides } from "./deck-capture.js";
 import { renderDeterministicFrames } from "./frame-capture.js";
 import { openFirstPartyMailto } from "./mailto-open.js";
-import { openValidatedDirectory } from "./open-path.js";
+import { openValidatedDirectory, resolveProjectRelativeFile } from "./open-path.js";
 import { exportArtifact as exportArtifactFromHtml } from "./artifact-export.js";
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
 import { SPLASH_VIDEO_DATA_URL } from "./splash-video.js";
@@ -2047,6 +2047,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   ipcMain.removeHandler("dialog:pick-working-dir");
   ipcMain.removeHandler("shell:open-external");
   ipcMain.removeHandler("shell:open-path");
+  ipcMain.removeHandler("shell:reveal-file");
   ipcMain.removeHandler("browser:clear-data");
   for (const channel of UPDATER_IPC_CHANNELS) {
     ipcMain.removeHandler(channel);
@@ -2234,6 +2235,32 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       return err instanceof Error ? err.message : String(err);
     }
   });
+
+  ipcMain.handle(
+    "shell:reveal-file",
+    async (_event, projectId: string, relativePath: string) => {
+      const apiBaseUrl =
+        (options.discoverDaemonUrl ? await options.discoverDaemonUrl() : null) ??
+        (await options.discoverUrl());
+      if (!apiBaseUrl) {
+        return "reveal-file: daemon API URL not available";
+      }
+      const resolved = await fetchResolvedProjectDir(apiBaseUrl, projectId);
+      if (!resolved.ok) return `reveal-file: ${resolved.reason}`;
+      const allowed = isOpenPathAllowedForProject(resolved.context);
+      if (!allowed.ok) return `reveal-file: ${allowed.reason}`;
+      const validated = await validateExistingDirectory(resolved.context.resolvedDir);
+      if (!validated.ok) return `reveal-file: ${validated.reason}`;
+      const resolvedFile = await resolveProjectRelativeFile(validated.resolved, relativePath);
+      if (!resolvedFile.ok) return `reveal-file: ${resolvedFile.reason}`;
+      try {
+        shell.showItemInFolder(resolvedFile.resolved);
+        return "";
+      } catch (err) {
+        return err instanceof Error ? err.message : String(err);
+      }
+    },
+  );
 
   let currentUrl: string | null = null;
   let currentPetUrl: string | null = null;
@@ -3129,3 +3156,5 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     },
   };
 }
+
+export { resolveProjectRelativeFile };

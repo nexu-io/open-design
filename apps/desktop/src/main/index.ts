@@ -94,6 +94,7 @@ export {
   validateExistingDirectory,
   fetchResolvedProjectDir,
   isOpenPathAllowedForProject,
+  resolveProjectRelativeFile,
   signDesktopImportToken,
   pickAndImportFolder,
   type PathValidationResult,

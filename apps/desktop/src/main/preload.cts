@@ -225,6 +225,15 @@ const shell = {
       return actionFailure(reasonFromError(error));
     }
   },
+  revealFile: async (projectId: string, relativePath: string): Promise<OpenDesignHostActionResult> => {
+    try {
+      const result = await ipcRenderer.invoke('shell:reveal-file', projectId, relativePath);
+      if (typeof result === 'string' && result.length > 0) return actionFailure(result);
+      return { ok: true };
+    } catch (error) {
+      return actionFailure(reasonFromError(error));
+    }
+  },
 };
 
 const browser = {

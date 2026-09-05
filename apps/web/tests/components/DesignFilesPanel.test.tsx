@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 
 import { CollabProvider } from "../../src/collab/collab-context";
+import { installMockOpenDesignHost } from "@open-design/host/testing";
 import {
   DesignFilesPanel,
   type DesignFilesNavState,
@@ -494,6 +495,140 @@ describe("DesignFilesPanel selection", () => {
       } else {
         Reflect.deleteProperty(navigator, "clipboard");
       }
+    }
+  });
+
+  it("shows 'Show in Finder' on macOS and invokes revealFile with project ID and relative path", async () => {
+    const revealFile = vi.fn().mockResolvedValue({ ok: true });
+    const restoreHost = installMockOpenDesignHost({
+      host: {
+        client: { type: "desktop", platform: "darwin" },
+        shell: {
+          revealFile,
+        },
+      },
+    });
+    try {
+      renderPanel([
+        file({
+          name: "alpha.html",
+          path: "alpha.html",
+          localPath: "/tmp/open-design/projects/test-project/alpha.html",
+        }),
+      ]);
+
+      fireEvent.click(screen.getByTestId("design-file-menu-alpha.html"));
+      const revealBtn = screen.getByRole("button", { name: "Show in Finder" });
+      expect(revealBtn).toBeTruthy();
+
+      fireEvent.click(revealBtn);
+
+      expect(revealFile).toHaveBeenCalledWith("test-project", "alpha.html");
+      // Closes the row menu popover after invocation
+      expect(screen.queryByTestId("design-file-menu-popover")).toBeNull();
+    } finally {
+      restoreHost();
+    }
+  });
+
+  it("shows 'Show in Explorer' on Windows and reveals nested file relative path", async () => {
+    const revealFile = vi.fn().mockResolvedValue({ ok: true });
+    const restoreHost = installMockOpenDesignHost({
+      host: {
+        client: { type: "desktop", platform: "win32" },
+        shell: {
+          revealFile,
+        },
+      },
+    });
+    try {
+      renderPanel([
+        file({
+          name: "assets/logo.png",
+          path: "assets/logo.png",
+          kind: "image",
+          localPath: "C:\\projects\\test-project\\assets\\logo.png",
+        }),
+      ]);
+
+      clickTab("cat:image");
+      fireEvent.click(screen.getByTestId("design-file-menu-assets/logo.png"));
+      const revealBtn = screen.getByRole("button", { name: "Show in Explorer" });
+      expect(revealBtn).toBeTruthy();
+
+      fireEvent.click(revealBtn);
+
+      expect(revealFile).toHaveBeenCalledWith("test-project", "assets/logo.png");
+      expect(screen.queryByTestId("design-file-menu-popover")).toBeNull();
+    } finally {
+      restoreHost();
+    }
+  });
+
+  it("shows 'Show in File Manager' on Linux", async () => {
+    const revealFile = vi.fn().mockResolvedValue({ ok: true });
+    const restoreHost = installMockOpenDesignHost({
+      host: {
+        client: { type: "desktop", platform: "linux" },
+        shell: {
+          revealFile,
+        },
+      },
+    });
+    try {
+      renderPanel([
+        file({
+          name: "alpha.html",
+          path: "alpha.html",
+        }),
+      ]);
+
+      fireEvent.click(screen.getByTestId("design-file-menu-alpha.html"));
+      expect(screen.getByRole("button", { name: "Show in File Manager" })).toBeTruthy();
+    } finally {
+      restoreHost();
+    }
+  });
+
+  it("does not render reveal action when running in browser or unsupported host", () => {
+    renderPanel([
+      file({
+        name: "alpha.html",
+        path: "alpha.html",
+      }),
+    ]);
+
+    fireEvent.click(screen.getByTestId("design-file-menu-alpha.html"));
+    expect(screen.queryByRole("button", { name: "Show in Finder" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show in Explorer" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show in File Manager" })).toBeNull();
+  });
+
+  it("does not render reveal action when host lacks revealFile capability", () => {
+    const restoreHost = installMockOpenDesignHost({
+      host: {
+        client: { type: "desktop", platform: "darwin" },
+        shell: {
+          openExternal: vi.fn(),
+          openPath: vi.fn(),
+          revealFile: undefined,
+        },
+      },
+    });
+    try {
+      renderPanel([
+        file({
+          name: "alpha.html",
+          path: "alpha.html",
+        }),
+      ]);
+
+      fireEvent.click(screen.getByTestId("design-file-menu-alpha.html"));
+      expect(screen.queryByRole("button", { name: "Show in Finder" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Show in Explorer" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Show in File Manager" })).toBeNull();
+    } finally {
+      restoreHost();
     }
   });
 
