@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 
 const electron = vi.hoisted(() => ({
   handlers: new Map<string, (...args: unknown[]) => Promise<unknown>>(),
-  protocols: new Set<string>(),
   opened: [] as string[],
 }));
 
@@ -12,20 +11,33 @@ vi.mock("electron", () => ({
     handle(channel: string, handler: (...args: unknown[]) => Promise<unknown>) { electron.handlers.set(channel, handler); },
     removeHandler(channel: string) { electron.handlers.delete(channel); },
   },
-  protocol: {
-    handle(scheme: string) { electron.protocols.add(scheme); },
-    unhandle(scheme: string) { electron.protocols.delete(scheme); },
-  },
   shell: { openExternal(url: string) { electron.opened.push(url); } },
 }));
 
 import { createElectronRendererAdapter } from "@/adapters/renderer/renderer.js";
 import { ELECTRON_CONTENT_UPDATE_CHANNELS } from "@/contracts/content-update.js";
 
+function runtimeAccess() {
+  return {
+    attachment: { id: "electron-renderer" },
+    binding: { digest: "b".repeat(64) },
+    handle: {
+      async invoke(command: { requestId: string; attachmentId: string; bindingDigest: string }) {
+        return {
+          requestId: command.requestId,
+          attachmentId: command.attachmentId,
+          bindingDigest: command.bindingDigest,
+          outcome: "accepted",
+          output: { schemaVersion: 1, daemon: { url: "http://127.0.0.1:17578" }, web: { url: "http://127.0.0.1:17579" } },
+        };
+      },
+    },
+  };
+}
+
 describe("Electron renderer content updater binding", () => {
   it("accepts only the mounted renderer and removes both finite handlers on dispose", async () => {
     electron.handlers.clear();
-    electron.protocols.clear();
     const listeners = new Map<string, (...args: unknown[]) => void>();
     const webContents = {
       id: 7,
@@ -42,7 +54,8 @@ describe("Electron renderer content updater binding", () => {
       manifest: { protocol: "od" },
       preflight: {},
       presentation: "interactive",
-      window: { webContents, async loadURL() {} },
+      runtime: runtimeAccess(),
+      window: { webContents, async loadURL(url: string) { expect(url).toBe("http://127.0.0.1:17579/"); } },
     } as unknown as Parameters<typeof adapter.renderer.mount>[0]);
 
     const prepare = electron.handlers.get(ELECTRON_CONTENT_UPDATE_CHANNELS.prepare)!;
@@ -53,18 +66,15 @@ describe("Electron renderer content updater binding", () => {
     await expect(apply({ sender: webContents }, true)).resolves.toMatchObject({ state: "blocked", reason: "transition-active" });
     expect(prepareLatest).toHaveBeenCalledWith("observe");
     expect(applyNow).toHaveBeenCalledWith({ force: true });
-    expect(electron.protocols).toEqual(new Set(["od"]));
     expect(listeners.size).toBe(3);
 
     await lease.dispose();
     expect(electron.handlers.size).toBe(0);
-    expect(electron.protocols.size).toBe(0);
     expect(listeners.size).toBe(0);
   });
 
   it("removes renderer security and finite handlers when the document fails to load", async () => {
     electron.handlers.clear();
-    electron.protocols.clear();
     const listeners = new Map<string, (...args: unknown[]) => void>();
     const webContents = {
       on(name: string, listener: (...args: unknown[]) => void) { listeners.set(name, listener); },
@@ -78,10 +88,10 @@ describe("Electron renderer content updater binding", () => {
       manifest: { protocol: "od" },
       preflight: {},
       presentation: "interactive",
+      runtime: runtimeAccess(),
       window: { webContents, async loadURL() { throw new Error("load failed"); } },
     } as unknown as Parameters<typeof adapter.renderer.mount>[0])).rejects.toThrow("load failed");
     expect(electron.handlers.size).toBe(0);
-    expect(electron.protocols.size).toBe(0);
     expect(listeners.size).toBe(0);
   });
 });

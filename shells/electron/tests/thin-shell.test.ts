@@ -120,9 +120,9 @@ describe("Electron product shell", () => {
     expect(runtime.warmup).toMatchObject({ maxConcurrency: 4, totalTimeoutMs: 360000 });
     expect(runtimeSource).toContain('"failure": "required"');
     expect(rendererSource).toContain("createElectronRendererAdapter");
-    expect(rendererSource).toContain("let warmedDocument");
+    expect(rendererSource).toContain("readElectronProductRuntime");
     expect(rendererSource).not.toContain("placeholder");
-    expect(rendererSource).toContain("electronShell.acknowledgeMounted()");
+    expect(preloadSource).toContain("DOMContentLoaded");
     expect(rendererSource).not.toContain("executeJavaScript");
     expect(preloadSource).toContain("@open-design/electron-kit/renderer");
     expect(preloadSource).toContain("ipcRenderer.send");
