@@ -51,13 +51,13 @@
           "inputs": ["suite://electron-scene"],
           "runnerClass": "electron_darwin_arm64",
           "products": "manifest",
-          "reusable": true
+          "reusable": false
         },
         "electron_scene_win32_x64": {
           "inputs": ["suite://electron-scene"],
           "runnerClass": "electron_win32_x64",
           "products": "manifest",
-          "reusable": true
+          "reusable": false
         }
       }
     }

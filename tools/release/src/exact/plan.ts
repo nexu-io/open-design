@@ -134,6 +134,25 @@ export async function createExactPlanFromRegistryFile(input: Readonly<{
   return await createExactPlan({ ...input, registry: await readContentIdentityRegistry(input.registryPath) });
 }
 
+export async function resolveExactPlanSourceIdentity(input: Readonly<{
+  id: ExactPlanNodeId;
+  registry: ContentIdentityRegistry;
+  root: string;
+  target: ExactTarget;
+}>): Promise<`sha256:${string}`> {
+  const resolved = resolveContentIdentityDeclaration(input.registry, input.id);
+  if (JSON.stringify(resolved.declaration.parameters) !== JSON.stringify(["target"])) {
+    throw new Error(`exact source identity ${input.id} must depend only on target`);
+  }
+  return (await resolveContentIdentity({
+    id: input.id,
+    parameters: { target: input.target },
+    root: input.root,
+    schemaVersion: resolved.declaration.schemaVersion,
+    sources: resolved.sources,
+  })).digest;
+}
+
 export function selectExactPlanActions(plan: ExactPlan, availableIdentities: ReadonlySet<string>): readonly ExactPlanAction[] {
   const actions: ExactPlanAction[] = [];
   for (const id of NODE_ORDER) {

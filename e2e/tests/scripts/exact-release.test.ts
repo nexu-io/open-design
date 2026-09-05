@@ -37,6 +37,9 @@ describe('exact release scripts', () => {
     expect(workflow).toContain('electron_scene_win32_x64');
     expect(workflow).toContain('@open-design/shell-electron exact:scene');
     expect(workflow).toContain('@open-design/shell-electron exact:distribution');
+    expect(workflow).toContain('exact-release-plan');
+    expect(workflow).toContain('plan["plan"]["nodes"]["electron.shell.build"]["identity"]');
+    expect(workflow).not.toContain('"sourceCommit": os.environ["SOURCE_SHA"], "target": target');
     expect(workflow).toContain('Install and exercise macOS Electron Shell');
     expect(workflow).toContain('Install and exercise Windows Electron Shell');
     expect(workflow).toContain('exact-${{ matrix.shell }}-scene-${{ matrix.target }}-${{ inputs.source_sha }}');
@@ -44,8 +47,8 @@ describe('exact release scripts', () => {
       policy: 'shell-scenes-v2',
       workloads: {
         terminal_scene_darwin_arm64: { reusable: true },
-        electron_scene_darwin_arm64: { runnerClass: 'electron_darwin_arm64', reusable: true },
-        electron_scene_win32_x64: { runnerClass: 'electron_win32_x64', reusable: true },
+        electron_scene_darwin_arm64: { runnerClass: 'electron_darwin_arm64', reusable: false },
+        electron_scene_win32_x64: { runnerClass: 'electron_win32_x64', reusable: false },
       },
     });
   });

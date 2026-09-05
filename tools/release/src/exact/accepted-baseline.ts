@@ -32,6 +32,7 @@ export type AcceptedShellBaselinePayload = Readonly<{
 }>;
 
 export type AcceptedShellBaselineReceipt = Readonly<{
+  acceptedIdentities: readonly `sha256:${string}`[];
   baseline: AcceptedShellBaselinePayload;
   baselineIdentity: `sha256:${string}`;
   operation: "electron.shell-baseline.accepted";
@@ -39,6 +40,7 @@ export type AcceptedShellBaselineReceipt = Readonly<{
 }>;
 
 export type AcceptedShellBaselineResolution = Readonly<{
+  acceptedIdentities: readonly `sha256:${string}`[];
   acceptedReceiptSha256?: `sha256:${string}`;
   baseline: AcceptedShellBaselinePayload | Readonly<{
     channel: string;
@@ -51,7 +53,7 @@ export type AcceptedShellBaselineResolution = Readonly<{
   schemaVersion: typeof ACCEPTED_SHELL_BASELINE_SCHEMA_VERSION;
 }>;
 
-export function createAcceptedShellBaselineReceipt(value: unknown): AcceptedShellBaselineReceipt {
+export function createAcceptedShellBaselineReceipt(value: unknown, acceptedIdentities: readonly `sha256:${string}`[]): AcceptedShellBaselineReceipt {
   const credential = record(value, "Electron installed acceptance credential");
   const shell = record(credential.shell, "Electron installed acceptance Shell");
   const artifact = record(credential.artifact, "Electron installed acceptance artifact");
@@ -81,7 +83,12 @@ export function createAcceptedShellBaselineReceipt(value: unknown): AcceptedShel
     shell,
     target: credential.target,
   });
+  if (acceptedIdentities.length === 0 || new Set(acceptedIdentities).size !== acceptedIdentities.length
+      || acceptedIdentities.some((identity) => !SHA256_IDENTITY.test(identity))) {
+    throw new Error("Electron installed acceptance exact identities are invalid");
+  }
   return Object.freeze({
+    acceptedIdentities: Object.freeze([...acceptedIdentities].sort()),
     baseline,
     baselineIdentity: acceptedShellBaselineIdentity(baseline),
     operation: "electron.shell-baseline.accepted",
@@ -157,6 +164,7 @@ export function resolveAcceptedShellBaseline(input: Readonly<{
       target: input.target,
     });
     return Object.freeze({
+      acceptedIdentities: Object.freeze([]),
       baseline,
       baselineIdentity: metadataDigest(canonicalMetadataJson({ bootstrap: baseline, schemaVersion: ACCEPTED_SHELL_BASELINE_SCHEMA_VERSION })),
       mode: "bootstrap",
@@ -175,15 +183,21 @@ export function resolveAcceptedShellBaseline(input: Readonly<{
     throw new Error("accepted Shell baseline receipt JSON is invalid");
   }
   const receipt = record(decoded, "accepted Shell baseline receipt");
-  exactKeys(receipt, ["baseline", "baselineIdentity", "operation", "schemaVersion"], "accepted Shell baseline receipt");
+  exactKeys(receipt, ["acceptedIdentities", "baseline", "baselineIdentity", "operation", "schemaVersion"], "accepted Shell baseline receipt");
   if (receipt.schemaVersion !== ACCEPTED_SHELL_BASELINE_SCHEMA_VERSION || receipt.operation !== "electron.shell-baseline.accepted"
       || typeof receipt.baselineIdentity !== "string" || !SHA256_IDENTITY.test(receipt.baselineIdentity)) {
     throw new Error("accepted Shell baseline receipt identity is invalid");
   }
   const baseline = payload(receipt.baseline);
+  if (!Array.isArray(receipt.acceptedIdentities) || receipt.acceptedIdentities.length === 0
+      || new Set(receipt.acceptedIdentities).size !== receipt.acceptedIdentities.length
+      || receipt.acceptedIdentities.some((identity) => typeof identity !== "string" || !SHA256_IDENTITY.test(identity))) {
+    throw new Error("accepted Shell baseline exact identities are invalid");
+  }
   if (baseline.channel !== input.channel || baseline.target !== input.target) throw new Error("accepted Shell baseline scope mismatch");
   if (acceptedShellBaselineIdentity(baseline) !== receipt.baselineIdentity) throw new Error("accepted Shell baseline payload digest mismatch");
   return Object.freeze({
+    acceptedIdentities: Object.freeze([...(receipt.acceptedIdentities as `sha256:${string}`[])].sort()),
     acceptedReceiptSha256: actualReceiptSha256,
     baseline,
     baselineIdentity: receipt.baselineIdentity as `sha256:${string}`,

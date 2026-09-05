@@ -3,6 +3,37 @@ import { cac } from "cac";
 const cli = cac("tools-release");
 
 cli
+  .command("exact-release-plan", "Resolve accepted baseline, exact identities, and release actions")
+  .option("--root <path>", "Repository root", { default: "." })
+  .option("--registry <path>", "Content identity registry", { default: "tools/release/resources/exact-plan-identities.json" })
+  .option("--channel <channel>", "Isolated exact channel")
+  .option("--target <target>", "Exact target: darwin-arm64, darwin-x64, or win32-x64")
+  .option("--accepted-receipt <path>", "Previously accepted baseline receipt")
+  .option("--accepted-receipt-sha256 <digest>", "Expected digest of the accepted receipt")
+  .option("--accepted-pointer-url <url>", "Trusted latest accepted-baseline pointer")
+  .option("--available <path>", "JSON array of reusable identities")
+  .option("--output <path>", "Release plan receipt", { default: ".tmp/release-exact/release-plan.json" })
+  .action(async (options: {
+    acceptedPointerUrl?: string; acceptedReceipt?: string; acceptedReceiptSha256?: string; available?: string; channel?: string;
+    output: string; registry: string; root: string; target?: string;
+  }) => {
+    if (options.channel == null || options.target == null) throw new Error("--channel and --target are required");
+    if (options.target !== "darwin-arm64" && options.target !== "darwin-x64" && options.target !== "win32-x64") {
+      throw new Error("--target must be darwin-arm64, darwin-x64, or win32-x64");
+    }
+    if (options.acceptedReceiptSha256 != null && !/^sha256:[a-f0-9]{64}$/u.test(options.acceptedReceiptSha256)) {
+      throw new Error("--accepted-receipt-sha256 must be a sha256 digest");
+    }
+    const { writeExactReleasePlan } = await import("./exact/write-release-plan.ts");
+    await writeExactReleasePlan({
+      ...options,
+      acceptedReceiptSha256: options.acceptedReceiptSha256 as `sha256:${string}` | undefined,
+      channel: options.channel,
+      target: options.target,
+    });
+  });
+
+cli
   .command("exact-baseline", "Resolve an accepted Electron Shell baseline or a cold-channel bootstrap")
   .option("--channel <channel>", "Isolated exact channel")
   .option("--target <target>", "Exact target: darwin-arm64, darwin-x64, or win32-x64")

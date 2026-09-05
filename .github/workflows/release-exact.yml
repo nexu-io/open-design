@@ -69,6 +69,42 @@ jobs:
       - name: Verify exact release transition algebra
         run: python3 .github/scripts/release.py --self-check
 
+      - uses: pnpm/action-setup@v5
+        if: ${{ inputs.channel == 'betahyx' }}
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v6
+        if: ${{ inputs.channel == 'betahyx' }}
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+
+      - name: Build exact content-identity planner
+        if: ${{ inputs.channel == 'betahyx' }}
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm --filter @open-design/metatool build
+          pnpm --filter @open-design/tools-release build
+
+      - name: Resolve canonical Electron release plans
+        if: ${{ inputs.channel == 'betahyx' }}
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          PUBLIC_ORIGIN: ${{ secrets.EXACT_RELEASE_PUBLIC_ORIGIN }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/exact-plan"
+          for target in darwin-arm64 win32-x64; do
+            node tools/release/bin/tools-release.mjs exact-release-plan \
+              --root "$GITHUB_WORKSPACE" \
+              --channel "$CHANNEL" \
+              --target "$target" \
+              --accepted-pointer-url "${PUBLIC_ORIGIN%/}/$CHANNEL/accepted/electron/$target/latest.json" \
+              --output "$RUNNER_TEMP/exact-plan/electron-$target.json"
+          done
+
       - name: Resolve Shell topology
         id: topology
         env:
@@ -121,7 +157,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/exact-plan/pending.json
+          path: ${{ runner.temp }}/exact-plan
           if-no-files-found: error
           retention-days: 1
 
@@ -190,7 +226,6 @@ jobs:
         env:
           CHANNEL: ${{ inputs.channel }}
           SHELL_TYPE: ${{ matrix.shell }}
-          SOURCE_SHA: ${{ inputs.source_sha }}
           TARGET: ${{ matrix.target }}
         shell: bash
         run: |
@@ -225,7 +260,11 @@ jobs:
               }
           elif shell_type == "electron":
               manifest = json.loads(Path("shells/electron/config/shell.json").read_text())
-              build_hash = hashlib.sha256(json.dumps({"shell": shell_type, "sourceCommit": os.environ["SOURCE_SHA"], "target": target}, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+              plan = json.loads(Path(os.environ["RUNNER_TEMP"], "exact-plan", f"electron-{target}.json").read_text())
+              shell_identity = plan["plan"]["nodes"]["electron.shell.build"]["identity"]
+              if not shell_identity.startswith("sha256:"):
+                  raise SystemExit("Electron Shell plan identity is invalid")
+              build_hash = shell_identity.removeprefix("sha256:")
               identity = {"type": shell_type, "version": manifest["version"], "buildHash": build_hash}
               identity["digest"] = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
               manifest.update({"channel": os.environ["CHANNEL"], "shell": identity})

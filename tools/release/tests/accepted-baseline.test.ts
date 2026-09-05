@@ -20,9 +20,11 @@ const baseline: AcceptedShellBaselinePayload = {
   shell: { buildHash: "e".repeat(64), type: "electron", version: "0.1.0" },
   target: "darwin-arm64",
 };
+const ACCEPTED_IDENTITIES = [`sha256:${"1".repeat(64)}`, `sha256:${"2".repeat(64)}`] as const;
 
 function acceptedReceipt(value: AcceptedShellBaselinePayload = baseline) {
   const bytes = Buffer.from(`${JSON.stringify({
+    acceptedIdentities: ACCEPTED_IDENTITIES,
     baseline: value,
     baselineIdentity: acceptedShellBaselineIdentity(value),
     operation: "electron.shell-baseline.accepted",
@@ -43,20 +45,21 @@ describe("accepted Shell baseline resolution", () => {
           { file: "closure.mjs", ...baseline.seed.closure },
         ] } },
       },
-    });
+    }, ACCEPTED_IDENTITIES);
     expect(receipt.baseline).toEqual(baseline);
     expect(receipt.baselineIdentity).toBe(acceptedShellBaselineIdentity(baseline));
     expect(() => createAcceptedShellBaselineReceipt({
       schemaVersion: 1, operation: "exact.acceptance", status: "accepted", channel: "betahyx", target: "darwin-arm64",
       shell: baseline.shell, artifact: baseline.artifact,
       installed: { shell: baseline.shell, target: "darwin-arm64", proof: { files: { seeds: [] } } },
-    })).toThrow(/Closure seed/u);
+    }, ACCEPTED_IDENTITIES)).toThrow(/Closure seed/u);
   });
 
   it("bootstraps a cold channel from current Closure and forces full acceptance", () => {
     const resolved = resolveAcceptedShellBaseline({ channel: "betahyx", currentClosureIdentity: CLOSURE_IDENTITY, target: "win32-x64" });
     expect(resolved.mode).toBe("bootstrap");
     expect(resolved.requiredAcceptance).toBe("full");
+    expect(resolved.acceptedIdentities).toEqual([]);
     expect(resolved.baseline).toEqual({ channel: "betahyx", seed: { closureIdentity: CLOSURE_IDENTITY }, target: "win32-x64" });
   });
 
@@ -67,6 +70,7 @@ describe("accepted Shell baseline resolution", () => {
     expect(resolved.requiredAcceptance).toBe("hot");
     expect(resolved.baselineIdentity).toBe(acceptedShellBaselineIdentity(baseline));
     expect(resolved.acceptedReceiptSha256).toBe(receipt.sha256);
+    expect(resolved.acceptedIdentities).toEqual([...ACCEPTED_IDENTITIES].sort());
   });
 
   it("fails closed on receipt, payload, or scope drift", () => {
