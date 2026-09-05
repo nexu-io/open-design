@@ -63,6 +63,13 @@ export type ElectronRendererMountAcknowledgement = Readonly<{
   nonce: string;
 }>;
 
+/** Exact generation access passed to a Shell-owned renderer adapter. */
+export type ElectronStandaloneRuntimeAccess = Readonly<{
+  attachment: StandaloneHandoffAttachment;
+  binding: StandaloneGenerationBinding;
+  handle: StandaloneRuntimeHandle;
+}>;
+
 export type ElectronStandaloneContentUpdateApplication =
   | Readonly<{
       status: "applied";
@@ -94,6 +101,7 @@ export type ElectronShellRenderer = Readonly<{
     preflight: ElectronPreflightResult;
     presentation: "headless" | "interactive";
     contentUpdater: ElectronStandaloneContentUpdaterPort;
+    runtime: ElectronStandaloneRuntimeAccess;
     window: BrowserWindow;
   }>): Readonly<{ dispose(): void | Promise<void> }> | Promise<Readonly<{ dispose(): void | Promise<void> }>>;
 }>;

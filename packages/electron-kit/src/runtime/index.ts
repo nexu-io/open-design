@@ -351,7 +351,15 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
           const barrier = installElectronRendererMountBarrier({ acknowledgement, ipc: ipcMain, sender: window.webContents, signal });
           let integration: Awaited<ReturnType<ElectronShellDefinition["renderer"]["mount"]>> | null = null;
           try {
-            integration = await definition.renderer.mount({ acknowledgement, contentUpdater: preparedRuntime!.contentUpdater, manifest, preflight, presentation, window });
+            integration = await definition.renderer.mount({
+              acknowledgement,
+              contentUpdater: preparedRuntime!.contentUpdater,
+              manifest,
+              preflight,
+              presentation,
+              runtime: Object.freeze({ attachment, binding: generationBinding!, handle: runtimeHandle! }),
+              window,
+            });
             await barrier.ready;
             const mountedIntegration = integration;
             rendererLease = Object.freeze({
