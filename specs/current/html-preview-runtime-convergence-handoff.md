@@ -1338,11 +1338,454 @@ downloading 3 MB of `@babel/standalone` and stops compiling in-page.
    `open-design-l2-gates.ts`). An agent was mid-way through adding one and was
    stopped; check `git worktree list` for a `od-lab-present` worktree before
    starting that work again.
-4. **L2 cold-start false failure.** Running the three cases cold, the first one
-   reports `fileTabPreserved` and `projectRoundTripPreserved` false. Isolated it
-   passes twice, and warm the full suite passes — it is the dev server compiling
-   on first navigation, not a product defect. It must be fixed before this lane
-   can gate a release, and not by widening a timeout.
+4. **L2 cold-start false failure — root-caused and fixed in the harness**
+   (`od-lab-present` commit `882bd71`). Running the three cases cold, the first
+   one reported `fileTabPreserved` and `projectRoundTripPreserved` false while
+   `previewCodePreserved` — the one round trip that never navigates — came back
+   true.
+
+   The frame instance really did change. The harness's reading of that was what
+   was wrong. `documentKeepAliveKey` keys a retained frame on
+   `project \0 file \0 <identity> \0 attempt:<n>`, and `navigationRetryToken`
+   is part of that key (`PreviewSessionFrames.tsx:229-236`, bumped at
+   `FileViewer.tsx:11518` on a standby navigation failure). When the runtime
+   gives a failed navigation its one clean retry, the next attach is a different
+   pool entry *by design* and `promote()` evicts the old one. A cold start is
+   exactly when a navigation is slow enough to fail and be retried, so the
+   harness converted a successful self-heal into a reported product defect.
+
+   Two hypotheses were killed statically on the way, both worth not re-running:
+   pool eviction is LRU **by count** (`maxEntries = 5`), not time-based, so a
+   slow run does not age anything out; and `initial.instance` was not null,
+   since `previewCodePreserved` shares that same guard and was true.
+
+   The fix replaces the three booleans with a four-state verdict —
+   `preserved` / `lost` / `reprovisioned` / `unbaselined`. Only `lost` (same
+   identity, same attempt, different frame) fails; `unbaselined` also fails,
+   because a missing measurement must never read as a passing one. The attempt
+   needs no new instrumentation: `previewSessionNavigationAttemptUrl` already
+   stamps `odPreviewAttempt=<session>.<n>` onto the document URL. Falsified
+   three ways, each branch independently red. 20/20 green, `tsc --noEmit` 0.
+
+   **Still open:** which navigation actually retried on the observed cold run is
+   not established — only the mechanism. That needs one live cold run to
+   confirm, and it is the first thing to check when a runtime is next started.
+   Adjacent and deliberately not fixed there: `projectRetention.frameReused` /
+   `sessionReused` / `documentVersionReused` compare identity the same way and
+   share the blind spot. They are diagnostic-only — never asserted by the gate —
+   so they cannot manufacture a failure, but they read misleadingly after a
+   retry.
+
+## Live verification, 2026-09-04
+
+**The cold-start failure was NOT the retry mechanism. My earlier diagnosis in
+item 4 above was wrong about the cause.** Reproduced it live and the harness
+now reports what it saw: `expectedText: false` with `nonWhite: true`, a
+completed handshake, and no recovery after a further 30 s. The frame inventory
+named the culprit — the page had drifted to
+`/projects/<p>/conversations/<cid>/files/lru-6.html` while the measurement
+waited for `index.html`. The server log shows only two page requests, so the
+app navigated itself there client-side.
+
+Root cause, verified in code:
+
+* `ProjectView.tsx:4319-4360` — the route-sync effect has no `routeFileName`
+  guard at all. On first commit `openTabsState.active` is null, so it navigates
+  with `fileName: null` and **strips the file out of the URL**.
+* `ProjectView.tsx:3741` — the auto-select guard is `if (routeFileName) return`,
+  and `routeFileName` is the *live* URL segment the step above just destroyed.
+* `selectPrimaryProjectFile` (`:12222-12230`) ranks every plain HTML file the
+  same and breaks the tie on newest `mtime`, so it lands on the last-created
+  file. Then `:3753` → `:4345` writes that file back into the URL and it
+  self-reinforces.
+
+**This is user-reachable, and sharing a link is the exact vulnerable case:**
+cached tab state is keyed per workspace identity, so a teammate opening a
+shared deep link has none, and gets sent to a different file. No test covers
+it, and `ProjectView.tabs-navigation.test.tsx` mocks `navigate`, so the
+URL→`routeFileName` feedback loop cannot occur there — the existing suite is
+structurally unable to catch it. A red spec must drive the real `navigate`.
+
+**A version update performs three real document navigations** where the
+contract is one (`navigationKinds: ['real-url','real-url','real-url']`,
+consistent across every case and every run). Not blank parks — three real
+reloads per save.
+
+This is a **regression introduced by this branch**, not a pre-existing defect.
+At the merge base (`a8ec5784eb`) none of the machinery exists:
+`PreviewSessionFrames.tsx`, `preview-session-navigation.ts`,
+`use-project-preview-session-navigation.ts`, `preview-version-remint.ts`,
+`project-preview-navigation-cache.ts` are all new, and
+`fileContentRefreshKey` / `previewRuntimeRevisionKey` /
+`previewRuntimeNavigationRetryToken` / `previewRuntimeScopeRetryToken` have
+zero occurrences in `apps/web/src` there. The old transport was a `?v=<mtime>`
+cache-bust on a single iframe with no scope-minting step. The convergence work
+introduced both the one-navigation contract and the thing that violates it.
+
+The governing invariant: one navigation per distinct
+`(sessionId, documentVersion, attempt)`. `project-preview-navigation-cache.ts`
+passes `revisionKey` to the cache but **not** to `#mint` (`:111`), so every
+distinct `revisionKey` is a guaranteed miss → a fresh `preview-url` mint → a
+new `sessionId` → one real navigation. Nothing dedupes "the bytes did not
+change". So the question is only how many distinct `revisionKey` values one
+save produces.
+
+Eliminated: both `previewRuntimeNavigationRetryToken` sites are unreachable
+from a save (`:11518` needs an Electron host navigation failure and is fenced
+once per generation; `:15002` is the toolbar Reload button). And the file-list
+refresh commit is genuinely atomic (`ProjectView.tsx:3590-3601` commits the
+list and both witnesses in one `setState`), so the staged-arrival theory for
+`size`/`mtime`/`fileContentRefreshKey` is falsified *within* a refresh.
+
+Two candidates remain, and **one was tested and disproven live**:
+
+* *Wildcard amplification (DISPROVEN).* A save also writes the version blob and
+  manifest under `.file-versions/`, which is inside the watch root and filtered
+  at none of the watcher, SSE (`routes/project/index.ts:5499` sends every event
+  unfiltered) or web layers — and each event bumps a project-wide wildcard key
+  (`ProjectView.tsx:4087-4092`) that every open preview folds in via `Math.max`
+  (`FileWorkspace.tsx:3396-3401`). Structurally exact. **But adding
+  `.file-versions` to `IGNORED_PROJECT_DIR_NAMES` left the live count at 3.**
+  The unit test went green and the symptom did not move, so the change was
+  reverted rather than shipped as an unvalidated "fix".
+* *Bounded VERSION_CHANGED remint (now the leading candidate).* The mint races
+  the write, the daemon serves the 409 version-changed document
+  (`routes/project/index.ts:6214-6224`), and `onStandbyVersionChanged`
+  (`FileViewer.tsx:17938-17959`) spends its budget twice.
+  `PREVIEW_VERSION_AUTOMATIC_REMINT_LIMIT = 2`, so 1 + 2 = exactly 3, and it
+  explains why the count is *invariant* across cases and runs where an
+  event-timing race would vary.
+
+**The discriminator, and it needs no new instrumentation:**
+`FileViewer.tsx:10004-10012` already stamps each attach with a `trigger`
+(`initial_open` / `content_version_change` / `recovery` / `file_tab_change` /
+`scope_reminted`). Read the `trigger` on the three `preview_attach` phase rows
+from one save: two `recovery` rows confirm the remint loop. Those rows go to
+the consent-gated analytics channel, not the console, so reading them needs a
+telemetry sink — that is the one remaining step.
+
+No test pins this. `FileViewer.test.tsx:9977` bounds `/preview-url` calls at 2
+but bumps both witnesses in a single rerender, and the e2e witness
+(`workspace-multi-client-collab.test.ts:730`) counts *promotions*, not
+navigations, so superseded navigations are invisible to it.
+
+**Deck presentation bridge — fixed and verified** (commit `050724c326`). It was
+never delivered on the converged transport: built as a URL-negotiated bridge,
+which works on `/raw` and `/powered` — the paths this refactor moved off. The
+scoped URL carries only the passive guards, on purpose ("Interactive Deck
+support is negotiated after navigation; it must never become part of the
+document URL"), so `odPreviewBridge=presentation` was requested and never
+arrived. Not a regression: `deck-presentation.ts` does not exist at the merge
+base; the bridge is new on this branch and was never wired up.
+
+It is now installed with the rest of the runtime next to `observability`, which
+is safe by construction — the bridge only registers a listener at parse time and
+does nothing until the host negotiates, and the host already posted
+`od:deck-presentation`. Both ends existed; only the middle was missing. Putting
+the switch in the URL would have been the wrong fix: a URL change is a
+navigation, so it would reload the very document presenting must keep alive.
+Live: `bridgeReady` / `acknowledged` / `receiptAgreesWithDocument` /
+`hiddenWhilePresenting` all false -> true, `restoredAfterExit` true, and
+document navigations still 0.
+
+**Click-to-advance was never broken.** `forwardAdvanced: false` was the fixture:
+two slides, with the deck parked on slide one before the click test, so the
+forward click asked it to advance past its own end. With three slides the same
+product code advances correctly.
+
+**Backward stepping oscillated — root-caused and fixed** (`2fbc93abf0`).
+Clicking back during a deck presentation bounced the slide forward again and
+settled wrong, about one time in three.
+
+A presented deck has more than one voice: the authored document reports its
+slide, and so does the injected deck runtime module. Instrumenting every writer
+showed both answering a single `go` and disagreeing while the move was still in
+flight. The host adopted whichever arrived last, that value feeds
+`deckSlideIndex`, and the transport replays `deckSlideIndex` — so a stale answer
+became a fresh intent and closed a loop:
+
+    goToSlide:2, replay:2, goToSlide:1, replay:1,
+    replay:2, replay:1, replay:2, replay:1, ...   (up to 59 writes, unbounded)
+
+Fix: a report is authoritative only once it agrees with what the host last
+asked for; until then the host is mid-move and a disagreeing report is a stale
+voice. The intent expires after 1.5s, so a deck that clamps the index or never
+answers cannot freeze host state — a tie-breaker, not a lock
+(`apps/web/src/runtime/deck-slide-intent.ts`, pure and separately specced
+because the wiring is not reachable from jsdom).
+
+    before   5 pass / 3 fail over 8 runs,  11-59 deck writes per run
+    after    7 pass / 0 fail over 8 runs,  exactly 2 writes per run
+
+The write count collapsing to 2 is the evidence that matters: the loop is gone,
+not sampled at a luckier moment.
+
+**Three theories died on the live product before this one survived** — worth
+recording, because each looked right on the code: the speaker-notes popup
+(disproven twice; the oscillation is identical with `window.open` neutralised),
+a stale closure over `activeDeckSlideIndex`, and a stale `modeStateRef` in the
+transport (assigned during render, never stale). Earlier in the same session
+`.file-versions` watcher events and the automatic remint budget died the same
+way. Code review alone has now been wrong five times on this surface; the write
+trace settled it in one run.
+
+**Click-to-advance was never broken.** `forwardAdvanced: false` was the fixture:
+two slides, with the deck parked on the last one before the click test, so the
+forward click asked it to advance past its own end.
+
+**Deep-link fix cherry-picked onto this branch** (`f0798938f0`, also standalone
+on `fix/project-file-deeplink-autoselect`). Not cosmetic for the lane: before
+it, four of six L2 runs aborted because the app drifted off the requested file.
+After it, zero.
+
+**The two stale FileViewer specs are fixed** (`801bb6cd56`). Both asserted the
+pre-convergence layout where the overlay owned an iframe. Neither invariant was
+stale, only the element: downloads are now checked on the promoted frame's own
+sandbox (which does carry `allow-downloads` — verified against the product
+first, because had it not, the spec would have been reporting a real
+regression), and the Escape-forwarding spec now selects
+`iframe[data-od-active="true"]` rather than the viewer's inert second frame.
+363 of 363 FileViewer tests pass.
+
+## Automated coverage, and what it found (2026-09-05)
+
+**The L2 matrix is fully executed for the first time.** `edit-save-reenter` and
+`comment-inspect-selection` were the last two pending entries; both are now
+driven entirely through product surfaces, and both were proven against a real
+defect before being marked automated. The fail-closed mechanism is kept and
+separately tested, so a scenario added later can still declare itself pending
+and block the lane.
+
+`edit-save-reenter` was verified by re-introducing the one line that cleared
+the persisted-document latch:
+
+    defect present   saved true · navigations 2 · scroll 240 -> 0 · reprovisioned
+    fix present      saved true · navigations 0 · scroll 240 -> 240 · preserved
+
+**Corpus results so far** (real artifacts, through the whole product path):
+
+    40 templates    39 rendered · 0 white · 1 harness error
+    165 templates  164 rendered · 0 white · 1 harness error
+
+56 of the 165 declare relative references that do not resolve, and every one of
+them still rendered — so a missing sibling is not by itself a black screen. The
+deck that did go black earlier was missing the specific script that drives its
+layout, which is a narrower failure than "missing asset" and worth keeping
+straight when triaging.
+
+The one harness error in both runs is the same daemon 500 on uploading a
+legitimate sibling file (`./assets/template.html`), counted as "not measured"
+rather than as a product failure.
+
+**A corpus runner now pushes real artifacts through the real product**
+(`od-lab-present/src/run-open-design-corpus.ts`). First run: 40 templates
+nobody wrote for a test — decks, landing pages, dashboards, animation, canvas,
+real sibling resource graphs — 39 rendered, 0 white, 1 harness error. Shape
+coverage went from 3 to 39 in one run. Artifact source is pluggable: a local
+directory needs no credentials, the R2 corpus needs Langfuse metadata that only
+CI holds.
+
+**Corpus patrol context.** The 50k-sample patrol measures artifacts WITHOUT the
+product (`page.goto` against an isolated origin; the workflow never checks out
+open-design). It is not a before/after for this branch. It also never ran on a
+schedule because `private-preview-patrol.yml` lives only on
+`feat/main-preview-patrol` — a `schedule:` trigger fires only from the default
+branch, so the cron could never have run regardless of
+`PREVIEW_PATROL_ENABLED`. Enabling that variable alone does nothing until the
+workflow is merged to main.
+
+### Found by automation and fixed: the presentation black flash
+
+Entering presentation flashed black for ~350 ms on roughly one attempt in six.
+The gates showed `navigationCount: 0`, `frameLoads: 0` and `continuity:
+preserved` throughout, so nothing reloaded — the flash was pure compositing.
+
+`.viewer.is-tab-present .viewer-body` changed layout (`position: fixed; inset:
+0`) and painted `background: #000` in the same rule, so the opaque ground
+composited before the document repainted into its new box. Proven, not
+reasoned: making the ground transparent removed the flash in six runs out of
+six, and the probe was reverted before designing the fix.
+
+The ground is not decoration — a slide whose aspect ratio does not fill the
+window needs it for letterbox bars — so it is delayed rather than dropped.
+`runtime/presentation-backdrop.ts` decides when it may paint, and
+`.is-present-settled` carries it a frame after promotion.
+
+Leaving is the mirror image and needed its own half: `closeInTabPresentation`
+dropped both classes together, so the ground was still opaque when the layout
+returned to normal. Fixing only entry left a ~337 ms flash on exit, visible in
+the very next eight-run batch. The ground is now dropped before the layout
+change.
+
+This one is worth noting for how it was found. Every step — the 1-in-6 rate,
+the CSS rule, the proof, and the second half nobody would have predicted — came
+from measurement. Nothing in it came from reading the code and reasoning, which
+on this surface produced seven wrong causes earlier in the same session.
+
+### The blank flash has one root cause, and only its amplifier is fixed
+
+Measured across every transition the lane exercises, all with `navigationCount:
+0` and `frameLoads: 0` — the document is never replaced:
+
+    entering presentation   ~1 in 6    ~350 ms
+    leaving presentation    ~1 in 6    ~340 ms
+    file-tab round trip     occasional ~339 ms
+    project round trip      occasional ~1353 ms
+    LRU restoration         occasional ~317 ms
+
+Nothing reloads. The preview frame is relocated to a new host with
+`moveBefore()`, which preserves the browsing context but still forces the
+browser to recomposite, and for a frame or more the new box is empty. Every
+transition above relocates the frame, which is why the same signature appears
+in all of them.
+
+**Fixed: the amplifier.** Presentation additionally painted an opaque black
+ground on the element whose layout was changing
+(`.viewer.is-tab-present .viewer-body`), so the empty frame read as solid
+black. The ground now lives on `.present-backdrop`, its own fixed layer whose
+box never changes, mounted with the presentation and faded in once the document
+has painted. Three full rounds, nine case-transitions, 0 ms.
+
+That fix took four attempts, and the first three are worth not repeating:
+delaying the ground by one frame fixed entry only; dropping it before the
+layout in the same handler did nothing, because React batches both state
+updates into one commit; two `requestAnimationFrame`s survived eight
+deck-only runs and then flashed on the very next FULL run, where deck is the
+third case and the browser is busier. All three were attempts to TIME the
+ground against a reflow, which is a bet that loses whenever load changes. The
+fourth removes the possibility instead of lowering its odds.
+
+**Not fixed: the relocation flash itself.** Without an opaque ground the empty
+frame shows the page background rather than black, so it is less visible but
+still measurable — that is what the file-tab, project and LRU numbers above
+are. Fixing it properly means changing what the frame shows while it is being
+relocated (holding a paint snapshot across the move, or delaying the host swap
+until the destination has painted), which touches every preview path in the
+product. That is an architectural decision, not a patch, and five separate
+one-off timing fixes would repeat exactly the mistake documented above.
+
+Recommendation: treat it as one item, decide the approach deliberately, and
+keep the per-transition blank budget in the lane as the regression witness —
+it is what surfaced this in the first place.
+
+### Found by automation, not fixed
+
+* **A save re-navigates other open files' previews.** `own=1,
+  foreign=['lru-5.html','lru-6.html']`, and the edit gate shows the same
+  collateral, so editor saves are affected too, not just plain file writes.
+  Needs the product decision on narrowing the wildcard by changed-file type.
+* **The entry nav rail's credits menu covers the viewer toolbar.** It opens on
+  hover, so resting the pointer on the left rail makes Edit and Comment
+  unclickable — `span.entry-nav-rail__menu-credits-plan` and
+  `div.entry-nav-rail__menu-credits-head` were both caught intercepting real
+  clicks. The lab moves the pointer away rather than force-clicking, so a
+  genuine overlap stays visible.
+* **Uploading a legitimate sibling file can 500.** `./assets/template.html`
+  was rejected by the daemon during a corpus run. Not investigated.
+* **Manual Edit save is intermittently lost** (roughly one run in six). The
+  driver confirms the edit reached the document before leaving edit mode, so
+  the loss happens after. A disk-side witness (`savedContentPersisted`) was
+  added to separate "the write never landed" from "it landed and the view
+  reverted"; measurement in progress.
+
+### Method note
+
+Building these gates produced three wrong controls in a row, each of which
+reported a product failure that did not exist: `.first()` resolved a hidden
+per-tab copy of the toolbar; the document was checked before the panel draft
+had been committed; the panel's own Save was never clicked. Together with the
+six wrong causes earlier in the session, the pattern is consistent enough to
+state plainly: **a new gate's first red is more likely to be the gate than the
+product.** Every gate here therefore carries a control that fails loudly when
+it measured nothing, and `unavailableReason` is never counted as a product
+verdict.
+
+The same rule applied to a blank-interval failure: the fixture had grown a
+2200px painted block, which lengthened every re-attach repaint. Raising the
+budget would have turned the observation off, so the paint cost was removed
+instead (`min-height` costs layout, not pixels) and the interval returned to
+0 ms across four runs while scroll stayed observable.
+
+## Where this stands for handoff
+
+Green on this branch: `pnpm guard` 0, web typecheck 0, daemon typecheck 0,
+daemon build 0, 363/363 FileViewer, 22/22 lab adapter. L2 passes fail-closed
+per case (`ordinary-html`, `relative-support-assets`, `deck-runtime`).
+
+Not done, in the order I would pick them up:
+
+1. **Collateral preview refresh — needs a product decision, not code.** A save
+   re-navigates other open files' retained previews: measured
+   `own=1, foreign=['lru-5.html','lru-6.html']` for a single save. Cause is the
+   project-wide content-refresh wildcard (`ProjectView.tsx:4087-4092`, folded in
+   via `Math.max` in `FileWorkspace.tsx:3396-3401`) plus `evictProject` on every
+   file event. The wildcard is deliberate and defensible: a changed asset can be
+   a dependency of any open page and real dependency analysis is not feasible
+   (dynamic `import()`, `fetch`, CSS `url()`, JS-built URLs). The cheap split
+   that needs no analysis is by *type* of the changed file — keep the wildcard
+   for assets, scope an HTML file's own change to itself. The codebase already
+   draws that line for `add` events. Residual risk is narrow and nameable: page
+   A iframes page B, B changes, A does not refresh. Do not ship this without the
+   call being made.
+2. **Fullscreen entry is still unverified**, not broken. The CDP-driven context
+   cannot be granted fullscreen at all (a direct
+   `documentElement.requestFullscreen()` with a user gesture fails
+   `TypeError: not granted`), so this needs a hand-driven browser. Everything
+   around it is verified: overlay layering, chrome hiding, exit, and zero
+   navigations.
+3. **`edit-save-reenter` and `comment-inspect-selection`** remain the two
+   pending L2 matrix gates.
+
+Method note worth keeping: on this surface, reading the code has now produced
+five confident wrong causes (`.file-versions` watcher events, the automatic
+remint budget, the speaker-notes popup, a stale `activeDeckSlideIndex` closure,
+a stale `modeStateRef`). Every one survived review and died on the live product.
+What actually resolved things each time was making the harness say what it
+saw — frame inventory, navigation identities, per-writer traces. Instrument
+first.
+
+**Presentation gate — now passes live** (`od-lab-present` 647891f). Three
+Tier-1 defects were fixed statically first, which is why the first live run was
+usable: no settle between the version write and the presentation baseline; the
+three identity equalities carrying the same blind spot the round-trip verdicts
+had just fixed; and `frameLoads` counting inert standby/`about:blank` events.
+Live result: `presentationEnter`/`presentationExit` both `navigationCount: 0`,
+`documentRequests: 0`, `frameLoads: 0`, `continuity: preserved`.
+
+**Real-browser pass — the convergence claim holds.** Driving actual Chrome
+through the Present menu, across two full round trips: `sameNode`,
+`sameBrowsingContext` (`contentWindow` identity), `sessionUnchanged`,
+`srcUnchanged` all true; the overlay is transparent `pointer-events:none` at
+z-1060 over the promoted preview at z-1050 on black; toolbar `display:none`;
+exit control present; overlay owns no iframe and the preview iframe count never
+left 1; zero new first-paint beacons on the first round trip.
+
+**Fullscreen entry remains UNVERIFIED — not broken.** The Fullscreen menu item
+left `document.fullscreenElement` null even under a real trusted click. The
+control settles it: a direct `document.documentElement.requestFullscreen()`
+with a user gesture also fails with `TypeError: not granted`, so this
+CDP-driven context cannot enter fullscreen at all. Nothing about the product is
+established here either way; it needs a hand-driven browser.
+
+**Convergence sweep — every remaining `srcDoc` in `apps/web/src` is accounted
+for.** Swept after the five FileViewer surfaces landed, so "did we actually get
+all of it" has an answer rather than a memory:
+
+* *Live preview documents* — converged. The only `srcDoc` left in a live
+  preview path is `preview-modal-transport.ts`, and it is already URL-first with
+  two **typed** fallback reasons: `no-document-url` (the caller holds HTML and
+  no URL that serves it) and `deck-runtime-unavailable`. The second names a real
+  upstream blocker — the catalogue preview routes (skills / plugins / design
+  systems) do not mint preview sessions yet, and deck paging is a capability
+  negotiated after navigation — so it is a tracked dependency, not an oversight.
+  `PREVIEW_MODAL_BRIDGE_TOKENS` is pinned to exact parity with what
+  `buildSrcdoc` installs, so the transport swap can neither smuggle in nor drop
+  runtime behavior.
+* *Thumbnails, covers and showcases* — `DeckThumbnailRail`, `DeckSlideThumbnail`,
+  `DesignFilesPanel`, `RecentProjectsStrip`, `DesignKitView`, `ExamplesTab`,
+  `CommunityTemplatePreview`. These are off-screen, non-interactive renders that
+  own no live state, which the transport module's own docstring explicitly
+  sanctions. They are **not** convergence debt and should not be migrated.
 
 **End-to-end status.** L2 ran against the real product for the first time — the
 CI lane exercises a hand-written fake product shell, so this was the first
@@ -1357,3 +1800,93 @@ checked head, 25 of 26 threads resolved, and the `CHANGES_REQUESTED` sits on a
 stale commit whose three blockers are all fixed. The reviewer has exhausted the
 PR's REQUEST_CHANGES allowance and can only leave COMMENT, which never clears
 it. Nothing in the code can lift it.
+
+---
+
+## What one save is allowed to disturb — resolved (2026-09-05)
+
+Item 1 above is closed, and the answer turned out to be bigger than the
+wildcard. The wildcard was a symptom.
+
+**What was actually happening.** Saving one HTML file re-navigated the retained
+previews of every other open document. `OD_L2_TRACE_NAVIGATION=1` (new, in
+`od-lab-present`) shows why the count alone was never enough to say: the
+reloaded documents came back with an **unchanged content hash and a brand-new
+preview session**, so they were reloaded by bookkeeping, not by content.
+
+One user-visible save reaches the file watcher as three writes, and only one of
+them is user content:
+
+| write | what it is | old effect |
+| --- | --- | --- |
+| `.file-versions/<hash>/manifest.json` and the snapshot | daemon version history | project-wide refresh |
+| `<name>.artifact.json` | generated metadata for one artifact | project-wide refresh |
+| the document | user content | project-wide refresh |
+
+Each of those advanced the project wildcard, so a single save minted a new
+document identity for every open preview — three times over.
+
+**The fix, in three layers.**
+
+1. `apps/daemon/src/project-watchers.ts` no longer surfaces changes inside the
+   daemon's reserved bookkeeping directories, and it sources that set from
+   `RESERVED_PROJECT_FILE_SEGMENTS` in `projects.ts` — the same set the write
+   API already refuses user writes into — so the two cannot drift apart.
+2. `artifactManifestSubjectPath` (`apps/web/src/artifacts/manifest.ts`)
+   attributes a `<name>.artifact.json` change to the document it describes.
+3. `handleProjectEvent` scopes an HTML document's own **edit** to itself.
+   Appearing and disappearing files keep the project wildcard, because a
+   reference that just started or stopped resolving leaves an open page showing
+   real breakage that only a reload repairs — and `ProjectView.pendingPrompt`
+   already had a spec pinning exactly that for a nested HTML dependency being
+   added. The retained-frame pool follows the same rule, so a scoped change no
+   longer evicts parked browsing contexts that did not change.
+
+**Result, live:** every transition in the matrix now reports
+`foreignNavigationPaths: []`, including the save and the Manual Edit round trip.
+`assertEditRoundTrip` gates on it, so it cannot silently come back.
+
+**Residual risk, narrow and nameable:** page A embeds page B, B is edited, and A
+keeps showing the previous B until anything else in the project changes or A is
+reloaded by hand.
+
+### Two harness faults that were reporting product defects
+
+Both were found by running the full matrix rather than one case at a time.
+
+* **`deck-runtime` selection and Manual Edit reported "no selection target".**
+  The fixture's `#edit-target` lived only on slide one, and the presentation
+  round trip leaves the deck on a later slide — so the harness was clicking
+  something legitimately off screen and blaming the product. Every slide now
+  carries its own target, the selector takes the visible one, and the round trip
+  refuses to report a product result when the target is not visible.
+* **The scroll gate failed every deck.** It required a scroll position greater
+  than zero, and a deck is one viewport-high slide at a time — genuinely
+  unscrollable. Applicability is measured now instead of assumed.
+
+Baseline discipline mattered here: both symptoms reproduced with this branch's
+web changes reverted, which is what separated them from the fan-out work.
+
+### Still open
+
+**`deck-runtime` Manual Edit exit provisions the same document twice.**
+`ownNavigationCount: 2`, both navigations carrying the *same* documentVersion
+(`sha256:5ab5079…`) 130 ms apart with different session ids. Ordinary HTML is
+`0` on the same path, so this is specific to the deck route, and it is a double
+provision rather than a content change. Not diagnosed further; the trace flag
+above is the tool for it.
+
+**`./` project file paths** returned 500 on write until `427ee934fc`. Found by
+scaling the corpus from 165 to 400 real artifacts — the design-system `DESIGN.md`
+files reference siblings as `./name`, which no synthetic fixture did. Verified by
+re-running the same 400 artifacts: 12 harness errors → 0, 400/400 rendered.
+
+### Method note, extended
+
+The five wrong causes from reading code are now eight — add the `.file-versions`
+watcher events (right family, wrong member), a project-wide source-snapshot
+invalidation, and the legacy `filesRefreshKey` re-navigation. All three were
+disproven by disabling them one at a time against the live product and watching
+the symptom survive. What found the real cause was recording the *inputs* to
+scope minting per file and watching `content-refresh:0` become
+`content-refresh:1` on a file nobody touched.
