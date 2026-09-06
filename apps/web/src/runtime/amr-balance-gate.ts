@@ -18,6 +18,7 @@ import type {
   WorkspaceBillingResponse,
 } from '@open-design/contracts';
 import { fetchAmrWalletSnapshot } from '../providers/daemon';
+import { isFreeAmrPlan, resolveAmrPlan } from './amr-low-balance-plan';
 
 /**
  * Hard-block line (USD): at or below this the wallet cannot fund any part of
@@ -163,6 +164,56 @@ export function setAmrLowBalanceWarnOptedOut(): void {
 }
 
 /**
+ * Whether something OTHER than the wallet might fund this Personal run, so the
+ * wallet-balance preflight must stand down and let Vela decide at admission.
+ *
+ * This is the surviving half of a two-part question. The gate originally asked
+ * "is the caller on a Coding Plan, AND is this model unlimited on that plan";
+ * the model half was retired with the client-side entitlement catalog, so Vela
+ * is now the only authority on whether a GIVEN model is metered. The plan half
+ * is still readable, and it is the half that decides whether standing down can
+ * ever be right: a subscriber's $0 wallet is a NORMAL state (their day-to-day
+ * models are plan-funded and never touch it), while an account with no plan at
+ * all has nothing but the wallet — so its empty wallet is a real hard block,
+ * not a wallet the run might route around.
+ *
+ * Only a DEFINITIVE free answer lets the gate run. An unresolved plan fails
+ * open exactly like the retired catalog lookup did on an unavailable list, so a
+ * subscriber whose tier cannot be read is never blocked by a failed read.
+ */
+async function planMayFundRunOutsideWallet(
+  snapshot: AmrWalletSnapshot,
+): Promise<boolean> {
+  return !isFreeAmrPlan(await resolveAmrPlan(snapshot));
+}
+
+/**
+ * Whether the HARD tier — and ONLY the hard tier — must stand down for this
+ * run, because something other than the wallet may fund it.
+ *
+ * Scope note (OPEND-2600). This question must never be asked ahead of BOTH
+ * tiers and answered with a whole-gate `allow`: that deletes the soft reminder
+ * for every subscriber between $0 and the warning line, which is how a Pro
+ * account at $1.79 ended up getting no card at all. Standing down is only ever
+ * about NOT BLOCKING; a plan says nothing about whether a nearly-empty wallet
+ * is worth mentioning. Product ruling 2026-09-03 (T37/T39): warn at every tier,
+ * block at none that a plan may still fund. So this guards the hard branch
+ * alone and the soft branch is reached either way.
+ *
+ * Latency note (red line, T40). The plan read is a network roundtrip, and the
+ * soft tier must not add one to the send path. Call this ONLY once the balance
+ * is already at or below the hard-block line — the one case that was always
+ * going to block, and is therefore already allowed to wait.
+ */
+async function hardBlockMustStandDown(
+  snapshot: AmrWalletSnapshot,
+  modelId: string | null | undefined,
+): Promise<boolean> {
+  if (!modelId?.trim()) return false;
+  return planMayFundRunOutsideWallet(snapshot);
+}
+
+/**
  * Decide whether an OpenDesign Cloud run may start. Fast path first: the
  * daemon-cached snapshot answers without an upstream roundtrip, so healthy
  * balances start with no added latency. Only a hard-block answer is confirmed
@@ -260,22 +311,24 @@ async function checkWorkspaceBalanceGate(
   }
   const balance = amrWalletBalanceUsd(workspaceSnapshot);
   if (balance == null) return { kind: 'unavailable' };
-  if (
-    balance <= AMR_LOW_BALANCE_WARN_USD
-    && scope.workspaceType === 'personal'
-    && modelId?.trim()
-  ) {
-    // Coding Plan membership is no longer exposed to the client. Personal
-    // requests therefore fail open here and let Vela enforce the authoritative
-    // billing and Model Limit decision at admission time.
-    return { kind: 'allow' };
-  }
   if (balance <= AMR_HARD_BLOCK_BALANCE_USD) {
-    return {
-      kind: 'hard',
-      reason: 'insufficient',
-      snapshot: workspaceSnapshot!,
-    };
+    // Coding Plan model membership is no longer exposed to the client, so Vela
+    // enforces the authoritative billing and Model Limit decision at admission
+    // time. The client still proves the caller HAS a plan first — without one
+    // there is nothing but the wallet, and failing open would delete this hard
+    // block for every empty personal wallet. Team wallets never stand down: a
+    // member's personal plan does not fund their team's runs.
+    const standsDown =
+      scope.workspaceType === 'personal'
+      && (await hardBlockMustStandDown(workspaceSnapshot!, modelId));
+    if (!standsDown) {
+      return {
+        kind: 'hard',
+        reason: 'insufficient',
+        snapshot: workspaceSnapshot!,
+      };
+    }
+    // Fall through: not blocked, but an empty wallet is still worth saying.
   }
   if (balance <= AMR_LOW_BALANCE_WARN_USD && !isAmrLowBalanceWarnOptedOut()) {
     return { kind: 'soft', snapshot: workspaceSnapshot! };
@@ -301,10 +354,11 @@ export async function checkAmrBalanceGate(
       if (cachedBalance > AMR_LOW_BALANCE_WARN_USD || isAmrLowBalanceWarnOptedOut()) {
         return { kind: 'allow' };
       }
+      // Above the hard line, so nothing here can block — and a plan never
+      // silences the reminder (OPEND-2600). Skipping the plan read also keeps
+      // the soft tier off the network, which is the latency red line (T40).
       // cached is non-null here: a definitive balance implies a snapshot.
-      return modelId?.trim()
-        ? { kind: 'allow' }
-        : { kind: 'soft', snapshot: cached! };
+      return { kind: 'soft', snapshot: cached! };
     }
     // Hard-block candidate (signed out or empty): confirm against the live
     // wallet before blocking — the cache may predate a sign-in or recharge.
@@ -323,10 +377,10 @@ export async function checkAmrBalanceGate(
     if (fresh.stale || fresh.error != null) return { kind: 'allow' };
     const freshBalance = amrWalletBalanceUsd(fresh);
     if (freshBalance == null) return { kind: 'allow' };
-    if (freshBalance <= AMR_LOW_BALANCE_WARN_USD && modelId?.trim()) {
-      return { kind: 'allow' };
-    }
-    if (freshBalance <= AMR_HARD_BLOCK_BALANCE_USD) {
+    if (
+      freshBalance <= AMR_HARD_BLOCK_BALANCE_USD
+      && !(await hardBlockMustStandDown(fresh, modelId))
+    ) {
       return { kind: 'hard', reason: 'insufficient', snapshot: fresh };
     }
     if (freshBalance <= AMR_LOW_BALANCE_WARN_USD && !isAmrLowBalanceWarnOptedOut()) {

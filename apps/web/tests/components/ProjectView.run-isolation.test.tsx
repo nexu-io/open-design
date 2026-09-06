@@ -1480,12 +1480,21 @@ describe('ProjectView conversation run isolation', () => {
     );
   });
 
-  it('lets Vela decide a selected Personal model when the wallet is empty', async () => {
+  it('hard-blocks the AMR send and shows the balance dialog when the wallet is empty', async () => {
     conversationAMessages = [];
+    // Both the cached read and the refresh confirmation report an empty wallet
+    // for a PROVABLY free account, so the send must be hard-blocked before any
+    // run spawns (OPEND-2448).
+    //
+    // `plan: 'free'` is load-bearing, not decoration. The gate blocks only a
+    // definitive free tier — an unresolved plan fails open (T39) — and this
+    // suite's `fetchVelaLoginStatus` returns `{ loggedIn: false }`, so with
+    // `user: null` the plan would resolve to null and this case would land in
+    // the fail-open cell without witnessing anything.
     fetchAmrWalletSnapshot.mockResolvedValue({
       status: 'available',
       profile: 'prod',
-      user: null,
+      user: { id: 'u-free', plan: 'free' },
       balanceUsd: '0',
       updatedAt: null,
       fetchedAt: '2026-07-02T00:00:00.000Z',
@@ -1512,8 +1521,8 @@ describe('ProjectView conversation run isolation', () => {
 
     fireEvent.click(screen.getByTestId('send-message'));
 
-    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
-    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
+    await waitFor(() => expect(screen.getByTestId('amr-balance-dialog')).toBeTruthy());
+    expect(streamViaDaemon).not.toHaveBeenCalled();
   });
 
   it('does not guess whether a selected Personal model is metered at low balance', async () => {
@@ -1548,8 +1557,15 @@ describe('ProjectView conversation run isolation', () => {
 
     fireEvent.click(screen.getByTestId('send-message'));
 
+    // A reminder is not a block (OPEND-2600 / T37): the plan check guards the
+    // hard tier only, so a subscriber between $0 and the warning line still
+    // reaches the soft tier and is told. The reminder holds THIS send.
+    await waitFor(() => expect(screen.getByTestId('amr-low-balance-dialog')).toBeTruthy());
+    expect(streamViaDaemon).not.toHaveBeenCalled();
+
+    // "Start anyway" resolves the pending send — the run starts without a re-submit.
+    fireEvent.click(screen.getByTestId('amr-low-balance-dialog-proceed'));
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
-    expect(screen.queryByTestId('amr-low-balance-dialog')).toBeNull();
     expect(streamViaDaemon).toHaveBeenCalledWith(
       expect.objectContaining({ agentId: 'amr' }),
     );
