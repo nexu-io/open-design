@@ -25,7 +25,7 @@ Package guide for Open Design agents and reviewers.
 - Keep the canvas black. Do not lift it to `#0a0a0a` "for softness"; the glow does that job.
 - Reserve a content column (max 676px) in the middle of the viewport so the star rails can flank it.
 - Use `--accent` (white) for exactly one primary action per screen; everything else is glass.
-- When the page needs the particle engine, pair this system with the `starflow-launch` skill.
+- When the page needs the particle engine, pair this system with the `starflow` skill.
 
 ## Avoid
 

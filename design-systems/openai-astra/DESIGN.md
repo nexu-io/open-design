@@ -234,7 +234,7 @@ The site scale is fluid between 375px and 1440px; the values below are the deskt
 - Use weight 500 for every heading and 400 for body; keep display tracking at -0.03em.
 - Reserve the shape frames (576px × 80vh) even before the engine is wired, so layout does not shift.
 - Ship the static poster fallback and honour `prefers-reduced-motion`.
-- Pair this system with the `starflow-launch` skill when the page needs the particle engine.
+- Pair this system with the `starflow` skill when the page needs the particle engine.
 
 ### Don't
 - Don't add gradients, coloured buttons, tinted cards, or a coloured link colour.
