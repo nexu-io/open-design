@@ -3097,6 +3097,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 scenarios={placeholderScenarios}
                 active={placeholderCarouselActive}
                 paused={composerFocused}
+                caretPlacement="typing-edge"
                 onScenarioChange={setPlaceholderScenario}
               />
             ) : null}
