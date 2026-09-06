@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "od-design-system-project/v1",
+  "id": "openai-astra",
+  "name": "OpenAI Astra (launch page)",
+  "category": "AI & LLM",
+  "description": "Dark, cinematic launch-page system distilled from the GPT-6 Astra announcement page: pure black canvas, a living galaxy of 4,000 stars that tilts, scatters into side rails and re-forms into shapes on scroll, OpenAI Sans at weight 500, white-on-black pill controls, and a single teal-blue ambient glow (#23435f). Complements the light editorial `openai` system.",
+  "source": {
+    "type": "bundled",
+    "origin": "Hand-authored from the public GPT-6 Astra launch page on openai.com (captured 2026-09-05). Particle choreography measured via the open-source Starflow engine (github.com/Win-Hao/starflow, MIT)."
+  },
+  "files": {
+    "design": "DESIGN.md",
+    "tokens": "tokens.css",
+    "components": "components.html"
+  },
+  "usage": "USAGE.md",
+  "componentsManifest": "components.manifest.json",
+  "importMode": "normalized",
+  "craft": {
+    "applies": [],
+    "suggested": [
+      "color",
+      "typography",
+      "animation-discipline",
+      "accessibility-baseline"
+    ],
+    "exemptions": []
+  },
+  "preview": {
+    "dir": "preview",
+    "pages": [
+      {
+        "path": "preview/colors.html",
+        "role": "colors",
+        "title": "Colors"
+      },
+      {
+        "path": "preview/typography.html",
+        "role": "typography",
+        "title": "Typography"
+      },
+      {
+        "path": "preview/spacing.html",
+        "role": "spacing",
+        "title": "Spacing"
+      }
+    ]
+  },
+  "sourceFiles": {
+    "evidence": "source/evidence.md"
+  }
+}

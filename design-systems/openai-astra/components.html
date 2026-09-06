@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>openai-astra — reference components</title>
+    <meta name="description" content="Reference fixture for design-systems/openai-astra. Every visible value comes from tokens.css. The Astra launch page's signature moves: pure black canvas under a particle galaxy, white text with white-at-alpha secondaries, OpenAI Sans at 500/400, monochrome pill chrome, a single #23435f ambient glow, no shadows, no gradients." />
+    <style>
+      /* Canonical token bindings — pasted verbatim from tokens.css (:root declarations only). */
+      :root {
+        --bg:           #000000;
+        --surface:      #1f1f1f;
+        --surface-warm: #0a0a0a;
+        --fg:   #ffffff;
+        --fg-2: #fafafa;
+        --muted: #ffffff99;
+        --meta:  #ffffff70;
+        --border:      #ffffff33;
+        --border-soft: #ffffff14;
+        --accent:        #ffffff;
+        --accent-on:     #000000;
+        --accent-hover:  #ffffffe6;
+        --accent-active: #ffffffcc;
+        --success: #16a34a;
+        --warn:    #eab308;
+        --danger:  #dc2626;
+        --font-display: "OpenAI Sans", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+        --font-body:    "OpenAI Sans", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+        --font-mono:    "SF Mono", Consolas, "Liberation Mono", ui-monospace, monospace;
+        --text-xs:   13px;
+        --text-sm:   14px;
+        --text-base: 17px;
+        --text-lg:   18px;
+        --text-xl:   22px;
+        --text-2xl:  30px;
+        --text-3xl:  48px;
+        --text-4xl:  64px;
+        --leading-body:     1.65;
+        --leading-tight:    1.08;
+        --tracking-display: -0.03em;
+        --space-1:  4px;
+        --space-2:  8px;
+        --space-3:  12px;
+        --space-4:  16px;
+        --space-5:  20px;
+        --space-6:  24px;
+        --space-8:  32px;
+        --space-12: 48px;
+        --section-y-desktop: 128px;
+        --section-y-tablet:  96px;
+        --section-y-phone:   64px;
+        --radius-sm:   6px;
+        --radius-md:   10px;
+        --radius-lg:   16px;
+        --radius-pill: 9999px;
+        --elev-flat:   none;
+        --elev-ring:   0 0 0 1px var(--border);
+        --elev-raised: 0 18px 60px rgba(0, 0, 0, 0.08);
+        --focus-ring: 0 0 0 2px #ffffffb3;
+        --motion-fast:   150ms;
+        --motion-base:   300ms;
+        --ease-standard: cubic-bezier(0.6, 0, 0.4, 1);
+        --container-max:            1088px;
+        --container-gutter-desktop: 56px;
+        --container-gutter-tablet:  32px;
+        --container-gutter-phone:   20px;
+      }
+
+      /* Astra extension values (DESIGN.md §2 / §7) are literals here so the fixture only references schema tokens. */
+      * { box-sizing: border-box; }
+      html { color-scheme: dark; }
+      body { margin: 0; background: var(--bg); color: var(--fg); font: 400 var(--text-base) / var(--leading-body) var(--font-body); letter-spacing: -0.01em; -webkit-font-smoothing: antialiased; }
+      main { max-width: var(--container-max); margin: 0 auto; padding: var(--space-12) var(--container-gutter-desktop); }
+      section { padding: var(--space-12) 0; border-top: 1px solid var(--border-soft); }
+      section:first-of-type { border-top: 0; }
+      h1 { margin: 0 0 var(--space-6); font: 500 var(--text-3xl) / var(--leading-tight) var(--font-display); letter-spacing: var(--tracking-display); text-wrap: balance; }
+      h2 { margin: 0 0 var(--space-4); font: 500 var(--text-2xl) / 1.32 var(--font-display); letter-spacing: -0.01em; }
+      h2.kicker { margin: 0 0 var(--space-6); font: 500 var(--text-xs) / 1.5 var(--font-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--meta); }
+      h3 { margin: 0 0 var(--space-3); font: 500 var(--text-lg) / 1.32 var(--font-display); letter-spacing: -0.01em; }
+      p { margin: 0 0 var(--space-4); color: var(--muted); text-wrap: pretty; }
+      code { font: 400 0.92em / 1.6 var(--font-mono); letter-spacing: 0; color: var(--fg); background: #ffffff1f; padding: 2px 8px; border-radius: var(--radius-sm); }
+      .row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+      .note { color: var(--meta); font-size: var(--text-sm); margin: var(--space-3) 0 0; }
+
+      /* ── Links ── */
+      a { color: var(--fg); text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 3px; transition: text-decoration-color var(--motion-base) var(--ease-standard); }
+      a:hover { text-decoration-color: var(--fg); }
+      .nav { display: flex; gap: var(--space-6); }
+      .nav a { font: 500 var(--text-xs) / 1.5 var(--font-body); letter-spacing: 0; color: var(--meta); text-decoration: none; transition: color var(--motion-fast); }
+      .nav a:hover, .nav a[aria-current="page"] { color: var(--fg); }
+      .link-arrow { font: 500 var(--text-sm) / 1 var(--font-body); text-decoration: none; }
+      .link-arrow::after { content: " →"; }
+
+      /* ── Buttons ── */
+      .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1); min-height: 40px; padding: var(--space-3) var(--space-4); border: 0; border-radius: var(--radius-pill); font: 500 var(--text-sm) / 1 var(--font-body); letter-spacing: 0; white-space: nowrap; cursor: pointer; transition: background-color var(--motion-base) var(--ease-standard), color var(--motion-base) var(--ease-standard); }
+      .btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      .btn-primary { background: var(--accent); color: var(--accent-on); }
+      .btn-primary:hover { background: var(--accent-hover); }
+      .btn-primary:active { background: var(--accent-active); }
+      .btn-glass { background: #ffffff1f; color: var(--fg); }
+      .btn-glass:hover { background: var(--border); }
+      .btn-ghost { background: transparent; color: var(--fg); }
+      .btn-ghost:hover { background: var(--border); }
+      .btn[disabled] { background: #ffffff1f; color: var(--muted); cursor: not-allowed; }
+      .icon-btn { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--fg); cursor: pointer; transition: background-color 200ms linear; }
+      .icon-btn:hover { background: #ffffff1f; }
+      .replay { width: 36px; height: 36px; background: #ffffff26; color: #ffffffcc; transition: color var(--motion-fast), background-color var(--motion-fast); }
+      .replay:hover { background: #ffffff40; color: #ffffffe6; }
+
+      /* ── Inputs ── */
+      .field { display: grid; gap: var(--space-2); max-width: 480px; }
+      .field label { font: 500 var(--text-xs) / 1.5 var(--font-body); letter-spacing: 0.04em; color: var(--meta); }
+      input[type="text"], input[type="email"], textarea, select { width: 100%; min-height: 44px; padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-warm); color: var(--fg); font: 400 var(--text-base) / 1.4 var(--font-body); letter-spacing: -0.01em; transition: border-color var(--motion-base) var(--ease-standard); }
+      input::placeholder, textarea::placeholder { color: var(--meta); }
+      input:focus-visible, textarea:focus-visible, select:focus-visible { outline: none; border-color: #ffffffb3; box-shadow: var(--focus-ring); }
+      .field .hint { margin: 0; font-size: var(--text-sm); color: var(--meta); }
+      .field .error { margin: 0; font-size: var(--text-sm); color: var(--danger); }
+      .search { display: flex; align-items: center; gap: var(--space-2); min-height: 48px; padding: 0 var(--space-3) 0 var(--space-4); border-radius: var(--radius-pill); background: #ffffff1f; }
+      .search input { min-height: 0; padding: var(--space-3) 0; border: 0; background: transparent; }
+      .search input:focus-visible { box-shadow: none; }
+
+      /* ── Badges ── */
+      .badge { display: inline-flex; align-items: center; min-height: 24px; padding: 0 var(--space-3); border-radius: var(--radius-pill); font: 500 var(--text-xs) / 1 var(--font-body); letter-spacing: 0.02em; color: var(--fg); background: #ffffff1f; }
+      .badge-outline { background: transparent; box-shadow: var(--elev-ring); color: var(--muted); }
+      .badge-solid { background: var(--accent); color: var(--accent-on); }
+      .badge-success { color: var(--success); background: transparent; box-shadow: 0 0 0 1px var(--success); }
+
+      /* ── Cards ── */
+      .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-4); }
+      .card { padding: var(--space-6); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--elev-flat); }
+      .card-glass { background: #ffffff1f; }
+      .card-outline { background: transparent; box-shadow: var(--elev-ring); }
+      .card h3 { margin-bottom: var(--space-2); }
+      .card p { margin: 0; font-size: var(--text-sm); }
+      .card .meta { display: block; margin-top: var(--space-4); font: 500 var(--text-sm) / 1.4 var(--font-body); letter-spacing: 0; color: var(--meta); }
+      .panel { background: var(--surface); border-radius: var(--radius-md); padding: var(--space-4); font: 400 var(--text-sm) / 1.6 var(--font-mono); letter-spacing: 0; color: var(--muted); }
+      .band { background: var(--surface-warm); border-radius: var(--radius-lg); padding: var(--space-6); }
+
+      /* ── Hero chrome ── */
+      .hero { position: relative; height: 420px; overflow: hidden; border-radius: var(--radius-lg); background: var(--bg) radial-gradient(ellipse farthest-corner at center, transparent 0%, color-mix(in srgb, #23435f 6.25%, transparent) 25%, color-mix(in srgb, #23435f 25%, transparent) 50%, color-mix(in srgb, #23435f 55%, transparent) 100%); }
+      .hero .label { position: absolute; top: 50%; margin: 0; transform: translateY(-50%); font: 500 var(--text-4xl) / 1 var(--font-display); letter-spacing: var(--tracking-display); color: var(--fg-2); text-shadow: 0 0 24px #fafafa14; user-select: none; }
+      .hero .label-left { left: var(--container-gutter-desktop); }
+      .hero .label-right { right: var(--container-gutter-desktop); }
+      .hero .letter { display: inline-block; opacity: 0; animation: reveal 1s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+      .hero .label-left .letter { transform: translateX(-44px); }
+      .hero .label-right .letter { transform: translateX(44px); }
+      @keyframes reveal { to { opacity: 1; transform: translate(0); } }
+      .hero .scroll-hint { position: absolute; bottom: var(--space-8); left: 50%; transform: translateX(-50%); margin: 0; color: #fafafa99; font-size: var(--text-sm); }
+      .hero .replay { position: absolute; right: var(--space-3); bottom: var(--space-3); }
+      .hero .star { position: absolute; width: 3px; height: 3px; border-radius: 50%; }
+      @media (prefers-reduced-motion: reduce) { .hero .letter { opacity: 1; animation: none; transform: none; } }
+
+      /* ── Copy column ── */
+      .copy { max-width: 676px; margin: 0 auto; padding: var(--space-12) var(--space-6); }
+      .copy h2 { margin: 0 0 var(--space-4); font: 500 var(--text-3xl) / 1.16 var(--font-display); letter-spacing: -0.02em; text-wrap: balance; }
+      .copy p { margin: 0 0 1.1em; }
+      .lede { font-size: var(--text-lg); }
+
+      /* ── Shape cue ── */
+      .cue { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); padding: var(--space-8) var(--space-6); }
+      .cue-target { width: min(576px, 100%); height: 320px; display: grid; place-items: center; border: 1px dashed var(--border-soft); border-radius: var(--radius-md); color: #fafafa4d; }
+      .cue-target svg { width: 40%; height: 40%; }
+      .caption { margin: 0; font: 500 var(--text-sm) / 1.5 var(--font-body); letter-spacing: 0.08em; color: #fafafad9; }
+      .cue-note { max-width: 440px; margin: 0; text-align: center; font-size: var(--text-sm); line-height: 1.7; color: var(--meta); }
+
+      /* ── Benchmarks ── */
+      table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+      th { text-align: left; font: 500 var(--text-lg) / 1.32 var(--font-body); letter-spacing: -0.01em; padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }
+      td { padding: var(--space-3) 0; border-bottom: 1px solid var(--border-soft); color: var(--muted); font-size: var(--text-sm); }
+      td:first-child { color: var(--fg); }
+      tr.featured td { color: var(--fg); }
+      .bar { display: inline-block; height: 6px; border-radius: 3px; background: var(--meta); vertical-align: middle; margin-right: var(--space-2); }
+      tr.featured .bar { background: var(--fg); }
+      .footnotes h3 { margin: 0 0 var(--space-3); font: 400 var(--text-sm) / 1.6 var(--font-body); color: var(--muted); letter-spacing: 0.02em; }
+      .footnotes p { margin: 0 0 var(--space-2); font-size: var(--text-sm); color: var(--meta); }
+      kbd { display: inline-block; min-width: 22px; padding: 2px 6px; border-radius: var(--radius-sm); box-shadow: var(--elev-ring); font: 500 var(--text-xs) / 1.4 var(--font-mono); letter-spacing: 0; color: var(--muted); text-align: center; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>OpenAI Astra components</h1>
+
+      <section id="hero">
+        <h2 class="kicker">Hero chrome</h2>
+        <div class="hero">
+          <span class="star" style="left: 38%; top: 42%; background: #6dcbf4; box-shadow: 0 0 8px #6dcbf4"></span>
+          <span class="star" style="left: 52%; top: 55%; background: #7ab1fe; box-shadow: 0 0 8px #7ab1fe"></span>
+          <span class="star" style="left: 46%; top: 48%; width: 4px; height: 4px; background: #f87915; box-shadow: 0 0 8px #f87915"></span>
+          <span class="star" style="left: 58%; top: 40%; background: #fa994c; box-shadow: 0 0 8px #fa994c"></span>
+          <span class="star" style="left: 43%; top: 60%; background: #f5f6fb; box-shadow: 0 0 8px #f5f6fb"></span>
+          <p class="label label-left" aria-label="GPT"><span class="letter" style="animation-delay: 1.05s">G</span><span class="letter" style="animation-delay: .95s">P</span><span class="letter" style="animation-delay: .85s">T</span></p>
+          <p class="label label-right" aria-label="Astra"><span class="letter" style="animation-delay: .85s">A</span><span class="letter" style="animation-delay: .95s">s</span><span class="letter" style="animation-delay: 1.05s">t</span><span class="letter" style="animation-delay: 1.15s">r</span><span class="letter" style="animation-delay: 1.25s">a</span></p>
+          <p class="scroll-hint">Scroll</p>
+          <button class="icon-btn replay" type="button" aria-label="Replay intro">↻</button>
+        </div>
+        <p class="note">Split labels at 64px / 500, letter reveal 1s cubic-bezier(.22,1,.36,1) with 0.85–1.25s stagger, ambient glow #23435f. The particle canvas sits under this layer.</p>
+      </section>
+
+      <section id="typography">
+        <h2 class="kicker">Typography</h2>
+        <h2>A new generation of intelligence</h2>
+        <h3>The world’s best computer use model</h3>
+        <p class="lede">We’re introducing a model that brings together years of research across pre-training, reasoning, and alignment.</p>
+        <p>It reads long documents, understands screenshots, writes code that runs, and asks the right follow-up question. Inline code looks like <code>astra.setScroll()</code>; shortcuts look like <kbd>⌘</kbd> <kbd>K</kbd>.</p>
+      </section>
+
+      <section id="links">
+        <h2 class="kicker">Links and navigation</h2>
+        <nav class="nav" aria-label="Sections">
+          <a href="#hero" aria-current="page">Research</a>
+          <a href="#typography">Product</a>
+          <a href="#buttons">Safety</a>
+          <a href="#cards">Company</a>
+        </nav>
+        <p style="margin-top: var(--space-4)">Read the <a href="#cards">system card</a> for methodology, or <a class="link-arrow" href="#cards">see all benchmarks</a></p>
+      </section>
+
+      <section id="buttons">
+        <h2 class="kicker">Buttons</h2>
+        <div class="row">
+          <button class="btn btn-primary" type="button">Try in ChatGPT</button>
+          <button class="btn btn-glass" type="button">Read the research</button>
+          <button class="btn btn-ghost" type="button">System card →</button>
+          <button class="btn btn-glass" type="button" disabled>Coming soon</button>
+          <button class="icon-btn" type="button" aria-label="Share">↗</button>
+          <button class="icon-btn replay" type="button" aria-label="Replay">↻</button>
+        </div>
+        <p class="note">One white pill per screen. Pills: min-height 40px, padding 12px 16px, 14px / 500, 300ms cubic-bezier(.6,0,.4,1). Glass fill #ffffff1f, hover --border.</p>
+      </section>
+
+      <section id="inputs">
+        <h2 class="kicker">Inputs</h2>
+        <div class="row" style="align-items: flex-start; gap: var(--space-8)">
+          <form class="field" onsubmit="return false">
+            <label for="email">Work email</label>
+            <input id="email" type="email" placeholder="you@company.com" />
+            <p class="hint">We’ll only use this for the availability notice.</p>
+          </form>
+          <form class="field" onsubmit="return false">
+            <label for="ask">Ask anything</label>
+            <div class="search">
+              <input id="ask" type="text" placeholder="Ask anything" />
+              <button class="icon-btn" type="submit" aria-label="Send">↑</button>
+            </div>
+            <p class="error">Please enter a question.</p>
+          </form>
+        </div>
+      </section>
+
+      <section id="badges">
+        <h2 class="kicker">Badges</h2>
+        <div class="row">
+          <span class="badge">New</span>
+          <span class="badge badge-outline">Research preview</span>
+          <span class="badge badge-solid">GPT‑6 Astra</span>
+          <span class="badge badge-success">Available</span>
+        </div>
+      </section>
+
+      <section id="cards">
+        <h2 class="kicker">Cards</h2>
+        <div class="cards">
+          <article class="card">
+            <h3>Computer use</h3>
+            <p>Give it a goal and it opens the page, fills the form, runs the flow, and hands the result back.</p>
+            <span class="meta">Terminal-Bench 4.0 · 91.4%</span>
+          </article>
+          <article class="card card-glass">
+            <h3>Long context</h3>
+            <p>Reads the whole repository, the whole contract, the whole thread, and keeps the thread.</p>
+            <span class="meta">Updated September 2026</span>
+          </article>
+          <article class="card card-outline">
+            <h3>Alignment</h3>
+            <p>Refuses the same way every time and explains why in one sentence.</p>
+            <span class="meta">System card</span>
+          </article>
+        </div>
+        <p class="note">Solid #1f1f1f, glass #ffffff1f, or hairline outline. No shadows: depth comes from fill and glow.</p>
+      </section>
+
+      <section id="copy">
+        <h2 class="kicker">Copy column</h2>
+        <div class="copy">
+          <h2>One model, many shapes</h2>
+          <p class="lede">Long documents, screenshots, code that runs, a follow-up question asked at the right moment.</p>
+          <p>These are not features bolted together; they are the same stars standing in different shapes at different times.</p>
+        </div>
+        <p class="note">676px column, h2 48px / 500, p1 17px / 28px in #ffffff99. Nothing on either side: the star rails live there.</p>
+      </section>
+
+      <section id="cue">
+        <h2 class="kicker">Shape cue</h2>
+        <div class="cue">
+          <div class="cue-target" aria-hidden="true">
+            <svg viewBox="0 0 19 19" fill="none" stroke="currentColor" stroke-width="0.8"><path d="M9.60978 17.0223C9.24308 17.739 8.76808 18.189 8.18478 18.3723C7.60148 18.564 7.03478 18.4931 6.48478 18.1598C5.93478 17.8348 5.53061 17.314 5.27228 16.5973L0.672282 3.68478C0.497282 3.19312 0.455612 2.72645 0.547282 2.28478C0.638952 1.83478 0.838952 1.45561 1.14728 1.14728C1.45561 0.838948 1.83478 0.638949 2.28478 0.547279C2.73478 0.455619 3.20561 0.497279 3.69728 0.672279L16.6098 5.27228C17.3265 5.53062 17.8473 5.93478 18.1723 6.48478C18.5056 7.02648 18.5765 7.58898 18.3848 8.17228C18.2015 8.75558 17.7515 9.23058 17.0348 9.59728L12.1098 12.1098L9.60978 17.0223Z"/></svg>
+          </div>
+          <p class="caption">It takes action</p>
+          <p class="cue-note">Give it a goal and it opens the page, fills the form, runs the flow, and hands the result back to you.</p>
+        </div>
+        <p class="note">576px × 80vh frame (shortened here). The SVG is invisible in production; it only reserves the aspect ratio for the stars.</p>
+      </section>
+
+      <section id="benchmarks">
+        <h2 class="kicker">Benchmarks</h2>
+        <table>
+          <thead><tr><th>Terminal-Bench 4.0</th><th>Score</th></tr></thead>
+          <tbody>
+            <tr class="featured"><td>This model</td><td><span class="bar" style="width: 180px"></span>91.4%</td></tr>
+            <tr><td>Previous generation</td><td><span class="bar" style="width: 142px"></span>72.1%</td></tr>
+            <tr><td>Comparison A</td><td><span class="bar" style="width: 128px"></span>65.0%</td></tr>
+            <tr><td>Comparison B</td><td><span class="bar" style="width: 96px"></span>48.7%</td></tr>
+          </tbody>
+        </table>
+        <p class="note">h5 labels, tabular figures, white for the featured row, white-at-alpha bars. No colour.</p>
+      </section>
+
+      <section id="panels">
+        <h2 class="kicker">Panels and bands</h2>
+        <div class="row" style="align-items: stretch">
+          <div class="panel" style="flex: 1 1 280px">astra.setScroll({ progress, tiltProgress, scatterProgress, contentBounds, shape })</div>
+          <div class="band footnotes" style="flex: 1 1 280px">
+            <h3>FOOTNOTES</h3>
+            <p>1. Measured on a held-out set; see the system card for methodology.</p>
+            <p>2. Availability varies by region.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

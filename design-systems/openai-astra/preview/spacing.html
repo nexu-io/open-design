@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenAI Astra spacing</title>
+    <link rel="stylesheet" href="../tokens.css" />
+    <style>
+      body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); }
+      main { max-width: var(--container-max); margin: 0 auto; padding: var(--space-12) var(--space-6); }
+      h1 { margin: 0 0 var(--space-6); font-family: var(--font-display); font-weight: 500; font-size: var(--text-2xl); line-height: var(--leading-tight); letter-spacing: var(--tracking-display); }
+      h2 { margin: var(--space-12) 0 var(--space-4); font-size: var(--text-xs); font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--meta); }
+      .steps { display: grid; gap: var(--space-3); }
+      .step { display: grid; grid-template-columns: 120px 1fr; align-items: center; gap: var(--space-4); color: var(--muted); font-size: var(--text-sm); font-family: var(--font-mono); }
+      .bar { height: 12px; background: #ffffff33; border-radius: var(--radius-sm); }
+      .radii { display: flex; gap: var(--space-4); flex-wrap: wrap; }
+      .radius { width: 120px; height: 72px; background: #ffffff1f; display: grid; place-items: center; color: var(--muted); font-size: var(--text-sm); font-family: var(--font-mono); }
+      .layout { position: relative; height: 200px; border: 1px dashed var(--border); border-radius: var(--radius-md); overflow: hidden; }
+      .rail { position: absolute; top: 0; bottom: 0; width: calc((100% - 62%) / 2); background: repeating-linear-gradient(135deg, #ffffff0a 0 6px, transparent 6px 14px); }
+      .rail.left { left: 0; } .rail.right { right: 0; }
+      .column { position: absolute; top: 0; bottom: 0; left: 19%; width: 62%; border-left: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); display: grid; place-items: center; color: var(--meta); font-size: var(--text-sm); font-family: var(--font-mono); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Spacing and layout</h1>
+
+      <h2>Spine (4px base)</h2>
+      <div class="steps">
+        <div class="step"><span>--space-1 · 4px</span><div class="bar" style="width: 4px"></div></div>
+        <div class="step"><span>--space-2 · 8px</span><div class="bar" style="width: 8px"></div></div>
+        <div class="step"><span>--space-3 · 12px</span><div class="bar" style="width: 12px"></div></div>
+        <div class="step"><span>--space-4 · 16px</span><div class="bar" style="width: 16px"></div></div>
+        <div class="step"><span>--space-5 · 20px</span><div class="bar" style="width: 20px"></div></div>
+        <div class="step"><span>--space-6 · 24px</span><div class="bar" style="width: 24px"></div></div>
+        <div class="step"><span>--space-8 · 32px</span><div class="bar" style="width: 32px"></div></div>
+        <div class="step"><span>--space-12 · 48px</span><div class="bar" style="width: 48px"></div></div>
+        <div class="step"><span>section phone</span><div class="bar" style="width: 64px"></div></div>
+        <div class="step"><span>section tablet</span><div class="bar" style="width: 96px"></div></div>
+        <div class="step"><span>section desktop</span><div class="bar" style="width: 128px"></div></div>
+      </div>
+
+      <h2>Radii</h2>
+      <div class="radii">
+        <div class="radius" style="border-radius: var(--radius-sm)">sm 6px</div>
+        <div class="radius" style="border-radius: var(--radius-md)">md 10px</div>
+        <div class="radius" style="border-radius: var(--radius-lg)">lg 16px</div>
+        <div class="radius" style="border-radius: var(--radius-pill)">pill</div>
+      </div>
+
+      <h2>Column and star rails (1088px container, 676px copy column)</h2>
+      <div class="layout">
+        <div class="rail left"></div>
+        <div class="column">676px copy column · rails stay empty</div>
+        <div class="rail right"></div>
+      </div>
+    </main>
+  </body>
+</html>

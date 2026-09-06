@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenAI Astra typography</title>
+    <link rel="stylesheet" href="../tokens.css" />
+    <style>
+      body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); letter-spacing: -0.01em; }
+      main { max-width: var(--container-max); margin: 0 auto; padding: var(--space-12) var(--space-6); }
+      h1 { margin: 0 0 var(--space-8); font-family: var(--font-display); font-weight: 500; font-size: var(--text-2xl); line-height: var(--leading-tight); letter-spacing: var(--tracking-display); }
+      .row { display: grid; grid-template-columns: 180px 1fr; gap: var(--space-6); align-items: baseline; padding: var(--space-5) 0; border-top: 1px solid var(--border-soft); }
+      .label { color: var(--meta); font-size: var(--text-sm); font-family: var(--font-mono); letter-spacing: 0; }
+      .h1 { font: 500 var(--text-4xl) / 1 var(--font-display); letter-spacing: var(--tracking-display); }
+      .h2 { font: 500 var(--text-3xl) / 1.16 var(--font-display); letter-spacing: -0.02em; }
+      .h3 { font: 500 var(--text-2xl) / 1.32 var(--font-display); letter-spacing: -0.01em; }
+      .h4 { font: 500 var(--text-xl) / 1.26 var(--font-display); letter-spacing: -0.01em; }
+      .h5 { font: 500 var(--text-lg) / 1.32 var(--font-display); letter-spacing: -0.01em; }
+      .p1 { font: 400 var(--text-base) / var(--leading-body) var(--font-body); color: var(--muted); max-width: 676px; }
+      .p2 { font: 400 var(--text-sm) / 1.64 var(--font-body); color: var(--muted); max-width: 676px; }
+      .cta { font: 500 var(--text-sm) / 1 var(--font-body); letter-spacing: 0; }
+      .meta { font: 500 var(--text-sm) / 1.4 var(--font-body); letter-spacing: 0; color: var(--meta); }
+      .nav { font: 500 var(--text-xs) / 1.5 var(--font-body); letter-spacing: 0; color: var(--meta); }
+      .mono { font: 400 var(--text-sm) / 1.6 var(--font-mono); letter-spacing: 0; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Type scale</h1>
+      <div class="row"><span class="label">h1 · 64px · 500 · -0.03em</span><span class="h1">Astra</span></div>
+      <div class="row"><span class="label">h2 · 48px · 500</span><span class="h2">A new generation of intelligence</span></div>
+      <div class="row"><span class="label">h3 · 30px · 500</span><span class="h3">The world’s best computer use model</span></div>
+      <div class="row"><span class="label">h4 · 22px · 500</span><span class="h4">Advancing scientific discovery</span></div>
+      <div class="row"><span class="label">h5 · 18px · 500</span><span class="h5">Long context</span></div>
+      <div class="row"><span class="label">p1 · 17px / 28px</span><span class="p1">We’re introducing a model that brings together years of research and big bets across pre-training, reasoning, and alignment. It reads, sees, writes, and acts as one system.</span></div>
+      <div class="row"><span class="label">p2 · 14px / 23px</span><span class="p2">Availability varies by region and plan. See the system card for methodology and limitations.</span></div>
+      <div class="row"><span class="label">cta · 14px · 500</span><span class="cta">Read the research</span></div>
+      <div class="row"><span class="label">meta · 14px · 500</span><span class="meta">Updated September 2026</span></div>
+      <div class="row"><span class="label">nav-header · 13px</span><span class="nav">Research · Product · Safety</span></div>
+      <div class="row"><span class="label">mono · 14px</span><span class="mono">astra.setScroll({ progress: 0.42 })</span></div>
+    </main>
+  </body>
+</html>
