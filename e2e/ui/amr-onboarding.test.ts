@@ -105,6 +105,7 @@ test('[P0] signed-out onboarding can open Local CLI setup without Cloud authoriz
   await expect.poll(() => page.evaluate(() => window.__amrOnboardingLoginCalls ?? 0)).toBe(0);
 
   await page.getByRole('button', { name: /^Back$|返回/i }).click();
+  await expect(connectLandingHeading(page)).toBeVisible();
   await expect(cloudPrimaryButton(page)).toHaveText(/Sign in to OpenDesign|登录 OpenDesign/i);
   await expect(page.getByRole('radiogroup')).toHaveCount(0);
 });
@@ -125,6 +126,7 @@ test('[P0] signed-out onboarding can open BYOK setup without Cloud authorization
   await expect.poll(() => page.evaluate(() => window.__amrOnboardingLoginCalls ?? 0)).toBe(0);
 
   await page.getByRole('button', { name: /^Back$|返回/i }).click();
+  await expect(connectLandingHeading(page)).toBeVisible();
   await expect(cloudPrimaryButton(page)).toHaveText(/Sign in to OpenDesign|登录 OpenDesign/i);
   await expect(page.getByRole('radiogroup')).toHaveCount(0);
 });
@@ -140,6 +142,7 @@ test('[P0] Cloud status loading does not block signed-out Local CLI or BYOK setu
   await seedOnboardingConfig(page, config);
   await gotoOnboarding(page);
 
+  await expect(connectLandingHeading(page)).toBeVisible();
   await expect(cloudPrimaryButton(page)).toBeDisabled();
   await expect(page.getByRole('button', { name: /Local (coding )?agent/i })).toBeEnabled();
   await expect(page.getByRole('button', { name: /Bring Your Own Key/i })).toBeEnabled();

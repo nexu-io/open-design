@@ -2497,6 +2497,7 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     ) as typeof fetch;
     renderOnboarding({ agentsLoading: false });
 
+    expect(screen.getByRole('heading', { name: 'Sign in to OpenDesign' })).toBeTruthy();
     expect(await findCloudSignInButton()).toBeTruthy();
     expect(screen.queryByRole('button', { name: /OpenDesign AMR/i })).toBeNull();
     expect(document.querySelector('.onboarding-view__card--skeleton')).toBeNull();
@@ -2512,6 +2513,7 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
       onRefreshAgents: vi.fn(() => [cliAgent()]),
     });
 
+    expect(screen.getByRole('heading', { name: 'Sign in to OpenDesign' })).toBeTruthy();
     expect(
       await screen.findByRole('button', { name: /Sign in to OpenDesign/i }),
     ).toBeTruthy();
@@ -2526,6 +2528,8 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     globalThis.fetch = fetchMock as typeof fetch;
     const props = renderOnboarding();
     await act(async () => {});
+
+    expect(screen.getByRole('heading', { name: 'Sign in to OpenDesign' })).toBeTruthy();
 
     // "Skip for now" was removed — Connect is a required step. The Connect
     // step exposes no secondary Skip/Back button, onboarding is not completed
