@@ -422,7 +422,10 @@ type RetainedMetadataVerdict = "intact" | "invalid" | "missing";
  * that is merely unreadable at this moment must never cost a real release its
  * record.
  */
-async function inspectRetainedMetadata(metadataPath: string): Promise<RetainedMetadataVerdict> {
+async function inspectRetainedMetadata(
+  metadataPath: string,
+  channel: DesktopUpdaterConfig["channel"],
+): Promise<RetainedMetadataVerdict> {
   const link = await lstat(metadataPath).then(
     (stats) => stats,
     (error: unknown) => (isVanishedPathError(error) ? null : "unreadable" as const),
@@ -448,7 +451,13 @@ async function inspectRetainedMetadata(metadataPath: string): Promise<RetainedMe
     // Unparseable bytes are a fault we can name; any other read failure is not.
     return error instanceof SyntaxError ? "invalid" : "intact";
   }
-  return isRecord(metadata) ? "intact" : "invalid";
+  if (!isRecord(metadata)) return "invalid";
+  // scanReleaseCleanupEntries() only accepts a record once
+  // releaseVersionForChannel() resolves a version for the configured channel.
+  // Without the same check here an object such as `{}` stays `retained` on every
+  // per-check pass while a full rescan would fault it, so the stale entry could
+  // survive indefinitely between rescans.
+  return releaseVersionForChannel(metadata, channel) == null ? "invalid" : "intact";
 }
 
 /**
@@ -473,12 +482,13 @@ async function inspectRetainedMetadata(metadataPath: string): Promise<RetainedMe
  * transient filesystem failure never erases the record of a real release.
  */
 export async function revalidateRetainedReleaseEntries(input: {
+  channel: DesktopUpdaterConfig["channel"];
   descriptor: ReleaseCleanupDescriptor;
   layout: DesktopUpdaterStoreLayout;
   logger: DesktopUpdaterLogger;
   nowIso: string;
 }): Promise<ReleaseCleanupDescriptor> {
-  const { descriptor, layout, logger, nowIso } = input;
+  const { channel, descriptor, layout, logger, nowIso } = input;
   const releases: ReleaseCleanupEntry[] = [];
   for (const entry of descriptor.releases) {
     if (entry.state !== "retained") {
@@ -519,7 +529,7 @@ export async function revalidateRetainedReleaseEntries(input: {
       // record and vouch for itself. scanReleaseCleanupEntries() derives it the
       // same way.
       const metadataPath = join(releaseDir, "metadata.json");
-      const verdict = await inspectRetainedMetadata(metadataPath);
+      const verdict = await inspectRetainedMetadata(metadataPath, channel);
       if (verdict === "intact") {
         releases.push(entry);
         continue;
@@ -648,6 +658,7 @@ export async function revalidateReleaseCleanupState(input: {
     const current = await readReleaseCleanupDescriptor(layout);
     if (current == null) return null;
     const revalidated = await revalidateRetainedReleaseEntries({
+      channel: config.channel,
       descriptor: current,
       layout,
       logger,
@@ -705,6 +716,7 @@ export async function runUpdateReleaseLifecycle(input: {
     }
 
     const revalidated = await revalidateRetainedReleaseEntries({
+      channel: config.channel,
       descriptor: {
         ...next,
         currentVersion: config.currentVersion,

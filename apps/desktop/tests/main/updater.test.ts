@@ -459,12 +459,14 @@ describe("desktop updater", () => {
   });
 
   // lstat() only proves a directory entry exists. A retained release whose
-  // metadata is a dangling symlink or unparseable JSON is just as unusable as
-  // one with no metadata at all, and the full rescan already says so; the
-  // per-check pass must not disagree with it.
+  // metadata is a dangling symlink, unparseable JSON, or a record that carries
+  // no version for the configured channel is just as unusable as one with no
+  // metadata at all, and the full rescan already says so; the per-check pass
+  // must not disagree with it.
   it.each([
     { expectedReason: "metadata-missing", expectedState: "unknown", label: "dangling symlink" },
     { expectedReason: "metadata-invalid", expectedState: "unknown", label: "malformed json" },
+    { expectedReason: "metadata-invalid", expectedState: "unknown", label: "record without a channel version" },
   ])("drops a retained cleanup entry whose metadata is a $label", async ({ expectedReason, expectedState, label }) => {
     const root = makeRoot();
     const fixture = await createUpdaterFixture();
@@ -484,8 +486,14 @@ describe("desktop updater", () => {
       const metadataPath = join(staleDir, "metadata.json");
       if (label === "dangling symlink") {
         symlinkSync(join(staleDir, "gone.json"), metadataPath);
-      } else {
+      } else if (label === "malformed json") {
         await writeFile(metadataPath, "{ not json", "utf8");
+      } else {
+        // Parses as an object, but exposes no version for the configured
+        // channel. scanReleaseCleanupEntries() faults exactly this shape with
+        // release-version-missing, so the per-check pass has to agree or the
+        // entry stays retained until the next full rescan.
+        await writeFile(metadataPath, `${JSON.stringify({ notes: "no version for this channel" })}\n`, "utf8");
       }
 
       const seededDescriptor = JSON.parse(await readFile(layout.cleanupPath, "utf8")) as {
