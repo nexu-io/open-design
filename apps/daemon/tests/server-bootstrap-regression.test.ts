@@ -235,6 +235,10 @@ describe('server route inventory', () => {
     const browserSessionRouteKeys = [
       'POST /api/projects/:id/browser-sessions',
       'DELETE /api/projects/:id/browser-sessions/:sessionId',
+      'POST /api/projects/:id/browser-sessions/:sessionId/pages',
+      'POST /api/projects/:id/browser-sessions/:sessionId/pages/:pageId/commands',
+      'GET /api/projects/:id/browser-sessions/:sessionId/pages/:pageId/events',
+      'DELETE /api/projects/:id/browser-sessions/:sessionId/pages/:pageId',
     ];
 
     expect(routeKeys).toEqual(expect.arrayContaining([

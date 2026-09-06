@@ -7624,7 +7624,12 @@ export async function startServer({
   // Interactive Terminal sessions (node-pty). In-memory, process-local, and
   // killed on daemon shutdown — see shutdownDaemonRuns below.
   const terminalService = createTerminalService();
-  const browserSessionService = createBrowserSessionService();
+  const browserSessionService = createBrowserSessionService({
+    // Hermetic E2E fixtures bind loopback. This is daemon-startup authority,
+    // not an agent-controlled request field, and stays off in normal product
+    // runs so prompt-injected code cannot opt itself into private networking.
+    allowPrivateNetwork: process.env.OD_BROWSER_ALLOW_PRIVATE_NETWORK_FOR_TESTS === '1',
+  });
 
   // Tracks runs whose finalized assistant message has already been forwarded
   // so repeated message updates only enter the reporter once. Terminal
