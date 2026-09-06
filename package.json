@@ -56,7 +56,8 @@
       "tmp": "0.2.7",
       "undici@^6": "6.28.0",
       "undici@^7": "7.29.0",
-      "yaml": "2.9.0"
+      "yaml": "2.9.0",
+      "builder-util-runtime": "9.7.0"
     },
     "onlyBuiltDependencies": [
       "better-sqlite3",
