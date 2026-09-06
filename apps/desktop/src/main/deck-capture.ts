@@ -524,7 +524,7 @@ async function renderEditablePptx(
   const importedStylesheetOverrides = await fetchGoogleFontStylesheets(importedStylesheetUrls);
   await window.webContents.executeJavaScript(await loadDomToPptxBundle(), true);
   const prepared = (await window.webContents.executeJavaScript(
-    `(() => { const cjkPromotedFontFamily = ${cjkPromotedFontFamily.toString()}; return (${runDomToPptx.toString()})(${JSON.stringify(SLIDE_SELECTOR)}, {}, "prepare", ${JSON.stringify(importedStylesheetOverrides)}); })()`,
+    `(() => { const cjkPromotedFontFamily = ${cjkPromotedFontFamily.toString()}; const hasSingleVisualTextLine = ${hasSingleVisualTextLine.toString()}; const visualLineBreakOffsets = ${visualLineBreakOffsets.toString()}; return (${runDomToPptx.toString()})(${JSON.stringify(SLIDE_SELECTOR)}, {}, "prepare", ${JSON.stringify(importedStylesheetOverrides)}); })()`,
     true,
   )) as { error?: string; prepared?: boolean };
   if (!prepared?.prepared || prepared.error) {
@@ -539,7 +539,7 @@ async function renderEditablePptx(
   // runDomToPptx calls cjkPromotedFontFamily by name; define it in the same scope
   // as the serialized body so the reference resolves inside the render window.
   const out = (await window.webContents.executeJavaScript(
-    `(() => { const cjkPromotedFontFamily = ${cjkPromotedFontFamily.toString()}; return (${runDomToPptx.toString()})(${JSON.stringify(SLIDE_SELECTOR)}, ${JSON.stringify(layeredBackgrounds)}, "export-prepared", ${JSON.stringify(importedStylesheetOverrides)}); })()`,
+    `(() => { const cjkPromotedFontFamily = ${cjkPromotedFontFamily.toString()}; const hasSingleVisualTextLine = ${hasSingleVisualTextLine.toString()}; const visualLineBreakOffsets = ${visualLineBreakOffsets.toString()}; return (${runDomToPptx.toString()})(${JSON.stringify(SLIDE_SELECTOR)}, ${JSON.stringify(layeredBackgrounds)}, "export-prepared", ${JSON.stringify(importedStylesheetOverrides)}); })()`,
     true,
   )) as { b64?: string; error?: string };
   if (!out || out.error || !out.b64) {
@@ -2047,6 +2047,70 @@ export function cjkPromotedFontFamily(fontFamily: string, text: string): string 
   return [families[firstCjk], ...families.filter((_, i) => i !== firstCjk)].join(", ");
 }
 
+// A Range returns one rectangle per rendered text fragment, so a single visual
+// line can still have several overlapping rects (for nested inline spans). Merge
+// those vertical bands and reject any band without meaningful overlap. Adjacent
+// lines can overlap slightly when glyph boxes exceed the authored line-height,
+// so treating any overlap as a single line would flatten wrapped headings.
+export function hasSingleVisualTextLine(
+  rects: ReadonlyArray<{ top: number; bottom: number; width: number; height: number }>,
+): boolean {
+  const visible = rects
+    .filter((rect) => rect.width > 0 && rect.height > 0 && rect.bottom > rect.top)
+    .sort((a, b) => a.top - b.top);
+  if (visible.length === 0) return false;
+
+  let bandTop = visible[0]!.top;
+  let bandBottom = visible[0]!.bottom;
+  for (const rect of visible.slice(1)) {
+    const overlap = Math.min(rect.bottom, bandBottom) - Math.max(rect.top, bandTop);
+    const minHeight = Math.min(rect.height, bandBottom - bandTop);
+    if (overlap < Math.max(0.5, minHeight * 0.25)) return false;
+    bandTop = Math.min(bandTop, rect.top);
+    bandBottom = Math.max(bandBottom, rect.bottom);
+  }
+  return true;
+}
+
+export function visualLineBreakOffsets(
+  samples: ReadonlyArray<{
+    offset: number;
+    rects: ReadonlyArray<{ top: number; bottom: number; width: number; height: number }>;
+  }>,
+): number[] {
+  const breaks: number[] = [];
+  let bandTop: number | null = null;
+  let bandBottom: number | null = null;
+
+  for (const sample of samples) {
+    const rect = sample.rects.find(
+      (candidate) =>
+        candidate.width > 0 &&
+        candidate.height > 0 &&
+        candidate.bottom > candidate.top,
+    );
+    if (!rect) continue;
+    if (bandTop == null || bandBottom == null) {
+      bandTop = rect.top;
+      bandBottom = rect.bottom;
+      continue;
+    }
+
+    const overlap = Math.min(rect.bottom, bandBottom) - Math.max(rect.top, bandTop);
+    const minHeight = Math.min(rect.height, bandBottom - bandTop);
+    if (overlap < Math.max(0.5, minHeight * 0.25)) {
+      breaks.push(sample.offset);
+      bandTop = rect.top;
+      bandBottom = rect.bottom;
+      continue;
+    }
+    bandTop = Math.min(bandTop, rect.top);
+    bandBottom = Math.max(bandBottom, rect.bottom);
+  }
+
+  return breaks;
+}
+
 // Serialized into the page: `prepare` applies every geometry-affecting export
 // normalization before Chromium capture, while `export-prepared` consumes those
 // measurements without moving the DOM again. Imported font faces are exposed in
@@ -2746,6 +2810,12 @@ export async function runDomToPptx(
         const rect = el.getBoundingClientRect();
         if (rect.width <= 1 || rect.height <= 1) return;
 
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const isSingleVisualLine = hasSingleVisualTextLine(Array.from(range.getClientRects()));
+        range.detach();
+        if (!isSingleVisualLine) return;
+
         const justify =
           style.textAlign === "center" || style.textAlign === "-webkit-center"
             ? "center"
@@ -2761,6 +2831,62 @@ export async function runDomToPptx(
         el.style.setProperty("line-height", "normal", "important");
         el.style.setProperty("white-space", "nowrap", "important");
         el.style.setProperty("overflow", "visible", "important");
+      });
+    }
+  }
+
+  function preserveRenderedTextLines(slides: HTMLElement[]): void {
+    for (const slide of slides) {
+      slide.querySelectorAll<HTMLElement>("*").forEach((el) => {
+        if (el.childNodes.length !== 1 || el.firstChild?.nodeType !== Node.TEXT_NODE) return;
+        if (el.hasAttribute("data-od-pptx-visual-lines")) return;
+
+        const textNode = el.firstChild as Text;
+        const rawText = textNode.data;
+        if (!rawText.trim() || rawText.includes("\n")) return;
+
+        const style = getComputedStyle(el);
+        if (!style.writingMode.startsWith("horizontal")) return;
+        if (style.whiteSpace.startsWith("pre") || style.whiteSpace === "nowrap") return;
+
+        const fontSizePx = Number.parseFloat(style.fontSize);
+        if (!Number.isFinite(fontSizePx) || fontSizePx < 96) return;
+
+        const lineHeightPx = Number.parseFloat(style.lineHeight);
+        if (!Number.isFinite(lineHeightPx) || lineHeightPx <= 0 || lineHeightPx > fontSizePx * 1.05) return;
+
+        const wholeRange = document.createRange();
+        wholeRange.selectNodeContents(textNode);
+        const isSingleVisualLine = hasSingleVisualTextLine(Array.from(wholeRange.getClientRects()));
+        wholeRange.detach();
+        if (isSingleVisualLine) return;
+
+        const range = document.createRange();
+        const samples: Array<{
+          offset: number;
+          rects: Array<{ top: number; bottom: number; width: number; height: number }>;
+        }> = [];
+        let offset = 0;
+        for (const character of rawText) {
+          const nextOffset = offset + character.length;
+          range.setStart(textNode, offset);
+          range.setEnd(textNode, nextOffset);
+          samples.push({ offset, rects: Array.from(range.getClientRects()) });
+          offset = nextOffset;
+        }
+        range.detach();
+
+        const breakOffsets = visualLineBreakOffsets(samples);
+        if (breakOffsets.length === 0) return;
+
+        for (const breakOffset of breakOffsets.reverse()) {
+          const nextLine = textNode.splitText(breakOffset);
+          const br = document.createElement("br");
+          br.setAttribute("data-od-pptx-visual-break", "true");
+          el.insertBefore(br, nextLine);
+        }
+        el.setAttribute("data-od-pptx-visual-lines", "true");
+        el.style.setProperty("white-space", "nowrap", "important");
       });
     }
   }
@@ -2821,9 +2947,10 @@ export async function runDomToPptx(
     await document.fonts?.ready;
     if (phase !== "export-prepared") {
       ensureExplicitSlideBackgrounds(slides as HTMLElement[]);
+      promoteCjkTypefaces(slides as HTMLElement[]);
+      preserveRenderedTextLines(slides as HTMLElement[]);
       stabilizeLargeSingleLineText(slides as HTMLElement[]);
       stabilizeAuthoredHeadingLines(slides as HTMLElement[]);
-      promoteCjkTypefaces(slides as HTMLElement[]);
       // dom-to-pptx assumes `node.className` is a string, but SVG elements expose
       // an SVGAnimatedString, so its DOM walk throws on decks containing inline SVG.
       // Normalize those to a plain string in this throwaway render window.

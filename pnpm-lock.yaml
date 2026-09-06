@@ -224,12 +224,18 @@ importers:
         specifier: workspace:*
         version: link:../../packages/sidecar-proto
     devDependencies:
+      '@playwright/test':
+        specifier: 1.60.0
+        version: 1.60.0
       '@types/node':
         specifier: 24.12.2
         version: 24.12.2
       electron:
         specifier: 41.3.0
         version: 41.3.0
+      jszip:
+        specifier: 3.10.1
+        version: 3.10.1
       typescript:
         specifier: 6.0.3
         version: 6.0.3
