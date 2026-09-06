@@ -176,7 +176,9 @@
       kbd { display: inline-block; min-width: 22px; padding: 2px 6px; border-radius: var(--radius-sm); box-shadow: var(--elev-ring); font: 500 var(--text-xs) / 1.4 var(--font-mono); letter-spacing: 0; color: var(--muted); text-align: center; }
 
       /* ── Site header (page: fixed, 54px, transparent over the canvas; masked brightness backdrop, no blur) ── */
-      .site-header { display: flex; align-items: center; gap: var(--space-5); height: 54px; padding: 0 var(--space-6); border-radius: var(--radius-md); background: #ffffff0a; }
+      .site-header { height: 54px; border-radius: var(--radius-md); background: #ffffff0a; }
+      .site-header.scrolled { background: #000000; box-shadow: var(--elev-ring); }
+      .site-header .bar { display: flex; align-items: center; gap: var(--space-5); height: 100%; max-width: var(--container-max); margin: 0 auto; padding: 0 var(--space-6); }
       .site-header .wordmark { display: inline-flex; align-items: center; height: 17px; font: 500 var(--text-lg) / 1 var(--font-display); letter-spacing: -0.02em; color: var(--fg); text-decoration: none; }
       .site-header nav { display: flex; align-items: center; align-self: stretch; flex: 1; min-width: 0; }
       .site-header nav a { display: inline-flex; align-items: center; height: 100%; padding: 0 var(--space-4); font: 500 var(--text-xs) / 1.5 var(--font-body); letter-spacing: 0; color: var(--fg); text-decoration: none; transition: color var(--motion-fast); }
@@ -268,18 +270,33 @@
 
       <section id="site-header">
         <h2 class="kicker">Site header</h2>
-        <header class="site-header">
-          <a class="wordmark" href="#">Astra</a>
-          <nav aria-label="Primary">
-            <a href="#">Research</a><a href="#">Products</a><a href="#">Business</a><a href="#">Developers</a><a href="#">Company</a>
-          </nav>
-          <div class="actions">
-            <button class="icon-btn search" type="button" aria-label="Search"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg></button>
-            <button class="btn btn-glass" type="button">Log in <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6 4 4 4-4"/></svg></button>
-            <a class="btn btn-primary" href="#">Try ChatGPT <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 11 11 5M6 5h5v5"/></svg></a>
+        <header class="site-header" aria-label="At the top of the page">
+          <div class="bar">
+            <a class="wordmark" href="#">Astra</a>
+            <nav aria-label="Primary">
+              <a href="#">Research</a><a href="#">Products</a><a href="#">Business</a><a href="#">Developers</a><a href="#">Company</a>
+              <button class="icon-btn search" type="button" aria-label="Search"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg></button>
+            </nav>
+            <div class="actions">
+              <button class="btn btn-glass" type="button">Log in <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6 4 4 4-4"/></svg></button>
+              <a class="btn btn-primary" href="#">Try ChatGPT <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 11 11 5M6 5h5v5"/></svg></a>
+            </div>
           </div>
         </header>
-        <p class="note">54px tall (3.375rem; 64px on wide screens), fixed over the canvas and transparent. Wordmark 17px, nav links 13px / 500 with 16px side padding, 40px search button in #ffffff99, glass "Log in" pill with chevron, white "Try" pill with an outward arrow.</p>
+        <header class="site-header scrolled" aria-label="After scrolling" style="margin-top: var(--space-4)">
+          <div class="bar">
+            <a class="wordmark" href="#">Astra</a>
+            <nav aria-label="Primary (scrolled)">
+              <a href="#">Research</a><a href="#">Products</a><a href="#">Business</a><a href="#">Developers</a><a href="#">Company</a>
+              <button class="icon-btn search" type="button" aria-label="Search"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg></button>
+            </nav>
+            <div class="actions">
+              <button class="btn btn-glass" type="button">Log in <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6 4 4 4-4"/></svg></button>
+              <a class="btn btn-primary" href="#">Try ChatGPT <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 11 11 5M6 5h5v5"/></svg></a>
+            </div>
+          </div>
+        </header>
+        <p class="note">54px tall (3.375rem; 64px on wide screens), fixed over the canvas. Content is centred in the 1088px container: wordmark 17px, nav links 13px / 500 with 16px side padding, the 40px search button closing the nav group, then the glass "Log in" pill and the white "Try" pill. Transparent at the top of the page; once scrolled, a solid #000000 surface fades in over 400ms cubic-bezier(.33,1,.68,1). No blur.</p>
       </section>
 
       <section id="hero">

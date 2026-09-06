@@ -121,8 +121,8 @@ The site scale is fluid between 375px and 1440px; the values below are the deskt
 - `FOOTNOTES` as a `p2` heading in `#ffffff99`, entries in `#ffffff70`, hairline above.
 
 ### Site Header
-- Fixed, `54px` tall (`3.375rem`; `64px` above 1440px), transparent over the canvas; a masked `brightness(95%) contrast(105%)` backdrop strip fades out below it. No blur.
-- Left: wordmark `17px` tall. Nav links `13px / 500`, `16px` side padding, white, hover `#ffffff99`. Right: `40px` round search button in `#ffffff99`, glass pill **Log in** with a chevron, white pill **Try …** with an outward arrow. Pills are `40px` tall with `0.3em` icon gap.
+- Fixed, `54px` tall (`3.375rem`; `64px` above 1440px). At the top of the page it is fully transparent over the canvas; as soon as the page scrolls a solid `#000000` surface fades in over `400ms cubic-bezier(0.33, 1, 0.68, 1)`, with a masked `brightness(95%) contrast(105%)` strip beneath it. No blur.
+- Content is centred in the `1088px` container with `24px` gutters. Left group: wordmark `17px` tall, nav links `13px / 500` with `16px` side padding (white, hover `#ffffff99`), then the `40px` round search button in `#ffffff99` closing the group. Right group: glass pill **Log in** with a chevron and white pill **Try …** with an outward arrow, both `40px` tall with `0.3em` icon gap.
 
 ### Segmented Control
 - Hairline pill container (`1px #ffffff33`, `4px` inner padding, `4px` gap). Items are `40px` pills, `12px 16px` padding, `14px / 500`; the selected item fills `#ffffff1f`, hover `#ffffff14`. Used to switch charts and benchmark views.

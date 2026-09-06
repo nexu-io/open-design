@@ -9,8 +9,8 @@
     "title": "openai-astra — reference components",
     "description": "Reference fixture for design-systems/openai-astra. Every visible value comes from tokens.css. The Astra launch page's signature moves: pure black canvas under a particle galaxy, white text with white-at-alpha secondaries, OpenAI Sans at 500/400, monochrome pill chrome, a single #23435f ambient glow, no shadows, no gradients.",
     "styleBlockCount": 1,
-    "selectorCount": 166,
-    "classCount": 76,
+    "selectorCount": 168,
+    "classCount": 77,
     "elementCount": 45
   },
   "tokens": {
@@ -258,6 +258,7 @@
     ".site-footer",
     ".site-header",
     ".site-header .actions",
+    ".site-header .bar",
     ".site-header .btn",
     ".site-header .btn svg",
     ".site-header .search",
@@ -265,6 +266,7 @@
     ".site-header nav",
     ".site-header nav a",
     ".site-header nav a:hover",
+    ".site-header.scrolled",
     ".two-up",
     ".two-up .screen",
     ".two-up .screen .bubble",
@@ -367,6 +369,7 @@
     "row",
     "screen",
     "scroll-hint",
+    "scrolled",
     "search",
     "segmented",
     "select",
@@ -745,7 +748,7 @@
     }
   ],
   "literals": {
-    "colorExpressions": 30,
+    "colorExpressions": 31,
     "pixelValues": 74,
     "hardcodedFontFamilies": 0
   }
